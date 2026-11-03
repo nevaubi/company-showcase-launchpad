@@ -896,12 +896,33 @@ async function main() {
   }
   if (!only || only === "macro") {
     console.log("\n▶ macro");
-    await pool(MACRO_SERIES, 4, async (s) => {
+    // FRED briefly blocks bursts (403); go two at a time, skip fresh snapshots, back off and retry.
+    const todo = [];
+    for (const s of MACRO_SERIES) {
       try {
-        await ingestMacro(s);
-      } catch (e) {
-        console.warn("  macro failed", s.id, (e as Error).message);
+        const cur = JSON.parse(await readFile(`${OUT}macro/${s.id}.json`, "utf8")) as MacroSeries;
+        if (!args.fresh && Date.now() - new Date(cur.fetchedAt).getTime() < 12 * 3600_000) continue;
+      } catch {
+        /* no snapshot yet */
       }
+      todo.push(s);
+    }
+    console.log(`  ${todo.length}/${MACRO_SERIES.length} series to fetch`);
+    await pool(todo, 2, async (s) => {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        try {
+          await ingestMacro(s);
+          break;
+        } catch (e) {
+          const msg = (e as Error).message;
+          if (attempt === 3 || !/403|429|5\d\d/.test(msg)) {
+            console.warn("  macro failed", s.id, msg);
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 15_000 * (attempt + 1)));
+        }
+      }
+      await new Promise((r) => setTimeout(r, 500));
     });
   }
   if (!only || only === "macro" || only === "macro-index") await writeMacroIndex();
