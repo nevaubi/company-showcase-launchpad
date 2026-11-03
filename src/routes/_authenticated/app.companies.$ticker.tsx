@@ -44,6 +44,7 @@ const TABS = [
   { to: "/app/companies/$ticker/financials", label: "Financials" },
   { to: "/app/companies/$ticker/valuation", label: "Valuation" },
   { to: "/app/companies/$ticker/segments", label: "Segments & KPIs" },
+  { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
   { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
   { to: "/app/companies/$ticker/insiders", label: "Insiders" },
 ] as const;
