@@ -90,6 +90,48 @@ describe("statement builder", () => {
   });
 });
 
+describe("data-quality guards", () => {
+  it("pairs a restated annual total with the nine-month figure from the same restatement", () => {
+    // FY2025 10-K (filed 2026) restates revenue to 300 after a spin-off; the original 9M YTD (filed 2025)
+    // was 340, and the restated 9M comparative (filed with the next year's Q3 10-Q) is 220.
+    const s = buildStatements(
+      filer({
+        Revenues: {
+          facts: [
+            fact("2024-01-01", "2024-12-31", 400, "10-K", "2025-02-01"),
+            fact("2025-01-01", "2025-03-31", 100, "10-Q", "2025-04-30"),
+            fact("2025-01-01", "2025-06-30", 210, "10-Q", "2025-07-30"),
+            fact("2025-01-01", "2025-09-30", 340, "10-Q", "2025-10-30"),
+            fact("2025-01-01", "2025-12-31", 300, "10-K", "2026-02-01"),
+            fact("2025-01-01", "2025-09-30", 220, "10-Q", "2026-10-30"),
+          ],
+        },
+        OperatingIncomeLoss: { facts: OPINC },
+      }),
+    );
+    const q = s.quarterly.income;
+    const cell = q.rows.find((r) => r.key === "revenue")!.cells[q.periods.findIndex((p) => p.key === "FY2025Q4")];
+    expect(cell?.v).toBe(80); // 300 − 220, not 300 − 340
+  });
+
+  it("rescales share counts a filing tagged in millions, keeping the tagged fact as the source", () => {
+    const y = (v: number, yr: number) => fact(`${yr}-01-01`, `${yr}-12-31`, v, "10-K", `${yr + 1}-02-01`);
+    const s = buildStatements(
+      filer({
+        Revenues: { facts: [y(25_000_000_000, 2024), y(26_000_000_000, 2025)] },
+        NetIncomeLoss: { facts: [y(8_223_000_000, 2024), y(8_563_000_000, 2025)] },
+        EarningsPerShareDiluted: { unit: "USD/shares", facts: [y(11.39, 2024), y(11.95, 2025)] },
+        WeightedAverageNumberOfDilutedSharesOutstanding: { unit: "shares", facts: [y(721.9, 2024), y(716_400_000, 2025)] },
+      }),
+    );
+    const sh = s.annual.income.rows.find((r) => r.key === "sharesDiluted")!;
+    expect(sh.cells[0]!.v).toBe(721_900_000);
+    expect(sh.cells[0]!.derived?.parts[0].value).toBe(721.9);
+    expect(sh.cells[1]!.v).toBe(716_400_000);
+    expect(sh.cells[1]!.src).toBeDefined();
+  });
+});
+
 describe("unit scale", () => {
   it("shows full dollars with separators, and scaled values in K / M / B", () => {
     expect(fmtCell(416_161_000_000, "usd", "full")).toBe("416,161,000,000");
