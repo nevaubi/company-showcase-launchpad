@@ -166,8 +166,10 @@ export type Database = {
           filed: string | null
           id: string
           kind: string
+          pages: number | null
           path: string | null
           period: string | null
+          rendition_path: string | null
           sha256: string | null
           source: string
           source_url: string
@@ -187,8 +189,10 @@ export type Database = {
           filed?: string | null
           id?: string
           kind?: string
+          pages?: number | null
           path?: string | null
           period?: string | null
+          rendition_path?: string | null
           sha256?: string | null
           source?: string
           source_url: string
@@ -208,8 +212,10 @@ export type Database = {
           filed?: string | null
           id?: string
           kind?: string
+          pages?: number | null
           path?: string | null
           period?: string | null
+          rendition_path?: string | null
           sha256?: string | null
           source?: string
           source_url?: string
@@ -226,6 +232,7 @@ export type Database = {
           derived: boolean
           doc: string | null
           document_id: string
+          document_kind: string | null
           filed: string | null
           id: string
           is_total: boolean
@@ -248,6 +255,7 @@ export type Database = {
           derived?: boolean
           doc?: string | null
           document_id: string
+          document_kind?: string | null
           filed?: string | null
           id?: string
           is_total?: boolean
@@ -270,6 +278,7 @@ export type Database = {
           derived?: boolean
           doc?: string | null
           document_id?: string
+          document_kind?: string | null
           filed?: string | null
           id?: string
           is_total?: boolean
