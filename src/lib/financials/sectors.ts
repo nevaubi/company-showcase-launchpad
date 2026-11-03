@@ -31,7 +31,9 @@ export function companyMetrics(u: UniverseEntry, price: number | null | undefine
   const mcap = price && shares ? price * shares : null;
   const revenue = f?.ttm.revenue ?? u.revenueTTM ?? null;
   const netIncome = f?.ttm.netIncome ?? u.netIncomeTTM ?? null;
-  const operatingIncome = f?.ttm.operatingIncome ?? null;
+  // Filers without an operating-income subtotal (integrated oils) fall back to EBIT = EBITDA − D&A.
+  const ebit = f?.ttm.ebitda != null && f.ttm.dna != null ? f.ttm.ebitda - Math.abs(f.ttm.dna) : null;
+  const operatingIncome = f?.ttm.operatingIncome ?? (bank ? null : ebit);
   const fcf = bank ? null : (f?.ttm.fcf ?? u.fcfTTM ?? null);
   return {
     ticker: u.ticker,
