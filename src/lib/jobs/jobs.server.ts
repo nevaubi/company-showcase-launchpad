@@ -205,7 +205,7 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
   async "ir-site"() {
     const { start } = await advance("ir-site", COVERAGE.length, 1);
     const { collectIr } = await import("@/lib/jobs/ir.server");
-    const r = await collectIr(COVERAGE[start], "site", 10);
+    const r = await collectIr(COVERAGE[start], "site", 25);
     return { ok: true, items: r.stored, detail: r as unknown as Record<string, unknown> };
   },
 
