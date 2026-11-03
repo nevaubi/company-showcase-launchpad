@@ -58,3 +58,17 @@ export const extractNextIr = createServerFn({ method: "POST" })
       return { done: false, facts: 0, error: (e as Error).message };
     }
   });
+
+/** HTML of a stored IR document (or its table rendition, for PDFs and spreadsheets) for the source viewer. */
+export const getIrHtml = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ data, context }) => {
+    const { data: row } = await context.supabase.from("ir_documents").select("path, rendition_path, source_url, ext, title").eq("id", data.id).maybeSingle();
+    const path = row?.rendition_path || (row?.ext?.startsWith("htm") ? row.path : null);
+    if (!row || !path) throw new Error("No viewable copy of this document");
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: file, error } = await supabaseAdmin.storage.from("ir-documents").download(path);
+    if (error || !file) throw new Error(error?.message ?? "Download failed");
+    return { html: await file.text(), contentType: "text/html", sourceUrl: row.source_url, rendition: !!row.rendition_path, title: row.title };
+  });
