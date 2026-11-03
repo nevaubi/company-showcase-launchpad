@@ -126,6 +126,8 @@ export function buildIrSeries(facts: IrFact[]): { series: IrSeries[]; quarters: 
     }
   }
 
+  inferSubtotals(series);
+
   // Reconcile: children of a parent total (same category & metric) must sum to it per quarter.
   const series = [...bySeries.values()];
   const checks: ReconcileCheck[] = [];
@@ -142,4 +144,39 @@ export function buildIrSeries(facts: IrFact[]): { series: IrSeries[]; quarters: 
     }
   }
   return { series, quarters: quarterEnds, checks };
+}
+
+const childrenOf = (series: IrSeries[], total: IrSeries) =>
+  series.filter((s) => s !== total && s.category === total.category && s.metric === total.metric && s.unit === total.unit && s.parent && normLabel(s.parent) === normLabel(total.label));
+
+/**
+ * Releases often print a flat product table next to a "Products / Services" split. When one child
+ * equals the sum of a subset of its siblings in every shared quarter, it is a subtotal: re-parent
+ * that subset under it so totals reconcile at each level.
+ */
+export function inferSubtotals(series: IrSeries[]) {
+  for (const total of series.filter((s) => s.isTotal)) {
+    const kids = childrenOf(series, total);
+    if (kids.length < 3 || kids.length > 14) continue;
+    const ends = Object.keys(total.cells).filter((e) => kids.every((k) => k.cells[e]));
+    if (!ends.length) continue;
+    const kidSum = (e: string) => kids.reduce((n, k) => n + k.cells[e].v, 0);
+    if (ends.every((e) => Math.abs(kidSum(e) - total.cells[e].v) <= Math.abs(total.cells[e].v) * 0.005)) continue;
+    for (const k of kids) {
+      const others = kids.filter((o) => o !== k);
+      const e0 = ends[0];
+      let found: IrSeries[] | null = null;
+      for (let mask = 1; mask < 1 << others.length && !found; mask++) {
+        const sub = others.filter((_, i) => mask & (1 << i));
+        if (sub.length < 2) continue;
+        const ok = ends.every((e) => Math.abs(sub.reduce((n, o) => n + o.cells[e].v, 0) - k.cells[e].v) <= Math.max(Math.abs(k.cells[e].v) * 0.002, 1e6));
+        if (ok && ok && Math.abs(sub.reduce((n, o) => n + o.cells[e0].v, 0)) > 0) found = sub;
+      }
+      if (found) {
+        k.isTotal = true;
+        for (const o of found) o.parent = k.label;
+        break;
+      }
+    }
+  }
 }
