@@ -91,7 +91,7 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
       flushing = false;
     }
   };
-  const rebuildTimer = setInterval(flush, 3 * 60_000);
+  const rebuildTimer = setInterval(() => void flush(), 60_000);
 
   const worker = async (n: number) => {
     while (!stop && reserved < o.max) {
@@ -170,7 +170,8 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   clearInterval(governor);
   clearInterval(rebuildTimer);
   while (flushing) await sleep(1000);
-  await flush();
+  while (flushing) await sleep(1000);
+  await flush(true);
   clearInterval(leaseTimer);
   await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
   log(stop ? `${o.job} STOPPED — ${stop}` : `${o.job} finished — ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens`);
