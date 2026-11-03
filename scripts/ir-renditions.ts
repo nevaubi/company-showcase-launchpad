@@ -61,15 +61,46 @@ function pdfHtml(buf: ArrayBuffer, title: string) {
   const parts = [`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>${STYLE}</head><body>`];
   pages.forEach((p, i) => {
     parts.push(`<h2 id="page-${i + 1}">Page ${i + 1}</h2><table data-page="${i + 1}">`);
-    for (const line of p.split("\n")) {
-      if (!line.trim()) continue;
-      const cells = line.trim().split(/\s{2,}/);
-      parts.push(`<tr>${cells.map((c) => `<td${isNum(c) ? ' class="n"' : ""}>${esc(c)}</td>`).join("")}</tr>`);
-    }
+    for (const cells of alignPage(p)) parts.push(`<tr>${cells.map((c) => `<td${isNum(c) ? ' class="n"' : ""}>${esc(c)}</td>`).join("")}</tr>`);
     parts.push("</table>");
   });
   parts.push("</body></html>");
   return { html: parts.join(""), pages: pages.length };
+}
+
+/**
+ * Lay a pdftotext page onto a grid: numeric columns are found from the right edges of numbers
+ * (financial tables right-align), and every token lands in the column whose edge it is nearest,
+ * so headers and values of the same period share a column index.
+ */
+function alignPage(text: string): string[][] {
+  const lines = text.split("\n").filter((l) => l.trim());
+  const toks = lines.map((l) => [...l.matchAll(/\S+(?: \S+)*/g)].map((m) => ({ s: m[0], a: m.index!, b: m.index! + m[0].length })));
+  const edges: number[] = [];
+  for (const row of toks) for (const t of row.slice(1)) if (isNum(t.s)) edges.push(t.b);
+  edges.sort((x, y) => x - y);
+  const anchors: number[] = [];
+  for (const e of edges) {
+    const last = anchors.at(-1);
+    if (last != null && e - last <= 3) continue;
+    if (edges.filter((x) => Math.abs(x - e) <= 3).length >= 2) anchors.push(e);
+  }
+  if (!anchors.length) return toks.map((r) => r.map((t) => t.s));
+  return toks.map((row) => {
+    const out: string[] = new Array(anchors.length + 1).fill("");
+    for (const t of row) {
+      if (t.b < anchors[0] - 12 && !isNum(t.s)) {
+        out[0] = out[0] ? `${out[0]} ${t.s}` : t.s;
+        continue;
+      }
+      // numbers by right edge, words by centre
+      const x = isNum(t.s) ? t.b : (t.a + t.b) / 2;
+      let k = 0;
+      for (let j = 1; j < anchors.length; j++) if (Math.abs(anchors[j] - x) < Math.abs(anchors[k] - x)) k = j;
+      out[k + 1] = out[k + 1] ? `${out[k + 1]} ${t.s}` : t.s;
+    }
+    return out;
+  });
 }
 
 let q = sb.from("ir_documents").select("id, ticker, path, ext, title").is("rendition_path", null).in("ext", ["xlsx", "xlsm", "pdf"]).neq("kind", "image").limit(Number(args.limit ?? 300));
