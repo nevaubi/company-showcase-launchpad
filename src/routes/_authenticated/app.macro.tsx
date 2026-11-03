@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getMacroBrief } from "@/lib/ai.functions";
-import { CURVE_TENORS, MACRO_SERIES, MACRO_TILES, macroDef, type MacroDef, type MacroGroup } from "@/lib/coverage";
+import { CURVE_TENORS, MACRO_TILES, macroDef, type MacroDef, type MacroGroup } from "@/lib/coverage";
 import { macroQuery, macroSummariesQuery } from "@/lib/data";
 import { changeText, displayUnits, fmtMacro, recessionBands, transformed, valueAt, type MacroSummary } from "@/lib/macro";
 import { fmtDate, fmtRelative } from "@/lib/format";
@@ -481,4 +481,3 @@ function Tiles({
   );
 }
 
-export { MACRO_SERIES };
