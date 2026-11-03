@@ -56,12 +56,18 @@
 - [x] Company-extension XBRL tags (COP, NEE capex) read from filings' iXBRL so FCF isn't blank for those filers
 - [x] Research-agent tool: search inside earnings-call transcripts
 
-## IR documents (current goal)
-- [ ] Storage: private `ir-documents` bucket + `ir_documents` table (ticker, source URL, kind, period, sha256, size, stored path)
-- [ ] Collector: 8-K exhibits (EX-99 releases, presentations, supplements) from EDGAR + IR-site files found via Firecrawl map / Tavily (pdf, xlsx, pptx, docx, images); download and store every file
-- [ ] Extract segment/KPI tables from stored releases & supplements with cell-level locators; reconcile segments to parent totals; derive Q4 = FY − 9M
-- [ ] Viewer: click-to-source for IR documents (HTML highlight, PDF page, XLSX cell)
-- [ ] Company "IR library" tab listing every stored document
-- [x] IR documents stored (SEC exhibits + IR sites), PDF/XLSX renditions, KPI extraction with cell-level click-to-source, Q4 derivation, reconciliation and SEC cross-check
-- [ ] IR: renditions for newly collected PDFs/XLSX run from `scripts/ir-renditions.ts` (not yet scheduled in production — needs a server-side PDF parser)
-- [ ] IR: a few breakdowns still don't reconcile (ABBV, AMD, CAT, CVX, FCX, GOOGL, SLB, TSLA, VZ) — flagged in the UI
+## IR documents (current goal — OpenAI-powered deep backfill, requested Nov 3)
+- [x] Storage: private `ir-documents` bucket + `ir_documents` metadata; every file stored byte-for-byte
+- [x] Collector: 8-K Item 2.02 / 7.01 exhibits from EDGAR back to 2008 (paged submissions history) + IR-site files
+- [x] Table extraction with the owner's OpenAI key (model points at cells, numbers re-read from cells), bounded single-flight runner with circuit breaker
+- [x] Series builder: parent-aware lines, per-period filing vintages, Q4 = FY − 9M, FY roll-ups, point-in-time KPIs, subtotal / double-breakdown checks, SEC revenue cross-check
+- [x] Cross-period label canonicalization pass (reasoning model) with keep-only-if-better acceptance
+- [x] Precomputed per-company payload (`ir_company_series`) + new IR page: quarterly/annual, period range, dimension filters, search, totals at the bottom with a parts = total check row, stacked charts, CSV export, full-value toggle
+- [x] Vision pass code: slides, chart images, scanned pages → facts pinned to the printed token with page-box highlight
+- [ ] BLOCKED (OpenAI credits exhausted): finish table extraction (~2,400 documents waiting) — `bun scripts/ir-extract.ts --resume --watch`
+- [ ] BLOCKED (OpenAI credits): vision pass over presentations and ~9.5k chart/slide images — `bun scripts/ir-vision.ts --resume`
+- [ ] BLOCKED (OpenAI credits): canonicalization for companies whose totals don't tie out (BAC, MA, V, LLY, META, JNJ, ORCL …) — `bun scripts/ir-canon.ts`
+- [ ] Historical 2008+ SEC exhibit backfill for all companies (running: `scripts/ir-backfill.ts`)
+- [ ] PDF/XLSX renditions for newly backfilled files (`scripts/ir-renditions.ts`)
+- [ ] Production schedules: keep the collector inside the scheduled-call time limit (small slices), reading stays in the batch runner
+- [ ] Deterministic accuracy audit: duplicate-total detection, sign conventions for eliminations, unit/scale outliers vs neighbouring quarters
