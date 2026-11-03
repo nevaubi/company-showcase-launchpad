@@ -46,7 +46,7 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     const symbols = [...COVERAGE.map((c) => c.ticker), ...BENCHMARKS.map((b) => b.symbol)];
     const { start, wrapped } = await advance("prices", symbols.length, 10);
     const batch = slice(symbols, start, 10);
-    const results = await pool(batch, 4, async (symbol) => {
+    const results = await pool(batch, 3, async (symbol) => {
       const r = await fetchYahoo(symbol, "1mo", "1d");
       const rows = toBars(r, false).map(([date, open, high, low, close, adj, volume]) => ({
         symbol,
@@ -78,7 +78,7 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     const { start, wrapped } = await advance("macro", defs.length, 8);
     const batch = slice(defs, start, 8);
     const since = daysAgo(11 * 365);
-    const results = await pool(batch, 4, async (def) => {
+    const results = await pool(batch, 2, async (def) => {
       const obs = isTreasurySeries(def.id) ? await fetchTreasury(def.id, since, 1) : await fetchFred(def.id, since);
       if (!obs.length) throw new Error("no observations");
       const cutoff = daysAgo(400);
