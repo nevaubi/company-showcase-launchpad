@@ -325,7 +325,7 @@ function segmentFact(
   };
 }
 
-function extractInlineSegments(html: string, labels: Map<string, string>, filing: Filing): RawSegment[] {
+function extractInlineSegments(html: string, labels: Map<string, string>, filing: Filing, cik: string): RawSegment[] {
   const contexts = parseContexts(html);
   const out: RawSegment[] = [];
   for (const m of html.matchAll(/<ix:nonFraction\b([^>]*)>([\s\S]*?)<\/ix:nonFraction>/gi)) {
@@ -337,7 +337,7 @@ function extractInlineSegments(html: string, labels: Map<string, string>, filing
     value *= Math.pow(10, Number(a.scale ?? 0));
     if (a.sign === "-") value = -value;
     if (ext) {
-      collectExtension(cikOf(filing), a.name, contexts.get(a.contextRef), value, filing);
+      collectExtension(cik, a.name, contexts.get(a.contextRef), value, filing);
       continue;
     }
     const f = segmentFact(a.name, contexts.get(a.contextRef), value, labels, filing, a.id);
@@ -351,7 +351,7 @@ const INSTANCE_RE = new RegExp(
   "g",
 );
 
-function extractInstanceSegments(xml: string, labels: Map<string, string>, filing: Filing): RawSegment[] {
+function extractInstanceSegments(xml: string, labels: Map<string, string>, filing: Filing, cik: string): RawSegment[] {
   const contexts = parseContexts(xml);
   const out: RawSegment[] = [];
   for (const m of xml.matchAll(INSTANCE_RE)) {
@@ -362,7 +362,7 @@ function extractInstanceSegments(xml: string, labels: Map<string, string>, filin
   }
   if (EXT_CONCEPTS.size) {
     const re = new RegExp(`<(${[...EXT_CONCEPTS].map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b([^>]*?)>([^<]*)</\\1>`, "g");
-    for (const m of xml.matchAll(re)) collectExtension(cikOf(filing), m[1], contexts.get(attrs(m[2]).contextRef), Number(m[3].trim()), filing);
+    for (const m of xml.matchAll(re)) collectExtension(cik, m[1], contexts.get(attrs(m[2]).contextRef), Number(m[3].trim()), filing);
   }
   return out;
 }
@@ -425,14 +425,14 @@ async function segmentsFor(cik: string, filing: Filing): Promise<RawSegment[]> {
     const html = await secText(archive(cik, filing.accn, filing.doc));
     const shares = extractCoverShares(html);
     if (shares && !coverShares.has(cik)) coverShares.set(cik, shares);
-    return extractInlineSegments(html, labels, filing);
+    return extractInlineSegments(html, labels, filing, cik);
   }
   // Legacy XBRL: the instance document is the largest .xml that isn't a linkbase or the filing summary.
   const instance = items
     .filter((i) => /\.xml$/i.test(i.name) && !/(_cal|_def|_lab|_pre|_ref)\.xml$/i.test(i.name) && !/^FilingSummary|^R\d+/i.test(i.name))
     .sort((a, b) => Number(b.size ?? 0) - Number(a.size ?? 0))[0];
   if (!instance) return [];
-  return extractInstanceSegments(await secText(archive(cik, filing.accn, instance.name)), labels, filing);
+  return extractInstanceSegments(await secText(archive(cik, filing.accn, instance.name)), labels, filing, cik);
 }
 
 const normLabel = (l: string) => l.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(segment|member|net sales|revenue|revenues)\b/g, "").trim();
@@ -598,7 +598,6 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
     `https://data.sec.gov/api/xbrl/companyfacts/CIK${pad(cfg.cik)}.json`,
   );
   const bank = isBankIndustry(cfg.industry);
-  const statements = buildStatements(cf, { bank });
 
   // Shares outstanding (sum classes reported on the same cover page)
   const so: { end: string; val: number; accn: string; filed: string }[] =
@@ -625,6 +624,8 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
     }
   }
   const segments = dedupeSegments(raw);
+  mergeExtensions(cf, cfg.cik);
+  const statements = buildStatements(cf, { bank });
 
   const coverFromHtml = coverShares.get(cfg.cik) ?? null;
   if (coverFromHtml && (!sharesOutstanding || cover[0]?.filed < (ixQ[0]?.filed ?? ""))) sharesOutstanding = coverFromHtml;
