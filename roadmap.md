@@ -66,16 +66,16 @@
 - [x] Vision pass code: slides, chart images, scanned pages → facts pinned to the printed token with page-box highlight
 - [x] Data status page: investor-relations library panel (files, size, span, read/waiting, data points, tie-out per company)
 - [x] OCR decimal guard: the slide reader returns its own reading of each number; OCR tokens with the same digits take the model's punctuation, anything else is rejected
-- [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 10 workers; the governor sheds more when the database slows)
+- [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 8 workers; the governor sheds more when the database slows)
 - [ ] Running: vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch`, 4 workers)
 - [x] Deterministic structure fixes: coincidental subtotal nesting (KO), one-table-per-segment generic rows (LMT), U.S./international/worldwide column sets (ABBV, pharma), period-end counts vs net additions (CMCSA), ~1,000× unit outliers flagged in the UI
 - [x] Data status: IR library panel; cut-off scheduled runs shown separately from failures; jobs time-boxed (`RUN_BUDGET_MS`), `ir-docs` every 5 min with done/partial/empty tracking
 - [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, KO, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`
-- [ ] Paused until the full rebuild finishes: historical 2008+ SEC exhibit backfill (`scripts/ir-backfill.ts`), remaining PG→EQIX, JPM, BRK.B
-- [ ] Paused until the full rebuild finishes (database load): IR-website files for every company (`scripts/ir-site.ts`, Firecrawl + Tavily) — resume from PEP onward at concurrency 2
+- [ ] Running: historical 2008+ SEC exhibit backfill (`scripts/ir-backfill.ts`, 2 workers), PG→EQIX, JPM, BRK.B
+- [ ] Running: IR-website files (`scripts/ir-site.ts`, Firecrawl + Tavily), PEP onward at concurrency 2
 - [x] IR tab shows stored tables on first load with no manual step: background readers rebuild each company's tables every few minutes, open pages refresh every two minutes, and a missing payload is rebuilt on request
 - [x] IR page never looks empty while the database is busy (slow-load notice, retries, clear timeout message); every bulk job waits on database latency (`dbGate`) and sheds workers
-- [ ] Running: PDF/XLSX renditions for newly backfilled files (`scripts/ir-renditions.ts`)
+- [ ] PDF/XLSX renditions for newly collected files (`scripts/ir-renditions.ts`) — run after the site pass
 - [ ] Production schedules: keep the collector inside the scheduled-call time limit (small slices), reading stays in the batch runner
 - [x] Deductions printed as positives (costs, eliminations) tie out with the line subtracted and say so; subtotals introduced mid-history (Alphabet "Google") roll their parts into the total for older periods
 - [x] Accuracy rules: subsidiary tables repeating the parent's rows keep only the consolidated table (Duke); a line counts once per total, taken from one table (Coca-Cola grids); one-table totals may pick up an eliminations line printed next door; never-matching "breakdowns" are shown as plain lines and counted in stats
