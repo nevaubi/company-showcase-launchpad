@@ -81,5 +81,6 @@
 - [x] Accuracy rules: subsidiary tables repeating the parent's rows keep only the consolidated table (Duke); a line counts once per total, taken from one table (Coca-Cola grids); one-table totals may pick up an eliminations line printed next door; never-matching "breakdowns" are shown as plain lines and counted in stats
 - [x] IR library loads slide images on demand (JPM/BAC pages ~3× faster)
 - [x] Site slow (Nov 3, 15:19): the smallest database size was overwhelmed by background reading and stopped answering; owner upgraded to Large + 10 GB, pages back to ~1.5s; rebuilds now time out instead of hanging
+- [ ] Canonical table names across quarters: one company can title the same table differently each quarter (Coca-Cola "Reported revenues by segment" vs "Net operating revenues by segment"), which splits a line's history across breakdowns. Merging by name alone dropped ~2% of distinct values (tried, reverted); needs the canon pass to map table titles, accepted only when no distinct value is lost
 - [ ] Deterministic accuracy audit: duplicate-total detection across tables
 - [ ] Rebuild every company's payload once the reading passes finish (`bun scripts/ir-build.ts`)
