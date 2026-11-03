@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, Download, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getIrData, getIrDownload } from "@/lib/ir.functions";
+import { extractNextIr, getIrData, getIrDownload } from "@/lib/ir.functions";
 import { buildIrSeries, normLabel, type IrCell, type IrFact, type IrSeries } from "@/lib/ir/kpis";
 import type { DerivedPart, SourceRef } from "@/lib/financials/types";
 import { fmtCompact, fmtCompactUsd, fmtDate } from "@/lib/format";
@@ -80,12 +81,34 @@ function IrPage() {
   const fetchIr = useServerFn(getIrData);
   const q = useQuery({ queryKey: ["ir", ticker], queryFn: () => fetchIr({ data: { ticker } }), staleTime: 5 * 60_000 });
 
+  // Releases that arrived since the last pass are read while the page is open, one at a time.
+  const extract = useServerFn(extractNextIr);
+  const qc = useQueryClient();
+  const running = useRef(false);
+  const pendingCount = q.data?.documents.filter((d) => d.ext?.startsWith("htm") && !d.extract_status && ["press-release", "supplement", "other"].includes(d.kind)).length ?? 0;
+  useEffect(() => {
+    if (!pendingCount || running.current) return;
+    running.current = true;
+    let cancelled = false;
+    (async () => {
+      for (let i = 0; i < 3 && !cancelled; i++) {
+        const r = await extract({ data: { ticker } }).catch(() => ({ done: true }));
+        if (r.done) break;
+      }
+      running.current = false;
+      if (!cancelled) qc.invalidateQueries({ queryKey: ["ir", ticker] });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingCount, ticker, extract, qc]);
+
   if (q.isLoading) return <Skeleton className="h-[600px]" />;
   if (q.isError) return <p className="text-sm text-negative">{(q.error as Error).message}</p>;
   const data = q.data!;
   return (
     <div className="grid grid-cols-1 gap-5">
-      <KpiTables ticker={ticker} facts={data.facts as unknown as IrFact[]} pending={data.documents.filter((d) => d.ext?.startsWith("htm") && !d.extract_status).length} />
+      <KpiTables ticker={ticker} facts={data.facts as unknown as IrFact[]} pending={pendingCount} />
       <Library ticker={ticker} documents={data.documents} />
     </div>
   );

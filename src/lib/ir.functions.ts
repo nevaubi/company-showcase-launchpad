@@ -40,3 +40,21 @@ export const getIrDownload = createServerFn({ method: "POST" })
     if (error || !signed) throw new Error(error?.message ?? "Couldn't create link");
     return { url: signed.signedUrl };
   });
+
+/** Read one waiting release for this company (runs when someone opens the IR tab). */
+export const extractNextIr = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
+  .handler(async ({ data }) => {
+    const { extractIrDocument, nextToExtract } = await import("@/lib/ir/extract.server");
+    const next = await nextToExtract(data.ticker);
+    if (!next) return { done: true, facts: 0 };
+    try {
+      const r = await extractIrDocument(next.id);
+      return { done: false, facts: r.facts };
+    } catch (e) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("ir_documents").update({ extracted_at: new Date().toISOString(), extract_status: `error: ${(e as Error).message.slice(0, 200)}` }).eq("id", next.id);
+      return { done: false, facts: 0, error: (e as Error).message };
+    }
+  });
