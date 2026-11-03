@@ -1,6 +1,6 @@
 // Compact, precomputed IR series payload stored per company (ir_company_series) and sent to the
 // IR data page. Pure: built by the pipeline scripts and by the server after new extractions.
-import { buildIrSeries, childrenOf, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
+import { buildIrSeries, childrenOf, neverTies, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
 
 export type PayloadLocator = [number, number, number] | { p: number; b: number[] };
 
