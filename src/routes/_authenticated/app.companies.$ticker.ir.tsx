@@ -88,7 +88,7 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
     const st = company.data?.statements.quarterly.income;
     const row = st?.rows.find((r) => r.key === "revenue");
     if (!payload || !st || !row) return [];
-    const reported = st.periods.flatMap((p, i) => (row.cells[i] && (p.months ?? 3) === 3 ? [{ end: p.end, v: row.cells[i]!.v }] : []));
+    const reported = st.periods.flatMap((p, i) => (row.cells[i] ? [{ end: p.end, v: row.cells[i]!.v }] : []));
     return secRevenueCheck(payload, reported);
   }, [company.data, payload]);
   const secBad = sec.filter((c) => !c.ok);
