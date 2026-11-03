@@ -16,6 +16,8 @@ import { useCompany } from "@/lib/data";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+const monthYear = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")({
   head: ({ params }) => ({
     meta: [
@@ -119,7 +121,7 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
 
   const stats: { label: string; value: string; hint?: string }[] = s
     ? [
-        { label: "Coverage", value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : "—", hint: s.firstPeriod ? `${fmtDate(s.firstPeriod)} to ${fmtDate(s.lastPeriod)}` : undefined },
+        { label: "Coverage", value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : "—", hint: s.firstPeriod ? `${monthYear(s.firstPeriod)} – ${monthYear(s.lastPeriod)}` : undefined },
         { label: "Lines tracked", value: s.series.toLocaleString(), hint: `${s.groups} breakdowns` },
         { label: "Data points", value: s.facts.toLocaleString(), hint: `from ${s.documents.toLocaleString()} documents` },
         { label: "Quarterly totals tie out", value: s.checksQ.total ? `${Math.round((s.checksQ.ok / s.checksQ.total) * 100)}%` : "—", hint: `${s.checksQ.ok.toLocaleString()} of ${s.checksQ.total.toLocaleString()}` },
