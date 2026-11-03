@@ -121,7 +121,7 @@ export function fundamentalsTimeline(d: CompanyDataset): FundamentalsAt[] {
   const out: FundamentalsAt[] = [];
   periods.forEach((p, i) => {
     if (i < 3) return;
-    const srcAccn = [rev[i], ni[i], eqCells[i], fcf[i]].find((c) => c?.src)?.src?.accn ?? [rev[i], ni[i]].find((c) => c?.derived)?.derived?.parts.find((x) => x.src)?.src?.accn;
+    const srcAccn = [rev[i], ni[i], eqCells[i], fcf[i]].find((c) => c?.src)?.src?.accn ?? [rev[i], ni[i]].find((c) => c?.derived)?.derived?.parts[0]?.accn;
     const filedOn = srcAccn ? filed.get(srcAccn) : undefined;
     // The value may come from a later filing that restated the quarter; only trust filing dates
     // shortly after the quarter ended, otherwise assume the usual 10-Q/10-K filing lag.
