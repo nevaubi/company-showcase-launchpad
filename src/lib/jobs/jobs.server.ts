@@ -5,7 +5,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { BENCHMARKS, COVERAGE, MACRO_SERIES } from "@/lib/coverage";
 import { form4XmlPath, parseForm4 } from "@/lib/financials/form4";
 import { summarize } from "@/lib/macro";
-import { fetchFred, fetchTreasury, fetchYahoo, isTreasurySeries, pool, toBars } from "@/lib/market-data.server";
+import { fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo, isTreasurySeries, pool, toBars } from "@/lib/market-data.server";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -46,9 +46,19 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     const symbols = [...COVERAGE.map((c) => c.ticker), ...BENCHMARKS.map((b) => b.symbol)];
     const { start, wrapped } = await advance("prices", symbols.length, 10);
     const batch = slice(symbols, start, 10);
+    const stocks = new Set(COVERAGE.map((c) => c.ticker));
     const results = await pool(batch, 3, async (symbol) => {
-      const r = await fetchYahoo(symbol, "1mo", "1d");
-      const rows = toBars(r, false).map(([date, open, high, low, close, adj, volume]) => ({
+      // Yahoo first (dividend-adjusted closes); Nasdaq when Yahoo throttles. Indices (^VIX) are Yahoo-only.
+      let bars;
+      try {
+        bars = toBars(await fetchYahoo(symbol, "1mo", "1d"), false);
+      } catch (e) {
+        if (symbol.startsWith("^")) throw e;
+        bars = await fetchNasdaqDaily(symbol, stocks.has(symbol) ? "stocks" : "etf").catch((n: Error) => {
+          throw new Error(`${(e as Error).message}; ${n.message}`);
+        });
+      }
+      const rows = bars.map(([date, open, high, low, close, adj, volume]) => ({
         symbol,
         date,
         open,

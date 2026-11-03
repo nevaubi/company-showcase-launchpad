@@ -58,6 +58,33 @@ export async function fetchYahoo(symbol: string, range: string, interval: string
   return r;
 }
 
+/**
+ * Daily bars from Nasdaq's public quote API — a fallback when Yahoo throttles. Prices are
+ * split-adjusted (not dividend-adjusted), so adjusted close = close for these recent bars.
+ */
+export async function fetchNasdaqDaily(symbol: string, kind: "stocks" | "etf", days = 31): Promise<Bar[]> {
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 86400_000);
+  const d = (x: Date) => x.toISOString().slice(0, 10);
+  const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${kind}&fromdate=${d(from)}&todate=${d(to)}&limit=60`;
+  const res = await fetch(url, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" } });
+  if (!res.ok) throw new Error(`Nasdaq responded ${res.status}`);
+  const j = (await res.json()) as { data?: { tradesTable?: { rows?: { date: string; close: string; open: string; high: string; low: string; volume: string }[] } } | null };
+  const rows = j.data?.tradesTable?.rows ?? [];
+  if (!rows.length) throw new Error(`Nasdaq has no history for ${symbol}`);
+  const num = (x: string) => Number(String(x).replace(/[$,]/g, ""));
+  return rows
+    .map((r): Bar | null => {
+      const [m, dd, y] = r.date.split("/");
+      const c = num(r.close);
+      if (!y || !Number.isFinite(c)) return null;
+      const o = num(r.open), h = num(r.high), l = num(r.low), v = num(r.volume);
+      return [`${y}-${m}-${dd}`, Number.isFinite(o) ? o : c, Number.isFinite(h) ? h : c, Number.isFinite(l) ? l : c, c, c, Number.isFinite(v) ? v : 0];
+    })
+    .filter((b): b is Bar => !!b)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+}
+
 export function toBars(r: YahooChartResult, intraday: boolean): Bar[] {
   const q = r.indicators.quote[0];
   const adj = r.indicators.adjclose?.[0]?.adjclose;
