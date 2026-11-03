@@ -8,6 +8,9 @@ const LOGOS: Record<string, string> = {
   AMZN: "/__l5e/assets-v1/05f6a9ac-b948-411c-892d-442e7a0868b3/logo-AMZN.svg",
   GOOGL: "/__l5e/assets-v1/be5ee208-0fa0-4672-8641-53d0a3e0a946/logo-GOOGL.svg",
   TSLA: "/__l5e/assets-v1/37a6f5bb-05c8-4367-8d5a-71922bb1a281/logo-TSLA.svg",
+  ...Object.fromEntries(
+    ["META", "AVGO", "AMD", "ORCL", "BAC", "GS", "V", "MA", "MRK", "WMT", "CAT"].map((t) => [t, `/logos/${t}.svg`]),
+  ),
 };
 
 export function CompanyLogo({

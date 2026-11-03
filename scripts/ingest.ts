@@ -399,6 +399,12 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
     `https://data.sec.gov/api/xbrl/companyfacts/CIK${pad(cfg.cik)}.json`,
   );
   const statements = buildStatements(cf);
+  // Bank-only lines (net interest income, deposits…) mislead for non-banks that tag similar concepts.
+  if (!/bank|brokerage/i.test(cfg.industry)) {
+    const BANK = new Set(["netInterestIncome", "nonInterestIncome", "provisionCreditLosses", "nonInterestExpense", "loans", "deposits"]);
+    for (const freq of Object.values(statements) as any[])
+      for (const st of Object.values(freq) as any[]) st.rows = st.rows.filter((r: any) => !BANK.has(r.key));
+  }
   console.log(
     `  statements: ${statements.annual.income.periods.length} annual / ${statements.quarterly.income.periods.length} quarterly periods`,
   );

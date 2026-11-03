@@ -99,9 +99,9 @@ function Hero({ onDemo, pending }: { onDemo: () => void; pending: boolean }) {
         </div>
         <dl className="mt-10 grid grid-cols-2 gap-6 border-t pt-6 sm:grid-cols-4">
           {[
-            ["3,300+", "SEC filings indexed"],
+            ["23,000+", "SEC filings indexed across 25 companies"],
             ["19 years", "of XBRL statement history"],
-            ["626", "Form 4 insider transactions parsed"],
+            ["2,170", "Form 4 insider transactions parsed"],
             ["35", "FRED macro series"],
           ].map(([k, v]) => (
             <div key={v}>
@@ -129,7 +129,7 @@ function CoverageBand() {
           <p className="eyebrow">Now covering</p>
           <p className="text-xs text-muted-foreground">Trailing-twelve-month revenue, from 10-Q and 10-K filings</p>
         </div>
-        <ul className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3 lg:grid-cols-6">
+        <ul className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3 lg:grid-cols-5">
           {COVERAGE.map((c) => {
             const u = byTicker.get(c.ticker);
             return (
@@ -367,7 +367,7 @@ function ClosingCta({ onDemo, pending }: { onDemo: () => void; pending: boolean 
       <div className="flex flex-col items-start justify-between gap-8 rounded-2xl border bg-card p-10 shadow-paper md:flex-row md:items-center">
         <div>
           <h2 className="font-display text-4xl">See it on real filings.</h2>
-          <p className="mt-2 text-muted-foreground">The demo workspace has six companies, sample theses and the research agent.</p>
+          <p className="mt-2 text-muted-foreground">The demo workspace covers 25 large US companies across tech, banks, healthcare, energy and retail, sample theses and the research agent.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button size="lg" variant="highlight" onClick={onDemo} disabled={pending}>

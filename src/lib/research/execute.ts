@@ -4,6 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { companyQuery, macroQuery, newsQuery, pricesQuery, quotesQuery, universeQuery, type Range } from "@/lib/data";
 import { COVERAGE, coverageOf, MACRO_SERIES } from "@/lib/coverage";
 import { getFilingDocument, searchFilings } from "@/lib/sec.functions";
+import { readWebpage, webSearch } from "@/lib/web.functions";
 import { durationDays } from "@/lib/financials/build";
 import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
@@ -220,6 +221,40 @@ Month-start closes:\n${monthly.join("\n")}`;
         output: r.items.map((n) => `${n.publishedAt.slice(0, 10)} | ${n.publisher} | ${n.title} | ${n.link}`).join("\n"),
         summary: `${r.items.length} headlines for "${args.query}"`,
       };
+    }
+    case "web_research": {
+      const r = await webSearch({
+        data: {
+          query: String(args.query).slice(0, 400),
+          topic: (args.topic as "general" | "news" | "finance") ?? "general",
+          days: typeof args.days === "number" ? Math.min(365, Math.max(1, args.days)) : undefined,
+          maxResults: 8,
+        },
+      });
+      if (!r.results.length) return { output: `No web results${"error" in r && r.error ? ` (${r.error})` : ""}. Try web_search.`, summary: `No results for "${args.query}"` };
+      return {
+        output: clip(r.results.map((x, i) => `[${i + 1}] ${x.title}\n${x.url}${x.publishedAt ? ` · ${x.publishedAt}` : ""}\n${x.content}`).join("\n\n")),
+        summary: `${r.results.length} web results for "${args.query}"`,
+      };
+    }
+    case "read_webpage": {
+      const r = await readWebpage({ data: { url: String(args.url) } });
+      if (!r.markdown) return { output: `Couldn't read ${args.url}${"error" in r && r.error ? `: ${r.error}` : ""}.`, summary: `Couldn't read page` };
+      let text = r.markdown;
+      const q = typeof args.query === "string" ? args.query.trim() : "";
+      if (q) {
+        const lower = text.toLowerCase();
+        const hits: string[] = [];
+        let i = lower.indexOf(q.toLowerCase());
+        while (i >= 0 && hits.length < 6) {
+          hits.push(text.slice(Math.max(0, i - 900), i + 1500));
+          i = lower.indexOf(q.toLowerCase(), i + 1500);
+        }
+        if (hits.length) text = hits.join("\n…\n");
+      }
+      let host = String(args.url);
+      try { host = new URL(host).hostname.replace(/^www\./, ""); } catch { /* keep raw */ }
+      return { output: clip(`${"title" in r && r.title ? r.title : ""} — ${r.url}\n\n${text}`), summary: `Read ${host}` };
     }
     default:
       throw new Error(`Unknown tool ${name}`);
