@@ -121,7 +121,7 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
 
   const stats: { label: string; value: string; hint?: string }[] = s
     ? [
-        { label: "Coverage", value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : "—", hint: s.firstPeriod ? `${monthYear(s.firstPeriod)} – ${monthYear(s.lastPeriod)}` : undefined },
+        { label: "Coverage", value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : "—", hint: s.firstPeriod && s.lastPeriod ? `${monthYear(s.firstPeriod)} – ${monthYear(s.lastPeriod)}` : undefined },
         { label: "Lines tracked", value: s.series.toLocaleString(), hint: `${s.groups} breakdowns` },
         { label: "Data points", value: s.facts.toLocaleString(), hint: `from ${s.documents.toLocaleString()} documents` },
         { label: "Quarterly totals tie out", value: s.checksQ.total ? `${Math.round((s.checksQ.ok / s.checksQ.total) * 100)}%` : "—", hint: `${s.checksQ.ok.toLocaleString()} of ${s.checksQ.total.toLocaleString()}` },
