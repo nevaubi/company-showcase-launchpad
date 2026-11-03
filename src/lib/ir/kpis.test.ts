@@ -399,3 +399,25 @@ describe("subsidiary tables repeating the parent's rows", () => {
     expect(dropRepeatedTables(facts).length).toBe(4);
   });
 });
+
+describe("transposed segment grids", () => {
+  it("lets one table's total pick up the eliminations line printed in a neighbouring table", () => {
+    const end = "2025-12-31";
+    const row = (label: string, v: number, breakdown: string, t: number, extra: Partial<IrFact> = {}) =>
+      f(label, end, 3, v, { category: "segment", parent: "Consolidated", breakdown, locator: { t, r: 0, c: 1 } as never, ...extra });
+    const facts = [
+      // total revenue per segment (incl. intersegment)
+      row("North America", 6_100e6, "Net operating revenues — total", 1),
+      row("International", 4_400e6, "Net operating revenues — total", 1),
+      row("Consolidated", 10_000e6, "Net operating revenues — total", 1, { parent: null, is_total: true }),
+      // intersegment revenue per segment, and the eliminations column
+      row("North America", 300e6, "Net operating revenues — intersegment", 2),
+      row("International", 200e6, "Net operating revenues — intersegment", 2),
+      row("Eliminations", -500e6, "Net operating revenues — intersegment", 2),
+      row("Consolidated", 0, "Net operating revenues — intersegment", 2, { parent: null, is_total: true }),
+    ];
+    const { checks } = buildIrSeries(facts);
+    const top = checks.find((c) => c.total === 10_000e6);
+    expect(top?.ok).toBe(true);
+  });
+});
