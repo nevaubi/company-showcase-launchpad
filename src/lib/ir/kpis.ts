@@ -106,6 +106,9 @@ export const normLabel = (s: string) =>
     .replace(/\b(net sales|net revenues?|revenues?|total)\b/g, (m) => (m === "total" ? "total" : "revenue"))
     .trim();
 
+/** Brand names print with trademark marks ("Humulin®"); the line is the same with or without them. */
+const unmark = (s: string) => s.replace(/\s*[®™©℠]+/g, "").replace(/\s{2,}/g, " ").trim();
+
 /** Identity of a raw extracted line, used to key the label map. */
 export const rawKey = (f: Pick<IrFact, "category" | "metric" | "unit" | "label" | "parent">) => `${f.category}|${f.metric}|${f.unit}|${normLabel(f.label)}|${normLabel(f.parent ?? "")}`;
 
@@ -421,7 +424,7 @@ export function buildIrSeries(
     const key = scope ? `${seriesKey(f)}|@${scope}` : seriesKey(f);
     let s = bySeries.get(key);
     if (!s) {
-      s = { key, category: f.category, metric: f.metric, label: f.label, parent: f.parent, isTotal: f.is_total, unit: f.unit, scope, cells: {}, annual: {} };
+      s = { key, category: f.category, metric: f.metric, label: unmark(f.label), parent: f.parent && unmark(f.parent), isTotal: f.is_total, unit: f.unit, scope, cells: {}, annual: {} };
       bySeries.set(key, s);
       votes.set(key, { total: 0, n: 0, breakdown: new Map(), parent: new Map() });
     }

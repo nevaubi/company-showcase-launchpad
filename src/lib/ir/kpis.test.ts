@@ -421,3 +421,17 @@ describe("transposed segment grids", () => {
     expect(top?.ok).toBe(true);
   });
 });
+
+describe("brand names", () => {
+  it("shows one line for a product printed with and without its trademark mark", () => {
+    const facts = [
+      f("Humulin ®", "2024-03-31", 3, 300e6, { category: "product" }),
+      f("Humulin", "2024-06-30", 3, 310e6, { category: "product" }),
+    ];
+    const { series } = buildIrSeries(facts);
+    const lines = series.filter((s) => /humulin/i.test(s.label));
+    expect(lines).toHaveLength(1);
+    expect(lines[0].label).toBe("Humulin");
+    expect(Object.keys(lines[0].cells)).toHaveLength(2);
+  });
+});
