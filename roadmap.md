@@ -73,6 +73,7 @@
 - [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, KO, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`
 - [ ] Running: historical 2008+ SEC exhibit backfill for all companies (`scripts/ir-backfill.ts`)
 - [ ] Running: IR-website files for every company (`scripts/ir-site.ts`, Firecrawl + Tavily)
+- [ ] IR page must never look empty while the database is busy: slow-load notice, automatic retry, keep last good data; background jobs throttle themselves when database latency rises
 - [ ] Running: PDF/XLSX renditions for newly backfilled files (`scripts/ir-renditions.ts`)
 - [ ] Production schedules: keep the collector inside the scheduled-call time limit (small slices), reading stays in the batch runner
 - [ ] Deterministic accuracy audit: duplicate-total detection, sign conventions for eliminations
