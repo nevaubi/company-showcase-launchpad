@@ -65,12 +65,14 @@ export interface Filing {
   size?: number;
 }
 
+export type SegmentMetric = "revenue" | "operatingIncome" | "grossProfit" | "netIncome" | "assets" | "capex" | "dna";
+
 export interface SegmentFact {
   axis: string;
   axisLabel: string;
   member: string;
   label: string;
-  metric: "revenue" | "operatingIncome";
+  metric: SegmentMetric;
   concept: string;
   start?: string;
   end: string;
@@ -193,5 +195,6 @@ export interface MacroSeries {
   frequency: string;
   observations: [string, number][];
   fetchedAt: string;
-  source: "fred-live" | "snapshot";
+  source: "fred-live" | "treasury-live" | "cloud" | "snapshot";
+  agency?: string;
 }
