@@ -131,9 +131,11 @@ export function buildIrSeries(facts: IrFact[]): { series: IrSeries[]; quarters: 
   // Reconcile: children of a parent total (same category & metric) must sum to it per quarter.
   const series = [...bySeries.values()];
   inferSubtotals(series);
+  splitDoubleBreakdowns(series);
   const checks: ReconcileCheck[] = [];
   const totals = series.filter((s) => s.isTotal);
   for (const total of totals) {
+    if (total.unit !== "usd" && total.unit !== "count") continue;
     const kids = childrenOf(series, total);
     if (kids.length < 2) continue;
     for (const [end, c] of Object.entries(total.cells)) {
@@ -180,6 +182,33 @@ export function inferSubtotals(series: IrSeries[]) {
         break;
       }
     }
+  }
+}
+
+/**
+ * Two breakdowns of the same total (e.g. by segment and by product) are sometimes put under one
+ * parent, so the children add to 2× the total. When a subset of children matches the total in every
+ * quarter and the rest does too, split the rest into its own "second breakdown" group.
+ */
+export function splitDoubleBreakdowns(series: IrSeries[]) {
+  for (const total of series.filter((s) => s.isTotal && !s.key.endsWith("#alt"))) {
+    const kids = childrenOf(series, total);
+    if (kids.length < 4 || kids.length > 16) continue;
+    const ends = Object.keys(total.cells).filter((e) => kids.every((k) => k.cells[e]));
+    if (!ends.length) continue;
+    const tol = (e: string) => Math.max(Math.abs(total.cells[e].v) * 0.005, 1.5e6);
+    const sumOf = (xs: IrSeries[], e: string) => xs.reduce((n, k) => n + k.cells[e].v, 0);
+    if (!ends.every((e) => Math.abs(sumOf(kids, e) - 2 * total.cells[e].v) <= 2 * tol(e))) continue;
+    let split: IrSeries[] | null = null;
+    for (let mask = 1; mask < 1 << kids.length && !split; mask++) {
+      const sub = kids.filter((_, i) => mask & (1 << i));
+      if (sub.length < 2 || sub.length > kids.length - 2 || !(mask & 1)) continue;
+      if (ends.every((e) => Math.abs(sumOf(sub, e) - total.cells[e].v) <= tol(e))) split = kids.filter((_, i) => !(mask & (1 << i)));
+    }
+    if (!split) continue;
+    const alt: IrSeries = { ...total, key: `${total.key}#alt`, label: `${total.label} — second breakdown`, cells: { ...total.cells } };
+    series.push(alt);
+    for (const k of split) k.parent = alt.label;
   }
 }
 
