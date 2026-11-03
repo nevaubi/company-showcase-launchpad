@@ -560,7 +560,7 @@ export function buildIrSeries(
       } else {
         members = kids.filter((k) => cellsOf(k)[end]);
       }
-      members = oneTablePerLine(members, (k) => fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v ?? 0, value);
+      if (!(globalThis as { __noOne?: boolean }).__noOne) members = oneTablePerLine(members, (k) => fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v ?? 0, value);
       let ok = true;
       for (const k of members) {
         const childDoc = fromDoc(k, end, doc) ? doc : (store.get(k.key)?.get(end)?.[0]?.doc ?? doc);
