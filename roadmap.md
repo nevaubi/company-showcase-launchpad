@@ -49,4 +49,4 @@
 ## Later
 - [ ] Insurer template (BRK)
 - [ ] Company-extension XBRL tags (e.g. COP, NEE capex) via iXBRL facts so FCF isn't blank for those filers
-- [ ] Research-agent tool: search inside earnings-call transcripts
+- [x] Research-agent tool: search inside earnings-call transcripts
