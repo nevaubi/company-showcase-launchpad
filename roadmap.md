@@ -1,6 +1,6 @@
 # Filed Under — roadmap
 
-## Done (needs end-to-end verification)
+## Done (verified end to end in the browser)
 - [x] Real-data ingestion pipeline (SEC XBRL statements, filings index, segments from iXBRL, Form 4 insiders + combined feed, earnings releases) for AAPL, MSFT, NVDA, AMZN, GOOGL, TSLA
 - [x] Design system (paper/ink/highlighter), fonts, brand logo + favicon
 - [x] Landing page `/` + `/pricing`
@@ -18,10 +18,14 @@
 - [x] Research agent (tool loop over SEC/Yahoo/FRED + hosted web search, cited answers, saved sessions)
 - [x] Docs (rich text + AI assistant + insert sourced data table) & Sheets (formula engine with FU()/PRICE(), AI build)
 
-## In progress / ready
-- [ ] Tests for financial derivations, lookup periods and the sheet formula engine
-- [ ] End-to-end verification in the browser (demo sign-in, click-to-source, agent, docs/sheets save)
-- [ ] Mobile layout pass for app pages
+- [x] Tests for lookup periods/values and the sheet formula engine (`bunx vitest run`)
+- [x] End-to-end: demo sign-in, email sign-up + confirmation + sign-in, click-to-source, agent with quote highlighting, theses + AI review, docs/sheets autosave, macro brief, narratives
+- [x] Mobile layout pass (no horizontal overflow on main pages)
+
+## Ready
+- [ ] Mobile: collapse wide statement/insider tables into card rows below 640px
+- [ ] Narratives/news: show "via web search" provenance when the headline feed was unavailable
+- [ ] Sheets: choose sensible default number format for FU() results (scale-aware)
 
 ## Later
 - [ ] Earnings call transcripts source (needs licensed provider or Firecrawl connection)
