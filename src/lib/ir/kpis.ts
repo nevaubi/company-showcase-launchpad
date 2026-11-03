@@ -277,7 +277,26 @@ export function splitStockAndFlow(facts: IrFact[]): IrFact[] {
   });
 }
 
-export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string, LabelMapEntry>; fyEndMonth?: number | null } = {}): { series: IrSeries[]; quarters: string[]; years: string[]; checks: ReconcileCheck[] } {
+/**
+ * Totals whose listed lines never add up in any period (at least three tries, every one off by more
+ * than 2%): the hierarchy came from a mislabelled table, so those lines aren't parts of that total.
+ */
+export function neverTies(checks: ReconcileCheck[]): Set<string> {
+  const by = new Map<string, { n: number; close: number }>();
+  for (const c of checks) {
+    if (c.partial) continue;
+    const r = by.get(c.totalKey) ?? { n: 0, close: 0 };
+    r.n++;
+    if (c.ok || Math.abs(c.sum - c.total) <= Math.abs(c.total) * 0.02) r.close++;
+    by.set(c.totalKey, r);
+  }
+  return new Set([...by].filter(([, r]) => r.n >= 3 && r.close === 0).map(([k]) => k));
+}
+
+export function buildIrSeries(
+  input: IrFact[],
+  opts: { labelMap?: Record<string, LabelMapEntry>; fyEndMonth?: number | null; unlink?: Set<string> } = {},
+): { series: IrSeries[]; quarters: string[]; years: string[]; checks: ReconcileCheck[] } {
   const mapped = splitStockAndFlow(splitGeoColumns(qualifyGenericLines(applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value)))));
   // Trailing-twelve-month columns ending mid-year are not fiscal years.
   const fyEnd = opts.fyEndMonth ?? fiscalYearEndMonth(mapped);
@@ -428,6 +447,10 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
   borrowTotals(series, qv, fv);
   inferSubtotals(series);
   splitDoubleBreakdowns(series, qv, fv);
+  if (opts.unlink?.size) {
+    const cut = series.filter((s) => opts.unlink!.has(s.key)).flatMap((t) => childrenOf(series, t));
+    for (const k of cut) k.parent = null;
+  }
 
   // Per-period vintage choice and reconciliation, top-down from each root total.
   const checks: ReconcileCheck[] = [];

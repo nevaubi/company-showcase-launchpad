@@ -98,6 +98,8 @@ export interface IrStats {
   checksFY: { ok: number; total: number; partial?: number };
   /** values flagged as ~1,000× off their neighbouring periods */
   scaleFlags?: number;
+  /** printed totals whose listed lines never add up, shown as plain lines instead of a breakdown */
+  unlinked?: number;
 }
 
 const locOf = (f: IrFact): PayloadLocator | undefined => {
@@ -129,7 +131,11 @@ export function scaleOutliers(cells: Record<string, { v: number }>): Set<string>
 }
 
 export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<string, LabelMapEntry>): IrPayload {
-  const { series, quarters, years, checks } = buildIrSeries(facts, { labelMap });
+  // Second pass without hierarchies whose parts never add up to their total in any period.
+  let built = buildIrSeries(facts, { labelMap });
+  const unlink = neverTies(built.checks);
+  if (unlink.size) built = buildIrSeries(facts, { labelMap, unlink });
+  const { series, quarters, years, checks } = built;
   const docIndex = new Map<string, number>();
   const docs: PayloadDoc[] = [];
   const di = (f: IrFact) => {
@@ -238,6 +244,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       checksQ: { ok: q.filter((c) => c.ok).length, total: q.filter((c) => !c.partial).length, partial: q.filter((c) => c.partial).length },
       checksFY: { ok: fy.filter((c) => c.ok).length, total: fy.filter((c) => !c.partial).length, partial: fy.filter((c) => c.partial).length },
       scaleFlags,
+      unlinked: unlink.size,
     },
   };
 }
