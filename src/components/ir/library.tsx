@@ -89,8 +89,8 @@ export function IrLibrary({ ticker, documents: files, images = 0 }: { ticker: st
       (!year || yearOf(d) === year) &&
       (!q || docTitle(d).toLowerCase().includes(q) || d.title.toLowerCase().includes(q)),
   );
-  const total = documents.reduce((n, d) => n + (d.bytes ?? 0), 0);
-  const read = documents.filter((d) => d.extract_status?.startsWith("ok")).length;
+  const total = files.reduce((n, d) => n + (d.bytes ?? 0), 0);
+  const read = files.filter((d) => d.extract_status?.startsWith("ok")).length;
 
   const view = async (d: IrDocRow) => {
     if (d.viewable) {
