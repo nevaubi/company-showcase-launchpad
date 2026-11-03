@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { CheckCircle2, Clock3, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, Search } from "lucide-react";
 import { toast } from "sonner";
@@ -9,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getIrDownload, type IrDocRow } from "@/lib/ir.functions";
+import { getIrDownload, getIrImages, type IrDocRow } from "@/lib/ir.functions";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -56,15 +57,23 @@ function KindIcon({ ext }: { ext: string | null }) {
 
 const yearOf = (d: IrDocRow) => (d.filed ?? d.period ?? "").slice(0, 4);
 
-export function IrLibrary({ ticker, documents }: { ticker: string; documents: IrDocRow[] }) {
+export function IrLibrary({ ticker, documents: files, images = 0 }: { ticker: string; documents: IrDocRow[]; images?: number }) {
   const { open } = useSource();
   const download = useServerFn(getIrDownload);
-  const kinds = useMemo(() => [...new Set(documents.map((d) => d.kind))].sort((a, b) => (KIND_LABEL[a] ?? a).localeCompare(KIND_LABEL[b] ?? b)), [documents]);
+  const fetchImages = useServerFn(getIrImages);
   const [kind, setKind] = useState<string>("all");
   const [year, setYear] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [showImages, setShowImages] = useState(false);
   const [limit, setLimit] = useState(150);
+  const wantImages = images > 0 && (showImages || kind === "image");
+  const imgQ = useQuery({ queryKey: ["ir-images", ticker], queryFn: () => fetchImages({ data: { ticker } }), enabled: wantImages, staleTime: 10 * 60_000 });
+  const documents = useMemo(() => (wantImages && imgQ.data ? [...files, ...imgQ.data] : files), [files, imgQ.data, wantImages]);
+  const kinds = useMemo(() => {
+    const k = new Set(files.map((d) => d.kind));
+    if (images) k.add("image");
+    return [...k].sort((a, b) => (KIND_LABEL[a] ?? a).localeCompare(KIND_LABEL[b] ?? b));
+  }, [files, images]);
 
   const years = useMemo(() => {
     const m = new Map<string, number>();
@@ -107,13 +116,13 @@ export function IrLibrary({ ticker, documents }: { ticker: string; documents: Ir
   return (
     <Panel
       title="IR document library"
-      subtitle={`${documents.length.toLocaleString()} files stored permanently (${(total / 1e6).toFixed(1)} MB) · ${read.toLocaleString()} read for data · earnings releases, supplements, presentations and data files from EDGAR and the IR website`}
+      subtitle={`${(files.length + images).toLocaleString()} files stored permanently${images ? ` (${images.toLocaleString()} slide images)` : ""} · ${(total / 1e6).toFixed(1)} MB of documents · ${read.toLocaleString()} read for data · earnings releases, supplements, presentations and data files from EDGAR and the IR website`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Segmented label="Document type" value={kind} onChange={(v) => (setKind(v), setLimit(150))} options={[{ v: "all", l: "All" }, ...kinds.map((k) => ({ v: k, l: KIND_LABEL[k] ?? k }))]} size="xs" />
-          {kind === "all" && (
+          {kind === "all" && images > 0 && (
             <Button size="sm" variant="ghost" onClick={() => setShowImages((x) => !x)}>
-              {showImages ? "Hide images" : "Show images"}
+              {wantImages && imgQ.isLoading ? "Loading images…" : showImages ? "Hide images" : `Show ${images.toLocaleString()} images`}
             </Button>
           )}
         </div>

@@ -88,7 +88,7 @@ function IrPage() {
           </p>
         </Panel>
       )}
-      <IrLibrary ticker={ticker} documents={data.documents} />
+      <IrLibrary ticker={ticker} documents={data.documents} images={data.images} />
     </div>
   );
 }
