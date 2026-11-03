@@ -91,10 +91,8 @@ describe("statement builder", () => {
 });
 
 describe("data-quality guards", () => {
-  it("pairs a restated annual total with the nine-month figure from the same restatement", () => {
-    // FY2025 10-K (filed 2026) restates revenue to 300 after a spin-off; the original 9M YTD (filed 2025)
-    // was 340, and the restated 9M comparative (filed with the next year's Q3 10-Q) is 220.
-    const s = buildStatements(
+  const restated = (extra: RawFact[]) =>
+    buildStatements(
       filer({
         Revenues: {
           facts: [
@@ -102,16 +100,26 @@ describe("data-quality guards", () => {
             fact("2025-01-01", "2025-03-31", 100, "10-Q", "2025-04-30"),
             fact("2025-01-01", "2025-06-30", 210, "10-Q", "2025-07-30"),
             fact("2025-01-01", "2025-09-30", 340, "10-Q", "2025-10-30"),
-            fact("2025-01-01", "2025-12-31", 300, "10-K", "2026-02-01"),
-            fact("2025-01-01", "2025-09-30", 220, "10-Q", "2026-10-30"),
+            fact("2025-01-01", "2025-12-31", 300, "10-K", "2026-02-01"), // restated after a spin-off
+            ...extra,
           ],
         },
         OperatingIncomeLoss: { facts: OPINC },
       }),
     );
+  const q4 = (s: ReturnType<typeof buildStatements>) => {
     const q = s.quarterly.income;
-    const cell = q.rows.find((r) => r.key === "revenue")!.cells[q.periods.findIndex((p) => p.key === "FY2025Q4")];
-    expect(cell?.v).toBe(80); // 300 − 220, not 300 − 340
+    return q.rows.find((r) => r.key === "revenue")!.cells[q.periods.findIndex((p) => p.key === "FY2025Q4")];
+  };
+
+  it("derives Q4 from a restated annual total and the restated nine-month comparative", () => {
+    // The next year's Q3 10-Q carries the restated 9M comparative (220).
+    expect(q4(restated([fact("2025-01-01", "2025-09-30", 220, "10-Q", "2026-10-30")]))?.v).toBe(80);
+  });
+
+  it("drops a fourth quarter that would come out negative from mismatched restatements", () => {
+    // Only the original 9M (340) exists, so 300 − 340 would show negative revenue.
+    expect(q4(restated([]))).toBeNull();
   });
 
   it("rescales share counts a filing tagged in millions, keeping the tagged fact as the source", () => {

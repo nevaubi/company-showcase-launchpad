@@ -171,17 +171,6 @@ function choose(list: RawFact[], concept: string, pred: (f: RawFact) => boolean)
   return { fact, concept, alts };
 }
 
-/** Like choose(), but prefers the fact filed nearest a reference date (ties → later filing). */
-function chooseNear(list: RawFact[], concept: string, pred: (f: RawFact) => boolean, filed: string): Picked | undefined {
-  const matches = list.filter(pred);
-  if (!matches.length) return undefined;
-  const dist = (f: RawFact) => Math.abs(toTime(f.filed) - toTime(filed));
-  const sorted = [...matches].sort((a, b) => dist(a) - dist(b) || (a.filed < b.filed ? 1 : -1));
-  const fact = sorted[0];
-  const alts = [...new Set(sorted.slice(1).filter((f) => f.val === fact.val && f.accn !== fact.accn).map((f) => f.accn))];
-  return { fact, concept, alts };
-}
-
 /** Lines that can't be negative; a negative derived quarter means mismatched restatements, so it's dropped. */
 const NON_NEGATIVE = new Set(["revenue", "costOfRevenue", "rnd", "sga", "salesMarketing", "generalAdmin", "dna", "sbc", "capex", "dividends", "buybacks", "sharesBasic", "sharesDiluted"]);
 
@@ -267,12 +256,13 @@ function quarterCell(
     if (!cum) continue;
     const cumLabel = k === 4 ? `FY${year.fy} total (10-K)` : `${YTD_LABEL[k - 1]} (Q${k} 10-Q)`;
     const prevEnd = year.qEnds[k - 2];
-    // Pair with the earlier year-to-date figure filed closest to the later one, so both sides
-    // share a restatement basis (a spin-off restates the 10-K total but not old 10-Qs).
+    // Latest-filed on both sides keeps them on the same restatement basis when a later filing
+    // restated the comparatives; when it didn't (a spin-off restates the 10-K total but not old
+    // 10-Qs), the non-negative guard below drops the mismatched result instead of showing it.
     const prevCum =
       k - 1 === 1
-        ? chooseNear(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f), cum.fact.filed)
-        : chooseNear(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f), cum.fact.filed);
+        ? choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f))
+        : choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f));
     if (prevCum && !(NON_NEGATIVE.has(def.key) && cum.fact.val - prevCum.fact.val < 0)) {
       const prevLabel = k - 1 === 1 ? "Q1 (3M)" : `${YTD_LABEL[k - 2]} (Q${k - 1} 10-Q)`;
       const parts: DerivedPart[] = [
