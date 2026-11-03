@@ -62,3 +62,6 @@
 - [ ] Extract segment/KPI tables from stored releases & supplements with cell-level locators; reconcile segments to parent totals; derive Q4 = FY − 9M
 - [ ] Viewer: click-to-source for IR documents (HTML highlight, PDF page, XLSX cell)
 - [ ] Company "IR library" tab listing every stored document
+- [x] IR documents stored (SEC exhibits + IR sites), PDF/XLSX renditions, KPI extraction with cell-level click-to-source, Q4 derivation, reconciliation and SEC cross-check
+- [ ] IR: renditions for newly collected PDFs/XLSX run from `scripts/ir-renditions.ts` (not yet scheduled in production — needs a server-side PDF parser)
+- [ ] IR: a few breakdowns still don't reconcile (ABBV, AMD, CAT, CVX, FCX, GOOGL, SLB, TSLA, VZ) — flagged in the UI
