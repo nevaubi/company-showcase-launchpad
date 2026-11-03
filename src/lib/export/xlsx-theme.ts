@@ -63,6 +63,9 @@ export function sheetName(name: string, used: Set<string>) {
 export const sheetRef = (name: string) => `'${name.replace(/'/g, "''")}'`;
 
 const ZERO = '"–"';
+/** Millions with one decimal when a line has values under $10 million, as the app shows them. */
+export const usdNeedsDecimals = (values: number[]) => values.some((v) => v !== 0 && Math.abs(v) < 1e7);
+
 /**
  * Number format for a unit. Dollar cells always hold the full printed value; the $K/$M/$B scale
  * is applied by the format's trailing commas, so formulas stay exact.
@@ -70,7 +73,7 @@ const ZERO = '"–"';
 export function numFmtFor(unit: string, scale: Scale, opts: { decimals?: boolean } = {}) {
   switch (unit) {
     case "usd": {
-      const body = scale === "full" ? "#,##0" : scale === "K" ? "#,##0," : scale === "M" ? "#,##0.0,," : "#,##0.00,,,";
+      const body = scale === "full" ? "#,##0" : scale === "K" ? "#,##0," : scale === "M" ? (opts.decimals ? "#,##0.0,," : "#,##0,,") : "#,##0.00,,,";
       return `${body};(${body});${ZERO}`;
     }
     case "usdPerShare":
@@ -231,6 +234,8 @@ export function cover(wb: Workbook, ws: Worksheet, info: CoverInfo) {
       ws.getCell(r, 3).value = l.text;
       ws.getCell(r, 3).font = font({ size: 9, color: { argb: C.inkSoft } });
       ws.getCell(r, 3).alignment = { wrapText: true, vertical: "top" };
+      s.alignment = { horizontal: "right", vertical: "top" };
+      ws.getRow(r).height = Math.max(15, Math.ceil(l.text.length / 105) * 12.5 + 3);
       r++;
     }
   }

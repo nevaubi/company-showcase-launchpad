@@ -1,7 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { z } from "zod";
 import { CheckCircle2, FileStack, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { IrBreakdowns } from "@/components/ir/breakdowns";
@@ -18,7 +19,15 @@ import { cn } from "@/lib/utils";
 
 const monthYear = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
+// Workbook "Open source" links land here with the line and period to open.
+const search = z.object({
+  line: z.string().optional(),
+  period: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  freq: z.enum(["q", "y"]).optional(),
+});
+
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")({
+  validateSearch: search,
   head: ({ params }) => ({
     meta: [
       { title: `${params.ticker.toUpperCase()} investor-relations data · Filed Under` },
@@ -33,6 +42,10 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")
 function IrPage() {
   const { ticker: raw } = Route.useParams();
   const ticker = raw.toUpperCase();
+  const { line, period, freq } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+  const focus = useMemo(() => (line && period ? { line, period, freq: freq ?? ("q" as const) } : undefined), [line, period, freq]);
+  const clearFocus = useCallback(() => navigate({ search: {}, replace: true }), [navigate]);
   const fetchIr = useServerFn(getIrData);
   const q = useQuery({
     queryKey: ["ir", ticker],
@@ -82,7 +95,7 @@ function IrPage() {
     <div className="grid grid-cols-1 gap-5">
       <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents.length + (data.images ?? 0)} builtAt={data.builtAt} />
       {data.payload && data.payload.series.length > 0 ? (
-        <IrBreakdowns ticker={ticker} payload={data.payload} />
+        <IrBreakdowns ticker={ticker} payload={data.payload} focus={focus} onFocusDone={clearFocus} />
       ) : (
         <Panel title="Segment & KPI breakdowns">
           <p className="p-5 text-sm text-muted-foreground">

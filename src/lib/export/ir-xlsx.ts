@@ -1,7 +1,7 @@
 // Investor-relations breakdowns as a styled Excel workbook: one sheet per breakdown type and period
 // type, live formulas for calculated quarters/years and for every "parts = total" check, plus Checks
 // and Data & sources sheets that trace each number to the stored document (and SEC.gov when filed).
-import type { Workbook, Worksheet } from "exceljs";
+import type { Workbook } from "exceljs";
 import type { Scale } from "@/lib/format";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { groupOrder, groupTitle, inDimension, periodLabel, periodLong, rowLabel, unitCaption } from "@/lib/ir/display";
@@ -28,6 +28,7 @@ import {
   titleBlock,
   totalRule,
   unitShort,
+  usdNeedsDecimals,
 } from "@/lib/export/xlsx-theme";
 
 export type IrFreq = "q" | "y";
@@ -187,6 +188,8 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
     stats.sheets.push(plan.name);
     prepareSheet(ws, { freezeCols: 2, freezeRows: HEAD + 1, tab: plan.section.tab });
     ws.properties.outlineProperties = { summaryBelow: true, summaryRight: false };
+    // exceljs marks a row "collapsed" when its level reaches outlineLevelRow; keep every group open.
+    ws.properties.outlineLevelRow = Math.min(8, Math.max(0, ...plan.blocks.flatMap((b) => (b.root ? b.lines.map((l) => l.depth) : [0]))) + 1);
     ws.getColumn(1).width = 54;
     ws.getColumn(2).width = 7;
     plan.cols.forEach((_, j) => (ws.getColumn(FIRST + j).width = 12.5));
@@ -255,7 +258,8 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
         const s = l.s;
         const isRoot = root?.k === s.k;
         r.outlineLevel = root ? Math.min(l.depth, 7) : 0;
-        const fmt = numFmtFor(s.unit, o.scale, { decimals: s.unit === "count" && Object.values(cellsOf(s, f)).some((c) => !Number.isInteger(c.v) && Math.abs(c.v) < 1000) });
+        const vals = plan.cols.map((e) => cellsOf(s, f)[e]?.v).filter((v): v is number => v != null);
+        const fmt = numFmtFor(s.unit, o.scale, { decimals: s.unit === "usd" ? usdNeedsDecimals(vals) : s.unit === "count" && vals.some((v) => !Number.isInteger(v) && Math.abs(v) < 1000) });
         const label = r.getCell(1);
         if (l.kind === "residual") {
           label.value = "Not itemized in the release";
@@ -283,7 +287,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
         const scopeTag = s.sc && !isRoot && root?.sc !== s.sc ? ` · ${s.sc}` : "";
         label.value = `${isRoot ? s.label : rowLabel(s.label, root?.label)}${scopeTag}${s.pit ? " (period end)" : ""}`;
         label.font = font({ bold: s.total, color: { argb: C.ink } });
-        label.alignment = { indent: root ? Math.min(l.depth === 0 ? 0 : l.depth, 8) : 0 };
+        label.alignment = { indent: root ? Math.min(l.depth, 8) : 0 };
         const u = r.getCell(2);
         u.value = unitShort(s.unit, o.scale);
         u.font = font({ size: 8, color: { argb: C.muted } });
@@ -351,7 +355,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
           }
           const sameParts = Math.abs(naive - chk.sum) <= tolOf(root.unit, chk.total) * 0.2;
           if (sameParts) {
-            const t = cellValue(1, root.unit) === 1 ? tref : tref;
+            const t = tref;
             x.value = {
               formula: `IF(ABS((${expr})-${t})<=${tolExpr(root.unit, t)},"✓",(${expr})-${t})`,
               result: chk.ok ? "✓" : chk.sum - chk.total,
@@ -361,7 +365,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
             x.value = chk.ok ? "✓" : chk.sum - chk.total;
             x.note = `Filed Under matched ${chk.n} lines for this total${chk.sub?.length ? ` (subtracting ${chk.sub.join(", ")})` : ""} — including a line printed in a neighbouring table or the parts of a subtotal not printed this period — so this check is a stored result rather than a formula.`;
           }
-          x.numFmt = numFmtFor(root.unit, o.scale);
+          x.numFmt = numFmtFor(root.unit, o.scale, { decimals: true });
           x.font = font({ size: 9, bold: chk.ok, color: { argb: chk.ok ? C.positive : C.warning } });
           if (!chk.ok) x.fill = solid(C.warningSoft);
         });
@@ -397,7 +401,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
       const s = byKey.get(c.k);
       const at = sheetOf.get(`${c.k}|${f}`)!;
       const row = ws.getRow(r);
-      const fmt = numFmtFor(s?.unit ?? "usd", o.scale);
+      const fmt = numFmtFor(s?.unit ?? "usd", o.scale, { decimals: true });
       const status = c.partial ? `Selected lines (${Math.round((c.sum / c.total) * 100)}% listed)` : c.ok ? "Ties" : "Off";
       row.values = [at.sheet, at.block.title, s?.label ?? c.k, periodLabel(c.e, f), new Date(`${c.e}T00:00:00Z`), c.total, c.sum, null, c.n, c.sub?.join(", ") ?? "", status];
       row.getCell(5).numFmt = "d mmm yyyy";

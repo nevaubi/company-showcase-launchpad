@@ -1,39 +1,59 @@
-// Excel model export: one sheet per statement with live formulas for calculated
-// lines, plus a Sources sheet that maps every number to its SEC filing.
+// Excel model export: one sheet per statement with live formulas for calculated lines, plus a
+// Sources sheet that maps every number to its SEC filing. Styled with the shared Filed Under theme;
 // exceljs is loaded on demand so it never weighs on page loads.
 import type { CompanyDataset, Period, Row, Statement, StatementKey } from "@/lib/financials/types";
-import { scaled, scaleCaption, unitLabel, type Scale } from "@/lib/format";
+import { unitLabel, type Scale } from "@/lib/format";
+import {
+  C,
+  col,
+  cover,
+  downloadBlob,
+  fetchLogo,
+  font,
+  footer,
+  hairline,
+  inkHeader,
+  link,
+  loadExcel,
+  numFmtFor,
+  prepareSheet,
+  scaleWords,
+  sheetRef,
+  solid,
+  titleBlock,
+  totalRule,
+  workbookBlob,
+} from "@/lib/export/xlsx-theme";
 
 type Freq = "annual" | "quarterly";
 
-const SHEETS: { key: StatementKey; name: string }[] = [
-  { key: "income", name: "Income statement" },
-  { key: "balance", name: "Balance sheet" },
-  { key: "cashflow", name: "Cash flow" },
-  { key: "kpis", name: "Ratios & KPIs" },
+const SHEETS: { key: StatementKey; name: string; tab: string }[] = [
+  { key: "income", name: "Income statement", tab: C.ink },
+  { key: "balance", name: "Balance sheet", tab: C.hyperlink },
+  { key: "cashflow", name: "Cash flow", tab: C.positive },
+  { key: "kpis", name: "Ratios & KPIs", tab: C.warning },
 ];
 
-const colName = (n: number) => {
-  let s = "";
-  for (n += 1; n > 0; n = Math.floor((n - 1) / 26)) s = String.fromCharCode(65 + ((n - 1) % 26)) + s;
-  return s;
-};
-const FIRST_COL = 2; // A = label, B = unit, C… = periods
+const FIRST = 3; // A = label, B = unit, C… = periods
+const HEAD = 4; // header rows 4–5
+const DATA0 = HEAD + 3; // first statement row
 
 function numFmt(row: Row, scale: Scale) {
   switch (row.unit) {
     case "usd":
-      return scale === "B" ? '#,##0.0;(#,##0.0);"–"' : '#,##0;(#,##0);"–"';
-    case "shares":
-      return scale === "B" ? "#,##0.00" : "#,##0";
+      return numFmtFor("usd", scale);
+    case "shares": {
+      const body = scale === "full" ? "#,##0" : scale === "K" ? "#,##0," : scale === "M" ? "#,##0.0,," : "#,##0.00,,,";
+      return `${body};(${body});"–"`;
+    }
     case "usdPerShare":
-      return '0.00;(0.00);"–"';
+      return '$0.00;($0.00);"–"';
     case "pct":
-      return "0.0%";
+      return '0.0%;(0.0%);"–"';
     case "ratio":
-      return '0.00"×"';
+      return '0.00"×";(0.00"×");"–"';
     case "days":
-      return "0";
+      return '0;(0);"–"';
   }
 }
 
@@ -85,12 +105,14 @@ function priorYearIndex(periods: Period[], i: number) {
   return periods.findIndex((q) => q.fy === p.fy - 1 && (q.fq ?? 0) === (p.fq ?? 0));
 }
 
-export async function exportWorkbook(d: CompanyDataset, freq: Freq, scale: Scale, periods?: number) {
-  const ExcelJS = (await import("exceljs")).default;
+export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, scale: Scale, periods?: number, logo?: ArrayBuffer | null) {
+  const ExcelJS = await loadExcel();
   const wb = new ExcelJS.Workbook();
   wb.creator = "Filed Under";
   wb.created = new Date();
+  wb.calcProperties = { fullCalcOnLoad: true };
   const ticker = d.profile.ticker;
+  const name = `${d.profile.name} (${ticker})`;
   const statements = d.statements[freq];
   const allPeriods = statements.income.periods;
   const startIdx = periods ? Math.max(0, allPeriods.length - periods) : 0;
@@ -101,100 +123,105 @@ export async function exportWorkbook(d: CompanyDataset, freq: Freq, scale: Scale
     const f = filings.get(accn);
     return `https://www.sec.gov/Archives/edgar/data/${cik}/${accn.replace(/-/g, "")}/${f?.doc ?? ""}`;
   };
+  const last = FIRST + ps.length - 1;
+  let formulas = 0;
+  let values = 0;
 
   // Row positions for cross-sheet references.
   const where = new Map<string, Ref>();
-  for (const s of SHEETS) statements[s.key].rows.forEach((r, i) => where.set(`${s.key}.${r.key}`, { sheet: s.name, row: i + 3 }));
+  for (const s of SHEETS) statements[s.key].rows.forEach((r, i) => where.set(`${s.key}.${r.key}`, { sheet: s.name, row: DATA0 + i }));
 
-  const ink = "FF1F232B";
-  const paper = "FFF7F4EC";
+  const ov = wb.addWorksheet("Overview");
 
   for (const s of SHEETS) {
     const st: Statement = statements[s.key];
-    const ws = wb.addWorksheet(s.name, { views: [{ state: "frozen", xSplit: 2, ySplit: 2 }] });
-    ws.getColumn(1).width = 46;
+    const ws = wb.addWorksheet(s.name);
+    prepareSheet(ws, { freezeCols: 2, freezeRows: HEAD + 1, tab: s.tab });
+    ws.getColumn(1).width = 48;
     ws.getColumn(2).width = 8;
-    ps.forEach((_, j) => (ws.getColumn(FIRST_COL + j + 1).width = 13));
-    const title = ws.getRow(1);
-    title.getCell(1).value = `${d.profile.name} (${ticker}) — ${s.name}, ${freq}`;
-    title.getCell(1).font = { bold: true, size: 12 };
-    title.getCell(2).value = scaleCaption(scale);
-    title.getCell(2).font = { italic: true, color: { argb: "FF6B7280" } };
-    const head = ws.getRow(2);
-    head.getCell(1).value = "Line item";
-    head.getCell(2).value = "Unit";
-    ps.forEach((p, j) => (head.getCell(FIRST_COL + j + 1).value = `${p.label}\n${p.end}`));
-    head.height = 30;
-    head.eachCell((c, col) => {
-      c.font = { bold: true, color: { argb: paper } };
-      c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ink } };
-      c.alignment = { wrapText: true, vertical: "middle", horizontal: col > FIRST_COL ? "right" : "left" };
+    ps.forEach((_, j) => (ws.getColumn(FIRST + j).width = 13));
+    titleBlock(ws, `${name} — ${s.name}, ${freq}`, `Dollar amounts shown in ${scaleWords(scale)}; cells hold full values. Blue = reported in an SEC filing, black = formula, green = formula using another sheet.`, last);
+    ws.getRow(3).height = 6;
+    const h1 = ws.getRow(HEAD);
+    const h2 = ws.getRow(HEAD + 1);
+    h1.getCell(1).value = "Line item";
+    h1.getCell(2).value = "Unit";
+    h2.getCell(1).value = freq === "annual" ? "Fiscal year ended" : "Quarter ended";
+    ps.forEach((p, j) => {
+      h1.getCell(FIRST + j).value = p.label;
+      const c = h2.getCell(FIRST + j);
+      c.value = new Date(`${p.end}T00:00:00Z`);
+      c.numFmt = "d mmm yyyy";
     });
+    inkHeader(h1, 1, last, { size: 10, height: 18, align: (c) => (c >= FIRST ? "right" : "left") });
+    inkHeader(h2, 1, last, { size: 8, height: 14, align: (c) => (c >= FIRST ? "right" : "left") });
+    for (let c = 1; c <= last; c++) h2.getCell(c).font = font({ size: 8, color: { argb: "FFC9C5BC" } });
+    ws.pageSetup.printTitlesRow = `${HEAD}:${HEAD + 1}`;
+    footer(ws, `${name} · ${s.name}`);
 
     st.rows.forEach((row, ri) => {
-      const r = ws.getRow(ri + 3);
-      r.getCell(1).value = row.label;
-      r.getCell(1).alignment = { indent: row.indent ? 2 : 0 };
-      if (row.bold) r.getCell(1).font = { bold: true };
-      r.getCell(2).value = unitLabel(row.unit, scale);
-      r.getCell(2).font = { color: { argb: "FF6B7280" }, size: 9 };
+      const r = ws.getRow(DATA0 + ri);
+      const border = row.bold ? totalRule : hairline;
+      const label = r.getCell(1);
+      label.value = row.label;
+      label.alignment = { indent: row.indent ? 2 : 0 };
+      label.font = font({ bold: row.bold, color: { argb: C.ink } });
+      label.border = border;
+      const u = r.getCell(2);
+      u.value = unitLabel(row.unit, scale);
+      u.font = font({ size: 8, color: { argb: C.muted } });
+      u.alignment = { horizontal: "center" };
+      u.border = border;
       const template = FORMULAS[s.key]?.[row.key];
-      ps.forEach((p, j) => {
+      ps.forEach((_, j) => {
         const i = startIdx + j;
         const cell = row.cells[i];
-        const xl = r.getCell(FIRST_COL + j + 1);
+        const xl = r.getCell(FIRST + j);
         xl.numFmt = numFmt(row, scale);
-        if (row.bold) xl.font = { bold: true };
+        xl.border = border;
         if (!cell) return;
-        const value = row.unit === "pct" ? cell.v : scaled(cell.v, row.unit, scale);
+        values++;
+        const value = cell.v;
         const isDerived = !cell.src && !!cell.derived;
         if (isDerived && template) {
           const ref = (key: string, offset = 0) => {
             const [sk, rk] = key.includes(".") ? key.split(".") : [s.key, key];
             const at = where.get(`${sk}.${rk}`);
             const srcRow = statements[sk as StatementKey].rows.find((x) => x.key === rk);
-            let col = j;
+            let c = j;
             if (offset) {
               const pi = priorYearIndex(allPeriods, i);
               if (pi < startIdx) return null;
-              col = pi - startIdx;
+              c = pi - startIdx;
             }
-            if (!at || !srcRow?.cells[startIdx + col]) return null;
-            const sheetRef = at.sheet === s.name ? "" : `'${at.sheet}'!`;
-            return `${sheetRef}${colName(FIRST_COL + col)}${at.row}`;
+            if (!at || !srcRow?.cells[startIdx + c]) return null;
+            const prefix = at.sheet === s.name ? "" : `${sheetRef(at.sheet)}!`;
+            return `${prefix}${col(FIRST + c)}${at.row}`;
           };
           const f = template(ref);
           if (f) {
             xl.value = { formula: f, result: value };
-            xl.font = { ...(xl.font ?? {}), italic: true, color: { argb: "FF374151" } };
+            xl.font = font({ italic: true, bold: row.bold, color: { argb: f.includes("!") ? C.link : C.formula } });
+            formulas++;
             return;
           }
         }
         xl.value = value;
-        if (isDerived) xl.font = { ...(xl.font ?? {}), italic: true, color: { argb: "FF374151" } };
+        xl.font = isDerived ? font({ italic: true, bold: row.bold, color: { argb: C.inkSoft } }) : font({ bold: row.bold, color: { argb: C.input } });
       });
     });
   }
 
   // Sources: every reported number and every component of a calculated one.
-  const src = wb.addWorksheet("Sources", { views: [{ state: "frozen", ySplit: 1 }] });
-  src.columns = [
-    { header: "Statement", key: "statement", width: 18 },
-    { header: "Line item", key: "line", width: 36 },
-    { header: "Period", key: "period", width: 12 },
-    { header: "Value (US$, as reported)", key: "value", width: 22 },
-    { header: "Basis", key: "basis", width: 46 },
-    { header: "XBRL concept", key: "concept", width: 48 },
-    { header: "Fact period", key: "factPeriod", width: 24 },
-    { header: "Form", key: "form", width: 8 },
-    { header: "Filed", key: "filed", width: 12 },
-    { header: "Accession", key: "accn", width: 22 },
-    { header: "Filing", key: "url", width: 18 },
-  ];
-  src.getRow(1).eachCell((c) => {
-    c.font = { bold: true, color: { argb: paper } };
-    c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ink } };
-  });
+  const src = wb.addWorksheet("Sources");
+  prepareSheet(src, { freezeRows: HEAD, tab: C.inkSoft });
+  const head = ["Statement", "Line item", "Period", "Value (US$, as reported)", "Basis", "XBRL concept", "Fact period", "Form", "Filed", "Accession", "Filing"];
+  [18, 36, 12, 22, 46, 48, 24, 8, 12, 22, 16].forEach((w, i) => (src.getColumn(i + 1).width = w));
+  titleBlock(src, `${name} — sources`, "Every reported value and every part of a calculated one, with the SEC filing it comes from.", head.length);
+  const hr = src.getRow(HEAD);
+  head.forEach((h, i) => (hr.getCell(i + 1).value = h));
+  inkHeader(hr, 1, head.length, { height: 18, align: (c) => (c === 4 ? "right" : "left") });
+  let sr = HEAD + 1;
   for (const s of SHEETS) {
     if (s.key === "kpis") continue;
     for (const row of statements[s.key].rows)
@@ -204,40 +231,62 @@ export async function exportWorkbook(d: CompanyDataset, freq: Freq, scale: Scale
         const refs = cell.src ? [{ ...cell.src, label: "Reported" }] : (cell.derived?.parts ?? []);
         for (const r of refs) {
           const f = filings.get(r.accn);
-          const added = src.addRow({
-            statement: s.name,
-            line: row.label,
-            period: p.label,
-            value: r.value,
-            basis: cell.src ? "Reported" : `${cell.derived?.formula} — ${r.label}`,
-            concept: r.concept,
-            factPeriod: r.start ? `${r.start} → ${r.end}` : r.end,
-            form: f?.form ?? "",
-            filed: f?.filed ?? "",
-            accn: r.accn,
-            url: { text: "Open on SEC.gov", hyperlink: filingUrl(r.accn) },
-          });
-          added.getCell("value").numFmt = row.unit === "usd" ? "#,##0" : "0.00";
-          added.getCell("url").font = { color: { argb: "FF1D4ED8" }, underline: true };
+          const x = src.getRow(sr);
+          x.values = [s.name, row.label, p.label, r.value, cell.src ? "Reported" : `${cell.derived?.formula} — ${r.label}`, r.concept, r.start ? `${r.start} → ${r.end}` : r.end, f?.form ?? "", f?.filed ?? "", r.accn];
+          for (let i = 1; i <= head.length; i++) {
+            x.getCell(i).font = font({ size: 9, color: { argb: i === 4 ? C.input : C.formula } });
+            x.getCell(i).border = hairline;
+          }
+          x.getCell(4).numFmt = row.unit === "usd" ? "#,##0;(#,##0)" : "0.00";
+          link(x.getCell(11), "Open on SEC.gov", filingUrl(r.accn));
+          x.getCell(11).font = font({ size: 9, color: { argb: C.hyperlink }, underline: true });
+          sr++;
         }
       });
   }
+  src.autoFilter = { from: { row: HEAD, column: 1 }, to: { row: Math.max(HEAD + 1, sr - 1), column: head.length } };
+  footer(src, `${name} · Sources`);
 
-  const about = wb.addWorksheet("About");
-  about.getColumn(1).width = 110;
-  [
-    `${d.profile.name} (${ticker}) — standardized financial statements from SEC EDGAR XBRL filings.`,
-    `Exported ${new Date().toISOString().slice(0, 10)} from Filed Under. Dataset generated ${d.generatedAt.slice(0, 10)}.`,
-    `Dollar values in ${scaleCaption(scale)}; per-share values in dollars; ratios as decimals.`,
-    "Italic cells are calculated. Where the calculation uses lines in this workbook it is a live formula.",
-    "The Sources sheet lists the SEC accession, XBRL concept and period behind every value, with a link to the filing.",
-  ].forEach((t, i) => (about.getCell(i + 1, 1).value = t));
+  // Overview: facts, legend and linked contents.
+  const next = cover(wb, ov, {
+    title: name,
+    subtitle: `Standardized financial statements from SEC EDGAR XBRL filings — ${freq}`,
+    logo,
+    facts: [
+      ["Exported", new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })],
+      ["Dataset generated", new Date(d.generatedAt).toLocaleString("en-US", { dateStyle: "medium" })],
+      ["Periods", ps.length ? `${ps.length} ${freq === "annual" ? "fiscal years" : "quarters"} · ${ps[0].label} – ${ps[ps.length - 1].label}` : "—"],
+      ["Dollar display", `${scaleWords(scale)} — cells hold full values, so formulas stay exact; per-share values in dollars; ratios as decimals`],
+      ["In this workbook", `${values.toLocaleString()} values · ${formulas.toLocaleString()} live formulas · ${(sr - HEAD - 1).toLocaleString()} source rows`],
+      ["SEC CIK", d.profile.cik],
+    ],
+    legend: [
+      { sample: "1,234", style: { color: { argb: C.input } }, text: "Reported in an SEC filing (input). The Sources sheet lists its accession, XBRL concept and period." },
+      { sample: "1,234", style: { italic: true, color: { argb: C.formula } }, text: "Calculated with a live formula from lines on the same sheet." },
+      { sample: "12.3%", style: { italic: true, color: { argb: C.link } }, text: "Calculated with a live formula that uses another sheet (margins, conversion, growth)." },
+      { sample: "1,234", style: { italic: true, color: { argb: C.inkSoft } }, text: "Calculated by Filed Under from facts outside this workbook (e.g. fourth quarter = full year − nine months)." },
+    ],
+  });
+  let r = next + 1;
+  ov.getCell(r, 2).value = "Contents";
+  ov.getCell(r, 2).font = font({ bold: true, size: 10, color: { argb: C.ink } });
+  r++;
+  for (const s of [...SHEETS.map((x) => ({ name: x.name, n: statements[x.key].rows.length })), { name: "Sources", n: sr - HEAD - 1 }]) {
+    link(ov.getCell(r, 2), s.name, `#${sheetRef(s.name)}!A1`);
+    ov.getCell(r, 3).value = s.name === "Sources" ? `${s.n.toLocaleString()} source rows` : `${s.n} lines`;
+    ov.getCell(r, 3).font = font({ size: 9, color: { argb: C.muted } });
+    for (let c = 2; c <= 6; c++) ov.getCell(r, c).border = hairline;
+    r++;
+  }
+  ov.getCell(r + 1, 2).value = "Filed Under · every number links to its SEC source";
+  ov.getCell(r + 1, 2).font = font({ size: 8, italic: true, color: { argb: C.muted } });
+  ov.getCell(r + 1, 2).fill = solid(C.paper);
+  footer(ov, `${name} · Overview`);
+  return { wb, values, formulas };
+}
 
-  const buf = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = `${ticker}-financials-${freq}.xlsx`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+export async function exportWorkbook(d: CompanyDataset, freq: Freq, scale: Scale, periods?: number, logoUrl?: string) {
+  const logo = logoUrl ? await fetchLogo(logoUrl) : null;
+  const { wb } = await buildFinancialsWorkbook(d, freq, scale, periods, logo);
+  downloadBlob(await workbookBlob(wb), `${d.profile.ticker}-financials-${freq}.xlsx`);
 }
