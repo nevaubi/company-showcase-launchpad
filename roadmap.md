@@ -43,8 +43,8 @@
 - [x] Data status page (last refresh per job)
 
 ### Quality
-- [ ] Tests for new derived lines, KPIs, unit formatting, segment Q4 derivation, valuation math
-- [ ] Browser verification of every new view + mobile pass; landing-page counts updated
+- [x] Tests for derived Q4 lines, EBITDA fallback, unit formatting, valuation math, sector roll-ups, transcript parsing
+- [x] Browser verification of every new view + mobile pass; landing-page counts updated
 
 ## Later
 - [ ] Insurer template (BRK)
