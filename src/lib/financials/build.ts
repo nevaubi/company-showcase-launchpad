@@ -674,8 +674,14 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     }
     const kpis = buildKpis(income, balance, cash, ps, freq, opts);
 
-    // Keep periods that carry at least one income or cash-flow figure (reported or derived).
-    const keep = ps.map((_, i) => [...income, ...cash].some((r) => r.cells[i]));
+    // Keep periods with a headline figure (revenue, net income, operating cash flow) or at
+    // least three income / cash-flow lines; a lone comparative fact from an old 10-K (e.g. a
+    // buyback total from 2000) shouldn't create an otherwise empty column.
+    const CORE = new Set(["revenue", "netIncome", "operatingIncome", "cfo", "cfNetIncome"]);
+    const keep = ps.map((_, i) => {
+      const filled = [...income, ...cash].filter((r) => r.cells[i]);
+      return filled.some((r) => CORE.has(r.key)) || filled.length >= 3;
+    });
     const sliceRows = (rows: Row[]) =>
       pruneEmptyRows(rows.map((r) => ({ ...r, cells: r.cells.filter((_, i) => keep[i]) })));
     const keptPeriods = ps.filter((_, i) => keep[i]);

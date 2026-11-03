@@ -90,7 +90,7 @@ const isQaHeading = (l: string) => /^#{2,3}\s*(questions?\s*(&|and)\s*answers?|q
 const isPreparedHeading = (l: string) => /^#{2,3}\s*(prepared remarks|full conference call transcript)\b/i.test(l);
 const isEnd = (l: string) =>
   /^#{1,3}\s/.test(l) ||
-  /^(duration:|call participants:|more [a-z]+ analysis|all earnings call transcripts|this article is a transcript|\*\*ad\*\*$)/i.test(l);
+  /^(\**duration:|\**call participants:|more [a-z]+ analysis|all earnings call transcripts|this article is a transcript|\*\*ad\*\*$)/i.test(l);
 const isJunk = (l: string) =>
   !l ||
   /^!\[/.test(l) ||
@@ -117,7 +117,7 @@ function firmsFromOperator(turns: { speaker: string; text: string }[]) {
   const firms = new Map<string, string>();
   for (const t of turns) {
     if (!/^operator$/i.test(t.speaker)) continue;
-    for (const m of t.text.matchAll(/(?:question|line)\s+(?:(?:is|will be|comes)\s+)?(?:from|of)\s+(?:the line of\s+)?([A-Z][\w.'’-]+(?:\s+[A-Z][\w.'’-]+){0,3})\s+(?:of|from|with|at)\s+([A-Z][\w&.,'’ -]{1,60}?)(?=[.,;]|\s+(?:please|your|go ahead)|$)/gi)) {
+    for (const m of t.text.matchAll(/(?:question|line)\s+(?:(?:is|will be|comes)\s+)?(?:from|of)\s+(?:the line of\s+)?([A-Z][\w.'’-]+(?:\s+[A-Z][\w.'’-]+){0,3})\s+(?:of|from|with|at)\s+([A-Z][\w&.,'’ -]{1,60}?)(?=\.(?:\s+(?:your|please|go|the|we|our|you|thank|mr|ms|now)\b|\s*$)|[,;]|\s+(?:please|your|go ahead)|$)/gi)) {
       firms.set(m[1].trim(), m[2].replace(/[.,]$/, "").trim());
     }
   }
