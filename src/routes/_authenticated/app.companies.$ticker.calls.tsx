@@ -170,7 +170,7 @@ function Reader({
   const questions = useMemo(() => questionIndex(t), [t]);
   const terms = useMemo(() => {
     const co = coverageOf(ticker);
-    return keyTerms(t, 14, [ticker, co?.shortName ?? "", co?.name ?? ""]);
+    return keyTerms(t, 14, [ticker, co?.shortName ?? ""]);
   }, [t, ticker]);
   const roleOf = useMemo(() => new Map(t.speakers.map((sp) => [sp.name, sp])), [t]);
 
