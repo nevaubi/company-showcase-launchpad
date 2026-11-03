@@ -5,6 +5,7 @@ import { companyQuery, macroQuery, newsQuery, pricesQuery, quotesQuery, universe
 import { COVERAGE, coverageOf, MACRO_SERIES } from "@/lib/coverage";
 import { getFilingDocument, searchFilings } from "@/lib/sec.functions";
 import { readWebpage, webSearch } from "@/lib/web.functions";
+import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
 import { durationDays } from "@/lib/financials/build";
 import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
@@ -236,6 +237,36 @@ Month-start closes:\n${monthly.join("\n")}`;
         output: clip(r.results.map((x, i) => `[${i + 1}] ${x.title}\n${x.url}${x.publishedAt ? ` · ${x.publishedAt}` : ""}\n${x.content}`).join("\n\n")),
         summary: `${r.results.length} web results for "${args.query}"`,
       };
+    }
+    case "get_earnings_call": {
+      const t = String(args.ticker).toUpperCase();
+      if (!coverageOf(t)) return { output: `${t} is not in coverage; use web_research for its transcript.`, summary: `${t} not covered` };
+      const list = await qc.fetchQuery({ queryKey: ["earnings-calls", t], queryFn: () => listEarningsCalls({ data: { ticker: t } }), staleTime: 6 * 3600_000 });
+      if (!list.calls.length) return { output: `No transcripts found for ${t}${list.error ? ` (${list.error})` : ""}. Try web_research.`, summary: `No transcripts for ${t}` };
+      const want = typeof args.quarter === "string" ? args.quarter.trim().toUpperCase().replace(/\s+/g, " ") : "";
+      const call = (want && list.calls.find((c) => (c.quarter ?? "").toUpperCase() === want)) || list.calls[0];
+      const r = await qc.fetchQuery({ queryKey: ["transcript", call.url], queryFn: () => getEarningsTranscript({ data: { ticker: t, url: call.url } }), staleTime: Infinity });
+      const tr = r.transcript;
+      if (!tr) return { output: `Couldn't read the ${call.quarter ?? ""} transcript (${r.error ?? "unknown error"}). Source: ${call.url}`, summary: "Couldn't read transcript" };
+      const who = new Map(tr.speakers.map((sp) => [sp.name, sp.kind === "analyst" ? `${sp.firm ?? "analyst"}` : (sp.role ?? sp.kind)]));
+      const section = args.section === "prepared" || args.section === "qa" ? args.section : "all";
+      const q = typeof args.query === "string" ? args.query.trim().toLowerCase() : "";
+      let turns = tr.turns.filter((x) => x.kind !== "operator" && (section === "all" || x.section === section));
+      if (q) {
+        const words = q.split(/\s+/).filter((w) => w.length > 2);
+        turns = turns.filter((x) => {
+          const l = x.text.toLowerCase();
+          return l.includes(q) || (words.length > 1 && words.every((w) => l.includes(w)));
+        });
+      }
+      const head = [
+        `${tr.title} — ${tr.date ?? ""} — ${tr.url}`,
+        `Speakers: ${tr.speakers.filter((s) => s.kind !== "operator").map((s) => `${s.name} (${who.get(s.name)})`).join("; ")}`,
+        `Other quarters available: ${list.calls.filter((c) => c.url !== call.url).map((c) => c.quarter ?? c.date).join(", ")}`,
+        q ? `${turns.length} turns mention "${q}"${section !== "all" ? ` in ${section}` : ""}:` : `${section === "all" ? "Transcript" : section === "qa" ? "Q&A" : "Prepared remarks"}:`,
+      ].join("\n");
+      const body = turns.map((x) => `[${x.section === "qa" ? "Q&A" : "Remarks"}] ${x.speaker} (${who.get(x.speaker)}): ${x.text}`).join("\n\n");
+      return { output: clip(`${head}\n\n${body || "(no matching turns)"}`), summary: `${tr.title}${q ? ` · "${q}"` : ""}` };
     }
     case "read_webpage": {
       const r = await readWebpage({ data: { url: String(args.url) } });
