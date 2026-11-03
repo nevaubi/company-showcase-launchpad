@@ -393,7 +393,7 @@ function mergeFlattened(bySeries: Map<string, IrSeries>, qv: Map<string, Map<str
     const kids = [...bySeries.values()].filter((k) => k !== sub && dim(k) === dim(sub) && k.parent && normLabel(k.parent) === normLabel(sub.label));
     if (kids.length < 2) continue;
     for (const m of [qv, fv]) {
-      const ends = new Set(kids.flatMap((k) => [...(m.get(sub.key) ? [] : []), ...(m.get(k.key)?.keys() ?? [])]));
+      const ends = new Set(kids.flatMap((k) => [...(m.get(k.key)?.keys() ?? [])]));
       for (const end of ends) {
         const have = new Set((m.get(sub.key)?.get(end) ?? []).map((v) => v.doc));
         const docs = new Set(kids.flatMap((k) => (m.get(k.key)?.get(end) ?? []).map((v) => v.doc)));
