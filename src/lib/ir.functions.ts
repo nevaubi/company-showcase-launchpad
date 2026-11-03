@@ -41,7 +41,18 @@ export const getIrData = createServerFn({ method: "GET" })
       }
       return { series, payload };
     };
-    const [docs, { series, payload }] = await Promise.all([loadDocs(), loadSeries()]);
+    const t0 = Date.now();
+    const [docs, loaded] = await Promise.all([loadDocs(), loadSeries()]);
+    let { series, payload } = loaded;
+    // Facts exist but no breakdowns are stored (first read, or a rebuild that never ran): build them
+    // now rather than showing an empty page.
+    const readFacts = docs.reduce((n, d) => n + (Number(d.extract_facts) || 0), 0);
+    if (!payload && readFacts > 0) {
+      const { rebuildCompany } = await import("@/lib/ir/rebuild.server");
+      payload = await rebuildCompany(data.ticker);
+      series = payload ? { payload: null, payload_path: `series/${data.ticker}.json`, built_at: payload.builtAt } : series;
+    }
+    console.log(`[ir] ${data.ticker} docs=${docs.length} facts=${readFacts} row=${series ? "yes" : "no"} payload=${payload ? payload.series.length : "none"} ${Date.now() - t0}ms`);
     const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
     const pending = documents.filter((d) => !d.extract_status && EXTRACTABLE.includes(d.kind) && d.viewable).length;
     return { payload, builtAt: series?.built_at ?? null, documents, pending };
