@@ -49,6 +49,9 @@
 - [x] Browser verification of every new view + mobile pass; landing-page counts updated
 
 ## Later
-- [ ] Insurer template (BRK)
+- [ ] Insurer template (premiums, loss ratio, float) — needed before adding BRK or other insurers
+- [ ] Filing alerts: email when a followed company files a 10-K/10-Q/8-K or an insider trades
+- [ ] Cross-company transcript search (store parsed calls so one query spans every covered company)
+- [ ] Excel model export with live formulas linking statements, valuation and segments
 - [x] Company-extension XBRL tags (COP, NEE capex) read from filings' iXBRL so FCF isn't blank for those filers
 - [x] Research-agent tool: search inside earnings-call transcripts
