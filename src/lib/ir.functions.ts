@@ -6,6 +6,7 @@ import type { IrPayload } from "@/lib/ir/payload";
 const tickerSchema = z.string().regex(/^[A-Z.]{1,6}$/);
 const DOC_COLUMNS = "id, source, source_url, accn, exhibit, kind, title, period, filed, ext, bytes, extract_status, extract_facts, rendition_path, pages";
 const EXTRACTABLE = ["press-release", "supplement", "presentation", "data", "other"];
+const rebuilding = new Map<string, Promise<IrPayload | null>>();
 
 /** Precomputed segment/KPI series plus the company's stored IR document library. */
 export const getIrData = createServerFn({ method: "GET" })
@@ -54,8 +55,14 @@ export const getIrData = createServerFn({ method: "GET" })
     // now rather than showing an empty page.
     const readFacts = docs.reduce((n, d) => n + (Number(d.extract_facts) || 0), 0);
     if (!payload && readFacts > 0) {
-      const { rebuildCompany } = await import("@/lib/ir/rebuild.server");
-      payload = await rebuildCompany(data.ticker);
+      // Concurrent first views of the same company share one rebuild instead of each starting their own.
+      let job = rebuilding.get(data.ticker);
+      if (!job) {
+        const { rebuildCompany } = await import("@/lib/ir/rebuild.server");
+        job = rebuildCompany(data.ticker).finally(() => rebuilding.delete(data.ticker));
+        rebuilding.set(data.ticker, job);
+      }
+      payload = await job;
       series = payload ? { payload: null, payload_path: `series/${data.ticker}.json`, built_at: payload.builtAt } : series;
     }
     console.log(`[ir] ${data.ticker} docs=${docs.length}+${images}img facts=${readFacts} row=${series ? "yes" : "no"} payload=${payload ? payload.series.length : "none"} ${Date.now() - t0}ms`);
