@@ -80,7 +80,7 @@ function IrPage() {
   const data = q.data!;
   return (
     <div className="grid grid-cols-1 gap-5">
-      <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents.length} builtAt={data.builtAt} />
+      <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents.length + (data.images ?? 0)} builtAt={data.builtAt} />
       {data.payload && data.payload.series.length > 0 ? (
         <IrBreakdowns ticker={ticker} payload={data.payload} />
       ) : (
@@ -132,7 +132,7 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
   return (
     <Panel
       title="Investor-relations data"
-      subtitle={builtAt ? `Rebuilt ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} from ${documents.toLocaleString()} stored files` : `${documents.toLocaleString()} stored files`}
+      subtitle={builtAt ? `Updated ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} from ${documents.toLocaleString()} stored files` : `${documents.toLocaleString()} stored files`}
       actions={
         pending > 0 ? (
           <Tooltip>
