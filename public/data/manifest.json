@@ -1,12 +1,12 @@
 {
- "generatedAt": "2026-11-03T08:41:01.550Z",
- "companies": 25,
- "filings": 20852,
- "segmentFacts": 4980,
- "statementValues": 99483,
- "fiscalYears": 454,
- "oldestFiscalYearEnd": "2007-09-29",
- "insiderTransactions": 2176,
+ "generatedAt": "2026-11-03T09:04:12.067Z",
+ "companies": 78,
+ "filings": 51940,
+ "segmentFacts": 45835,
+ "statementValues": 286716,
+ "fiscalYears": 1435,
+ "oldestFiscalYearEnd": "2006-12-31",
+ "insiderTransactions": 5971,
  "macroSeries": 118,
  "priceSymbols": 99
 }
