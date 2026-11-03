@@ -47,7 +47,10 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   }
   const renew = () => sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: null, lease_until: new Date(Date.now() + 3 * 60_000).toISOString(), updated_at: new Date().toISOString() });
   await renew();
-  const leaseTimer = setInterval(renew, 60_000);
+  // Query builders only run when awaited/then'd — a bare `setInterval(renew)` never renews the lease.
+  const leaseTimer = setInterval(() => {
+    renew().then(({ error }) => error && log(`${o.job}: lease renewal failed: ${error.message}`));
+  }, 60_000);
   await o.reset();
 
   let reserved = 0;
