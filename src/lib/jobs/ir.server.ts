@@ -117,6 +117,23 @@ export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]>
       /* page unavailable; keep going */
     }
   }
+  // Tavily finds decks and supplements hosted on CDNs the IR pages only link via scripts.
+  try {
+    const { tavilySearch } = await import("@/lib/web.server");
+    const host = new URL(c.ir).hostname.replace(/^www\./, "");
+    const site = new URL(c.website).hostname.replace(/^www\./, "");
+    for (const q of [`${c.shortName} investor presentation earnings slides pdf`, `${c.shortName} financial supplement quarterly data xlsx`]) {
+      const r = await tavilySearch(q, { maxResults: 10, depth: "basic" });
+      for (const x of r.results) {
+        const u = x.url.split("#")[0];
+        const h = new URL(u).hostname;
+        const own = h.endsWith(host) || h.endsWith(site) || /q4cdn\.com|gcs-web\.com|edgar-online|s\d+\.q4cdn/.test(h);
+        if (own && IR_FILE_RE.test(u.split("?")[0])) links.add(u);
+      }
+    }
+  } catch {
+    /* search optional */
+  }
   return [...links].map((url) => ({ url, source: "ir-site" as const }));
 }
 
