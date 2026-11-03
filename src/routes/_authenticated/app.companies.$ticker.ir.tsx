@@ -228,6 +228,17 @@ const KIND_LABEL: Record<string, string> = {
   other: "Other",
 };
 
+const KIND_ONE: Record<string, string> = { "press-release": "Earnings release", presentation: "Presentation", supplement: "Financial supplement", data: "Data file", transcript: "Transcript", image: "Image", "annual-report": "Annual report", proxy: "Proxy statement", other: "Exhibit" };
+
+/** Human title: filenames like "a8-kex991q4202609262026" become "Earnings release · Q4 …". */
+function docTitle(d: Doc) {
+  const t = d.title?.trim() ?? "";
+  const looksLikeFile = !t || /\d{5,}|^(ex|d)\d|ex[-_ ]?99|^[a-z0-9]+[_-][a-z0-9_-]+$/i.test(t) || !/\s/.test(t);
+  if (!looksLikeFile) return t;
+  const when = d.period ? fmtDate(d.period, { month: "short", year: "numeric" }) : d.filed ? fmtDate(d.filed, { month: "short", year: "numeric" }) : "";
+  return [KIND_ONE[d.kind] ?? "Document", when].filter(Boolean).join(" · ");
+}
+
 function KindIcon({ ext }: { ext: string | null }) {
   if (/^(xlsx?|xlsm|csv)$/.test(ext ?? "")) return <FileSpreadsheet className="size-4 text-positive" />;
   if (/^pptx?$/.test(ext ?? "")) return <Presentation className="size-4 text-chart-3" />;
@@ -247,7 +258,7 @@ function Library({ ticker, documents }: { ticker: string; documents: Doc[] }) {
   const view = async (d: Doc) => {
     const name = d.source_url.split("/").pop() ?? "";
     if (d.source === "sec-exhibit" && d.accn && /\.html?$/i.test(name)) {
-      open({ ticker, label: d.title, unit: "usd", value: 0, doc: { accn: d.accn, doc: name, form: "8-K", filed: d.filed ?? undefined, title: d.title } });
+      open({ ticker, label: docTitle(d), unit: "usd", value: 0, doc: { accn: d.accn, doc: name, form: "8-K", filed: d.filed ?? undefined, title: docTitle(d) } });
       return;
     }
     const { url } = await download({ data: { id: d.id } });
@@ -281,7 +292,7 @@ function Library({ ticker, documents }: { ticker: string; documents: Doc[] }) {
             <li key={d.id} className="flex min-w-0 items-center gap-3 px-4 py-2">
               <KindIcon ext={d.ext} />
               <button onClick={() => view(d)} className="min-w-0 flex-1 text-left">
-                <p className="truncate text-sm hover:underline">{d.title || d.source_url.split("/").pop()}</p>
+                <p className="truncate text-sm hover:underline">{docTitle(d)}</p>
                 <p className="num truncate text-[11px] text-muted-foreground">
                   {d.filed ? fmtDate(d.filed) : "IR website"} · {d.exhibit ?? (d.ext ?? "").toUpperCase()} · {((d.bytes ?? 0) / 1024).toFixed(0)} KB
                   {d.extract_facts ? ` · ${d.extract_facts} data points` : ""}
