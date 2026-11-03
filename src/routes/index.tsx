@@ -129,7 +129,7 @@ function CoverageBand() {
           <p className="eyebrow">Now covering</p>
           <p className="text-xs text-muted-foreground">Trailing-twelve-month revenue, from 10-Q and 10-K filings</p>
         </div>
-        <ul className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3 lg:grid-cols-6">
+        <ul className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3 lg:grid-cols-5">
           {COVERAGE.map((c) => {
             const u = byTicker.get(c.ticker);
             return (
