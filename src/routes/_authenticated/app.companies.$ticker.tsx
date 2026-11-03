@@ -76,7 +76,7 @@ function CompanyLayout() {
             </Badge>
           </div>
           <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            {p?.name && (
+            {p?.name && p.name.toLowerCase().replace(/[^a-z]/g, "") !== (coverageOf(ticker)?.shortName ?? "").toLowerCase().replace(/[^a-z]/g, "") && (
               <>
                 <span className="num text-xs uppercase tracking-wide">{p.name}</span>
                 <span aria-hidden>·</span>
