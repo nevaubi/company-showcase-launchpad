@@ -187,3 +187,27 @@ describe("flattened vs nested tables", () => {
     expect(checks.filter((c) => c.group === "product:Products").map((c) => c.period)).toEqual(["2026-06-27"]);
   });
 });
+
+describe("selected-item lists", () => {
+  it("flags a total whose listed lines always fall short as a partial list, not an error", () => {
+    const q = ["2026-03-31", "2026-06-30", "2026-09-30"];
+    const facts = q.flatMap((e, i) => [
+      f("Mounjaro", e, 3, 10 + i, { category: "product", breakdown: "Selected Products" }),
+      f("Zepbound", e, 3, 5 + i, { category: "product", breakdown: "Selected Products" }),
+      f("Total Revenue", e, 3, 24 + i, { category: "product", is_total: true, parent: null }),
+    ]);
+    const { checks } = buildIrSeries(facts.map((x) => ({ ...x, parent: x.label === "Total Revenue" ? null : "Total Revenue" })));
+    expect(checks).toHaveLength(3);
+    expect(checks.every((c) => !c.ok && c.partial)).toBe(true);
+  });
+  it("keeps a breakdown whose parts exceed the total as a real mismatch", () => {
+    const facts = [
+      f("A", "2026-03-31", 3, 20, { parent: "Total" }),
+      f("B", "2026-03-31", 3, 15, { parent: "Total" }),
+      f("Total", "2026-03-31", 3, 30, { is_total: true, parent: null }),
+    ];
+    const { checks } = buildIrSeries(facts);
+    expect(checks[0].ok).toBe(false);
+    expect(checks[0].partial).toBeUndefined();
+  });
+});
