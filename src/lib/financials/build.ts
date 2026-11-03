@@ -652,7 +652,7 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
           return combine(ebit, d, "add", ["EBIT", "D&A"]);
         }),
       };
-      if (oi) insertAfter(income, "operatingIncome", ebitdaRow);
+      if (oi?.cells.some(Boolean)) insertAfter(income, "operatingIncome", ebitdaRow);
       else insertAfter(income, "pretaxIncome", ebitdaRow);
       const debt = totalDebtRow(cf, balance, ps);
       const cashRow = rowOf(balance, "cash");
