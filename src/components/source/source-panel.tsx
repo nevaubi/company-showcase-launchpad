@@ -17,6 +17,8 @@ interface ActiveDoc {
   doc?: string;
   locator?: FactLocator;
   label?: string;
+  /** Stored IR document id */
+  irDoc?: string;
 }
 
 export const PANEL_WIDTH = "min(50vw, 920px)";

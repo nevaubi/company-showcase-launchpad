@@ -18,7 +18,7 @@ export const getIrData = createServerFn({ method: "GET" })
         .limit(2000),
       context.supabase
         .from("ir_kpi_facts")
-        .select("category, metric, parent, label, is_total, period_start, period_end, months, value, unit, accn, doc, filed, locator")
+        .select("document_id, document_kind, category, metric, parent, label, is_total, period_start, period_end, months, value, unit, accn, doc, filed, locator")
         .eq("ticker", data.ticker)
         .limit(20000),
     ]);

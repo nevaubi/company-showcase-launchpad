@@ -2,6 +2,8 @@
 // derive missing fourth quarters (FY − Q1−Q2−Q3, or FY − 9M YTD), and reconcile children to parent totals.
 
 export interface IrFact {
+  document_id?: string;
+  document_kind?: string | null;
   category: string; // dimension, e.g. "segment", "product", "geography", "kpi"
   metric: string; // e.g. "revenue", "operating_income", "units"
   parent: string | null;

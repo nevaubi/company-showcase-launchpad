@@ -67,11 +67,11 @@ function orderTree(group: IrSeries[]): { s: IrSeries; depth: number }[] {
 
 const refOf = (f: IrFact, value = f.value): SourceRef => ({
   accn: f.accn ?? "",
-  concept: `Press release table · ${f.label}`,
+  concept: `${f.document_kind === "presentation" ? "Presentation" : f.document_kind === "data" ? "Data file" : f.document_kind === "supplement" ? "Supplement" : "Press release"} table · ${f.label}`,
   ...(f.period_start ? { start: f.period_start } : {}),
   end: f.period_end,
   value,
-  ...(f.doc ? { doc: f.doc } : {}),
+  ...(f.doc ? { doc: f.doc } : f.document_id ? { irDoc: f.document_id } : {}),
   ...("t" in f.locator ? { cell: { t: f.locator.t, r: f.locator.r, c: f.locator.c } } : {}),
 });
 
