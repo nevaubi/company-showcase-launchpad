@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, ExternalLink, Loader2, Minus, Plus, ScanSearch, TriangleAlert } from "lucide-react";
 import { getFilingDocument } from "@/lib/sec.functions";
+import { getIrHtml } from "@/lib/ir.functions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,8 @@ export interface FactLocator {
   elementId?: string;
   /** Free-text search when there is no structured fact */
   search?: string;
+  /** Table cell (document-order table, row and cell indexes) for press releases and other non-XBRL exhibits */
+  cell?: { t: number; r: number; c: number };
 }
 
 export type LocateStatus =
@@ -148,7 +151,10 @@ export function FilingViewer({
   locator,
   className,
   onStatus,
+  irDocId,
 }: {
+  /** Stored IR document to show instead of an EDGAR document */
+  irDocId?: string;
   cik: string;
   accn: string;
   doc: string;
@@ -162,17 +168,17 @@ export function FilingViewer({
   const [zoom, setZoom] = useState(0.9);
   const [status, setStatus] = useState<LocateStatus>({ kind: "idle" });
 
-  const q = useQuery({
-    queryKey: ["filing-doc", cik, accn, doc],
-    queryFn: () => getFilingDocument({ data: { cik: String(Number(cik)), accn, doc } }),
+  const q = useQuery<{ html: string; contentType: string; sourceUrl?: string }>({
+    queryKey: irDocId ? ["ir-doc", irDocId] : ["filing-doc", cik, accn, doc],
+    queryFn: () => (irDocId ? getIrHtml({ data: { id: irDocId } }) : getFilingDocument({ data: { cik: String(Number(cik)), accn, doc } })),
     staleTime: Infinity,
     gcTime: 10 * 60_000,
     retry: 1,
   });
 
   const srcDoc = useMemo(
-    () => (q.data ? buildSrcDoc(q.data.html, secBase(cik, accn), q.data.contentType) : undefined),
-    [q.data, cik, accn],
+    () => (q.data ? buildSrcDoc(q.data.html, irDocId ? (q.data.sourceUrl ?? "") : secBase(cik, accn), q.data.contentType) : undefined),
+    [q.data, cik, accn, irDocId],
   );
 
   const report = useCallback(
@@ -203,7 +209,15 @@ export function FilingViewer({
     }
     let found: HTMLElement[] = [];
     let how = "";
-    if (locator.elementId) {
+    if (locator.cell) {
+      const table = d.querySelectorAll("table")[locator.cell.t] as HTMLTableElement | undefined;
+      const el = table?.rows[locator.cell.r]?.cells[locator.cell.c] as HTMLElement | undefined;
+      if (el) {
+        found = [el];
+        how = `table ${locator.cell.t + 1}, row ${locator.cell.r + 1}`;
+      }
+    }
+    if (!found.length && locator.elementId) {
       const el = d.getElementById(locator.elementId);
       if (el) {
         found = [el];
@@ -257,7 +271,7 @@ export function FilingViewer({
   useEffect(() => {
     if (frame.current?.contentDocument?.readyState === "complete" && srcDoc) locate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.value]);
+  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.value, locator?.cell?.t, locator?.cell?.r, locator?.cell?.c]);
 
   useEffect(() => {
     const d = frame.current?.contentDocument;
@@ -271,7 +285,7 @@ export function FilingViewer({
     focusHit(hits, next);
   };
 
-  const url = `${secBase(cik, accn)}${doc}`;
+  const url = irDocId ? (q.data?.sourceUrl ?? "") : `${secBase(cik, accn)}${doc}`;
 
   return (
     <div className={cn("flex min-h-0 flex-col", className)}>
@@ -298,7 +312,7 @@ export function FilingViewer({
           <Button variant="ghost" size="icon-sm" onClick={() => setZoom((z) => Math.min(1.4, +(z + 0.1).toFixed(2)))} aria-label="Zoom in">
             <Plus />
           </Button>
-          <Button variant="ghost" size="icon-sm" asChild aria-label="Open on SEC.gov">
+          <Button variant="ghost" size="icon-sm" asChild aria-label={irDocId ? "Open original document" : "Open on SEC.gov"}>
             <a href={url} target="_blank" rel="noreferrer">
               <ExternalLink />
             </a>
@@ -309,7 +323,7 @@ export function FilingViewer({
         {q.isLoading && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-card/80 text-sm text-muted-foreground">
             <Loader2 className="size-5 animate-spin" />
-            <span>Retrieving {doc} from SEC EDGAR…</span>
+            <span>{irDocId ? "Opening stored document…" : `Retrieving ${doc} from SEC EDGAR…`}</span>
           </div>
         )}
         {q.isError && (

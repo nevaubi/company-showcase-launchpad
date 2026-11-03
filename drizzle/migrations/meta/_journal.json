@@ -15,6 +15,27 @@
       "when": 1793695891003,
       "tag": "0001_market_refresh_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1793702703402,
+      "tag": "0002_ir_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1793703152588,
+      "tag": "0003_ir_extraction_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793703792098,
+      "tag": "0004_ir_renditions",
+      "breakpoints": true
     }
   ]
 }

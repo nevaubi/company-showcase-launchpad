@@ -17,6 +17,8 @@ interface ActiveDoc {
   doc?: string;
   locator?: FactLocator;
   label?: string;
+  /** Stored IR document id */
+  irDoc?: string;
 }
 
 export const PANEL_WIDTH = "min(50vw, 920px)";
@@ -33,10 +35,10 @@ export function SourcePanel() {
     if (target.doc) {
       setActive({ accn: target.doc.accn, doc: target.doc.doc ? renderableDoc(target.doc.doc) : undefined, locator: target.doc.search ? { search: target.doc.search } : undefined });
     } else if (target.src) {
-      setActive({ accn: target.src.accn, locator: locatorOf(target.src, target.unit as string, target.elementId) });
+      setActive({ accn: target.src.accn, doc: target.src.doc, irDoc: target.src.irDoc, locator: locatorOf(target.src, target.unit as string, target.elementId) });
     } else if (target.derived?.parts.length) {
       const p = target.derived.parts[0];
-      setActive({ accn: p.accn, locator: locatorOf(p, target.unit as string), label: p.label });
+      setActive({ accn: p.accn, doc: p.doc, irDoc: p.irDoc, locator: locatorOf(p, target.unit as string), label: p.label });
     }
   }, [target]);
 
@@ -99,7 +101,7 @@ export function SourcePanel() {
                     return (
                       <li key={`${p.accn}-${p.concept}-${i}`}>
                         <button
-                          onClick={() => setActive({ accn: p.accn, locator: locatorOf(p, target.unit as string), label: p.label })}
+                          onClick={() => setActive({ accn: p.accn, doc: p.doc, irDoc: p.irDoc, locator: locatorOf(p, target.unit as string), label: p.label })}
                           className={cn(
                             "flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-secondary",
                             isActive && "bg-highlight-soft",
@@ -147,7 +149,9 @@ export function SourcePanel() {
           </div>
 
           <div className="min-h-0 flex-1">
-            {active && cik ? (
+            {active?.irDoc ? (
+              <FilingViewer key={active.irDoc} irDocId={active.irDoc} cik={cik} accn={active.accn} doc="" locator={active.locator} className="h-full" />
+            ) : active && cik ? (
               <ResolvedViewer cik={cik} accn={active.accn} doc={active.doc} filing={filing} locator={active.locator} />
             ) : (
               <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
@@ -206,7 +210,7 @@ function FactCard({ src, filing, cik }: { src: SourceRef; filing?: Filing; cik: 
           <span>{src.accn}</span>
         )}
       </dd>
-      <dt className="text-muted-foreground">XBRL concept</dt>
+      <dt className="text-muted-foreground">{src.concept.includes(" · ") ? "Location" : "XBRL concept"}</dt>
       <dd className="num truncate text-xs">{src.concept}</dd>
       <dt className="text-muted-foreground">Period</dt>
       <dd>{src.start ? `${fmtDate(src.start)} – ${fmtDate(src.end)}` : `As of ${fmtDate(src.end)}`}</dd>
@@ -262,7 +266,7 @@ function renderableDoc(doc: string) {
 }
 
 function locatorOf(src: SourceRef, unit: string, elementId?: string): FactLocator {
-  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId };
+  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId, cell: src.cell };
 }
 
 function guessUnit(concept: string, fallback: string) {

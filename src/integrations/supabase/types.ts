@@ -152,6 +152,158 @@ export type Database = {
         }
         Relationships: []
       }
+      ir_documents: {
+        Row: {
+          accn: string | null
+          bytes: number | null
+          content_type: string | null
+          exhibit: string | null
+          ext: string | null
+          extract_facts: number | null
+          extract_status: string | null
+          extracted_at: string | null
+          fetched_at: string
+          filed: string | null
+          id: string
+          kind: string
+          pages: number | null
+          path: string | null
+          period: string | null
+          rendition_path: string | null
+          sha256: string | null
+          source: string
+          source_url: string
+          ticker: string
+          title: string
+        }
+        Insert: {
+          accn?: string | null
+          bytes?: number | null
+          content_type?: string | null
+          exhibit?: string | null
+          ext?: string | null
+          extract_facts?: number | null
+          extract_status?: string | null
+          extracted_at?: string | null
+          fetched_at?: string
+          filed?: string | null
+          id?: string
+          kind?: string
+          pages?: number | null
+          path?: string | null
+          period?: string | null
+          rendition_path?: string | null
+          sha256?: string | null
+          source?: string
+          source_url: string
+          ticker: string
+          title?: string
+        }
+        Update: {
+          accn?: string | null
+          bytes?: number | null
+          content_type?: string | null
+          exhibit?: string | null
+          ext?: string | null
+          extract_facts?: number | null
+          extract_status?: string | null
+          extracted_at?: string | null
+          fetched_at?: string
+          filed?: string | null
+          id?: string
+          kind?: string
+          pages?: number | null
+          path?: string | null
+          period?: string | null
+          rendition_path?: string | null
+          sha256?: string | null
+          source?: string
+          source_url?: string
+          ticker?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      ir_kpi_facts: {
+        Row: {
+          accn: string | null
+          category: string
+          created_at: string
+          derived: boolean
+          doc: string | null
+          document_id: string
+          document_kind: string | null
+          filed: string | null
+          id: string
+          is_total: boolean
+          label: string
+          locator: Json
+          metric: string
+          months: number | null
+          parent: string | null
+          period_end: string | null
+          period_label: string
+          period_start: string | null
+          ticker: string
+          unit: string
+          value: number
+        }
+        Insert: {
+          accn?: string | null
+          category: string
+          created_at?: string
+          derived?: boolean
+          doc?: string | null
+          document_id: string
+          document_kind?: string | null
+          filed?: string | null
+          id?: string
+          is_total?: boolean
+          label: string
+          locator?: Json
+          metric?: string
+          months?: number | null
+          parent?: string | null
+          period_end?: string | null
+          period_label: string
+          period_start?: string | null
+          ticker: string
+          unit?: string
+          value: number
+        }
+        Update: {
+          accn?: string | null
+          category?: string
+          created_at?: string
+          derived?: boolean
+          doc?: string | null
+          document_id?: string
+          document_kind?: string | null
+          filed?: string | null
+          id?: string
+          is_total?: boolean
+          label?: string
+          locator?: Json
+          metric?: string
+          months?: number | null
+          parent?: string | null
+          period_end?: string | null
+          period_label?: string
+          period_start?: string | null
+          ticker?: string
+          unit?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ir_kpi_facts_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "ir_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_runs: {
         Row: {
           detail: Json | null

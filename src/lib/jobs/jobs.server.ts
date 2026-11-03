@@ -9,7 +9,7 @@ import { fetchCboeDaily, fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo,
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -191,6 +191,37 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
       }
     }
     return { ok: errors.length < batch.length, items: filings + trades, detail: { companies: batch.map((c) => c.ticker), filings, trades, errors } };
+  },
+
+  /** Store new 8-K exhibits (releases, presentations, supplements) for one company per run. */
+  async "ir-docs"() {
+    const { start } = await advance("ir-docs", COVERAGE.length, 1);
+    const { collectIr } = await import("@/lib/jobs/ir.server");
+    const r = await collectIr(COVERAGE[start], "sec", 10);
+    return { ok: true, items: r.stored, detail: r as unknown as Record<string, unknown> };
+  },
+
+  /** Extract segment/KPI facts from the next stored press release. */
+  async "ir-extract"() {
+    const { extractIrDocument, nextToExtract } = await import("@/lib/ir/extract.server");
+    const next = await nextToExtract();
+    if (!next) return { ok: true, items: 0, detail: { idle: true } };
+    try {
+      const r = await extractIrDocument(next.id);
+      return { ok: true, items: r.facts, detail: { ...next, ...r } };
+    } catch (e) {
+      const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+      await db.from("ir_documents").update({ extracted_at: new Date().toISOString(), extract_status: `error: ${(e as Error).message.slice(0, 200)}` }).eq("id", next.id);
+      return { ok: false, items: 0, detail: { ...next, error: (e as Error).message } };
+    }
+  },
+
+  /** Store files hosted on one company's IR website per run (found with Firecrawl). */
+  async "ir-site"() {
+    const { start } = await advance("ir-site", COVERAGE.length, 1);
+    const { collectIr } = await import("@/lib/jobs/ir.server");
+    const r = await collectIr(COVERAGE[start], "site", 25);
+    return { ok: true, items: r.stored, detail: r as unknown as Record<string, unknown> };
   },
 
   /** Mirror one recent 10-K/10-Q primary document into file storage per run. */

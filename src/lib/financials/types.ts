@@ -11,6 +11,12 @@ export interface SourceRef {
   start?: string;
   end: string;
   value: number;
+  /** Document inside the filing (e.g. an EX-99 press release) when it isn't the primary document */
+  doc?: string;
+  /** Table cell locator for non-XBRL documents: table / row / cell index in document order */
+  cell?: { t: number; r: number; c: number };
+  /** Stored investor-relations document id (press release, supplement, presentation) when not an EDGAR document */
+  irDoc?: string;
 }
 
 export interface DerivedPart extends SourceRef {

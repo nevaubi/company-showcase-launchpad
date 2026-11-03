@@ -55,3 +55,13 @@
 - [ ] Excel model export with live formulas linking statements, valuation and segments
 - [x] Company-extension XBRL tags (COP, NEE capex) read from filings' iXBRL so FCF isn't blank for those filers
 - [x] Research-agent tool: search inside earnings-call transcripts
+
+## IR documents (current goal)
+- [ ] Storage: private `ir-documents` bucket + `ir_documents` table (ticker, source URL, kind, period, sha256, size, stored path)
+- [ ] Collector: 8-K exhibits (EX-99 releases, presentations, supplements) from EDGAR + IR-site files found via Firecrawl map / Tavily (pdf, xlsx, pptx, docx, images); download and store every file
+- [ ] Extract segment/KPI tables from stored releases & supplements with cell-level locators; reconcile segments to parent totals; derive Q4 = FY − 9M
+- [ ] Viewer: click-to-source for IR documents (HTML highlight, PDF page, XLSX cell)
+- [ ] Company "IR library" tab listing every stored document
+- [x] IR documents stored (SEC exhibits + IR sites), PDF/XLSX renditions, KPI extraction with cell-level click-to-source, Q4 derivation, reconciliation and SEC cross-check
+- [ ] IR: renditions for newly collected PDFs/XLSX run from `scripts/ir-renditions.ts` (not yet scheduled in production — needs a server-side PDF parser)
+- [ ] IR: a few breakdowns still don't reconcile (ABBV, AMD, CAT, CVX, FCX, GOOGL, SLB, TSLA, VZ) — flagged in the UI

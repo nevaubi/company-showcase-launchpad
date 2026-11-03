@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 import { authenticateCronRequest } from "@/integrations/supabase/cron-auth";
 
-const JOB = z.enum(["prices", "macro", "sec", "filing-cache"]);
+const JOB = z.enum(["prices", "macro", "sec", "filing-cache", "ir-docs", "ir-site", "ir-extract"]);
 
 // Scheduled data refresh. Called only by the managed scheduler (bearer-authenticated).
 export const Route = createFileRoute("/api/public/jobs/$job")({
