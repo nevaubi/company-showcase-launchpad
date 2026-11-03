@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildStatements, type CompanyFacts, type RawFact } from "./build";
-import { fmtCell, scaled, unitLabel } from "./../format";
+import { fmtCell, scaled, unitLabel } from "../format";
 
 let n = 0;
 const fact = (start: string | undefined, end: string, val: number, form: string, filed: string, accn = `0000000001-26-${String(++n).padStart(6, "0")}`): RawFact => ({
@@ -26,7 +26,7 @@ const REVENUE = [
   fact("2025-01-01", "2025-12-31", 480, "10-K", "2026-02-01"),
   fact("2025-01-01", "2025-03-31", 100, "10-Q", "2025-04-30"),
   fact("2025-04-01", "2025-06-30", 110, "10-Q", "2025-07-30"),
-  fact("2025-04-01", "2025-06-30", 210, "10-Q", "2025-07-30"), // six-month YTD
+  fact("2025-01-01", "2025-06-30", 210, "10-Q", "2025-07-30"), // six-month YTD
   fact("2025-01-01", "2025-09-30", 340, "10-Q", "2025-10-30"), // nine-month YTD
   fact("2025-07-01", "2025-09-30", 130, "10-Q", "2025-10-30"),
 ];
@@ -95,7 +95,7 @@ describe("unit scale", () => {
     expect(fmtCell(416_161_000_000, "usd", "full")).toBe("416,161,000,000");
     expect(fmtCell(416_161_000_000, "usd", "M")).toBe("416,161");
     expect(fmtCell(416_161_000_000, "usd", "B")).toBe("416.2");
-    expect(fmtCell(-2_500_000, "usd", "M")).toBe("(3)".replace("3", "3")); // rounds to whole millions, negatives in parentheses
+    expect(fmtCell(-2_500_000, "usd", "M")).toBe("(3)"); // whole millions, negatives in parentheses
   });
   it("leaves per-share, percent and ratio values alone when the scale changes", () => {
     expect(fmtCell(7.46, "usdPerShare", "B")).toBe("7.46");
