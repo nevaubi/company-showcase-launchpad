@@ -125,6 +125,35 @@ export async function fetchNasdaqQuote(symbol: string, kind: "stocks" | "etf"): 
   };
 }
 
+const CBOE = "https://cdn-api.cboe.com/api/global/delayed_quotes";
+/** Cboe index symbols ("^VIX" → "_VIX"); only volatility indices are served this way. */
+export const isCboeIndex = (symbol: string) => /^\^VIX\w*$/.test(symbol);
+
+/** Delayed index quote from Cboe (fallback for Yahoo; Nasdaq doesn't carry the VIX). */
+export async function fetchCboeQuote(symbol: string): Promise<{ price: number; previousClose: number; high: number; low: number; marketTime?: string }> {
+  const res = await fetch(`${CBOE}/quotes/_${encodeURIComponent(symbol.slice(1))}.json`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } });
+  if (!res.ok) throw new Error(`Cboe responded ${res.status}`);
+  const j = (await res.json()) as { data?: { current_price?: number; prev_day_close?: number; close?: number; high?: number; low?: number; last_trade_time?: string } };
+  const d = j.data;
+  const price = d?.current_price ?? d?.close;
+  if (!d || !price) throw new Error(`Cboe has no quote for ${symbol}`);
+  return { price, previousClose: d.prev_day_close ?? price, high: d.high ?? price, low: d.low ?? price, marketTime: d.last_trade_time };
+}
+
+/** Recent daily bars for a Cboe index. */
+export async function fetchCboeDaily(symbol: string, days = 31): Promise<Bar[]> {
+  const res = await fetch(`${CBOE}/charts/historical/_${encodeURIComponent(symbol.slice(1))}.json`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } });
+  if (!res.ok) throw new Error(`Cboe responded ${res.status}`);
+  const j = (await res.json()) as { data?: { date: string; open: string; high: string; low: string; close: string }[] };
+  const cutoff = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+  return (j.data ?? [])
+    .filter((r) => r.date >= cutoff)
+    .map((r): Bar => {
+      const c = Number(r.close);
+      return [r.date, Number(r.open) || c, Number(r.high) || c, Number(r.low) || c, c, c, 0];
+    });
+}
+
 export function toBars(r: YahooChartResult, intraday: boolean): Bar[] {
   const q = r.indicators.quote[0];
   const adj = r.indicators.adjclose?.[0]?.adjclose;
