@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, FileStack, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Panel } from "@/components/app/page-header";
@@ -33,11 +33,27 @@ function IrPage() {
   const { ticker: raw } = Route.useParams();
   const ticker = raw.toUpperCase();
   const fetchIr = useServerFn(getIrData);
-  const q = useQuery({ queryKey: ["ir", ticker], queryFn: () => fetchIr({ data: { ticker } }), staleTime: 5 * 60_000 });
+  const q = useQuery({
+    queryKey: ["ir", ticker],
+    queryFn: () => fetchIr({ data: { ticker } }),
+    staleTime: 5 * 60_000,
+    retry: 3,
+    retryDelay: (n) => Math.min(2000 * 2 ** n, 15_000),
+  });
+  const slow = useSlow(q.isLoading, 6000);
 
   if (q.isLoading)
     return (
       <div className="grid grid-cols-1 gap-5">
+        {slow && (
+          <div role="status" className="flex items-start gap-2 rounded-md border bg-card px-4 py-3 text-sm">
+            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+            <span>
+              Still loading. The database is busy filing newly collected documents, so this can take up to a minute. Nothing has been removed.
+              {q.failureCount > 0 && <span className="text-muted-foreground"> Retrying ({q.failureCount} of 3)…</span>}
+            </span>
+          </div>
+        )}
         <Skeleton className="h-28" />
         <Skeleton className="h-[520px]" />
       </div>
@@ -45,10 +61,14 @@ function IrPage() {
   if (q.isError)
     return (
       <Panel title="Investor-relations data">
-        <div className="flex items-center gap-3 p-5 text-sm">
+        <div className="flex flex-wrap items-center gap-3 p-5 text-sm">
           <TriangleAlert className="size-4 text-negative" />
-          <span>Couldn't load this company's IR data: {(q.error as Error).message}</span>
-          <Button size="sm" variant="outline" onClick={() => q.refetch()} className="ml-auto">
+          <span className="min-w-0 flex-1">
+            {/timeout|canceling statement|fetch failed|503|502/i.test((q.error as Error).message)
+              ? "The database took too long to answer. The stored documents and breakdowns are safe; try again in a moment."
+              : `Couldn't load this company's IR data: ${(q.error as Error).message}`}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => q.refetch()}>
             Try again
           </Button>
         </div>
@@ -70,6 +90,17 @@ function IrPage() {
       <IrLibrary ticker={ticker} documents={data.documents} />
     </div>
   );
+}
+
+/** True once `active` has stayed true for `ms`. */
+function useSlow(active: boolean, ms: number) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!active) return setSlow(false);
+    const t = setTimeout(() => setSlow(true), ms);
+    return () => clearTimeout(t);
+  }, [active, ms]);
+  return slow;
 }
 
 function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: string; payload: IrPayload | null; pending: number; documents: number; builtAt: string | null }) {
