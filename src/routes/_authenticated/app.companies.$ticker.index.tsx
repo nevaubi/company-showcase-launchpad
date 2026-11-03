@@ -18,6 +18,8 @@ import { alignByDate, annualizedVol, beta, maxDrawdown, returns } from "@/lib/in
 import { fiscalYearEndLabel, fmtCompactUsd, fmtDate, fmtPct, fmtPrice, fmtRelative, SEC_FORM_LABEL, titleCase } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
+import { PeerTable } from "@/components/company/peer-table";
+import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   component: Overview,
@@ -67,6 +69,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
   const gpT = ttmTarget(ticker, q.income, "grossProfit", "Gross profit");
   const epsT = ttmTarget(ticker, q.income, "epsDiluted", "Diluted EPS");
   const gmT = gpT && revT ? ratioTarget(ticker, "Gross margin (TTM)", revT.periodLabel ?? "", gpT, revT) : null;
+  const niiT = ttmTarget(ticker, q.income, "netInterestIncome", "Net interest income");
   const yoy = latestYoY(q.income, "revenue");
   const lastQ = q.income.periods.length - 1;
 
@@ -121,7 +124,11 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         <Stat label="Revenue (TTM)" value={fmtCompactUsd(revT?.value)} sub={yoy != null ? `${fmtPct(yoy, 1, true)} YoY (latest qtr)` : undefined} tone={yoy != null && yoy >= 0 ? "positive" : "negative"} target={revT} />
         <Stat label="Net income (TTM)" value={fmtCompactUsd(niT?.value)} sub={niT && revT ? `${fmtPct(niT.value / revT.value)} margin` : undefined} target={niT} />
         <Stat label="Free cash flow (TTM)" value={fmtCompactUsd(fcfT?.value)} sub={fcfT && mcap ? `${fmtPct(fcfT.value / mcap)} FCF yield` : undefined} tone={fcfT && fcfT.value < 0 ? "negative" : "neutral"} target={fcfT} />
-        <Stat label="Gross margin (TTM)" value={fmtPct(gmT?.value)} target={gmT} />
+        {gmT || !niiT ? (
+          <Stat label="Gross margin (TTM)" value={fmtPct(gmT?.value)} target={gmT} />
+        ) : (
+          <Stat label="Net interest income (TTM)" value={fmtCompactUsd(niiT.value)} sub={revT ? `${fmtPct(niiT.value / revT.value)} of revenue` : undefined} target={niiT} />
+        )}
         <Stat
           label="52-week range"
           value={stats.lo != null ? `${stats.lo.toFixed(0)}–${stats.hi?.toFixed(0)}` : "—"}
@@ -166,6 +173,11 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <RevenueBars ticker={ticker} data={data} />
         <MarginLines data={data} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <PeerTable ticker={ticker} />
+        <EarningsCallPanel ticker={ticker} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
