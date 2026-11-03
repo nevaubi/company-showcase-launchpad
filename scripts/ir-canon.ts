@@ -36,7 +36,7 @@ function shownValues(facts: IrFact[], map?: Record<string, LabelMapEntry>) {
  * Printed values the base tables show that a proposal would make disappear. Not counted: lines it
  * drops as junk, and values replaced by a later filing's restatement of the same line and quarter.
  */
-function lostValues(facts: IrFact[], base: Set<string>, map: Record<string, LabelMapEntry>) {
+function lostValues(facts: IrFact[], base: Set<string>, map: Record<string, LabelMapEntry>): { lost: number; lines: Set<string> } {
   const after = shownValues(facts, map);
   const byValue = new Map<string, IrFact[]>();
   for (const f of facts) {
@@ -45,6 +45,8 @@ function lostValues(facts: IrFact[], base: Set<string>, map: Record<string, Labe
     byValue.set(k, [...(byValue.get(k) ?? []), f]);
   }
   let lost = 0;
+  // the merged lines (unit + canonical label) the lost values collapsed into
+  const lines = new Set<string>();
   for (const v of base) {
     if (after.values.has(v)) continue;
     const fs = byValue.get(v) ?? [];
@@ -54,9 +56,18 @@ function lostValues(facts: IrFact[], base: Set<string>, map: Record<string, Labe
       const newer = after.shownFiled.get(`${f.unit}|${f.period_end}|${normLabel(m?.label ?? f.label)}`);
       return newer != null && newer > (f.filed ?? "");
     });
-    if (!excused) lost++;
+    if (excused) continue;
+    lost++;
+    for (const f of fs) lines.add(`${f.unit}|${normLabel(map[rawKey(f)]?.label ?? f.label)}`);
   }
-  return lost;
+  return { lost, lines };
+}
+
+/** Undo every rename into the lines that swallowed real numbers; the rest of the proposal stands. */
+function revertCollisions(proposal: Record<string, LabelMapEntry>, lines: Set<string>) {
+  const out = { ...proposal };
+  for (const [k, m] of Object.entries(proposal)) if (lines.has(`${k.split("|")[2]}|${normLabel(m.label)}`)) delete out[k];
+  return out;
 }
 
 function batches(lines: RawLine[], max = 380): RawLine[][] {
@@ -100,6 +111,7 @@ async function canonCompany(ticker: string, name: string) {
   const lines = rawLines(facts);
   const base = failureNotes(facts, undefined, 0);
   const baseValues = shownValues(facts).values;
+  const allowed = baseValues.size * 0.002;
   let map: Record<string, LabelMapEntry> = {};
   let tokens = 0;
   const rounds = Number(args.rounds ?? 2);
@@ -108,9 +120,9 @@ async function canonCompany(ticker: string, name: string) {
   const existing = await loadLabelMap(ticker);
   if (existing) {
     const r = failureNotes(facts, existing, 0);
-    const lost = lostValues(facts, baseValues, existing);
+    const { lost } = lostValues(facts, baseValues, existing);
     log(`${ticker} stored map: failures ${r.failed}/${r.total}, ${lost} shown values lost`);
-    if (r.failed <= best.failed && r.total >= base.total * 0.85 && lost <= baseValues.size * 0.002) best = { map: existing, failed: r.failed, total: r.total };
+    if (r.failed <= best.failed && r.total >= base.total * 0.85 && lost <= allowed) best = { map: existing, failed: r.failed, total: r.total };
   }
   for (let round = 1; round <= rounds; round++) {
     const current = failureNotes(facts, Object.keys(map).length ? map : undefined, 80);
@@ -131,13 +143,20 @@ async function canonCompany(ticker: string, name: string) {
         return mapFromModel(b, r.data);
       }),
     );
-    const proposal = Object.assign({}, map, ...results);
-    const after = failureNotes(facts, proposal, 0);
-    const lost = lostValues(facts, baseValues, proposal);
-    log(`${ticker} round ${round}: failures ${current.failed}/${current.total} → ${after.failed}/${after.total}, ${lost} shown values lost`);
+    let proposal: Record<string, LabelMapEntry> = Object.assign({}, map, ...results);
+    let after = failureNotes(facts, proposal, 0);
+    let lv = lostValues(facts, baseValues, proposal);
+    log(`${ticker} round ${round}: failures ${current.failed}/${current.total} → ${after.failed}/${after.total}, ${lv.lost} shown values lost`);
+    // Merges that swallow real numbers are undone line by line, keeping the rest of the proposal.
+    for (let fix = 1; fix <= 3 && lv.lost > allowed && lv.lines.size; fix++) {
+      proposal = revertCollisions(proposal, lv.lines);
+      after = failureNotes(facts, proposal, 0);
+      lv = lostValues(facts, baseValues, proposal);
+      log(`${ticker} round ${round} repair ${fix}: failures ${after.failed}/${after.total}, ${lv.lost} shown values lost`);
+    }
     // Keep a proposal only if it fails no more checks, doesn't hide coverage (dropping lines to "pass")
     // and doesn't merge away real numbers (two different values collapsing into one line).
-    if (after.failed <= best.failed && after.total >= base.total * 0.85 && lost <= baseValues.size * 0.002) best = { map: proposal, failed: after.failed, total: after.total };
+    if (after.failed <= best.failed && after.total >= base.total * 0.85 && lv.lost <= allowed) best = { map: proposal, failed: after.failed, total: after.total };
     map = proposal;
   }
   if (!best.map && existing) await sb.from("ir_label_map").delete().eq("ticker", ticker);
