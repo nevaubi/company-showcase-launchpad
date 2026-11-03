@@ -435,7 +435,9 @@ function CheckLine({ chk, unit, scale }: { chk: PayloadCheck; unit: string; scal
     );
   return chk.ok ? (
     <p className="text-positive">
-      {chk.n} parts sum to {fmtIr(chk.sum, unit, scale)} = printed total
+      {chk.sub?.length
+        ? `${chk.n} parts net to ${fmtIr(chk.sum, unit, scale)} = printed total, with ${chk.sub.join(", ")} subtracted`
+        : `${chk.n} parts sum to ${fmtIr(chk.sum, unit, scale)} = printed total`}
     </p>
   ) : (
     <p>

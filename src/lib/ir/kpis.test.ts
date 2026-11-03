@@ -333,3 +333,22 @@ describe("U.S. / international / worldwide columns", () => {
     expect(checks.every((c) => c.ok)).toBe(true);
   });
 });
+
+describe("deductions printed as positive numbers", () => {
+  it("ties a gross-profit style total out when the cost line is subtracted", () => {
+    const end = "2026-09-30";
+    const facts = [
+      f("Net revenue", end, 3, 100e6, { parent: "Gross profit" }),
+      f("Cost of sales", end, 3, 60e6, { parent: "Gross profit" }),
+      f("Gross profit", end, 3, 40e6, { parent: null, is_total: true }),
+    ];
+    const { checks } = buildIrSeries(facts);
+    expect(checks[0].ok).toBe(true);
+    expect(checks[0].subtracted).toEqual(["Cost of sales"]);
+  });
+  it("never subtracts an ordinary product line to force a match", () => {
+    const end = "2026-09-30";
+    const facts = [f("Widgets", end, 3, 100e6), f("Gadgets", end, 3, 30e6), f("Total net sales", end, 3, 70e6, { parent: null, is_total: true })];
+    expect(buildIrSeries(facts).checks[0].ok).toBe(false);
+  });
+});

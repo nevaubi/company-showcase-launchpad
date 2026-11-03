@@ -65,6 +65,8 @@ export interface PayloadCheck {
   n: number;
   /** parts are a selected list that covers only part of the total */
   partial?: boolean;
+  /** lines subtracted for the parts to equal the total (deductions printed as positives) */
+  sub?: string[];
 }
 export interface PayloadDoc {
   id: string;
@@ -211,7 +213,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
     groups.push({ id, cat: s0.category, met: s0.metric, unit: s0.unit, label: "", bd: null, root: null, rows: list.sort((a, b) => magnitude(b) - magnitude(a)).map((s) => ({ k: s.key, depth: 0 })) });
   }
 
-  const pc = (c: ReconcileCheck): PayloadCheck => ({ k: c.totalKey, e: c.period, kind: c.kind, total: c.total, sum: c.sum, ok: c.ok, n: c.children, ...(c.partial ? { partial: true } : {}) });
+  const pc = (c: ReconcileCheck): PayloadCheck => ({ k: c.totalKey, e: c.period, kind: c.kind, total: c.total, sum: c.sum, ok: c.ok, n: c.children, ...(c.partial ? { partial: true } : {}), ...(c.subtracted ? { sub: c.subtracted } : {}) });
   const allPeriods = out.flatMap((s) => [...Object.keys(s.q), ...Object.keys(s.y)]).sort();
   const q = checks.filter((c) => c.kind === "q");
   const fy = checks.filter((c) => c.kind === "fy");

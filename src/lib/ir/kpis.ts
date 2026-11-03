@@ -75,6 +75,8 @@ export interface ReconcileCheck {
   children: number;
   /** The release itemizes only selected lines: parts cover part of the total, never exceed it. */
   partial?: boolean;
+  /** parts that add up only when these lines are subtracted (deductions printed as positives) */
+  subtracted?: string[];
 }
 
 export interface LabelMapEntry {
@@ -85,6 +87,9 @@ export interface LabelMapEntry {
   is_total: boolean;
   drop?: boolean;
 }
+
+/** Lines that reduce their total: costs, eliminations, reserves, adjustments, "less …". */
+const DEDUCTION = /\b(cost|costs|expense|expenses|elimination|eliminations|intersegment|inter-segment|less|deduct|deductions|discount|discounts|allowance|provision|reserve|returns|rebates|chargebacks|adjustment|adjustments|reconciling|corporate|unallocated|impairment|amortization|depreciation|tax|taxes|interest expense|minority|noncontrolling)\b/i;
 
 const DAY = 86_400_000;
 const t = (d: string) => Date.parse(`${d}T00:00:00Z`);
@@ -461,9 +466,20 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
         ok = evaluate(k, end, childDoc, out, apply) && ok;
       }
       if (members.length >= 2 && node.isTotal && !own?.synthetic && (node.unit === "usd" || node.unit === "count")) {
-        const sum = members.reduce((n, k) => n + (fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v ?? 0), 0);
-        const pass = Math.abs(sum - value) <= tolFor(node, value);
-        out.push({ group: `${node.category}:${node.label}`, totalKey: node.key, period: end, kind, total: value, sum, ok: pass, children: members.length });
+        const vals = members.map((k) => fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v ?? 0);
+        let sum = vals.reduce((n, v) => n + v, 0);
+        let pass = Math.abs(sum - value) <= tolFor(node, value);
+        let subtracted: string[] | undefined;
+        if (!pass) {
+          // Deductions printed without parentheses ("Revenue 100, Cost of sales 60, Gross profit 40").
+          const i = members.findIndex((k, j) => vals[j] > 0 && DEDUCTION.test(k.label) && Math.abs(sum - 2 * vals[j] - value) <= tolFor(node, value));
+          if (i >= 0) {
+            sum -= 2 * vals[i];
+            pass = true;
+            subtracted = [members[i].label];
+          }
+        }
+        out.push({ group: `${node.category}:${node.label}`, totalKey: node.key, period: end, kind, total: value, sum, ok: pass, children: members.length, ...(subtracted ? { subtracted } : {}) });
         ok = ok && pass;
       }
       return ok;
