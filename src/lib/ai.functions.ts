@@ -89,12 +89,30 @@ export const getNarratives = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     const { cached, structured } = await import("@/lib/ai.server");
     const bucket = new Date().toISOString().slice(0, 13).replace(/T(\d\d)$/, (_, h) => `T${String(Math.floor(Number(h) / 6) * 6).padStart(2, "0")}`);
-    return cached(`narratives:v2:${data.ticker}:${bucket}`, 6 * 3600_000, async () => {
+    return cached(`narratives:v3:${data.ticker}:${bucket}`, 6 * 3600_000, async () => {
       let news: NewsItem[] = [];
       try {
         news = await fetchYahooNews(data.ticker, 16);
       } catch {
         news = [];
+      }
+      let via: "feed" | "web" = "feed";
+      if (!news.length) {
+        try {
+          const { tavilySearch } = await import("@/lib/web.server");
+          const r = await tavilySearch(`${data.name} ${data.ticker} stock`, { topic: "news", days: 21, maxResults: 14, depth: "basic" });
+          news = r.results.map((x, i) => ({
+            id: `w${i + 1}`,
+            title: x.title,
+            publisher: new URL(x.url).hostname.replace(/^www\./, ""),
+            link: x.url,
+            publishedAt: x.publishedAt && !Number.isNaN(Date.parse(x.publishedAt)) ? new Date(x.publishedAt).toISOString() : new Date().toISOString(),
+            tickers: [data.ticker],
+          }));
+          via = "web";
+        } catch {
+          news = [];
+        }
       }
       if (!news.length) return webNarratives(data.ticker, data.name, structured);
       const list = news.map((n) => `[${n.id}] ${n.publishedAt.slice(0, 10)} · ${n.publisher}: ${n.title}`).join("\n");
@@ -125,7 +143,7 @@ export const getNarratives = createServerFn({ method: "POST" })
           },
         },
       });
-      return { narratives: out.narratives.slice(0, 4), news, via: "feed" as const };
+      return { narratives: out.narratives.slice(0, 4), news, via };
     });
   });
 

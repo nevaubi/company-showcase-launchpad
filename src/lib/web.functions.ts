@@ -60,12 +60,12 @@ export const getEarningsCallBrief = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<{ brief: EarningsBrief | null; error?: string }> => {
     const co = coverageOf(data.ticker);
     if (!co) return { brief: null, error: "Not a covered company" };
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const key = `earnings-call:v1:${co.ticker}`;
-    if (!data.refresh) {
-      const { data: hit } = await supabaseAdmin.from("ai_cache").select("value, created_at").eq("key", key).maybeSingle();
-      if (hit && Date.now() - new Date(hit.created_at as string).getTime() < 12 * 3600_000) return { brief: hit.value as unknown as EarningsBrief };
-    }
+    const { cached } = await import("@/lib/ai.server");
+    const key = `earnings-call:v1:${co.ticker}${data.refresh ? `:${Date.now()}` : ""}`;
+    return cached(key, 12 * 3600_000, () => buildBrief(co));
+  });
+
+async function buildBrief(co: NonNullable<ReturnType<typeof coverageOf>>): Promise<{ brief: EarningsBrief | null; error?: string }> {
     const { tavilySearch, firecrawlScrape } = await import("@/lib/web.server");
     const { structured } = await import("@/lib/ai.server");
     try {
@@ -118,10 +118,9 @@ export const getEarningsCallBrief = createServerFn({ method: "POST" })
         sources: (used.length ? used : all.slice(0, 4)).map((s) => ({ title: s.title, url: s.url })),
         generatedAt: new Date().toISOString(),
       };
-      await supabaseAdmin.from("ai_cache").upsert({ key, value: brief as never });
       return { brief };
     } catch (e) {
       console.error("earnings brief failed", e);
       return { brief: null, error: (e as Error).message };
     }
-  });
+}
