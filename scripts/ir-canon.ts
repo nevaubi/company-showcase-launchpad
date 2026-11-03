@@ -7,12 +7,27 @@
  */
 import { COVERAGE } from "@/lib/coverage";
 import { CANON_INSTRUCTIONS, CANON_SCHEMA, failureNotes, mapFromModel, rawLines, renderLines, type RawLine } from "@/lib/ir/canon";
-import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
+import { buildIrSeries, rawKey, type IrFact, type LabelMapEntry } from "@/lib/ir/kpis";
 import { IR_MODELS, OpenAIError, openaiStructured } from "@/lib/openai.server";
 import { buildCompany, loadFacts } from "./ir-build";
 import { args, log, sb } from "./lib/supa";
 
 type CanonOut = { lines: { id: number; category: string; metric: string; label: string; parent: string; is_total: boolean; drop: boolean; reason: string }[] };
+
+/** Every distinct (unit, quarter, value) the tables show — a merge may dedupe these, never lose them. */
+function shownValues(facts: IrFact[], map?: Record<string, LabelMapEntry>) {
+  const { series } = buildIrSeries(facts, map ? { labelMap: map } : {});
+  return new Set(series.flatMap((s) => Object.entries(s.cells).map(([e, c]) => `${s.unit}|${e}|${Math.round(c.v)}`)));
+}
+
+/** Values the base tables show that a proposal would make disappear (excluding lines it drops as junk). */
+function lostValues(facts: IrFact[], base: Set<string>, map: Record<string, LabelMapEntry>) {
+  const after = shownValues(facts, map);
+  const dropped = new Set(facts.filter((f) => map[rawKey(f)]?.drop).map((f) => `${f.unit}|${f.period_end}|${Math.round(f.value)}`));
+  let lost = 0;
+  for (const v of base) if (!after.has(v) && !dropped.has(v)) lost++;
+  return lost;
+}
 
 function batches(lines: RawLine[], max = 380): RawLine[][] {
   const byMetric = new Map<string, RawLine[]>();
@@ -54,6 +69,7 @@ async function canonCompany(ticker: string, name: string) {
   if (!facts.length) return;
   const lines = rawLines(facts);
   const base = failureNotes(facts, undefined, 0);
+  const baseValues = shownValues(facts);
   let map: Record<string, LabelMapEntry> = {};
   let tokens = 0;
   const rounds = Number(args.rounds ?? 2);
@@ -79,9 +95,11 @@ async function canonCompany(ticker: string, name: string) {
     );
     const proposal = Object.assign({}, map, ...results);
     const after = failureNotes(facts, proposal, 0);
-    log(`${ticker} round ${round}: failures ${current.failed}/${current.total} → ${after.failed}/${after.total}`);
-    // Keep a proposal only if it fails no more checks and doesn't hide coverage (dropping lines to "pass").
-    if (after.failed <= best.failed && after.total >= base.total * 0.85) best = { map: proposal, failed: after.failed, total: after.total };
+    const lost = lostValues(facts, baseValues, proposal);
+    log(`${ticker} round ${round}: failures ${current.failed}/${current.total} → ${after.failed}/${after.total}, ${lost} shown values lost`);
+    // Keep a proposal only if it fails no more checks, doesn't hide coverage (dropping lines to "pass")
+    // and doesn't merge away real numbers (two different values collapsing into one line).
+    if (after.failed <= best.failed && after.total >= base.total * 0.85 && lost <= baseValues.size * 0.002) best = { map: proposal, failed: after.failed, total: after.total };
     map = proposal;
   }
   if (best.map) {
