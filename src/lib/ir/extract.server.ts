@@ -63,7 +63,7 @@ Use labels exactly as printed (without footnote markers). Include every period c
 export async function extractIrDocument(id: string) {
   const { data: doc } = await supabaseAdmin.from("ir_documents").select("*").eq("id", id).maybeSingle();
   if (!doc?.path) throw new Error("Document not stored");
-  const { data: file, error } = await supabaseAdmin.storage.from("ir-documents").download(doc.path);
+  const { data: file, error } = await supabaseAdmin.storage.from("ir-documents").download(doc.rendition_path || doc.path);
   if (error || !file) throw new Error(error?.message ?? "Download failed");
   const html = await file.text();
   const tables = parseTables(html);
@@ -109,7 +109,8 @@ export async function extractIrDocument(id: string) {
       unit: f.unit,
       locator: { t: f.t, r: f.r, c: f.c, text },
       accn: doc.accn,
-      doc: doc.source === "sec-exhibit" ? doc_ : null,
+      doc: doc.source === "sec-exhibit" && !doc.rendition_path ? doc_ : null,
+      document_kind: doc.kind,
       filed: doc.filed,
     });
   }
@@ -129,8 +130,8 @@ export async function nextToExtract(ticker?: string) {
     .select("id, ticker, title")
     .is("extracted_at", null)
     .is("extract_status", null)
-    .in("ext", ["htm", "html"])
-    .in("kind", ["press-release", "supplement", "other"])
+    .or("ext.in.(htm,html),rendition_path.like.%html")
+    .in("kind", ["press-release", "supplement", "presentation", "data", "other"])
     .order("filed", { ascending: false })
     .limit(8);
   if (ticker) q = q.eq("ticker", ticker);

@@ -1,5 +1,5 @@
 // Pure helpers for classifying investor-relations files.
-export type IrKind = "press-release" | "presentation" | "supplement" | "transcript" | "annual-report" | "proxy" | "data" | "image" | "other";
+export type IrKind = "sec-copy" | "press-release" | "presentation" | "supplement" | "transcript" | "annual-report" | "proxy" | "data" | "image" | "other";
 
 export const IR_FILE_RE = /\.(pdf|xlsx?|xlsm|csv|pptx?|docx?|jpe?g|png)$/i;
 
@@ -23,6 +23,8 @@ export function classifyIrDocument(p: { exhibit?: string; description?: string; 
   const text = `${p.description ?? ""} ${p.name}`.toLowerCase();
   const title = (p.description && !/^ex-?99/i.test(p.description) ? p.description : p.name.replace(/\.[a-z0-9]+$/i, "").replace(/[_-]+/g, " ")).trim();
   if (/^(jpe?g|png|gif)$/.test(p.ext)) return { kind: "image", title };
+  // Copies of 10-K/10-Q/proxy filings already covered by EDGAR XBRL.
+  if (/\b10[- ]?[qk]\b|as[- ]filed|including exhibits|form 10/.test(text)) return { kind: "sec-copy", title };
   if (/transcript/.test(text)) return { kind: "transcript", title };
   if (/presentation|slides|deck|investor day|earnings call materials/.test(text) || /^pptx?$/.test(p.ext)) return { kind: "presentation", title };
   if (/supplement|financial data|trending|schedules|fact ?book|metrics|kpi|statistical|segment/.test(text) || /^(xlsx?|xlsm|csv)$/.test(p.ext)) return { kind: p.ext.startsWith("xls") || p.ext === "csv" ? "data" : "supplement", title };
