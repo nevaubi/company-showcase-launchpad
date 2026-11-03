@@ -110,8 +110,6 @@ export function classifyOpenAIError(status: number, code: string, type: string, 
 }
 
 async function parseResponse<T>(res: Response): Promise<{ data: T; usage: Usage; model: string }> {
-  {
-  }
   const j = (await res.json()) as {
     model: string;
     status?: string;
