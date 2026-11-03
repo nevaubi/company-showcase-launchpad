@@ -80,5 +80,6 @@
 - [x] Deductions printed as positives (costs, eliminations) tie out with the line subtracted and say so; subtotals introduced mid-history (Alphabet "Google") roll their parts into the total for older periods
 - [x] Accuracy rules: subsidiary tables repeating the parent's rows keep only the consolidated table (Duke); a line counts once per total, taken from one table (Coca-Cola grids); one-table totals may pick up an eliminations line printed next door; never-matching "breakdowns" are shown as plain lines and counted in stats
 - [x] IR library loads slide images on demand (JPM/BAC pages ~3× faster)
+- [ ] Site slow (Nov 3, 15:19): database stopped responding — diagnose, recover, keep background jobs from overloading it
 - [ ] Deterministic accuracy audit: duplicate-total detection across tables
 - [ ] Rebuild every company's payload once the reading passes finish (`bun scripts/ir-build.ts`)
