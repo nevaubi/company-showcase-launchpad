@@ -241,7 +241,13 @@ function MultipleCard({
     >
       <button onClick={onClick} className="block w-full text-left">
         <p className="truncate text-[11px] text-muted-foreground">{def.short}</p>
-        <p className="num mt-0.5 text-xl font-medium">{fmtMultiple(def.kind, stats.current)}</p>
+        {stats.current == null ? (
+          <p className="num mt-0.5 text-xl font-medium text-muted-foreground" title="Not meaningful: the denominator (earnings, book value, cash flow or payout) is zero, negative or not reported for the latest period">
+            n.m.
+          </p>
+        ) : (
+          <p className="num mt-0.5 text-xl font-medium">{fmtMultiple(def.kind, stats.current)}</p>
+        )}
         <p className="num truncate text-[10px] text-muted-foreground">median {fmtMultiple(def.kind, stats.median)}</p>
       </button>
       <div className="mt-2 flex items-center gap-2">
