@@ -66,15 +66,16 @@
 - [x] Vision pass code: slides, chart images, scanned pages → facts pinned to the printed token with page-box highlight
 - [x] Data status page: investor-relations library panel (files, size, span, read/waiting, data points, tie-out per company)
 - [x] OCR decimal guard: the slide reader returns its own reading of each number; OCR tokens with the same digits take the model's punctuation, anything else is rejected
-- [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 16 workers — 32 saturated the database pool)
-- [ ] Running: vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch`, 6 workers)
+- [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 10 workers; the governor sheds more when the database slows)
+- [ ] Running: vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch`, 4 workers)
 - [x] Deterministic structure fixes: coincidental subtotal nesting (KO), one-table-per-segment generic rows (LMT), U.S./international/worldwide column sets (ABBV, pharma), period-end counts vs net additions (CMCSA), ~1,000× unit outliers flagged in the UI
 - [x] Data status: IR library panel; cut-off scheduled runs shown separately from failures; jobs time-boxed (`RUN_BUDGET_MS`), `ir-docs` every 5 min with done/partial/empty tracking
 - [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, KO, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`
 - [ ] Running: historical 2008+ SEC exhibit backfill for all companies (`scripts/ir-backfill.ts`)
 - [ ] Running: IR-website files for every company (`scripts/ir-site.ts`, Firecrawl + Tavily)
-- [ ] IR page must never look empty while the database is busy: slow-load notice, automatic retry, keep last good data; background jobs throttle themselves when database latency rises
+- [x] IR page never looks empty while the database is busy (slow-load notice, retries, clear timeout message); every bulk job waits on database latency (`dbGate`) and sheds workers
 - [ ] Running: PDF/XLSX renditions for newly backfilled files (`scripts/ir-renditions.ts`)
 - [ ] Production schedules: keep the collector inside the scheduled-call time limit (small slices), reading stays in the batch runner
-- [ ] Deterministic accuracy audit: duplicate-total detection, sign conventions for eliminations
+- [x] Deductions printed as positives (costs, eliminations) tie out with the line subtracted and say so; subtotals introduced mid-history (Alphabet "Google") roll their parts into the total for older periods
+- [ ] Deterministic accuracy audit: duplicate-total detection across tables
 - [ ] Rebuild every company's payload once the reading passes finish (`bun scripts/ir-build.ts`)
