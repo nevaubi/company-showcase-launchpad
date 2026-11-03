@@ -24,7 +24,7 @@
 
 ## Ready
 - [x] Narratives show "web search" provenance when the headline feed is throttled
-- [ ] Research agent: fall back to web search inside the get_news tool when the headline feed is throttled
+- [x] Research agent switches to web search when the headline feed is throttled
 - [ ] Coverage expansion via the ingest script (e.g. META, AVGO, JPM) once bank statement templates exist
 
 ## Later

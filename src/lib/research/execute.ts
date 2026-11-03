@@ -210,9 +210,14 @@ Month-start closes:\n${monthly.join("\n")}`;
       };
     }
     case "get_news": {
-      const r = await qc.fetchQuery(newsQuery(String(args.query).slice(0, 60)));
+      const r = await qc.fetchQuery(newsQuery(String(args.query).slice(0, 60))).catch(() => null);
+      if (!r || !r.items.length)
+        return {
+          output: "The headline feed is unavailable or returned nothing right now. Use web_search for recent news coverage instead.",
+          summary: `No feed headlines for "${args.query}" — switching to web search`,
+        };
       return {
-        output: r.items.map((n) => `${n.publishedAt.slice(0, 10)} | ${n.publisher} | ${n.title} | ${n.link}`).join("\n") || "No headlines.",
+        output: r.items.map((n) => `${n.publishedAt.slice(0, 10)} | ${n.publisher} | ${n.title} | ${n.link}`).join("\n"),
         summary: `${r.items.length} headlines for "${args.query}"`,
       };
     }
