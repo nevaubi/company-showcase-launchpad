@@ -474,17 +474,10 @@ async function releasesFor(cik: string, filings: Filing[]): Promise<EarningsRele
 
 // ---------- Company ----------
 async function loadLogo(ticker: string) {
-  for (const path of [`../src/assets/logos/${ticker}.svg.asset.json`, `../src/assets/logos/${ticker}.png.asset.json`]) {
-    try {
-      const raw = await readFile(new URL(path, import.meta.url), "utf8");
-      return (JSON.parse(raw) as { url: string }).url;
-    } catch {
-      /* try next */
-    }
-  }
+  // public/logos holds one official vector logo per covered company (see public/logos/sources.json).
   try {
-    await stat(new URL(`../public/logos/${ticker}.svg`, import.meta.url));
-    return `/logos/${ticker}.svg`;
+    const map = JSON.parse(await readFile(new URL("../public/logos/sources.json", import.meta.url), "utf8")) as Record<string, { file: string }>;
+    return map[ticker] ? `/logos/${map[ticker].file}` : "";
   } catch {
     return "";
   }
