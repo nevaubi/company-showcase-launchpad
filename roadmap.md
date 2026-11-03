@@ -25,7 +25,7 @@
 ## Ready
 - [x] Narratives show "web search" provenance when the headline feed is throttled
 - [x] Research agent switches to web search when the headline feed is throttled
-- [ ] Coverage expansion via the ingest script (e.g. META, AVGO, JPM) once bank statement templates exist
+- [ ] Add META and AVGO to coverage with the ingest script (standard statement templates already fit them)
 
 ## Later
 - [ ] Earnings call transcripts source (needs licensed provider or Firecrawl connection)
