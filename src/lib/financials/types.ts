@@ -168,6 +168,41 @@ export interface UniverseEntry {
   revenueGrowthYoY: number | null;
   sharesOutstanding: number | null;
   lastFiling: { form: string; filed: string; accn: string } | null;
+  /** Compact fundamentals for screens and sector roll-ups (all from the SEC statements). */
+  f?: UniverseFundamentals;
+}
+
+export type TtmKey =
+  | "revenue"
+  | "grossProfit"
+  | "operatingIncome"
+  | "ebitda"
+  | "netIncome"
+  | "fcf"
+  | "cfo"
+  | "capex"
+  | "sbc"
+  | "rnd"
+  | "dna"
+  | "buybacks"
+  | "dividends"
+  | "epsDiluted"
+  | "interestExpense";
+
+export type BalanceKey = "cash" | "shortTermInvestments" | "totalDebt" | "netDebt" | "equity" | "totalAssets" | "loans" | "deposits";
+
+export interface UniverseFundamentals {
+  /** End date of the latest quarter in the TTM window */
+  asOf: string | null;
+  ttm: Partial<Record<TtmKey, number>>;
+  bs: Partial<Record<BalanceKey, number>>;
+  /** Last ten fiscal years of revenue */
+  revenueHistory: [string, number][];
+  revenueCagr3y: number | null;
+  revenueCagr5y: number | null;
+  epsGrowthYoY: number | null;
+  /** Latest quarter's weighted diluted shares */
+  dilutedShares: number | null;
 }
 
 export interface Universe {
