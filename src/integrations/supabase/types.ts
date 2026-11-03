@@ -65,6 +65,216 @@ export type Database = {
         }
         Relationships: []
       }
+      filing_documents: {
+        Row: {
+          accn: string
+          bytes: number
+          cached_at: string
+          content_type: string
+          doc: string
+          path: string
+        }
+        Insert: {
+          accn: string
+          bytes: number
+          cached_at?: string
+          content_type: string
+          doc: string
+          path: string
+        }
+        Update: {
+          accn?: string
+          bytes?: number
+          cached_at?: string
+          content_type?: string
+          doc?: string
+          path?: string
+        }
+        Relationships: []
+      }
+      insider_trades: {
+        Row: {
+          accn: string
+          acquired: boolean
+          code: string
+          direct: boolean
+          discovered_at: string
+          doc: string
+          filed: string
+          owned_after: number | null
+          owner: string
+          plan_10b5: boolean
+          price: number | null
+          role: string
+          security: string
+          seq: number
+          shares: number
+          ticker: string
+          trade_date: string
+        }
+        Insert: {
+          accn: string
+          acquired: boolean
+          code: string
+          direct: boolean
+          discovered_at?: string
+          doc: string
+          filed: string
+          owned_after?: number | null
+          owner: string
+          plan_10b5?: boolean
+          price?: number | null
+          role: string
+          security: string
+          seq: number
+          shares: number
+          ticker: string
+          trade_date: string
+        }
+        Update: {
+          accn?: string
+          acquired?: boolean
+          code?: string
+          direct?: boolean
+          discovered_at?: string
+          doc?: string
+          filed?: string
+          owned_after?: number | null
+          owner?: string
+          plan_10b5?: boolean
+          price?: number | null
+          role?: string
+          security?: string
+          seq?: number
+          shares?: number
+          ticker?: string
+          trade_date?: string
+        }
+        Relationships: []
+      }
+      job_runs: {
+        Row: {
+          detail: Json | null
+          finished_at: string | null
+          id: number
+          items: number
+          job: string
+          ok: boolean | null
+          started_at: string
+        }
+        Insert: {
+          detail?: Json | null
+          finished_at?: string | null
+          id?: never
+          items?: number
+          job: string
+          ok?: boolean | null
+          started_at?: string
+        }
+        Update: {
+          detail?: Json | null
+          finished_at?: string | null
+          id?: never
+          items?: number
+          job?: string
+          ok?: boolean | null
+          started_at?: string
+        }
+        Relationships: []
+      }
+      job_state: {
+        Row: {
+          cursor: number
+          job: string
+          updated_at: string
+        }
+        Insert: {
+          cursor?: number
+          job: string
+          updated_at?: string
+        }
+        Update: {
+          cursor?: number
+          job?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      macro_observations: {
+        Row: {
+          date: string
+          series_id: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          date: string
+          series_id: string
+          updated_at?: string
+          value: number
+        }
+        Update: {
+          date?: string
+          series_id?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: []
+      }
+      macro_summaries: {
+        Row: {
+          series_id: string
+          summary: Json
+          updated_at: string
+        }
+        Insert: {
+          series_id: string
+          summary: Json
+          updated_at?: string
+        }
+        Update: {
+          series_id?: string
+          summary?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      market_bars: {
+        Row: {
+          adj_close: number | null
+          close: number
+          date: string
+          high: number | null
+          low: number | null
+          open: number | null
+          symbol: string
+          updated_at: string
+          volume: number | null
+        }
+        Insert: {
+          adj_close?: number | null
+          close: number
+          date: string
+          high?: number | null
+          low?: number | null
+          open?: number | null
+          symbol: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Update: {
+          adj_close?: number | null
+          close?: number
+          date?: string
+          high?: number | null
+          low?: number | null
+          open?: number | null
+          symbol?: string
+          updated_at?: string
+          volume?: number | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -151,6 +361,51 @@ export type Database = {
           title?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      sec_filings: {
+        Row: {
+          accn: string
+          cik: string
+          description: string | null
+          discovered_at: string
+          doc: string
+          filed: string
+          form: string
+          items: string | null
+          ixbrl: boolean
+          report: string | null
+          size: number | null
+          ticker: string
+        }
+        Insert: {
+          accn: string
+          cik: string
+          description?: string | null
+          discovered_at?: string
+          doc: string
+          filed: string
+          form: string
+          items?: string | null
+          ixbrl?: boolean
+          report?: string | null
+          size?: number | null
+          ticker: string
+        }
+        Update: {
+          accn?: string
+          cik?: string
+          description?: string | null
+          discovered_at?: string
+          doc?: string
+          filed?: string
+          form?: string
+          items?: string | null
+          ixbrl?: boolean
+          report?: string | null
+          size?: number | null
+          ticker?: string
         }
         Relationships: []
       }
