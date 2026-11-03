@@ -14,6 +14,7 @@ import { useUnitScale } from "@/hooks/use-preference";
 import { scaleCaption } from "@/lib/format";
 import type { StatementKey } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
+import wordmark from "@/assets/brand/wordmark.png.asset.json";
 
 const search = z.object({
   statement: z.enum(["income", "balance", "cashflow", "kpis"]).default("income"),
@@ -81,8 +82,8 @@ function Financials() {
     setExporting(true);
     try {
       const { exportWorkbook } = await import("@/lib/export/xlsx");
-      await exportWorkbook(company.data!, s.freq, scale, span);
-      toast.success("Excel model downloaded", { description: "Four statements with live formulas and a Sources sheet." });
+      await exportWorkbook(company.data!, s.freq, scale, span, wordmark.url);
+      toast.success("Excel model downloaded", { description: "Cover sheet, four styled statements with live formulas, and a Sources sheet linking every number to SEC.gov." });
     } catch (e) {
       console.error(e);
       toast.error("Could not build the workbook", { description: (e as Error).message });

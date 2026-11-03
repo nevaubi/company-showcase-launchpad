@@ -52,7 +52,7 @@
 - [ ] Insurer template (premiums, loss ratio, float) — needed before adding BRK or other insurers
 - [ ] Filing alerts: email when a followed company files a 10-K/10-Q/8-K or an insider trades
 - [ ] Cross-company transcript search (store parsed calls so one query spans every covered company)
-- [ ] Excel model export with live formulas linking statements, valuation and segments
+- [ ] Excel model export linking statements, valuation and segments in one workbook (statements and IR breakdowns now export separately, both styled)
 - [x] Company-extension XBRL tags (COP, NEE capex) read from filings' iXBRL so FCF isn't blank for those filers
 - [x] Research-agent tool: search inside earnings-call transcripts
 
@@ -66,16 +66,16 @@
 - [x] Vision pass code: slides, chart images, scanned pages → facts pinned to the printed token with page-box highlight
 - [x] Data status page: investor-relations library panel (files, size, span, read/waiting, data points, tie-out per company)
 - [x] OCR decimal guard: the slide reader returns its own reading of each number; OCR tokens with the same digits take the model's punctuation, anything else is rejected
-- [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 16 workers; ~9,900 files queued; the governor sheds workers when the database slows)
-- [ ] Running: vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch`, 8 workers; ~37,000 images queued, ~2 days at current pace)
+- [ ] BLOCKED (OpenAI credits ran out Nov 3, 23:38): table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch --concurrency=12`; ~10,400 files queued). Resumed Nov 3 23:12 and read 386 files (~120k values) before the 429 `credit_balance_exhausted`; rerun with `--resume` once credits are added
+- [ ] BLOCKED (OpenAI credits): vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch --concurrency=6`; ~37,000 images queued); read 425 images before stopping
 - [x] Deterministic structure fixes: coincidental subtotal nesting (KO), one-table-per-segment generic rows (LMT), U.S./international/worldwide column sets (ABBV, pharma), period-end counts vs net additions (CMCSA), ~1,000× unit outliers flagged in the UI
 - [x] Data status: IR library panel; cut-off scheduled runs shown separately from failures; jobs time-boxed (`RUN_BUDGET_MS`), `ir-docs` every 5 min with done/partial/empty tracking
-- [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, KO, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`
-- [ ] Running: historical 2008+ SEC exhibit backfill (`scripts/ir-backfill.ts`, 2 workers), PG→EQIX, JPM, BRK.B
-- [ ] Running: IR-website files (`scripts/ir-site.ts`, Firecrawl + Tavily), PEP onward at concurrency 2
+- [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts` (KO improved 152→145 failures; VZ and BA kept their originals — no better proposal)
+- [ ] Running: historical 2008+ SEC exhibit backfill (`scripts/ir-backfill.ts`, 2 workers), PG→EQIX + JPM, restarted Nov 3 23:46
+- [x] IR-website files (`scripts/ir-site.ts`, Firecrawl + Tavily), PEP→EQIX finished Nov 3: 195 new files for 32 companies
 - [x] IR tab shows stored tables on first load with no manual step: background readers rebuild each company's tables every few minutes, open pages refresh every two minutes, and a missing payload is rebuilt on request
 - [x] IR page never looks empty while the database is busy (slow-load notice, retries, clear timeout message); every bulk job waits on database latency (`dbGate`) and sheds workers
-- [ ] PDF/XLSX renditions for newly collected files (`scripts/ir-renditions.ts`) — run after the site pass
+- [ ] Running: PDF/XLSX renditions for newly collected files (`scripts/ir-renditions.ts --limit=400`), started after the site pass
 - [x] Production schedules: collector stays inside the scheduled-call time limit (small slices, `RUN_BUDGET_MS`); reading stays in the batch runner
 - [x] Deductions printed as positives (costs, eliminations) tie out with the line subtracted and say so; subtotals introduced mid-history (Alphabet "Google") roll their parts into the total for older periods
 - [x] Accuracy rules: subsidiary tables repeating the parent's rows keep only the consolidated table (Duke); a line counts once per total, taken from one table (Coca-Cola grids); one-table totals may pick up an eliminations line printed next door; never-matching "breakdowns" are shown as plain lines and counted in stats
@@ -86,3 +86,8 @@
 - [ ] Background readers only run while this workspace is open; a long-running worker would keep reading when it sleeps
 - [ ] Deterministic accuracy audit: duplicate-total detection across tables
 - [x] Payload rebuilds are automatic: the readers rebuild companies that gained facts (big banks less often), full rebuild run Nov 3
+- [x] Breakdowns list: "Show 50 more" and "Show all" (off-screen breakdowns skip layout, so 300+ stay smooth)
+- [x] Bulk Excel export of IR breakdowns (in view, or complete quarterly + annual history; per-breakdown too): cover with contents, one styled sheet per breakdown type, live Q4/FY and parts = total formulas, Checks and Data & sources sheets with "Open source" links back to the exact cell; built in a background worker
+- [x] Financial statements workbook restyled with the same theme (cover, full values with scale formats, input/formula colour coding)
+- [ ] Odd period columns for some banks (BAC shows Nov/May/Aug quarter columns): find which facts carry non-quarter-end dates and map or drop them at build time
+

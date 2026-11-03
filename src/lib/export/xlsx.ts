@@ -2,6 +2,7 @@
 // Sources sheet that maps every number to its SEC filing. Styled with the shared Filed Under theme;
 // exceljs is loaded on demand so it never weighs on page loads.
 import type { CompanyDataset, Period, Row, Statement, StatementKey } from "@/lib/financials/types";
+import { coverageOf } from "@/lib/coverage";
 import { unitLabel, type Scale } from "@/lib/format";
 import {
   C,
@@ -112,7 +113,7 @@ export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, sca
   wb.created = new Date();
   wb.calcProperties = { fullCalcOnLoad: true };
   const ticker = d.profile.ticker;
-  const name = `${d.profile.name} (${ticker})`;
+  const name = `${coverageOf(ticker)?.shortName ?? d.profile.name} (${ticker})`;
   const statements = d.statements[freq];
   const allPeriods = statements.income.periods;
   const startIdx = periods ? Math.max(0, allPeriods.length - periods) : 0;
