@@ -60,21 +60,30 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   let active = 0;
   let concurrency = o.concurrency;
   let lastWork = Date.now();
-  const dirty = new Set<string>();
+  // ticker → when it first gained facts since its last rebuild
+  const dirty = new Map<string, number>();
+  const cost = new Map<string, { at: number; ms: number }>();
   let flushing = false;
-  const flush = async () => {
+  const flush = async (final = false) => {
     if (flushing) return;
     flushing = true;
     try {
-      for (const t of [...dirty]) {
+      for (const [t, since] of [...dirty]) {
+        // Big companies (JPM: ~56k facts, ~100s) rebuild less often so they don't hog the database.
+        const c = cost.get(t);
+        if (!final && c && Date.now() - c.at < Math.max(3 * 60_000, c.ms * 10)) continue;
         dirty.delete(t);
+        // Another runner (or the full build) may already have rebuilt it with these facts.
+        const { data: row } = await sb.from("ir_company_series").select("built_at").eq("ticker", t).maybeSingle();
+        if (row?.built_at && Date.parse(row.built_at) > since + 60_000) continue;
         await dbGate(`${o.job} rebuild`);
         const t0 = Date.now();
         try {
           const p = await rebuildCompany(t);
+          cost.set(t, { at: Date.now(), ms: Date.now() - t0 });
           if (p) log(`${t.padEnd(5)} breakdowns rebuilt (${p.stats.facts.toLocaleString()} facts) in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
         } catch (e) {
-          dirty.add(t);
+          if (!dirty.has(t)) dirty.set(t, since);
           log(`${t} rebuild failed: ${(e as Error).message.slice(0, 120)}`);
         }
       }
@@ -116,7 +125,7 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
         const r = await o.process(item);
         done++;
         facts += r.facts;
-        if (r.facts > 0) dirty.add(item.ticker);
+        if (r.facts > 0 && !dirty.has(item.ticker)) dirty.set(item.ticker, Date.now());
         tokensIn += r.usage?.input_tokens ?? 0;
         tokensOut += r.usage?.output_tokens ?? 0;
         rateHits = Math.max(0, rateHits - 1);
