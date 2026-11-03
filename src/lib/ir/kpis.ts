@@ -161,7 +161,8 @@ export function inferSubtotals(series: IrSeries[]) {
     if (!ends.length) continue;
     const kidSum = (e: string) => kids.reduce((n, k) => n + k.cells[e].v, 0);
     if (ends.every((e) => Math.abs(kidSum(e) - total.cells[e].v) <= Math.abs(total.cells[e].v) * 0.005)) continue;
-    for (const k of kids) {
+    // Subtotals are larger than their parts: try the biggest candidates first.
+    for (const k of [...kids].sort((a, b) => Math.abs(b.cells[ends[0]].v) - Math.abs(a.cells[ends[0]].v))) {
       const others = kids.filter((o) => o !== k);
       const e0 = ends[0];
       let found: IrSeries[] | null = null;
@@ -169,7 +170,7 @@ export function inferSubtotals(series: IrSeries[]) {
         const sub = others.filter((_, i) => mask & (1 << i));
         if (sub.length < 2) continue;
         const ok = ends.every((e) => Math.abs(sub.reduce((n, o) => n + o.cells[e].v, 0) - k.cells[e].v) <= Math.max(Math.abs(k.cells[e].v) * 0.002, 1e6));
-        if (ok && ok && Math.abs(sub.reduce((n, o) => n + o.cells[e0].v, 0)) > 0) found = sub;
+        if (ok && Math.abs(sub.reduce((n, o) => n + o.cells[e0].v, 0)) > 0) found = sub;
       }
       if (found) {
         k.isTotal = true;

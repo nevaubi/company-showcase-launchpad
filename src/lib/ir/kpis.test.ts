@@ -46,11 +46,11 @@ describe("IR KPI series", () => {
   it("detects a Products subtotal and reconciles every level to its total", () => {
     const end = "2026-09-26";
     const facts = [
-      f("iPhone", end, 3, 57),
-      f("Mac", end, 3, 11),
-      f("Products", end, 3, 68),
-      f("Services", end, 3, 32),
-      f("Total net sales", end, 3, 100, { is_total: true, parent: null }),
+      f("iPhone", end, 3, 57e9),
+      f("Mac", end, 3, 11e9),
+      f("Products", end, 3, 68e9),
+      f("Services", end, 3, 32e9),
+      f("Total net sales", end, 3, 100e9, { is_total: true, parent: null }),
     ];
     const { checks, series } = buildIrSeries(facts);
     expect(series.find((x) => x.label === "iPhone")?.parent).toBe("Products");
