@@ -123,12 +123,14 @@ export function fundamentalsTimeline(d: CompanyDataset): FundamentalsAt[] {
     if (i < 3) return;
     const srcAccn = [rev[i], ni[i], eqCells[i], fcf[i]].find((c) => c?.src)?.src?.accn ?? [rev[i], ni[i]].find((c) => c?.derived)?.derived?.parts.find((x) => x.src)?.src?.accn;
     const filedOn = srcAccn ? filed.get(srcAccn) : undefined;
-    // A filing for a later period can restate earlier ones; never treat data as public before the period ended.
-    const available = filedOn && filedOn > p.end ? filedOn : addDays(p.end, p.fq === 4 || !p.fq ? 60 : 40);
+    // The value may come from a later filing that restated the quarter; only trust filing dates
+    // shortly after the quarter ended, otherwise assume the usual 10-Q/10-K filing lag.
+    const lag = addDays(p.end, p.fq === 4 || !p.fq ? 60 : 40);
+    const available = filedOn && filedOn > p.end && filedOn <= addDays(p.end, 120) ? filedOn : lag;
     const cash = cashCells[i]?.v ?? null;
     out.push({
       end: p.end,
-      available: filedOn && filedOn > addDays(p.end, 120) ? addDays(p.end, p.fq === 4 ? 60 : 40) : available,
+      available,
       label: p.label,
       shares: shares[i],
       revenue: ttm(rev, i),
