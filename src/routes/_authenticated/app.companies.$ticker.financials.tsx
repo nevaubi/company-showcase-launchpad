@@ -14,6 +14,7 @@ const search = z.object({
   freq: z.enum(["annual", "quarterly"]).default("annual"),
   scale: z.enum(["M", "B"]).default("M"),
   span: z.enum(["10", "20", "all"]).default("10"),
+  view: z.enum(["values", "yoy", "common"]).default("values"),
 });
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/financials")({
@@ -89,6 +90,9 @@ function Financials() {
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Seg value={s.freq} onChange={(v) => set({ freq: v })} options={[{ v: "annual", l: "Annual" }, { v: "quarterly", l: "Quarterly" }]} />
           <Seg value={s.span} onChange={(v) => set({ span: v })} options={[{ v: "10", l: s.freq === "annual" ? "10Y" : "12Q" }, { v: "20", l: s.freq === "annual" ? "20Y" : "24Q" }, { v: "all", l: "All" }]} />
+          {s.statement !== "kpis" && (
+            <Seg value={s.view} onChange={(v) => set({ view: v })} options={[{ v: "values", l: "Values" }, { v: "yoy", l: "YoY %" }, { v: "common", l: s.statement === "balance" ? "% assets" : "% revenue" }]} />
+          )}
           <Seg value={s.scale} onChange={(v) => set({ scale: v })} options={[{ v: "M", l: "$M" }, { v: "B", l: "$B" }]} />
           <Button size="sm" variant="outline" onClick={download}>
             <Download /> CSV
@@ -96,7 +100,7 @@ function Financials() {
         </div>
       </div>
 
-      <StatementTable statement={st} ticker={ticker} scale={s.scale} maxPeriods={span ? Math.round(span) : undefined} filingsByAccn={filingsByAccn} />
+      <StatementTable statement={st} ticker={ticker} scale={s.scale} maxPeriods={span ? Math.round(span) : undefined} filingsByAccn={filingsByAccn} view={s.statement === "kpis" ? "values" : s.view} lag={s.freq === "quarterly" ? 4 : 1} />
 
       <div className="flex flex-wrap items-start gap-x-6 gap-y-2 text-xs text-muted-foreground">
         <p className="flex items-center gap-1.5">

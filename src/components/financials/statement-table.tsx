@@ -12,7 +12,13 @@ export function StatementTable({
   scale = "M",
   maxPeriods,
   filingsByAccn,
+  view = "values",
+  lag = 1,
 }: {
+  /** Show a second line per cell: YoY change or % of revenue/assets (common size). */
+  view?: "values" | "yoy" | "common";
+  /** Periods back for YoY (1 annual, 4 quarterly). */
+  lag?: number;
   statement: Statement;
   ticker: string;
   scale?: Scale;
@@ -29,6 +35,20 @@ export function StatementTable({
     const el = scroller.current;
     if (el) el.scrollLeft = el.scrollWidth;
   }, [statement, maxPeriods]);
+
+  const baseRow = rows.find((r) => r.key === "revenue") ?? rows.find((r) => r.key === "totalAssets");
+  const sub = (row: Row, i: number, v: number): string | null => {
+    if (view === "values" || row.unit === "pct" || row.unit === "ratio" || row.kind === "kpi") return null;
+    if (view === "yoy") {
+      const prev = row.cells[i - lag]?.v;
+      if (prev == null || prev === 0 || Math.sign(prev) !== Math.sign(v)) return null;
+      const g = v / prev - 1;
+      return `${g >= 0 ? "+" : ""}${(g * 100).toFixed(1)}%`;
+    }
+    if (row.unit !== "usd") return null;
+    const base = baseRow?.cells[i]?.v;
+    return base ? `${((v / base) * 100).toFixed(1)}%` : null;
+  };
 
   const activeKey = target ? `${target.label}|${target.periodLabel}` : "";
 
@@ -108,6 +128,14 @@ export function StatementTable({
                             >
                               {cell.approx && "≈"}
                               {fmtCell(cell.v, row.unit, scale)}
+                              {view !== "values" && (() => {
+                                const t = sub(row, i, cell.v);
+                                return (
+                                  <span className={cn("block text-[10px] not-italic leading-tight", !t ? "text-transparent" : view === "yoy" ? (t.startsWith("+") ? "text-positive" : "text-negative") : "text-muted-foreground")}>
+                                    {t ?? "·"}
+                                  </span>
+                                );
+                              })()}
                               {cell.derived && row.kind !== "kpi" && (
                                 <span className="absolute right-0.5 top-1 size-1 rounded-full bg-chart-2" aria-label="derived" />
                               )}
