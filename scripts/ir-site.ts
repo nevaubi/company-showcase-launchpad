@@ -6,7 +6,7 @@
  */
 import { COVERAGE } from "@/lib/coverage";
 import { collectIr } from "@/lib/jobs/ir.server";
-import { args, log } from "./lib/supa";
+import { args, dbGate, log } from "./lib/supa";
 
 const want = args.tickers?.split(",");
 const companies = COVERAGE.filter((c) => !want || want.includes(c.ticker));
@@ -17,6 +17,7 @@ let stored = 0;
 async function worker() {
   while (next < companies.length) {
     const c = companies[next++];
+    await dbGate("ir-site");
     const t0 = Date.now();
     try {
       const r = await collectIr(c, "site", max);

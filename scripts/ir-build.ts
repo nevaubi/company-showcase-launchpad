@@ -5,7 +5,7 @@
  */
 import { COVERAGE } from "@/lib/coverage";
 import { loadFacts, rebuildCompany } from "@/lib/ir/rebuild.server";
-import { args, log } from "./lib/supa";
+import { args, dbGate, log } from "./lib/supa";
 
 export { loadFacts };
 export const buildCompany = (ticker: string, dry = false) => rebuildCompany(ticker, { dry });
@@ -14,6 +14,7 @@ if (import.meta.main) {
   const want = args.tickers?.split(",");
   for (const c of COVERAGE.filter((x) => !want || want.includes(x.ticker))) {
     let p: Awaited<ReturnType<typeof buildCompany>> = null;
+    await dbGate("build");
     try {
       p = await buildCompany(c.ticker, args.dry !== undefined);
     } catch (e) {
