@@ -36,6 +36,7 @@ import type {
   UniverseFundamentals,
 } from "../src/lib/financials/types";
 import { COVERAGE, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
+import { summarize, type MacroSummary } from "../src/lib/macro";
 
 const UA = "FiledUnder Research research@filedunder.ai";
 const OUT = new URL("../public/data/", import.meta.url).pathname;
@@ -825,6 +826,21 @@ async function ingestMacro(s: MacroDef) {
   console.log(`  ${s.id}: ${observations.length} obs`);
 }
 
+/** One small file with the latest reading, percentile and sparkline of every series (dashboards load this, not 120 files). */
+async function writeMacroIndex() {
+  const out: MacroSummary[] = [];
+  for (const def of MACRO_SERIES) {
+    try {
+      const s = JSON.parse(await readFile(`${OUT}macro/${def.id}.json`, "utf8")) as MacroSeries;
+      out.push(summarize(def, s.observations, s.fetchedAt));
+    } catch {
+      console.warn("  no snapshot for", def.id);
+    }
+  }
+  await writeFile(`${OUT}macro/index.json`, JSON.stringify({ generatedAt: new Date().toISOString(), series: out }));
+  console.log(`  macro index: ${out.length} series`);
+}
+
 /** Slim cross-company Form 4 feed so the insider hub doesn't load every company file. */
 async function writeInsiderFeed() {
   const rows: (InsiderTrade & { ticker: string })[] = [];
@@ -941,6 +957,7 @@ async function main() {
       }
     });
   }
+  if (!only || only === "macro" || only === "macro-index") await writeMacroIndex();
   if (!only || only === "sec" || only === "manifest" || only === "insiders") await writeManifest();
 }
 
