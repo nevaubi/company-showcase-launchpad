@@ -585,6 +585,9 @@ const SHORT_BORROWINGS: LineDef = {
   kind: "stock",
 };
 
+/** Long-term debt concepts that already include current maturities. */
+const INCLUDES_CURRENT = new Set(["us-gaap:LongTermDebt", "us-gaap:LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities"]);
+
 /** Total debt = long-term + short-term debt, without double-counting current maturities. */
 function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row {
   const ltd = rowOf(balance, "longTermDebt");
@@ -593,7 +596,7 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
     const l = ltd?.cells[i] ?? null;
     const s = std?.cells[i] ?? null;
     if (!l && !s) return null;
-    if (l?.src?.concept === "us-gaap:LongTermDebt") {
+    if (l?.src && INCLUDES_CURRENT.has(l.src.concept)) {
       // This concept already includes current maturities; add only short-term borrowings.
       const extra = pickCell(cf, SHORT_BORROWINGS, (f) => !f.start && near(f.end, p.end, 4));
       if (extra) return combine(l, extra, "add", ["Long-term debt incl. current maturities", "Short-term borrowings"]);

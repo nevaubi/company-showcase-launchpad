@@ -87,7 +87,7 @@ export const INCOME_LINES: LineDef[] = [
   usd(
     "interestExpense",
     "Interest expense",
-    ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt", "InterestAndDebtExpense"],
+    ["InterestExpense", "InterestExpenseNonoperating", "InterestExpenseDebt", "InterestAndDebtExpense", "InterestExpenseOperating"],
     "flow",
     { indent: 1 },
   ),
@@ -211,7 +211,13 @@ export const BALANCE_LINES: LineDef[] = [
   usd(
     "longTermDebt",
     "Long-term debt",
-    ["LongTermDebtNoncurrent", "LongTermDebtAndCapitalLeaseObligations", "LongTermDebt", "LongTermDebtAndFinanceLeaseObligations"],
+    [
+      "LongTermDebtNoncurrent",
+      "LongTermDebtAndCapitalLeaseObligations",
+      "LongTermDebt",
+      "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
+      "LongTermDebtAndFinanceLeaseObligations",
+    ],
     "stock",
   ),
   usd("operatingLeases", "Operating lease liabilities", ["OperatingLeaseLiabilityNoncurrent"], "stock"),
@@ -270,7 +276,13 @@ export const CASHFLOW_LINES: LineDef[] = [
   usd(
     "debtIssued",
     "Debt issued",
-    ["ProceedsFromIssuanceOfLongTermDebt", "ProceedsFromIssuanceOfDebt", "ProceedsFromIssuanceOfSeniorLongTermDebt", "ProceedsFromDebtNetOfIssuanceCosts"],
+    [
+      "ProceedsFromIssuanceOfLongTermDebt",
+      "ProceedsFromIssuanceOfDebt",
+      "ProceedsFromIssuanceOfSeniorLongTermDebt",
+      "ProceedsFromDebtNetOfIssuanceCosts",
+      "ProceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet",
+    ],
     "flow",
     { indent: 1 },
   ),

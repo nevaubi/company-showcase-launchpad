@@ -395,8 +395,24 @@ async function segmentsFor(cik: string, filing: Filing): Promise<RawSegment[]> {
   return extractInstanceSegments(await secText(archive(cik, filing.accn, instance.name)), labels, filing);
 }
 
-/** Keep one fact per member/metric/period: the most recently filed (recast) value, then the preferred concept. */
-function dedupeSegments(all: RawSegment[]): SegmentFact[] {
+const normLabel = (l: string) => l.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\b(segment|member|net sales|revenue|revenues)\b/g, "").trim();
+/** Subtotals ("Total Mac net sales") would double count when members are stacked. */
+const isSubtotal = (l: string) => /^total\b|\btotal$/i.test(l.trim());
+
+/**
+ * Keep one fact per member/metric/period: the most recently filed (recast) value, then the preferred concept.
+ * Members renamed across filings (aapl:AmericasMember → aapl:AmericasSegmentMember) merge by label.
+ */
+function dedupeSegments(input: RawSegment[]): SegmentFact[] {
+  const all = input.filter((s) => !isSubtotal(s.label));
+  // Canonical member per axis + normalised label: the QName used by the latest filing.
+  const canon = new Map<string, { filed: string; member: string }>();
+  for (const s of all) {
+    const k = `${s.axis}|${normLabel(s.label) || s.member}`;
+    const cur = canon.get(k);
+    if (!cur || s.filed > cur.filed) canon.set(k, { filed: s.filed, member: s.member });
+  }
+  for (const s of all) s.member = canon.get(`${s.axis}|${normLabel(s.label) || s.member}`)!.member;
   const best = new Map<string, RawSegment>();
   for (const s of all) {
     const k = `${s.axis}|${s.member}|${s.metric}|${s.start ?? ""}|${s.end}`;
