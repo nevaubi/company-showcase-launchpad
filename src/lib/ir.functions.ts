@@ -118,48 +118,6 @@ export const getIrDownload = createServerFn({ method: "POST" })
     return { url: signed.signedUrl };
   });
 
-/**
- * Read up to two newly stored releases for one company and refresh its series. Started by the
- * user ("Read new releases"), never by a page view; each call is bounded.
- */
-export const readPendingIr = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
-  .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: state } = await supabaseAdmin.from("job_state").select("paused_reason").eq("job", "ir-extract-runner").maybeSingle();
-    if (state?.paused_reason) throw new Error(`Document reading is paused: ${state.paused_reason}`);
-    const { extractIrDocument, nextToExtract } = await import("@/lib/ir/extract.server");
-    const { OpenAIError } = await import("@/lib/openai.server");
-    let read = 0;
-    let facts = 0;
-    for (let i = 0; i < 2; i++) {
-      const next = await nextToExtract({ ticker: data.ticker });
-      if (!next) break;
-      try {
-        const r = await extractIrDocument(next.id, { concurrency: 3 });
-        read++;
-        facts += r.facts;
-      } catch (e) {
-        const err = e as Error;
-        const transient = err instanceof OpenAIError && (err.kind === "rate" || err.kind === "transient");
-        await supabaseAdmin
-          .from("ir_documents")
-          .update(transient ? { extract_status: null } : { extract_status: `error: ${err.message.slice(0, 200)}`, extracted_at: new Date().toISOString() })
-          .eq("id", next.id);
-        if (err instanceof OpenAIError && (err.kind === "auth" || err.kind === "quota")) {
-          await supabaseAdmin.from("job_state").upsert({ job: "ir-extract-runner", cursor: 0, paused_reason: err.message.slice(0, 200), updated_at: new Date().toISOString() });
-        }
-        throw new Error(transient ? "The AI service is busy — try again in a minute." : `Couldn't read a document: ${err.message.slice(0, 160)}`);
-      }
-    }
-    if (read) {
-      const { rebuildCompany } = await import("@/lib/ir/rebuild.server");
-      await rebuildCompany(data.ticker);
-    }
-    return { read, facts };
-  });
-
 /** HTML of a stored IR document (or its rendition, for PDFs, spreadsheets and slide images) for the source viewer. */
 export const getIrHtml = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
