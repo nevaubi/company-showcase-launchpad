@@ -114,7 +114,10 @@ export function IrBreakdowns({ ticker, payload }: { ticker: string; payload: IrP
       {groups.length > shown && (
         <div className="border-t px-4 py-3 text-center">
           <Button variant="outline" size="sm" onClick={() => setShown((n) => n + PAGE * 2)}>
-            <ChevronDown /> Show {Math.min(PAGE * 2, groups.length - shown)} more of {groups.length - shown} remaining breakdowns
+            <ChevronDown />
+            {groups.length - shown <= PAGE * 2
+              ? `Show the remaining ${groups.length - shown} breakdown${groups.length - shown > 1 ? "s" : ""}`
+              : `Show ${PAGE * 2} more of ${groups.length - shown} remaining breakdowns`}
           </Button>
         </div>
       )}
