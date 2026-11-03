@@ -36,6 +36,20 @@ const OPINC = [
 ];
 
 describe("statement builder", () => {
+  it("uses a company-extension capex concept when no us-gaap capex is filed, keeping its qualified name as the source", () => {
+    const cf = filer({ Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } });
+    cf.facts.cop = {
+      PaymentToAcquireProductiveAssetsAndInvestments: {
+        units: { USD: [fact("2025-01-01", "2025-12-31", 12553, "10-K", "2026-02-17"), fact("2024-01-01", "2024-12-31", 12118, "10-K", "2025-02-18")] },
+      },
+    };
+    const a = buildStatements(cf).annual.cashflow;
+    const i = a.periods.findIndex((p) => p.label === "FY2025");
+    const cell = a.rows.find((r) => r.key === "capex")!.cells[i]!;
+    expect(cell.v).toBe(12553);
+    expect(cell.src?.concept).toBe("cop:PaymentToAcquireProductiveAssetsAndInvestments");
+  });
+
   it("derives a fourth quarter as the annual total minus nine-month YTD, with both parts sourced", () => {
     const s = buildStatements(filer({ Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } }));
     const q = s.quarterly.income;
