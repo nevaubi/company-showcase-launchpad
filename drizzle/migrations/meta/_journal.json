@@ -50,6 +50,41 @@
       "when": 1793709109869,
       "tag": "0006_ir_facts_keyset_index",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793709567996,
+      "tag": "0007_ir_series_in_storage",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793710752959,
+      "tag": "0008_ir_coverage_function",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793712460568,
+      "tag": "0009_ir_release_scan",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793712848929,
+      "tag": "0010_ir_vision_queue_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793713724620,
+      "tag": "0011_ir_documents_ticker_filed_index",
+      "breakpoints": true
     }
   ]
 }

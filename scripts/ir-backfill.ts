@@ -7,7 +7,7 @@
  */
 import { COVERAGE } from "@/lib/coverage";
 import { collectIr } from "@/lib/jobs/ir.server";
-import { args, log } from "./lib/supa";
+import { args, dbGate, log } from "./lib/supa";
 
 const since = args.since ?? "2008-01-01";
 const want = args.tickers?.split(",");
@@ -19,6 +19,7 @@ let stored = 0;
 async function worker() {
   while (next < companies.length) {
     const c = companies[next++];
+    await dbGate("backfill");
     const t0 = Date.now();
     try {
       let filings = 0;

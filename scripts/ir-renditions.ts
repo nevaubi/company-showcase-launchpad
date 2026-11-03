@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { dbGate } from "./lib/supa";
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, "").split("=")));
 const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
@@ -110,6 +111,7 @@ if (error) throw error;
 console.log(`${docs!.length} documents to render`);
 let ok = 0;
 for (const d of docs!) {
+  await dbGate("renditions");
   try {
     const { data: file, error: e } = await sb.storage.from("ir-documents").download(d.path!);
     if (e || !file) throw new Error(e?.message ?? "download failed");

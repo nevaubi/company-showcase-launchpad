@@ -1,6 +1,6 @@
 // Compact, precomputed IR series payload stored per company (ir_company_series) and sent to the
 // IR data page. Pure: built by the pipeline scripts and by the server after new extractions.
-import { buildIrSeries, childrenOf, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
+import { buildIrSeries, childrenOf, neverTies, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
 
 export type PayloadLocator = [number, number, number] | { p: number; b: number[] };
 
@@ -26,6 +26,8 @@ export interface PayloadCell {
   e?: string;
   m?: number;
   f?: { formula: string; parts: PayloadPart[] };
+  /** "scale": about 1,000× off the neighbouring periods — likely a thousands/millions mix-up */
+  w?: "scale";
 }
 export interface PayloadSeries {
   k: string;
@@ -36,6 +38,8 @@ export interface PayloadSeries {
   total: boolean;
   unit: string;
   bd?: string | null;
+  /** table the line belongs to, when the same label appears in several tables of one release */
+  sc?: string;
   pit?: boolean;
   q: Record<string, PayloadCell>;
   y: Record<string, PayloadCell>;
@@ -61,6 +65,8 @@ export interface PayloadCheck {
   n: number;
   /** parts are a selected list that covers only part of the total */
   partial?: boolean;
+  /** lines subtracted for the parts to equal the total (deductions printed as positives) */
+  sub?: string[];
 }
 export interface PayloadDoc {
   id: string;
@@ -90,6 +96,10 @@ export interface IrStats {
   lastPeriod: string | null;
   checksQ: { ok: number; total: number; partial?: number };
   checksFY: { ok: number; total: number; partial?: number };
+  /** values flagged as ~1,000× off their neighbouring periods */
+  scaleFlags?: number;
+  /** printed totals whose listed lines never add up, shown as plain lines instead of a breakdown */
+  unlinked?: number;
 }
 
 const locOf = (f: IrFact): PayloadLocator | undefined => {
@@ -99,8 +109,33 @@ const locOf = (f: IrFact): PayloadLocator | undefined => {
   return undefined;
 };
 
+/**
+ * Periods whose value is ~1,000× (or 1,000,000×) off its neighbours while the neighbours agree with
+ * each other: the table was almost certainly read in the wrong unit (thousands vs millions).
+ */
+export function scaleOutliers(cells: Record<string, { v: number }>): Set<string> {
+  const ends = Object.keys(cells).filter((e) => cells[e].v !== 0).sort();
+  const out = new Set<string>();
+  for (let i = 0; i < ends.length; i++) {
+    const nb = [...ends.slice(Math.max(0, i - 2), i), ...ends.slice(i + 1, i + 3)].map((e) => Math.abs(cells[e].v));
+    if (nb.length < 2) continue;
+    const lo = Math.min(...nb);
+    const hi = Math.max(...nb);
+    if (hi / lo > 30) continue; // neighbours disagree among themselves: no baseline
+    const med = [...nb].sort((a, b) => a - b)[Math.floor(nb.length / 2)];
+    const r = Math.abs(cells[ends[i]].v) / med;
+    const lg = Math.log10(r);
+    if (Math.abs(lg) >= 2.5 && Math.abs(Math.abs(lg) - 3 * Math.round(Math.abs(lg) / 3)) <= 0.5) out.add(ends[i]);
+  }
+  return out;
+}
+
 export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<string, LabelMapEntry>): IrPayload {
-  const { series, quarters, years, checks } = buildIrSeries(facts, { labelMap });
+  // Second pass without hierarchies whose parts never add up to their total in any period.
+  let built = buildIrSeries(facts, { labelMap });
+  const unlink = neverTies(built.checks);
+  if (unlink.size) built = buildIrSeries(facts, { labelMap, unlink });
+  const { series, quarters, years, checks } = built;
   const docIndex = new Map<string, number>();
   const docs: PayloadDoc[] = [];
   const di = (f: IrFact) => {
@@ -132,6 +167,12 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   const kids = new Map<IrSeries, IrSeries[]>();
   for (const [k, p] of parentOf) kids.set(p, [...(kids.get(p) ?? []), k]);
 
+  let scaleFlags = 0;
+  const flagged = (cells: Record<string, IrCell>, unit: string) => {
+    const bad = unit === "pct" || unit === "ratio" ? new Set<string>() : scaleOutliers(cells);
+    scaleFlags += bad.size;
+    return Object.fromEntries(Object.entries(cells).map(([e, c]) => [e, bad.has(e) ? { ...cellOf(c), w: "scale" as const } : cellOf(c)]));
+  };
   const out: PayloadSeries[] = series
     .filter((s) => Object.keys(s.cells).length || Object.keys(s.annual).length)
     .map((s) => ({
@@ -143,9 +184,10 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       total: s.isTotal,
       unit: s.unit,
       bd: s.breakdown ?? null,
+      ...(s.scope ? { sc: s.breakdown ?? s.scope } : {}),
       ...(s.pit ? { pit: true } : {}),
-      q: Object.fromEntries(Object.entries(s.cells).map(([e, c]) => [e, cellOf(c)])),
-      y: Object.fromEntries(Object.entries(s.annual).map(([e, c]) => [e, cellOf(c)])),
+      q: flagged(s.cells, s.unit),
+      y: flagged(s.annual, s.unit),
     }));
   const kept = new Set(out.map((s) => s.k));
 
@@ -177,7 +219,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
     groups.push({ id, cat: s0.category, met: s0.metric, unit: s0.unit, label: "", bd: null, root: null, rows: list.sort((a, b) => magnitude(b) - magnitude(a)).map((s) => ({ k: s.key, depth: 0 })) });
   }
 
-  const pc = (c: ReconcileCheck): PayloadCheck => ({ k: c.totalKey, e: c.period, kind: c.kind, total: c.total, sum: c.sum, ok: c.ok, n: c.children, ...(c.partial ? { partial: true } : {}) });
+  const pc = (c: ReconcileCheck): PayloadCheck => ({ k: c.totalKey, e: c.period, kind: c.kind, total: c.total, sum: c.sum, ok: c.ok, n: c.children, ...(c.partial ? { partial: true } : {}), ...(c.subtracted ? { sub: c.subtracted } : {}) });
   const allPeriods = out.flatMap((s) => [...Object.keys(s.q), ...Object.keys(s.y)]).sort();
   const q = checks.filter((c) => c.kind === "q");
   const fy = checks.filter((c) => c.kind === "fy");
@@ -201,6 +243,8 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       // Selected-item lists aren't additive by design: report them apart from real tie-out checks.
       checksQ: { ok: q.filter((c) => c.ok).length, total: q.filter((c) => !c.partial).length, partial: q.filter((c) => c.partial).length },
       checksFY: { ok: fy.filter((c) => c.ok).length, total: fy.filter((c) => !c.partial).length, partial: fy.filter((c) => c.partial).length },
+      scaleFlags,
+      unlinked: unlink.size,
     },
   };
 }

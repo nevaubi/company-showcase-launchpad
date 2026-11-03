@@ -1,20 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, FileStack, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
-import { toast } from "sonner";
 import { Panel } from "@/components/app/page-header";
 import { IrBreakdowns } from "@/components/ir/breakdowns";
 import { IrLibrary } from "@/components/ir/library";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getIrData, readPendingIr } from "@/lib/ir.functions";
+import { getIrData } from "@/lib/ir.functions";
 import { secRevenueCheck } from "@/lib/ir/display";
 import type { IrPayload } from "@/lib/ir/payload";
 import { useCompany } from "@/lib/data";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")({
   head: ({ params }) => ({
@@ -32,11 +32,29 @@ function IrPage() {
   const { ticker: raw } = Route.useParams();
   const ticker = raw.toUpperCase();
   const fetchIr = useServerFn(getIrData);
-  const q = useQuery({ queryKey: ["ir", ticker], queryFn: () => fetchIr({ data: { ticker } }), staleTime: 5 * 60_000 });
+  const q = useQuery({
+    queryKey: ["ir", ticker],
+    queryFn: () => fetchIr({ data: { ticker } }),
+    staleTime: 5 * 60_000,
+    retry: 3,
+    retryDelay: (n) => Math.min(2000 * 2 ** n, 15_000),
+    // While new files are being read in the background, pick up their numbers without a reload.
+    refetchInterval: (query) => (query.state.data?.pending ? 120_000 : false),
+  });
+  const slow = useSlow(q.isLoading, 6000);
 
   if (q.isLoading)
     return (
       <div className="grid grid-cols-1 gap-5">
+        {slow && (
+          <div role="status" className="flex items-start gap-2 rounded-md border bg-card px-4 py-3 text-sm">
+            <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin text-muted-foreground" />
+            <span>
+              Still loading. The database is busy filing newly collected documents, so this can take up to a minute. Nothing has been removed.
+              {q.failureCount > 0 && <span className="text-muted-foreground"> Retrying ({q.failureCount} of 3)…</span>}
+            </span>
+          </div>
+        )}
         <Skeleton className="h-28" />
         <Skeleton className="h-[520px]" />
       </div>
@@ -44,10 +62,14 @@ function IrPage() {
   if (q.isError)
     return (
       <Panel title="Investor-relations data">
-        <div className="flex items-center gap-3 p-5 text-sm">
+        <div className="flex flex-wrap items-center gap-3 p-5 text-sm">
           <TriangleAlert className="size-4 text-negative" />
-          <span>Couldn't load this company's IR data: {(q.error as Error).message}</span>
-          <Button size="sm" variant="outline" onClick={() => q.refetch()} className="ml-auto">
+          <span className="min-w-0 flex-1">
+            {/timeout|canceling statement|fetch failed|503|502/i.test((q.error as Error).message)
+              ? "The database took too long to answer. The stored documents and breakdowns are safe; try again in a moment."
+              : `Couldn't load this company's IR data: ${(q.error as Error).message}`}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => q.refetch()}>
             Try again
           </Button>
         </div>
@@ -66,23 +88,24 @@ function IrPage() {
           </p>
         </Panel>
       )}
-      <IrLibrary ticker={ticker} documents={data.documents} />
+      <IrLibrary ticker={ticker} documents={data.documents} images={data.images} />
     </div>
   );
 }
 
+/** True once `active` has stayed true for `ms`. */
+function useSlow(active: boolean, ms: number) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!active) return setSlow(false);
+    const t = setTimeout(() => setSlow(true), ms);
+    return () => clearTimeout(t);
+  }, [active, ms]);
+  return slow;
+}
+
 function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: string; payload: IrPayload | null; pending: number; documents: number; builtAt: string | null }) {
   const company = useCompany(ticker);
-  const qc = useQueryClient();
-  const read = useServerFn(readPendingIr);
-  const m = useMutation({
-    mutationFn: () => read({ data: { ticker } }),
-    onSuccess: (r) => {
-      toast.success(r.read ? `Read ${r.read} document${r.read > 1 ? "s" : ""} · ${r.facts.toLocaleString()} data points` : "Nothing new to read");
-      qc.invalidateQueries({ queryKey: ["ir", ticker] });
-    },
-    onError: (e) => toast.error((e as Error).message),
-  });
 
   const sec = useMemo(() => {
     const st = company.data?.statements.quarterly.income;
@@ -111,21 +134,29 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
       actions={
         pending > 0 ? (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="outline" onClick={() => m.mutate()} disabled={m.isPending}>
-                {m.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                {m.isPending ? "Reading…" : `Read ${Math.min(2, pending)} of ${pending} waiting`}
-              </Button>
+            <TooltipTrigger className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground">
+              <RefreshCw className="size-3.5 animate-spin [animation-duration:3s]" />
+              {pending.toLocaleString()} new file{pending > 1 ? "s" : ""} being read automatically
             </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">Reads up to two newly stored documents now (about a minute). The rest are read by the background pipeline.</TooltipContent>
+            <TooltipContent className="max-w-xs text-xs">
+              Newly collected documents are read in the background. Their numbers are added to the tables below automatically; this page refreshes on its own every two minutes.
+            </TooltipContent>
           </Tooltip>
         ) : undefined
       }
     >
       {s ? (
         <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
-          {stats.map((x) => (
-            <div key={x.label} className="min-w-0 bg-card px-4 py-3">
+          {stats.map((x, i) => (
+            // An odd last tile spans the row on phones (2 columns) and tablets (3 columns) so no empty cell shows.
+            <div
+              key={x.label}
+              className={cn(
+                "min-w-0 bg-card px-4 py-3",
+                i === stats.length - 1 && stats.length % 2 === 1 && "col-span-2 sm:col-span-1",
+                i === stats.length - 1 && stats.length % 3 === 2 && "sm:col-span-2 lg:col-span-1",
+              )}
+            >
               <p className="eyebrow">{x.label}</p>
               <p className="num mt-0.5 text-lg font-semibold">{x.value}</p>
               {x.hint && <p className="num truncate text-[11px] text-muted-foreground">{x.hint}</p>}

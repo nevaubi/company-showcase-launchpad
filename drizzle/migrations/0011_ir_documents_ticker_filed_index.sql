@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS ir_documents_ticker_filed ON public.ir_documents (ticker, filed DESC NULLS LAST, id);

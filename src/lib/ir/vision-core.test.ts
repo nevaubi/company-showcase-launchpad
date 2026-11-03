@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numberTokens, parseBboxHtml, parseToken, visionFacts, type VisionOutput } from "@/lib/ir/vision-core";
+import { numberTokens, parseBboxHtml, parseToken, resolveValue, visionFacts, type VisionOutput } from "@/lib/ir/vision-core";
 
 describe("parseToken", () => {
   it("reads currency suffixes, parentheses and percentages", () => {
@@ -47,16 +47,16 @@ describe("visionFacts", () => {
   const base = { parent: "", breakdown: "", category: "segment" as const, metric: "revenue" as const, is_total: false };
 
   it("takes the value from the token, using its printed suffix over the model's scale", () => {
-    const r = visionFacts(out([{ ...base, label: "Cloud", unit: "usd", scale: 1e6, values: [{ w: 0, p: 0 }] }]), tokens, 3, "2025-10-28");
+    const r = visionFacts(out([{ ...base, label: "Cloud", unit: "usd", scale: 1e6, values: [{ w: 0, p: 0, read: "$4.2B" }] }]), tokens, 3, "2025-10-28");
     expect(r.rows[0].value).toBe(4.2e9);
     expect(r.rows[0].locator).toMatchObject({ page: 3, text: "$4.2B" });
   });
   it("rejects a percentage token mapped to a dollar row and reused tokens", () => {
     const r = visionFacts(
       out([
-        { ...base, label: "Cloud", unit: "usd", scale: 1e6, values: [{ w: 1, p: 0 }] },
-        { ...base, label: "Units", unit: "count", scale: 1, values: [{ w: 2, p: 0 }] },
-        { ...base, label: "Units again", unit: "count", scale: 1, values: [{ w: 2, p: 0 }] },
+        { ...base, label: "Cloud", unit: "usd", scale: 1e6, values: [{ w: 1, p: 0, read: "38%" }] },
+        { ...base, label: "Units", unit: "count", scale: 1, values: [{ w: 2, p: 0, read: "1,250" }] },
+        { ...base, label: "Units again", unit: "count", scale: 1, values: [{ w: 2, p: 0, read: "1,250" }] },
       ]),
       tokens,
       1,
@@ -67,7 +67,7 @@ describe("visionFacts", () => {
     expect(r.rejected).toBe(2);
   });
   it("rejects periods ending after the document date", () => {
-    const o = out([{ ...base, label: "Cloud", unit: "usd", scale: 1e6, values: [{ w: 0, p: 0 }] }]);
+    const o = out([{ ...base, label: "Cloud", unit: "usd", scale: 1e6, values: [{ w: 0, p: 0, read: "$4.2B" }] }]);
     o.panels[0].periods[0].period_end = "2026-09-30";
     expect(visionFacts(o, tokens, 1, "2025-10-28").rows).toHaveLength(0);
   });
@@ -78,5 +78,18 @@ describe("parseBboxHtml", () => {
     const html = `<page width="720.0" height="540.0"><word xMin="72.0" yMin="54.0" xMax="144.0" yMax="108.0">$1.5</word></page>`;
     const [p] = parseBboxHtml(html);
     expect(p.words[0]).toEqual({ text: "$1.5", box: [0.1, 0.1, 0.2, 0.2] });
+  });
+});
+
+describe("resolveValue", () => {
+  it("restores a decimal point OCR dropped when the digits match the model's reading", () => {
+    expect(resolveValue("$271", "$2.71", true)?.v).toBe(2.71);
+  });
+  it("trusts the PDF text layer: a disagreeing reading is rejected", () => {
+    expect(resolveValue("$271", "$2.71", false)).toBeNull();
+    expect(resolveValue("1,250", "1,250", false)?.v).toBe(1250);
+  });
+  it("rejects readings with different digits", () => {
+    expect(resolveValue("$271", "$2.81", true)).toBeNull();
   });
 });

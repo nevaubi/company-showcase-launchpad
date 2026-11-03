@@ -12,24 +12,78 @@ export const getIrData = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
   .handler(async ({ data, context }) => {
-    const docs: Record<string, unknown>[] = [];
-    for (let from = 0; from < 6000; from += 1000) {
+    // The document list and the precomputed breakdowns load in parallel.
+    // Slide images (thousands per bank) load on demand in the library; only their count comes here.
+    const loadDocs = async () => {
+      const docs: Record<string, unknown>[] = [];
+      for (let from = 0; from < 20_000; from += 1000) {
+        const { data: page, error } = await context.supabase
+          .from("ir_documents")
+          .select(DOC_COLUMNS)
+          .eq("ticker", data.ticker)
+          .neq("kind", "image")
+          .order("filed", { ascending: false, nullsFirst: false })
+          .order("id")
+          .range(from, from + 999);
+        if (error) throw new Error(error.message);
+        docs.push(...(page ?? []));
+        if (!page || page.length < 1000) break;
+      }
+      return docs;
+    };
+    const loadSeries = async () => {
+      const { data: series, error } = await context.supabase.from("ir_company_series").select("payload, payload_path, built_at").eq("ticker", data.ticker).maybeSingle();
+      if (error) throw new Error(error.message);
+      let payload = (series?.payload ?? null) as IrPayload | null;
+      if (series?.payload_path) {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: file, error: dl } = await supabaseAdmin.storage.from("ir-documents").download(series.payload_path);
+        if (dl || !file) throw new Error(dl?.message ?? "Couldn't load breakdowns");
+        payload = JSON.parse(await file.text()) as IrPayload;
+      }
+      return { series, payload };
+    };
+    const t0 = Date.now();
+    const countImages = async () => {
+      const { count } = await context.supabase.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", data.ticker).eq("kind", "image");
+      return count ?? 0;
+    };
+    const [docs, loaded, images] = await Promise.all([loadDocs(), loadSeries(), countImages()]);
+    let { series, payload } = loaded;
+    // Facts exist but no breakdowns are stored (first read, or a rebuild that never ran): build them
+    // now rather than showing an empty page.
+    const readFacts = docs.reduce((n, d) => n + (Number(d.extract_facts) || 0), 0);
+    if (!payload && readFacts > 0) {
+      const { rebuildCompany } = await import("@/lib/ir/rebuild.server");
+      payload = await rebuildCompany(data.ticker);
+      series = payload ? { payload: null, payload_path: `series/${data.ticker}.json`, built_at: payload.builtAt } : series;
+    }
+    console.log(`[ir] ${data.ticker} docs=${docs.length}+${images}img facts=${readFacts} row=${series ? "yes" : "no"} payload=${payload ? payload.series.length : "none"} ${Date.now() - t0}ms`);
+    const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
+    const pending = documents.filter((d) => !d.extract_status && EXTRACTABLE.includes(d.kind) && d.viewable).length;
+    return { payload, builtAt: series?.built_at ?? null, documents, images, pending };
+  });
+
+/** A company's stored slide/chart images for the library (paged; they can number in the thousands). */
+export const getIrImages = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
+  .handler(async ({ data, context }) => {
+    const out: Record<string, unknown>[] = [];
+    for (let from = 0; from < 20_000; from += 1000) {
       const { data: page, error } = await context.supabase
         .from("ir_documents")
         .select(DOC_COLUMNS)
         .eq("ticker", data.ticker)
+        .eq("kind", "image")
         .order("filed", { ascending: false, nullsFirst: false })
         .order("id")
         .range(from, from + 999);
       if (error) throw new Error(error.message);
-      docs.push(...(page ?? []));
+      out.push(...(page ?? []));
       if (!page || page.length < 1000) break;
     }
-    const { data: series, error } = await context.supabase.from("ir_company_series").select("payload, built_at").eq("ticker", data.ticker).maybeSingle();
-    if (error) throw new Error(error.message);
-    const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
-    const pending = documents.filter((d) => !d.extract_status && EXTRACTABLE.includes(d.kind) && d.viewable).length;
-    return { payload: (series?.payload ?? null) as IrPayload | null, builtAt: series?.built_at ?? null, documents, pending };
+    return out.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
   });
 
 export interface IrDocRow {

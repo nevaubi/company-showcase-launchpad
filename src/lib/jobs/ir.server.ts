@@ -162,9 +162,16 @@ export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]>
 
 /** Store up to `max` not-yet-stored files for a company (`since` bounds the SEC history). */
 export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 8, opts: { since?: string; onFiling?: (accn: string, files: number) => void } = {}) {
-  const { data: have } = await supabaseAdmin.from("ir_documents").select("source_url, accn").eq("ticker", c.ticker).limit(5000);
-  const known = new Set((have ?? []).map((d) => d.source_url));
-  const doneAccn = new Set((have ?? []).map((d) => d.accn).filter(Boolean));
+  // Banks have thousands of stored files; page past the 1,000-row response cap.
+  const have: { source_url: string; accn: string | null }[] = [];
+  for (let from = 0; from < 20_000; from += 1000) {
+    const { data, error } = await supabaseAdmin.from("ir_documents").select("source_url, accn").eq("ticker", c.ticker).order("id").range(from, from + 999);
+    if (error) throw new Error(error.message);
+    have.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const known = new Set(have.map((d) => d.source_url));
+  const doneAccn = new Set(have.map((d) => d.accn).filter(Boolean));
   let todo: Candidate[] = [];
   if (mode === "sec") {
     // Whole filings only, so a filing is either fully stored or untouched (lets us skip stored accessions).
@@ -189,6 +196,64 @@ export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 
     }
   }
   return { ticker: c.ticker, mode, stored: results.filter((r) => r.stored).length, results };
+}
+
+/**
+ * Newest earnings / Reg FD 8-K (seen by the SEC filings scan in the last three weeks) whose
+ * exhibits aren't stored yet: store up to `max` of its files. Keeps scheduled runs to a few seconds.
+ */
+/**
+ * Store the exhibits of the newest earnings (Item 2.02) or Reg FD (7.01) 8-K that isn't fully
+ * stored yet. Files are stored a few at a time while `more()` allows; `ir_release_scan` records
+ * each filing as done, partial (cut short by the budget — resumed first next run) or empty (no
+ * exhibits), so one exhibit-less filing never blocks the queue.
+ */
+export async function collectRecentRelease(companies: CoverageCompany[], more: () => boolean = () => true) {
+  const since = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
+  const { data: recent, error } = await supabaseAdmin
+    .from("sec_filings")
+    .select("accn, ticker, filed, report, items, form")
+    .like("form", "8-K%")
+    .gte("filed", since)
+    .order("filed", { ascending: false })
+    .limit(80);
+  if (error) throw new Error(error.message);
+  const wanted = (recent ?? []).filter((f) => /2\.02|7\.01/.test(f.items ?? "") && companies.some((c) => c.ticker === f.ticker));
+  if (!wanted.length) return null;
+  const accns = wanted.map((f) => f.accn);
+  const [{ data: scans }, { data: stored }] = await Promise.all([
+    supabaseAdmin.from("ir_release_scan").select("accn, status").in("accn", accns),
+    // Images outnumber documents ~10:1; checking documents only keeps this under the row cap.
+    supabaseAdmin.from("ir_documents").select("accn").in("accn", accns).neq("kind", "image").limit(1000),
+  ]);
+  const scan = new Map((scans ?? []).map((r) => [r.accn, r.status]));
+  const have = new Set((stored ?? []).map((d) => d.accn));
+  const next = wanted.find((f) => scan.get(f.accn) === "partial") ?? wanted.find((f) => !scan.has(f.accn) && !have.has(f.accn));
+  if (!next) return null;
+  const c = companies.find((x) => x.ticker === next.ticker)!;
+  const { data: known } = await supabaseAdmin.from("ir_documents").select("source_url").eq("accn", next.accn);
+  const done = new Set((known ?? []).map((d) => d.source_url));
+  const all = await exhibitsOf(c, { url: next.accn, source: "sec-exhibit", accn: next.accn, filed: next.filed, period: next.report ?? undefined });
+  const files = all.filter((k) => !done.has(k.url));
+  const results: { url: string; stored: boolean; reason?: string }[] = [];
+  let i = 0;
+  // Three at a time: each store is an SEC download, a storage upload and a row insert.
+  await Promise.all(
+    Array.from({ length: 3 }, async () => {
+      while (i < files.length && more()) {
+        const k = files[i++];
+        try {
+          results.push({ url: k.url, ...(await store(c, k)) });
+        } catch (e) {
+          results.push({ url: k.url, stored: false, reason: (e as Error).message });
+        }
+      }
+    }),
+  );
+  const left = files.length - results.length;
+  const status = all.length === 0 ? "empty" : left > 0 ? "partial" : "done";
+  await supabaseAdmin.from("ir_release_scan").upsert({ accn: next.accn, ticker: c.ticker, files: all.length, stored: done.size + results.filter((r) => r.stored).length, status, scanned_at: new Date().toISOString() });
+  return { ticker: c.ticker, accn: next.accn, mode: "recent", status, stored: results.filter((r) => r.stored).length, left, results: results.slice(0, 6) };
 }
 
 /** Signed URL / bytes for a stored document. */
