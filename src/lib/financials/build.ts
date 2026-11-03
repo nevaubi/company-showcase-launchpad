@@ -171,6 +171,20 @@ function choose(list: RawFact[], concept: string, pred: (f: RawFact) => boolean)
   return { fact, concept, alts };
 }
 
+/** Like choose(), but prefers the fact filed nearest a reference date (ties → later filing). */
+function chooseNear(list: RawFact[], concept: string, pred: (f: RawFact) => boolean, filed: string): Picked | undefined {
+  const matches = list.filter(pred);
+  if (!matches.length) return undefined;
+  const dist = (f: RawFact) => Math.abs(toTime(f.filed) - toTime(filed));
+  const sorted = [...matches].sort((a, b) => dist(a) - dist(b) || (a.filed < b.filed ? 1 : -1));
+  const fact = sorted[0];
+  const alts = [...new Set(sorted.slice(1).filter((f) => f.val === fact.val && f.accn !== fact.accn).map((f) => f.accn))];
+  return { fact, concept, alts };
+}
+
+/** Lines that can't be negative; a negative derived quarter means mismatched restatements, so it's dropped. */
+const NON_NEGATIVE = new Set(["revenue", "costOfRevenue", "rnd", "sga", "salesMarketing", "generalAdmin", "dna", "sbc", "capex", "dividends", "buybacks", "sharesBasic", "sharesDiluted"]);
+
 const ref = (p: Picked): SourceRef => ({
   accn: p.fact.accn,
   concept: `us-gaap:${p.concept}`,
@@ -253,11 +267,13 @@ function quarterCell(
     if (!cum) continue;
     const cumLabel = k === 4 ? `FY${year.fy} total (10-K)` : `${YTD_LABEL[k - 1]} (Q${k} 10-Q)`;
     const prevEnd = year.qEnds[k - 2];
+    // Pair with the earlier year-to-date figure filed closest to the later one, so both sides
+    // share a restatement basis (a spin-off restates the 10-K total but not old 10-Qs).
     const prevCum =
       k - 1 === 1
-        ? choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f))
-        : choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f));
-    if (prevCum) {
+        ? chooseNear(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f), cum.fact.filed)
+        : chooseNear(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f), cum.fact.filed);
+    if (prevCum && !(NON_NEGATIVE.has(def.key) && cum.fact.val - prevCum.fact.val < 0)) {
       const prevLabel = k - 1 === 1 ? "Q1 (3M)" : `${YTD_LABEL[k - 2]} (Q${k - 1} 10-Q)`;
       const parts: DerivedPart[] = [
         { ...ref(cum), label: cumLabel, sign: 1 },
@@ -277,6 +293,7 @@ function quarterCell(
         ...earlier.map((x, i) => ({ ...x!.src!, label: `Q${i + 1}`, sign: -1 as const })),
       ];
       const v = cum.fact.val - earlier.reduce((s, x) => s + x!.v, 0);
+      if (NON_NEGATIVE.has(def.key) && v < 0) return null;
       return {
         v: round(v, def.unit),
         derived: { formula: `${cumLabel.split(" (")[0]} − ${earlier.map((_, i) => `Q${i + 1}`).join(" − ")}`, parts },
@@ -610,6 +627,35 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
   return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells };
 }
 
+/**
+ * Some filers tag share counts in millions (e.g. 751.8 instead of 751,800,000). When net
+ * income ÷ EPS says the count should be a million times larger, rescale it as a derived
+ * cell that keeps the tagged fact as its source.
+ */
+export function fixShareScale(income: Row[]) {
+  const ni = rowOf(income, "netIncome");
+  const eps = rowOf(income, "epsDiluted") ?? rowOf(income, "epsBasic");
+  for (const key of ["sharesBasic", "sharesDiluted"]) {
+    const row = rowOf(income, key);
+    if (!row) continue;
+    row.cells = row.cells.map((c, i) => {
+      if (!c?.src || c.v <= 0 || c.v >= 1e5) return c;
+      const n = ni?.cells[i]?.v;
+      const e = eps?.cells[i]?.v;
+      const implied = n && e ? n / e : null;
+      const scaled = c.v * 1e6;
+      if (implied == null || implied <= 0 || Math.abs(scaled / implied - 1) > 0.15) return c;
+      return {
+        v: scaled,
+        derived: {
+          formula: "Tagged value × 1,000,000 (the filing tagged this count in millions)",
+          parts: [{ ...c.src, label: "As tagged (millions of shares)", sign: 1 as const }],
+        },
+      };
+    });
+  }
+}
+
 export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
   const years = detectFiscalYears(cf);
   const periods = buildPeriods(years);
@@ -621,6 +667,7 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     const balance = buildStatement(cf, BALANCE_LINES.filter(keepLine), ps, years, freq);
     const cash = buildStatement(cf, CASHFLOW_LINES.filter(keepLine), ps, years, freq);
     fillDerived(income, "grossProfit", "revenue", "costOfRevenue", ["Revenue", "Cost of revenue"]);
+    fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
     const cfo = rowOf(cash, "cfo");
     const capex = rowOf(cash, "capex");
