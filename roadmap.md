@@ -64,10 +64,13 @@
 - [x] Cross-period label canonicalization pass (reasoning model) with keep-only-if-better acceptance
 - [x] Precomputed per-company payload (`ir_company_series`) + new IR page: quarterly/annual, period range, dimension filters, search, totals at the bottom with a parts = total check row, stacked charts, CSV export, full-value toggle
 - [x] Vision pass code: slides, chart images, scanned pages → facts pinned to the printed token with page-box highlight
-- [ ] BLOCKED (OpenAI credits exhausted): finish table extraction (~2,400 documents waiting) — `bun scripts/ir-extract.ts --resume --watch`
-- [ ] BLOCKED (OpenAI credits): vision pass over presentations and ~9.5k chart/slide images — `bun scripts/ir-vision.ts --resume`
-- [ ] BLOCKED (OpenAI credits): canonicalization for companies whose totals don't tie out (BAC, MA, V, LLY, META, JNJ, ORCL …) — `bun scripts/ir-canon.ts`
-- [ ] Historical 2008+ SEC exhibit backfill for all companies (running: `scripts/ir-backfill.ts`)
-- [ ] PDF/XLSX renditions for newly backfilled files (`scripts/ir-renditions.ts`)
+- [x] Data status page: investor-relations library panel (files, size, span, read/waiting, data points, tie-out per company)
+- [x] OCR decimal guard: the slide reader returns its own reading of each number; OCR tokens with the same digits take the model's punctuation, anything else is rejected
+- [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 16 workers — 32 saturated the database pool)
+- [ ] Running: vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch`, 6 workers)
+- [ ] Canonicalization for companies whose totals don't tie out (KO, DE, DUK, LMT, COP, WMT, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`; KO's transposed segment tables (segments as columns) give wrong parents and need a deterministic fix too
+- [ ] Running: historical 2008+ SEC exhibit backfill for all companies (`scripts/ir-backfill.ts`)
+- [ ] Running: PDF/XLSX renditions for newly backfilled files (`scripts/ir-renditions.ts`)
 - [ ] Production schedules: keep the collector inside the scheduled-call time limit (small slices), reading stays in the batch runner
 - [ ] Deterministic accuracy audit: duplicate-total detection, sign conventions for eliminations, unit/scale outliers vs neighbouring quarters
+- [ ] Rebuild every company's payload once the reading passes finish (`bun scripts/ir-build.ts`)

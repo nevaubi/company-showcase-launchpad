@@ -23,6 +23,17 @@ async function advance(job: JobName, total: number, step: number): Promise<{ sta
 
 const slice = <T,>(all: T[], start: number, n: number) => all.slice(start, start + n);
 
+/**
+ * The scheduler's HTTP call gives up after a few seconds and the platform cancels the handler with
+ * it, so every job stops starting new work once this budget is spent and leaves the rest to the
+ * next run.
+ */
+export const RUN_BUDGET_MS = 2000;
+const budget = (ms = RUN_BUDGET_MS) => {
+  const end = Date.now() + ms;
+  return () => Date.now() < end;
+};
+
 export async function runJob(job: JobName): Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }> {
   const { data: run } = await supabaseAdmin.from("job_runs").insert({ job }).select("id").single();
   let result: { ok: boolean; items: number; detail: Record<string, unknown> };
@@ -86,13 +97,13 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     return { ok: failed.length < batch.length, items, detail: { symbols: batch, failed } };
   },
 
-  /** Eight macro series per run: recent observations plus a fresh dashboard summary. */
+  /** Four macro series per run: recent observations plus a fresh dashboard summary. */
   async macro() {
     const defs = MACRO_SERIES;
-    const { start, wrapped } = await advance("macro", defs.length, 8);
-    const batch = slice(defs, start, 8);
+    const { start, wrapped } = await advance("macro", defs.length, 4);
+    const batch = slice(defs, start, 4);
     const since = daysAgo(11 * 365);
-    const results = await pool(batch, 2, async (def) => {
+    const results = await pool(batch, 4, async (def) => {
       const obs = isTreasurySeries(def.id) ? await fetchTreasury(def.id, since, 1) : await fetchFred(def.id, since);
       if (!obs.length) throw new Error("no observations");
       const cutoff = daysAgo(400);
@@ -193,12 +204,14 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     return { ok: errors.length < batch.length, items: filings + trades, detail: { companies: batch.map((c) => c.ticker), filings, trades, errors } };
   },
 
-  /** Store new 8-K exhibits (releases, presentations, supplements) for one company per run. */
+  /** Store the exhibits of new earnings / Reg FD 8-Ks found by the SEC scan, a few files per run. */
   async "ir-docs"() {
-    const { start } = await advance("ir-docs", COVERAGE.length, 1);
-    const { collectIr } = await import("@/lib/jobs/ir.server");
-    const r = await collectIr(COVERAGE[start], "sec", 10);
-    return { ok: true, items: r.stored, detail: r as unknown as Record<string, unknown> };
+    // Deep history (2008+) and IR-website files are collected by scripts/ir-backfill.ts and
+    // scripts/ir-site.ts; this run only keeps up with new releases inside the call window.
+    const { collectRecentRelease } = await import("@/lib/jobs/ir.server");
+    const fresh = await collectRecentRelease(COVERAGE, budget());
+    if (!fresh) return { ok: true, items: 0, detail: { idle: true } };
+    return { ok: true, items: fresh.stored, detail: fresh as unknown as Record<string, unknown> };
   },
 
   /** Extract segment/KPI facts from the next stored press release. */
@@ -230,13 +243,15 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     const c = COVERAGE[Math.floor(start / 2)];
     const form = start % 2 === 0 ? "10-K" : "10-Q";
     const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)).json()) as {
-      filings: { recent: { accessionNumber: string[]; form: string[]; primaryDocument: string[] } };
+      filings: { recent: { accessionNumber: string[]; form: string[]; primaryDocument: string[]; size: number[] } };
     };
     const r = sub.filings.recent;
     const i = r.form.findIndex((f) => f === form);
     if (i < 0) return { ok: true, items: 0, detail: { ticker: c.ticker, form, skipped: "no filing" } };
     const accn = r.accessionNumber[i];
     const doc = r.primaryDocument[i];
+    // Big filings take longer than the scheduler waits; they're mirrored the first time someone opens them.
+    if ((r.size?.[i] ?? 0) > 12 * 1024 * 1024) return { ok: true, items: 0, detail: { ticker: c.ticker, form, accn, doc, skipped: "large — mirrored on first view" } };
     const cached = await cacheFilingDocument(c.cik, accn, doc);
     return { ok: true, items: cached.stored ? 1 : 0, detail: { ticker: c.ticker, form, accn, doc, ...cached } };
   },

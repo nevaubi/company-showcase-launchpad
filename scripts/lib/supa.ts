@@ -15,6 +15,12 @@ export async function selectAll<T>(build: (from: number, to: number) => PromiseL
   return out;
 }
 
-export const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, "").split("=") as [string, string])) as Record<string, string | undefined>;
+/** `--key=value` → { key: "value" }; bare flags (`--dry`, `--resume`) → { key: "true" }. */
+export const args = Object.fromEntries(
+  process.argv.slice(2).map((a) => {
+    const [k, ...v] = a.replace(/^--/, "").split("=");
+    return [k, v.length ? v.join("=") : "true"];
+  }),
+) as Record<string, string | undefined>;
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const log = (...m: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...m);

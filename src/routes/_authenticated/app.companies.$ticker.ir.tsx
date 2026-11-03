@@ -15,6 +15,7 @@ import { secRevenueCheck } from "@/lib/ir/display";
 import type { IrPayload } from "@/lib/ir/payload";
 import { useCompany } from "@/lib/data";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")({
   head: ({ params }) => ({
@@ -124,8 +125,16 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
     >
       {s ? (
         <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
-          {stats.map((x) => (
-            <div key={x.label} className="min-w-0 bg-card px-4 py-3">
+          {stats.map((x, i) => (
+            // An odd last tile spans the row on phones (2 columns) and tablets (3 columns) so no empty cell shows.
+            <div
+              key={x.label}
+              className={cn(
+                "min-w-0 bg-card px-4 py-3",
+                i === stats.length - 1 && stats.length % 2 === 1 && "col-span-2 sm:col-span-1",
+                i === stats.length - 1 && stats.length % 3 === 2 && "sm:col-span-2 lg:col-span-1",
+              )}
+            >
               <p className="eyebrow">{x.label}</p>
               <p className="num mt-0.5 text-lg font-semibold">{x.value}</p>
               {x.hint && <p className="num truncate text-[11px] text-muted-foreground">{x.hint}</p>}

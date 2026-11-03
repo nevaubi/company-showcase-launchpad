@@ -52,6 +52,12 @@ export interface IrSeries {
   isTotal: boolean;
   unit: string;
   breakdown?: string | null;
+  /**
+   * Set when one release prints the same line with different values in several tables (bank
+   * segment tables all have "Net interest income" → "Total revenue"): the table's breakdown name
+   * keeps them apart, and children only roll into a total of the same scope.
+   */
+  scope?: string | null;
   /** Point-in-time values (balances, subscriber counts) rather than flows */
   pit?: boolean;
   cells: Record<string, IrCell>; // quarter end (YYYY-MM-DD)
@@ -142,8 +148,132 @@ const monthNear = (d: string, m: number) => {
   return dm === m || (dm === (m % 12) + 1 && day <= 7) || (dm === ((m + 10) % 12) + 1 && day >= 24);
 };
 
+/** Row labels that only name the metric ("Net sales", "Total revenue, net of interest expense"). */
+const GENERIC_LINE = new Set([
+  "revenue",
+  "total revenue",
+  "sales",
+  "total sales",
+  "revenue net of interest expense",
+  "total revenue net of interest expense",
+  "operating profit",
+  "operating income",
+  "total operating income",
+  "segment profit",
+  "segment operating profit",
+  "segment operating income",
+]);
+const NOT_A_SEGMENT = /^(non[- ]?gaap|gaap|as reported|reported|adjusted|comparable|unaudited|continued|cont|in (millions|billions|thousands)|quarterly|annual|ytd|year to date|(three|six|nine|twelve) months|fy|q\d|total|consolidated|summary|detail)\b/i;
+
+/** The business a per-segment table is about: "Revenue by reportable segment — Aeronautics", "Consumer Banking results". */
+export function segmentOfBreakdown(bd: string | null | undefined): string | null {
+  if (!bd) return null;
+  const tail = bd.match(/\s[—–-]\s+(.+)$/) ?? bd.match(/:\s*(.+)$/);
+  let seg = tail?.[1]?.trim() ?? null;
+  if (!seg) {
+    const head = bd.match(/^(.+?)\s+(?:segment\s+)?(?:results|revenues?(?:\s+by\s+.+)?|net revenues?|sales|financial (?:results|highlights)|highlights|key metrics)$/i);
+    seg = head?.[1]?.trim() ?? null;
+    if (seg && /^(revenues?|net revenues?|net sales|sales|total|segment|consolidated|company|business|income|operating)\b/i.test(seg)) seg = null;
+  }
+  if (!seg || seg.length > 60 || !/[a-z]/i.test(seg) || NOT_A_SEGMENT.test(seg)) return null;
+  return seg;
+}
+
+/**
+ * Releases often print one small table per segment whose rows only say "Net sales" or "Total
+ * revenue"; the segment is in the table title. When a release has such tables for at least two
+ * segments, name each generic row after its segment so it lines up with the segment summary
+ * instead of stacking several identical "Net sales" lines under one total.
+ */
+export function qualifyGenericLines(facts: IrFact[]): IrFact[] {
+  const segs = new Map<string, Set<string>>();
+  const gkey = (f: IrFact) => `${docOf(f)}|${f.category}|${f.metric}|${normLabel(f.label)}`;
+  for (const f of facts) {
+    if (!GENERIC_LINE.has(normLabel(f.label))) continue;
+    const seg = segmentOfBreakdown(f.breakdown);
+    if (!seg) continue;
+    const k = gkey(f);
+    if (!segs.has(k)) segs.set(k, new Set());
+    segs.get(k)!.add(normLabel(seg));
+  }
+  const rename = new Map<string, string>(); // doc|breakdown|generic label → segment
+  for (const f of facts) {
+    if (!GENERIC_LINE.has(normLabel(f.label)) || (segs.get(gkey(f))?.size ?? 0) < 2) continue;
+    const seg = segmentOfBreakdown(f.breakdown)!;
+    rename.set(`${docOf(f)}|${f.breakdown}|${normLabel(f.label)}`, seg);
+  }
+  if (!rename.size) return facts;
+  return facts.map((f) => {
+    const own = rename.get(`${docOf(f)}|${f.breakdown}|${normLabel(f.label)}`);
+    const par = f.parent ? rename.get(`${docOf(f)}|${f.breakdown}|${normLabel(f.parent)}`) : undefined;
+    if (!own && !par) return f;
+    return { ...f, ...(own ? { label: own } : {}), ...(par ? { parent: par } : {}) };
+  });
+}
+
+/** Geography of a U.S. / international / worldwide column set, from the table's breakdown name. */
+export function geoOfBreakdown(bd: string | null | undefined): "U.S." | "International" | "Worldwide" | null {
+  const raw = (bd ?? "").toLowerCase();
+  const t = ` ${raw.replace(/[’']/g, "").replace(/[^a-z.\- ]+/g, " ")} `;
+  if (/\b(outside (the )?u\.?s\.?|ex[- ]u\.?s\.?|non[- ]u\.?s\.?|international|intl\.?|rest of (the )?world|row)(\s|$)/.test(t)) return "International";
+  if (/\b(global|worldwide|world wide|total company)\b/.test(t) || /[—–-]\s*total\.?\s*$/.test(raw.trim())) return "Worldwide";
+  if (/(^|\s)(u\.s\.?|us|united states|domestic)(\s|$)/.test(t)) return "U.S.";
+  return null;
+}
+
+/**
+ * Pharma releases print each product's U.S., international and worldwide sales side by side
+ * under one label. When a release has the same line in two or more of those column sets, the U.S.
+ * and international values become "— U.S." / "— International" lines (with their totals), and
+ * the worldwide value keeps the plain label, so the three never collide.
+ */
+export function splitGeoColumns(facts: IrFact[]): IrFact[] {
+  const geos = new Map<string, Set<string>>();
+  const k = (f: IrFact) => `${docOf(f)}|${f.category}|${f.metric}|${normLabel(f.label)}|${f.period_end}|${f.months}`;
+  for (const f of facts) {
+    const g = geoOfBreakdown(f.breakdown);
+    if (!g) continue;
+    const key = k(f);
+    if (!geos.has(key)) geos.set(key, new Set());
+    geos.get(key)!.add(g);
+  }
+  const splitDocs = new Set<string>();
+  for (const [key, set] of geos) if (set.size >= 2) splitDocs.add(key.split("|")[0]);
+  if (!splitDocs.size) return facts;
+  return facts.map((f) => {
+    if (!splitDocs.has(docOf(f))) return f;
+    const g = geoOfBreakdown(f.breakdown);
+    if (!g || g === "Worldwide") return f;
+    return { ...f, label: `${f.label} — ${g}`, parent: f.parent ? `${f.parent} — ${g}` : null };
+  });
+}
+
+/**
+ * KPI tables often print a period-end count next to the change in the period under one label
+ * ("Customer relationships": 31,339 and net additions 370). The period-end value is the line;
+ * flows under the same label become their own "— net change" line so the two never mix.
+ */
+export function splitStockAndFlow(facts: IrFact[]): IrFact[] {
+  const lk = (f: IrFact, label: string) => `${f.category}|${f.metric}|${f.unit}|${normLabel(label)}`;
+  const stock = new Set<string>();
+  const flow = new Set<string>();
+  for (const f of facts) {
+    if (f.unit === "pct" || f.unit === "ratio") continue;
+    (f.months === 0 ? stock : flow).add(lk(f, f.label));
+  }
+  const mixed = new Set([...stock].filter((k) => flow.has(k)));
+  if (!mixed.size) return facts;
+  return facts.map((f) => {
+    if (f.months === 0) return f;
+    const own = mixed.has(lk(f, f.label));
+    const par = !!f.parent && mixed.has(lk(f, f.parent));
+    if (!own && !par) return f;
+    return { ...f, ...(own ? { label: `${f.label} — net change` } : {}), ...(par ? { parent: `${f.parent} — net change` } : {}) };
+  });
+}
+
 export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string, LabelMapEntry>; fyEndMonth?: number | null } = {}): { series: IrSeries[]; quarters: string[]; years: string[]; checks: ReconcileCheck[] } {
-  const mapped = applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value));
+  const mapped = splitStockAndFlow(splitGeoColumns(qualifyGenericLines(applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value)))));
   // Trailing-twelve-month columns ending mid-year are not fiscal years.
   const fyEnd = opts.fyEndMonth ?? fiscalYearEndMonth(mapped);
   const facts = fyEnd ? mapped.filter((f) => f.months !== 12 || monthNear(f.period_end, fyEnd)) : mapped;
@@ -176,11 +306,22 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
     list.push(v);
     per.set(end, list);
   };
+  // Lines printed with different values in two tables of one release need their table scope.
+  const conflicts = new Set<string>();
+  const firstVal = new Map<string, number>();
   for (const f of facts) {
-    const key = seriesKey(f);
+    const ck = `${seriesKey(f)}|${docOf(f)}|${f.period_end}|${f.months}`;
+    const prev = firstVal.get(ck);
+    if (prev == null) firstVal.set(ck, f.value);
+    else if (Math.abs(prev - f.value) > Math.max(Math.abs(prev) * 0.001, 1)) conflicts.add(seriesKey(f));
+  }
+  const scopeOf = (f: IrFact) => (conflicts.has(seriesKey(f)) ? scopeName(f.breakdown) || "unscoped" : null);
+  for (const f of facts) {
+    const scope = scopeOf(f);
+    const key = scope ? `${seriesKey(f)}|@${scope}` : seriesKey(f);
     let s = bySeries.get(key);
     if (!s) {
-      s = { key, category: f.category, metric: f.metric, label: f.label, parent: f.parent, isTotal: f.is_total, unit: f.unit, cells: {}, annual: {} };
+      s = { key, category: f.category, metric: f.metric, label: f.label, parent: f.parent, isTotal: f.is_total, unit: f.unit, scope, cells: {}, annual: {} };
       bySeries.set(key, s);
       votes.set(key, { total: 0, n: 0, breakdown: new Map(), parent: new Map() });
     }
@@ -225,7 +366,8 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
   for (const s of bySeries.values()) {
     if (s.pit || !FLOW_UNITS.has(s.unit)) continue;
     for (const [fyEnd, list] of fv.get(s.key) ?? []) {
-      const fy = list[0].fact!;
+      const fy = list.find((v) => v.fact)?.fact;
+      if (!fy) continue;
       const q4 = snap(quarters, fyEnd);
       if (s.cells[q4]) continue;
       const start = fy.period_start ?? new Date(t(fy.period_end) - 364 * DAY).toISOString().slice(0, 10);
@@ -374,7 +516,7 @@ export function markPartialLists(checks: ReconcileCheck[], series: IrSeries[]) {
  * the missing subtotal for those releases from the parts they printed (marked synthetic).
  */
 function mergeFlattened(bySeries: Map<string, IrSeries>, qv: Map<string, Map<string, Vintage[]>>, fv: Map<string, Map<string, Vintage[]>>, nine: Map<string, IrFact[]>) {
-  const dim = (s: IrSeries) => `${s.category}|${s.metric}|${s.unit}`;
+  const dim = (s: IrSeries) => `${s.category}|${s.metric}|${s.unit}|${s.scope ?? ""}`;
   const byLabel = new Map<string, IrSeries[]>();
   for (const s of bySeries.values()) {
     const k = `${dim(s)}|${normLabel(s.label)}`;
@@ -464,8 +606,61 @@ function borrowTotals(series: IrSeries[], qv: Map<string, Map<string, Vintage[]>
   }
 }
 
-export const childrenOf = (series: IrSeries[], total: IrSeries) =>
-  series.filter((s) => s !== total && s.category === total.category && s.metric === total.metric && s.unit === total.unit && s.parent && normLabel(s.parent) === normLabel(total.label));
+/** Scopes of the totals carrying each label, cached per series list (rebuilt when it grows). */
+const scopeCache = new WeakMap<IrSeries[], { n: number; m: Map<string, Set<string>> }>();
+function totalScopes(series: IrSeries[]) {
+  let c = scopeCache.get(series);
+  if (!c || c.n !== series.length) {
+    const m = new Map<string, Set<string>>();
+    for (const s of series) {
+      if (!s.scope) continue;
+      const k = `${s.category}|${s.metric}|${s.unit}|${normLabel(s.label)}`;
+      m.set(k, (m.get(k) ?? new Set()).add(s.scope));
+    }
+    scopeCache.set(series, (c = { n: series.length, m }));
+  }
+  return c.m;
+}
+
+/** Table scope from a breakdown name, ignoring filler words that vary between releases. */
+export const scopeName = (bd: string | null | undefined) =>
+  normLabel(bd ?? "")
+    .replace(/\b(segments?|results?|summary|selected|financial|data|highlights|information|and|the|of|by|for|key|metrics|line)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** A child's table scope: its own when split, else its table's breakdown name. */
+const kidScope = (s: IrSeries) => s.scope ?? scopeName(s.breakdown);
+
+export const childrenOf = (series: IrSeries[], total: IrSeries) => {
+  const scopes = totalScopes(series).get(`${total.category}|${total.metric}|${total.unit}|${normLabel(total.label)}`);
+  return series.filter((s) => {
+    if (s === total || s.category !== total.category || s.metric !== total.metric || s.unit !== total.unit || !s.parent || normLabel(s.parent) !== normLabel(total.label)) return false;
+    if (!scopes) return true;
+    // Scoped totals take the children of their own table; the unscoped one takes the rest.
+    return total.scope ? kidScope(s) === total.scope : !scopes.has(kidScope(s));
+  });
+};
+
+const rowOf = (c?: IrCell) => {
+  const l = c?.fact?.locator as { t?: number; r?: number } | undefined;
+  return l && typeof l.t === "number" && typeof l.r === "number" ? { doc: c!.fact!.doc, t: l.t, r: l.r } : null;
+};
+
+/** The parts sit in consecutive rows of the subtotal's table, directly above or below it. */
+export function printedAsBlock(parts: IrSeries[], subtotal: IrSeries, end: string) {
+  const k = rowOf(subtotal.cells[end]);
+  if (!k) return false;
+  const rows: number[] = [];
+  for (const p of parts) {
+    const l = rowOf(p.cells[end]);
+    if (!l || l.doc !== k.doc || l.t !== k.t) return false;
+    rows.push(l.r);
+  }
+  rows.sort((a, b) => a - b);
+  if (rows[rows.length - 1] - rows[0] + 1 > rows.length + 1) return false;
+  return (k.r > rows[rows.length - 1] && k.r - rows[rows.length - 1] <= 2) || (k.r < rows[0] && rows[0] - k.r <= 2);
+}
 
 /**
  * Releases often print a flat product table next to a "Products / Services" split. When one child
@@ -492,6 +687,15 @@ export function inferSubtotals(series: IrSeries[]) {
         if (ok && Math.abs(sub.reduce((n, o) => n + o.cells[e0].v, 0)) > 0) found = sub;
       }
       if (found) {
+        // A coincidental subset sum must not nest sibling segments: the subset has to add up to
+        // the candidate in (nearly) every quarter where they're all printed, and in at least two.
+        const sub = found;
+        const both = Object.keys(k.cells).filter((e) => sub.every((o) => o.cells[e]));
+        const hits = both.filter((e) => Math.abs(sub.reduce((n, o) => n + o.cells[e].v, 0) - k.cells[e].v) <= Math.max(Math.abs(k.cells[e].v) * 0.002, 1e6));
+        const consistent = hits.length >= Math.ceil(both.length * 0.9);
+        // One shared quarter is enough only when the parts are printed as a block right next to
+        // the subtotal row in the same table.
+        if (!consistent || (hits.length < 2 && !hits.every((e) => printedAsBlock(sub, k, e)))) continue;
         k.isTotal = true;
         for (const o of found) o.parent = k.label;
         break;

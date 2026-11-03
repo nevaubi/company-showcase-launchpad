@@ -63,7 +63,16 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
         continue;
       }
       reserved++;
-      const item = await o.claim();
+      let item: T | null;
+      try {
+        item = await o.claim();
+      } catch (e) {
+        // A busy database (statement timeout) shouldn't end the batch: back off and try again.
+        reserved--;
+        log(`${o.job}: claim failed (${(e as Error).message.slice(0, 120)}) — retrying in 15s`);
+        await sleep(15_000);
+        continue;
+      }
       if (!item) {
         reserved--;
         if (o.idleMinutes == null && active === 0) return;

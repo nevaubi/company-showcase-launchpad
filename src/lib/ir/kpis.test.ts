@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIrSeries, crossCheckTotals, type IrFact } from "./kpis";
+import { buildIrSeries, crossCheckTotals, geoOfBreakdown, segmentOfBreakdown, type IrFact } from "./kpis";
 import { parseNumber, parseTables } from "./tables";
 
 const f = (label: string, end: string, months: number, value: number, extra: Partial<IrFact> = {}): IrFact => ({
@@ -46,16 +46,34 @@ describe("IR KPI series", () => {
   it("detects a Products subtotal and reconciles every level to its total", () => {
     const end = "2026-09-26";
     const facts = [
-      f("iPhone", end, 3, 57e9),
-      f("Mac", end, 3, 11e9),
-      f("Products", end, 3, 68e9),
-      f("Services", end, 3, 32e9),
-      f("Total net sales", end, 3, 100e9, { is_total: true, parent: null }),
+      f("iPhone", end, 3, 57e9, { locator: { t: 0, r: 1, c: 1 } }),
+      f("Mac", end, 3, 11e9, { locator: { t: 0, r: 2, c: 1 } }),
+      f("Products", end, 3, 68e9, { locator: { t: 0, r: 3, c: 1 } }),
+      f("Services", end, 3, 32e9, { locator: { t: 0, r: 4, c: 1 } }),
+      f("Total net sales", end, 3, 100e9, { is_total: true, parent: null, locator: { t: 0, r: 5, c: 1 } }),
     ];
     const { checks, series } = buildIrSeries(facts);
     expect(series.find((x) => x.label === "iPhone")?.parent).toBe("Products");
     expect(checks.length).toBe(2);
     expect(checks.every((c) => c.ok)).toBe(true);
+  });
+
+  it("does not nest sibling regions because two of them happen to add up to a third in one quarter", () => {
+    // Coca-Cola style: EMEA + Bottling = 1,041 = North America in this quarter by coincidence.
+    const end = "2024-09-27";
+    const row = (r: number) => ({ locator: { t: 0, r, c: 1 } });
+    const facts = [
+      f("Europe, Middle East & Africa", end, 3, 998e6, row(1)),
+      f("Latin America", end, 3, 937e6, row(2)),
+      f("North America", end, 3, 1041e6, row(3)),
+      f("Asia Pacific", end, 3, 462e6, row(4)),
+      f("Bottling Investments", end, 3, 43e6, row(5)),
+      f("Corporate", end, 3, -1386e6, row(6)),
+      f("Total net sales", end, 3, 2195e6, { is_total: true, parent: null, ...row(7) }), // one segment not itemized
+    ];
+    const { series } = buildIrSeries(facts);
+    expect(series.find((x) => x.label === "Bottling Investments")?.parent).toBe("Total net sales");
+    expect(series.find((x) => x.label === "North America")?.isTotal).toBe(false);
   });
 
   it("flags a breakdown that doesn't add up", () => {
@@ -192,9 +210,9 @@ describe("selected-item lists", () => {
   it("flags a total whose listed lines always fall short as a partial list, not an error", () => {
     const q = ["2026-03-31", "2026-06-30", "2026-09-30"];
     const facts = q.flatMap((e, i) => [
-      f("Mounjaro", e, 3, 10 + i, { category: "product", breakdown: "Selected Products" }),
-      f("Zepbound", e, 3, 5 + i, { category: "product", breakdown: "Selected Products" }),
-      f("Total Revenue", e, 3, 24 + i, { category: "product", is_total: true, parent: null }),
+      f("Mounjaro", e, 3, (10 + i) * 1e9, { category: "product", breakdown: "Selected Products" }),
+      f("Zepbound", e, 3, (5 + i) * 1e9, { category: "product", breakdown: "Selected Products" }),
+      f("Total Revenue", e, 3, (24 + i) * 1e9, { category: "product", is_total: true, parent: null }),
     ]);
     const { checks } = buildIrSeries(facts.map((x) => ({ ...x, parent: x.label === "Total Revenue" ? null : "Total Revenue" })));
     expect(checks).toHaveLength(3);
@@ -202,12 +220,116 @@ describe("selected-item lists", () => {
   });
   it("keeps a breakdown whose parts exceed the total as a real mismatch", () => {
     const facts = [
-      f("A", "2026-03-31", 3, 20, { parent: "Total" }),
-      f("B", "2026-03-31", 3, 15, { parent: "Total" }),
-      f("Total", "2026-03-31", 3, 30, { is_total: true, parent: null }),
+      f("A", "2026-03-31", 3, 20e9, { parent: "Total" }),
+      f("B", "2026-03-31", 3, 15e9, { parent: "Total" }),
+      f("Total", "2026-03-31", 3, 30e9, { is_total: true, parent: null }),
     ];
     const { checks } = buildIrSeries(facts);
     expect(checks[0].ok).toBe(false);
     expect(checks[0].partial).toBeUndefined();
+  });
+});
+
+describe("same line in several tables of one release", () => {
+  it("keeps per-segment tables apart so each segment total reconciles", () => {
+    const D = { document_id: "S", filed: "2026-10-15", category: "segment", parent: "Total revenue" };
+    const e = "2026-09-30";
+    const facts = [
+      f("Net interest income", e, 3, 8e9, { ...D, breakdown: "Consumer Banking" }),
+      f("Noninterest income", e, 3, 2e9, { ...D, breakdown: "Consumer Banking" }),
+      f("Total revenue", e, 3, 10e9, { ...D, breakdown: "Consumer Banking", is_total: true, parent: null }),
+      f("Net interest income", e, 3, 1e9, { ...D, breakdown: "Global Wealth" }),
+      f("Noninterest income", e, 3, 4e9, { ...D, breakdown: "Global Wealth" }),
+      f("Total revenue", e, 3, 5e9, { ...D, breakdown: "Global Wealth", is_total: true, parent: null }),
+    ];
+    const { series, checks } = buildIrSeries(facts);
+    expect(series.filter((s) => s.label === "Net interest income").map((s) => s.cells[e].v).sort()).toEqual([1e9, 8e9]);
+    expect(checks).toHaveLength(2);
+    expect(checks.every((c) => c.ok)).toBe(true);
+  });
+});
+
+describe("per-segment tables with generic row labels", () => {
+  it("reads the segment from the table title", () => {
+    expect(segmentOfBreakdown("Revenue by reportable segment — Aeronautics")).toBe("Aeronautics");
+    expect(segmentOfBreakdown("Consumer Banking results")).toBe("Consumer Banking");
+    expect(segmentOfBreakdown("Global Markets revenue by type")).toBe("Global Markets");
+    expect(segmentOfBreakdown("Revenue by segment — Non-GAAP")).toBeNull();
+    expect(segmentOfBreakdown("Revenue by income type")).toBeNull();
+    expect(segmentOfBreakdown("Net sales by segment")).toBeNull();
+  });
+
+  it("names each 'Sales' row after its segment so the summary isn't counted twice", () => {
+    // Lockheed Martin style: a summary table plus one table per segment whose row just says "Sales".
+    const end = "2026-09-27";
+    const seg = (name: string, v: number) => [
+      f(name, end, 3, v, { category: "segment", parent: "Total sales", breakdown: "Revenue by reportable segment" }),
+      f("Sales", end, 3, v, { category: "segment", parent: "Total sales", breakdown: `Revenue by reportable segment — ${name}` }),
+    ];
+    const facts = [
+      ...seg("Aeronautics", 8214e6),
+      ...seg("Missiles and Fire Control", 4501e6),
+      ...seg("Rotary and Mission Systems", 4511e6),
+      ...seg("Space", 3485e6),
+      f("Total sales", end, 3, 20711e6, { category: "segment", parent: null, is_total: true, breakdown: "Revenue by reportable segment" }),
+    ];
+    const { checks, series } = buildIrSeries(facts);
+    expect(series.filter((x) => x.label === "Sales")).toHaveLength(0);
+    expect(series.filter((x) => x.parent === "Total sales")).toHaveLength(4);
+    expect(checks).toHaveLength(1);
+    expect(checks[0].ok).toBe(true);
+  });
+
+  it("leaves a single generic table alone", () => {
+    const end = "2026-09-27";
+    const facts = [f("Net sales", end, 3, 10e6, { parent: null, breakdown: "Results — Aeronautics" })];
+    expect(buildIrSeries(facts).series[0].label).toBe("Net sales");
+  });
+});
+
+describe("period-end counts next to net additions", () => {
+  it("keeps net additions out of the customer-count line", () => {
+    const kpi = { category: "kpi", metric: "users", unit: "count", parent: null } as const;
+    const facts = [
+      f("Customer relationships", "2021-03-31", 0, 31_062_000, kpi),
+      f("Customer relationships", "2021-03-31", 3, 370_000, kpi),
+      f("Customer relationships", "2021-06-30", 0, 31_339_000, kpi),
+      f("Customer relationships", "2021-06-30", 3, 277_000, kpi),
+    ];
+    const { series } = buildIrSeries(facts);
+    const stock = series.find((x) => x.label === "Customer relationships")!;
+    const flow = series.find((x) => x.label === "Customer relationships — net change")!;
+    expect(Object.values(stock.cells).map((c) => c.v)).toEqual([31_062_000, 31_339_000]);
+    expect(Object.values(flow.cells).map((c) => c.v)).toEqual([370_000, 277_000]);
+  });
+});
+
+describe("U.S. / international / worldwide columns", () => {
+  it("reads the geography from the table name", () => {
+    expect(geoOfBreakdown("U.S. revenue by product")).toBe("U.S.");
+    expect(geoOfBreakdown("International revenue by product")).toBe("International");
+    expect(geoOfBreakdown("Outside U.S. revenue")).toBe("International");
+    expect(geoOfBreakdown("Global revenue by product")).toBe("Worldwide");
+    expect(geoOfBreakdown("Net revenues by product — Int'l.")).toBe("International");
+    expect(geoOfBreakdown("Net revenues by product — Total")).toBe("Worldwide");
+    expect(geoOfBreakdown("Total revenue by product")).toBeNull();
+    expect(geoOfBreakdown("Revenue by product")).toBeNull();
+    expect(geoOfBreakdown("Business segment results")).toBeNull();
+  });
+
+  it("keeps each geography's products under its own total so every column ties out", () => {
+    // AbbVie style: one table, three column sets, same row labels.
+    const end = "2026-09-30";
+    const col = (geo: string, botox: number, vyalev: number, total: number) => [
+      f("Botox Therapeutic", end, 3, botox, { parent: "Neuroscience", breakdown: `${geo} revenue by product` }),
+      f("Vyalev", end, 3, vyalev, { parent: "Neuroscience", breakdown: `${geo} revenue by product` }),
+      f("Neuroscience", end, 3, total, { parent: null, is_total: true, breakdown: `${geo} revenue by product` }),
+    ];
+    const facts = [...col("U.S.", 912e6, 154e6, 1066e6), ...col("International", 168e6, 132e6, 300e6), ...col("Global", 1080e6, 286e6, 1366e6)];
+    const { series, checks } = buildIrSeries(facts);
+    expect(series.find((x) => x.label === "Vyalev")?.cells[end].v).toBe(286e6);
+    expect(series.find((x) => x.label === "Vyalev — U.S.")?.parent).toBe("Neuroscience — U.S.");
+    expect(checks).toHaveLength(3);
+    expect(checks.every((c) => c.ok)).toBe(true);
   });
 });

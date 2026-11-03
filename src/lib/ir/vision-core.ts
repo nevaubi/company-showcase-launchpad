@@ -79,7 +79,8 @@ export interface VisionRow {
   unit: (typeof UNITS)[number];
   scale: number;
   is_total: boolean;
-  values: { w: number; p: number }[];
+  /** w = token id, p = period index, read = the number exactly as the model reads it on the image */
+  values: { w: number; p: number; read: string }[];
 }
 export interface VisionPanel {
   title: string;
@@ -131,7 +132,12 @@ export const VISION_SCHEMA = {
                 is_total: { type: "boolean" },
                 values: {
                   type: "array",
-                  items: { type: "object", additionalProperties: false, required: ["w", "p"], properties: { w: { type: "integer" }, p: { type: "integer" } } },
+                  items: {
+                    type: "object",
+                    additionalProperties: false,
+                    required: ["w", "p", "read"],
+                    properties: { w: { type: "integer" }, p: { type: "integer" }, read: { type: "string" } },
+                  },
                 },
               },
             },
@@ -155,6 +161,7 @@ Hierarchy: the printed total of a breakdown is a row with is_total=true; its com
 Periods: list each period once per panel (p = 0,1,…) with ISO dates, months = 3 for a quarter, 6/9 year-to-date, 12 full year, 0 for point-in-time values. Infer exact dates from the company's fiscal calendar and the document date when the page says "Q3 FY25" or "2024".
 Units & scale: scale converts the printed number to absolute units — "$ in billions" or "$12.3B" → 1000000000, "in millions" → 1000000, "in thousands" → 1000; percentages, prices, per-share amounts and ratios use scale 1. unit: usd, pct (as printed, 45.2), bps, count, usdPerShare (per-unit dollars like ARPU or $/barrel), ratio.
 SKIP: growth rates and changes (+12% Y/Y, "up 5%"), guidance/outlook, targets, page numbers, footnote numbers, years used as labels, non-GAAP adjustment bridges, per-share EPS and share counts.
+For every value also give "read": the number exactly as you see it printed on the image, with its $, %, decimal point and suffix (e.g. "$2.71", "41.2%", "$4.3B"). OCR sometimes drops a decimal point or comma; your reading is compared with the token.
 Each token may be used once. If the page holds no qualifying data, return its page_kind with "panels": [].`;
 
 export interface VisionFact {
@@ -182,8 +189,25 @@ const clean = (s: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const digits = (s: string) => s.replace(/\D/g, "");
+
+/**
+ * Value for one pointer. Text-layer tokens are exact, so the model's reading must agree with them.
+ * OCR tokens can lose a decimal point or comma: when the model's reading has the same digit
+ * sequence, its punctuation wins; any other disagreement rejects the value.
+ */
+export function resolveValue(tokenText: string, read: string | undefined, ocr: boolean) {
+  const tok = parseToken(tokenText);
+  const rd = read ? parseToken(read) : null;
+  if (!tok) return null;
+  if (!rd) return ocr ? null : tok;
+  if (rd.v === tok.v && rd.pct === tok.pct) return { ...tok, suffixScale: tok.suffixScale ?? rd.suffixScale };
+  if (ocr && digits(tokenText) === digits(read!) && digits(read!).length > 0) return { ...rd, suffixScale: rd.suffixScale ?? tok.suffixScale, pct: rd.pct || tok.pct };
+  return null;
+}
+
 /** Validate the model's token pointers and turn them into fact rows. */
-export function visionFacts(out: VisionOutput, tokens: PageToken[], page: number, filed?: string | null): { rows: VisionFact[]; rejected: number } {
+export function visionFacts(out: VisionOutput, tokens: PageToken[], page: number, filed?: string | null, ocr = false): { rows: VisionFact[]; rejected: number } {
   const byId = new Map(tokens.map((t) => [t.w, t]));
   const used = new Set<number>();
   const rows: VisionFact[] = [];
@@ -196,7 +220,7 @@ export function visionFacts(out: VisionOutput, tokens: PageToken[], page: number
       for (const ref of row.values) {
         const tok = byId.get(ref.w);
         const per = periods.get(ref.p);
-        const parsed = tok ? parseToken(tok.text) : null;
+        const parsed = tok ? resolveValue(tok.text, ref.read, ocr) : null;
         const okPeriod = !!per && [0, 3, 6, 9, 12].includes(per.months) && ISO.test(per.period_end) && Date.parse(per.period_end) <= latest;
         if (!tok || !parsed || used.has(ref.w) || !okPeriod || !label) {
           rejected++;
@@ -227,7 +251,7 @@ export function visionFacts(out: VisionOutput, tokens: PageToken[], page: number
           months: per!.months,
           value: parsed.v * scale,
           unit: row.unit,
-          locator: { page, box: tok.box.map((x) => Math.round(x * 10000) / 10000), text: tok.text, w: tok.w },
+          locator: { page, box: tok.box.map((x) => Math.round(x * 10000) / 10000), text: ocr && ref.read ? ref.read : tok.text, w: tok.w },
         });
       }
     }

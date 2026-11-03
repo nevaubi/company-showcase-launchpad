@@ -57,6 +57,8 @@ async function claim(): Promise<Doc | null> {
 interface PageJob {
   page: number;
   words: PageWords;
+  /** words came from OCR rather than the PDF text layer */
+  ocr: boolean;
   image: string; // local file
   w: number;
   h: number;
@@ -85,7 +87,7 @@ async function processDoc(d: Doc) {
         sh("convert", [`${src}[0]`, "-background", "white", "-flatten", "-quality", "85", img]);
       }
       const tsv = sh("tesseract", [img, "stdout", "--psm", "11", "tsv"]).toString();
-      jobs.push({ page: 1, words: parseTesseractTsv(tsv, w, h), image: img, w, h });
+      jobs.push({ page: 1, words: parseTesseractTsv(tsv, w, h), image: img, w, h, ocr: true });
     } else if (ext === "pdf") {
       const bbox = sh("pdftotext", ["-bbox", "-l", String(MAX_PAGES), src, "-"]).toString("utf8");
       const pages = parseBboxHtml(bbox);
@@ -100,11 +102,17 @@ async function processDoc(d: Doc) {
         const img = `${base}.jpg`;
         const [w, h] = sh("identify", ["-format", "%w %h\n", img]).toString().split("\n")[0].split(" ").map(Number);
         const words = scanned ? parseTesseractTsv(sh("tesseract", [img, "stdout", "--psm", "11", "tsv"]).toString(), w, h, p.page) : p;
-        jobs.push({ page: p.page, words, image: img, w, h });
+        jobs.push({ page: p.page, words, image: img, w, h, ocr: scanned });
       }
     } else return mark(d, "skipped: format", 0);
 
     const candidates = jobs.filter((j) => numberTokens(j.words).length >= MIN_TOKENS);
+    if (args.dry !== undefined) {
+      // Inspect page selection and tokens without calling the model; the document stays queued.
+      await sb.from("ir_documents").update({ vision_status: null }).eq("id", d.id);
+      const sample = candidates[0] ? numberTokens(candidates[0].words).slice(0, 12).map((t) => t.text).join(" ") : "";
+      return { facts: 0, note: `dry: ${candidates.length}/${pageCount} pages, ${candidates.reduce((n, j) => n + numberTokens(j.words).length, 0)} tokens [${sample}]` };
+    }
     if (!candidates.length) return mark(d, "no data", 0);
 
     const context = `Company: ${d.ticker} (${names.get(d.ticker) ?? d.ticker}). Document: ${d.title} (${d.kind}, filed ${d.filed ?? "unknown"}).`;
@@ -126,7 +134,7 @@ async function processDoc(d: Doc) {
       });
       usage.input_tokens += r.usage.input_tokens;
       usage.output_tokens += r.usage.output_tokens;
-      return { job: j, ...visionFacts(r.data, tokens, j.page, d.filed), kind: r.data.page_kind };
+      return { job: j, ...visionFacts(r.data, tokens, j.page, d.filed, j.ocr), kind: r.data.page_kind };
     });
 
     // Numbers the table pass already stored from this document stay with their table cell.
@@ -188,7 +196,7 @@ async function publishPages(d: Doc, pages: PageJob[], isImage: boolean) {
       .map((p) => `<h2 id="page-${p.page}">Page ${p.page}</h2>${figure(p, assets.get(p.page)!)}`)
       .join("")}</body></html>`;
   }
-  const path = d.rendition_path ?? `renditions/${d.id}.html`;
+  const path = d.rendition_path || `renditions/${d.id}.html`;
   await upload(path, Buffer.from(html), "text/html; charset=utf-8");
   if (!d.rendition_path) await sb.from("ir_documents").update({ rendition_path: path }).eq("id", d.id);
 }

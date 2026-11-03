@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS ir_documents_vision_queue ON public.ir_documents (filed DESC NULLS LAST) WHERE vision_status IS NULL AND path IS NOT NULL;
+CREATE INDEX IF NOT EXISTS ir_documents_accn ON public.ir_documents (accn);

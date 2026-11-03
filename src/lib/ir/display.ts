@@ -61,14 +61,21 @@ export function inDimension(g: PayloadGroup, dim: string) {
 const ORDER_MET = ["revenue", "gross_profit", "segment_profit", "operating_income", "net_income", "cost", "expense", "margin", "units", "users", "volume", "price", "backlog", "loans", "deposits", "assets", "aum", "stores", "headcount", "other"];
 const ORDER_CAT = ["segment", "product", "geography", "customer", "channel", "cost", "kpi", "balance", "other"];
 
+/** Worldwide breakdowns first, then their U.S. and international splits. */
+const geoRank = (g: PayloadGroup) => (/(^|—\s*)U\.S\.(\s*—|$)/.test(g.label) ? 1 : /(^|—\s*)International(\s*—|$)/.test(g.label) ? 2 : 0);
+
 export function groupOrder(a: PayloadGroup, b: PayloadGroup) {
+  // Proper breakdowns (a printed total with its parts) before loose lists of other lines.
+  if (!a.root !== !b.root) return a.root ? -1 : 1;
   const m = ORDER_MET.indexOf(a.met) - ORDER_MET.indexOf(b.met);
-  if (a.met === "revenue" && b.met === "revenue") return ORDER_CAT.indexOf(a.cat) - ORDER_CAT.indexOf(b.cat) || b.rows.length - a.rows.length;
+  if (a.met === "revenue" && b.met === "revenue") return ORDER_CAT.indexOf(a.cat) - ORDER_CAT.indexOf(b.cat) || geoRank(a) - geoRank(b) || b.rows.length - a.rows.length;
   if (a.met === "revenue" || b.met === "revenue") return a.met === "revenue" ? -1 : 1;
   return ORDER_CAT.indexOf(a.cat) - ORDER_CAT.indexOf(b.cat) || m || b.rows.length - a.rows.length;
 }
 
 export function groupTitle(g: PayloadGroup, root?: PayloadSeries) {
+  if (!g.root) return `${METRIC_LABEL[g.met] ?? g.met} — other ${CATEGORY_LABEL[g.cat] ?? g.cat} lines`;
+  if (root?.sc) return root.sc.replace(/:$/, "");
   if (g.bd && !/^(total|consolidated)/i.test(g.bd)) return g.bd.replace(/:$/, "");
   const metric = METRIC_LABEL[g.met] ?? g.met;
   if (g.cat === "cost") return root?.label ? `${root.label} — components` : "Costs & expenses";
@@ -111,7 +118,7 @@ export function fmtIr(v: number, unit: string, scale: Scale): string {
 
 export function unitCaption(unit: string, scale: Scale) {
   if (unit === "usd") return scale === "full" ? "US dollars" : scale === "K" ? "$ thousands" : scale === "M" ? "$ millions" : "$ billions";
-  if (unit === "usdPerShare") return "$ per share";
+  if (unit === "usdPerShare") return "$ per unit";
   if (unit === "pct") return "percent";
   if (unit === "bps") return "basis points";
   if (unit === "ratio") return "ratio";
@@ -183,4 +190,17 @@ export function secRevenueCheck(p: IrPayload, reported: { end: string; v: number
     out.push({ label: best.s.label, period: r.end, ir: best.c.v, sec: r.v, ok: Math.abs(best.c.v - r.v) <= Math.max(1e6, Math.abs(r.v) * 0.005) });
   }
   return out;
+}
+
+const GEO_TAGS = ["U.S.", "International"];
+const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Inside a "U.S." or "International" breakdown, rows don't need to repeat the geography. */
+export function rowLabel(label: string, rootLabel?: string | null) {
+  if (!rootLabel) return label;
+  for (const tag of GEO_TAGS) {
+    const re = new RegExp(`\\s*—\\s*${esc(tag)}$|^${esc(tag)}\\s*—\\s*`);
+    if (re.test(rootLabel)) return label.replace(re, "") || label;
+  }
+  return label;
 }

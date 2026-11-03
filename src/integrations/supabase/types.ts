@@ -155,19 +155,25 @@ export type Database = {
       ir_company_series: {
         Row: {
           built_at: string
-          payload: Json
+          payload: Json | null
+          payload_bytes: number | null
+          payload_path: string | null
           stats: Json
           ticker: string
         }
         Insert: {
           built_at?: string
-          payload: Json
+          payload?: Json | null
+          payload_bytes?: number | null
+          payload_path?: string | null
           stats?: Json
           ticker: string
         }
         Update: {
           built_at?: string
-          payload?: Json
+          payload?: Json | null
+          payload_bytes?: number | null
+          payload_path?: string | null
           stats?: Json
           ticker?: string
         }
@@ -366,6 +372,33 @@ export type Database = {
           created_at?: string
           model?: string | null
           raw_key?: string
+          ticker?: string
+        }
+        Relationships: []
+      }
+      ir_release_scan: {
+        Row: {
+          accn: string
+          files: number
+          scanned_at: string
+          status: string
+          stored: number
+          ticker: string
+        }
+        Insert: {
+          accn: string
+          files?: number
+          scanned_at?: string
+          status: string
+          stored?: number
+          ticker: string
+        }
+        Update: {
+          accn?: string
+          files?: number
+          scanned_at?: string
+          status?: string
+          stored?: number
           ticker?: string
         }
         Relationships: []
@@ -754,7 +787,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      ir_coverage: {
+        Args: never
+        Returns: {
+          bytes: number
+          docs: number
+          first_filed: string
+          last_filed: string
+          read: number
+          readable: number
+          ticker: string
+          vision_read: number
+          waiting: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useUnitScale } from "@/hooks/use-preference";
-import { DIMENSIONS, derivedOf, fmtIr, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, refOf, unitCaption } from "@/lib/ir/display";
+import { DIMENSIONS, derivedOf, fmtIr, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, refOf, rowLabel, unitCaption } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { fmtCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -334,8 +334,9 @@ function BreakdownCard({
                         match && "bg-highlight-soft",
                       )}
                     >
-                      <span className="block truncate" style={{ paddingLeft: root ? depth * 14 : 0 }} title={s.label}>
-                        {s.label}
+                      <span className="block truncate" style={{ paddingLeft: root ? depth * 14 : 0 }} title={s.sc ? `${s.label} · ${s.sc}` : s.label}>
+                        {isRoot ? s.label : rowLabel(s.label, root?.label)}
+                        {s.sc && !isRoot && root?.sc !== s.sc && <span className="ml-1 text-[11px] font-normal text-muted-foreground">· {s.sc}</span>}
                         {s.pit && <span className="ml-1 text-[10px] font-normal text-muted-foreground">(period end)</span>}
                       </span>
                     </th>
@@ -355,6 +356,7 @@ function BreakdownCard({
                                   c.f && "italic text-foreground/85",
                                   c.v < 0 && "text-negative",
                                   chk && !chk.ok && "underline decoration-warning decoration-wavy underline-offset-4",
+                                  c.w === "scale" && "bg-warning-soft text-warning",
                                 )}
                               >
                                 {fmtIr(c.v, s.unit, scale)}
@@ -363,6 +365,7 @@ function BreakdownCard({
                             <TooltipContent className="max-w-xs text-xs">
                               <p>{c.f ? c.f.formula : c.x ? `Printed as “${c.x}”` : periodLong(e, freq, c.m)}</p>
                               {c.d != null && payload.docs[c.d]?.filed && <p className="opacity-75">From the {payload.docs[c.d].kind?.replace("-", " ") ?? "document"} filed {payload.docs[c.d].filed}</p>}
+                              {c.w === "scale" && <p className="font-medium text-warning">About 1,000× off the neighbouring periods — a different unit or measure may have been read here. Check the source.</p>}
                               {chk && <CheckLine chk={chk} unit={s.unit} scale={scale} />}
                             </TooltipContent>
                           </Tooltip>
