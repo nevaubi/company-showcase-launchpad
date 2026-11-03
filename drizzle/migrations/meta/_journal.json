@@ -43,6 +43,13 @@
       "when": 1793706201129,
       "tag": "0005_ir_pipeline_v2",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793709109869,
+      "tag": "0006_ir_facts_keyset_index",
+      "breakpoints": true
     }
   ]
 }
