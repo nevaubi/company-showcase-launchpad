@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, FileStack, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
@@ -10,7 +10,7 @@ import { IrLibrary } from "@/components/ir/library";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getIrData, readPendingIr } from "@/lib/ir.functions";
+import { getIrData } from "@/lib/ir.functions";
 import { secRevenueCheck } from "@/lib/ir/display";
 import type { IrPayload } from "@/lib/ir/payload";
 import { useCompany } from "@/lib/data";
@@ -39,6 +39,8 @@ function IrPage() {
     staleTime: 5 * 60_000,
     retry: 3,
     retryDelay: (n) => Math.min(2000 * 2 ** n, 15_000),
+    // While new files are being read in the background, pick up their numbers without a reload.
+    refetchInterval: (query) => (query.state.data?.pending ? 120_000 : false),
   });
   const slow = useSlow(q.isLoading, 6000);
 
@@ -105,16 +107,6 @@ function useSlow(active: boolean, ms: number) {
 
 function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: string; payload: IrPayload | null; pending: number; documents: number; builtAt: string | null }) {
   const company = useCompany(ticker);
-  const qc = useQueryClient();
-  const read = useServerFn(readPendingIr);
-  const m = useMutation({
-    mutationFn: () => read({ data: { ticker } }),
-    onSuccess: (r) => {
-      toast.success(r.read ? `Read ${r.read} document${r.read > 1 ? "s" : ""} · ${r.facts.toLocaleString()} data points` : "Nothing new to read");
-      qc.invalidateQueries({ queryKey: ["ir", ticker] });
-    },
-    onError: (e) => toast.error((e as Error).message),
-  });
 
   const sec = useMemo(() => {
     const st = company.data?.statements.quarterly.income;
@@ -143,13 +135,13 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
       actions={
         pending > 0 ? (
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="outline" onClick={() => m.mutate()} disabled={m.isPending}>
-                {m.isPending ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-                {m.isPending ? "Reading…" : `Read ${Math.min(2, pending)} of ${pending} waiting`}
-              </Button>
+            <TooltipTrigger className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground">
+              <RefreshCw className="size-3.5 animate-spin [animation-duration:3s]" />
+              {pending.toLocaleString()} new file{pending > 1 ? "s" : ""} being read automatically
             </TooltipTrigger>
-            <TooltipContent className="max-w-xs text-xs">Reads up to two newly stored documents now (about a minute). The rest are read by the background pipeline.</TooltipContent>
+            <TooltipContent className="max-w-xs text-xs">
+              Newly collected documents are read in the background. Their numbers are added to the tables below automatically; this page refreshes on its own every two minutes.
+            </TooltipContent>
           </Tooltip>
         ) : undefined
       }
