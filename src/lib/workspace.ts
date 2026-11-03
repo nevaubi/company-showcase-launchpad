@@ -11,7 +11,8 @@ export type AppPath =
   | "/app/macro"
   | "/app/theses"
   | "/app/research"
-  | "/app/docs";
+  | "/app/docs"
+  | "/app/status";
 
 export async function currentUserId() {
   const { data } = await supabase.auth.getUser();

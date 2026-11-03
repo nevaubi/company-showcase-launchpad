@@ -132,6 +132,22 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_earnings_call",
+    description:
+      "Earnings-call transcript for a covered company, parsed into speaker turns (management, analysts with firms). Pick a quarter (e.g. 'Q3 2026') or null for the latest; give a search phrase to get only the turns that mention it, or a section. Lists the other available quarters.",
+    parameters: obj(
+      {
+        ticker: str("Covered ticker"),
+        quarter: nullable(str("Fiscal quarter as named on the call, e.g. 'Q4 2026'; null for the latest")),
+        query: nullable(str("Phrase to search for, e.g. 'gross margin' or 'tariff'")),
+        section: { type: "string", enum: ["all", "prepared", "qa"] },
+      },
+      ["ticker", "quarter", "query", "section"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "read_webpage",
     description:
       "Read the full text of a web page (Firecrawl) as markdown — earnings call transcripts, IR press releases, investor presentations, articles. Give an optional search phrase to return only the passages around it.",
@@ -157,4 +173,5 @@ export const TOOL_LABELS: Record<string, string> = {
   web_search: "Searched the web",
   web_research: "Researched the web",
   read_webpage: "Read web page",
+  get_earnings_call: "Read earnings call",
 };

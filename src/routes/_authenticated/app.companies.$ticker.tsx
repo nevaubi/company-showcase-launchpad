@@ -42,7 +42,9 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
 const TABS = [
   { to: "/app/companies/$ticker", label: "Overview", exact: true },
   { to: "/app/companies/$ticker/financials", label: "Financials" },
+  { to: "/app/companies/$ticker/valuation", label: "Valuation" },
   { to: "/app/companies/$ticker/segments", label: "Segments & KPIs" },
+  { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
   { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
   { to: "/app/companies/$ticker/insiders", label: "Insiders" },
 ] as const;
@@ -66,12 +68,20 @@ function CompanyLayout() {
         <CompanyLogo ticker={ticker} src={p?.logo} size="xl" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-[2.4rem] leading-none">{p?.name ?? coverageOf(ticker)?.shortName}</h1>
+            <h1 className="font-display text-[2.4rem] leading-none" title={p?.name ? `SEC registrant: ${p.name}` : undefined}>
+              {coverageOf(ticker)?.shortName ?? p?.name}
+            </h1>
             <Badge variant="mono">
               {p?.exchange ?? "—"}: {ticker}
             </Badge>
           </div>
           <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+            {p?.name && p.name.toLowerCase().replace(/[^a-z]/g, "") !== (coverageOf(ticker)?.shortName ?? "").toLowerCase().replace(/[^a-z]/g, "") && (
+              <>
+                <span className="num text-xs uppercase tracking-wide">{p.name}</span>
+                <span aria-hidden>·</span>
+              </>
+            )}
             <span>{p?.sector}</span>
             <span aria-hidden>·</span>
             <span>{p?.industry}</span>
@@ -80,7 +90,7 @@ function CompanyLayout() {
                 <span aria-hidden>·</span>
                 <span className="inline-flex items-center gap-1">
                   <Building className="size-3.5" />
-                  {p.address.city.charAt(0) + p.address.city.slice(1).toLowerCase()}, {p.address.state}
+                  {p.address.city.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}, {p.address.state}
                 </span>
               </>
             )}

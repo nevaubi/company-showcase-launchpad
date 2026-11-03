@@ -42,8 +42,15 @@ function unitKey(def: LineDef) {
   return def.unit === "usdPerShare" ? "USD/shares" : def.unit === "shares" ? "shares" : "USD";
 }
 
+/** Concepts are us-gaap local names, or prefix-qualified company extensions ("cop:CapitalExpendituresAndInvestments"). */
+const splitConcept = (concept: string): [string, string] => {
+  const i = concept.indexOf(":");
+  return i < 0 ? ["us-gaap", concept] : [concept.slice(0, i), concept.slice(i + 1)];
+};
+
 export function factsFor(cf: CompanyFacts, concept: string, unit: string): RawFact[] {
-  const node = cf.facts["us-gaap"]?.[concept];
+  const [ns, local] = splitConcept(concept);
+  const node = cf.facts[ns]?.[local];
   const list = node?.units?.[unit] ?? [];
   return list.filter((f) => PERIODIC_FORM.test(f.form));
 }
@@ -171,9 +178,12 @@ function choose(list: RawFact[], concept: string, pred: (f: RawFact) => boolean)
   return { fact, concept, alts };
 }
 
+/** Lines that can't be negative; a negative derived quarter means mismatched restatements, so it's dropped. */
+const NON_NEGATIVE = new Set(["revenue", "costOfRevenue", "rnd", "sga", "salesMarketing", "generalAdmin", "dna", "sbc", "capex", "dividends", "buybacks", "sharesBasic", "sharesDiluted"]);
+
 const ref = (p: Picked): SourceRef => ({
   accn: p.fact.accn,
-  concept: `us-gaap:${p.concept}`,
+  concept: p.concept.includes(":") ? p.concept : `us-gaap:${p.concept}`,
   ...(p.fact.start ? { start: p.fact.start } : {}),
   end: p.fact.end,
   value: p.fact.val,
@@ -195,16 +205,37 @@ function firstConcept(
 
 const isDuration = (lo: number, hi: number) => (f: RawFact) => !!f.start && inRange(durationDays(f.start, f.end), lo, hi);
 
+/** Reported value for the line, or — when the line defines components — the sum of the components reported for the same period. */
+function pickCell(cf: CompanyFacts, def: LineDef, pred: (f: RawFact) => boolean): Cell | null {
+  const picked = firstConcept(cf, def, pred);
+  if (picked) return reportedCell(picked);
+  if (!def.components?.length) return null;
+  const found = def.components
+    .map((c) => choose(factsFor(cf, c, unitKey(def)), c, pred))
+    .filter((x): x is Picked => !!x);
+  if (!found.length) return null;
+  if (found.length === 1) return reportedCell(found[0]);
+  const names = found.map((x) => humanizeConcept(x.concept));
+  return {
+    v: found.reduce((sum, x) => sum + x.fact.val, 0),
+    derived: { formula: names.join(" + "), parts: found.map((x, i) => ({ ...ref(x), label: names[i], sign: 1 as const })) },
+  };
+}
+
+/** "CommercialPaper" → "Commercial paper" */
+export function humanizeConcept(c: string) {
+  const s = c.replace(/^[\w-]+:/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function annualCell(cf: CompanyFacts, def: LineDef, p: Period): Cell | null {
-  const picked =
-    def.kind === "stock"
-      ? firstConcept(cf, def, (f) => !f.start && near(f.end, p.end, 4))
-      : firstConcept(
-          cf,
-          def,
-          (f) => isAnnualForm(f.form) && isDuration(350, 380)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4),
-        );
-  return picked ? reportedCell(picked) : null;
+  return def.kind === "stock"
+    ? pickCell(cf, def, (f) => !f.start && near(f.end, p.end, 4))
+    : pickCell(
+        cf,
+        def,
+        (f) => isAnnualForm(f.form) && isDuration(350, 380)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4),
+      );
 }
 
 const YTD_LABEL = ["3M", "6M YTD", "9M YTD"];
@@ -216,10 +247,7 @@ function quarterCell(
   year: FiscalYear,
   prevCells: (Cell | null)[],
 ): Cell | null {
-  if (def.kind === "stock") {
-    const picked = firstConcept(cf, def, (f) => !f.start && near(f.end, p.end, 4));
-    return picked ? reportedCell(picked) : null;
-  }
+  if (def.kind === "stock") return pickCell(cf, def, (f) => !f.start && near(f.end, p.end, 4));
   const direct = firstConcept(cf, def, (f) => isDuration(80, 100)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4));
   if (direct) return reportedCell(direct);
   if (!def.additive || !p.fq || p.fq === 1) return null;
@@ -235,11 +263,14 @@ function quarterCell(
     if (!cum) continue;
     const cumLabel = k === 4 ? `FY${year.fy} total (10-K)` : `${YTD_LABEL[k - 1]} (Q${k} 10-Q)`;
     const prevEnd = year.qEnds[k - 2];
+    // Latest-filed on both sides keeps them on the same restatement basis when a later filing
+    // restated the comparatives; when it didn't (a spin-off restates the 10-K total but not old
+    // 10-Qs), the non-negative guard below drops the mismatched result instead of showing it.
     const prevCum =
       k - 1 === 1
         ? choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f))
         : choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f));
-    if (prevCum) {
+    if (prevCum && !(NON_NEGATIVE.has(def.key) && cum.fact.val - prevCum.fact.val < 0)) {
       const prevLabel = k - 1 === 1 ? "Q1 (3M)" : `${YTD_LABEL[k - 2]} (Q${k - 1} 10-Q)`;
       const parts: DerivedPart[] = [
         { ...ref(cum), label: cumLabel, sign: 1 },
@@ -259,6 +290,7 @@ function quarterCell(
         ...earlier.map((x, i) => ({ ...x!.src!, label: `Q${i + 1}`, sign: -1 as const })),
       ];
       const v = cum.fact.val - earlier.reduce((s, x) => s + x!.v, 0);
+      if (NON_NEGATIVE.has(def.key) && v < 0) return null;
       return {
         v: round(v, def.unit),
         derived: { formula: `${cumLabel.split(" (")[0]} − ${earlier.map((_, i) => `Q${i + 1}`).join(" − ")}`, parts },
@@ -279,19 +311,21 @@ export function partsFrom(cell: Cell | null | undefined, label: string, sign: 1 
   return (cell.derived?.parts ?? []).map((p) => ({ ...p, sign: (p.sign * sign) as 1 | -1, label: `${label} · ${p.label}` }));
 }
 
-function combine(
+const OP_SYMBOL = { add: "+", sub: "−", div: "÷" } as const;
+
+export function combine(
   a: Cell | null,
   b: Cell | null,
-  op: "sub" | "div",
+  op: "add" | "sub" | "div",
   labels: [string, string],
 ): Cell | null {
   if (!a || !b) return null;
   if (op === "div" && b.v === 0) return null;
-  const v = op === "sub" ? a.v - b.v : a.v / b.v;
+  const v = op === "add" ? a.v + b.v : op === "sub" ? a.v - b.v : a.v / b.v;
   return {
     v,
     derived: {
-      formula: `${labels[0]} ${op === "sub" ? "−" : "÷"} ${labels[1]}`,
+      formula: `${labels[0]} ${OP_SYMBOL[op]} ${labels[1]}`,
       parts: [...partsFrom(a, labels[0], 1), ...partsFrom(b, labels[1], op === "sub" ? -1 : 1)],
     },
   };
@@ -365,9 +399,57 @@ function growthRow(key: string, label: string, src: Row | undefined, periods: Pe
   return { key, label, unit: "pct", cells, kind: "kpi" };
 }
 
-function ratioRow(key: string, label: string, num: Row | undefined, den: Row | undefined, labels: [string, string], unit: "pct" | "ratio" = "pct"): Row {
-  const cells = (num?.cells ?? []).map((c, i) => combine(c, den?.cells[i] ?? null, "div", labels));
+function ratioRow(
+  key: string,
+  label: string,
+  num: Row | undefined,
+  den: Row | undefined,
+  labels: [string, string],
+  unit: "pct" | "ratio" = "pct",
+  opts: { positiveDen?: boolean } = {},
+): Row {
+  const cells = (num?.cells ?? []).map((c, i) => {
+    const d = den?.cells[i] ?? null;
+    if (opts.positiveDen && (!d || d.v <= 0)) return null;
+    return combine(c, d, "div", labels);
+  });
   return { key, label, unit, cells, kind: "kpi" };
+}
+
+export interface BuildOptions {
+  /** Banks and brokerages: keep bank-only lines, skip industrial-style debt and margin metrics. */
+  bank?: boolean;
+}
+
+const periodDays = (p: Period) => (p.start ? durationDays(p.start, p.end) + 1 : 365);
+
+/** Average of this and the prior fiscal year's balance. */
+function avgCell(row: Row | undefined, i: number, periods: Period[], label: string): Cell | null {
+  const c1 = row?.cells[i];
+  const c0 = i > 0 ? row?.cells[i - 1] : null;
+  if (!c1 || !c0 || periods[i - 1].fy !== periods[i].fy - 1) return null;
+  return {
+    v: (c1.v + c0.v) / 2,
+    derived: {
+      formula: `Average of ${periods[i - 1].label} and ${periods[i].label} ${label}`,
+      parts: [...partsFrom(c1, `${periods[i].label} ending ${label}`, 1), ...partsFrom(c0, `${periods[i - 1].label} ending ${label}`, 1)],
+    },
+  };
+}
+
+/** Balance-sheet "days" metric: balance ÷ flow × days in the period (e.g. DSO, inventory days). */
+function daysRow(key: string, label: string, bal: Row | undefined, flow: Row | undefined, periods: Period[], labels: [string, string]): Row {
+  const cells = periods.map((p, i) => {
+    const b = bal?.cells[i];
+    const f = flow?.cells[i];
+    if (!b || !f || f.v <= 0) return null;
+    const days = periodDays(p);
+    return {
+      v: (b.v / f.v) * days,
+      derived: { formula: `${labels[0]} ÷ ${labels[1]} × ${days} days`, parts: [...partsFrom(b, labels[0], 1), ...partsFrom(f, labels[1], 1)] },
+    } satisfies Cell;
+  });
+  return { key, label, unit: "days", cells, kind: "kpi" };
 }
 
 export function buildKpis(
@@ -376,68 +458,213 @@ export function buildKpis(
   cash: Row[],
   periods: Period[],
   freq: "annual" | "quarterly",
+  opts: BuildOptions = {},
 ): Row[] {
   const g = (rows: Row[], k: string) => rowOf(rows, k);
+  const bank = !!opts.bank;
   const rev = g(income, "revenue");
+  const ni = g(income, "netIncome");
+  const oi = g(income, "operatingIncome");
+  const fcf = g(cash, "fcf");
   const rows: Row[] = [
     growthRow("revenueGrowth", "Revenue growth (YoY)", rev, periods, "revenue"),
     ratioRow("grossMargin", "Gross margin", g(income, "grossProfit"), rev, ["Gross profit", "Revenue"]),
-    ratioRow("operatingMargin", "Operating margin", g(income, "operatingIncome"), rev, ["Operating income", "Revenue"]),
-    ratioRow("netMargin", "Net margin", g(income, "netIncome"), rev, ["Net income", "Revenue"]),
-    ratioRow("fcfMargin", "Free cash flow margin", g(cash, "fcf"), rev, ["Free cash flow", "Revenue"]),
-    ratioRow("rndIntensity", "R&D as % of revenue", g(income, "rnd"), rev, ["R&D", "Revenue"]),
-    ratioRow("sbcIntensity", "Stock comp as % of revenue", g(cash, "sbc"), rev, ["Stock-based comp", "Revenue"]),
-    ratioRow("capexIntensity", "Capex as % of revenue", g(cash, "capex"), rev, ["Capex", "Revenue"]),
-    ratioRow("taxRate", "Effective tax rate", g(income, "incomeTax"), g(income, "pretaxIncome"), ["Income tax", "Pretax income"]),
-    growthRow("netIncomeGrowth", "Net income growth (YoY)", g(income, "netIncome"), periods, "net income"),
+    ratioRow("operatingMargin", "Operating margin", oi, rev, ["Operating income", "Revenue"]),
+    ...(bank ? [] : [ratioRow("ebitdaMargin", "EBITDA margin", g(income, "ebitda"), rev, ["EBITDA", "Revenue"])]),
+    ratioRow("netMargin", "Net margin", ni, rev, ["Net income", "Revenue"]),
+    ...(bank
+      ? [
+          ratioRow("efficiencyRatio", "Efficiency ratio (noninterest expense ÷ revenue)", g(income, "nonInterestExpense"), rev, ["Noninterest expense", "Revenue"]),
+          ratioRow("niiShare", "Net interest income share of revenue", g(income, "netInterestIncome"), rev, ["Net interest income", "Revenue"]),
+          ratioRow("loansToDeposits", "Loans ÷ deposits", g(balance, "loans"), g(balance, "deposits"), ["Loans", "Deposits"]),
+          ratioRow("equityToAssets", "Equity ÷ assets", g(balance, "equity"), g(balance, "totalAssets"), ["Equity", "Total assets"]),
+        ]
+      : [
+          ratioRow("fcfMargin", "Free cash flow margin", fcf, rev, ["Free cash flow", "Revenue"]),
+          ratioRow("rndIntensity", "R&D as % of revenue", g(income, "rnd"), rev, ["R&D", "Revenue"]),
+          ratioRow("sbcIntensity", "Stock comp as % of revenue", g(cash, "sbc"), rev, ["Stock-based comp", "Revenue"]),
+          ratioRow("capexIntensity", "Capex as % of revenue", g(cash, "capex"), rev, ["Capex", "Revenue"]),
+        ]),
+    ratioRow("taxRate", "Effective tax rate", g(income, "incomeTax"), g(income, "pretaxIncome"), ["Income tax", "Pretax income"], "pct", { positiveDen: true }),
+    growthRow("netIncomeGrowth", "Net income growth (YoY)", ni, periods, "net income"),
     growthRow("epsGrowth", "Diluted EPS growth (YoY)", g(income, "epsDiluted"), periods, "diluted EPS"),
-    growthRow("fcfGrowth", "Free cash flow growth (YoY)", g(cash, "fcf"), periods, "FCF"),
-    ratioRow("currentRatio", "Current ratio", g(balance, "currentAssets"), g(balance, "currentLiabilities"), ["Current assets", "Current liabilities"], "ratio"),
-    ratioRow("debtToEquity", "Long-term debt / equity", g(balance, "longTermDebt"), g(balance, "equity"), ["Long-term debt", "Equity"], "ratio"),
-    ratioRow("fcfConversion", "FCF conversion (FCF ÷ net income)", g(cash, "fcf"), g(income, "netIncome"), ["Free cash flow", "Net income"], "ratio"),
+    ...(bank ? [] : [growthRow("fcfGrowth", "Free cash flow growth (YoY)", fcf, periods, "FCF")]),
+    growthRow("dpsGrowth", "Dividend per share growth (YoY)", g(income, "dividendsPerShare"), periods, "dividends per share"),
+    ratioRow("payoutRatio", "Dividend payout ratio", g(cash, "dividends"), ni, ["Dividends paid", "Net income"], "pct", { positiveDen: true }),
   ];
+  if (!bank) {
+    const ret = g(cash, "buybacks");
+    const div = g(cash, "dividends");
+    rows.push(
+      {
+        key: "cashReturned",
+        label: "Cash returned ÷ free cash flow",
+        unit: "pct",
+        kind: "kpi",
+        cells: periods.map((_, i) => {
+          const f = fcf?.cells[i];
+          const b = ret?.cells[i] ?? null;
+          const d = div?.cells[i] ?? null;
+          if (!f || f.v <= 0 || (!b && !d)) return null;
+          const returned = b && d ? combine(b, d, "add", ["Buybacks", "Dividends"])! : (b ?? d)!;
+          return combine(returned, f, "div", [b && d ? "(Buybacks + dividends)" : b ? "Buybacks" : "Dividends", "Free cash flow"]);
+        }),
+      },
+      ratioRow("fcfConversion", "FCF conversion (FCF ÷ net income)", fcf, ni, ["Free cash flow", "Net income"], "ratio", { positiveDen: true }),
+      ratioRow("currentRatio", "Current ratio", g(balance, "currentAssets"), g(balance, "currentLiabilities"), ["Current assets", "Current liabilities"], "ratio"),
+      ratioRow("debtToEquity", "Total debt ÷ equity", g(balance, "totalDebt"), g(balance, "equity"), ["Total debt", "Equity"], "ratio", { positiveDen: true }),
+      ratioRow("interestCoverage", "Interest coverage (operating income ÷ interest)", oi, g(income, "interestExpense"), ["Operating income", "Interest expense"], "ratio", { positiveDen: true }),
+      daysRow("dso", "Days sales outstanding", g(balance, "receivables"), rev, periods, ["Accounts receivable", "Revenue"]),
+      daysRow("dio", "Inventory days", g(balance, "inventory"), g(income, "costOfRevenue"), periods, ["Inventories", "Cost of revenue"]),
+    );
+  } else {
+    rows.push(ratioRow("debtToEquity", "Long-term debt ÷ equity", g(balance, "longTermDebt"), g(balance, "equity"), ["Long-term debt", "Equity"], "ratio", { positiveDen: true }));
+  }
+
   if (freq === "annual") {
-    const ni = g(income, "netIncome");
     const eq = g(balance, "equity");
-    rows.push({
-      key: "roe",
-      label: "Return on equity",
-      unit: "pct",
+    const assets = g(balance, "totalAssets");
+    const avgRow = (key: string, label: string, num: Row | undefined, base: Row | undefined, baseLabel: string, numLabel: string, unit: "pct" | "ratio" = "pct"): Row => ({
+      key,
+      label,
+      unit,
       kind: "kpi",
       cells: periods.map((p, i) => {
-        const n = ni?.cells[i];
-        const e1 = eq?.cells[i];
-        const e0 = i > 0 ? eq?.cells[i - 1] : null;
-        if (!n || !e1 || !e0) return null;
-        const avg = (e1.v + e0.v) / 2;
-        if (avg <= 0) return null;
+        const n = num?.cells[i];
+        const avg = avgCell(base, i, periods, baseLabel);
+        if (!n || !avg || avg.v <= 0) return null;
         return {
-          v: n.v / avg,
-          derived: {
-            formula: "Net income ÷ average shareholders' equity",
-            parts: [
-              ...partsFrom(n, `${p.label} net income`, 1),
-              ...partsFrom(e1, `${p.label} ending equity`, 1),
-              ...partsFrom(e0, `${periods[i - 1].label} ending equity`, 1),
-            ],
-          },
+          v: n.v / avg.v,
+          derived: { formula: `${numLabel} ÷ average ${baseLabel}`, parts: [...partsFrom(n, `${p.label} ${numLabel.toLowerCase()}`, 1), ...(avg.derived?.parts ?? [])] },
         } satisfies Cell;
       }),
     });
+    rows.push(avgRow("roe", "Return on equity", ni, eq, "shareholders' equity", "Net income"));
+    rows.push(avgRow("roa", "Return on assets", ni, assets, "total assets", "Net income"));
+    if (!bank) {
+      rows.push(avgRow("assetTurnover", "Asset turnover", rev, assets, "total assets", "Revenue", "ratio"));
+      // ROIC: after-tax operating income over average invested capital (total debt + equity).
+      const debt = g(balance, "totalDebt");
+      const tax = g(income, "incomeTax");
+      const pt = g(income, "pretaxIncome");
+      const invested: Row = {
+        key: "_ic",
+        label: "Invested capital",
+        unit: "usd",
+        cells: periods.map((_, i) => combine(debt?.cells[i] ?? null, eq?.cells[i] ?? null, "add", ["Total debt", "Equity"])),
+      };
+      rows.push({
+        key: "roic",
+        label: "Return on invested capital",
+        unit: "pct",
+        kind: "kpi",
+        cells: periods.map((p, i) => {
+          const o = oi?.cells[i];
+          const t = tax?.cells[i];
+          const b = pt?.cells[i];
+          const avg = avgCell(invested, i, periods, "total debt + equity");
+          if (!o || !t || !b || b.v <= 0 || !avg || avg.v <= 0) return null;
+          const rate = Math.min(0.5, Math.max(0, t.v / b.v));
+          return {
+            v: (o.v * (1 - rate)) / avg.v,
+            derived: {
+              formula: "Operating income × (1 − tax ÷ pretax income) ÷ average (total debt + equity)",
+              parts: [
+                ...partsFrom(o, `${p.label} operating income`, 1),
+                ...partsFrom(t, `${p.label} income tax`, 1),
+                ...partsFrom(b, `${p.label} pretax income`, 1),
+                ...(avg.derived?.parts ?? []),
+              ],
+            },
+          } satisfies Cell;
+        }),
+      });
+      rows.push(ratioRow("netDebtToEbitda", "Net debt ÷ EBITDA", g(balance, "netDebt"), g(income, "ebitda"), ["Net debt", "EBITDA"], "ratio", { positiveDen: true }));
+    }
   }
   return pruneEmptyRows(rows);
 }
 
-export function buildStatements(cf: CompanyFacts) {
+function insertAfter(rows: Row[], afterKey: string, ...add: Row[]) {
+  const i = rows.findIndex((r) => r.key === afterKey);
+  rows.splice(i >= 0 ? i + 1 : rows.length, 0, ...add);
+}
+
+const SHORT_BORROWINGS: LineDef = {
+  key: "_stb",
+  label: "Short-term borrowings",
+  concepts: [],
+  components: ["CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings"],
+  unit: "usd",
+  kind: "stock",
+};
+
+/** Long-term debt concepts that already include current maturities. */
+const INCLUDES_CURRENT = new Set(["us-gaap:LongTermDebt", "us-gaap:LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities"]);
+
+/** Total debt = long-term + short-term debt, without double-counting current maturities. */
+function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row {
+  const ltd = rowOf(balance, "longTermDebt");
+  const std = rowOf(balance, "shortTermDebt");
+  const cells = periods.map((p, i) => {
+    const l = ltd?.cells[i] ?? null;
+    const s = std?.cells[i] ?? null;
+    if (!l && !s) return null;
+    if (l?.src && INCLUDES_CURRENT.has(l.src.concept)) {
+      // This concept already includes current maturities; add only short-term borrowings.
+      const extra = pickCell(cf, SHORT_BORROWINGS, (f) => !f.start && near(f.end, p.end, 4));
+      if (extra) return combine(l, extra, "add", ["Long-term debt incl. current maturities", "Short-term borrowings"]);
+      return { v: l.v, derived: { formula: "Long-term debt incl. current maturities", parts: partsFrom(l, "Long-term debt incl. current maturities", 1) } };
+    }
+    if (l && s) return combine(l, s, "add", ["Long-term debt", "Short-term debt"]);
+    const only = (l ?? s)!;
+    const label = l ? "Long-term debt" : "Short-term debt";
+    return { v: only.v, derived: { formula: label, parts: partsFrom(only, label, 1) } };
+  });
+  return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells };
+}
+
+/**
+ * Some filers tag share counts in millions (e.g. 751.8 instead of 751,800,000). When net
+ * income ÷ EPS says the count should be a million times larger, rescale it as a derived
+ * cell that keeps the tagged fact as its source.
+ */
+export function fixShareScale(income: Row[]) {
+  const ni = rowOf(income, "netIncome");
+  const eps = rowOf(income, "epsDiluted") ?? rowOf(income, "epsBasic");
+  for (const key of ["sharesBasic", "sharesDiluted"]) {
+    const row = rowOf(income, key);
+    if (!row) continue;
+    row.cells = row.cells.map((c, i) => {
+      if (!c?.src || c.v <= 0 || c.v >= 1e5) return c;
+      const n = ni?.cells[i]?.v;
+      const e = eps?.cells[i]?.v;
+      const implied = n && e ? n / e : null;
+      const scaled = c.v * 1e6;
+      if (implied == null || implied <= 0 || Math.abs(scaled / implied - 1) > 0.15) return c;
+      return {
+        v: scaled,
+        derived: {
+          formula: "Tagged value × 1,000,000 (the filing tagged this count in millions)",
+          parts: [{ ...c.src, label: "As tagged (millions of shares)", sign: 1 as const }],
+        },
+      };
+    });
+  }
+}
+
+export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
   const years = detectFiscalYears(cf);
   const periods = buildPeriods(years);
+  const keepLine = (d: LineDef) => !!opts.bank || !d.bank;
   const out = {} as Record<"annual" | "quarterly", Record<StatementKey, Statement>>;
   for (const freq of ["annual", "quarterly"] as const) {
     const ps = periods[freq];
-    const income = buildStatement(cf, INCOME_LINES, ps, years, freq);
-    const balance = buildStatement(cf, BALANCE_LINES, ps, years, freq);
-    const cash = buildStatement(cf, CASHFLOW_LINES, ps, years, freq);
+    const income = buildStatement(cf, INCOME_LINES.filter(keepLine), ps, years, freq);
+    const balance = buildStatement(cf, BALANCE_LINES.filter(keepLine), ps, years, freq);
+    const cash = buildStatement(cf, CASHFLOW_LINES.filter(keepLine), ps, years, freq);
     fillDerived(income, "grossProfit", "revenue", "costOfRevenue", ["Revenue", "Cost of revenue"]);
+    fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
     const cfo = rowOf(cash, "cfo");
     const capex = rowOf(cash, "capex");
@@ -450,10 +677,55 @@ export function buildStatements(cf: CompanyFacts) {
       cells: ps.map((_, i) => combine(cfo?.cells[i] ?? null, capex?.cells[i] ?? null, "sub", ["Cash from operations", "Capex"])),
     };
     cash.push(fcf);
-    const kpis = buildKpis(income, balance, cash, ps, freq);
+    if (!opts.bank) {
+      const oi = rowOf(income, "operatingIncome");
+      const dna = rowOf(cash, "dna");
+      const pretax = rowOf(income, "pretaxIncome");
+      const interest = rowOf(income, "interestExpense");
+      const ebitdaRow: Row = {
+        key: "ebitda",
+        label: "EBITDA",
+        unit: "usd",
+        kind: "kpi",
+        cells: ps.map((_, i) => {
+          const d = dna?.cells[i] ?? null;
+          const fromOi = combine(oi?.cells[i] ?? null, d, "add", ["Operating income", "D&A"]);
+          if (fromOi) return fromOi;
+          // Filers without an operating-income subtotal (e.g. integrated oils): pretax + interest + D&A.
+          const ebit = combine(pretax?.cells[i] ?? null, interest?.cells[i] ?? null, "add", ["Income before taxes", "Interest expense"]);
+          return combine(ebit, d, "add", ["EBIT", "D&A"]);
+        }),
+      };
+      if (oi?.cells.some(Boolean)) insertAfter(income, "operatingIncome", ebitdaRow);
+      else insertAfter(income, "pretaxIncome", ebitdaRow);
+      const debt = totalDebtRow(cf, balance, ps);
+      const cashRow = rowOf(balance, "cash");
+      const sti = rowOf(balance, "shortTermInvestments");
+      const netDebt: Row = {
+        key: "netDebt",
+        label: "Net debt (cash)",
+        unit: "usd",
+        kind: "kpi",
+        cells: ps.map((_, i) => {
+          const d = debt.cells[i];
+          const c = cashRow?.cells[i] ?? null;
+          if (!d || !c) return null;
+          const liquid = sti?.cells[i] ? combine(c, sti.cells[i], "add", ["Cash", "Short-term investments"])! : c;
+          return combine(d, liquid, "sub", ["Total debt", sti?.cells[i] ? "(cash + short-term investments)" : "Cash"]);
+        }),
+      };
+      insertAfter(balance, "operatingLeases", debt, netDebt);
+    }
+    const kpis = buildKpis(income, balance, cash, ps, freq, opts);
 
-    // Keep periods that carry at least one income or cash-flow figure (reported or derived).
-    const keep = ps.map((_, i) => [...income, ...cash].some((r) => r.cells[i]));
+    // Keep periods with a headline figure (revenue, net income, operating cash flow) or at
+    // least three income / cash-flow lines; a lone comparative fact from an old 10-K (e.g. a
+    // buyback total from 2000) shouldn't create an otherwise empty column.
+    const CORE = new Set(["revenue", "netIncome", "operatingIncome", "cfo", "cfNetIncome"]);
+    const keep = ps.map((_, i) => {
+      const filled = [...income, ...cash].filter((r) => r.cells[i]);
+      return filled.some((r) => CORE.has(r.key)) || filled.length >= 3;
+    });
     const sliceRows = (rows: Row[]) =>
       pruneEmptyRows(rows.map((r) => ({ ...r, cells: r.cells.filter((_, i) => keep[i]) })));
     const keptPeriods = ps.filter((_, i) => keep[i]);

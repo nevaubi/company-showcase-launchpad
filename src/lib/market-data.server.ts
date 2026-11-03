@@ -1,0 +1,232 @@
+// Server-only fetchers for Yahoo Finance, FRED and the U.S. Treasury Fiscal Data API.
+// Shared by the live server functions and the scheduled refresh jobs.
+import type { Bar } from "@/lib/financials/types";
+
+const BROWSER_UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+const RESEARCH_UA = "FiledUnder Research research@filedunder.ai";
+
+export interface YahooChartResult {
+  meta: {
+    currency: string;
+    symbol: string;
+    longName?: string;
+    shortName?: string;
+    gmtoffset?: number;
+    regularMarketPrice?: number;
+    chartPreviousClose?: number;
+    previousClose?: number;
+    regularMarketTime?: number;
+    regularMarketDayHigh?: number;
+    regularMarketDayLow?: number;
+    regularMarketVolume?: number;
+    fiftyTwoWeekHigh?: number;
+    fiftyTwoWeekLow?: number;
+    exchangeName?: string;
+    fullExchangeName?: string;
+  };
+  timestamp?: number[];
+  indicators: {
+    quote: { open: (number | null)[]; high: (number | null)[]; low: (number | null)[]; close: (number | null)[]; volume: (number | null)[] }[];
+    adjclose?: { adjclose: (number | null)[] }[];
+  };
+}
+
+interface YahooChart {
+  chart: { result?: YahooChartResult[]; error?: { description?: string } | null };
+}
+
+const YAHOO_HOSTS = ["https://query2.finance.yahoo.com", "https://query1.finance.yahoo.com"];
+
+/** Yahoo rate-limits per host; try the alternate host on 429/5xx before giving up. */
+export async function yahooGet(path: string) {
+  let last = "";
+  for (const host of YAHOO_HOSTS) {
+    const res = await fetch(`${host}${path}`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } });
+    if (res.ok) return res;
+    last = `Yahoo Finance responded ${res.status}`;
+    if (res.status !== 429 && res.status < 500) break;
+  }
+  throw new Error(last);
+}
+
+export async function fetchYahoo(symbol: string, range: string, interval: string) {
+  const res = await yahooGet(`/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false&events=div%2Csplits`);
+  const j = (await res.json()) as YahooChart;
+  const r = j.chart.result?.[0];
+  if (!r) throw new Error(j.chart.error?.description ?? `No data for ${symbol}`);
+  return r;
+}
+
+/**
+ * Daily bars from Nasdaq's public quote API — a fallback when Yahoo throttles. Prices are
+ * split-adjusted (not dividend-adjusted), so adjusted close = close for these recent bars.
+ */
+export async function fetchNasdaqDaily(symbol: string, kind: "stocks" | "etf", days = 31): Promise<Bar[]> {
+  const to = new Date();
+  const from = new Date(to.getTime() - days * 86400_000);
+  const d = (x: Date) => x.toISOString().slice(0, 10);
+  const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${kind}&fromdate=${d(from)}&todate=${d(to)}&limit=60`;
+  const res = await fetch(url, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" } });
+  if (!res.ok) throw new Error(`Nasdaq responded ${res.status}`);
+  const j = (await res.json()) as { data?: { tradesTable?: { rows?: { date: string; close: string; open: string; high: string; low: string; volume: string }[] } } | null };
+  const rows = j.data?.tradesTable?.rows ?? [];
+  if (!rows.length) throw new Error(`Nasdaq has no history for ${symbol}`);
+  const num = (x: string) => Number(String(x).replace(/[$,]/g, ""));
+  return rows
+    .map((r): Bar | null => {
+      const [m, dd, y] = r.date.split("/");
+      const c = num(r.close);
+      if (!y || !Number.isFinite(c)) return null;
+      const o = num(r.open), h = num(r.high), l = num(r.low), v = num(r.volume);
+      return [`${y}-${m}-${dd}`, Number.isFinite(o) ? o : c, Number.isFinite(h) ? h : c, Number.isFinite(l) ? l : c, c, c, Number.isFinite(v) ? v : 0];
+    })
+    .filter((b): b is Bar => !!b)
+    .sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+export interface NasdaqQuote {
+  symbol: string;
+  name?: string;
+  price: number;
+  previousClose: number;
+  marketTime?: string;
+  exchange?: string;
+  high52?: number;
+  low52?: number;
+}
+
+/** Latest regular-session quote from Nasdaq (fallback for Yahoo). Outside market hours this is the last close. */
+export async function fetchNasdaqQuote(symbol: string, kind: "stocks" | "etf"): Promise<NasdaqQuote> {
+  const res = await fetch(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${kind}`, {
+    headers: { "User-Agent": BROWSER_UA, Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" },
+  });
+  if (!res.ok) throw new Error(`Nasdaq responded ${res.status}`);
+  type Px = { lastSalePrice?: string; netChange?: string; lastTradeTimestamp?: string } | null;
+  const j = (await res.json()) as {
+    data?: { companyName?: string; exchange?: string; marketStatus?: string; primaryData?: Px; secondaryData?: Px; keyStats?: { fiftyTwoWeekHighLow?: { value?: string } } } | null;
+  };
+  const d = j.data;
+  const open = /market open/i.test(d?.marketStatus ?? "");
+  const px = (open ? d?.primaryData : d?.secondaryData?.lastSalePrice ? d.secondaryData : d?.primaryData) ?? null;
+  const num = (x?: string) => Number(String(x ?? "").replace(/[$,%]/g, ""));
+  const price = num(px?.lastSalePrice);
+  if (!d || !Number.isFinite(price) || price <= 0) throw new Error(`Nasdaq has no quote for ${symbol}`);
+  const change = num(px?.netChange);
+  const [lo, hi] = (d.keyStats?.fiftyTwoWeekHighLow?.value ?? "").split(" - ").map(num);
+  return {
+    symbol,
+    name: d.companyName?.replace(/ (Common Stock|Class [A-C] (Common Stock|Capital Stock)|Common Shares)$/i, ""),
+    price,
+    previousClose: Number.isFinite(change) ? Math.round((price - change) * 10000) / 10000 : price,
+    exchange: d.exchange,
+    high52: Number.isFinite(hi) && hi > 0 ? hi : undefined,
+    low52: Number.isFinite(lo) && lo > 0 ? lo : undefined,
+  };
+}
+
+const CBOE = "https://cdn-api.cboe.com/api/global/delayed_quotes";
+/** Cboe index symbols ("^VIX" → "_VIX"); only volatility indices are served this way. */
+export const isCboeIndex = (symbol: string) => /^\^VIX\w*$/.test(symbol);
+
+/** Delayed index quote from Cboe (fallback for Yahoo; Nasdaq doesn't carry the VIX). */
+export async function fetchCboeQuote(symbol: string): Promise<{ price: number; previousClose: number; high: number; low: number; marketTime?: string }> {
+  const res = await fetch(`${CBOE}/quotes/_${encodeURIComponent(symbol.slice(1))}.json`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } });
+  if (!res.ok) throw new Error(`Cboe responded ${res.status}`);
+  const j = (await res.json()) as { data?: { current_price?: number; prev_day_close?: number; close?: number; high?: number; low?: number; last_trade_time?: string } };
+  const d = j.data;
+  const price = d?.current_price ?? d?.close;
+  if (!d || !price) throw new Error(`Cboe has no quote for ${symbol}`);
+  return { price, previousClose: d.prev_day_close ?? price, high: d.high ?? price, low: d.low ?? price, marketTime: d.last_trade_time };
+}
+
+/** Recent daily bars for a Cboe index. */
+export async function fetchCboeDaily(symbol: string, days = 31): Promise<Bar[]> {
+  const res = await fetch(`${CBOE}/charts/historical/_${encodeURIComponent(symbol.slice(1))}.json`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } });
+  if (!res.ok) throw new Error(`Cboe responded ${res.status}`);
+  const j = (await res.json()) as { data?: { date: string; open: string; high: string; low: string; close: string }[] };
+  const cutoff = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
+  return (j.data ?? [])
+    .filter((r) => r.date >= cutoff)
+    .map((r): Bar => {
+      const c = Number(r.close);
+      return [r.date, Number(r.open) || c, Number(r.high) || c, Number(r.low) || c, c, c, 0];
+    });
+}
+
+export function toBars(r: YahooChartResult, intraday: boolean): Bar[] {
+  const q = r.indicators.quote[0];
+  const adj = r.indicators.adjclose?.[0]?.adjclose;
+  const ts = r.timestamp ?? [];
+  const bars: Bar[] = [];
+  const f = (x: number) => Math.round(x * 10000) / 10000;
+  ts.forEach((t, i) => {
+    const c = q.close[i];
+    if (c == null) return;
+    const d = intraday ? new Date(t * 1000).toISOString() : new Date((t + (r.meta.gmtoffset ?? 0)) * 1000).toISOString().slice(0, 10);
+    bars.push([d, f(q.open[i] ?? c), f(q.high[i] ?? c), f(q.low[i] ?? c), f(c), f(adj?.[i] ?? c), q.volume[i] ?? 0]);
+  });
+  return bars;
+}
+
+/** Run async work with a small concurrency limit (Yahoo throttles bursts; Workers allow six open requests). */
+export async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const out: PromiseSettledResult<R>[] = new Array(items.length);
+  let i = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(n, items.length) }, async () => {
+      while (i < items.length) {
+        const k = i++;
+        try {
+          out[k] = { status: "fulfilled", value: await fn(items[k]) };
+        } catch (e) {
+          out[k] = { status: "rejected", reason: e };
+        }
+      }
+    }),
+  );
+  return out;
+}
+
+export async function fetchFred(id: string, since?: string): Promise<[string, number][]> {
+  const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}${since ? `&cosd=${since}` : ""}`;
+  const res = await fetch(url, { headers: { "User-Agent": RESEARCH_UA } });
+  if (!res.ok) throw new Error(`FRED responded ${res.status} for ${id}`);
+  const text = await res.text();
+  const out: [string, number][] = [];
+  for (const line of text.trim().split("\n").slice(1)) {
+    const [d, v] = line.split(",");
+    const n = Number(v);
+    if (d && v && v !== "." && Number.isFinite(n)) out.push([d, n]);
+  }
+  return out;
+}
+
+const FISCAL_API = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service";
+const TREASURY: Record<string, { path: string; field: string; filter?: string }> = {
+  TSY_DEBT: { path: "/v2/accounting/od/debt_to_penny", field: "tot_pub_debt_out_amt" },
+  TSY_DEBT_PUBLIC: { path: "/v2/accounting/od/debt_to_penny", field: "debt_held_public_amt" },
+  TSY_AVG_RATE: { path: "/v2/accounting/od/avg_interest_rates", field: "avg_interest_rate_amt", filter: "security_desc:eq:Total Interest-bearing Debt" },
+};
+
+export const isTreasurySeries = (id: string) => id in TREASURY;
+
+/** Observations straight from the Treasury's Fiscal Data API (Debt to the Penny, average interest rates). */
+export async function fetchTreasury(id: string, since = "2005-01-01", maxPages = 3): Promise<[string, number][]> {
+  const spec = TREASURY[id];
+  if (!spec) throw new Error(`Unknown Treasury series ${id}`);
+  const out: [string, number][] = [];
+  for (let page = 1; page <= maxPages; page++) {
+    const filter = [`record_date:gte:${since}`, spec.filter].filter(Boolean).join(",");
+    const url = `${FISCAL_API}${spec.path}?fields=record_date,${spec.field}&filter=${encodeURIComponent(filter)}&sort=record_date&page[number]=${page}&page[size]=10000`;
+    const res = await fetch(url, { headers: { "User-Agent": RESEARCH_UA } });
+    if (!res.ok) throw new Error(`Treasury Fiscal Data responded ${res.status} for ${id}`);
+    const j = (await res.json()) as { data: Record<string, string>[]; meta: { "total-pages": number } };
+    for (const r of j.data) {
+      const n = Number(r[spec.field]);
+      if (Number.isFinite(n)) out.push([r.record_date, n]);
+    }
+    if (page >= j.meta["total-pages"]) break;
+  }
+  return out;
+}

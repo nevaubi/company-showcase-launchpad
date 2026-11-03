@@ -47,7 +47,13 @@ export function friendlyAiError(e: unknown): Error {
   return e instanceof Error ? e : new Error(String(e));
 }
 
-export async function cached<T>(key: string, maxAgeMs: number, compute: () => Promise<T>): Promise<T & { cachedAt: string }> {
+export async function cached<T>(
+  key: string,
+  maxAgeMs: number,
+  compute: () => Promise<T>,
+  /** Only store results that pass (e.g. skip caching failures so the next request retries). */
+  keep: (value: T) => boolean = () => true,
+): Promise<T & { cachedAt: string }> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin.from("ai_cache").select("payload, created_at").eq("key", key).maybeSingle();
   if (data && Date.now() - new Date(data.created_at).getTime() < maxAgeMs) {
@@ -55,6 +61,6 @@ export async function cached<T>(key: string, maxAgeMs: number, compute: () => Pr
   }
   const fresh = await compute();
   const now = new Date().toISOString();
-  await supabaseAdmin.from("ai_cache").upsert({ key, payload: fresh as never, created_at: now });
+  if (keep(fresh)) await supabaseAdmin.from("ai_cache").upsert({ key, payload: fresh as never, created_at: now });
   return { ...fresh, cachedAt: now };
 }

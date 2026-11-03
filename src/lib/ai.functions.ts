@@ -191,8 +191,8 @@ export const getMacroBrief = createServerFn({ method: "POST" })
       .object({
         asOf: z.string().max(30),
         readings: z
-          .array(z.object({ id: z.string().max(30), title: z.string().max(80), latest: z.string().max(40), date: z.string().max(12), change: z.string().max(60) }))
-          .max(40),
+          .array(z.object({ id: z.string().max(30), title: z.string().max(140), latest: z.string().max(40), date: z.string().max(12), change: z.string().max(160) }))
+          .max(160),
       })
       .parse(d),
   )
@@ -202,7 +202,7 @@ export const getMacroBrief = createServerFn({ method: "POST" })
       structured<{ headline: string; regime: string; sections: { title: string; body: string; seriesIds: string[] }[] }>({
         name: "macro_brief",
         instructions:
-          "You are a macro strategist writing a morning brief for equity investors. Use only the FRED readings provided (latest value, date and change). Cover rates & curve, inflation, labor, growth, liquidity & credit, and what it implies for US equities. Plain, specific sentences. Cite the series ids you used in each section.",
+          "You are a macro strategist writing a morning brief for equity investors. Use only the U.S. government and Federal Reserve readings provided (latest value, date, change, year-ago value and where the reading sits in its 10-year range). Cover rates & curve, inflation, labor, growth & the consumer, liquidity & credit, fiscal and energy, and what it implies for US equities and sectors. Plain, specific sentences with numbers. Cite the series ids you used in each section.",
         input: `Readings as of ${data.asOf}:\n${data.readings.map((r) => `${r.id} — ${r.title}: ${r.latest} (${r.date}); ${r.change}`).join("\n")}`,
         effort: "medium",
         schema: {
