@@ -197,7 +197,7 @@ function SegmentExplorer({ ticker, data }: { ticker: string; data: CompanyDatase
 
   // Segment margins: operating income ÷ revenue on the same axis.
   const marginGroup = g.metric === "revenue" ? groups.find((x) => x.axis === g.axis && x.metric === "operatingIncome") : undefined;
-  const margins = useMemo(() => {
+  const margins = (() => {
     if (!marginGroup) return null;
     const oi = segmentMatrix(data.segments, marginGroup, statementPeriods, annualPeriods, freq).cells;
     const idx = periods.map((p) => statementPeriods.indexOf(p));
@@ -213,7 +213,7 @@ function SegmentExplorer({ ticker, data }: { ticker: string; data: CompanyDatase
       }))
       .filter((r) => r.values.some((v) => v != null));
     return rows.length ? rows : null;
-  }, [marginGroup, data.segments, statementPeriods, annualPeriods, freq, periods, members, cells]);
+  })();
 
   return (
     <div className="grid grid-cols-1 gap-6">
