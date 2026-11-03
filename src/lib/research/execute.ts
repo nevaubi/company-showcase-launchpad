@@ -254,7 +254,7 @@ Month-start closes:\n${monthly.join("\n")}`;
       }
       let host = String(args.url);
       try { host = new URL(host).hostname.replace(/^www\./, ""); } catch { /* keep raw */ }
-      return { output: clip(`${r.title ?? ""} — ${r.url}\n\n${text}`), summary: `Read ${host}` };
+      return { output: clip(`${"title" in r && r.title ? r.title : ""} — ${r.url}\n\n${text}`), summary: `Read ${host}` };
     }
     default:
       throw new Error(`Unknown tool ${name}`);
