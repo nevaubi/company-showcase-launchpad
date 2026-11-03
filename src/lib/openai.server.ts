@@ -61,6 +61,8 @@ export async function openaiStructured<T>(opts: {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
       signal: opts.signal,
+      // Bun's fetch aborts after 5 minutes by default; long reasoning calls need longer.
+      ...({ timeout: false } as Record<string, unknown>),
       body: JSON.stringify({
         model: opts.model,
         instructions: opts.instructions,

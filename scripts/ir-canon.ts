@@ -80,7 +80,8 @@ async function canonCompany(ticker: string, name: string) {
     const proposal = Object.assign({}, map, ...results);
     const after = failureNotes(facts, proposal, 0);
     log(`${ticker} round ${round}: failures ${current.failed}/${current.total} → ${after.failed}/${after.total}`);
-    if (after.failed <= best.failed) best = { map: proposal, failed: after.failed, total: after.total };
+    // Keep a proposal only if it fails no more checks and doesn't hide coverage (dropping lines to "pass").
+    if (after.failed <= best.failed && after.total >= base.total * 0.85) best = { map: proposal, failed: after.failed, total: after.total };
     map = proposal;
   }
   if (best.map) {
