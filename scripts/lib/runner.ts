@@ -8,9 +8,12 @@
  *  - circuit breaker: auth/quota errors pause the job (job_state.paused_reason) and stop all workers;
  *    rate limits shrink concurrency and back off
  *  - paused guard: refuses to start while paused unless --resume is given
+ *  - live results: companies that gained facts get their breakdowns rebuilt every few minutes, so
+ *    newly read documents show up in the app without a manual rebuild
  *  - back-pressure: waits while the database is slow and sheds workers until it recovers, so the
  *    app stays usable during bulk runs
  */
+import { rebuildCompany } from "@/lib/ir/rebuild.server";
 import { OpenAIError } from "@/lib/openai.server";
 import { args, dbGate, dbLatency, log, sb, sleep } from "./supa";
 
@@ -57,6 +60,29 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   let active = 0;
   let concurrency = o.concurrency;
   let lastWork = Date.now();
+  const dirty = new Set<string>();
+  let flushing = false;
+  const flush = async () => {
+    if (flushing) return;
+    flushing = true;
+    try {
+      for (const t of [...dirty]) {
+        dirty.delete(t);
+        await dbGate(`${o.job} rebuild`);
+        const t0 = Date.now();
+        try {
+          const p = await rebuildCompany(t);
+          if (p) log(`${t.padEnd(5)} breakdowns rebuilt (${p.stats.facts.toLocaleString()} facts) in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+        } catch (e) {
+          dirty.add(t);
+          log(`${t} rebuild failed: ${(e as Error).message.slice(0, 120)}`);
+        }
+      }
+    } finally {
+      flushing = false;
+    }
+  };
+  const rebuildTimer = setInterval(flush, 3 * 60_000);
 
   const worker = async (n: number) => {
     while (!stop && reserved < o.max) {
@@ -90,6 +116,7 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
         const r = await o.process(item);
         done++;
         facts += r.facts;
+        if (r.facts > 0) dirty.add(item.ticker);
         tokensIn += r.usage?.input_tokens ?? 0;
         tokensOut += r.usage?.output_tokens ?? 0;
         rateHits = Math.max(0, rateHits - 1);
@@ -132,6 +159,9 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   await Promise.all(Array.from({ length: o.concurrency }, (_, i) => worker(i)));
   clearInterval(stats);
   clearInterval(governor);
+  clearInterval(rebuildTimer);
+  while (flushing) await sleep(1000);
+  await flush();
   clearInterval(leaseTimer);
   await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
   log(stop ? `${o.job} STOPPED — ${stop}` : `${o.job} finished — ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens`);
