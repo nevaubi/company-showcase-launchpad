@@ -66,8 +66,8 @@
 - [x] Vision pass code: slides, chart images, scanned pages → facts pinned to the printed token with page-box highlight
 - [x] Data status page: investor-relations library panel (files, size, span, read/waiting, data points, tie-out per company)
 - [x] OCR decimal guard: the slide reader returns its own reading of each number; OCR tokens with the same digits take the model's punctuation, anything else is rejected
-- [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 8 workers; the governor sheds more when the database slows)
-- [ ] Running: vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch`, 4 workers)
+- [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 16 workers; ~9,900 files queued; the governor sheds workers when the database slows)
+- [ ] Running: vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch`, 8 workers; ~37,000 images queued, ~2 days at current pace)
 - [x] Deterministic structure fixes: coincidental subtotal nesting (KO), one-table-per-segment generic rows (LMT), U.S./international/worldwide column sets (ABBV, pharma), period-end counts vs net additions (CMCSA), ~1,000× unit outliers flagged in the UI
 - [x] Data status: IR library panel; cut-off scheduled runs shown separately from failures; jobs time-boxed (`RUN_BUDGET_MS`), `ir-docs` every 5 min with done/partial/empty tracking
 - [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, KO, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`
@@ -76,11 +76,13 @@
 - [x] IR tab shows stored tables on first load with no manual step: background readers rebuild each company's tables every few minutes, open pages refresh every two minutes, and a missing payload is rebuilt on request
 - [x] IR page never looks empty while the database is busy (slow-load notice, retries, clear timeout message); every bulk job waits on database latency (`dbGate`) and sheds workers
 - [ ] PDF/XLSX renditions for newly collected files (`scripts/ir-renditions.ts`) — run after the site pass
-- [ ] Production schedules: keep the collector inside the scheduled-call time limit (small slices), reading stays in the batch runner
+- [x] Production schedules: collector stays inside the scheduled-call time limit (small slices, `RUN_BUDGET_MS`); reading stays in the batch runner
 - [x] Deductions printed as positives (costs, eliminations) tie out with the line subtracted and say so; subtotals introduced mid-history (Alphabet "Google") roll their parts into the total for older periods
 - [x] Accuracy rules: subsidiary tables repeating the parent's rows keep only the consolidated table (Duke); a line counts once per total, taken from one table (Coca-Cola grids); one-table totals may pick up an eliminations line printed next door; never-matching "breakdowns" are shown as plain lines and counted in stats
 - [x] IR library loads slide images on demand (JPM/BAC pages ~3× faster)
 - [x] Site slow (Nov 3, 15:19): the smallest database size was overwhelmed by background reading and stopped answering; owner upgraded to Large + 10 GB, pages back to ~1.5s; rebuilds now time out instead of hanging
 - [ ] Canonical table names across quarters: one company can title the same table differently each quarter (Coca-Cola "Reported revenues by segment" vs "Net operating revenues by segment"), which splits a line's history across breakdowns. Merging by name alone dropped ~2% of distinct values (tried, reverted); needs the canon pass to map table titles, accepted only when no distinct value is lost
+- [x] Label-merging pass rejects proposals that would make printed numbers disappear (restatements excepted) — caught a Walmart proposal that "passed" every check by hiding 598 values
+- [ ] Background readers only run while this workspace is open; a long-running worker would keep reading when it sleeps
 - [ ] Deterministic accuracy audit: duplicate-total detection across tables
-- [ ] Rebuild every company's payload once the reading passes finish (`bun scripts/ir-build.ts`)
+- [x] Payload rebuilds are automatic: the readers rebuild companies that gained facts (big banks less often), full rebuild run Nov 3
