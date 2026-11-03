@@ -450,8 +450,12 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
       const own = fromDoc(node, end, doc);
       if (apply && own) cellsOf(node)[end] = { v: own.v, fact: own.fact, derived: own.derived };
       const value = own?.v ?? cellsOf(node)[end]?.v;
-      const kids = kidsOf(node);
-      if (!kids.length || value == null) return true;
+      if (!kidsOf(node).length || value == null) return true;
+      // A subtotal introduced later (Alphabet's "Google" = Services + Cloud from 2025) has no value
+      // in older periods: its own parts then roll straight into this total.
+      const flatKids = (n: IrSeries, depth: number): IrSeries[] =>
+        kidsOf(n).flatMap((k) => (depth < 3 && !fromDoc(k, end, doc) && !cellsOf(k)[end] && kidsOf(k).length ? flatKids(k, depth + 1) : [k]));
+      const kids = flatKids(node, 0);
       const inDoc = kids.filter((k) => fromDoc(k, end, doc));
       let members: IrSeries[];
       if (inDoc.length >= 2) {

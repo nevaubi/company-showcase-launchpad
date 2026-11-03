@@ -352,3 +352,24 @@ describe("deductions printed as positive numbers", () => {
     expect(buildIrSeries(facts).checks[0].ok).toBe(false);
   });
 });
+
+describe("subtotals introduced part-way through history", () => {
+  it("rolls the subtotal's parts into the total for periods before the subtotal existed", () => {
+    const old = "2024-12-31";
+    const now = "2025-12-31";
+    const facts = [
+      f("Google Services", now, 3, 95e9, { parent: "Google" }),
+      f("Google Cloud", now, 3, 17e9, { parent: "Google" }),
+      f("Google", now, 3, 112e9, { parent: "Total revenues", is_total: true }),
+      f("Other Bets", now, 3, 0.4e9, { parent: "Total revenues" }),
+      f("Total revenues", now, 3, 112.4e9, { parent: null, is_total: true }),
+      f("Google Services", old, 3, 84e9, { parent: "Total revenues", doc: "old.htm" }),
+      f("Google Cloud", old, 3, 12e9, { parent: "Total revenues", doc: "old.htm" }),
+      f("Other Bets", old, 3, 0.4e9, { parent: "Total revenues", doc: "old.htm" }),
+      f("Total revenues", old, 3, 96.4e9, { parent: null, is_total: true, doc: "old.htm" }),
+    ];
+    const { checks } = buildIrSeries(facts);
+    const top = checks.filter((c) => c.group.endsWith("Total revenues"));
+    expect(top.map((c) => [c.period, c.ok])).toEqual([[old, true], [now, true]]);
+  });
+});
