@@ -247,6 +247,7 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
   }
 
   const series = [...bySeries.values()];
+  borrowTotals(series, qv, fv);
   inferSubtotals(series);
   splitDoubleBreakdowns(series, qv, fv);
 
@@ -313,6 +314,28 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
     }
   }
   return { series, quarters, years, checks };
+}
+
+/**
+ * A second breakdown of the same total (revenue by product type next to revenue by segment) lives
+ * in its own category but names the shared total as parent. Give that category a copy of the total.
+ */
+function borrowTotals(series: IrSeries[], qv: Map<string, Map<string, Vintage[]>>, fv: Map<string, Map<string, Vintage[]>>) {
+  const has = new Set(series.filter((s) => s.isTotal).map((s) => `${s.category}|${s.metric}|${s.unit}|${normLabel(s.label)}`));
+  const wanted = new Map<string, IrSeries>();
+  for (const s of series) {
+    if (!s.parent) continue;
+    const k = `${s.category}|${s.metric}|${s.unit}|${normLabel(s.parent)}`;
+    if (has.has(k) || wanted.has(k)) continue;
+    const src = series.find((t) => t.isTotal && t.metric === s.metric && t.unit === s.unit && t.category !== s.category && normLabel(t.label) === normLabel(s.parent!));
+    if (src) wanted.set(k, { ...src, key: `${src.key}#in:${s.category}`, category: s.category, cells: { ...src.cells }, annual: { ...src.annual } });
+  }
+  for (const copy of wanted.values()) {
+    const base = copy.key.split("#in:")[0];
+    series.push(copy);
+    if (qv.has(base)) qv.set(copy.key, qv.get(base)!);
+    if (fv.has(base)) fv.set(copy.key, fv.get(base)!);
+  }
 }
 
 export const childrenOf = (series: IrSeries[], total: IrSeries) =>
