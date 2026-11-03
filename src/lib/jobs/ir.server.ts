@@ -127,7 +127,10 @@ export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]>
       for (const x of r.results) {
         const u = x.url.split("#")[0];
         const h = new URL(u).hostname;
-        const own = h.endsWith(host) || h.endsWith(site) || /q4cdn\.com|gcs-web\.com|edgar-online|s\d+\.q4cdn/.test(h);
+        const cdn = /q4cdn\.com|gcs-web\.com/.test(h);
+        const named = `${x.title} ${u}`.toLowerCase();
+        const mentions = named.includes(c.ticker.toLowerCase()) || named.includes(c.shortName.toLowerCase().split(/[ .']/)[0]);
+        const own = h.endsWith(host) || h.endsWith(site) || (cdn && mentions);
         if (own && IR_FILE_RE.test(u.split("?")[0])) links.add(u);
       }
     }
