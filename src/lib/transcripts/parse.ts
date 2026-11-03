@@ -121,7 +121,7 @@ function firmsFromOperator(turns: { speaker: string; text: string }[]) {
     const re =
       /(?:[Qq]uestion|[Ll]ine)\s+(?:(?:is|will be|comes)\s+)?(?:from|of)\s+(?:the line of\s+)?([A-Z][\w.'’-]+(?:\s+[A-Z][\w.'’-]+){0,3})\s+(?:of|from|with|at)\s+([A-Z][\w&.,'’ -]{1,60}?)(?=\.(?:\s+(?:[Yy]our|[Pp]lease|[Gg]o|[Tt]he|[Ww]e|[Oo]ur|[Yy]ou|[Tt]hank|M[rs]|[Nn]ow)\b|\s*$)|[,;]|\s+(?:[Pp]lease|[Yy]our|[Gg]o ahead)|$)/g;
     for (const m of t.text.matchAll(re)) {
-      firms.set(m[1].trim(), m[2].replace(/[.,]$/, "").trim());
+      firms.set(m[1].trim(), m[2].replace(/[.,]$/, "").replace(/\.\s+(?=[A-Z]{2,}\b)/g, " ").trim());
     }
   }
   return firms;
