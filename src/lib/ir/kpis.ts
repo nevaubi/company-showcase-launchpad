@@ -365,6 +365,14 @@ export function splitDoubleBreakdowns(series: IrSeries[], qv?: Map<string, Map<s
     const tol = (e: string) => Math.max(Math.abs(total.cells[e].v) * 0.005, 1.5e6);
     const sumOf = (xs: IrSeries[], e: string) => xs.reduce((n, k) => n + k.cells[e].v, 0);
     if (!ends.every((e) => Math.abs(sumOf(kids, e) - 2 * total.cells[e].v) <= 2 * tol(e))) continue;
+    // Both breakdowns must be printed side by side in one release — otherwise it's a recast, not a split.
+    if (qv) {
+      const together = ends.some((e) => {
+        const docSets = kids.map((k) => new Set((qv.get(k.key)?.get(e) ?? []).map((v) => v.doc)));
+        return [...docSets[0]].some((d) => docSets.every((ds) => ds.has(d)));
+      });
+      if (!together) continue;
+    }
     let split: IrSeries[] | null = null;
     for (let mask = 1; mask < 1 << kids.length && !split; mask++) {
       const sub = kids.filter((_, i) => mask & (1 << i));
