@@ -261,7 +261,13 @@ export const CASHFLOW_LINES: LineDef[] = [
   usd(
     "capex",
     "Capital expenditures",
-    ["PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets"],
+    [
+      "PaymentsToAcquirePropertyPlantAndEquipment",
+      "PaymentsToAcquireProductiveAssets",
+      "PaymentsToAcquireOtherPropertyPlantAndEquipment",
+      "PaymentsToAcquireOtherProductiveAssets",
+      "PaymentsToDevelopRealEstateAssets",
+    ],
     "flow",
     { indent: 1 },
   ),
@@ -293,8 +299,15 @@ export const CASHFLOW_LINES: LineDef[] = [
     "flow",
     { indent: 1 },
   ),
-  usd("buybacks", "Share repurchases", ["PaymentsForRepurchaseOfCommonStock"], "flow", { indent: 1 }),
-  usd("dividends", "Dividends paid", ["PaymentsOfDividends", "PaymentsOfDividendsCommonStock"], "flow", {
+  usd(
+    "buybacks",
+    "Share repurchases",
+    // Last resort: the equity-statement amount, for filers that don't tag the cash-flow line.
+    ["PaymentsForRepurchaseOfCommonStock", "PaymentsForRepurchaseOfEquity", "StockRepurchasedDuringPeriodValue"],
+    "flow",
+    { indent: 1 },
+  ),
+  usd("dividends", "Dividends paid", ["PaymentsOfDividends", "PaymentsOfDividendsCommonStock", "PaymentsOfOrdinaryDividends"], "flow", {
     indent: 1,
   }),
   usd("cff", "Cash from financing", ["NetCashProvidedByUsedInFinancingActivities"], "flow", { bold: true }),
