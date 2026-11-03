@@ -17,6 +17,8 @@ export interface FactLocator {
   search?: string;
   /** Table cell (document-order table, row and cell indexes) for press releases and other non-XBRL exhibits */
   cell?: { t: number; r: number; c: number };
+  /** Region on a page image: page number and [x0, y0, x1, y1] fractions */
+  box?: { p: number; b: number[] };
 }
 
 export type LocateStatus =
@@ -48,6 +50,9 @@ function buildSrcDoc(raw: string, base: string, contentType: string) {
     mark.fu-hl{color:inherit;padding:0 1px}
     @keyframes fuFlash{0%{box-shadow:0 0 0 0 ${hl}}50%{box-shadow:0 0 0 10px ${hl}}100%{box-shadow:0 0 0 0 transparent}}
     .fu-flash{animation:fuFlash 1.2s ease-out 2}
+    figure[data-page-img]{position:relative;margin:12px 0;border:1px solid #ddd}
+    figure[data-page-img] img{display:block;width:100%;height:auto}
+    .fu-box{position:absolute;background:color-mix(in oklch, ${hl} 45%, transparent);outline:2px solid ${ink};outline-offset:1px;border-radius:2px;pointer-events:none}
   </style>`;
   if (!/html/i.test(contentType) && !/<html|<body|<div|<table/i.test(raw.slice(0, 5000))) {
     const esc = raw.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -203,18 +208,33 @@ export function FilingViewer({
     d.body.style.setProperty("zoom", String(zoom));
     d.querySelectorAll(".fu-hl").forEach((e) => e.classList.remove("fu-hl"));
     d.querySelectorAll(".fu-hl-row").forEach((e) => e.classList.remove("fu-hl-row"));
+    d.querySelectorAll(".fu-box").forEach((e) => e.remove());
     if (!locator) {
       report({ kind: "idle" });
       return;
     }
     let found: HTMLElement[] = [];
     let how = "";
-    if (locator.cell) {
+    if (locator.box) {
+      const fig = d.querySelector(`figure[data-page-img="${locator.box.p}"]`) as HTMLElement | null;
+      if (fig) {
+        const [x0, y0, x1, y1] = locator.box.b;
+        const mark = d.createElement("div");
+        mark.className = "fu-box";
+        Object.assign(mark.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${Math.max(0.01, x1 - x0) * 100}%`, height: `${Math.max(0.01, y1 - y0) * 100}%` });
+        fig.appendChild(mark);
+        found = [mark];
+        how = `page ${locator.box.p}`;
+      }
+    }
+    if (!found.length && locator.cell) {
       const table = d.querySelectorAll("table")[locator.cell.t] as HTMLTableElement | undefined;
       const el = table?.rows[locator.cell.r]?.cells[locator.cell.c] as HTMLElement | undefined;
       if (el) {
         found = [el];
-        how = `table ${locator.cell.t + 1}, row ${locator.cell.r + 1}`;
+        const page = table?.getAttribute("data-page");
+        const sheet = table?.getAttribute("data-sheet");
+        how = page ? `page ${page}, line ${locator.cell.r + 1}` : sheet ? `sheet “${sheet}”, row ${locator.cell.r + 1}` : `table ${locator.cell.t + 1}, row ${locator.cell.r + 1}`;
       }
     }
     if (!found.length && locator.elementId) {
@@ -241,6 +261,7 @@ export function FilingViewer({
     }
     if (found.length) {
       found.forEach((el) => {
+        if (el.classList.contains("fu-box")) return;
         el.classList.add("fu-hl");
         el.closest("tr")?.classList.add("fu-hl-row");
       });
@@ -271,7 +292,7 @@ export function FilingViewer({
   useEffect(() => {
     if (frame.current?.contentDocument?.readyState === "complete" && srcDoc) locate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.value, locator?.cell?.t, locator?.cell?.r, locator?.cell?.c]);
+  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.value, locator?.cell?.t, locator?.cell?.r, locator?.cell?.c, locator?.box?.p, locator?.box?.b?.join()]);
 
   useEffect(() => {
     const d = frame.current?.contentDocument;

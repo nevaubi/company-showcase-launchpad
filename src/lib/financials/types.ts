@@ -15,6 +15,8 @@ export interface SourceRef {
   doc?: string;
   /** Table cell locator for non-XBRL documents: table / row / cell index in document order */
   cell?: { t: number; r: number; c: number };
+  /** Region on a page image (slides read by vision): page number and [x0, y0, x1, y1] as fractions */
+  box?: { p: number; b: number[] };
   /** Stored investor-relations document id (press release, supplement, presentation) when not an EDGAR document */
   irDoc?: string;
 }
