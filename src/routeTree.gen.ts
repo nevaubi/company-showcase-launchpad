@@ -33,6 +33,7 @@ import { Route as AuthenticatedAppCompaniesTickerFilingsRouteImport } from './ro
 import { Route as AuthenticatedAppCompaniesTickerFinancialsRouteImport } from './routes/_authenticated/app.companies.$ticker.financials'
 import { Route as AuthenticatedAppCompaniesTickerInsidersRouteImport } from './routes/_authenticated/app.companies.$ticker.insiders'
 import { Route as AuthenticatedAppCompaniesTickerSegmentsRouteImport } from './routes/_authenticated/app.companies.$ticker.segments'
+import { Route as AuthenticatedAppCompaniesTickerValuationRouteImport } from './routes/_authenticated/app.companies.$ticker.valuation'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -165,6 +166,12 @@ const AuthenticatedAppCompaniesTickerSegmentsRoute =
     path: '/segments',
     getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
   } as any)
+const AuthenticatedAppCompaniesTickerValuationRoute =
+  AuthenticatedAppCompaniesTickerValuationRouteImport.update({
+    id: '/valuation',
+    path: '/valuation',
+    getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/app/companies/$ticker/financials': typeof AuthenticatedAppCompaniesTickerFinancialsRoute
   '/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/app/companies/$ticker/segments': typeof AuthenticatedAppCompaniesTickerSegmentsRoute
+  '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRoutesByTo {
@@ -212,6 +220,7 @@ export interface FileRoutesByTo {
   '/app/companies/$ticker/financials': typeof AuthenticatedAppCompaniesTickerFinancialsRoute
   '/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/app/companies/$ticker/segments': typeof AuthenticatedAppCompaniesTickerSegmentsRoute
+  '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRoutesById {
@@ -239,6 +248,7 @@ export interface FileRoutesById {
   '/_authenticated/app/companies/$ticker/financials': typeof AuthenticatedAppCompaniesTickerFinancialsRoute
   '/_authenticated/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/_authenticated/app/companies/$ticker/segments': typeof AuthenticatedAppCompaniesTickerSegmentsRoute
+  '/_authenticated/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRouteTypes {
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/financials'
     | '/app/companies/$ticker/insiders'
     | '/app/companies/$ticker/segments'
+    | '/app/companies/$ticker/valuation'
     | '/app/companies/$ticker/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -289,6 +300,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/financials'
     | '/app/companies/$ticker/insiders'
     | '/app/companies/$ticker/segments'
+    | '/app/companies/$ticker/valuation'
     | '/app/companies/$ticker'
   id:
     | '__root__'
@@ -315,6 +327,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/companies/$ticker/financials'
     | '/_authenticated/app/companies/$ticker/insiders'
     | '/_authenticated/app/companies/$ticker/segments'
+    | '/_authenticated/app/companies/$ticker/valuation'
     | '/_authenticated/app/companies/$ticker/'
   fileRoutesById: FileRoutesById
 }
@@ -497,6 +510,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCompaniesTickerSegmentsRouteImport
       parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
     }
+    '/_authenticated/app/companies/$ticker/valuation': {
+      id: '/_authenticated/app/companies/$ticker/valuation'
+      path: '/valuation'
+      fullPath: '/app/companies/$ticker/valuation'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerValuationRouteImport
+      parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
+    }
   }
 }
 
@@ -505,6 +525,7 @@ interface AuthenticatedAppCompaniesTickerRouteChildren {
   AuthenticatedAppCompaniesTickerFinancialsRoute: typeof AuthenticatedAppCompaniesTickerFinancialsRoute
   AuthenticatedAppCompaniesTickerInsidersRoute: typeof AuthenticatedAppCompaniesTickerInsidersRoute
   AuthenticatedAppCompaniesTickerSegmentsRoute: typeof AuthenticatedAppCompaniesTickerSegmentsRoute
+  AuthenticatedAppCompaniesTickerValuationRoute: typeof AuthenticatedAppCompaniesTickerValuationRoute
   AuthenticatedAppCompaniesTickerIndexRoute: typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 
@@ -518,6 +539,8 @@ const AuthenticatedAppCompaniesTickerRouteChildren: AuthenticatedAppCompaniesTic
       AuthenticatedAppCompaniesTickerInsidersRoute,
     AuthenticatedAppCompaniesTickerSegmentsRoute:
       AuthenticatedAppCompaniesTickerSegmentsRoute,
+    AuthenticatedAppCompaniesTickerValuationRoute:
+      AuthenticatedAppCompaniesTickerValuationRoute,
     AuthenticatedAppCompaniesTickerIndexRoute:
       AuthenticatedAppCompaniesTickerIndexRoute,
   }

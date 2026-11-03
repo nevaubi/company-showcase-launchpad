@@ -42,6 +42,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
 const TABS = [
   { to: "/app/companies/$ticker", label: "Overview", exact: true },
   { to: "/app/companies/$ticker/financials", label: "Financials" },
+  { to: "/app/companies/$ticker/valuation", label: "Valuation" },
   { to: "/app/companies/$ticker/segments", label: "Segments & KPIs" },
   { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
   { to: "/app/companies/$ticker/insiders", label: "Insiders" },
