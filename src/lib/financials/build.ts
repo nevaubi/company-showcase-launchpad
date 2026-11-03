@@ -195,16 +195,37 @@ function firstConcept(
 
 const isDuration = (lo: number, hi: number) => (f: RawFact) => !!f.start && inRange(durationDays(f.start, f.end), lo, hi);
 
+/** Reported value for the line, or — when the line defines components — the sum of the components reported for the same period. */
+function pickCell(cf: CompanyFacts, def: LineDef, pred: (f: RawFact) => boolean): Cell | null {
+  const picked = firstConcept(cf, def, pred);
+  if (picked) return reportedCell(picked);
+  if (!def.components?.length) return null;
+  const found = def.components
+    .map((c) => choose(factsFor(cf, c, unitKey(def)), c, pred))
+    .filter((x): x is Picked => !!x);
+  if (!found.length) return null;
+  if (found.length === 1) return reportedCell(found[0]);
+  const names = found.map((x) => humanizeConcept(x.concept));
+  return {
+    v: found.reduce((sum, x) => sum + x.fact.val, 0),
+    derived: { formula: names.join(" + "), parts: found.map((x, i) => ({ ...ref(x), label: names[i], sign: 1 as const })) },
+  };
+}
+
+/** "CommercialPaper" → "Commercial paper" */
+export function humanizeConcept(c: string) {
+  const s = c.replace(/^us-gaap:/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function annualCell(cf: CompanyFacts, def: LineDef, p: Period): Cell | null {
-  const picked =
-    def.kind === "stock"
-      ? firstConcept(cf, def, (f) => !f.start && near(f.end, p.end, 4))
-      : firstConcept(
-          cf,
-          def,
-          (f) => isAnnualForm(f.form) && isDuration(350, 380)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4),
-        );
-  return picked ? reportedCell(picked) : null;
+  return def.kind === "stock"
+    ? pickCell(cf, def, (f) => !f.start && near(f.end, p.end, 4))
+    : pickCell(
+        cf,
+        def,
+        (f) => isAnnualForm(f.form) && isDuration(350, 380)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4),
+      );
 }
 
 const YTD_LABEL = ["3M", "6M YTD", "9M YTD"];
@@ -216,10 +237,7 @@ function quarterCell(
   year: FiscalYear,
   prevCells: (Cell | null)[],
 ): Cell | null {
-  if (def.kind === "stock") {
-    const picked = firstConcept(cf, def, (f) => !f.start && near(f.end, p.end, 4));
-    return picked ? reportedCell(picked) : null;
-  }
+  if (def.kind === "stock") return pickCell(cf, def, (f) => !f.start && near(f.end, p.end, 4));
   const direct = firstConcept(cf, def, (f) => isDuration(80, 100)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4));
   if (direct) return reportedCell(direct);
   if (!def.additive || !p.fq || p.fq === 1) return null;
@@ -279,19 +297,21 @@ export function partsFrom(cell: Cell | null | undefined, label: string, sign: 1 
   return (cell.derived?.parts ?? []).map((p) => ({ ...p, sign: (p.sign * sign) as 1 | -1, label: `${label} · ${p.label}` }));
 }
 
-function combine(
+const OP_SYMBOL = { add: "+", sub: "−", div: "÷" } as const;
+
+export function combine(
   a: Cell | null,
   b: Cell | null,
-  op: "sub" | "div",
+  op: "add" | "sub" | "div",
   labels: [string, string],
 ): Cell | null {
   if (!a || !b) return null;
   if (op === "div" && b.v === 0) return null;
-  const v = op === "sub" ? a.v - b.v : a.v / b.v;
+  const v = op === "add" ? a.v + b.v : op === "sub" ? a.v - b.v : a.v / b.v;
   return {
     v,
     derived: {
-      formula: `${labels[0]} ${op === "sub" ? "−" : "÷"} ${labels[1]}`,
+      formula: `${labels[0]} ${OP_SYMBOL[op]} ${labels[1]}`,
       parts: [...partsFrom(a, labels[0], 1), ...partsFrom(b, labels[1], op === "sub" ? -1 : 1)],
     },
   };
