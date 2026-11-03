@@ -182,3 +182,21 @@ export function inferSubtotals(series: IrSeries[]) {
     }
   }
 }
+
+/** Compare IR top-line totals against the SEC-reported statement value for the same quarter. */
+export function crossCheckTotals(
+  series: IrSeries[],
+  reported: { end: string; v: number }[],
+  metric = "revenue",
+): { label: string; period: string; ir: number; sec: number; ok: boolean }[] {
+  const out: { label: string; period: string; ir: number; sec: number; ok: boolean }[] = [];
+  for (const s of series) {
+    if (!s.isTotal || s.metric !== metric || s.unit !== "usd" || s.parent) continue;
+    for (const [end, c] of Object.entries(s.cells)) {
+      const r = reported.find((x) => near(x.end, end));
+      if (!r) continue;
+      out.push({ label: s.label, period: end, ir: c.v, sec: r.v, ok: Math.abs(c.v - r.v) <= Math.max(Math.abs(r.v) * 0.005, 1e6) });
+    }
+  }
+  return out;
+}

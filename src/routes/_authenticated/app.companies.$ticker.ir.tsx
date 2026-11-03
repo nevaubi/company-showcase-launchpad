@@ -12,10 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { extractNextIr, getIrData, getIrDownload } from "@/lib/ir.functions";
-import { buildIrSeries, normLabel, type IrCell, type IrFact, type IrSeries } from "@/lib/ir/kpis";
+import { buildIrSeries, crossCheckTotals, normLabel, type IrCell, type IrFact, type IrSeries } from "@/lib/ir/kpis";
 import type { DerivedPart, SourceRef } from "@/lib/financials/types";
 import { fmtCompact, fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useCompany } from "@/lib/data";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")({
   head: ({ params }) => ({
@@ -128,6 +129,15 @@ function KpiTables({ ticker, facts, pending }: { ticker: string; facts: IrFact[]
   const [span, setSpan] = useState<"8" | "12" | "all">("8");
   const cols = span === "all" ? quarters : quarters.slice(-Number(span));
   const failed = checks.filter((c) => !c.ok);
+  const company = useCompany(ticker);
+  const secChecks = useMemo(() => {
+    const st = company.data?.statements.quarterly.income;
+    const row = st?.rows.find((r) => r.key === "revenue");
+    if (!st || !row) return [];
+    const reported = st.periods.flatMap((p, i) => (row.cells[i] ? [{ end: p.end, v: row.cells[i]!.v }] : []));
+    return crossCheckTotals(series, reported);
+  }, [company.data, series]);
+  const secBad = secChecks.filter((c) => !c.ok);
 
   if (!series.length)
     return (
@@ -161,6 +171,26 @@ function KpiTables({ ticker, facts, pending }: { ticker: string; facts: IrFact[]
           ) : (
             <span className="inline-flex items-center gap-1 text-positive">
               <CheckCircle2 className="size-3.5" /> All {checks.length} breakdowns sum to their printed totals
+            </span>
+          ))}
+        {secChecks.length > 0 &&
+          (secBad.length ? (
+            <Tooltip>
+              <TooltipTrigger className="inline-flex items-center gap-1 text-negative">
+                <TriangleAlert className="size-3.5" /> {secBad.length} of {secChecks.length} quarterly totals differ from SEC-reported revenue
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm text-xs">
+                {secBad.slice(0, 6).map((b) => (
+                  <p key={b.label + b.period}>
+                    {b.label} {fmtDate(b.period)}: release {fmtCompactUsd(b.ir, 2)} vs 10-Q/10-K {fmtCompactUsd(b.sec, 2)}
+                  </p>
+                ))}
+                <p className="mt-1 opacity-75">Usually a later recast (e.g. a divestiture) in the SEC statements.</p>
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-positive">
+              <CheckCircle2 className="size-3.5" /> Top-line totals match SEC-reported revenue in all {secChecks.length} quarters
             </span>
           ))}
         <span><em>Italic</em> = calculated fourth quarter (full year − Q1–Q3, or full year − nine months)</span>

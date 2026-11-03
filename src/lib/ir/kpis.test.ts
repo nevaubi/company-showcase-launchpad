@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildIrSeries, type IrFact } from "./kpis";
+import { buildIrSeries, crossCheckTotals, type IrFact } from "./kpis";
 import { parseNumber, parseTables } from "./tables";
 
 const f = (label: string, end: string, months: number, value: number, extra: Partial<IrFact> = {}): IrFact => ({
@@ -62,5 +62,14 @@ describe("IR KPI series", () => {
     const end = "2026-09-26";
     const { checks } = buildIrSeries([f("A", end, 3, 40), f("B", end, 3, 40), f("Total net sales", end, 3, 100e6, { is_total: true, parent: null })]);
     expect(checks[0].ok).toBe(false);
+  });
+});
+
+describe("IR vs SEC cross-check", () => {
+  it("matches a release total to the 10-Q revenue for the same quarter (52/53-week dates allowed)", () => {
+    const { series } = buildIrSeries([f("Total net sales", "2026-09-26", 3, 114_477e6, { is_total: true, parent: null })]);
+    const r = crossCheckTotals(series, [{ end: "2026-09-27", v: 114_477e6 }]);
+    expect(r).toEqual([expect.objectContaining({ ok: true })]);
+    expect(crossCheckTotals(series, [{ end: "2026-09-26", v: 110_000e6 }])[0].ok).toBe(false);
   });
 });
