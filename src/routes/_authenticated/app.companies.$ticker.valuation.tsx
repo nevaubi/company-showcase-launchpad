@@ -321,7 +321,7 @@ function PeerMultiples({ ticker, bank }: { ticker: string; bank: boolean }) {
                     <Link to="/app/companies/$ticker/valuation" params={{ ticker: r.t }} className="flex items-center gap-2 hover:underline">
                       <CompanyLogo ticker={r.t} size="xs" />
                       <span className="num font-medium">{r.t}</span>
-                      <span className="truncate text-muted-foreground">{r.u.name}</span>
+                      <span className="truncate text-muted-foreground">{coverageOf(r.t)?.shortName ?? r.u.name}</span>
                     </Link>
                   </td>
                   <td className="num px-3 py-2 text-right">{r.price == null ? <Skeleton className="ml-auto h-4 w-12" /> : fmtPrice(r.price)}</td>

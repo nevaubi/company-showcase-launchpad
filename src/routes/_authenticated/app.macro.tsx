@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQueries, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowUpRight, Loader2, Sparkles, X } from "lucide-react";
@@ -95,6 +95,14 @@ function Macro() {
     },
     onError: (e) => toast.error((e as Error).message),
   });
+  // The brief is cached server-side per data date, so opening the page normally reads the shared copy.
+  const asked = useRef(false);
+  useEffect(() => {
+    if (sm && !asked.current) {
+      asked.current = true;
+      brief.mutate();
+    }
+  }, [sm, brief]);
 
   return (
     <div className="grid grid-cols-1 gap-5">
