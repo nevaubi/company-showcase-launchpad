@@ -52,15 +52,16 @@ function gist(text: string) {
 
 const STOP = new Set(
   (
-    "a about above across actually after again against all almost also although always am among an and another any anything are around as ask asked at back based be because been before being below best better between big bit both but by call can continue continued could couple day days did do does doing done down during each early either else end even ever every expect expected first for from further get getting give go going good got great guess had half has have having he hear her here hey hi high higher his how i if important in into is it its itself just keep kind know last later let level like little look looking lot made make making many may maybe me mean might more most much my need new next no not now number obviously of off on once one ones only or other our out over overall part particular particularly people perhaps please point pretty probably put quarter quarters question questions quite rather really right said same saw say saying see seeing seen she should side significant since so some something sort still strong such sure take talk talked talking terms than thank thanks that the their them then there these they thing things think thinking this those though three through time times to today together too took two up us very want wanted was way we well were what when where whether which while who why will with within without would year years yes yet you your"
+    "a about above across actually after again against all almost also although always am among an and another any anything are around as ask asked at back based be because been before being below best better between big bit both but by call can continue continued could couple day days did do does doing done down during each early either else end even ever every expect expected first for from further get getting give go going good got great guess had half has have having he hear her here hey hi high higher his how i if important in into is it its itself just keep kind know last later let level like little look looking lot made make making many may maybe me mean might more most much my need new next no not now number obviously of off on once one ones only or other our out over overall part particular particularly people perhaps please point pretty probably put quarter quarters question questions quite rather really right said same saw say saying see seeing seen she should side significant since so some something sort still strong such sure take talk talked talking terms than thank thanks that the their them then there these they thing things think thinking this those though three through time times to today together too took two up us very want wanted was way we well were what when where whether which while who why will with within without would year years yes yet you your yeah okay frankly billion million percent business january february march april june july august september october november december prepared remarks guys folks color"
   ).split(" "),
 );
 
 /** Most frequent content words and two-word phrases across the call (management + analysts). */
-export function keyTerms(t: ParsedTranscript, n = 12): { term: string; count: number }[] {
+export function keyTerms(t: ParsedTranscript, n = 12, exclude: string[] = []): { term: string; count: number }[] {
   const uni = new Map<string, number>();
   const bi = new Map<string, number>();
-  const names = new Set(t.speakers.flatMap((s) => s.name.toLowerCase().split(/\s+/)));
+  // Speaker names and the company's own name say nothing about the call's topics.
+  const names = new Set([...t.speakers.flatMap((s) => s.name.toLowerCase().split(/\s+/)), ...exclude.flatMap((e) => e.toLowerCase().split(/\s+/))]);
   for (const x of t.turns) {
     if (x.kind === "operator") continue;
     const words = x.text

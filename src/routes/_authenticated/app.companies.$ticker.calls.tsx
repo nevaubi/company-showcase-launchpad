@@ -168,7 +168,10 @@ function Reader({
 
   const share = useMemo(() => talkShare(t), [t]);
   const questions = useMemo(() => questionIndex(t), [t]);
-  const terms = useMemo(() => keyTerms(t, 14), [t]);
+  const terms = useMemo(() => {
+    const co = coverageOf(ticker);
+    return keyTerms(t, 14, [ticker, co?.shortName ?? "", co?.name ?? ""]);
+  }, [t, ticker]);
   const roleOf = useMemo(() => new Map(t.speakers.map((sp) => [sp.name, sp])), [t]);
 
   const visible = t.turns.filter((x) => (section === "all" || x.section === section) && (!speaker || x.speaker === speaker));
