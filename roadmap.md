@@ -25,9 +25,11 @@
 ## Ready
 - [x] Narratives show "web search" provenance when the headline feed is throttled
 - [x] Research agent switches to web search when the headline feed is throttled
-- [ ] Add META and AVGO to coverage with the ingest script (standard statement templates already fit them)
+- [x] Coverage expanded to 25 companies (tech, semis, banks, payments, pharma, managed care, retail, energy, industrials) with bank statement lines
+- [x] Web research: Tavily search + Firecrawl page reader in the research agent, headline fallback, and an earnings-call brief on company pages
+- [x] Company pages: peer comparison, earnings call brief, bank-aware stats; financials YoY % and common-size views; companies list sector filter + search
 
 ## Later
-- [ ] Earnings call transcripts source (needs licensed provider or Firecrawl connection)
-- [ ] Bank/insurer statement templates (JPM, BRK)
+- [ ] Brand logos for JPM, LLY, UNH, JNJ, COST, XOM, CVX, HD (monograms for now)
+- [ ] Insurer template (BRK)
 - [ ] Broader coverage (more tickers via the ingest script)
