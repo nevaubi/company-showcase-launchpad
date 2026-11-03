@@ -88,6 +88,9 @@ export interface LabelMapEntry {
   drop?: boolean;
 }
 
+/** Reconciling lines a release may print outside the table that holds the other parts. */
+const BORROWABLE = /\b(elimination|eliminations|intersegment|inter-segment|corporate|reconciling|unallocated|adjustments?)\b/i;
+
 /** Lines that reduce their total: costs, eliminations, reserves, adjustments, "less …". */
 const DEDUCTION = /\b(cost|costs|expense|expenses|elimination|eliminations|intersegment|inter-segment|less|deduct|deductions|discount|discounts|allowance|provision|reserve|returns|rebates|chargebacks|adjustment|adjustments|reconciling|corporate|unallocated|impairment|amortization|depreciation|tax|taxes|interest expense|minority|noncontrolling)\b/i;
 
@@ -533,6 +536,12 @@ export function buildIrSeries(
     if (!k) kidsMemo.set(s, (k = childrenOf(series, s)));
     return k;
   };
+  const byParent = new Map<string, IrSeries[]>();
+  for (const x of series) {
+    if (!x.parent) continue;
+    const k = `${x.category}|${x.metric}|${x.unit}|${normLabel(x.parent)}`;
+    byParent.set(k, [...(byParent.get(k) ?? []), x]);
+  }
   const tol = (v: number) => Math.max(Math.abs(v) * 0.005, 1.5e6);
   const tolFor = (s: IrSeries, v: number) => (s.unit === "usd" ? tol(v) : Math.max(Math.abs(v) * 0.005, 1.5));
 
@@ -571,6 +580,20 @@ export function buildIrSeries(
         let sum = vals.reduce((n, v) => n + v, 0);
         let pass = Math.abs(sum - value) <= tolFor(node, value);
         let subtracted: string[] | undefined;
+        if (!pass && node.scope) {
+          // A scoped total (one table of a transposed segment grid) can miss a reconciling line that
+          // the release prints in a neighbouring table — Coca-Cola's "Eliminations" column.
+          const have = new Set(members.map((k) => normLabel(k.label)));
+          const extra = (byParent.get(`${node.category}|${node.metric}|${node.unit}|${normLabel(node.label)}`) ?? []).find((k) => {
+            if (have.has(normLabel(k.label)) || !BORROWABLE.test(k.label)) return false;
+            const v = fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v;
+            return v != null && Math.abs(sum + v - value) <= tolFor(node, value);
+          });
+          if (extra) {
+            sum += fromDoc(extra, end, doc)?.v ?? cellsOf(extra)[end]!.v;
+            pass = true;
+          }
+        }
         if (!pass) {
           // Deductions printed without parentheses ("Revenue 100, Cost of sales 60, Gross profit 40").
           const i = members.findIndex((k, j) => vals[j] > 0 && DEDUCTION.test(k.label) && Math.abs(sum - 2 * vals[j] - value) <= tolFor(node, value));
