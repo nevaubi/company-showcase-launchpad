@@ -14,7 +14,8 @@
  */
 import { createHash } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
-import { buildStatements, type CompanyFacts } from "../src/lib/financials/build";
+import { buildStatements, type CompanyFacts, type RawFact } from "../src/lib/financials/build";
+import { ALL_LINES } from "../src/lib/financials/schema";
 import { isBankIndustry, slimDataset } from "../src/lib/financials/dataset";
 import { form4XmlPath, parseForm4 } from "../src/lib/financials/form4";
 import { cagr, latest, latestYoY, rowCells, ttm } from "../src/lib/financials/metrics";
@@ -329,11 +330,16 @@ function extractInlineSegments(html: string, labels: Map<string, string>, filing
   const out: RawSegment[] = [];
   for (const m of html.matchAll(/<ix:nonFraction\b([^>]*)>([\s\S]*?)<\/ix:nonFraction>/gi)) {
     const a = attrs(m[1]);
-    if (!METRIC_OF.has(a.name)) continue;
+    const ext = EXT_CONCEPTS.has(a.name);
+    if (!METRIC_OF.has(a.name) && !ext) continue;
     const raw = m[2].replace(/<[^>]+>/g, "").replace(/[,\s$]/g, "");
     let value = raw === "" || /^[—–-]$/.test(raw) ? 0 : Number(raw);
     value *= Math.pow(10, Number(a.scale ?? 0));
     if (a.sign === "-") value = -value;
+    if (ext) {
+      collectExtension(cikOf(filing), a.name, contexts.get(a.contextRef), value, filing);
+      continue;
+    }
     const f = segmentFact(a.name, contexts.get(a.contextRef), value, labels, filing, a.id);
     if (f) out.push(f);
   }
@@ -354,10 +360,42 @@ function extractInstanceSegments(xml: string, labels: Map<string, string>, filin
     const f = segmentFact(m[1], contexts.get(a.contextRef), value, labels, filing, a.id);
     if (f) out.push(f);
   }
+  if (EXT_CONCEPTS.size) {
+    const re = new RegExp(`<(${[...EXT_CONCEPTS].map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})\\b([^>]*?)>([^<]*)</\\1>`, "g");
+    for (const m of xml.matchAll(re)) collectExtension(cikOf(filing), m[1], contexts.get(attrs(m[2]).contextRef), Number(m[3].trim()), filing);
+  }
   return out;
 }
 
 const coverShares = new Map<string, number>();
+
+/**
+ * Company-extension concepts used by statement lines (e.g. "cop:CapitalExpendituresAndInvestments").
+ * SEC's companyfacts API only carries standard taxonomies, so these are read from each filing's own XBRL.
+ */
+const EXT_CONCEPTS = new Set(ALL_LINES.flatMap((l) => l.concepts.filter((c) => c.includes(":"))));
+/** cik → qualified concept → facts found in the filings parsed for segments. */
+const extFacts = new Map<string, Map<string, RawFact[]>>();
+
+function collectExtension(cik: string, name: string, ctx: Ctx | undefined, value: number, filing: Filing) {
+  if (!ctx || ctx.dims.length || !Number.isFinite(value)) return;
+  const fact: RawFact = { ...(ctx.start ? { start: ctx.start } : {}), end: (ctx.end ?? ctx.instant)!, val: value, accn: filing.accn, form: filing.form, filed: filing.filed };
+  if (!fact.end) return;
+  const byConcept = extFacts.get(cik) ?? new Map<string, RawFact[]>();
+  extFacts.set(cik, byConcept);
+  const list = byConcept.get(name) ?? [];
+  if (!list.some((f) => f.accn === fact.accn && f.start === fact.start && f.end === fact.end)) list.push(fact);
+  byConcept.set(name, list);
+}
+
+/** Merge extension facts into the companyfacts payload so the statement builder treats them like any other concept. */
+function mergeExtensions(cf: CompanyFacts, cik: string) {
+  for (const [qname, facts] of extFacts.get(cik) ?? []) {
+    const [ns, local] = qname.split(":");
+    cf.facts[ns] ??= {};
+    cf.facts[ns][local] = { label: qname, units: { USD: facts } };
+  }
+}
 
 interface IndexItem {
   name: string;
