@@ -76,10 +76,11 @@ describe("IR vs SEC cross-check", () => {
 
 describe("double breakdowns", () => {
   it("splits segment and product lines that were both parented to the same total", () => {
+    const P = { parent: "Total revenue" };
     const facts = ["2026-06-30", "2026-09-30"].flatMap((d, i) => [
       f("Total revenue", d, 3, 100e9 + i * 1e9, { is_total: true, parent: null }),
-      f("Cloud", d, 3, 60e9 + i * 1e9), f("Devices", d, 3, 40e9),
-      f("Server products", d, 3, 30e9 + i * 1e9), f("Office", d, 3, 45e9), f("Gaming", d, 3, 25e9),
+      f("Cloud", d, 3, 60e9 + i * 1e9, P), f("Devices", d, 3, 40e9, P),
+      f("Server products", d, 3, 30e9 + i * 1e9, P), f("Office", d, 3, 45e9, P), f("Gaming", d, 3, 25e9, P),
     ]);
     const { checks, series } = buildIrSeries(facts);
     expect(checks.filter((c) => !c.ok)).toEqual([]);
