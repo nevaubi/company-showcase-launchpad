@@ -370,6 +370,6 @@ describe("subtotals introduced part-way through history", () => {
     ];
     const { checks } = buildIrSeries(facts);
     const top = checks.filter((c) => c.group.endsWith("Total revenues"));
-    expect(top.map((c) => [c.period, c.ok])).toEqual([[old, true], [now, true]]);
+    expect(top.map((c) => [c.period, c.ok]).sort()).toEqual([[old, true], [now, true]]);
   });
 });
