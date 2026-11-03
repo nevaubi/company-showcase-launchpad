@@ -1,5 +1,5 @@
-import { dropRepeatedTables, describe, expect, it } from "vitest";
-import { buildIrSeries, crossCheckTotals, geoOfBreakdown, segmentOfBreakdown, type IrFact } from "./kpis";
+import { describe, expect, it } from "vitest";
+import { buildIrSeries, crossCheckTotals, dropRepeatedTables, geoOfBreakdown, segmentOfBreakdown, type IrFact } from "./kpis";
 import { parseNumber, parseTables } from "./tables";
 
 const f = (label: string, end: string, months: number, value: number, extra: Partial<IrFact> = {}): IrFact => ({
