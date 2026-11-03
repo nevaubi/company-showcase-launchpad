@@ -120,8 +120,8 @@ export async function fetchNasdaqQuote(symbol: string, kind: "stocks" | "etf"): 
     price,
     previousClose: Number.isFinite(change) ? Math.round((price - change) * 10000) / 10000 : price,
     exchange: d.exchange,
-    high52: Number.isFinite(hi) ? hi : undefined,
-    low52: Number.isFinite(lo) ? lo : undefined,
+    high52: Number.isFinite(hi) && hi > 0 ? hi : undefined,
+    low52: Number.isFinite(lo) && lo > 0 ? lo : undefined,
   };
 }
 
