@@ -33,10 +33,10 @@ export function SourcePanel() {
     if (target.doc) {
       setActive({ accn: target.doc.accn, doc: target.doc.doc ? renderableDoc(target.doc.doc) : undefined, locator: target.doc.search ? { search: target.doc.search } : undefined });
     } else if (target.src) {
-      setActive({ accn: target.src.accn, locator: locatorOf(target.src, target.unit as string, target.elementId) });
+      setActive({ accn: target.src.accn, doc: target.src.doc, locator: locatorOf(target.src, target.unit as string, target.elementId) });
     } else if (target.derived?.parts.length) {
       const p = target.derived.parts[0];
-      setActive({ accn: p.accn, locator: locatorOf(p, target.unit as string), label: p.label });
+      setActive({ accn: p.accn, doc: p.doc, locator: locatorOf(p, target.unit as string), label: p.label });
     }
   }, [target]);
 
@@ -262,7 +262,7 @@ function renderableDoc(doc: string) {
 }
 
 function locatorOf(src: SourceRef, unit: string, elementId?: string): FactLocator {
-  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId };
+  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId, cell: src.cell };
 }
 
 function guessUnit(concept: string, fallback: string) {

@@ -14,6 +14,8 @@ export interface FactLocator {
   elementId?: string;
   /** Free-text search when there is no structured fact */
   search?: string;
+  /** Table cell (document-order table, row and cell indexes) for press releases and other non-XBRL exhibits */
+  cell?: { t: number; r: number; c: number };
 }
 
 export type LocateStatus =
@@ -203,7 +205,15 @@ export function FilingViewer({
     }
     let found: HTMLElement[] = [];
     let how = "";
-    if (locator.elementId) {
+    if (locator.cell) {
+      const table = d.querySelectorAll("table")[locator.cell.t] as HTMLTableElement | undefined;
+      const el = table?.rows[locator.cell.r]?.cells[locator.cell.c] as HTMLElement | undefined;
+      if (el) {
+        found = [el];
+        how = `table ${locator.cell.t + 1}, row ${locator.cell.r + 1}`;
+      }
+    }
+    if (!found.length && locator.elementId) {
       const el = d.getElementById(locator.elementId);
       if (el) {
         found = [el];
@@ -257,7 +267,7 @@ export function FilingViewer({
   useEffect(() => {
     if (frame.current?.contentDocument?.readyState === "complete" && srcDoc) locate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.value]);
+  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.value, locator?.cell?.t, locator?.cell?.r, locator?.cell?.c]);
 
   useEffect(() => {
     const d = frame.current?.contentDocument;
