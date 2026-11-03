@@ -19,12 +19,27 @@ export const getFilingDocument = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ cik: cikSchema, accn: accnSchema, doc: docSchema }).parse(d))
   .handler(async ({ data }) => {
     const url = archiveUrl(data.cik, data.accn, data.doc);
+    // Mirrored copy first: faster, and immune to SEC rate limits.
+    const { cacheFilingDocument, readCachedFiling } = await import("@/lib/jobs/jobs.server");
+    try {
+      const cached = await readCachedFiling(data.accn, data.doc);
+      if (cached) return { url, contentType: cached.contentType, html: cached.html, bytes: cached.html.length, cached: true };
+    } catch (e) {
+      console.warn("filing cache read failed", (e as Error).message);
+    }
     const res = await fetchSec(url);
     const len = Number(res.headers.get("content-length") ?? 0);
     if (len > MAX_BYTES) throw new Error("This document is too large to render inline. Open it on SEC.gov.");
     const contentType = res.headers.get("content-type") ?? "text/html";
     const text = await res.text();
-    return { url, contentType, html: text, bytes: text.length };
+    if (/html|xml|text/.test(contentType) && text.length <= MAX_BYTES) {
+      try {
+        await cacheFilingDocument(data.cik, data.accn, data.doc, text, contentType);
+      } catch (e) {
+        console.warn("filing cache write failed", (e as Error).message);
+      }
+    }
+    return { url, contentType, html: text, bytes: text.length, cached: false };
   });
 
 export interface FilingDocumentEntry {
