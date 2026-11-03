@@ -58,41 +58,66 @@ export function fmtSigned(v: number | null | undefined, digits = 2): string {
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}`;
 }
 
-export type Scale = "M" | "B";
+export type Scale = "full" | "K" | "M" | "B";
+
+export const SCALES: { v: Scale; l: string; title: string }[] = [
+  { v: "full", l: "Full", title: "Exact dollar values" },
+  { v: "K", l: "$K", title: "Thousands of dollars" },
+  { v: "M", l: "$M", title: "Millions of dollars" },
+  { v: "B", l: "$B", title: "Billions of dollars" },
+];
+
+const SCALE_DIV: Record<Scale, number> = { full: 1, K: 1e3, M: 1e6, B: 1e9 };
+
+/** Scale a raw value for display/export: dollars and share counts follow the unit toggle. */
+export function scaled(v: number, unit: Unit, scale: Scale): number {
+  return unit === "usd" || unit === "shares" ? v / SCALE_DIV[scale] : v;
+}
+
+const paren = (v: number, s: string) => (v < 0 ? `(${s})` : s);
 
 /** Statement cell formatting, accounting style (negatives in parentheses). */
 export function fmtCell(v: number, unit: Unit, scale: Scale = "M"): string {
   switch (unit) {
     case "usd": {
-      const div = scale === "B" ? 1e9 : 1e6;
-      const x = v / div;
-      const s = scale === "B" ? n1.format(Math.abs(x)) : n0.format(Math.abs(x));
-      return v < 0 ? `(${s})` : s;
+      const x = Math.abs(v / SCALE_DIV[scale]);
+      return paren(v, scale === "B" ? n1.format(x) : n0.format(x));
     }
     case "usdPerShare":
-      return v < 0 ? `(${n2.format(Math.abs(v))})` : n2.format(v);
-    case "shares":
-      return n0.format(v / 1e6);
+      return paren(v, n2.format(Math.abs(v)));
+    case "shares": {
+      const x = Math.abs(v / SCALE_DIV[scale]);
+      return paren(v, scale === "B" ? n2.format(x) : n0.format(x));
+    }
     case "pct":
       return `${(v * 100).toFixed(1)}%`.replace("-", "−");
     case "ratio":
-      return `${v.toFixed(2)}×`;
+      return `${v.toFixed(2)}×`.replace("-", "−");
+    case "days":
+      return n0.format(v);
   }
 }
 
 export function unitLabel(unit: Unit, scale: Scale = "M"): string {
   switch (unit) {
     case "usd":
-      return scale === "B" ? "$B" : "$M";
+      return scale === "full" ? "$" : `$${scale}`;
     case "usdPerShare":
       return "$/sh";
     case "shares":
-      return "M sh";
+      return scale === "full" ? "sh" : `${scale} sh`;
     case "pct":
       return "%";
     case "ratio":
       return "×";
+    case "days":
+      return "days";
   }
+}
+
+/** Human description of the active scale, for table captions. */
+export function scaleCaption(scale: Scale) {
+  return scale === "full" ? "US dollars" : scale === "K" ? "thousands of US dollars" : scale === "M" ? "millions of US dollars" : "billions of US dollars";
 }
 
 export function fmtValueLong(v: number, unit: Unit | string): string {
@@ -101,6 +126,7 @@ export function fmtValueLong(v: number, unit: Unit | string): string {
   if (unit === "shares") return `${n0.format(v)} shares`;
   if (unit === "pct") return fmtPct(v, 2);
   if (unit === "ratio") return `${v.toFixed(2)}×`;
+  if (unit === "days") return `${n0.format(v)} days`;
   return n2.format(v);
 }
 
