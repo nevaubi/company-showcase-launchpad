@@ -115,6 +115,29 @@ export const TOOL_DEFS = [
     parameters: obj({ query: str("Ticker or topic") }, ["query"]),
     strict: true,
   },
+  {
+    type: "function",
+    name: "web_research",
+    description:
+      "Search the web (Tavily) for recent news, earnings call coverage, transcripts, investor-relations pages, analyst commentary and industry data. Returns titles, URLs, dates and content snippets. Prefer this over hosted web search for finance topics.",
+    parameters: obj(
+      {
+        query: str("Search query, e.g. 'NVIDIA Q3 FY2027 earnings call gross margin guidance'"),
+        topic: { type: "string", enum: ["general", "news", "finance"] },
+        days: nullable({ type: "integer", description: "Only results from the last N days (news topic). null for any time." }),
+      },
+      ["query", "topic", "days"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "read_webpage",
+    description:
+      "Read the full text of a web page (Firecrawl) as markdown — earnings call transcripts, IR press releases, investor presentations, articles. Give an optional search phrase to return only the passages around it.",
+    parameters: obj({ url: str("Full https URL"), query: nullable(str("Optional phrase to focus on")) }, ["url", "query"]),
+    strict: true,
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFS)[number]["name"];
@@ -132,4 +155,6 @@ export const TOOL_LABELS: Record<string, string> = {
   get_macro: "Pulled FRED series",
   get_news: "Read headlines",
   web_search: "Searched the web",
+  web_research: "Researched the web",
+  read_webpage: "Read web page",
 };
