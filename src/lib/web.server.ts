@@ -65,3 +65,24 @@ export async function firecrawlScrape(url: string): Promise<{ markdown: string; 
   const markdown = j.data?.markdown ?? j.markdown ?? "";
   return { markdown, title: j.data?.metadata?.title ?? j.metadata?.title, url };
 }
+
+/** Discover URLs on a site (Firecrawl map). Supports direct and gateway-backed keys. */
+export async function firecrawlMap(url: string, opts: { search?: string; limit?: number } = {}): Promise<string[]> {
+  const key = process.env["FIRECRAWL_API_KEY"];
+  if (!key) throw new Error("Page reader is not configured");
+  const gateway = key.startsWith("lovc_");
+  const endpoint = gateway ? "https://connector-gateway.lovable.dev/firecrawl/v2/map" : "https://api.firecrawl.dev/v2/map";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (gateway) {
+    headers["Authorization"] = `Bearer ${process.env["LOVABLE_API_KEY"] ?? ""}`;
+    headers["X-Connection-Api-Key"] = key;
+  } else headers["Authorization"] = `Bearer ${key}`;
+  const res = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ url, search: opts.search, limit: opts.limit ?? 500, includeSubdomains: true }),
+  });
+  if (!res.ok) throw new Error(`Firecrawl map failed (${res.status}): ${(await res.text()).slice(0, 200)}`);
+  const j = (await res.json()) as { links?: (string | { url: string })[]; data?: { links?: (string | { url: string })[] } };
+  return (j.links ?? j.data?.links ?? []).map((l) => (typeof l === "string" ? l : l.url));
+}

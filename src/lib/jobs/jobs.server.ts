@@ -9,7 +9,7 @@ import { fetchCboeDaily, fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo,
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -191,6 +191,22 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
       }
     }
     return { ok: errors.length < batch.length, items: filings + trades, detail: { companies: batch.map((c) => c.ticker), filings, trades, errors } };
+  },
+
+  /** Store new 8-K exhibits (releases, presentations, supplements) for one company per run. */
+  async "ir-docs"() {
+    const { start } = await advance("ir-docs", COVERAGE.length, 1);
+    const { collectIr } = await import("@/lib/jobs/ir.server");
+    const r = await collectIr(COVERAGE[start], "sec", 10);
+    return { ok: true, items: r.stored, detail: r as unknown as Record<string, unknown> };
+  },
+
+  /** Store files hosted on one company's IR website per run (found with Firecrawl). */
+  async "ir-site"() {
+    const { start } = await advance("ir-site", COVERAGE.length, 1);
+    const { collectIr } = await import("@/lib/jobs/ir.server");
+    const r = await collectIr(COVERAGE[start], "site", 10);
+    return { ok: true, items: r.stored, detail: r as unknown as Record<string, unknown> };
   },
 
   /** Mirror one recent 10-K/10-Q primary document into file storage per run. */
