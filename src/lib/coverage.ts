@@ -387,56 +387,214 @@ export const BENCHMARKS: Benchmark[] = [
 
 export const ALL_SYMBOLS = [...COVERAGE_TICKERS, ...BENCHMARKS.map((b) => b.symbol)];
 
+export type MacroGroup =
+  | "rates"
+  | "curve"
+  | "inflation"
+  | "labor"
+  | "growth"
+  | "consumer"
+  | "business"
+  | "housing"
+  | "liquidity"
+  | "credit"
+  | "fiscal"
+  | "energy"
+  | "industry";
+
 export interface MacroDef {
   id: string;
   title: string;
   units: string;
-  frequency: string;
+  frequency: "Daily" | "Weekly" | "Monthly" | "Quarterly" | "Annual";
   since: string;
-  group: "rates" | "inflation" | "labor" | "growth" | "liquidity" | "risk" | "housing" | "curve";
-  transform?: "yoy" | "diff";
+  group: MacroGroup;
+  /** yoy = % change vs 12 months earlier; diff = change vs prior observation; sum12 = trailing 12-month total */
+  transform?: "yoy" | "diff" | "sum12";
+  /** Page with the series' official documentation */
   source: string;
+  /** Government agency (or institution) that produces the numbers */
+  agency: string;
+  /** Where the ingest fetches it: FRED mirror (default) or the U.S. Treasury Fiscal Data API directly */
+  provider?: "fred" | "treasury";
+  /** Display formatting for raw (untransformed) values */
+  fmt?: { div?: number; prefix?: string; suffix?: string; digits?: number };
+  /** Sectors this is a fundamental driver for (sector pages) */
+  sectors?: string[];
+  /** Is a rising reading usually good or bad for risk assets? Colors the macro monitor. */
+  rising?: "good" | "bad";
+  /** Industry drivers are shown on sector pages, and in the macro page's Industry tab */
+  note?: string;
 }
 
 const fred = (id: string) => `https://fred.stlouisfed.org/series/${id}`;
+const FISCAL = "https://fiscaldata.treasury.gov/datasets";
+
+const BLS = "Bureau of Labor Statistics";
+const BEA = "Bureau of Economic Analysis";
+const CENSUS = "Census Bureau";
+const FRB = "Federal Reserve Board";
+const NYFED = "Federal Reserve Bank of New York";
+const TSY = "U.S. Treasury";
+const EIA = "Energy Information Administration";
+const DOL = "Department of Labor";
+
+const T = { div: 1e6, prefix: "$", suffix: "T", digits: 2 }; // millions → trillions
+const B = { prefix: "$", suffix: "B", digits: 0 }; // billions
+const K = { div: 1e3, suffix: "k", digits: 0 };
+
+type M = Omit<MacroDef, "source"> & { source?: string };
+const m = (d: M): MacroDef => ({ ...d, source: d.source ?? fred(d.id) });
 
 export const MACRO_SERIES: MacroDef[] = [
-  { id: "FEDFUNDS", title: "Effective federal funds rate", units: "%", frequency: "Monthly", since: "1990-01-01", group: "rates", source: fred("FEDFUNDS") },
-  { id: "DGS2", title: "2-year Treasury yield", units: "%", frequency: "Daily", since: "2005-01-01", group: "rates", source: fred("DGS2") },
-  { id: "DGS10", title: "10-year Treasury yield", units: "%", frequency: "Daily", since: "2005-01-01", group: "rates", source: fred("DGS10") },
-  { id: "T10Y2Y", title: "10Y minus 2Y Treasury spread", units: "pp", frequency: "Daily", since: "2005-01-01", group: "rates", source: fred("T10Y2Y") },
-  { id: "T10Y3M", title: "10Y minus 3M Treasury spread", units: "pp", frequency: "Daily", since: "2005-01-01", group: "rates", source: fred("T10Y3M") },
-  { id: "MORTGAGE30US", title: "30-year fixed mortgage rate", units: "%", frequency: "Weekly", since: "2000-01-01", group: "housing", source: fred("MORTGAGE30US") },
-  { id: "CPIAUCSL", title: "CPI, all items", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", source: fred("CPIAUCSL") },
-  { id: "CPILFESL", title: "Core CPI (ex food & energy)", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", source: fred("CPILFESL") },
-  { id: "PCEPILFE", title: "Core PCE price index", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", source: fred("PCEPILFE") },
-  { id: "T5YIE", title: "5-year breakeven inflation", units: "%", frequency: "Daily", since: "2005-01-01", group: "inflation", source: fred("T5YIE") },
-  { id: "UNRATE", title: "Unemployment rate", units: "%", frequency: "Monthly", since: "1990-01-01", group: "labor", source: fred("UNRATE") },
-  { id: "PAYEMS", title: "Nonfarm payrolls", units: "Thousands of persons", frequency: "Monthly", since: "1990-01-01", group: "labor", transform: "diff", source: fred("PAYEMS") },
-  { id: "ICSA", title: "Initial jobless claims", units: "Claims", frequency: "Weekly", since: "2000-01-01", group: "labor", source: fred("ICSA") },
-  { id: "JTSJOL", title: "Job openings (JOLTS)", units: "Thousands", frequency: "Monthly", since: "2001-01-01", group: "labor", source: fred("JTSJOL") },
-  { id: "A191RL1Q225SBEA", title: "Real GDP growth (SAAR)", units: "% q/q annualized", frequency: "Quarterly", since: "1990-01-01", group: "growth", source: fred("A191RL1Q225SBEA") },
-  { id: "INDPRO", title: "Industrial production", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "growth", transform: "yoy", source: fred("INDPRO") },
-  { id: "RSAFS", title: "Retail sales", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "growth", transform: "yoy", source: fred("RSAFS") },
-  { id: "UMCSENT", title: "Consumer sentiment (UMich)", units: "Index 1966:Q1=100", frequency: "Monthly", since: "1990-01-01", group: "growth", source: fred("UMCSENT") },
-  { id: "M2SL", title: "M2 money supply", units: "Billions of dollars", frequency: "Monthly", since: "1990-01-01", group: "liquidity", transform: "yoy", source: fred("M2SL") },
-  { id: "WALCL", title: "Fed balance sheet (total assets)", units: "Millions of dollars", frequency: "Weekly", since: "2003-01-01", group: "liquidity", source: fred("WALCL") },
-  { id: "BAMLH0A0HYM2", title: "High-yield credit spread (OAS)", units: "%", frequency: "Daily", since: "2005-01-01", group: "risk", source: fred("BAMLH0A0HYM2") },
-  { id: "VIXCLS", title: "VIX", units: "Index", frequency: "Daily", since: "2005-01-01", group: "risk", source: fred("VIXCLS") },
-  { id: "NFCI", title: "Chicago Fed financial conditions", units: "Index", frequency: "Weekly", since: "2000-01-01", group: "risk", source: fred("NFCI") },
-  { id: "DTWEXBGS", title: "Trade-weighted US dollar", units: "Index Jan 2006=100", frequency: "Daily", since: "2006-01-01", group: "risk", source: fred("DTWEXBGS") },
-  { id: "HOUST", title: "Housing starts", units: "Thousands of units (SAAR)", frequency: "Monthly", since: "1990-01-01", group: "housing", source: fred("HOUST") },
-  { id: "USREC", title: "NBER recession indicator", units: "0/1", frequency: "Monthly", since: "1990-01-01", group: "growth", source: fred("USREC") },
-  { id: "DGS1MO", title: "1-month Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS1MO") },
-  { id: "DGS3MO", title: "3-month Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS3MO") },
-  { id: "DGS6MO", title: "6-month Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS6MO") },
-  { id: "DGS1", title: "1-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS1") },
-  { id: "DGS3", title: "3-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS3") },
-  { id: "DGS5", title: "5-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS5") },
-  { id: "DGS7", title: "7-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS7") },
-  { id: "DGS20", title: "20-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS20") },
-  { id: "DGS30", title: "30-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", source: fred("DGS30") },
+  // ---- Rates ----
+  m({ id: "FEDFUNDS", title: "Effective federal funds rate", units: "%", frequency: "Monthly", since: "1990-01-01", group: "rates", agency: FRB }),
+  m({ id: "SOFR", title: "Secured overnight financing rate", units: "%", frequency: "Daily", since: "2018-04-01", group: "rates", agency: NYFED }),
+  m({ id: "DTB3", title: "3-month Treasury bill", units: "%", frequency: "Daily", since: "2005-01-01", group: "rates", agency: FRB }),
+  m({ id: "DGS2", title: "2-year Treasury yield", units: "%", frequency: "Daily", since: "2005-01-01", group: "rates", agency: FRB, sectors: ["Financials"] }),
+  m({ id: "DGS10", title: "10-year Treasury yield", units: "%", frequency: "Daily", since: "2005-01-01", group: "rates", agency: FRB, sectors: ["Utilities", "Real Estate"], rising: "bad" }),
+  m({ id: "DFII10", title: "10-year real yield (TIPS)", units: "%", frequency: "Daily", since: "2005-01-01", group: "rates", agency: FRB, rising: "bad" }),
+  m({ id: "THREEFYTP10", title: "10-year term premium (Kim–Wright)", units: "pp", frequency: "Daily", since: "2005-01-01", group: "rates", agency: FRB }),
+  m({ id: "T10Y2Y", title: "10Y minus 2Y Treasury spread", units: "pp", frequency: "Daily", since: "2005-01-01", group: "rates", agency: FRB, sectors: ["Financials"] }),
+  m({ id: "T10Y3M", title: "10Y minus 3M Treasury spread", units: "pp", frequency: "Daily", since: "2005-01-01", group: "rates", agency: FRB }),
+  m({ id: "MORTGAGE30US", title: "30-year fixed mortgage rate", units: "%", frequency: "Weekly", since: "2000-01-01", group: "housing", agency: "Freddie Mac", sectors: ["Real Estate", "Consumer Discretionary"], rising: "bad" }),
+
+  // ---- Inflation ----
+  m({ id: "CPIAUCSL", title: "CPI, all items", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", agency: BLS, rising: "bad" }),
+  m({ id: "CPILFESL", title: "Core CPI (ex food & energy)", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", agency: BLS, rising: "bad" }),
+  m({ id: "CUSR0000SAH1", title: "CPI: shelter", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", agency: BLS, rising: "bad" }),
+  m({ id: "CUSR0000SASLE", title: "CPI: services less energy", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", agency: BLS, rising: "bad" }),
+  m({ id: "CPIUFDSL", title: "CPI: food", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", agency: BLS }),
+  m({ id: "CPIENGSL", title: "CPI: energy", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", agency: BLS }),
+  m({ id: "PCEPI", title: "PCE price index", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", agency: BEA, rising: "bad" }),
+  m({ id: "PCEPILFE", title: "Core PCE price index", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "inflation", transform: "yoy", agency: BEA, rising: "bad" }),
+  m({ id: "CORESTICKM159SFRBATL", title: "Sticky-price core CPI", units: "% y/y", frequency: "Monthly", since: "1990-01-01", group: "inflation", agency: "Federal Reserve Bank of Atlanta", fmt: { suffix: "%", digits: 1 }, rising: "bad" }),
+  m({ id: "PPIFIS", title: "PPI: final demand", units: "Index Nov 2009=100", frequency: "Monthly", since: "2010-01-01", group: "inflation", transform: "yoy", agency: BLS }),
+  m({ id: "ECIALLCIV", title: "Employment cost index", units: "Index Dec 2005=100", frequency: "Quarterly", since: "2001-01-01", group: "inflation", transform: "yoy", agency: BLS }),
+  m({ id: "T5YIE", title: "5-year breakeven inflation", units: "%", frequency: "Daily", since: "2005-01-01", group: "inflation", agency: FRB }),
+  m({ id: "T5YIFR", title: "5y5y forward inflation expectation", units: "%", frequency: "Daily", since: "2005-01-01", group: "inflation", agency: FRB }),
+  m({ id: "MICH", title: "Consumer 1-year inflation expectations", units: "%", frequency: "Monthly", since: "1990-01-01", group: "inflation", agency: "University of Michigan" }),
+
+  // ---- Labor ----
+  m({ id: "UNRATE", title: "Unemployment rate", units: "%", frequency: "Monthly", since: "1990-01-01", group: "labor", agency: BLS, rising: "bad" }),
+  m({ id: "U6RATE", title: "U-6 underemployment rate", units: "%", frequency: "Monthly", since: "1994-01-01", group: "labor", agency: BLS, rising: "bad" }),
+  m({ id: "PAYEMS", title: "Nonfarm payrolls", units: "Thousands of persons", frequency: "Monthly", since: "1990-01-01", group: "labor", transform: "diff", agency: BLS, rising: "good" }),
+  m({ id: "LNS12300060", title: "Prime-age employment-population ratio", units: "%", frequency: "Monthly", since: "1990-01-01", group: "labor", agency: BLS, rising: "good" }),
+  m({ id: "CIVPART", title: "Labor force participation", units: "%", frequency: "Monthly", since: "1990-01-01", group: "labor", agency: BLS }),
+  m({ id: "CES0500000003", title: "Average hourly earnings", units: "$ per hour", frequency: "Monthly", since: "2006-03-01", group: "labor", transform: "yoy", agency: BLS }),
+  m({ id: "ICSA", title: "Initial jobless claims", units: "Claims", frequency: "Weekly", since: "2000-01-01", group: "labor", agency: DOL, fmt: K, rising: "bad" }),
+  m({ id: "CCSA", title: "Continuing jobless claims", units: "Claims", frequency: "Weekly", since: "2000-01-01", group: "labor", agency: DOL, fmt: { div: 1e6, suffix: "M", digits: 2 }, rising: "bad" }),
+  m({ id: "JTSJOL", title: "Job openings (JOLTS)", units: "Thousands", frequency: "Monthly", since: "2001-01-01", group: "labor", agency: BLS, fmt: { div: 1e3, suffix: "M", digits: 2 } }),
+  m({ id: "JTSQUR", title: "Quits rate (JOLTS)", units: "%", frequency: "Monthly", since: "2001-01-01", group: "labor", agency: BLS }),
+
+  // ---- Growth & output ----
+  m({ id: "A191RL1Q225SBEA", title: "Real GDP growth (SAAR)", units: "% q/q annualized", frequency: "Quarterly", since: "1990-01-01", group: "growth", agency: BEA, fmt: { suffix: "%", digits: 1 }, rising: "good" }),
+  m({ id: "GDPC1", title: "Real GDP", units: "Billions of chained 2017 dollars", frequency: "Quarterly", since: "1990-01-01", group: "growth", transform: "yoy", agency: BEA, rising: "good" }),
+  m({ id: "GDPNOW", title: "GDPNow nowcast (current quarter)", units: "% q/q annualized", frequency: "Quarterly", since: "2011-07-01", group: "growth", agency: "Federal Reserve Bank of Atlanta", fmt: { suffix: "%", digits: 1 } }),
+  m({ id: "CP", title: "Corporate profits after tax", units: "Billions of dollars (SAAR)", frequency: "Quarterly", since: "1990-01-01", group: "growth", transform: "yoy", agency: BEA, rising: "good" }),
+  m({ id: "INDPRO", title: "Industrial production", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "growth", transform: "yoy", agency: FRB, rising: "good" }),
+  m({ id: "TCU", title: "Capacity utilization", units: "% of capacity", frequency: "Monthly", since: "1990-01-01", group: "growth", agency: FRB, fmt: { suffix: "%", digits: 1 }, sectors: ["Industrials", "Materials"] }),
+  m({ id: "USREC", title: "NBER recession indicator", units: "0/1", frequency: "Monthly", since: "1990-01-01", group: "growth", agency: "NBER" }),
+
+  // ---- Consumer ----
+  m({ id: "RSAFS", title: "Retail sales", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "consumer", transform: "yoy", agency: CENSUS, rising: "good" }),
+  m({ id: "RSFSXMV", title: "Retail sales ex autos", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "consumer", transform: "yoy", agency: CENSUS, sectors: ["Consumer Discretionary"] }),
+  m({ id: "PCEC96", title: "Real personal consumption", units: "Billions of chained 2017 dollars", frequency: "Monthly", since: "2002-01-01", group: "consumer", transform: "yoy", agency: BEA, sectors: ["Consumer Staples", "Consumer Discretionary"], rising: "good" }),
+  m({ id: "DSPIC96", title: "Real disposable income", units: "Billions of chained 2017 dollars", frequency: "Monthly", since: "1990-01-01", group: "consumer", transform: "yoy", agency: BEA, rising: "good" }),
+  m({ id: "PSAVERT", title: "Personal saving rate", units: "%", frequency: "Monthly", since: "1990-01-01", group: "consumer", agency: BEA }),
+  m({ id: "TOTALSL", title: "Consumer credit outstanding", units: "Millions of dollars", frequency: "Monthly", since: "1990-01-01", group: "consumer", transform: "yoy", agency: FRB, sectors: ["Financials"] }),
+  m({ id: "DRCCLACBS", title: "Credit card delinquency rate", units: "%", frequency: "Quarterly", since: "1991-01-01", group: "consumer", agency: FRB, sectors: ["Financials"], rising: "bad" }),
+  m({ id: "TDSP", title: "Household debt service ratio", units: "% of disposable income", frequency: "Quarterly", since: "1990-01-01", group: "consumer", agency: FRB, fmt: { suffix: "%", digits: 1 } }),
+  m({ id: "UMCSENT", title: "Consumer sentiment (UMich)", units: "Index 1966:Q1=100", frequency: "Monthly", since: "1990-01-01", group: "consumer", agency: "University of Michigan", fmt: { digits: 1 }, sectors: ["Consumer Discretionary"], rising: "good" }),
+  m({ id: "TOTALSA", title: "Light vehicle sales (SAAR)", units: "Millions of units", frequency: "Monthly", since: "1990-01-01", group: "consumer", agency: BEA, fmt: { suffix: "M", digits: 1 }, sectors: ["Consumer Discretionary"] }),
+  m({ id: "ECOMPCTSA", title: "E-commerce share of retail sales", units: "%", frequency: "Quarterly", since: "1999-10-01", group: "consumer", agency: CENSUS, sectors: ["Consumer Discretionary", "Consumer Staples"] }),
+
+  // ---- Business ----
+  m({ id: "NEWORDER", title: "Core capital goods orders", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "business", transform: "yoy", agency: CENSUS, sectors: ["Industrials"], rising: "good" }),
+  m({ id: "DGORDER", title: "Durable goods orders", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "business", transform: "yoy", agency: CENSUS, rising: "good" }),
+  m({ id: "IPMAN", title: "Manufacturing output", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "business", transform: "yoy", agency: FRB, sectors: ["Industrials", "Materials"] }),
+  m({ id: "Y033RC1Q027SBEA", title: "Business equipment investment", units: "Billions of dollars (SAAR)", frequency: "Quarterly", since: "1990-01-01", group: "business", transform: "yoy", agency: BEA, sectors: ["Industrials"] }),
+  m({ id: "A679RC1Q027SBEA", title: "Info-processing equipment & software investment", units: "Billions of dollars (SAAR)", frequency: "Quarterly", since: "1990-01-01", group: "business", transform: "yoy", agency: BEA, sectors: ["Information Technology"] }),
+  m({ id: "ISRATIO", title: "Business inventories-to-sales ratio", units: "Ratio", frequency: "Monthly", since: "1992-01-01", group: "business", agency: CENSUS, fmt: { suffix: "×", digits: 2 } }),
+  m({ id: "TTLCONS", title: "Construction spending", units: "Millions of dollars (SAAR)", frequency: "Monthly", since: "1993-01-01", group: "business", transform: "yoy", agency: CENSUS, sectors: ["Industrials", "Materials"] }),
+  m({ id: "BOPGSTB", title: "Trade balance (goods & services)", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "business", agency: CENSUS, fmt: { div: 1e3, prefix: "$", suffix: "B", digits: 1 } }),
+
+  // ---- Housing ----
+  m({ id: "HOUST", title: "Housing starts", units: "Thousands of units (SAAR)", frequency: "Monthly", since: "1990-01-01", group: "housing", agency: CENSUS, fmt: { suffix: "k", digits: 0 }, sectors: ["Consumer Discretionary"] }),
+  m({ id: "PERMIT", title: "Building permits", units: "Thousands of units (SAAR)", frequency: "Monthly", since: "1990-01-01", group: "housing", agency: CENSUS, fmt: { suffix: "k", digits: 0 } }),
+  m({ id: "HSN1F", title: "New home sales", units: "Thousands of units (SAAR)", frequency: "Monthly", since: "1990-01-01", group: "housing", agency: CENSUS, fmt: { suffix: "k", digits: 0 } }),
+  m({ id: "MSPUS", title: "Median price of houses sold", units: "Dollars", frequency: "Quarterly", since: "1990-01-01", group: "housing", agency: CENSUS, fmt: { div: 1e3, prefix: "$", suffix: "k", digits: 0 } }),
+  m({ id: "USSTHPI", title: "FHFA house price index", units: "Index 1980:Q1=100", frequency: "Quarterly", since: "1990-01-01", group: "housing", transform: "yoy", agency: "Federal Housing Finance Agency", sectors: ["Real Estate"] }),
+  m({ id: "CSUSHPINSA", title: "Case-Shiller national home prices", units: "Index Jan 2000=100", frequency: "Monthly", since: "1990-01-01", group: "housing", transform: "yoy", agency: "S&P Dow Jones Indices" }),
+  m({ id: "RRVRUSQ156N", title: "Rental vacancy rate", units: "%", frequency: "Quarterly", since: "1990-01-01", group: "housing", agency: CENSUS, sectors: ["Real Estate"] }),
+  m({ id: "TLNRESCONS", title: "Nonresidential construction spending", units: "Millions of dollars (SAAR)", frequency: "Monthly", since: "1993-01-01", group: "housing", transform: "yoy", agency: CENSUS, sectors: ["Real Estate", "Industrials"] }),
+
+  // ---- Liquidity ----
+  m({ id: "M2SL", title: "M2 money supply", units: "Billions of dollars", frequency: "Monthly", since: "1990-01-01", group: "liquidity", transform: "yoy", agency: FRB }),
+  m({ id: "WALCL", title: "Fed balance sheet (total assets)", units: "Millions of dollars", frequency: "Weekly", since: "2003-01-01", group: "liquidity", agency: FRB, fmt: T }),
+  m({ id: "WRESBAL", title: "Bank reserve balances at the Fed", units: "Millions of dollars", frequency: "Weekly", since: "2003-01-01", group: "liquidity", agency: FRB, fmt: T }),
+  m({ id: "RRPONTSYD", title: "Overnight reverse repo usage", units: "Billions of dollars", frequency: "Daily", since: "2014-01-01", group: "liquidity", agency: NYFED, fmt: B }),
+  m({ id: "WTREGEN", title: "Treasury General Account balance", units: "Millions of dollars", frequency: "Weekly", since: "2003-01-01", group: "liquidity", agency: FRB, fmt: { div: 1e3, prefix: "$", suffix: "B", digits: 0 } }),
+  m({ id: "TOTBKCR", title: "Commercial bank credit", units: "Billions of dollars", frequency: "Weekly", since: "2000-01-01", group: "liquidity", transform: "yoy", agency: FRB, sectors: ["Financials"] }),
+  m({ id: "DPSACBW027SBOG", title: "Commercial bank deposits", units: "Billions of dollars", frequency: "Weekly", since: "2000-01-01", group: "liquidity", transform: "yoy", agency: FRB, sectors: ["Financials"] }),
+
+  // ---- Credit & risk ----
+  m({ id: "BAMLH0A0HYM2", title: "High-yield credit spread (OAS)", units: "%", frequency: "Daily", since: "2005-01-01", group: "credit", agency: "ICE Data Indices", rising: "bad" }),
+  m({ id: "BAA10Y", title: "Baa corporate minus 10Y Treasury", units: "pp", frequency: "Daily", since: "2005-01-01", group: "credit", agency: "Moody's", rising: "bad" }),
+  m({ id: "DRTSCILM", title: "Banks tightening C&I lending standards", units: "Net % of banks", frequency: "Quarterly", since: "1990-04-01", group: "credit", agency: FRB, fmt: { suffix: "%", digits: 1 }, sectors: ["Financials"], rising: "bad" }),
+  m({ id: "BUSLOANS", title: "Commercial & industrial loans", units: "Billions of dollars", frequency: "Monthly", since: "1990-01-01", group: "credit", transform: "yoy", agency: FRB, sectors: ["Financials"] }),
+  m({ id: "DRCRELEXFACBS", title: "Commercial real estate loan delinquency", units: "%", frequency: "Quarterly", since: "1991-01-01", group: "credit", agency: FRB, sectors: ["Real Estate", "Financials"], rising: "bad" }),
+  m({ id: "VIXCLS", title: "VIX", units: "Index", frequency: "Daily", since: "2005-01-01", group: "credit", agency: "Cboe", fmt: { digits: 1 }, rising: "bad" }),
+  m({ id: "NFCI", title: "Chicago Fed financial conditions", units: "Index", frequency: "Weekly", since: "2000-01-01", group: "credit", agency: "Federal Reserve Bank of Chicago", fmt: { digits: 2 }, rising: "bad" }),
+  m({ id: "DTWEXBGS", title: "Trade-weighted US dollar", units: "Index Jan 2006=100", frequency: "Daily", since: "2006-01-01", group: "credit", agency: FRB, fmt: { digits: 1 } }),
+
+  // ---- Fiscal (U.S. Treasury Fiscal Data, direct) ----
+  m({ id: "TSY_DEBT", title: "Total public debt outstanding", units: "Dollars", frequency: "Daily", since: "2005-01-01", group: "fiscal", agency: TSY, provider: "treasury", fmt: { div: 1e12, prefix: "$", suffix: "T", digits: 2 }, source: `${FISCAL}/debt-to-the-penny/debt-to-the-penny` }),
+  m({ id: "TSY_DEBT_PUBLIC", title: "Debt held by the public", units: "Dollars", frequency: "Daily", since: "2005-01-01", group: "fiscal", agency: TSY, provider: "treasury", fmt: { div: 1e12, prefix: "$", suffix: "T", digits: 2 }, source: `${FISCAL}/debt-to-the-penny/debt-to-the-penny` }),
+  m({ id: "TSY_AVG_RATE", title: "Average interest rate on federal debt", units: "%", frequency: "Monthly", since: "2001-01-01", group: "fiscal", agency: TSY, provider: "treasury", fmt: { suffix: "%", digits: 2 }, source: `${FISCAL}/average-interest-rates-treasury-securities/average-interest-rates-on-u-s-treasury-securities` }),
+  m({ id: "MTSDS133FMS", title: "Federal deficit, trailing 12 months", units: "Millions of dollars", frequency: "Monthly", since: "1990-01-01", group: "fiscal", transform: "sum12", agency: TSY, fmt: T }),
+  m({ id: "A091RC1Q027SBEA", title: "Federal interest payments (SAAR)", units: "Billions of dollars", frequency: "Quarterly", since: "1990-01-01", group: "fiscal", agency: BEA, fmt: { div: 1e3, prefix: "$", suffix: "T", digits: 2 } }),
+  m({ id: "GFDEGDQ188S", title: "Federal debt to GDP", units: "% of GDP", frequency: "Quarterly", since: "1990-01-01", group: "fiscal", agency: "OMB / Federal Reserve Bank of St. Louis", fmt: { suffix: "%", digits: 1 } }),
+  m({ id: "FYFSGDA188S", title: "Federal surplus or deficit to GDP", units: "% of GDP", frequency: "Annual", since: "1990-01-01", group: "fiscal", agency: "Office of Management and Budget", fmt: { suffix: "%", digits: 1 } }),
+
+  // ---- Energy & commodities ----
+  m({ id: "DCOILWTICO", title: "WTI crude oil", units: "$ per barrel", frequency: "Daily", since: "2005-01-01", group: "energy", agency: EIA, fmt: { prefix: "$", digits: 2 }, sectors: ["Energy"] }),
+  m({ id: "DCOILBRENTEU", title: "Brent crude oil", units: "$ per barrel", frequency: "Daily", since: "2005-01-01", group: "energy", agency: EIA, fmt: { prefix: "$", digits: 2 }, sectors: ["Energy"] }),
+  m({ id: "DHHNGSP", title: "Henry Hub natural gas", units: "$ per MMBtu", frequency: "Daily", since: "2005-01-01", group: "energy", agency: EIA, fmt: { prefix: "$", digits: 2 }, sectors: ["Energy", "Utilities"] }),
+  m({ id: "GASREGW", title: "Regular gasoline, retail", units: "$ per gallon", frequency: "Weekly", since: "2005-01-01", group: "energy", agency: EIA, fmt: { prefix: "$", digits: 2 }, sectors: ["Energy", "Consumer Discretionary"] }),
+  m({ id: "PCOPPUSDM", title: "Copper price", units: "$ per metric ton", frequency: "Monthly", since: "1990-01-01", group: "energy", agency: "International Monetary Fund", fmt: { prefix: "$", digits: 0 }, sectors: ["Materials"] }),
+  m({ id: "PPIACO", title: "PPI: all commodities", units: "Index 1982=100", frequency: "Monthly", since: "1990-01-01", group: "energy", transform: "yoy", agency: BLS, sectors: ["Materials"] }),
+
+  // ---- Industry drivers (sector pages) ----
+  m({ id: "IPG3344S", title: "Semiconductor production", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: FRB, sectors: ["Information Technology"] }),
+  m({ id: "USINFO", title: "Information-sector employment", units: "Thousands of persons", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: BLS, sectors: ["Communication Services"] }),
+  m({ id: "RSNSR", title: "Online & nonstore retail sales", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "industry", transform: "yoy", agency: CENSUS, sectors: ["Consumer Discretionary", "Communication Services"] }),
+  m({ id: "RSFSDP", title: "Restaurant & bar sales", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "industry", transform: "yoy", agency: CENSUS, sectors: ["Consumer Discretionary"] }),
+  m({ id: "RSDBS", title: "Grocery & beverage store sales", units: "Millions of dollars", frequency: "Monthly", since: "1992-01-01", group: "industry", transform: "yoy", agency: CENSUS, sectors: ["Consumer Staples"] }),
+  m({ id: "CUSR0000SAF11", title: "CPI: food at home", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: BLS, sectors: ["Consumer Staples"] }),
+  m({ id: "CPIMEDSL", title: "CPI: medical care", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: BLS, sectors: ["Health Care"] }),
+  m({ id: "CES6562000001", title: "Health care employment", units: "Thousands of persons", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: BLS, sectors: ["Health Care"] }),
+  m({ id: "MANEMP", title: "Manufacturing employment", units: "Thousands of persons", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: BLS, sectors: ["Industrials"] }),
+  m({ id: "IPG325S", title: "Chemical production", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: FRB, sectors: ["Materials"] }),
+  m({ id: "PCU325325", title: "PPI: chemical manufacturing", units: "Index Dec 1984=100", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: BLS, sectors: ["Materials"] }),
+  m({ id: "IPG2211A2N", title: "Electric power generation output", units: "Index 2017=100", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: FRB, sectors: ["Utilities"] }),
+  m({ id: "CUSR0000SEHF01", title: "CPI: electricity", units: "Index 1982-84=100", frequency: "Monthly", since: "1990-01-01", group: "industry", transform: "yoy", agency: BLS, sectors: ["Utilities"] }),
+
+  // ---- Yield curve tenors ----
+  m({ id: "DGS1MO", title: "1-month Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
+  m({ id: "DGS3MO", title: "3-month Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
+  m({ id: "DGS6MO", title: "6-month Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
+  m({ id: "DGS1", title: "1-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
+  m({ id: "DGS3", title: "3-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
+  m({ id: "DGS5", title: "5-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
+  m({ id: "DGS7", title: "7-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
+  m({ id: "DGS20", title: "20-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
+  m({ id: "DGS30", title: "30-year Treasury", units: "%", frequency: "Daily", since: "2022-01-01", group: "curve", agency: FRB }),
 ];
+
+export const macroDef = (id: string) => MACRO_SERIES.find((d) => d.id === id);
+/** Series shown in the macro dashboard tiles (curve tenors and the recession flag are used as overlays). */
+export const MACRO_TILES = MACRO_SERIES.filter((d) => d.group !== "curve" && d.id !== "USREC");
 
 export const CURVE_TENORS: { id: string; label: string; years: number }[] = [
   { id: "DGS1MO", label: "1M", years: 1 / 12 },
