@@ -50,6 +50,8 @@
   --color-positive-soft: var(--positive-soft);
   --color-negative: var(--negative);
   --color-negative-soft: var(--negative-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
   --color-ink: var(--ink);
   --color-ink-foreground: var(--ink-foreground);
   --color-ink-muted: var(--ink-muted);
@@ -113,6 +115,8 @@
   --positive-soft: oklch(0.94 0.04 155);
   --negative: oklch(0.55 0.17 27);
   --negative-soft: oklch(0.95 0.035 27);
+  --warning: oklch(0.6 0.13 70);
+  --warning-soft: oklch(0.95 0.05 85);
   --destructive: oklch(0.55 0.19 27);
   --destructive-foreground: oklch(0.985 0.005 85);
   --link: oklch(0.42 0.13 255);

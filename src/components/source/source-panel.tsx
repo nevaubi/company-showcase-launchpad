@@ -32,7 +32,9 @@ export function SourcePanel() {
 
   useEffect(() => {
     if (!target) return setActive(null);
-    if (target.doc) {
+    if (target.doc?.irDoc) {
+      setActive({ accn: target.doc.accn, irDoc: target.doc.irDoc, locator: target.doc.search ? { search: target.doc.search } : undefined });
+    } else if (target.doc) {
       setActive({ accn: target.doc.accn, doc: target.doc.doc ? renderableDoc(target.doc.doc) : undefined, locator: target.doc.search ? { search: target.doc.search } : undefined });
     } else if (target.src) {
       setActive({ accn: target.src.accn, doc: target.src.doc, irDoc: target.src.irDoc, locator: locatorOf(target.src, target.unit as string, target.elementId) });
@@ -266,7 +268,7 @@ function renderableDoc(doc: string) {
 }
 
 function locatorOf(src: SourceRef, unit: string, elementId?: string): FactLocator {
-  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId, cell: src.cell };
+  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId, cell: src.cell, box: src.box };
 }
 
 function guessUnit(concept: string, fallback: string) {
