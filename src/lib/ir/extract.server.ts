@@ -122,17 +122,22 @@ export async function extractIrDocument(id: string) {
   return { facts: rows.length, rejected };
 }
 
-/** Next press release waiting for extraction (HTML exhibits; newest first). */
+/** Claim the next press release waiting for extraction (HTML exhibits; newest first). Safe under concurrent runs. */
 export async function nextToExtract(ticker?: string) {
   let q = supabaseAdmin
     .from("ir_documents")
     .select("id, ticker, title")
     .is("extracted_at", null)
+    .is("extract_status", null)
     .in("ext", ["htm", "html"])
     .in("kind", ["press-release", "supplement", "other"])
     .order("filed", { ascending: false })
-    .limit(1);
+    .limit(8);
   if (ticker) q = q.eq("ticker", ticker);
   const { data } = await q;
-  return data?.[0] ?? null;
+  for (const d of data ?? []) {
+    const { data: claimed } = await supabaseAdmin.from("ir_documents").update({ extract_status: "working" }).eq("id", d.id).is("extract_status", null).select("id");
+    if (claimed?.length) return d;
+  }
+  return null;
 }
