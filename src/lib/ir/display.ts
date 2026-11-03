@@ -142,7 +142,7 @@ export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell[
     start: c.s,
     end: c.e ?? "",
     value: c.v,
-    ...(doc.doc && doc.accn ? { doc: doc.doc } : { irDoc: doc.id }),
+    irDoc: doc.id,
     ...(Array.isArray(l) ? { cell: { t: l[0], r: l[1], c: l[2] } } : l ? { box: l } : {}),
   } as SourceRef;
 }
@@ -165,4 +165,22 @@ export function groupCsv(p: IrPayload, g: PayloadGroup, cols: string[], kind: "q
     lines.push([esc(`${"  ".repeat(r.depth ? 0 : 0)}${s.label}`), s.unit, ...cols.map((c) => (cells[c] ? String(cells[c].v) : ""))].join(","));
   }
   return lines.join("\n");
+}
+
+/** Compare each quarter's top-line revenue total from the releases with SEC-reported revenue. */
+export function secRevenueCheck(p: IrPayload, reported: { end: string; v: number }[]) {
+  const byKey = new Map(p.series.map((s) => [s.k, s]));
+  const roots = p.groups
+    .filter((g) => g.root && g.met === "revenue" && g.unit === "usd" && ["segment", "product", "geography"].includes(g.cat))
+    .map((g) => byKey.get(g.root!)!)
+    .filter(Boolean);
+  const out: { label: string; period: string; ir: number; sec: number; ok: boolean }[] = [];
+  for (const r of reported) {
+    // A release prints the top line in several tables; the largest matching root is the consolidated one.
+    const cands = roots.map((s) => ({ s, c: s.q[r.end] })).filter((x) => x.c && !x.c.f);
+    if (!cands.length) continue;
+    const best = cands.reduce((a, b) => (Math.abs(b.c.v - r.v) < Math.abs(a.c.v - r.v) ? b : a));
+    out.push({ label: best.s.label, period: r.end, ir: best.c.v, sec: r.v, ok: Math.abs(best.c.v - r.v) <= Math.max(1e6, Math.abs(r.v) * 0.005) });
+  }
+  return out;
 }
