@@ -40,6 +40,10 @@ let tokensOut = 0;
 let stop: string | null = null;
 let rateHits = 0;
 let active = 0;
+let lastWork = Date.now();
+
+// Single-flight lease held: documents left "working" by a crashed runner go back in the queue.
+await sb.from("ir_documents").update({ extract_status: null }).eq("extract_status", "working");
 
 async function release(id: string, status: string | null) {
   await sb.from("ir_documents").update({ extract_status: status, extracted_at: status ? new Date().toISOString() : null }).eq("id", id);
@@ -53,11 +57,13 @@ async function worker(n: number) {
     }
     const next = await nextToExtract(args.ticker ? { ticker: args.ticker } : {});
     if (!next) {
-      if (active === 0) return;
-      await sleep(10_000);
-      if (!(await nextToExtract.length)) return;
+      // --watch keeps polling while the collector and rendition jobs add documents.
+      if (args.watch === undefined && active === 0) return;
+      if (Date.now() - lastWork > Number(args.idle ?? 30) * 60_000) return;
+      await sleep(30_000);
       continue;
     }
+    lastWork = Date.now();
     active++;
     const t0 = Date.now();
     try {

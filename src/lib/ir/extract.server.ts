@@ -105,6 +105,7 @@ export async function nextToExtract(opts: { ticker?: string; before?: string } =
     .is("extract_status", null)
     .or("ext.in.(htm,html),rendition_path.like.%html")
     .in("kind", EXTRACTABLE_KINDS)
+    .or("pages.is.null,pages.lte.90")
     .order("filed", { ascending: false, nullsFirst: false })
     .limit(12);
   if (opts.ticker) q = q.eq("ticker", opts.ticker);
