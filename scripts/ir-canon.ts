@@ -9,6 +9,7 @@ import { COVERAGE } from "@/lib/coverage";
 import { CANON_INSTRUCTIONS, CANON_SCHEMA, failureNotes, mapFromModel, rawLines, renderLines, type RawLine } from "@/lib/ir/canon";
 import { buildIrSeries, rawKey, type IrFact, type LabelMapEntry } from "@/lib/ir/kpis";
 import { IR_MODELS, OpenAIError, openaiStructured } from "@/lib/openai.server";
+import { loadLabelMap } from "@/lib/ir/rebuild.server";
 import { buildCompany, loadFacts } from "./ir-build";
 import { args, log, sb } from "./lib/supa";
 
@@ -74,6 +75,14 @@ async function canonCompany(ticker: string, name: string) {
   let tokens = 0;
   const rounds = Number(args.rounds ?? 2);
   let best = { map: undefined as Record<string, LabelMapEntry> | undefined, failed: base.failed, total: base.total };
+  // The stored map from an earlier pass competes on the same terms; one that loses real numbers is retired.
+  const existing = await loadLabelMap(ticker);
+  if (existing) {
+    const r = failureNotes(facts, existing, 0);
+    const lost = lostValues(facts, baseValues, existing);
+    log(`${ticker} stored map: failures ${r.failed}/${r.total}, ${lost} shown values lost`);
+    if (r.failed <= best.failed && r.total >= base.total * 0.85 && lost <= baseValues.size * 0.002) best = { map: existing, failed: r.failed, total: r.total };
+  }
   for (let round = 1; round <= rounds; round++) {
     const current = failureNotes(facts, Object.keys(map).length ? map : undefined, 80);
     if (round > 1 && current.failed === 0) break;
@@ -102,7 +111,8 @@ async function canonCompany(ticker: string, name: string) {
     if (after.failed <= best.failed && after.total >= base.total * 0.85 && lost <= baseValues.size * 0.002) best = { map: proposal, failed: after.failed, total: after.total };
     map = proposal;
   }
-  if (best.map) {
+  if (!best.map && existing) await sb.from("ir_label_map").delete().eq("ticker", ticker);
+  if (best.map && best.map !== existing) {
     await sb.from("ir_label_map").delete().eq("ticker", ticker);
     const rows = Object.entries(best.map).map(([raw_key, canonical]) => ({ ticker, raw_key, canonical: canonical as never, model: args.model ?? IR_MODELS.reason }));
     for (let i = 0; i < rows.length; i += 500) {
