@@ -24,3 +24,34 @@ export const args = Object.fromEntries(
 ) as Record<string, string | undefined>;
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export const log = (...m: unknown[]) => console.log(new Date().toISOString().slice(11, 19), ...m);
+
+/**
+ * Database back-pressure shared by the pipeline scripts. Each process probes a tiny query at most
+ * every 10 s; while it takes longer than `BUSY_MS` the scripts wait instead of piling on, so the app
+ * itself stays responsive while bulk reading runs.
+ */
+const BUSY_MS = Number(process.env.DB_BUSY_MS ?? 1500);
+let latency = 0;
+let lastProbe = 0;
+let probing: Promise<void> | null = null;
+async function probe() {
+  const t0 = Date.now();
+  await sb.from("job_state").select("job").limit(1);
+  latency = Date.now() - t0;
+  lastProbe = Date.now();
+}
+export const dbLatency = () => latency;
+export async function dbGate(label = "job") {
+  for (let waited = 0; ; waited += 10_000) {
+    if (Date.now() - lastProbe > 10_000) {
+      probing ??= probe().finally(() => (probing = null));
+      await probing;
+    }
+    if (latency < BUSY_MS) {
+      if (waited) log(`database responsive again (${latency}ms) — ${label} resuming`);
+      return;
+    }
+    if (!waited) log(`database busy (${latency}ms) — ${label} waiting`);
+    await sleep(10_000);
+  }
+}

@@ -8,9 +8,11 @@
  *  - circuit breaker: auth/quota errors pause the job (job_state.paused_reason) and stop all workers;
  *    rate limits shrink concurrency and back off
  *  - paused guard: refuses to start while paused unless --resume is given
+ *  - back-pressure: waits while the database is slow and sheds workers until it recovers, so the
+ *    app stays usable during bulk runs
  */
 import { OpenAIError } from "@/lib/openai.server";
-import { args, log, sb, sleep } from "./supa";
+import { args, dbGate, dbLatency, log, sb, sleep } from "./supa";
 
 export interface RunnerItem {
   id: string;
@@ -62,6 +64,7 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
         await sleep(5000);
         continue;
       }
+      await dbGate(o.job);
       reserved++;
       let item: T | null;
       try {
@@ -117,9 +120,18 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
     }
   };
 
+  // Shed workers while database round-trips are slow; add them back one at a time once it recovers.
+  const governor = setInterval(() => {
+    const ms = dbLatency();
+    if (ms > 800 && concurrency > 2) {
+      concurrency = Math.max(2, Math.floor(concurrency * 0.75));
+      log(`database slow (${ms}ms) — concurrency now ${concurrency}`);
+    } else if (ms && ms < 300 && concurrency < o.concurrency) concurrency++;
+  }, 20_000);
   const stats = setInterval(() => log(`— ${o.job}: ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens, concurrency ${concurrency}`), 120_000);
   await Promise.all(Array.from({ length: o.concurrency }, (_, i) => worker(i)));
   clearInterval(stats);
+  clearInterval(governor);
   clearInterval(leaseTimer);
   await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
   log(stop ? `${o.job} STOPPED — ${stop}` : `${o.job} finished — ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens`);
