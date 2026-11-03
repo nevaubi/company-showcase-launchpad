@@ -2,6 +2,7 @@ import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { CompanyDataset, MacroSeries, PriceSeries, Universe } from "@/lib/financials/types";
 import { getMacroSeries, getNews, getPriceSeries, getQuotes } from "@/lib/market.functions";
 import type { MacroDef } from "@/lib/coverage";
+import { hydrateDataset } from "@/lib/financials/dataset";
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path);
@@ -20,7 +21,7 @@ export const universeQuery = queryOptions({
 export const companyQuery = (ticker: string) =>
   queryOptions({
     queryKey: ["company", ticker.toUpperCase()],
-    queryFn: () => getJson<CompanyDataset>(`/data/companies/${ticker.toUpperCase()}.json`),
+    queryFn: async () => hydrateDataset(await getJson<CompanyDataset>(`/data/companies/${ticker.toUpperCase()}.json`)),
     staleTime: Infinity,
   });
 

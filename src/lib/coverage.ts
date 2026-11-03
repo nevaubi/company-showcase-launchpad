@@ -340,9 +340,6 @@ export const COVERAGE: CoverageCompany[] = [
     ["AMT", "PLD", "MSFT"]),
 ];
 
-/** Industries whose statements carry bank-style lines (net interest income, deposits, loans). */
-export const BANK_INDUSTRY = /bank|brokerage|consumer finance/i;
-export const isBankLike = (industry: string) => BANK_INDUSTRY.test(industry);
 
 function co(
   ticker: string, cik: string, shortName: string, sector: string, industry: string, sectorEtf: string,
