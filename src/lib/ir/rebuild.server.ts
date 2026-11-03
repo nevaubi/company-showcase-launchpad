@@ -15,8 +15,21 @@ async function pages<T>(build: (from: number, to: number) => PromiseLike<{ data:
   }
 }
 
-export const loadFacts = (ticker: string) =>
-  pages<IrFact>((a, b) => supabaseAdmin.from("ir_kpi_facts").select(FACT_COLUMNS).eq("ticker", ticker).order("id").range(a, b) as never);
+/** All facts for a company, paged by id (keyset) so large companies don't hit the statement timeout. */
+export async function loadFacts(ticker: string): Promise<IrFact[]> {
+  const out: IrFact[] = [];
+  let last: string | null = null;
+  for (;;) {
+    let q = supabaseAdmin.from("ir_kpi_facts").select(FACT_COLUMNS).eq("ticker", ticker).order("id").limit(1000);
+    if (last) q = q.gt("id", last);
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as IrFact[];
+    out.push(...rows);
+    if (rows.length < 1000) return out;
+    last = String((rows.at(-1) as { id: string | number }).id);
+  }
+}
 
 export async function loadLabelMap(ticker: string): Promise<Record<string, LabelMapEntry> | undefined> {
   const rows = await pages<{ raw_key: string; canonical: LabelMapEntry }>((a, b) => supabaseAdmin.from("ir_label_map").select("raw_key, canonical").eq("ticker", ticker).range(a, b) as never);
