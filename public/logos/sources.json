@@ -1,0 +1,392 @@
+{
+ "AAPL": {
+  "file": "AAPL.svg",
+  "source": "Apple logo black.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg"
+ },
+ "ABBV": {
+  "file": "ABBV.svg",
+  "source": "AbbVie logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/cc/AbbVie_logo.svg"
+ },
+ "ABT": {
+  "file": "ABT.svg",
+  "source": "Abbott Laboratories 2025 logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/Abbott_Laboratories_2025_logo.svg"
+ },
+ "ADBE": {
+  "file": "ADBE.svg",
+  "source": "Adobe Corporate Horizontal Red HEX.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Adobe_Corporate_Horizontal_Red_HEX.svg"
+ },
+ "AMD": {
+  "file": "AMD.svg",
+  "source": "AMD Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/7/7c/AMD_Logo.svg"
+ },
+ "AMGN": {
+  "file": "AMGN.svg",
+  "source": "Amgen.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Amgen.svg"
+ },
+ "AMT": {
+  "file": "AMT.svg",
+  "source": "American Tower Corporation logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/7/73/American_Tower_Corporation_logo.svg"
+ },
+ "AMZN": {
+  "file": "AMZN.svg",
+  "source": "Amazon icon.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/4/4a/Amazon_icon.svg"
+ },
+ "AVGO": {
+  "file": "AVGO.svg",
+  "source": "Broadcom logo (2016-present).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/58/Broadcom_logo_%282016-present%29.svg"
+ },
+ "AXP": {
+  "file": "AXP.svg",
+  "source": "American Express logo (2018).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/fa/American_Express_logo_%282018%29.svg"
+ },
+ "BA": {
+  "file": "BA.svg",
+  "source": "Boeing full logo (variant).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/54/Boeing_full_logo_%28variant%29.svg"
+ },
+ "BAC": {
+  "file": "BAC.svg",
+  "source": "Bank of America logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/20/Bank_of_America_logo.svg"
+ },
+ "BKNG": {
+  "file": "BKNG.svg",
+  "source": "Booking Holdings Inc. Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Booking_Holdings_Inc._Logo.svg"
+ },
+ "C": {
+  "file": "C.svg",
+  "source": "Citi logo March 2023.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/7/73/Citi_logo_March_2023.svg"
+ },
+ "CAT": {
+  "file": "CAT.svg",
+  "source": "Caterpillar-shortened.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Caterpillar-shortened.svg"
+ },
+ "CMCSA": {
+  "file": "CMCSA.svg",
+  "source": "NBC Peacock (2022; 3D).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8b/NBC_Peacock_%282022%3B_3D%29.svg"
+ },
+ "COP": {
+  "file": "COP.svg",
+  "source": "ConocoPhillips Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/0c/ConocoPhillips_Logo.svg"
+ },
+ "COST": {
+  "file": "COST.svg",
+  "source": "Costco Wholesale logo 2010-10-26.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/59/Costco_Wholesale_logo_2010-10-26.svg"
+ },
+ "CRM": {
+  "file": "CRM.svg",
+  "source": "Salesforce.com logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f9/Salesforce.com_logo.svg"
+ },
+ "CSCO": {
+  "file": "CSCO.svg",
+  "source": "Cisco logo blue 2016.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/08/Cisco_logo_blue_2016.svg"
+ },
+ "CVX": {
+  "file": "CVX.svg",
+  "source": "Chevron Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/86/Chevron_Logo.svg"
+ },
+ "DE": {
+  "file": "DE.svg",
+  "source": "John Deere Logo \u2013 Flat 2 Color.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/en/0/02/John_Deere_Logo_%E2%80%93_Flat_2_Color.svg"
+ },
+ "DIS": {
+  "file": "DIS.svg",
+  "source": "Disney.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Disney.svg"
+ },
+ "DUK": {
+  "file": "DUK.svg",
+  "source": "Duke Energy logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/Duke_Energy_logo.svg"
+ },
+ "EQIX": {
+  "file": "EQIX.svg",
+  "source": "Equinix logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Equinix_logo.svg"
+ },
+ "FCX": {
+  "file": "FCX.svg",
+  "source": "Logo Freeport McMoRan.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/4/46/Logo_Freeport_McMoRan.svg"
+ },
+ "GE": {
+  "file": "GE.svg",
+  "source": "GE Aerospace logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/GE_Aerospace_logo.svg"
+ },
+ "GOOGL": {
+  "file": "GOOGL.svg",
+  "source": "Google Favicon 2025.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/3c/Google_Favicon_2025.svg"
+ },
+ "GS": {
+  "file": "GS.svg",
+  "source": "Goldman Sachs.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/61/Goldman_Sachs.svg"
+ },
+ "HD": {
+  "file": "HD.svg",
+  "source": "The Home Depot logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f6/The_Home_Depot_logo.svg"
+ },
+ "HON": {
+  "file": "HON.svg",
+  "source": "Logo honeywell.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Logo_honeywell.svg"
+ },
+ "IBM": {
+  "file": "IBM.svg",
+  "source": "IBM logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/51/IBM_logo.svg"
+ },
+ "INTC": {
+  "file": "INTC.svg",
+  "source": "Intel logo 2023.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/85/Intel_logo_2023.svg"
+ },
+ "ISRG": {
+  "file": "ISRG.svg",
+  "source": "Intuitive Surgical logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/01/Intuitive_Surgical_logo.svg"
+ },
+ "JNJ": {
+  "file": "JNJ.svg",
+  "source": "Johnson and Johnson Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Johnson_and_Johnson_Logo.svg"
+ },
+ "JPM": {
+  "file": "JPM.svg",
+  "source": "JPMorgan Chase.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e0/JPMorgan_Chase.svg"
+ },
+ "KO": {
+  "file": "KO.svg",
+  "source": "Coca-Cola logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Coca-Cola_logo.svg"
+ },
+ "LIN": {
+  "file": "LIN.png",
+  "source": "Linde plc logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6f/Linde_plc_logo.png"
+ },
+ "LLY": {
+  "file": "LLY.svg",
+  "source": "Eli Lilly and Company.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2b/Eli_Lilly_and_Company.svg"
+ },
+ "LMT": {
+  "file": "LMT.svg",
+  "source": "Lockheed Martin logo (2).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/1d/Lockheed_Martin_logo_%282%29.svg"
+ },
+ "LOW": {
+  "file": "LOW.svg",
+  "source": "Lowes Companies Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2c/Lowes_Companies_Logo.svg"
+ },
+ "MA": {
+  "file": "MA.svg",
+  "source": "Mastercard 2019 logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/Mastercard_2019_logo.svg"
+ },
+ "MCD": {
+  "file": "MCD.svg",
+  "source": "McDonald's square 2020.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/05/McDonald%27s_square_2020.svg"
+ },
+ "META": {
+  "file": "META.svg",
+  "source": "Meta Platforms Inc. logo (cropped).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/05/Meta_Platforms_Inc._logo_%28cropped%29.svg"
+ },
+ "MRK": {
+  "file": "MRK.svg",
+  "source": "Merck Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/94/Merck_Logo.svg"
+ },
+ "MS": {
+  "file": "MS.svg",
+  "source": "Morgan Stanley Logo 2024.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/ec/Morgan_Stanley_Logo_2024.svg"
+ },
+ "MSFT": {
+  "file": "MSFT.svg",
+  "source": "Microsoft icon.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/25/Microsoft_icon.svg"
+ },
+ "MU": {
+  "file": "MU.svg",
+  "source": "Micron Technology logo 2024.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/16/Micron_Technology_logo_2024.svg"
+ },
+ "NEE": {
+  "file": "NEE.svg",
+  "source": "NextEra Energy logo (1).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e0/NextEra_Energy_logo_%281%29.svg"
+ },
+ "NFLX": {
+  "file": "NFLX.svg",
+  "source": "Netflix 2016 N logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/18/Netflix_2016_N_logo.svg"
+ },
+ "NKE": {
+  "file": "NKE.svg",
+  "source": "Logo NIKE.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg"
+ },
+ "NOW": {
+  "file": "NOW.svg",
+  "source": "ServiceNow logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/ServiceNow_logo.svg"
+ },
+ "NVDA": {
+  "file": "NVDA.svg",
+  "source": "NVIDIA logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/NVIDIA_logo.svg"
+ },
+ "ORCL": {
+  "file": "ORCL.svg",
+  "source": "Oracle logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Oracle_logo.svg"
+ },
+ "PEP": {
+  "file": "PEP.svg",
+  "source": "PepsiCo logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a6/PepsiCo_logo.svg"
+ },
+ "PFE": {
+  "file": "PFE.svg",
+  "source": "Pfizer (2021).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/Pfizer_%282021%29.svg"
+ },
+ "PG": {
+  "file": "PG.svg",
+  "source": "Procter & Gamble logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/85/Procter_%26_Gamble_logo.svg"
+ },
+ "PLD": {
+  "file": "PLD.svg",
+  "source": "Prologis Logo Current.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Prologis_Logo_Current.svg"
+ },
+ "PM": {
+  "file": "PM.svg",
+  "source": "Pmi logo text only.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Pmi_logo_text_only.svg"
+ },
+ "QCOM": {
+  "file": "QCOM.svg",
+  "source": "Qualcomm-Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/fc/Qualcomm-Logo.svg"
+ },
+ "RTX": {
+  "file": "RTX.svg",
+  "source": "RTX Raytheon Technologies logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/30/RTX_Raytheon_Technologies_logo.svg"
+ },
+ "SBUX": {
+  "file": "SBUX.svg",
+  "source": "Starbucks Corporation Logo 2011.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/en/d/d3/Starbucks_Corporation_Logo_2011.svg"
+ },
+ "SCHW": {
+  "file": "SCHW.svg",
+  "source": "Charles Schwab Corporation logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/4/4b/Charles_Schwab_Corporation_logo.svg"
+ },
+ "SLB": {
+  "file": "SLB.svg",
+  "source": "SLB Logo 2022.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/SLB_Logo_2022.svg"
+ },
+ "SO": {
+  "file": "SO.svg",
+  "source": "Southern Company logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/29/Southern_Company_logo.svg"
+ },
+ "SPGI": {
+  "file": "SPGI.svg",
+  "source": "S&P Global logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/S%26P_Global_logo.svg"
+ },
+ "T": {
+  "file": "T.svg",
+  "source": "AT&T Globe 2016.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/05/AT%26T_Globe_2016.svg"
+ },
+ "TMO": {
+  "file": "TMO.svg",
+  "source": "Thermo Fisher Scientific logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Thermo_Fisher_Scientific_logo.svg"
+ },
+ "TSLA": {
+  "file": "TSLA.svg",
+  "source": "Tesla T symbol.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Tesla_T_symbol.svg"
+ },
+ "TXN": {
+  "file": "TXN.svg",
+  "source": "Texas Instruments logo 2024.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/36/Texas_Instruments_logo_2024.svg"
+ },
+ "UNH": {
+  "file": "UNH.svg",
+  "source": "UnitedHealthcare (logo).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/en/2/29/UnitedHealthcare_%28logo%29.svg"
+ },
+ "UNP": {
+  "file": "UNP.svg",
+  "source": "Union pacific railroad logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/de/Union_pacific_railroad_logo.svg"
+ },
+ "UPS": {
+  "file": "UPS.svg",
+  "source": "United Parcel Service logo 2014.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/United_Parcel_Service_logo_2014.svg"
+ },
+ "V": {
+  "file": "V.svg",
+  "source": "Visa Inc. logo (2021\u2013present).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Visa_Inc._logo_%282021%E2%80%93present%29.svg"
+ },
+ "VZ": {
+  "file": "VZ.svg",
+  "source": "Verizon 2024 (symbol).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/5a/Verizon_2024_%28symbol%29.svg"
+ },
+ "WFC": {
+  "file": "WFC.svg",
+  "source": "Wells Fargo Logo (2020).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e2/Wells_Fargo_Logo_%282020%29.svg"
+ },
+ "WMT": {
+  "file": "WMT.svg",
+  "source": "Walmart spark (2025).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/60/Walmart_spark_%282025%29.svg"
+ },
+ "XOM": {
+  "file": "XOM.svg",
+  "source": "Exxon Mobil Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/18/Exxon_Mobil_Logo.svg"
+ }
+}
