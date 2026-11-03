@@ -170,7 +170,6 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   clearInterval(governor);
   clearInterval(rebuildTimer);
   while (flushing) await sleep(1000);
-  while (flushing) await sleep(1000);
   await flush(true);
   clearInterval(leaseTimer);
   await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
