@@ -152,6 +152,27 @@ export type Database = {
         }
         Relationships: []
       }
+      ir_company_series: {
+        Row: {
+          built_at: string
+          payload: Json
+          stats: Json
+          ticker: string
+        }
+        Insert: {
+          built_at?: string
+          payload: Json
+          stats?: Json
+          ticker: string
+        }
+        Update: {
+          built_at?: string
+          payload?: Json
+          stats?: Json
+          ticker?: string
+        }
+        Relationships: []
+      }
       ir_documents: {
         Row: {
           accn: string | null
@@ -160,7 +181,9 @@ export type Database = {
           exhibit: string | null
           ext: string | null
           extract_facts: number | null
+          extract_model: string | null
           extract_status: string | null
+          extract_usage: Json | null
           extracted_at: string | null
           fetched_at: string
           filed: string | null
@@ -175,6 +198,8 @@ export type Database = {
           source_url: string
           ticker: string
           title: string
+          vision_at: string | null
+          vision_status: string | null
         }
         Insert: {
           accn?: string | null
@@ -183,7 +208,9 @@ export type Database = {
           exhibit?: string | null
           ext?: string | null
           extract_facts?: number | null
+          extract_model?: string | null
           extract_status?: string | null
+          extract_usage?: Json | null
           extracted_at?: string | null
           fetched_at?: string
           filed?: string | null
@@ -198,6 +225,8 @@ export type Database = {
           source_url: string
           ticker: string
           title?: string
+          vision_at?: string | null
+          vision_status?: string | null
         }
         Update: {
           accn?: string | null
@@ -206,7 +235,9 @@ export type Database = {
           exhibit?: string | null
           ext?: string | null
           extract_facts?: number | null
+          extract_model?: string | null
           extract_status?: string | null
+          extract_usage?: Json | null
           extracted_at?: string | null
           fetched_at?: string
           filed?: string | null
@@ -221,12 +252,15 @@ export type Database = {
           source_url?: string
           ticker?: string
           title?: string
+          vision_at?: string | null
+          vision_status?: string | null
         }
         Relationships: []
       }
       ir_kpi_facts: {
         Row: {
           accn: string | null
+          breakdown: string | null
           category: string
           created_at: string
           derived: boolean
@@ -238,7 +272,9 @@ export type Database = {
           is_total: boolean
           label: string
           locator: Json
+          method: string
           metric: string
+          model: string | null
           months: number | null
           parent: string | null
           period_end: string | null
@@ -250,6 +286,7 @@ export type Database = {
         }
         Insert: {
           accn?: string | null
+          breakdown?: string | null
           category: string
           created_at?: string
           derived?: boolean
@@ -261,7 +298,9 @@ export type Database = {
           is_total?: boolean
           label: string
           locator?: Json
+          method?: string
           metric?: string
+          model?: string | null
           months?: number | null
           parent?: string | null
           period_end?: string | null
@@ -273,6 +312,7 @@ export type Database = {
         }
         Update: {
           accn?: string | null
+          breakdown?: string | null
           category?: string
           created_at?: string
           derived?: boolean
@@ -284,7 +324,9 @@ export type Database = {
           is_total?: boolean
           label?: string
           locator?: Json
+          method?: string
           metric?: string
+          model?: string | null
           months?: number | null
           parent?: string | null
           period_end?: string | null
@@ -303,6 +345,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      ir_label_map: {
+        Row: {
+          canonical: Json
+          created_at: string
+          model: string | null
+          raw_key: string
+          ticker: string
+        }
+        Insert: {
+          canonical: Json
+          created_at?: string
+          model?: string | null
+          raw_key: string
+          ticker: string
+        }
+        Update: {
+          canonical?: Json
+          created_at?: string
+          model?: string | null
+          raw_key?: string
+          ticker?: string
+        }
+        Relationships: []
       }
       job_runs: {
         Row: {
@@ -338,16 +404,22 @@ export type Database = {
         Row: {
           cursor: number
           job: string
+          lease_until: string | null
+          paused_reason: string | null
           updated_at: string
         }
         Insert: {
           cursor?: number
           job: string
+          lease_until?: string | null
+          paused_reason?: string | null
           updated_at?: string
         }
         Update: {
           cursor?: number
           job?: string
+          lease_until?: string | null
+          paused_reason?: string | null
           updated_at?: string
         }
         Relationships: []
