@@ -636,13 +636,24 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     if (!opts.bank) {
       const oi = rowOf(income, "operatingIncome");
       const dna = rowOf(cash, "dna");
-      insertAfter(income, "operatingIncome", {
+      const pretax = rowOf(income, "pretaxIncome");
+      const interest = rowOf(income, "interestExpense");
+      const ebitdaRow: Row = {
         key: "ebitda",
         label: "EBITDA",
         unit: "usd",
         kind: "kpi",
-        cells: ps.map((_, i) => combine(oi?.cells[i] ?? null, dna?.cells[i] ?? null, "add", ["Operating income", "D&A"])),
-      });
+        cells: ps.map((_, i) => {
+          const d = dna?.cells[i] ?? null;
+          const fromOi = combine(oi?.cells[i] ?? null, d, "add", ["Operating income", "D&A"]);
+          if (fromOi) return fromOi;
+          // Filers without an operating-income subtotal (e.g. integrated oils): pretax + interest + D&A.
+          const ebit = combine(pretax?.cells[i] ?? null, interest?.cells[i] ?? null, "add", ["Income before taxes", "Interest expense"]);
+          return combine(ebit, d, "add", ["EBIT", "D&A"]);
+        }),
+      };
+      if (oi) insertAfter(income, "operatingIncome", ebitdaRow);
+      else insertAfter(income, "pretaxIncome", ebitdaRow);
       const debt = totalDebtRow(cf, balance, ps);
       const cashRow = rowOf(balance, "cash");
       const sti = rowOf(balance, "shortTermInvestments");
