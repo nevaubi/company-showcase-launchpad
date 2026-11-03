@@ -47,7 +47,7 @@ export const extractNextIr = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
   .handler(async ({ data }) => {
     const { extractIrDocument, nextToExtract } = await import("@/lib/ir/extract.server");
-    const next = await nextToExtract(data.ticker);
+    const next = await nextToExtract({ ticker: data.ticker });
     if (!next) return { done: true, facts: 0 };
     try {
       const r = await extractIrDocument(next.id);
