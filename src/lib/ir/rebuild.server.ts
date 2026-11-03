@@ -9,7 +9,7 @@ export const FACT_COLUMNS = "id, document_id, document_kind, category, metric, b
 async function retry<T extends { error: { message: string } | null }>(run: () => PromiseLike<T>, tries = 4): Promise<T> {
   for (let i = 0; ; i++) {
     const r = await run();
-    if (!r.error || i >= tries - 1 || !/timeout|fetch failed|ECONNRESET|503|502|upstream/i.test(r.error.message)) return r;
+    if (!r.error || i >= tries - 1 || !/timeout|timed out|abort|fetch failed|ECONNRESET|503|502|upstream/i.test(r.error.message)) return r;
     await new Promise((res) => setTimeout(res, 1500 * 2 ** i));
   }
 }
@@ -31,7 +31,8 @@ export async function loadFacts(ticker: string): Promise<IrFact[]> {
   for (;;) {
     const after = last;
     const { data, error } = await retry(() => {
-      let q = supabaseAdmin.from("ir_kpi_facts").select(FACT_COLUMNS).eq("ticker", ticker).order("id").limit(1000);
+      // A stalled connection must fail (and be retried) rather than hang the rebuild forever.
+      let q = supabaseAdmin.from("ir_kpi_facts").select(FACT_COLUMNS).eq("ticker", ticker).order("id").limit(1000).abortSignal(AbortSignal.timeout(90_000));
       if (after) q = q.gt("id", after);
       return q;
     });
@@ -56,12 +57,16 @@ export async function rebuildCompany(ticker: string, opts: { dry?: boolean } = {
     // Payloads for banks run to several MB: keep them in storage, with stats in the table.
     const body = JSON.stringify(payload);
     const path = `series/${ticker}.json`;
-    const up = await supabaseAdmin.storage.from("ir-documents").upload(path, new Blob([body], { type: "application/json" }), { upsert: true, contentType: "application/json" });
+    const up = await Promise.race([
+      supabaseAdmin.storage.from("ir-documents").upload(path, new Blob([body], { type: "application/json" }), { upsert: true, contentType: "application/json" }),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`upload of ${path} timed out`)), 120_000)),
+    ]);
     if (up.error) throw new Error(up.error.message);
     const { error } = await retry(() =>
       supabaseAdmin
         .from("ir_company_series")
-        .upsert({ ticker, payload: null, payload_path: path, payload_bytes: body.length, stats: payload.stats as never, built_at: payload.builtAt }),
+        .upsert({ ticker, payload: null, payload_path: path, payload_bytes: body.length, stats: payload.stats as never, built_at: payload.builtAt })
+        .abortSignal(AbortSignal.timeout(60_000)),
     );
     if (error) throw new Error(error.message);
   }
