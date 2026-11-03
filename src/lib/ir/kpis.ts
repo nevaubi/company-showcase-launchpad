@@ -93,7 +93,8 @@ export const normLabel = (s: string) =>
 /** Identity of a raw extracted line, used to key the label map. */
 export const rawKey = (f: Pick<IrFact, "category" | "metric" | "unit" | "label" | "parent">) => `${f.category}|${f.metric}|${f.unit}|${normLabel(f.label)}|${normLabel(f.parent ?? "")}`;
 
-const seriesKey = (f: Pick<IrFact, "category" | "metric" | "label" | "unit">) => `${f.category}|${f.metric}|${normLabel(f.label)}|${f.unit}`;
+/** A line is its dimension, label and the total it rolls into (the same label can appear in two tables). */
+const seriesKey = (f: Pick<IrFact, "category" | "metric" | "label" | "unit" | "parent">) => `${f.category}|${f.metric}|${normLabel(f.label)}|${f.unit}|${normLabel(f.parent ?? "")}`;
 const docOf = (f: IrFact) => f.document_id ?? f.accn ?? "doc";
 const FLOW_UNITS = new Set(["usd", "count", "other"]);
 /** Lines that can't be negative: a negative derived value means mismatched vintages, not data. */
@@ -123,8 +124,25 @@ interface Vintage {
   filed: string;
 }
 
-export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string, LabelMapEntry> } = {}): { series: IrSeries[]; quarters: string[]; years: string[]; checks: ReconcileCheck[] } {
-  const facts = applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value));
+/** Fiscal-year end month (1-12): the most common end month among 12-month periods (trailing-twelve-month columns are rarer). */
+export function fiscalYearEndMonth(facts: IrFact[]): number | null {
+  const n = new Map<number, number>();
+  for (const f of facts) if (f.months === 12) n.set(Number(f.period_end.slice(5, 7)), (n.get(Number(f.period_end.slice(5, 7))) ?? 0) + 1);
+  const best = [...n.entries()].sort((a, b) => b[1] - a[1])[0];
+  return best ? best[0] : null;
+}
+
+const monthNear = (d: string, m: number) => {
+  const dm = Number(d.slice(5, 7));
+  const day = Number(d.slice(8, 10));
+  return dm === m || (dm === (m % 12) + 1 && day <= 7) || (dm === ((m + 10) % 12) + 1 && day >= 24);
+};
+
+export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string, LabelMapEntry>; fyEndMonth?: number | null } = {}): { series: IrSeries[]; quarters: string[]; years: string[]; checks: ReconcileCheck[] } {
+  const mapped = applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value));
+  // Trailing-twelve-month columns ending mid-year are not fiscal years.
+  const fyEnd = opts.fyEndMonth ?? fiscalYearEndMonth(mapped);
+  const facts = fyEnd ? mapped.filter((f) => f.months !== 12 || monthNear(f.period_end, fyEnd)) : mapped;
 
   // Period grids: quarter ends (3-month and point-in-time values) and fiscal-year ends.
   const quarters: string[] = [];
