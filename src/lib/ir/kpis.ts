@@ -67,6 +67,8 @@ export interface ReconcileCheck {
   sum: number;
   ok: boolean;
   children: number;
+  /** The release itemizes only selected lines: parts cover part of the total, never exceed it. */
+  partial?: boolean;
 }
 
 export interface LabelMapEntry {
@@ -342,7 +344,27 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
       }
     }
   }
+  markPartialLists(checks, series);
   return { series, quarters, years, checks };
+}
+
+/**
+ * "Selected products" tables list some lines and the total without an "other" line, so the parts
+ * always fall short. When a total's misses are (almost) all short — never over — and they're most
+ * of its checks, or the table says "selected", flag them as partial lists instead of errors.
+ */
+export function markPartialLists(checks: ReconcileCheck[], series: IrSeries[]) {
+  const byTotal = new Map<string, ReconcileCheck[]>();
+  for (const c of checks) byTotal.set(c.totalKey, [...(byTotal.get(c.totalKey) ?? []), c]);
+  const byKey = new Map(series.map((x) => [x.key, x]));
+  for (const [key, list] of byTotal) {
+    const bad = list.filter((c) => !c.ok);
+    if (!bad.length) continue;
+    const short = bad.filter((c) => c.sum < c.total && c.sum > 0 && c.sum >= c.total * 0.2);
+    const kids = childrenOf(series, byKey.get(key)!);
+    const selected = /selected|key product|select /i.test(`${byKey.get(key)?.breakdown ?? ""} ${kids.map((k) => k.breakdown ?? "").join(" ")}`);
+    if (short.length === bad.length && (selected || bad.length >= list.length * 0.8)) for (const c of short) c.partial = true;
+  }
 }
 
 /**

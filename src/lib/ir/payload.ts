@@ -59,6 +59,8 @@ export interface PayloadCheck {
   sum: number;
   ok: boolean;
   n: number;
+  /** parts are a selected list that covers only part of the total */
+  partial?: boolean;
 }
 export interface PayloadDoc {
   id: string;
@@ -86,8 +88,8 @@ export interface IrStats {
   facts: number;
   firstPeriod: string | null;
   lastPeriod: string | null;
-  checksQ: { ok: number; total: number };
-  checksFY: { ok: number; total: number };
+  checksQ: { ok: number; total: number; partial?: number };
+  checksFY: { ok: number; total: number; partial?: number };
 }
 
 const locOf = (f: IrFact): PayloadLocator | undefined => {
@@ -175,7 +177,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
     groups.push({ id, cat: s0.category, met: s0.metric, unit: s0.unit, label: "", bd: null, root: null, rows: list.sort((a, b) => magnitude(b) - magnitude(a)).map((s) => ({ k: s.key, depth: 0 })) });
   }
 
-  const pc = (c: ReconcileCheck): PayloadCheck => ({ k: c.totalKey, e: c.period, kind: c.kind, total: c.total, sum: c.sum, ok: c.ok, n: c.children });
+  const pc = (c: ReconcileCheck): PayloadCheck => ({ k: c.totalKey, e: c.period, kind: c.kind, total: c.total, sum: c.sum, ok: c.ok, n: c.children, ...(c.partial ? { partial: true } : {}) });
   const allPeriods = out.flatMap((s) => [...Object.keys(s.q), ...Object.keys(s.y)]).sort();
   const q = checks.filter((c) => c.kind === "q");
   const fy = checks.filter((c) => c.kind === "fy");
@@ -196,8 +198,9 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       facts: facts.length,
       firstPeriod: allPeriods[0] ?? null,
       lastPeriod: allPeriods.at(-1) ?? null,
-      checksQ: { ok: q.filter((c) => c.ok).length, total: q.length },
-      checksFY: { ok: fy.filter((c) => c.ok).length, total: fy.length },
+      // Selected-item lists aren't additive by design: report them apart from real tie-out checks.
+      checksQ: { ok: q.filter((c) => c.ok).length, total: q.filter((c) => !c.partial).length, partial: q.filter((c) => c.partial).length },
+      checksFY: { ok: fy.filter((c) => c.ok).length, total: fy.filter((c) => !c.partial).length, partial: fy.filter((c) => c.partial).length },
     },
   };
 }
