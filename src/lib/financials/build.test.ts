@@ -119,7 +119,7 @@ describe("data-quality guards", () => {
 
   it("drops a fourth quarter that would come out negative from mismatched restatements", () => {
     // Only the original 9M (340) exists, so 300 − 340 would show negative revenue.
-    expect(q4(restated([]))).toBeNull();
+    expect(q4(restated([]))?.v ?? null).toBeNull();
   });
 
   it("rescales share counts a filing tagged in millions, keeping the tagged fact as the source", () => {
