@@ -110,7 +110,9 @@ export const quotesQuery = (symbols: string[]) =>
 
 export const useQuotes = (symbols: string[]) => useQuery({ ...quotesQuery(symbols), enabled: symbols.length > 0 });
 
-export const macroQuery = (def: Pick<MacroDef, "id" | "title" | "units" | "frequency"> & { since?: string }) =>
+type MacroRequest = Pick<MacroDef, "id" | "title" | "units"> & { frequency: string; since?: string; provider?: MacroDef["provider"] };
+
+export const macroQuery = (def: MacroRequest) =>
   queryOptions({
     queryKey: ["macro", def.id, def.since ?? ""],
     queryFn: async (): Promise<MacroSeries> => {
@@ -128,7 +130,7 @@ export const macroQuery = (def: Pick<MacroDef, "id" | "title" | "units" | "frequ
     staleTime: 30 * 60_000,
   });
 
-export const useMacro = (def: Pick<MacroDef, "id" | "title" | "units" | "frequency"> & { since?: string }) =>
+export const useMacro = (def: MacroRequest) =>
   useQuery(macroQuery(def));
 
 export const newsQuery = (query: string) =>

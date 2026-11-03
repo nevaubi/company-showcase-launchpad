@@ -125,10 +125,10 @@ export async function exportWorkbook(d: CompanyDataset, freq: Freq, scale: Scale
     head.getCell(2).value = "Unit";
     ps.forEach((p, j) => (head.getCell(FIRST_COL + j + 1).value = `${p.label}\n${p.end}`));
     head.height = 30;
-    head.eachCell((c) => {
+    head.eachCell((c, col) => {
       c.font = { bold: true, color: { argb: paper } };
       c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: ink } };
-      c.alignment = { wrapText: true, vertical: "middle", horizontal: c.col > FIRST_COL ? "right" : "left" };
+      c.alignment = { wrapText: true, vertical: "middle", horizontal: col > FIRST_COL ? "right" : "left" };
     });
 
     st.rows.forEach((row, ri) => {
