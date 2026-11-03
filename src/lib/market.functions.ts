@@ -85,7 +85,9 @@ export const getQuotes = createServerFn({ method: "GET" })
         // Yahoo throttles shared IPs; Nasdaq covers U.S. stocks and ETFs (not indices).
         if (s.startsWith("^")) throw e;
         const kind = stocks.has(s) ? "stocks" : "etf";
-        const [n, bars] = await Promise.all([fetchNasdaqQuote(s, kind), fetchNasdaqDaily(s, kind, 10).catch(() => [])]);
+        // Sequential: the pool already holds four requests open (the runtime allows six).
+        const n = await fetchNasdaqQuote(s, kind);
+        const bars = await fetchNasdaqDaily(s, kind, 10).catch(() => []);
         const q: Quote = {
           symbol: s,
           name: n.name,
