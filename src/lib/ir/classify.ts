@@ -1,5 +1,5 @@
 // Pure helpers for classifying investor-relations files.
-export type IrKind = "sec-copy" | "press-release" | "presentation" | "supplement" | "transcript" | "annual-report" | "proxy" | "data" | "image" | "other";
+export type IrKind = "sec-copy" | "report" | "press-release" | "presentation" | "supplement" | "transcript" | "annual-report" | "proxy" | "data" | "image" | "other";
 
 export const IR_FILE_RE = /\.(pdf|xlsx?|xlsm|csv|pptx?|docx?|jpe?g|png)$/i;
 
@@ -26,9 +26,11 @@ export function classifyIrDocument(p: { exhibit?: string; description?: string; 
   // Copies of 10-K/10-Q/proxy filings already covered by EDGAR XBRL.
   if (/\b10[- ]?[qk]\b|as[- ]filed|including exhibits|form 10/.test(text)) return { kind: "sec-copy", title };
   if (/transcript/.test(text)) return { kind: "transcript", title };
+  // Long-form reports (sustainability, citizenship, annual-report books) — stored, not table-mined.
+  if (/sustainab|esg|citizenship|impact report|climate|tcfd|diversity|corporate responsibility|annual ?report|annualreport/.test(text)) return { kind: "report", title };
   if (/presentation|slides|deck|investor day|earnings call materials/.test(text) || /^pptx?$/.test(p.ext)) return { kind: "presentation", title };
   if (/supplement|financial data|trending|schedules|fact ?book|metrics|kpi|statistical|segment/.test(text) || /^(xlsx?|xlsm|csv)$/.test(p.ext)) return { kind: p.ext.startsWith("xls") || p.ext === "csv" ? "data" : "supplement", title };
-  if (/annual report|10-k wrap/.test(text)) return { kind: "annual-report", title };
+  if (/10-k wrap/.test(text)) return { kind: "annual-report", title };
   if (/proxy/.test(text)) return { kind: "proxy", title };
   if (/release|results|earnings|announces|reports/.test(text) || /99\.1\b/.test(p.exhibit ?? "")) return { kind: "press-release", title };
   return { kind: "other", title };

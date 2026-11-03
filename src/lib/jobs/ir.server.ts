@@ -66,21 +66,41 @@ async function store(c: CoverageCompany, k: Candidate): Promise<{ stored: boolea
   return { stored: true, bytes: buf.byteLength };
 }
 
+interface FilingColumns {
+  accessionNumber: string[];
+  form: string[];
+  filingDate: string[];
+  reportDate: string[];
+  items: string[];
+}
 interface Submissions {
-  filings: { recent: { accessionNumber: string[]; form: string[]; filingDate: string[]; reportDate: string[]; items: string[] } };
+  filings: { recent: FilingColumns; files?: { name: string; filingFrom: string; filingTo: string }[] };
 }
 
-/** EX-99.x exhibits (and attached spreadsheets/PDFs) from results and Reg FD 8-Ks. */
-export async function secExhibitCandidates(c: CoverageCompany, sinceDays = 3 * 365): Promise<Candidate[]> {
-  const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)).json()) as Submissions;
-  const r = sub.filings.recent;
-  const since = new Date(Date.now() - sinceDays * 86400000).toISOString().slice(0, 10);
-  const out: Candidate[] = [];
-  for (let i = 0; i < r.form.length; i++) {
-    if (r.form[i] !== "8-K" || r.filingDate[i] < since || !/2\.02|7\.01/.test(r.items[i] ?? "")) continue;
-    out.push({ url: r.accessionNumber[i], source: "sec-exhibit", accn: r.accessionNumber[i], filed: r.filingDate[i], period: r.reportDate[i] || undefined });
+/**
+ * EX-99.x exhibits (and attached spreadsheets/PDFs) from results (Item 2.02) and Reg FD (Item 7.01)
+ * 8-Ks filed on or after `since`, newest first. Older history lives in the paginated submissions
+ * files, which are read only when `since` reaches back past the "recent" window.
+ */
+export async function secExhibitCandidates(c: CoverageCompany, since = new Date(Date.now() - 3 * 365 * 86400000).toISOString().slice(0, 10)): Promise<Candidate[]> {
+  const cik = c.cik.padStart(10, "0");
+  const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${cik}.json`)).json()) as Submissions;
+  const pages: FilingColumns[] = [sub.filings.recent];
+  for (const f of sub.filings.files ?? []) {
+    if (f.filingTo < since) continue;
+    pages.push((await (await fetchSec(`https://data.sec.gov/submissions/${f.name}`)).json()) as FilingColumns);
   }
-  return out;
+  const out: Candidate[] = [];
+  const seen = new Set<string>();
+  for (const r of pages) {
+    for (let i = 0; i < r.form.length; i++) {
+      if (!/^8-K(\/A)?$/.test(r.form[i]) || r.filingDate[i] < since || !/2\.02|7\.01/.test(r.items?.[i] ?? "")) continue;
+      if (seen.has(r.accessionNumber[i])) continue;
+      seen.add(r.accessionNumber[i]);
+      out.push({ url: r.accessionNumber[i], source: "sec-exhibit", accn: r.accessionNumber[i], filed: r.filingDate[i], period: r.reportDate[i] || undefined });
+    }
+  }
+  return out.sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? ""));
 }
 
 /** Expand one 8-K into its exhibit files using the filing index table (type + description columns). */
@@ -140,18 +160,24 @@ export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]>
   return [...links].map((url) => ({ url, source: "ir-site" as const }));
 }
 
-/** Store up to `max` not-yet-stored files for a company. */
-export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 8) {
+/** Store up to `max` not-yet-stored files for a company (`since` bounds the SEC history). */
+export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 8, opts: { since?: string; onFiling?: (accn: string, files: number) => void } = {}) {
   const { data: have } = await supabaseAdmin.from("ir_documents").select("source_url, accn").eq("ticker", c.ticker).limit(5000);
   const known = new Set((have ?? []).map((d) => d.source_url));
   const doneAccn = new Set((have ?? []).map((d) => d.accn).filter(Boolean));
   let todo: Candidate[] = [];
   if (mode === "sec") {
     // Whole filings only, so a filing is either fully stored or untouched (lets us skip stored accessions).
-    const filings = (await secExhibitCandidates(c)).filter((f) => !doneAccn.has(f.accn!));
+    const filings = (await secExhibitCandidates(c, opts.since)).filter((f) => !doneAccn.has(f.accn!));
     for (const f of filings) {
       if (todo.length >= max) break;
-      todo.push(...(await exhibitsOf(c, f)).filter((k) => !known.has(k.url)));
+      try {
+        const files = (await exhibitsOf(c, f)).filter((k) => !known.has(k.url));
+        todo.push(...files);
+        opts.onFiling?.(f.accn!, files.length);
+      } catch {
+        /* index unavailable; retried on the next pass */
+      }
     }
   } else todo = (await irSiteCandidates(c)).filter((k) => !known.has(k.url)).slice(0, max);
   const results: { url: string; stored: boolean; reason?: string }[] = [];

@@ -11,9 +11,9 @@
 
 export const IR_MODELS = {
   /** Bulk table extraction: fast, strict-JSON capable. */
-  extract: process.env["IR_EXTRACT_MODEL"] || "gpt-6-astra",
+  extract: process.env["IR_EXTRACT_MODEL"] || "gpt-6.1-sol",
   /** Slide/chart reading (image input). */
-  vision: process.env["IR_VISION_MODEL"] || "gpt-6-astra",
+  vision: process.env["IR_VISION_MODEL"] || "gpt-6.1-sol",
   /** Reconciliation repair and cross-period label mapping: strongest reasoning. */
   reason: process.env["IR_REASON_MODEL"] || "gpt-6.1-sol",
 } as const;
