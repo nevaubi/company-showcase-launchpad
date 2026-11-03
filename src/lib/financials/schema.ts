@@ -268,6 +268,7 @@ export const CASHFLOW_LINES: LineDef[] = [
       "PaymentsToAcquireOtherProductiveAssets",
       "PaymentsToDevelopRealEstateAssets",
       // Company extensions (read from the filings' inline XBRL at ingest) for filers with no us-gaap capex line.
+      "cop:PaymentToAcquireProductiveAssetsAndInvestments",
       "cop:CapitalExpendituresAndInvestments",
       "nee:CapitalExpendituresIndependentPowerInvestmentsAndNuclearFuelPurchases",
     ],
