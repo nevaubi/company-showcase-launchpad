@@ -59,7 +59,9 @@ export function IrBreakdowns({ ticker, payload }: { ticker: string; payload: IrP
     [payload, dim, byKey, freq, cols, q],
   );
   const visible = groups.slice(0, shown);
-  const inView = payload.checks.filter((c) => (c.kind === "fy" ? "y" : "q") === freq && cols.includes(c.e));
+  const inViewAll = payload.checks.filter((c) => (c.kind === "fy" ? "y" : "q") === freq && cols.includes(c.e));
+  const inView = inViewAll.filter((c) => !c.partial);
+  const partialInView = new Set(inViewAll.filter((c) => c.partial).map((c) => c.k)).size;
   const okInView = inView.filter((c) => c.ok).length;
 
   const changeFreq = (f: Freq) => {
@@ -93,6 +95,7 @@ export function IrBreakdowns({ ticker, payload }: { ticker: string; payload: IrP
             {okInView.toLocaleString()} of {inView.length.toLocaleString()} totals in view equal the sum of their parts
           </span>
         )}
+        {partialInView > 0 && <span>{partialInView} breakdowns list selected lines only — the rest is shown as “Not itemized”</span>}
         <span>
           <em>Italic</em> = calculated ({freq === "q" ? "fourth quarter = full year − first three quarters" : "full year = sum of four quarters"})
         </span>
@@ -154,7 +157,13 @@ function BreakdownCard({
   const directKids = root ? rows.filter((r) => r.s.parent === root.k) : [];
   const chartable = root && directKids.length >= 2 && (root.unit === "usd" || root.unit === "count");
   const groupChecks = rows.flatMap((r) => (r.s.total ? cols.map((c) => checks.get(`${r.k}|${freq}|${c}`)).filter(Boolean) : [])) as PayloadCheck[];
-  const failing = groupChecks.filter((c) => !c.ok).length;
+  const failing = groupChecks.filter((c) => !c.ok && !c.partial).length;
+  const partials = groupChecks.filter((c) => c.partial);
+  const coverage = partials.map((c) => c.sum / c.total);
+  const partialCols = root ? new Map(cols.flatMap((e) => {
+    const c = checks.get(`${root.k}|${freq}|${e}`);
+    return c?.partial ? [[e, c] as const] : [];
+  })) : new Map<string, PayloadCheck>();
   const title = groupTitle(group, root);
 
   const openCell = (s: PayloadSeries, end: string, c: PayloadCell) => {
@@ -211,9 +220,16 @@ function BreakdownCard({
           <h3 className="text-[13px] font-semibold">{title}</h3>
           <p className="text-[11px] text-muted-foreground">
             {unitCaption(group.unit, scale)} · {rows.length} lines
-            {groupChecks.length > 0 &&
+            {partials.length > 0 && (
+              <span>
+                {" "}
+                · selected lines only ({Math.round(Math.min(...coverage) * 100)}
+                {Math.round(Math.min(...coverage) * 100) !== Math.round(Math.max(...coverage) * 100) ? `–${Math.round(Math.max(...coverage) * 100)}` : ""}% of the total itemized)
+              </span>
+            )}
+            {groupChecks.length > partials.length &&
               (failing ? (
-                <span className="text-warning"> · {failing} of {groupChecks.length} totals off</span>
+                <span className="text-warning"> · {failing} of {groupChecks.length - partials.length} totals off</span>
               ) : (
                 <span className="text-positive"> · every total ties out</span>
               ))}
@@ -272,8 +288,42 @@ function BreakdownCard({
               {rows.map(({ k, s, depth }) => {
                 const cells = cellsOf(s);
                 const isRoot = root?.k === k;
+                const residual = isRoot && partialCols.size > 0 && (
+                  <tr key="__residual" className="group">
+                    <th scope="row" className="sticky left-0 z-10 max-w-80 border-b bg-card px-4 py-1 text-left font-normal italic text-muted-foreground group-hover:bg-secondary">
+                      <span className="block truncate" style={{ paddingLeft: 14 }}>
+                        Not itemized in the release
+                      </span>
+                    </th>
+                    {cols.map((e) => {
+                      const c = partialCols.get(e);
+                      const tc = cellsOf(s)[e];
+                      if (!c || !tc) return <td key={e} className="num border-b px-3 py-1 text-right text-muted-foreground/40">—</td>;
+                      const kids = directKids.filter((r) => cellsOf(r.s)[e]);
+                      const v = c.total - c.sum;
+                      const openResidual = () => {
+                        const parts = [
+                          { ...(refOf(payload, { ...tc, e: tc.e ?? e }, s.label) ?? { accn: "", concept: s.label, end: e, value: tc.v }), label: s.label, sign: 1 as const },
+                          ...kids.map((r) => {
+                            const kc = cellsOf(r.s)[e];
+                            return { ...(refOf(payload, { ...kc, e: kc.e ?? e }, r.s.label) ?? { accn: "", concept: r.s.label, end: e, value: kc.v }), label: r.s.label, sign: -1 as const };
+                          }),
+                        ];
+                        open({ ticker, label: `${s.label} — not itemized`, periodLabel: periodLong(e, freq), unit: s.unit, value: v, derived: { formula: "Printed total − listed lines", parts } });
+                      };
+                      return (
+                        <td key={e} className="border-b p-0 group-hover:bg-secondary/60">
+                          <button onClick={openResidual} className="num block w-full whitespace-nowrap px-3 py-1 text-right italic text-muted-foreground tabular-nums hover:bg-highlight-soft">
+                            {fmtIr(v, s.unit, scale)}
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
                 const match = highlight && s.label.toLowerCase().includes(highlight);
-                return (
+                return [
+                  residual,
                   <tr key={k} className="group">
                     <th
                       scope="row"
@@ -319,8 +369,8 @@ function BreakdownCard({
                         </td>
                       );
                     })}
-                  </tr>
-                );
+                  </tr>,
+                ];
               })}
               {root && root.total && (
                 <tr>
@@ -333,6 +383,13 @@ function BreakdownCard({
                       <td key={e} className="px-3 py-1 text-right text-[11px]">
                         {!chk ? (
                           <span className="text-muted-foreground/40">·</span>
+                        ) : chk.partial ? (
+                          <Tooltip delayDuration={250}>
+                            <TooltipTrigger className="num text-muted-foreground">{Math.round((chk.sum / chk.total) * 100)}% listed</TooltipTrigger>
+                            <TooltipContent className="max-w-xs text-xs">
+                              <CheckLine chk={chk} unit={root.unit} scale={scale} />
+                            </TooltipContent>
+                          </Tooltip>
                         ) : chk.ok ? (
                           <Tooltip delayDuration={250}>
                             <TooltipTrigger className="inline-flex items-center text-positive" aria-label="Parts add up to the total">
@@ -367,6 +424,12 @@ function BreakdownCard({
 }
 
 function CheckLine({ chk, unit, scale }: { chk: PayloadCheck; unit: string; scale: ReturnType<typeof useUnitScale>[0] }) {
+  if (chk.partial)
+    return (
+      <p>
+        The release lists selected lines only: they add to {fmtIr(chk.sum, unit, scale)} of the printed {fmtIr(chk.total, unit, scale)} total ({Math.round((chk.sum / chk.total) * 100)}%). The remainder is shown as “Not itemized”.
+      </p>
+    );
   return chk.ok ? (
     <p className="text-positive">
       {chk.n} parts sum to {fmtIr(chk.sum, unit, scale)} = printed total
