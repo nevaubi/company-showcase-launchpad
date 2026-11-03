@@ -152,6 +152,122 @@ export type Database = {
         }
         Relationships: []
       }
+      ir_documents: {
+        Row: {
+          accn: string | null
+          bytes: number | null
+          content_type: string | null
+          exhibit: string | null
+          ext: string | null
+          fetched_at: string
+          filed: string | null
+          id: string
+          kind: string
+          path: string | null
+          period: string | null
+          sha256: string | null
+          source: string
+          source_url: string
+          ticker: string
+          title: string
+        }
+        Insert: {
+          accn?: string | null
+          bytes?: number | null
+          content_type?: string | null
+          exhibit?: string | null
+          ext?: string | null
+          fetched_at?: string
+          filed?: string | null
+          id?: string
+          kind?: string
+          path?: string | null
+          period?: string | null
+          sha256?: string | null
+          source?: string
+          source_url: string
+          ticker: string
+          title?: string
+        }
+        Update: {
+          accn?: string | null
+          bytes?: number | null
+          content_type?: string | null
+          exhibit?: string | null
+          ext?: string | null
+          fetched_at?: string
+          filed?: string | null
+          id?: string
+          kind?: string
+          path?: string | null
+          period?: string | null
+          sha256?: string | null
+          source?: string
+          source_url?: string
+          ticker?: string
+          title?: string
+        }
+        Relationships: []
+      }
+      ir_kpi_facts: {
+        Row: {
+          category: string
+          created_at: string
+          derived: boolean
+          document_id: string
+          id: string
+          label: string
+          locator: Json
+          months: number | null
+          parent: string | null
+          period_end: string | null
+          period_label: string
+          ticker: string
+          unit: string
+          value: number
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          derived?: boolean
+          document_id: string
+          id?: string
+          label: string
+          locator?: Json
+          months?: number | null
+          parent?: string | null
+          period_end?: string | null
+          period_label: string
+          ticker: string
+          unit?: string
+          value: number
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          derived?: boolean
+          document_id?: string
+          id?: string
+          label?: string
+          locator?: Json
+          months?: number | null
+          parent?: string | null
+          period_end?: string | null
+          period_label?: string
+          ticker?: string
+          unit?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ir_kpi_facts_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "ir_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_runs: {
         Row: {
           detail: Json | null
