@@ -1,7 +1,7 @@
 # Filed Under — roadmap
 
 ## Done (verified end to end in the browser)
-- [x] Real-data ingestion pipeline (SEC XBRL statements, filings index, segments from iXBRL, Form 4 insiders + combined feed, earnings releases) for AAPL, MSFT, NVDA, AMZN, GOOGL, TSLA
+- [x] Real-data ingestion pipeline (SEC XBRL statements, filings index, segments from iXBRL, Form 4 insiders + combined feed, earnings releases)
 - [x] Design system (paper/ink/highlighter), fonts, brand logo + favicon
 - [x] Landing page `/` + `/pricing`
 - [x] Auth: email/password, Google, Lovable, demo account one-click sign-in, password reset
@@ -9,27 +9,42 @@
 - [x] Companies list + company page (overview, stats, charts, AI narratives, quick links)
 - [x] Financial statements wide tables (annual/quarterly) with click-to-source filing panel
 - [x] KPIs & segments with formula + source attribution
-- [x] Filings & IR browser (exhibits, earnings releases, EDGAR full-text search)
-- [x] Insider trades (company tab + cross-company hub)
-- [x] Technicals (live Yahoo prices, overlays, RSI/MACD, compare, earnings reactions, AI chart read)
-- [x] Sectors (heatmap, relative performance, correlation matrix)
-- [x] Macro (FRED series, yield curve, recession shading, AI brief)
-- [x] Theses (CRUD, log, price tracking, AI review)
-- [x] Research agent (tool loop over SEC/Yahoo/FRED + hosted web search, cited answers, saved sessions)
-- [x] Docs (rich text + AI assistant + insert sourced data table) & Sheets (formula engine with FU()/PRICE(), AI build)
+- [x] Filings & IR browser, insiders, technicals, sectors, macro, theses, research agent, docs & sheets
+- [x] Tests for lookup periods/values and the sheet formula engine
+- [x] Coverage of 25 companies; Tavily + Firecrawl web research; earnings-call brief; peer table; YoY / common-size views
 
-- [x] Tests for lookup periods/values and the sheet formula engine (`bunx vitest run`)
-- [x] End-to-end: demo sign-in, email sign-up + confirmation + sign-in, click-to-source, agent with quote highlighting, theses + AI review, docs/sheets autosave, macro brief, narratives
-- [x] Mobile layout pass (no horizontal overflow on main pages)
+## In progress — "prod-quality pass" (requested Nov 3)
+### Data
+- [ ] Coverage → ~75 companies across all 11 sectors (incl. materials, utilities, real estate)
+- [ ] Richer statements: EBITDA, total/net debt, short-term debt, interest expense, deferred revenue, retained earnings, debt issued/repaid, dividends per share, period-end shares
+- [ ] More KPIs: ROA, ROIC, interest coverage, net debt/EBITDA, payout ratio, DSO, inventory days, asset turnover, bank efficiency ratio, loans/deposits
+- [ ] Slimmer dataset files (KPIs rebuilt in the browser, no duplicated values)
+- [ ] Deep segment backfill: every inline-XBRL 10-K + 12 10-Qs + pre-2019 XBRL instance docs; more metrics (op income, net income, assets, capex, D&A); derived Q4 segment values
+- [ ] 10-year daily price history (valuation bands)
+- [ ] Macro: ~80 series with originating agency (BLS, BEA, Census, Fed Board, NY Fed, Treasury, EIA, DOL, FHFA) + direct U.S. Treasury Fiscal Data (debt, deficit, TGA, avg interest rate, interest expense)
+- [ ] Sector driver series (gov data per sector)
 
-## Ready
-- [x] Narratives show "web search" provenance when the headline feed is throttled
-- [x] Research agent switches to web search when the headline feed is throttled
-- [x] Coverage expanded to 25 companies (tech, semis, banks, payments, pharma, managed care, retail, energy, industrials) with bank statement lines
-- [x] Web research: Tavily search + Firecrawl page reader in the research agent, headline fallback, and an earnings-call brief on company pages
-- [x] Company pages: peer comparison, earnings call brief, bank-aware stats; financials YoY % and common-size views; companies list sector filter + search
+### Product / UI
+- [ ] Unit scale toggle Full / K / M / B on every financial table (persisted preference)
+- [ ] Statement table: sticky header, sparkbars + CAGR column, row charting, YoY heat shading
+- [ ] Real .xlsx model export with live formulas + a Sources sheet
+- [ ] Valuation tab: P/E, EV/EBITDA, P/S, P/FCF history with median ±1σ bands, point-in-time fundamentals, price vs multiple envelope, peer multiples
+- [ ] Capital allocation chart (capex, M&A, buybacks, dividends, net debt) with click-to-source
+- [ ] Segment mix: 100% stacked area, treemap, revenue bridge (growth contribution)
+- [ ] Macro overhaul: agency sources, category tabs, macro monitor table (percentile / z-score), dual-axis compare with recession shading, fiscal + energy + credit sections
+- [ ] Sectors overhaul: sector fundamentals from covered companies, gov industry drivers, sector detail
+- [ ] High-quality color logos for every covered company
+- [ ] Earnings call transcript reader (Firecrawl), cached, searchable, speaker turns
+
+### Backend
+- [ ] Live-refresh tables (prices, filings, Form 4s, macro, job runs) + client merge with snapshots
+- [ ] Scheduled jobs: prices, SEC filings scan, Form 4 parse, macro + Treasury, filing-cache warmer
+- [ ] SEC filing document cache in file storage (compressed) for fast, rate-limit-proof opening
+- [ ] Data status page (last refresh per job)
+
+### Quality
+- [ ] Tests for new derived lines, KPIs, unit formatting, segment Q4 derivation, valuation math
+- [ ] Browser verification of every new view + mobile pass; landing-page counts updated
 
 ## Later
-- [ ] Brand logos for JPM, LLY, UNH, JNJ, COST, XOM, CVX, HD (monograms for now)
 - [ ] Insurer template (BRK)
-- [ ] Broader coverage (more tickers via the ingest script)
