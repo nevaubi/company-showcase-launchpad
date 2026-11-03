@@ -131,7 +131,7 @@ export function buildIrSeries(facts: IrFact[]): { series: IrSeries[]; quarters: 
   const checks: ReconcileCheck[] = [];
   const totals = series.filter((s) => s.isTotal);
   for (const total of totals) {
-    const kids = series.filter((s) => !s.isTotal && s.category === total.category && s.metric === total.metric && s.unit === total.unit && s.parent && normLabel(s.parent) === normLabel(total.label));
+    const kids = series.filter((s) => s !== total && s.category === total.category && s.metric === total.metric && s.unit === total.unit && s.parent && normLabel(s.parent) === normLabel(total.label));
     if (kids.length < 2) continue;
     for (const [end, c] of Object.entries(total.cells)) {
       const vals = kids.map((k) => k.cells[end]?.v);
