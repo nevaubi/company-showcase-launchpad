@@ -113,14 +113,14 @@ export function ThesisForm({
           <DialogDescription>Be specific about what has to be true. We'll track it against the price and the filings.</DialogDescription>
         </DialogHeader>
         <form
-          className="grid gap-4"
+          className="grid grid-cols-1 gap-4"
           onSubmit={(e) => {
             e.preventDefault();
             if (valid) save.mutate();
           }}
         >
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_2fr]">
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label>Company</Label>
               <Select value={d.ticker} onValueChange={(v) => setD({ ...d, ticker: v, entry_price: d.id ? d.entry_price : null })} disabled={!!d.id}>
                 <SelectTrigger>
@@ -135,14 +135,14 @@ export function ThesisForm({
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="t-title">Title</Label>
               <Input id="t-title" value={d.title} onChange={(e) => setD({ ...d, title: e.target.value })} placeholder="Services mix keeps lifting margins" maxLength={140} />
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label>Stance</Label>
               <div className="flex rounded-md border bg-secondary/50 p-0.5">
                 {(["long", "short", "neutral"] as const).map((s) => (
@@ -157,7 +157,7 @@ export function ThesisForm({
                 ))}
               </div>
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label>Conviction</Label>
               <div className="flex gap-1">
                 {[1, 2, 3, 4, 5].map((n) => (
@@ -176,7 +176,7 @@ export function ThesisForm({
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="t-entry">Entry price</Label>
               <Input
                 id="t-entry"
@@ -188,26 +188,26 @@ export function ThesisForm({
                 onChange={(e) => setD({ ...d, entry_price: e.target.value ? Number(e.target.value) : null })}
               />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="t-target">Target price</Label>
               <Input id="t-target" type="number" step="0.01" min="0" value={d.target_price ?? ""} onChange={(e) => setD({ ...d, target_price: e.target.value ? Number(e.target.value) : null })} />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="t-h">Horizon</Label>
               <Input id="t-h" value={d.horizon} onChange={(e) => setD({ ...d, horizon: e.target.value })} placeholder="12 months" maxLength={40} />
             </div>
           </div>
 
-          <div className="grid gap-1.5">
+          <div className="grid grid-cols-1 gap-1.5">
             <Label htmlFor="t-sum">Thesis</Label>
             <Textarea id="t-sum" rows={5} value={d.summary} onChange={(e) => setD({ ...d, summary: e.target.value })} placeholder="What the market is missing, and the numbers that will prove it." maxLength={4000} />
           </div>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="t-cat">Catalysts (one per line)</Label>
               <Textarea id="t-cat" rows={4} value={catalysts} onChange={(e) => setCatalysts(e.target.value)} />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="t-risk">Risks (one per line)</Label>
               <Textarea id="t-risk" rows={4} value={risks} onChange={(e) => setRisks(e.target.value)} />
             </div>

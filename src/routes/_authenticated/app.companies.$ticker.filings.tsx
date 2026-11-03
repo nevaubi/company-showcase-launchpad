@@ -117,7 +117,7 @@ function Filings() {
         )}
       </Panel>
 
-      <div className="grid content-start gap-5">
+      <div className="grid grid-cols-1 content-start gap-5">
         <Panel
           title={
             <span className="flex items-center gap-1.5">

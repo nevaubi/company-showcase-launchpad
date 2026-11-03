@@ -352,7 +352,7 @@ function Markets() {
       </Panel>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <div className="grid content-start gap-3">
+        <div className="grid grid-cols-1 content-start gap-3">
           {stats ? (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <Stat label="1M / 3M" value={fmtPct(stats.ret1m, 1, true)} sub={`${fmtPct(stats.ret3m, 1, true)} over 3M`} tone={(stats.ret1m ?? 0) >= 0 ? "positive" : "negative"} />
@@ -413,7 +413,7 @@ function Markets() {
               <Skeleton className="h-24" />
             </div>
           ) : insight.data ? (
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <div className="flex items-center gap-2">
                 <Badge variant={insight.data.bias === "bullish" ? "positive" : insight.data.bias === "bearish" ? "negative" : "outline"} className="capitalize">
                   {insight.data.bias}

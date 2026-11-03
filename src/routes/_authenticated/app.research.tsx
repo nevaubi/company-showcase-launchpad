@@ -280,7 +280,7 @@ function Research() {
                 </div>
               </div>
             ) : (
-              <div className="grid gap-8">
+              <div className="grid grid-cols-1 gap-8">
                 {messages.isLoading && !live && <Skeleton className="h-40" />}
                 {shown.map((m) => (m.role === "user" ? <UserBubble key={m.id} text={m.content} /> : <AssistantMessage key={m.id} m={m} />))}
               </div>
@@ -358,7 +358,7 @@ function AssistantMessage({ m }: { m: Msg }) {
   const toolSteps = m.steps.filter((s) => s.name !== "sources");
   const sources = useMemo(() => dedupe(m.steps.flatMap((s) => (s.name === "sources" ? (s.sources ?? []) : []))), [m.steps]);
   return (
-    <div className="grid gap-3">
+    <div className="grid grid-cols-1 gap-3">
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <span className="flex size-6 items-center justify-center rounded-full border bg-card">
           <Bot className="size-3.5" />
@@ -370,7 +370,7 @@ function AssistantMessage({ m }: { m: Msg }) {
         </button>
       </div>
       {open && toolSteps.length > 0 && (
-        <ol className="ml-3 grid gap-1 border-l pl-4">
+        <ol className="ml-3 grid grid-cols-1 gap-1 border-l pl-4">
           {toolSteps.map((s, i) => (
             <li key={i} className="text-[12px]">
               <span className="flex items-center gap-1.5">

@@ -133,7 +133,7 @@ export function DocEditor({ initialHtml, title, ticker, onChange }: { initialHtm
             <input type="checkbox" checked={useWeb} onChange={(e) => setUseWeb(e.target.checked)} />
             <Globe className="size-3" /> Allow web search
           </label>
-          <div className="mt-3 grid gap-1.5">
+          <div className="mt-3 grid grid-cols-1 gap-1.5">
             {(
               [
                 ["draft", "Draft section"],
@@ -212,7 +212,7 @@ function DataTableDialog({ open, onOpenChange, editor, defaultTicker }: { open: 
           <DialogDescription>Reported values straight from the filings, with the source accession numbers noted below the table.</DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="grid gap-1.5">
+          <div className="grid grid-cols-1 gap-1.5">
             <Label>Company</Label>
             <Select value={ticker} onValueChange={setTicker}>
               <SelectTrigger>
@@ -227,7 +227,7 @@ function DataTableDialog({ open, onOpenChange, editor, defaultTicker }: { open: 
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid grid-cols-1 gap-1.5">
             <Label>Table</Label>
             <Select value={preset} onValueChange={setPreset}>
               <SelectTrigger>
@@ -242,7 +242,7 @@ function DataTableDialog({ open, onOpenChange, editor, defaultTicker }: { open: 
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid grid-cols-1 gap-1.5">
             <Label>Frequency</Label>
             <Select value={freq} onValueChange={(v) => setFreq(v as typeof freq)}>
               <SelectTrigger>
@@ -254,7 +254,7 @@ function DataTableDialog({ open, onOpenChange, editor, defaultTicker }: { open: 
               </SelectContent>
             </Select>
           </div>
-          <div className="grid gap-1.5">
+          <div className="grid grid-cols-1 gap-1.5">
             <Label htmlFor="np">Periods</Label>
             <Input id="np" type="number" min={1} max={10} value={n} onChange={(e) => setN(Math.max(1, Math.min(10, Number(e.target.value) || 4)))} />
           </div>

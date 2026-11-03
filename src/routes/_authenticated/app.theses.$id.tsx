@@ -217,7 +217,7 @@ function ThesisDetail() {
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
-        <div className="grid content-start gap-5">
+        <div className="grid grid-cols-1 content-start gap-5">
           <Panel title="Price since opened" subtitle="Dashed lines: entry and target · E = earnings release" bodyClassName="p-2">
             {bars.length ? (
               <PriceChart bars={bars} mode="area" height={300} showVolume={false} markers={markers} levels={[...(entry ? [{ price: entry, label: "Entry" }] : []), ...(target ? [{ price: target, label: "Target" }] : [])]} />
@@ -260,7 +260,7 @@ function ThesisDetail() {
           </Panel>
         </div>
 
-        <div className="grid content-start gap-5">
+        <div className="grid grid-cols-1 content-start gap-5">
           <Panel
             title={
               <span className="flex items-center gap-1.5">
@@ -282,7 +282,7 @@ function ThesisDetail() {
                 <Skeleton className="h-24" />
               </div>
             ) : review ? (
-              <div className="grid gap-3 text-sm">
+              <div className="grid grid-cols-1 gap-3 text-sm">
                 <div className="flex items-center gap-2">
                   <Badge
                     variant={review.verdict === "broken" ? "negative" : review.verdict === "weakening" ? "highlight" : "positive"}
@@ -304,7 +304,7 @@ function ThesisDetail() {
 
           <Panel title="Log" subtitle="Earnings, catalysts, and second thoughts" bodyClassName="p-0">
             <form
-              className="grid gap-2 border-b p-4"
+              className="grid grid-cols-1 gap-2 border-b p-4"
               onSubmit={(e) => {
                 e.preventDefault();
                 if (note.trim()) addUpdate.mutate();

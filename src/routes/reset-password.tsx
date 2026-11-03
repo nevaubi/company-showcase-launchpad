@@ -69,12 +69,12 @@ function ResetPassword() {
             .
           </p>
         ) : (
-          <form onSubmit={submit} className="mt-5 grid gap-3.5">
-            <div className="grid gap-1.5">
+          <form onSubmit={submit} className="mt-5 grid grid-cols-1 gap-3.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="pw">New password</Label>
               <Input id="pw" type="password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid grid-cols-1 gap-1.5">
               <Label htmlFor="pw2">Confirm password</Label>
               <Input id="pw2" type="password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             </div>

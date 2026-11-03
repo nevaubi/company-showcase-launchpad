@@ -188,7 +188,7 @@ function AuthPage() {
                     <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
                   </div>
 
-                  <div className="grid gap-2">
+                  <div className="grid grid-cols-1 gap-2">
                     <Button variant="outline" size="lg" onClick={() => oauth("google")} disabled={!!busy}>
                       {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
                       Continue with Google
@@ -200,14 +200,14 @@ function AuthPage() {
                 </>
               )}
 
-              <form onSubmit={onSubmit} className="mt-6 grid gap-3.5">
+              <form onSubmit={onSubmit} className="mt-6 grid grid-cols-1 gap-3.5">
                 {mode === "signup" && (
-                  <div className="grid gap-1.5">
+                  <div className="grid grid-cols-1 gap-1.5">
                     <Label htmlFor="name">Name</Label>
                     <Input id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ada Analyst" autoComplete="name" />
                   </div>
                 )}
-                <div className="grid gap-1.5">
+                <div className="grid grid-cols-1 gap-1.5">
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
@@ -220,7 +220,7 @@ function AuthPage() {
                   />
                 </div>
                 {mode !== "forgot" && (
-                  <div className="grid gap-1.5">
+                  <div className="grid grid-cols-1 gap-1.5">
                     <div className="flex items-center justify-between">
                       <Label htmlFor="password">Password</Label>
                       {mode === "signin" && (
