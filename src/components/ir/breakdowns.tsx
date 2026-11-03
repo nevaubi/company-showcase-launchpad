@@ -284,7 +284,7 @@ function BreakdownCard({
                         match && "bg-highlight-soft",
                       )}
                     >
-                      <span className="block truncate" style={{ paddingLeft: Math.max(0, (root ? rowDepth(rows, depth) : 0) * 14) }} title={s.label}>
+                      <span className="block truncate" style={{ paddingLeft: root ? depth * 14 : 0 }} title={s.label}>
                         {s.label}
                         {s.pit && <span className="ml-1 text-[10px] font-normal text-muted-foreground">(period end)</span>}
                       </span>
@@ -364,12 +364,6 @@ function BreakdownCard({
       )}
     </section>
   );
-}
-
-/** Indentation: parts sit one level in from the total they add up to. */
-function rowDepth(rows: { depth: number }[], depth: number) {
-  const max = Math.max(...rows.map((r) => r.depth));
-  return max - (max - depth);
 }
 
 function CheckLine({ chk, unit, scale }: { chk: PayloadCheck; unit: string; scale: ReturnType<typeof useUnitScale>[0] }) {
