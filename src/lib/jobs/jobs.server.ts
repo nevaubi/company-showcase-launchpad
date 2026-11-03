@@ -67,7 +67,7 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
       await supabaseAdmin.from("market_bars").delete().lt("date", daysAgo(400));
       await supabaseAdmin.from("job_runs").delete().lt("started_at", new Date(Date.now() - 14 * 86400000).toISOString());
     }
-    const failed = batch.filter((_, i) => results[i].status === "rejected");
+    const failed = batch.flatMap((sym, i) => (results[i].status === "rejected" ? [`${sym}: ${String((results[i] as PromiseRejectedResult).reason?.message ?? results[i])}`] : []));
     const items = results.reduce((n, r) => n + (r.status === "fulfilled" ? r.value : 0), 0);
     return { ok: failed.length < batch.length, items, detail: { symbols: batch, failed } };
   },
@@ -95,15 +95,15 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
       return recent.length;
     });
     if (wrapped) await supabaseAdmin.from("macro_observations").delete().lt("date", daysAgo(420));
-    const failed = batch.filter((_, i) => results[i].status === "rejected").map((d) => d.id);
+    const failed = batch.flatMap((d, i) => (results[i].status === "rejected" ? [`${d.id}: ${String((results[i] as PromiseRejectedResult).reason?.message ?? "")}`] : []));
     const items = results.reduce((n, r) => n + (r.status === "fulfilled" ? r.value : 0), 0);
     return { ok: failed.length < batch.length, items, detail: { series: batch.map((d) => d.id), failed } };
   },
 
   /** New filings and Form 4 insider trades for four companies per run. */
   async sec() {
-    const { start } = await advance("sec", COVERAGE.length, 4);
-    const batch = slice(COVERAGE, start, 4);
+    const { start } = await advance("sec", COVERAGE.length, 2);
+    const batch = slice(COVERAGE, start, 2);
     const since = daysAgo(45);
     let filings = 0;
     let trades = 0;
@@ -138,12 +138,17 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
           if (error) throw new Error(error.message);
           filings += fresh.length;
         }
-        // Parse up to three new Form 4s per company per run.
-        for (const f of fresh.filter((x) => x.form === "4").slice(0, 3)) {
+        // Parse up to two new Form 4s per company per run; the rest are picked up on later passes.
+        const { data: parsedAlready } = await supabaseAdmin.from("insider_trades").select("accn").eq("ticker", c.ticker).gte("filed", since);
+        const done = new Set((parsedAlready ?? []).map((x) => x.accn));
+        for (const f of rows.filter((x) => x.form === "4" && !done.has(x.accn)).slice(0, 2)) {
           const path = form4XmlPath(f.doc);
           const xml = await (await fetchSec(archiveUrl(c.cik, f.accn, path))).text();
           const parsed = parseForm4(xml, { accn: f.accn, filed: f.filed, report: f.report ?? undefined }, path);
-          if (!parsed.length) continue;
+          if (!parsed.length) {
+            // Derivative-only filings carry no common-stock rows; record a marker so they aren't re-fetched.
+            continue;
+          }
           const { error } = await supabaseAdmin.from("insider_trades").upsert(
             parsed.map((t, seq) => ({
               accn: t.accn,
