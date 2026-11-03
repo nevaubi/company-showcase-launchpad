@@ -79,26 +79,38 @@ export async function openaiStructured<T>(opts: {
   if (!res.ok) {
     const body = await res.text();
     let code = "";
+    let type = "";
     let msg = body.slice(0, 400);
     try {
       const j = JSON.parse(body) as { error?: { code?: string; type?: string; message?: string } };
-      code = j.error?.code ?? j.error?.type ?? "";
+      code = j.error?.code ?? "";
+      type = j.error?.type ?? "";
       msg = j.error?.message ?? msg;
     } catch {
       /* not JSON */
     }
-    const kind: OpenAIErrorKind =
-      res.status === 401 || res.status === 403 || code === "model_not_found"
-        ? "auth"
-        : code === "insufficient_quota" || /billing|quota/i.test(code)
-          ? "quota"
-          : res.status === 429
-            ? "rate"
-            : res.status >= 500
-              ? "transient"
-              : "rejected";
+    const kind: OpenAIErrorKind = classifyOpenAIError(res.status, code, type, msg);
     const ra = Number(res.headers.get("retry-after"));
-    throw new OpenAIError(`OpenAI ${res.status}${code ? ` ${code}` : ""}: ${msg}`, kind, res.status, Number.isFinite(ra) && ra > 0 ? ra * 1000 : undefined);
+    throw new OpenAIError(`OpenAI ${res.status}${code || type ? ` ${code || type}` : ""}: ${msg}`, kind, res.status, Number.isFinite(ra) && ra > 0 ? ra * 1000 : undefined);
+  }
+  return parseResponse<T>(res);
+}
+
+/**
+ * OpenAI reports an empty balance as HTTP 429 (insufficient_quota / credit_balance_exhausted), so
+ * quota must be checked before the generic 429 → rate-limit rule or runners would retry forever.
+ */
+export function classifyOpenAIError(status: number, code: string, type: string, message: string): OpenAIErrorKind {
+  const all = `${code} ${type}`;
+  if (status === 401 || status === 403 || code === "model_not_found") return "auth";
+  if (/insufficient_quota|credit|billing|quota/i.test(all) || /no credits|exceeded your current quota|billing/i.test(message)) return "quota";
+  if (status === 429) return "rate";
+  if (status >= 500) return "transient";
+  return "rejected";
+}
+
+async function parseResponse<T>(res: Response): Promise<{ data: T; usage: Usage; model: string }> {
+  {
   }
   const j = (await res.json()) as {
     model: string;
