@@ -1,16 +1,19 @@
+import { useState } from "react";
 import { cn } from "@/lib/utils";
 
-/** Bundled marks for covered companies, so any surface can show a logo from just the ticker. */
-const LOGOS: Record<string, string> = {
-  AAPL: "/__l5e/assets-v1/d276f434-7367-4a90-a218-3af0fe531588/logo-AAPL.svg",
-  MSFT: "/__l5e/assets-v1/f00a1107-9c23-4096-b689-e92adbbf7844/logo-MSFT.svg",
-  NVDA: "/__l5e/assets-v1/24df2cf8-0ac5-428c-9dc4-2543bac7527a/logo-NVDA.svg",
-  AMZN: "/__l5e/assets-v1/05f6a9ac-b948-411c-892d-442e7a0868b3/logo-AMZN.svg",
-  GOOGL: "/__l5e/assets-v1/be5ee208-0fa0-4672-8641-53d0a3e0a946/logo-GOOGL.svg",
-  TSLA: "/__l5e/assets-v1/37a6f5bb-05c8-4367-8d5a-71922bb1a281/logo-TSLA.svg",
-  ...Object.fromEntries(
-    ["META", "AVGO", "AMD", "ORCL", "BAC", "GS", "V", "MA", "MRK", "WMT", "CAT"].map((t) => [t, `/logos/${t}.svg`]),
-  ),
+/**
+ * Official logo for every covered company, bundled in public/logos (sources listed in
+ * public/logos/sources.json). The bundled file wins over any URL in the data so every
+ * surface shows the same mark.
+ */
+const RASTER = new Set(["LIN"]);
+const COVERED = new Set(
+  "AAPL ABBV ABT ADBE AMD AMGN AMT AMZN AVGO AXP BA BAC BKNG C CAT CMCSA COP COST CRM CSCO CVX DE DIS DUK EQIX FCX GE GOOGL GS HD HON IBM INTC ISRG JNJ JPM KO LIN LLY LMT LOW MA MCD META MRK MS MSFT MU NEE NFLX NKE NOW NVDA ORCL PEP PFE PG PLD PM QCOM RTX SBUX SCHW SLB SO SPGI T TMO TSLA TXN UNH UNP UPS V VZ WFC WMT XOM".split(" "),
+);
+
+export const logoUrl = (ticker: string) => {
+  const t = ticker.toUpperCase();
+  return COVERED.has(t) ? `/logos/${t}.${RASTER.has(t) ? "png" : "svg"}` : undefined;
 };
 
 export function CompanyLogo({
@@ -20,13 +23,15 @@ export function CompanyLogo({
   size = "md",
 }: {
   ticker: string;
+  /** Fallback for tickers outside coverage */
   src?: string;
   className?: string;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
 }) {
-  const url = src || LOGOS[ticker];
+  const [failed, setFailed] = useState(false);
+  const url = logoUrl(ticker) ?? src;
   const dims = {
-    xs: "size-5 p-0.5 rounded",
+    xs: "size-5 p-[3px] rounded",
     sm: "size-7 p-1 rounded-md",
     md: "size-9 p-1.5 rounded-md",
     lg: "size-12 p-2 rounded-lg",
@@ -34,16 +39,13 @@ export function CompanyLogo({
   }[size];
   return (
     <span
-      className={cn(
-        "inline-flex shrink-0 items-center justify-center border bg-card shadow-paper",
-        dims,
-        className,
-      )}
+      className={cn("inline-flex shrink-0 items-center justify-center overflow-hidden border bg-logo-plate shadow-paper", dims, className)}
+      title={ticker}
     >
-      {url ? (
-        <img src={url} alt={`${ticker} logo`} className="h-full w-full object-contain" loading="lazy" />
+      {url && !failed ? (
+        <img src={url} alt={`${ticker} logo`} className="h-full w-full object-contain" loading="lazy" decoding="async" onError={() => setFailed(true)} />
       ) : (
-        <span className="num text-[10px] font-semibold">{ticker.slice(0, 4)}</span>
+        <span className={cn("num font-semibold leading-none", size === "xs" ? "text-[7px]" : size === "sm" ? "text-[8px]" : "text-[10px]")}>{ticker.slice(0, 4)}</span>
       )}
     </span>
   );

@@ -11,6 +11,7 @@
  */
 
 @theme inline {
+  --color-logo-plate: var(--logo-plate);
   --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Instrument Serif", ui-serif, Georgia, serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -89,6 +90,8 @@
   --background: oklch(0.982 0.007 85);
   --foreground: oklch(0.19 0.012 260);
   --card: oklch(0.993 0.004 85);
+  /* Logos always sit on a light plate so dark brand marks stay legible */
+  --logo-plate: oklch(0.996 0.003 85);
   --card-foreground: oklch(0.19 0.012 260);
   --popover: oklch(0.995 0.003 85);
   --popover-foreground: oklch(0.19 0.012 260);
