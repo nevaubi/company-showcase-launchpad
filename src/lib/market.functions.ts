@@ -55,7 +55,11 @@ export const getQuotes = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => z.object({ symbols: z.array(symbolSchema).min(1).max(40) }).parse(d))
   .handler(async ({ data }): Promise<{ quotes: Quote[]; errors: string[] }> => {
+    const { COVERAGE } = await import("@/lib/coverage");
+    const { fetchNasdaqDaily, fetchNasdaqQuote } = await import("@/lib/market-data.server");
+    const stocks = new Set(COVERAGE.map((c) => c.ticker));
     const results = await pool(data.symbols, 4, async (s) => {
+      try {
         const r = await fetchYahoo(s, "5d", "1d");
         const closes = (r.indicators.quote[0]?.close ?? []).filter((x): x is number => x != null);
         const price = r.meta.regularMarketPrice ?? closes.at(-1) ?? 0;
@@ -77,6 +81,25 @@ export const getQuotes = createServerFn({ method: "GET" })
           spark: closes,
         };
         return q;
+      } catch (e) {
+        // Yahoo throttles shared IPs; Nasdaq covers U.S. stocks and ETFs (not indices).
+        if (s.startsWith("^")) throw e;
+        const kind = stocks.has(s) ? "stocks" : "etf";
+        const [n, bars] = await Promise.all([fetchNasdaqQuote(s, kind), fetchNasdaqDaily(s, kind, 10).catch(() => [])]);
+        const q: Quote = {
+          symbol: s,
+          name: n.name,
+          price: n.price,
+          previousClose: n.previousClose,
+          change: n.price - n.previousClose,
+          changePct: n.previousClose ? n.price / n.previousClose - 1 : 0,
+          high52: n.high52,
+          low52: n.low52,
+          exchange: n.exchange,
+          spark: bars.map((b) => b[4]),
+        };
+        return q;
+      }
     });
     const quotes: Quote[] = [];
     const errors: string[] = [];

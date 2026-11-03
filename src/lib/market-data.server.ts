@@ -85,6 +85,46 @@ export async function fetchNasdaqDaily(symbol: string, kind: "stocks" | "etf", d
     .sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+export interface NasdaqQuote {
+  symbol: string;
+  name?: string;
+  price: number;
+  previousClose: number;
+  marketTime?: string;
+  exchange?: string;
+  high52?: number;
+  low52?: number;
+}
+
+/** Latest regular-session quote from Nasdaq (fallback for Yahoo). Outside market hours this is the last close. */
+export async function fetchNasdaqQuote(symbol: string, kind: "stocks" | "etf"): Promise<NasdaqQuote> {
+  const res = await fetch(`https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/info?assetclass=${kind}`, {
+    headers: { "User-Agent": BROWSER_UA, Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" },
+  });
+  if (!res.ok) throw new Error(`Nasdaq responded ${res.status}`);
+  type Px = { lastSalePrice?: string; netChange?: string; lastTradeTimestamp?: string } | null;
+  const j = (await res.json()) as {
+    data?: { companyName?: string; exchange?: string; marketStatus?: string; primaryData?: Px; secondaryData?: Px; keyStats?: { fiftyTwoWeekHighLow?: { value?: string } } } | null;
+  };
+  const d = j.data;
+  const open = /market open/i.test(d?.marketStatus ?? "");
+  const px = (open ? d?.primaryData : d?.secondaryData?.lastSalePrice ? d.secondaryData : d?.primaryData) ?? null;
+  const num = (x?: string) => Number(String(x ?? "").replace(/[$,%]/g, ""));
+  const price = num(px?.lastSalePrice);
+  if (!d || !Number.isFinite(price) || price <= 0) throw new Error(`Nasdaq has no quote for ${symbol}`);
+  const change = num(px?.netChange);
+  const [lo, hi] = (d.keyStats?.fiftyTwoWeekHighLow?.value ?? "").split(" - ").map(num);
+  return {
+    symbol,
+    name: d.companyName?.replace(/ (Common Stock|Class [A-C] (Common Stock|Capital Stock)|Common Shares)$/i, ""),
+    price,
+    previousClose: Number.isFinite(change) ? Math.round((price - change) * 10000) / 10000 : price,
+    exchange: d.exchange,
+    high52: Number.isFinite(hi) ? hi : undefined,
+    low52: Number.isFinite(lo) ? lo : undefined,
+  };
+}
+
 export function toBars(r: YahooChartResult, intraday: boolean): Bar[] {
   const q = r.indicators.quote[0];
   const adj = r.indicators.adjclose?.[0]?.adjclose;
