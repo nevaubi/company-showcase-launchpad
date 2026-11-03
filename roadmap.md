@@ -68,9 +68,12 @@
 - [x] OCR decimal guard: the slide reader returns its own reading of each number; OCR tokens with the same digits take the model's punctuation, anything else is rejected
 - [ ] Running: table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch`, 16 workers — 32 saturated the database pool)
 - [ ] Running: vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch`, 6 workers)
-- [ ] Canonicalization for companies whose totals don't tie out (KO, DE, DUK, LMT, COP, WMT, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`; KO's transposed segment tables (segments as columns) give wrong parents and need a deterministic fix too
+- [x] Deterministic structure fixes: coincidental subtotal nesting (KO), one-table-per-segment generic rows (LMT), U.S./international/worldwide column sets (ABBV, pharma), period-end counts vs net additions (CMCSA), ~1,000× unit outliers flagged in the UI
+- [x] Data status: IR library panel; cut-off scheduled runs shown separately from failures; jobs time-boxed (`RUN_BUDGET_MS`), `ir-docs` every 5 min with done/partial/empty tracking
+- [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, KO, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`
 - [ ] Running: historical 2008+ SEC exhibit backfill for all companies (`scripts/ir-backfill.ts`)
+- [ ] Running: IR-website files for every company (`scripts/ir-site.ts`, Firecrawl + Tavily)
 - [ ] Running: PDF/XLSX renditions for newly backfilled files (`scripts/ir-renditions.ts`)
 - [ ] Production schedules: keep the collector inside the scheduled-call time limit (small slices), reading stays in the batch runner
-- [ ] Deterministic accuracy audit: duplicate-total detection, sign conventions for eliminations, unit/scale outliers vs neighbouring quarters
+- [ ] Deterministic accuracy audit: duplicate-total detection, sign conventions for eliminations
 - [ ] Rebuild every company's payload once the reading passes finish (`bun scripts/ir-build.ts`)
