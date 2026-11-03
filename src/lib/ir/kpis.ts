@@ -769,8 +769,6 @@ function totalScopes(series: IrSeries[]) {
 export const scopeName = (bd: string | null | undefined) =>
   normLabel(bd ?? "")
     .replace(/\b(segments?|results?|summary|selected|financial|data|highlights|information|and|the|of|by|for|key|metrics|line)\b/g, " ")
-    // An unqualified table is the reported one: "Reported net operating revenues" = "Net operating revenues".
-    .replace((globalThis as { __noRep?: boolean }).__noRep ? /$^/ : /\b(as reported|reported|u s gaap|gaap)\b/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 
