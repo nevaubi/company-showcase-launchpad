@@ -86,3 +86,20 @@ export async function firecrawlMap(url: string, opts: { search?: string; limit?:
   const j = (await res.json()) as { links?: (string | { url: string })[]; data?: { links?: (string | { url: string })[] } };
   return (j.links ?? j.data?.links ?? []).map((l) => (typeof l === "string" ? l : l.url));
 }
+
+/** All links on a rendered page (Firecrawl scrape, `links` format) — finds JS-loaded IR file links. */
+export async function firecrawlLinks(url: string): Promise<string[]> {
+  const key = process.env["FIRECRAWL_API_KEY"];
+  if (!key) throw new Error("Page reader is not configured");
+  const gateway = key.startsWith("lovc_");
+  const endpoint = gateway ? "https://connector-gateway.lovable.dev/firecrawl/v2/scrape" : "https://api.firecrawl.dev/v2/scrape";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (gateway) {
+    headers["Authorization"] = `Bearer ${process.env["LOVABLE_API_KEY"] ?? ""}`;
+    headers["X-Connection-Api-Key"] = key;
+  } else headers["Authorization"] = `Bearer ${key}`;
+  const res = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ url, formats: ["links"], waitFor: 2500, timeout: 45000 }) });
+  if (!res.ok) throw new Error(`Firecrawl scrape failed (${res.status})`);
+  const j = (await res.json()) as { data?: { links?: string[] }; links?: string[] };
+  return j.data?.links ?? j.links ?? [];
+}

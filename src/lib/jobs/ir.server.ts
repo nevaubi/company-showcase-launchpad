@@ -105,13 +105,16 @@ export async function exhibitsOf(c: CoverageCompany, f: Candidate): Promise<Cand
 
 /** Downloadable files linked from the IR site (pdf, xlsx, pptx, docx…). */
 export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]> {
-  const { firecrawlMap } = await import("@/lib/web.server");
-  const links = new Set<string>();
-  for (const search of [undefined, "presentation", "supplement", "financial"]) {
+  const { firecrawlLinks, firecrawlMap } = await import("@/lib/web.server");
+  const pages = await firecrawlMap(c.ir, { limit: 400 });
+  const PAGE_RE = /(financial|quarter|results|earnings|events|presentation|report|filings|supplement|fact|kpi|metrics|investor-day)/i;
+  const picked = [c.ir, ...pages.filter((p) => PAGE_RE.test(p) && !IR_FILE_RE.test(p.split("?")[0]))].slice(0, 6);
+  const links = new Set<string>(pages.filter((l) => IR_FILE_RE.test(l.split("?")[0])));
+  for (const page of picked) {
     try {
-      for (const l of await firecrawlMap(c.ir, { search, limit: 1000 })) if (IR_FILE_RE.test(l.split("?")[0])) links.add(l);
-    } catch (e) {
-      if (!search) throw e;
+      for (const l of await firecrawlLinks(page)) if (IR_FILE_RE.test(l.split("?")[0].split("#")[0])) links.add(l);
+    } catch {
+      /* page unavailable; keep going */
     }
   }
   return [...links].map((url) => ({ url, source: "ir-site" as const }));
