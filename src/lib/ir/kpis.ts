@@ -277,6 +277,56 @@ export function splitStockAndFlow(facts: IrFact[]): IrFact[] {
   });
 }
 
+const tableOf = (f: IrFact) => {
+  const l = f.locator as { t?: number; p?: number } | null | undefined;
+  return l?.t ?? (l?.p != null ? `p${l.p}` : null);
+};
+
+/**
+ * Utilities and conglomerates print one table per subsidiary with identical rows (Duke Energy:
+ * "Commercial", "Industrial", "Total Retail Sales" for the parent and five operating companies).
+ * When the breakdown name doesn't tell them apart, keep the table with the largest values — the
+ * consolidated one — so subsidiaries' numbers never mix into the company series.
+ */
+export function dropRepeatedTables(facts: IrFact[]): IrFact[] {
+  const groups = new Map<string, Map<string | number, IrFact[]>>();
+  for (const f of facts) {
+    const t = tableOf(f);
+    if (t == null) continue;
+    const g = `${docOf(f)}|${f.category}|${f.metric}|${f.unit}|${scopeName(f.breakdown)}`;
+    let m = groups.get(g);
+    if (!m) groups.set(g, (m = new Map()));
+    const list = m.get(t) ?? [];
+    list.push(f);
+    m.set(t, list);
+  }
+  const drop = new Set<IrFact>();
+  for (const tables of groups.values()) {
+    if (tables.size < 2) continue;
+    const entries = [...tables].map(([t, list]) => ({
+      t,
+      list,
+      mag: list.reduce((n, f) => n + Math.abs(f.value), 0),
+      vals: new Map(list.map((f) => [`${normLabel(f.label)}|${f.period_end}|${f.months}`, f.value])),
+    }));
+    entries.sort((a, b) => b.mag - a.mag);
+    const kept: typeof entries = [];
+    for (const e of entries) {
+      const clash = kept.some((k) => {
+        let n = 0;
+        for (const [key, v] of e.vals) {
+          const kv = k.vals.get(key);
+          if (kv != null && Math.abs(kv - v) > Math.max(Math.abs(kv) * 0.001, 1)) n++;
+        }
+        return n >= 2;
+      });
+      if (clash) for (const f of e.list) drop.add(f);
+      else kept.push(e);
+    }
+  }
+  return drop.size ? facts.filter((f) => !drop.has(f)) : facts;
+}
+
 /**
  * Totals whose listed lines never add up in any period (at least three tries, every one off by more
  * than 2%): the hierarchy came from a mislabelled table, so those lines aren't parts of that total.
@@ -297,7 +347,7 @@ export function buildIrSeries(
   input: IrFact[],
   opts: { labelMap?: Record<string, LabelMapEntry>; fyEndMonth?: number | null; unlink?: Set<string> } = {},
 ): { series: IrSeries[]; quarters: string[]; years: string[]; checks: ReconcileCheck[] } {
-  const mapped = splitStockAndFlow(splitGeoColumns(qualifyGenericLines(applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value)))));
+  const mapped = dropRepeatedTables(splitStockAndFlow(splitGeoColumns(qualifyGenericLines(applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value))))));
   // Trailing-twelve-month columns ending mid-year are not fiscal years.
   const fyEnd = opts.fyEndMonth ?? fiscalYearEndMonth(mapped);
   const facts = fyEnd ? mapped.filter((f) => f.months !== 12 || monthNear(f.period_end, fyEnd)) : mapped;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { dropRepeatedTables, describe, expect, it } from "vitest";
 import { buildIrSeries, crossCheckTotals, geoOfBreakdown, segmentOfBreakdown, type IrFact } from "./kpis";
 import { parseNumber, parseTables } from "./tables";
 
@@ -371,5 +371,31 @@ describe("subtotals introduced part-way through history", () => {
     const { checks } = buildIrSeries(facts);
     const top = checks.filter((c) => c.group.endsWith("Total revenues"));
     expect(top.map((c) => [c.period, c.ok]).sort()).toEqual([[old, true], [now, true]]);
+  });
+});
+
+describe("subsidiary tables repeating the parent's rows", () => {
+  it("keeps the consolidated table and drops subsidiaries with the same breakdown name", () => {
+    const end = "2025-12-31";
+    const row = (label: string, v: number, t: number, total = false) =>
+      f(label, end, 3, v, { category: "kpi", metric: "volume", unit: "count", breakdown: "GWh sales", parent: total ? null : "Total Retail Sales", is_total: total, locator: { t } as never });
+    const facts = [
+      row("Residential", 20000, 28), row("Commercial", 18847, 28), row("Industrial", 11218, 28), row("Total Retail Sales", 50065, 28, true),
+      row("Residential", 7000, 29), row("Commercial", 7176, 29), row("Industrial", 4754, 29), row("Total Retail Sales", 18930, 29, true),
+      row("Residential", 3000, 30), row("Commercial", 3563, 30), row("Industrial", 2252, 30), row("Total Retail Sales", 8815, 30, true),
+    ];
+    const kept = dropRepeatedTables(facts);
+    expect(kept.every((x) => (x.locator as { t: number }).t === 28)).toBe(true);
+    const { checks } = buildIrSeries(facts);
+    expect(checks.length).toBe(1);
+    expect(checks[0].ok).toBe(true);
+  });
+  it("keeps separate tables that repeat the same numbers (summary and detail)", () => {
+    const end = "2025-12-31";
+    const facts = [
+      f("Cloud", end, 3, 10e9, { locator: { t: 1 } as never }), f("Devices", end, 3, 5e9, { locator: { t: 1 } as never }),
+      f("Cloud", end, 3, 10e9, { locator: { t: 4 } as never }), f("Devices", end, 3, 5e9, { locator: { t: 4 } as never }),
+    ];
+    expect(dropRepeatedTables(facts).length).toBe(4);
   });
 });
