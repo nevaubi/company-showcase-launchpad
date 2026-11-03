@@ -216,5 +216,6 @@ await runBatch<Doc>({
   process: processDoc,
 });
 // Clean any leftovers from interrupted documents.
+mkdirSync("/tmp/irv", { recursive: true });
 for (const f of readdirSync("/tmp/irv", { withFileTypes: true }).filter((x) => x.isDirectory())) rmSync(join("/tmp/irv", f.name), { recursive: true, force: true });
 process.exit(0);
