@@ -10,33 +10,308 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as PricingRouteImport } from './routes/pricing'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
+import { Route as AuthenticatedAppInsidersRouteImport } from './routes/_authenticated/app.insiders'
+import { Route as AuthenticatedAppMacroRouteImport } from './routes/_authenticated/app.macro'
+import { Route as AuthenticatedAppMarketsRouteImport } from './routes/_authenticated/app.markets'
+import { Route as AuthenticatedAppResearchRouteImport } from './routes/_authenticated/app.research'
+import { Route as AuthenticatedAppSectorsRouteImport } from './routes/_authenticated/app.sectors'
+import { Route as AuthenticatedAppCompaniesIndexRouteImport } from './routes/_authenticated/app.companies.index'
+import { Route as AuthenticatedAppCompaniesTickerRouteImport } from './routes/_authenticated/app.companies.$ticker'
+import { Route as AuthenticatedAppDocsIndexRouteImport } from './routes/_authenticated/app.docs.index'
+import { Route as AuthenticatedAppDocsIdRouteImport } from './routes/_authenticated/app.docs.$id'
+import { Route as AuthenticatedAppThesesIndexRouteImport } from './routes/_authenticated/app.theses.index'
+import { Route as AuthenticatedAppThesesIdRouteImport } from './routes/_authenticated/app.theses.$id'
+import { Route as AuthenticatedAppCompaniesTickerIndexRouteImport } from './routes/_authenticated/app.companies.$ticker.index'
+import { Route as AuthenticatedAppCompaniesTickerFilingsRouteImport } from './routes/_authenticated/app.companies.$ticker.filings'
+import { Route as AuthenticatedAppCompaniesTickerFinancialsRouteImport } from './routes/_authenticated/app.companies.$ticker.financials'
+import { Route as AuthenticatedAppCompaniesTickerInsidersRouteImport } from './routes/_authenticated/app.companies.$ticker.insiders'
+import { Route as AuthenticatedAppCompaniesTickerSegmentsRouteImport } from './routes/_authenticated/app.companies.$ticker.segments'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PricingRoute = PricingRouteImport.update({
+  id: '/pricing',
+  path: '/pricing',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppInsidersRoute =
+  AuthenticatedAppInsidersRouteImport.update({
+    id: '/insiders',
+    path: '/insiders',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppMacroRoute = AuthenticatedAppMacroRouteImport.update({
+  id: '/macro',
+  path: '/macro',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppMarketsRoute = AuthenticatedAppMarketsRouteImport.update({
+  id: '/markets',
+  path: '/markets',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppResearchRoute =
+  AuthenticatedAppResearchRouteImport.update({
+    id: '/research',
+    path: '/research',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppSectorsRoute = AuthenticatedAppSectorsRouteImport.update({
+  id: '/sectors',
+  path: '/sectors',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppCompaniesIndexRoute =
+  AuthenticatedAppCompaniesIndexRouteImport.update({
+    id: '/companies/',
+    path: '/companies/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppCompaniesTickerRoute =
+  AuthenticatedAppCompaniesTickerRouteImport.update({
+    id: '/companies/$ticker',
+    path: '/companies/$ticker',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppDocsIndexRoute =
+  AuthenticatedAppDocsIndexRouteImport.update({
+    id: '/docs/',
+    path: '/docs/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppDocsIdRoute = AuthenticatedAppDocsIdRouteImport.update({
+  id: '/docs/$id',
+  path: '/docs/$id',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppThesesIndexRoute =
+  AuthenticatedAppThesesIndexRouteImport.update({
+    id: '/theses/',
+    path: '/theses/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppThesesIdRoute =
+  AuthenticatedAppThesesIdRouteImport.update({
+    id: '/theses/$id',
+    path: '/theses/$id',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppCompaniesTickerIndexRoute =
+  AuthenticatedAppCompaniesTickerIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
+  } as any)
+const AuthenticatedAppCompaniesTickerFilingsRoute =
+  AuthenticatedAppCompaniesTickerFilingsRouteImport.update({
+    id: '/filings',
+    path: '/filings',
+    getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
+  } as any)
+const AuthenticatedAppCompaniesTickerFinancialsRoute =
+  AuthenticatedAppCompaniesTickerFinancialsRouteImport.update({
+    id: '/financials',
+    path: '/financials',
+    getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
+  } as any)
+const AuthenticatedAppCompaniesTickerInsidersRoute =
+  AuthenticatedAppCompaniesTickerInsidersRouteImport.update({
+    id: '/insiders',
+    path: '/insiders',
+    getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
+  } as any)
+const AuthenticatedAppCompaniesTickerSegmentsRoute =
+  AuthenticatedAppCompaniesTickerSegmentsRouteImport.update({
+    id: '/segments',
+    path: '/segments',
+    getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/pricing': typeof PricingRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/app': typeof AuthenticatedAppRouteWithChildren
+  '/app/insiders': typeof AuthenticatedAppInsidersRoute
+  '/app/macro': typeof AuthenticatedAppMacroRoute
+  '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/research': typeof AuthenticatedAppResearchRoute
+  '/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/app/': typeof AuthenticatedAppIndexRoute
+  '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
+  '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
+  '/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
+  '/app/docs/': typeof AuthenticatedAppDocsIndexRoute
+  '/app/theses/': typeof AuthenticatedAppThesesIndexRoute
+  '/app/companies/$ticker/filings': typeof AuthenticatedAppCompaniesTickerFilingsRoute
+  '/app/companies/$ticker/financials': typeof AuthenticatedAppCompaniesTickerFinancialsRoute
+  '/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
+  '/app/companies/$ticker/segments': typeof AuthenticatedAppCompaniesTickerSegmentsRoute
+  '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/pricing': typeof PricingRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/app/insiders': typeof AuthenticatedAppInsidersRoute
+  '/app/macro': typeof AuthenticatedAppMacroRoute
+  '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/research': typeof AuthenticatedAppResearchRoute
+  '/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/app': typeof AuthenticatedAppIndexRoute
+  '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
+  '/app/companies': typeof AuthenticatedAppCompaniesIndexRoute
+  '/app/docs': typeof AuthenticatedAppDocsIndexRoute
+  '/app/theses': typeof AuthenticatedAppThesesIndexRoute
+  '/app/companies/$ticker/filings': typeof AuthenticatedAppCompaniesTickerFilingsRoute
+  '/app/companies/$ticker/financials': typeof AuthenticatedAppCompaniesTickerFinancialsRoute
+  '/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
+  '/app/companies/$ticker/segments': typeof AuthenticatedAppCompaniesTickerSegmentsRoute
+  '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/pricing': typeof PricingRoute
+  '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
+  '/_authenticated/app/insiders': typeof AuthenticatedAppInsidersRoute
+  '/_authenticated/app/macro': typeof AuthenticatedAppMacroRoute
+  '/_authenticated/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/_authenticated/app/research': typeof AuthenticatedAppResearchRoute
+  '/_authenticated/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
+  '/_authenticated/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
+  '/_authenticated/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/_authenticated/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
+  '/_authenticated/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
+  '/_authenticated/app/docs/': typeof AuthenticatedAppDocsIndexRoute
+  '/_authenticated/app/theses/': typeof AuthenticatedAppThesesIndexRoute
+  '/_authenticated/app/companies/$ticker/filings': typeof AuthenticatedAppCompaniesTickerFilingsRoute
+  '/_authenticated/app/companies/$ticker/financials': typeof AuthenticatedAppCompaniesTickerFinancialsRoute
+  '/_authenticated/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
+  '/_authenticated/app/companies/$ticker/segments': typeof AuthenticatedAppCompaniesTickerSegmentsRoute
+  '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/pricing'
+    | '/reset-password'
+    | '/app'
+    | '/app/insiders'
+    | '/app/macro'
+    | '/app/markets'
+    | '/app/research'
+    | '/app/sectors'
+    | '/app/'
+    | '/app/companies/$ticker'
+    | '/app/docs/$id'
+    | '/app/theses/$id'
+    | '/app/companies/'
+    | '/app/docs/'
+    | '/app/theses/'
+    | '/app/companies/$ticker/filings'
+    | '/app/companies/$ticker/financials'
+    | '/app/companies/$ticker/insiders'
+    | '/app/companies/$ticker/segments'
+    | '/app/companies/$ticker/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/pricing'
+    | '/reset-password'
+    | '/app/insiders'
+    | '/app/macro'
+    | '/app/markets'
+    | '/app/research'
+    | '/app/sectors'
+    | '/app'
+    | '/app/docs/$id'
+    | '/app/theses/$id'
+    | '/app/companies'
+    | '/app/docs'
+    | '/app/theses'
+    | '/app/companies/$ticker/filings'
+    | '/app/companies/$ticker/financials'
+    | '/app/companies/$ticker/insiders'
+    | '/app/companies/$ticker/segments'
+    | '/app/companies/$ticker'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/pricing'
+    | '/reset-password'
+    | '/_authenticated/app'
+    | '/_authenticated/app/insiders'
+    | '/_authenticated/app/macro'
+    | '/_authenticated/app/markets'
+    | '/_authenticated/app/research'
+    | '/_authenticated/app/sectors'
+    | '/_authenticated/app/'
+    | '/_authenticated/app/companies/$ticker'
+    | '/_authenticated/app/docs/$id'
+    | '/_authenticated/app/theses/$id'
+    | '/_authenticated/app/companies/'
+    | '/_authenticated/app/docs/'
+    | '/_authenticated/app/theses/'
+    | '/_authenticated/app/companies/$ticker/filings'
+    | '/_authenticated/app/companies/$ticker/financials'
+    | '/_authenticated/app/companies/$ticker/insiders'
+    | '/_authenticated/app/companies/$ticker/segments'
+    | '/_authenticated/app/companies/$ticker/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
+  AuthRoute: typeof AuthRoute
+  PricingRoute: typeof PricingRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +323,241 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/pricing': {
+      id: '/pricing'
+      path: '/pricing'
+      fullPath: '/pricing'
+      preLoaderRoute: typeof PricingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated/app': {
+      id: '/_authenticated/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AuthenticatedAppRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/app/': {
+      id: '/_authenticated/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AuthenticatedAppIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/insiders': {
+      id: '/_authenticated/app/insiders'
+      path: '/insiders'
+      fullPath: '/app/insiders'
+      preLoaderRoute: typeof AuthenticatedAppInsidersRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/macro': {
+      id: '/_authenticated/app/macro'
+      path: '/macro'
+      fullPath: '/app/macro'
+      preLoaderRoute: typeof AuthenticatedAppMacroRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/markets': {
+      id: '/_authenticated/app/markets'
+      path: '/markets'
+      fullPath: '/app/markets'
+      preLoaderRoute: typeof AuthenticatedAppMarketsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/research': {
+      id: '/_authenticated/app/research'
+      path: '/research'
+      fullPath: '/app/research'
+      preLoaderRoute: typeof AuthenticatedAppResearchRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/sectors': {
+      id: '/_authenticated/app/sectors'
+      path: '/sectors'
+      fullPath: '/app/sectors'
+      preLoaderRoute: typeof AuthenticatedAppSectorsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/companies/': {
+      id: '/_authenticated/app/companies/'
+      path: '/companies'
+      fullPath: '/app/companies/'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/companies/$ticker': {
+      id: '/_authenticated/app/companies/$ticker'
+      path: '/companies/$ticker'
+      fullPath: '/app/companies/$ticker'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/docs/': {
+      id: '/_authenticated/app/docs/'
+      path: '/docs'
+      fullPath: '/app/docs/'
+      preLoaderRoute: typeof AuthenticatedAppDocsIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/docs/$id': {
+      id: '/_authenticated/app/docs/$id'
+      path: '/docs/$id'
+      fullPath: '/app/docs/$id'
+      preLoaderRoute: typeof AuthenticatedAppDocsIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/theses/': {
+      id: '/_authenticated/app/theses/'
+      path: '/theses'
+      fullPath: '/app/theses/'
+      preLoaderRoute: typeof AuthenticatedAppThesesIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/theses/$id': {
+      id: '/_authenticated/app/theses/$id'
+      path: '/theses/$id'
+      fullPath: '/app/theses/$id'
+      preLoaderRoute: typeof AuthenticatedAppThesesIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/companies/$ticker/': {
+      id: '/_authenticated/app/companies/$ticker/'
+      path: '/'
+      fullPath: '/app/companies/$ticker/'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerIndexRouteImport
+      parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
+    }
+    '/_authenticated/app/companies/$ticker/filings': {
+      id: '/_authenticated/app/companies/$ticker/filings'
+      path: '/filings'
+      fullPath: '/app/companies/$ticker/filings'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerFilingsRouteImport
+      parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
+    }
+    '/_authenticated/app/companies/$ticker/financials': {
+      id: '/_authenticated/app/companies/$ticker/financials'
+      path: '/financials'
+      fullPath: '/app/companies/$ticker/financials'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerFinancialsRouteImport
+      parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
+    }
+    '/_authenticated/app/companies/$ticker/insiders': {
+      id: '/_authenticated/app/companies/$ticker/insiders'
+      path: '/insiders'
+      fullPath: '/app/companies/$ticker/insiders'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerInsidersRouteImport
+      parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
+    }
+    '/_authenticated/app/companies/$ticker/segments': {
+      id: '/_authenticated/app/companies/$ticker/segments'
+      path: '/segments'
+      fullPath: '/app/companies/$ticker/segments'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerSegmentsRouteImport
+      parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
+    }
   }
 }
 
+interface AuthenticatedAppCompaniesTickerRouteChildren {
+  AuthenticatedAppCompaniesTickerFilingsRoute: typeof AuthenticatedAppCompaniesTickerFilingsRoute
+  AuthenticatedAppCompaniesTickerFinancialsRoute: typeof AuthenticatedAppCompaniesTickerFinancialsRoute
+  AuthenticatedAppCompaniesTickerInsidersRoute: typeof AuthenticatedAppCompaniesTickerInsidersRoute
+  AuthenticatedAppCompaniesTickerSegmentsRoute: typeof AuthenticatedAppCompaniesTickerSegmentsRoute
+  AuthenticatedAppCompaniesTickerIndexRoute: typeof AuthenticatedAppCompaniesTickerIndexRoute
+}
+
+const AuthenticatedAppCompaniesTickerRouteChildren: AuthenticatedAppCompaniesTickerRouteChildren =
+  {
+    AuthenticatedAppCompaniesTickerFilingsRoute:
+      AuthenticatedAppCompaniesTickerFilingsRoute,
+    AuthenticatedAppCompaniesTickerFinancialsRoute:
+      AuthenticatedAppCompaniesTickerFinancialsRoute,
+    AuthenticatedAppCompaniesTickerInsidersRoute:
+      AuthenticatedAppCompaniesTickerInsidersRoute,
+    AuthenticatedAppCompaniesTickerSegmentsRoute:
+      AuthenticatedAppCompaniesTickerSegmentsRoute,
+    AuthenticatedAppCompaniesTickerIndexRoute:
+      AuthenticatedAppCompaniesTickerIndexRoute,
+  }
+
+const AuthenticatedAppCompaniesTickerRouteWithChildren =
+  AuthenticatedAppCompaniesTickerRoute._addFileChildren(
+    AuthenticatedAppCompaniesTickerRouteChildren,
+  )
+
+interface AuthenticatedAppRouteChildren {
+  AuthenticatedAppInsidersRoute: typeof AuthenticatedAppInsidersRoute
+  AuthenticatedAppMacroRoute: typeof AuthenticatedAppMacroRoute
+  AuthenticatedAppMarketsRoute: typeof AuthenticatedAppMarketsRoute
+  AuthenticatedAppResearchRoute: typeof AuthenticatedAppResearchRoute
+  AuthenticatedAppSectorsRoute: typeof AuthenticatedAppSectorsRoute
+  AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
+  AuthenticatedAppCompaniesTickerRoute: typeof AuthenticatedAppCompaniesTickerRouteWithChildren
+  AuthenticatedAppDocsIdRoute: typeof AuthenticatedAppDocsIdRoute
+  AuthenticatedAppThesesIdRoute: typeof AuthenticatedAppThesesIdRoute
+  AuthenticatedAppCompaniesIndexRoute: typeof AuthenticatedAppCompaniesIndexRoute
+  AuthenticatedAppDocsIndexRoute: typeof AuthenticatedAppDocsIndexRoute
+  AuthenticatedAppThesesIndexRoute: typeof AuthenticatedAppThesesIndexRoute
+}
+
+const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
+  AuthenticatedAppInsidersRoute: AuthenticatedAppInsidersRoute,
+  AuthenticatedAppMacroRoute: AuthenticatedAppMacroRoute,
+  AuthenticatedAppMarketsRoute: AuthenticatedAppMarketsRoute,
+  AuthenticatedAppResearchRoute: AuthenticatedAppResearchRoute,
+  AuthenticatedAppSectorsRoute: AuthenticatedAppSectorsRoute,
+  AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
+  AuthenticatedAppCompaniesTickerRoute:
+    AuthenticatedAppCompaniesTickerRouteWithChildren,
+  AuthenticatedAppDocsIdRoute: AuthenticatedAppDocsIdRoute,
+  AuthenticatedAppThesesIdRoute: AuthenticatedAppThesesIdRoute,
+  AuthenticatedAppCompaniesIndexRoute: AuthenticatedAppCompaniesIndexRoute,
+  AuthenticatedAppDocsIndexRoute: AuthenticatedAppDocsIndexRoute,
+  AuthenticatedAppThesesIndexRoute: AuthenticatedAppThesesIndexRoute,
+}
+
+const AuthenticatedAppRouteWithChildren =
+  AuthenticatedAppRoute._addFileChildren(AuthenticatedAppRouteChildren)
+
+interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAppRoute: typeof AuthenticatedAppRouteWithChildren
+}
+
+const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAppRoute: AuthenticatedAppRouteWithChildren,
+}
+
+const AuthenticatedRouteRouteWithChildren =
+  AuthenticatedRouteRoute._addFileChildren(AuthenticatedRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
+  AuthRoute: AuthRoute,
+  PricingRoute: PricingRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
