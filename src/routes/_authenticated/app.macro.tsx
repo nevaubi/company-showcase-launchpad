@@ -251,7 +251,7 @@ function MacroMonitor({
   onSelect: (id: string) => void;
 }) {
   return (
-    <Panel title="Macro monitor" subtitle="Latest print, change, and position in the 10-year range · click a row to chart it" pad={false}>
+    <Panel title="Macro monitor" subtitle="Latest print, change, and position in the 10-year range · click a row to chart it" bodyClassName="p-0">
       <div className="overflow-x-auto scrollbar-thin">
         <table className="w-full min-w-[860px] text-[12.5px]">
           <thead>
@@ -371,7 +371,7 @@ function SeriesDetail({
           <a href={def.source} target="_blank" rel="noreferrer" className="num inline-flex items-center gap-0.5 text-[11px] text-muted-foreground hover:text-foreground">
             {def.id} <ArrowUpRight className="size-3" />
           </a>
-          <Button size="icon-xs" variant="ghost" onClick={onClose} aria-label="Close chart">
+          <Button size="icon-sm" variant="ghost" onClick={onClose} aria-label="Close chart">
             <X />
           </Button>
         </div>
