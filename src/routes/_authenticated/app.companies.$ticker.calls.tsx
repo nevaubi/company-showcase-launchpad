@@ -88,7 +88,7 @@ function Calls() {
   return (
     <div className="grid grid-cols-1 gap-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex flex-wrap gap-1" role="tablist" aria-label="Earnings calls">
+        <div className="-mx-1 flex min-w-0 max-w-full gap-1 overflow-x-auto px-1 pb-1 scrollbar-thin sm:flex-wrap sm:overflow-visible sm:pb-0" role="tablist" aria-label="Earnings calls">
           {list.map((c) => (
             <button
               key={c.url}
@@ -96,7 +96,7 @@ function Calls() {
               aria-selected={c.url === url}
               onClick={() => set({ call: c.url, speaker: undefined })}
               className={cn(
-                "rounded-md px-3 py-1.5 text-left transition-colors",
+                "shrink-0 rounded-md px-3 py-1.5 text-left transition-colors",
                 c.url === url ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
               )}
             >
