@@ -121,14 +121,15 @@ function Status() {
               ["SEC filings indexed", fmtInt(m.filings)],
               ["Sourced statement values", fmtInt(m.statementValues)],
               ["Segment facts", fmtInt(m.segmentFacts)],
-              ["Fiscal years", `${fmtInt(m.fiscalYears)} since ${m.oldestFiscalYearEnd.slice(0, 4)}`],
+              ["Company fiscal years", fmtInt(m.fiscalYears), `back to FY${m.oldestFiscalYearEnd.slice(0, 4)}`],
               ["Form 4 transactions", fmtInt(m.insiderTransactions)],
               ["Economic series", fmtInt(m.macroSeries)],
               ["Price histories", fmtInt(m.priceSymbols)],
-            ].map(([k, v]) => (
+            ].map(([k, v, sub]) => (
               <div key={k}>
                 <dt className="text-[11px] text-muted-foreground">{k}</dt>
                 <dd className="num mt-0.5 text-lg font-medium">{v}</dd>
+                {sub && <p className="text-[10px] text-muted-foreground">{sub}</p>}
               </div>
             ))}
           </dl>
