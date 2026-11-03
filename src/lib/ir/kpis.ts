@@ -122,6 +122,8 @@ interface Vintage {
   derived?: IrCell["derived"];
   doc: string;
   filed: string;
+  /** subtotal rebuilt from its printed parts — never counted as a reconciliation check */
+  synthetic?: boolean;
 }
 
 /** Fiscal-year end month (1-12): the most common end month among 12-month periods (trailing-twelve-month columns are rarer). */
@@ -200,12 +202,21 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
     s.breakdown = top(vt.breakdown) ?? null;
     s.parent = top(vt.parent) || null;
   }
+  mergeFlattened(bySeries, qv, fv, nine);
   for (const m of [qv, fv]) for (const per of m.values()) for (const list of per.values()) list.sort((a, b) => b.filed.localeCompare(a.filed));
 
   // Latest vintage per cell.
   for (const s of bySeries.values()) {
-    for (const [end, list] of qv.get(s.key) ?? []) s.cells[end] = { v: list[0].v, fact: list[0].fact };
-    for (const [end, list] of fv.get(s.key) ?? []) s.annual[end] = { v: list[0].v, fact: list[0].fact };
+    // Prefer a printed value over a rebuilt subtotal from the same filing date.
+    const pick = (list: Vintage[]) => list.find((v) => !v.synthetic && v.filed === list[0].filed) ?? list[0];
+    for (const [end, list] of qv.get(s.key) ?? []) {
+      const v = pick(list);
+      s.cells[end] = { v: v.v, fact: v.fact, derived: v.derived };
+    }
+    for (const [end, list] of fv.get(s.key) ?? []) {
+      const v = pick(list);
+      s.annual[end] = { v: v.v, fact: v.fact, derived: v.derived };
+    }
   }
 
   // Fourth quarters: FY − (Q1+Q2+Q3), else FY − 9M YTD. Never for ratios, percentages or balances.
@@ -305,7 +316,7 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
         const childDoc = fromDoc(k, end, doc) ? doc : (store.get(k.key)?.get(end)?.[0]?.doc ?? doc);
         ok = evaluate(k, end, childDoc, out, apply) && ok;
       }
-      if (members.length >= 2 && node.isTotal && (node.unit === "usd" || node.unit === "count")) {
+      if (members.length >= 2 && node.isTotal && !own?.synthetic && (node.unit === "usd" || node.unit === "count")) {
         const sum = members.reduce((n, k) => n + (fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v ?? 0), 0);
         const pass = Math.abs(sum - value) <= tolFor(node, value);
         out.push({ group: `${node.category}:${node.label}`, totalKey: node.key, period: end, kind, total: value, sum, ok: pass, children: members.length });
@@ -332,6 +343,81 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
     }
   }
   return { series, quarters, years, checks };
+}
+
+/**
+ * Some releases print a line under its subtotal ("iPhone" under "Products"), others flatten the
+ * table and put it straight under the grand total. When the other parent is itself a child of that
+ * grand total, both are the same line: merge the flattened copy into the nested one, then rebuild
+ * the missing subtotal for those releases from the parts they printed (marked synthetic).
+ */
+function mergeFlattened(bySeries: Map<string, IrSeries>, qv: Map<string, Map<string, Vintage[]>>, fv: Map<string, Map<string, Vintage[]>>, nine: Map<string, IrFact[]>) {
+  const dim = (s: IrSeries) => `${s.category}|${s.metric}|${s.unit}`;
+  const byLabel = new Map<string, IrSeries[]>();
+  for (const s of bySeries.values()) {
+    const k = `${dim(s)}|${normLabel(s.label)}`;
+    byLabel.set(k, [...(byLabel.get(k) ?? []), s]);
+  }
+  const parentsOf = (d: string, label: string) => new Set((byLabel.get(`${d}|${normLabel(label)}`) ?? []).map((x) => normLabel(x.parent ?? "")));
+  const nested = new Set<IrSeries>();
+  for (const list of byLabel.values()) {
+    if (list.length < 2) continue;
+    for (const deep of list) {
+      if (!deep.parent) continue;
+      for (const flat of list) {
+        if (flat === deep || !bySeries.has(flat.key) || !bySeries.has(deep.key)) continue;
+        // deep.parent must itself roll into flat.parent
+        if (!parentsOf(dim(deep), deep.parent).has(normLabel(flat.parent ?? ""))) continue;
+        for (const m of [qv, fv]) {
+          const src = m.get(flat.key);
+          if (!src) continue;
+          let dst = m.get(deep.key);
+          if (!dst) m.set(deep.key, (dst = new Map()));
+          for (const [end, vs] of src) dst.set(end, [...(dst.get(end) ?? []), ...vs]);
+          m.delete(flat.key);
+        }
+        if (nine.has(flat.key)) nine.set(deep.key, [...(nine.get(deep.key) ?? []), ...nine.get(flat.key)!]);
+        nine.delete(flat.key);
+        bySeries.delete(flat.key);
+        const sub = (byLabel.get(`${dim(deep)}|${normLabel(deep.parent)}`) ?? []).find((x) => bySeries.has(x.key) && normLabel(x.parent ?? "") === normLabel(flat.parent ?? ""));
+        if (sub) {
+          sub.isTotal = true;
+          nested.add(sub);
+        }
+      }
+    }
+  }
+  // Rebuild each nested subtotal for releases that printed its parts but not the subtotal itself.
+  for (const sub of nested) {
+    if (!FLOW_UNITS.has(sub.unit)) continue;
+    const kids = [...bySeries.values()].filter((k) => k !== sub && dim(k) === dim(sub) && k.parent && normLabel(k.parent) === normLabel(sub.label));
+    if (kids.length < 2) continue;
+    for (const m of [qv, fv]) {
+      const ends = new Set(kids.flatMap((k) => [...(m.get(sub.key) ? [] : []), ...(m.get(k.key)?.keys() ?? [])]));
+      for (const end of ends) {
+        const have = new Set((m.get(sub.key)?.get(end) ?? []).map((v) => v.doc));
+        const docs = new Set(kids.flatMap((k) => (m.get(k.key)?.get(end) ?? []).map((v) => v.doc)));
+        for (const doc of docs) {
+          if (have.has(doc) || doc.startsWith("derived")) continue;
+          const parts = kids.flatMap((k) => (m.get(k.key)?.get(end) ?? []).filter((v) => v.doc === doc && v.fact).map((v) => ({ k, v })));
+          if (parts.length < 2) continue;
+          const v = parts.reduce((n, p) => n + p.v.v, 0);
+          let per = m.get(sub.key);
+          if (!per) m.set(sub.key, (per = new Map()));
+          per.set(end, [
+            ...(per.get(end) ?? []),
+            {
+              v,
+              doc,
+              filed: parts[0].v.filed,
+              synthetic: true,
+              derived: { formula: "Sum of the components printed in this release", parts: parts.map((p) => ({ label: p.k.label, value: p.v.v, sign: 1 as const, fact: p.v.fact! })) },
+            },
+          ]);
+        }
+      }
+    }
+  }
 }
 
 /**

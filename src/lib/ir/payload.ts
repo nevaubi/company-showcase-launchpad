@@ -157,7 +157,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
     const rows: { k: string; depth: number }[] = [];
     const walk = (s: IrSeries, depth: number) => {
       placed.add(s);
-      const ks = (kids.get(s) ?? []).sort((a, b) => Number(a.isTotal) - Number(b.isTotal) || magnitude(b) - magnitude(a));
+      const ks = (kids.get(s) ?? []).sort((a, b) => magnitude(b) - magnitude(a));
       for (const k of ks) walk(k, depth + 1);
       if (kept.has(s.key)) rows.push({ k: s.key, depth });
     };
