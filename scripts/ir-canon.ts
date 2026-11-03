@@ -7,7 +7,7 @@
  */
 import { COVERAGE } from "@/lib/coverage";
 import { CANON_INSTRUCTIONS, CANON_SCHEMA, failureNotes, mapFromModel, rawLines, renderLines, type RawLine } from "@/lib/ir/canon";
-import { buildIrSeries, rawKey, type IrFact, type LabelMapEntry } from "@/lib/ir/kpis";
+import { buildIrSeries, normLabel, rawKey, type IrFact, type LabelMapEntry } from "@/lib/ir/kpis";
 import { IR_MODELS, OpenAIError, openaiStructured } from "@/lib/openai.server";
 import { loadLabelMap } from "@/lib/ir/rebuild.server";
 import { buildCompany, loadFacts } from "./ir-build";
@@ -15,18 +15,47 @@ import { args, log, sb } from "./lib/supa";
 
 type CanonOut = { lines: { id: number; category: string; metric: string; label: string; parent: string; is_total: boolean; drop: boolean; reason: string }[] };
 
-/** Every distinct (unit, quarter, value) the tables show — a merge may dedupe these, never lose them. */
+/** Every distinct printed (unit, quarter, value) the tables show — a merge may dedupe these, never lose them. */
 function shownValues(facts: IrFact[], map?: Record<string, LabelMapEntry>) {
   const { series } = buildIrSeries(facts, map ? { labelMap: map } : {});
-  return new Set(series.flatMap((s) => Object.entries(s.cells).map(([e, c]) => `${s.unit}|${e}|${Math.round(c.v)}`)));
+  const values = new Set<string>();
+  // newest filing date shown per (unit, quarter, line) — used to recognise restated values
+  const shownFiled = new Map<string, string>();
+  for (const s of series)
+    for (const [e, c] of Object.entries(s.cells)) {
+      if (!c.fact) continue; // derived cells (Q4 = FY − 9M) change with their inputs
+      values.add(`${s.unit}|${e}|${Math.round(c.v)}`);
+      const k = `${s.unit}|${e}|${normLabel(s.label)}`;
+      const filed = c.fact.filed ?? "";
+      if (filed > (shownFiled.get(k) ?? "")) shownFiled.set(k, filed);
+    }
+  return { values, shownFiled };
 }
 
-/** Values the base tables show that a proposal would make disappear (excluding lines it drops as junk). */
+/**
+ * Printed values the base tables show that a proposal would make disappear. Not counted: lines it
+ * drops as junk, and values replaced by a later filing's restatement of the same line and quarter.
+ */
 function lostValues(facts: IrFact[], base: Set<string>, map: Record<string, LabelMapEntry>) {
   const after = shownValues(facts, map);
-  const dropped = new Set(facts.filter((f) => map[rawKey(f)]?.drop).map((f) => `${f.unit}|${f.period_end}|${Math.round(f.value)}`));
+  const byValue = new Map<string, IrFact[]>();
+  for (const f of facts) {
+    if (f.months !== 3) continue;
+    const k = `${f.unit}|${f.period_end}|${Math.round(f.value)}`;
+    byValue.set(k, [...(byValue.get(k) ?? []), f]);
+  }
   let lost = 0;
-  for (const v of base) if (!after.has(v) && !dropped.has(v)) lost++;
+  for (const v of base) {
+    if (after.values.has(v)) continue;
+    const fs = byValue.get(v) ?? [];
+    const excused = fs.some((f) => {
+      const m = map[rawKey(f)];
+      if (m?.drop) return true;
+      const newer = after.shownFiled.get(`${f.unit}|${f.period_end}|${normLabel(m?.label ?? f.label)}`);
+      return newer != null && newer > (f.filed ?? "");
+    });
+    if (!excused) lost++;
+  }
   return lost;
 }
 
@@ -70,7 +99,7 @@ async function canonCompany(ticker: string, name: string) {
   if (!facts.length) return;
   const lines = rawLines(facts);
   const base = failureNotes(facts, undefined, 0);
-  const baseValues = shownValues(facts);
+  const baseValues = shownValues(facts).values;
   let map: Record<string, LabelMapEntry> = {};
   let tokens = 0;
   const rounds = Number(args.rounds ?? 2);
