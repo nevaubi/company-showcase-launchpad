@@ -36,7 +36,10 @@ export function StatementChart({
       type: bar ? "bar" : "line",
       axis: hasDollar && !bar ? "right" : "left",
       values: r.cells.slice(start).map((c) => (c ? scaled(c.v, r.unit, scale) : null)),
-      format: (v) => (r.unit === "usd" || r.unit === "shares" ? fmtCell(v * (scale === "full" ? 1 : { K: 1e3, M: 1e6, B: 1e9 }[scale]), r.unit, scale) : fmtCell(v, r.unit, scale)),
+      format: (v) =>
+        r.unit === "usd" || r.unit === "shares"
+          ? `${v < 0 ? "−" : ""}${r.unit === "usd" ? "$" : ""}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: scale === "B" ? 1 : 0 })}${scale === "full" ? "" : scale}`
+          : fmtCell(v, r.unit, scale),
       onSelect: (i) => {
         const c = r.cells[start + i];
         if (c) open({ ticker, label: r.label, periodLabel: periods[i].label, unit: r.unit, value: c.v, src: c.src, alts: c.alts, derived: c.derived, approx: c.approx });
