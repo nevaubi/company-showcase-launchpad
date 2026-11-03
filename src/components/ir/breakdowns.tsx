@@ -95,7 +95,7 @@ export function IrBreakdowns({ ticker, payload }: { ticker: string; payload: IrP
             {okInView.toLocaleString()} of {inView.length.toLocaleString()} totals in view equal the sum of their parts
           </span>
         )}
-        {partialInView > 0 && <span>{partialInView} breakdowns list selected lines only — the rest is shown as “Not itemized”</span>}
+        {partialInView > 0 && <span>{partialInView} breakdown{partialInView === 1 ? " lists" : "s list"} selected lines only — the rest is shown as “Not itemized”</span>}
         <span>
           <em>Italic</em> = calculated ({freq === "q" ? "fourth quarter = full year − first three quarters" : "full year = sum of four quarters"})
         </span>
@@ -222,7 +222,7 @@ function BreakdownCard({
         <div className="min-w-0">
           <h3 className="text-[13px] font-semibold">{title}</h3>
           <p className="text-[11px] text-muted-foreground">
-            {unitCaption(group.unit, scale)} · {rows.length} lines
+            {unitCaption(group.unit, scale)} · {rows.length} line{rows.length === 1 ? "" : "s"}
             {partials.length > 0 && (
               <span>
                 {" "}
