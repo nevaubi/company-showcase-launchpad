@@ -34,13 +34,13 @@
 - [x] Macro overhaul: agency sources, category tabs, macro monitor table (percentile / z-score), dual-axis compare with recession shading, fiscal + energy + credit sections
 - [x] Sectors overhaul: sector fundamentals from covered companies, gov industry drivers, sector detail
 - [x] High-quality color logos for every covered company
-- [ ] Earnings call transcript reader (Firecrawl), cached, searchable, speaker turns
+- [x] Earnings call transcript reader (Firecrawl), cached, searchable, speaker turns
 
 ### Backend
 - [x] Live-refresh tables (prices, filings, Form 4s, macro, job runs) + client merge with snapshots
 - [x] Scheduled jobs: prices, SEC filings scan, Form 4 parse, macro + Treasury, filing-cache warmer
-- [ ] SEC filing document cache in file storage (compressed) for fast, rate-limit-proof opening
-- [ ] Data status page (last refresh per job)
+- [x] SEC filing document cache in file storage (compressed) for fast, rate-limit-proof opening
+- [x] Data status page (last refresh per job)
 
 ### Quality
 - [ ] Tests for new derived lines, KPIs, unit formatting, segment Q4 derivation, valuation math
@@ -48,3 +48,5 @@
 
 ## Later
 - [ ] Insurer template (BRK)
+- [ ] Company-extension XBRL tags (e.g. COP, NEE capex) via iXBRL facts so FCF isn't blank for those filers
+- [ ] Research-agent tool: search inside earnings-call transcripts
