@@ -41,6 +41,8 @@
 - [x] Scheduled jobs: prices, SEC filings scan, Form 4 parse, macro + Treasury, filing-cache warmer
 - [x] SEC filing document cache in file storage (compressed) for fast, rate-limit-proof opening
 - [x] Data status page (last refresh per job)
+- [x] Price fallbacks when Yahoo throttles: Nasdaq for stocks/ETFs, Cboe for the VIX (quotes + refresh job)
+- [x] Data-quality fixes: dividends/capex/buyback alternate tags, share counts tagged in millions (MCD), negative derived quarters from restatements (COP), stray early fiscal years
 
 ### Quality
 - [x] Tests for derived Q4 lines, EBITDA fallback, unit formatting, valuation math, sector roll-ups, transcript parsing

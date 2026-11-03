@@ -19,7 +19,7 @@
 - The signed-in product lives under `src/routes/_authenticated/` (`/app/...`); marketing and auth pages are public top-level routes.
 - AI features call the Lovable AI Gateway from server functions only, behind `requireSupabaseAuth`; shared AI outputs are cached in the service-role-only `ai_cache` table.
 - tsconfig relaxes `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes` and `noPropertyAccessFromIndexSignature` because the dataset code is index-heavy; keep `strict` on.
-- Yahoo throttles shared IPs: every Yahoo call goes through `yahooGet` (alternate hosts, small concurrency pool), quotes fall back to bundled closes, and news-dependent AI (narratives) falls back to hosted web search — never let a 429 blank a page.
+- Yahoo throttles shared IPs: every Yahoo call goes through `yahooGet` (alternate hosts, small concurrency pool); quotes and the price job fall back to Nasdaq (stocks/ETFs) and Cboe (VIX) in `src/lib/market-data.server.ts`, then to bundled closes, and news-dependent AI falls back to hosted web search — never let a 429 blank a page.
 - Research-agent filing citations use `filing:TICKER:ACCESSION[:DOC]` links with an optional verbatim-phrase link title; the source panel searches that phrase to highlight the passage.
 - Layout grids that hold tables or charts must have an explicit column template (`grid-cols-1` at the base breakpoint) and panels carry `min-w-0`, otherwise wide content stretches the page on phones.
 - Web research goes through `src/lib/web.server.ts` (Tavily search via `TAVILY_API_KEY`, Firecrawl scrape via `FIRECRAWL_API_KEY`, auto-detecting direct vs gateway keys) and is exposed only through authenticated server functions in `src/lib/web.functions.ts`; web-sourced AI output must list its source URLs.
