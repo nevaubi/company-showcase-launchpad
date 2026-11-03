@@ -99,7 +99,7 @@ export function SourcePanel() {
                     return (
                       <li key={`${p.accn}-${p.concept}-${i}`}>
                         <button
-                          onClick={() => setActive({ accn: p.accn, locator: locatorOf(p, target.unit as string), label: p.label })}
+                          onClick={() => setActive({ accn: p.accn, doc: p.doc, locator: locatorOf(p, target.unit as string), label: p.label })}
                           className={cn(
                             "flex w-full items-center gap-3 px-3 py-2 text-left text-sm transition-colors hover:bg-secondary",
                             isActive && "bg-highlight-soft",
