@@ -126,14 +126,13 @@ export function buildIrSeries(facts: IrFact[]): { series: IrSeries[]; quarters: 
     }
   }
 
-  inferSubtotals(series);
-
   // Reconcile: children of a parent total (same category & metric) must sum to it per quarter.
   const series = [...bySeries.values()];
+  inferSubtotals(series);
   const checks: ReconcileCheck[] = [];
   const totals = series.filter((s) => s.isTotal);
   for (const total of totals) {
-    const kids = series.filter((s) => s !== total && s.category === total.category && s.metric === total.metric && s.unit === total.unit && s.parent && normLabel(s.parent) === normLabel(total.label));
+    const kids = childrenOf(series, total);
     if (kids.length < 2) continue;
     for (const [end, c] of Object.entries(total.cells)) {
       const vals = kids.map((k) => k.cells[end]?.v);
