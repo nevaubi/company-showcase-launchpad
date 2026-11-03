@@ -18,7 +18,8 @@ import { AttributionDemo } from "@/components/site/attribution-demo";
 import { Button } from "@/components/ui/button";
 import { useDemoSignIn } from "@/hooks/use-demo-sign-in";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { fmtCompactUsd, fmtPct } from "@/lib/format";
+import { fmtCompactUsd, fmtInt, fmtPct } from "@/lib/format";
+import { manifestQuery } from "@/lib/data";
 import type { Universe } from "@/lib/financials/types";
 import { COVERAGE } from "@/lib/coverage";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,8 @@ function Landing() {
 }
 
 function Hero({ onDemo, pending }: { onDemo: () => void; pending: boolean }) {
+  const manifest = useQuery(manifestQuery).data;
+  const years = manifest ? new Date().getUTCFullYear() - Number(manifest.oldestFiscalYearEnd.slice(0, 4)) : null;
   return (
     <section className="relative overflow-hidden">
       <div className="mx-auto max-w-7xl px-6 pb-20 pt-14 lg:pt-20">
@@ -99,10 +102,10 @@ function Hero({ onDemo, pending }: { onDemo: () => void; pending: boolean }) {
         </div>
         <dl className="mt-10 grid grid-cols-2 gap-6 border-t pt-6 sm:grid-cols-4">
           {[
-            ["23,000+", "SEC filings indexed across 25 companies"],
-            ["19 years", "of XBRL statement history"],
-            ["2,170", "Form 4 insider transactions parsed"],
-            ["35", "FRED macro series"],
+            [manifest ? `${fmtInt(Math.floor(manifest.filings / 1000) * 1000)}+` : "50,000+", `SEC filings indexed across ${manifest?.companies ?? COVERAGE.length} companies`],
+            [manifest ? fmtInt(manifest.statementValues) : "280,000+", `sourced statement values${years ? `, up to ${years} years deep` : ""}`],
+            [manifest ? fmtInt(manifest.insiderTransactions) : "5,900+", "Form 4 insider transactions parsed"],
+            [manifest ? `${manifest.macroSeries}` : "118", "government & Fed macro series"],
           ].map(([k, v]) => (
             <div key={v}>
               <dt className="num text-xl font-medium">{k}</dt>
@@ -122,6 +125,9 @@ function CoverageBand() {
     staleTime: Infinity,
   });
   const byTicker = new Map((q.data?.companies ?? []).map((c) => [c.ticker, c]));
+  // The fifteen largest by trailing revenue; the rest are one click away in the app.
+  const featured = [...COVERAGE].sort((a, b) => (byTicker.get(b.ticker)?.revenueTTM ?? 0) - (byTicker.get(a.ticker)?.revenueTTM ?? 0)).slice(0, 15);
+  const rest = COVERAGE.length - featured.length;
   return (
     <section className="border-y bg-card/70">
       <div className="mx-auto max-w-7xl px-6 py-8">
@@ -130,7 +136,7 @@ function CoverageBand() {
           <p className="text-xs text-muted-foreground">Trailing-twelve-month revenue, from 10-Q and 10-K filings</p>
         </div>
         <ul className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-3 lg:grid-cols-5">
-          {COVERAGE.map((c) => {
+          {featured.map((c) => {
             const u = byTicker.get(c.ticker);
             return (
               <li key={c.ticker} className="flex items-center gap-3 bg-card px-4 py-4">
@@ -150,6 +156,9 @@ function CoverageBand() {
             );
           })}
         </ul>
+        <p className="mt-3 text-xs text-muted-foreground">
+          …and {rest} more across all eleven sectors, from semiconductors and banks to utilities, REITs and materials.
+        </p>
       </div>
     </section>
   );
@@ -160,12 +169,12 @@ function HowItWorks() {
     {
       n: "01",
       title: "Pull the primary record",
-      body: "XBRL company facts, inline-XBRL filings, Form 4 insider reports and 8-K earnings releases come straight from EDGAR. Prices from Yahoo Finance, macro from FRED.",
+      body: "XBRL company facts, inline-XBRL filings, Form 4 insider reports and 8-K earnings releases come straight from EDGAR. Prices from Yahoo Finance, macro from FRED, the Treasury and federal statistical agencies.",
     },
     {
       n: "02",
       title: "Rebuild the statements",
-      body: "Income, balance sheet and cash flow, annual and quarterly, back to 2007. Missing fourth quarters are derived — and the formula shows its parts.",
+      body: "Income, balance sheet and cash flow, annual and quarterly, back to the mid-2000s. Missing fourth quarters are derived — and the formula shows its parts.",
     },
     {
       n: "03",
@@ -367,7 +376,7 @@ function ClosingCta({ onDemo, pending }: { onDemo: () => void; pending: boolean 
       <div className="flex flex-col items-start justify-between gap-8 rounded-2xl border bg-card p-10 shadow-paper md:flex-row md:items-center">
         <div>
           <h2 className="font-display text-4xl">See it on real filings.</h2>
-          <p className="mt-2 text-muted-foreground">The demo workspace covers 25 large US companies across tech, banks, healthcare, energy and retail, sample theses and the research agent.</p>
+          <p className="mt-2 text-muted-foreground">The demo workspace covers {COVERAGE.length} large US companies across all eleven sectors, with sample theses, earnings-call transcripts and the research agent.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button size="lg" variant="highlight" onClick={onDemo} disabled={pending}>
