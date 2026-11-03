@@ -73,6 +73,7 @@
 - [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, KO, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts`
 - [ ] Running: historical 2008+ SEC exhibit backfill for all companies (`scripts/ir-backfill.ts`)
 - [ ] Running: IR-website files for every company (`scripts/ir-site.ts`, Firecrawl + Tavily)
+- [x] IR tab shows stored tables on first load with no manual step: background readers rebuild each company's tables every few minutes, open pages refresh every two minutes, and a missing payload is rebuilt on request
 - [x] IR page never looks empty while the database is busy (slow-load notice, retries, clear timeout message); every bulk job waits on database latency (`dbGate`) and sheds workers
 - [ ] Running: PDF/XLSX renditions for newly backfilled files (`scripts/ir-renditions.ts`)
 - [ ] Production schedules: keep the collector inside the scheduled-call time limit (small slices), reading stays in the batch runner
