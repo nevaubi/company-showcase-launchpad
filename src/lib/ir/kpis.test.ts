@@ -148,3 +148,42 @@ describe("fiscal years and point-in-time values", () => {
     expect(mac.annual["2024-12-31"].v).toBe(40);
   });
 });
+
+describe("flattened vs nested tables", () => {
+  // Release A nests iPhone/Mac under "Products"; release B lists them straight under the total.
+  const A = { document_id: "A", filed: "2026-07-30" };
+  const B = { document_id: "B", filed: "2026-01-29" };
+  const facts: IrFact[] = [
+    f("iPhone", "2026-06-27", 3, 40, { ...A, parent: "Products" }),
+    f("Mac", "2026-06-27", 3, 10, { ...A, parent: "Products" }),
+    f("Products", "2026-06-27", 3, 50, { ...A, is_total: true }),
+    f("Services", "2026-06-27", 3, 25, A),
+    f("Total net sales", "2026-06-27", 3, 75, { ...A, is_total: true, parent: null }),
+    f("iPhone", "2025-12-27", 3, 60, B),
+    f("Mac", "2025-12-27", 3, 9, B),
+    f("Services", "2025-12-27", 3, 26, B),
+    f("Total net sales", "2025-12-27", 3, 95, { ...B, is_total: true, parent: null }),
+  ];
+  const { series, checks } = buildIrSeries(facts);
+
+  it("keeps one iPhone line under Products for both releases", () => {
+    const iphones = series.filter((s) => s.label === "iPhone");
+    expect(iphones).toHaveLength(1);
+    expect(iphones[0].parent).toBe("Products");
+    expect(iphones[0].cells["2025-12-27"].v).toBe(60);
+    expect(iphones[0].cells["2026-06-27"].v).toBe(40);
+  });
+
+  it("rebuilds the missing Products subtotal from the parts that release printed", () => {
+    const products = series.find((s) => s.label === "Products")!;
+    expect(products.cells["2025-12-27"].v).toBe(69);
+    expect(products.cells["2025-12-27"].derived?.formula).toMatch(/Sum of the components/);
+    expect(products.cells["2026-06-27"].v).toBe(50);
+  });
+
+  it("checks the grand total in both quarters but never counts the rebuilt subtotal as a check", () => {
+    const total = checks.filter((c) => c.group === "product:Total net sales");
+    expect(total.map((c) => [c.period, c.ok])).toEqual(expect.arrayContaining([["2025-12-27", true], ["2026-06-27", true]]));
+    expect(checks.filter((c) => c.group === "product:Products").map((c) => c.period)).toEqual(["2026-06-27"]);
+  });
+});
