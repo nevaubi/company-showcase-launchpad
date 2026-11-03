@@ -74,7 +74,10 @@ export function groupOrder(a: PayloadGroup, b: PayloadGroup) {
 }
 
 export function groupTitle(g: PayloadGroup, root?: PayloadSeries) {
-  if (!g.root) return `${METRIC_LABEL[g.met] ?? g.met} — other ${CATEGORY_LABEL[g.cat] ?? g.cat} lines`;
+  if (!g.root) {
+    const c = CATEGORY_LABEL[g.cat] ?? g.cat;
+    return `${METRIC_LABEL[g.met] ?? g.met} — other ${c.endsWith(" line") ? `${c}s` : `${c} lines`}`;
+  }
   if (root?.sc) return root.sc.replace(/:$/, "");
   if (g.bd && !/^(total|consolidated)/i.test(g.bd)) return g.bd.replace(/:$/, "");
   const metric = METRIC_LABEL[g.met] ?? g.met;

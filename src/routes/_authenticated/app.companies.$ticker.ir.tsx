@@ -16,6 +16,8 @@ import { useCompany } from "@/lib/data";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+const monthYear = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
+
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")({
   head: ({ params }) => ({
     meta: [
@@ -78,7 +80,7 @@ function IrPage() {
   const data = q.data!;
   return (
     <div className="grid grid-cols-1 gap-5">
-      <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents.length} builtAt={data.builtAt} />
+      <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents.length + (data.images ?? 0)} builtAt={data.builtAt} />
       {data.payload && data.payload.series.length > 0 ? (
         <IrBreakdowns ticker={ticker} payload={data.payload} />
       ) : (
@@ -119,7 +121,7 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
 
   const stats: { label: string; value: string; hint?: string }[] = s
     ? [
-        { label: "Coverage", value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : "—", hint: s.firstPeriod ? `${fmtDate(s.firstPeriod)} to ${fmtDate(s.lastPeriod)}` : undefined },
+        { label: "Coverage", value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : "—", hint: s.firstPeriod && s.lastPeriod ? `${monthYear(s.firstPeriod)} – ${monthYear(s.lastPeriod)}` : undefined },
         { label: "Lines tracked", value: s.series.toLocaleString(), hint: `${s.groups} breakdowns` },
         { label: "Data points", value: s.facts.toLocaleString(), hint: `from ${s.documents.toLocaleString()} documents` },
         { label: "Quarterly totals tie out", value: s.checksQ.total ? `${Math.round((s.checksQ.ok / s.checksQ.total) * 100)}%` : "—", hint: `${s.checksQ.ok.toLocaleString()} of ${s.checksQ.total.toLocaleString()}` },
@@ -130,7 +132,7 @@ function IrSummary({ ticker, payload, pending, documents, builtAt }: { ticker: s
   return (
     <Panel
       title="Investor-relations data"
-      subtitle={builtAt ? `Rebuilt ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} from ${documents.toLocaleString()} stored files` : `${documents.toLocaleString()} stored files`}
+      subtitle={builtAt ? `Updated ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} from ${documents.toLocaleString()} stored files` : `${documents.toLocaleString()} stored files`}
       actions={
         pending > 0 ? (
           <Tooltip>

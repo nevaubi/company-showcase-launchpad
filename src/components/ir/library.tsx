@@ -24,6 +24,7 @@ const KIND_LABEL: Record<string, string> = {
   report: "Reports",
   "annual-report": "Annual reports",
   proxy: "Proxy",
+  "sec-copy": "SEC filings",
   other: "Other",
 };
 const KIND_ONE: Record<string, string> = {
@@ -36,6 +37,7 @@ const KIND_ONE: Record<string, string> = {
   report: "Report",
   "annual-report": "Annual report",
   proxy: "Proxy statement",
+  "sec-copy": "SEC filing",
   other: "Exhibit",
 };
 
