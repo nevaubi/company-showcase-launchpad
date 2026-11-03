@@ -150,12 +150,6 @@ const LIST_FORMS = new Set([
   "SD",
   "11-K",
   "S-8",
-  "SC 13G",
-  "SC 13G/A",
-  "SC 13D",
-  "SC 13D/A",
-  "S-3ASR",
-  "424B2",
   "20-F",
 ]);
 
