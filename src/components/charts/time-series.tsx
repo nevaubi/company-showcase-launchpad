@@ -97,13 +97,20 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
       })
     : [];
 
-  // Resolve end-label collisions
+  // Resolve end-label collisions: each label is two lines (value + name), so keep them a
+  // full label apart, pushing down first and then back up if the stack runs off the plot.
   const ends = series
     .map((s) => ({ s, p: s.points[s.points.length - 1] }))
     .filter((e) => e.p)
     .map((e) => ({ ...e, y: yOf(e.s)(e.p.value) }))
     .sort((a, b) => a.y - b.y);
-  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].y = ends[i - 1].y + 13;
+  const gap = 23;
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < gap) ends[i].y = ends[i - 1].y + gap;
+  const floor = ih - 4;
+  if (ends.length && ends[ends.length - 1].y > floor) {
+    ends[ends.length - 1].y = floor;
+    for (let i = ends.length - 2; i >= 0; i--) if (ends[i + 1].y - ends[i].y < gap) ends[i].y = ends[i + 1].y - gap;
+  }
 
   return (
     <div ref={ref} className={cn("relative w-full select-none", className)}>
