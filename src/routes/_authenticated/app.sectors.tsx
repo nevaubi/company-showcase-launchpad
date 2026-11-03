@@ -195,7 +195,7 @@ function Sectors() {
             {[...new Set(COVERAGE.map((c) => c.sector))].map((sec) => (
               <li key={sec} className="px-4 py-3">
                 <p className="eyebrow">{sec}</p>
-                <div className="mt-2 grid gap-1.5">
+                <div className="mt-2 grid grid-cols-1 gap-1.5">
                   {COVERAGE.filter((c) => c.sector === sec).map((c) => {
                     const u = universe.data?.companies.find((x) => x.ticker === c.ticker);
                     return (
