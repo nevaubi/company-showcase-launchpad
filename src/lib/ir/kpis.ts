@@ -171,7 +171,7 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
     if (f.months === 3) push(qv, key, snap(quarters, f.period_end), vin);
     else if (f.months === 0) {
       s.pit = true;
-      push(qv, key, snap(quarters, f.period_end) && quarters.find((e) => near(e, f.period_end, 20))!, vin);
+      push(qv, key, quarters.find((e) => near(e, f.period_end, 20)) ?? f.period_end, vin);
     } else if (f.months === 12) push(fv, key, snap(years, f.period_end), vin);
     else if (f.months === 9) nine.set(key, [...(nine.get(key) ?? []), f]);
   }
@@ -287,7 +287,7 @@ export function buildIrSeries(input: IrFact[], opts: { labelMap?: Record<string,
         ok = evaluate(k, end, childDoc, out, apply) && ok;
       }
       if (members.length >= 2 && node.isTotal && (node.unit === "usd" || node.unit === "count")) {
-        const sum = members.reduce((n, k) => n + (cellsOf(k)[end]?.v ?? fromDoc(k, end, doc)?.v ?? 0), 0);
+        const sum = members.reduce((n, k) => n + (fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v ?? 0), 0);
         const pass = Math.abs(sum - value) <= tolFor(node, value);
         out.push({ group: `${node.category}:${node.label}`, totalKey: node.key, period: end, kind, total: value, sum, ok: pass, children: members.length });
         ok = ok && pass;

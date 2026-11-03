@@ -88,3 +88,63 @@ describe("double breakdowns", () => {
     expect(series.find((s) => s.label === "Cloud")?.parent).toBe("Total revenue");
   });
 });
+
+describe("recast segment structures", () => {
+  it("shows each quarter as printed in the latest release whose parts add up, hiding superseded lines", () => {
+    const S = { category: "segment", parent: "Total revenue" };
+    const facts = [
+      // original Q1 2025 release: old segments A + B
+      f("Total revenue", "2025-03-31", 3, 100e6, { ...S, parent: null, is_total: true, document_id: "d1", filed: "2025-04-25" }),
+      f("Alpha", "2025-03-31", 3, 50e6, { ...S, document_id: "d1", filed: "2025-04-25" }),
+      f("Beta", "2025-03-31", 3, 50e6, { ...S, document_id: "d1", filed: "2025-04-25" }),
+      // Q1 2026 release recasts Q1 2025 into new segments C + D
+      f("Total revenue", "2025-03-31", 3, 100e6, { ...S, parent: null, is_total: true, document_id: "d2", filed: "2026-04-24" }),
+      f("Cloud", "2025-03-31", 3, 60e6, { ...S, document_id: "d2", filed: "2026-04-24" }),
+      f("Devices", "2025-03-31", 3, 40e6, { ...S, document_id: "d2", filed: "2026-04-24" }),
+      f("Total revenue", "2026-03-31", 3, 120e6, { ...S, parent: null, is_total: true, document_id: "d2", filed: "2026-04-24" }),
+      f("Cloud", "2026-03-31", 3, 75e6, { ...S, document_id: "d2", filed: "2026-04-24" }),
+      f("Devices", "2026-03-31", 3, 45e6, { ...S, document_id: "d2", filed: "2026-04-24" }),
+    ];
+    const { series, checks } = buildIrSeries(facts);
+    const by = (l: string) => series.find((s) => s.label === l)!;
+    expect(by("Alpha").cells["2025-03-31"]).toBeUndefined();
+    expect(by("Cloud").cells["2025-03-31"].v).toBe(60e6);
+    expect(checks.filter((c) => c.kind === "q")).toHaveLength(2);
+    expect(checks.every((c) => c.ok)).toBe(true);
+  });
+
+  it("falls back to an older release when the newest one's parts don't add up", () => {
+    const S = { category: "segment", parent: "Total revenue" };
+    const facts = [
+      f("Total revenue", "2025-03-31", 3, 100e6, { ...S, parent: null, is_total: true, document_id: "d1", filed: "2025-04-25" }),
+      f("Alpha", "2025-03-31", 3, 70e6, { ...S, document_id: "d1", filed: "2025-04-25" }),
+      f("Beta", "2025-03-31", 3, 30e6, { ...S, document_id: "d1", filed: "2025-04-25" }),
+      f("Total revenue", "2025-03-31", 3, 100e6, { ...S, parent: null, is_total: true, document_id: "d2", filed: "2026-04-24" }),
+      f("Alpha", "2025-03-31", 3, 70e6, { ...S, document_id: "d2", filed: "2026-04-24" }),
+      f("Beta", "2025-03-31", 3, 20e6, { ...S, document_id: "d2", filed: "2026-04-24" }),
+    ];
+    const { series, checks } = buildIrSeries(facts);
+    expect(series.find((s) => s.label === "Beta")!.cells["2025-03-31"].v).toBe(30e6);
+    expect(checks).toEqual([expect.objectContaining({ ok: true, sum: 100e6 })]);
+  });
+});
+
+describe("fiscal years and point-in-time values", () => {
+  it("sums four reported quarters into a fiscal year when the year isn't printed, and never derives balances", () => {
+    const q = ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"];
+    const facts = [
+      ...q.map((e, i) => f("Mac", e, 3, 10 + i)),
+      f("Mac", "2024-12-31", 12, 40),
+      f("Subscribers", "2025-12-31", 0, 900, { category: "kpi", metric: "users", unit: "count", parent: null }),
+      f("Subscribers", "2024-12-31", 0, 800, { category: "kpi", metric: "users", unit: "count", parent: null }),
+    ];
+    const { series, years } = buildIrSeries(facts);
+    const mac = series.find((s) => s.label === "Mac")!;
+    expect(years).toContain("2024-12-31");
+    const subs = series.find((s) => s.label === "Subscribers")!;
+    expect(subs.pit).toBe(true);
+    expect(subs.cells["2025-12-31"].v).toBe(900);
+    expect(subs.annual["2024-12-31"].v).toBe(800);
+    expect(mac.annual["2024-12-31"].v).toBe(40);
+  });
+});
