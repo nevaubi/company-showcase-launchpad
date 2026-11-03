@@ -80,7 +80,7 @@ async function webNarratives(ticker: string, name: string, structured: Structure
       .trim();
   const ids = new Set(news.map((n) => n.id));
   const narratives = out.narratives.slice(0, 4).map((n) => ({ ...n, title: clean(n.title), summary: clean(n.summary), headlineIds: n.headlineIds.filter((id) => ids.has(id)) }));
-  return { narratives, news };
+  return { narratives, news, via: "web" as const };
 }
 
 export const getNarratives = createServerFn({ method: "POST" })
@@ -125,7 +125,7 @@ export const getNarratives = createServerFn({ method: "POST" })
           },
         },
       });
-      return { narratives: out.narratives.slice(0, 4), news };
+      return { narratives: out.narratives.slice(0, 4), news, via: "feed" as const };
     });
   });
 

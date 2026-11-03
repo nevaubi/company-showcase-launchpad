@@ -23,9 +23,9 @@
 - [x] Mobile layout pass (no horizontal overflow on main pages)
 
 ## Ready
-- [ ] Mobile: collapse wide statement/insider tables into card rows below 640px
-- [ ] Narratives/news: show "via web search" provenance when the headline feed was unavailable
-- [ ] Sheets: choose sensible default number format for FU() results (scale-aware)
+- [x] Narratives show "web search" provenance when the headline feed is throttled
+- [ ] Research agent: fall back to web search inside the get_news tool when the headline feed is throttled
+- [ ] Coverage expansion via the ingest script (e.g. META, AVGO, JPM) once bank statement templates exist
 
 ## Later
 - [ ] Earnings call transcripts source (needs licensed provider or Firecrawl connection)

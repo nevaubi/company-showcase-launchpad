@@ -286,7 +286,7 @@ function NarrativesPanel({ ticker, name }: { ticker: string; name: string }) {
           <Sparkles className="size-3.5" /> Trending narratives
         </span>
       }
-      subtitle={q.data ? `AI-clustered from ${news.length} recent headlines · ${fmtRelative(q.data.cachedAt)}` : "Clustering recent headlines…"}
+      subtitle={q.data ? `AI-clustered from ${news.length} recent ${q.data.via === "web" ? "articles found by web search" : "headlines"} · ${fmtRelative(q.data.cachedAt)}` : "Clustering recent headlines…"}
       bodyClassName="p-0"
     >
       {q.isLoading ? (
