@@ -277,6 +277,29 @@ export function splitStockAndFlow(facts: IrFact[]): IrFact[] {
   });
 }
 
+/**
+ * A line can only be counted once in its total. When the same line arrives from several tables of a
+ * release (Coca-Cola prints each segment's third-party, intersegment and total revenue), take every
+ * part from one table: the table whose parts come closest to the printed total.
+ */
+function oneTablePerLine(members: IrSeries[], val: (s: IrSeries) => number, total: number): IrSeries[] {
+  const labels = new Set(members.map((k) => normLabel(k.label)));
+  if (labels.size === members.length) return members;
+  let best: { set: IrSeries[]; err: number } | null = null;
+  for (const sc of new Set(members.map((k) => k.scope ?? ""))) {
+    const pick = new Map<string, IrSeries>();
+    for (const k of members) {
+      const l = normLabel(k.label);
+      const cur = pick.get(l);
+      if (!cur || ((k.scope ?? "") === sc && (cur.scope ?? "") !== sc)) pick.set(l, k);
+    }
+    const set = [...pick.values()];
+    const err = Math.abs(set.reduce((n, k) => n + val(k), 0) - total);
+    if (!best || err < best.err) best = { set, err };
+  }
+  return best!.set;
+}
+
 const tableOf = (f: IrFact) => {
   const l = f.locator as { t?: number; p?: number } | null | undefined;
   return l?.t ?? (l?.p != null ? `p${l.p}` : null);
@@ -537,6 +560,7 @@ export function buildIrSeries(
       } else {
         members = kids.filter((k) => cellsOf(k)[end]);
       }
+      members = oneTablePerLine(members, (k) => fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v ?? 0, value);
       let ok = true;
       for (const k of members) {
         const childDoc = fromDoc(k, end, doc) ? doc : (store.get(k.key)?.get(end)?.[0]?.doc ?? doc);
