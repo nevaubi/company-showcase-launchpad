@@ -159,6 +159,9 @@ export type Database = {
           content_type: string | null
           exhibit: string | null
           ext: string | null
+          extract_facts: number | null
+          extract_status: string | null
+          extracted_at: string | null
           fetched_at: string
           filed: string | null
           id: string
@@ -177,6 +180,9 @@ export type Database = {
           content_type?: string | null
           exhibit?: string | null
           ext?: string | null
+          extract_facts?: number | null
+          extract_status?: string | null
+          extracted_at?: string | null
           fetched_at?: string
           filed?: string | null
           id?: string
@@ -195,6 +201,9 @@ export type Database = {
           content_type?: string | null
           exhibit?: string | null
           ext?: string | null
+          extract_facts?: number | null
+          extract_status?: string | null
+          extracted_at?: string | null
           fetched_at?: string
           filed?: string | null
           id?: string
@@ -211,49 +220,67 @@ export type Database = {
       }
       ir_kpi_facts: {
         Row: {
+          accn: string | null
           category: string
           created_at: string
           derived: boolean
+          doc: string | null
           document_id: string
+          filed: string | null
           id: string
+          is_total: boolean
           label: string
           locator: Json
+          metric: string
           months: number | null
           parent: string | null
           period_end: string | null
           period_label: string
+          period_start: string | null
           ticker: string
           unit: string
           value: number
         }
         Insert: {
+          accn?: string | null
           category: string
           created_at?: string
           derived?: boolean
+          doc?: string | null
           document_id: string
+          filed?: string | null
           id?: string
+          is_total?: boolean
           label: string
           locator?: Json
+          metric?: string
           months?: number | null
           parent?: string | null
           period_end?: string | null
           period_label: string
+          period_start?: string | null
           ticker: string
           unit?: string
           value: number
         }
         Update: {
+          accn?: string | null
           category?: string
           created_at?: string
           derived?: boolean
+          doc?: string | null
           document_id?: string
+          filed?: string | null
           id?: string
+          is_total?: boolean
           label?: string
           locator?: Json
+          metric?: string
           months?: number | null
           parent?: string | null
           period_end?: string | null
           period_label?: string
+          period_start?: string | null
           ticker?: string
           unit?: string
           value?: number

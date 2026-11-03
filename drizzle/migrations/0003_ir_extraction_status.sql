@@ -1,0 +1,3 @@
+ALTER TABLE public.ir_documents ADD COLUMN extracted_at timestamptz, ADD COLUMN extract_status text, ADD COLUMN extract_facts integer;
+ALTER TABLE public.ir_kpi_facts ADD COLUMN metric text NOT NULL DEFAULT 'other', ADD COLUMN is_total boolean NOT NULL DEFAULT false, ADD COLUMN period_start date, ADD COLUMN accn text, ADD COLUMN doc text, ADD COLUMN filed date;
+CREATE INDEX ir_documents_extract_idx ON public.ir_documents (kind, extracted_at);
