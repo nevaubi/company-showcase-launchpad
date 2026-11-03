@@ -124,10 +124,13 @@ export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 
   const doneAccn = new Set((have ?? []).map((d) => d.accn).filter(Boolean));
   let todo: Candidate[] = [];
   if (mode === "sec") {
+    // Whole filings only, so a filing is either fully stored or untouched (lets us skip stored accessions).
     const filings = (await secExhibitCandidates(c)).filter((f) => !doneAccn.has(f.accn!));
-    for (const f of filings.slice(0, 4)) todo.push(...(await exhibitsOf(c, f)));
-  } else todo = await irSiteCandidates(c);
-  todo = todo.filter((k) => !known.has(k.url)).slice(0, max);
+    for (const f of filings) {
+      if (todo.length >= max) break;
+      todo.push(...(await exhibitsOf(c, f)).filter((k) => !known.has(k.url)));
+    }
+  } else todo = (await irSiteCandidates(c)).filter((k) => !known.has(k.url)).slice(0, max);
   const results: { url: string; stored: boolean; reason?: string }[] = [];
   for (const k of todo) {
     try {
