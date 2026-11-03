@@ -56,7 +56,7 @@ export const getQuotes = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ symbols: z.array(symbolSchema).min(1).max(40) }).parse(d))
   .handler(async ({ data }): Promise<{ quotes: Quote[]; errors: string[] }> => {
     const { COVERAGE } = await import("@/lib/coverage");
-    const { fetchCboeDaily, fetchCboeQuote, fetchNasdaqDaily, fetchNasdaqQuote, isCboeIndex } = await import("@/lib/market-data.server");
+    const { fetchCboeQuote, fetchNasdaqDaily, fetchNasdaqQuote, isCboeIndex } = await import("@/lib/market-data.server");
     const stocks = new Set(COVERAGE.map((c) => c.ticker));
     const results = await pool(data.symbols, 4, async (s) => {
       try {
@@ -85,7 +85,6 @@ export const getQuotes = createServerFn({ method: "GET" })
         // Yahoo throttles shared IPs; Nasdaq covers U.S. stocks and ETFs, Cboe the VIX.
         if (isCboeIndex(s)) {
           const c = await fetchCboeQuote(s);
-          const bars = await fetchCboeDaily(s, 10).catch(() => []);
           const q: Quote = {
             symbol: s,
             name: "Cboe Volatility Index",
@@ -96,7 +95,8 @@ export const getQuotes = createServerFn({ method: "GET" })
             dayHigh: c.high,
             dayLow: c.low,
             exchange: "Cboe",
-            spark: bars.map((b) => b[4]),
+            // Cboe's history file is large; the two-point spark is enough for the tape.
+            spark: [c.previousClose, c.price],
           };
           return q;
         }
