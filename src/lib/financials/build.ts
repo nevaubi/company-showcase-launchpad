@@ -42,8 +42,15 @@ function unitKey(def: LineDef) {
   return def.unit === "usdPerShare" ? "USD/shares" : def.unit === "shares" ? "shares" : "USD";
 }
 
+/** Concepts are us-gaap local names, or prefix-qualified company extensions ("cop:CapitalExpendituresAndInvestments"). */
+const splitConcept = (concept: string): [string, string] => {
+  const i = concept.indexOf(":");
+  return i < 0 ? ["us-gaap", concept] : [concept.slice(0, i), concept.slice(i + 1)];
+};
+
 export function factsFor(cf: CompanyFacts, concept: string, unit: string): RawFact[] {
-  const node = cf.facts["us-gaap"]?.[concept];
+  const [ns, local] = splitConcept(concept);
+  const node = cf.facts[ns]?.[local];
   const list = node?.units?.[unit] ?? [];
   return list.filter((f) => PERIODIC_FORM.test(f.form));
 }
@@ -176,7 +183,7 @@ const NON_NEGATIVE = new Set(["revenue", "costOfRevenue", "rnd", "sga", "salesMa
 
 const ref = (p: Picked): SourceRef => ({
   accn: p.fact.accn,
-  concept: `us-gaap:${p.concept}`,
+  concept: p.concept.includes(":") ? p.concept : `us-gaap:${p.concept}`,
   ...(p.fact.start ? { start: p.fact.start } : {}),
   end: p.fact.end,
   value: p.fact.val,
@@ -217,7 +224,7 @@ function pickCell(cf: CompanyFacts, def: LineDef, pred: (f: RawFact) => boolean)
 
 /** "CommercialPaper" → "Commercial paper" */
 export function humanizeConcept(c: string) {
-  const s = c.replace(/^us-gaap:/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+  const s = c.replace(/^[\w-]+:/, "").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
