@@ -1,4 +1,6 @@
-// Server-only client for the project owner's own OpenAI key (OPENAI_API_KEY), used for the
+import { GatewayError, generateResponse } from "@lovable.dev/ai-gateway";
+
+// Server-only client for high-volume IR analysis (Lovable AI Gateway by default, or the owner's OPENAI_API_KEY), used for the
 // high-volume investor-relations analysis (table extraction, slide vision, reconciliation repair,
 // cross-document label mapping). Everything else keeps using the Lovable AI Gateway.
 //
@@ -32,7 +34,54 @@ export class OpenAIError extends Error {
   }
 }
 
-export const hasOpenAIKey = () => !!process.env["OPENAI_API_KEY"];
+/** IR reading runs on the Lovable AI Gateway by default; set IR_AI_PROVIDER=openai to use the owner's key. */
+const useGateway = () => (process.env["IR_AI_PROVIDER"] || "gateway") !== "openai";
+
+export const hasOpenAIKey = () => (useGateway() ? !!process.env["LOVABLE_API_KEY"] : !!process.env["OPENAI_API_KEY"]);
+
+function gatewayKind(e: GatewayError): OpenAIErrorKind {
+  switch (e.code) {
+    case "payment_required":
+      return "quota";
+    case "authentication_error":
+    case "configuration_error":
+    case "permission_denied":
+      return "auth";
+    case "rate_limited":
+      return "rate";
+    case "request_rejected":
+      return "rejected";
+    default:
+      return "transient";
+  }
+}
+
+async function gatewayStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+  const content: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;
+  const model = opts.model.includes("/") ? opts.model : `openai/${opts.model}`;
+  let j: unknown;
+  try {
+    j = await generateResponse(
+      {
+        model: model as "openai/gpt-6.1-sol",
+        instructions: opts.instructions,
+        input: [{ role: "user", content }],
+        ...(opts.effort ? { reasoning: { effort: opts.effort } } : {}),
+        max_output_tokens: opts.maxOutputTokens ?? 64_000,
+        store: false,
+        text: { format: { type: "json_schema", name: opts.name, schema: opts.schema, strict: true } },
+      } as unknown as Parameters<typeof generateResponse<"openai/gpt-6.1-sol">>[0], // shared InputPart shape; verified live
+      opts.signal ? { signal: opts.signal } : undefined,
+    );
+  } catch (e) {
+    if (e instanceof GatewayError) {
+      const ra = e.retryAfter ? e.retryAfter * 1000 : undefined;
+      throw new OpenAIError(`AI ${e.httpStatus ?? ""} ${e.code}: ${e.message}`, gatewayKind(e), e.httpStatus ?? 0, ra);
+    }
+    throw new OpenAIError(`AI error: ${(e as Error).message}`, "transient", 0);
+  }
+  return parseResponse<T>(new Response(JSON.stringify(j)));
+}
 
 export type InputPart = { type: "input_text"; text: string } | { type: "input_image"; image_url: string; detail?: "low" | "high" | "auto" };
 
@@ -52,6 +101,7 @@ export async function openaiStructured<T>(opts: {
   maxOutputTokens?: number;
   signal?: AbortSignal;
 }): Promise<{ data: T; usage: Usage; model: string }> {
+  if (useGateway()) return gatewayStructured<T>(opts);
   const key = process.env["OPENAI_API_KEY"];
   if (!key) throw new OpenAIError("OPENAI_API_KEY is not configured", "auth", 0);
   const content: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;

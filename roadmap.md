@@ -66,8 +66,8 @@
 - [x] Vision pass code: slides, chart images, scanned pages → facts pinned to the printed token with page-box highlight
 - [x] Data status page: investor-relations library panel (files, size, span, read/waiting, data points, tie-out per company)
 - [x] OCR decimal guard: the slide reader returns its own reading of each number; OCR tokens with the same digits take the model's punctuation, anything else is rejected
-- [ ] BLOCKED (OpenAI credits ran out Nov 3, 23:38): table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch --concurrency=12`; ~10,400 files queued). Resumed Nov 3 23:12 and read 386 files (~120k values) before the 429 `credit_balance_exhausted`; rerun with `--resume` once credits are added
-- [ ] BLOCKED (OpenAI credits): vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch --concurrency=6`; ~37,000 images queued); read 425 images before stopping
+- [ ] RUNNING on built-in AI (Nov 4): table extraction over the waiting documents (`bun scripts/ir-extract.ts --resume --watch --concurrency=12`; ~10,400 files queued). Resumed Nov 3 23:12 and read 386 files (~120k values) before the 429 `credit_balance_exhausted`; rerun with `--resume` once credits are added
+- [ ] RUNNING on built-in AI (Nov 4): vision pass over presentations and chart/slide images (`bun scripts/ir-vision.ts --resume --watch --concurrency=6`; ~37,000 images queued); read 425 images before stopping
 - [x] Deterministic structure fixes: coincidental subtotal nesting (KO), one-table-per-segment generic rows (LMT), U.S./international/worldwide column sets (ABBV, pharma), period-end counts vs net additions (CMCSA), ~1,000× unit outliers flagged in the UI
 - [x] Data status: IR library panel; cut-off scheduled runs shown separately from failures; jobs time-boxed (`RUN_BUDGET_MS`), `ir-docs` every 5 min with done/partial/empty tracking
 - [ ] Canonicalization for companies whose totals still don't tie out (DUK, DE, WMT, MCD, LIN, COP, BAC, V …) after extraction finishes — `bun scripts/ir-canon.ts` (KO improved 152→145 failures; VZ and BA kept their originals — no better proposal)
