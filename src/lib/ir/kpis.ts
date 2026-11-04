@@ -554,7 +554,10 @@ export function buildIrSeries(
     const fromDoc = (s: IrSeries, end: string, doc: string) => store.get(s.key)?.get(end)?.find((x) => x.doc === doc);
 
     /** Evaluate a subtree for one period using one document's printed values. */
-    const evaluate = (node: IrSeries, end: string, doc: string, out: ReconcileCheck[], apply: boolean): boolean => {
+    // Label maps can contain parent/child cycles (A under B under A); the path guard stops the walk.
+    const evaluate = (node: IrSeries, end: string, doc: string, out: ReconcileCheck[], apply: boolean, path: Set<string> = new Set()): boolean => {
+      if (path.has(node.key)) return true;
+      path = new Set(path).add(node.key);
       const own = fromDoc(node, end, doc);
       if (apply && own) cellsOf(node)[end] = { v: own.v, fact: own.fact, derived: own.derived };
       const value = own?.v ?? cellsOf(node)[end]?.v;
@@ -576,7 +579,7 @@ export function buildIrSeries(
       let ok = true;
       for (const k of members) {
         const childDoc = fromDoc(k, end, doc) ? doc : (store.get(k.key)?.get(end)?.[0]?.doc ?? doc);
-        ok = evaluate(k, end, childDoc, out, apply) && ok;
+        ok = evaluate(k, end, childDoc, out, apply, path) && ok;
       }
       if (members.length >= 2 && node.isTotal && !own?.synthetic && (node.unit === "usd" || node.unit === "count")) {
         const vals = members.map((k) => fromDoc(k, end, doc)?.v ?? cellsOf(k)[end]?.v ?? 0);
