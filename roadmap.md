@@ -52,6 +52,9 @@
 - [x] Side-panel assistant: page navigation, screen reading, code interpreter, screener, supply tools, deep research loops
 - [x] Trade ideas: rule-based long/short setups with point-in-time hit rates, filing evidence and paper trades (`/app/ideas`)
 
+- [x] Markets: earnings reactions leaderboard/profile, correlation explorer, chart-pattern scanner with per-stock hit rates, sector deep-dive pages
+- [ ] Company pages: one-screen overview, catalysts timeline, visual polish
+
 ## Later
 - [ ] Insurer template (premiums, loss ratio, float) — needed before adding BRK or other insurers
 - [ ] Filing alerts: email when a followed company files a 10-K/10-Q/8-K or an insider trades

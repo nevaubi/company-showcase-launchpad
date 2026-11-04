@@ -31,6 +31,7 @@ import { Route as AuthenticatedAppCompaniesIndexRouteImport } from './routes/_au
 import { Route as AuthenticatedAppCompaniesTickerRouteImport } from './routes/_authenticated/app.companies.$ticker'
 import { Route as AuthenticatedAppDocsIndexRouteImport } from './routes/_authenticated/app.docs.index'
 import { Route as AuthenticatedAppDocsIdRouteImport } from './routes/_authenticated/app.docs.$id'
+import { Route as AuthenticatedAppSectorsSectorRouteImport } from './routes/_authenticated/app.sectors_.$sector'
 import { Route as AuthenticatedAppThesesIndexRouteImport } from './routes/_authenticated/app.theses.index'
 import { Route as AuthenticatedAppThesesIdRouteImport } from './routes/_authenticated/app.theses.$id'
 import { Route as ApiPublicJobsJobRouteImport } from './routes/api/public/jobs/$job'
@@ -161,6 +162,12 @@ const AuthenticatedAppDocsIdRoute = AuthenticatedAppDocsIdRouteImport.update({
   path: '/docs/$id',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppSectorsSectorRoute =
+  AuthenticatedAppSectorsSectorRouteImport.update({
+    id: '/sectors_/$sector',
+    path: '/sectors/$sector',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppThesesIndexRoute =
   AuthenticatedAppThesesIndexRouteImport.update({
     id: '/theses/',
@@ -247,6 +254,7 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/app/sectors/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
@@ -279,6 +287,7 @@ export interface FileRoutesByTo {
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/app/sectors/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/app/companies': typeof AuthenticatedAppCompaniesIndexRoute
@@ -315,6 +324,7 @@ export interface FileRoutesById {
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   '/_authenticated/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/_authenticated/app/sectors_/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/_authenticated/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/_authenticated/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
@@ -351,6 +361,7 @@ export interface FileRouteTypes {
     | '/app/'
     | '/app/companies/$ticker'
     | '/app/docs/$id'
+    | '/app/sectors/$sector'
     | '/app/theses/$id'
     | '/api/public/jobs/$job'
     | '/app/companies/'
@@ -383,6 +394,7 @@ export interface FileRouteTypes {
     | '/app/supply-chain'
     | '/app'
     | '/app/docs/$id'
+    | '/app/sectors/$sector'
     | '/app/theses/$id'
     | '/api/public/jobs/$job'
     | '/app/companies'
@@ -418,6 +430,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/'
     | '/_authenticated/app/companies/$ticker'
     | '/_authenticated/app/docs/$id'
+    | '/_authenticated/app/sectors_/$sector'
     | '/_authenticated/app/theses/$id'
     | '/api/public/jobs/$job'
     | '/_authenticated/app/companies/'
@@ -598,6 +611,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppDocsIdRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/sectors_/$sector': {
+      id: '/_authenticated/app/sectors_/$sector'
+      path: '/sectors/$sector'
+      fullPath: '/app/sectors/$sector'
+      preLoaderRoute: typeof AuthenticatedAppSectorsSectorRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/theses/': {
       id: '/_authenticated/app/theses/'
       path: '/theses'
@@ -729,6 +749,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
   AuthenticatedAppCompaniesTickerRoute: typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   AuthenticatedAppDocsIdRoute: typeof AuthenticatedAppDocsIdRoute
+  AuthenticatedAppSectorsSectorRoute: typeof AuthenticatedAppSectorsSectorRoute
   AuthenticatedAppThesesIdRoute: typeof AuthenticatedAppThesesIdRoute
   AuthenticatedAppCompaniesIndexRoute: typeof AuthenticatedAppCompaniesIndexRoute
   AuthenticatedAppDocsIndexRoute: typeof AuthenticatedAppDocsIndexRoute
@@ -751,6 +772,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppCompaniesTickerRoute:
     AuthenticatedAppCompaniesTickerRouteWithChildren,
   AuthenticatedAppDocsIdRoute: AuthenticatedAppDocsIdRoute,
+  AuthenticatedAppSectorsSectorRoute: AuthenticatedAppSectorsSectorRoute,
   AuthenticatedAppThesesIdRoute: AuthenticatedAppThesesIdRoute,
   AuthenticatedAppCompaniesIndexRoute: AuthenticatedAppCompaniesIndexRoute,
   AuthenticatedAppDocsIndexRoute: AuthenticatedAppDocsIndexRoute,

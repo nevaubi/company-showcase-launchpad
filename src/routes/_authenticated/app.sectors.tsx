@@ -309,6 +309,9 @@ function SectorDetail({ agg, data, loaded }: { agg: SectorAggregate; data: Map<s
           <p className="eyebrow">Sector detail</p>
           <h2 className="font-display text-3xl">{agg.sector}</h2>
         </div>
+        <Link to="/app/sectors/$sector" params={{ sector: agg.sector }} className="mb-1 inline-flex items-center gap-1 rounded-md border bg-card px-2.5 py-1 text-[12px] font-medium hover:bg-muted">
+          Deep dive <ArrowUpRight className="size-3.5" />
+        </Link>
         <p className="num pb-1 text-xs text-muted-foreground">
           {agg.count} companies · {agg.mcap ? fmtCompactUsd(agg.mcap) : "—"} market cap · P/E {fmtX(agg.pe)} · op. margin {fmtPct(agg.opMargin, 1)}
         </p>

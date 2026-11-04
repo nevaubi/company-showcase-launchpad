@@ -13,6 +13,8 @@ import {
   Globe2,
   LayoutDashboard,
   LineChart,
+  Grid3x3,
+  ScanLine,
   LogOut,
   Menu,
   Network,
@@ -59,6 +61,9 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     items: [
       { to: "/app/markets", label: "Technicals", icon: LineChart },
       { to: "/app/sectors", label: "Sectors", icon: PieChart },
+      { to: "/app/reactions", label: "Earnings reactions", icon: Activity },
+      { to: "/app/correlations", label: "Correlations", icon: Grid3x3 },
+      { to: "/app/patterns", label: "Chart patterns", icon: ScanLine },
       { to: "/app/ideas", label: "Trade ideas", icon: Crosshair },
       { to: "/app/supply-chain", label: "Supply chain", icon: Network },
       { to: "/app/macro", label: "Macro", icon: Globe2 },
