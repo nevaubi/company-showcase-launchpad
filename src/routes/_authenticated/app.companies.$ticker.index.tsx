@@ -20,6 +20,7 @@ import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 import { PeerTable } from "@/components/company/peer-table";
 import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
+import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   component: Overview,
@@ -168,6 +169,11 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
           )}
         </Panel>
         <NarrativesPanel ticker={ticker} name={p.name} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+        <SetupPanel ticker={ticker} data={data} price={price} />
+        <CatalystsTimeline ticker={ticker} data={data} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">

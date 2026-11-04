@@ -113,5 +113,5 @@
 
 ## Quality pass (requested Nov 4) — supply chain first
 - [x] Supply chain: 10-Q + prior two 10-Ks read; "Changes" tab (added/dropped/share moves); "Moves" tab (earnings sympathy moves, beta, same-direction rate)
-- [ ] Markets: earnings reactions, correlation explorer, pattern detection, sector deep dives
-- [ ] Company pages: overview summary, catalysts & events timeline, visual polish
+- [x] Markets: earnings reactions, correlation explorer, pattern detection, sector deep dives
+- [x] Company pages: setup-at-a-glance panel and catalysts & events timeline on the overview
