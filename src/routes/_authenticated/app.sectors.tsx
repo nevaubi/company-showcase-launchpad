@@ -18,10 +18,10 @@ import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
 import type { PriceSeries } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 
-const search = z.object({ sector: z.string().max(40).optional() });
+const pageSearch = z.object({ sector: z.string().max(40).optional() });
 
 export const Route = createFileRoute("/_authenticated/app/sectors")({
-  validateSearch: search,
+  validateSearch: pageSearch,
   head: () => ({
     meta: [
       { title: "Sectors — Filed Under" },

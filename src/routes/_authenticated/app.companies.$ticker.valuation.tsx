@@ -27,13 +27,13 @@ import {
 import { fmtCompactUsd, fmtDate, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const search = z.object({
+const pageSearch = z.object({
   m: z.enum(["pe", "evEbitda", "evSales", "ps", "pfcf", "pb", "fcfYield", "divYield", "shYield"]).optional(),
   span: z.enum(["3", "5", "10"]).default("10"),
 });
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/valuation")({
-  validateSearch: search,
+  validateSearch: pageSearch,
   component: Valuation,
 });
 
@@ -84,7 +84,7 @@ function Valuation() {
 
   const st = stats[sel.key];
   const latest = history.at(-1)!;
-  const set = (patch: Partial<z.infer<typeof search>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
+  const set = (patch: Partial<z.infer<typeof pageSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
   const pts = (key: MultipleKey) =>
     windowed.filter((p) => p.values[key] != null).map((p) => ({ date: new Date(`${p.date}T00:00:00Z`), value: p.values[key]! }));

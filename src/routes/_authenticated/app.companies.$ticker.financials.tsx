@@ -16,7 +16,7 @@ import type { StatementKey } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 import wordmark from "@/assets/brand/wordmark.png.asset.json";
 
-const search = z.object({
+const pageSearch = z.object({
   statement: z.enum(["income", "balance", "cashflow", "kpis"]).default("income"),
   freq: z.enum(["annual", "quarterly"]).default("annual"),
   span: z.enum(["10", "20", "all"]).default("10"),
@@ -24,7 +24,7 @@ const search = z.object({
 });
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/financials")({
-  validateSearch: search,
+  validateSearch: pageSearch,
   component: Financials,
 });
 
@@ -52,7 +52,7 @@ function Financials() {
   const [charted, setCharted] = useState<Partial<Record<StatementKey, string[]>>>({});
   const [chartOpen, setChartOpen] = useState(true);
   const [exporting, setExporting] = useState(false);
-  const set = (patch: Partial<z.infer<typeof search>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
+  const set = (patch: Partial<z.infer<typeof pageSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
   const filingsByAccn = useMemo(() => new Map((company.data?.filings ?? []).map((f) => [f.accn, f])), [company.data]);
 

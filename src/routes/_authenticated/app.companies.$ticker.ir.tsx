@@ -20,14 +20,14 @@ import { cn } from "@/lib/utils";
 const monthYear = (iso: string) => new Date(`${iso.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 
 // Workbook "Open source" links land here with the line and period to open.
-const search = z.object({
+const pageSearch = z.object({
   line: z.string().optional(),
   period: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   freq: z.enum(["q", "y"]).optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")({
-  validateSearch: search,
+  validateSearch: pageSearch,
   head: ({ params }) => ({
     meta: [
       { title: `${params.ticker.toUpperCase()} investor-relations data · Filed Under` },

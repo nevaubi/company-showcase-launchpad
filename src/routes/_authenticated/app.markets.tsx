@@ -31,13 +31,13 @@ const RANGES: { r: Range; i: Interval; l: string }[] = [
   { r: "max", i: "1mo", l: "Max" },
 ];
 
-const search = z.object({
+const pageSearch = z.object({
   symbol: z.string().max(12).default("NVDA"),
   range: z.enum(["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"]).default("1y"),
 });
 
 export const Route = createFileRoute("/_authenticated/app/markets")({
-  validateSearch: search,
+  validateSearch: pageSearch,
   head: () => ({
     meta: [
       { title: "Technicals — Filed Under" },
@@ -258,7 +258,7 @@ function Markets() {
               {RANGES.map((x) => (
                 <button
                   key={x.r}
-                  onClick={() => navigate({ search: (p) => ({ ...p, range: x.r as z.infer<typeof search>["range"] }) })}
+                  onClick={() => navigate({ search: (p) => ({ ...p, range: x.r as z.infer<typeof pageSearch>["range"] }) })}
                   className={cn("num rounded px-2 py-0.5 text-[11px]", s.range === x.r ? "bg-card font-medium shadow-paper" : "text-muted-foreground")}
                 >
                   {x.l}

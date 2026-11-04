@@ -16,14 +16,14 @@ import { keyTerms, questionIndex, talkShare } from "@/lib/transcripts/analyze";
 import type { TranscriptTurn } from "@/lib/transcripts/parse";
 import { cn } from "@/lib/utils";
 
-const search = z.object({
+const pageSearch = z.object({
   call: z.string().url().max(300).optional(),
   section: z.enum(["all", "prepared", "qa"]).default("all"),
   speaker: z.string().max(80).optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/calls")({
-  validateSearch: search,
+  validateSearch: pageSearch,
   head: ({ params }) => {
     const t = params.ticker.toUpperCase();
     const name = coverageOf(t)?.shortName ?? t;
@@ -46,7 +46,7 @@ function Calls() {
   const ticker = raw.toUpperCase();
   const s = Route.useSearch();
   const navigate = Route.useNavigate();
-  const set = (patch: Partial<z.infer<typeof search>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
+  const set = (patch: Partial<z.infer<typeof pageSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
   const co = coverageOf(ticker);
 
   const listFn = useServerFn(listEarningsCalls);
@@ -159,7 +159,7 @@ function Reader({
   ticker: string;
   section: "all" | "prepared" | "qa";
   speaker?: string;
-  set: (p: Partial<z.infer<typeof search>>) => void;
+  set: (p: Partial<z.infer<typeof pageSearch>>) => void;
 }) {
   const [query, setQuery] = useState("");
   const q = useDeferredValue(query.trim());

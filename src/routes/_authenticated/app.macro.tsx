@@ -19,35 +19,15 @@ import { macroQuery, macroSummariesQuery } from "@/lib/data";
 import { changeText, displayUnits, fmtMacro, recessionBands, transformed, valueAt, type MacroSummary } from "@/lib/macro";
 import { fmtDate, fmtRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { GROUPS, GROUP_IDS, macroSearch } from "@/lib/macro-search";
 
-const GROUPS: { id: MacroGroup; title: string }[] = [
-  { id: "rates", title: "Rates" },
-  { id: "inflation", title: "Inflation" },
-  { id: "labor", title: "Labor" },
-  { id: "growth", title: "Growth" },
-  { id: "consumer", title: "Consumer" },
-  { id: "business", title: "Business" },
-  { id: "housing", title: "Housing" },
-  { id: "liquidity", title: "Liquidity" },
-  { id: "credit", title: "Credit & risk" },
-  { id: "fiscal", title: "Fiscal" },
-  { id: "energy", title: "Energy & commodities" },
-  { id: "industry", title: "Industry drivers" },
-];
-const GROUP_IDS = ["key", ...GROUPS.map((g) => g.id)] as [string, ...string[]];
 
 /** The dashboard's opening view: the dozen prints that move multiples most. */
 const KEY = ["FEDFUNDS", "DGS10", "T10Y2Y", "DFII10", "CPILFESL", "PCEPILFE", "UNRATE", "PAYEMS", "A191RL1Q225SBEA", "ICSA", "BAMLH0A0HYM2", "TSY_DEBT", "MTSDS133FMS", "DCOILWTICO", "RSAFS", "NEWORDER"];
 
-const search = z.object({
-  group: z.enum(GROUP_IDS).default("key"),
-  series: z.string().max(30).optional(),
-  vs: z.string().max(30).optional(),
-  span: z.enum(["2", "5", "10", "20", "max"]).default("10"),
-});
 
 export const Route = createFileRoute("/_authenticated/app/macro")({
-  validateSearch: search,
+  validateSearch: macroSearch,
   head: () => ({
     meta: [
       { title: "Macro — Filed Under" },
@@ -72,7 +52,7 @@ const cutoffFor = (span: string) => (span === "max" ? "1900-01-01" : new Date(Da
 function Macro() {
   const s = Route.useSearch();
   const navigate = Route.useNavigate();
-  const set = (patch: Partial<z.infer<typeof search>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
+  const set = (patch: Partial<z.infer<typeof macroSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
   const summaries = useQuery(macroSummariesQuery);
   const sm = summaries.data;
 
@@ -177,7 +157,7 @@ function Macro() {
         {[{ id: "key", title: "Key indicators" }, ...GROUPS].map((g) => (
           <button
             key={g.id}
-            onClick={() => set({ group: g.id as z.infer<typeof search>["group"] })}
+            onClick={() => set({ group: g.id as z.infer<typeof macroSearch>["group"] })}
             className={cn("shrink-0 rounded-full border px-3 py-1 text-xs", s.group === g.id ? "border-foreground bg-ink text-ink-foreground" : "bg-card hover:bg-secondary")}
           >
             {g.title}
