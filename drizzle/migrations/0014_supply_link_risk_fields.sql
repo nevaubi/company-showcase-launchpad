@@ -1,0 +1,1 @@
+alter table public.supply_links add column if not exists amount_usd numeric, add column if not exists single_source boolean not null default false, add column if not exists regions text[] not null default '{}', add column if not exists risk text;

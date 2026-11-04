@@ -98,3 +98,120 @@ export function sidePositions(count: number, side: Relation): { x: number; y: nu
     return { x: (c - (inRow - 1) / 2) * COL, y: dir * (330 + r * ROW) };
   });
 }
+
+// ---------------------------------------------------------------- richer analysis
+
+export interface RiskLink extends SupplyLink {
+  amount_usd?: number | null;
+  single_source?: boolean;
+  regions?: string[];
+  risk?: string | null;
+}
+
+/** Dollar value a link represents: the stated amount, else share × the filer's revenue (only for customer shares, which are % of revenue). */
+export function linkDollars(l: RiskLink, revenue: Record<string, number | undefined>): number | null {
+  if (l.amount_usd != null && l.amount_usd > 0) return l.amount_usd;
+  const rev = revenue[l.ticker];
+  if (l.share_pct != null && l.relation === "customer" && rev) return (l.share_pct / 100) * rev;
+  return null;
+}
+
+export const HOTSPOTS = ["china", "taiwan", "hong kong", "russia", "ukraine", "israel", "korea", "middle east"];
+
+export interface NodeRisk {
+  singleSource: boolean;
+  concentrated: boolean;
+  hotspots: string[];
+  regions: string[];
+  dollars: number | null;
+}
+
+export function nodeRisk(links: RiskLink[], revenue: Record<string, number | undefined>): NodeRisk {
+  const regions = [...new Set(links.flatMap((l) => l.regions ?? []))];
+  const dollars = links.map((l) => linkDollars(l, revenue)).filter((d): d is number => d != null);
+  return {
+    singleSource: links.some((l) => !!l.single_source),
+    concentrated: links.some((l) => (l.share_pct ?? 0) >= 10),
+    hotspots: regions.filter((r) => HOTSPOTS.some((h) => r.toLowerCase().includes(h))),
+    regions,
+    dollars: dollars.length ? Math.max(...dollars) : null,
+  };
+}
+
+export interface HopNode extends GraphNode {
+  hop: 1 | 2;
+  parent: string;
+}
+
+/**
+ * Second-order links: suppliers of the focus's suppliers and customers of its customers
+ * (plus each hop-1 company's own top partners), up to `perParent` per hop-1 company.
+ */
+export function secondOrder(focus: string, first: GraphNode[], all: SupplyLink[], names: Record<string, string>, perParent = 4): HopNode[] {
+  const f = focus.toUpperCase();
+  const seen = new Set(first.map((n) => n.ticker ?? n.name.toLowerCase()));
+  seen.add(f);
+  const out: HopNode[] = [];
+  for (const p of first) {
+    if (!p.ticker || (p.relation !== "supplier" && p.relation !== "customer")) continue;
+    const kids = focusGraph(p.ticker, all, names).filter((k) => k.relation === p.relation && !seen.has(k.ticker ?? k.name.toLowerCase()));
+    for (const k of kids.slice(0, perParent)) {
+      seen.add(k.ticker ?? k.name.toLowerCase());
+      out.push({ ...k, key: `h2:${p.key}:${k.key}`, hop: 2, parent: p.key });
+    }
+  }
+  return out;
+}
+
+export interface ShockImpact {
+  key: string;
+  name: string;
+  ticker: string | null;
+  hop: number;
+  channel: "lost sales" | "supply disruption";
+  /** fraction of this company's revenue at risk, when the filings quantify it */
+  revenuePct: number | null;
+  dollars: number | null;
+  severity: "high" | "medium" | "low";
+  path: string[];
+  link: RiskLink;
+}
+
+/**
+ * Propagate a demand/output shock at `source` (e.g. 0.2 = 20% drop):
+ * - its suppliers lose sales: share of their revenue from source × shock (quantified when they disclose the share), recursing upstream;
+ * - its customers face supply disruption (high when single-sourced), one more hop downstream.
+ */
+export function simulateShock(source: string, shock: number, all: RiskLink[], names: Record<string, string>, revenue: Record<string, number | undefined>, maxHop = 2): ShockImpact[] {
+  const out = new Map<string, ShockImpact>();
+  const nm = (t: string) => names[t] ?? t;
+  const keep = (imp: ShockImpact) => {
+    const prev = out.get(imp.key);
+    const score = (x: ShockImpact) => (x.revenuePct ?? 0) * 10 + (x.severity === "high" ? 3 : x.severity === "medium" ? 2 : 1) - x.hop;
+    if (!prev || score(imp) > score(prev)) out.set(imp.key, imp);
+  };
+  const walk = (s: string, size: number, hop: number, path: string[], dir: "up" | "down" | "both") => {
+    if (hop > maxHop || size < 0.002) return;
+    for (const l of all) {
+      // upstream: U says S is its customer, or S says U is its supplier
+      const up = l.relation === "customer" && l.counterparty_ticker === s ? { t: l.ticker, name: nm(l.ticker), share: l.share_pct } : l.relation === "supplier" && l.ticker === s ? { t: l.counterparty_ticker, name: l.counterparty_ticker ? nm(l.counterparty_ticker) : l.counterparty, share: null } : null;
+      if (up && dir !== "down" && up.t !== source) {
+        const pct = up.share != null ? (up.share / 100) * size : null;
+        const key = up.t ?? normText(up.name);
+        const rev = up.t ? revenue[up.t] : undefined;
+        keep({ key, name: up.name, ticker: up.t ?? null, hop, channel: "lost sales", revenuePct: pct, dollars: pct != null && rev ? pct * rev : null, severity: pct != null ? (pct >= 0.05 ? "high" : pct >= 0.01 ? "medium" : "low") : "low", path: [...path, up.name], link: l });
+        if (up.t && pct != null) walk(up.t, pct, hop + 1, [...path, up.name], "up");
+      }
+      // downstream: D says S is its supplier, or S says D is its customer
+      const down = l.relation === "supplier" && l.counterparty_ticker === s ? { t: l.ticker, name: nm(l.ticker) } : l.relation === "customer" && l.ticker === s ? { t: l.counterparty_ticker, name: l.counterparty_ticker ? nm(l.counterparty_ticker) : l.counterparty } : null;
+      if (down && dir !== "up" && down.t !== source) {
+        const key = down.t ?? normText(down.name);
+        keep({ key, name: down.name, ticker: down.t ?? null, hop, channel: "supply disruption", revenuePct: null, dollars: null, severity: l.single_source ? "high" : hop === 1 ? "medium" : "low", path: [...path, down.name], link: l });
+        if (down.t && hop < maxHop) walk(down.t, size / 2, hop + 1, [...path, down.name], "down");
+      }
+    }
+  };
+  walk(source.toUpperCase(), shock, 1, [nm(source.toUpperCase())], "both");
+  const rank = { high: 0, medium: 1, low: 2 };
+  return [...out.values()].sort((a, b) => (b.revenuePct ?? -1) - (a.revenuePct ?? -1) || rank[a.severity] - rank[b.severity] || a.hop - b.hop);
+}

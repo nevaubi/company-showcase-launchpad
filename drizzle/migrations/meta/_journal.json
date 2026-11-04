@@ -99,6 +99,13 @@
       "when": 1793824225318,
       "tag": "0013_paper_trades",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793825839633,
+      "tag": "0014_supply_link_risk_fields",
+      "breakpoints": true
     }
   ]
 }

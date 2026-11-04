@@ -714,6 +714,7 @@ export type Database = {
       supply_links: {
         Row: {
           accn: string
+          amount_usd: number | null
           counterparty: string
           counterparty_domain: string | null
           counterparty_ticker: string | null
@@ -724,12 +725,16 @@ export type Database = {
           form: string
           id: string
           quote: string
+          regions: string[]
           relation: string
+          risk: string | null
           share_pct: number | null
+          single_source: boolean
           ticker: string
         }
         Insert: {
           accn: string
+          amount_usd?: number | null
           counterparty: string
           counterparty_domain?: string | null
           counterparty_ticker?: string | null
@@ -740,12 +745,16 @@ export type Database = {
           form: string
           id?: string
           quote: string
+          regions?: string[]
           relation: string
+          risk?: string | null
           share_pct?: number | null
+          single_source?: boolean
           ticker: string
         }
         Update: {
           accn?: string
+          amount_usd?: number | null
           counterparty?: string
           counterparty_domain?: string | null
           counterparty_ticker?: string | null
@@ -756,8 +765,11 @@ export type Database = {
           form?: string
           id?: string
           quote?: string
+          regions?: string[]
           relation?: string
+          risk?: string | null
           share_pct?: number | null
+          single_source?: boolean
           ticker?: string
         }
         Relationships: []
