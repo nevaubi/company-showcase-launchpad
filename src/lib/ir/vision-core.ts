@@ -11,13 +11,15 @@ export interface PageToken {
   text: string;
   /** [x0, y0, x1, y1] as fractions of the page */
   box: [number, number, number, number];
+  /** low OCR confidence: only usable when the model's reading has the same digits */
+  weak?: boolean;
 }
 
 export interface PageWords {
   page: number;
   width: number;
   height: number;
-  words: { text: string; box: [number, number, number, number] }[];
+  words: { text: string; box: [number, number, number, number]; weak?: boolean }[];
 }
 
 const NUM = /^\(?[-−–+]?[$€£]?\(?\d[\d,]*(\.\d+)?\)?(%|x|×|[KMB]|bn|mm|m|k)?\)?\*?$/i;
@@ -26,7 +28,8 @@ const NUM = /^\(?[-−–+]?[$€£]?\(?\d[\d,]*(\.\d+)?\)?(%|x|×|[KMB]|bn|mm|m
 export function parseToken(text: string): { v: number; suffixScale: number | null; pct: boolean } | null {
   const t = text.trim().replace(/[−–]/g, "-").replace(/\*+$/, "");
   if (!NUM.test(t)) return null;
-  const neg = /^\(.*\)$/.test(t) || /^-/.test(t.replace(/[($€£]/g, ""));
+  // Accounting negatives: "(1,234)", "$(404)", "(12.3%)", "-$5", "$-5".
+  const neg = /\(.*\d.*\)/.test(t) || /^[($€£]*-/.test(t);
   const m = t.match(/(\d[\d,]*(?:\.\d+)?)/);
   if (!m) return null;
   const digits = m[1].replace(/,/g, "");
@@ -46,6 +49,7 @@ export function numberTokens(page: PageWords, max = 400): PageToken[] {
   for (let i = 0; i < ws.length && out.length < max; i++) {
     let text = ws[i].text;
     let box = ws[i].box;
+    let weak = !!ws[i].weak;
     const prev = ws[i - 1];
     const next = ws[i + 1];
     const near = (a: PageWords["words"][number], b: PageWords["words"][number]) => Math.abs(a.box[1] - b.box[1]) < 0.01 && b.box[0] - a.box[2] < 0.012;
@@ -56,18 +60,19 @@ export function numberTokens(page: PageWords, max = 400): PageToken[] {
     if (next && /^(%|B|M|K|bn|mm|x|\))$/i.test(next.text) && near(ws[i], next)) {
       text = text + next.text;
       box = [box[0], Math.min(box[1], next.box[1]), next.box[2], Math.max(box[3], next.box[3])];
+      weak ||= !!next.weak;
       i++;
     }
     if (!/\d/.test(text) || !parseToken(text)) continue;
     // Skip bare years and page numbers — they're labels, not data.
     if (/^(19|20)\d{2}$/.test(text) || /^(FY|Q[1-4])/i.test(text)) continue;
-    out.push({ w: out.length, text, box });
+    out.push(weak ? { w: out.length, text, box, weak } : { w: out.length, text, box });
   }
   return out;
 }
 
 export function renderTokens(tokens: PageToken[]) {
-  return tokens.map((t) => `w${t.w}: ${t.text} @ (${((t.box[0] + t.box[2]) / 2).toFixed(2)}, ${((t.box[1] + t.box[3]) / 2).toFixed(2)})`).join("\n");
+  return tokens.map((t) => `w${t.w}: ${t.text}${t.weak ? " ?" : ""} @ (${((t.box[0] + t.box[2]) / 2).toFixed(2)}, ${((t.box[1] + t.box[3]) / 2).toFixed(2)})`).join("\n");
 }
 
 export interface VisionRow {
@@ -87,15 +92,62 @@ export interface VisionPanel {
   periods: { p: number; period_start: string; period_end: string; months: number }[];
   rows: VisionRow[];
 }
+export const SKIP_REASONS = [
+  "growth_or_change",
+  "guidance_or_target",
+  "per_share_or_share_count",
+  "share_of_total",
+  "adjustment_bridge",
+  "consolidated_line",
+  "annualized_or_derived",
+  "label_year_or_date",
+  "axis_tick",
+  "page_or_footnote_number",
+  "duplicate",
+  "text_or_non_data",
+  "unreadable",
+] as const;
+
+export interface VisionSkip {
+  w: number;
+  why: (typeof SKIP_REASONS)[number];
+}
 export interface VisionOutput {
   page_kind: "data" | "chart" | "text" | "cover" | "other";
   panels: VisionPanel[];
+  /** every listed token that isn't a stored value, with the reason (completeness accounting) */
+  skipped?: VisionSkip[];
 }
+
+const ROW_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["label", "parent", "breakdown", "category", "metric", "unit", "scale", "is_total", "values"],
+  properties: {
+    label: { type: "string" },
+    parent: { type: "string" },
+    breakdown: { type: "string" },
+    category: { type: "string", enum: [...CATEGORIES] },
+    metric: { type: "string", enum: [...METRICS] },
+    unit: { type: "string", enum: [...UNITS] },
+    scale: { type: "number" },
+    is_total: { type: "boolean" },
+    values: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["w", "p", "read"],
+        properties: { w: { type: "integer" }, p: { type: "integer" }, read: { type: "string" } },
+      },
+    },
+  },
+} as const;
 
 export const VISION_SCHEMA = {
   type: "object",
   additionalProperties: false,
-  required: ["page_kind", "panels"],
+  required: ["page_kind", "panels", "skipped"],
   properties: {
     page_kind: { type: "string", enum: ["data", "chart", "text", "cover", "other"] },
     panels: {
@@ -115,54 +167,85 @@ export const VISION_SCHEMA = {
               properties: { p: { type: "integer" }, period_start: { type: "string" }, period_end: { type: "string" }, months: { type: "integer" } },
             },
           },
-          rows: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: false,
-              required: ["label", "parent", "breakdown", "category", "metric", "unit", "scale", "is_total", "values"],
-              properties: {
-                label: { type: "string" },
-                parent: { type: "string" },
-                breakdown: { type: "string" },
-                category: { type: "string", enum: [...CATEGORIES] },
-                metric: { type: "string", enum: [...METRICS] },
-                unit: { type: "string", enum: [...UNITS] },
-                scale: { type: "number" },
-                is_total: { type: "boolean" },
-                values: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    required: ["w", "p", "read"],
-                    properties: { w: { type: "integer" }, p: { type: "integer" }, read: { type: "string" } },
-                  },
-                },
-              },
-            },
-          },
+          rows: { type: "array", items: ROW_SCHEMA },
         },
+      },
+    },
+    skipped: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["w", "why"],
+        properties: { w: { type: "integer" }, why: { type: "string", enum: [...SKIP_REASONS] } },
       },
     },
   },
 } as const;
 
-export const VISION_INSTRUCTIONS = `You are a meticulous sell-side data analyst reading one page of a public company's investor-relations material (an earnings slide, a chart, a scanned table or an infographic). You get the page image and a numbered list of every number printed on it ("w<id>: <text> @ (x, y)" — x/y are the token's centre as fractions of the page width/height, origin top-left).
+export const VISION_INSTRUCTIONS = `You are a meticulous sell-side data analyst transcribing one page of a public company's investor-relations material (an earnings slide, chart, KPI dashboard, scanned table or infographic) into structured data. Your output is stored as reported figures that analysts rely on, so a qualifying number that is left out is an error, and so is a number filed under the wrong label, period, unit or scale.
 
-Return every number that is disaggregated or operating data, pointing at its token id:
-1. Revenue / sales split by segment, product or service, geography, customer or end market, channel.
-2. Segment profit (operating income, adjusted EBITDA, contribution) and segment margins; cost and expense components.
-3. Operating KPIs: units, deliveries, subscribers, users, ARPU, backlog, bookings, AUM, deposits, loans, production, realized prices, store counts, headcount, same-store sales.
+<inputs>
+- The page image.
+- Context: company, document title, filing date, page number.
+- A numbered list of every number token printed on the page, found by the PDF text layer or by OCR: "w<id>: <text> @ (x, y)". x and y are the token's centre as fractions of the page width and height, origin top-left, so you can find each token on the image. A token marked "?" was read with low OCR confidence: look at the image and give your own reading in "read".
+</inputs>
 
-How to read charts: in a bar or column chart each bar is one period; a stacked bar's printed segment labels are its components and the printed figure above the bar is the total. Use the legend and axis labels to name rows and periods. In a pie/donut, the slices are components of the printed total in the centre or title. Only point at numbers that are actually printed — never estimate values from bar heights.
+<task>
+Account for every token in the list exactly once: either as a value inside a row of a panel (a stored fact), or in "skipped" with the reason it is not a qualifying fact. Never use a token twice, never invent token ids.
+</task>
 
-Hierarchy: the printed total of a breakdown is a row with is_total=true; its components use parent = the total's exact label. When the total isn't printed on this page leave parent "" and is_total=false. Keep separate breakdowns apart with a short "breakdown" name.
-Periods: list each period once per panel (p = 0,1,…) with ISO dates, months = 3 for a quarter, 6/9 year-to-date, 12 full year, 0 for point-in-time values. Infer exact dates from the company's fiscal calendar and the document date when the page says "Q3 FY25" or "2024".
-Units & scale: scale converts the printed number to absolute units — "$ in billions" or "$12.3B" → 1000000000, "in millions" → 1000000, "in thousands" → 1000; percentages, prices, per-share amounts and ratios use scale 1. unit: usd, pct (as printed, 45.2), bps, count, usdPerShare (per-unit dollars like ARPU or $/barrel), ratio.
-SKIP: growth rates and changes (+12% Y/Y, "up 5%"), guidance/outlook, targets, page numbers, footnote numbers, years used as labels, non-GAAP adjustment bridges, per-share EPS and share counts.
-For every value also give "read": the number exactly as you see it printed on the image, with its $, %, decimal point and suffix (e.g. "$2.71", "41.2%", "$4.3B"). OCR sometimes drops a decimal point or comma; your reading is compared with the token.
-Each token may be used once. If the page holds no qualifying data, return its page_kind with "panels": [].`;
+<what_to_store>
+Disaggregated and operating data, plus the printed totals they add up to:
+1. Revenue / net sales split by reportable or operating segment, product or service line, geography, customer type or end market, sales channel.
+2. Segment profit measures (operating income, segment profit, adjusted EBITDA by segment, contribution), segment margins and segment costs.
+3. Cost and expense components whose parts sum to a printed total (category "cost").
+4. Operating KPIs: units shipped, deliveries, subscribers, paid members, MAU/DAU, ARPU, same-store / comparable sales, store counts, backlog, bookings, RPO, AUM/AUA, deposits, loans, net interest margin, production volumes, realized prices, load factor, utilization, headcount (category "kpi", or "balance" for balance-type breakdowns such as loans or deposits by type).
+5. The consolidated total that a breakdown on this page sums to (e.g. total revenue printed next to segment bars), as the breakdown's is_total row.
+</what_to_store>
+
+<skip>
+Put these in "skipped" with the matching reason: growth rates, Y/Y or Q/Q changes and variances (growth_or_change; comparable / same-store sales are KPIs, not changes); guidance, outlook, targets and ranges (guidance_or_target); EPS, per-share amounts and share counts (per_share_or_share_count); "% of total" or mix shares derived from other numbers on the page (share_of_total); non-GAAP adjustment bridges, including "as reported / FX impact / adjusted" and "GAAP to non-GAAP" tables (adjustment_bridge — but as-reported segment, product or KPI values in such a table still qualify; only the adjustment and adjusted lines are skipped); company-wide lines that are not the total of a breakdown on this page — consolidated revenue, operating expenses, operating profit or margin, net income, cash flow, capex — because they come from the financial statements (consolidated_line); annualized run-rates ("annualized NOI", quarter × 4), pro-forma and other figures computed from other numbers rather than reported for a period (annualized_or_derived); years, quarters and dates used as labels (label_year_or_date); chart axis tick labels and gridline values (axis_tick); page numbers and footnote markers (page_or_footnote_number); the same figure printed a second time on the page (duplicate); numbers in running text, phone numbers, addresses, rankings and other non-data (text_or_non_data); tokens you cannot make out on the image (unreadable).
+</skip>
+
+<how_to_read>
+- Work panel by panel: a slide often holds several charts, tables or KPI tiles. For each, find its title, legend, period labels (axis, column headers, or the document's reporting period) and units note ("$ in millions"), then walk its numbers.
+- Bar / column charts: each bar or bar group is one period; the x-axis labels name the periods. In stacked bars the printed segment labels are the components and the figure above the bar is the total. Use the legend to name each series.
+- Pie / donut charts: printed slice amounts are components of the printed total (centre or title). Slices printed only as percentages of the whole are share_of_total unless no amounts are printed at all, in which case store them as pct rows labelled "<slice> share of <total>".
+- KPI tiles and callouts ("245M paid memberships", "$4.3B backlog"): one row each, period = the period the document reports, months = 0 for point-in-time balances and counts.
+- Tables: each row is a line item, each column a period.
+- Only store numbers that are printed. Never estimate values from bar heights or gridlines.
+</how_to_read>
+
+<fields>
+- Periods: list each period once per panel (p = 0, 1, …) with ISO dates. months = 3 for a quarter, 6 / 9 for year-to-date, 12 for a full year or a trailing-twelve-months / trailing-four-quarters figure, 0 only for point-in-time values (balances and counts at a date: assets, loans, deposits, AUM, backlog, subscribers, stores, headcount). Flows — revenue, NOI, income, expenses, volumes produced or sold — always cover a period (3 / 6 / 9 / 12); use the document's reporting period when the page doesn't print one; period_start is the first day of the period ("" when months = 0). When the page says "Q3 FY25" or "2024", infer exact dates from the company's fiscal calendar and the document date.
+- Units & scale: scale converts the printed number to absolute units — "$ in billions" or "$12.3B" → 1000000000, "in millions" → 1000000, "in thousands" → 1000; percentages, prices, per-unit amounts and ratios use scale 1. unit: usd, pct (as printed, 45.2), bps, count, usdPerShare (per-unit dollars such as ARPU or realized price per barrel), ratio.
+- Hierarchy: the printed total of a breakdown is a row with is_total = true and its components use parent = the total's exact label. When the total isn't printed on this page, leave parent "" and is_total = false. Keep different breakdowns apart with a short "breakdown" name such as "Revenue by segment".
+- Labels exactly as printed, without footnote markers. When the same line name appears under more than one heading on the page, prefix the heading so every label in a panel is unique ("Americas — iPhone", "North America — Copper sales (mm lbs)").
+- read: the number exactly as you see it printed on the image, with its $, %, decimal point and suffix ("$2.71", "41.2%", "$4.3B"). OCR sometimes drops a decimal point or comma; your reading is compared with the token.
+</fields>
+
+If the page holds no qualifying data, return its page_kind with "panels": [] and every token in "skipped".
+
+Think the problem through before you answer: identify every panel and its periods and units, then go through the token list in order and decide for each token which row and period it belongs to, or why it is skipped.`;
+
+/** Tokens the model neither stored nor skipped. */
+export function unaccounted(out: VisionOutput, tokens: PageToken[]): PageToken[] {
+  const seen = new Set<number>();
+  for (const panel of out.panels ?? []) for (const row of panel.rows) for (const v of row.values) seen.add(v.w);
+  for (const s of out.skipped ?? []) seen.add(s.w);
+  return tokens.filter((t) => !seen.has(t.w));
+}
+
+/** Second-turn prompt for tokens the first answer left out. */
+export function followUpPrompt(missing: PageToken[]) {
+  return `Your answer did not account for ${missing.length} token${missing.length === 1 ? "" : "s"}:\n${renderTokens(missing)}\n\nLook at each of them on the image again. Return JSON in the same format that covers ONLY these tokens: new panels/rows for the ones that qualify (repeat a panel's title, periods and the row's label, parent and breakdown when a token belongs to a row you already returned) and "skipped" entries for the rest. Do not repeat values you already returned.`;
+}
+
+/** Combine the first answer with a follow-up answer (earlier pointers win in visionFacts). */
+export function mergeVision(a: VisionOutput, b: VisionOutput): VisionOutput {
+  return { page_kind: a.page_kind, panels: [...(a.panels ?? []), ...(b.panels ?? [])], skipped: [...(a.skipped ?? []), ...(b.skipped ?? [])] };
+}
 
 export interface VisionFact {
   category: string;
@@ -256,7 +339,26 @@ export function visionFacts(out: VisionOutput, tokens: PageToken[], page: number
       }
     }
   }
-  return { rows, rejected };
+  const kept = dropScaleOutliers(rows);
+  return { rows: kept, rejected: rejected + rows.length - kept.length };
+}
+
+/**
+ * A line on one page doesn't jump ~1,000× between periods: a value that far from the line's median
+ * is a scale slip ("$22,334" read as billions next to millions) and is dropped.
+ */
+export function dropScaleOutliers(rows: VisionFact[]): VisionFact[] {
+  const groups = new Map<string, number[]>();
+  const keyOf = (f: VisionFact) => `${f.breakdown ?? ""}|${f.label}|${f.unit}|${f.months}`;
+  for (const f of rows) if (f.value) (groups.get(keyOf(f)) ?? groups.set(keyOf(f), []).get(keyOf(f))!).push(Math.abs(f.value));
+  return rows.filter((f) => {
+    const vals = groups.get(keyOf(f));
+    if (!f.value || !vals || vals.length < 3) return true;
+    const sorted = [...vals].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const ratio = Math.abs(f.value) / median;
+    return ratio < 300 && ratio > 1 / 300;
+  });
 }
 
 /** pdftotext -bbox output → words per page (boxes as page fractions). */
@@ -280,16 +382,19 @@ export function parseBboxHtml(html: string): PageWords[] {
 }
 
 /** tesseract TSV output → words (boxes as image fractions). Low-confidence words are dropped. */
-export function parseTesseractTsv(tsv: string, width: number, height: number, page = 1): PageWords {
+export function parseTesseractTsv(tsv: string, width: number, height: number, page = 1, opts: { minConf?: number; weakBelow?: number } = {}): PageWords {
+  const minConf = opts.minConf ?? 55;
+  const weakBelow = opts.weakBelow ?? minConf;
   const words: PageWords["words"] = [];
   for (const line of tsv.split("\n").slice(1)) {
     const c = line.split("\t");
     if (c.length < 12 || c[0] !== "5") continue;
     const conf = Number(c[10]);
     const text = c[11]?.trim();
-    if (!text || conf < 55) continue;
+    if (!text || conf < minConf) continue;
     const [l, t, w, h] = [Number(c[6]), Number(c[7]), Number(c[8]), Number(c[9])];
-    words.push({ text, box: [l / width, t / height, (l + w) / width, (t + h) / height] });
+    const box: [number, number, number, number] = [l / width, t / height, (l + w) / width, (t + h) / height];
+    words.push(conf < weakBelow ? { text, box, weak: true } : { text, box });
   }
   return { page, width, height, words };
 }

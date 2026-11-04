@@ -23,6 +23,13 @@ export interface RunnerItem {
   label: string;
 }
 
+export interface RunUsage {
+  input_tokens: number;
+  output_tokens: number;
+  /** estimated spend in USD when the model's prices are known */
+  usd?: number;
+}
+
 export interface RunnerOpts<T extends RunnerItem> {
   job: string;
   max: number;
@@ -30,10 +37,17 @@ export interface RunnerOpts<T extends RunnerItem> {
   claim: () => Promise<T | null>;
   release: (item: T, status: string | null) => Promise<unknown>;
   reset: () => Promise<unknown>;
-  process: (item: T) => Promise<{ facts: number; note?: string; usage?: { input_tokens: number; output_tokens: number } | null }>;
+  process: (item: T) => Promise<{ facts: number; note?: string; usage?: RunUsage | null }>;
   /** keep polling for new work for this many minutes after the queue empties */
   idleMinutes?: number;
+  /** pause the job once the estimated spend of this run passes this many USD */
+  maxUsd?: number;
 }
+
+/** Database/network hiccups (statement timeouts, gateway pages) are retried instead of failing the item. */
+export const isTransientInfra = (msg: string) =>
+  /statement timeout|fetch failed|ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|network|connection (reset|terminated|closed)|\b50[234]\b|Bad Gateway|Service Unavailable|Gateway Time-?out|<!DOCTYPE html>|upstream/i.test(msg);
+const MAX_INFRA_RETRIES = 3;
 
 export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   const { data: state } = await sb.from("job_state").select("*").eq("job", o.job).maybeSingle();
@@ -58,7 +72,10 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   let facts = 0;
   let tokensIn = 0;
   let tokensOut = 0;
+  let usd = 0;
   let stop: string | null = null;
+  // item id → database/network failures in a row (bounded retries)
+  const infraFails = new Map<string, number>();
   let rateHits = 0;
   let active = 0;
   let concurrency = o.concurrency;
@@ -131,14 +148,29 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
         if (r.facts > 0 && !dirty.has(item.ticker)) dirty.set(item.ticker, Date.now());
         tokensIn += r.usage?.input_tokens ?? 0;
         tokensOut += r.usage?.output_tokens ?? 0;
+        usd += r.usage?.usd ?? 0;
         rateHits = Math.max(0, rateHits - 1);
+        infraFails.delete(item.id);
         log(`${item.ticker.padEnd(5)} ${String(r.facts).padStart(4)} facts ${r.note ? `${r.note} ` : ""}${((Date.now() - t0) / 1000).toFixed(0)}s  ${item.label.slice(0, 60)}`);
+        if (o.maxUsd && usd > o.maxUsd && !stop) {
+          stop = `budget: this run spent about $${usd.toFixed(0)} (cap $${o.maxUsd}) — rerun with --resume to continue`;
+          await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
+        }
       } catch (e) {
         const err = e as Error;
+        const infra = !(err instanceof OpenAIError) && isTransientInfra(err.message);
+        const tries = infra ? (infraFails.get(item.id) ?? 0) + 1 : 0;
         if (err instanceof OpenAIError && (err.kind === "auth" || err.kind === "quota")) {
           stop = `${err.kind}: ${err.message.slice(0, 200)}`;
           await o.release(item, null);
           await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
+        } else if (infra && tries <= MAX_INFRA_RETRIES) {
+          // Busy database / flaky network: put the item back and slow down instead of failing it.
+          infraFails.set(item.id, tries);
+          reserved--;
+          log(`${item.ticker} database/network hiccup (try ${tries}/${MAX_INFRA_RETRIES}): ${err.message.slice(0, 100)}`);
+          await o.release(item, null).then(undefined, () => undefined);
+          await sleep(20_000 + Math.random() * 20_000);
         } else if (err instanceof OpenAIError && (err.kind === "rate" || err.kind === "transient")) {
           await o.release(item, null);
           reserved--;
@@ -150,6 +182,7 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
           }
           await sleep(err.retryAfterMs ?? 15_000 + Math.random() * 15_000);
         } else {
+          infraFails.delete(item.id);
           await o.release(item, `error: ${err.message.slice(0, 200)}`);
           log(`${item.ticker} error: ${err.message.slice(0, 160)}`);
         }
@@ -167,7 +200,13 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
       log(`database slow (${ms}ms) — concurrency now ${concurrency}`);
     } else if (ms && ms < 300 && concurrency < o.concurrency) concurrency++;
   }, 20_000);
-  const stats = setInterval(() => log(`— ${o.job}: ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens, concurrency ${concurrency}`), 120_000);
+  const stats = setInterval(
+    () =>
+      log(
+        `— ${o.job}: ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens${usd ? `, ~$${usd.toFixed(2)}` : ""}, concurrency ${concurrency}`,
+      ),
+    120_000,
+  );
   await Promise.all(Array.from({ length: o.concurrency }, (_, i) => worker(i)));
   clearInterval(stats);
   clearInterval(governor);
@@ -176,5 +215,5 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   await flush(true);
   clearInterval(leaseTimer);
   await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
-  log(stop ? `${o.job} STOPPED — ${stop}` : `${o.job} finished — ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens`);
+  log(stop ? `${o.job} STOPPED — ${stop}` : `${o.job} finished — ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens${usd ? `, ~$${usd.toFixed(2)}` : ""}`);
 }

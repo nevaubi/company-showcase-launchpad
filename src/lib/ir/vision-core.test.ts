@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { numberTokens, parseBboxHtml, parseToken, resolveValue, visionFacts, type VisionOutput } from "@/lib/ir/vision-core";
+import { dropScaleOutliers, numberTokens, parseBboxHtml, parseToken, resolveValue, unaccounted, visionFacts, type VisionOutput } from "@/lib/ir/vision-core";
 
 describe("parseToken", () => {
   it("reads currency suffixes, parentheses and percentages", () => {
@@ -7,6 +7,13 @@ describe("parseToken", () => {
     expect(parseToken("(1,234)")).toEqual({ v: -1234, suffixScale: null, pct: false });
     expect(parseToken("45.2%")).toEqual({ v: 45.2, suffixScale: null, pct: true });
     expect(parseToken("$850M")?.suffixScale).toBe(1e6);
+  });
+  it("keeps the minus sign when the currency symbol sits outside the parentheses", () => {
+    expect(parseToken("$(404)")?.v).toBe(-404);
+    expect(parseToken("$(2,996)")?.v).toBe(-2996);
+    expect(parseToken("(12.3%)")).toEqual({ v: -12.3, suffixScale: null, pct: true });
+    expect(parseToken("-$5")?.v).toBe(-5);
+    expect(parseToken("$5")?.v).toBe(5);
   });
   it("rejects garbled thousands groupings and words", () => {
     expect(parseToken("12,34")).toBeNull();
@@ -70,6 +77,32 @@ describe("visionFacts", () => {
     const o = out([{ ...base, label: "Cloud", unit: "usd", scale: 1e6, values: [{ w: 0, p: 0, read: "$4.2B" }] }]);
     o.panels[0].periods[0].period_end = "2026-09-30";
     expect(visionFacts(o, tokens, 1, "2025-10-28").rows).toHaveLength(0);
+  });
+});
+
+describe("dropScaleOutliers", () => {
+  const fact = (value: number, period_end: string) => ({
+    category: "product", metric: "revenue", breakdown: "Net revenues", parent: null, is_total: false, label: "Combustible Tobacco",
+    period_label: "", period_start: null, period_end, months: 12, value, unit: "usd", locator: { page: 1, box: [0, 0, 0, 0], text: "", w: 0 },
+  });
+  it("drops a value ~1,000× off the rest of its line (scale slip) and keeps the others", () => {
+    const rows = [fact(26_595e6, "2015-12-31"), fact(25_818e6, "2016-12-31"), fact(22_334e9, "2023-12-31"), fact(23_218e6, "2024-12-31")];
+    expect(dropScaleOutliers(rows).map((r) => r.period_end)).toEqual(["2015-12-31", "2016-12-31", "2024-12-31"]);
+  });
+  it("keeps lines with fewer than three values untouched", () => {
+    expect(dropScaleOutliers([fact(1e6, "2023-12-31"), fact(5e9, "2024-12-31")])).toHaveLength(2);
+  });
+});
+
+describe("unaccounted", () => {
+  it("lists tokens the model neither stored nor skipped", () => {
+    const toks = [0, 1, 2, 3].map((w) => ({ w, text: String(w + 10), box: [0, 0, 0, 0] as [number, number, number, number] }));
+    const o: VisionOutput = {
+      page_kind: "data",
+      panels: [{ title: "", periods: [], rows: [{ label: "A", parent: "", breakdown: "", category: "kpi", metric: "revenue", unit: "count", scale: 1, is_total: false, values: [{ w: 0, p: 0, read: "10" }] }] }],
+      skipped: [{ w: 2, why: "axis_tick" }],
+    };
+    expect(unaccounted(o, toks).map((t) => t.w)).toEqual([1, 3]);
   });
 });
 
