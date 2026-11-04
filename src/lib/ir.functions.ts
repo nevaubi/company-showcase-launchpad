@@ -68,7 +68,9 @@ export const getIrData = createServerFn({ method: "GET" })
     console.log(`[ir] ${data.ticker} docs=${docs.length}+${images}img facts=${readFacts} row=${series ? "yes" : "no"} payload=${payload ? payload.series.length : "none"} ${Date.now() - t0}ms`);
     const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
     const pending = documents.filter((d) => !d.extract_status && EXTRACTABLE.includes(d.kind) && d.viewable).length;
-    return { payload, builtAt: series?.built_at ?? null, documents, images, pending };
+    // Bank-sized payloads (thousands of series) exceed the RPC serializer's pending-output limit
+    // when sent as objects, so ship one JSON string and parse it on the client.
+    return { json: JSON.stringify({ payload, builtAt: series?.built_at ?? null, documents, images, pending }) };
   });
 
 /** A company's stored slide/chart images for the library (paged; they can number in the thousands). */

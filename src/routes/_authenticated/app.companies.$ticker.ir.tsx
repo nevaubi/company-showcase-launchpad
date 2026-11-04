@@ -49,7 +49,16 @@ function IrPage() {
   const fetchIr = useServerFn(getIrData);
   const q = useQuery({
     queryKey: ["ir", ticker],
-    queryFn: () => fetchIr({ data: { ticker } }),
+    queryFn: async () => {
+      const { json } = await fetchIr({ data: { ticker } });
+      return JSON.parse(json) as {
+        payload: IrPayload | null;
+        builtAt: string | null;
+        documents: IrDocRow[];
+        images: number;
+        pending: number;
+      };
+    },
     staleTime: 5 * 60_000,
     retry: 3,
     retryDelay: (n) => Math.min(2000 * 2 ** n, 15_000),
