@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import { FileText } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import { cn } from "@/lib/utils";
+import { AnswerChart, parseChartSpec } from "@/components/research/answer-chart";
 
 /** Markdown with filing:TICKER:ACCESSION[:DOC] links (optional "quoted phrase" title) that open the source panel. */
 export function ResearchMarkdown({ children, className }: { children: string; className?: string }) {
@@ -13,6 +14,14 @@ export function ResearchMarkdown({ children, className }: { children: string; cl
         remarkPlugins={[remarkGfm]}
         urlTransform={(url) => (url.startsWith("filing:") ? url : defaultUrlTransform(url))}
         components={{
+          pre: ({ children: c, node }) => {
+            const code = node?.children?.[0] as { properties?: { className?: string[] }; children?: { value?: string }[] } | undefined;
+            if (code?.properties?.className?.includes("language-chart")) {
+              const spec = parseChartSpec(code.children?.map((t) => t.value ?? "").join("") ?? "");
+              if (spec) return <AnswerChart spec={spec} />;
+            }
+            return <pre>{c}</pre>;
+          },
           a: ({ href, title, children: label }) => {
             if (href?.startsWith("filing:")) {
               const [, ticker, accn, ...doc] = href.split(":");

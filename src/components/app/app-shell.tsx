@@ -124,7 +124,7 @@ function ShellInner({ children }: { children: ReactNode }) {
         className="transition-[padding] duration-300 lg:pl-60"
         style={target ? ({ "--panel": PANEL_WIDTH } as React.CSSProperties) : undefined}
       >
-        <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]", !target && aiOpen && "xl:pr-[420px]")}>
+        <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]", !target && aiOpen && "md:pr-[min(420px,100vw)]")}>
           <header className="sticky top-0 z-20 flex h-12 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur lg:px-6">
             <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setMobileOpen((o) => !o)} aria-label="Menu">
               {mobileOpen ? <X /> : <Menu />}

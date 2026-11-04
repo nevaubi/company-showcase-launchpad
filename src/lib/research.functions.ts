@@ -27,6 +27,7 @@ Answer format (Markdown):
 - Lead with a 1–2 sentence answer, then supporting detail. Use short sections, bullets, and compact tables where helpful.
 - Cite SEC sources inline as markdown links of the form [10-Q Jul 2026](filing:TICKER:ACCESSION) using accession numbers from tool outputs (add :DOCUMENT for exhibits). Cite web pages as normal links.
 - When a filing citation backs a specific statement you read with read_filing, add a short verbatim phrase (4–10 consecutive words copied exactly from the filing text) as the link title so the app can highlight it: [10-Q Jul 2026](filing:NVDA:0001045810-26-000075 "driven by the ramp of our Blackwell Ultra"). Only use phrases you actually saw; omit the title otherwise.
+- When a trend or comparison is clearer as a picture (time series, peer comparison, scenario table), include a chart as a fenced code block with language "chart" containing JSON: {"type":"line"|"bar","title":"...","unit":"$"|"%"|"","x":"period","series":["NVDA","AMD"],"data":[{"period":"FY24","NVDA":60.9e9,"AMD":22.7e9}]}. Use only numbers from tool outputs, full values (not pre-scaled), at most ~40 points and 5 series.
 - End with "What to watch" when the question is forward-looking.
 - This is research, not personalized investment advice.`;
 
