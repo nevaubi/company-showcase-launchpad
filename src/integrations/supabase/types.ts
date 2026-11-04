@@ -532,6 +532,51 @@ export type Database = {
         }
         Relationships: []
       }
+      paper_trades: {
+        Row: {
+          closed_at: string | null
+          closed_price: number | null
+          created_at: string
+          direction: string
+          entry_date: string
+          entry_price: number
+          id: string
+          signals: Json
+          stop: number | null
+          target: number | null
+          ticker: string
+          user_id: string
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_price?: number | null
+          created_at?: string
+          direction: string
+          entry_date?: string
+          entry_price: number
+          id?: string
+          signals?: Json
+          stop?: number | null
+          target?: number | null
+          ticker: string
+          user_id?: string
+        }
+        Update: {
+          closed_at?: string | null
+          closed_price?: number | null
+          created_at?: string
+          direction?: string
+          entry_date?: string
+          entry_price?: number
+          id?: string
+          signals?: Json
+          stop?: number | null
+          target?: number | null
+          ticker?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null

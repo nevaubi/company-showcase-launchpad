@@ -48,6 +48,8 @@
 - [x] Tests for derived Q4 lines, EBITDA fallback, unit formatting, valuation math, sector roll-ups, transcript parsing
 - [x] Browser verification of every new view + mobile pass; landing-page counts updated
 
+- [x] Trade ideas: rule-based long/short setups with point-in-time hit rates, filing evidence and paper trades (`/app/ideas`)
+
 ## Later
 - [ ] Insurer template (premiums, loss ratio, float) — needed before adding BRK or other insurers
 - [ ] Filing alerts: email when a followed company files a 10-K/10-Q/8-K or an insider trades
@@ -101,3 +103,5 @@
 - [ ] Trade opportunity engine
 - [ ] More analyst tools
 - [ ] Portfolio research file
+- [ ] Refresh trade-idea scan on a schedule (currently refreshed by rerunning the scan script)
+- [ ] More analyst tools; portfolio research file

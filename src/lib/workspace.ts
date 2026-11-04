@@ -9,6 +9,7 @@ export type AppPath =
   | "/app/markets"
   | "/app/sectors"
   | "/app/supply-chain"
+  | "/app/ideas"
   | "/app/macro"
   | "/app/theses"
   | "/app/research"
