@@ -10,7 +10,7 @@ import { IrLibrary } from "@/components/ir/library";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { getIrData } from "@/lib/ir.functions";
+import { getIrData, type IrDocRow } from "@/lib/ir.functions";
 import { secRevenueCheck } from "@/lib/ir/display";
 import type { IrPayload } from "@/lib/ir/payload";
 import { useCompany } from "@/lib/data";
