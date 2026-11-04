@@ -110,7 +110,11 @@ async function waitingCount(ticker: string): Promise<number> {
 /** Give items no reader can ever take an explicit status, so backlog counts tell the truth. */
 async function markUnreadable(all: Row[]) {
   const noSlide = all.filter((d) => d.kind === "image" && d.vision_status === null && !canVision(d));
-  const noText = all.filter((d) => d.kind !== "image" && d.extract_status === null && !canExtract(d) && !canVision(d));
+  // Spreadsheets are never "text-less": they wait for an HTML rendition (scripts/ir-renditions.ts), then Sol reads them.
+  const SHEETS = ["xls", "xlsx", "xlsm", "csv"];
+  const noText = all.filter(
+    (d) => d.kind !== "image" && d.extract_status === null && !SHEETS.includes((d as { ext?: string }).ext ?? "") && !canExtract(d) && !canVision(d),
+  );
   const ids = (xs: Row[]) => {
     const out: string[][] = [];
     for (let i = 0; i < xs.length; i += 500) out.push(xs.slice(i, i + 500).map((d) => d.id));

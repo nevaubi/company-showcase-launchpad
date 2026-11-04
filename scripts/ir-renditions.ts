@@ -9,7 +9,7 @@
 import { createClient } from "@supabase/supabase-js";
 import ExcelJS from "exceljs";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dbGate } from "./lib/supa";
@@ -36,12 +36,12 @@ async function xlsxHtml(buf: ArrayBuffer, title: string) {
         const cell = row.getCell(c);
         let t = "";
         try {
-          t = cell.text ?? "";
+          t = String(cell.text ?? "");
         } catch {
           t = "";
         }
         if (!t && cell.formula && cell.result != null) t = String(cell.result);
-        t = t.trim();
+        t = String(t).trim();
         cells.push(`<td${isNum(t) ? ' class="n"' : ""}>${esc(t)}</td>`);
       }
       parts.push(`<tr>${cells.join("")}</tr>`);
@@ -50,6 +50,16 @@ async function xlsxHtml(buf: ArrayBuffer, title: string) {
   });
   parts.push("</body></html>");
   return { html: parts.join(""), pages: sheets };
+}
+
+/** Legacy .xls / .csv: convert to .xlsx with LibreOffice, then render like any workbook. */
+function toXlsx(buf: ArrayBuffer, ext: string): ArrayBuffer {
+  const dir = mkdtempSync(join(tmpdir(), "irxls-"));
+  const file = join(dir, `doc.${ext}`);
+  writeFileSync(file, Buffer.from(buf));
+  execFileSync("soffice", ["--headless", `-env:UserInstallation=file://${dir}/lo`, "--convert-to", "xlsx", "--outdir", dir, file], { timeout: 120_000, stdio: "ignore" });
+  const out = readFileSync(join(dir, "doc.xlsx"));
+  return out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer;
 }
 
 function pdfHtml(buf: ArrayBuffer, title: string) {
@@ -104,7 +114,7 @@ function alignPage(text: string): string[][] {
   });
 }
 
-let q = sb.from("ir_documents").select("id, ticker, path, ext, title").is("rendition_path", null).in("ext", ["xlsx", "xlsm", "pdf"]).neq("kind", "image").limit(Number(args.limit ?? 300));
+let q = sb.from("ir_documents").select("id, ticker, path, ext, title").is("rendition_path", null).in("ext", args.sheets ? ["xlsx", "xlsm", "xls", "csv"] : ["xlsx", "xlsm", "xls", "csv", "pdf"]).neq("kind", "image").limit(Number(args.limit ?? 300));
 if (args.ticker) q = q.eq("ticker", args.ticker);
 const { data: docs, error } = await q;
 if (error) throw error;
@@ -116,7 +126,7 @@ for (const d of docs!) {
     const { data: file, error: e } = await sb.storage.from("ir-documents").download(d.path!);
     if (e || !file) throw new Error(e?.message ?? "download failed");
     const buf = await file.arrayBuffer();
-    const r = d.ext === "pdf" ? pdfHtml(buf, d.title) : await xlsxHtml(buf, d.title);
+    const r = d.ext === "pdf" ? pdfHtml(buf, d.title) : await xlsxHtml(d.ext === "xls" || d.ext === "csv" ? toXlsx(buf, d.ext) : buf, d.title);
     const rpath = `${d.path}.rendition.html`;
     const up = await sb.storage.from("ir-documents").upload(rpath, new Blob([r.html], { type: "text/html" }), { contentType: "text/html", upsert: true });
     if (up.error) throw new Error(up.error.message);
