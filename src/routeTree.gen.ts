@@ -16,10 +16,13 @@ import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
+import { Route as AuthenticatedAppCorrelationsRouteImport } from './routes/_authenticated/app.correlations'
 import { Route as AuthenticatedAppIdeasRouteImport } from './routes/_authenticated/app.ideas'
 import { Route as AuthenticatedAppInsidersRouteImport } from './routes/_authenticated/app.insiders'
 import { Route as AuthenticatedAppMacroRouteImport } from './routes/_authenticated/app.macro'
 import { Route as AuthenticatedAppMarketsRouteImport } from './routes/_authenticated/app.markets'
+import { Route as AuthenticatedAppPatternsRouteImport } from './routes/_authenticated/app.patterns'
+import { Route as AuthenticatedAppReactionsRouteImport } from './routes/_authenticated/app.reactions'
 import { Route as AuthenticatedAppResearchRouteImport } from './routes/_authenticated/app.research'
 import { Route as AuthenticatedAppSectorsRouteImport } from './routes/_authenticated/app.sectors'
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
@@ -74,6 +77,12 @@ const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppCorrelationsRoute =
+  AuthenticatedAppCorrelationsRouteImport.update({
+    id: '/correlations',
+    path: '/correlations',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppIdeasRoute = AuthenticatedAppIdeasRouteImport.update({
   id: '/ideas',
   path: '/ideas',
@@ -95,6 +104,18 @@ const AuthenticatedAppMarketsRoute = AuthenticatedAppMarketsRouteImport.update({
   path: '/markets',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppPatternsRoute =
+  AuthenticatedAppPatternsRouteImport.update({
+    id: '/patterns',
+    path: '/patterns',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
+const AuthenticatedAppReactionsRoute =
+  AuthenticatedAppReactionsRouteImport.update({
+    id: '/reactions',
+    path: '/reactions',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppResearchRoute =
   AuthenticatedAppResearchRouteImport.update({
     id: '/research',
@@ -212,10 +233,13 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
+  '/app/correlations': typeof AuthenticatedAppCorrelationsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/app/insiders': typeof AuthenticatedAppInsidersRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/patterns': typeof AuthenticatedAppPatternsRoute
+  '/app/reactions': typeof AuthenticatedAppReactionsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
@@ -242,10 +266,13 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/app/correlations': typeof AuthenticatedAppCorrelationsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/app/insiders': typeof AuthenticatedAppInsidersRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/patterns': typeof AuthenticatedAppPatternsRoute
+  '/app/reactions': typeof AuthenticatedAppReactionsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
@@ -274,10 +301,13 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
+  '/_authenticated/app/correlations': typeof AuthenticatedAppCorrelationsRoute
   '/_authenticated/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/_authenticated/app/insiders': typeof AuthenticatedAppInsidersRoute
   '/_authenticated/app/macro': typeof AuthenticatedAppMacroRoute
   '/_authenticated/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/_authenticated/app/patterns': typeof AuthenticatedAppPatternsRoute
+  '/_authenticated/app/reactions': typeof AuthenticatedAppReactionsRoute
   '/_authenticated/app/research': typeof AuthenticatedAppResearchRoute
   '/_authenticated/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/_authenticated/app/status': typeof AuthenticatedAppStatusRoute
@@ -307,10 +337,13 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/app'
+    | '/app/correlations'
     | '/app/ideas'
     | '/app/insiders'
     | '/app/macro'
     | '/app/markets'
+    | '/app/patterns'
+    | '/app/reactions'
     | '/app/research'
     | '/app/sectors'
     | '/app/status'
@@ -337,10 +370,13 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pricing'
     | '/reset-password'
+    | '/app/correlations'
     | '/app/ideas'
     | '/app/insiders'
     | '/app/macro'
     | '/app/markets'
+    | '/app/patterns'
+    | '/app/reactions'
     | '/app/research'
     | '/app/sectors'
     | '/app/status'
@@ -368,10 +404,13 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/_authenticated/app'
+    | '/_authenticated/app/correlations'
     | '/_authenticated/app/ideas'
     | '/_authenticated/app/insiders'
     | '/_authenticated/app/macro'
     | '/_authenticated/app/markets'
+    | '/_authenticated/app/patterns'
+    | '/_authenticated/app/reactions'
     | '/_authenticated/app/research'
     | '/_authenticated/app/sectors'
     | '/_authenticated/app/status'
@@ -454,6 +493,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppIndexRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/correlations': {
+      id: '/_authenticated/app/correlations'
+      path: '/correlations'
+      fullPath: '/app/correlations'
+      preLoaderRoute: typeof AuthenticatedAppCorrelationsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/ideas': {
       id: '/_authenticated/app/ideas'
       path: '/ideas'
@@ -480,6 +526,20 @@ declare module '@tanstack/react-router' {
       path: '/markets'
       fullPath: '/app/markets'
       preLoaderRoute: typeof AuthenticatedAppMarketsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/patterns': {
+      id: '/_authenticated/app/patterns'
+      path: '/patterns'
+      fullPath: '/app/patterns'
+      preLoaderRoute: typeof AuthenticatedAppPatternsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/reactions': {
+      id: '/_authenticated/app/reactions'
+      path: '/reactions'
+      fullPath: '/app/reactions'
+      preLoaderRoute: typeof AuthenticatedAppReactionsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/research': {
@@ -655,10 +715,13 @@ const AuthenticatedAppCompaniesTickerRouteWithChildren =
   )
 
 interface AuthenticatedAppRouteChildren {
+  AuthenticatedAppCorrelationsRoute: typeof AuthenticatedAppCorrelationsRoute
   AuthenticatedAppIdeasRoute: typeof AuthenticatedAppIdeasRoute
   AuthenticatedAppInsidersRoute: typeof AuthenticatedAppInsidersRoute
   AuthenticatedAppMacroRoute: typeof AuthenticatedAppMacroRoute
   AuthenticatedAppMarketsRoute: typeof AuthenticatedAppMarketsRoute
+  AuthenticatedAppPatternsRoute: typeof AuthenticatedAppPatternsRoute
+  AuthenticatedAppReactionsRoute: typeof AuthenticatedAppReactionsRoute
   AuthenticatedAppResearchRoute: typeof AuthenticatedAppResearchRoute
   AuthenticatedAppSectorsRoute: typeof AuthenticatedAppSectorsRoute
   AuthenticatedAppStatusRoute: typeof AuthenticatedAppStatusRoute
@@ -673,10 +736,13 @@ interface AuthenticatedAppRouteChildren {
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
+  AuthenticatedAppCorrelationsRoute: AuthenticatedAppCorrelationsRoute,
   AuthenticatedAppIdeasRoute: AuthenticatedAppIdeasRoute,
   AuthenticatedAppInsidersRoute: AuthenticatedAppInsidersRoute,
   AuthenticatedAppMacroRoute: AuthenticatedAppMacroRoute,
   AuthenticatedAppMarketsRoute: AuthenticatedAppMarketsRoute,
+  AuthenticatedAppPatternsRoute: AuthenticatedAppPatternsRoute,
+  AuthenticatedAppReactionsRoute: AuthenticatedAppReactionsRoute,
   AuthenticatedAppResearchRoute: AuthenticatedAppResearchRoute,
   AuthenticatedAppSectorsRoute: AuthenticatedAppSectorsRoute,
   AuthenticatedAppStatusRoute: AuthenticatedAppStatusRoute,
