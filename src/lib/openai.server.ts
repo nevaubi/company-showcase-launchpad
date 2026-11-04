@@ -56,6 +56,76 @@ function gatewayKind(e: GatewayError): OpenAIErrorKind {
   }
 }
 
+/** Owner's Anthropic key (claude-* models): structured outputs give schema-exact JSON; instructions are prompt-cached. */
+async function anthropicStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+  const key = process.env["ANTHROPIC_API_KEY"];
+  if (!key) throw new OpenAIError("ANTHROPIC_API_KEY is not configured", "auth", 0);
+  const parts: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;
+  const content = parts.map((p) => {
+    if (p.type === "input_text") return { type: "text", text: p.text };
+    const m = /^data:([^;]+);base64,(.*)$/s.exec(p.image_url);
+    return m ? { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } } : { type: "image", source: { type: "url", url: p.image_url } };
+  });
+  let res: Response;
+  try {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" },
+      signal: opts.signal,
+      ...({ timeout: false } as Record<string, unknown>),
+      body: JSON.stringify({
+        model: opts.model,
+        max_tokens: Math.min(opts.maxOutputTokens ?? 64_000, 64_000),
+        system: [{ type: "text", text: opts.instructions, cache_control: { type: "ephemeral" } }],
+        output_config: { format: { type: "json_schema", schema: opts.schema }, ...(opts.effort ? { effort: opts.effort === "minimal" || opts.effort === "none" ? "low" : opts.effort } : {}) },
+        messages: [{ role: "user", content }],
+      }),
+    });
+  } catch (e) {
+    throw new OpenAIError(`Anthropic network error: ${(e as Error).message}`, "transient", 0);
+  }
+  if (!res.ok) {
+    const body = await res.text();
+    let type = "";
+    let msg = body.slice(0, 400);
+    try {
+      const j = JSON.parse(body) as { error?: { type?: string; message?: string } };
+      type = j.error?.type ?? "";
+      msg = j.error?.message ?? msg;
+    } catch {
+      /* not JSON */
+    }
+    const kind: OpenAIErrorKind =
+      res.status === 401 || res.status === 403 || type === "not_found_error" ? "auth"
+      : /credit|billing/i.test(msg) ? "quota"
+      : res.status === 429 ? "rate"
+      : res.status >= 500 || res.status === 529 ? "transient"
+      : "rejected";
+    const ra = Number(res.headers.get("retry-after"));
+    throw new OpenAIError(`Anthropic ${res.status} ${type}: ${msg}`, kind, res.status, Number.isFinite(ra) && ra > 0 ? ra * 1000 : undefined);
+  }
+  const j = (await res.json()) as {
+    model: string;
+    stop_reason?: string;
+    content?: { type: string; text?: string }[];
+    usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+  };
+  if (j.stop_reason === "max_tokens") throw new OpenAIError("Response incomplete (max_tokens)", "rejected", 200);
+  const text = (j.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
+  let data: T;
+  try {
+    data = JSON.parse(text) as T;
+  } catch {
+    throw new OpenAIError("Model returned invalid JSON", "rejected", 200);
+  }
+  const cached = j.usage?.cache_read_input_tokens ?? 0;
+  return {
+    data,
+    usage: { input_tokens: (j.usage?.input_tokens ?? 0) + cached + (j.usage?.cache_creation_input_tokens ?? 0), output_tokens: j.usage?.output_tokens ?? 0, cached_tokens: cached },
+    model: j.model,
+  };
+}
+
 async function gatewayStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
   const content: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;
   const model = opts.model.includes("/") ? opts.model : `openai/${opts.model}`;
@@ -101,6 +171,7 @@ export async function openaiStructured<T>(opts: {
   maxOutputTokens?: number;
   signal?: AbortSignal;
 }): Promise<{ data: T; usage: Usage; model: string }> {
+  if (opts.model.startsWith("claude-")) return anthropicStructured<T>(opts);
   if (useGateway()) return gatewayStructured<T>(opts);
   const key = process.env["OPENAI_API_KEY"];
   if (!key) throw new OpenAIError("OPENAI_API_KEY is not configured", "auth", 0);
