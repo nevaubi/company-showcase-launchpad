@@ -50,7 +50,8 @@ function IrPage() {
   const q = useQuery({
     queryKey: ["ir", ticker],
     queryFn: async () => {
-      const { json } = await fetchIr({ data: { ticker } });
+      const { gz } = await fetchIr({ data: { ticker } });
+      const json = await new Response(gz.pipeThrough(new DecompressionStream("gzip"))).text();
       return JSON.parse(json) as {
         payload: IrPayload | null;
         builtAt: string | null;

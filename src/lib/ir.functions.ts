@@ -70,7 +70,11 @@ export const getIrData = createServerFn({ method: "GET" })
     const pending = documents.filter((d) => !d.extract_status && EXTRACTABLE.includes(d.kind) && d.viewable).length;
     // Bank-sized payloads (thousands of series) exceed the RPC serializer's pending-output limit
     // when sent as objects, so ship one JSON string and parse it on the client.
-    return { json: JSON.stringify({ payload, builtAt: series?.built_at ?? null, documents, images, pending }) };
+    // Bank payloads outgrow the RPC serializer's 32 MB cap even as one string, so stream gzipped
+    // bytes (raw streams bypass that cap) and decompress in the browser.
+    const bytes = new TextEncoder().encode(JSON.stringify({ payload, builtAt: series?.built_at ?? null, documents, images, pending }));
+    const gz = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip")) as ReadableStream<Uint8Array>;
+    return { gz };
   });
 
 /** A company's stored slide/chart images for the library (paged; they can number in the thousands). */
