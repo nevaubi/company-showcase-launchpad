@@ -1,6 +1,6 @@
 /**
  * Bulk IR table extraction with the owner's OpenAI key.
- *   bun scripts/ir-extract.ts [--concurrency=16] [--max=5000] [--ticker=AAPL] [--model=gpt-6.1-sol] [--watch --idle=30] [--resume] [--force]
+ *   bun scripts/ir-extract.ts [--concurrency=16] [--chunk-concurrency=6] [--max=5000] [--ticker=AAPL] [--model=gpt-6.1-sol] [--watch --idle=30] [--resume] [--force]
  *
  * Bounded, single-flight, idempotent, with a circuit breaker — see scripts/lib/runner.ts.
  * --force takes over a lease left by a crashed runner; never use it while another runner is alive.
@@ -22,7 +22,8 @@ await runBatch({
   release: (d, status) => sb.from("ir_documents").update({ extract_status: status, extracted_at: status ? new Date().toISOString() : null }).eq("id", d.id),
   reset: () => sb.from("ir_documents").update({ extract_status: null }).eq("extract_status", "working"),
   process: async (d) => {
-    const r = await extractIrDocument(d.id, { model, concurrency: 4 });
+    // Parts of one file read in parallel: long 2010s releases have 10+ table chunks.
+    const r = await extractIrDocument(d.id, { model, concurrency: Number(args["chunk-concurrency"] ?? 6) });
     return { facts: r.facts, note: r.rejected ? `(${r.rejected} rej)` : undefined, usage: r.usage };
   },
 });
