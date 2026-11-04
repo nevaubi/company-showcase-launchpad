@@ -101,7 +101,10 @@ async function run(co: Co) {
   if (!set.length) return log(co.ticker, "no 10-K");
   const all: Record<string, unknown>[] = [];
   for (const { f, current } of set) {
-    try { all.push(...(await readFiling(co, f, current))); } catch (e) { log(co.ticker, f.form, f.filed, "failed", (e as Error).message.slice(0, 150)); }
+    try { all.push(...(await readFiling(co, f, current))); } catch (e) {
+      // never replace stored links with a partial set
+      return log(co.ticker, f.form, f.filed, "failed — kept existing links", (e as Error).message.slice(0, 150));
+    }
   }
   if (args.dry) return console.log(all.slice(0, 5));
   if (!all.length) return;
