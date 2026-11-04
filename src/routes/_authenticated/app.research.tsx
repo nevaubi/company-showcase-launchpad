@@ -57,7 +57,7 @@ const SUGGESTIONS = [
   "Who are Amazon's main competitors in cloud, and how does AWS margin compare with Azure's disclosures?",
 ];
 
-const MAX_STEPS = 10;
+const MAX_STEPS = 16;
 
 function Research() {
   const search = Route.useSearch();

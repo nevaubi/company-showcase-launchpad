@@ -48,6 +48,8 @@
 - [x] Tests for derived Q4 lines, EBITDA fallback, unit formatting, valuation math, sector roll-ups, transcript parsing
 - [x] Browser verification of every new view + mobile pass; landing-page counts updated
 
+- [x] Supply chain v2: $ exposure, 2nd-order links, risk overlays, shock simulator
+- [x] Side-panel assistant: page navigation, screen reading, code interpreter, screener, supply tools, deep research loops
 - [x] Trade ideas: rule-based long/short setups with point-in-time hit rates, filing evidence and paper trades (`/app/ideas`)
 
 ## Later

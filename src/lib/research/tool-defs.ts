@@ -154,6 +154,74 @@ export const TOOL_DEFS = [
     parameters: obj({ url: str("Full https URL"), query: nullable(str("Optional phrase to focus on")) }, ["url", "query"]),
     strict: true,
   },
+  {
+    type: "function",
+    name: "screen_companies",
+    description:
+      "Screen all covered companies on TTM fundamentals. Metrics: revenue, grossProfit, operatingIncome, ebitda, netIncome, fcf, cfo, capex, sbc, rnd, buybacks, dividends, epsDiluted, cash, totalDebt, netDebt, equity, grossMargin, operatingMargin, netMargin, fcfMargin, revenueGrowthYoY, revenueCagr3y, revenueCagr5y, epsGrowthYoY, rndIntensity, capexIntensity. Ratios are fractions (0.25 = 25%).",
+    parameters: obj(
+      {
+        filters: { type: "array", items: obj({ metric: str("Metric key"), op: { type: "string", enum: [">", ">=", "<", "<=", "="] }, value: { type: "number" } }, ["metric", "op", "value"]) },
+        sector: nullable(str("Optional sector name filter (substring)")),
+        sort_by: str("Metric to sort by"),
+        descending: { type: "boolean" },
+        limit: { type: "integer", description: "1-78" },
+        columns: { type: "array", items: { type: "string" }, description: "Metric keys to show" },
+      },
+      ["filters", "sector", "sort_by", "descending", "limit", "columns"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "run_code",
+    description:
+      "Code interpreter: run JavaScript (async function body; use `return` for the result and console.log for output) in an isolated sandbox with no network. `data.universe` is every covered company's TTM fundamentals (same keys as screen_companies, plus ticker, name, sector). `data.companies[TICKER]` holds {income, balance, cashflow, kpis} each as {annual|quarterly: {periods: string[], rows: {metricKey: number[]}}} for the tickers you request. `data.prices[SYMBOL]` is [[date, close], ...] daily for requested symbols (2y). `stats` has mean, median, sum, stdev, cagr(a,b,years), corr(a,b). Use for regressions, DCFs, scenario math, custom screens, aggregations. 8s limit.",
+    parameters: obj(
+      {
+        code: str("JavaScript function body"),
+        tickers: { type: "array", items: { type: "string" }, description: "Covered tickers whose statements to load into data.companies (max 12)" },
+        price_symbols: { type: "array", items: { type: "string" }, description: "Symbols whose 2y daily closes to load into data.prices (max 8)" },
+      },
+      ["code", "tickers", "price_symbols"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_supply_chain",
+    description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession.",
+    parameters: obj({ ticker: str("Covered ticker"), relation: nullable({ type: "string", enum: ["customer", "supplier", "partner", "competitor"] }) }, ["ticker", "relation"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "simulate_supply_shock",
+    description: "Propagate a demand/output shock at one company through disclosed supply-chain links: suppliers lose sales sized by their disclosed revenue share; customers face supply disruption. Two steps out.",
+    parameters: obj({ ticker: str("Ticker to shock"), shock_pct: { type: "number", description: "Size of drop, e.g. 20 for -20%" } }, ["ticker", "shock_pct"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "navigate_to",
+    description:
+      "Open a page in the user's Filed Under app (only works in the side-panel assistant). Use when the user asks to show/open/go to something, or when a page would help them see your answer.",
+    parameters: obj(
+      {
+        page: { type: "string", enum: ["dashboard", "company", "financials", "segments", "valuation", "filings", "insiders", "calls", "ir", "supply_chain", "ideas", "markets", "macro", "sectors", "research", "theses", "docs", "all_insiders", "companies"] },
+        ticker: nullable(str("Ticker for company pages and supply_chain")),
+      },
+      ["page", "ticker"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_page_context",
+    description: "What the user is looking at right now in the app: URL, page title and visible text. Call this first when the user says 'this', 'here', 'this page' or 'this company'.",
+    parameters: obj({}, []),
+    strict: true,
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFS)[number]["name"];
@@ -174,4 +242,10 @@ export const TOOL_LABELS: Record<string, string> = {
   web_research: "Researched the web",
   read_webpage: "Read web page",
   get_earnings_call: "Read earnings call",
+  screen_companies: "Screened companies",
+  run_code: "Ran code",
+  get_supply_chain: "Mapped supply chain",
+  simulate_supply_shock: "Simulated shock",
+  navigate_to: "Opened page",
+  get_page_context: "Read your screen",
 };

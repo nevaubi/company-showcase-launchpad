@@ -26,6 +26,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/brand/logo";
 import { SourceProvider, useSource } from "@/components/source/source-context";
 import { PANEL_WIDTH, SourcePanel } from "@/components/source/source-panel";
+import { AssistantPanel } from "@/components/research/assistant-panel";
+import { Sparkles } from "lucide-react";
 import { CommandMenu } from "@/components/app/command-menu";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { useQuotes, useUniverse } from "@/lib/data";
@@ -85,6 +87,9 @@ function ShellInner({ children }: { children: ReactNode }) {
   const { target } = useSource();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  useEffect(() => setAiOpen(localStorage.getItem("fu:assistant") === "1"), []);
+  useEffect(() => localStorage.setItem("fu:assistant", aiOpen ? "1" : "0"), [aiOpen]);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   useEffect(() => setMobileOpen(false), [pathname]);
@@ -93,6 +98,10 @@ function ShellInner({ children }: { children: ReactNode }) {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCmdOpen((o) => !o);
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
+        e.preventDefault();
+        setAiOpen((o) => !o);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -115,7 +124,7 @@ function ShellInner({ children }: { children: ReactNode }) {
         className="transition-[padding] duration-300 lg:pl-60"
         style={target ? ({ "--panel": PANEL_WIDTH } as React.CSSProperties) : undefined}
       >
-        <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]")}>
+        <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]", !target && aiOpen && "xl:pr-[420px]")}>
           <header className="sticky top-0 z-20 flex h-12 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur lg:px-6">
             <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setMobileOpen((o) => !o)} aria-label="Menu">
               {mobileOpen ? <X /> : <Menu />}
@@ -129,10 +138,15 @@ function ShellInner({ children }: { children: ReactNode }) {
               <kbd className="num rounded border bg-muted px-1.5 text-[10px]">⌘K</kbd>
             </button>
             <MarketTape />
+            <Button variant={aiOpen ? "ink" : "outline"} size="sm" className="ml-auto shrink-0 md:ml-0" onClick={() => setAiOpen((o) => !o)} aria-label="Assistant">
+              <Sparkles /> <span className="hidden sm:inline">Assistant</span>
+              <kbd className="num hidden rounded border px-1 text-[10px] opacity-70 md:inline">⌘J</kbd>
+            </Button>
           </header>
           <main className="px-4 pb-16 pt-6 lg:px-8">{children}</main>
         </div>
       </div>
+      <AssistantPanel open={aiOpen} onClose={() => setAiOpen(false)} />
       <SourcePanel />
       <CommandMenu open={cmdOpen} onOpenChange={setCmdOpen} />
     </div>

@@ -8,6 +8,10 @@ import { readWebpage, webSearch } from "@/lib/web.functions";
 import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
 import { durationDays } from "@/lib/financials/build";
 import type { CompanyDataset, Row } from "@/lib/financials/types";
+import { runSandbox } from "@/lib/research/sandbox";
+import { supplyLinksQuery } from "@/lib/supply/query";
+import { focusGraph, linkDollars, simulateShock, type RiskLink } from "@/lib/supply/core";
+import type { UniverseEntry } from "@/lib/financials/types";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
 
 const MAX = 9000;
@@ -49,8 +53,130 @@ function htmlToText(html: string) {
     .trim();
 }
 
-export async function runTool(qc: QueryClient, name: string, args: Record<string, unknown>): Promise<ToolRun> {
+/** App hooks available to the side-panel assistant. */
+export interface AgentCtx {
+  navigate?: (href: string) => void;
+}
+
+const PAGE_PATH: Record<string, (t: string) => string> = {
+  dashboard: () => "/app",
+  companies: () => "/app/companies",
+  company: (t) => `/app/companies/${t}`,
+  financials: (t) => `/app/companies/${t}/financials`,
+  segments: (t) => `/app/companies/${t}/segments`,
+  valuation: (t) => `/app/companies/${t}/valuation`,
+  filings: (t) => `/app/companies/${t}/filings`,
+  insiders: (t) => `/app/companies/${t}/insiders`,
+  calls: (t) => `/app/companies/${t}/calls`,
+  ir: (t) => `/app/companies/${t}/ir`,
+  supply_chain: (t) => (t ? `/app/supply-chain?t=${t}` : "/app/supply-chain"),
+  ideas: () => "/app/ideas",
+  markets: () => "/app/markets",
+  macro: () => "/app/macro",
+  sectors: () => "/app/sectors",
+  research: () => "/app/research",
+  theses: () => "/app/theses",
+  docs: () => "/app/docs",
+  all_insiders: () => "/app/insiders",
+};
+
+/** Flat TTM metrics per company — shared by screen_companies and run_code. */
+export function flatUniverse(companies: UniverseEntry[]) {
+  return companies.map((c) => {
+    const t = c.f?.ttm ?? {};
+    const b = c.f?.bs ?? {};
+    const rev = t.revenue ?? c.revenueTTM ?? null;
+    const div = (a: number | undefined | null) => (a != null && rev ? a / rev : null);
+    return {
+      ticker: c.ticker, name: c.name, sector: c.sector, industry: c.industry, asOf: c.f?.asOf ?? null,
+      ...t, ...b, revenue: rev,
+      grossMargin: c.grossMarginTTM ?? div(t.grossProfit), operatingMargin: div(t.operatingIncome), netMargin: div(t.netIncome), fcfMargin: div(t.fcf),
+      rndIntensity: div(t.rnd), capexIntensity: div(t.capex != null ? Math.abs(t.capex) : null),
+      revenueGrowthYoY: c.revenueGrowthYoY, revenueCagr3y: c.f?.revenueCagr3y ?? null, revenueCagr5y: c.f?.revenueCagr5y ?? null, epsGrowthYoY: c.f?.epsGrowthYoY ?? null,
+    } as Record<string, string | number | null>;
+  });
+}
+
+const fmtMetric = (k: string, v: unknown) =>
+  typeof v !== "number" ? String(v ?? "—") : /Margin|Growth|Cagr|Intensity/.test(k) ? `${(v * 100).toFixed(1)}%` : k === "epsDiluted" ? `$${v.toFixed(2)}` : `$${(v / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M`;
+
+export async function runTool(qc: QueryClient, name: string, args: Record<string, unknown>, ctx: AgentCtx = {}): Promise<ToolRun> {
   switch (name) {
+    case "screen_companies": {
+      const u = await qc.fetchQuery(universeQuery);
+      let rows = flatUniverse(u.companies);
+      const sector = typeof args.sector === "string" ? args.sector.toLowerCase() : "";
+      if (sector) rows = rows.filter((r) => `${r.sector} ${r.industry}`.toLowerCase().includes(sector));
+      for (const f of (args.filters as { metric: string; op: string; value: number }[]) ?? []) {
+        rows = rows.filter((r) => {
+          const v = r[f.metric];
+          if (typeof v !== "number") return false;
+          return f.op === ">" ? v > f.value : f.op === ">=" ? v >= f.value : f.op === "<" ? v < f.value : f.op === "<=" ? v <= f.value : v === f.value;
+        });
+      }
+      const sk = String(args.sort_by ?? "revenue");
+      rows.sort((a, b) => ((Number(b[sk]) || -Infinity) - (Number(a[sk]) || -Infinity)) * (args.descending === false ? -1 : 1));
+      const cols = [...new Set([sk, ...((args.columns as string[]) ?? [])])].slice(0, 8);
+      const n = Math.max(1, Math.min(78, Number(args.limit) || 15));
+      const lines = rows.slice(0, n).map((r) => `${r.ticker} ${r.name} | ${cols.map((c) => `${c} ${fmtMetric(c, r[c])}`).join(" | ")}`);
+      return { output: `${rows.length} companies match (TTM, from SEC statements).\n${lines.join("\n")}`, summary: `${rows.length} matches` };
+    }
+    case "run_code": {
+      const u = await qc.fetchQuery(universeQuery);
+      const companies: Record<string, unknown> = {};
+      for (const t of ((args.tickers as string[]) ?? []).slice(0, 12)) {
+        const d = await dataset(qc, t);
+        const pack = (st: { periods: { label: string }[]; rows: Row[] }) => ({ periods: st.periods.map((p) => p.label), rows: Object.fromEntries(st.rows.map((r) => [r.key, r.cells.map((c) => c?.v ?? null)])) });
+        companies[t.toUpperCase()] = Object.fromEntries((["income", "balance", "cashflow", "kpis"] as const).map((k) => [k, { annual: d.statements.annual[k] ? pack(d.statements.annual[k]) : null, quarterly: d.statements.quarterly[k] ? pack(d.statements.quarterly[k]) : null }]));
+      }
+      const prices: Record<string, [string, number][]> = {};
+      for (const s of ((args.price_symbols as string[]) ?? []).slice(0, 8)) {
+        const p = await qc.fetchQuery(pricesQuery(s.toUpperCase(), "2y", "1d")).catch(() => null);
+        if (p) prices[s.toUpperCase()] = p.bars.map((b) => [b[0], b[5]]);
+      }
+      const r = await runSandbox(String(args.code ?? ""), { universe: flatUniverse(u.companies), companies, prices });
+      const out = [r.logs.length ? `console:\n${r.logs.join("\n")}` : "", r.result ? `result:\n${r.result}` : "", r.error ? `ERROR: ${r.error}` : ""].filter(Boolean).join("\n\n");
+      return { output: clip(out || "(no output — use return or console.log)"), summary: r.ok ? `ran in ${r.ms}ms` : `error: ${r.error?.split("\n")[0].slice(0, 80)}` };
+    }
+    case "get_supply_chain": {
+      const t = String(args.ticker).toUpperCase();
+      const [links, u] = await Promise.all([qc.fetchQuery(supplyLinksQuery), qc.fetchQuery(universeQuery)]);
+      const names = Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName]));
+      const revenue = Object.fromEntries(u.companies.map((c) => [c.ticker, c.revenueTTM ?? undefined]));
+      const g = focusGraph(t, links, names).filter((n) => !args.relation || n.relation === args.relation);
+      const lines = g.slice(0, 60).map((n) => {
+        const l = n.links[0] as RiskLink;
+        const d = linkDollars(l, revenue);
+        return `${n.relation.toUpperCase()} ${n.name}${n.ticker ? ` (${n.ticker})` : ""}: ${l.detail}${l.share_pct != null ? ` | share ${l.share_pct}%` : ""}${d != null ? ` | ≈$${(d / 1e6).toFixed(0)}M` : ""}${l.single_source ? " | SINGLE SOURCE" : ""}${l.regions?.length ? ` | regions ${l.regions.join(", ")}` : ""}${l.risk ? ` | risk: ${l.risk}` : ""} | per ${l.ticker} ${l.form} ${l.accn}: "${l.quote}"`;
+      });
+      return { output: clip(lines.join("\n") || `No named links for ${t}.`), summary: `${g.length} links for ${t}`, refs: g.slice(0, 5).map((n) => ({ ticker: n.links[0].ticker, accn: n.links[0].accn, label: n.name })) };
+    }
+    case "simulate_supply_shock": {
+      const t = String(args.ticker).toUpperCase();
+      const shock = Math.max(1, Math.min(100, Number(args.shock_pct) || 20)) / 100;
+      const [links, u] = await Promise.all([qc.fetchQuery(supplyLinksQuery), qc.fetchQuery(universeQuery)]);
+      const names = Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName]));
+      const revenue = Object.fromEntries(u.companies.map((c) => [c.ticker, c.revenueTTM ?? undefined]));
+      const r = simulateShock(t, shock, links, names, revenue);
+      const lines = r.slice(0, 30).map((i) => `${i.name}${i.ticker ? ` (${i.ticker})` : ""} | ${i.channel} | ${i.severity} | hop ${i.hop}${i.revenuePct != null ? ` | ${(i.revenuePct * 100).toFixed(2)}% of revenue` : ""}${i.dollars != null ? ` ≈$${(i.dollars / 1e6).toFixed(0)}M` : ""} | path ${i.path.join(" → ")} | source ${i.link.ticker} ${i.link.form} ${i.link.accn}`);
+      return { output: `Shock: ${names[t] ?? t} −${shock * 100}%. Mechanical estimate from disclosed shares.\n${lines.join("\n") || "No linked companies."}`, summary: `${r.length} companies affected` };
+    }
+    case "navigate_to": {
+      const page = String(args.page);
+      const t = typeof args.ticker === "string" ? args.ticker.toUpperCase() : "";
+      const mk = PAGE_PATH[page];
+      if (!mk) throw new Error(`Unknown page ${page}`);
+      if (/^(company|financials|segments|valuation|filings|insiders|calls|ir)$/.test(page) && !coverageOf(t)) throw new Error(`${t || "A ticker"} is required and must be covered`);
+      const href = mk(t);
+      if (!ctx.navigate) return { output: "Navigation is only available in the side-panel assistant. Give the user this link instead: " + href, summary: href };
+      ctx.navigate(href);
+      return { output: `Opened ${href} for the user.`, summary: href };
+    }
+    case "get_page_context": {
+      const main = document.querySelector("main");
+      const text = (main?.innerText ?? "").replace(/\n{2,}/g, "\n").slice(0, 6000);
+      return { output: `URL: ${location.pathname}${location.search}\nTitle: ${document.title}\nVisible content:\n${text}`, summary: location.pathname };
+    }
     case "get_coverage": {
       const u = await qc.fetchQuery(universeQuery);
       const lines = u.companies.map(
