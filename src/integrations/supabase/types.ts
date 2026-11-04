@@ -666,6 +666,57 @@ export type Database = {
         }
         Relationships: []
       }
+      supply_links: {
+        Row: {
+          accn: string
+          counterparty: string
+          counterparty_domain: string | null
+          counterparty_ticker: string | null
+          created_at: string
+          detail: string
+          doc: string
+          filed: string
+          form: string
+          id: string
+          quote: string
+          relation: string
+          share_pct: number | null
+          ticker: string
+        }
+        Insert: {
+          accn: string
+          counterparty: string
+          counterparty_domain?: string | null
+          counterparty_ticker?: string | null
+          created_at?: string
+          detail: string
+          doc: string
+          filed: string
+          form: string
+          id?: string
+          quote: string
+          relation: string
+          share_pct?: number | null
+          ticker: string
+        }
+        Update: {
+          accn?: string
+          counterparty?: string
+          counterparty_domain?: string | null
+          counterparty_ticker?: string | null
+          created_at?: string
+          detail?: string
+          doc?: string
+          filed?: string
+          form?: string
+          id?: string
+          quote?: string
+          relation?: string
+          share_pct?: number | null
+          ticker?: string
+        }
+        Relationships: []
+      }
       theses: {
         Row: {
           catalysts: string[]

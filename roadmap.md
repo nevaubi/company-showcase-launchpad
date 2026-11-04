@@ -96,3 +96,8 @@
 - [x] Financial statements workbook restyled with the same theme (cover, full values with scale formats, input/formula colour coding)
 - [ ] Odd period columns for some banks (BAC shows Nov/May/Aug quarter columns): find which facts carry non-quarter-end dates and map or drop them at build time
 
+
+- [x] Supply-chain map (10-K quoted customers/suppliers/partners/competitors)
+- [ ] Trade opportunity engine
+- [ ] More analyst tools
+- [ ] Portfolio research file

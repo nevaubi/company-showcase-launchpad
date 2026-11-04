@@ -85,6 +85,13 @@
       "when": 1793713724620,
       "tag": "0011_ir_documents_ticker_filed_index",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793817678005,
+      "tag": "0012_migration",
+      "breakpoints": true
     }
   ]
 }

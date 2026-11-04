@@ -22,6 +22,7 @@ import { Route as AuthenticatedAppMarketsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppResearchRouteImport } from './routes/_authenticated/app.research'
 import { Route as AuthenticatedAppSectorsRouteImport } from './routes/_authenticated/app.sectors'
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
+import { Route as AuthenticatedAppSupplyChainRouteImport } from './routes/_authenticated/app.supply-chain'
 import { Route as AuthenticatedAppCompaniesIndexRouteImport } from './routes/_authenticated/app.companies.index'
 import { Route as AuthenticatedAppCompaniesTickerRouteImport } from './routes/_authenticated/app.companies.$ticker'
 import { Route as AuthenticatedAppDocsIndexRouteImport } from './routes/_authenticated/app.docs.index'
@@ -104,6 +105,12 @@ const AuthenticatedAppStatusRoute = AuthenticatedAppStatusRouteImport.update({
   path: '/status',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppSupplyChainRoute =
+  AuthenticatedAppSupplyChainRouteImport.update({
+    id: '/supply-chain',
+    path: '/supply-chain',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppCompaniesIndexRoute =
   AuthenticatedAppCompaniesIndexRouteImport.update({
     id: '/companies/',
@@ -205,6 +212,7 @@ export interface FileRoutesByFullPath {
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
+  '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
@@ -233,6 +241,7 @@ export interface FileRoutesByTo {
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
+  '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
   '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
@@ -263,6 +272,7 @@ export interface FileRoutesById {
   '/_authenticated/app/research': typeof AuthenticatedAppResearchRoute
   '/_authenticated/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/_authenticated/app/status': typeof AuthenticatedAppStatusRoute
+  '/_authenticated/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   '/_authenticated/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
@@ -294,6 +304,7 @@ export interface FileRouteTypes {
     | '/app/research'
     | '/app/sectors'
     | '/app/status'
+    | '/app/supply-chain'
     | '/app/'
     | '/app/companies/$ticker'
     | '/app/docs/$id'
@@ -322,6 +333,7 @@ export interface FileRouteTypes {
     | '/app/research'
     | '/app/sectors'
     | '/app/status'
+    | '/app/supply-chain'
     | '/app'
     | '/app/docs/$id'
     | '/app/theses/$id'
@@ -351,6 +363,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/research'
     | '/_authenticated/app/sectors'
     | '/_authenticated/app/status'
+    | '/_authenticated/app/supply-chain'
     | '/_authenticated/app/'
     | '/_authenticated/app/companies/$ticker'
     | '/_authenticated/app/docs/$id'
@@ -469,6 +482,13 @@ declare module '@tanstack/react-router' {
       path: '/status'
       fullPath: '/app/status'
       preLoaderRoute: typeof AuthenticatedAppStatusRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/supply-chain': {
+      id: '/_authenticated/app/supply-chain'
+      path: '/supply-chain'
+      fullPath: '/app/supply-chain'
+      preLoaderRoute: typeof AuthenticatedAppSupplyChainRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/companies/': {
@@ -622,6 +642,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppResearchRoute: typeof AuthenticatedAppResearchRoute
   AuthenticatedAppSectorsRoute: typeof AuthenticatedAppSectorsRoute
   AuthenticatedAppStatusRoute: typeof AuthenticatedAppStatusRoute
+  AuthenticatedAppSupplyChainRoute: typeof AuthenticatedAppSupplyChainRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
   AuthenticatedAppCompaniesTickerRoute: typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   AuthenticatedAppDocsIdRoute: typeof AuthenticatedAppDocsIdRoute
@@ -638,6 +659,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppResearchRoute: AuthenticatedAppResearchRoute,
   AuthenticatedAppSectorsRoute: AuthenticatedAppSectorsRoute,
   AuthenticatedAppStatusRoute: AuthenticatedAppStatusRoute,
+  AuthenticatedAppSupplyChainRoute: AuthenticatedAppSupplyChainRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
   AuthenticatedAppCompaniesTickerRoute:
     AuthenticatedAppCompaniesTickerRouteWithChildren,

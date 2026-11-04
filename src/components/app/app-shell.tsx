@@ -15,6 +15,7 @@ import {
   LineChart,
   LogOut,
   Menu,
+  Network,
   PieChart,
   Search,
   UserRoundSearch,
@@ -55,6 +56,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     items: [
       { to: "/app/markets", label: "Technicals", icon: LineChart },
       { to: "/app/sectors", label: "Sectors", icon: PieChart },
+      { to: "/app/supply-chain", label: "Supply chain", icon: Network },
       { to: "/app/macro", label: "Macro", icon: Globe2 },
     ],
   },
