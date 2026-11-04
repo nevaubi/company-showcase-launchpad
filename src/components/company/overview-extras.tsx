@@ -47,23 +47,25 @@ export function SetupPanel({ ticker, data, price }: { ticker: string; data: Comp
       {!mc ? (
         m.isLoading ? <Skeleton className="h-40" /> : <p className="text-sm text-muted-foreground">No market history for {ticker}.</p>
       ) : (
+        <div className="grid grid-cols-1 gap-5">
+        <div className="grid grid-cols-3 divide-x rounded-md border bg-secondary/40">
+          {[
+            { k: "Next earnings", v: days != null ? `${days}d` : "—", sub: next ? fmtDate(next.date) : "" },
+            { k: "Avg 2-day move", v: s?.n ? `±${fmtPct(s.avgAbsMove, 1)}` : "—", sub: s?.n ? `${s.n} prints` : "" },
+            { k: "Up after earnings", v: s?.n ? fmtPct(s.upRate, 0) : "—", sub: s?.avgDrift20 != null ? `${fmtPct(s.avgDrift20, 1, true)} avg 20d drift` : "" },
+          ].map((t) => (
+            <div key={t.k} className="min-w-0 px-3 py-2.5">
+              <p className="truncate text-[11px] text-muted-foreground">{t.k}</p>
+              <p className="num text-lg font-medium leading-tight">{t.v}</p>
+              <p className="truncate text-[10.5px] text-muted-foreground">{t.sub}</p>
+            </div>
+          ))}
+        </div>
         <div className="grid grid-cols-1 gap-4 text-[13px] sm:grid-cols-2">
           <div className="min-w-0 space-y-2">
             <p className="eyebrow flex items-center gap-1.5"><CalendarClock className="size-3" /> Earnings</p>
-            {next && (
-              <p>
-                Next release likely around <b>{fmtDate(next.date)}</b>
-                {days != null && <span className="text-muted-foreground"> ({days} days)</span>}
-                <span className="block text-[11px] text-muted-foreground">Estimate: {next.basis}</span>
-              </p>
-            )}
-            {s && s.n > 0 && (
-              <p>
-                Typically moves <b className="num">±{fmtPct(s.avgAbsMove, 1)}</b> over two days, up{" "}
-                <b className="num">{fmtPct(s.upRate, 0)}</b> of {s.n} prints
-                {s.continuation != null && <> · follow-through {fmtPct(s.continuation, 0)}</>}
-              </p>
-            )}
+            {next && <p className="text-[11px] text-muted-foreground">Next-date estimate: {next.basis}</p>}
+            {s?.continuation != null && <p>Follow-through after the print <b className="num">{fmtPct(s.continuation, 0)}</b> of the time</p>}
             {last && (
               <p className="text-muted-foreground">
                 Last measured print {fmtDate(last.date)}:{" "}
@@ -101,6 +103,36 @@ export function SetupPanel({ ticker, data, price }: { ticker: string; data: Comp
               <b className="num text-foreground">{res ? fmtPrice(res.price) : "—"}</b>
             </p>
           </div>
+        </div>
+        {mc.reactions.length > 0 && (
+          <div>
+            <p className="eyebrow mb-2">Last {Math.min(12, mc.reactions.length)} earnings reactions</p>
+            {(() => {
+              const rs = mc.reactions.slice(0, 12).reverse();
+              const max = Math.max(...rs.map((r) => Math.abs(r.move)), 0.01);
+              return (
+                <div className="flex h-24 items-stretch gap-1">
+                  {rs.map((r) => (
+                    <div key={r.date} className="flex min-w-0 flex-1 flex-col" title={`${fmtDate(r.date)}: ${fmtPct(r.move, 1, true)}`}>
+                      <div className="flex flex-1 items-end">
+                        {r.move >= 0 && <div className="w-full rounded-t-sm bg-positive/80" style={{ height: `${(r.move / max) * 100}%` }} />}
+                      </div>
+                      <div className="border-t" />
+                      <div className="flex flex-1 items-start">
+                        {r.move < 0 && <div className="w-full rounded-b-sm bg-negative/80" style={{ height: `${(-r.move / max) * 100}%` }} />}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+            <p className="mt-1 flex justify-between text-[10.5px] text-muted-foreground">
+              <span>{fmtDate(mc.reactions[Math.min(11, mc.reactions.length - 1)].date)}</span>
+              <span>max ±{fmtPct(Math.max(...mc.reactions.slice(0, 12).map((r) => Math.abs(r.move))), 1)}</span>
+              <span>{fmtDate(mc.reactions[0].date)}</span>
+            </p>
+          </div>
+        )}
         </div>
       )}
     </Panel>
@@ -204,12 +236,22 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
       }
       bodyClassName="p-0"
     >
-      <ol className="max-h-[420px] overflow-y-auto scrollbar-thin">
+      <ol className="max-h-[520px] overflow-y-auto scrollbar-thin">
         {events.map((e, i) => {
+          const month = e.date.slice(0, 7);
+          const header =
+            i === 0 || events[i - 1].date.slice(0, 7) !== month ? (
+              <li key={`m-${month}`} className="sticky top-0 z-10 border-b bg-secondary/90 px-4 py-1 backdrop-blur">
+                <span className="eyebrow">{new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}</span>
+              </li>
+            ) : null;
           const body = (
             <>
-              <span className="num w-20 shrink-0 text-[11px] text-muted-foreground">{fmtDate(e.date)}</span>
-              <span className={cn("mt-1 size-2 shrink-0 rounded-full", e.tone === "positive" ? "bg-positive" : e.tone === "negative" ? "bg-negative" : "bg-chart-2")} />
+              <span className="num w-7 shrink-0 pt-px text-right text-[12px] font-medium tabular-nums">{Number(e.date.slice(8, 10))}</span>
+              <span className="relative flex w-2 shrink-0 justify-center self-stretch">
+                <span className="absolute inset-y-[-10px] w-px bg-border" />
+                <span className={cn("relative mt-1.5 size-2 rounded-full ring-2 ring-card", e.tone === "positive" ? "bg-positive" : e.tone === "negative" ? "bg-negative" : "bg-chart-2")} />
+              </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1.5">
                   <Badge variant="outline" className="shrink-0 text-[10px]">{KIND_LABEL[e.kind]}</Badge>
@@ -220,20 +262,21 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
               {e.accn && <FileText className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
             </>
           );
-          return (
-            <li key={`${e.kind}-${e.accn ?? e.title}-${e.date}-${i}`} className="border-b last:border-b-0">
+          return [
+            header,
+            <li key={`${e.kind}-${e.accn ?? e.title}-${e.date}-${i}`} className="border-b border-border/60 last:border-b-0">
               {e.accn ? (
                 <button
                   onClick={() => open({ ticker, label: KIND_LABEL[e.kind], periodLabel: e.date, unit: "usd", value: 0, doc: { accn: e.accn!, doc: e.doc ?? "", title: e.title } })}
-                  className="flex w-full items-start gap-3 px-4 py-2.5 text-left transition-colors hover:bg-secondary"
+                  className="flex w-full items-start gap-3 px-4 py-2 text-left transition-colors hover:bg-secondary"
                 >
                   {body}
                 </button>
               ) : (
-                <div className="flex items-start gap-3 px-4 py-2.5">{body}</div>
+                <div className="flex items-start gap-3 px-4 py-2">{body}</div>
               )}
-            </li>
-          );
+            </li>,
+          ];
         })}
         {events.length === 0 && <li className="p-4 text-sm text-muted-foreground">Nothing in this view.</li>}
       </ol>
