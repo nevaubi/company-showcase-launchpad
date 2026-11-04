@@ -156,7 +156,7 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
                 cols: { [freq]: cols },
                 scope: `${groups.length} breakdowns in view · ${dimLabel === "All" ? "all types" : dimLabel} · ${cols.length} ${periodWord}s (${range})${q ? ` · lines matching “${query.trim()}”` : ""}`,
               };
-      const [{ exportIrWorkbook }, logo] = await Promise.all([import("@/lib/export/ir-export.client"), fetchLogo(wordmark.url)]);
+      const [{ exportIrWorkbook }, logo] = await Promise.all([import("@/lib/export/ir-export-browser"), fetchLogo(wordmark.url)]);
       const { blob, stats } = await exportIrWorkbook({
         ticker,
         company: cov?.shortName ?? company.data?.profile.name,
