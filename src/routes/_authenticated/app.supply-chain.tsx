@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSource } from "@/components/source/source-context";
 import { supplyLinksQuery } from "@/lib/supply/query";
+import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
 import { useUniverse } from "@/lib/data";
 import { COVERAGE } from "@/lib/coverage";
 import { focusGraph, linkDollars, nodeRisk, RELATIONS, secondOrder, simulateShock, type GraphNode, type Relation, type RiskLink, type ShockImpact } from "@/lib/supply/core";
@@ -108,7 +109,7 @@ function SupplyChainPage() {
       <PageHeader
         eyebrow="Markets"
         title="Supply chain map"
-        description="Who each company sells to, buys from, works with and competes against, as named in its latest 10-K — with disclosed dollar exposure, risk flags and a shock simulator. Every link opens the sentence it comes from."
+        description="Who each company sells to, buys from, works with and competes against, as named in its latest 10-K and 10-Q — with disclosed dollar exposure, risk flags, year-over-year changes, earnings sympathy moves and a shock simulator. Every link opens the sentence it comes from."
         actions={
           <Select value={ticker} onValueChange={go}>
             <SelectTrigger className="w-[240px]">
@@ -188,11 +189,19 @@ function SupplyChainPage() {
 
         <Panel title="Analysis" className="min-w-0">
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="mb-3 grid w-full grid-cols-3">
-              <TabsTrigger value="evidence">Evidence</TabsTrigger>
-              <TabsTrigger value="shock">Shock</TabsTrigger>
-              <TabsTrigger value="exposure">Exposure</TabsTrigger>
+            <TabsList className="mb-3 grid w-full grid-cols-5">
+              <TabsTrigger value="evidence" className="px-1 text-xs">Evidence</TabsTrigger>
+              <TabsTrigger value="reactions" className="px-1 text-xs">Moves</TabsTrigger>
+              <TabsTrigger value="changes" className="px-1 text-xs">Changes</TabsTrigger>
+              <TabsTrigger value="shock" className="px-1 text-xs">Shock</TabsTrigger>
+              <TabsTrigger value="exposure" className="px-1 text-xs">Exposure</TabsTrigger>
             </TabsList>
+            <TabsContent value="reactions">
+              {tab === "reactions" && <ReactionsTab ticker={ticker} name={focus.name} graph={graph} covered={covered} onSelect={(k) => { setSelected(k); setTab("evidence"); }} />}
+            </TabsContent>
+            <TabsContent value="changes">
+              {tab === "changes" && <ChangesTab ticker={ticker} name={focus.name} onOpen={(l, label) => openLink(l as RiskLink, label)} />}
+            </TabsContent>
 
             <TabsContent value="evidence">
               {sel ? (

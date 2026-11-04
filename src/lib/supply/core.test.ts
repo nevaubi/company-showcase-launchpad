@@ -45,3 +45,41 @@ describe("exposure and shocks", () => {
     expect(r[0].severity).toBe("high");
   });
 });
+
+import { eventReturn, linkChanges, spillover } from "./core";
+
+describe("supply link changes", () => {
+  it("finds added, dropped and share moves between two 10-Ks", () => {
+    const all = [
+      link({ accn: "new", counterparty: "TSMC", share_pct: 12 }),
+      link({ accn: "new", counterparty: "Foxconn" }),
+      link({ accn: "old", counterparty: "TSMC", share_pct: 9 }),
+      link({ accn: "old", counterparty: "Samsung" }),
+    ];
+    const c = linkChanges("AAPL", all, "new", "old");
+    expect(c.map((x) => `${x.kind}:${x.name}`)).toEqual(["share:TSMC", "added:Foxconn", "dropped:Samsung"]);
+    expect(c[0]).toMatchObject({ from: 9, to: 12 });
+  });
+});
+
+describe("earnings reactions", () => {
+  const closes: [string, number][] = [["2025-01-02", 100], ["2025-01-03", 100], ["2025-01-06", 110], ["2025-01-07", 121]];
+  it("measures close-before to close-after the release", () => {
+    expect(eventReturn(closes, "2025-01-06")).toBeCloseTo(0.21);
+    expect(eventReturn(closes, "2025-01-04")).toBeCloseTo(0.21); // weekend release → next trading day
+  });
+  it("computes a 2x beta when the other stock moves twice as much", () => {
+    const f: [string, number][] = [], o: [string, number][] = [];
+    const moves = [0.05, -0.03, 0.02, -0.04];
+    let pf = 100, po = 100;
+    moves.forEach((m, k) => {
+      for (const [d, mm] of [[`2025-0${k + 1}-01`, 0], [`2025-0${k + 1}-02`, m], [`2025-0${k + 1}-03`, 0]] as const) {
+        pf *= 1 + mm; po *= 1 + 2 * mm; f.push([d, pf]); o.push([d, po]);
+      }
+    });
+    const s = spillover(f, o, moves.map((_, k) => `2025-0${k + 1}-02`))!;
+    expect(s.events).toBe(4);
+    expect(s.sameDir).toBe(1);
+    expect(s.beta!).toBeGreaterThan(1.9);
+  });
+});

@@ -215,3 +215,93 @@ export function simulateShock(source: string, shock: number, all: RiskLink[], na
   const rank = { high: 0, medium: 1, low: 2 };
   return [...out.values()].sort((a, b) => (b.revenuePct ?? -1) - (a.revenuePct ?? -1) || rank[a.severity] - rank[b.severity] || a.hop - b.hop);
 }
+
+// ---------- Change over time ----------
+
+export interface LinkChange {
+  key: string;
+  name: string;
+  ticker: string | null;
+  relation: Relation;
+  kind: "added" | "dropped" | "share";
+  from: number | null;
+  to: number | null;
+  /** link from the newer filing (added/share) or the older one (dropped) — for click-to-source */
+  link: SupplyLink;
+}
+
+const linkKey = (l: SupplyLink) => `${l.relation}:${l.counterparty_ticker ?? normText(l.counterparty)}`;
+
+/** 10-K filings (newest first) that `ticker` itself filed, among the links. */
+export function annualFilings(ticker: string, all: SupplyLink[]): { accn: string; filed: string }[] {
+  const m = new Map<string, string>();
+  for (const l of all) if (l.ticker === ticker && l.form === "10-K") m.set(l.accn, l.filed);
+  return [...m].map(([accn, filed]) => ({ accn, filed })).sort((a, b) => b.filed.localeCompare(a.filed));
+}
+
+/** Counterparties named in `newer` but not `older` (added), the reverse (dropped), and stated-share moves ≥ 1pt. */
+export function linkChanges(ticker: string, all: SupplyLink[], newerAccn: string, olderAccn: string): LinkChange[] {
+  const pick = (accn: string) => {
+    const m = new Map<string, SupplyLink>();
+    for (const l of all) if (l.ticker === ticker && l.accn === accn && !m.has(linkKey(l))) m.set(linkKey(l), l);
+    return m;
+  };
+  const a = pick(newerAccn), b = pick(olderAccn);
+  const out: LinkChange[] = [];
+  const mk = (l: SupplyLink, kind: LinkChange["kind"], from: number | null, to: number | null): LinkChange =>
+    ({ key: linkKey(l), name: l.counterparty, ticker: l.counterparty_ticker, relation: l.relation, kind, from, to, link: l });
+  for (const [k, l] of a) {
+    const o = b.get(k);
+    if (!o) out.push(mk(l, "added", null, l.share_pct));
+    else if (l.share_pct != null && o.share_pct != null && Math.abs(l.share_pct - o.share_pct) >= 1) out.push(mk(l, "share", o.share_pct, l.share_pct));
+  }
+  for (const [k, l] of b) if (!a.has(k)) out.push(mk(l, "dropped", l.share_pct, null));
+  const order = { share: 0, added: 1, dropped: 2 };
+  return out.sort((x, y) => order[x.kind] - order[y.kind] || x.name.localeCompare(y.name));
+}
+
+// ---------- Earnings price reactions ----------
+
+/** [date, close] pairs sorted ascending. */
+export type Closes = [string, number][];
+
+/** Return from the close before `date` to the close after it (covers pre-market and after-hours releases). */
+export function eventReturn(c: Closes, date: string): number | null {
+  const i = c.findIndex(([d]) => d >= date);
+  if (i < 1 || i + 1 >= c.length) return null;
+  // released on a trading day: close[i-1] → close[i+1]
+  return c[i + 1][1] / c[i - 1][1] - 1;
+}
+
+export interface Spillover {
+  events: number;
+  /** mean move of the counterparty around the focus company's earnings */
+  meanMove: number;
+  /** mean absolute move */
+  meanAbs: number;
+  /** share of events where both moved the same way */
+  sameDir: number;
+  /** slope of counterparty move on focus move */
+  beta: number | null;
+  rows: { date: string; focus: number; other: number }[];
+}
+
+export function spillover(focus: Closes, other: Closes, dates: string[]): Spillover | null {
+  const rows = dates
+    .map((date) => ({ date, focus: eventReturn(focus, date), other: eventReturn(other, date) }))
+    .filter((r): r is { date: string; focus: number; other: number } => r.focus != null && r.other != null);
+  if (rows.length < 3) return null;
+  const n = rows.length;
+  const mf = rows.reduce((s, r) => s + r.focus, 0) / n;
+  const mo = rows.reduce((s, r) => s + r.other, 0) / n;
+  const cov = rows.reduce((s, r) => s + (r.focus - mf) * (r.other - mo), 0);
+  const vf = rows.reduce((s, r) => s + (r.focus - mf) ** 2, 0);
+  return {
+    events: n,
+    meanMove: mo,
+    meanAbs: rows.reduce((s, r) => s + Math.abs(r.other), 0) / n,
+    sameDir: rows.filter((r) => Math.sign(r.focus) === Math.sign(r.other)).length / n,
+    beta: vf > 0 ? cov / vf : null,
+    rows,
+  };
+}
