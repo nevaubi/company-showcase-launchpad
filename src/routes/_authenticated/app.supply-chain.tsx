@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSource } from "@/components/source/source-context";
 import { supplyLinksQuery } from "@/lib/supply/query";
 import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
+import { SupplyIntel } from "@/components/supply/supply-intel";
 import { ConfidenceBadge, DependencyCard, FragilityRanking, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
 import { confidence, mirrors, type ProLink } from "@/lib/supply/core";
 import { useUniverse } from "@/lib/data";
@@ -352,6 +353,9 @@ function SupplyChainPage() {
         <SupplyNotePanel ticker={ticker} byId={byId} onOpen={(l) => openLink(l, `${l.counterparty} · ${l.relation}`)} />
         <DependencyCard ticker={ticker} all={all as ProLink[]} />
         <RegionPanel graph={graph} />
+      </div>
+      <div className="mt-4 grid grid-cols-1">
+        <SupplyIntel ticker={ticker} />
       </div>
       <div className="mt-4 grid grid-cols-1">
         <FragilityRanking tickers={[...covered]} all={all as ProLink[]} names={names} onPick={go} current={ticker} />

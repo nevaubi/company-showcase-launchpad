@@ -122,3 +122,4 @@
 - [ ] XBRL customer-concentration history + purchase obligations charts
 - [ ] World map view, lead/lag signals, ecosystem baskets, region shock
 - [ ] Assistant tools for exposure questions
+- [x] Supply chain alt-data intelligence panel (full 78-company read running)
