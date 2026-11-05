@@ -783,6 +783,75 @@ export type Database = {
         }
         Relationships: []
       }
+      supply_signals: {
+        Row: {
+          accn: string | null
+          amount_usd: number | null
+          counterparty: string | null
+          country: string | null
+          created_at: string
+          detail: string | null
+          doc: string | null
+          filed: string | null
+          form: string | null
+          id: string
+          impact: string
+          kind: string
+          pct: number | null
+          period: string | null
+          quote: string
+          source_kind: string
+          speaker: string | null
+          ticker: string
+          title: string
+          url: string | null
+        }
+        Insert: {
+          accn?: string | null
+          amount_usd?: number | null
+          counterparty?: string | null
+          country?: string | null
+          created_at?: string
+          detail?: string | null
+          doc?: string | null
+          filed?: string | null
+          form?: string | null
+          id?: string
+          impact?: string
+          kind: string
+          pct?: number | null
+          period?: string | null
+          quote: string
+          source_kind: string
+          speaker?: string | null
+          ticker: string
+          title: string
+          url?: string | null
+        }
+        Update: {
+          accn?: string | null
+          amount_usd?: number | null
+          counterparty?: string | null
+          country?: string | null
+          created_at?: string
+          detail?: string | null
+          doc?: string | null
+          filed?: string | null
+          form?: string | null
+          id?: string
+          impact?: string
+          kind?: string
+          pct?: number | null
+          period?: string | null
+          quote?: string
+          source_kind?: string
+          speaker?: string | null
+          ticker?: string
+          title?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       theses: {
         Row: {
           catalysts: string[]
