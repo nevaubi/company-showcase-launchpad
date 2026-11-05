@@ -1,4 +1,14 @@
 {
+ "A": {
+  "file": "A.svg",
+  "source": "Agilent Technologies-Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8c/Agilent_Technologies-Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "AA": {
+  "file": "AA.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "AAPL": {
   "file": "AAPL.svg",
   "source": "Apple logo black.svg",
@@ -9,25 +19,175 @@
   "source": "AbbVie logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/c/cc/AbbVie_logo.svg"
  },
+ "ABNB": {
+  "file": "ABNB.svg",
+  "source": "Airbnb Logo B\u00e9lo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/69/Airbnb_Logo_B%C3%A9lo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "ABT": {
   "file": "ABT.svg",
   "source": "Abbott Laboratories 2025 logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/Abbott_Laboratories_2025_logo.svg"
+ },
+ "ACGL": {
+  "file": "ACGL.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ACGL.png"
+ },
+ "ACM": {
+  "file": "ACM.png",
+  "source": "AECOM 1c-black rgb.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/95/AECOM_1c-black_rgb.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ACN": {
+  "file": "ACN.svg",
+  "source": "Accenture.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Accenture.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "ADBE": {
   "file": "ADBE.svg",
   "source": "Adobe Corporate Horizontal Red HEX.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/b/b1/Adobe_Corporate_Horizontal_Red_HEX.svg"
  },
+ "ADI": {
+  "file": "ADI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ADM": {
+  "file": "ADM.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ADP": {
+  "file": "ADP.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ADSK": {
+  "file": "ADSK.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AEE": {
+  "file": "AEE.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AEIS": {
+  "file": "AEIS.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AEP": {
+  "file": "AEP.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AES": {
+  "file": "AES.svg",
+  "source": "AES Corporation logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d0/AES_Corporation_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "AFL": {
+  "file": "AFL.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/AFL.png"
+ },
+ "AGNC": {
+  "file": "AGNC.png",
+  "source": "agnc.com site icon",
+  "url": "https://agnc.com/wp-content/uploads/cropped-favicon-192x192.png"
+ },
+ "AIG": {
+  "file": "AIG.svg",
+  "source": "AIG logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/b3/AIG_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "AIZ": {
+  "file": "AIZ.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/AIZ.png"
+ },
+ "AJG": {
+  "file": "AJG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/AJG.png"
+ },
+ "AKAM": {
+  "file": "AKAM.svg",
+  "source": "Akamai-2025.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2f/Akamai-2025.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ALB": {
+  "file": "ALB.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ALGN": {
+  "file": "ALGN.svg",
+  "source": "Align Technology logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/97/Align_Technology_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ALL": {
+  "file": "ALL.svg",
+  "source": "Allstate wordmark.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/88/Allstate_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ALLE": {
+  "file": "ALLE.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ALLE.png"
+ },
+ "ALLY": {
+  "file": "ALLY.svg",
+  "source": "Ally Financial.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/00/Ally_Financial.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ALSN": {
+  "file": "ALSN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AM": {
+  "file": "AM.png",
+  "source": "www.anteroresources.com site icon",
+  "url": "https://d1io3yog0oux5.cloudfront.net/_69d22111deb87532f98551ac86e18027/anteroresources/files/theme/images/favicons/apple-touch-icon.png"
+ },
+ "AMAT": {
+  "file": "AMAT.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AMCR": {
+  "file": "AMCR.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "AMD": {
   "file": "AMD.svg",
   "source": "AMD Logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/7/7c/AMD_Logo.svg"
  },
+ "AME": {
+  "file": "AME.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AMG": {
+  "file": "AMG.png",
+  "source": "www.amg.com site icon",
+  "url": "https://media.amg.com/wp-content/uploads/2023/04/12020948/cropped-ms-icon-310x310-1-192x192.png"
+ },
  "AMGN": {
   "file": "AMGN.svg",
   "source": "Amgen.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/a/ab/Amgen.svg"
+ },
+ "AMP": {
+  "file": "AMP.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "AMT": {
   "file": "AMT.svg",
@@ -39,15 +199,115 @@
   "source": "Amazon icon.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/4/4a/Amazon_icon.svg"
  },
+ "ANET": {
+  "file": "ANET.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AON": {
+  "file": "AON.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AOS": {
+  "file": "AOS.svg",
+  "source": "AO Smith logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/04/AO_Smith_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "APA": {
+  "file": "APA.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/APA.png"
+ },
+ "APD": {
+  "file": "APD.svg",
+  "source": "Logo Air Products.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/20/Logo_Air_Products.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "APH": {
+  "file": "APH.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "APO": {
+  "file": "APO.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "APP": {
+  "file": "APP.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/APP.png"
+ },
+ "APPF": {
+  "file": "APPF.png",
+  "source": "www.appfolioinc.com site icon",
+  "url": "https://www.appfolio.com/_nuxt/icons/icon_512x512.4826b9.png"
+ },
+ "APTV": {
+  "file": "APTV.svg",
+  "source": "Aptiv logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/26/Aptiv_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "AR": {
+  "file": "AR.png",
+  "source": "www.anteroresources.com site icon",
+  "url": "https://d1io3yog0oux5.cloudfront.net/_69d22111deb87532f98551ac86e18027/anteroresources/files/theme/images/favicons/apple-touch-icon.png"
+ },
+ "ARE": {
+  "file": "ARE.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ARE.png"
+ },
+ "ARES": {
+  "file": "ARES.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ARES.png"
+ },
+ "ARMK": {
+  "file": "ARMK.svg",
+  "source": "www.aramark.com site icon",
+  "url": "https://www.aramark.com/safari-pinned-tab.svg?v=1"
+ },
+ "ARWR": {
+  "file": "ARWR.svg",
+  "source": "arrowheadpharma.com site icon",
+  "url": "https://arrowheadpharma.com/s/favicon.htbAxMCQ.svg"
+ },
+ "ATO": {
+  "file": "ATO.svg",
+  "source": "Atmos Energy Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/fa/Atmos_Energy_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "AVGO": {
   "file": "AVGO.svg",
   "source": "Broadcom logo (2016-present).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/58/Broadcom_logo_%282016-present%29.svg"
  },
+ "AVY": {
+  "file": "AVY.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AWK": {
+  "file": "AWK.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "AXON": {
+  "file": "AXON.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "AXP": {
   "file": "AXP.svg",
   "source": "American Express logo (2018).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/f/fa/American_Express_logo_%282018%29.svg"
+ },
+ "AZO": {
+  "file": "AZO.png",
+  "source": "Logo of AutoZone.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/38/Logo_of_AutoZone.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "BA": {
   "file": "BA.svg",
@@ -59,115 +319,1305 @@
   "source": "Bank of America logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/20/Bank_of_America_logo.svg"
  },
+ "BAH": {
+  "file": "BAH.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "BALL": {
+  "file": "BALL.svg",
+  "source": "Ball Corporation logo 2024.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/ac/Ball_Corporation_logo_2024.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BAX": {
+  "file": "BAX.svg",
+  "source": "Baxter.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d4/Baxter.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BBY": {
+  "file": "BBY.svg",
+  "source": "Best Buy logo 2018.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c4/Best_Buy_logo_2018.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BDX": {
+  "file": "BDX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "BE": {
+  "file": "BE.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "BEN": {
+  "file": "BEN.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/BEN.png"
+ },
+ "BF-B": {
+  "file": "BF-B.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/BF-B.png"
+ },
+ "BG": {
+  "file": "BG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "BIIB": {
+  "file": "BIIB.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/BIIB.png"
+ },
+ "BJ": {
+  "file": "BJ.svg",
+  "source": "BJs Wholesale Club Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/4/48/BJs_Wholesale_Club_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "BKNG": {
   "file": "BKNG.svg",
   "source": "Booking Holdings Inc. Logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/3/3d/Booking_Holdings_Inc._Logo.svg"
+ },
+ "BKR": {
+  "file": "BKR.svg",
+  "source": "Baker Hughes logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/69/Baker_Hughes_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BLK": {
+  "file": "BLK.svg",
+  "source": "BlackRock wordmark.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/85/BlackRock_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BMRN": {
+  "file": "BMRN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "BMY": {
+  "file": "BMY.svg",
+  "source": "Bristol-Myers Squibb logo (2020).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/Bristol-Myers_Squibb_logo_%282020%29.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BNY": {
+  "file": "BNY.svg",
+  "source": "BNY Mellon.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a2/BNY_Mellon.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BR": {
+  "file": "BR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/BR.png"
+ },
+ "BRK-B": {
+  "file": "BRK-B.svg",
+  "source": "Berkshire-Hathaway-Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6e/Berkshire-Hathaway-Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BRKR": {
+  "file": "BRKR.jpg",
+  "source": "Bruker-logo.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/Bruker-logo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BRO": {
+  "file": "BRO.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/BRO.png"
+ },
+ "BROS": {
+  "file": "BROS.svg",
+  "source": "Dutch Bros Coffee wordmark.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/20/Dutch_Bros_Coffee_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BSX": {
+  "file": "BSX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "BSY": {
+  "file": "BSY.svg",
+  "source": "www.bentley.com site icon",
+  "url": "https://www.bentley.com/favicon.svg"
+ },
+ "BURL": {
+  "file": "BURL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "BWA": {
+  "file": "BWA.svg",
+  "source": "BorgWarner Logo Dark Blue (1).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/BorgWarner_Logo_Dark_Blue_%281%29.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BWXT": {
+  "file": "BWXT.svg",
+  "source": "BWX Technologies logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/0e/BWX_Technologies_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "BX": {
+  "file": "BX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "BXP": {
+  "file": "BXP.png",
+  "source": "Bxp boston logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/b2/Bxp_boston_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "C": {
   "file": "C.svg",
   "source": "Citi logo March 2023.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/7/73/Citi_logo_March_2023.svg"
  },
+ "CAH": {
+  "file": "CAH.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CARR": {
+  "file": "CARR.svg",
+  "source": "Logo of the Carrier Corporation.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8f/Logo_of_the_Carrier_Corporation.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CART": {
+  "file": "CART.svg",
+  "source": "Instacart logo and wordmark.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/9f/Instacart_logo_and_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CASY": {
+  "file": "CASY.svg",
+  "source": "Casey's logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Casey%27s_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "CAT": {
   "file": "CAT.svg",
   "source": "Caterpillar-shortened.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Caterpillar-shortened.svg"
+ },
+ "CB": {
+  "file": "CB.svg",
+  "source": "Chubb-Limited-logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/4/48/Chubb-Limited-logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CBOE": {
+  "file": "CBOE.svg",
+  "source": "Cboe Global Markets Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8a/Cboe_Global_Markets_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CBRE": {
+  "file": "CBRE.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CCI": {
+  "file": "CCI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CCK": {
+  "file": "CCK.svg",
+  "source": "Crown Holdings logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/22/Crown_Holdings_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CCL": {
+  "file": "CCL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CDE": {
+  "file": "CDE.png",
+  "source": "Coeur Mining Logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/Coeur_Mining_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CDNS": {
+  "file": "CDNS.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CDW": {
+  "file": "CDW.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CEG": {
+  "file": "CEG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CEG.png"
+ },
+ "CELH": {
+  "file": "CELH.png",
+  "source": "www.celsiusholdingsinc.com site icon",
+  "url": "https://celsiusholdingsinc.com/wp-content/uploads/2024/06/cropped-favicon-192x192.png"
+ },
+ "CF": {
+  "file": "CF.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CFG": {
+  "file": "CFG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CFR": {
+  "file": "CFR.svg",
+  "source": "www.frostbank.com site icon",
+  "url": "https://www.frostbank.com/favicon.svg"
+ },
+ "CG": {
+  "file": "CG.svg",
+  "source": "The Carlyle Group logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/01/The_Carlyle_Group_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CHD": {
+  "file": "CHD.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CHD.png"
+ },
+ "CHDN": {
+  "file": "CHDN.png",
+  "source": "www.churchilldownsincorporated.com site icon",
+  "url": "https://www.churchilldownsincorporated.com/wp-content/themes/berg-theme-child/assets/images/favicon/apple-touch-icon.png"
+ },
+ "CHRW": {
+  "file": "CHRW.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CHTR": {
+  "file": "CHTR.svg",
+  "source": "Charter Communications Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/26/Charter_Communications_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CI": {
+  "file": "CI.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CI.png"
+ },
+ "CIEN": {
+  "file": "CIEN.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CIEN.png"
+ },
+ "CINF": {
+  "file": "CINF.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CINF.png"
+ },
+ "CL": {
+  "file": "CL.svg",
+  "source": "Colgate-Palmolive (2025).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/86/Colgate-Palmolive_%282025%29.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CLF": {
+  "file": "CLF.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CLH": {
+  "file": "CLH.jpg",
+  "source": "Clean Harbors Logo RED rgb H space.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/87/Clean_Harbors_Logo_RED_rgb_H_space.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CLX": {
+  "file": "CLX.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "CMCSA": {
   "file": "CMCSA.svg",
   "source": "NBC Peacock (2022; 3D).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/8/8b/NBC_Peacock_%282022%3B_3D%29.svg"
  },
+ "CME": {
+  "file": "CME.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CMG": {
+  "file": "CMG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CMG.png"
+ },
+ "CMI": {
+  "file": "CMI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CMS": {
+  "file": "CMS.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CMS.png"
+ },
+ "CNC": {
+  "file": "CNC.svg",
+  "source": "Centene Corporation Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Centene_Corporation_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CNH": {
+  "file": "CNH.svg",
+  "source": "CNH Industrial.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/9e/CNH_Industrial.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CNM": {
+  "file": "CNM.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CNP": {
+  "file": "CNP.svg",
+  "source": "CenterPoint Energy logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/06/CenterPoint_Energy_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CNX": {
+  "file": "CNX.svg",
+  "source": "www.consolenergy.com site icon",
+  "url": "https://corenaturalresources.com/wp-content/uploads/2024/12/icon.svg"
+ },
+ "COF": {
+  "file": "COF.svg",
+  "source": "Capital One logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/98/Capital_One_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "COHR": {
+  "file": "COHR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/COHR.png"
+ },
+ "COIN": {
+  "file": "COIN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "COO": {
+  "file": "COO.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/COO.png"
+ },
  "COP": {
   "file": "COP.svg",
   "source": "ConocoPhillips Logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/0/0c/ConocoPhillips_Logo.svg"
+ },
+ "COR": {
+  "file": "COR.png",
+  "source": "Cencora logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/7/79/Cencora_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "COST": {
   "file": "COST.svg",
   "source": "Costco Wholesale logo 2010-10-26.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/59/Costco_Wholesale_logo_2010-10-26.svg"
  },
+ "CPAY": {
+  "file": "CPAY.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CPAY.png"
+ },
+ "CPRT": {
+  "file": "CPRT.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CPT": {
+  "file": "CPT.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CPT.png"
+ },
+ "CR": {
+  "file": "CR.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CRH": {
+  "file": "CRH.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CRL": {
+  "file": "CRL.svg",
+  "source": "Charles River Laboratories Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/36/Charles_River_Laboratories_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "CRM": {
   "file": "CRM.svg",
   "source": "Salesforce.com logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/f/f9/Salesforce.com_logo.svg"
+ },
+ "CRS": {
+  "file": "CRS.png",
+  "source": "Carpenter Technology.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6f/Carpenter_Technology.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CRUS": {
+  "file": "CRUS.svg",
+  "source": "www.cirrus.com site icon",
+  "url": "https://www.cirrus.com/icon.svg?icon.00wnehcofcpwv.svg"
+ },
+ "CRWD": {
+  "file": "CRWD.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "CSCO": {
   "file": "CSCO.svg",
   "source": "Cisco logo blue 2016.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/0/08/Cisco_logo_blue_2016.svg"
  },
+ "CSGP": {
+  "file": "CSGP.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CSX": {
+  "file": "CSX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "CTAS": {
+  "file": "CTAS.svg",
+  "source": "Cintas-Logo.SVG",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/5a/Cintas-Logo.SVG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CTSH": {
+  "file": "CTSH.jpg",
+  "source": "Cognizant Technology Solutions - Kolkata 2011-08-29 4824.JPG",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6f/Cognizant_Technology_Solutions_-_Kolkata_2011-08-29_4824.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CTVA": {
+  "file": "CTVA.svg",
+  "source": "Corteva logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Corteva_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CVLT": {
+  "file": "CVLT.png",
+  "source": "www.commvault.com site icon",
+  "url": "https://www.commvault.com/wp-content/uploads/2025/05/favicon.png"
+ },
+ "CVNA": {
+  "file": "CVNA.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/CVNA.png"
+ },
+ "CVS": {
+  "file": "CVS.svg",
+  "source": "CVS Health Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/df/CVS_Health_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "CVX": {
   "file": "CVX.svg",
   "source": "Chevron Logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/8/86/Chevron_Logo.svg"
+ },
+ "D": {
+  "file": "D.svg",
+  "source": "Dominion Energy logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/b8/Dominion_Energy_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DAL": {
+  "file": "DAL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "DAR": {
+  "file": "DAR.png",
+  "source": "www.darlingii.com site icon",
+  "url": "https://www.darlingii.com/android-chrome-512x512.png"
+ },
+ "DASH": {
+  "file": "DASH.svg",
+  "source": "DoorDash Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6a/DoorDash_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DD": {
+  "file": "DD.svg",
+  "source": "DuPont logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a3/DuPont_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DDOG": {
+  "file": "DDOG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/DDOG.png"
  },
  "DE": {
   "file": "DE.svg",
   "source": "John Deere Logo \u2013 Flat 2 Color.svg",
   "url": "https://upload.wikimedia.org/wikipedia/en/0/02/John_Deere_Logo_%E2%80%93_Flat_2_Color.svg"
  },
+ "DECK": {
+  "file": "DECK.png",
+  "source": "Deckers Brands logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Deckers_Brands_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DELL": {
+  "file": "DELL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "DG": {
+  "file": "DG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "DGX": {
+  "file": "DGX.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/DGX.png"
+ },
+ "DHI": {
+  "file": "DHI.svg",
+  "source": "D. R. Horton logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/93/D._R._Horton_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DHR": {
+  "file": "DHR.svg",
+  "source": "Danaher Corporation logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d8/Danaher_Corporation_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "DIS": {
   "file": "DIS.svg",
   "source": "Disney.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Disney.svg"
+ },
+ "DLR": {
+  "file": "DLR.svg",
+  "source": "Digital Realty TM Brandmark RGB Black.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f2/Digital_Realty_TM_Brandmark_RGB_Black.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DLTR": {
+  "file": "DLTR.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "DOC": {
+  "file": "DOC.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/DOC.png"
+ },
+ "DOCN": {
+  "file": "DOCN.svg",
+  "source": "DigitalOcean logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/ff/DigitalOcean_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DOCU": {
+  "file": "DOCU.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "DOV": {
+  "file": "DOV.png",
+  "source": "Dover Corporation logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/ae/Dover_Corporation_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DOW": {
+  "file": "DOW.svg",
+  "source": "Dow Chemical Company logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/9b/Dow_Chemical_Company_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DPZ": {
+  "file": "DPZ.svg",
+  "source": "Domino's 2025.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/64/Domino%27s_2025.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DRI": {
+  "file": "DRI.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/DRI.png"
+ },
+ "DT": {
+  "file": "DT.png",
+  "source": "www.dynatrace.com site icon",
+  "url": "https://dt-cdn.net/images/apple-touch-icon-180x180-180-80738a22c0.png"
+ },
+ "DTE": {
+  "file": "DTE.svg",
+  "source": "DTE Logo Blue.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/07/DTE_Logo_Blue.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "DUK": {
   "file": "DUK.svg",
   "source": "Duke Energy logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/Duke_Energy_logo.svg"
  },
+ "DUOL": {
+  "file": "DUOL.png",
+  "source": "www.duolingo.com site icon",
+  "url": "https://d35aaqx5ub95lt.cloudfront.net/images/duolingo-touch-icon2.png"
+ },
+ "DVA": {
+  "file": "DVA.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "DVN": {
+  "file": "DVN.svg",
+  "source": "Devon-Energy-Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/67/Devon-Energy-Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "DXCM": {
+  "file": "DXCM.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/DXCM.png"
+ },
+ "EBAY": {
+  "file": "EBAY.svg",
+  "source": "EBay logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/1b/EBay_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ECHO": {
+  "file": "ECHO.svg",
+  "source": "EchoStar logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/bb/EchoStar_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ECL": {
+  "file": "ECL.svg",
+  "source": "Ecolab.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/26/Ecolab.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ED": {
+  "file": "ED.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "EFX": {
+  "file": "EFX.svg",
+  "source": "Equifax.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/24/Equifax.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "EG": {
+  "file": "EG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "EIX": {
+  "file": "EIX.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/EIX.png"
+ },
+ "EL": {
+  "file": "EL.svg",
+  "source": "Est\u00e9e Lauder Companies logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/03/Est%C3%A9e_Lauder_Companies_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ELAN": {
+  "file": "ELAN.svg",
+  "source": "Elanco.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Elanco.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ELV": {
+  "file": "ELV.svg",
+  "source": "Elevance Health Logo 2022.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Elevance_Health_Logo_2022.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "EME": {
+  "file": "EME.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/EME.png"
+ },
+ "EMR": {
+  "file": "EMR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/EMR.png"
+ },
+ "ENS": {
+  "file": "ENS.png",
+  "source": "www.enersys.com site icon",
+  "url": "https://www.enersys.com/apple-touch-icon.png"
+ },
+ "EOG": {
+  "file": "EOG.svg",
+  "source": "EOG Resources logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c7/EOG_Resources_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "EQIX": {
   "file": "EQIX.svg",
   "source": "Equinix logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Equinix_logo.svg"
+ },
+ "EQT": {
+  "file": "EQT.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/EQT.png"
+ },
+ "ERIE": {
+  "file": "ERIE.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ERIE.png"
+ },
+ "ES": {
+  "file": "ES.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ES.png"
+ },
+ "ESS": {
+  "file": "ESS.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ESS.png"
+ },
+ "ETN": {
+  "file": "ETN.svg",
+  "source": "Eaton Corporation Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d8/Eaton_Corporation_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ETR": {
+  "file": "ETR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ETR.png"
+ },
+ "EVR": {
+  "file": "EVR.svg",
+  "source": "Evercore logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2f/Evercore_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "EVRG": {
+  "file": "EVRG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "EW": {
+  "file": "EW.svg",
+  "source": "Edwards Lifesciences.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e9/Edwards_Lifesciences.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "EXC": {
+  "file": "EXC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "EXE": {
+  "file": "EXE.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "EXPD": {
+  "file": "EXPD.svg",
+  "source": "Expeditors logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f9/Expeditors_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "EXPE": {
+  "file": "EXPE.svg",
+  "source": "Expedia Group logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/0a/Expedia_Group_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "EXR": {
+  "file": "EXR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/EXR.png"
+ },
+ "F": {
+  "file": "F.svg",
+  "source": "Ford logo flat.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/3e/Ford_logo_flat.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "FANG": {
+  "file": "FANG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/FANG.png"
+ },
+ "FAST": {
+  "file": "FAST.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "FCFS": {
+  "file": "FCFS.png",
+  "source": "FirstCashPawnlLogo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d0/FirstCashPawnlLogo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "FCX": {
   "file": "FCX.svg",
   "source": "Logo Freeport McMoRan.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/4/46/Logo_Freeport_McMoRan.svg"
  },
+ "FDS": {
+  "file": "FDS.svg",
+  "source": "FactSet wordmark.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/4/41/FactSet_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "FDX": {
+  "file": "FDX.svg",
+  "source": "FedEx Corporation - 2016 Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/b9/FedEx_Corporation_-_2016_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "FDXF": {
+  "file": "FDXF.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/FDXF.png"
+ },
+ "FE": {
+  "file": "FE.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "FERG": {
+  "file": "FERG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/FERG.png"
+ },
+ "FFIV": {
+  "file": "FFIV.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/FFIV.png"
+ },
+ "FICO": {
+  "file": "FICO.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/FICO.png"
+ },
+ "FIS": {
+  "file": "FIS.svg",
+  "source": "FIS logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/83/FIS_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "FISV": {
+  "file": "FISV.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "FITB": {
+  "file": "FITB.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/FITB.png"
+ },
+ "FIVE": {
+  "file": "FIVE.png",
+  "source": "Five below logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/03/Five_below_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "FIX": {
+  "file": "FIX.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/FIX.png"
+ },
+ "FLEX": {
+  "file": "FLEX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "FND": {
+  "file": "FND.png",
+  "source": "www.flooranddecor.com site icon",
+  "url": "https://www.flooranddecor.com/on/demandware.static/Sites-floor-decor-Site/-/default/dwaaf4f18c/images/favicon/android-icon-192x192.png"
+ },
+ "FOXA": {
+  "file": "FOXA.svg",
+  "source": "FOX wordmark.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/25/FOX_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "FR": {
+  "file": "FR.png",
+  "source": "www.firstindustrial.com site icon",
+  "url": "https://www.firstindustrial.com/themes/custom/firt/apple-touch-icon.png"
+ },
+ "FRT": {
+  "file": "FRT.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "FSLR": {
+  "file": "FSLR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/FSLR.png"
+ },
+ "FTI": {
+  "file": "FTI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "FTNT": {
+  "file": "FTNT.svg",
+  "source": "Fortinet logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/62/Fortinet_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "FTV": {
+  "file": "FTV.svg",
+  "source": "Fortive Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/19/Fortive_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "G": {
+  "file": "G.png",
+  "source": "www.genpact.com site icon",
+  "url": "https://www.genpact.com/etc.clientlibs/genpact/clientlibs/clientlib-site/resources/icon-192x192.png"
+ },
+ "GATX": {
+  "file": "GATX.png",
+  "source": "www.gatx.com site icon",
+  "url": "https://www.gatx.com/wp-content/themes/gatx/assets/images/favicon/gatx/android-icon-192x192.png"
+ },
+ "GD": {
+  "file": "GD.svg",
+  "source": "General-Dynamics-Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/7/71/General-Dynamics-Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GDDY": {
+  "file": "GDDY.svg",
+  "source": "GoDaddy logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/fa/GoDaddy_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "GE": {
   "file": "GE.svg",
   "source": "GE Aerospace logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/2e/GE_Aerospace_logo.svg"
+ },
+ "GEHC": {
+  "file": "GEHC.svg",
+  "source": "GE HealthCare logo 2023.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/bc/GE_HealthCare_logo_2023.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GEN": {
+  "file": "GEN.svg",
+  "source": "Gen logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/0d/Gen_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GEV": {
+  "file": "GEV.svg",
+  "source": "GE Vernova logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/65/GE_Vernova_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GGG": {
+  "file": "GGG.svg",
+  "source": "Graco (fluid handling) logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/61/Graco_%28fluid_handling%29_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GILD": {
+  "file": "GILD.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/GILD.png"
+ },
+ "GIS": {
+  "file": "GIS.svg",
+  "source": "General Mills logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/00/General_Mills_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GL": {
+  "file": "GL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "GLW": {
+  "file": "GLW.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "GM": {
+  "file": "GM.svg",
+  "source": "General motors logo with wordmark.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/General_motors_logo_with_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GME": {
+  "file": "GME.svg",
+  "source": "GameStop Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/38/GameStop_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GMED": {
+  "file": "GMED.png",
+  "source": "www.globusmedical.com site icon",
+  "url": "https://www.globusmedical.com/wp-content/uploads/2019/02/cropped-globus_favicon-1-192x192.png"
+ },
+ "GNRC": {
+  "file": "GNRC.png",
+  "source": "Generac Power Systems logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/Generac_Power_Systems_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "GOOGL": {
   "file": "GOOGL.svg",
   "source": "Google Favicon 2025.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/3/3c/Google_Favicon_2025.svg"
  },
+ "GPC": {
+  "file": "GPC.svg",
+  "source": "Genuine Parts Company logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/eb/Genuine_Parts_Company_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "GPN": {
+  "file": "GPN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "GRMN": {
+  "file": "GRMN.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/GRMN.png"
+ },
  "GS": {
   "file": "GS.svg",
   "source": "Goldman Sachs.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/6/61/Goldman_Sachs.svg"
+ },
+ "GWRE": {
+  "file": "GWRE.png",
+  "source": "www.guidewire.com site icon",
+  "url": "https://www.guidewire.com/favicon/apple-touch-icon.png"
+ },
+ "GWW": {
+  "file": "GWW.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "GXO": {
+  "file": "GXO.png",
+  "source": "gxo.com site icon",
+  "url": "https://gxo.com/wp-content/uploads/2024/07/cropped-favicon-192x192.png"
+ },
+ "H": {
+  "file": "H.svg",
+  "source": "Hyatt Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/91/Hyatt_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HAL": {
+  "file": "HAL.svg",
+  "source": "Halliburton logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8b/Halliburton_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HALO": {
+  "file": "HALO.png",
+  "source": "www.halozyme.com site icon",
+  "url": "https://halozyme.com/wp-content/uploads/favicon-wordmark-300x300.png"
+ },
+ "HAS": {
+  "file": "HAS.svg",
+  "source": "Hasbro logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/ea/Hasbro_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HBAN": {
+  "file": "HBAN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "HCA": {
+  "file": "HCA.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "HD": {
   "file": "HD.svg",
   "source": "The Home Depot logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/f/f6/The_Home_Depot_logo.svg"
  },
+ "HIG": {
+  "file": "HIG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/HIG.png"
+ },
+ "HII": {
+  "file": "HII.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "HIMS": {
+  "file": "HIMS.svg",
+  "source": "Hims logo (2026).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/Hims_logo_%282026%29.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HL": {
+  "file": "HL.svg",
+  "source": "Hecla Mining logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/13/Hecla_Mining_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HLT": {
+  "file": "HLT.svg",
+  "source": "Hilton Worldwide logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8a/Hilton_Worldwide_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HOMB": {
+  "file": "HOMB.png",
+  "source": "Home BancShares logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a2/Home_BancShares_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "HON": {
   "file": "HON.svg",
   "source": "Logo honeywell.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Logo_honeywell.svg"
+ },
+ "HONA": {
+  "file": "HONA.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/HONA.png"
+ },
+ "HOOD": {
+  "file": "HOOD.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "HPE": {
+  "file": "HPE.svg",
+  "source": "Hewlett Packard Enterprise logo 2025 expanded.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d2/Hewlett_Packard_Enterprise_logo_2025_expanded.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HPQ": {
+  "file": "HPQ.svg",
+  "source": "HP logo 2025.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/05/HP_logo_2025.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HRL": {
+  "file": "HRL.png",
+  "source": "Hormel Foods logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/34/Hormel_Foods_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HSIC": {
+  "file": "HSIC.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/HSIC.png"
+ },
+ "HST": {
+  "file": "HST.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "HSY": {
+  "file": "HSY.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "HUBB": {
+  "file": "HUBB.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "HUBS": {
+  "file": "HUBS.svg",
+  "source": "HubSpot Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/3f/HubSpot_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "HUM": {
+  "file": "HUM.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "HWM": {
+  "file": "HWM.jpg",
+  "source": "Arconic Logo JPG.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/84/Arconic_Logo_JPG.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "IBKR": {
+  "file": "IBKR.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "IBM": {
   "file": "IBM.svg",
   "source": "IBM logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/51/IBM_logo.svg"
  },
+ "ICE": {
+  "file": "ICE.svg",
+  "source": "Logo of the IntercontinentalExchange.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/0f/Logo_of_the_IntercontinentalExchange.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "IDXX": {
+  "file": "IDXX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "IEX": {
+  "file": "IEX.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/IEX.png"
+ },
+ "IFF": {
+  "file": "IFF.png",
+  "source": "Iff-logo 2022.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/21/Iff-logo_2022.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ILMN": {
+  "file": "ILMN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "INCY": {
+  "file": "INCY.svg",
+  "source": "Incyte logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/5a/Incyte_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "INTC": {
   "file": "INTC.svg",
   "source": "Intel logo 2023.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/8/85/Intel_logo_2023.svg"
  },
+ "INTU": {
+  "file": "INTU.svg",
+  "source": "Intuit logo 2022.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/Intuit_logo_2022.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "INVH": {
+  "file": "INVH.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/INVH.png"
+ },
+ "IP": {
+  "file": "IP.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "IQV": {
+  "file": "IQV.svg",
+  "source": "Iqvia-logo-color.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/34/Iqvia-logo-color.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "IR": {
+  "file": "IR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/IR.png"
+ },
+ "IRM": {
+  "file": "IRM.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/IRM.png"
+ },
  "ISRG": {
   "file": "ISRG.svg",
   "source": "Intuitive Surgical logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/0/01/Intuitive_Surgical_logo.svg"
+ },
+ "IT": {
+  "file": "IT.svg",
+  "source": "Gartner logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/98/Gartner_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ITW": {
+  "file": "ITW.svg",
+  "source": "ITW.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/fe/ITW.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "IVZ": {
+  "file": "IVZ.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/IVZ.png"
+ },
+ "J": {
+  "file": "J.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "JBHT": {
+  "file": "JBHT.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/JBHT.png"
+ },
+ "JBL": {
+  "file": "JBL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "JCI": {
+  "file": "JCI.svg",
+  "source": "Johnson Controls old logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/4/46/Johnson_Controls_old_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "JEF": {
+  "file": "JEF.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "JKHY": {
+  "file": "JKHY.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "JLL": {
+  "file": "JLL.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "JNJ": {
   "file": "JNJ.svg",
@@ -179,15 +1629,120 @@
   "source": "JPMorgan Chase.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/e/e0/JPMorgan_Chase.svg"
  },
+ "KDP": {
+  "file": "KDP.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/KDP.png"
+ },
+ "KEY": {
+  "file": "KEY.png",
+  "source": "KeyBank.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d8/KeyBank.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "KEYS": {
+  "file": "KEYS.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/KEYS.png"
+ },
+ "KHC": {
+  "file": "KHC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "KIM": {
+  "file": "KIM.png",
+  "source": "Kimco Logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/a6/Kimco_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "KKR": {
+  "file": "KKR.svg",
+  "source": "Kohlberg Kravis Roberts (logo).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e7/Kohlberg_Kravis_Roberts_%28logo%29.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "KLAC": {
+  "file": "KLAC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "KMB": {
+  "file": "KMB.svg",
+  "source": "Kimberly-Clark logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/88/Kimberly-Clark_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "KMI": {
+  "file": "KMI.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/KMI.png"
+ },
  "KO": {
   "file": "KO.svg",
   "source": "Coca-Cola logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Coca-Cola_logo.svg"
  },
+ "KR": {
+  "file": "KR.svg",
+  "source": "Kroger logo (1961-2019).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/69/Kroger_logo_%281961-2019%29.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "KRYS": {
+  "file": "KRYS.png",
+  "source": "www.krystalbio.com site icon",
+  "url": "https://www.krystalbio.com/wp-content/uploads/fbrfg/apple-touch-icon.png"
+ },
+ "KVUE": {
+  "file": "KVUE.svg",
+  "source": "Kenvue logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e1/Kenvue_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "L": {
+  "file": "L.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "LAMR": {
+  "file": "LAMR.svg",
+  "source": "Lamar Advertising Company logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/32/Lamar_Advertising_Company_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "LDOS": {
+  "file": "LDOS.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "LEA": {
+  "file": "LEA.png",
+  "source": "www.lear.com site icon",
+  "url": "https://cdn.prod.website-files.com/6019e43dcfad3c059841794a/6019e43dcfad3c3a444179a0_lear%20webclip.png"
+ },
+ "LEN": {
+  "file": "LEN.png",
+  "source": "Lennar Corporation logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c8/Lennar_Corporation_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "LH": {
+  "file": "LH.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "LHX": {
+  "file": "LHX.svg",
+  "source": "L3Harris Technologies logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/23/L3Harris_Technologies_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "LII": {
+  "file": "LII.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/LII.png"
+ },
  "LIN": {
   "file": "LIN.png",
   "source": "Linde plc logo.png",
   "url": "https://upload.wikimedia.org/wikipedia/commons/6/6f/Linde_plc_logo.png"
+ },
+ "LITE": {
+  "file": "LITE.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/LITE.png"
  },
  "LLY": {
   "file": "LLY.svg",
@@ -199,75 +1754,490 @@
   "source": "Lockheed Martin logo (2).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/1/1d/Lockheed_Martin_logo_%282%29.svg"
  },
+ "LNT": {
+  "file": "LNT.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "LOW": {
   "file": "LOW.svg",
   "source": "Lowes Companies Logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/2c/Lowes_Companies_Logo.svg"
+ },
+ "LRCX": {
+  "file": "LRCX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "LSCC": {
+  "file": "LSCC.png",
+  "source": "Lattice Semiconductor logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/00/Lattice_Semiconductor_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "LSTR": {
+  "file": "LSTR.png",
+  "source": "www.landstar.com site icon",
+  "url": "https://www.landstar.com/Content/img/favicons/favicon-196x196.png"
+ },
+ "LULU": {
+  "file": "LULU.svg",
+  "source": "Lululemon Athletica logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/22/Lululemon_Athletica_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "LUV": {
+  "file": "LUV.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "LVS": {
+  "file": "LVS.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/LVS.png"
+ },
+ "LYB": {
+  "file": "LYB.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "LYV": {
+  "file": "LYV.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/LYV.png"
+ },
+ "M": {
+  "file": "M.png",
+  "source": "Macy's Inc. Logo 2023.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/01/Macy%27s_Inc._Logo_2023.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "MA": {
   "file": "MA.svg",
   "source": "Mastercard 2019 logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/Mastercard_2019_logo.svg"
  },
+ "MAA": {
+  "file": "MAA.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MANH": {
+  "file": "MANH.svg",
+  "source": "www.manh.com site icon",
+  "url": "https://www.manh.com/favicon.svg?r=81724"
+ },
+ "MAR": {
+  "file": "MAR.svg",
+  "source": "Marriott International.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e7/Marriott_International.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "MAS": {
+  "file": "MAS.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "MCD": {
   "file": "MCD.svg",
   "source": "McDonald's square 2020.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/0/05/McDonald%27s_square_2020.svg"
+ },
+ "MCHP": {
+  "file": "MCHP.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MCK": {
+  "file": "MCK.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MCO": {
+  "file": "MCO.png",
+  "source": "Moody's new logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/12/Moody%27s_new_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "MDLZ": {
+  "file": "MDLZ.svg",
+  "source": "Mondelez International.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/3b/Mondelez_International.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "MDT": {
+  "file": "MDT.svg",
+  "source": "Medtronic logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2c/Medtronic_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "MEDP": {
+  "file": "MEDP.png",
+  "source": "www.medpace.com site icon",
+  "url": "https://www.medpace.com/wp-content/uploads/2023/01/medpace-favicon-300x300.png"
+ },
+ "MET": {
+  "file": "MET.svg",
+  "source": "MetLife logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c6/MetLife_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "META": {
   "file": "META.svg",
   "source": "Meta Platforms Inc. logo (cropped).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/0/05/Meta_Platforms_Inc._logo_%28cropped%29.svg"
  },
+ "MGM": {
+  "file": "MGM.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/MGM.png"
+ },
+ "MKC": {
+  "file": "MKC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MLI": {
+  "file": "MLI.png",
+  "source": "www.muellerindustries.com site icon",
+  "url": "https://prod.speakcdn.com/sitefiles/2914/images/favicon/apple-icon-180x180.png"
+ },
+ "MLM": {
+  "file": "MLM.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/MLM.png"
+ },
+ "MMM": {
+  "file": "MMM.svg",
+  "source": "3M wordmark.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/15/3M_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "MNST": {
+  "file": "MNST.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/MNST.png"
+ },
+ "MO": {
+  "file": "MO.svg",
+  "source": "Altria Group.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/ff/Altria_Group.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "MOS": {
+  "file": "MOS.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MPC": {
+  "file": "MPC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MPWR": {
+  "file": "MPWR.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "MRK": {
   "file": "MRK.svg",
   "source": "Merck Logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/9/94/Merck_Logo.svg"
+ },
+ "MRNA": {
+  "file": "MRNA.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MRSH": {
+  "file": "MRSH.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MRVL": {
+  "file": "MRVL.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "MS": {
   "file": "MS.svg",
   "source": "Morgan Stanley Logo 2024.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/e/ec/Morgan_Stanley_Logo_2024.svg"
  },
+ "MSCI": {
+  "file": "MSCI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "MSFT": {
   "file": "MSFT.svg",
   "source": "Microsoft icon.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/25/Microsoft_icon.svg"
+ },
+ "MSI": {
+  "file": "MSI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MTB": {
+  "file": "MTB.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MTD": {
+  "file": "MTD.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "MTN": {
+  "file": "MTN.png",
+  "source": "www.vailresorts.com site icon",
+  "url": "https://www.vailresorts.com/wp-content/uploads/2023/09/cropped-VR-Fav-192x192.png"
+ },
+ "MTSI": {
+  "file": "MTSI.svg",
+  "source": "www.macom.com site icon",
+  "url": "https://www.macom.com/modules/macom-templates-2/icons/icon.svg"
  },
  "MU": {
   "file": "MU.svg",
   "source": "Micron Technology logo 2024.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/1/16/Micron_Technology_logo_2024.svg"
  },
+ "MUSA": {
+  "file": "MUSA.jpg",
+  "source": "Murphylogo3d2.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/cf/Murphylogo3d2.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "NBIX": {
+  "file": "NBIX.png",
+  "source": "www.neurocrine.com site icon",
+  "url": "https://www.neurocrine.com/apple-touch-icon.png"
+ },
+ "NCLH": {
+  "file": "NCLH.png",
+  "source": "NCLH logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/NCLH_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "NDAQ": {
+  "file": "NDAQ.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "NDSN": {
+  "file": "NDSN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "NEE": {
   "file": "NEE.svg",
   "source": "NextEra Energy logo (1).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/e/e0/NextEra_Energy_logo_%281%29.svg"
+ },
+ "NEM": {
+  "file": "NEM.png",
+  "source": "Newmont-logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f2/Newmont-logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "NEU": {
+  "file": "NEU.png",
+  "source": "www.newmarket.com site icon",
+  "url": "https://www.newmarket.com/wp-content/uploads/cropped-newmarketlogo-300x300.png"
+ },
+ "NFG": {
+  "file": "NFG.png",
+  "source": "www.nationalfuelgas.com site icon",
+  "url": "https://www.nationalfuel.com/wp-content/uploads/2021/02/cropped-nfg-logo.png?w=192"
  },
  "NFLX": {
   "file": "NFLX.svg",
   "source": "Netflix 2016 N logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/1/18/Netflix_2016_N_logo.svg"
  },
+ "NI": {
+  "file": "NI.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/NI.png"
+ },
  "NKE": {
   "file": "NKE.svg",
   "source": "Logo NIKE.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/a/a6/Logo_NIKE.svg"
+ },
+ "NNN": {
+  "file": "NNN.png",
+  "source": "www.nnnreit.com site icon",
+  "url": "https://www.nnnreit.com/wp-content/uploads/2023/04/cropped-nnnreit_favicon-192x192.png"
+ },
+ "NOC": {
+  "file": "NOC.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "NOW": {
   "file": "NOW.svg",
   "source": "ServiceNow logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/ServiceNow_logo.svg"
  },
+ "NRG": {
+  "file": "NRG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "NSC": {
+  "file": "NSC.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/NSC.png"
+ },
+ "NTAP": {
+  "file": "NTAP.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "NTNX": {
+  "file": "NTNX.png",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "NTRS": {
+  "file": "NTRS.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/NTRS.png"
+ },
+ "NUE": {
+  "file": "NUE.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "NVDA": {
   "file": "NVDA.svg",
   "source": "NVIDIA logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/a/a4/NVIDIA_logo.svg"
  },
+ "NVR": {
+  "file": "NVR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/NVR.png"
+ },
+ "NWSA": {
+  "file": "NWSA.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "NXPI": {
+  "file": "NXPI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "NXST": {
+  "file": "NXST.svg",
+  "source": "Nexstar Media Group logo (color).svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/11/Nexstar_Media_Group_logo_%28color%29.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "NYT": {
+  "file": "NYT.svg",
+  "source": "The New York Times Company Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/0e/The_New_York_Times_Company_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "O": {
+  "file": "O.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ODFL": {
+  "file": "ODFL.jpg",
+  "source": "Old Dominion Freight Line (2).jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/cd/Old_Dominion_Freight_Line_%282%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "OKE": {
+  "file": "OKE.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/OKE.png"
+ },
+ "OLLI": {
+  "file": "OLLI.png",
+  "source": "www.ollies.com site icon",
+  "url": "https://www.ollies.com/cdn/shop/files/favicon_1_Ollie_s_O_228x228.png?v=1724662444"
+ },
+ "OMC": {
+  "file": "OMC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ON": {
+  "file": "ON.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ONB": {
+  "file": "ONB.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "ORCL": {
   "file": "ORCL.svg",
   "source": "Oracle logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Oracle_logo.svg"
+ },
+ "ORI": {
+  "file": "ORI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ORLY": {
+  "file": "ORLY.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "OTIS": {
+  "file": "OTIS.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "OVV": {
+  "file": "OVV.png",
+  "source": "Ovintiv logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/b3/Ovintiv_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "OXY": {
+  "file": "OXY.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "P": {
+  "file": "P.svg",
+  "source": "Pure-storage-vector-logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/61/Pure-storage-vector-logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "PANW": {
+  "file": "PANW.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PATH": {
+  "file": "PATH.svg",
+  "source": "UiPath 2025 logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/2c/UiPath_2025_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "PAYX": {
+  "file": "PAYX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PB": {
+  "file": "PB.png",
+  "source": "www.prosperitybankusa.com site icon",
+  "url": "https://www.prosperitybankusa.com/wp-content/uploads/2024/05/cropped-prosperity-favicon.png?w=192"
+ },
+ "PBF": {
+  "file": "PBF.svg",
+  "source": "www.pbfenergy.com site icon",
+  "url": "https://www.pbfenergy.com/wp-content/uploads/2023/11/PBF-R-Blue.svg"
+ },
+ "PCAR": {
+  "file": "PCAR.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PCG": {
+  "file": "PCG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/PCG.png"
+ },
+ "PEG": {
+  "file": "PEG.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "PEP": {
   "file": "PEP.svg",
@@ -279,30 +2249,260 @@
   "source": "Pfizer (2021).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/Pfizer_%282021%29.svg"
  },
+ "PFG": {
+  "file": "PFG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "PG": {
   "file": "PG.svg",
   "source": "Procter & Gamble logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/8/85/Procter_%26_Gamble_logo.svg"
+ },
+ "PGR": {
+  "file": "PGR.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PH": {
+  "file": "PH.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PHM": {
+  "file": "PHM.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/PHM.png"
+ },
+ "PINS": {
+  "file": "PINS.svg",
+  "source": "Pinterest Logo 3.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/ed/Pinterest_Logo_3.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "PKG": {
+  "file": "PKG.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "PLD": {
   "file": "PLD.svg",
   "source": "Prologis Logo Current.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Prologis_Logo_Current.svg"
  },
+ "PLTR": {
+  "file": "PLTR.svg",
+  "source": "Palantir Technologies logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/13/Palantir_Technologies_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "PM": {
   "file": "PM.svg",
   "source": "Pmi logo text only.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Pmi_logo_text_only.svg"
+ },
+ "PNC": {
+  "file": "PNC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PNR": {
+  "file": "PNR.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PNW": {
+  "file": "PNW.png",
+  "source": "Pinnacle West Capital logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/4/43/Pinnacle_West_Capital_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "PODD": {
+  "file": "PODD.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/PODD.png"
+ },
+ "POR": {
+  "file": "POR.png",
+  "source": "portlandgeneral.com site icon",
+  "url": "https://portlandgeneral.com/icons/icon-512x512.png?v=c60bcd675e6a11983cd1c7b0fed6b12f"
+ },
+ "PPG": {
+  "file": "PPG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PPL": {
+  "file": "PPL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PR": {
+  "file": "PR.png",
+  "source": "permianres.com site icon",
+  "url": "https://permianres.com/wp-content/uploads/2022/08/cropped-Permian-Resources-Icon-192x192.png"
+ },
+ "PRU": {
+  "file": "PRU.png",
+  "source": "Logo-prudential-do-brasil.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6a/Logo-prudential-do-brasil.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "PSA": {
+  "file": "PSA.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PSX": {
+  "file": "PSX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PTC": {
+  "file": "PTC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "PWR": {
+  "file": "PWR.jpg",
+  "source": "QScolorjpg.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/98/QScolorjpg.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "PYPL": {
+  "file": "PYPL.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/PYPL.png"
+ },
+ "Q": {
+  "file": "Q.jpg",
+  "source": "Qnity Electronics logo.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/b/bd/Qnity_Electronics_logo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "QCOM": {
   "file": "QCOM.svg",
   "source": "Qualcomm-Logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/f/fc/Qualcomm-Logo.svg"
  },
+ "RCL": {
+  "file": "RCL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "RDDT": {
+  "file": "RDDT.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/RDDT.png"
+ },
+ "REG": {
+  "file": "REG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "REGN": {
+  "file": "REGN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "REXR": {
+  "file": "REXR.png",
+  "source": "www.rexfordindustrial.com site icon",
+  "url": "https://www.rexfordindustrial.com/wp-content/themes/rexfordcore/img/favicon/apple-touch-icon.png"
+ },
+ "RF": {
+  "file": "RF.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "RGA": {
+  "file": "RGA.jpg",
+  "source": "Reinsurance Group of America logo.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d5/Reinsurance_Group_of_America_logo.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "RJF": {
+  "file": "RJF.jpg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "RL": {
+  "file": "RL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "RLI": {
+  "file": "RLI.png",
+  "source": "www.rlicorp.com site icon",
+  "url": "https://cdn.prod.website-files.com/66634795b5878abbe1149412/6733c22c5ce5d0d010f6f72f_touch-icon-256x256.png"
+ },
+ "RMD": {
+  "file": "RMD.png",
+  "source": "Resmed Logo 2025.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f0/Resmed_Logo_2025.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "RNR": {
+  "file": "RNR.png",
+  "source": "www.renre.com site icon",
+  "url": "https://www.renre.com/wp-content/uploads/2024/09/cropped-r-192x192.png"
+ },
+ "ROIV": {
+  "file": "ROIV.jpg",
+  "source": "Roivant.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/1/1c/Roivant.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "ROK": {
+  "file": "ROK.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ROL": {
+  "file": "ROL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ROP": {
+  "file": "ROP.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ROST": {
+  "file": "ROST.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "RPM": {
+  "file": "RPM.svg",
+  "source": "RPM International logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/0d/RPM_International_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "RRC": {
+  "file": "RRC.png",
+  "source": "www.rangeresources.com site icon",
+  "url": "https://www.rangeresources.com/wp-content/uploads/2025/09/cropped-Favicon-2-192x192.png"
+ },
+ "RRX": {
+  "file": "RRX.jpg",
+  "source": "Regal beloit corporation global logo.JPG",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/5b/Regal_beloit_corporation_global_logo.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "RSG": {
+  "file": "RSG.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "RTX": {
   "file": "RTX.svg",
   "source": "RTX Raytheon Technologies logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/3/30/RTX_Raytheon_Technologies_logo.svg"
+ },
+ "RVTY": {
+  "file": "RVTY.png",
+  "source": "Revvity Logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/a/aa/Revvity_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "SARO": {
+  "file": "SARO.png",
+  "source": "StandardAero logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e6/StandardAero_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "SBAC": {
+  "file": "SBAC.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "SBUX": {
   "file": "SBUX.svg",
@@ -314,45 +2514,390 @@
   "source": "Charles Schwab Corporation logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/4/4b/Charles_Schwab_Corporation_logo.svg"
  },
+ "SF": {
+  "file": "SF.svg",
+  "source": "www.stifel.com site icon",
+  "url": "https://www.stifel.com/Favicon-Stifel.svg"
+ },
+ "SHW": {
+  "file": "SHW.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SIRI": {
+  "file": "SIRI.png",
+  "source": "www.siriusxm.com site icon",
+  "url": "https://www.siriusxm.com/apple-touch-icon.png"
+ },
+ "SITM": {
+  "file": "SITM.png",
+  "source": "www.sitime.com site icon",
+  "url": "https://www.sitime.com/themes/custom/sitime/images/favicon/android-icon-192x192.png"
+ },
+ "SJM": {
+  "file": "SJM.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "SLB": {
   "file": "SLB.svg",
   "source": "SLB Logo 2022.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/d/d6/SLB_Logo_2022.svg"
+ },
+ "SMCI": {
+  "file": "SMCI.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/SMCI.png"
+ },
+ "SMTC": {
+  "file": "SMTC.svg",
+  "source": "Semtech Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c2/Semtech_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "SN": {
+  "file": "SN.png",
+  "source": "www.sharkninja.com site icon",
+  "url": "https://www.sharkninja.com/on/demandware.static/Sites-US-SharkNinja-Site/-/default/dw3c8c7cbe/images/favicons/favicon-196x196.png"
+ },
+ "SNA": {
+  "file": "SNA.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SNDK": {
+  "file": "SNDK.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SNPS": {
+  "file": "SNPS.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "SO": {
   "file": "SO.svg",
   "source": "Southern Company logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/29/Southern_Company_logo.svg"
  },
+ "SOLV": {
+  "file": "SOLV.png",
+  "source": "Solventum logo 2024.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/2/29/Solventum_logo_2024.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "SPG": {
+  "file": "SPG.svg",
+  "source": "Simon Property Group Logo 2014.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/3/30/Simon_Property_Group_Logo_2014.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "SPGI": {
   "file": "SPGI.svg",
   "source": "S&P Global logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/e/ee/S%26P_Global_logo.svg"
+ },
+ "SPXC": {
+  "file": "SPXC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SR": {
+  "file": "SR.png",
+  "source": "www.spireenergy.com site icon",
+  "url": "https://www.spireenergy.com/themes/custom/spire/img/android/android-icon-192x192.png"
+ },
+ "SRE": {
+  "file": "SRE.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "STE": {
+  "file": "STE.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "STLD": {
+  "file": "STLD.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "STT": {
+  "file": "STT.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "STX": {
+  "file": "STX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "STZ": {
+  "file": "STZ.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/STZ.png"
+ },
+ "SW": {
+  "file": "SW.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SWK": {
+  "file": "SWK.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SWKS": {
+  "file": "SWKS.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SWX": {
+  "file": "SWX.png",
+  "source": "www.swgas.com site icon",
+  "url": "https://www.swgas.com/android-chrome-192x192.png"
+ },
+ "SYF": {
+  "file": "SYF.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SYK": {
+  "file": "SYK.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "SYY": {
+  "file": "SYY.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "T": {
   "file": "T.svg",
   "source": "AT&T Globe 2016.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/0/05/AT%26T_Globe_2016.svg"
  },
+ "TDG": {
+  "file": "TDG.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/TDG.png"
+ },
+ "TDY": {
+  "file": "TDY.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TECH": {
+  "file": "TECH.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/TECH.png"
+ },
+ "TEL": {
+  "file": "TEL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TER": {
+  "file": "TER.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TEX": {
+  "file": "TEX.png",
+  "source": "www.terex.com site icon",
+  "url": "https://www.terex.com/Assets/Icons/terex/apple-touch-icon.png"
+ },
+ "TFC": {
+  "file": "TFC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TGT": {
+  "file": "TGT.svg",
+  "source": "Target logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/9a/Target_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "THC": {
+  "file": "THC.png",
+  "source": "Tenet Health logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e8/Tenet_Health_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TJX": {
+  "file": "TJX.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TKO": {
+  "file": "TKO.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TKR": {
+  "file": "TKR.svg",
+  "source": "Timken.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8d/Timken.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TLN": {
+  "file": "TLN.png",
+  "source": "www.talenenergy.com site icon",
+  "url": "https://www.talenenergy.com/wp-content/uploads/2024/06/favicon.png"
+ },
  "TMO": {
   "file": "TMO.svg",
   "source": "Thermo Fisher Scientific logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/50/Thermo_Fisher_Scientific_logo.svg"
+ },
+ "TMUS": {
+  "file": "TMUS.svg",
+  "source": "T-Mobile US Logo 2022 RGB Magenta on Transparent.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/88/T-Mobile_US_Logo_2022_RGB_Magenta_on_Transparent.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TOL": {
+  "file": "TOL.svg",
+  "source": "Toll Brothers.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Toll_Brothers.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TPL": {
+  "file": "TPL.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/TPL.png"
+ },
+ "TPR": {
+  "file": "TPR.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TREX": {
+  "file": "TREX.png",
+  "source": "trex.com site icon",
+  "url": "https://www.trex.com/etc.clientlibs/trex/clientlibs/clientlib-site/resources/icon-192x192.png"
+ },
+ "TRGP": {
+  "file": "TRGP.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/TRGP.png"
+ },
+ "TRMB": {
+  "file": "TRMB.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TROW": {
+  "file": "TROW.png",
+  "source": "T. Rowe Price Logo 2017.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e4/T._Rowe_Price_Logo_2017.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TRU": {
+  "file": "TRU.png",
+  "source": "TU Logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/9/9e/TU_Logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TRV": {
+  "file": "TRV.jpg",
+  "source": "Trav umb 5inch.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/d/d4/Trav_umb_5inch.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TSCO": {
+  "file": "TSCO.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "TSLA": {
   "file": "TSLA.svg",
   "source": "Tesla T symbol.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/b/bb/Tesla_T_symbol.svg"
  },
+ "TSN": {
+  "file": "TSN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TT": {
+  "file": "TT.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TTC": {
+  "file": "TTC.jpg",
+  "source": "Logo TORO Ltd.jpg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/Logo_TORO_Ltd.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TTEK": {
+  "file": "TTEK.svg",
+  "source": "www.tetratech.com site icon",
+  "url": "https://www.tetratech.com/wp-content/uploads/2023/05/tetra-tech-favicon.svg"
+ },
+ "TTMI": {
+  "file": "TTMI.png",
+  "source": "TTM Technologies logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/57/TTM_Technologies_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "TTWO": {
+  "file": "TTWO.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TWLO": {
+  "file": "TWLO.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "TXN": {
   "file": "TXN.svg",
   "source": "Texas Instruments logo 2024.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/3/36/Texas_Instruments_logo_2024.svg"
  },
+ "TXRH": {
+  "file": "TXRH.png",
+  "source": "www.texasroadhousemenues.com site icon",
+  "url": "https://duckduckgo.com/static-assets/favicons/DDG-iOS-icon_152x152.png"
+ },
+ "TXT": {
+  "file": "TXT.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "TYL": {
+  "file": "TYL.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/TYL.png"
+ },
+ "UAL": {
+  "file": "UAL.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/UAL.png"
+ },
+ "UBER": {
+  "file": "UBER.svg",
+  "source": "Uber logo 2018.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/5/58/Uber_logo_2018.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "UDR": {
+  "file": "UDR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/UDR.png"
+ },
+ "UHS": {
+  "file": "UHS.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ULTA": {
+  "file": "ULTA.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "UMBF": {
+  "file": "UMBF.jpg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "UNH": {
   "file": "UNH.svg",
   "source": "UnitedHealthcare (logo).svg",
   "url": "https://upload.wikimedia.org/wikipedia/en/2/29/UnitedHealthcare_%28logo%29.svg"
+ },
+ "UNM": {
+  "file": "UNM.svg",
+  "source": "Unum Group logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/c/c9/Unum_Group_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
  "UNP": {
   "file": "UNP.svg",
@@ -364,29 +2909,239 @@
   "source": "United Parcel Service logo 2014.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/6/6b/United_Parcel_Service_logo_2014.svg"
  },
+ "URI": {
+  "file": "URI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "USB": {
+  "file": "USB.svg",
+  "source": "US Bancorp logo 2023 color.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8b/US_Bancorp_logo_2023_color.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
  "V": {
   "file": "V.svg",
   "source": "Visa Inc. logo (2021\u2013present).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Visa_Inc._logo_%282021%E2%80%93present%29.svg"
+ },
+ "VEEV": {
+  "file": "VEEV.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "VFC": {
+  "file": "VFC.svg",
+  "source": "VF Corporation logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/8/8c/VF_Corporation_logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "VIAV": {
+  "file": "VIAV.png",
+  "source": "www.viavisolutions.com site icon",
+  "url": "https://www.viavisolutions.com/themes/custom/viavi/favicons/apple-touch-icon.png"
+ },
+ "VICI": {
+  "file": "VICI.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "VLO": {
+  "file": "VLO.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "VLTO": {
+  "file": "VLTO.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/VLTO.png"
+ },
+ "VLY": {
+  "file": "VLY.svg",
+  "source": "www.valley.com site icon",
+  "url": "https://www.valley.com/content/dam/valley/site-settings/favicon.svg"
+ },
+ "VMC": {
+  "file": "VMC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "VOYA": {
+  "file": "VOYA.png",
+  "source": "Voya Financial logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/f7/Voya_Financial_logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "VRSK": {
+  "file": "VRSK.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "VRSN": {
+  "file": "VRSN.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "VRT": {
+  "file": "VRT.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "VRTX": {
+  "file": "VRTX.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/VRTX.png"
+ },
+ "VST": {
+  "file": "VST.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/VST.png"
+ },
+ "VTR": {
+  "file": "VTR.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/VTR.png"
+ },
+ "VTRS": {
+  "file": "VTRS.svg",
+  "source": "(re-resolving)",
+  "url": ""
  },
  "VZ": {
   "file": "VZ.svg",
   "source": "Verizon 2024 (symbol).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/5/5a/Verizon_2024_%28symbol%29.svg"
  },
+ "WAB": {
+  "file": "WAB.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "WAT": {
+  "file": "WAT.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/WAT.png"
+ },
+ "WDAY": {
+  "file": "WDAY.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "WDC": {
+  "file": "WDC.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "WEC": {
+  "file": "WEC.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/WEC.png"
+ },
+ "WELL": {
+  "file": "WELL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "WFC": {
   "file": "WFC.svg",
   "source": "Wells Fargo Logo (2020).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/e/e2/Wells_Fargo_Logo_%282020%29.svg"
+ },
+ "WM": {
+  "file": "WM.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "WMB": {
+  "file": "WMB.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "WMS": {
+  "file": "WMS.svg",
+  "source": "www.ads-pipe.com site icon",
+  "url": "https://www.adspipe.com/Content/images/favicons/ads.svg"
  },
  "WMT": {
   "file": "WMT.svg",
   "source": "Walmart spark (2025).svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/6/60/Walmart_spark_%282025%29.svg"
  },
+ "WRB": {
+  "file": "WRB.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/WRB.png"
+ },
+ "WSM": {
+  "file": "WSM.png",
+  "source": "Williams-Sonoma, Inc. logo.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/f/fc/Williams-Sonoma%2C_Inc._logo.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "WST": {
+  "file": "WST.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/WST.png"
+ },
+ "WTRG": {
+  "file": "WTRG.svg",
+  "source": "Aqua America Logo.svg",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/0/07/Aqua_America_Logo.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "WTW": {
+  "file": "WTW.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/WTW.png"
+ },
+ "WWD": {
+  "file": "WWD.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "WY": {
+  "file": "WY.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "WYNN": {
+  "file": "WYNN.png",
+  "source": "Wynn Resorts logo 2025.png",
+  "url": "https://upload.wikimedia.org/wikipedia/commons/e/e1/Wynn_Resorts_logo_2025.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "XEL": {
+  "file": "XEL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
  "XOM": {
   "file": "XOM.svg",
   "source": "Exxon Mobil Logo.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/1/18/Exxon_Mobil_Logo.svg"
+ },
+ "XYL": {
+  "file": "XYL.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "XYZ": {
+  "file": "XYZ.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "YUM": {
+  "file": "YUM.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ZBH": {
+  "file": "ZBH.svg",
+  "source": "(re-resolving)",
+  "url": ""
+ },
+ "ZBRA": {
+  "file": "ZBRA.png",
+  "source": "Filed Under partner corpus",
+  "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/ZBRA.png"
+ },
+ "ZTS": {
+  "file": "ZTS.svg",
+  "source": "(re-resolving)",
+  "url": ""
  }
 }

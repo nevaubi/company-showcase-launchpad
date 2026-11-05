@@ -1,5 +1,6 @@
 // Coverage universe and reference series. Company facts come from SEC filings;
 // the fields here are descriptive metadata that EDGAR does not publish.
+import { CURATED_GROUPS, EXTRA_COVERAGE } from "./coverage-extra";
 
 export interface CoverageCompany {
   ticker: string;
@@ -13,9 +14,12 @@ export interface CoverageCompany {
   founded: number;
   description: string;
   peers: string[];
+  /** Industry group shared across the whole universe (partner taxonomy), for peer grouping */
+  group?: string;
 }
 
-export const COVERAGE: CoverageCompany[] = [
+/** Hand-curated companies; their datasets are bundled under public/data. */
+export const CURATED_COVERAGE: CoverageCompany[] = [
   {
     ticker: "AAPL",
     cik: "320193",
@@ -348,8 +352,21 @@ function co(
   return { ticker, cik, shortName, sector, industry, sectorEtf, website, ir, founded, description, peers };
 }
 
+const CURATED_SET = new Set(CURATED_COVERAGE.map((c) => c.ticker));
+
+/** Every covered company: the curated list plus the generated partner-universe list (scripts/expand-coverage.ts). */
+export const COVERAGE: CoverageCompany[] = [
+  ...CURATED_COVERAGE.map((c) => ({ ...c, group: CURATED_GROUPS[c.ticker] ?? c.industry })),
+  ...EXTRA_COVERAGE.filter((c) => !CURATED_SET.has(c.ticker)),
+];
+const BY_TICKER = new Map(COVERAGE.map((c) => [c.ticker, c]));
+
 export const COVERAGE_TICKERS = COVERAGE.map((c) => c.ticker);
-export const coverageOf = (ticker: string) => COVERAGE.find((c) => c.ticker === ticker.toUpperCase());
+export const coverageOf = (ticker: string) => BY_TICKER.get(ticker.toUpperCase());
+/** Datasets and price snapshots for curated companies ship in public/data; the rest are served from storage. */
+export const isBundled = (ticker: string) => CURATED_SET.has(ticker.toUpperCase());
+/** Peer-grouping key: the shared industry group when known, else the industry label. */
+export const groupOf = (c: Pick<CoverageCompany, "group" | "industry"> | undefined) => c?.group ?? c?.industry ?? "";
 
 export interface Benchmark {
   symbol: string;
