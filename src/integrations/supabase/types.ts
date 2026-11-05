@@ -1054,6 +1054,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      alt_event_buckets: {
+        Args: never
+        Returns: {
+          bucket: number
+          dataset: string
+          last_date: string
+          n: number
+          ticker: string
+        }[]
+      }
+      alt_source_stats: {
+        Args: never
+        Returns: {
+          dataset: string
+          latest: string
+          refreshed: string
+          rows: number
+          tickers: number
+        }[]
+      }
       ir_coverage: {
         Args: never
         Returns: {

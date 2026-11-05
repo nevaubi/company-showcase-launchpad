@@ -91,3 +91,52 @@ export function fmtAlt(v: number | null, unit: string | null) {
   if (unit === "%") return `${v.toFixed(2)}%`;
   return v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${(v / 1e3).toFixed(0)}K` : v.toLocaleString();
 }
+
+/** Event counts per company × dataset in 90-day windows (last ~27 months). */
+export const altBucketsQuery = () => ({
+  queryKey: ["alt_buckets"],
+  queryFn: async () => {
+    const { data, error } = await supabase.rpc("alt_event_buckets");
+    if (error) throw error;
+    return (data ?? []) as { ticker: string; dataset: string; bucket: number; n: number; last_date: string | null }[];
+  },
+  staleTime: 10 * 60_000,
+});
+
+export const altSourceStatsQuery = () => ({
+  queryKey: ["alt_source_stats"],
+  queryFn: async () => {
+    const { data, error } = await supabase.rpc("alt_source_stats");
+    if (error) throw error;
+    return (data ?? []) as { dataset: string; rows: number; tickers: number; latest: string | null; refreshed: string | null }[];
+  },
+  staleTime: 10 * 60_000,
+});
+
+/** Events for one company × dataset in the last `days`. */
+export const altCellQuery = (ticker: string, dataset: string, days = 90) => ({
+  queryKey: ["alt_cell", ticker, dataset, days],
+  queryFn: async () => {
+    const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
+    const { data, error } = await supabase.from("alt_data").select("*").eq("ticker", ticker).eq("dataset", dataset).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(200);
+    if (error) throw error;
+    return (data ?? []) as AltRow[];
+  },
+  staleTime: 10 * 60_000,
+});
+
+/** Red-flag 8-K items and activist 13Ds in the last 90 days. */
+export const altRedFlagsQuery = (items: string[]) => ({
+  queryKey: ["alt_redflags", items.join(",")],
+  queryFn: async () => {
+    const since = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+    const [ev, own] = await Promise.all([
+      supabase.from("alt_data").select("*").eq("dataset", "events").in("meta->>item", items).gte("date", since).order("date", { ascending: false }).limit(300),
+      supabase.from("alt_data").select("*").eq("dataset", "ownership").eq("meta->>activist", "true").gte("date", since).order("date", { ascending: false }).limit(100),
+    ]);
+    if (ev.error) throw ev.error;
+    if (own.error) throw own.error;
+    return [...(own.data ?? []), ...(ev.data ?? [])] as AltRow[];
+  },
+  staleTime: 10 * 60_000,
+});

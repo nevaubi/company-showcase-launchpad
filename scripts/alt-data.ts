@@ -39,7 +39,9 @@ async function get(url: string, init: RequestInit = {}, json = true): Promise<an
   }
   return null;
 }
-const iso = (s: string | undefined | null) => (s && /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s ? s.slice(0, 10) : null);
+const isoRaw = (s: string | undefined | null) => (s && /^\d{8}$/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s ? s.slice(0, 10) : null);
+// Registries sometimes carry typo'd years (e.g. "0012-11-30"); drop impossible dates rather than misplace the record.
+const iso = (s: string | undefined | null) => { const d = isoRaw(s); return d && /^(19|20)\d\d-\d\d-\d\d$/.test(d) ? d : null; };
 const cik10 = (c: Co) => c.cik.padStart(10, "0");
 const edgarUrl = (c: Co, accn: string, doc?: string) => `https://www.sec.gov/Archives/edgar/data/${Number(c.cik)}/${accn.replace(/-/g, "")}/${doc ?? `${accn}-index.htm`}`;
 

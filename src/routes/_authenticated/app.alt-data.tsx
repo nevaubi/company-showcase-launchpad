@@ -5,6 +5,7 @@ import { z } from "zod";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AltEventList } from "@/components/alt/alt-views";
+import { AltSignalsSection, SourceStrip } from "@/components/alt/alt-signals";
 import { altFeedQuery, altSeriesQuery, DATASETS, fmtAlt, leaderboard } from "@/lib/alt/query";
 import { cn } from "@/lib/utils";
 
@@ -33,8 +34,11 @@ function AltHub() {
   const meta = DATASETS[d] ?? DATASETS.events;
   return (
     <div>
-      <PageHeader eyebrow="Data" title="Alternative data" description="Public datasets pulled from government and open registries for every covered company. Every row links to the record it came from." />
-      <div className="mb-5 flex flex-wrap gap-1.5">
+      <PageHeader eyebrow="Data" title="Alternative data" description="What changed across public registries (SEC, federal contracts, regulators, FDA, NHTSA, CFPB, FDIC), scored against each company's own history. Every row links to its record." />
+      <SourceStrip />
+      <AltSignalsSection />
+      <h2 className="mb-2 text-[13px] font-semibold">Browse by dataset</h2>
+      <div className="mb-4 flex flex-wrap gap-1.5">
         {Object.entries(DATASETS).map(([k, v]) => (
           <Link key={k} to="/app/alt-data" search={{ d: k }} className={cn("rounded-full border px-3 py-1 text-[12px]", k === d ? "bg-foreground text-background" : "bg-card hover:bg-secondary")}>{v.label}</Link>
         ))}
