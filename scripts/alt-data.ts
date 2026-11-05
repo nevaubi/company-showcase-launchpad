@@ -7,6 +7,7 @@
 // attention (Wikipedia pageviews). A failed source never deletes stored rows (upsert only).
 import { readFile } from "node:fs/promises";
 import { args, log, sb, sleep } from "./lib/supa";
+import { CAPITAL, ITEMS } from "../src/lib/alt/sec-forms";
 
 const UA = "FiledUnder Research research@filedunder.ai";
 interface Co { ticker: string; name: string; cik: string; sector: string; industry: string }
@@ -14,7 +15,7 @@ type Row = { uid: string; ticker: string; dataset: string; kind: "event" | "seri
 
 const universe = JSON.parse(await readFile("public/data/universe.json", "utf8")) as { companies: Co[] };
 const only = args.only?.toUpperCase().split(",");
-const SETS = (args.sets ?? "ownership,events,contracts,regulatory,fda,recalls,complaints,bank,attention").split(",");
+const SETS = (args.sets ?? "ownership,events,contracts,regulatory,fda,recalls,complaints,bank,attention,capital,trials,consumer").split(",");
 
 // Names as they appear in each public registry (defaults to a cleaned SEC name).
 const NAME: Record<string, string> = { AAPL: "Apple", MSFT: "Microsoft", NVDA: "NVIDIA", AMZN: "Amazon", GOOGL: "Google", META: "Meta Platforms", AVGO: "Broadcom", AMD: "Advanced Micro Devices", JPM: "JPMorgan Chase", BAC: "Bank of America", GS: "Goldman Sachs", V: "Visa", MA: "Mastercard", LLY: "Eli Lilly", UNH: "UnitedHealth", JNJ: "Johnson & Johnson", MRK: "Merck", WMT: "Walmart", COST: "Costco", XOM: "Exxon Mobil", CVX: "Chevron", CAT: "Caterpillar", HD: "Home Depot", CRM: "Salesforce", NOW: "ServiceNow", CSCO: "Cisco", IBM: "International Business Machines", INTC: "Intel", QCOM: "Qualcomm", TXN: "Texas Instruments", MU: "Micron Technology", NFLX: "Netflix", DIS: "Walt Disney", CMCSA: "Comcast", T: "AT&T", VZ: "Verizon", LOW: "Lowe's", MCD: "McDonald's", SBUX: "Starbucks", NKE: "Nike", BKNG: "Booking Holdings", PG: "Procter & Gamble", KO: "Coca-Cola", PEP: "PepsiCo", PM: "Philip Morris", WFC: "Wells Fargo", C: "Citigroup", MS: "Morgan Stanley", SCHW: "Charles Schwab", AXP: "American Express", SPGI: "S&P Global", ABBV: "AbbVie", PFE: "Pfizer", AMGN: "Amgen", TMO: "Thermo Fisher", ABT: "Abbott Laboratories", ISRG: "Intuitive Surgical", GE: "General Electric", RTX: "Raytheon", BA: "Boeing", LMT: "Lockheed Martin", HON: "Honeywell", DE: "Deere", UNP: "Union Pacific", UPS: "United Parcel Service", COP: "ConocoPhillips", SLB: "Schlumberger", LIN: "Linde", FCX: "Freeport-McMoRan", NEE: "NextEra Energy", DUK: "Duke Energy", SO: "Southern Company", PLD: "Prologis", AMT: "American Tower", EQIX: "Equinix", TSLA: "Tesla", ORCL: "Oracle", ADBE: "Adobe" };
@@ -68,16 +69,7 @@ async function ownership(c: Co): Promise<Row[]> {
 }
 
 // ───────── SEC: 8-K corporate events ─────────
-const ITEMS: Record<string, [string, string]> = {
-  "1.01": ["deal", "Entered a material agreement"], "1.02": ["deal", "Terminated a material agreement"],
-  "2.01": ["m&a", "Completed an acquisition or disposition"], "2.03": ["debt", "Took on a direct financial obligation"],
-  "2.04": ["debt", "Debt acceleration triggered"], "2.05": ["restructuring", "Exit or restructuring costs"],
-  "2.06": ["impairment", "Material impairment"], "3.01": ["listing", "Listing standard notice"],
-  "3.02": ["equity", "Unregistered equity sale"], "4.01": ["audit", "Changed auditor"],
-  "4.02": ["restatement", "Prior financials no longer reliable"], "5.01": ["control", "Change in control"],
-  "5.02": ["management", "Director or officer change"], "5.03": ["governance", "Charter or bylaw amendment"],
-  "1.05": ["cyber", "Material cybersecurity incident"],
-};
+
 async function events(c: Co): Promise<Row[]> {
   const head = await get(`https://data.sec.gov/submissions/CIK${cik10(c)}.json`);
   if (!head) return [];
@@ -113,6 +105,19 @@ async function contracts(c: Co): Promise<Row[]> {
     for (const r of t?.results ?? []) if (r.aggregated_amount) fy.set(Number(r.time_period.fiscal_year), (fy.get(Number(r.time_period.fiscal_year)) ?? 0) + r.aggregated_amount);
     const recent = { ...filters, time_period: [{ start_date: `${new Date().getFullYear() - 5}-01-01`, end_date: today }] };
     const a = await post("https://api.usaspending.gov/api/v2/search/spending_by_award/", { filters: recent, fields: ["Award ID", "Recipient Name", "Award Amount", "Awarding Agency", "Awarding Sub Agency", "Start Date", "End Date", "Description", "generated_internal_id"], limit: 40, sort: "Award Amount", order: "desc" });
+    // Newest obligations (new awards, task orders, modifications ≥ $1M) in the last 18 months, so the
+    // feed reflects what was actually awarded recently — not just the biggest historic contracts.
+    const since = new Date(Date.now() - 548 * 864e5).toISOString().slice(0, 10);
+    for (let page = 1; page <= 3; page++) {
+      const tx = await post("https://api.usaspending.gov/api/v2/search/spending_by_transaction/", { filters: { ...filters, time_period: [{ start_date: since, end_date: today }] }, fields: ["Award ID", "Mod", "Recipient Name", "Action Date", "Transaction Amount", "Awarding Agency", "Awarding Sub Agency", "Transaction Description", "generated_internal_id", "internal_id"], limit: 100, page, sort: "Action Date", order: "desc" });
+      const res = tx?.results ?? [];
+      for (const r of res) {
+        if (!(r["Transaction Amount"] >= 1e6)) continue;
+        const mod = String(r.Mod ?? "0");
+        out.push({ uid: `usatx:${c.ticker}:${r.internal_id}`, ticker: c.ticker, dataset: "contracts", kind: "event", date: iso(r["Action Date"]), title: `${r["Awarding Sub Agency"] ?? r["Awarding Agency"]}: ${(r["Transaction Description"] ?? "Contract action").slice(0, 140)}`, value: r["Transaction Amount"], unit: "USD", meta: { award_id: r["Award ID"], mod, action: mod === "0" ? "new award" : "modification", recipient: r["Recipient Name"], agency: r["Awarding Agency"], sub_agency: r["Awarding Sub Agency"] }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/award/${r.generated_internal_id}` });
+      }
+      if (!tx?.page_metadata?.hasNext) break;
+    }
     for (const r of a?.results ?? []) out.push({ uid: `usa:${c.ticker}:${r.generated_internal_id}`, ticker: c.ticker, dataset: "contracts", kind: "event", date: r["Start Date"], title: `${r["Awarding Agency"]}: ${(r.Description ?? "Contract award").slice(0, 140)}`, value: r["Award Amount"], unit: "USD", meta: { award_id: r["Award ID"], recipient: r["Recipient Name"], agency: r["Awarding Agency"], sub_agency: r["Awarding Sub Agency"], end: r["End Date"] }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/award/${r.generated_internal_id}` });
   }
   const curFy = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
@@ -204,7 +209,60 @@ async function attention(c: Co): Promise<Row[]> {
   return (j?.items ?? []).map((r: any) => ({ uid: `wiki:${c.ticker}:${r.timestamp.slice(0, 6)}`, ticker: c.ticker, dataset: "attention", kind: "series" as const, date: `${r.timestamp.slice(0, 4)}-${r.timestamp.slice(4, 6)}-01`, title: "Wikipedia pageviews", value: r.views, unit: "views", meta: { article: decodeURIComponent(a) }, source: "Wikimedia pageviews", source_url: `https://pageviews.wmcloud.org/?pages=${a}&range=all-time` }));
 }
 
-const ADAPTERS: Record<string, (c: Co) => Promise<Row[]>> = { ownership, events, contracts, regulatory, fda, recalls, complaints, bank, attention };
+// ───────── SEC: capital-markets activity (shelf registrations, takedowns, tender offers, buyback/exchange) ─────────
+
+async function capital(c: Co): Promise<Row[]> {
+  const head = await get(`https://data.sec.gov/submissions/CIK${cik10(c)}.json`);
+  if (!head) return [];
+  // Older submission files too, so heavy filers have a real multi-year baseline.
+  const blocks = [head.filings.recent];
+  for (const f of head.filings.files ?? []) { const x = await get(`https://data.sec.gov/submissions/${f.name}`); if (x) blocks.push(x); await sleep(120); }
+  const out: Row[] = [];
+  const allForms = blocks.flatMap((b) => b.form as string[]);
+  const routineNotes = new Set(["424B2", "424B3"].filter((x) => allForms.filter((f) => f === x).length > 100));
+  for (const b of blocks) {
+  for (let i = 0; i < b.accessionNumber.length; i++) {
+    if (routineNotes.has(b.form[i])) continue;
+    const hit = CAPITAL.find(([re]) => re.test(b.form[i])); if (!hit) continue;
+    out.push({ uid: `cap:${c.ticker}:${b.accessionNumber[i]}`, ticker: c.ticker, dataset: "capital", kind: "event", date: b.filingDate[i], title: hit[2], meta: { form: b.form[i], category: hit[1], description: b.primaryDocDescription?.[i] || null }, source: "SEC EDGAR", source_url: edgarUrl(c, b.accessionNumber[i], b.primaryDocument[i] || undefined) });
+  }
+  }
+  return out;
+}
+
+// ───────── ClinicalTrials.gov: trials the company sponsors (healthcare only) ─────────
+async function trials(c: Co): Promise<Row[]> {
+  if (!/health|pharma|biotech|medical|life sci|drug/i.test(`${c.sector} ${c.industry}`)) return [];
+  const name = nm(c); const re = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const out: Row[] = []; let token = "";
+  for (let p = 0; p < 5; p++) {
+    const j = await get(`https://clinicaltrials.gov/api/v2/studies?query.lead=${encodeURIComponent(name)}&sort=LastUpdatePostDate:desc&pageSize=200&fields=NCTId,BriefTitle,OverallStatus,Phase,LastUpdatePostDate,StartDate,PrimaryCompletionDate,LeadSponsorName,Condition,EnrollmentCount${token ? `&pageToken=${token}` : ""}`).catch(() => null);
+    for (const st of j?.studies ?? []) {
+      const ps = st.protocolSection; const sponsor = ps.sponsorCollaboratorsModule?.leadSponsor?.name ?? "";
+      if (!re.test(sponsor)) continue; // lead sponsor must be the company itself
+      const id = ps.identificationModule.nctId; const s = ps.statusModule;
+      out.push({ uid: `ct:${c.ticker}:${id}`, ticker: c.ticker, dataset: "trials", kind: "event", date: iso(s.lastUpdatePostDateStruct?.date), title: ps.identificationModule.briefTitle.slice(0, 240), value: ps.designModule?.enrollmentInfo?.count ?? null, unit: "patients", meta: { nct: id, status: s.overallStatus, phase: (ps.designModule?.phases ?? []).join("/"), start: s.startDateStruct?.date, primary_completion: s.primaryCompletionDateStruct?.date, conditions: (ps.conditionsModule?.conditions ?? []).slice(0, 4), sponsor }, source: "ClinicalTrials.gov", source_url: `https://clinicaltrials.gov/study/${id}` });
+    }
+    token = j?.nextPageToken; if (!token) break;
+  }
+  return out;
+}
+
+// ───────── CPSC consumer-product recalls naming the company ─────────
+async function consumer(c: Co): Promise<Row[]> {
+  const name = nm(c); const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const j = await get(`https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallTitle=${encodeURIComponent(name)}`).catch(() => null);
+  const out: Row[] = [];
+  for (const r of j ?? []) {
+    const who = [...(r.Manufacturers ?? []), ...(r.Importers ?? [])].map((x: any) => x.Name).join(" | ");
+    if (!re.test(r.Title ?? "") && !re.test(who)) continue;
+    const units = Number(String(r.Products?.[0]?.NumberOfUnits ?? "").replace(/[^\d]/g, "")) || null;
+    out.push({ uid: `cpsc:${c.ticker}:${r.RecallNumber}`, ticker: c.ticker, dataset: "consumer", kind: "event", date: iso(r.RecallDate), title: r.Title?.slice(0, 240) ?? "Recall", value: units, unit: "units", meta: { role: re.test(String(r.Title ?? "").split(/\b(Recall|Recalls|Recalled|Reannounces)\b/)[0]) || re.test(who) ? "maker" : "retailer", product: r.Products?.[0]?.Name, hazard: r.Hazards?.[0]?.Name?.slice(0, 400), remedy: r.Remedies?.[0]?.Name?.slice(0, 300) }, source: "CPSC", source_url: r.URL });
+  }
+  return out;
+}
+
+const ADAPTERS: Record<string, (c: Co) => Promise<Row[]>> = { ownership, events, contracts, regulatory, fda, recalls, complaints, bank, attention, capital, trials, consumer };
 
 async function save(rows: Row[]) {
   const seen = new Map(rows.map((r) => [r.uid, r]));

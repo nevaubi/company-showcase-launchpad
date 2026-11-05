@@ -191,7 +191,7 @@ export const TOOL_DEFS = [
     type: "function",
     name: "get_alt_data",
     description: "Public alternative data for a covered company (or the newest records across all companies when ticker is null): ownership (13D/13G holders), events (8-K items: deals, M&A, debt, restructuring, impairments, exec changes, restatements, cyber), contracts (USAspending federal obligations by FY + largest awards), regulatory (Federal Register), fda (approvals, recalls), recalls (NHTSA), complaints (CFPB per year), bank (FDIC call-report quarterlies), attention (monthly Wikipedia pageviews). Every row has a source URL — cite it.",
-    parameters: obj({ ticker: nullable(str("Covered ticker")), dataset: nullable({ type: "string", enum: ["ownership", "events", "contracts", "regulatory", "fda", "recalls", "complaints", "bank", "attention"] }), since: nullable(str("Earliest date YYYY-MM-DD")) }, ["ticker", "dataset", "since"]),
+    parameters: obj({ ticker: nullable(str("Covered ticker")), dataset: nullable({ type: "string", enum: ["ownership", "events", "capital", "contracts", "regulatory", "fda", "trials", "recalls", "consumer", "complaints", "bank", "attention"] }), since: nullable(str("Earliest date YYYY-MM-DD")) }, ["ticker", "dataset", "since"]),
     strict: true,
   },
   {

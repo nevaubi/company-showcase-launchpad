@@ -23,6 +23,9 @@ export const DATASETS: Record<string, { label: string; blurb: string; source: st
   recalls: { label: "Vehicle & equipment recalls", blurb: "NHTSA recall campaigns and units affected", source: "NHTSA" },
   complaints: { label: "Consumer complaints", blurb: "CFPB complaints per year with product mix", source: "CFPB" },
   bank: { label: "Bank call reports", blurb: "Quarterly FDIC data for the main insured bank: deposits, loans, NIM, charge-offs, capital", source: "FDIC" },
+  capital: { label: "Capital markets", blurb: "Shelf registrations, bond/equity takedowns, tender offers, merger registrations and stock-plan filings", source: "SEC EDGAR" },
+  trials: { label: "Clinical trials", blurb: "Trials the company leads as sponsor: phase, status, enrollment and completion dates", source: "ClinicalTrials.gov" },
+  consumer: { label: "Consumer product recalls", blurb: "CPSC recalls naming the company as maker, importer or retailer, with units and hazard", source: "CPSC" },
   attention: { label: "Public attention", blurb: "Monthly Wikipedia pageviews — a free demand/interest proxy", source: "Wikimedia" },
 };
 

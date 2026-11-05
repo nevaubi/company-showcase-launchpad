@@ -16,6 +16,9 @@ function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
   if (r.dataset === "regulatory") return { text: m.type ?? "document" };
   if (r.dataset === "contracts") return { text: m.sub_agency ?? m.agency ?? "award" };
   if (r.dataset === "recalls") return { text: m.component ?? "recall", tone: "neg" };
+  if (r.dataset === "capital") return { text: m.form ?? m.category };
+  if (r.dataset === "trials") return { text: [m.phase?.replace(/PHASE/g, "Ph "), m.status?.toLowerCase().replace(/_/g, " ")].filter(Boolean).join(" · "), tone: /TERMINATED|WITHDRAWN|SUSPENDED/.test(m.status ?? "") ? "neg" : /COMPLETED/.test(m.status ?? "") ? "pos" : undefined };
+  if (r.dataset === "consumer") return { text: m.role === "retailer" ? "sold at its stores" : m.product ?? "own product", tone: m.role === "retailer" ? undefined : "neg" };
   return null;
 }
 
@@ -25,6 +28,9 @@ function detail(r: AltRow): string | null {
   if (r.dataset === "regulatory") return [(m.agencies ?? []).join(", "), m.abstract].filter(Boolean).join(" — ") || null;
   if (r.dataset === "fda") return m.reason || null;
   if (r.dataset === "recalls") return m.summary || null;
+  if (r.dataset === "trials") return [m.nct, (m.conditions ?? []).join(", "), m.primary_completion ? `primary completion ${m.primary_completion}` : null].filter(Boolean).join(" · ") || null;
+  if (r.dataset === "consumer") return m.hazard || null;
+  if (r.dataset === "contracts" && m.action) return `${m.action === "new award" ? "New award" : `Modification ${m.mod}`} · ${m.award_id}`;
   if (r.dataset === "contracts") return m.award_id ? `Award ${m.award_id}${m.end ? ` · ends ${fmtD(m.end)}` : ""}` : null;
   return null;
 }
@@ -47,7 +53,7 @@ export function AltEventList({ rows, showTicker, max = 200 }: { rows: AltRow[]; 
                     <Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="font-medium hover:underline">{r.ticker}</Link>
                   )}
                   {t?.text && <Badge variant="outline" className={cn("text-[10px] capitalize", t.tone === "neg" && "text-negative", t.tone === "pos" && "text-positive")}>{t.text}</Badge>}
-                  {r.value != null && <span className="num text-[12px] font-medium">{fmtAlt(r.value, r.unit)}{r.unit === "units" ? " units" : ""}</span>}
+                  {r.value != null && <span className="num text-[12px] font-medium">{fmtAlt(r.value, r.unit)}{r.unit === "units" ? " units" : r.unit === "patients" ? " patients" : ""}</span>}
                 </div>
                 <a href={r.source_url ?? undefined} target="_blank" rel="noreferrer" className="group mt-0.5 flex items-start gap-1 leading-snug hover:underline">
                   <span className="line-clamp-2">{r.title}</span>

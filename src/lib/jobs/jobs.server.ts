@@ -8,6 +8,7 @@ import { summarize } from "@/lib/macro";
 import { fetchCboeDaily, fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo, isCboeIndex, isTreasurySeries, pool, toBars } from "@/lib/market-data.server";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
+import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 
 export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract";
 
@@ -139,6 +140,9 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
           filings: { recent: Record<string, (string | number)[]> };
         };
         const r = sub.filings.recent;
+        // Keep the alt-data hub current: 8-K items and capital-markets filings from the last 45 days.
+        const alt = secAltRows(c.ticker, c.cik, r as unknown as SubmissionBlock).filter((x) => x.date >= since);
+        if (alt.length) await supabaseAdmin.from("alt_data").upsert(alt as never, { onConflict: "uid" });
         const rows = (r.accessionNumber as string[])
           .map((accn, i) => ({
             accn,

@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { AltEventList } from "@/components/alt/alt-views";
 import { altBucketsQuery, altCellQuery, altRedFlagsQuery, altSourceStatsQuery, DATASETS } from "@/lib/alt/query";
-import { computeSignals, heat, RED_FLAG_ITEMS, signalLabel, topChanges, type Signal } from "@/lib/alt/signals";
+import { computeSignals, heat, NO_SIGNAL, RED_FLAG_ITEMS, signalLabel, topChanges, type Signal } from "@/lib/alt/signals";
 import { cn } from "@/lib/utils";
 
-const EVENT_SETS = ["ownership", "events", "contracts", "regulatory", "fda", "recalls"];
-const SHORT: Record<string, string> = { ownership: "13D/G", events: "8-K", contracts: "Contracts", regulatory: "Fed. Reg.", fda: "FDA", recalls: "Recalls" };
+const EVENT_SETS = ["ownership", "events", "capital", "contracts", "regulatory", "fda", "trials", "recalls", "consumer"];
+const SHORT: Record<string, string> = { ownership: "13D/G", events: "8-K", contracts: "Contracts", regulatory: "Fed. Reg.", fda: "FDA", recalls: "NHTSA", capital: "Capital", trials: "Trials", consumer: "CPSC" };
 
 function ago(iso: string | null) {
   if (!iso) return "—";
@@ -25,7 +25,7 @@ export function SourceStrip() {
   if (q.isLoading) return <Skeleton className="mb-5 h-20" />;
   const by = new Map((q.data ?? []).map((r) => [r.dataset, r]));
   return (
-    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-9">
+    <div className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6">
       {Object.entries(DATASETS).map(([k, v]) => {
         const s = by.get(k);
         const stale = s?.latest && Date.now() - new Date(s.latest).getTime() > 120 * 864e5;
@@ -135,7 +135,7 @@ function Heatmap({ signals, loading, onOpen }: { signals: Signal[]; loading: boo
   const grid = useMemo(() => {
     const by = new Map<string, Map<string, Signal>>();
     for (const s of signals) if (EVENT_SETS.includes(s.dataset)) (by.get(s.ticker) ?? by.set(s.ticker, new Map()).get(s.ticker)!).set(s.dataset, s);
-    const rows = [...by.entries()].map(([ticker, m]) => ({ ticker, m, score: [...m.values()].reduce((a, s) => a + Math.max(0, s.z), 0) }));
+    const rows = [...by.entries()].map(([ticker, m]) => ({ ticker, m, score: [...m.values()].reduce((a, s) => a + (NO_SIGNAL.has(s.dataset) ? 0 : Math.max(0, s.z)), 0) }));
     return rows.sort((a, b) => sort === "score" ? b.score - a.score : sort === "ticker" ? a.ticker.localeCompare(b.ticker) : (b.m.get(sort)?.z ?? -9) - (a.m.get(sort)?.z ?? -9));
   }, [signals, sort]);
   return (
@@ -159,7 +159,7 @@ function Heatmap({ signals, loading, onOpen }: { signals: Signal[]; loading: boo
                     if (!s) return <td key={d} className="px-1 py-1"><div className="h-6 rounded-sm bg-muted/20" /></td>;
                     return (
                       <td key={d} className="px-1 py-1">
-                        <button onClick={() => onOpen({ ticker: r.ticker, dataset: d })} title={`${s.recent} in 90d · ${signalLabel(s)}`} className={cn("num h-6 w-full rounded-sm text-[11px] transition hover:ring-1 hover:ring-foreground/40", HEAT_CLS[heat(s.z)])}>
+                        <button onClick={() => onOpen({ ticker: r.ticker, dataset: d })} title={`${s.recent} in 90d · ${signalLabel(s)}`} className={cn("num h-6 w-full rounded-sm text-[11px] transition hover:ring-1 hover:ring-foreground/40", HEAT_CLS[NO_SIGNAL.has(d) ? 0 : heat(s.z)])}>
                           {s.recent || "·"}
                         </button>
                       </td>

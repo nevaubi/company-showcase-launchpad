@@ -16,6 +16,12 @@ export interface Signal {
 
 export const WINDOWS = 9;
 
+/** Datasets whose stored history is shorter than two years: baseline uses only the windows the
+ * source actually covers (contract actions: last ~18 months). Trials are dated by last update,
+ * so their count measures record churn, not news — kept out of "what changed". */
+export const BASELINE_WINDOWS: Record<string, number> = { contracts: 5 };
+export const NO_SIGNAL = new Set(["trials"]);
+
 /** Activity vs each company's own history. Spread floors at √baseline (Poisson) and 1 so rare series don't explode. */
 export function computeSignals(rows: Bucket[]): Signal[] {
   const m = new Map<string, { h: number[]; last: string | null; ticker: string; dataset: string }>();
@@ -29,7 +35,8 @@ export function computeSignals(rows: Bucket[]): Signal[] {
   }
   return [...m.values()].map(({ h, last, ticker, dataset }) => {
     const recent = h[WINDOWS - 1];
-    const prior = h.slice(0, WINDOWS - 1);
+    const nb = BASELINE_WINDOWS[dataset] ?? WINDOWS - 1;
+    const prior = h.slice(WINDOWS - 1 - nb, WINDOWS - 1);
     const baseline = prior.reduce((a, b) => a + b, 0) / prior.length;
     const sd = Math.sqrt(prior.reduce((a, b) => a + (b - baseline) ** 2, 0) / prior.length);
     const spread = Math.max(sd, Math.sqrt(baseline), 1);
@@ -40,13 +47,15 @@ export function computeSignals(rows: Bucket[]): Signal[] {
 /** Biggest unusual moves: needs at least `minRecent` events or a clear drop from a busy baseline. */
 export function topChanges(signals: Signal[], limit = 12, minRecent = 2): Signal[] {
   return signals
+    .filter((s) => !NO_SIGNAL.has(s.dataset))
     .filter((s) => (s.z >= 1.5 && s.recent >= minRecent) || (s.z <= -1.5 && s.baseline >= 3))
     .sort((a, b) => Math.abs(b.z) - Math.abs(a.z) || b.recent - a.recent)
     .slice(0, limit);
 }
 
 export function signalLabel(s: Signal): string {
-  if (s.baseline === 0) return s.recent ? `${s.recent} new — none in the prior 2 years` : "quiet";
+  if (NO_SIGNAL.has(s.dataset)) return `${s.recent} records updated`;
+  if (s.baseline === 0) return s.recent ? `${s.recent} new — none in the prior ${s.dataset in BASELINE_WINDOWS ? "15 months" : "2 years"}` : "quiet";
   const r = s.recent / s.baseline;
   return r >= 1 ? `${r.toFixed(1)}× its usual pace` : `${Math.round((1 - r) * 100)}% below its usual pace`;
 }
