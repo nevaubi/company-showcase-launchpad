@@ -22,7 +22,6 @@ import {
   Crosshair,
   PieChart,
   Search,
-  UserRoundSearch,
   X,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -55,7 +54,6 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     items: [
       { to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
       { to: "/app/companies", label: "Companies", icon: Building2 },
-      { to: "/app/insiders", label: "Insider trades", icon: UserRoundSearch },
     ],
   },
   {

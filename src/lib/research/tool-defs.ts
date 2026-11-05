@@ -257,7 +257,7 @@ export const TOOL_DEFS = [
       "Open a page in the user's Filed Under app (only works in the side-panel assistant). Use when the user asks to show/open/go to something, or when a page would help them see your answer.",
     parameters: obj(
       {
-        page: { type: "string", enum: ["dashboard", "company", "financials", "segments", "valuation", "filings", "insiders", "calls", "ir", "supply_chain", "ideas", "markets", "macro", "sectors", "research", "theses", "docs", "all_insiders", "companies", "hedge_funds", "alt_data"] },
+        page: { type: "string", enum: ["dashboard", "company", "financials", "segments", "valuation", "filings", "insiders", "calls", "ir", "supply_chain", "ideas", "markets", "macro", "sectors", "research", "theses", "docs", "companies", "hedge_funds", "alt_data"] },
         ticker: nullable(str("Ticker for company pages and supply_chain")),
       },
       ["page", "ticker"],

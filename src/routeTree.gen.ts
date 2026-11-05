@@ -19,7 +19,6 @@ import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
 import { Route as AuthenticatedAppHedgeFundsRouteImport } from './routes/_authenticated/app.hedge-funds'
 import { Route as AuthenticatedAppIdeasRouteImport } from './routes/_authenticated/app.ideas'
-import { Route as AuthenticatedAppInsidersRouteImport } from './routes/_authenticated/app.insiders'
 import { Route as AuthenticatedAppMacroRouteImport } from './routes/_authenticated/app.macro'
 import { Route as AuthenticatedAppMarketsRouteImport } from './routes/_authenticated/app.markets'
 import { Route as AuthenticatedAppResearchRouteImport } from './routes/_authenticated/app.research'
@@ -95,12 +94,6 @@ const AuthenticatedAppIdeasRoute = AuthenticatedAppIdeasRouteImport.update({
   path: '/ideas',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
-const AuthenticatedAppInsidersRoute =
-  AuthenticatedAppInsidersRouteImport.update({
-    id: '/insiders',
-    path: '/insiders',
-    getParentRoute: () => AuthenticatedAppRoute,
-  } as any)
 const AuthenticatedAppMacroRoute = AuthenticatedAppMacroRouteImport.update({
   id: '/macro',
   path: '/macro',
@@ -249,7 +242,6 @@ export interface FileRoutesByFullPath {
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
-  '/app/insiders': typeof AuthenticatedAppInsidersRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
@@ -284,7 +276,6 @@ export interface FileRoutesByTo {
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
-  '/app/insiders': typeof AuthenticatedAppInsidersRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
@@ -321,7 +312,6 @@ export interface FileRoutesById {
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/_authenticated/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/_authenticated/app/ideas': typeof AuthenticatedAppIdeasRoute
-  '/_authenticated/app/insiders': typeof AuthenticatedAppInsidersRoute
   '/_authenticated/app/macro': typeof AuthenticatedAppMacroRoute
   '/_authenticated/app/markets': typeof AuthenticatedAppMarketsRoute
   '/_authenticated/app/research': typeof AuthenticatedAppResearchRoute
@@ -359,7 +349,6 @@ export interface FileRouteTypes {
     | '/app/alt-data'
     | '/app/hedge-funds'
     | '/app/ideas'
-    | '/app/insiders'
     | '/app/macro'
     | '/app/markets'
     | '/app/research'
@@ -394,7 +383,6 @@ export interface FileRouteTypes {
     | '/app/alt-data'
     | '/app/hedge-funds'
     | '/app/ideas'
-    | '/app/insiders'
     | '/app/macro'
     | '/app/markets'
     | '/app/research'
@@ -430,7 +418,6 @@ export interface FileRouteTypes {
     | '/_authenticated/app/alt-data'
     | '/_authenticated/app/hedge-funds'
     | '/_authenticated/app/ideas'
-    | '/_authenticated/app/insiders'
     | '/_authenticated/app/macro'
     | '/_authenticated/app/markets'
     | '/_authenticated/app/research'
@@ -537,13 +524,6 @@ declare module '@tanstack/react-router' {
       path: '/ideas'
       fullPath: '/app/ideas'
       preLoaderRoute: typeof AuthenticatedAppIdeasRouteImport
-      parentRoute: typeof AuthenticatedAppRoute
-    }
-    '/_authenticated/app/insiders': {
-      id: '/_authenticated/app/insiders'
-      path: '/insiders'
-      fullPath: '/app/insiders'
-      preLoaderRoute: typeof AuthenticatedAppInsidersRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/macro': {
@@ -763,7 +743,6 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAltDataRoute: typeof AuthenticatedAppAltDataRoute
   AuthenticatedAppHedgeFundsRoute: typeof AuthenticatedAppHedgeFundsRoute
   AuthenticatedAppIdeasRoute: typeof AuthenticatedAppIdeasRoute
-  AuthenticatedAppInsidersRoute: typeof AuthenticatedAppInsidersRoute
   AuthenticatedAppMacroRoute: typeof AuthenticatedAppMacroRoute
   AuthenticatedAppMarketsRoute: typeof AuthenticatedAppMarketsRoute
   AuthenticatedAppResearchRoute: typeof AuthenticatedAppResearchRoute
@@ -784,7 +763,6 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAltDataRoute: AuthenticatedAppAltDataRoute,
   AuthenticatedAppHedgeFundsRoute: AuthenticatedAppHedgeFundsRoute,
   AuthenticatedAppIdeasRoute: AuthenticatedAppIdeasRoute,
-  AuthenticatedAppInsidersRoute: AuthenticatedAppInsidersRoute,
   AuthenticatedAppMacroRoute: AuthenticatedAppMacroRoute,
   AuthenticatedAppMarketsRoute: AuthenticatedAppMarketsRoute,
   AuthenticatedAppResearchRoute: AuthenticatedAppResearchRoute,

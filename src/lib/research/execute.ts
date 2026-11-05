@@ -86,7 +86,6 @@ const PAGE_PATH: Record<string, (t: string) => string> = {
   research: () => "/app/research",
   theses: () => "/app/theses",
   docs: () => "/app/docs",
-  all_insiders: () => "/app/insiders",
   hedge_funds: () => "/app/hedge-funds",
   alt_data: () => "/app/alt-data",
 };

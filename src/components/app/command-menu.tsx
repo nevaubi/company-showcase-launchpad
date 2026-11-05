@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { BookOpenText, Bot, Building2, FileSpreadsheet, Globe2, LayoutDashboard, LineChart, PieChart, Star, UserRoundSearch } from "lucide-react";
+import { BookOpenText, Bot, Building2, FileSpreadsheet, Globe2, LayoutDashboard, LineChart, PieChart, Star } from "lucide-react";
 import {
   CommandDialog,
   CommandEmpty,
@@ -20,7 +20,6 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
   { to: "/app/markets", label: "Technicals", icon: LineChart, keywords: "chart price rsi macd" },
   { to: "/app/sectors", label: "Sectors", icon: PieChart, keywords: "etf rotation heatmap" },
   { to: "/app/macro", label: "Macro", icon: Globe2, keywords: "fred rates inflation yield curve" },
-  { to: "/app/insiders", label: "Insider trades", icon: UserRoundSearch, keywords: "form 4 trade following" },
   { to: "/app/theses", label: "Theses", icon: BookOpenText, keywords: "ideas notes long short" },
   { to: "/app/research", label: "Research agent", icon: Bot, keywords: "ai chat ask" },
   { to: "/app/docs", label: "Docs & sheets", icon: FileSpreadsheet, keywords: "excel word editor" },
