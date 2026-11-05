@@ -37,18 +37,22 @@ import type {
   UniverseEntry,
   UniverseFundamentals,
 } from "../src/lib/financials/types";
-import { COVERAGE, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
+import { COVERAGE, isBundled, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
 import { summarize, type MacroSummary } from "../src/lib/macro";
 
 const UA = "FiledUnder Research research@filedunder.ai";
-const OUT = new URL("../public/data/", import.meta.url).pathname;
-const CACHE = "/tmp/ingest/cache";
 const args = Object.fromEntries(
   process.argv.slice(2).map((a) => {
     const [k, v] = a.replace(/^--/, "").split("=");
     return [k, v ?? "1"];
   }),
 );
+// --extra builds the partner-universe companies (not bundled) into a staging folder that
+// scripts/publish-extra.ts uploads to the public `datasets` bucket; default builds the bundled set.
+const EXTRA = !!args.extra;
+const OUT = EXTRA ? "/tmp/ingest/extra/" : new URL("../public/data/", import.meta.url).pathname;
+const CACHE = "/tmp/ingest/cache";
+const SCOPE = COVERAGE.filter((c) => isBundled(c.ticker) !== EXTRA);
 
 // ---------- SEC transport (throttled, cached) ----------
 let lastSec = 0;
@@ -823,7 +827,7 @@ async function writeMacroIndex() {
 /** Slim cross-company Form 4 feed so the insider hub doesn't load every company file. */
 async function writeInsiderFeed() {
   const rows: (InsiderTrade & { ticker: string })[] = [];
-  for (const c of COVERAGE) {
+  for (const c of SCOPE) {
     try {
       const d = JSON.parse(await readFile(`${OUT}companies/${c.ticker}.json`, "utf8")) as { insiders: InsiderTrade[] };
       for (const t of d.insiders) rows.push({ ...t, ticker: c.ticker });
@@ -844,7 +848,7 @@ async function writeManifest() {
   let periods = 0;
   let oldest = "9999";
   let companies = 0;
-  for (const c of COVERAGE) {
+  for (const c of SCOPE) {
     try {
       const d = JSON.parse(await readFile(`${OUT}companies/${c.ticker}.json`, "utf8")) as CompanyDataset;
       companies++;
@@ -873,7 +877,7 @@ async function writeManifest() {
     oldestFiscalYearEnd: oldest,
     insiderTransactions: insiders.trades.length,
     macroSeries: MACRO_SERIES.length,
-    priceSymbols: COVERAGE.length + BENCHMARKS.length,
+    priceSymbols: SCOPE.length + BENCHMARKS.length,
   };
   await writeFile(`${OUT}manifest.json`, JSON.stringify(manifest, null, 1));
   console.log("  manifest", manifest);
@@ -894,7 +898,7 @@ async function main() {
     } catch {
       /* first run */
     }
-    const todo = COVERAGE.filter((c) => !tickers || tickers.includes(c.ticker));
+    const todo = SCOPE.filter((c) => !tickers || tickers.includes(c.ticker));
     console.log(`▶ SEC: ${todo.length} companies`);
     const fresh = await pool(todo, Number(args.concurrency ?? 3), async (c) => {
       try {
@@ -905,16 +909,29 @@ async function main() {
       }
     });
     const byTicker = new Map(fresh.filter((e): e is UniverseEntry => !!e).map((e) => [e.ticker, e]));
-    const entries = COVERAGE.map((c) => byTicker.get(c.ticker) ?? prev?.companies.find((x) => x.ticker === c.ticker)).filter(
+    const entries = SCOPE.map((c) => byTicker.get(c.ticker) ?? prev?.companies.find((x) => x.ticker === c.ticker)).filter(
       (e): e is UniverseEntry => !!e,
     );
     const universe: Universe = { generatedAt: new Date().toISOString(), companies: entries };
     await writeFile(`${OUT}universe.json`, JSON.stringify(universe));
   }
+  if (EXTRA) {
+    if (!only || only === "prices") {
+      const symbols = SCOPE.filter((c) => !tickers || tickers.includes(c.ticker));
+      await pool(symbols, 2, async (c) => {
+        try {
+          await ingestPrice(c.ticker, c.shortName);
+        } catch (e) {
+          console.warn("  price failed", c.ticker, (e as Error).message);
+        }
+      });
+    }
+    return;
+  }
   if (!only || only === "sec" || only === "insiders") await writeInsiderFeed();
   if (!only || only === "prices") {
     console.log("\n▶ prices");
-    const symbols = [...COVERAGE.map((c) => [c.ticker, c.shortName]), ...BENCHMARKS.map((b) => [b.symbol, b.name])].filter(
+    const symbols = [...SCOPE.map((c) => [c.ticker, c.shortName]), ...(EXTRA ? [] : BENCHMARKS.map((b) => [b.symbol, b.name]))].filter(
       ([s]) => !tickers || tickers.includes(s),
     );
     await pool(symbols, 2, async ([s, n]) => {

@@ -1,7 +1,7 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import type { Bar, CompanyDataset, Filing, InsiderTrade, MacroSeries, PriceSeries, Universe } from "@/lib/financials/types";
 import { getMacroSeries, getNews, getPriceSeries, getQuotes } from "@/lib/market.functions";
-import type { MacroDef } from "@/lib/coverage";
+import { coverageOf, isBundled, type MacroDef } from "@/lib/coverage";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import type { MacroSummary } from "@/lib/macro";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,11 +16,32 @@ async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/** Bundled companies ship in public/data; the partner-universe ones live in the private `datasets` bucket (scripts/extra-backfill.ts). */
+async function getDataset<T>(kind: "companies" | "prices", file: string, bundled: boolean): Promise<T> {
+  if (bundled) return getJson<T>(`/data/${kind}/${file}.json`);
+  const { data, error } = await supabase.storage.from("datasets").download(`${kind}/${file}.json`);
+  if (error || !data) throw new Error(`No ${kind === "companies" ? "SEC dataset" : "price history"} built yet for ${file}`);
+  return JSON.parse(await data.text()) as T;
+}
+
 export const symbolFile = (s: string) => s.replace(/\^/g, "IDX_").replace(/[^A-Za-z0-9_.-]/g, "_");
 
 export const universeQuery = queryOptions({
   queryKey: ["universe"],
-  queryFn: () => getJson<Universe>("/data/universe.json"),
+  queryFn: async () => {
+    const base = await getJson<Universe>("/data/universe.json");
+    try {
+      const { data } = await supabase.storage.from("datasets").download("universe.json");
+      if (data) {
+        const extra = JSON.parse(await data.text()) as Universe;
+        const have = new Set(base.companies.map((c) => c.ticker));
+        return { ...base, companies: [...base.companies, ...extra.companies.filter((c) => !have.has(c.ticker))] };
+      }
+    } catch {
+      /* bundled universe only */
+    }
+    return base;
+  },
   staleTime: Infinity,
 });
 
@@ -88,7 +109,7 @@ export const companyQuery = (ticker: string) =>
     queryKey: ["company", ticker.toUpperCase()],
     queryFn: async () => {
       const t = ticker.toUpperCase();
-      const d = hydrateDataset(await getJson<CompanyDataset>(`/data/companies/${t}.json`));
+      const d = hydrateDataset(await getDataset<CompanyDataset>("companies", t, isBundled(t)));
       const latestFiled = d.filings.reduce((m, f) => (f.filed > m ? f.filed : m), "");
       const fresh = await freshSecData(t, latestFiled || d.generatedAt.slice(0, 10));
       if (!fresh.filings.length && !fresh.insiders.length) return d;
@@ -113,7 +134,7 @@ const RANGE_DAYS: Partial<Record<Range, number>> = { "5d": 7, "1mo": 31, "3mo": 
 
 /** Bundled ten-year daily snapshot plus any newer bars the refresh job stored. */
 async function storedDailyBars(symbol: string): Promise<PriceSeries> {
-  const s = await getJson<PriceSeries>(`/data/prices/${symbolFile(symbol)}.json`);
+  const s = await getDataset<PriceSeries>("prices", symbolFile(symbol), isBundled(symbol) || !coverageOf(symbol));
   const last = s.bars.at(-1)?.[0] ?? "1900-01-01";
   try {
     const { data } = await supabase

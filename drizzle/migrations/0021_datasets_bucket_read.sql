@@ -1,0 +1,1 @@
+CREATE POLICY "Signed-in users read datasets" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'datasets');
