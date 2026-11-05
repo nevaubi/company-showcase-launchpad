@@ -48,7 +48,7 @@
 - `scripts/alt-data.ts` upserts `alt_data` (stable `uid`, `source_url` required); contract recipients match parent ids by name prefix only.
 - OFR hedge fund data comes from `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json`, values as published with source URLs; rerun, never hand-edit.
 - Hedge/auction analytics: `src/lib/hedge/core.ts`; auctions: `scripts/treasury-auctions.ts`.
-- AI briefs/notes may only cite browser-assembled fact ids.
+- AI briefs/notes cite only browser-built fact ids.
 - Supply-chain country/region/concentration/freshness/basket analytics are pure in `src/lib/supply/analytics.ts`; web cross-checks keep only sentences naming both companies.
 - Promises keep only verbatim-verified quotes (`vetPromises`); alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows.
 - Analyst estimates: `scripts/estimates.ts` fills `analyst_estimates` (provider throttles Node fetch); `getEstimates` refreshes live after 6h.
