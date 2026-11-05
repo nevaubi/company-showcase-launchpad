@@ -50,4 +50,4 @@
 - Hedge/auction analytics are pure in `src/lib/hedge/core.ts`; auctions come from `bun scripts/treasury-auctions.ts` (rerun to refresh).
 - The morning brief (`src/lib/brief.functions.ts`) may only cite browser-assembled fact ids, so every line stays sourced.
 - Supply-chain country exposure, region shocks (incl. HQ-country ties for well-known foreign counterparties), concentration history, freshness and ecosystem baskets are pure in `src/lib/supply/analytics.ts`; per-link web cross-checks (`src/lib/supply-verify.functions.ts`) keep only sentences naming both companies and are cached per link.
-- Promises (`src/lib/earnings.functions.ts`) survive only if `vetPromises` finds each quote verbatim in its call; grades need a verbatim later-call quote. Alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows (no generic Federal Register notices; supply links alert by filing date).
+- Promises keep only verbatim-verified quotes (`vetPromises`); alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows.
