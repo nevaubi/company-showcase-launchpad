@@ -48,6 +48,7 @@ const TABS = [
   { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
   { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
   { to: "/app/companies/$ticker/insiders", label: "Insiders" },
+  { to: "/app/companies/$ticker/alt-data", label: "Alt data" },
 ] as const;
 
 function CompanyLayout() {

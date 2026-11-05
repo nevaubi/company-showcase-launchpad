@@ -127,6 +127,13 @@
       "when": 1793843133168,
       "tag": "0017_supply_signals",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793847600444,
+      "tag": "0018_alt_data",
+      "breakpoints": true
     }
   ]
 }

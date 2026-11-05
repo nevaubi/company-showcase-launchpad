@@ -8,7 +8,7 @@ export type AppPath =
   | "/app/insiders"
   | "/app/markets"
   | "/app/sectors"
-  | "/app/reactions"
+  | "/app/alt-data"
   | "/app/supply-chain"
   | "/app/ideas"
   | "/app/macro"

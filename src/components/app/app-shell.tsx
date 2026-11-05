@@ -59,7 +59,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     items: [
       { to: "/app/markets", label: "Technicals", icon: LineChart },
       { to: "/app/sectors", label: "Sectors", icon: PieChart },
-      { to: "/app/reactions", label: "Earnings reactions", icon: Activity },
+      { to: "/app/alt-data", label: "Alt data", icon: Activity },
       { to: "/app/ideas", label: "Trade ideas", icon: Crosshair },
       { to: "/app/supply-chain", label: "Supply chain", icon: Network },
       { to: "/app/macro", label: "Macro", icon: Globe2 },

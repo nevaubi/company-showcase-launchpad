@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader, Panel, Stat } from "@/components/app/page-header";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { CorrHeatmap } from "@/components/markets/corr-heatmap";
 import { TimeSeriesChart } from "@/components/charts/time-series";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,7 +107,7 @@ function SectorDeep() {
             <Stat label="Typical earnings move" value={reactAvg.length ? fmtPct(reactAvg.reduce((a, b) => a + b, 0) / reactAvg.length) : "—"} sub="Two-day, average of members" />
           </div>
 
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+          <div className="grid grid-cols-1 gap-5">
             <Panel title="Constituents" subtitle={`Sorted by 3-month return · relative to ${etf}`} bodyClassName="p-0" className="min-w-0">
               <div className="overflow-x-auto scrollbar-thin">
                 <table className="w-full min-w-[720px] text-[13px]">
@@ -140,7 +139,7 @@ function SectorDeep() {
                           <td className="num px-2 text-right">{r.betaSpy?.toFixed(2) ?? "—"}</td>
                           <td className="num px-2 text-right">{fmtPct(r.vol, 0)}</td>
                           <td className="num px-2 text-right">
-                            <Link to="/app/reactions" search={{ ticker: r.t }} className="hover:underline">{fmtPct(mc?.stats.avgAbsMove)}</Link>
+                            {fmtPct(mc?.stats.avgAbsMove)}
                           </td>
                           <td className="min-w-[200px] px-4">
                             <div className="flex flex-wrap gap-1 py-1">
@@ -155,9 +154,6 @@ function SectorDeep() {
                   </tbody>
                 </table>
               </div>
-            </Panel>
-            <Panel title="How they trade together" subtitle="1-year daily-return correlation" className="min-w-0">
-              <CorrHeatmap labels={data.rows.map((r) => r.t)} m={data.matrix} />
             </Panel>
           </div>
 

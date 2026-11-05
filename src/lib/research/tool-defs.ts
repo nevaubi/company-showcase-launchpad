@@ -189,6 +189,13 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_alt_data",
+    description: "Public alternative data for a covered company (or the newest records across all companies when ticker is null): ownership (13D/13G holders), events (8-K items: deals, M&A, debt, restructuring, impairments, exec changes, restatements, cyber), contracts (USAspending federal obligations by FY + largest awards), regulatory (Federal Register), fda (approvals, recalls), recalls (NHTSA), complaints (CFPB per year), bank (FDIC call-report quarterlies), attention (monthly Wikipedia pageviews). Every row has a source URL — cite it.",
+    parameters: obj({ ticker: nullable(str("Covered ticker")), dataset: nullable({ type: "string", enum: ["ownership", "events", "contracts", "regulatory", "fda", "recalls", "complaints", "bank", "attention"] }), since: nullable(str("Earliest date YYYY-MM-DD")) }, ["ticker", "dataset", "since"]),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_supply_chain",
     description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession.",
     parameters: obj({ ticker: str("Covered ticker"), relation: nullable({ type: "string", enum: ["customer", "supplier", "partner", "competitor"] }) }, ["ticker", "relation"]),
@@ -244,6 +251,7 @@ export const TOOL_LABELS: Record<string, string> = {
   get_earnings_call: "Read earnings call",
   screen_companies: "Screened companies",
   run_code: "Ran code",
+  get_alt_data: "Read alt data",
   get_supply_chain: "Mapped supply chain",
   simulate_supply_shock: "Simulated shock",
   navigate_to: "Opened page",

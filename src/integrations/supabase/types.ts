@@ -32,6 +32,51 @@ export type Database = {
         }
         Relationships: []
       }
+      alt_data: {
+        Row: {
+          created_at: string
+          dataset: string
+          date: string | null
+          kind: string
+          meta: Json
+          source: string
+          source_url: string | null
+          ticker: string
+          title: string
+          uid: string
+          unit: string | null
+          value: number | null
+        }
+        Insert: {
+          created_at?: string
+          dataset: string
+          date?: string | null
+          kind?: string
+          meta?: Json
+          source: string
+          source_url?: string | null
+          ticker: string
+          title: string
+          uid: string
+          unit?: string | null
+          value?: number | null
+        }
+        Update: {
+          created_at?: string
+          dataset?: string
+          date?: string | null
+          kind?: string
+          meta?: Json
+          source?: string
+          source_url?: string | null
+          ticker?: string
+          title?: string
+          uid?: string
+          unit?: string | null
+          value?: number | null
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           content: Json

@@ -393,10 +393,8 @@ function Markets() {
                   ))}
                 </tbody>
               </table>
-              <Link to="/app/reactions" search={{ ticker: symbol }} className="block border-t px-4 py-2 text-[12px] underline">Full earnings profile</Link>
             </Panel>
           )}
-          {covered && <SymbolPatterns ticker={symbol} />}
         </div>
         <Panel
           title={
@@ -453,49 +451,3 @@ function Markets() {
   );
 }
 
-function SymbolPatterns({ ticker }: { ticker: string }) {
-  const q = useQuery(marketsQuery);
-  const c = q.data?.companies.find((x) => x.ticker === ticker);
-  if (!c) return null;
-  const recent = [...c.recent].reverse().slice(0, 8);
-  return (
-    <Panel title="Chart patterns" subtitle="Rule-based, detected with data available on each day" bodyClassName="p-0">
-      <div className="grid grid-cols-2 gap-3 border-b px-4 py-3 text-[13px]">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Resistance</div>
-          {c.levels.resistance.map((l) => <div key={l.price} className="num">{fmtPrice(l.price)} <span className="text-muted-foreground">· {l.touches} touches</span></div>)}
-          {!c.levels.resistance.length && <div className="text-muted-foreground">None nearby</div>}
-        </div>
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Support</div>
-          {c.levels.support.map((l) => <div key={l.price} className="num">{fmtPrice(l.price)} <span className="text-muted-foreground">· {l.touches} touches</span></div>)}
-          {!c.levels.support.length && <div className="text-muted-foreground">None nearby</div>}
-        </div>
-      </div>
-      <table className="w-full text-[13px]">
-        <thead>
-          <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="px-4 py-2 font-medium">Pattern</th>
-            <th className="px-2 py-2 font-medium">Date</th>
-            <th className="px-2 py-2 text-right font-medium">+20d</th>
-            <th className="px-4 py-2 text-right font-medium" title="On this stock, all past cases">Hit rate</th>
-          </tr>
-        </thead>
-        <tbody>
-          {recent.map((h) => {
-            const m = PATTERN_META[h.kind];
-            const e = c.edges.find((x) => x.kind === h.kind);
-            return (
-              <tr key={h.kind + h.date} className="border-b last:border-0" title={m.rule}>
-                <td className={cn("px-4 py-1.5", m.bias === "bullish" ? "text-positive" : m.bias === "bearish" ? "text-negative" : "")}>{m.label}</td>
-                <td className="num px-2 text-xs">{fmtDate(h.date)}</td>
-                <td className={cn("num px-2 text-right", h.fwd20 == null ? "text-muted-foreground" : h.fwd20 >= 0 ? "text-positive" : "text-negative")}>{h.fwd20 == null ? "open" : fmtPct(h.fwd20, 1, true)}</td>
-                <td className="num px-4 text-right">{e?.hitRate != null ? `${fmtPct(e.hitRate, 0)} of ${e.n}` : e ? `${e.n} cases` : "—"}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </Panel>
-  );
-}

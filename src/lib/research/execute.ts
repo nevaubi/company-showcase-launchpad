@@ -10,6 +10,8 @@ import { durationDays } from "@/lib/financials/build";
 import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { runSandbox } from "@/lib/research/sandbox";
 import { supplyLinksQuery } from "@/lib/supply/query";
+import { supabase } from "@/integrations/supabase/client";
+import { fmtAlt } from "@/lib/alt/query";
 import { focusGraph, linkDollars, simulateShock, type RiskLink } from "@/lib/supply/core";
 import type { UniverseEntry } from "@/lib/financials/types";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
@@ -137,6 +139,16 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
       const r = await runSandbox(String(args.code ?? ""), { universe: flatUniverse(u.companies), companies, prices });
       const out = [r.logs.length ? `console:\n${r.logs.join("\n")}` : "", r.result ? `result:\n${r.result}` : "", r.error ? `ERROR: ${r.error}` : ""].filter(Boolean).join("\n\n");
       return { output: clip(out || "(no output — use return or console.log)"), summary: r.ok ? `ran in ${r.ms}ms` : `error: ${r.error?.split("\n")[0].slice(0, 80)}` };
+    }
+    case "get_alt_data": {
+      let q = supabase.from("alt_data").select("ticker,dataset,kind,date,title,value,unit,meta,source_url").order("date", { ascending: false }).limit(400);
+      if (args.ticker) q = q.eq("ticker", String(args.ticker).toUpperCase());
+      if (args.dataset) q = q.eq("dataset", String(args.dataset));
+      if (args.since) q = q.gte("date", String(args.since));
+      const { data, error } = await q;
+      if (error) return { output: `Error: ${error.message}`, summary: "alt data failed" };
+      const lines = (data ?? []).map((r: any) => `${r.date} ${r.ticker} [${r.dataset}${r.kind === "series" ? " series" : ""}] ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""}${r.meta?.category ? ` (${r.meta.category})` : ""}${r.meta?.filers ? ` filers: ${r.meta.filers.slice(0, 3).join("; ")}` : ""}${r.meta?.agencies?.length ? ` agencies: ${r.meta.agencies.join("; ")}` : ""} <${r.source_url}>`);
+      return { output: clip(lines.join("\n") || "No alt data rows match."), summary: `${data?.length ?? 0} alt-data rows` };
     }
     case "get_supply_chain": {
       const t = String(args.ticker).toUpperCase();

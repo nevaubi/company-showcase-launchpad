@@ -36,13 +36,6 @@ export function SetupPanel({ ticker, data, price }: { ticker: string; data: Comp
         </span>
       }
       subtitle={mc ? `Prices through ${fmtDate(mc.asOf)} · rules-based, no forecasts` : "Loading…"}
-      actions={
-        <Button size="xs" variant="ghost" asChild>
-          <Link to="/app/reactions" search={{ ticker }}>
-            Earnings profile
-          </Link>
-        </Button>
-      }
     >
       {!mc ? (
         m.isLoading ? <Skeleton className="h-40" /> : <p className="text-sm text-muted-foreground">No market history for {ticker}.</p>
