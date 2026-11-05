@@ -1,24 +1,27 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, FileText, Loader2, Newspaper, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { FileText, Loader2, Newspaper, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import { Panel, Stat } from "@/components/app/page-header";
-import { PriceChart, type ChartMarker } from "@/components/charts/price-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { TimeSeriesChart } from "@/components/charts/time-series";
 import { useSource } from "@/components/source/source-context";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { useCompany, usePrices, useQuotes, type Range } from "@/lib/data";
+import { useCompany, usePrices, useQuotes } from "@/lib/data";
 import { getNarratives } from "@/lib/ai.functions";
 import { cellTarget, ratioTarget, ttmTarget } from "@/lib/financials/targets";
 import { latestYoY, ttm } from "@/lib/financials/metrics";
 import { alignByDate, annualizedVol, beta, maxDrawdown, returns } from "@/lib/indicators";
-import { fiscalYearEndLabel, fmtCompactUsd, fmtDate, fmtPct, fmtPrice, fmtRelative, SEC_FORM_LABEL, titleCase } from "@/lib/format";
+import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice, fmtRelative, SEC_FORM_LABEL } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
-import { PeerTable } from "@/components/company/peer-table";
+import { ResearchChart } from "@/components/company/research-chart";
+import { AboutPanel } from "@/components/company/about";
+import { LeadershipPanel } from "@/components/company/leadership";
+import { SectorTable } from "@/components/company/sector-table";
+import { RelatedCompanies } from "@/components/company/related";
 import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
 
@@ -26,7 +29,6 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   component: Overview,
 });
 
-const RANGES: Range[] = ["1mo", "6mo", "ytd", "1y", "5y"];
 
 function Overview() {
   const { ticker: raw } = Route.useParams();
@@ -50,8 +52,6 @@ function OverviewSkeleton() {
 }
 
 function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }) {
-  const [range, setRange] = useState<Range>("1y");
-  const prices = usePrices(ticker, range);
   const year = usePrices(ticker, "1y");
   const spy = usePrices("SPY", "1y");
   const quote = useQuotes([ticker]).data?.quotes[0];
@@ -91,16 +91,6 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
     return { hi, lo, beta: b, vol: closes.length > 20 ? annualizedVol(returns(closes)) : null, mdd: closes.length ? maxDrawdown(closes) : null, ret1y };
   }, [year.data, spy.data]);
 
-  const markers: ChartMarker[] = useMemo(
-    () =>
-      data.earningsReleases.map((r) => ({
-        time: r.filed,
-        label: "E",
-        color: "var(--chart-2)",
-      })),
-    [data.earningsReleases],
-  );
-
   const sharesTarget = shares && p.sharesOutstandingAccn
     ? {
         ticker,
@@ -139,41 +129,22 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         <Stat label="Beta vs S&P 500" value={stats.beta != null ? stats.beta.toFixed(2) : "—"} sub={stats.vol != null ? `${fmtPct(stats.vol, 0)} ann. vol` : undefined} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Panel
-          title="Price"
-          subtitle={
-            prices.data
-              ? `${prices.data.source === "yahoo-live" ? "Live · Yahoo Finance" : "Snapshot"} · E = earnings release (8-K 2.02)`
-              : "Loading…"
-          }
-          actions={
-            <div className="flex rounded-md border bg-secondary/50 p-0.5">
-              {RANGES.map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setRange(r)}
-                  className={cn("num rounded px-2 py-0.5 text-[11px] uppercase", range === r ? "bg-card font-medium shadow-paper" : "text-muted-foreground")}
-                >
-                  {r}
-                </button>
-              ))}
-            </div>
-          }
-          bodyClassName="p-2"
-        >
-          {prices.data ? (
-            <PriceChart bars={prices.data.bars} mode="area" markers={markers} height={320} overlays={range === "1y" || range === "5y" ? ["sma50", "sma200"] : []} />
-          ) : (
-            <Skeleton className="h-[320px]" />
-          )}
-        </Panel>
-        <NarrativesPanel ticker={ticker} name={p.name} />
-      </div>
+      <ResearchChart ticker={ticker} data={data} />
+
+      <AboutPanel ticker={ticker} data={data} />
+
+      <LeadershipPanel ticker={ticker} />
+
+      <SectorTable ticker={ticker} />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <SetupPanel ticker={ticker} data={data} price={price} />
         <CatalystsTimeline ticker={ticker} data={data} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <NarrativesPanel ticker={ticker} name={p.name} />
+        <EarningsCallPanel ticker={ticker} />
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -181,64 +152,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         <MarginLines data={data} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <PeerTable ticker={ticker} />
-        <EarningsCallPanel ticker={ticker} />
-      </div>
-
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
-        <Panel title="Company profile" subtitle="SEC EDGAR submissions">
-          <p className="text-sm leading-relaxed">{p.description}</p>
-          <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-[13px]">
-            <dt className="text-muted-foreground">Headquarters</dt>
-            <dd>
-              {titleCase(p.address.street)}, {titleCase(p.address.city)}, {p.address.state} {p.address.zip}
-            </dd>
-            <dt className="text-muted-foreground">Phone</dt>
-            <dd>{p.phone}</dd>
-            {p.ceo && (
-              <>
-                <dt className="text-muted-foreground">Chief executive</dt>
-                <dd>{p.ceo} <span className="text-xs text-muted-foreground">(per Form 4)</span></dd>
-              </>
-            )}
-            <dt className="text-muted-foreground">Founded</dt>
-            <dd>{p.founded}</dd>
-            <dt className="text-muted-foreground">Fiscal year end</dt>
-            <dd>{fiscalYearEndLabel(p.fiscalYearEnd)}</dd>
-            <dt className="text-muted-foreground">Incorporated</dt>
-            <dd>{p.stateOfIncorporation}</dd>
-            <dt className="text-muted-foreground">SIC</dt>
-            <dd>
-              {p.sic} · {titleCase(p.sicDescription)}
-            </dd>
-            <dt className="text-muted-foreground">CIK / EIN</dt>
-            <dd className="num text-xs">
-              {p.cik} / {p.ein}
-            </dd>
-            <dt className="text-muted-foreground">Filer status</dt>
-            <dd>{p.filerCategory}</dd>
-            {p.formerNames.length > 0 && (
-              <>
-                <dt className="text-muted-foreground">Former names</dt>
-                <dd className="text-xs">{p.formerNames.map((f) => f.name).join(" · ")}</dd>
-              </>
-            )}
-          </dl>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Button size="xs" variant="outline" asChild>
-              <a href={p.website} target="_blank" rel="noreferrer">
-                Website <ArrowUpRight />
-              </a>
-            </Button>
-            <Button size="xs" variant="outline" asChild>
-              <a href={p.investorRelations} target="_blank" rel="noreferrer">
-                Investor relations <ArrowUpRight />
-              </a>
-            </Button>
-          </div>
-        </Panel>
-
         <Panel
           title="Recent filings"
           actions={
@@ -279,6 +193,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         </Panel>
 
         <InsiderSummary ticker={ticker} data={data} price={price} />
+        <RelatedCompanies ticker={ticker} />
       </div>
       <p className="text-[11px] text-muted-foreground">
         Fundamentals through {q.income.periods[lastQ]?.label} ({fmtDate(q.income.periods[lastQ]?.end)}) and {a.income.periods.at(-1)?.label}. Dataset generated{" "}
