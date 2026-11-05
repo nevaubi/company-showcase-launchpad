@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSource } from "@/components/source/source-context";
 import { supplyLinksQuery } from "@/lib/supply/query";
 import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
-import { SupplyIntel } from "@/components/supply/supply-intel";
+import { SupplyIntel, CounterpartyEvidence } from "@/components/supply/supply-intel";
 import { ConfidenceBadge, DependencyCard, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
 import { allSignalsQuery, ConcentrationHistory, DeepVerify, EcosystemBasket, FragilityTable, FreshnessBadge, FreshnessStrip, RegionShockPanel, WorldExposureMap } from "@/components/supply/supply-plus";
 import { canonCountry } from "@/lib/supply/analytics";
@@ -374,6 +374,9 @@ function SupplyChainPage() {
       </div>
       <div className="mt-4 grid grid-cols-1">
         <SupplyIntel ticker={ticker} />
+      </div>
+      <div className="mt-4 grid grid-cols-1">
+        <CounterpartyEvidence ticker={ticker} />
       </div>
       <div className="mt-4 grid grid-cols-1">
         <FragilityTable tickers={[...covered]} all={all as ProLink[]} names={names} onPick={go} current={ticker} />
