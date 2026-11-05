@@ -496,7 +496,6 @@ function SymbolPatterns({ ticker }: { ticker: string }) {
           })}
         </tbody>
       </table>
-      <Link to="/app/patterns" className="block border-t px-4 py-2 text-[12px] underline">Scan all companies</Link>
     </Panel>
   );
 }

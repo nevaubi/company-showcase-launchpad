@@ -158,7 +158,6 @@ function SectorDeep() {
             </Panel>
             <Panel title="How they trade together" subtitle="1-year daily-return correlation" className="min-w-0">
               <CorrHeatmap labels={data.rows.map((r) => r.t)} m={data.matrix} />
-              <Link to="/app/correlations" search={{ syms: [etf, ...data.rows.map((r) => r.t)].slice(0, 16).join(","), win: "252" }} className="mt-3 inline-block text-[13px] underline">Open in correlation explorer</Link>
             </Panel>
           </div>
 
