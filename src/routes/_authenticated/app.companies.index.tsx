@@ -3,7 +3,6 @@ import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Star } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { Sparkline } from "@/components/charts/sparkline";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuotes, useUniverse } from "@/lib/data";
 import { COVERAGE, COVERAGE_TICKERS, coverageOf } from "@/lib/coverage";
@@ -127,7 +126,6 @@ function Companies() {
                 <Th k="chg" className="text-right">
                   Day
                 </Th>
-                <th className="px-3 py-2 font-medium uppercase">5D</th>
                 <Th k="mcap" className="text-right">
                   Mkt cap
                 </Th>
@@ -153,19 +151,19 @@ function Companies() {
               {u.isLoading &&
                 Array.from({ length: 6 }).map((_, i) => (
                   <tr key={i}>
-                    <td colSpan={12} className="px-3 py-2">
+                    <td colSpan={11} className="px-3 py-2">
                       <Skeleton className="h-9" />
                     </td>
                   </tr>
                 ))}
               {sorted.map((r) => (
                 <tr key={r.ticker} className="border-b last:border-0 hover:bg-secondary/60">
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-1.5">
                     <button onClick={() => follow.toggle(r.ticker)} aria-label={follow.isFollowed(r.ticker) ? `Unfollow ${r.ticker}` : `Follow ${r.ticker}`}>
                       <Star className={cn("size-4 text-muted-foreground", follow.isFollowed(r.ticker) && "fill-chart-2 text-chart-2")} />
                     </button>
                   </td>
-                  <td className="px-3 py-2">
+                  <td className="px-3 py-1.5">
                     <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }} className="flex items-center gap-3">
                       <CompanyLogo ticker={r.ticker} src={r.logo} size="sm" />
                       <span>
@@ -174,17 +172,14 @@ function Companies() {
                       </span>
                     </Link>
                   </td>
-                  <td className="num px-3 py-2 text-right">{fmtPrice(r.quote?.price)}</td>
-                  <td className={cn("num px-3 py-2 text-right", (r.quote?.changePct ?? 0) >= 0 ? "text-positive" : "text-negative")}>{fmtPct(r.quote?.changePct, 2, true)}</td>
-                  <td className="px-3 py-2">
-                    <Sparkline values={r.quote?.spark ?? []} tone={(r.quote?.changePct ?? 0) >= 0 ? "positive" : "negative"} className="h-6 w-16" />
-                  </td>
-                  <td className="num px-3 py-2 text-right">{fmtCompactUsd(r.mcap)}</td>
-                  <td className="num px-3 py-2 text-right">{fmtCompactUsd(r.revenueTTM)}</td>
-                  <td className={cn("num px-3 py-2 text-right", (r.revenueGrowthYoY ?? 0) >= 0 ? "text-positive" : "text-negative")}>{fmtPct(r.revenueGrowthYoY, 1, true)}</td>
-                  <td className="num px-3 py-2 text-right">{fmtPct(r.grossMarginTTM)}</td>
-                  <td className="num px-3 py-2 text-right">{r.pe ? `${r.pe.toFixed(1)}×` : "—"}</td>
-                  <td className="num px-3 py-2 text-right">{fmtPct(r.fcfYield)}</td>
+                  <td className="num px-3 py-1.5 text-right">{fmtPrice(r.quote?.price)}</td>
+                  <td className={cn("num px-3 py-1.5 text-right", (r.quote?.changePct ?? 0) >= 0 ? "text-positive" : "text-negative")}>{fmtPct(r.quote?.changePct, 2, true)}</td>
+                  <td className="num px-3 py-1.5 text-right">{fmtCompactUsd(r.mcap)}</td>
+                  <td className="num px-3 py-1.5 text-right">{fmtCompactUsd(r.revenueTTM)}</td>
+                  <td className={cn("num px-3 py-1.5 text-right", (r.revenueGrowthYoY ?? 0) >= 0 ? "text-positive" : "text-negative")}>{fmtPct(r.revenueGrowthYoY, 1, true)}</td>
+                  <td className="num px-3 py-1.5 text-right">{fmtPct(r.grossMarginTTM)}</td>
+                  <td className="num px-3 py-1.5 text-right">{r.pe ? `${r.pe.toFixed(1)}×` : "—"}</td>
+                  <td className="num px-3 py-1.5 text-right">{fmtPct(r.fcfYield)}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {r.lastFiling ? (
                       <>
@@ -198,7 +193,7 @@ function Companies() {
               ))}
               {!u.isLoading && sorted.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-sm text-muted-foreground">No companies match that filter.</td>
+                  <td colSpan={11} className="px-3 py-8 text-center text-sm text-muted-foreground">No companies match that filter.</td>
                 </tr>
               )}
             </tbody>

@@ -97,7 +97,7 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
           ))}
         </div>
       }
-      bodyClassName="p-0"
+      bodyClassName="max-h-none overflow-visible p-0"
     >
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0 border-b xl:border-b-0 xl:border-r">

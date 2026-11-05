@@ -8,6 +8,8 @@ import {
   Bot,
   Building2,
   ChevronsUpDown,
+  PanelLeftClose,
+  PanelLeftOpen,
   DatabaseZap,
   FileSpreadsheet,
   Globe2,
@@ -92,6 +94,13 @@ function ShellInner({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => setCollapsed(localStorage.getItem("fu:sidebar") === "1"), []);
+  const toggleCollapsed = () =>
+    setCollapsed((c) => {
+      localStorage.setItem("fu:sidebar", c ? "0" : "1");
+      return !c;
+    });
   useEffect(() => setAiOpen(localStorage.getItem("fu:assistant") === "1"), []);
   useEffect(() => localStorage.setItem("fu:assistant", aiOpen ? "1" : "0"), [aiOpen]);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -116,16 +125,17 @@ function ShellInner({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-background">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-sidebar-border bg-sidebar transition-transform lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-sidebar-border bg-sidebar transition-[transform,width] lg:translate-x-0",
+          collapsed && "lg:w-14",
           mobileOpen ? "translate-x-0 shadow-lift" : "-translate-x-full",
         )}
       >
-        <SidebarContent onSearch={() => setCmdOpen(true)} />
+        <SidebarContent onSearch={() => setCmdOpen(true)} collapsed={collapsed} onToggle={toggleCollapsed} />
       </aside>
       {mobileOpen && <div className="fixed inset-0 z-20 bg-ink/30 lg:hidden" onClick={() => setMobileOpen(false)} />}
 
       <div
-        className="transition-[padding] duration-300 lg:pl-60"
+        className={cn("transition-[padding] duration-300", collapsed ? "lg:pl-14" : "lg:pl-60")}
         style={target ? ({ "--panel": PANEL_WIDTH } as React.CSSProperties) : undefined}
       >
         <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]", !target && aiOpen && "md:pr-[min(420px,100vw)]")}>
@@ -148,7 +158,7 @@ function ShellInner({ children }: { children: ReactNode }) {
               <kbd className="num hidden rounded border px-1 text-[10px] opacity-70 md:inline">⌘J</kbd>
             </Button>
           </header>
-          <main className="px-4 pb-16 pt-6 lg:px-8">{children}</main>
+          <main className="px-4 pb-12 pt-4 lg:px-6">{children}</main>
         </div>
       </div>
       <AssistantPanel open={aiOpen} onClose={() => setAiOpen(false)} />
@@ -158,7 +168,9 @@ function ShellInner({ children }: { children: ReactNode }) {
   );
 }
 
-function SidebarContent({ onSearch }: { onSearch: () => void }) {
+function SidebarContent({ onSearch, collapsed, onToggle }: { onSearch: () => void; collapsed: boolean; onToggle: () => void }) {
+  // Collapsing only applies on desktop; the phone drawer always shows labels.
+  const lbl = collapsed ? "lg:hidden" : "";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const watch = useWatchlist();
   const universe = useUniverse();
@@ -170,15 +182,23 @@ function SidebarContent({ onSearch }: { onSearch: () => void }) {
 
   return (
     <>
-      <div className="flex h-12 items-center border-b border-sidebar-border px-4">
-        <Link to="/app">
+      <div className={cn("flex h-12 items-center gap-2 border-b border-sidebar-border px-4", collapsed && "lg:justify-center lg:px-0")}>
+        <Link to="/app" className={lbl}>
           <Logo size="sm" />
         </Link>
+        <button
+          onClick={onToggle}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="ml-auto hidden rounded-md p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground lg:block"
+        >
+          {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
+        </button>
       </div>
-      <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 py-4 scrollbar-thin">
+      <nav className={cn("flex-1 space-y-4 overflow-y-auto px-2.5 py-3 scrollbar-thin", collapsed && "lg:px-1.5")}>
         {NAV.map((g) => (
           <div key={g.heading}>
-            <p className="eyebrow px-2 pb-1.5">{g.heading}</p>
+            <p className={cn("eyebrow px-2 pb-1.5", lbl)}>{g.heading}</p>
             <ul className="space-y-0.5">
               {g.items.map((item) => (
                 <li key={item.to}>
@@ -187,10 +207,12 @@ function SidebarContent({ onSearch }: { onSearch: () => void }) {
                     className={cn(
                       "flex h-8 items-center gap-2.5 rounded-md px-2 text-[13px] text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
                       isActive(item) && "bg-sidebar-accent font-medium text-sidebar-foreground",
+                      collapsed && "lg:justify-center lg:px-0",
                     )}
+                    title={collapsed ? item.label : undefined}
                   >
-                    <item.icon className="size-4 opacity-80" />
-                    {item.label}
+                    <item.icon className="size-4 shrink-0 opacity-80" />
+                    <span className={lbl}>{item.label}</span>
                   </Link>
                 </li>
               ))}
@@ -198,7 +220,7 @@ function SidebarContent({ onSearch }: { onSearch: () => void }) {
           </div>
         ))}
         <div>
-          <div className="flex items-center justify-between px-2 pb-1.5">
+          <div className={cn("flex items-center justify-between px-2 pb-1.5", lbl)}>
             <p className="eyebrow">Watchlist</p>
             <button onClick={onSearch} className="text-[11px] text-muted-foreground hover:text-foreground">
               + Add
@@ -216,13 +238,15 @@ function SidebarContent({ onSearch }: { onSearch: () => void }) {
                     className={cn(
                       "flex h-8 items-center gap-2 rounded-md px-2 text-[13px] transition-colors hover:bg-sidebar-accent",
                       pathname.startsWith(`/app/companies/${t}`) && "bg-sidebar-accent",
+                      collapsed && "lg:justify-center lg:px-0",
                     )}
+                    title={collapsed ? t : undefined}
                   >
                     <CompanyLogo ticker={t} src={u?.logo} size="xs" />
-                    <span className="num font-medium">{t}</span>
-                    <span className="num ml-auto text-[11px] text-muted-foreground">{q ? fmtPrice(q.price) : ""}</span>
+                    <span className={cn("num font-medium", lbl)}>{t}</span>
+                    <span className={cn("num ml-auto text-[11px] text-muted-foreground", lbl)}>{q ? fmtPrice(q.price) : ""}</span>
                     {q && (
-                      <span className={cn("num w-12 text-right text-[11px]", q.changePct >= 0 ? "text-positive" : "text-negative")}>
+                      <span className={cn("num w-12 text-right text-[11px]", lbl, q.changePct >= 0 ? "text-positive" : "text-negative")}>
                         {fmtPct(q.changePct, 1, true)}
                       </span>
                     )}
@@ -230,16 +254,16 @@ function SidebarContent({ onSearch }: { onSearch: () => void }) {
                 </li>
               );
             })}
-            {!tickers.length && !watch.isLoading && <li className="px-2 text-xs text-muted-foreground">Follow a company to see it here.</li>}
+            {!tickers.length && !watch.isLoading && <li className={cn("px-2 text-xs text-muted-foreground", lbl)}>Follow a company to see it here.</li>}
           </ul>
         </div>
       </nav>
-      <UserMenu />
+      <UserMenu collapsed={collapsed} />
     </>
   );
 }
 
-function UserMenu() {
+function UserMenu({ collapsed }: { collapsed: boolean }) {
   const me = useProfile();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -254,18 +278,18 @@ function UserMenu() {
   };
 
   return (
-    <div className="border-t border-sidebar-border p-2.5">
+    <div className={cn("border-t border-sidebar-border p-2.5", collapsed && "lg:p-1.5")}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button className="flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-sidebar-accent">
             <span className="flex size-8 items-center justify-center rounded-full bg-ink text-xs font-semibold text-ink-foreground">
               {name.slice(0, 1).toUpperCase()}
             </span>
-            <span className="min-w-0 flex-1">
+            <span className={cn("min-w-0 flex-1", collapsed && "lg:hidden")}>
               <span className="block truncate text-[13px] font-medium">{name}</span>
               <span className="block truncate text-[11px] text-muted-foreground">{email}</span>
             </span>
-            <ChevronsUpDown className="size-3.5 text-muted-foreground" />
+            <ChevronsUpDown className={cn("size-3.5 text-muted-foreground", collapsed && "lg:hidden")} />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-56">

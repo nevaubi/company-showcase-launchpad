@@ -46,7 +46,7 @@ export function Panel({
   return (
     <section className={cn("min-w-0 rounded-lg border bg-card shadow-paper", className)}>
       {(title || actions) && (
-        <header className="flex flex-wrap items-center gap-3 border-b px-4 py-2.5">
+        <header className="flex flex-wrap items-center gap-3 border-b px-3.5 py-2">
           <div className="min-w-0">
             {title && <h2 className="text-sm font-semibold">{title}</h2>}
             {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
@@ -54,7 +54,7 @@ export function Panel({
           {actions && <div className="ml-auto flex items-center gap-1.5">{actions}</div>}
         </header>
       )}
-      <div className={cn("min-w-0 p-4", bodyClassName)}>{children}</div>
+      <div className={cn("min-w-0 max-h-[640px] overflow-y-auto p-3.5 scrollbar-thin", bodyClassName)}>{children}</div>
     </section>
   );
 }
