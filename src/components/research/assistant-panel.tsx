@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowUp, Check, ChevronDown, Code2, Compass, Globe, Loader2, MessageSquarePlus, Sparkles, Square, TriangleAlert, Wrench, X } from "lucide-react";
+import {
+  ArrowUp, Brain, Check, ChevronRight, Circle, CircleDot, Code2, Compass, Copy, FileSearch, Globe, GripHorizontal, ListChecks,
+  MessageCircleQuestion, MessageSquarePlus, Network, PanelRight, PictureInPicture2, ScanText, Sparkles, Square, TriangleAlert, Wrench, X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { ResearchMarkdown } from "@/components/research/markdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { titleSession } from "@/lib/research.functions";
-import { runAgent, type Step } from "@/lib/research/loop";
+import { runAgent, type Plan, type Question, type Step } from "@/lib/research/loop";
 import { TOOL_LABELS } from "@/lib/research/tool-defs";
 import { currentUserId } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
@@ -20,19 +23,24 @@ interface Msg {
   role: "user" | "assistant";
   content: string;
   steps: Step[];
+  plan?: Plan;
+  phase?: string;
   pending?: boolean;
   error?: string;
 }
 
 function suggestionsFor(path: string): string[] {
-  const t = path.match(/\/app\/companies\/([A-Z.]+)/)?.[1];
+  const t = path.match(/\/app\/companies\/([A-Z.-]+)/)?.[1];
   if (t)
-    return [`Summarize what matters on this page for ${t}`, `Build a quick DCF for ${t} with bear/base/bull cases`, `Who are ${t}'s most important suppliers and customers, and what if its top customer cut spend 30%?`];
+    return [`Summarize what matters on this page for ${t}`, `Build a quick DCF for ${t} with bear/base/bull cases`, `Map ${t}'s IR site and pull the latest guidance from its newest release`];
   if (path.includes("supply-chain")) return ["Explain the biggest risks on this map", "Which covered companies are most exposed to TSMC?", "Simulate a 25% drop in Apple demand"];
-  return ["Screen for companies with >20% revenue growth and >25% FCF margins", "Which semis have the highest R&D intensity? Show me a chart page", "Open NVIDIA's valuation page and explain where its P/E sits"];
+  return ["Screen for >20% revenue growth and >25% FCF margins", "Which semis have the highest R&D intensity? Chart it", "Crawl the latest Fed statement and tell me what changed"];
 }
 
-export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+const FLOAT_KEY = "fu:assistant-float";
+const DOCK_KEY = "fu:assistant-docked";
+
+export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open: boolean; onClose: () => void; docked: boolean; onDockedChange: (d: boolean) => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
@@ -41,18 +49,65 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
   const [busy, setBusy] = useState(false);
   const [deep, setDeep] = useState(false);
   const [sid, setSid] = useState<string | null>(null);
+  const [question, setQuestion] = useState<Question | null>(null);
+  const answerRef = useRef<((a: string) => void) | null>(null);
   const stop = useRef(false);
-  const bottom = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [box, setBox] = useState({ x: 0, y: 72, w: 440, h: 640 });
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
-  }, [msgs]);
+    try {
+      const f = JSON.parse(localStorage.getItem(FLOAT_KEY) ?? "null");
+      setBox(f ?? { x: window.innerWidth - 470, y: 72, w: 440, h: Math.min(680, window.innerHeight - 100) });
+      if (localStorage.getItem(DOCK_KEY) === "0") onDockedChange(false);
+    } catch {
+      /* ignore */
+    }
+  }, [onDockedChange]);
+  useEffect(() => localStorage.setItem(DOCK_KEY, docked ? "1" : "0"), [docked]);
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 240) el.scrollTop = el.scrollHeight;
+  }, [msgs, question]);
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
 
+  function clampBox(b: typeof box) {
+    const W = window.innerWidth, H = window.innerHeight;
+    const w = Math.min(Math.max(b.w, 340), W - 16), h = Math.min(Math.max(b.h, 360), H - 16);
+    return { w, h, x: Math.min(Math.max(b.x, 8), W - w - 8), y: Math.min(Math.max(b.y, 8), H - h - 8) };
+  }
+  function drag(e: RPointerEvent, mode: "move" | "resize") {
+    if (docked || (e.target as HTMLElement).closest("button")) return;
+    e.preventDefault();
+    const sx = e.clientX, sy = e.clientY, start = box;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - sx, dy = ev.clientY - sy;
+      setBox(clampBox(mode === "move" ? { ...start, x: start.x + dx, y: start.y + dy } : { ...start, w: start.w + dx, h: start.h + dy }));
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      setBox((b) => (localStorage.setItem(FLOAT_KEY, JSON.stringify(b)), b));
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  }
+
+  function answer(a: string) {
+    const t = a.trim();
+    if (!t || !answerRef.current) return;
+    answerRef.current(t);
+    answerRef.current = null;
+    setQuestion(null);
+    setInput("");
+  }
+
   async function ask(text: string) {
+    if (question) return answer(text);
     const q = text.trim();
     if (!q || busy) return;
     setBusy(true);
@@ -84,10 +139,17 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
     const history = msgs.filter((m) => !m.pending);
     const now = Date.now();
     const asstId = `a-${now}`;
-    setMsgs([...history, { id: `u-${now}`, role: "user", content: q, steps: [] }, { id: asstId, role: "assistant", content: "", steps: [], pending: true }]);
+    setMsgs([...history, { id: `u-${now}`, role: "user", content: q, steps: [] }, { id: asstId, role: "assistant", content: "", steps: [], pending: true, phase: "Thinking" }]);
+    // Context: recent turns (with each prior plan's notes, so follow-ups keep findings) + where the user is.
     const items: Record<string, unknown>[] = [
-      ...history.slice(-12).map((m) => ({ role: m.role, content: m.content || "(no answer)" })),
-      { role: "user", content: `[User is viewing ${window.location.pathname}${window.location.search} — call get_page_context if the question refers to it]\n${q}` },
+      ...history.slice(-14).map((m) => ({
+        role: m.role,
+        content: (m.content || "(no answer)") + (m.role === "assistant" && m.plan?.notes ? `\n\n[Earlier working notes: ${m.plan.notes.slice(0, 1200)}]` : ""),
+      })),
+      {
+        role: "user",
+        content: `[Context — user is viewing ${window.location.pathname}${window.location.search} ("${document.title}"); mode: ${deep ? "deep research" : "fast"}; local time ${new Date().toLocaleString()}. Call get_page_context if the question refers to the page.]\n${q}`,
+      },
     ];
     const turn = await runAgent({
       qc,
@@ -96,6 +158,12 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
       ctx: { navigate: (href) => navigate({ href }) },
       stopped: () => stop.current,
       onUpdate: (t) => setMsgs((ms) => ms.map((m) => (m.id === asstId ? { ...m, ...t } : m))),
+      onAsk: (qq) =>
+        new Promise<string>((resolve) => {
+          answerRef.current = resolve;
+          setQuestion(qq);
+          setTimeout(() => inputRef.current?.focus(), 50);
+        }),
     });
     setMsgs((ms) => ms.map((m) => (m.id === asstId ? { ...m, ...turn, pending: false } : m)));
     await supabase.from("research_messages").insert({
@@ -103,29 +171,41 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
       user_id: userId,
       role: "assistant",
       content: turn.error ? `${turn.content}\n\n> Error: ${turn.error}` : turn.content,
-      steps: turn.steps as never,
+      steps: turn.steps.map(({ output: _o, ...s }) => s) as never,
     });
     await supabase.from("research_sessions").update({ updated_at: new Date().toISOString() }).eq("id", session!);
     qc.invalidateQueries({ queryKey: ["research-sessions"] });
     setBusy(false);
   }
 
+  function halt() {
+    stop.current = true;
+    if (answerRef.current) answer("(user stopped)");
+  }
+
   return (
     <aside
       aria-hidden={!open}
       aria-label="AI assistant"
-      style={{ width: ASSISTANT_WIDTH }}
+      style={docked ? { width: ASSISTANT_WIDTH } : { left: box.x, top: box.y, width: box.w, height: box.h }}
       className={cn(
-        "fixed inset-y-0 right-0 z-30 flex max-w-full flex-col border-l border-rule bg-background transition-transform duration-300",
-        open ? "translate-x-0 shadow-panel" : "pointer-events-none invisible translate-x-full",
+        "fixed z-30 flex max-w-full flex-col bg-background",
+        docked ? "inset-y-0 right-0 border-l border-rule transition-transform duration-300" : "overflow-hidden rounded-xl border border-rule shadow-lift transition-opacity duration-200",
+        open ? (docked ? "translate-x-0 shadow-panel" : "opacity-100") : docked ? "pointer-events-none invisible translate-x-full" : "pointer-events-none invisible opacity-0",
       )}
     >
-      <div className="flex h-12 shrink-0 items-center gap-2 border-b px-3">
-        <Sparkles className="size-4" />
-        <p className="text-sm font-medium">Assistant</p>
-        <span className="truncate text-[11px] text-muted-foreground">· sees {path.replace("/app", "") || "/dashboard"}</span>
-        <div className="ml-auto flex items-center gap-1">
-          <Button variant="ghost" size="icon-sm" disabled={busy} onClick={() => { setMsgs([]); setSid(null); }} aria-label="New chat">
+      <div onPointerDown={(e) => drag(e, "move")} className={cn("flex h-11 shrink-0 items-center gap-2 border-b px-3", !docked && "cursor-grab select-none active:cursor-grabbing")}>
+        {!docked && <GripHorizontal className="size-3.5 text-muted-foreground" />}
+        <span className="grid size-6 place-items-center rounded-md bg-ink text-ink-foreground">
+          <Sparkles className="size-3.5" />
+        </span>
+        <p className="text-[13px] font-medium">Assistant</p>
+        <span className="truncate rounded border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{path.replace("/app", "") || "/dashboard"}</span>
+        <div className="ml-auto flex items-center">
+          <Button variant="ghost" size="icon-sm" onClick={() => onDockedChange(!docked)} aria-label={docked ? "Pop out" : "Dock to side"} title={docked ? "Pop out & move" : "Dock to side"}>
+            {docked ? <PictureInPicture2 /> : <PanelRight />}
+          </Button>
+          <Button variant="ghost" size="icon-sm" disabled={busy} onClick={() => { setMsgs([]); setSid(null); }} aria-label="New chat" title="New chat">
             <MessageSquarePlus />
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close assistant">
@@ -134,19 +214,32 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-thin">
+      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-thin">
         {!msgs.length ? (
-          <div>
-            <p className="font-display text-2xl leading-tight">Ask, calculate, or have it take you there.</p>
-            <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
-              <li className="flex gap-2"><Compass className="size-3.5 shrink-0" /> Opens pages and reads what you're looking at</li>
-              <li className="flex gap-2"><Code2 className="size-3.5 shrink-0" /> Runs code on the SEC data for models and screens</li>
-              <li className="flex gap-2"><Globe className="size-3.5 shrink-0" /> Researches filings, calls and the web in loops, with citations</li>
-            </ul>
-            <div className="mt-5 grid grid-cols-1 gap-2">
+          <div className="animate-[rise_.4s_ease-out]">
+            <p className="font-display text-[22px] leading-tight">Research anything. It plans, digs, checks itself and shows its work.</p>
+            <div className="mt-4 grid grid-cols-2 gap-1.5 text-[11px] text-muted-foreground">
+              {[
+                [Compass, "Drives the app & reads your screen"],
+                [Code2, "Runs code for models & screens"],
+                [Globe, "Searches, maps, crawls & extracts the web"],
+                [ListChecks, "Plans, loops, self-reviews, asks when unsure"],
+              ].map(([I, t], i) => {
+                const Icon = I as typeof Compass;
+                return (
+                  <div key={i} className="flex items-start gap-1.5 rounded-md border bg-card p-2">
+                    <Icon className="mt-px size-3.5 shrink-0 text-foreground" />
+                    <span className="leading-snug">{t as string}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="mb-1.5 mt-5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Try</p>
+            <div className="grid grid-cols-1 gap-1.5">
               {suggestionsFor(path).map((s) => (
-                <button key={s} onClick={() => ask(s)} className="rounded-lg border bg-card p-2.5 text-left text-[12.5px] leading-snug shadow-paper hover:bg-secondary/60">
-                  {s}
+                <button key={s} onClick={() => ask(s)} className="group flex items-center gap-2 rounded-lg border bg-card px-2.5 py-2 text-left text-[12.5px] leading-snug shadow-paper transition-colors hover:border-rule hover:bg-secondary/60">
+                  <span className="flex-1">{s}</span>
+                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                 </button>
               ))}
             </div>
@@ -155,21 +248,36 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
           <div className="grid grid-cols-1 gap-5">
             {msgs.map((m) =>
               m.role === "user" ? (
-                <p key={m.id} className="ml-auto max-w-[90%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-ink px-3 py-2 text-[13px] text-ink-foreground">
+                <p key={m.id} className="ml-auto max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-ink px-3 py-2 text-[13px] text-ink-foreground">
                   {m.content}
                 </p>
               ) : (
                 <AssistantTurn key={m.id} m={m} />
               ),
             )}
+            {question && (
+              <div className="animate-[rise_.3s_ease-out] rounded-xl border border-foreground/20 bg-card p-3 shadow-paper">
+                <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                  <MessageCircleQuestion className="size-3.5" /> Needs your input
+                </p>
+                <p className="mt-1.5 text-[13px] font-medium leading-snug">{question.question}</p>
+                <div className="mt-2.5 flex flex-wrap gap-1.5">
+                  {question.options.map((o) => (
+                    <button key={o} onClick={() => answer(o)} className="rounded-full border bg-background px-2.5 py-1 text-[12px] transition-colors hover:border-foreground hover:bg-secondary">
+                      {o}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-2 text-[10.5px] text-muted-foreground">Or type your own answer below.</p>
+              </div>
+            )}
           </div>
         )}
-        <div ref={bottom} />
       </div>
 
       <div className="shrink-0 border-t p-2.5">
         <form
-          className="flex items-end gap-1.5 rounded-xl border bg-card p-1.5 focus-within:border-rule"
+          className="rounded-xl border bg-card p-1.5 shadow-paper transition-colors focus-within:border-foreground/40"
           onSubmit={(e) => {
             e.preventDefault();
             ask(input);
@@ -186,61 +294,167 @@ export function AssistantPanel({ open, onClose }: { open: boolean; onClose: () =
               }
             }}
             rows={1}
-            maxLength={2000}
-            disabled={busy}
-            placeholder="Ask anything, or “take me to…”"
-            className="max-h-32 min-h-9 resize-none border-0 bg-transparent text-[13px] shadow-none focus-visible:ring-0"
+            maxLength={4000}
+            disabled={busy && !question}
+            placeholder={question ? "Type your answer…" : busy ? "Working…" : "Ask, research, model, or “take me to…”"}
+            className="max-h-36 min-h-9 resize-none border-0 bg-transparent px-1.5 text-[13px] shadow-none focus-visible:ring-0"
           />
-          <button
-            type="button"
-            onClick={() => setDeep((d) => !d)}
-            className={cn("shrink-0 rounded-md border px-1.5 py-1 text-[10.5px]", deep ? "border-foreground bg-ink text-ink-foreground" : "text-muted-foreground")}
-            title="Deep research: more loops, more cross-checking"
-          >
-            {deep ? "Deep" : "Fast"}
-          </button>
-          {busy ? (
-            <Button type="button" size="icon-sm" variant="outline" onClick={() => (stop.current = true)} aria-label="Stop">
-              <Square className="size-3 fill-current" />
-            </Button>
-          ) : (
-            <Button type="submit" size="icon-sm" variant="ink" disabled={!input.trim()} aria-label="Send">
-              <ArrowUp />
-            </Button>
-          )}
+          <div className="flex items-center gap-1 px-0.5">
+            <div className="flex rounded-md border p-0.5 text-[10.5px]" role="radiogroup" aria-label="Research depth">
+              {(["Fast", "Deep"] as const).map((l) => {
+                const on = (l === "Deep") === deep;
+                return (
+                  <button key={l} type="button" role="radio" aria-checked={on} onClick={() => setDeep(l === "Deep")} className={cn("rounded px-1.5 py-0.5 transition-colors", on ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:text-foreground")}
+                    title={l === "Deep" ? "More loops, cross-checks and a self-review pass" : "Quick answers"}>
+                    {l}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="ml-1 hidden text-[10px] text-muted-foreground sm:inline">⏎ send · ⇧⏎ newline</span>
+            <div className="ml-auto">
+              {busy && !question ? (
+                <Button type="button" size="icon-sm" variant="outline" onClick={halt} aria-label="Stop">
+                  <Square className="size-3 fill-current" />
+                </Button>
+              ) : (
+                <Button type="submit" size="icon-sm" variant="ink" disabled={!input.trim()} aria-label="Send">
+                  <ArrowUp />
+                </Button>
+              )}
+            </div>
+          </div>
         </form>
         <p className="mt-1 text-center text-[10px] text-muted-foreground">
           Saved to your <Link to="/app/research" className="underline">research history</Link>. Not investment advice.
         </p>
       </div>
+      {!docked && <div onPointerDown={(e) => drag(e, "resize")} className="absolute bottom-0 right-0 size-4 cursor-se-resize" aria-hidden><span className="absolute bottom-1 right-1 size-2 border-b-2 border-r-2 border-rule" /></div>}
     </aside>
+  );
+}
+
+function stepIcon(s: Step) {
+  if (s.status === "error") return <TriangleAlert className="size-3 text-negative" />;
+  const c = "size-3";
+  if (s.kind === "think") return <Brain className={c} />;
+  if (s.name === "run_code") return <Code2 className={c} />;
+  if (s.name === "navigate_to" || s.name === "get_page_context") return <Compass className={c} />;
+  if (s.name === "ask_user") return <MessageCircleQuestion className={c} />;
+  if (s.name === "web_map" || s.name === "web_crawl") return <Network className={c} />;
+  if (s.name === "web_extract" || s.name === "fetch_url") return <ScanText className={c} />;
+  if (s.name.startsWith("read_") || s.name === "search_filings") return <FileSearch className={c} />;
+  if (s.kind === "web" || s.name.startsWith("web_")) return <Globe className={c} />;
+  return <Wrench className={c} />;
+}
+
+const host = (u: string) => {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return u;
+  }
+};
+
+function StepRow({ s }: { s: Step }) {
+  const [open, setOpen] = useState(false);
+  const detail = s.kind === "think" ? s.output : s.output || (s.args && Object.keys(s.args).length ? JSON.stringify(s.args, null, 2) : "");
+  const running = s.status === "running";
+  return (
+    <li className="relative">
+      <span className={cn("absolute -left-[19px] top-[3px] grid size-[15px] place-items-center rounded-full border bg-background", running && "border-foreground/50")}>
+        {running ? <span className="size-1.5 animate-[pulse-dot_1s_ease-in-out_infinite] rounded-full bg-foreground" /> : stepIcon(s)}
+      </span>
+      <button onClick={() => detail && setOpen((o) => !o)} className={cn("flex w-full min-w-0 items-baseline gap-1.5 text-left text-[11.5px]", detail && "hover:text-foreground")}>
+        <span className={cn("shrink-0 font-medium", running && "text-shimmer", s.kind === "think" && "font-normal italic text-muted-foreground")}>
+          {s.kind === "think" ? s.summary : (TOOL_LABELS[s.name] ?? s.name)}
+        </span>
+        {s.kind !== "think" && <span className={cn("truncate text-muted-foreground", s.status === "error" && "text-negative")}>{s.summary}</span>}
+        {s.ms != null && s.ms > 800 && <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">{(s.ms / 1000).toFixed(1)}s</span>}
+      </button>
+      {s.sources && s.sources.length > 0 && (
+        <div className="mt-1 flex flex-wrap gap-1">
+          {s.sources.slice(0, 6).map((x) => (
+            <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.title ?? x.url} className="inline-flex max-w-[150px] items-center gap-1 rounded border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
+              <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt="" className="size-3 rounded-sm" loading="lazy" />
+              <span className="truncate">{host(x.url)}</span>
+            </a>
+          ))}
+        </div>
+      )}
+      {open && detail && (
+        <pre className={cn("mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted/50 p-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground scrollbar-thin", s.kind === "think" && "font-sans italic")}>
+          {detail}
+        </pre>
+      )}
+    </li>
+  );
+}
+
+function PlanCard({ plan, live }: { plan: Plan; live: boolean }) {
+  const done = plan.steps.filter((s) => s.status === "done").length;
+  return (
+    <div className="rounded-lg border bg-card p-2.5 shadow-paper">
+      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <ListChecks className="size-3.5" /> Plan
+        <span className="ml-auto font-mono normal-case tracking-normal">{done}/{plan.steps.length}</span>
+      </div>
+      <div className="mt-1.5 h-0.5 overflow-hidden rounded bg-muted">
+        <div className="h-full bg-foreground transition-[width] duration-500" style={{ width: `${plan.steps.length ? (done / plan.steps.length) * 100 : 0}%` }} />
+      </div>
+      <p className="mt-2 text-[12px] font-medium leading-snug">{plan.goal}</p>
+      <ul className="mt-1.5 grid gap-1">
+        {plan.steps.map((s, i) => (
+          <li key={i} className={cn("flex items-start gap-1.5 text-[11.5px] leading-snug", s.status === "dropped" && "text-muted-foreground line-through", s.status === "done" && "text-muted-foreground")}>
+            {s.status === "done" ? <Check className="mt-px size-3 shrink-0 text-positive" /> : s.status === "doing" ? <CircleDot className="mt-px size-3 shrink-0" /> : <Circle className="mt-px size-3 shrink-0 text-muted-foreground" />}
+            <span className={cn(s.status === "doing" && live && "text-shimmer")}>{s.title}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
 function AssistantTurn({ m }: { m: Msg }) {
   const [open, setOpen] = useState(false);
   const steps = m.steps.filter((s) => s.name !== "sources");
+  const sources = Array.from(new Map(m.steps.flatMap((s) => s.sources ?? []).map((x) => [x.url, x])).values());
   const showSteps = open || m.pending;
+  const tools = steps.filter((s) => s.kind !== "think").length;
   return (
-    <div className="grid grid-cols-1 gap-2">
-      <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
-        {m.pending ? <Loader2 className="size-3 animate-spin" /> : <Check className="size-3" />}
-        {m.pending ? "Working" : "Done"} · {steps.length} step{steps.length === 1 ? "" : "s"}
-        <ChevronDown className={cn("size-3 transition-transform", showSteps && "rotate-180")} />
-      </button>
-      {showSteps && steps.length > 0 && (
-        <ol className="ml-1.5 grid grid-cols-1 gap-0.5 border-l pl-3">
-          {steps.map((s, i) => (
-            <li key={i} className="flex min-w-0 items-center gap-1.5 text-[11px]">
-              {s.status === "running" ? <Loader2 className="size-3 shrink-0 animate-spin" /> : s.status === "error" ? <TriangleAlert className="size-3 shrink-0 text-negative" /> : s.name === "run_code" ? <Code2 className="size-3 shrink-0" /> : s.name === "navigate_to" ? <Compass className="size-3 shrink-0" /> : s.kind === "web" ? <Globe className="size-3 shrink-0" /> : <Wrench className="size-3 shrink-0" />}
-              <span className="shrink-0 font-medium">{TOOL_LABELS[s.name] ?? s.name}</span>
-              <span className="truncate text-muted-foreground">{s.summary}</span>
-            </li>
-          ))}
-        </ol>
+    <div className="grid grid-cols-1 gap-2.5">
+      {m.plan && m.plan.steps.length > 0 && <PlanCard plan={m.plan} live={!!m.pending} />}
+      {steps.length > 0 && (
+        <div>
+          <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+            <ChevronRight className={cn("size-3 transition-transform", showSteps && "rotate-90")} />
+            {m.pending ? "Working" : "Worked"} · {tools} tool{tools === 1 ? "" : "s"}
+            {sources.length > 0 && ` · ${sources.length} sources`}
+          </button>
+          {showSteps && (
+            <ol className="ml-[7px] mt-1.5 grid grid-cols-1 gap-1.5 border-l pl-3">
+              {steps.map((s, i) => (
+                <StepRow key={i} s={s} />
+              ))}
+            </ol>
+          )}
+        </div>
       )}
-      {m.content ? <ResearchMarkdown className="text-[13px] leading-relaxed">{m.content}</ResearchMarkdown> : null}
+      {m.pending && m.phase && <p className="text-shimmer text-[12px] font-medium">{m.phase}…</p>}
+      {m.content ? <ResearchMarkdown className={cn("text-[13px] leading-relaxed", m.pending && "opacity-60")}>{m.content}</ResearchMarkdown> : null}
       {m.error && <p className="rounded-md border border-negative/30 bg-negative-soft px-2.5 py-1.5 text-xs text-negative">{m.error}</p>}
+      {!m.pending && m.content && (
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="icon-sm" className="size-6" aria-label="Copy answer" onClick={() => navigator.clipboard.writeText(m.content).then(() => toast.success("Copied"))}>
+            <Copy className="size-3" />
+          </Button>
+          {sources.slice(0, 5).map((x) => (
+            <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.title ?? x.url}>
+              <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt={host(x.url)} className="size-4 rounded-sm border" loading="lazy" />
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

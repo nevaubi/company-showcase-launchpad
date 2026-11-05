@@ -103,3 +103,67 @@ export async function firecrawlLinks(url: string): Promise<string[]> {
   const j = (await res.json()) as { data?: { links?: string[] }; links?: string[] };
   return j.data?.links ?? j.links ?? [];
 }
+
+function firecrawlReq(path: string, init: { method?: string; body?: unknown } = {}) {
+  const key = process.env["FIRECRAWL_API_KEY"];
+  if (!key) throw new Error("Page reader is not configured");
+  const gateway = key.startsWith("lovc_");
+  const base = gateway ? "https://connector-gateway.lovable.dev/firecrawl/v2" : "https://api.firecrawl.dev/v2";
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (gateway) {
+    headers["Authorization"] = `Bearer ${process.env["LOVABLE_API_KEY"] ?? ""}`;
+    headers["X-Connection-Api-Key"] = key;
+  } else headers["Authorization"] = `Bearer ${key}`;
+  return fetch(`${base}${path}`, { method: init.method ?? "POST", headers, body: init.body ? JSON.stringify(init.body) : undefined });
+}
+
+async function okJson<T>(res: Response, what: string): Promise<T> {
+  if (!res.ok) {
+    const body = await res.text();
+    console.error(`${what} failed [${res.status}]: ${body}`);
+    throw new Error(`${what} failed (${res.status}): ${body.slice(0, 200)}`);
+  }
+  return (await res.json()) as T;
+}
+
+/** Structured extraction from one page (Firecrawl json format, prompt-driven). */
+export async function firecrawlExtract(url: string, prompt: string): Promise<{ json: unknown; title?: string; url: string }> {
+  const j = await okJson<{ data?: { json?: unknown; metadata?: { title?: string } }; json?: unknown }>(
+    await firecrawlReq("/scrape", { body: { url, formats: [{ type: "json", prompt }], onlyMainContent: true, timeout: 50000 } }),
+    "Extract",
+  );
+  return { json: j.data?.json ?? j.json ?? null, title: j.data?.metadata?.title, url };
+}
+
+/** Crawl a site (bounded): starts a job and polls for up to ~45s; returns what finished. */
+export async function firecrawlCrawl(url: string, opts: { limit?: number; includePaths?: string[] } = {}): Promise<{ status: string; pages: { url: string; title?: string; markdown: string }[] }> {
+  const start = await okJson<{ id?: string }>(
+    await firecrawlReq("/crawl", { body: { url, limit: Math.min(opts.limit ?? 10, 25), maxDiscoveryDepth: 2, includePaths: opts.includePaths, scrapeOptions: { formats: ["markdown"], onlyMainContent: true } } }),
+    "Crawl",
+  );
+  if (!start.id) throw new Error("Crawl did not start");
+  type P = { status: string; data?: { markdown?: string; metadata?: { title?: string; sourceURL?: string; url?: string } }[] };
+  let last: P = { status: "scraping" };
+  for (let i = 0; i < 15; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    last = await okJson<P>(await firecrawlReq(`/crawl/${start.id}`, { method: "GET" }), "Crawl status");
+    if (last.status === "completed" || last.status === "failed") break;
+  }
+  return {
+    status: last.status,
+    pages: (last.data ?? []).map((d) => ({ url: d.metadata?.sourceURL ?? d.metadata?.url ?? url, title: d.metadata?.title, markdown: d.markdown ?? "" })),
+  };
+}
+
+const PRIVATE_HOST = /^(localhost|.*\.local|.*\.internal|0\.0\.0\.0|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?|\[?f[cd])/i;
+
+/** Raw HTTP GET for public APIs/JSON/CSV/text (no JS rendering). Blocks private hosts. */
+export async function fetchPublic(url: string): Promise<{ status: number; contentType: string; body: string; url: string }> {
+  const u = new URL(url);
+  if (!/^https?:$/.test(u.protocol) || PRIVATE_HOST.test(u.hostname)) throw new Error("Only public http(s) URLs are allowed");
+  const res = await fetch(u, { headers: { "User-Agent": "FiledUnder research admin@filedunder.ai", Accept: "application/json, text/csv, text/plain, text/html;q=0.8, */*;q=0.5" }, redirect: "follow", signal: AbortSignal.timeout(20000) });
+  const contentType = res.headers.get("content-type") ?? "";
+  if (/image|video|audio|octet-stream|pdf|zip/.test(contentType)) return { status: res.status, contentType, body: `(binary ${contentType}; use read_webpage for PDFs)`, url: res.url };
+  const text = await res.text();
+  return { status: res.status, contentType, body: text.slice(0, 120_000), url: res.url };
+}

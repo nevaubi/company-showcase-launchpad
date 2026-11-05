@@ -271,6 +271,57 @@ export const TOOL_DEFS = [
     parameters: obj({}, []),
     strict: true,
   },
+  {
+    type: "function",
+    name: "update_plan",
+    description:
+      "Publish or revise your working plan and notes (shown live to the user). Call at the start of any multi-step task, and again whenever you learn something that changes the plan, finish a step, or need to restart with a different approach. Keep it short.",
+    parameters: obj(
+      {
+        goal: str("One-line restatement of what the user actually needs"),
+        steps: { type: "array", items: obj({ title: str("Step"), status: { type: "string", enum: ["todo", "doing", "done", "dropped"] } }, ["title", "status"]) },
+        notes: str("Key findings so far, open questions, contradictions (empty string if none)"),
+      },
+      ["goal", "steps", "notes"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "ask_user",
+    description:
+      "Pause and ask the user a clarifying question when the request is genuinely ambiguous or a choice materially changes the work (ticker, time period, scenario, which of several readings). Offer 2-4 short options. Don't ask what you can find out yourself.",
+    parameters: obj({ question: str("The question"), options: { type: "array", items: { type: "string" } } }, ["question", "options"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "web_map",
+    description: "List URLs on a website (sitemap discovery), optionally filtered by a keyword — e.g. find a company's IR press-release or presentation pages before reading them.",
+    parameters: obj({ url: str("Site root, e.g. https://investor.nvidia.com"), search: nullable(str("Keyword to rank/filter URLs")) }, ["url", "search"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "web_crawl",
+    description: "Read several pages of one site at once (bounded crawl, max 25 pages, ~45s). Use when the answer is spread across a section of a site. Prefer web_map + read_webpage for targeted reads.",
+    parameters: obj({ url: str("Start URL"), limit: { type: "integer", description: "Max pages 1-25" }, include_paths: nullable({ type: "array", items: { type: "string" }, description: "Regex path filters, e.g. ['/news/.*']" }) }, ["url", "limit", "include_paths"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "web_extract",
+    description: "Extract structured data from one web page with a prompt (e.g. 'all contract awards with date, value, counterparty'). Returns JSON. Good for tables, lists and pricing pages.",
+    parameters: obj({ url: str("Page URL"), prompt: str("What to extract and in what shape") }, ["url", "prompt"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "fetch_url",
+    description: "Raw HTTP GET of a public URL — JSON/CSV APIs (e.g. data.sec.gov, api.stlouisfed.org, government open-data endpoints), robots, plain text. No JavaScript rendering; use read_webpage for normal pages and PDFs. Pipe large results into run_code by pasting the relevant part.",
+    parameters: obj({ url: str("Full https URL") }, ["url"]),
+    strict: true,
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFS)[number]["name"];
@@ -304,4 +355,11 @@ export const TOOL_LABELS: Record<string, string> = {
   simulate_supply_shock: "Simulated shock",
   navigate_to: "Opened page",
   get_page_context: "Read your screen",
+  update_plan: "Planned",
+  ask_user: "Asked you",
+  web_map: "Mapped site",
+  web_crawl: "Crawled site",
+  web_extract: "Extracted data",
+  fetch_url: "Fetched URL",
+  reasoning: "Thought",
 };

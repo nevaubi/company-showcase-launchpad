@@ -124,3 +124,59 @@ async function buildBrief(co: NonNullable<ReturnType<typeof coverageOf>>): Promi
       return { brief: null, error: (e as Error).message };
     }
 }
+
+const errOut = (e: unknown) => ({ error: (e as Error).message });
+
+/** Discover URLs on a site (Firecrawl map). */
+export const mapSite = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000), search: z.string().max(200).optional(), limit: z.number().int().min(1).max(500).default(100) }).parse(d))
+  .handler(async ({ data }) => {
+    const { firecrawlMap } = await import("@/lib/web.server");
+    try {
+      return { links: (await firecrawlMap(data.url, { search: data.search, limit: data.limit })).slice(0, data.limit) };
+    } catch (e) {
+      return { links: [] as string[], ...errOut(e) };
+    }
+  });
+
+/** Bounded multi-page crawl (Firecrawl crawl). */
+export const crawlSite = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000), limit: z.number().int().min(1).max(25).default(8), includePaths: z.array(z.string().max(200)).max(10).optional() }).parse(d))
+  .handler(async ({ data }) => {
+    const { firecrawlCrawl } = await import("@/lib/web.server");
+    try {
+      const r = await firecrawlCrawl(data.url, data);
+      return { status: r.status, pages: r.pages.map((p) => ({ ...p, markdown: p.markdown.slice(0, 8000) })) };
+    } catch (e) {
+      return { status: "failed", pages: [] as { url: string; title?: string; markdown: string }[], ...errOut(e) };
+    }
+  });
+
+/** Prompted structured extraction from a page (Firecrawl json). */
+export const extractFromPage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000), prompt: z.string().min(3).max(2000) }).parse(d))
+  .handler(async ({ data }) => {
+    const { firecrawlExtract } = await import("@/lib/web.server");
+    try {
+      const r = await firecrawlExtract(data.url, data.prompt);
+      return { url: r.url, title: r.title, json: JSON.stringify(r.json) };
+    } catch (e) {
+      return { url: data.url, json: "", ...errOut(e) };
+    }
+  });
+
+/** Raw GET of a public URL (APIs, JSON, CSV). */
+export const fetchUrl = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000) }).parse(d))
+  .handler(async ({ data }) => {
+    const { fetchPublic } = await import("@/lib/web.server");
+    try {
+      return await fetchPublic(data.url);
+    } catch (e) {
+      return { status: 0, contentType: "", body: "", url: data.url, ...errOut(e) };
+    }
+  });

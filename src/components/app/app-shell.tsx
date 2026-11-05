@@ -92,6 +92,7 @@ function ShellInner({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiDocked, setAiDocked] = useState(true);
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => setCollapsed(localStorage.getItem("fu:sidebar") === "1"), []);
   const toggleCollapsed = () =>
@@ -136,7 +137,7 @@ function ShellInner({ children }: { children: ReactNode }) {
         className={cn("transition-[padding] duration-300", collapsed ? "lg:pl-14" : "lg:pl-60")}
         style={target ? ({ "--panel": PANEL_WIDTH } as React.CSSProperties) : undefined}
       >
-        <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]", !target && aiOpen && "md:pr-[min(420px,100vw)]")}>
+        <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]", !target && aiOpen && aiDocked && "md:pr-[min(420px,100vw)]")}>
           <header className="sticky top-0 z-20 flex h-12 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur lg:px-6">
             <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setMobileOpen((o) => !o)} aria-label="Menu">
               {mobileOpen ? <X /> : <Menu />}
@@ -159,7 +160,7 @@ function ShellInner({ children }: { children: ReactNode }) {
           <main className="px-4 pb-12 pt-4 lg:px-6">{children}</main>
         </div>
       </div>
-      <AssistantPanel open={aiOpen} onClose={() => setAiOpen(false)} />
+      <AssistantPanel open={aiOpen} onClose={() => setAiOpen(false)} docked={aiDocked} onDockedChange={setAiDocked} />
       <SourcePanel />
       <CommandMenu open={cmdOpen} onOpenChange={setCmdOpen} />
     </div>

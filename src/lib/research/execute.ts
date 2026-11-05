@@ -6,7 +6,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { companyQuery, macroQuery, newsQuery, pricesQuery, quotesQuery, universeQuery, type Range } from "@/lib/data";
 import { COVERAGE, coverageOf, MACRO_SERIES } from "@/lib/coverage";
 import { getFilingDocument, searchFilings } from "@/lib/sec.functions";
-import { readWebpage, webSearch } from "@/lib/web.functions";
+import { crawlSite, extractFromPage, fetchUrl, mapSite, readWebpage, webSearch } from "@/lib/web.functions";
 import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
 import { getPromises } from "@/lib/earnings.functions";
 import { credibility } from "@/lib/earnings/promises";
@@ -24,6 +24,7 @@ import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
 
 const MAX = 9000;
+const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
 const clip = (s: string) => (s.length > MAX ? `${s.slice(0, MAX)}\n…[truncated]` : s);
 
 export interface ToolRun {
@@ -513,6 +514,28 @@ Month-start closes:\n${monthly.join("\n")}`;
       let host = String(args.url);
       try { host = new URL(host).hostname.replace(/^www\./, ""); } catch { /* keep raw */ }
       return { output: clip(`${"title" in r && r.title ? r.title : ""} — ${r.url}\n\n${text}`), summary: `Read ${host}` };
+    }
+    case "web_map": {
+      const r = await mapSite({ data: { url: String(args.url), search: typeof args.search === "string" && args.search ? args.search : undefined, limit: 120 } });
+      if (!r.links.length) return { output: `No URLs found${"error" in r && r.error ? ` (${r.error})` : ""}.`, summary: "No URLs found" };
+      return { output: clip(r.links.join("\n")), summary: `${r.links.length} URLs on ${hostOf(String(args.url))}` };
+    }
+    case "web_crawl": {
+      const inc = Array.isArray(args.include_paths) ? (args.include_paths as string[]) : undefined;
+      const r = await crawlSite({ data: { url: String(args.url), limit: Math.max(1, Math.min(25, Number(args.limit) || 8)), includePaths: inc } });
+      if (!r.pages.length) return { output: `Crawl ${r.status}${"error" in r && r.error ? `: ${r.error}` : ""}; no pages.`, summary: "Crawl returned nothing" };
+      const per = Math.floor(MAX * 2 / r.pages.length);
+      return { output: r.pages.map((p) => `## ${p.title ?? ""} — ${p.url}\n${p.markdown.slice(0, per)}`).join("\n\n").slice(0, MAX * 2), summary: `${r.pages.length} pages from ${hostOf(String(args.url))}${r.status !== "completed" ? " (partial)" : ""}` };
+    }
+    case "web_extract": {
+      const r = await extractFromPage({ data: { url: String(args.url), prompt: String(args.prompt) } });
+      if (!r.json) return { output: `Extraction failed${"error" in r && r.error ? `: ${r.error}` : ""}.`, summary: "Extraction failed" };
+      return { output: clip(`Source: ${r.url}\n${r.json}`), summary: `Extracted from ${hostOf(r.url)}` };
+    }
+    case "fetch_url": {
+      const r = await fetchUrl({ data: { url: String(args.url) } });
+      if ("error" in r && r.error) return { output: `Fetch failed: ${r.error}`, summary: "Fetch failed" };
+      return { output: clip(`HTTP ${r.status} ${r.contentType} — ${r.url}\n${r.body}`), summary: `HTTP ${r.status} · ${hostOf(r.url)}` };
     }
     default:
       throw new Error(`Unknown tool ${name}`);
