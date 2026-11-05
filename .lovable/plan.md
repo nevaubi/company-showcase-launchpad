@@ -1,26 +1,21 @@
-# Merge this site's features into the Vercel version (filedunderai)
+# Combine the two Filed Under sites
 
-## Constraint
-The other site runs on Vercel, outside this workspace, so I can't open or edit its code from here. You have two ways to get it to me:
-- **A (recommended):** push the Vercel repo to GitHub and import it as a new Lovable project in this workspace. I then copy features into it.
-- **B:** upload a ZIP of its source here. I compare the two and hand you a package of ported files to drop in.
+## What the other site's code shows (changes my earlier advice)
+- It's built very differently: plain JavaScript pages with no framework, Python data scripts, Vercel functions and its own separate database.
+- This site is a React app. Moving its features (supply-chain map, assistant panel, estimates, alerts, trade ideas, sectors, company layout) over there means rewriting nearly all of them from scratch. That's months of work and very risky.
+- Its data, on the other hand, is mostly published as ready-made public files: company statements, IR/KPI series, prices, insiders, sectors and screener data for about 500 to 1,000 tickers. This site can read those directly or copy them.
 
-Either way the ~1,000-ticker data stays in its own database, and nothing gets re-imported.
+**New recommendation: bring that site's data into this site.** All the features you listed stay exactly as they are.
 
 ## Steps
-1. **Audit both sites.** Map how the other site stores statements, IR facts and source links, plus its routes, auth and database. List every place it differs from this site.
-2. **Shared foundation.** Port the pure modules first (no UI): supply-chain core and analytics, estimates core, alerts core, earnings promises, signals core, research loop and sandbox, hedge core. Adapt the data readers to the other site's schema instead of `public/data` snapshots.
-3. **Database.** Add migrations there for `supply_links`, `supply_signals`, `alt_data`, `analyst_estimates`, `alert_state`, `paper_trades`, `ai_cache` and `job_state`, with the same RLS and grants.
-4. **Features, in order:**
-   - Company page layout (header, research price chart, About/management, collapsible panels, Geist fonts)
-   - Research assistant panel (⌘J) with tools pointed at their data
-   - Supply chain map and intel
-   - Estimates & analysts, alerts bell, earnings & promises
-   - Trade ideas (signals) and sector pages
-   - Alt data hub and hedge funds / Treasury auctions
-5. **Pipelines.** Rerun the supply-chain, supply-intel, alt-data, estimates, signals and hedge scripts for all ~1,000 tickers, in small batches with spend caps.
-6. **Verify.** Run the tests, then smoke-test signed in on a few companies (NVDA, AAPL, plus a newly covered small company).
+1. **Inventory.** List every data file and database table the other site produces, map each to what this site uses today (statements, IR series, KPIs, insiders, prices, sectors), and confirm the ticker count.
+2. **Importer.** Add one importer script that pulls the other site's public files into this project's storage, converted to this site's formats. Every number keeps its SEC accession, concept and period, so click-to-source still works. Nothing gets hand-edited.
+3. **Expand coverage** from 78 to the full list. Company pages, search and sectors pick up the new tickers automatically.
+4. **Keep the better source per company.** Where both sites have IR data (the 78 overlap), keep whichever has the higher tie-out rate and note the choice.
+5. **Fill the new tickers** by running this site's own pipelines for them: supply chain, alt data, estimates, trade ideas and company context. These run in small batches with a spend cap. Supply-chain AI reading costs scale with ticker count.
+6. **Bring over unique pieces** from that site only where they add value (its macro store, its 189-field screener, its workspace), rebuilt as React pages one at a time.
+7. **Verify.** Run the tests, then check pages signed in for NVDA, AAPL and a few newly added small companies.
 
-## Notes
-- The 1,000-ticker supply-chain and estimates runs cost AI credits, about 13x the 78-company runs.
-- Once the merge is verified, this site can be retired.
+## Needs from you
+- Confirm the other site's public data files can still be read (it uses its own separate storage). If they're private, a one-time export works instead.
+- After this, the Vercel site can be retired.
