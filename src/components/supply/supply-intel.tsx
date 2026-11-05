@@ -8,7 +8,7 @@ import { useSource } from "@/components/source/source-context";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { concentrationBasis } from "@/lib/supply/core";
-import { byCounterparty, signalConfidence, type CpConfidence } from "@/lib/supply/counterparty";
+import { byCounterparty, quoteLink, signalConfidence, type CpConfidence } from "@/lib/supply/counterparty";
 const BASIS: Record<string, string> = { revenue: "of revenue", receivables: "of receivables", vendor: "vendor receivables", channel: "of sales by channel", other: "" };
 
 export interface Signal {
@@ -77,7 +77,7 @@ export function SupplyIntel({ ticker }: { ticker: string }) {
   const openSig = (s: Signal) => {
     if ((s.source_kind === "filing" || s.source_kind === "exhibit") && s.accn && s.doc)
       open({ ticker: s.ticker, label: s.title, unit: "usd", value: 0, doc: { accn: s.accn, doc: s.doc, form: s.form ?? "", filed: s.filed ?? "", title: `${s.ticker} ${s.form}`, search: s.quote } });
-    else if (s.url) window.open(s.url, "_blank", "noopener,noreferrer");
+    else if (s.url) window.open(quoteLink(s.url, s.quote), "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -193,7 +193,7 @@ export function CounterpartyEvidence({ ticker }: { ticker: string }) {
   const openSig = (s: Signal) => {
     if (s.source_kind === "exhibit" && s.accn && s.doc)
       open({ ticker: s.ticker, label: s.title, unit: "usd", value: 0, doc: { accn: s.accn, doc: s.doc, form: s.form ?? "", filed: s.filed ?? "", title: `${s.ticker} ${s.form}`, search: s.quote } });
-    else if (s.url) window.open(s.url, "_blank", "noopener,noreferrer");
+    else if (s.url) window.open(quoteLink(s.url, s.quote), "_blank", "noopener,noreferrer");
   };
   return (
     <Panel title="Contracts & earnings calls by counterparty" subtitle="Every named party in filed contract exhibits and management's call remarks, with dates and a confidence label. Click a statement to open its source at the quoted passage.">

@@ -46,3 +46,12 @@ export function byCounterparty<T extends CpSignal>(signals: T[]): Counterparty<T
   for (const g of m.values()) g.signals.sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? ""));
   return [...m.values()].sort((a, b) => RANK[b.confidence] - RANK[a.confidence] || b.signals.length - a.signals.length || (b.last ?? "").localeCompare(a.last ?? ""));
 }
+
+/** Browser text-fragment link (#:~:text=start,end) so a web/transcript source opens scrolled to and highlighting the quote. */
+export function quoteLink(url: string, quote: string): string {
+  const words = quote.replace(/[“”]/g, '"').replace(/[‘’]/g, "'").trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return url;
+  const enc = (w: string[]) => encodeURIComponent(w.join(" ")).replace(/-/g, "%2D").replace(/,/g, "%2C").replace(/&/g, "%26");
+  const frag = words.length <= 12 ? enc(words) : `${enc(words.slice(0, 6))},${enc(words.slice(-6))}`;
+  return `${url.split("#")[0]}#:~:text=${frag}`;
+}

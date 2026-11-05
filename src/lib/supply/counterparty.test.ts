@@ -28,3 +28,11 @@ describe("multi-party statements", () => {
     expect(g.map((x) => x.name).sort()).toEqual(["Lilly", "Roche"]);
   });
 });
+
+import { quoteLink } from "./counterparty";
+describe("quoteLink", () => {
+  it("uses start,end fragment for long quotes and encodes hyphens", () => {
+    const u = quoteLink("https://x.com/a#old", "one two three four five six seven eight nine ten eleven twelve-thirteen end");
+    expect(u).toBe("https://x.com/a#:~:text=one%20two%20three%20four%20five%20six,eight%20nine%20ten%20eleven%20twelve%2Dthirteen%20end");
+  });
+});
