@@ -55,6 +55,14 @@
 - [x] Markets: earnings reactions leaderboard/profile, correlation explorer, chart-pattern scanner with per-stock hit rates, sector deep-dive pages
 - [ ] Company pages: one-screen overview, catalysts timeline, visual polish
 
+## "Use the full potential" pass (Nov 5)
+- [x] Hedge funds: crowding composite, 8 leverage/basis-trade gauges, most-unusual readings across all 497 series
+- [x] New source: every Treasury auction since 2010, graded for demand
+- [x] Connected data: company timeline now includes alt data + supply intel; assistant `get_company_dossier` joins every source
+- [x] Proactive AI: sourced morning brief on the dashboard; assistant tools for hedge funds and auctions
+- [ ] Patents (USPTO key), lobbying (Senate LDA key), EIA energy (key) — waiting on free API keys from the owner
+- [ ] Scheduled refresh for hedge fund + auction snapshots
+
 ## Later
 - [ ] Insurer template (premiums, loss ratio, float) — needed before adding BRK or other insurers
 - [ ] Filing alerts: email when a followed company files a 10-K/10-Q/8-K or an insider trades

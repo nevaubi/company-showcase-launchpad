@@ -58,7 +58,7 @@ export function DailyBrief({ tickers }: { tickers: string[] }) {
     enabled: !!facts.data?.length,
     staleTime: 60 * 60_000,
     retry: false,
-    queryFn: () => run({ data: { date, key, tickers, facts: facts.data!.map(({ id, area, text }) => ({ id, area, text })) } }),
+    queryFn: () => run({ data: { date, key, tickers, facts: facts.data!.map(({ id, area, text }) => ({ id, area: area.slice(0, 30), text: text.slice(0, 590) })) } }),
   });
   const byId = new Map((facts.data ?? []).map((f) => [f.id, f]));
 

@@ -14,7 +14,7 @@ export const getDailyBrief = createServerFn({ method: "POST" })
         date: z.string().max(12),
         key: z.string().max(80),
         tickers: z.array(z.string().max(8)).max(40),
-        facts: z.array(z.object({ id: z.string().max(12), area: z.string().max(30), text: z.string().max(400) })).max(220),
+        facts: z.array(z.object({ id: z.string().max(12), area: z.string().max(30), text: z.string().max(600) })).max(220),
       })
       .parse(d),
   )
