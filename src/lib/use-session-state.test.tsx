@@ -26,4 +26,15 @@ describe("research view preferences", () => {
     const hook = renderHook(() => useSessionState("companies:filter", ""));
     expect(hook.result.current[0]).toBe("");
   });
+  it("rejects a stored query with the wrong type", () => {
+    sessionStorage.setItem("companies:filter", JSON.stringify({ query: "Apple" }));
+    const hook = renderHook(() => useSessionState("companies:filter", ""));
+    expect(hook.result.current[0]).toBe("");
+  });
+  it("resets a stored option that is no longer available", () => {
+    sessionStorage.setItem("companies:sector", JSON.stringify("Removed sector"));
+    const hook = renderHook(() => useSessionState("companies:sector", "All", (value): value is string => value === "All" || value === "Technology"));
+    expect(hook.result.current[0]).toBe("All");
+    expect(JSON.parse(sessionStorage.getItem("companies:sector") ?? "null")).toBe("All");
+  });
 });

@@ -54,6 +54,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   const stop = useRef(false);
   const scroller = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const handoffPending = useRef(false);
   const [box, setBox] = useState({ x: 0, y: 72, w: 440, h: 640 });
 
   useEffect(() => {
@@ -75,9 +76,30 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     if (open) inputRef.current?.focus();
   }, [open]);
   useEffect(() => {
+    const el = inputRef.current;
+    if (!el || !open) return;
+    const fit = () => {
+      el.style.height = "auto";
+      el.style.height = `${Math.min(144, Math.max(40, el.scrollHeight))}px`;
+    };
+    fit();
+    if (handoffPending.current) {
+      el.focus();
+      el.setSelectionRange(0, 0);
+      el.scrollTop = 0;
+      handoffPending.current = false;
+    }
+    let width = el.clientWidth;
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth !== width) { width = el.clientWidth; fit(); }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [input, open]);
+  useEffect(() => {
     const receive = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail;
-      if (typeof detail === "string") { setInput(detail); inputRef.current?.focus(); }
+      if (typeof detail === "string") { handoffPending.current = true; setInput(detail); }
     };
     window.addEventListener("fu:research-request", receive);
     return () => window.removeEventListener("fu:research-request", receive);

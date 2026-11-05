@@ -76,7 +76,7 @@ function CompanyLayout() {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center gap-3">
+      <div className="mb-3 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
         <CompanyLogo ticker={ticker} src={p?.logo} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -108,9 +108,9 @@ function CompanyLayout() {
             )}
           </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-3">
+        <div className="col-span-2 grid min-w-0 grid-cols-1 items-center gap-2 sm:grid-cols-[auto_minmax(0,1fr)]">
           {q ? (
-            <div className="flex items-baseline gap-2">
+            <div className="flex shrink-0 items-baseline justify-end gap-2 sm:justify-start">
               <p className="num text-2xl font-semibold">{fmtPrice(q.price)}</p>
               <p className={cn("num text-sm", q.change >= 0 ? "text-positive" : "text-negative")}>
                 {fmtSigned(q.change)} ({fmtPct(q.changePct, 2, true)})
@@ -119,7 +119,7 @@ function CompanyLayout() {
           ) : (
             <Skeleton className="h-8 w-32" />
           )}
-          <div className="flex flex-wrap justify-end gap-1">
+          <div className="flex min-w-0 flex-wrap justify-end gap-1">
             <Button size="xs" variant="outline" onClick={() => requestResearch(`Build a sourced investment brief for ${ticker}: latest results, valuation, estimates, supply-chain risks and upcoming catalysts. Read the company pages and distinguish reported facts from estimates.`)}><Sparkles /> Research</Button>
             <Button size="xs" variant={follow.isFollowed(ticker) ? "secondary" : "outline"} onClick={() => follow.toggle(ticker)} disabled={follow.pending}>
               <Star className={cn(follow.isFollowed(ticker) && "fill-current")} />

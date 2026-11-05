@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 export interface SegOption<T extends string> {
@@ -25,23 +26,23 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div role="radiogroup" aria-label={label} className={cn("inline-flex rounded-md border bg-secondary/50 p-0.5", className)}>
+    <div role="radiogroup" aria-label={label} className={cn("inline-flex min-w-0 max-w-full flex-wrap rounded-md border bg-secondary/50 p-0.5", className)}>
       {options.map((o) => {
         const btn = (
-          <button
+          <Button variant="ghost" size="xs"
             key={o.v}
             type="button"
             role="radio"
             aria-checked={value === o.v}
             onClick={() => onChange(o.v)}
             className={cn(
-              "rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "h-auto min-h-7 shrink-0 rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               size === "xs" ? "px-2 py-0.5 text-[11px]" : "px-2.5 py-1 text-xs",
               value === o.v ? "bg-card font-medium text-foreground shadow-paper" : "text-muted-foreground hover:text-foreground",
             )}
           >
             {o.l}
-          </button>
+          </Button>
         );
         return o.title ? (
           <Tooltip key={o.v} delayDuration={400}>

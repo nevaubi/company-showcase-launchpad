@@ -28,13 +28,21 @@ export const Route = createFileRoute("/_authenticated/app/companies/")({
 });
 
 type SortKey = "ticker" | "mcap" | "revenueTTM" | "growth" | "gm" | "pe" | "fcf" | "chg";
+const SORT_KEYS: SortKey[] = ["ticker", "mcap", "revenueTTM", "growth", "gm", "pe", "fcf", "chg"];
+function validSort(value: unknown): value is { key: SortKey; dir: 1 | -1 } {
+  if (!value || typeof value !== "object" || !("key" in value) || !("dir" in value)) return false;
+  return SORT_KEYS.some((key) => key === value.key) && (value.dir === 1 || value.dir === -1);
+}
+function validSector(value: unknown): value is string {
+  return typeof value === "string" && (value === "All" || COVERAGE.some((c) => c.sector === value));
+}
 
 function Companies() {
   const u = useUniverse();
   const quotes = useQuotes(COVERAGE_TICKERS);
   const follow = useToggleFollow();
-  const [sort, setSort] = useSessionState<{ key: SortKey; dir: 1 | -1 }>("fu:companies:sort", { key: "mcap", dir: -1 });
-  const [sector, setSector] = useSessionState<string>("fu:companies:sector", "All");
+  const [sort, setSort] = useSessionState<{ key: SortKey; dir: 1 | -1 }>("fu:companies:sort", { key: "mcap", dir: -1 }, validSort);
+  const [sector, setSector] = useSessionState<string>("fu:companies:sector", "All", validSector);
   const [q, setQ] = useSessionState("fu:companies:query", "");
   const [limit, setLimit] = useState(50);
   const sectors = useMemo(() => {

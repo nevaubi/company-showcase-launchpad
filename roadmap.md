@@ -1,5 +1,10 @@
 # Filed Under — roadmap
 
+## Research experience review (Nov 5)
+- [x] Review main research flows on desktop and mobile
+- [x] Fix discovered phone valuation overflow, cramped company headers, clipped assistant drafts and invalid saved filters
+- [x] Verify fixes and run regression tests
+
 ## Interface quality upgrade (Nov 5)
 - [x] Company first-screen hierarchy and grouped navigation
 - [x] Consistent compact tables and source evidence
