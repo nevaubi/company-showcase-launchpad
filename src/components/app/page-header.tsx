@@ -54,7 +54,7 @@ export function Panel({
           {actions && <div className="ml-auto flex items-center gap-1.5">{actions}</div>}
         </header>
       )}
-      <div className={cn("min-w-0 max-h-[640px] overflow-y-auto p-3.5 scrollbar-thin", bodyClassName)}>{children}</div>
+      <div className={cn("min-w-0 p-3.5", bodyClassName)}>{children}</div>
     </section>
   );
 }

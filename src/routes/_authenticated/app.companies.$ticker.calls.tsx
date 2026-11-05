@@ -218,7 +218,7 @@ function Reader({
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[17rem_minmax(0,1fr)]">
-      <aside className="grid min-w-0 content-start gap-4 lg:sticky lg:top-16 lg:max-h-[calc(100vh-5rem)] lg:overflow-y-auto lg:pr-1 scrollbar-thin">
+      <aside className="grid min-w-0 content-start gap-4">
         <Panel title={t.title} subtitle={`${t.date ? fmtDate(t.date) : ""} · ${t.words.toLocaleString()} words · ~${minutes} min`}>
           <p className="eyebrow mb-1.5">Talk time</p>
           <div className="flex h-2 overflow-hidden rounded-full bg-secondary" aria-label="Share of words spoken">
@@ -278,7 +278,7 @@ function Reader({
 
         {questions.length > 0 && (
           <Panel title={`Analyst questions (${questions.length})`} bodyClassName="p-0">
-            <ol className="max-h-80 divide-y overflow-y-auto scrollbar-thin lg:max-h-none">
+            <ol className="divide-y">
               {questions.map((x, n) => (
                 <li key={x.i}>
                   <button onClick={() => jump(x.i)} className="block w-full px-4 py-2 text-left transition-colors hover:bg-secondary">

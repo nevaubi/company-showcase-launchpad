@@ -310,7 +310,7 @@ function TargetsPanel({ e }: { e: Estimates }) {
           ))}
         </div>
         <div className="flex justify-between font-mono text-[10px] text-muted-foreground"><span>Low {fmtPrice(e.target.low)}</span><span>Median {fmtPrice(e.target.median)}</span><span>High {fmtPrice(e.target.high)}</span></div>
-        <div className="mt-3 max-h-56 divide-y divide-border/60 overflow-y-auto">
+        <div className="mt-3 divide-y divide-border/60">
           {firms.map((f) => {
             const up = e.price ? f.target! / e.price - 1 : null;
             return (
@@ -355,9 +355,9 @@ function ActionsPanel({ e }: { e: Estimates }) {
           <button key={d} type="button" className={chip(win === d)} onClick={() => setWin(d as number)}>{l}</button>
         ))}
       </div>
-      <div className="max-h-[28rem] overflow-auto">
+      <div className="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">
-          <thead className="sticky top-0 bg-card text-left text-[11px] uppercase tracking-wide text-muted-foreground">
+          <thead className="bg-card text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr className="border-b border-border">
               <th className="px-4 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Firm</th><th className="px-3 py-2 font-medium">Action</th>
               <th className="px-3 py-2 font-medium">Rating</th><th className="px-4 py-2 text-right font-medium">Price target</th>

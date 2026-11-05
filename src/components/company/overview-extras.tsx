@@ -253,12 +253,12 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
       }
       bodyClassName="p-0"
     >
-      <ol className="max-h-[520px] overflow-y-auto scrollbar-thin">
+      <ol>
         {events.map((e, i) => {
           const month = e.date.slice(0, 7);
           const header =
             i === 0 || events[i - 1].date.slice(0, 7) !== month ? (
-              <li key={`m-${month}`} className="sticky top-0 z-10 border-b bg-secondary/90 px-4 py-1 backdrop-blur">
+              <li key={`m-${month}`} className="sticky top-12 z-10 border-b bg-secondary/90 px-4 py-1 backdrop-blur">
                 <span className="eyebrow">{new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}</span>
               </li>
             ) : null;

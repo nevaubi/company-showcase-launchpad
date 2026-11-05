@@ -236,7 +236,7 @@ function NarrativesPanel({ ticker, name }: { ticker: string; name: string }) {
           </Button>
         </div>
       ) : (
-        <div className="max-h-[360px] overflow-y-auto scrollbar-thin">
+        <div>
           <ul className="divide-y">
             {(q.data?.narratives ?? []).map((n) => (
               <li key={n.title} className="px-4 py-3">

@@ -59,7 +59,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
           <Button size="xs" variant="outline" className="ml-2" onClick={refresh}>Try again</Button>
         </div>
       ) : (
-        <div className="max-h-[440px] overflow-y-auto scrollbar-thin">
+        <div>
           <p className="px-4 pt-3 text-[13px] leading-relaxed">{b.summary}</p>
           {b.highlights.length > 0 && (
             <dl className="grid grid-cols-1 gap-x-4 gap-y-2 px-4 pt-3 sm:grid-cols-2">

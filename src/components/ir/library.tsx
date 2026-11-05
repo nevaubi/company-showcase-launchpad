@@ -174,7 +174,7 @@ export function IrLibrary({ ticker, documents: files, images = 0 }: { ticker: st
       {!list.length ? (
         <p className="p-5 text-sm text-muted-foreground">{documents.length ? "No documents match these filters." : "No stored documents yet — the collector adds files for each company in rotation."}</p>
       ) : (
-        <ul className="max-h-[560px] divide-y overflow-y-auto scrollbar-thin">
+        <ul className="divide-y">
           {list.slice(0, limit).map((d) => (
             <li key={d.id} className="flex min-w-0 items-center gap-3 px-4 py-2">
               <KindIcon ext={d.ext} />

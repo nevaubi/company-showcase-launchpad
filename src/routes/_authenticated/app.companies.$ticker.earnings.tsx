@@ -177,7 +177,7 @@ function PromisePanel({ loading, data, error }: { loading: boolean; data?: { pro
               ))}
             </div>
           </div>
-          <ol className="min-w-0 max-h-[720px] space-y-2 overflow-y-auto pr-1">
+          <ol className="min-w-0 space-y-2">
             {shown.map((p, i) => (
               <li key={i} className="rounded-md border p-3">
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
