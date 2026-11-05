@@ -16,7 +16,9 @@ import { useSource } from "@/components/source/source-context";
 import { supplyLinksQuery } from "@/lib/supply/query";
 import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
 import { SupplyIntel } from "@/components/supply/supply-intel";
-import { ConfidenceBadge, DependencyCard, FragilityRanking, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
+import { ConfidenceBadge, DependencyCard, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
+import { allSignalsQuery, ConcentrationHistory, DeepVerify, EcosystemBasket, FragilityTable, FreshnessBadge, FreshnessStrip, RegionShockPanel, WorldExposureMap } from "@/components/supply/supply-plus";
+import { canonCountry } from "@/lib/supply/analytics";
 import { confidence, mirrors, type ProLink } from "@/lib/supply/core";
 import { useUniverse } from "@/lib/data";
 import { COVERAGE } from "@/lib/coverage";
@@ -64,6 +66,9 @@ function SupplyChainPage() {
   const [shock, setShock] = useState(20);
   const [view, setView] = useState<"network" | "flow">("network");
   const { open } = useSource();
+  const { data: signals } = useQuery(allSignalsQuery);
+  const [country, setCountry] = useState<string | null>(null);
+  const today = new Date().toISOString().slice(0, 10);
 
   const names = useMemo(() => Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName])), []);
   const covered = useMemo(() => new Set(Object.keys(names)), [names]);
@@ -77,6 +82,7 @@ function SupplyChainPage() {
   const sel = [...graph, ...hop2].find((n) => n.key === selected) ?? null;
   const counts = Object.fromEntries(RELATIONS.map((r) => [r, graph.filter((n) => n.relation === r).length])) as Record<Relation, number>;
 
+  const countryList = useMemo(() => [...new Set([...(all as ProLink[]).flatMap((l) => (l.regions ?? []).map((r) => canonCountry(r)!)), ...(signals ?? []).map((x) => canonCountry(x.country)!)])].filter(Boolean), [all, signals]);
   const src = shockSrc ?? ticker;
   const impacts = useMemo(() => (tab === "shock" ? simulateShock(src, shock / 100, all, names, revenue) : []), [tab, src, shock, all, names, revenue]);
   const impactMap = useMemo(() => (tab === "shock" ? new Map(impacts.map((i) => [i.key, i])) : null), [tab, impacts]);
@@ -131,11 +137,12 @@ function SupplyChainPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
         <Stat label="Disclosed $ exposure" value={summary.exposure.length ? fmtCompactUsd(summary.exposure.reduce((s, x) => s + x.d!, 0)) : "—"} hint={`${summary.exposure.length} quantified links`} />
         <Stat label="Concentrated (≥10%)" value={String(summary.conc)} hint="counterparties" />
         <Stat label="Single-source" value={String(summary.single)} hint="stated dependencies" icon={<Lock className="size-3.5" />} />
         <Stat label="Hotspot regions" value={summary.hotspots.length ? summary.hotspots.slice(0, 3).join(", ") : "None stated"} hint="tied to links in the filing" icon={<Globe2 className="size-3.5" />} />
+        <FreshnessStrip links={graph.flatMap((n) => n.links) as ProLink[]} today={today} />
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -240,6 +247,7 @@ function SupplyChainPage() {
                       </p>
                       <div className="mt-1 flex flex-wrap gap-1">
                         <ConfidenceBadge c={confidence(l as ProLink, all)} />
+                        <FreshnessBadge filed={l.filed} today={today} />
                         {(l as ProLink).link_type && <span className="rounded bg-muted px-1.5 py-0.5 text-[10.5px]">{(l as ProLink).link_type!.replace(/_/g, " ")}</span>}
                         {(l as ProLink).product && <span className="rounded bg-muted px-1.5 py-0.5 text-[10.5px]">{(l as ProLink).product}</span>}
                       </div>
@@ -254,6 +262,7 @@ function SupplyChainPage() {
                       <button type="button" onClick={() => openLink(l, `${sel.name} · ${l.relation}`)} className="mt-2 inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-1 text-xs font-medium text-highlight-foreground hover:bg-highlight">
                         <FileText className="size-3" /> Open in {l.form}
                       </button>
+                      <div className="mt-2"><DeepVerify key={l.id} linkId={l.id} /></div>
                     </div>
                   ))}
                   <div className="flex flex-wrap gap-3">
@@ -349,6 +358,15 @@ function SupplyChainPage() {
         </Panel>
       </div>
 
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <WorldExposureMap ticker={ticker} name={focus.name} links={all as ProLink[]} signals={signals ?? []} revenue={revenue} selected={country} onSelect={setCountry} />
+        <RegionShockPanel country={country} onCountry={setCountry} countries={countryList} links={all as ProLink[]} signals={signals ?? []} revenue={revenue} names={names} onPick={go} />
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+        <EcosystemBasket ticker={ticker} name={focus.name} graph={graph} names={names} />
+        <ConcentrationHistory ticker={ticker} name={focus.name} />
+      </div>
+
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
         <SupplyNotePanel ticker={ticker} byId={byId} onOpen={(l) => openLink(l, `${l.counterparty} · ${l.relation}`)} />
         <DependencyCard ticker={ticker} all={all as ProLink[]} />
@@ -358,7 +376,7 @@ function SupplyChainPage() {
         <SupplyIntel ticker={ticker} />
       </div>
       <div className="mt-4 grid grid-cols-1">
-        <FragilityRanking tickers={[...covered]} all={all as ProLink[]} names={names} onPick={go} current={ticker} />
+        <FragilityTable tickers={[...covered]} all={all as ProLink[]} names={names} onPick={go} current={ticker} />
       </div>
     </div>
   );

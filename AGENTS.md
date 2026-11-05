@@ -49,3 +49,4 @@
 - OFR Hedge Fund Monitor data (Form PF, CFTC TFF, SCOOS, FICC repo) is pulled whole by `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json` with values exactly as published and each series' OFR source URL; rerun to refresh, never hand-edit.
 - Hedge/auction analytics are pure in `src/lib/hedge/core.ts`; auctions come from `bun scripts/treasury-auctions.ts` (rerun to refresh).
 - The morning brief (`src/lib/brief.functions.ts`) may only cite browser-assembled fact ids, so every line stays sourced.
+- Supply-chain country exposure, region shocks (incl. HQ-country ties for well-known foreign counterparties), concentration history, freshness and ecosystem baskets are pure in `src/lib/supply/analytics.ts`; per-link web cross-checks (`src/lib/supply-verify.functions.ts`) keep only sentences naming both companies and are cached per link.

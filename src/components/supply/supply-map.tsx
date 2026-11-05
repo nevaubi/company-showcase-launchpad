@@ -24,14 +24,14 @@ function CompanyNode({ data }: NodeProps<Node<Data>>) {
   return (
     <div
       className={cn(
-        "flex items-center gap-2 rounded-lg border bg-card px-2.5 py-2 shadow-paper transition-all",
+        "flex items-center gap-2 rounded-lg border border-l-4 bg-card px-2.5 py-2 shadow-paper transition-all hover:-translate-y-px hover:shadow-lift",
         focus ? "min-w-[180px] border-2 px-3.5 py-3" : hop2 ? "w-[170px] border-dashed py-1.5" : "w-[190px]",
         selected && "ring-2 ring-highlight",
         hit && "ring-2 ring-negative",
         impact?.severity === "high" && "bg-negative-soft",
         dim && "opacity-30",
       )}
-      style={{ borderColor: focus ? undefined : RELATION_COLOR[node.relation] }}
+      style={focus ? undefined : { borderLeftColor: RELATION_COLOR[node.relation] }}
     >
       <Handle type="target" position={Position.Left} className="!opacity-0" />
       <Handle type="source" position={Position.Right} className="!opacity-0" />

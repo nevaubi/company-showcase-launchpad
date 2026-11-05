@@ -126,33 +126,6 @@ export function RegionPanel({ graph }: { graph: GraphNode[] }) {
   );
 }
 
-/** Coverage-wide fragility ranking. */
-export function FragilityRanking({ tickers, all, names, onPick, current }: { tickers: string[]; all: ProLink[]; names: Record<string, string>; onPick: (t: string) => void; current: string }) {
-  const rows = useMemo(() => tickers.map((t) => ({ t, d: dependencyScore(t, all) })).filter((r) => r.d.score > 0).sort((a, b) => b.d.score - a.d.score), [tickers, all]);
-  return (
-    <Panel title="Most fragile supply chains in coverage" className="min-w-0">
-      <div className="max-h-[360px] overflow-auto">
-        <table className="w-full text-xs">
-          <thead className="sticky top-0 bg-card text-left text-muted-foreground">
-            <tr><th className="py-1">Company</th><th className="text-right">Score</th><th className="text-right">Top cust.</th><th className="text-right">Single-src</th><th className="text-right">Hotspot links</th></tr>
-          </thead>
-          <tbody>
-            {rows.map(({ t, d }) => (
-              <tr key={t} onClick={() => onPick(t)} className={cn("cursor-pointer border-t hover:bg-muted", t === current && "bg-highlight-soft")}>
-                <td className="py-1"><span className="font-medium">{t}</span> <span className="text-muted-foreground">{names[t]}</span></td>
-                <td className="num text-right font-semibold">{d.score}</td>
-                <td className="num text-right">{d.topCustomerPct ? `${d.topCustomerPct}%` : "—"}</td>
-                <td className="num text-right">{d.singleSource || "—"}</td>
-                <td className="num text-right">{d.hotspotLinks || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Panel>
-  );
-}
-
 /** Suppliers → company → customers, band width = disclosed dollars, else stated share, else equal. */
 export function SupplyFlow({ focusName, graph, revenue, onSelect, selected }: { focusName: string; graph: GraphNode[]; revenue: Record<string, number | undefined>; onSelect: (k: string) => void; selected: string | null }) {
   const W = 1000, H = 600, NODE_W = 10, GAP = 6;

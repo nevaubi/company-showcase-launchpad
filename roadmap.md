@@ -131,3 +131,5 @@
 - [ ] World map view, lead/lag signals, ecosystem baskets, region shock
 - [ ] Assistant tools for exposure questions
 - [x] Supply chain alt-data intelligence panel (full 78-company read running)
+- [x] Supply chain v4: world exposure map, region shock, ecosystem basket, concentration history, freshness, web cross-check per link, cleaner fragility table
+- [ ] Supply chain next: more sources (EX-10 contracts by counterparty, call transcripts), XBRL concentration facts, shipping/customs data
