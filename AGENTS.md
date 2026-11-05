@@ -45,10 +45,10 @@
 - Earnings reactions, chart patterns and the correlation explorer use pure functions in `src/lib/markets/core.ts`, precomputed by `bun scripts/markets.ts` into `public/data/markets.json` and `returns.json` (3y aligned daily returns) so pages never download every price file; rerun after ingest.
 - Supply-chain analyst metrics are pure in `src/lib/supply/core.ts`; the analyst note may only cite stored link ids.
 - `scripts/supply-intel.ts` fills `supply_signals` with verbatim-verified quotes; failed stages keep stored rows.
-- Public alt data is pulled by `bun scripts/alt-data.ts` into `alt_data` (stable `uid`, upsert-only, every row has `source_url`); contract recipients resolve to parent ids by name prefix, never substring.
+- `scripts/alt-data.ts` upserts `alt_data` (stable `uid`, `source_url` required); contract recipients match parent ids by name prefix only.
 - OFR hedge fund data comes from `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json`, values as published with source URLs; rerun, never hand-edit.
 - Hedge/auction analytics: `src/lib/hedge/core.ts`; auctions: `scripts/treasury-auctions.ts`.
 - AI briefs/notes may only cite browser-assembled fact ids.
 - Supply-chain country/region/concentration/freshness/basket analytics are pure in `src/lib/supply/analytics.ts`; web cross-checks keep only sentences naming both companies.
 - Promises keep only verbatim-verified quotes (`vetPromises`); alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows.
-- Analyst estimates: `scripts/estimates.ts` fills `analyst_estimates` (Node fetch is throttled by the provider); `getEstimates` reads it and refreshes live after 6h. Pure fixes in `src/lib/estimates/core.ts`.
+- Analyst estimates: `scripts/estimates.ts` fills `analyst_estimates` (provider throttles Node fetch); `getEstimates` refreshes live after 6h.
