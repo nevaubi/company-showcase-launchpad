@@ -52,7 +52,7 @@ const SCHEMA = {
       type: "array",
       items: {
         type: "object", additionalProperties: false,
-        required: ["counterparty", "counterparty_ticker", "domain", "relation", "detail", "share_pct", "amount_usd", "single_source", "regions", "risk", "quote"],
+        required: ["counterparty", "counterparty_ticker", "domain", "relation", "detail", "share_pct", "amount_usd", "single_source", "regions", "risk", "quote", "product", "link_type"],
         properties: {
           counterparty: { type: "string" },
           counterparty_ticker: { type: "string", description: "US listing ticker if public, else empty" },
@@ -64,6 +64,8 @@ const SCHEMA = {
           single_source: { type: "boolean", description: "true only if the text says sole, single or limited source / depends on this counterparty" },
           regions: { type: "array", items: { type: "string" }, description: "Countries/regions the text ties to this link (e.g. Taiwan, China); empty if none" },
           risk: { type: "string", description: "≤ 15 words: the dependency or concentration risk stated, empty if none" },
+          product: { type: "string", description: "≤ 6 words: the product, input or service involved (e.g. 'HBM memory', '3nm wafers', 'cloud compute'); empty if not stated" },
+          link_type: { type: "string", enum: ["foundry", "contract_manufacturer", "component", "materials", "logistics", "licensor", "licensee", "distributor", "reseller", "cloud", "joint_venture", "co_development", "end_customer", "government", "competitor", "other"] },
           quote: { type: "string", description: "8–40 consecutive words copied exactly from the text" },
         },
       },
@@ -79,6 +81,7 @@ Rules:
 - share_pct only when the text states a percentage for that counterparty; amount_usd only when a dollar figure is stated for it (convert "$2.1 billion" to 2100000000).
 - single_source only when the text says sole/single/limited source or a stated dependency. regions: geographies the text ties to the link. risk: the stated dependency/concentration risk in a few words.
 - counterparty_ticker: the primary US ticker if the company is publicly listed (e.g. TSM for TSMC, MSFT for Microsoft); empty for private companies, governments, agencies.
+- product: what flows, only if stated. link_type: the most specific kind of relationship the text supports.
 - Prefer the most important links: concentration disclosures, sole-source suppliers, major partners. Up to 60 links. One row per counterparty+relation.`;
 
 type Filing = { accn: string; form: string; filed: string; doc: string };
@@ -122,7 +125,7 @@ async function readFiling(co: Co, f: Filing, current: boolean) {
   const text = htmlToText(await res.text());
   const excerpt = relevant(text);
   const tickers = covered.map((c) => `${c.ticker}=${c.name}`).join(", ");
-  const { data, usage } = await openaiStructured<{ links: { counterparty: string; counterparty_ticker: string; domain: string; relation: string; detail: string; share_pct: number | null; amount_usd: number | null; single_source: boolean; regions: string[]; risk: string; quote: string }[] }>({
+  const { data, usage } = await openaiStructured<{ links: { counterparty: string; counterparty_ticker: string; domain: string; relation: string; detail: string; share_pct: number | null; amount_usd: number | null; single_source: boolean; regions: string[]; risk: string; quote: string; product: string; link_type: string }[] }>({
     model: IR_MODELS.reason, name: "supply_links", instructions: INSTRUCTIONS, effort: "medium", schema: SCHEMA,
     input: `Filer: ${co.name} (${co.ticker}). Known tickers: ${tickers}\n\n${f.form} excerpts:\n${excerpt}`,
   });
@@ -135,7 +138,7 @@ async function readFiling(co: Co, f: Filing, current: boolean) {
       counterparty_ticker: l.counterparty_ticker.trim().toUpperCase() || null,
       counterparty_domain: l.domain.trim().toLowerCase().replace(/^https?:\/\/|^www\.|\/.*$/g, "") || null,
       relation: l.relation, detail: l.detail, share_pct: l.share_pct, quote: l.quote,
-      amount_usd: l.amount_usd, single_source: !!l.single_source, regions: (l.regions ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 6), risk: l.risk?.trim() || null,
+      amount_usd: l.amount_usd, single_source: !!l.single_source, regions: (l.regions ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 6), risk: l.risk?.trim() || null, product: l.product?.trim() || null, link_type: l.link_type || null,
       accn: f.accn, doc: f.doc, form: f.form, filed: f.filed, is_current: current,
     }))
     .filter((r) => r.counterparty_ticker !== co.ticker)

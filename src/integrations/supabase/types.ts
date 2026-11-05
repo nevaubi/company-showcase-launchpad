@@ -725,6 +725,8 @@ export type Database = {
           form: string
           id: string
           is_current: boolean
+          link_type: string | null
+          product: string | null
           quote: string
           regions: string[]
           relation: string
@@ -746,6 +748,8 @@ export type Database = {
           form: string
           id?: string
           is_current?: boolean
+          link_type?: string | null
+          product?: string | null
           quote: string
           regions?: string[]
           relation: string
@@ -767,6 +771,8 @@ export type Database = {
           form?: string
           id?: string
           is_current?: boolean
+          link_type?: string | null
+          product?: string | null
           quote?: string
           regions?: string[]
           relation?: string

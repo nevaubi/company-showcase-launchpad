@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useSource } from "@/components/source/source-context";
 import { supplyLinksQuery } from "@/lib/supply/query";
 import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
+import { ConfidenceBadge, DependencyCard, FragilityRanking, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
+import { confidence, mirrors, type ProLink } from "@/lib/supply/core";
 import { useUniverse } from "@/lib/data";
 import { COVERAGE } from "@/lib/coverage";
 import { focusGraph, linkDollars, nodeRisk, RELATIONS, secondOrder, simulateShock, type GraphNode, type Relation, type RiskLink, type ShockImpact } from "@/lib/supply/core";
@@ -59,6 +61,7 @@ function SupplyChainPage() {
   const [tab, setTab] = useState("evidence");
   const [shockSrc, setShockSrc] = useState<string | null>(null);
   const [shock, setShock] = useState(20);
+  const [view, setView] = useState<"network" | "flow">("network");
   const { open } = useSource();
 
   const names = useMemo(() => Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName])), []);
@@ -69,6 +72,7 @@ function SupplyChainPage() {
   const hop2 = useMemo(() => (depth === 2 ? secondOrder(ticker, graph, all, names) : []), [depth, ticker, graph, all, names]);
   const risks = useMemo(() => Object.fromEntries([...graph, ...hop2].map((n) => [n.key, nodeRisk(n.links as RiskLink[], revenue)])), [graph, hop2, revenue]);
   const focus: GraphNode = { key: "focus", name: names[ticker] ?? ticker, ticker, domain: null, relation: "focus", links: [] };
+  const byId = useMemo(() => new Map((all as ProLink[]).map((l) => [l.id, l])), [all]);
   const sel = [...graph, ...hop2].find((n) => n.key === selected) ?? null;
   const counts = Object.fromEntries(RELATIONS.map((r) => [r, graph.filter((n) => n.relation === r).length])) as Record<Relation, number>;
 
@@ -147,6 +151,13 @@ function SupplyChainPage() {
         ))}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-md border p-0.5 text-xs">
+            {(["network", "flow"] as const).map((v) => (
+              <button key={v} type="button" onClick={() => setView(v)} className={cn("rounded px-2.5 py-1", view === v ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+                {v === "network" ? "Network" : "Flow"}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-md border p-0.5 text-xs">
             {([1, 2] as const).map((d) => (
               <button key={d} type="button" onClick={() => setDepth(d)} className={cn("rounded px-2.5 py-1", depth === d ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
                 {d === 1 ? "Direct" : "+ 2nd order"}
@@ -177,6 +188,8 @@ function SupplyChainPage() {
               <Network className="size-6" />
               No named customers or suppliers found in {focus.name}'s latest 10-K yet.
             </div>
+          ) : view === "flow" ? (
+            <SupplyFlow focusName={focus.name} graph={graph} revenue={revenue} selected={selected} onSelect={(k) => { setSelected(k); setTab("evidence"); }} />
           ) : (
             <ClientOnly fallback={<Skeleton className="h-full w-full" />}>
               <Suspense fallback={<Skeleton className="h-full w-full" />}>
@@ -224,7 +237,17 @@ function SupplyChainPage() {
                         {l.share_pct != null && <span className="ml-1 text-foreground">· {l.share_pct}%</span>}
                         {linkDollars(l, revenue) != null && <span className="ml-1 text-foreground">· {fmtCompactUsd(linkDollars(l, revenue))}</span>}
                       </p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <ConfidenceBadge c={confidence(l as ProLink, all)} />
+                        {(l as ProLink).link_type && <span className="rounded bg-muted px-1.5 py-0.5 text-[10.5px]">{(l as ProLink).link_type!.replace(/_/g, " ")}</span>}
+                        {(l as ProLink).product && <span className="rounded bg-muted px-1.5 py-0.5 text-[10.5px]">{(l as ProLink).product}</span>}
+                      </div>
                       <p className="mt-1">{l.detail}</p>
+                      {mirrors(l, all).slice(0, 1).map((m) => (
+                        <button key={m.id} type="button" onClick={() => openLink(m as RiskLink, `${names[m.ticker] ?? m.ticker} confirms`)} className="mt-1 block text-left text-[11px] text-positive hover:underline">
+                          {names[m.ticker] ?? m.ticker}'s {m.form} confirms: “{m.quote.slice(0, 110)}{m.quote.length > 110 ? "…" : ""}”
+                        </button>
+                      ))}
                       {l.risk && <p className="mt-1 text-xs text-negative">Risk: {l.risk}</p>}
                       <blockquote className="mt-2 border-l-2 border-highlight pl-2 text-xs italic text-muted-foreground">“{l.quote}”</blockquote>
                       <button type="button" onClick={() => openLink(l, `${sel.name} · ${l.relation}`)} className="mt-2 inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-1 text-xs font-medium text-highlight-foreground hover:bg-highlight">
@@ -323,6 +346,15 @@ function SupplyChainPage() {
             </TabsContent>
           </Tabs>
         </Panel>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <SupplyNotePanel ticker={ticker} byId={byId} onOpen={(l) => openLink(l, `${l.counterparty} · ${l.relation}`)} />
+        <DependencyCard ticker={ticker} all={all as ProLink[]} />
+        <RegionPanel graph={graph} />
+      </div>
+      <div className="mt-4 grid grid-cols-1">
+        <FragilityRanking tickers={[...covered]} all={all as ProLink[]} names={names} onPick={go} current={ticker} />
       </div>
     </div>
   );

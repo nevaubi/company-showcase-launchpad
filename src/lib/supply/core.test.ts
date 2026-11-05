@@ -83,3 +83,30 @@ describe("earnings reactions", () => {
     expect(s.beta!).toBeGreaterThan(1.9);
   });
 });
+
+import { confidence, dependencyScore, entityKey } from "./core";
+
+describe("analyst layer", () => {
+  it("merges TSMC spellings into one counterparty", () => {
+    expect(entityKey("Taiwan Semiconductor Manufacturing Company Limited", null)).toBe("TSM");
+    expect(entityKey("TSMC", null)).toBe("TSM");
+    expect(entityKey("Acme Holdings, Inc.", null)).toBe("acme");
+  });
+  it("a link is corroborated when the counterparty's own filing names the filer back", () => {
+    const a = link({ ticker: "NVDA", counterparty: "Microsoft", counterparty_ticker: "MSFT", relation: "customer" });
+    const b = link({ ticker: "MSFT", counterparty: "NVIDIA", counterparty_ticker: "NVDA", relation: "supplier" });
+    expect(confidence(a, [a, b])).toBe("corroborated");
+    expect(confidence(a, [a])).toBe("mentioned");
+    expect(confidence({ ...a, share_pct: 12 }, [a])).toBe("stated");
+  });
+  it("scores a 30% customer, one sole-source supplier and one Taiwan link", () => {
+    const d = dependencyScore("X", [
+      { ...link({ ticker: "X", relation: "customer", counterparty: "Big", share_pct: 30 }) },
+      { ...link({ ticker: "X", relation: "supplier", counterparty: "Fab" }), single_source: true, regions: ["Taiwan"] },
+    ]);
+    expect(d.topCustomerPct).toBe(30);
+    expect(d.customerHhi).toBe(900);
+    expect(d.parts.map((p) => p.points)).toEqual([28, 10, 6]);
+    expect(d.score).toBe(44);
+  });
+});

@@ -115,3 +115,10 @@
 - [x] Supply chain: 10-Q + prior two 10-Ks read; "Changes" tab (added/dropped/share moves); "Moves" tab (earnings sympathy moves, beta, same-direction rate)
 - [x] Markets: earnings reactions, correlation explorer, pattern detection, sector deep dives
 - [x] Company pages: setup-at-a-glance panel and catalysts & events timeline on the overview
+
+## Supply chain — analyst grade
+- [x] Product + link type per link, confidence/corroboration, entity merging, dependency score, region footprint, fragility ranking, flow view, cited AI note
+- [ ] More sources: call transcripts, 8-K EX-10 contracts
+- [ ] XBRL customer-concentration history + purchase obligations charts
+- [ ] World map view, lead/lag signals, ecosystem baskets, region shock
+- [ ] Assistant tools for exposure questions

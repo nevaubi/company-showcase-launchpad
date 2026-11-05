@@ -305,3 +305,117 @@ export function spillover(focus: Closes, other: Closes, dates: string[]): Spillo
     rows,
   };
 }
+
+// ---------------------------------------------------------------- analyst layer
+
+export interface ProLink extends RiskLink {
+  product?: string | null;
+  link_type?: string | null;
+}
+
+/** Known alias spellings → one canonical counterparty key, so "TSMC" and "Taiwan Semiconductor" merge. */
+const ALIASES: [RegExp, string][] = [
+  [/taiwan semiconductor|\btsmc\b/, "TSM"],
+  [/samsung/, "SSNLF"],
+  [/sk hynix|hynix/, "HXSCL"],
+  [/foxconn|hon hai/, "HNHPF"],
+  [/amazon web services|\baws\b/, "AMZN"],
+  [/google cloud|\bgoogle\b/, "GOOGL"],
+  [/microsoft azure|\bazure\b/, "MSFT"],
+];
+
+/** Stable identity for a counterparty: its ticker, a known alias, or its normalised name minus corporate suffixes. */
+export function entityKey(name: string, ticker: string | null): string {
+  if (ticker) return ticker.toUpperCase();
+  const n = normText(name);
+  for (const [re, k] of ALIASES) if (re.test(n)) return k;
+  return n.replace(/[.,]/g, "").replace(/\b(inc|corp|corporation|co|ltd|limited|plc|llc|lp|ag|sa|nv|holdings?|group|company)\b/g, "").replace(/\s+/g, " ").trim();
+}
+
+export type Confidence = "corroborated" | "stated" | "mentioned";
+
+/**
+ * How well-supported a link is. corroborated = the counterparty's own filing names the focus with the
+ * mirrored relation; stated = a filing quote carries a share, amount or dependency; mentioned = named only.
+ */
+export function confidence(l: ProLink, all: SupplyLink[]): Confidence {
+  if (l.counterparty_ticker) {
+    const mirror = all.some((m) => m.ticker === l.counterparty_ticker && m.counterparty_ticker === l.ticker && m.relation === inverse(l.relation));
+    if (mirror) return "corroborated";
+  }
+  return l.share_pct != null || (l.amount_usd ?? 0) > 0 || l.single_source ? "stated" : "mentioned";
+}
+
+/** The mirrored links (counterparty's filing naming the filer) that back up `l`. */
+export function mirrors(l: SupplyLink, all: SupplyLink[]): SupplyLink[] {
+  if (!l.counterparty_ticker) return [];
+  return all.filter((m) => m.ticker === l.counterparty_ticker && m.counterparty_ticker === l.ticker && m.relation === inverse(l.relation));
+}
+
+/** Earliest annual filing in which `ticker` named this counterparty with this relation. */
+export function firstSeen(l: SupplyLink, history: SupplyLink[]): string {
+  const k = `${l.relation}:${entityKey(l.counterparty, l.counterparty_ticker)}`;
+  return history
+    .filter((h) => h.ticker === l.ticker && `${h.relation}:${entityKey(h.counterparty, h.counterparty_ticker)}` === k)
+    .reduce((m, h) => (h.filed < m ? h.filed : m), l.filed);
+}
+
+export interface Dependency {
+  /** 0–100, higher = more fragile */
+  score: number;
+  /** Herfindahl of stated customer shares (0–10,000) */
+  customerHhi: number;
+  topCustomerPct: number;
+  statedCustomerPct: number;
+  singleSource: number;
+  hotspotLinks: number;
+  hotspots: string[];
+  parts: { label: string; points: number; max: number; why: string }[];
+}
+
+/**
+ * Fragility of one company from its own current filing: customer concentration (stated shares),
+ * stated single-source inputs, and links tied to geopolitical hotspots. Every input is a filing fact.
+ */
+export function dependencyScore(ticker: string, all: ProLink[]): Dependency {
+  const own = all.filter((l) => l.ticker === ticker);
+  const shares = new Map<string, number>();
+  for (const l of own) if (l.relation === "customer" && l.share_pct != null) {
+    const k = entityKey(l.counterparty, l.counterparty_ticker);
+    shares.set(k, Math.max(shares.get(k) ?? 0, l.share_pct));
+  }
+  const s = [...shares.values()];
+  const hhi = s.reduce((a, x) => a + x * x, 0);
+  const top = Math.max(0, ...s);
+  const stated = Math.min(100, s.reduce((a, x) => a + x, 0));
+  const single = new Set(own.filter((l) => l.single_source && l.relation !== "customer").map((l) => entityKey(l.counterparty, l.counterparty_ticker))).size;
+  const hotLinks = own.filter((l) => (l.regions ?? []).some((r) => HOTSPOTS.some((h) => r.toLowerCase().includes(h))));
+  const hotspots = [...new Set(hotLinks.flatMap((l) => (l.regions ?? []).filter((r) => HOTSPOTS.some((h) => r.toLowerCase().includes(h)))))];
+  const cPts = Math.round(Math.min(40, top * 0.8 + Math.min(10, hhi / 250)));
+  const sPts = Math.min(30, single * 10);
+  const gPts = Math.min(30, hotLinks.length * 6);
+  return {
+    score: cPts + sPts + gPts, customerHhi: Math.round(hhi), topCustomerPct: top, statedCustomerPct: stated,
+    singleSource: single, hotspotLinks: hotLinks.length, hotspots,
+    parts: [
+      { label: "Customer concentration", points: cPts, max: 40, why: top ? `largest named customer ${top}% of revenue; ${s.length} customers with stated shares` : "no customer shares stated" },
+      { label: "Single-source inputs", points: sPts, max: 30, why: `${single} supplier/partner dependencies stated as sole, single or limited source` },
+      { label: "Geopolitical exposure", points: gPts, max: 30, why: hotspots.length ? `${hotLinks.length} links tied to ${hotspots.join(", ")}` : "no hotspot regions tied to links" },
+    ],
+  };
+}
+
+/** Links grouped by stated region (first-order, both directions), largest first. */
+export function regionExposure(nodes: { links: ProLink[]; relation: string }[]): { region: string; hotspot: boolean; suppliers: number; customers: number; other: number }[] {
+  const m = new Map<string, { region: string; hotspot: boolean; suppliers: number; customers: number; other: number }>();
+  for (const n of nodes) {
+    const regions = new Set(n.links.flatMap((l) => (l.regions ?? []).map((r) => r.trim())).filter(Boolean));
+    for (const r of regions) {
+      const key = r.toLowerCase();
+      const e = m.get(key) ?? { region: r, hotspot: HOTSPOTS.some((h) => key.includes(h)), suppliers: 0, customers: 0, other: 0 };
+      if (n.relation === "supplier") e.suppliers++; else if (n.relation === "customer") e.customers++; else e.other++;
+      m.set(key, e);
+    }
+  }
+  return [...m.values()].sort((a, b) => b.suppliers + b.customers + b.other - (a.suppliers + a.customers + a.other));
+}

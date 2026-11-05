@@ -1,0 +1,1 @@
+ALTER TABLE public.supply_links ADD COLUMN IF NOT EXISTS product text, ADD COLUMN IF NOT EXISTS link_type text;
