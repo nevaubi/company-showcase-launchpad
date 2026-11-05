@@ -72,7 +72,7 @@ const PAGE_PATH: Record<string, (t: string) => string> = {
   companies: () => "/app/companies",
   company: (t) => `/app/companies/${t}`,
   financials: (t) => `/app/companies/${t}/financials`,
-  segments: (t) => `/app/companies/${t}/segments`,
+  segments: (t) => `/app/companies/${t}/ir`,
   valuation: (t) => `/app/companies/${t}/valuation`,
   filings: (t) => `/app/companies/${t}/filings`,
   insiders: (t) => `/app/companies/${t}/insiders`,

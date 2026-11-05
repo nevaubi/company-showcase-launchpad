@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Info, Minus } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, Line, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from "recharts";
 import { Panel } from "@/components/app/page-header";
+import { FirmLogo } from "@/components/estimates/firm-logo";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { coverageOf } from "@/lib/coverage";
@@ -102,6 +103,21 @@ function Summary({ e }: { e: Estimates }) {
         <Stat label="Last 90 days" value={`${s.upgrades}↑ ${s.downgrades}↓`} sub={`${s.targetRaises} target raises · ${s.targetCuts} cuts`} />
         <Stat label="Beat rate" value={beats ? `${beats.beats}/${beats.n}` : "—"} sub={beats?.avgSurprise != null ? `Avg EPS surprise ${fmtPct(beats.avgSurprise, 1, true)}` : undefined} />
       </div>
+      {e.actions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-border px-4 py-2.5">
+          <span className="mr-1 text-[11px] uppercase tracking-wide text-muted-foreground">Latest calls</span>
+          {e.actions.slice(0, 8).map((a, i) => {
+            const k = actionKind(a);
+            return (
+              <span key={i} title={`${fmtDate(a.date)} · ${a.firm}: ${a.toGrade}${a.target ? `, target ${fmtPrice(a.target)}` : ""}`} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card py-0.5 pl-0.5 pr-2 text-xs">
+                <FirmLogo firm={a.firm} className="rounded-full" />
+                <span className="max-w-[9rem] truncate">{a.firm}</span>
+                <span className={cn("font-mono", k === "upgrade" ? "text-primary" : k === "downgrade" ? "text-destructive" : "text-muted-foreground")}>{a.toGrade}{a.target ? ` ${fmtPrice(a.target)}` : ""}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
       {e.nextEarnings?.start && (
         <p className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
           Next report expected {fmtDate(e.nextEarnings.start)}{e.nextEarnings.end && e.nextEarnings.end !== e.nextEarnings.start ? `–${fmtDate(e.nextEarnings.end)}` : ""}
@@ -299,7 +315,7 @@ function TargetsPanel({ e }: { e: Estimates }) {
             const up = e.price ? f.target! / e.price - 1 : null;
             return (
               <div key={f.firm} className="flex items-center justify-between gap-2 py-1.5 text-xs">
-                <span className="min-w-0 truncate">{f.firm}<span className="ml-1.5 text-muted-foreground">{fmtDate(f.date, { month: "short", day: "numeric" })}</span></span>
+                <span className="flex min-w-0 items-center gap-2"><FirmLogo firm={f.firm} /><span className="truncate">{f.firm}</span><span className="ml-1.5 text-muted-foreground">{fmtDate(f.date, { month: "short", day: "numeric" })}</span></span>
                 <span className="flex shrink-0 items-center gap-3 font-mono tabular-nums">
                   <span>{fmtPrice(f.target)}</span>
                   <span className={cn("w-14 text-right", (up ?? 0) >= 0 ? "text-primary" : "text-destructive")}>{up == null ? "" : fmtPct(up, 0, true)}</span>
@@ -363,7 +379,7 @@ function ActionRow({ a }: { a: AnalystAction }) {
   return (
     <tr className="border-b border-border/60 last:border-0">
       <td className="whitespace-nowrap px-4 py-2 text-xs text-muted-foreground">{fmtDate(a.date)}</td>
-      <td className="px-3 py-2">{a.firm}</td>
+      <td className="px-3 py-2"><span className="flex items-center gap-2"><FirmLogo firm={a.firm} />{a.firm}</span></td>
       <td className="px-3 py-2"><span className={cn("rounded border px-1.5 py-0.5 text-[11px]", KIND_STYLE[k])}>{KIND_LABEL[k]}</span></td>
       <td className="px-3 py-2 text-xs">{a.fromGrade && a.fromGrade !== a.toGrade ? <><span className="text-muted-foreground">{a.fromGrade} → </span>{a.toGrade}</> : a.toGrade || "—"}</td>
       <td className="px-4 py-2 text-right font-mono text-xs tabular-nums">

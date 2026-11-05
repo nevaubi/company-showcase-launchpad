@@ -43,7 +43,6 @@ const TABS = [
   { to: "/app/companies/$ticker", label: "Overview", exact: true },
   { to: "/app/companies/$ticker/financials", label: "Financials" },
   { to: "/app/companies/$ticker/valuation", label: "Valuation" },
-  { to: "/app/companies/$ticker/segments", label: "Segments & KPIs" },
   { to: "/app/companies/$ticker/ir", label: "IR data" },
   { to: "/app/companies/$ticker/earnings", label: "Earnings & promises" },
   { to: "/app/companies/$ticker/estimates", label: "Estimates & analysts" },
