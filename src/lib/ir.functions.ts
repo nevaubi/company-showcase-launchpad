@@ -49,8 +49,23 @@ export const getIrData = createServerFn({ method: "GET" })
       const { count } = await context.supabase.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", data.ticker).eq("kind", "image");
       return count ?? 0;
     };
-    const [docs, loaded, images] = await Promise.all([loadDocs(), loadSeries(), countImages()]);
+    // The partner corpus is the primary IR source; this site's own extractions are the fallback.
+    const loadExternal = async () => {
+      try {
+        const { loadExternalPayload } = await import("@/lib/ir/external.server");
+        return await loadExternalPayload(data.ticker);
+      } catch (e) {
+        console.warn(`[ir] partner corpus failed for ${data.ticker}: ${(e as Error).message}`);
+        return null;
+      }
+    };
+    const [docs, loaded, images, external] = await Promise.all([loadDocs(), loadSeries(), countImages(), loadExternal()]);
     let { series, payload } = loaded;
+    if (external && external.series.length) {
+      const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) }));
+      const bytes = new TextEncoder().encode(JSON.stringify({ payload: external, builtAt: external.builtAt, documents, images, pending: 0, source: "partner" }));
+      return { gz: new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip")) as ReadableStream<Uint8Array> };
+    }
     // Facts exist but no breakdowns are stored (first read, or a rebuild that never ran): build them
     // now rather than showing an empty page.
     const readFacts = docs.reduce((n, d) => n + (Number(d.extract_facts) || 0), 0);
@@ -134,8 +149,18 @@ export const getIrDownload = createServerFn({ method: "POST" })
 /** HTML of a stored IR document (or its rendition, for PDFs, spreadsheets and slide images) for the source viewer. */
 export const getIrHtml = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) => z.object({ id: z.union([z.string().uuid(), z.string().regex(/^x:[A-Za-z0-9_-]{1,64}$/)]) }).parse(d))
   .handler(async ({ data, context }) => {
+    if (data.id.startsWith("x:")) {
+      const { loadExternalDoc } = await import("@/lib/ir/external.server");
+      const doc = await loadExternalDoc(data.id.slice(2));
+      if (!doc) throw new Error("Document not found");
+      const isSec = /^https:\/\/www\.sec\.gov\//.test(doc.url);
+      const res = isSec ? await (await import("@/lib/sec.server")).fetchSec(doc.url) : await fetch(doc.url, { signal: AbortSignal.timeout(20_000) });
+      const type = res.headers.get("content-type") ?? "";
+      if (!res.ok || !/html|text\/plain/.test(type)) throw new Error("This document has no in-app copy; open the original");
+      return { html: await res.text(), contentType: "text/html", sourceUrl: doc.url, rendition: false, title: doc.title };
+    }
     const { data: row } = await context.supabase.from("ir_documents").select("path, rendition_path, source_url, ext, title").eq("id", data.id).maybeSingle();
     const path = row?.rendition_path || (row?.ext?.startsWith("htm") ? row.path : null);
     if (!row || !path) throw new Error("No viewable copy of this document");

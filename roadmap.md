@@ -137,4 +137,11 @@
 - [x] Watchlist alerts bell, earnings preview/recap, management promise tracker
 - [x] Estimates & analysts tab (consensus, revisions, surprises, ratings, targets, actions)
 - [ ] Scheduled refresh of analyst estimates (currently script + live refresh on view)
+## Merge with the partner (Vercel) site — requested Nov 5
+- [x] IR page reads the partner corpus (~800 companies, quote-highlighted sources) with own data as fallback
+- [ ] Expand coverage beyond 78 companies (statements, prices, logos from partner bundles)
+- [ ] Partner PDFs/IR-site files open in-app (currently only SEC/HTML copies render)
+- [ ] Run supply chain, alt data, estimates, signals, company context for new tickers (spend cap)
+- [ ] Port partner-only pieces: macro store, 189-field screener, workspace
+
 - [x] Company page redesign: research price chart + read, About with photos, leadership & board, sector comparison, related companies

@@ -19,6 +19,8 @@ export interface SourceRef {
   box?: { p: number; b: number[] };
   /** Stored investor-relations document id (press release, supplement, presentation) when not an EDGAR document */
   irDoc?: string;
+  /** Verbatim passage to find in the document (partner-corpus IR values) */
+  search?: string;
 }
 
 export interface DerivedPart extends SourceRef {

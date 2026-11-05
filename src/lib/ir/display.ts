@@ -141,6 +141,20 @@ export function periodLong(end: string, kind: "q" | "y", months?: number) {
 }
 
 /** Source reference for one payload cell, pointing into the stored document or the SEC exhibit. */
+/**
+ * The number as printed inside a quoted line (e.g. "52,648" from "Americas $ 52,648 $ 50,430"),
+ * so the viewer can find it in a table where label and value sit in separate cells.
+ */
+export function printedToken(quote: string, value: number): string {
+  const digits = String(Math.round(Math.abs(value))).replace(/0+$/, "");
+  const tokens = quote.match(/\d[\d,]*(?:\.\d+)?/g) ?? [];
+  const hit = tokens.find((t) => {
+    const d = t.replace(/[,.]/g, "").replace(/0+$/, "");
+    return d.length >= 2 && digits.startsWith(d.slice(0, Math.min(d.length, digits.length)));
+  });
+  return hit ?? quote;
+}
+
 export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell["l"]; x?: string; s?: string; e?: string }, label: string): SourceRef | undefined {
   if (c.d == null) return undefined;
   const doc = p.docs[c.d];
@@ -153,6 +167,7 @@ export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell[
     end: c.e ?? "",
     value: c.v,
     irDoc: doc.id,
+    ...(doc.id.startsWith("x:") && c.x ? { search: printedToken(c.x, c.v) } : {}),
     ...(Array.isArray(l) ? { cell: { t: l[0], r: l[1], c: l[2] } } : l ? { box: l } : {}),
   } as SourceRef;
 }
