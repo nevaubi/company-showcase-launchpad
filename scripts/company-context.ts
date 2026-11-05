@@ -113,22 +113,31 @@ function toImage(title: string, ii: II): ContextImage {
   };
 }
 
-async function images(article: string): Promise<ContextImage[]> {
-  const j = await getJson<{ query?: { pages: Record<string, { images?: { title: string }[] }> } }>(
-    `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=images&imlimit=60&redirects=1&titles=${encodeURIComponent(article)}`,
+async function images(article: string, company: string): Promise<ContextImage[]> {
+  const j = await getJson<{ query?: { pages: Record<string, { images?: { title: string }[]; pageimage?: string }> } }>(
+    `https://en.wikipedia.org/w/api.php?action=query&format=json&prop=images|pageimages&imlimit=80&redirects=1&titles=${encodeURIComponent(article)}`,
   );
-  const titles = Object.values(j.query?.pages ?? {}).flatMap((p) => p.images ?? []).map((i) => i.title).filter((t) => /\.(jpe?g|png|webp)$/i.test(t));
-  const out: ContextImage[] = [];
-  for (let i = 0; i < titles.length && out.length < 8; i += 25) {
+  const pages = Object.values(j.query?.pages ?? {});
+  const lead = pages[0]?.pageimage ? `File:${pages[0].pageimage.replace(/_/g, " ")}` : null;
+  const titles = pages.flatMap((p) => p.images ?? []).map((i) => i.title).filter((t) => /\.(jpe?g|png|webp)$/i.test(t));
+  const found: ContextImage[] = [];
+  for (let i = 0; i < titles.length; i += 25) {
     for (const { title, ii } of await commonsInfo(titles.slice(i, i + 25))) {
       const lic = strip(ii.extmetadata?.LicenseShortName?.value);
       if (!usableImage(title, ii.width, ii.height)) continue;
       if (/fair use|non-free/i.test(lic)) continue;
-      out.push(toImage(title, ii));
-      if (out.length >= 8) break;
+      const img = toImage(title, ii);
+      found.push(Object.assign(img, { _t: title }));
     }
   }
-  return out;
+  // Lead image first, then photos whose title or caption names the company, then the rest.
+  const stem = company.toLowerCase().split(/\s+/)[0];
+  const score = (x: ContextImage & { _t?: string }) =>
+    (lead && x._t?.replace(/_/g, " ") === lead ? 0 : 2) - ((x._t ?? "").toLowerCase().includes(stem) || x.caption.toLowerCase().includes(stem) ? 1 : 0);
+  return found
+    .sort((a, b) => score(a) - score(b))
+    .slice(0, 8)
+    .map(({ _t, ...x }: ContextImage & { _t?: string }) => x);
 }
 
 // ---------- People from SEC filings ----------
@@ -344,7 +353,7 @@ for (const t of tickers) {
       generatedAt: new Date().toISOString(),
       description: w?.article ? await description(w.article).catch(() => prev?.description) : prev?.description,
       facts: { employees: w?.employees ? { value: w.employees, asOf: w.employeesAsOf } : prev?.facts.employees, founders: w?.founders.length ? w.founders : prev?.facts.founders, headquarters: w?.hq ?? prev?.facts.headquarters, wikidata: w?.item },
-      images: w?.article ? await images(w.article).catch(() => prev?.images ?? []) : (prev?.images ?? []),
+      images: w?.article ? await images(w.article, name).catch(() => prev?.images ?? []) : (prev?.images ?? []),
       people: prev?.people ?? [],
     };
     if (!args["no-people"]) {
