@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { FileText } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { ChevronDown, FileText } from "lucide-react";
 import { useSource, type SourceTarget } from "@/components/source/source-context";
 import { cn } from "@/lib/utils";
 
@@ -35,7 +35,10 @@ export function Panel({
   children,
   className,
   bodyClassName,
+  collapse,
 }: {
+  /** Max body height before "Show more" (px); false disables collapsing. */
+  collapse?: number | false;
   title?: ReactNode;
   subtitle?: ReactNode;
   actions?: ReactNode;
@@ -54,8 +57,49 @@ export function Panel({
           {actions && <div className="ml-auto flex items-center gap-1.5">{actions}</div>}
         </header>
       )}
-      <div className={cn("min-w-0 p-3.5", bodyClassName)}>{children}</div>
+      <CollapsibleBody className={bodyClassName} limit={collapse === false ? 0 : collapse ?? 440}>
+        {children}
+      </CollapsibleBody>
     </section>
+  );
+}
+
+/** Clamps tall content to `limit` px with a fade and a Show more toggle (no inner scrolling). */
+function CollapsibleBody({ children, className, limit }: { children: ReactNode; className?: string; limit: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [tall, setTall] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !limit) return;
+    const check = () => setTall(el.scrollHeight > limit + 120);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [limit]);
+  const clamped = tall && !open;
+  return (
+    <div className="relative">
+      <div
+        ref={ref}
+        className={cn("min-w-0 p-3.5", clamped && "overflow-hidden", className)}
+        style={clamped ? { maxHeight: limit } : undefined}
+      >
+        {children}
+      </div>
+      {clamped && <div className="pointer-events-none absolute inset-x-0 bottom-8 h-16 bg-gradient-to-t from-card to-transparent" />}
+      {tall && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex w-full items-center justify-center gap-1 border-t py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+        >
+          {open ? "Show less" : "Show more"}
+          <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -258,7 +258,7 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
           const month = e.date.slice(0, 7);
           const header =
             i === 0 || events[i - 1].date.slice(0, 7) !== month ? (
-              <li key={`m-${month}`} className="sticky top-12 z-10 border-b bg-secondary/90 px-4 py-1 backdrop-blur">
+              <li key={`m-${month}`} className="border-b bg-secondary/70 px-4 py-1">
                 <span className="eyebrow">{new Date(`${month}-01T00:00:00Z`).toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" })}</span>
               </li>
             ) : null;

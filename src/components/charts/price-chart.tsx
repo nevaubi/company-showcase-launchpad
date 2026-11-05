@@ -74,7 +74,9 @@ export function PriceChart({
         rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: showVolume ? 0.24 : 0.06 } },
         timeScale: { borderVisible: false, timeVisible: bars[0]?.[0].length > 10, secondsVisible: false },
         crosshair: { mode: lc.CrosshairMode.Magnet, vertLine: { color: muted, labelBackgroundColor: fg }, horzLine: { color: muted, labelBackgroundColor: fg } },
-        handleScale: { axisPressedMouseMove: true },
+        // Wheel/touch scrolling must move the page, never the chart; zoom via drag on the axes.
+        handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: false, vertTouchDrag: false },
+        handleScale: { mouseWheel: false, pinch: false, axisPressedMouseMove: true, axisDoubleClickReset: true },
       });
       const closes = bars.map((b) => b[4]);
       let main;
