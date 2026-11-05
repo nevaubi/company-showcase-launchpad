@@ -53,3 +53,4 @@
 - Promises keep only verbatim-verified quotes (`vetPromises`); alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows.
 - Analyst estimates: `scripts/estimates.ts` fills `analyst_estimates` (provider throttles Node fetch); `getEstimates` refreshes live after 6h.
 - Company context (Wikipedia description, Commons photos, 10-K/proxy people with headshots) comes from `bun scripts/company-context.ts` into `public/data/context/`; people are kept only if named in the filing text, and photos need a Wikidata link to the company or the company's own page.
+- Region risk on the supply-chain page: pure scoring/term extraction in `src/lib/supply/region.ts`; World Bank WGI, Federal Register and news lookups only via authenticated `src/lib/supply-region.functions.ts`, cached in `ai_cache`, every item keeps its source URL.

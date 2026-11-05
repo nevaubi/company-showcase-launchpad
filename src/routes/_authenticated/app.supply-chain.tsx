@@ -19,6 +19,7 @@ import { SupplyIntel, CounterpartyEvidence } from "@/components/supply/supply-in
 import { ConfidenceBadge, DependencyCard, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
 import { allSignalsQuery, ConcentrationHistory, DeepVerify, EcosystemBasket, FragilityTable, FreshnessBadge, FreshnessStrip, RegionShockPanel, WorldExposureMap } from "@/components/supply/supply-plus";
 import { canonCountry } from "@/lib/supply/analytics";
+import { AgreementTermsPanel, RegionDossierPanel, RegionRiskRegister } from "@/components/supply/supply-region";
 import { confidence, mirrors, type ProLink } from "@/lib/supply/core";
 import { useUniverse } from "@/lib/data";
 import { COVERAGE } from "@/lib/coverage";
@@ -361,6 +362,13 @@ function SupplyChainPage() {
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <WorldExposureMap ticker={ticker} name={focus.name} links={all as ProLink[]} signals={signals ?? []} revenue={revenue} selected={country} onSelect={setCountry} />
         <RegionShockPanel country={country} onCountry={setCountry} countries={countryList} links={all as ProLink[]} signals={signals ?? []} revenue={revenue} names={names} onPick={go} />
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <RegionRiskRegister ticker={ticker} name={focus.name} links={all as ProLink[]} signals={signals ?? []} revenue={revenue} selected={country} onCountry={setCountry} />
+        <RegionDossierPanel ticker={ticker} name={focus.name} country={country} theme={COVERAGE.find((c) => c.ticker === ticker)?.industry} />
+      </div>
+      <div className="mt-4 grid grid-cols-1">
+        <AgreementTermsPanel ticker={ticker} name={focus.name} />
       </div>
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <EcosystemBasket ticker={ticker} name={focus.name} graph={graph} names={names} />
