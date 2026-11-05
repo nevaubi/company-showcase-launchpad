@@ -45,7 +45,7 @@
 - Earnings reactions, chart patterns and the correlation explorer use pure functions in `src/lib/markets/core.ts`, precomputed by `bun scripts/markets.ts` into `public/data/markets.json` and `returns.json` (3y aligned daily returns) so pages never download every price file; rerun after ingest.
 - Supply-chain analyst metrics are pure in `src/lib/supply/core.ts`; the analyst note may only cite stored link ids.
 - `scripts/supply-intel.ts` fills `supply_signals` with verbatim-verified quotes; failed stages keep stored rows.
-- `scripts/alt-data.ts` upserts `alt_data` (stable `uid`, `source_url` required); contract recipients match parent ids by name prefix only. SEC form maps live in `src/lib/alt/sec-forms.ts` so the scheduled `sec` job keeps 8-K/capital rows fresh; alt signals (90-day activity vs own 2y history) are pure in `src/lib/alt/signals.ts`.
+- `scripts/alt-data.ts` upserts `alt_data` (stable `uid`, `source_url` required); contract recipients match parent ids by name prefix only. Shared SEC form maps: `src/lib/alt/sec-forms.ts`; signals pure in `src/lib/alt/signals.ts`.
 - OFR hedge fund data comes from `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json`, values as published with source URLs; rerun, never hand-edit.
 - Hedge analytics: `src/lib/hedge/core.ts`.
 - AI briefs/notes cite only browser-built fact ids.
