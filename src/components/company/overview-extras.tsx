@@ -13,6 +13,8 @@ import { buildTimeline, estimateNextEarnings, type EventKind, type TimelineEvent
 import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { fmtAlt } from "@/lib/alt/query";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -141,12 +143,16 @@ const KIND_LABEL: Record<EventKind, string> = {
   insider_buy: "Insider buy",
   insider_sell: "Insider sale",
   pattern: "Signal",
+  alt: "Alt data",
+  intel: "Supply intel",
 };
+const ALT_LABEL: Record<string, string> = { ownership: "Ownership", contracts: "Gov contract", regulatory: "Regulatory", fda: "FDA", recalls: "Recall" };
 const FILTERS: { id: string; label: string; kinds: EventKind[] }[] = [
   { id: "all", label: "All", kinds: [] },
   { id: "filings", label: "Filings", kinds: ["earnings", "annual", "quarterly", "8k", "proxy"] },
   { id: "insiders", label: "Insiders", kinds: ["insider_buy", "insider_sell"] },
   { id: "signals", label: "Signals", kinds: ["pattern"] },
+  { id: "alt", label: "Alt data", kinds: ["alt", "intel"] },
 ];
 
 /** Everything that happened to the company, newest first, each row opening its source. */
@@ -155,9 +161,27 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
   const m = useQuery(marketsQuery);
   const [filter, setFilter] = useState("all");
   const mc = m.data?.companies.find((c) => c.ticker === ticker);
+  // Alt data (13D/G, contracts, FDA, recalls, regulatory) and verified supply-chain intel join the same timeline.
+  const extra = useQuery({
+    queryKey: ["timeline-extra", ticker],
+    staleTime: 10 * 60_000,
+    queryFn: async () => {
+      const [alt, sig] = await Promise.all([
+        supabase.from("alt_data").select("dataset,date,title,value,unit,source_url").eq("ticker", ticker).eq("kind", "event").in("dataset", Object.keys(ALT_LABEL)).not("date", "is", null).order("date", { ascending: false }).limit(80),
+        supabase.from("supply_signals").select("kind,title,detail,impact,filed,accn,doc,url").eq("ticker", ticker).not("filed", "is", null).order("filed", { ascending: false }).limit(60),
+      ]);
+      return { alt: alt.data ?? [], sig: sig.data ?? [] };
+    },
+  });
 
   const events = useMemo(() => {
     const ev: TimelineEvent[] = [];
+    for (const r of extra.data?.alt ?? []) {
+      ev.push({ date: r.date!, kind: "alt", title: `${ALT_LABEL[r.dataset] ?? r.dataset}: ${r.title}`, detail: r.value != null ? fmtAlt(r.value, r.unit) : undefined, url: r.source_url ?? undefined, tone: r.dataset === "recalls" ? "negative" : "neutral" });
+    }
+    for (const s of extra.data?.sig ?? []) {
+      ev.push({ date: s.filed!.slice(0, 10), kind: "intel", title: s.title, detail: s.detail ?? undefined, accn: s.accn ?? undefined, doc: s.doc ?? undefined, url: s.accn ? undefined : s.url ?? undefined, tone: s.impact === "positive" ? "positive" : s.impact === "negative" ? "negative" : "neutral" });
+    }
     const rx = new Map((mc?.reactions ?? []).map((r) => [r.accn, r]));
     for (const r of data.earningsReleases) {
       const re = rx.get(r.accn);
@@ -208,7 +232,7 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
     }
     const kinds = FILTERS.find((f) => f.id === filter)?.kinds ?? [];
     return buildTimeline(kinds.length ? ev.filter((e) => kinds.includes(e.kind)) : ev, 60);
-  }, [data, mc, filter]);
+  }, [data, mc, filter, extra.data]);
 
   return (
     <Panel
@@ -217,7 +241,7 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
           <CalendarClock className="size-3.5" /> Catalysts & events
         </span>
       }
-      subtitle="Filings, earnings, insider trades and chart signals · click a filing to open it"
+      subtitle="Filings, earnings, insiders, signals, alt data and supply-chain intel · every row opens its source"
       actions={
         <div className="flex rounded-md border bg-secondary/50 p-0.5">
           {FILTERS.map((f) => (
@@ -265,6 +289,8 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
                 >
                   {body}
                 </button>
+              ) : e.url ? (
+                <a href={e.url} target="_blank" rel="noreferrer" className="flex w-full items-start gap-3 px-4 py-2 text-left transition-colors hover:bg-secondary">{body}</a>
               ) : (
                 <div className="flex items-start gap-3 px-4 py-2">{body}</div>
               )}

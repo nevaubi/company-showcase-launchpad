@@ -14,6 +14,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { fmtAlt } from "@/lib/alt/query";
 import { focusGraph, linkDollars, simulateShock, type RiskLink } from "@/lib/supply/core";
 import type { UniverseEntry } from "@/lib/financials/types";
+import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
+import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
 
 const MAX = 9000;
@@ -80,6 +82,8 @@ const PAGE_PATH: Record<string, (t: string) => string> = {
   theses: () => "/app/theses",
   docs: () => "/app/docs",
   all_insiders: () => "/app/insiders",
+  hedge_funds: () => "/app/hedge-funds",
+  alt_data: () => "/app/alt-data",
 };
 
 /** Flat TTM metrics per company — shared by screen_companies and run_code. */
@@ -149,6 +153,54 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
       if (error) return { output: `Error: ${error.message}`, summary: "alt data failed" };
       const lines = (data ?? []).map((r: any) => `${r.date} ${r.ticker} [${r.dataset}${r.kind === "series" ? " series" : ""}] ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""}${r.meta?.category ? ` (${r.meta.category})` : ""}${r.meta?.filers ? ` filers: ${r.meta.filers.slice(0, 3).join("; ")}` : ""}${r.meta?.agencies?.length ? ` agencies: ${r.meta.agencies.join("; ")}` : ""} <${r.source_url}>`);
       return { output: clip(lines.join("\n") || "No alt data rows match."), summary: `${data?.length ?? 0} alt-data rows` };
+    }
+    case "get_hedge_fund_data": {
+      const p = await qc.fetchQuery(hedgeFundsQuery);
+      const all = allSeries(p);
+      const terms = String(args.query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+      const lines: string[] = [];
+      if (!terms.length || terms.includes("overview") || terms.includes("crowding")) {
+        const gs = gauges(p); const cr = crowding(gs);
+        lines.push(`CROWDING COMPOSITE ${cr.score?.toFixed(2)}σ (avg signed z of leverage/funding gauges)`);
+        for (const g of gs) { const s = seriesStats(g.data, g.unit)!; lines.push(`${g.label}: ${s.latest[1].toPrecision(4)} ${g.unit} (${s.latest[0]}) z=${s.z?.toFixed(2)} pct=${s.percentile.toFixed(0)}${s.record ? ` RECORD ${s.record}` : ""} yoy=${JSON.stringify(s.yoy)} [${g.formula ?? g.sources[0]}]`); }
+        const cutoff = new Date(Date.now() - 200 * 86400_000).toISOString().slice(0, 10);
+        lines.push("MOST UNUSUAL:", ...mostUnusual(all, cutoff, 15).map((u) => `${u.m} ${u.name} z=${u.z.toFixed(2)}${u.record ? ` record ${u.record}` : ""} (${u.date})`));
+      } else {
+        const hits = all.filter((s) => terms.every((t) => `${s.m} ${s.name}`.toLowerCase().includes(t))).slice(0, 12);
+        for (const s of hits) {
+          const st = seriesStats(s.data, s.unit)!;
+          lines.push(`${s.m} — ${s.name} [${s.unit}, ${s.freq}] latest ${s.data.at(-1)![1]} (${st.latest[0]}) z=${st.z?.toFixed(2)} pct=${st.percentile.toFixed(0)} high ${st.high[1]} (${st.high[0]}) low ${st.low[1]} (${st.low[0]}) last8: ${s.data.slice(-8).map((d) => `${d[0]}=${d[1]}`).join(", ")} <${s.url}>`);
+        }
+      }
+      return { output: clip(lines.join("\n") || "No hedge fund series match; try fewer words."), summary: `${lines.length} hedge fund lines` };
+    }
+    case "get_treasury_auctions": {
+      const a = await qc.fetchQuery(auctionsQuery);
+      const reads = readAuctions(a.auctions).filter((r) => !args.term || r.term === args.term).slice(0, 25);
+      return { output: clip(reads.map((r) => `${r.date} ${r.term} ${r.type} ${r.cusip} yield ${r.rate}% btc ${r.btc} (avg ${r.avgBtc?.toFixed(2)}) indirect ${r.indirect}% (avg ${r.avgIndirect?.toFixed(1)}) dealers ${r.dealer}% (avg ${r.avgDealer?.toFixed(1)}) → ${r.verdict ?? "n/a"} ${r.score?.toFixed(1) ?? ""}`).join("\n") + `\nSource: ${a.sourceUrl}`), summary: `${reads.length} auctions` };
+    }
+    case "get_company_dossier": {
+      const t = String(args.ticker).toUpperCase();
+      const since = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
+      const [d, links, alt, sig, ideas] = await Promise.all([
+        dataset(qc, t),
+        qc.fetchQuery(supplyLinksQuery),
+        supabase.from("alt_data").select("dataset,kind,date,title,value,unit,source_url").eq("ticker", t).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(60),
+        supabase.from("supply_signals").select("kind,title,detail,impact,quote,filed,form,accn,url").eq("ticker", t).order("filed", { ascending: false }).limit(40),
+        fetch("/data/signals.json").then((r) => r.json()).catch(() => null),
+      ]);
+      const out: string[] = [`DOSSIER ${t} — everything Filed Under knows, last 12 months`];
+      const u = (await qc.fetchQuery(universeQuery)).companies.find((c) => c.ticker === t);
+      if (u) out.push(`SNAPSHOT: ${JSON.stringify(flatUniverse([u])[0]).slice(0, 600)}`);
+      out.push("FILINGS:", ...d.filings.filter((f) => f.filed >= since).slice(0, 15).map((f) => `${f.filed} ${f.form} ${f.desc ?? ""} ${f.items ? `items ${f.items}` : ""} accn ${f.accn}`));
+      out.push("INSIDERS (open market):", ...d.insiders.filter((x) => (x.code === "P" || x.code === "S") && x.date >= since).slice(0, 12).map((x) => `${x.date} ${x.owner} (${x.role}) ${x.code === "P" ? "BUY" : "SELL"} ${x.shares} @ ${x.price ?? "?"}${x.plan10b5 ? " 10b5-1" : ""} accn ${x.accn}`));
+      out.push("ALT DATA EVENTS:", ...(alt.data ?? []).map((r: any) => `${r.date} [${r.dataset}] ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""} <${r.source_url}>`));
+      out.push("SUPPLY-CHAIN INTEL (verbatim-verified):", ...(sig.data ?? []).map((r: any) => `${r.filed ?? ""} [${r.kind}/${r.impact}] ${r.title}: "${String(r.quote).slice(0, 220)}" ${r.accn ? `accn ${r.accn}` : r.url ?? ""}`));
+      const g = focusGraph(t, links, Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName])));
+      out.push(`SUPPLY LINKS: ${g.slice(0, 25).map((n) => `${n.relation}:${n.name}${n.links[0].share_pct != null ? `(${n.links[0].share_pct}%)` : ""}${(n.links[0] as RiskLink).single_source ? "[single-source]" : ""}`).join("; ")}`);
+      const myIdeas = (ideas?.ideas ?? []).filter((i: any) => i.ticker === t);
+      if (myIdeas.length) out.push("RULE-BASED TRADE IDEAS:", ...myIdeas.map((i: any) => JSON.stringify(i).slice(0, 400)));
+      return { output: clip(out.join("\n")), summary: `dossier for ${t}`, refs: d.filings.slice(0, 3).map((f) => ({ ticker: t, accn: f.accn, doc: f.doc, label: f.form })) };
     }
     case "get_supply_chain": {
       const t = String(args.ticker).toUpperCase();

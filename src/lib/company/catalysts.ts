@@ -25,7 +25,7 @@ export function estimateNextEarnings(dates: string[], today: string): { date: st
   return { date: new Date(next).toISOString().slice(0, 10), basis: "typical gap between releases" };
 }
 
-export type EventKind = "earnings" | "annual" | "quarterly" | "8k" | "proxy" | "insider_buy" | "insider_sell" | "pattern";
+export type EventKind = "earnings" | "annual" | "quarterly" | "8k" | "proxy" | "insider_buy" | "insider_sell" | "pattern" | "alt" | "intel";
 
 export interface TimelineEvent {
   date: string;
@@ -35,6 +35,8 @@ export interface TimelineEvent {
   /** Filing to open, when the event comes from one. */
   accn?: string;
   doc?: string;
+  /** External source page (alt data, web) when the event isn't a filing. */
+  url?: string;
   tone?: "positive" | "negative" | "neutral";
 }
 

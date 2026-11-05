@@ -15,6 +15,7 @@ import { changeText, fmtMacro, reading } from "@/lib/macro";
 import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice, fmtRelative } from "@/lib/format";
 import { useProfile, useWatchlist } from "@/lib/workspace";
 import { ThesisList } from "@/components/app/thesis-list";
+import { DailyBrief } from "@/components/app/daily-brief";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/")({
@@ -116,6 +117,8 @@ function Dashboard() {
           );
         })}
       </div>
+
+      {watch.isSuccess && <DailyBrief tickers={tickers} />}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Panel

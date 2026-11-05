@@ -196,6 +196,27 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_hedge_fund_data",
+    description: "OFR Hedge Fund Monitor (SEC Form PF leverage/borrowing/liquidity/stress tests, CFTC futures positioning by trader type incl. leveraged-fund net positions in S&P, Nasdaq, VIX, Treasuries, FX, crypto; Fed SCOOS dealer survey; FICC sponsored repo). query='overview' returns the crowding composite, key leverage gauges and the most unusual readings; otherwise words to search series names/ids (e.g. 'leveraged net S&P', 'multi strategy leverage'). Returns z-score vs history, percentile, highs/lows, last 8 points and source URL.",
+    parameters: obj({ query: str("'overview' or search words") }, ["query"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_treasury_auctions",
+    description: "Recent U.S. Treasury note/bond/TIPS/FRN auctions with stop-out yield, bid-to-cover, indirect (foreign) and dealer take-up, each graded strong/average/weak vs the prior six same-tenor auctions.",
+    parameters: obj({ term: nullable(str("Tenor like '10-Year', '30-Year', '2-Year'; null for all")) }, ["term"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_company_dossier",
+    description: "One call that joins everything known about a covered company over the last 12 months: filings, open-market insider trades, alt-data events (13D/G, 8-K items, contracts, FDA, recalls, regulatory), verbatim-verified supply-chain intel, supply links and rule-based trade ideas. Use first for 'what's going on with X' questions, then drill in.",
+    parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_supply_chain",
     description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession.",
     parameters: obj({ ticker: str("Covered ticker"), relation: nullable({ type: "string", enum: ["customer", "supplier", "partner", "competitor"] }) }, ["ticker", "relation"]),
@@ -215,7 +236,7 @@ export const TOOL_DEFS = [
       "Open a page in the user's Filed Under app (only works in the side-panel assistant). Use when the user asks to show/open/go to something, or when a page would help them see your answer.",
     parameters: obj(
       {
-        page: { type: "string", enum: ["dashboard", "company", "financials", "segments", "valuation", "filings", "insiders", "calls", "ir", "supply_chain", "ideas", "markets", "macro", "sectors", "research", "theses", "docs", "all_insiders", "companies"] },
+        page: { type: "string", enum: ["dashboard", "company", "financials", "segments", "valuation", "filings", "insiders", "calls", "ir", "supply_chain", "ideas", "markets", "macro", "sectors", "research", "theses", "docs", "all_insiders", "companies", "hedge_funds", "alt_data"] },
         ticker: nullable(str("Ticker for company pages and supply_chain")),
       },
       ["page", "ticker"],
@@ -253,6 +274,9 @@ export const TOOL_LABELS: Record<string, string> = {
   run_code: "Ran code",
   get_alt_data: "Read alt data",
   get_supply_chain: "Mapped supply chain",
+  get_hedge_fund_data: "Read hedge fund data",
+  get_treasury_auctions: "Read Treasury auctions",
+  get_company_dossier: "Built company dossier",
   simulate_supply_shock: "Simulated shock",
   navigate_to: "Opened page",
   get_page_context: "Read your screen",
