@@ -43,11 +43,11 @@
 - The research agent loop lives in `src/lib/research/loop.ts` (server step ⇄ browser tools) and powers the right-side assistant panel (`AssistantPanel`, ⌘J); browser-only tools (navigate_to, get_page_context, run_code in a network-less Web Worker via `src/lib/research/sandbox.ts`) run in `src/lib/research/execute.ts` with an `AgentCtx`.
 - Supply-chain exposure, second-order links and shock propagation are pure functions in `src/lib/supply/core.ts`; dollar exposure only comes from stated amounts or stated revenue shares × SEC revenue.
 - Earnings reactions, chart patterns and the correlation explorer use pure functions in `src/lib/markets/core.ts`, precomputed by `bun scripts/markets.ts` into `public/data/markets.json` and `returns.json` (3y aligned daily returns) so pages never download every price file; rerun after ingest.
-- Supply-chain analyst metrics (entity merging, corroboration/confidence, dependency score, regions) are pure in `src/lib/supply/core.ts`; the cited analyst note comes from `src/lib/supply.functions.ts` and may only reference stored link ids.
-- Supply-chain intel comes from `scripts/supply-intel.ts` into `supply_signals`; each quote is verified verbatim against its source, and a failed stage keeps stored rows.
+- Supply-chain analyst metrics are pure in `src/lib/supply/core.ts`; the analyst note may only cite stored link ids.
+- `scripts/supply-intel.ts` fills `supply_signals` with verbatim-verified quotes; failed stages keep stored rows.
 - Public alt data is pulled by `bun scripts/alt-data.ts` into `alt_data` (stable `uid`, upsert-only, every row has `source_url`); contract recipients resolve to parent ids by name prefix, never substring.
-- OFR Hedge Fund Monitor data (Form PF, CFTC TFF, SCOOS, FICC repo) is pulled whole by `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json` with values exactly as published and each series' OFR source URL; rerun to refresh, never hand-edit.
+- OFR hedge fund data comes from `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json`, values as published with source URLs; rerun, never hand-edit.
 - Hedge/auction analytics are pure in `src/lib/hedge/core.ts`; auctions come from `bun scripts/treasury-auctions.ts` (rerun to refresh).
-- The morning brief (`src/lib/brief.functions.ts`) may only cite browser-assembled fact ids, so every line stays sourced.
-- Supply-chain country exposure, region shocks (incl. HQ-country ties for well-known foreign counterparties), concentration history, freshness and ecosystem baskets are pure in `src/lib/supply/analytics.ts`; per-link web cross-checks (`src/lib/supply-verify.functions.ts`) keep only sentences naming both companies and are cached per link.
+- AI briefs/notes may only cite browser-assembled fact ids.
+- Supply-chain country/region/concentration/freshness/basket analytics are pure in `src/lib/supply/analytics.ts`; web cross-checks keep only sentences naming both companies.
 - Promises keep only verbatim-verified quotes (`vetPromises`); alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows.
