@@ -32,6 +32,24 @@ export type Database = {
         }
         Relationships: []
       }
+      alert_state: {
+        Row: {
+          last_seen: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          last_seen?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          last_seen?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       alt_data: {
         Row: {
           created_at: string

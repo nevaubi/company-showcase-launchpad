@@ -6,6 +6,9 @@ import { COVERAGE, coverageOf, MACRO_SERIES } from "@/lib/coverage";
 import { getFilingDocument, searchFilings } from "@/lib/sec.functions";
 import { readWebpage, webSearch } from "@/lib/web.functions";
 import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
+import { getPromises } from "@/lib/earnings.functions";
+import { credibility } from "@/lib/earnings/promises";
+import { alertsQuery } from "@/components/app/alerts-bell";
 import { durationDays } from "@/lib/financials/build";
 import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { runSandbox } from "@/lib/research/sandbox";
@@ -173,6 +176,24 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
         }
       }
       return { output: clip(lines.join("\n") || "No hedge fund series match; try fewer words."), summary: `${lines.length} hedge fund lines` };
+    }
+    case "get_promises": {
+      const t = String(args.ticker).toUpperCase();
+      const r = await getPromises({ data: { ticker: t } });
+      if (!r.promises.length) return { output: r.error ?? "No promises found", summary: "no promises" };
+      const c = credibility(r.promises);
+      return {
+        output: clip([`${t} credibility ${c.score != null ? Math.round(c.score * 100) : "n/a"} (kept ${c.kept}, partial ${c.partial}, missed ${c.missed}, pending ${c.pending})`, ...r.promises.map((p) => `${p.callDate} [${p.status}] ${p.summary} — "${p.quote}" <${p.callUrl}>${p.outcomeQuote ? ` → ${p.outcomeCallDate}: "${p.outcomeQuote}" <${p.outcomeUrl}>` : ""}`)].join("\n")),
+        summary: `${r.promises.length} promises`,
+      };
+    }
+    case "get_alerts": {
+      const { data: wl } = await supabase.from("watchlist").select("ticker");
+      const tickers = (wl ?? []).map((w) => w.ticker).sort();
+      if (!tickers.length) return { output: "Watchlist is empty.", summary: "no watchlist" };
+      const all = await qc.fetchQuery(alertsQuery(tickers));
+      const rows = all.filter((a) => !args.ticker || a.ticker === String(args.ticker).toUpperCase()).slice(0, 60);
+      return { output: clip(rows.map((a) => `${a.at.slice(0, 10)} ${a.ticker} [${a.kind}] ${a.title}${a.detail ? ` — ${a.detail}` : ""}${a.filing ? ` accn ${a.filing.accn}` : a.url ? ` <${a.url}>` : ""}`).join("\n") || "No alerts."), summary: `${rows.length} alerts` };
     }
     case "get_treasury_auctions": {
       const a = await qc.fetchQuery(auctionsQuery);

@@ -133,3 +133,5 @@
 - [x] Supply chain alt-data intelligence panel (full 78-company read running)
 - [x] Supply chain v4: world exposure map, region shock, ecosystem basket, concentration history, freshness, web cross-check per link, cleaner fragility table
 - [ ] Supply chain next: more sources (EX-10 contracts by counterparty, call transcripts), XBRL concentration facts, shipping/customs data
+
+- [x] Watchlist alerts bell, earnings preview/recap, management promise tracker

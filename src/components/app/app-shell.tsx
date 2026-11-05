@@ -30,6 +30,7 @@ import { PANEL_WIDTH, SourcePanel } from "@/components/source/source-panel";
 import { AssistantPanel } from "@/components/research/assistant-panel";
 import { Sparkles } from "lucide-react";
 import { CommandMenu } from "@/components/app/command-menu";
+import { AlertsBell } from "@/components/app/alerts-bell";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { useQuotes, useUniverse } from "@/lib/data";
 import { fmtPct, fmtPrice } from "@/lib/format";
@@ -141,7 +142,8 @@ function ShellInner({ children }: { children: ReactNode }) {
               <kbd className="num rounded border bg-muted px-1.5 text-[10px]">⌘K</kbd>
             </button>
             <MarketTape />
-            <Button variant={aiOpen ? "ink" : "outline"} size="sm" className="ml-auto shrink-0 md:ml-0" onClick={() => setAiOpen((o) => !o)} aria-label="Assistant">
+            <div className="ml-auto md:ml-0"><AlertsBell /></div>
+            <Button variant={aiOpen ? "ink" : "outline"} size="sm" className="shrink-0" onClick={() => setAiOpen((o) => !o)} aria-label="Assistant">
               <Sparkles /> <span className="hidden sm:inline">Assistant</span>
               <kbd className="num hidden rounded border px-1 text-[10px] opacity-70 md:inline">⌘J</kbd>
             </Button>

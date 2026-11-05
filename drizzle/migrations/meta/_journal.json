@@ -134,6 +134,13 @@
       "when": 1793847600444,
       "tag": "0018_alt_data",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793856267989,
+      "tag": "0019_alert_state",
+      "breakpoints": true
     }
   ]
 }
