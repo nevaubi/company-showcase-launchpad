@@ -52,3 +52,4 @@
 - Supply-chain country/region/concentration/freshness/basket analytics are pure in `src/lib/supply/analytics.ts`; web cross-checks keep only sentences naming both companies.
 - Promises keep only verbatim-verified quotes (`vetPromises`); alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows.
 - Analyst estimates: `scripts/estimates.ts` fills `analyst_estimates` (provider throttles Node fetch); `getEstimates` refreshes live after 6h.
+- Company context (Wikipedia description, Commons photos, 10-K/proxy people with headshots) comes from `bun scripts/company-context.ts` into `public/data/context/`; people are kept only if named in the filing text, and photos need a Wikidata link to the company or the company's own page.

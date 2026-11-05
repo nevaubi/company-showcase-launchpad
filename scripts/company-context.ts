@@ -94,10 +94,10 @@ async function description(article: string) {
 type II = { url: string; thumburl?: string; thumbwidth?: number; thumbheight?: number; width: number; height: number; descriptionurl: string; extmetadata?: Record<string, { value: string }> };
 const strip = (s?: string) => (s ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 
-async function commonsInfo(titles: string[]): Promise<{ title: string; ii: II }[]> {
+async function commonsInfo(titles: string[], width = 1280): Promise<{ title: string; ii: II }[]> {
   if (!titles.length) return [];
   const j = await getJson<{ query?: { pages: Record<string, { title: string; imageinfo?: II[] }> } }>(
-    `https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=1400&titles=${encodeURIComponent(titles.join("|"))}`,
+    `https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url|size|extmetadata&iiurlwidth=${width}&titles=${encodeURIComponent(titles.join("|"))}`,
   );
   return Object.values(j.query?.pages ?? {}).flatMap((p) => (p.imageinfo?.[0] ? [{ title: p.title, ii: p.imageinfo[0] }] : []));
 }
@@ -293,9 +293,9 @@ async function wikidataPhoto(name: string, company: string, companyItem?: string
     if (!linked && !described && !pos) continue;
     const file = claims["P18"]?.[0]?.mainsnak.datavalue?.value as string | undefined;
     if (!file) return undefined;
-    const [info] = await commonsInfo([`File:${file}`]);
+    const [info] = await commonsInfo([`File:${file}`], 500);
     if (!info) return undefined;
-    const img = toImage(info.title, { ...info.ii, thumburl: info.ii.thumburl?.replace(/\/\d+px-/, "/400px-") });
+    const img = toImage(info.title, info.ii);
     return { url: img.url, credit: img.credit };
   }
   return undefined;

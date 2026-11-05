@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCompanyContext } from "@/lib/company/context-query";
-import type { Credit } from "@/lib/company/context";
+import { commonsThumb, type Credit } from "@/lib/company/context";
 import { fiscalYearEndLabel, fmtCompact, titleCase } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
@@ -110,8 +110,8 @@ function Gallery({ images }: { images: NonNullable<ReturnType<typeof useCompanyC
   const img = images[i];
   return (
     <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-      <figure className="relative overflow-hidden rounded-lg border bg-secondary">
-        <img src={img.url} alt={img.caption} className="aspect-[16/9] w-full object-cover" loading="lazy" />
+      <figure className="relative aspect-[16/9] overflow-hidden rounded-lg border bg-secondary md:aspect-auto md:min-h-[340px]">
+        <img src={commonsThumb(img.url, 1280)} alt={img.caption} referrerPolicy="no-referrer" className="absolute inset-0 h-full w-full object-cover" />
         <figcaption className="absolute inset-x-0 bottom-0 flex items-end gap-2 bg-gradient-to-t from-background/95 to-transparent p-3 pt-10 text-[12px]">
           <span className="line-clamp-2 flex-1">{img.caption}</span>
           <CreditNote credit={img.credit} />
@@ -128,9 +128,9 @@ function Gallery({ images }: { images: NonNullable<ReturnType<typeof useCompanyC
         )}
       </figure>
       <div className="grid grid-cols-4 gap-2 md:grid-cols-2 md:content-start">
-        {images.map((m, k) => (
+        {images.slice(0, 8).map((m, k) => (
           <button key={m.url} onClick={() => setI(k)} className={cn("overflow-hidden rounded-md border", k === i ? "ring-2 ring-foreground" : "opacity-75 hover:opacity-100")}>
-            <img src={m.url} alt="" className="aspect-[4/3] w-full object-cover" loading="lazy" />
+            <img src={commonsThumb(m.url, 500)} alt="" referrerPolicy="no-referrer" className="aspect-[4/3] w-full object-cover" loading="lazy" />
           </button>
         ))}
       </div>

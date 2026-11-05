@@ -4,7 +4,7 @@ import { Panel } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { useSource } from "@/components/source/source-context";
 import { useCompanyContext } from "@/lib/company/context-query";
-import { rankPeople, tenureYears, type Person } from "@/lib/company/context";
+import { commonsThumb, rankPeople, tenureYears, type Person } from "@/lib/company/context";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreditNote } from "./about";
@@ -18,7 +18,7 @@ function Avatar({ p, size = "md" }: { p: Person; size?: "md" | "lg" }) {
   return (
     <div className={cn("relative shrink-0", cls)}>
       {p.photo && !bad ? (
-        <img src={p.photo.url} alt={p.name} onError={() => setBad(true)} className={cn("rounded-full border object-cover object-top", cls)} loading="lazy" />
+        <img src={commonsThumb(p.photo.url, 250)} alt={p.name} referrerPolicy="no-referrer" onError={() => setBad(true)} className={cn("rounded-full border object-cover object-top", cls)} loading="lazy" />
       ) : (
         <div className={cn("grid place-items-center rounded-full border bg-secondary font-display text-muted-foreground", cls, size === "lg" ? "text-2xl" : "text-sm")}>{initials(p.name)}</div>
       )}

@@ -188,3 +188,9 @@ export function rankPeople(people: Person[]): { ceo?: Person; executives: Person
 
 /** Years in role as of `today` (ISO date). */
 export const tenureYears = (since: number | undefined, today: string) => (since ? Math.max(0, Number(today.slice(0, 4)) - since) : undefined);
+
+/** Wikimedia only serves standard thumbnail widths from upload.wikimedia.org; normalise stored URLs. */
+export function commonsThumb(url: string, width: 250 | 500 | 960 | 1280): string {
+  if (!/wikimedia\.org\/wikipedia\/commons\/thumb\//.test(url)) return url;
+  return url.replace("//thumb.wikimedia.org/", "//upload.wikimedia.org/").replace(/\/\d+px-([^/?]+)/, `/${width}px-$1`);
+}

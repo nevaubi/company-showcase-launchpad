@@ -137,3 +137,4 @@
 - [x] Watchlist alerts bell, earnings preview/recap, management promise tracker
 - [x] Estimates & analysts tab (consensus, revisions, surprises, ratings, targets, actions)
 - [ ] Scheduled refresh of analyst estimates (currently script + live refresh on view)
+- [x] Company page redesign: research price chart + read, About with photos, leadership & board, sector comparison, related companies
