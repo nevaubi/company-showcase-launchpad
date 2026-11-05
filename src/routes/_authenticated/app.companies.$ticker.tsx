@@ -67,21 +67,21 @@ function CompanyLayout() {
 
   return (
     <div>
-      <div className="mb-5 flex flex-wrap items-start gap-4">
-        <CompanyLogo ticker={ticker} src={p?.logo} size="xl" />
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <CompanyLogo ticker={ticker} src={p?.logo} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-display text-[2.4rem] leading-none" title={p?.name ? `SEC registrant: ${p.name}` : undefined}>
+            <h1 className="truncate text-2xl font-semibold leading-tight tracking-tight" title={p?.name ? `SEC registrant: ${p.name}` : undefined}>
               {coverageOf(ticker)?.shortName ?? p?.name}
             </h1>
             <Badge variant="mono">
               {p?.exchange ?? "—"}: {ticker}
             </Badge>
           </div>
-          <p className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
             {p?.name && p.name.toLowerCase().replace(/[^a-z]/g, "") !== (coverageOf(ticker)?.shortName ?? "").toLowerCase().replace(/[^a-z]/g, "") && (
               <>
-                <span className="num text-xs uppercase tracking-wide">{p.name}</span>
+                <span className="num text-[11px] uppercase">{p.name}</span>
                 <span aria-hidden>·</span>
               </>
             )}
@@ -99,25 +99,25 @@ function CompanyLayout() {
             )}
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           {q ? (
-            <div className="text-right">
-              <p className="num text-3xl font-medium tracking-tight">{fmtPrice(q.price)}</p>
+            <div className="flex items-baseline gap-2">
+              <p className="num text-2xl font-semibold">{fmtPrice(q.price)}</p>
               <p className={cn("num text-sm", q.change >= 0 ? "text-positive" : "text-negative")}>
                 {fmtSigned(q.change)} ({fmtPct(q.changePct, 2, true)})
               </p>
             </div>
           ) : (
-            <Skeleton className="h-12 w-32" />
+            <Skeleton className="h-8 w-32" />
           )}
-          <div className="flex flex-wrap justify-end gap-1.5">
-            <Button size="sm" variant={follow.isFollowed(ticker) ? "secondary" : "outline"} onClick={() => follow.toggle(ticker)} disabled={follow.pending}>
+          <div className="flex flex-wrap justify-end gap-1">
+            <Button size="xs" variant={follow.isFollowed(ticker) ? "secondary" : "outline"} onClick={() => follow.toggle(ticker)} disabled={follow.pending}>
               <Star className={cn(follow.isFollowed(ticker) && "fill-current")} />
               {follow.isFollowed(ticker) ? "Following" : "Follow"}
             </Button>
             {latest10K && (
               <Button
-                size="sm"
+                size="xs"
                 variant="outline"
                 onClick={() =>
                   open({ ticker, label: `Annual report (${latest10K.report?.slice(0, 4)})`, unit: "usd", value: 0, doc: { accn: latest10K.accn, doc: latest10K.doc, title: "Latest Form 10-K" } })
@@ -128,7 +128,7 @@ function CompanyLayout() {
             )}
             {latest10Q && (
               <Button
-                size="sm"
+                size="xs"
                 variant="outline"
                 onClick={() => open({ ticker, label: `Quarterly report (${latest10Q.report})`, unit: "usd", value: 0, doc: { accn: latest10Q.accn, doc: latest10Q.doc, title: "Latest Form 10-Q" } })}
               >
@@ -137,12 +137,12 @@ function CompanyLayout() {
             )}
             {p && (
               <>
-                <Button size="sm" variant="ghost" asChild>
+                <Button size="xs" variant="ghost" asChild>
                   <a href={p.investorRelations} target="_blank" rel="noreferrer">
                     <Globe /> IR <ArrowUpRight className="opacity-60" />
                   </a>
                 </Button>
-                <Button size="sm" variant="ghost" asChild>
+                <Button size="xs" variant="ghost" asChild>
                   <a href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${p.cik}&type=&dateb=&owner=include&count=40`} target="_blank" rel="noreferrer">
                     EDGAR <ArrowUpRight className="opacity-60" />
                   </a>
@@ -153,7 +153,7 @@ function CompanyLayout() {
         </div>
       </div>
 
-      <nav className="mb-6 flex gap-1 overflow-x-auto border-b scrollbar-thin">
+      <nav className="mb-4 flex gap-0.5 overflow-x-auto border-b scrollbar-thin">
         {TABS.map((t) => {
           const href = t.to.replace("$ticker", ticker);
           const active = "exact" in t && t.exact ? pathname === href || pathname === href + "/" : pathname.startsWith(href);
@@ -163,7 +163,7 @@ function CompanyLayout() {
               to={t.to}
               params={{ ticker }}
               className={cn(
-                "-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground",
+                "-mb-px whitespace-nowrap border-b-2 border-transparent px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground",
                 active && "border-foreground font-medium text-foreground",
               )}
             >
@@ -174,7 +174,7 @@ function CompanyLayout() {
         <Link
           to="/app/markets"
           search={{ symbol: ticker }}
-          className="-mb-px whitespace-nowrap border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="-mb-px whitespace-nowrap border-b-2 border-transparent px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
         >
           Technicals ↗
         </Link>

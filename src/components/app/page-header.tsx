@@ -44,12 +44,12 @@ export function Panel({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("min-w-0 rounded-lg border bg-card shadow-paper", className)}>
+    <section className={cn("min-w-0 rounded-lg border bg-card shadow-paper transition-colors duration-200 hover:border-rule", className)}>
       {(title || actions) && (
         <header className="flex flex-wrap items-center gap-3 border-b px-3.5 py-2">
           <div className="min-w-0">
-            {title && <h2 className="text-sm font-semibold">{title}</h2>}
-            {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
+            {title && <h2 className="text-[13px] font-semibold tracking-tight">{title}</h2>}
+            {subtitle && <p className="text-[11px] text-muted-foreground">{subtitle}</p>}
           </div>
           {actions && <div className="ml-auto flex items-center gap-1.5">{actions}</div>}
         </header>
@@ -78,11 +78,11 @@ export function Stat({
   const { open } = useSource();
   const body = (
     <>
-      <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
         {label}
         {target && <FileText className="size-3 opacity-0 transition-opacity group-hover:opacity-70" />}
       </span>
-      <span className="num mt-1 block text-[1.35rem] font-medium leading-tight tracking-tight">{value}</span>
+      <span className="num mt-0.5 block text-lg font-semibold leading-tight">{value}</span>
       {sub && (
         <span
           className={cn(
@@ -95,7 +95,7 @@ export function Stat({
       )}
     </>
   );
-  const cls = cn("group block rounded-lg border bg-card px-3.5 py-3 text-left shadow-paper", className);
+  const cls = cn("group block rounded-lg border bg-card px-3 py-2 text-left shadow-paper", className);
   if (!target) return <div className={cls}>{body}</div>;
   return (
     <button onClick={() => open(target)} className={cn(cls, "transition-colors hover:border-rule hover:bg-highlight-soft/40")}>

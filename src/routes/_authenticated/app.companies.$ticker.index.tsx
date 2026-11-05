@@ -41,7 +41,7 @@ function Overview() {
 function OverviewSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
         {Array.from({ length: 8 }).map((_, i) => (
           <Skeleton key={i} className="h-20" />
         ))}
@@ -103,8 +103,8 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
     : null;
 
   return (
-    <div className="grid grid-cols-1 gap-5">
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 2xl:grid-cols-8">
+    <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
         <Stat label="Market cap" value={fmtCompactUsd(mcap)} sub={shares ? `${(shares / 1e9).toFixed(2)}B shares` : "—"} target={sharesTarget} />
         <Stat
           label="P/E (TTM)"
@@ -137,22 +137,22 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <SectorTable ticker={ticker} />
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <SetupPanel ticker={ticker} data={data} price={price} />
         <CatalystsTimeline ticker={ticker} data={data} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <NarrativesPanel ticker={ticker} name={p.name} />
         <EarningsCallPanel ticker={ticker} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <RevenueBars ticker={ticker} data={data} />
         <MarginLines data={data} />
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
         <Panel
           title="Recent filings"
           actions={
