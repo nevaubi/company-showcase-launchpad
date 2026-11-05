@@ -1,3 +1,4 @@
+import { signalsQuery } from "@/components/supply/supply-intel";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -6,7 +7,7 @@ import { Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
 import { getSupplyNote } from "@/lib/supply.functions";
-import { dependencyScore, linkDollars, regionExposure, type Confidence, type GraphNode, type ProLink } from "@/lib/supply/core";
+import { concentrationBasis, dependencyScore, linkDollars, regionExposure, type Confidence, type GraphNode, type ProLink } from "@/lib/supply/core";
 import { fmtCompactUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -72,6 +73,8 @@ export function SupplyNotePanel({ ticker, byId, onOpen }: { ticker: string; byId
 /** Fragility score with its three filing-based components. */
 export function DependencyCard({ ticker, all }: { ticker: string; all: ProLink[] }) {
   const d = useMemo(() => dependencyScore(ticker, all), [ticker, all]);
+  const { data: sig } = useQuery(signalsQuery(ticker));
+  const unnamed = (sig ?? []).filter((s) => s.kind === "concentration" && s.pct != null && concentrationBasis(s.quote) === "revenue").sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
   const tone = d.score >= 50 ? "text-negative" : d.score >= 25 ? "text-highlight-foreground" : "text-positive";
   return (
     <Panel title="Dependency score" className="min-w-0">
@@ -89,6 +92,9 @@ export function DependencyCard({ ticker, all }: { ticker: string; all: ProLink[]
         ))}
       </div>
       <p className="mt-3 text-[11px] text-muted-foreground">Customer HHI {d.customerHhi.toLocaleString()} · {d.statedCustomerPct}% of revenue tied to named customers</p>
+      {unnamed && d.statedCustomerPct < (unnamed.pct ?? 0) && (
+        <p className="mt-1.5 rounded bg-highlight/40 px-2 py-1 text-[11px]">Filing also states an unnamed customer at {unnamed.pct}% of revenue{unnamed.period ? ` (${unnamed.period})` : ""} — not counted above because no name is given. See Alt-data intelligence below.</p>
+      )}
     </Panel>
   );
 }

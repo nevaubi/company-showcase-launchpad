@@ -419,3 +419,14 @@ export function regionExposure(nodes: { links: ProLink[]; relation: string }[]):
   }
   return [...m.values()].sort((a, b) => b.suppliers + b.customers + b.other - (a.suppliers + a.customers + a.other));
 }
+
+/** What a stated concentration percentage measures, read from its verbatim quote. */
+export type ConcBasis = "revenue" | "receivables" | "vendor" | "channel" | "other";
+export function concentrationBasis(quote: string): ConcBasis {
+  const q = quote.toLowerCase();
+  if (/receivable/.test(q)) return /vendor/.test(q) ? "vendor" : "receivables";
+  if (/\b(vendor|supplier|purchases)\b/.test(q)) return "vendor";
+  if (/\b(channel|distribution)\b/.test(q)) return "channel";
+  if (/(revenue|net sales|total sales)/.test(q) && /(customer|client|distributor|partner)/.test(q)) return "revenue";
+  return "other";
+}

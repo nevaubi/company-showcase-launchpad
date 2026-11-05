@@ -7,6 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSource } from "@/components/source/source-context";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { concentrationBasis } from "@/lib/supply/core";
+const BASIS: Record<string, string> = { revenue: "of revenue", receivables: "of receivables", vendor: "vendor receivables", channel: "of sales by channel", other: "" };
 
 export interface Signal {
   id: string; ticker: string; kind: string; title: string; detail: string | null; quote: string;
@@ -24,24 +26,33 @@ const KINDS: { v: string; label: string }[] = [
   { v: "facility", label: "Locations" },
   { v: "policy", label: "Tariffs, laws & politics" },
 ];
+const COUNTRY_ALIAS: Record<string, string> = {
+  "u.s.": "United States", us: "United States", usa: "United States", "united states of america": "United States",
+  "greater china": "China", prc: "China", "mainland china": "China", "people's republic of china": "China",
+  uk: "United Kingdom", "u.k.": "United Kingdom", "great britain": "United Kingdom", eu: "European Union",
+  "republic of korea": "South Korea", korea: "South Korea",
+};
+export const normCountry = (c: string | null) => (c ? COUNTRY_ALIAS[c.trim().toLowerCase()] ?? c.trim() : null);
 const SRC_ICON = { filing: FileText, exhibit: ScrollText, transcript: Mic, web: Newspaper } as Record<string, typeof FileText>;
 const SRC_LABEL: Record<string, string> = { filing: "10-K", exhibit: "Contract exhibit", transcript: "Earnings call", web: "News" };
 
+export const signalsQuery = (ticker: string) => ({
+  queryKey: ["supply_signals", ticker],
+  queryFn: async () => {
+    const { data, error } = await supabase.from("supply_signals").select("*").eq("ticker", ticker).limit(1000);
+    if (error) throw error;
+    return (data ?? []) as Signal[];
+  },
+  staleTime: 10 * 60_000,
+});
+
 export function SupplyIntel({ ticker }: { ticker: string }) {
-  const { data, isLoading } = useQuery({
-    queryKey: ["supply_signals", ticker],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("supply_signals").select("*").eq("ticker", ticker).limit(1000);
-      if (error) throw error;
-      return (data ?? []) as Signal[];
-    },
-    staleTime: 10 * 60_000,
-  });
+  const { data, isLoading } = useQuery(signalsQuery(ticker));
   const [kind, setKind] = useState("all");
   const [impact, setImpact] = useState<"all" | "risk" | "positive">("all");
   const [country, setCountry] = useState<string | null>(null);
   const { open } = useSource();
-  const all = data ?? [];
+  const all = useMemo(() => (data ?? []).map((s) => ({ ...s, country: normCountry(s.country) })), [data]);
 
   const counts = useMemo(() => Object.fromEntries(KINDS.map((k) => [k.v, k.v === "all" ? all.length : all.filter((s) => s.kind === k.v).length])), [all]);
   const countries = useMemo(() => {
@@ -76,7 +87,7 @@ export function SupplyIntel({ ticker }: { ticker: string }) {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
           <div className="min-w-0">
             <div className="mb-3 flex flex-wrap gap-1.5">
-              {KINDS.map((k) => (
+              {KINDS.filter((k) => k.v === "all" || counts[k.v] > 0).map((k) => (
                 <button key={k.v} onClick={() => setKind(k.v)} className={cn("rounded-full border px-2.5 py-1 text-xs", kind === k.v ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground")}>
                   {k.label} <span className="opacity-70">{counts[k.v]}</span>
                 </button>
@@ -105,13 +116,13 @@ export function SupplyIntel({ ticker }: { ticker: string }) {
                     {s.detail && <p className="mt-1 text-xs text-muted-foreground">{s.detail}</p>}
                     <div className="mt-1.5 flex flex-wrap gap-1 text-[11px]">
                       {s.counterparty && <Chip>{s.counterparty}</Chip>}
-                      {s.country && <Chip>{s.country}</Chip>}
+                      {s.country && !s.counterparty?.includes(s.country) && <Chip>{s.country}</Chip>}
                       {s.amount_usd != null && <Chip>{fmtCompactUsd(s.amount_usd)}</Chip>}
                       {s.pct != null && <Chip>{s.pct}%</Chip>}
                       {s.period && <Chip>{s.period}</Chip>}
                       {s.speaker && <Chip>{s.speaker}</Chip>}
                     </div>
-                    <p className="mt-2 border-l-2 border-border pl-2 text-xs italic text-muted-foreground">“{s.quote}”</p>
+                    <p className="mt-2 line-clamp-3 border-l-2 border-border pl-2 text-xs italic text-muted-foreground">“{s.quote}”</p>
                   </button>
                 );
               })}
@@ -124,7 +135,7 @@ export function SupplyIntel({ ticker }: { ticker: string }) {
               <div className="space-y-1">
                 {countries.map(([c, v]) => (
                   <button key={c} onClick={() => setCountry(country === c ? null : c)} className={cn("block w-full rounded px-1 py-0.5 text-left text-xs hover:bg-muted/50", country === c && "bg-muted")}>
-                    <div className="flex justify-between"><span>{c}</span><span className="text-muted-foreground">{v.facility ? `${v.facility} sites · ` : ""}{v.policy ? `${v.policy} policy · ` : ""}{v.risk} risk</span></div>
+                    <div className="flex justify-between"><span>{c}</span><span className="text-muted-foreground">{[v.facility && `${v.facility} site${v.facility > 1 ? "s" : ""}`, v.policy && `${v.policy} policy`, v.risk && `${v.risk} risk`].filter(Boolean).join(" · ") || `${v.n} mention${v.n > 1 ? "s" : ""}`}</span></div>
                     <div className="relative mt-0.5 h-1.5 rounded bg-muted">
                       <div className="absolute inset-y-0 left-0 rounded bg-foreground/25" style={{ width: `${(v.n / maxN) * 100}%` }} />
                       <div className="absolute inset-y-0 left-0 rounded bg-destructive/80" style={{ width: `${(v.risk / maxN) * 100}%` }} />
@@ -139,8 +150,9 @@ export function SupplyIntel({ ticker }: { ticker: string }) {
                 <div className="space-y-1.5">
                   {conc.slice(0, 8).map((s) => (
                     <button key={s.id} onClick={() => openSig(s)} className="block w-full text-left text-xs hover:opacity-80">
-                      <div className="flex justify-between gap-2"><span className="truncate">{s.counterparty ?? s.title}</span><span className="tabular-nums">{s.pct}%{s.period ? ` · ${s.period}` : ""}</span></div>
-                      <div className="mt-0.5 h-1.5 rounded bg-muted"><div className="h-full rounded bg-primary" style={{ width: `${Math.min(100, s.pct ?? 0)}%` }} /></div>
+                      <div className="flex items-start justify-between gap-2"><span className="line-clamp-2">{s.counterparty ?? s.title}</span><span className="shrink-0 tabular-nums font-medium">{s.pct}%</span></div>
+                      <div className="text-[10.5px] text-muted-foreground">{[BASIS[concentrationBasis(s.quote)], s.period].filter(Boolean).join(" · ")}</div>
+                      <div className="mt-0.5 h-1.5 rounded bg-muted"><div className={cn("h-full rounded", concentrationBasis(s.quote) === "revenue" ? "bg-primary" : "bg-foreground/30")} style={{ width: `${Math.min(100, s.pct ?? 0)}%` }} /></div>
                     </button>
                   ))}
                 </div>
