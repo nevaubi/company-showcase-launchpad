@@ -95,6 +95,24 @@ export type Database = {
         }
         Relationships: []
       }
+      analyst_estimates: {
+        Row: {
+          fetched_at: string
+          payload: Json
+          ticker: string
+        }
+        Insert: {
+          fetched_at?: string
+          payload: Json
+          ticker: string
+        }
+        Update: {
+          fetched_at?: string
+          payload?: Json
+          ticker?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           content: Json

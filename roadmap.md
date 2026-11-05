@@ -135,3 +135,5 @@
 - [ ] Supply chain next: more sources (EX-10 contracts by counterparty, call transcripts), XBRL concentration facts, shipping/customs data
 
 - [x] Watchlist alerts bell, earnings preview/recap, management promise tracker
+- [x] Estimates & analysts tab (consensus, revisions, surprises, ratings, targets, actions)
+- [ ] Scheduled refresh of analyst estimates (currently script + live refresh on view)

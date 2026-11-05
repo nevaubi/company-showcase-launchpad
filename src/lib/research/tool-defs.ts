@@ -217,6 +217,13 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_estimates",
+    description: "Sell-side consensus for a covered company: EPS and revenue estimates (avg/low/high, analyst count, growth) for current/next quarter and fiscal year, 7/30/60/90-day EPS revisions, earnings surprise history, rating counts, price targets and recent upgrades/downgrades. Third-party data, not from filings.",
+    parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_alerts",
     description: "The user's watchlist alerts from the last 30 days: material SEC filings, open-market insider trades, new supply-chain links, alt-data events and rule-based setups, newest first.",
     parameters: obj({ ticker: nullable(str("Limit to one ticker; null for all")) }, ["ticker"]),
@@ -292,6 +299,7 @@ export const TOOL_LABELS: Record<string, string> = {
   get_treasury_auctions: "Read Treasury auctions",
   get_promises: "Check management promises",
   get_alerts: "Read watchlist alerts",
+  get_estimates: "Read analyst estimates",
   get_company_dossier: "Built company dossier",
   simulate_supply_shock: "Simulated shock",
   navigate_to: "Opened page",

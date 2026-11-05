@@ -47,7 +47,8 @@
 - `scripts/supply-intel.ts` fills `supply_signals` with verbatim-verified quotes; failed stages keep stored rows.
 - Public alt data is pulled by `bun scripts/alt-data.ts` into `alt_data` (stable `uid`, upsert-only, every row has `source_url`); contract recipients resolve to parent ids by name prefix, never substring.
 - OFR hedge fund data comes from `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json`, values as published with source URLs; rerun, never hand-edit.
-- Hedge/auction analytics are pure in `src/lib/hedge/core.ts`; auctions come from `bun scripts/treasury-auctions.ts` (rerun to refresh).
+- Hedge/auction analytics: `src/lib/hedge/core.ts`; auctions: `scripts/treasury-auctions.ts`.
 - AI briefs/notes may only cite browser-assembled fact ids.
 - Supply-chain country/region/concentration/freshness/basket analytics are pure in `src/lib/supply/analytics.ts`; web cross-checks keep only sentences naming both companies.
 - Promises keep only verbatim-verified quotes (`vetPromises`); alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows.
+- Analyst estimates: `scripts/estimates.ts` fills `analyst_estimates` (Node fetch is throttled by the provider); `getEstimates` reads it and refreshes live after 6h. Pure fixes in `src/lib/estimates/core.ts`.

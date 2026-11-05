@@ -46,6 +46,7 @@ const TABS = [
   { to: "/app/companies/$ticker/segments", label: "Segments & KPIs" },
   { to: "/app/companies/$ticker/ir", label: "IR data" },
   { to: "/app/companies/$ticker/earnings", label: "Earnings & promises" },
+  { to: "/app/companies/$ticker/estimates", label: "Estimates & analysts" },
   { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
   { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
   { to: "/app/companies/$ticker/insiders", label: "Insiders" },

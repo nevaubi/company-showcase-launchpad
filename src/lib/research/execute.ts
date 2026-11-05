@@ -1,5 +1,7 @@
 // Browser-side executors for the research agent's function tools. Data comes from
 // the bundled SEC datasets plus live Yahoo/FRED/EDGAR calls through server functions.
+import { getEstimates } from "@/lib/estimates.functions";
+import { PERIOD_LABEL, actionSummary, ratingLabel } from "@/lib/estimates/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { companyQuery, macroQuery, newsQuery, pricesQuery, quotesQuery, universeQuery, type Range } from "@/lib/data";
 import { COVERAGE, coverageOf, MACRO_SERIES } from "@/lib/coverage";
@@ -186,6 +188,21 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
         output: clip([`${t} credibility ${c.score != null ? Math.round(c.score * 100) : "n/a"} (kept ${c.kept}, partial ${c.partial}, missed ${c.missed}, pending ${c.pending})`, ...r.promises.map((p) => `${p.callDate} [${p.status}] ${p.summary} — "${p.quote}" <${p.callUrl}>${p.outcomeQuote ? ` → ${p.outcomeCallDate}: "${p.outcomeQuote}" <${p.outcomeUrl}>` : ""}`)].join("\n")),
         summary: `${r.promises.length} promises`,
       };
+    }
+    case "get_estimates": {
+      const t = String(args.ticker).toUpperCase();
+      const r = await getEstimates({ data: { ticker: t } });
+      const e = r.estimates;
+      if (!e) return { output: r.error ?? "No estimates", summary: "no estimates" };
+      const s = actionSummary(e.actions, new Date(Date.now() - 90 * 86400_000).toISOString().slice(0, 10));
+      const lines = [
+        `${t} consensus (third-party, as of ${e.asOf}): rating ${ratingLabel(e.rating.mean)} (${e.rating.mean?.toFixed(2) ?? "n/a"}), price ${e.price}, target mean ${e.target.mean} median ${e.target.median} range ${e.target.low}-${e.target.high} (${e.target.analysts} analysts)`,
+        ...e.periods.map((p) => `${PERIOD_LABEL[p.code]} (ending ${p.endDate}): EPS ${p.eps.avg} [${p.eps.low}-${p.eps.high}, n=${p.eps.analysts}, yr-ago ${p.eps.yearAgo}], revenue ${p.revenue.avg} [${p.revenue.low}-${p.revenue.high}, yr-ago ${p.revenue.yearAgo}]; EPS trend now ${p.trend.current} / 7d ${p.trend.d7} / 30d ${p.trend.d30} / 90d ${p.trend.d90}; revisions 30d up ${p.revisions.up30} down ${p.revisions.down30}`),
+        `Surprises: ${e.surprises.map((x) => `${x.quarter} ${x.actual} vs ${x.estimate} (${x.surprisePct})`).join("; ")}`,
+        `Last 90d: ${s.upgrades} upgrades, ${s.downgrades} downgrades, ${s.targetRaises} target raises, ${s.targetCuts} cuts`,
+        ...e.actions.slice(0, 15).map((a) => `${a.date} ${a.firm} ${a.action} ${a.fromGrade}->${a.toGrade} PT ${a.priorTarget ?? ""}->${a.target ?? ""}`),
+      ];
+      return { output: clip(lines.join("\n")), summary: `${t} estimates` };
     }
     case "get_alerts": {
       const { data: wl } = await supabase.from("watchlist").select("ticker");
