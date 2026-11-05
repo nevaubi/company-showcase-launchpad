@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/docs/")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Docs & sheets — Filed Under" },
       { name: "description", content: "Research notes and live spreadsheets that pull sourced SEC data." },
       { property: "og:title", content: "Docs & sheets — Filed Under" },

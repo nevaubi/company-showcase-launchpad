@@ -14,6 +14,8 @@ export const Route = createFileRoute("/_authenticated/app/theses/")({
   validateSearch: z.object({ new: z.string().optional() }),
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Theses — Filed Under" },
       { name: "description", content: "Investment theses tracked against live prices and new filings." },
       { property: "og:title", content: "Theses — Filed Under" },

@@ -24,8 +24,16 @@ import { SectorTable } from "@/components/company/sector-table";
 import { RelatedCompanies } from "@/components/company/related";
 import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
+import { coverageOf } from "@/lib/coverage";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
+  head: ({ params }) => ({ meta: [
+    { title: `${params.ticker} overview — Filed Under` },
+    { name: "description", content: `${coverageOf(params.ticker)?.shortName ?? params.ticker} price research, SEC fundamentals, management and catalysts.` },
+    { property: "og:title", content: `${params.ticker} research overview — Filed Under` },
+    { property: "og:description", content: "Price analysis, sourced fundamentals and company intelligence." },
+    { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
+  ] }),
   component: Overview,
 });
 
@@ -41,7 +49,7 @@ function Overview() {
 function OverviewSkeleton() {
   return (
     <div className="grid grid-cols-1 gap-4">
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-px border-b bg-border md:grid-cols-4 xl:grid-cols-8">
         {Array.from({ length: 8 }).map((_, i) => (
           <Skeleton key={i} className="h-20" />
         ))}
@@ -104,7 +112,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
   return (
     <div className="grid grid-cols-1 gap-3">
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
         <Stat label="Market cap" value={fmtCompactUsd(mcap)} sub={shares ? `${(shares / 1e9).toFixed(2)}B shares` : "—"} target={sharesTarget} />
         <Stat
           label="P/E (TTM)"
@@ -113,8 +121,10 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
           target={epsT}
         />
         <Stat label="Revenue (TTM)" value={fmtCompactUsd(revT?.value)} sub={yoy != null ? `${fmtPct(yoy, 1, true)} YoY (latest qtr)` : undefined} tone={yoy != null && yoy >= 0 ? "positive" : "negative"} target={revT} />
-        <Stat label="Net income (TTM)" value={fmtCompactUsd(niT?.value)} sub={niT && revT ? `${fmtPct(niT.value / revT.value)} margin` : undefined} target={niT} />
         <Stat label="Free cash flow (TTM)" value={fmtCompactUsd(fcfT?.value)} sub={fcfT && mcap ? `${fmtPct(fcfT.value / mcap)} FCF yield` : undefined} tone={fcfT && fcfT.value < 0 ? "negative" : "neutral"} target={fcfT} />
+      </div>
+      <details className="border-b pb-2"><summary className="cursor-pointer text-xs text-muted-foreground">More metrics · profitability, range & risk</summary><div className="grid grid-cols-2 gap-2 pt-2 md:grid-cols-4">
+        <Stat label="Net income (TTM)" value={fmtCompactUsd(niT?.value)} sub={niT && revT ? `${fmtPct(niT.value / revT.value)} margin` : undefined} target={niT} />
         {gmT || !niiT ? (
           <Stat label="Gross margin (TTM)" value={fmtPct(gmT?.value)} target={gmT} />
         ) : (
@@ -127,30 +137,28 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
           tone={stats.ret1y != null && stats.ret1y >= 0 ? "positive" : "negative"}
         />
         <Stat label="Beta vs S&P 500" value={stats.beta != null ? stats.beta.toFixed(2) : "—"} sub={stats.vol != null ? `${fmtPct(stats.vol, 0)} ann. vol` : undefined} />
-      </div>
+      </div></details>
 
       <ResearchChart ticker={ticker} data={data} />
-
-      <AboutPanel ticker={ticker} data={data} />
-
-      <LeadershipPanel ticker={ticker} />
-
-      <SectorTable ticker={ticker} />
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <SetupPanel ticker={ticker} data={data} price={price} />
         <CatalystsTimeline ticker={ticker} data={data} />
       </div>
 
+      <AboutPanel ticker={ticker} data={data} />
+      <details className="border-y py-3"><summary className="cursor-pointer text-sm font-semibold">Management & board</summary><div className="pt-3"><LeadershipPanel ticker={ticker} /></div></details>
+      <details className="border-y py-3"><summary className="cursor-pointer text-sm font-semibold">Sector & peer fundamentals</summary><div className="pt-3"><SectorTable ticker={ticker} /></div></details>
+
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <NarrativesPanel ticker={ticker} name={p.name} />
         <EarningsCallPanel ticker={ticker} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+      <details className="border-y py-3"><summary className="cursor-pointer text-sm font-semibold">Financial trends · revenue, profitability & margins</summary><div className="grid grid-cols-1 gap-3 pt-3 lg:grid-cols-2">
         <RevenueBars ticker={ticker} data={data} />
         <MarginLines data={data} />
-      </div>
+      </div></details>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
         <Panel

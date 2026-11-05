@@ -74,6 +74,19 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
+  useEffect(() => {
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent<unknown>).detail;
+      if (typeof detail === "string") { setInput(detail); inputRef.current?.focus(); }
+    };
+    window.addEventListener("fu:research-request", receive);
+    return () => window.removeEventListener("fu:research-request", receive);
+  }, []);
+  useEffect(() => {
+    const resize = () => setBox((b) => clampBox(b));
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
 
   function clampBox(b: typeof box) {
     const W = window.innerWidth, H = window.innerHeight;
@@ -126,7 +139,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
         session = data.id;
         setSid(session);
         titleSession({ data: { question: q } })
-          .then((title) => supabase.from("research_sessions").update({ title }).eq("id", session!))
+          .then((title) => session ? supabase.from("research_sessions").update({ title }).eq("id", session) : undefined)
           .then(() => qc.invalidateQueries({ queryKey: ["research-sessions"] }))
           .catch(() => {});
       }
@@ -173,7 +186,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       content: turn.error ? `${turn.content}\n\n> Error: ${turn.error}` : turn.content,
       steps: turn.steps.map(({ output: _o, ...s }) => s) as never,
     });
-    await supabase.from("research_sessions").update({ updated_at: new Date().toISOString() }).eq("id", session!);
+    if (session) await supabase.from("research_sessions").update({ updated_at: new Date().toISOString() }).eq("id", session);
     qc.invalidateQueries({ queryKey: ["research-sessions"] });
     setBusy(false);
   }
@@ -189,8 +202,8 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       aria-label="AI assistant"
       style={docked ? { width: ASSISTANT_WIDTH } : { left: box.x, top: box.y, width: box.w, height: box.h }}
       className={cn(
-        "fixed z-30 flex max-w-full flex-col bg-background",
-        docked ? "inset-y-0 right-0 border-l border-rule transition-transform duration-300" : "overflow-hidden rounded-xl border border-rule shadow-lift transition-opacity duration-200",
+        "fixed z-30 flex max-w-full flex-col bg-background max-sm:!inset-0 max-sm:!h-dvh max-sm:!w-full max-sm:!rounded-none",
+        docked ? "inset-y-0 right-0 w-full border-l border-rule transition-transform duration-300 max-sm:!w-full" : "overflow-hidden rounded-lg border border-rule shadow-lift transition-opacity duration-200",
         open ? (docked ? "translate-x-0 shadow-panel" : "opacity-100") : docked ? "pointer-events-none invisible translate-x-full" : "pointer-events-none invisible opacity-0",
       )}
     >
@@ -217,30 +230,14 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-thin">
         {!msgs.length ? (
           <div className="animate-[rise_.4s_ease-out]">
-            <p className="font-display text-[22px] leading-tight">Research anything. It plans, digs, checks itself and shows its work.</p>
-            <div className="mt-4 grid grid-cols-2 gap-1.5 text-[11px] text-muted-foreground">
-              {[
-                [Compass, "Drives the app & reads your screen"],
-                [Code2, "Runs code for models & screens"],
-                [Globe, "Searches, maps, crawls & extracts the web"],
-                [ListChecks, "Plans, loops, self-reviews, asks when unsure"],
-              ].map(([I, t], i) => {
-                const Icon = I as typeof Compass;
-                return (
-                  <div key={i} className="flex items-start gap-1.5 rounded-md border bg-card p-2">
-                    <Icon className="mt-px size-3.5 shrink-0 text-foreground" />
-                    <span className="leading-snug">{t as string}</span>
-                  </div>
-                );
-              })}
-            </div>
-            <p className="mb-1.5 mt-5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Try</p>
+            <p className="font-display text-xl leading-tight">Your research desk</p>
+            <p className="mb-2 mt-4 text-[11px] font-medium text-muted-foreground">Suggested investigations</p>
             <div className="grid grid-cols-1 gap-1.5">
               {suggestionsFor(path).map((s) => (
-                <button key={s} onClick={() => ask(s)} className="group flex items-center gap-2 rounded-lg border bg-card px-2.5 py-2 text-left text-[12.5px] leading-snug shadow-paper transition-colors hover:border-rule hover:bg-secondary/60">
+                <Button variant="ghost" key={s} onClick={() => setInput(s)} className="group h-auto w-full justify-start gap-2 whitespace-normal rounded-none border-b px-0 py-3 text-left text-[12.5px] leading-snug">
                   <span className="flex-1">{s}</span>
                   <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -304,14 +301,13 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
               {(["Fast", "Deep"] as const).map((l) => {
                 const on = (l === "Deep") === deep;
                 return (
-                  <button key={l} type="button" role="radio" aria-checked={on} onClick={() => setDeep(l === "Deep")} className={cn("rounded px-1.5 py-0.5 transition-colors", on ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:text-foreground")}
+                  <Button variant="ghost" size="xs" key={l} type="button" role="radio" aria-checked={on} onClick={() => setDeep(l === "Deep")} className={cn("h-6 rounded px-1.5 text-[10.5px] transition-colors", on ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:text-foreground")}
                     title={l === "Deep" ? "More loops, cross-checks and a self-review pass" : "Quick answers"}>
                     {l}
-                  </button>
+                  </Button>
                 );
               })}
             </div>
-            <span className="ml-1 hidden text-[10px] text-muted-foreground sm:inline">⏎ send · ⇧⏎ newline</span>
             <div className="ml-auto">
               {busy && !question ? (
                 <Button type="button" size="icon-sm" variant="outline" onClick={halt} aria-label="Stop">
@@ -394,7 +390,8 @@ function StepRow({ s }: { s: Step }) {
 function PlanCard({ plan, live }: { plan: Plan; live: boolean }) {
   const done = plan.steps.filter((s) => s.status === "done").length;
   return (
-    <div className="rounded-lg border bg-card p-2.5 shadow-paper">
+    <details open={live ? true : undefined} className="border-y bg-card/40 p-2.5">
+      <summary className="cursor-pointer text-[11px] font-medium">Research plan · {done}/{plan.steps.length}</summary>
       <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         <ListChecks className="size-3.5" /> Plan
         <span className="ml-auto font-mono normal-case tracking-normal">{done}/{plan.steps.length}</span>
@@ -411,7 +408,7 @@ function PlanCard({ plan, live }: { plan: Plan; live: boolean }) {
           </li>
         ))}
       </ul>
-    </div>
+    </details>
   );
 }
 
@@ -420,20 +417,21 @@ function AssistantTurn({ m }: { m: Msg }) {
   const steps = m.steps.filter((s) => s.name !== "sources");
   const sources = Array.from(new Map(m.steps.flatMap((s) => s.sources ?? []).map((x) => [x.url, x])).values());
   const showSteps = open || m.pending;
+  const visibleSteps = open ? steps : steps.slice(-3);
   const tools = steps.filter((s) => s.kind !== "think").length;
   return (
     <div className="grid grid-cols-1 gap-2.5">
       {m.plan && m.plan.steps.length > 0 && <PlanCard plan={m.plan} live={!!m.pending} />}
       {steps.length > 0 && (
         <div>
-          <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" size="xs" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="h-6 px-0 text-[11px] text-muted-foreground">
             <ChevronRight className={cn("size-3 transition-transform", showSteps && "rotate-90")} />
             {m.pending ? "Working" : "Worked"} · {tools} tool{tools === 1 ? "" : "s"}
             {sources.length > 0 && ` · ${sources.length} sources`}
-          </button>
+          </Button>
           {showSteps && (
             <ol className="ml-[7px] mt-1.5 grid grid-cols-1 gap-1.5 border-l pl-3">
-              {steps.map((s, i) => (
+              {visibleSteps.map((s, i) => (
                 <StepRow key={i} s={s} />
               ))}
             </ol>
@@ -453,6 +451,7 @@ function AssistantTurn({ m }: { m: Msg }) {
               <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt={host(x.url)} className="size-4 rounded-sm border" loading="lazy" />
             </a>
           ))}
+          {sources.length > 0 && <details className="ml-1 text-[11px]"><summary className="cursor-pointer text-muted-foreground">All {sources.length} sources</summary><ul className="mt-2 space-y-1">{sources.map((x) => <li key={x.url}><a className="block truncate text-link hover:underline" href={x.url} target="_blank" rel="noreferrer">{x.title ?? host(x.url)}</a></li>)}</ul></details>}
         </div>
       )}
     </div>

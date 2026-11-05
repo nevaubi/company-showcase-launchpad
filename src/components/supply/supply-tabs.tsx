@@ -36,7 +36,7 @@ export function ChangesTab({ ticker, name, onOpen }: { ticker: string; name: str
       {changes.length === 0 ? (
         <p className="text-sm text-muted-foreground">No named counterparties added or dropped.</p>
       ) : (
-        <ul className="max-h-[440px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+        <ul className="space-y-2">
           {changes.map((c) => (
             <li key={c.kind + c.key} className="rounded-lg border p-2.5 text-sm">
               <div className="flex items-center gap-2">

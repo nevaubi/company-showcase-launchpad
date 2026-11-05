@@ -42,7 +42,7 @@ export function AnswerChart({ spec }: { spec: ChartSpec }) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
             <XAxis dataKey={x} tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" />
             <YAxis tick={{ fontSize: 10 }} width={44} stroke="var(--muted-foreground)" tickFormatter={(v) => fmt(v, spec.unit)} />
-            <Tooltip formatter={(v) => fmt(v, spec.unit)} contentStyle={{ fontSize: 11 }} />
+            <Tooltip formatter={(v) => fmt(v, spec.unit)} contentStyle={{ fontSize: 11, background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)" }} />
             {series.length > 1 && <Legend wrapperStyle={{ fontSize: 10 }} />}
             {series.map((k, i) =>
               spec.type === "bar" ? (

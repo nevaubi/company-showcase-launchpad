@@ -68,7 +68,7 @@ export function PeerTable({ ticker }: { ticker: string }) {
       bodyClassName="p-0"
     >
       <div className="overflow-x-auto scrollbar-thin">
-        <table className="w-full text-[12.5px]">
+        <table className="research-table">
           <thead>
             <tr className="border-b text-left text-[10.5px] uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-2 font-medium">Company</th>

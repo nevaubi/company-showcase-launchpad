@@ -1,5 +1,7 @@
 import { createFileRoute, Link, notFound, Outlet, useRouterState } from "@tanstack/react-router";
-import { ArrowUpRight, Building, Globe, Star } from "lucide-react";
+import { ArrowUpRight, Building, ChevronDown, Globe, Sparkles, Star } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { requestResearch } from "@/lib/research/request";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +26,8 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
         { name: "description", content: `${c?.shortName} financials, filings, segments and insider trades with source attribution.` },
         { property: "og:title", content: t },
         { property: "og:description", content: `${c?.shortName} research file on Filed Under.` },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary" },
       ],
     };
   },
@@ -51,6 +55,11 @@ const TABS = [
   { to: "/app/companies/$ticker/insiders", label: "Insiders" },
   { to: "/app/companies/$ticker/alt-data", label: "Alt data" },
 ] as const;
+const TAB_GROUPS = [
+  { label: "Financials", paths: ["financials", "valuation", "ir"] },
+  { label: "Intelligence", paths: ["earnings", "estimates", "insiders", "alt-data"] },
+  { label: "Documents", paths: ["calls", "filings"] },
+];
 
 function CompanyLayout() {
   const { ticker: raw } = Route.useParams();
@@ -111,6 +120,7 @@ function CompanyLayout() {
             <Skeleton className="h-8 w-32" />
           )}
           <div className="flex flex-wrap justify-end gap-1">
+            <Button size="xs" variant="outline" onClick={() => requestResearch(`Build a sourced investment brief for ${ticker}: latest results, valuation, estimates, supply-chain risks and upcoming catalysts. Read the company pages and distinguish reported facts from estimates.`)}><Sparkles /> Research</Button>
             <Button size="xs" variant={follow.isFollowed(ticker) ? "secondary" : "outline"} onClick={() => follow.toggle(ticker)} disabled={follow.pending}>
               <Star className={cn(follow.isFollowed(ticker) && "fill-current")} />
               {follow.isFollowed(ticker) ? "Following" : "Follow"}
@@ -153,35 +163,23 @@ function CompanyLayout() {
         </div>
       </div>
 
-      <nav className="mb-4 flex gap-0.5 overflow-x-auto border-b scrollbar-thin">
-        {TABS.map((t) => {
-          const href = t.to.replace("$ticker", ticker);
-          const active = "exact" in t && t.exact ? pathname === href || pathname === href + "/" : pathname.startsWith(href);
-          return (
-            <Link
-              key={t.to}
-              to={t.to}
-              params={{ ticker }}
-              className={cn(
-                "-mb-px whitespace-nowrap border-b-2 border-transparent px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground",
-                active && "border-foreground font-medium text-foreground",
-              )}
-            >
-              {t.label}
-            </Link>
-          );
+      <nav aria-label="Company research" className="mb-4 flex flex-wrap items-center gap-1 border-b pb-1">
+        <Button variant={pathname.replace(/\/$/, "") === `/app/companies/${ticker}` ? "secondary" : "ghost"} size="sm" asChild><Link to="/app/companies/$ticker" params={{ ticker }}>Overview</Link></Button>
+        {TAB_GROUPS.map((group) => {
+          const tabs = TABS.filter((t) => group.paths.includes(t.to.split("/").at(-1) ?? ""));
+          const active = tabs.find((t) => pathname.startsWith(t.to.replace("$ticker", ticker)));
+          return <DropdownMenu key={group.label}>
+            <DropdownMenuTrigger asChild><Button variant={active ? "secondary" : "ghost"} size="sm">{group.label}<ChevronDown className="size-3" /></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="start">{tabs.map((t) => <DropdownMenuItem key={t.to} asChild><Link to={t.to} params={{ ticker }} aria-current={t === active ? "page" : undefined}>{t.label}</Link></DropdownMenuItem>)}</DropdownMenuContent>
+          </DropdownMenu>;
         })}
-        <Link
-          to="/app/markets"
-          search={{ symbol: ticker }}
-          className="-mb-px whitespace-nowrap border-b-2 border-transparent px-2.5 py-1.5 text-[13px] text-muted-foreground transition-colors hover:text-foreground"
-        >
-          Technicals ↗
-        </Link>
+        <Button variant="ghost" size="sm" asChild><Link to="/app/markets" search={{ symbol: ticker }}>Technicals <ArrowUpRight className="size-3" /></Link></Button>
+        <Button variant="ghost" size="sm" asChild><Link to="/app/supply-chain" search={{ t: ticker }}>Supply chain <ArrowUpRight className="size-3" /></Link></Button>
+        {TABS.find((t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker))) && <span className="ml-auto py-1 text-xs text-muted-foreground">{TABS.find((t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker)))?.label}</span>}
       </nav>
 
       {company.isError ? (
-        <p className="text-sm text-negative">Couldn't load this company's dataset: {(company.error as Error).message}</p>
+        <div className="flex flex-wrap items-center gap-3 border-l-2 border-negative p-4"><p className="text-sm text-negative">Company data is temporarily unavailable.</p><Button size="sm" variant="outline" onClick={() => company.refetch()}>Retry</Button></div>
       ) : (
         <Outlet />
       )}

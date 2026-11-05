@@ -1,5 +1,13 @@
 # Filed Under — roadmap
 
+## Interface quality upgrade (Nov 5)
+- [x] Company first-screen hierarchy and grouped navigation
+- [x] Consistent compact tables and source evidence
+- [x] Compact assistant workflow and connected research actions
+- [x] Progressive disclosure without section-internal scrolling
+- [x] Retained filters, clear loading/empty/error and dated-refresh states
+- [x] Authenticated desktop/mobile research-flow verification (company navigation, evidence handoff, filters, supply flow, chart wheel and live assistant navigation)
+
 ## Done (verified end to end in the browser)
 - [x] Real-data ingestion pipeline (SEC XBRL statements, filings index, segments from iXBRL, Form 4 insiders + combined feed, earnings releases)
 - [x] Design system (paper/ink/highlighter), fonts, brand logo + favicon

@@ -181,7 +181,7 @@ export function RegionShockPanel({ country, links, signals, revenue, names, onPi
       </div>
       <p className="mb-2 text-xs text-muted-foreground">If {c} is cut off — export controls, conflict, tariffs — these covered companies are exposed through their own filings. Score weights single-source ties, stated dollars vs revenue, facilities and policy flags.</p>
       {!hits.length ? <p className="text-sm text-muted-foreground">No covered company ties a link or facility to {c}.</p> : (
-        <ul className="max-h-[420px] space-y-1 overflow-y-auto pr-1 scrollbar-thin">
+        <ul className="space-y-1">
           {hits.slice(0, 30).map((h) => (
             <li key={h.ticker}>
               <button type="button" onClick={() => onPick(h.ticker)} className="group grid w-full grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-1.5 py-1.5 text-left hover:bg-muted">
@@ -299,7 +299,7 @@ export function EcosystemBasket({ ticker, name, graph, names }: { ticker: string
             <div className="grid grid-cols-[minmax(0,1fr)_64px_48px_44px] gap-x-2 border-b pb-1 text-[10.5px] uppercase tracking-wide text-muted-foreground">
               <span>Member</span><span className="text-right">Return</span><span className="text-right">Vol</span><span className="text-right">ρ</span>
             </div>
-            <ul className="max-h-[250px] overflow-y-auto scrollbar-thin">
+            <ul>
               {b.members.map((m) => {
                 const maxAbs = Math.max(...b.members.map((x) => Math.abs(x.ret)), 0.01);
                 return (

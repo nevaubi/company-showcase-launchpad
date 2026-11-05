@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, Calculator, FileText, Sigma, X } from "lucide-react";
+import { ArrowUpRight, Calculator, FileText, Sigma, Sparkles, X } from "lucide-react";
+import { requestResearch } from "@/lib/research/request";
 import { useSource } from "./source-context";
 import { FilingViewer, type FactLocator } from "./filing-viewer";
 import { useCompany } from "@/lib/data";
@@ -32,6 +33,7 @@ export function SourcePanel() {
 
   useEffect(() => {
     if (!target) return setActive(null);
+    if (target.external) return setActive(null);
     if (target.doc?.irDoc) {
       setActive({ accn: target.doc.accn, irDoc: target.doc.irDoc, locator: target.doc.search ? { search: target.doc.search } : undefined });
     } else if (target.doc) {
@@ -57,6 +59,7 @@ export function SourcePanel() {
   return (
     <aside
       aria-hidden={!open}
+      aria-label="Source evidence"
       style={{ width: PANEL_WIDTH }}
       className={cn(
         "fixed inset-y-0 right-0 z-40 flex max-w-full flex-col border-l border-rule bg-background transition-[transform,box-shadow] duration-300 ease-[cubic-bezier(0.2,0.7,0.2,1)]",
@@ -75,7 +78,7 @@ export function SourcePanel() {
                 {target.label}
                 {target.periodLabel && <span className="font-normal text-muted-foreground"> · {target.periodLabel}</span>}
               </h2>
-              {!target.doc && (
+              {!target.doc && !target.external && (
                 <p className="num mt-1 text-2xl font-medium tracking-tight">
                   <span className="hl">{fmtValueLong(target.value, target.unit)}</span>
                   {target.approx && <span className="ml-2 align-middle text-xs text-muted-foreground">approx.</span>}
@@ -89,6 +92,11 @@ export function SourcePanel() {
           </header>
 
           <div className="max-h-[38%] shrink-0 space-y-3 overflow-y-auto border-b bg-card/60 px-5 py-3 scrollbar-thin">
+            {target.external && <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
+              <dt className="text-muted-foreground">Source</dt><dd className="break-all">{sourceHost(target.external.url)}</dd>
+              <dt className="text-muted-foreground">Date</dt><dd>{target.external.date ? fmtDate(target.external.date) : "Not supplied"}</dd>
+              <dt className="text-muted-foreground">Evidence</dt><dd>{target.external.confidence ?? "Public source · not independently verified"}</dd>
+            </dl>}
             {target.src && <FactCard src={target.src} filing={byAccn.get(target.src.accn)} cik={cik} />}
             {target.derived && (
               <div>
@@ -124,16 +132,16 @@ export function SourcePanel() {
                 </ul>
               </div>
             )}
-            {target.alts && target.alts.length > 0 && (
+            {target.src && target.alts && target.alts.length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground">Same value also reported in</p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {[target.src!.accn, ...target.alts].map((a) => {
+                  {[target.src.accn, ...target.alts].map((a) => {
                     const f = byAccn.get(a);
                     return (
                       <button
                         key={a}
-                        onClick={() => setActive({ accn: a, locator: locatorOf(target.src!, target.unit as string) })}
+                        onClick={() => { if (target.src) setActive({ accn: a, locator: locatorOf(target.src, target.unit as string) }); }}
                         className={cn(
                           "rounded border bg-card px-2 py-1 text-[11px] transition-colors hover:border-rule hover:bg-secondary",
                           active?.accn === a && "border-foreground/40 bg-highlight-soft",
@@ -151,7 +159,10 @@ export function SourcePanel() {
           </div>
 
           <div className="min-h-0 flex-1">
-            {active?.irDoc ? (
+            {target.external ? <div className="space-y-4 p-5">
+              {target.external.quote && <blockquote className="border-l-2 border-highlight pl-4 text-sm leading-relaxed">“{target.external.quote}”</blockquote>}
+              <Button variant="outline" size="sm" asChild><a href={target.external.url} target="_blank" rel="noreferrer">Open original record <ArrowUpRight /></a></Button>
+            </div> : active?.irDoc ? (
               <FilingViewer key={active.irDoc} irDocId={active.irDoc} cik={cik} accn={active.accn} doc="" locator={active.locator} className="h-full" />
             ) : active && cik ? (
               <ResolvedViewer cik={cik} accn={active.accn} doc={active.doc} filing={filing} locator={active.locator} />
@@ -161,6 +172,13 @@ export function SourcePanel() {
               </div>
             )}
           </div>
+          <footer className="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-2">
+            <span className="text-[11px] text-muted-foreground">{target.ticker} · Evidence</span>
+            <Button size="xs" variant="outline" onClick={() => {
+              requestResearch(`Investigate ${target.ticker}: ${target.label}. Cross-check this evidence and explain its investment implications. ${target.external ? `Source: ${target.external.url}\n${target.external.quote ?? ""}` : `Filing: ${target.doc?.accn ?? target.src?.accn ?? "derived components"}\n${target.doc?.search ?? ""}`}`);
+              close();
+            }}><Sparkles /> Investigate</Button>
+          </footer>
         </>
       )}
     </aside>
@@ -276,4 +294,8 @@ function guessUnit(concept: string, fallback: string) {
   if (/NumberOfShares|SharesOutstanding/.test(concept)) return "shares";
   if (fallback === "pct" || fallback === "ratio") return "usd";
   return fallback;
+}
+
+function sourceHost(url: string) {
+  try { return new URL(url).hostname; } catch { return "Public record"; }
 }

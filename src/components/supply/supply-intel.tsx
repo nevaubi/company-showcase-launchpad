@@ -9,6 +9,7 @@ import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { concentrationBasis } from "@/lib/supply/core";
 import { byCounterparty, quoteLink, signalConfidence, type CpConfidence } from "@/lib/supply/counterparty";
+import { Button } from "@/components/ui/button";
 const BASIS: Record<string, string> = { revenue: "of revenue", receivables: "of receivables", vendor: "vendor receivables", channel: "of sales by channel", other: "" };
 
 export interface Signal {
@@ -77,7 +78,7 @@ export function SupplyIntel({ ticker }: { ticker: string }) {
   const openSig = (s: Signal) => {
     if ((s.source_kind === "filing" || s.source_kind === "exhibit") && s.accn && s.doc)
       open({ ticker: s.ticker, label: s.title, unit: "usd", value: 0, doc: { accn: s.accn, doc: s.doc, form: s.form ?? "", filed: s.filed ?? "", title: `${s.ticker} ${s.form}`, search: s.quote } });
-    else if (s.url) window.open(quoteLink(s.url, s.quote), "_blank", "noopener,noreferrer");
+    else if (s.url) open({ ticker: s.ticker, label: s.title, unit: "usd", value: 0, external: { url: quoteLink(s.url, s.quote), quote: s.quote, date: s.filed ?? undefined, confidence: `${signalConfidence(s)} confidence` } });
   };
 
   return (
@@ -99,7 +100,7 @@ export function SupplyIntel({ ticker }: { ticker: string }) {
               ))}
               {country && <button onClick={() => setCountry(null)} className="rounded-full border border-foreground px-2.5 py-1 text-xs">{country} ✕</button>}
             </div>
-            <div className="max-h-[640px] space-y-2 overflow-y-auto pr-1">
+            <div className="space-y-2">
               {shown.map((s) => {
                 const Icon = SRC_ICON[s.source_kind] ?? FileText;
                 return (
@@ -193,7 +194,7 @@ export function CounterpartyEvidence({ ticker }: { ticker: string }) {
   const openSig = (s: Signal) => {
     if (s.source_kind === "exhibit" && s.accn && s.doc)
       open({ ticker: s.ticker, label: s.title, unit: "usd", value: 0, doc: { accn: s.accn, doc: s.doc, form: s.form ?? "", filed: s.filed ?? "", title: `${s.ticker} ${s.form}`, search: s.quote } });
-    else if (s.url) window.open(quoteLink(s.url, s.quote), "_blank", "noopener,noreferrer");
+    else if (s.url) open({ ticker: s.ticker, label: s.title, unit: "usd", value: 0, external: { url: quoteLink(s.url, s.quote), quote: s.quote, date: s.filed ?? undefined, confidence: `${signalConfidence(s)} confidence` } });
   };
   return (
     <Panel title="Contracts & earnings calls by counterparty" subtitle="Every named party in filed contract exhibits and management's call remarks, with dates and a confidence label. Click a statement to open its source at the quoted passage.">
@@ -201,7 +202,7 @@ export function CounterpartyEvidence({ ticker }: { ticker: string }) {
         <p className="py-8 text-center text-sm text-muted-foreground">No named counterparties in contracts or calls yet for this company.</p>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_minmax(0,1fr)]">
-          <div className="max-h-[560px] min-w-0 space-y-1 overflow-y-auto pr-1">
+          <div className="min-w-0 space-y-1">
             {groups.map((x) => (
               <button key={x.key} onClick={() => setSel(x.key)} className={cn("block w-full rounded-md border p-2 text-left text-xs hover:bg-muted/50", x.key === g?.key ? "border-foreground/40 bg-muted/60" : "border-border")}>
                 <div className="flex items-center justify-between gap-2"><span className="truncate font-medium">{x.name}</span><ConfBadge c={x.confidence} short /></div>
@@ -219,7 +220,7 @@ export function CounterpartyEvidence({ ticker }: { ticker: string }) {
                 <h4 className="text-base font-semibold">{g.name}</h4>
                 {g.amount != null && <Chip>largest stated {fmtCompactUsd(g.amount)}</Chip>}
               </div>
-              <ol className="max-h-[520px] space-y-2 overflow-y-auto border-l border-border pl-4">
+              <ol className="space-y-2 border-l border-border pl-4">
                 {g.signals.map((s) => {
                   const c = signalConfidence(s);
                   const Icon = s.kind === "contract" ? ScrollText : Mic;

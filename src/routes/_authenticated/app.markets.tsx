@@ -42,6 +42,8 @@ export const Route = createFileRoute("/_authenticated/app/markets")({
   validateSearch: pageSearch,
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Technicals — Filed Under" },
       { name: "description", content: "Candlestick charts, moving averages, RSI, MACD and AI chart reads." },
       { property: "og:title", content: "Technicals — Filed Under" },

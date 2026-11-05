@@ -8,6 +8,8 @@ export interface SourceTarget {
   periodLabel?: string;
   unit: Unit | string;
   value: number;
+  /** Public evidence is previewed as metadata/quote, never embedded as untrusted remote HTML. */
+  external?: { url: string; quote?: string; date?: string; confidence?: string };
   src?: SourceRef;
   alts?: string[];
   derived?: { formula: string; parts: DerivedPart[] };

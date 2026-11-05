@@ -167,11 +167,11 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "cv11";
-    letter-spacing: -0.005em;
+    letter-spacing: 0;
   }
 
   .font-display, h1, h2 {
-    letter-spacing: -0.025em;
+    letter-spacing: 0;
     font-weight: 600;
   }
 
@@ -233,13 +233,34 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     font-feature-settings: "zero" 0;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
 
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--rule) transparent;
   }
+
+  .research-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .research-table th {
+    background: var(--muted);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--muted-foreground);
+    border-bottom: 1px solid var(--rule);
+  }
+  .research-table td { border-bottom: 1px solid var(--border); }
+  .research-table tbody tr:last-child td { border-bottom: 0; }
+  .research-table tbody tr:hover { background: var(--secondary); }
+  .research-table td.num { white-space: nowrap; }
+  .research-table :is(th, td) { padding: 0.5rem 0.75rem; }
+  .research-table td a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 
   .brand-invert {
     filter: invert(1) brightness(1.05);
@@ -424,4 +445,5 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .text-shimmer { animation: none; color: var(--muted-foreground); background: none; }
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

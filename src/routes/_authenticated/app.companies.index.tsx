@@ -10,6 +10,9 @@ import { Input } from "@/components/ui/input";
 import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import { useToggleFollow } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useSessionState } from "@/lib/use-session-state";
 
 export const Route = createFileRoute("/_authenticated/app/companies/")({
   head: () => ({
@@ -18,6 +21,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/")({
       { name: "description", content: "Covered companies with SEC-sourced fundamentals and live prices." },
       { property: "og:title", content: "Companies — Filed Under" },
       { property: "og:description", content: "Covered companies with SEC-sourced fundamentals and live prices." },
+      { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Companies,
@@ -29,9 +33,10 @@ function Companies() {
   const u = useUniverse();
   const quotes = useQuotes(COVERAGE_TICKERS);
   const follow = useToggleFollow();
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "mcap", dir: -1 });
-  const [sector, setSector] = useState<string>("All");
-  const [q, setQ] = useState("");
+  const [sort, setSort] = useSessionState<{ key: SortKey; dir: 1 | -1 }>("fu:companies:sort", { key: "mcap", dir: -1 });
+  const [sector, setSector] = useSessionState<string>("fu:companies:sector", "All");
+  const [q, setQ] = useSessionState("fu:companies:query", "");
+  const [limit, setLimit] = useState(50);
   const sectors = useMemo(() => {
     const m = new Map<string, number>();
     for (const c of COVERAGE) m.set(c.sector, (m.get(c.sector) ?? 0) + 1);
@@ -80,14 +85,14 @@ function Companies() {
   }, [rows, sort, sector, q]);
 
   const Th = ({ k, children, className }: { k: SortKey; children: React.ReactNode; className?: string }) => (
-    <th className={cn("px-3 py-2 font-medium", className)}>
-      <button
+    <th aria-sort={sort.key === k ? sort.dir === 1 ? "ascending" : "descending" : "none"} className={cn("px-3 py-2 font-medium", className)}>
+      <Button variant="ghost" size="xs"
         onClick={() => setSort((s) => ({ key: k, dir: s.key === k ? (-s.dir as 1 | -1) : k === "ticker" || k === "pe" ? 1 : -1 }))}
-        className="inline-flex items-center gap-1 uppercase hover:text-foreground"
+        className="h-6 gap-1 px-0 text-[11px] font-medium hover:bg-transparent"
       >
         {children}
         {sort.key === k && (sort.dir === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
-      </button>
+      </Button>
     </th>
   );
 
@@ -96,28 +101,17 @@ function Companies() {
       <PageHeader
         eyebrow="Coverage"
         title="Companies"
-        description="Every fundamental below is computed from XBRL facts in each company's 10-K and 10-Q filings. Prices are live from Yahoo Finance when available."
       />
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filter by name, ticker or industry" className="h-8 w-full sm:w-64" aria-label="Filter companies" />
-        <div className="flex flex-wrap gap-1">
-          {[["All", COVERAGE.length] as [string, number], ...sectors].map(([name, n]) => (
-            <button
-              key={name}
-              onClick={() => setSector(name)}
-              className={cn(
-                "rounded-full border px-2.5 py-1 text-xs transition-colors",
-                sector === name ? "border-ink bg-ink text-ink-foreground" : "bg-card text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {name} <span className="num opacity-60">{n}</span>
-            </button>
-          ))}
-        </div>
+        <Input value={q} onChange={(e) => { setQ(e.target.value); setLimit(50); }} placeholder="Name, ticker or industry" className="h-8 w-full sm:w-64" aria-label="Filter companies" />
+        <Select value={sector} onValueChange={(v) => { setSector(v); setLimit(50); }}><SelectTrigger aria-label="Filter sector" className="h-8 w-60"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="All">All sectors · {COVERAGE.length}</SelectItem>{sectors.map(([name, n]) => <SelectItem value={name} key={name}>{name} · {n}</SelectItem>)}</SelectContent></Select>
+        <span className="ml-auto text-xs text-muted-foreground">{sorted.length} companies</span>
+        {(q || sector !== "All") && <Button size="xs" variant="ghost" onClick={() => { setQ(""); setSector("All"); setLimit(50); }}>Clear filters</Button>}
       </div>
-      <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
+      {u.isError && <div role="alert" className="mb-3 flex items-center gap-3 text-sm text-muted-foreground">{u.data ? "Refresh failed; showing the last available dataset." : "Company data is temporarily unavailable."}<Button size="xs" variant="outline" onClick={() => u.refetch()}>Retry</Button></div>}
+      <div className="border-y bg-card/40">
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full text-[13px]">
+          <table className="research-table">
             <thead>
               <tr className="border-b text-left text-[10px] tracking-wider text-muted-foreground">
                 <th className="w-8 px-3 py-2" />
@@ -156,12 +150,12 @@ function Companies() {
                     </td>
                   </tr>
                 ))}
-              {sorted.map((r) => (
+              {sorted.slice(0, limit).map((r) => (
                 <tr key={r.ticker} className="border-b last:border-0 hover:bg-secondary/60">
                   <td className="px-3 py-1.5">
-                    <button onClick={() => follow.toggle(r.ticker)} aria-label={follow.isFollowed(r.ticker) ? `Unfollow ${r.ticker}` : `Follow ${r.ticker}`}>
+                    <Button variant="ghost" size="icon-sm" disabled={follow.pending} onClick={() => follow.toggle(r.ticker)} aria-label={follow.isFollowed(r.ticker) ? `Unfollow ${r.ticker}` : `Follow ${r.ticker}`}>
                       <Star className={cn("size-4 text-muted-foreground", follow.isFollowed(r.ticker) && "fill-chart-2 text-chart-2")} />
-                    </button>
+                    </Button>
                   </td>
                   <td className="px-3 py-1.5">
                     <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }} className="flex items-center gap-3">
@@ -200,6 +194,7 @@ function Companies() {
           </table>
         </div>
       </div>
+      {sorted.length > limit && <Button variant="ghost" className="mt-2 w-full" onClick={() => setLimit((n) => n + 50)}>Show 50 more · {sorted.length - limit} remaining</Button>}
       <p className="mt-3 text-[11px] text-muted-foreground">
         TTM = sum of the last four reported quarters. Revenue YoY compares the latest quarter with the same quarter a year earlier. Fundamentals snapshot generated{" "}
         {fmtDate(u.data?.generatedAt)}.

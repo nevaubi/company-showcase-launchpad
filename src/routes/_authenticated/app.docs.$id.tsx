@@ -14,6 +14,8 @@ import { fmtRelative } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/app/docs/$id")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Document — Filed Under" },
       { name: "description", content: "Research document editor." },
       { property: "og:title", content: "Document — Filed Under" },

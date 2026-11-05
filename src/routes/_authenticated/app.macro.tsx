@@ -30,6 +30,8 @@ export const Route = createFileRoute("/_authenticated/app/macro")({
   validateSearch: macroSearch,
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Macro — Filed Under" },
       { name: "description", content: "120 U.S. government economic series — rates, inflation, labor, growth, fiscal, energy — with percentiles, comparisons and an AI macro brief." },
       { property: "og:title", content: "Macro — Filed Under" },

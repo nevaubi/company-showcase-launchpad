@@ -24,6 +24,13 @@ const pageSearch = z.object({
 });
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/financials")({
+  head: ({ params }) => ({ meta: [
+    { title: `${params.ticker.toUpperCase()} Financial statements — Filed Under` },
+    { name: "description", content: `Annual and quarterly SEC income statements, balance sheets, cash flows and ratios with exact filing sources. Company: ${params.ticker.toUpperCase()}.` },
+    { property: "og:title", content: `${params.ticker.toUpperCase()} Financial statements — Filed Under` },
+    { property: "og:description", content: "Annual and quarterly SEC income statements, balance sheets, cash flows and ratios with exact filing sources." },
+    { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
+  ] }),
   validateSearch: pageSearch,
   component: Financials,
 });

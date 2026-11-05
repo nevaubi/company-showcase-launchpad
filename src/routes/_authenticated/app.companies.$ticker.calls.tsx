@@ -29,6 +29,8 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/call
     const name = coverageOf(t)?.shortName ?? t;
     return {
       meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
         { title: `${name} (${t}) earnings call transcripts — Filed Under` },
         { name: "description", content: `Read ${name}'s recent earnings calls by speaker: prepared remarks, every analyst question, talk time and key terms.` },
         { property: "og:title", content: `${name} earnings call transcripts — Filed Under` },

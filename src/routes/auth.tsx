@@ -21,6 +21,8 @@ export const Route = createFileRoute("/auth")({
   validateSearch: searchSchema,
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Sign in — Filed Under" },
       { name: "description", content: "Sign in to Filed Under, or open the demo workspace with live SEC, market and macro data." },
       { property: "og:title", content: "Sign in — Filed Under" },

@@ -14,6 +14,13 @@ import { fmtDate, SEC_FORM_LABEL } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/filings")({
+  head: ({ params }) => ({ meta: [
+    { title: `${params.ticker.toUpperCase()} Filings and IR documents — Filed Under` },
+    { name: "description", content: `Search and read SEC filings, earnings releases and investor-relations documents. Company: ${params.ticker.toUpperCase()}.` },
+    { property: "og:title", content: `${params.ticker.toUpperCase()} Filings and IR documents — Filed Under` },
+    { property: "og:description", content: "Search and read SEC filings, earnings releases and investor-relations documents." },
+    { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
+  ] }),
   component: Filings,
 });
 

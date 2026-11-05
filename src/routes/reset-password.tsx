@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label";
 export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Reset password — Filed Under" },
       { name: "description", content: "Choose a new password for your Filed Under account." },
       { property: "og:title", content: "Reset password — Filed Under" },

@@ -22,6 +22,8 @@ export const Route = createFileRoute("/_authenticated/app/sectors_/$sector")({
   },
   head: ({ params }) => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: `${params.sector} sector deep dive — Filed Under` },
       { name: "description", content: `${params.sector}: every covered company's returns, beta, correlations, earnings reactions and live chart patterns.` },
       { property: "og:title", content: `${params.sector} — Filed Under` },

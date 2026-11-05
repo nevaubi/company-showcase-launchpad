@@ -20,6 +20,8 @@ export const Route = createFileRoute("/_authenticated/app/research")({
   validateSearch: z.object({ session: z.string().uuid().optional(), q: z.string().max(500).optional() }),
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Research agent — Filed Under" },
       { name: "description", content: "An AI analyst that reads SEC filings, prices, FRED data and the web, and cites every source." },
       { property: "og:title", content: "Research agent — Filed Under" },

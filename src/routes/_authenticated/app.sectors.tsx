@@ -24,6 +24,8 @@ export const Route = createFileRoute("/_authenticated/app/sectors")({
   validateSearch: pageSearch,
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Sectors — Filed Under" },
       { name: "description", content: "Sector performance, fundamentals rolled up from SEC filings, government industry drivers and correlations." },
       { property: "og:title", content: "Sectors — Filed Under" },

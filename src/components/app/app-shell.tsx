@@ -106,6 +106,11 @@ function ShellInner({ children }: { children: ReactNode }) {
 
   useEffect(() => setMobileOpen(false), [pathname]);
   useEffect(() => {
+    const openResearch = () => setAiOpen(true);
+    window.addEventListener("fu:research-request", openResearch);
+    return () => window.removeEventListener("fu:research-request", openResearch);
+  }, []);
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
@@ -138,18 +143,19 @@ function ShellInner({ children }: { children: ReactNode }) {
         style={target ? ({ "--panel": PANEL_WIDTH } as React.CSSProperties) : undefined}
       >
         <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]", !target && aiOpen && aiDocked && "md:pr-[min(420px,100vw)]")}>
-          <header className="sticky top-0 z-20 flex h-12 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur lg:px-6">
+          <header className="@container sticky top-0 z-20 flex h-12 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur lg:px-6">
             <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setMobileOpen((o) => !o)} aria-label="Menu">
               {mobileOpen ? <X /> : <Menu />}
             </Button>
-            <button
+            <Button variant="outline"
               onClick={() => setCmdOpen(true)}
-              className="flex h-8 w-full max-w-sm items-center gap-2 rounded-md border bg-card px-2.5 text-sm text-muted-foreground shadow-paper transition-colors hover:border-rule"
+              aria-label="Search companies, pages, filings"
+              className="h-8 min-w-0 w-full max-w-sm justify-start gap-2 bg-card px-2.5 text-sm text-muted-foreground"
             >
               <Search className="size-3.5" />
               <span className="flex-1 truncate text-left">Search companies, pages, filings…</span>
               <kbd className="num rounded border bg-muted px-1.5 text-[10px]">⌘K</kbd>
-            </button>
+            </Button>
             <MarketTape />
             <div className="ml-auto md:ml-0"><AlertsBell /></div>
             <Button variant={aiOpen ? "ink" : "outline"} size="sm" className="shrink-0" onClick={() => setAiOpen((o) => !o)} aria-label="Assistant">
@@ -317,7 +323,7 @@ const TAPE_LABEL: Record<string, string> = { "^VIX": "VIX" };
 function MarketTape() {
   const q = useQuotes(TAPE);
   return (
-    <div className="ml-auto hidden items-center gap-4 md:flex">
+    <div className="ml-auto hidden shrink-0 items-center gap-4 @min-[760px]:flex">
       <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] text-muted-foreground">
         <Activity className="size-3" />
         {!q.data ? "Markets" : q.data.quotes.some((x) => "snapshot" in x) ? "Last close" : "Live"}
@@ -327,7 +333,7 @@ function MarketTape() {
           key={x.symbol}
           to="/app/markets"
           search={{ symbol: x.symbol }}
-          className={cn("num hidden items-baseline gap-1.5 whitespace-nowrap text-[11px]", i < 3 ? "xl:flex" : "2xl:flex")}
+          className={cn("num hidden items-baseline gap-1.5 whitespace-nowrap text-[11px]", i < 3 ? "@min-[1100px]:flex" : "@min-[1500px]:flex")}
         >
           <span className="font-medium">{TAPE_LABEL[x.symbol] ?? x.symbol}</span>
           <span className="text-muted-foreground">{x.price.toFixed(2)}</span>

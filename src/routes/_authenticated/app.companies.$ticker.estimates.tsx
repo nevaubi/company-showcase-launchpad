@@ -151,7 +151,7 @@ function EstimateTable({ e }: { e: Estimates }) {
   return (
     <Panel title="Consensus estimates" subtitle="Average, low and high analyst forecasts; growth is versus the same period a year earlier." actions={<SourceNote asOf={e.asOf} />}>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] text-sm">
+        <table className="research-table min-w-[720px]">
           <thead className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr className="border-b border-border">
               <th className="px-4 py-2 font-medium">Period</th>
@@ -192,7 +192,7 @@ function Revisions({ e }: { e: Estimates }) {
   return (
     <Panel title="Estimate revisions" subtitle="How consensus EPS moved, and how many analysts raised or cut." actions={<SourceNote asOf={e.asOf} />} className="min-w-0">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] text-sm">
+        <table className="research-table min-w-[520px]">
           <thead className="text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr className="border-b border-border">
               <th className="px-4 py-2 font-medium">Period</th>
@@ -356,7 +356,7 @@ function ActionsPanel({ e }: { e: Estimates }) {
         ))}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
+        <table className="research-table min-w-[640px]">
           <thead className="bg-card text-left text-[11px] uppercase tracking-wide text-muted-foreground">
             <tr className="border-b border-border">
               <th className="px-4 py-2 font-medium">Date</th><th className="px-3 py-2 font-medium">Firm</th><th className="px-3 py-2 font-medium">Action</th>

@@ -10,6 +10,8 @@ import { performance, readTechnicals } from "@/lib/company/technicals";
 import { fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useSessionState } from "@/lib/use-session-state";
 
 const RANGES: { id: Range; label: string }[] = [
   { id: "1mo", label: "1M" },
@@ -33,7 +35,7 @@ const LAYERS: { id: Layer; label: string; dot: string }[] = [
 
 /** Research price chart: area price with averages, index comparison, dated events and a plain-language read. */
 export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyDataset }) {
-  const [range, setRange] = useState<Range>("1y");
+  const [range, setRange] = useSessionState<Range>(`fu:chart:${ticker}:range`, "1y");
   const [on, setOn] = useState<Set<Layer>>(new Set(["averages", "earnings", "levels"]));
   const view = usePrices(ticker, range);
   const long = usePrices(ticker, "5y");
@@ -87,38 +89,40 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
       actions={
         <div className="flex rounded-md border bg-secondary/50 p-0.5">
           {RANGES.map((r) => (
-            <button
+            <Button variant="ghost" size="xs"
               key={r.id}
               onClick={() => setRange(r.id)}
-              className={cn("num rounded px-2 py-0.5 text-[11px]", range === r.id ? "bg-card font-medium shadow-paper" : "text-muted-foreground hover:text-foreground")}
+              aria-pressed={range === r.id}
+              className={cn("num h-6 rounded px-2 text-[11px]", range === r.id ? "bg-card font-medium shadow-paper" : "text-muted-foreground hover:text-foreground")}
             >
               {r.label}
-            </button>
+            </Button>
           ))}
         </div>
       }
-      bodyClassName="p-0"
+      bodyClassName="@container p-0"
       collapse={false}
     >
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px]">
-        <div className="min-w-0 border-b xl:border-b-0 xl:border-r">
+      <div className="grid grid-cols-1 @min-[900px]:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="min-w-0 border-b @min-[900px]:border-b-0 @min-[900px]:border-r">
           <div className="flex flex-wrap gap-1.5 px-3 pt-3">
             {LAYERS.map((l) => (
-              <button
+              <Button variant="ghost" size="xs"
                 key={l.id}
                 onClick={() => toggle(l.id)}
+                aria-pressed={on.has(l.id)}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] transition-colors",
+                  "h-6 gap-1.5 rounded border px-2 text-[11px] transition-colors",
                   on.has(l.id) ? "border-foreground/30 bg-card text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <span className={cn("size-1.5 rounded-full", l.dot, !on.has(l.id) && "opacity-40")} />
                 {l.label}
-              </button>
+              </Button>
             ))}
           </div>
           <div className="p-2">
-            {view.data ? (
+            {view.isError && !view.data ? <div role="alert" className="grid h-[400px] place-content-center gap-3 text-sm text-muted-foreground">Price history is temporarily unavailable.<Button size="sm" variant="outline" onClick={() => view.refetch()}>Retry</Button></div> : view.data && !bars.length ? <div className="grid h-[400px] place-content-center text-sm text-muted-foreground">No price history available for this period.</div> : view.data ? (
               <PriceChart
                 bars={bars}
                 mode="area"
@@ -132,7 +136,7 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
               <Skeleton className="h-[400px]" />
             )}
           </div>
-          <div className="grid grid-cols-4 border-t sm:grid-cols-7">
+          <div className="grid grid-cols-4 border-t @min-[650px]:grid-cols-7">
             {perf.map((p) => (
               <div key={p.label} className="min-w-0 border-r px-3 py-2 last:border-r-0">
                 <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">{p.label}</p>

@@ -30,6 +30,8 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")
   validateSearch: pageSearch,
   head: ({ params }) => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: `${params.ticker.toUpperCase()} investor-relations data · Filed Under` },
       { name: "description", content: `Segment and KPI breakdowns from ${params.ticker.toUpperCase()}'s earnings releases, supplements and presentations, each linked to the exact cell in the stored document.` },
       { property: "og:title", content: `${params.ticker.toUpperCase()} investor-relations data · Filed Under` },

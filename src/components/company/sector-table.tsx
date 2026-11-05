@@ -54,7 +54,7 @@ export function SectorTable({ ticker }: { ticker: string }) {
         <Skeleton className="m-4 h-60" />
       ) : (
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="w-full min-w-[1100px] text-[12.5px]">
+          <table className="research-table min-w-[1100px]">
             <thead>
               <tr className="border-b bg-secondary/40 text-left text-[10.5px] uppercase tracking-wide text-muted-foreground">
                 <th className="sticky left-0 z-10 bg-secondary/95 px-4 py-2 font-medium">Company</th>

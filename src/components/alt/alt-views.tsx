@@ -5,6 +5,8 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Too
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { DATASETS, fmtAlt, type AltRow } from "@/lib/alt/query";
+import { EvidenceButton } from "@/components/source/evidence-button";
+import { Button } from "@/components/ui/button";
 
 const fmtD = (d: string | null) => (d ? new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—");
 
@@ -36,7 +38,7 @@ function detail(r: AltRow): string | null {
 }
 
 export function AltEventList({ rows, showTicker, max = 200 }: { rows: AltRow[]; showTicker?: boolean; max?: number }) {
-  const [n, setN] = useState(60);
+  const [n, setN] = useState(15);
   const list = rows.slice(0, Math.min(n, max));
   if (!rows.length) return <p className="px-4 py-6 text-sm text-muted-foreground">Nothing on record yet.</p>;
   return (
@@ -60,20 +62,21 @@ export function AltEventList({ rows, showTicker, max = 200 }: { rows: AltRow[]; 
                   <ExternalLink className="mt-0.5 size-3 shrink-0 opacity-40 group-hover:opacity-100" />
                 </a>
                 {d && <p className="mt-0.5 line-clamp-2 text-[12px] text-muted-foreground">{d}</p>}
+                {r.source_url && <EvidenceButton ticker={r.ticker} title={r.title} url={r.source_url} date={r.date ?? undefined} />}
               </div>
             </li>
           );
         })}
       </ul>
       {rows.length > list.length && list.length < max && (
-        <button className="w-full border-t px-4 py-2 text-[12px] underline" onClick={() => setN((x) => x + 100)}>Show more ({rows.length - list.length} left)</button>
+        <Button variant="ghost" className="w-full rounded-none border-t text-xs" onClick={() => setN((x) => x + 25)}>Show 25 more ({Math.min(rows.length, max) - list.length} left)</Button>
       )}
     </div>
   );
 }
 
 export function AltSeriesChart({ rows, bar }: { rows: AltRow[]; bar?: boolean }) {
-  const data = useMemo(() => rows.map((r) => ({ d: r.date!.slice(0, bar ? 4 : 7), v: r.value })), [rows, bar]);
+  const data = useMemo(() => rows.flatMap((r) => r.date ? [{ d: r.date.slice(0, bar ? 4 : 7), v: r.value }] : []), [rows, bar]);
   const unit = rows[0]?.unit ?? null;
   const Chart = bar ? BarChart : LineChart;
   return (

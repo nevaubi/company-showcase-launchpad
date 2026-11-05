@@ -8,6 +8,8 @@ import { AltEventList } from "@/components/alt/alt-views";
 import { AltSignalsSection, SourceStrip } from "@/components/alt/alt-signals";
 import { altFeedQuery, altSeriesQuery, DATASETS, fmtAlt, leaderboard } from "@/lib/alt/query";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { EvidenceButton } from "@/components/source/evidence-button";
 
 const pageSearch = z.object({ d: z.string().optional() });
 
@@ -47,8 +49,8 @@ function AltHub() {
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         {SERIES_SETS.has(d) && <Leaders d={d} />}
         {d !== "bank" && d !== "attention" && d !== "complaints" && (
-          <Panel title="Latest across coverage" subtitle="Newest 300 records" bodyClassName="p-0 max-h-[900px] overflow-y-auto scrollbar-thin" className={cn(!SERIES_SETS.has(d) && "xl:col-span-2")}>
-            <Feed d={d} />
+          <Panel title="Latest across coverage" subtitle="Newest 300 records" bodyClassName="p-0" collapse={false} className={cn(!SERIES_SETS.has(d) && "xl:col-span-2")}>
+            <Feed key={d} d={d} />
           </Panel>
         )}
       </div>
@@ -59,6 +61,7 @@ function AltHub() {
 function Feed({ d }: { d: string }) {
   const q = useQuery(altFeedQuery(d));
   if (q.isLoading) return <Skeleton className="m-4 h-64" />;
+  if (q.isError && !q.data) return <div role="alert" className="space-y-2 p-4"><p className="text-sm text-muted-foreground">Records are temporarily unavailable.</p><Button variant="outline" size="xs" onClick={() => q.refetch()}>Retry</Button></div>;
   return <AltEventList rows={q.data ?? []} showTicker max={300} />;
 }
 
@@ -69,9 +72,9 @@ function Leaders({ d }: { d: string }) {
   const rows = useMemo(() => (title ? leaderboard(q.data ?? [], title) : []), [q.data, title]);
   return (
     <Panel title={title ?? "Leaderboard"} subtitle="Latest reading per company and change vs a year earlier" bodyClassName="p-0" className="min-w-0">
-      {q.isLoading ? <Skeleton className="m-4 h-64" /> : !rows.length ? <p className="px-4 py-6 text-sm text-muted-foreground">Not loaded yet.</p> : (
+      {q.isLoading ? <Skeleton className="m-4 h-64" /> : q.isError && !q.data ? <div role="alert" className="p-4 text-sm">Readings are temporarily unavailable. <Button size="xs" variant="outline" onClick={() => q.refetch()}>Retry</Button></div> : !rows.length ? <p className="px-4 py-6 text-sm text-muted-foreground">No readings available for this dataset.</p> : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[13px]">
+          <table className="research-table">
             <thead><tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-2 font-medium">Company</th><th className="px-2 py-2 font-medium">As of</th><th className="px-2 py-2 text-right font-medium">Latest</th><th className="px-4 py-2 text-right font-medium">vs 1y</th>
             </tr></thead>
@@ -80,7 +83,7 @@ function Leaders({ d }: { d: string }) {
                 <tr key={r.ticker} className="border-b last:border-0">
                   <td className="px-4 py-1.5"><Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="font-medium hover:underline">{r.ticker}</Link></td>
                   <td className="num px-2 text-[11px] text-muted-foreground">{r.last.date}{r.last.meta?.ytd ? " (YTD)" : ""}</td>
-                  <td className="num px-2 text-right"><a href={r.last.source_url ?? undefined} target="_blank" rel="noreferrer" className="hover:underline">{fmtAlt(r.last.value, r.last.unit)}</a></td>
+                  <td className="num px-2 text-right"><span>{fmtAlt(r.last.value, r.last.unit)}</span>{r.last.source_url && <EvidenceButton ticker={r.ticker} title={r.last.title} url={r.last.source_url} date={r.last.date ?? undefined} />}</td>
                   <td className={cn("num px-4 text-right", r.chg == null ? "text-muted-foreground" : r.chg >= 0 ? "text-positive" : "text-negative")}>{r.chg == null || r.last.meta?.ytd ? "—" : `${r.chg >= 0 ? "+" : ""}${(r.chg * 100).toFixed(0)}%`}</td>
                 </tr>
               ))}

@@ -4,6 +4,8 @@ import { AppShell } from "@/components/app/app-shell";
 export const Route = createFileRoute("/_authenticated/app")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Workspace — Filed Under" },
       { name: "description", content: "Your Filed Under research workspace." },
       { property: "og:title", content: "Workspace — Filed Under" },

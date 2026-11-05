@@ -24,6 +24,8 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/theses/$id")({
   head: () => ({
     meta: [
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
       { title: "Thesis — Filed Under" },
       { name: "description", content: "Thesis detail, price tracking and AI review." },
       { property: "og:title", content: "Thesis — Filed Under" },

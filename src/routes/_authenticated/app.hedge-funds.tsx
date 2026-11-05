@@ -207,7 +207,7 @@ function Explorer({ p, sel, setSel }: { p: HfPayload; sel: string | null; setSel
         ))}
       </div>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <Panel className="min-w-0" bodyClassName="max-h-[640px] overflow-y-auto p-0">
+        <Panel className="min-w-0" bodyClassName="p-0">
           {list.map((s) => {
             const last = s.data[s.data.length - 1]; const c = seriesStats(s.data, s.unit);
             return (

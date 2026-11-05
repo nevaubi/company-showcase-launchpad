@@ -1,4 +1,7 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { useSessionState } from "@/lib/use-session-state";
+import { requestResearch } from "@/lib/research/request";
 import { ClientOnly } from "@tanstack/react-router";
 import { lazy, Suspense, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -57,15 +60,16 @@ function SupplyChainPage() {
   const ticker = (t ?? "NVDA").toUpperCase();
   const navigate = useNavigate({ from: Route.fullPath });
   const { data: universe } = useUniverse();
-  const { data: links, isLoading } = useQuery(supplyLinksQuery);
+  const linksQuery = useQuery(supplyLinksQuery);
+  const { data: links, isLoading } = linksQuery;
   const [visible, setVisible] = useState<Set<Relation>>(new Set(RELATIONS));
   const [selected, setSelected] = useState<string | null>(null);
-  const [depth, setDepth] = useState<1 | 2>(1);
-  const [overlay, setOverlay] = useState<Overlay>("none");
-  const [tab, setTab] = useState("evidence");
+  const [depth, setDepth] = useSessionState<1 | 2>("fu:supply:depth", 1);
+  const [overlay, setOverlay] = useSessionState<Overlay>("fu:supply:overlay", "none");
+  const [tab, setTab] = useSessionState("fu:supply:tab", "evidence");
   const [shockSrc, setShockSrc] = useState<string | null>(null);
   const [shock, setShock] = useState(20);
-  const [view, setView] = useState<"network" | "flow">("network");
+  const [view, setView] = useSessionState<"network" | "flow">("fu:supply:view", "network");
   const { open } = useSource();
   const { data: signals } = useQuery(allSignalsQuery);
   const [country, setCountry] = useState<string | null>(null);
@@ -190,7 +194,7 @@ function SupplyChainPage() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="relative h-[640px] min-w-0 overflow-hidden rounded-xl border bg-card">
-          {isLoading ? (
+          {linksQuery.isError && !links ? <div role="alert" className="grid h-full place-content-center gap-3 p-6 text-sm text-muted-foreground">Supply-chain records are temporarily unavailable.<Button variant="outline" size="sm" onClick={() => linksQuery.refetch()}>Retry</Button></div> : isLoading ? (
             <Skeleton className="h-full w-full" />
           ) : graph.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
@@ -267,6 +271,8 @@ function SupplyChainPage() {
                     </div>
                   ))}
                   <div className="flex flex-wrap gap-3">
+                    {sel.ticker && <Button size="xs" variant="outline" asChild><Link to="/app/companies/$ticker" params={{ ticker: sel.ticker }}>Company research <ArrowRight /></Link></Button>}
+                    <Button size="xs" variant="outline" onClick={() => requestResearch(`Investigate ${focus.name}'s ${sel.relation} relationship with ${sel.name}. Read the supply-chain evidence, dated agreements, regional risks and latest public developments. Cross-check sources, quantify only disclosed exposure and distinguish uncertainty.`)}>Investigate relationship</Button>
                     {sel.ticker && covered.has(sel.ticker) && (
                       <button type="button" onClick={() => go(sel.ticker!)} className="inline-flex items-center gap-1 text-sm font-medium underline-offset-4 hover:underline">
                         Map {sel.name} <ArrowRight className="size-3.5" />
@@ -322,7 +328,7 @@ function SupplyChainPage() {
               {impacts.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No linked companies in the filings yet.</p>
               ) : (
-                <ul className="max-h-[400px] space-y-2 overflow-y-auto pr-1 scrollbar-thin">
+                <ul className="space-y-2">
                   {impacts.slice(0, 30).map((i) => (
                     <ImpactRow key={i.key} i={i} onOpen={() => openLink(i.link, `${i.name} · ${i.channel}`)} />
                   ))}
