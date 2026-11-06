@@ -3,7 +3,9 @@
 // trusted data, never from numbers a browser sent.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { hydrateDataset } from "@/lib/financials/dataset";
-import type { CompanyDataset, Filing } from "@/lib/financials/types";
+import type { Bar, CompanyDataset, Filing, UniverseEntry } from "@/lib/financials/types";
+import { coverageOf } from "@/lib/coverage";
+import { lastClose, peerSnapshot, selectPeers, type PeerSnapshot } from "./peers";
 import type { Estimates } from "@/lib/estimates/core";
 import type { TrackedPromise } from "@/lib/earnings/promises";
 import type { MarketsFile } from "@/lib/markets/query";
@@ -21,6 +23,46 @@ async function markets(): Promise<MarketsFile | null> {
   const file = await storageJson<MarketsFile>("markets.json");
   marketsCache = { at: Date.now(), file };
   return file;
+}
+
+let universeCache: { at: number; list: UniverseEntry[] } | null = null;
+async function universe(): Promise<UniverseEntry[]> {
+  if (universeCache && Date.now() - universeCache.at < 3600_000) return universeCache.list;
+  // Bundled core companies + the partner-universe companies built by the backfill.
+  const [core, extra] = await Promise.all([
+    storageJson<{ companies: UniverseEntry[] }>("universe-core.json"),
+    storageJson<{ companies: UniverseEntry[] }>("universe.json"),
+  ]);
+  const seen = new Set<string>();
+  const list = [...(core?.companies ?? []), ...(extra?.companies ?? [])].filter((u) => !seen.has(u.ticker) && (seen.add(u.ticker), true));
+  universeCache = { at: Date.now(), list };
+  return universeCache.list;
+}
+
+async function loadBars(ticker: string): Promise<Bar[] | null> {
+  const f = await storageJson<{ bars: Bar[] }>(`prices/${ticker}.json`);
+  return f?.bars?.length ? f.bars : null;
+}
+
+/**
+ * Peer snapshots, two at a time; each dataset is reduced to its sourced metrics before the next
+ * loads so memory stays small. A peer that fails to load is skipped.
+ */
+async function loadPeers(ticker: string): Promise<PeerSnapshot[]> {
+  const list = selectPeers(ticker, await universe(), coverageOf(ticker)?.peers ?? []);
+  const out: PeerSnapshot[] = [];
+  for (let i = 0; i < list.length; i += 2) {
+    const got = await Promise.all(list.slice(i, i + 2).map(async (t) => {
+      try {
+        const [raw, bars] = await Promise.all([storageJson<CompanyDataset>(`companies/${t}.json`), loadBars(t)]);
+        return raw ? peerSnapshot(hydrateDataset(raw), bars, lastClose(bars)) : null;
+      } catch {
+        return null;
+      }
+    }));
+    for (const g of got) if (g) out.push(g);
+  }
+  return out;
 }
 
 export async function loadDataset(ticker: string): Promise<CompanyDataset> {
@@ -61,11 +103,14 @@ async function loadPrice(ticker: string, est: Estimates | null, mk: MarketsFile 
 
 export async function loadReportInputs(ticker: string, coverage: ReportInputs["coverage"] = null): Promise<ReportInputs> {
   const today = new Date().toISOString().slice(0, 10);
-  const [data, estRow, promRow, mk] = await Promise.all([
+  const [data, estRow, promRow, mk, selfBars, spyBars, peers] = await Promise.all([
     loadDataset(ticker),
     supabaseAdmin.from("analyst_estimates").select("payload").eq("ticker", ticker).maybeSingle(),
     supabaseAdmin.from("ai_cache").select("payload, created_at").like("key", `promises:v1:${ticker}:%`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
     markets(),
+    loadBars(ticker).catch(() => null),
+    loadBars("SPY").catch(() => null),
+    loadPeers(ticker).catch(() => [] as PeerSnapshot[]),
   ]);
   const estimates = (estRow.data?.payload as unknown as Estimates) ?? null;
   const promises = ((promRow.data?.payload as unknown as { promises?: TrackedPromise[] })?.promises ?? null) || null;
@@ -79,5 +124,7 @@ export async function loadReportInputs(ticker: string, coverage: ReportInputs["c
     promises: promises?.length ? promises : null,
     reactions: m ? { reactions: m.reactions, stats: m.stats } : null,
     coverage,
+    peers,
+    prices: { self: selfBars, spy: spyBars },
   };
 }

@@ -4,7 +4,11 @@
 // without its source. No I/O: shared by the server generator, scripts and tests.
 import type { Cell, CompanyDataset, DerivedPart, Period, SegmentFact, SourceRef, Statement } from "@/lib/financials/types";
 import type { Estimates, PeriodCode } from "@/lib/estimates/core";
-import type { Fact, FactArea, FactRef, ReportInputs, ReportTable, TableCell } from "./types";
+import type { Fact, FactArea, FactRef, GlanceItem, ReportChart, ReportInputs, ReportTable, TableCell } from "./types";
+import { buildInsights } from "./insights";
+import { numbersIn } from "./vet";
+import { money, mult, pct, perShare } from "./fmt";
+export { money, mult, pct, perShare } from "./fmt";
 
 // ---------- formatting (ASCII minus so the number checker can read it back) ----------
 /** SEC parts behind a fact reference (a plain SEC value becomes its single part). */
@@ -14,19 +18,6 @@ function derivedParts(r: FactRef): DerivedPart[] {
   return [];
 }
 
-export function money(v: number): string {
-  const s = v < 0 ? "-" : "";
-  const a = Math.abs(v);
-  if (a >= 1e12) return `${s}$${(a / 1e12).toFixed(2)}T`;
-  if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(a >= 1e10 ? 1 : 2)}B`;
-  if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(a >= 1e8 ? 0 : 1)}M`;
-  if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
-  if (a === 0) return "$0";
-  return `${s}$${a.toFixed(2)}`;
-}
-export const perShare = (v: number) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
-export const pct = (v: number, signed = false) => `${signed && v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
-export const mult = (v: number) => `${v.toFixed(1)}x`;
 const count = (v: number) => v.toLocaleString("en-US", { maximumFractionDigits: 0 });
 
 const PERIOD_NAME: Record<PeriodCode, string> = { "0q": "current quarter", "+1q": "next quarter", "0y": "current fiscal year", "+1y": "next fiscal year" };
@@ -46,13 +37,24 @@ function periodName(p: Period, quarterly: boolean): string {
   return quarterly && p.fq ? `Q${p.fq} FY${p.fy}` : `FY${p.fy}`;
 }
 
-class Pack {
+export class Pack {
   facts: Fact[] = [];
-  add(area: FactArea, text: string, ref: FactRef | null): string | null {
+  /** Exact values behind facts that charts plot. */
+  vals = new Map<string, number>();
+  add(area: FactArea, text: string, ref: FactRef | null, opts?: { v?: number; chart?: boolean }): string | null {
     if (!ref) return null;
     const id = `F${this.facts.length + 1}`;
-    this.facts.push({ id, area, text, ref });
+    this.facts.push({ id, area, text, ref, ...(opts?.chart ? { chart: true } : {}) });
+    if (opts?.v != null && Number.isFinite(opts.v)) this.vals.set(id, opts.v);
     return id;
+  }
+  /** Value of a fact: the exact one when recorded, else the last figure in its text. */
+  value(id: string | null | undefined): number | null {
+    if (!id) return null;
+    const v = this.vals.get(id);
+    if (v != null) return v;
+    const f = this.facts.find((x) => x.id === id);
+    return f ? (numbersIn(f.text).at(-1)?.value ?? null) : null;
   }
   ref(id: string | null): FactRef | undefined {
     return id ? this.facts.find((f) => f.id === id)?.ref : undefined;
@@ -97,6 +99,9 @@ const BALANCE_LINES = [
 export interface ReportData {
   facts: Fact[];
   tables: ReportTable[];
+  charts: ReportChart[];
+  glance: GlanceItem[];
+  peers: { ticker: string; name: string }[];
   dataVersion: string;
   background: string;
   latestQuarter: string | null;
@@ -114,10 +119,13 @@ export function isoWeek(date: string): string {
 }
 
 /** Version key: changes when a new periodic filing or earnings release lands, or a new week starts. */
+/** Bump when the report format changes so stored reports are rewritten with it. */
+export const REPORT_FORMAT = "r2";
+
 export function dataVersionOf(d: CompanyDataset, today: string): string {
   const periodic = d.filings.find((f) => f.form === "10-K" || f.form === "10-Q");
   const release = d.earningsReleases[0];
-  return [periodic?.accn ?? "", release?.accn ?? "", isoWeek(today)].join("|");
+  return [periodic?.accn ?? "", release?.accn ?? "", isoWeek(today), REPORT_FORMAT].join("|");
 }
 
 export function buildReportData(inp: ReportInputs): ReportData {
@@ -258,9 +266,11 @@ export function buildReportData(inp: ReportInputs): ReportData {
   const segTables = segmentFacts(p, d.segments);
   // ---------- valuation ----------
   const valuationRows: ReportTable["rows"] = [];
+  const val: { price?: string | null; mcap?: string | null; ev?: string | null; pe?: string | null; evSales?: string | null; fcfYield?: string | null; divYield?: string | null } = {};
   if (inp.price) {
     const priceRef: FactRef = { kind: "market", label: "Share price", asOf: inp.price.asOf };
     const priceId = p.add("valuation", `Share price as of ${inp.price.asOf}: ${perShare(inp.price.price)}.`, priceRef);
+    val.price = priceId;
     valuationRows.push({ label: "Share price", cells: [{ text: perShare(inp.price.price), ref: p.ref(priceId) }, { text: `As of ${inp.price.asOf}` }] });
     const sharesCell = cellAt(Q.balance, "sharesOutstanding", Q.balance.periods.length - 1) ?? cellAt(Q.income, "sharesDiluted", qPeriods.length - 1);
     if (sharesCell) {
@@ -269,6 +279,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
       const sharesParts = partsOf(sharesCell, "Shares outstanding");
       const mcapRef: FactRef = { kind: "derived", formula: "Share price × shares outstanding", parts: sharesParts, market: mkt, label: "Market capitalization" };
       const mcapId = p.add("valuation", `Market capitalization at ${perShare(inp.price.price)}: ${money(mcap)} (${(sharesCell.v / 1e6).toFixed(0)}M shares).`, mcapRef);
+      val.mcap = mcapId;
       valuationRows.push({ label: "Market cap", cells: [{ text: money(mcap), ref: p.ref(mcapId) }, { text: "Price × shares outstanding" }] });
       const debt = cellAt(bal, "totalDebt", bi), cash = cellAt(bal, "cash", bi), sti = cellAt(bal, "shortTermInvestments", bi);
       let ev: number | null = null;
@@ -278,22 +289,23 @@ export function buildReportData(inp: ReportInputs): ReportData {
         evParts = [...sharesParts, ...partsOf(debt, "Total debt"), ...partsOf(cash, "Cash"), ...(sti ? partsOf(sti, "Short-term investments") : [])];
         const evRef: FactRef = { kind: "derived", formula: "Market cap + total debt − cash − short-term investments", parts: evParts, market: mkt, label: "Enterprise value" };
         const evId = p.add("valuation", `Enterprise value: ${money(ev)}.`, evRef);
+        val.ev = evId;
         valuationRows.push({ label: "Enterprise value", cells: [{ text: money(ev), ref: p.ref(evId) }, { text: "Market cap + debt − cash" }] });
       }
       if (ttmEps && ttmEps.v > 0) {
-        const id = p.add("valuation", `Price-to-earnings on trailing diluted EPS: ${mult(inp.price.price / ttmEps.v)}.`, { kind: "derived", formula: "Share price ÷ TTM diluted EPS", parts: derivedParts(ttmEps.ref), market: mkt, label: "P/E (TTM)" });
+        const id = val.pe = p.add("valuation", `Price-to-earnings on trailing diluted EPS: ${mult(inp.price.price / ttmEps.v)}.`, { kind: "derived", formula: "Share price ÷ TTM diluted EPS", parts: derivedParts(ttmEps.ref), market: mkt, label: "P/E (TTM)" });
         valuationRows.push({ label: "P/E (TTM)", cells: [{ text: mult(inp.price.price / ttmEps.v), ref: p.ref(id) }, { text: "Price ÷ TTM diluted EPS" }] });
       }
       if (ev != null && ttmRev && ttmRev.v > 0) {
-        const id = p.add("valuation", `Enterprise value to trailing revenue: ${mult(ev / ttmRev.v)}.`, { kind: "derived", formula: "EV ÷ TTM revenue", parts: [...evParts, ...derivedParts(ttmRev.ref)], market: mkt, label: "EV/Sales (TTM)" });
+        const id = val.evSales = p.add("valuation", `Enterprise value to trailing revenue: ${mult(ev / ttmRev.v)}.`, { kind: "derived", formula: "EV ÷ TTM revenue", parts: [...evParts, ...derivedParts(ttmRev.ref)], market: mkt, label: "EV/Sales (TTM)" });
         valuationRows.push({ label: "EV / Sales (TTM)", cells: [{ text: mult(ev / ttmRev.v), ref: p.ref(id) }, { text: "EV ÷ TTM revenue" }] });
       }
       if (ttmFcf) {
-        const id = p.add("valuation", `Free-cash-flow yield (TTM free cash flow ÷ market cap): ${pct(ttmFcf.v / mcap)}.`, { kind: "derived", formula: "TTM free cash flow ÷ market cap", parts: [...derivedParts(ttmFcf.ref), ...sharesParts], market: mkt, label: "FCF yield" });
+        const id = val.fcfYield = p.add("valuation", `Free-cash-flow yield (TTM free cash flow ÷ market cap): ${pct(ttmFcf.v / mcap)}.`, { kind: "derived", formula: "TTM free cash flow ÷ market cap", parts: [...derivedParts(ttmFcf.ref), ...sharesParts], market: mkt, label: "FCF yield" });
         valuationRows.push({ label: "FCF yield", cells: [{ text: pct(ttmFcf.v / mcap), ref: p.ref(id) }, { text: "TTM FCF ÷ market cap" }] });
       }
       if (ttmDiv && ttmDiv.v > 0) {
-        const id = p.add("valuation", `Dividend yield (TTM dividends per share ÷ price): ${pct(ttmDiv.v / inp.price.price)}.`, { kind: "derived", formula: "TTM dividends per share ÷ share price", parts: derivedParts(ttmDiv.ref), market: mkt, label: "Dividend yield" });
+        const id = val.divYield = p.add("valuation", `Dividend yield (TTM dividends per share ÷ price): ${pct(ttmDiv.v / inp.price.price)}.`, { kind: "derived", formula: "TTM dividends per share ÷ share price", parts: derivedParts(ttmDiv.ref), market: mkt, label: "Dividend yield" });
         valuationRows.push({ label: "Dividend yield", cells: [{ text: pct(ttmDiv.v / inp.price.price), ref: p.ref(id) }, { text: "TTM DPS ÷ price" }] });
       }
     }
@@ -305,19 +317,20 @@ export function buildReportData(inp: ReportInputs): ReportData {
   const est = inp.estimates;
   const estRows: ReportTable["rows"] = [];
   let nextEarnings: string | null = null;
+  const estIds: import("./insights").EstimateIds = { revisions: new Map(), consensus: new Map(), surprises: [], ratings: [], target: null, nextEarnings: null };
   if (est) {
     const mref = (label: string): FactRef => ({ kind: "market", label, asOf: est.asOf.slice(0, 10) });
     for (const per of est.periods) {
       const name = PERIOD_NAME[per.code];
       const e = per.eps, r = per.revenue;
       const ids: (string | null)[] = [];
-      if (e.avg != null) ids.push(p.add("estimates", `Consensus diluted EPS for the ${name}${per.endDate ? ` (ending ${per.endDate})` : ""}: ${perShare(e.avg)}${e.low != null && e.high != null ? `, range ${perShare(e.low)} to ${perShare(e.high)}` : ""}${e.analysts ? `, ${e.analysts} analysts` : ""}${e.yearAgo != null ? `; year-ago EPS ${perShare(e.yearAgo)}` : ""}.`, mref(`Consensus EPS, ${name}`)));
+      if (e.avg != null) ids.push(estIds.consensus.set(per.code, p.add("estimates", `Consensus diluted EPS for the ${name}${per.endDate ? ` (ending ${per.endDate})` : ""}: ${perShare(e.avg)}${e.low != null && e.high != null ? `, range ${perShare(e.low)} to ${perShare(e.high)}` : ""}${e.analysts ? `, ${e.analysts} analysts` : ""}${e.yearAgo != null ? `; year-ago EPS ${perShare(e.yearAgo)}` : ""}.`, mref(`Consensus EPS, ${name}`))).get(per.code)!);
       if (r.avg != null) ids.push(p.add("estimates", `Consensus revenue for the ${name}: ${money(r.avg)}${r.low != null && r.high != null ? `, range ${money(r.low)} to ${money(r.high)}` : ""}${r.yearAgo != null ? `; year-ago revenue ${money(r.yearAgo)}` : ""}${r.growth != null ? ` (implied growth ${pct(r.growth, true)})` : ""}.`, mref(`Consensus revenue, ${name}`)));
       const tr = per.trend;
       let rev30: number | null = null;
       if (tr.current != null && tr.d90 != null && tr.d90 !== 0) {
         rev30 = tr.d30 != null && tr.d30 !== 0 ? tr.current / tr.d30 - 1 : null;
-        p.add("estimates", `Consensus EPS for the ${name} was ${perShare(tr.d90)} 90 days ago, ${tr.d30 != null ? `${perShare(tr.d30)} 30 days ago, ` : ""}and is ${perShare(tr.current)} now (${pct(tr.current / tr.d90 - 1, true)} over 90 days).`, mref(`EPS revisions, ${name}`));
+        estIds.revisions.set(per.code, p.add("estimates", `Consensus EPS for the ${name} was ${perShare(tr.d90)} 90 days ago, ${tr.d30 != null ? `${perShare(tr.d30)} 30 days ago, ` : ""}and is ${perShare(tr.current)} now (${pct(tr.current / tr.d90 - 1, true)} over 90 days).`, mref(`EPS revisions, ${name}`)));
       }
       if (per.revisions.up30 != null || per.revisions.down30 != null) {
         p.add("estimates", `Last 30 days of EPS estimate revisions for the ${name}: ${per.revisions.up30 ?? 0} up, ${per.revisions.down30 ?? 0} down.`, mref(`Revision count, ${name}`));
@@ -332,13 +345,19 @@ export function buildReportData(inp: ReportInputs): ReportData {
       ] });
     }
     const tg = est.target;
-    if (tg.mean != null) p.add("street", `Street price target: mean ${perShare(tg.mean)}${tg.median != null ? `, median ${perShare(tg.median)}` : ""}${tg.low != null ? `, low ${perShare(tg.low)}` : ""}${tg.high != null ? `, high ${perShare(tg.high)}` : ""}${tg.analysts ? ` (${tg.analysts} analysts)` : ""}.`, mref("Street price targets"));
+    if (tg.mean != null) estIds.target = p.add("street", `Street price target: mean ${perShare(tg.mean)}${tg.median != null ? `, median ${perShare(tg.median)}` : ""}${tg.low != null ? `, low ${perShare(tg.low)}` : ""}${tg.high != null ? `, high ${perShare(tg.high)}` : ""}${tg.analysts ? ` (${tg.analysts} analysts)` : ""}.`, mref("Street price targets"));
     if (est.rating.mean != null) p.add("street", `Average street rating ${est.rating.mean.toFixed(2)} on a 1 (strong buy) to 5 (sell) scale${est.rating.key ? ` — "${est.rating.key}"` : ""}.`, mref("Street rating"));
-    const lastRatings = est.ratings[0];
-    if (lastRatings) p.add("street", `Current rating mix: ${lastRatings.strongBuy} strong buy, ${lastRatings.buy} buy, ${lastRatings.hold} hold, ${lastRatings.sell} sell, ${lastRatings.strongSell} strong sell.`, mref("Rating distribution"));
+    const MONTH_LABEL: Record<string, string> = { "0m": "this month", "-1m": "one month ago", "-2m": "two months ago", "-3m": "three months ago" };
+    est.ratings.slice(0, 4).forEach((rm, k) => {
+      if (!(rm.strongBuy + rm.buy + rm.hold + rm.sell + rm.strongSell)) return;
+      const label = MONTH_LABEL[rm.period] ?? rm.period;
+      const mix = `${rm.strongBuy} strong buy, ${rm.buy} buy, ${rm.hold} hold, ${rm.sell} sell, ${rm.strongSell} strong sell`;
+      const id = p.add("street", k === 0 ? `Current rating mix: ${mix}.` : `Rating mix ${label}: ${mix}.`, mref(k === 0 ? "Rating distribution" : `Rating distribution ${rm.period}`));
+      estIds.ratings.push({ period: rm.period, label, row: rm, id });
+    });
     for (const s of est.surprises.slice(0, 4)) {
       if (s.actual == null || s.estimate == null) continue;
-      p.add("estimates", `Reported EPS for the quarter ended ${s.quarter}: ${perShare(s.actual)} versus consensus ${perShare(s.estimate)}${s.surprisePct != null ? ` (${pct(s.surprisePct, true)} surprise)` : ""}.`, mref(`EPS surprise ${s.quarter}`));
+      estIds.surprises.push({ quarter: s.quarter, actual: s.actual, estimate: s.estimate, surprisePct: s.surprisePct, id: p.add("estimates", `Reported EPS for the quarter ended ${s.quarter}: ${perShare(s.actual)} versus consensus ${perShare(s.estimate)}${s.surprisePct != null ? ` (${pct(s.surprisePct, true)} surprise)` : ""}.`, mref(`EPS surprise ${s.quarter}`)) });
     }
     const recent = new Date(Date.parse(inp.today) - 90 * 86400000).toISOString().slice(0, 10);
     for (const a of est.actions.filter((x) => x.date >= recent).slice(0, 10)) {
@@ -347,12 +366,13 @@ export function buildReportData(inp: ReportInputs): ReportData {
     }
     if (est.nextEarnings?.start) {
       nextEarnings = est.nextEarnings.start;
-      p.add("estimates", `Next earnings date expected ${est.nextEarnings.start}${est.nextEarnings.end && est.nextEarnings.end !== est.nextEarnings.start ? ` to ${est.nextEarnings.end}` : ""}.`, mref("Earnings calendar"));
+      estIds.nextEarnings = p.add("estimates", `Next earnings date expected ${est.nextEarnings.start}${est.nextEarnings.end && est.nextEarnings.end !== est.nextEarnings.start ? ` to ${est.nextEarnings.end}` : ""}.`, mref("Earnings calendar"));
     }
   }
 
   // ---------- reactions ----------
   const reactRows: ReportTable["rows"] = [];
+  const reactIds: { date: string; id: string | null }[] = [];
   if (inp.reactions?.stats && inp.reactions.stats.n) {
     const s = inp.reactions.stats;
     const last = inp.reactions.reactions[0];
@@ -361,6 +381,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
     for (const r of inp.reactions.reactions.slice(0, 8)) {
       const id = p.add("reactions", `Earnings release ${r.date}: stock ${pct(r.move, true)}${r.excess != null ? ` (${pct(r.excess, true)} versus SPY)` : ""}${r.drift20 != null ? `, then ${pct(r.drift20, true)} over the next 20 sessions` : ""}.`,
         { kind: "filing", accn: r.accn, doc: r.doc, form: "8-K", filed: r.date, label: `Earnings release ${r.date}` });
+      reactIds.push({ date: r.date, id });
       reactRows.push({ label: r.date, cells: [
         { text: pct(r.move, true), ref: p.ref(id), tone: r.move >= 0 ? "positive" : "negative" },
         r.excess != null ? { text: pct(r.excess, true) } : null,
@@ -449,10 +470,23 @@ export function buildReportData(inp: ReportInputs): ReportData {
   tables.push(...segTables);
   if (reactRows.length) tables.push({ id: "reactions", title: "Stock reaction to recent earnings", columns: ["Move", "vs SPY", "Next 20 days"], rows: reactRows, note: "Close before the release to the close after; dates link to the earnings release." });
 
+  const insights = buildInsights({
+    p, inp, d,
+    annual: { idx: aIdx, ids: annualIds, growth: growthIds, margin: marginIds },
+    quarterly: { idx: qIdx, ids: qIds, yoy: qYoyIds, margin: qMarginIds },
+    ttm: { revenue: ttmRev, netIncome: ttmNi, fcf: ttmFcf, eps: ttmEps, ids: ttmIds },
+    latestQ: latestQ?.end ?? null,
+    val, est: estIds, reactions: reactIds,
+  });
+  tables.splice(Math.min(tables.length, 3), 0, ...insights.tables);
+
   const co = d.profile.description?.trim();
   return {
     facts: p.facts,
     tables,
+    charts: insights.charts,
+    glance: insights.glance,
+    peers: insights.peers,
     dataVersion: dataVersionOf(d, inp.today),
     background: co ? co.slice(0, 1200) : "",
     latestQuarter: latestQ ? periodName(latestQ, true) : null,

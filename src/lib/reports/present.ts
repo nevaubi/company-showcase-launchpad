@@ -13,6 +13,7 @@ export function refTarget(ref: FactRef, ticker: string, text: string): SourceTar
   const n = numbersIn(text).at(-1);
   const unit = !n ? "usd" : n.kind === "pct" ? "pct" : n.kind === "mult" ? "ratio" : /\$\d+\.\d{2}$/.test(n.raw) && Math.abs(n.value) < 5000 ? "usdPerShare" : "usd";
   const label = text.length > 90 ? `${text.slice(0, 88)}…` : text;
+  if ((ref.kind === "sec" || ref.kind === "derived" || ref.kind === "filing") && ref.tk) ticker = ref.tk;
   switch (ref.kind) {
     case "sec": return { ticker, label, unit, value: ref.src.value, src: ref.src };
     case "derived": return { ticker, label, unit, value: n?.value ?? 0, derived: { formula: `${ref.formula}${marketNote(ref.market)}`, parts: ref.parts } };
@@ -24,11 +25,12 @@ export function refTarget(ref: FactRef, ticker: string, text: string): SourceTar
 
 export function refCaption(ref: FactRef): string {
   switch (ref.kind) {
-    case "sec": return `SEC XBRL · ${ref.src.concept} · ${ref.src.start ? `${ref.src.start} → ` : ""}${ref.src.end} · ${ref.src.accn}`;
-    case "derived": return `Calculated · ${ref.formula}${marketNote(ref.market)}`;
+    case "sec": return `${ref.tk ? `${ref.tk} · ` : ""}SEC XBRL · ${ref.src.concept} · ${ref.src.start ? `${ref.src.start} → ` : ""}${ref.src.end} · ${ref.src.accn}`;
+    case "derived": return `${ref.tk ? `${ref.tk} · ` : ""}Calculated · ${ref.formula}${marketNote(ref.market)}`;
     case "filing": return `${ref.form === "4" ? "Form 4" : `Form ${ref.form}`} filed ${ref.filed} · ${ref.accn}`;
     case "web": return `${ref.label}${ref.url ? ` · ${new URL(ref.url).hostname.replace(/^www\./, "")}` : ""}`;
     case "market": return `Market data as of ${ref.asOf} (third-party; not from SEC filings)`;
+    case "composite": return `Calculated across ${ref.members.length} sourced figure${ref.members.length === 1 ? "" : "s"} · ${ref.formula}`;
     case "firm": return `Firm coverage record as of ${ref.asOf}`;
   }
 }

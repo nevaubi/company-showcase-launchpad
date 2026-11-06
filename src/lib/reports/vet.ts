@@ -116,12 +116,15 @@ export function vetClaim(c: Claim, facts: Map<string, Fact>, factNums: Map<strin
 
 export function vetSections(
   raw: { id: string; paragraphs: Claim[]; bullets: Claim[] }[],
-  defs: { id: string; title: string; tables?: string[] }[],
+  defs: { id: string; title: string; tables?: string[]; charts?: string[] }[],
   facts: Fact[],
   tableIds: Set<string>,
+  chartIds: Set<string> = new Set(),
 ): { sections: ReportSection[]; qa: ReportQa } {
-  const byId = new Map(facts.map((f) => [f.id, f]));
-  const nums = new Map(facts.map((f) => [f.id, numbersIn(f.text)]));
+  // Plot-only facts were never shown to the writer, so they can't be cited.
+  const citable = facts.filter((f) => !f.chart);
+  const byId = new Map(citable.map((f) => [f.id, f]));
+  const nums = new Map(citable.map((f) => [f.id, numbersIn(f.text)]));
   const qa: ReportQa = { claims: 0, citedClaims: 0, numbers: 0, verifiedNumbers: 0, removed: [] };
   const sections: ReportSection[] = [];
   for (const def of defs) {
@@ -140,8 +143,9 @@ export function vetSections(
     const paragraphs = r ? vet(r.paragraphs) : [];
     const bullets = r ? vet(r.bullets) : [];
     const tables = (def.tables ?? []).filter((t) => tableIds.has(t));
-    if (!paragraphs.length && !bullets.length && !tables.length) continue;
-    sections.push({ id: def.id, title: def.title, paragraphs, bullets, tables });
+    const charts = (def.charts ?? []).filter((c) => chartIds.has(c));
+    if (!paragraphs.length && !bullets.length && !tables.length && !charts.length) continue;
+    sections.push({ id: def.id, title: def.title, paragraphs, bullets, tables, ...(charts.length ? { charts } : {}) });
   }
   return { sections, qa };
 }

@@ -1,7 +1,7 @@
 // Report kinds, their sections and the prompt contract. Pure.
 import type { ReportKind, ReportOptions } from "./types";
 
-export interface SectionDef { id: string; title: string; brief: string; tables?: string[] }
+export interface SectionDef { id: string; title: string; brief: string; tables?: string[]; charts?: string[] }
 export interface KindDef { kind: ReportKind; label: string; short: string; description: string; sections: SectionDef[]; tables: string[] }
 
 export const KINDS: Record<ReportKind, KindDef> = {
@@ -10,13 +10,14 @@ export const KINDS: Record<ReportKind, KindDef> = {
     label: "Company primer",
     short: "Primer",
     description: "Everything a new analyst needs: the business, how it makes money, financial profile, capital allocation, valuation, debates and risks.",
-    tables: ["financials", "segments-1", "segments-2", "valuation", "estimates"],
+    tables: ["financials", "segments-1", "segments-2", "peers", "valuation", "estimates"],
     sections: [
       { id: "summary", title: "Investment summary", brief: "4-6 bullets: what the company is, what drives the numbers now, the debate, and what matters next." },
-      { id: "business", title: "Business overview", brief: "How the company makes money — segments, mix and their trajectory.", tables: ["segments-1", "segments-2"] },
-      { id: "financials", title: "Financial profile", brief: "Multi-year growth, margin and cash-flow trajectory; what changed recently.", tables: ["financials"] },
-      { id: "capital", title: "Balance sheet & capital allocation", brief: "Cash, debt, buybacks, dividends, capex and stock compensation." },
-      { id: "valuation", title: "Valuation & the street", brief: "Current multiples, consensus expectations, rating mix and recent analyst actions.", tables: ["valuation", "estimates"] },
+      { id: "business", title: "Business overview", brief: "How the company makes money — segments, mix, which segments drove growth and how the mix has shifted.", tables: ["segments-1", "segments-2"], charts: ["segment-mix", "segment-growth"] },
+      { id: "financials", title: "Financial profile", brief: "Multi-year growth, margin and cash-flow trajectory; the operating-margin bridge, incremental margins and seasonality; what changed recently.", tables: ["financials"], charts: ["revenue-annual", "margins-annual", "margin-bridge"] },
+      { id: "capital", title: "Balance sheet & capital allocation", brief: "Cash, debt, coverage, cash conversion, capex intensity, buybacks, dividends, dilution and stock compensation.", charts: ["cash-flow", "capital-returns"] },
+      { id: "peers", title: "Competitive positioning", brief: "How the company compares with its peers on growth, profitability, cash generation, valuation and share-price performance: where it ranks, how far from the median, what explains the gaps, and the growth-adjusted valuation.", tables: ["peers"], charts: ["peer-panel", "peer-scatter"] },
+      { id: "valuation", title: "Valuation & the street", brief: "Current multiples against the company's own five-year history and its peers, consensus expectations versus the reported trajectory, revisions, rating mix, targets and recent analyst actions.", tables: ["valuation", "estimates"], charts: ["valuation-history", "target-range", "price-performance", "eps-revisions"] },
       { id: "debates", title: "Key debates", brief: "3-5 bullets, each framing a bull view and a bear view grounded in the facts." },
       { id: "risks", title: "Risks", brief: "Specific, evidence-based risks (concentration, margins, balance sheet, execution, insiders)." },
       { id: "watch", title: "What to watch", brief: "Upcoming catalysts and the metrics that would change the picture." },
@@ -27,13 +28,14 @@ export const KINDS: Record<ReportKind, KindDef> = {
     label: "Earnings preview",
     short: "Preview",
     description: "Into the print: what the street expects, revisions, the KPIs and promises to check, how the stock usually reacts and questions for management.",
-    tables: ["estimates", "quarters", "reactions"],
+    tables: ["estimates", "quarters", "peers", "reactions"],
     sections: [
-      { id: "setup", title: "Setup into the print", brief: "Date, recent trend in results and estimates, and the stock's positioning." },
-      { id: "street", title: "What the street expects", brief: "Consensus EPS and revenue, the range, revision direction and implied growth.", tables: ["estimates"] },
-      { id: "watch", title: "What to watch", brief: "4-6 bullets: specific lines, margins, segments and open management commitments to check.", tables: ["quarters"] },
-      { id: "history", title: "How the stock reacts", brief: "Historical earnings-day moves, direction hit rate and post-print drift.", tables: ["reactions"] },
-      { id: "scenarios", title: "Scenarios", brief: "Upside and downside paths — what each would require, using only cited numbers." },
+      { id: "setup", title: "Setup into the print", brief: "Date, recent trend in results and estimates, the stock's performance against the S&P 500 and peers, and where it trades against its own history.", charts: ["price-performance", "valuation-history"] },
+      { id: "street", title: "What the street expects", brief: "Consensus EPS and revenue, the range and dispersion, revision direction, implied growth versus the reported trajectory, and the rating mix.", tables: ["estimates"], charts: ["eps-revisions", "rating-mix"] },
+      { id: "watch", title: "What to watch", brief: "4-6 bullets: specific lines, margins, segments, seasonality and open management commitments to check.", tables: ["quarters"], charts: ["revenue-quarterly", "margins-quarterly"] },
+      { id: "peers", title: "Read-across from peers", brief: "How the company's growth, margins and valuation compare with its peers' latest reported quarters, and what that positioning implies into the print.", tables: ["peers"], charts: ["peer-panel"] },
+      { id: "history", title: "How the stock reacts", brief: "Historical earnings-day moves, direction hit rate, post-print drift, the surprise record and how the stock reacted to beats versus misses.", tables: ["reactions"], charts: ["reactions", "surprises"] },
+      { id: "scenarios", title: "Scenarios", brief: "Upside and downside paths — what each would require, using only cited numbers; anchor to street targets and the trading range.", charts: ["target-range"] },
       { id: "questions", title: "Questions for management", brief: "5-7 sharp questions tied to cited facts or open promises." },
     ],
   },
@@ -42,13 +44,14 @@ export const KINDS: Record<ReportKind, KindDef> = {
     label: "Earnings recap",
     short: "Recap",
     description: "The latest reported quarter: results versus a year ago and versus expectations, drivers, guidance and promises, and the market's reaction.",
-    tables: ["quarters", "estimates", "reactions"],
+    tables: ["quarters", "estimates", "peers", "reactions"],
     sections: [
-      { id: "headline", title: "Results at a glance", brief: "4-6 bullets with the headline numbers of the latest reported quarter." },
-      { id: "vs", title: "Versus expectations", brief: "EPS surprise history and how the quarter compared with consensus." },
-      { id: "drivers", title: "Drivers", brief: "What moved revenue and margins year over year; segment mix where available.", tables: ["quarters"] },
+      { id: "headline", title: "Results at a glance", brief: "4-6 bullets with the headline numbers of the latest reported quarter.", charts: ["revenue-quarterly"] },
+      { id: "vs", title: "Versus expectations", brief: "EPS surprise history and how the quarter compared with consensus.", charts: ["surprises"] },
+      { id: "drivers", title: "Drivers", brief: "What moved revenue and margins year over year: the operating-margin bridge, incremental margin, segment contributions to growth and mix shift.", tables: ["quarters"], charts: ["margins-quarterly", "margin-bridge", "segment-growth"] },
+      { id: "peers", title: "Versus peers", brief: "How the quarter's growth and margins compare with peers, and whether the company is gaining or losing ground.", tables: ["peers"], charts: ["peer-panel"] },
       { id: "guidance", title: "Guidance & management commitments", brief: "What management promised and whether earlier promises were kept, with quotes." },
-      { id: "reaction", title: "Market reaction", brief: "How the stock reacted to this and prior releases.", tables: ["reactions"] },
+      { id: "reaction", title: "Market reaction", brief: "How the stock reacted to this and prior releases, versus the S&P 500 and peers.", tables: ["reactions"], charts: ["reactions", "price-performance"] },
       { id: "takeaways", title: "Takeaways", brief: "3-5 bullets on what changed in the investment picture and what to track next." },
     ],
   },
@@ -57,12 +60,13 @@ export const KINDS: Record<ReportKind, KindDef> = {
     label: "IC memo",
     short: "IC memo",
     description: "An investment-committee memo: thesis, where we differ from consensus, value drivers, valuation, catalysts, what would make us wrong and open diligence.",
-    tables: ["financials", "valuation", "estimates"],
+    tables: ["financials", "peers", "valuation", "estimates"],
     sections: [
       { id: "recommendation", title: "Thesis", brief: "The core thesis in 3-5 bullets. If a firm rating is cited, frame the thesis around it; otherwise present the balanced case without recommending." },
-      { id: "variant", title: "Where we could differ from consensus", brief: "Compare consensus expectations with the trajectory in reported numbers." },
-      { id: "drivers", title: "Key value drivers", brief: "The few metrics that determine the outcome and their recent trend.", tables: ["financials"] },
-      { id: "valuation", title: "Valuation", brief: "Current multiples, cash generation and street targets.", tables: ["valuation", "estimates"] },
+      { id: "variant", title: "Where we could differ from consensus", brief: "Compare consensus expectations and revisions with the trajectory in reported numbers.", charts: ["eps-revisions"] },
+      { id: "drivers", title: "Key value drivers", brief: "The few metrics that determine the outcome, their recent trend and what drives them (margin bridge, segment contributions).", tables: ["financials"], charts: ["revenue-annual", "margins-annual"] },
+      { id: "relative", title: "Relative value", brief: "Positioning against peers on growth, margins, returns and multiples; the growth-adjusted valuation gap and whether it looks justified.", tables: ["peers"], charts: ["peer-scatter", "peer-panel"] },
+      { id: "valuation", title: "Valuation", brief: "Current multiples against the five-year history, cash generation, street targets and the trading range.", tables: ["valuation", "estimates"], charts: ["valuation-history", "target-range"] },
       { id: "catalysts", title: "Catalysts", brief: "Dated events and what each could reveal." },
       { id: "risks", title: "What would make us wrong", brief: "Specific, falsifiable risks with evidence." },
       { id: "diligence", title: "Open diligence", brief: "4-6 questions or checks before acting, tied to facts." },
@@ -135,6 +139,8 @@ export function reportInstructions(kind: ReportKind, o: ReportOptions, name: str
     "Every number you write (dollar amounts, percentages, multiples, per-share values, counts above 12) must appear verbatim in one of the cited facts — copy the figure exactly as the fact formats it. Never compute new numbers, never round differently, never estimate.",
     "Dates may be written as in the facts. Do not invent guidance, events, products or quotes. If the facts don't support a section, write one sentence saying what data is missing.",
     "Third-party consensus and price data are 'street' or 'market' data; SEC figures are 'reported'. Keep that distinction clear.",
+    "Be analytical, not descriptive: connect evidence across areas — relate margins to segment mix and the margin bridge, valuation to growth versus peers and to the company's own history, consensus to the reported trajectory, stock reactions to surprises. Prefer comparative statements (versus peers, versus history, versus consensus) backed by the peer, analysis, history and performance facts, and say what each comparison implies.",
+    "When naming a peer's figure, cite that peer's fact; use the rank facts for medians and ranks. Charts and tables appear beside the text, so interpret them rather than restating every number.",
     "No price targets or buy/sell recommendations of your own; you may restate a firm rating only if a coverage fact provides it.",
     LENGTH_GUIDE[o.length], AUDIENCE_GUIDE[o.audience], STANCE_GUIDE[o.stance],
     o.focus ? `Emphasis requested by the user: ${o.focus}` : "",
@@ -143,7 +149,7 @@ export function reportInstructions(kind: ReportKind, o: ReportOptions, name: str
   ].filter(Boolean).join("\n");
 }
 
-export function reportInput(sections: { id: string; title: string; brief: string }[], facts: { id: string; area: string; text: string }[], background: string, today: string): string {
+export function reportInput(sections: { id: string; title: string; brief: string }[], facts: { id: string; area: string; text: string; chart?: boolean }[], background: string, today: string): string {
   return [
     `Today: ${today}.`,
     background ? `Background (context only, not citable, contains no numbers to use): ${background.replace(/\d[\d,.]*/g, "#")}` : "",
@@ -151,7 +157,7 @@ export function reportInput(sections: { id: string; title: string; brief: string
     ...sections.map((s) => `- ${s.id} — ${s.title}: ${s.brief}`),
     "",
     "Facts:",
-    ...facts.map((f) => `[${f.id}] (${f.area}) ${f.text}`),
+    ...facts.filter((f) => !f.chart).map((f) => `[${f.id}] (${f.area}) ${f.text}`),
   ].filter(Boolean).join("\n");
 }
 

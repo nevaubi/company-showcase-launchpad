@@ -1,0 +1,12 @@
+import { loadReportInputs } from "@/lib/reports/inputs.server";
+import { buildReportData } from "@/lib/reports/facts";
+const t = process.argv[2] ?? "AMZN";
+const t0 = Date.now();
+const inp = await loadReportInputs(t);
+console.log("load ms", Date.now() - t0, "peers", inp.peers?.map((p) => `${p.ticker}(${Object.keys(p.m).length})`).join(" "), "bars", inp.prices?.self?.length, inp.prices?.spy?.length);
+const b = buildReportData(inp);
+console.log("facts", b.facts.length, "writer facts", b.facts.filter((f) => !f.chart).length, "charts", b.charts.map((c) => c.id).join(","), "tables", b.tables.map((x) => x.id).join(","));
+for (const f of b.facts.filter((f) => ["peers", "analysis", "history", "performance"].includes(f.area) && !f.chart)) console.log(" ", f.id, f.area, f.text.slice(0, 260));
+console.log("glance", JSON.stringify(b.glance));
+console.log("size", JSON.stringify(b).length);
+process.exit(0);
