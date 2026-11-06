@@ -16,8 +16,38 @@ async function getJson<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Bundled companies ship in public/data; the partner-universe ones live in the private `datasets` bucket (scripts/extra-backfill.ts). */
-async function getDataset<T>(kind: "companies" | "prices", file: string, bundled: boolean): Promise<T> {
+/**
+ * Partner data service (Filed Under pipeline): serves the same dataset files, rebuilt on a
+ * schedule, to signed-in users only. Set VITE_PARTNER_DATA_URL to "off" to disable.
+ */
+const PARTNER_DATA_URL = (import.meta.env.VITE_PARTNER_DATA_URL as string | undefined) ?? "https://www.filedunder.ai/api/app-data";
+
+async function partnerJson<T>(path: string): Promise<T | null> {
+  if (!PARTNER_DATA_URL || PARTNER_DATA_URL === "off" || typeof window === "undefined") return null;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return null;
+    const res = await fetch(`${PARTNER_DATA_URL}?path=${encodeURIComponent(path)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Covered companies come from the partner data service first; bundled snapshots (public/data)
+ * and the private `datasets` bucket (scripts/extra-backfill.ts) are the fallback.
+ */
+async function getDataset<T>(kind: "companies" | "prices", file: string, bundled: boolean, partner = true): Promise<T> {
+  if (partner) {
+    const remote = await partnerJson<T>(`${kind}/${file}.json`);
+    if (remote) return remote;
+  }
   if (bundled) return getJson<T>(`/data/${kind}/${file}.json`);
   const { data, error } = await supabase.storage.from("datasets").download(`${kind}/${file}.json`);
   if (error || !data) throw new Error(`No ${kind === "companies" ? "SEC dataset" : "price history"} built yet for ${file}`);
@@ -134,7 +164,8 @@ const RANGE_DAYS: Partial<Record<Range, number>> = { "5d": 7, "1mo": 31, "3mo": 
 
 /** Bundled ten-year daily snapshot plus any newer bars the refresh job stored. */
 async function storedDailyBars(symbol: string): Promise<PriceSeries> {
-  const s = await getDataset<PriceSeries>("prices", symbolFile(symbol), isBundled(symbol) || !coverageOf(symbol));
+  const covered = !!coverageOf(symbol);
+  const s = await getDataset<PriceSeries>("prices", symbolFile(symbol), isBundled(symbol) || !covered, covered);
   const last = s.bars.at(-1)?.[0] ?? "1900-01-01";
   try {
     const { data } = await supabase
