@@ -152,6 +152,8 @@ export function useRemoveCoverage(firmId: string | null | undefined) {
 export function friendlyError(e: unknown): string {
   const m = (e as { message?: string })?.message ?? String(e);
   if (/row-level security|permission denied/i.test(m)) return "Your firm role doesn't allow that change.";
+  if (/firm_invites_pending_uniq/i.test(m)) return "An invite is already pending for that email — copy its link below instead.";
+  if (/firm_coverage_pkey/i.test(m)) return "That company is already on the coverage list.";
   if (/duplicate key/i.test(m)) return "That already exists.";
   return m;
 }

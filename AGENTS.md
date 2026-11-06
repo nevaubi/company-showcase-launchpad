@@ -54,3 +54,4 @@
 - Analyst estimates: `scripts/estimates.ts` fills `analyst_estimates` (provider throttles Node fetch); `getEstimates` refreshes live after 6h.
 - Company context (Wikipedia description, Commons photos, 10-K/proxy people with headshots) comes from `bun scripts/company-context.ts` into `public/data/context/`; people are kept only if named in the filing text, and photos need a Wikidata link to the company or the company's own page.
 - Region risk: pure in `src/lib/supply/region.ts`; external lookups via authed `supply-region.functions.ts`, cached, sourced.
+- Firm workspaces: permissions live in the database (RLS, checked RPCs, guard triggers); firm tables `REVOKE ALL` then grant exact columns, because this project's default privileges grant everything.

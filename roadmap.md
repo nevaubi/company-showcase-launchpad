@@ -1,7 +1,9 @@
 # Filed Under — roadmap
 
 ## Institutional platform (requested Nov 6 — "all, proceed")
-- [ ] M1 Firm workspaces: firms, roles (owner/admin/analyst/viewer), invites, shared coverage list with assigned analyst/rating/restricted flag, firm notes, branding (logo, colors, disclaimer)
+- [x] M1 Firm workspaces: firms, roles (owner/admin/analyst/viewer), invites, shared coverage list with assigned analyst/rating/restricted flag, firm notes, branding (logo, colors, disclaimer)
+  - [ ] M1b Share theses and docs with the firm from their pages (database already supports it)
+  - [ ] M1c Invite emails (needs an email sender domain); today invites are copy-link + in-app
 - [ ] M2 Report library: pre-generated company primer, earnings preview, earnings recap and IC memo per company (background job, cached, refreshed when data changes); instant view/download (PDF, Word); customize (sections, tone, length) with firm templates/presets and branding
 - [ ] M3 SEC redline engine: consecutive 10-K/10-Q section diff (risk factors, MD&A, footnotes), changed/added/removed paragraphs, materiality ranking, source links
 - [ ] M4 Cross-company KPI & segment matrix + industry deep dives (normalized calendar quarters), assistant tools to query it

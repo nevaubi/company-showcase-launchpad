@@ -256,7 +256,7 @@ function CoverageTableRow({ row: r, name, logo, sector, price, members, editable
           />
         ) : <span className="num text-[12.5px]">{r.target_price ? fmtPrice(r.target_price) : "—"}</span>}
       </TableCell>
-      <TableCell className={cn("num text-right text-[12.5px]", u != null && (u >= 0 ? "text-positive" : "text-negative"))}>{u == null ? "—" : fmtPct(u * 100, 1, true)}</TableCell>
+      <TableCell className={cn("num text-right text-[12.5px]", u != null && (u >= 0 ? "text-positive" : "text-negative"))}>{u == null ? "—" : fmtPct(u, 1, true)}</TableCell>
       <TableCell>
         {editable ? (
           <Select value={String(r.priority)} onValueChange={(v) => onSave({ priority: Number(v) })}>

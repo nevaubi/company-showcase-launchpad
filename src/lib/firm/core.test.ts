@@ -38,6 +38,12 @@ describe("coverage", () => {
     const text = activityText("coverage.updated", { rating: ["hold", "buy"], restricted: [false, true], reason: "MNPI" }, () => "Ann");
     expect(text).toBe("rating Hold → Buy, added to restricted list (MNPI)");
   });
+
+  it("describes invites and branding changes", () => {
+    expect(activityText("invite.sent", { email: "a@b.co", role: "viewer" }, () => "")).toBe("invited a@b.co as Viewer");
+    expect(activityText("invite.revoked", { email: "a@b.co" }, () => "")).toBe("revoked the invite for a@b.co");
+    expect(activityText("firm.branding", { logo: true }, () => "")).toBe("updated the logo and report branding");
+  });
 });
 
 describe("branding", () => {

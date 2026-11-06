@@ -42,7 +42,7 @@ export function CoverageChip({ ticker, price }: { ticker: string; price: number 
       <PopoverContent align="end" className="w-72 space-y-3">
         <div>
           <p className="text-sm font-medium">{firm.name} coverage</p>
-          <p className="text-xs text-muted-foreground">Analyst: {analyst}{u != null && <> · <span className={u >= 0 ? "text-positive" : "text-negative"}>{fmtPct(u * 100, 1, true)} to target</span></>}</p>
+          <p className="text-xs text-muted-foreground">Analyst: {analyst}{u != null && <> · <span className={u >= 0 ? "text-positive" : "text-negative"}>{fmtPct(u, 1, true)} to target</span></>}</p>
         </div>
         {can("analyst") ? (
           <div className="grid grid-cols-2 gap-2">
