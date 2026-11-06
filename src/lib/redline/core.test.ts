@@ -45,6 +45,17 @@ describe("filing text extraction", () => {
     expect(b.map((x) => x.text)).toEqual(["Our suppliers may be unable to meet demand for advanced packaging capacity in the coming year."]);
   });
 
+  it("reads an Item heading laid out as a table with empty spacer rows", () => {
+    const html = `<table><tr><td/><td/></tr><tr><td colspan="2" style="background:#032d42"></td></tr><tr><td><span style="font-weight:700">Item 2. Management's Discussion and Analysis</span></td></tr><tr><td></td></tr></table>`;
+    expect(htmlToBlocks(html)).toEqual([{ text: "Item 2. Management's Discussion and Analysis", heading: true }]);
+  });
+
+  it("falls back to standard section titles when a filer doesn't use Item headings", () => {
+    const body = (t: string) => `<p>${t} discussion that continues for long enough to count as the real section rather than an index entry.</p>`;
+    const html = `<p><b>Notes to Consolidated Condensed Financial Statements</b></p>${body("Notes")}<p><b>Management's Discussion and Analysis</b></p>${body("MD&A")}<p><b>Risk Factors and Other Key Information</b></p>${body("Risk")}`;
+    expect(splitSections(htmlToBlocks(html), "10-Q").map((x) => x.key)).toEqual(["I-1", "I-2", "II-1A"]);
+  });
+
   it("splits 10-K items and skips the table-of-contents copy", () => {
     const toc = `<p>Item 1A. Risk Factors</p><p>Item 7. Management's Discussion and Analysis</p>`;
     const s = splitSections(htmlToBlocks(toc + doc(RISK_OLD, MDNA)), "10-K");
@@ -113,6 +124,15 @@ describe("buildRedline", () => {
     }, r);
     expect(v.bullets.map((b) => b.text)).toEqual(["Export-control risk hardened."]);
     expect(v.dropped).toBe(3);
+  });
+});
+
+describe("whole-report fallback", () => {
+  it("compares the full text when neither filing has recognisable sections", () => {
+    const html = (x: string) => `<p><b>CONSOLIDATED RESULTS</b></p><p>Orders grew in the quarter as commercial engine demand stayed strong across regions.</p><p>${x}</p>`;
+    const r = buildRedline({ ticker: "GE", form: "10-Q", from: F("a", "2025-10-21", "10-Q"), to: F("b", "2026-10-20", "10-Q"), oldHtml: html("Supply chain constraints may limit deliveries of certain engines."), newHtml: html("Supply chain constraints have limited deliveries of certain engines and tariffs were imposed on imported parts.") });
+    expect(r.sections.map((x) => [x.key, x.found])).toEqual([["ALL", "both"]]);
+    expect(r.changes.filter((c) => c.type === "changed")).toHaveLength(1);
   });
 });
 

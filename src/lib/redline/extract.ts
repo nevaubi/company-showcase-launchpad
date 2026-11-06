@@ -94,7 +94,8 @@ export function htmlToBlocks(html: string): Block[] {
       } else if (tableDepth > 0) {
         tableDepth--;
         if (tableDepth === 0) {
-          if (rowText.length) { tableText.push(rowText.join(" ")); rowText = []; tableRows++; }
+          if (rowText.join("").trim()) { tableText.push(rowText.join(" ")); tableRows++; }
+          rowText = [];
           const txt = tableText.join(" ").replace(/\s+/g, " ").trim();
           // Layout table: few rows, little text, mostly words.
           const digits = (txt.match(/\d/g) ?? []).length;
@@ -104,7 +105,7 @@ export function htmlToBlocks(html: string): Block[] {
       continue;
     }
     if (tableDepth > 0) {
-      if (tag === "tr" && close) { tableText.push(rowText.join(" ")); rowText = []; tableRows++; }
+      if (tag === "tr" && close) { const row = rowText.join(" "); if (row.trim()) { tableText.push(row); tableRows++; } rowText = []; }
       else if ((tag === "td" || tag === "th") && close) rowText.push(" ");
       continue;
     }
@@ -175,6 +176,26 @@ export const SECTION_DEFS: Record<"10-K" | "10-Q", { key: string; title: string;
   ],
 };
 
+const NOTES_TITLE = /^notes to (the )?(consolidated |condensed |combined )*financial statements$/i;
+const TITLE_KEYS: Record<"10-K" | "10-Q", { key: string; re: RegExp }[]> = {
+  "10-K": [
+    { key: "1A", re: /^risk factors\b/i },
+    { key: "1C", re: /^cybersecurity$/i },
+    { key: "3", re: /^legal proceedings$/i },
+    { key: "7", re: /^management['’]s discussion and analysis\b/i },
+    { key: "7A", re: /^quantitative and qualitative disclosures? about market risk$/i },
+    { key: "8", re: NOTES_TITLE },
+    { key: "9A", re: /^controls and procedures$/i },
+  ],
+  "10-Q": [
+    { key: "I-1", re: NOTES_TITLE },
+    { key: "I-2", re: /^management['’]s discussion and analysis\b/i },
+    { key: "I-3", re: /^quantitative and qualitative disclosures? about market risk$/i },
+    { key: "I-4", re: /^controls and procedures$/i },
+    { key: "II-1", re: /^legal proceedings$/i },
+    { key: "II-1A", re: /^risk factors\b/i },
+  ],
+};
 const ITEM_RE = /^\s*item\s*(\d{1,2}\s?[a-c]?)\s*(?:[.:\-–—]|\s)\s*(.{0,160})$/i;
 const PART_RE = /^\s*part\s+(i{1,2}|1|2)\b(?!\w)/i;
 
@@ -195,6 +216,18 @@ export function splitSections(blocks: Block[], form: "10-K" | "10-Q"): Section[]
     if (!m) continue;
     const item = m[1].replace(/\s/g, "").toUpperCase();
     hits.push({ idx: i, key: form === "10-Q" ? `${part}-${item}` : item });
+  }
+  // Some filers (e.g. Intel) organise the report by topic and map Items in a cross-reference index:
+  // fall back to the standard section titles when the Items themselves aren't headings.
+  const known = new Set(hits.map((h) => h.key).filter((k) => defs.some((d) => d.key === k)));
+  if (known.size < 2) {
+    hits.length = 0;
+    for (let i = 0; i < blocks.length; i++) {
+      const b = blocks[i];
+      if (!b.heading || b.text.length > 120) continue;
+      const hit = TITLE_KEYS[form].find((x) => x.re.test(b.text.trim()));
+      if (hit) hits.push({ idx: i, key: hit.key });
+    }
   }
   // Text length following each hit until the next hit.
   const len = (k: number) => {

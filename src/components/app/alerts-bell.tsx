@@ -20,16 +20,17 @@ export const alertsQuery = (tickers: string[]) => ({
   staleTime: 10 * 60_000,
   queryFn: async (): Promise<Alert[]> => {
     const since = new Date(Date.now() - DAYS * 86400_000).toISOString().slice(0, 10);
-    const [f, i, l, a, ideas] = await Promise.all([
+    const [f, i, l, a, ideas, rl] = await Promise.all([
       supabase.from("sec_filings").select("accn,ticker,form,filed,doc,description,items,discovered_at").in("ticker", tickers).gte("filed", since).limit(400),
       supabase.from("insider_trades").select("accn,seq,ticker,owner,role,code,shares,price,plan_10b5,trade_date,doc,filed,discovered_at").in("ticker", tickers).gte("filed", since).in("code", ["P", "S"]).limit(500),
       supabase.from("supply_links").select("id,ticker,counterparty,relation,detail,accn,doc,form,filed,created_at,is_current").in("ticker", tickers).eq("is_current", true).gte("filed", since).limit(300),
       supabase.from("alt_data").select("uid,ticker,dataset,title,date,source_url,created_at").in("ticker", tickers).eq("kind", "event").gte("date", since).limit(300),
       fetch("/data/signals.json").then((r) => r.json()).catch(() => ({ ideas: [] })),
+      supabase.from("filing_redlines").select("ticker,form,to_accn,to_filed,high,medium,stats").in("ticker", tickers).gte("to_filed", since).limit(100),
     ]);
     return buildAlerts({
       tickers, since,
-      filings: f.data ?? [], insiders: (i.data ?? []) as never, links: (l.data ?? []) as never, alt: a.data ?? [], ideas: ideas?.ideas ?? [],
+      filings: f.data ?? [], insiders: (i.data ?? []) as never, links: (l.data ?? []) as never, alt: a.data ?? [], ideas: ideas?.ideas ?? [], redlines: (rl.data ?? []) as never,
     });
   },
 });
@@ -114,6 +115,7 @@ export function AlertsBell() {
                 </>
               );
               const cls = "flex w-full items-start gap-2 border-b px-3 py-2 text-left last:border-0 hover:bg-muted/50";
+              if (a.redline) return <Link key={a.id} to="/app/companies/$ticker/redline" params={{ ticker: a.ticker }} search={{ form: a.redline.form }} className={cls}>{body}</Link>;
               return a.path ? <Link key={a.id} to="/app/ideas" className={cls}>{body}</Link> : <button key={a.id} onClick={() => go(a)} className={cls}>{body}</button>;
             })
           )}

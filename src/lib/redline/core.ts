@@ -2,7 +2,7 @@
 import { htmlToBlocks, SECTION_DEFS, splitSections, type Block } from "./extract";
 import { diffBlocks, opWords, type Op } from "./diff";
 
-export const REDLINE_VERSION = 1;
+export const REDLINE_VERSION = 2;
 
 export interface FilingRef { accn: string; doc: string; form: string; filed: string; report?: string }
 
@@ -132,11 +132,19 @@ function contextFor(blocks: Block[], idx: number | undefined): string | null {
 
 /** Compare two filings of the same form. */
 export function buildRedline(p: { ticker: string; form: "10-K" | "10-Q"; from: FilingRef; to: FilingRef; oldHtml: string; newHtml: string; now?: string }): Redline {
-  const oldS = splitSections(htmlToBlocks(p.oldHtml), p.form);
-  const newS = splitSections(htmlToBlocks(p.newHtml), p.form);
+  const oldB = htmlToBlocks(p.oldHtml), newB = htmlToBlocks(p.newHtml);
+  let oldS = splitSections(oldB, p.form);
+  let newS = splitSections(newB, p.form);
+  let defs = SECTION_DEFS[p.form];
+  // Filers that organise reports by topic (fewer than two recognisable Items or titles): compare the whole text.
+  if (defs.filter((d) => oldS.some((s) => s.key === d.key) && newS.some((s) => s.key === d.key)).length < 2) {
+    defs = [{ key: "ALL", title: "Full report", weight: 1 }];
+    oldS = [{ key: "ALL", title: "Full report", blocks: oldB }];
+    newS = [{ key: "ALL", title: "Full report", blocks: newB }];
+  }
   const stats: SectionStats[] = [];
   const changes: Change[] = [];
-  for (const def of SECTION_DEFS[p.form]) {
+  for (const def of defs) {
     const a = oldS.find((s) => s.key === def.key), b = newS.find((s) => s.key === def.key);
     if (!a && !b) continue;
     const st: SectionStats = { key: def.key, title: def.title, added: 0, removed: 0, changed: 0, figuresOnly: 0, unchanged: 0, moved: 0, wordsAdded: 0, wordsRemoved: 0, high: 0, medium: 0, found: a && b ? "both" : a ? "old" : "new" };

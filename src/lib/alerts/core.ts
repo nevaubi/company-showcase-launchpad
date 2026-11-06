@@ -15,6 +15,8 @@ export interface Alert {
   url?: string;
   /** In-app page */
   path?: string;
+  /** Opens the company's filing-changes view */
+  redline?: { form: "10-K" | "10-Q" };
 }
 
 export interface AlertInputs {
@@ -25,6 +27,7 @@ export interface AlertInputs {
   links: { id: string; ticker: string; counterparty: string; relation: string; detail: string; accn: string; doc: string; form: string; filed: string; created_at: string; is_current: boolean }[];
   alt: { uid: string; ticker: string; dataset: string; title: string; date: string | null; source_url: string | null; created_at: string }[];
   ideas: { ticker: string; asOf: string; direction: string; signals: { detail: string }[] }[];
+  redlines?: { ticker: string; form: string; to_accn: string; to_filed: string; high: number; medium: number; stats: { title: string; high: number; found: string }[] }[];
 }
 
 const MATERIAL = /^(10-K|10-Q|8-K|S-1|S-4|DEF 14A|SC 13D|SC 13G|424B)/;
@@ -84,6 +87,17 @@ export function buildAlerts(inp: AlertInputs): Alert[] {
       id: `t:${i.ticker}:${i.asOf}:${i.direction}`, ticker: i.ticker, kind: "idea", at: `${i.asOf}T21:00:00Z`,
       title: `${i.direction === "long" ? "Long" : "Short"} setup: ${i.signals.length} rule${i.signals.length === 1 ? "" : "s"} aligned`,
       detail: i.signals.map((s) => s.detail).slice(0, 2).join(" · "), path: "/app/ideas",
+    });
+  }
+  for (const r of inp.redlines ?? []) {
+    // A new 10-K/10-Q alerts on its own; the comparison alerts only when it found material wording changes.
+    if (!ok(r.ticker, r.to_filed) || (r.form !== "10-K" && r.form !== "10-Q") || (r.high === 0 && r.medium < 5)) continue;
+    const top = r.stats.filter((s) => s.found === "both" && s.high > 0).sort((a, b) => b.high - a.high).slice(0, 3);
+    out.push({
+      id: `r:${r.to_accn}`, ticker: r.ticker, kind: "filing", at: `${r.to_filed}T13:00:00Z`,
+      title: `${r.form} wording changes: ${r.high ? `${r.high} high-materiality` : `${r.medium} notable`} vs ${r.form === "10-K" ? "last year's report" : "the same quarter last year"}`,
+      detail: top.length ? top.map((s) => `${s.title} ${s.high}`).join(" · ") : undefined,
+      redline: { form: r.form },
     });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at));
