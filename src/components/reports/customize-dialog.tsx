@@ -42,7 +42,7 @@ export function CustomizeDialog({ open, onOpenChange, kind, initial, onGenerate,
   };
   useEffect(() => { if (open) { load(initial); setScope(firm && can("analyst") ? "firm" : "user"); } }, [open, kind]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const final = (): ReportOptions => normalizeOptions(kind, { ...o, sections: order.filter((s) => on.has(s)) });
+  const final = (): ReportOptions => normalizeOptions(kind, { ...o, sections: order.filter((s) => on.has(s) && all.includes(s)) });
   const move = (i: number, d: -1 | 1) => setOrder((x) => { const y = [...x]; const j = i + d; if (j < 0 || j >= y.length) return x; [y[i], y[j]] = [y[j], y[i]]; return y; });
 
   return (
@@ -75,7 +75,7 @@ export function CustomizeDialog({ open, onOpenChange, kind, initial, onGenerate,
           <div className="space-y-1.5">
             <p className="text-xs font-medium">Sections</p>
             <ul className="divide-y rounded-md border">
-              {order.map((id, i) => {
+              {order.filter((id) => def.sections.some((x) => x.id === id)).map((id, i) => {
                 const s = def.sections.find((x) => x.id === id)!;
                 return (
                   <li key={id} className={cn("flex items-center gap-2 px-2 py-1.5", !on.has(id) && "opacity-55")}>
