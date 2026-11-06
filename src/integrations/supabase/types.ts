@@ -946,6 +946,115 @@ export type Database = {
         }
         Relationships: []
       }
+      report_templates: {
+        Row: {
+          created_at: string
+          created_by: string
+          firm_id: string | null
+          id: string
+          kind: string
+          name: string
+          options: Json
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          firm_id?: string | null
+          id?: string
+          kind: string
+          name: string
+          options?: Json
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          firm_id?: string | null
+          id?: string
+          kind?: string
+          name?: string
+          options?: Json
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_templates_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reports: {
+        Row: {
+          content: Json | null
+          created_at: string
+          data_version: string
+          error: string | null
+          firm_id: string | null
+          id: string
+          kind: string
+          options: Json
+          requested_by: string | null
+          scope: string
+          started_at: string | null
+          status: string
+          ticker: string
+          title: string | null
+          updated_at: string
+          user_id: string | null
+          variant: string
+        }
+        Insert: {
+          content?: Json | null
+          created_at?: string
+          data_version?: string
+          error?: string | null
+          firm_id?: string | null
+          id?: string
+          kind: string
+          options?: Json
+          requested_by?: string | null
+          scope: string
+          started_at?: string | null
+          status?: string
+          ticker: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+          variant?: string
+        }
+        Update: {
+          content?: Json | null
+          created_at?: string
+          data_version?: string
+          error?: string | null
+          firm_id?: string | null
+          id?: string
+          kind?: string
+          options?: Json
+          requested_by?: string | null
+          scope?: string
+          started_at?: string | null
+          status?: string
+          ticker?: string
+          title?: string | null
+          updated_at?: string
+          user_id?: string | null
+          variant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       research_messages: {
         Row: {
           content: string
