@@ -49,6 +49,7 @@ import { Route as AuthenticatedAppCompaniesTickerFinancialsRouteImport } from '.
 import { Route as AuthenticatedAppCompaniesTickerInsidersRouteImport } from './routes/_authenticated/app.companies.$ticker.insiders'
 import { Route as AuthenticatedAppCompaniesTickerIrRouteImport } from './routes/_authenticated/app.companies.$ticker.ir'
 import { Route as AuthenticatedAppCompaniesTickerMemoRouteImport } from './routes/_authenticated/app.companies.$ticker.memo'
+import { Route as AuthenticatedAppCompaniesTickerRedlineRouteImport } from './routes/_authenticated/app.companies.$ticker.redline'
 import { Route as AuthenticatedAppCompaniesTickerReportsRouteImport } from './routes/_authenticated/app.companies.$ticker.reports'
 import { Route as AuthenticatedAppCompaniesTickerValuationRouteImport } from './routes/_authenticated/app.companies.$ticker.valuation'
 
@@ -274,6 +275,12 @@ const AuthenticatedAppCompaniesTickerMemoRoute =
     path: '/memo',
     getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
   } as any)
+const AuthenticatedAppCompaniesTickerRedlineRoute =
+  AuthenticatedAppCompaniesTickerRedlineRouteImport.update({
+    id: '/redline',
+    path: '/redline',
+    getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
+  } as any)
 const AuthenticatedAppCompaniesTickerReportsRoute =
   AuthenticatedAppCompaniesTickerReportsRouteImport.update({
     id: '/reports',
@@ -326,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/app/companies/$ticker/ir': typeof AuthenticatedAppCompaniesTickerIrRoute
   '/app/companies/$ticker/memo': typeof AuthenticatedAppCompaniesTickerMemoRoute
+  '/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
@@ -366,6 +374,7 @@ export interface FileRoutesByTo {
   '/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/app/companies/$ticker/ir': typeof AuthenticatedAppCompaniesTickerIrRoute
   '/app/companies/$ticker/memo': typeof AuthenticatedAppCompaniesTickerMemoRoute
+  '/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
@@ -411,6 +420,7 @@ export interface FileRoutesById {
   '/_authenticated/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/_authenticated/app/companies/$ticker/ir': typeof AuthenticatedAppCompaniesTickerIrRoute
   '/_authenticated/app/companies/$ticker/memo': typeof AuthenticatedAppCompaniesTickerMemoRoute
+  '/_authenticated/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/_authenticated/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/_authenticated/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
@@ -456,6 +466,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/insiders'
     | '/app/companies/$ticker/ir'
     | '/app/companies/$ticker/memo'
+    | '/app/companies/$ticker/redline'
     | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
     | '/app/companies/$ticker/'
@@ -496,6 +507,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/insiders'
     | '/app/companies/$ticker/ir'
     | '/app/companies/$ticker/memo'
+    | '/app/companies/$ticker/redline'
     | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
     | '/app/companies/$ticker'
@@ -540,6 +552,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/companies/$ticker/insiders'
     | '/_authenticated/app/companies/$ticker/ir'
     | '/_authenticated/app/companies/$ticker/memo'
+    | '/_authenticated/app/companies/$ticker/redline'
     | '/_authenticated/app/companies/$ticker/reports'
     | '/_authenticated/app/companies/$ticker/valuation'
     | '/_authenticated/app/companies/$ticker/'
@@ -836,6 +849,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCompaniesTickerMemoRouteImport
       parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
     }
+    '/_authenticated/app/companies/$ticker/redline': {
+      id: '/_authenticated/app/companies/$ticker/redline'
+      path: '/redline'
+      fullPath: '/app/companies/$ticker/redline'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerRedlineRouteImport
+      parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
+    }
     '/_authenticated/app/companies/$ticker/reports': {
       id: '/_authenticated/app/companies/$ticker/reports'
       path: '/reports'
@@ -878,6 +898,7 @@ interface AuthenticatedAppCompaniesTickerRouteChildren {
   AuthenticatedAppCompaniesTickerInsidersRoute: typeof AuthenticatedAppCompaniesTickerInsidersRoute
   AuthenticatedAppCompaniesTickerIrRoute: typeof AuthenticatedAppCompaniesTickerIrRoute
   AuthenticatedAppCompaniesTickerMemoRoute: typeof AuthenticatedAppCompaniesTickerMemoRoute
+  AuthenticatedAppCompaniesTickerRedlineRoute: typeof AuthenticatedAppCompaniesTickerRedlineRoute
   AuthenticatedAppCompaniesTickerReportsRoute: typeof AuthenticatedAppCompaniesTickerReportsRoute
   AuthenticatedAppCompaniesTickerValuationRoute: typeof AuthenticatedAppCompaniesTickerValuationRoute
   AuthenticatedAppCompaniesTickerIndexRoute: typeof AuthenticatedAppCompaniesTickerIndexRoute
@@ -903,6 +924,8 @@ const AuthenticatedAppCompaniesTickerRouteChildren: AuthenticatedAppCompaniesTic
       AuthenticatedAppCompaniesTickerIrRoute,
     AuthenticatedAppCompaniesTickerMemoRoute:
       AuthenticatedAppCompaniesTickerMemoRoute,
+    AuthenticatedAppCompaniesTickerRedlineRoute:
+      AuthenticatedAppCompaniesTickerRedlineRoute,
     AuthenticatedAppCompaniesTickerReportsRoute:
       AuthenticatedAppCompaniesTickerReportsRoute,
     AuthenticatedAppCompaniesTickerValuationRoute:

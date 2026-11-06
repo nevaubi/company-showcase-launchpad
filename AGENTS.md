@@ -56,3 +56,4 @@
 - Region risk: pure in `src/lib/supply/region.ts`; external lookups via authed `supply-region.functions.ts`, cached, sourced.
 - Firm workspaces: permissions live in the database (RLS, checked RPCs, guard triggers); firm tables `REVOKE ALL` then grant exact columns, because this project's default privileges grant everything.
 - Report library: facts are built purely in `src/lib/reports/` and every model sentence is re-checked against them (`vet.ts`, sign-aware); slots are written only through `ensureReport` (`store.server.ts`, single flight + `report_runs` spend limits), shared by the authed server fn and `scripts/reports-pregen.ts`.
+- Filing redlines are pure in `src/lib/redline/` (text blocks → sections → paragraph pairing → word diff → rule-based score); `scripts/redlines.ts` stores standard pairs in `filing_redlines`, other pairs are compared in a browser worker, and briefs keep only bullets whose quote is verbatim in a cited change.

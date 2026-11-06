@@ -53,6 +53,7 @@ const TABS = [
   { to: "/app/companies/$ticker/estimates", label: "Estimates & analysts" },
   { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
   { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
+  { to: "/app/companies/$ticker/redline", label: "Filing changes" },
   { to: "/app/companies/$ticker/insiders", label: "Insiders" },
   { to: "/app/companies/$ticker/alt-data", label: "Alt data" },
   { to: "/app/companies/$ticker/reports", label: "Reports" },
@@ -60,7 +61,7 @@ const TABS = [
 const TAB_GROUPS = [
   { label: "Financials", paths: ["financials", "valuation", "ir"] },
   { label: "Intelligence", paths: ["earnings", "estimates", "insiders", "alt-data"] },
-  { label: "Documents", paths: ["reports", "calls", "filings"] },
+  { label: "Documents", paths: ["reports", "calls", "filings", "redline"] },
 ];
 
 function CompanyLayout() {

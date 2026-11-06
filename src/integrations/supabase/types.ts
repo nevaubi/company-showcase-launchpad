@@ -184,6 +184,54 @@ export type Database = {
         }
         Relationships: []
       }
+      filing_redlines: {
+        Row: {
+          created_at: string
+          form: string
+          from_accn: string
+          high: number
+          id: string
+          medium: number
+          payload: Json
+          stats: Json
+          summary: Json | null
+          ticker: string
+          to_accn: string
+          to_filed: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          form: string
+          from_accn: string
+          high?: number
+          id?: string
+          medium?: number
+          payload: Json
+          stats?: Json
+          summary?: Json | null
+          ticker: string
+          to_accn: string
+          to_filed: string
+          version: number
+        }
+        Update: {
+          created_at?: string
+          form?: string
+          from_accn?: string
+          high?: number
+          id?: string
+          medium?: number
+          payload?: Json
+          stats?: Json
+          summary?: Json | null
+          ticker?: string
+          to_accn?: string
+          to_filed?: string
+          version?: number
+        }
+        Relationships: []
+      }
       firm_activity: {
         Row: {
           action: string

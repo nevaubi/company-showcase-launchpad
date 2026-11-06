@@ -7,7 +7,9 @@
 - [x] M2 Report library: company primer, earnings preview, earnings recap and IC memo per company (shared, refreshed when filings/week change), cited sentences + numbered sources, PDF (print) and Word download, customize (sections, order, length, audience, stance, emphasis), firm/personal templates, firm branding, library page with coverage matrix
   - [ ] M2b Pre-write standard reports for all 78 core companies (`bun scripts/reports-pregen.ts --max=40` per run; 8 written for NVDA/AAPL) and schedule it after ingest
   - [ ] M2c Extend reports to the partner-universe companies once their datasets finish backfilling
-- [ ] M3 SEC redline engine: consecutive 10-K/10-Q section diff (risk factors, MD&A, footnotes), changed/added/removed paragraphs, materiality ranking, source links
+- [x] M3 SEC redline engine: 10-K vs prior 10-K and 10-Q vs same quarter last year, by section (risk factors, MD&A, legal, controls, notes), word-level diffs, rule-based materiality, cited "what changed" brief, links into both filings, any-pair comparison in the browser, assistant tool (`get_filing_changes`)
+  - [ ] M3b Precompute comparisons for all 78 core companies (`bun scripts/redlines.ts --history=2`) and schedule after each new 10-K/10-Q; add "new risk factor" to watchlist alerts
+  - [ ] M3c Table-level redlines for notes (debt maturities, segment tables) and 8-K exhibit comparisons
 - [ ] M4 Cross-company KPI & segment matrix + industry deep dives (normalized calendar quarters), assistant tools to query it
 - [ ] M5 Interactive web financial model (driver-based 3-statement + DCF) and Wall Street-grade Excel model export (live formulas, inputs/formulas color convention, sensitivity table)
 - [ ] M6 Call tone analysis: prepared remarks vs Q&A tone discrepancies, across-call trend; timed briefs

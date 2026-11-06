@@ -217,6 +217,13 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_filing_changes",
+    description: "Redline of a covered company's latest 10-K vs the prior 10-K (or latest 10-Q vs the same quarter a year earlier): new/removed risk factors and paragraphs, rewritten language in MD&A, legal, controls and notes, ranked by a rule-based materiality score, with the verbatim new and old text and the heading each sits under. Cite as filing:TICKER:ACCESSION with a verbatim phrase.",
+    parameters: obj({ ticker: str("Covered ticker"), form: { type: "string", enum: ["10-K", "10-Q"], description: "Annual or quarterly report" } }, ["ticker", "form"]),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_estimates",
     description: "Sell-side consensus for a covered company: EPS and revenue estimates (avg/low/high, analyst count, growth) for current/next quarter and fiscal year, 7/30/60/90-day EPS revisions, earnings surprise history, rating counts, price targets and recent upgrades/downgrades. Third-party data, not from filings.",
     parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
@@ -257,7 +264,7 @@ export const TOOL_DEFS = [
       "Open a page in the user's Filed Under app (only works in the side-panel assistant). Use when the user asks to show/open/go to something, or when a page would help them see your answer.",
     parameters: obj(
       {
-        page: { type: "string", enum: ["dashboard", "company", "financials", "segments", "valuation", "filings", "insiders", "calls", "ir", "supply_chain", "ideas", "markets", "macro", "sectors", "research", "theses", "docs", "companies", "hedge_funds", "alt_data"] },
+        page: { type: "string", enum: ["dashboard", "company", "financials", "segments", "valuation", "filings", "filing_changes", "reports", "insiders", "calls", "ir", "supply_chain", "ideas", "markets", "macro", "sectors", "research", "theses", "docs", "companies", "hedge_funds", "alt_data"] },
         ticker: nullable(str("Ticker for company pages and supply_chain")),
       },
       ["page", "ticker"],
@@ -351,6 +358,7 @@ export const TOOL_LABELS: Record<string, string> = {
   get_promises: "Check management promises",
   get_alerts: "Read watchlist alerts",
   get_estimates: "Read analyst estimates",
+  get_filing_changes: "Compared filings",
   get_company_dossier: "Built company dossier",
   simulate_supply_shock: "Simulated shock",
   navigate_to: "Opened page",

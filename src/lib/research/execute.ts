@@ -76,6 +76,8 @@ const PAGE_PATH: Record<string, (t: string) => string> = {
   segments: (t) => `/app/companies/${t}/ir`,
   valuation: (t) => `/app/companies/${t}/valuation`,
   filings: (t) => `/app/companies/${t}/filings`,
+  filing_changes: (t) => `/app/companies/${t}/redline`,
+  reports: (t) => (t ? `/app/companies/${t}/reports` : "/app/reports"),
   insiders: (t) => `/app/companies/${t}/insiders`,
   calls: (t) => `/app/companies/${t}/calls`,
   ir: (t) => `/app/companies/${t}/ir`,
@@ -188,6 +190,31 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
         output: clip([`${t} credibility ${c.score != null ? Math.round(c.score * 100) : "n/a"} (kept ${c.kept}, partial ${c.partial}, missed ${c.missed}, pending ${c.pending})`, ...r.promises.map((p) => `${p.callDate} [${p.status}] ${p.summary} — "${p.quote}" <${p.callUrl}>${p.outcomeQuote ? ` → ${p.outcomeCallDate}: "${p.outcomeQuote}" <${p.outcomeUrl}>` : ""}`)].join("\n")),
         summary: `${r.promises.length} promises`,
       };
+    }
+    case "get_filing_changes": {
+      const t = String(args.ticker).toUpperCase();
+      const form = args.form === "10-Q" ? "10-Q" : "10-K";
+      const { REDLINE_VERSION, textsOf } = await import("@/lib/redline/core");
+      const { data: row } = await supabase.from("filing_redlines").select("payload").eq("ticker", t).eq("form", form).eq("version", REDLINE_VERSION).order("to_filed", { ascending: false }).limit(1).maybeSingle();
+      if (!row) return { output: `No stored ${form} comparison for ${t}. Open /app/companies/${t}/redline to compare filings on the spot.`, summary: "no comparison" };
+      const r = row.payload as unknown as import("@/lib/redline/core").Redline;
+      const titles = new Map(r.sections.map((x) => [x.key, x.title]));
+      const top = r.changes.filter((c) => !c.figuresOnly && c.level !== "low").sort((a, b) => b.score - a.score).slice(0, 25);
+      const cut = (x: string | null, n: number) => (!x ? "" : x.length > n ? `${x.slice(0, n)}…` : x);
+      const lines = [
+        `${t} ${form} filed ${r.to.filed} (accn ${r.to.accn}) vs ${r.from.filed} (accn ${r.from.accn}).`,
+        `Sections: ${r.sections.map((x) => `${x.title} +${x.added}/-${x.removed}/~${x.changed} (high ${x.high})`).join("; ")}`,
+        ...top.map((c) => {
+          const tx = textsOf(c);
+          const added = c.ops ? c.ops.filter((o) => o.t === "+").map((o) => o.s.trim()).join(" … ") : "";
+          return [
+            `[${c.level} ${c.score}] ${titles.get(c.section) ?? c.section} · ${c.type}${c.isHeading ? " (heading)" : ""}${c.context ? ` under "${cut(c.context, 100)}"` : ""} — ${c.why.join("; ")}`,
+            c.type === "removed" ? `  OLD (accn ${r.from.accn}): "${cut(tx.before, 500)}"` : `  NEW (accn ${r.to.accn}): "${cut(tx.after, 500)}"`,
+            c.type === "changed" ? `  ADDED WORDS: "${cut(added, 300)}"` : "",
+          ].filter(Boolean).join("\n");
+        }),
+      ];
+      return { output: clip(lines.join("\n")), summary: `${top.length} material changes` };
     }
     case "get_estimates": {
       const t = String(args.ticker).toUpperCase();

@@ -38,7 +38,8 @@ const EMPH_TAG = new Set(["b", "strong", "i", "em", "u"]);
 
 function emphasized(tag: string, attrs: string): boolean {
   if (EMPH_TAG.has(tag)) return true;
-  const st = /style\s*=\s*["']([^"']*)["']/i.exec(attrs)?.[1] ?? "";
+  const m = /style\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(attrs);
+  const st = m ? m[1] ?? m[2] ?? "" : "";
   return /font-weight\s*:\s*(bold|bolder|[6-9]00)/i.test(st) || /font-style\s*:\s*italic/i.test(st) || /text-decoration\s*:\s*underline/i.test(st);
 }
 
@@ -130,17 +131,24 @@ export function htmlToBlocks(html: string): Block[] {
   return dropArtifacts(out);
 }
 
-/** Page numbers, running headers/footers, "Table of Contents" back-links. */
+/** Page numbers, running headers/footers, "Table of Contents" back-links; re-join paragraphs split by a page break. */
 function dropArtifacts(blocks: Block[]): Block[] {
   const counts = new Map<string, number>();
   for (const b of blocks) if (b.text.length < 120) counts.set(b.text.toLowerCase(), (counts.get(b.text.toLowerCase()) ?? 0) + 1);
-  return blocks.filter((b) => {
+  const kept = blocks.filter((b) => {
     const t = b.text;
     if (/^(page\s*)?[\divxlc\-–\s]{1,8}$/i.test(t)) return false;
     if (/^(table of contents|index|back to (top|contents))$/i.test(t)) return false;
     if (t.length < 120 && (counts.get(t.toLowerCase()) ?? 0) >= 6) return false;
     return true;
   });
+  const out: Block[] = [];
+  for (const b of kept) {
+    const prev = out[out.length - 1];
+    if (prev && !prev.heading && !b.heading && /^[a-z]/.test(b.text) && !/[.!?:;”")]$/.test(prev.text)) prev.text = `${prev.text} ${b.text}`;
+    else out.push({ ...b });
+  }
+  return out;
 }
 
 /** Sections compared in each form, keyed by part + item. */
@@ -203,12 +211,42 @@ export function splitSections(blocks: Block[], form: "10-K" | "10-Q"): Section[]
   });
   const chosen = [...best.entries()].map(([key, v]) => ({ key, idx: v.idx })).sort((a, b) => a.idx - b.idx);
   const out: Section[] = [];
+  // 10-K notes often sit after Item 15 rather than under Item 8.
+  const notesRe = /^notes to (the )?(condensed )?consolidated financial statements\b/i;
+  const item8 = chosen.find((c) => c.key === "8");
+  let notes: { idx: number; end: number; n: number } | null = null;
+  if (form === "10-K") {
+    for (let i = 0; i < blocks.length; i++) {
+      if (blocks[i].text.length > 160 || !notesRe.test(blocks[i].text)) continue;
+      let end = blocks.length, n = 0;
+      for (let j = i + 1; j < blocks.length; j++) {
+        if (/^(signatures|exhibit index)$/i.test(blocks[j].text) || (blocks[j].text.length < 160 && ITEM_RE.test(blocks[j].text) && /^\s*item\s*1[56]/i.test(blocks[j].text))) { end = j; break; }
+        n += blocks[j].text.length;
+      }
+      if (!notes || n > notes.n) notes = { idx: i, end, n };
+    }
+  }
   chosen.forEach((c, k) => {
     const def = defs.find((d) => d.key === c.key);
     if (!def) return;
     const end = k + 1 < chosen.length ? chosen[k + 1].idx : blocks.length;
     const body = blocks.slice(c.idx + 1, end).filter((b) => !/^part\s+i{1,2}\b/i.test(b.text) || b.text.length > 80);
+    if (c.key === "8" && body.length < 20) return; // statements/notes sit elsewhere (filled below)
     if (body.length) out.push({ key: def.key, title: def.title, blocks: body });
   });
+  if (form === "10-K" && !out.some((s) => s.key === "8")) {
+    const def = defs.find((d) => d.key === "8")!;
+    if (notes) out.push({ key: def.key, title: def.title, blocks: blocks.slice(notes.idx + 1, notes.end) });
+    else {
+      // Statements and notes filed under Item 15 ("Exhibits and Financial Statement Schedules").
+      const k15 = chosen.findIndex((c) => c.key === "15");
+      if (k15 >= 0) {
+        const end = k15 + 1 < chosen.length ? chosen[k15 + 1].idx : blocks.length;
+        const body = blocks.slice(chosen[k15].idx + 1, end).filter((b) => !/^signatures$/i.test(b.text));
+        if (body.length >= 20) out.push({ key: def.key, title: def.title, blocks: body });
+      }
+    }
+  }
+  out.sort((a, b) => defs.findIndex((d) => d.key === a.key) - defs.findIndex((d) => d.key === b.key));
   return out;
 }
