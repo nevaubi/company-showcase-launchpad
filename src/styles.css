@@ -447,3 +447,8 @@
   .text-shimmer { animation: none; color: var(--muted-foreground); background: none; }
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+@media print {
+  aside, header, nav, [data-print-hide] { display: none !important; }
+  .memo-print { font-size: 10px; }
+}

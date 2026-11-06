@@ -54,11 +54,12 @@ const TABS = [
   { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
   { to: "/app/companies/$ticker/insiders", label: "Insiders" },
   { to: "/app/companies/$ticker/alt-data", label: "Alt data" },
+  { to: "/app/companies/$ticker/memo", label: "IC memo" },
 ] as const;
 const TAB_GROUPS = [
   { label: "Financials", paths: ["financials", "valuation", "ir"] },
   { label: "Intelligence", paths: ["earnings", "estimates", "insiders", "alt-data"] },
-  { label: "Documents", paths: ["calls", "filings"] },
+  { label: "Documents", paths: ["calls", "filings", "memo"] },
 ];
 
 function CompanyLayout() {
