@@ -466,4 +466,6 @@
   html.printing-report .report-doc h3 { break-after: avoid; }
   html.printing-report .report-doc .overflow-x-auto { overflow: visible; }
   html.printing-report .report-doc table { min-width: 0; }
+  html.printing-report .report-doc .report-chart { break-inside: avoid; }
+  html.printing-report .report-doc .report-charts { gap: 14px 18px; }
 }

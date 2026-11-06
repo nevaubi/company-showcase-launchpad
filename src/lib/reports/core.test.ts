@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import type { CompanyDataset } from "@/lib/financials/types";
-import { buildReportData, isoWeek, money, pct } from "./facts";
+import { REPORT_FORMAT, buildReportData, isoWeek, money, pct } from "./facts";
 import { normalizeOptions, variantKey } from "./kinds";
-import { numbersIn, vetClaim, vetSections } from "./vet";
+import { companyAliases, numbersIn, vetClaim, vetSections } from "./vet";
 import type { Fact } from "./types";
 
 const fact = (id: string, text: string): Fact => ({ id, area: "annual", text, ref: { kind: "market", label: "x", asOf: "2026-01-01" } });
@@ -63,6 +63,27 @@ describe("claim vetting", () => {
     expect(sections.map((s) => s.id)).toEqual(["b"]);
     expect(qa.removed.length).toBe(1);
   });
+  describe("peer attribution", () => {
+    const pf: Fact[] = [
+      { id: "P1", area: "peers", text: "MSFT operating margin (four quarters through 2026-03-31): 47.1%.", ref: { kind: "derived", formula: "Operating income ÷ revenue", parts: [], label: "MSFT op margin", tk: "MSFT" } },
+      { id: "S1", area: "peers", text: "AMZN operating margin (four quarters through 2026-03-31): 13.1%.", ref: { kind: "derived", formula: "Operating income ÷ revenue", parts: [], label: "AMZN op margin", tk: "AMZN" } },
+    ];
+    const run = (text: string) => vetSections([{ id: "a", paragraphs: [{ text, factIds: ["P1", "S1"] }], bullets: [] }], [{ id: "a", title: "A" }], pf, new Set(), new Set(), { ticker: "AMZN", peers: [{ ticker: "MSFT", name: "Microsoft Corp" }] });
+    it("drops a peer's figure presented without naming the peer", () => {
+      expect(run("Operating margin reached 47.1%.").sections).toEqual([]);
+    });
+    it("keeps it when the peer is named in the sentence or the one before", () => {
+      expect(run("Microsoft's operating margin was 47.1%, against 13.1% here.").sections[0].paragraphs[0].text).toContain("47.1%");
+      expect(run("The comparison is with MSFT. Its operating margin was 47.1%.").sections[0].paragraphs[0].text).toContain("47.1%");
+    });
+    it("never needs a name for the subject's own figures", () => {
+      expect(run("Operating margin was 13.1%.").sections[0].paragraphs).toHaveLength(1);
+    });
+    it("builds distinctive aliases", () => {
+      expect(companyAliases("MSFT", "Microsoft Corp")).toEqual(expect.arrayContaining(["MSFT", "Microsoft"]));
+      expect(companyAliases("BAC", "Bank of America Corp")).not.toContain("Bank");
+    });
+  });
 });
 
 describe("options", () => {
@@ -112,8 +133,9 @@ describe("fact pack", () => {
     expect(f.ref.parts.some((p) => p.concept === "Revenues" || /Revenue/.test(p.concept))).toBe(true);
     expect(f.ref.market?.[0].value).toBe(200);
   });
-  it("versions by filing and week", () => {
-    expect(built.dataVersion.endsWith(isoWeek("2026-11-06"))).toBe(true);
+  it("versions by filing, week and report format", () => {
+    expect(built.dataVersion.split("|")).toContain(isoWeek("2026-11-06"));
+    expect(built.dataVersion.split("|")).toContain(REPORT_FORMAT);
     expect(isoWeek("2026-01-01")).toBe("2026-W01");
     expect(pct(0.0641, true)).toBe("+6.4%");
   });

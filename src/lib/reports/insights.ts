@@ -6,9 +6,10 @@ import type { PeriodCode, RatingMonth } from "@/lib/estimates/core";
 import { isBankIndustry } from "@/lib/financials/dataset";
 import { multipleStats, valuationHistory, type MultipleKey } from "@/lib/financials/valuation";
 import type { Pack } from "./facts";
+import { coverageOf } from "@/lib/coverage";
 import { money, mult, perShare, pct, pp } from "./fmt";
 import {
-  METRIC_DEF, cellAt, daysBefore, fmtMetric, lastQuarter, median, ols, ordinal, partsOf, peerSnapshot, rankOf, sum4, totalReturn, weeklyCloses,
+  METRIC_DEF, cellAt, daysBefore, fmtMetric, lastQuarter, median, ols, ordinal, partsOf, peerSnapshot, quantile, rankOf, sum4, totalReturn, weeklyCloses, withLivePrice,
   type PeerMetricKey, type PeerSnapshot,
 } from "./peers";
 import type { ChartPoint, ChartSeries, ChartUnit, FactRef, GlanceItem, ReportChart, ReportInputs, ReportTable, TableCell } from "./types";
@@ -48,6 +49,8 @@ const composite = (label: string, formula: string, members: (string | null | und
 };
 const derived = (formula: string, parts: DerivedPart[], label = formula, market?: { label: string; value: number; asOf: string }[]): FactRef =>
   ({ kind: "derived", formula, parts, label, ...(market ? { market } : {}) });
+/** Display name: the curated short name when known, else the SEC registrant name tidied up. */
+const nameOf = (ticker: string, sec: string) => coverageOf(ticker)?.shortName ?? shortName(sec);
 const shortName = (n: string) => n.replace(/,?\s+(Inc\.?|Corporation|Corp\.?|Company|Co\.?|plc|Ltd\.?|Holdings?|Incorporated|N\.V\.|S\.A\.)$/i, "").replace(/^The /, "");
 
 export function buildInsights(c: InsightCtx): Insights {
@@ -92,7 +95,9 @@ export function buildInsights(c: InsightCtx): Insights {
       series("Dividends", "bar", "usd", c.annual.ids.get("dividends")),
     ]);
     const fcfLine = series("Free cash flow", "dash", "usd", c.annual.ids.get("fcf"), { tone: "self" });
-    if (cr.length) charts.push({ id: "capital-returns", type: "stacked", title: "Capital returned versus free cash flow", subtitle: "Fiscal years", x: aCols, series: [...cr, ...(fcfLine.points.some((x) => x.v != null) ? [fcfLine] : [])], size: "half" });
+    // Only worth a chart when the company returns cash in most of the years shown.
+    const years = c.annual.idx.filter((_, k) => cr.reduce((sum, x) => sum + Math.max(0, x.points[k]?.v ?? 0), 0) > 0).length;
+    if (cr.length && years >= 3) charts.push({ id: "capital-returns", type: "stacked", title: "Capital returned versus free cash flow", subtitle: "Fiscal years", x: aCols, series: [...cr, ...(fcfLine.points.some((x) => x.v != null) ? [fcfLine] : [])], size: "half" });
   }
 
   // ---------- operating analysis (TTM vs prior TTM) ----------
@@ -192,7 +197,10 @@ export function buildInsights(c: InsightCtx): Insights {
   segmentHistory(c, charts);
 
   // ---------- peers ----------
-  const self = peerSnapshot(d, inp.prices?.self ?? null, inp.price);
+  // Returns use stored closes for every company so the windows line up; the 52-week range and
+  // multiples use today's price.
+  const bars = inp.prices?.self ?? null;
+  const self = peerSnapshot(d, bars, inp.price);
   const peers = (inp.peers ?? []).filter((x) => x.ticker !== t && Object.keys(x.m).length);
   const all: PeerSnapshot[] = [self, ...peers];
   const keys: PeerMetricKey[] = self.fin
@@ -255,7 +263,7 @@ export function buildInsights(c: InsightCtx): Insights {
     if (usable.length >= 3) charts.push({
       id: "peer-panel", type: "peers", title: "Peer comparison", subtitle: `${t} vs ${peers.length} peers · dashed line = peer median`,
       metrics: usable.map((k) => ({ key: k, label: METRIC_DEF[k].short, unit: METRIC_DEF[k].unit === "mult" ? "mult" : METRIC_DEF[k].unit === "usd" ? "usd" : "pct", better: METRIC_DEF[k].better, median: medians[k] ?? null, medianF: rankIds[k] })),
-      rows: order.map((co) => ({ ticker: co.ticker, name: shortName(co.name), self: co.ticker === t, cells: usable.map((k) => ({ v: co.m[k]?.v ?? null, f: fid.get(co.ticker)?.[k] })) })),
+      rows: order.map((co) => ({ ticker: co.ticker, name: nameOf(co.ticker, co.name), self: co.ticker === t, cells: usable.map((k) => ({ v: co.m[k]?.v ?? null, f: fid.get(co.ticker)?.[k] })) })),
       size: "full",
     });
     // comparison table
@@ -270,7 +278,7 @@ export function buildInsights(c: InsightCtx): Insights {
     tables.push({
       id: "peers", title: "Peer comparison", columns: tcols.map((k) => METRIC_DEF[k].short),
       rows: [
-        ...order.map((co) => ({ label: `${co.ticker} · ${shortName(co.name)}`, bold: co.ticker === t, cells: tcols.map((k) => cell(co, k)) })),
+        ...order.map((co) => ({ label: `${co.ticker} · ${nameOf(co.ticker, co.name)}`, bold: co.ticker === t, cells: tcols.map((k) => cell(co, k)) })),
         { label: "Peer median", cells: tcols.map((k) => { const v = median(peers.map((x) => x.m[k]?.v).filter((x): x is number => x != null)); return v == null ? null : { text: fmtMetric(k, v) }; }) },
       ],
       note: `TTM figures from each company's SEC filings (four quarters through each company's latest filing); multiples use dated share prices — ${t} as of ${inp.price?.asOf ?? "n/a"}, peers at their latest stored close.`,
@@ -278,7 +286,6 @@ export function buildInsights(c: InsightCtx): Insights {
   }
 
   // ---------- price performance ----------
-  const bars = inp.prices?.self ?? null;
   let spyRet: string | null = null;
   if (bars?.length) {
     const lastDate = bars[bars.length - 1][0].slice(0, 10);
@@ -293,18 +300,19 @@ export function buildInsights(c: InsightCtx): Insights {
       p.add("performance", `Over the past year ${t} returned ${pct(sv, true)} versus ${pct(r.r, true)} for the S&P 500 (${pp(sv - r.r)})${pm != null ? ` and a peer median of ${pct(pm, true)}` : ""}.`,
         composite("Relative performance", "1-year total returns, dividends reinvested", [selfRet, spyRet, rankIds.ret1y]), { v: sv - r.r });
     }
-    // 52-week range
-    const yr = bars.filter((b) => b[0] >= from);
+    // 52-week range (through today's price)
+    const live = withLivePrice(bars, inp.price) ?? bars;
+    const yr = live.filter((b) => b[0] >= daysBefore(live[live.length - 1][0], 365));
     if (yr.length > 100) {
       const lo = Math.min(...yr.map((b) => b[4])), hi = Math.max(...yr.map((b) => b[4]));
       const cur = yr[yr.length - 1][4];
-      const id = p.add("performance", `52-week closing range ${perShare(lo)}–${perShare(hi)}; last close ${perShare(cur)} on ${lastDate} is ${pct((cur - lo) / (hi - lo || 1))} of the way up the range and ${pct(Math.abs(cur / hi - 1))} below the high.`,
+      const id = p.add("performance", `52-week closing range ${perShare(lo)}–${perShare(hi)}; the ${perShare(cur)} price on ${yr[yr.length - 1][0].slice(0, 10)} is ${pct((cur - lo) / (hi - lo || 1))} of the way up the range and ${pct(Math.abs(cur / hi - 1))} below the high.`,
         { kind: "market", label: "52-week price range", asOf: lastDate }, { v: cur });
       const rows: Extract<ReportChart, { type: "range" }>["rows"] = [];
       const tg = inp.estimates?.target;
       if (tg?.low != null && tg.high != null) rows.push({ label: "Street price targets", low: tg.low, high: tg.high, f: c.est.target ?? undefined,
         marks: [...(tg.mean != null ? [{ label: "Mean", v: tg.mean, f: c.est.target ?? undefined }] : []), ...(tg.median != null ? [{ label: "Median", v: tg.median, f: c.est.target ?? undefined }] : [])] });
-      rows.push({ label: "52-week trading range", low: lo, high: hi, f: id ?? undefined, marks: [{ label: "Last close", v: cur, f: id ?? undefined }] });
+      rows.push({ label: "52-week trading range", low: lo, high: hi, f: id ?? undefined, marks: [] });
       const price = inp.price;
       charts.push({ id: "target-range", type: "range", title: "Price versus street targets and trading range", subtitle: price ? `Share price ${perShare(price.price)} as of ${price.asOf}` : undefined, unit: "usdPerShare",
         rows, current: price ? { label: "Price", v: price.price, f: c.val.price ?? undefined } : undefined, size: "half" });
@@ -351,7 +359,7 @@ export function buildInsights(c: InsightCtx): Insights {
         tone: per.code === "0q" ? "self" : undefined, points: vals.map((v, i) => ({ v, f: i === vals.length - 1 ? id ?? undefined : undefined })) });
     }
     if (rev.length) charts.push({ id: "eps-revisions", type: "combo", title: "Consensus EPS revisions", subtitle: "Change in consensus EPS since 90 days ago", x: labels, series: rev, size: "half" });
-    const sur = [...c.est.surprises].reverse();
+    const sur = [...c.est.surprises].sort((a, b) => a.quarter.localeCompare(b.quarter));
     if (sur.length >= 2) charts.push({ id: "surprises", type: "combo", title: "Reported EPS versus consensus", subtitle: "Last reported quarters",
       x: sur.map((s) => s.quarter.slice(0, 7)),
       series: [
@@ -360,9 +368,9 @@ export function buildInsights(c: InsightCtx): Insights {
       ], size: "half" });
     const rm = [...c.est.ratings].reverse();
     if (rm.length >= 2) {
-      const cats = [["Strong buy", "strongBuy"], ["Buy", "buy"], ["Hold", "hold"], ["Sell", "sell"], ["Strong sell", "strongSell"]] as const;
+      const cats = [["Strong buy", "strongBuy", "pos", 1], ["Buy", "buy", "pos", 0.55], ["Hold", "hold", "neutral", 0.6], ["Sell", "sell", "neg", 0.55], ["Strong sell", "strongSell", "neg", 1]] as const;
       charts.push({ id: "rating-mix", type: "stacked", percent: true, title: "Analyst rating mix", subtitle: "Share of ratings by month", x: rm.map((r) => r.label.replace(/^this month$/, "Now")),
-        series: cats.map(([name, k]) => ({ name, kind: "bar" as const, unit: "count" as const, points: rm.map((r) => ({ v: r.row[k], f: r.id ?? undefined })) })), size: "half" });
+        series: cats.map(([name, k, tone, opacity]) => ({ name, kind: "bar" as const, unit: "count" as const, tone, opacity, points: rm.map((r) => ({ v: r.row[k], f: r.id ?? undefined })) })), size: "half" });
     }
     // consensus vs reported trajectory
     const ny = est.periods.find((x) => x.code === "+1y") ?? est.periods.find((x) => x.code === "0y");
@@ -439,9 +447,12 @@ export function buildInsights(c: InsightCtx): Insights {
   if (self.m[vk]) g(METRIC_DEF[vk].short, rankIds[vk] ?? fid.get(t)?.[vk], mult(self.m[vk]!.v), medians[vk] != null ? `Peer median ${mult(medians[vk]!)}` : undefined);
   if (!self.fin && self.m.fcfYield) g("FCF yield", fid.get(t)?.fcfYield, pct(self.m.fcfYield.v), medians.fcfYield != null ? `Peer median ${pct(medians.fcfYield)}` : undefined);
   if (est?.target.mean != null && inp.price) g("Mean street target", c.est.target, perShare(est.target.mean), `${pct(est.target.mean / inp.price.price - 1, true)} implied`, est.target.mean >= inp.price.price ? "positive" : "negative");
-  if (est?.nextEarnings?.start) g("Next earnings", c.est.nextEarnings, est.nextEarnings.start, est.nextEarnings.epsAvg != null ? `Consensus EPS ${perShare(est.nextEarnings.epsAvg)}` : undefined);
+  if (est?.nextEarnings?.start && est.nextEarnings.start >= inp.today) g("Next earnings", c.est.nextEarnings, est.nextEarnings.start, est.nextEarnings.epsAvg != null ? `Consensus EPS ${perShare(est.nextEarnings.epsAvg)}` : undefined);
 
-  return { charts, tables, glance: glance.slice(0, 8), peers: peers.map((x) => ({ ticker: x.ticker, name: shortName(x.name) })) };
+  // Fill the strip to a full row with the next most useful comparisons.
+  if (!self.fin && vk !== "evSales" && self.m.evSales && glance.length < 8) g("EV / Sales", rankIds.evSales ?? fid.get(t)?.evSales, mult(self.m.evSales.v), medians.evSales != null ? `Peer median ${mult(medians.evSales)}` : undefined);
+  if (self.m.ret1y && glance.length < 8) g("1Y total return", rankIds.ret1y ?? fid.get(t)?.ret1y, pct(self.m.ret1y.v, true), medians.ret1y != null ? `Peer median ${pct(medians.ret1y, true)}` : undefined);
+  return { charts, tables, glance: glance.slice(0, 8), peers: peers.map((x) => ({ ticker: x.ticker, name: nameOf(x.ticker, x.name) })) };
 }
 
 /** Five-year point-in-time multiple with its median and ±1σ band. */
@@ -455,17 +466,22 @@ function valuationBand(c: InsightCtx, charts: ReportChart[], bars: Bar[], fin: b
   const k: MultipleKey = fin ? (share("pb") > 0.8 ? "pb" : "pe") : share("pe") > 0.85 ? "pe" : share("evSales") > 0.8 ? "evSales" : "ps";
   const values = win.map((h) => h.values[k] ?? null);
   const st = multipleStats(values);
-  if (st.n < 50 || st.median == null || st.sd == null || st.current == null) return;
+  const finite = values.filter((v): v is number => v != null);
+  const lo = quantile(finite, 0.25), hi = quantile(finite, 0.75);
+  if (st.n < 50 || st.median == null || st.current == null || lo == null || hi == null) return;
   const name = ({ pe: "P/E", evSales: "EV/sales", ps: "Price/sales", pb: "Price/book" } as Record<string, string>)[k] ?? k;
   const lastDate = win[win.length - 1].date;
   const basis = k === "pe" ? c.ttm.netIncome : k === "pb" ? null : c.ttm.revenue;
   const parts = basis?.ref.kind === "derived" ? basis.ref.parts : [];
   const pctile = Math.round((st.percentile ?? 0) * 100);
-  const z = (st.current - st.median) / (st.sd || 1);
-  const id = p.add("history", `Point-in-time ${name} over the five years to ${lastDate} (weekly; each week uses only fundamentals filed by then): ${mult(st.current)} now versus a five-year median of ${mult(st.median)} and mean of ${mult(st.mean ?? st.median)} (one standard deviation ${mult(st.sd)}), range ${mult(st.min ?? 0)}–${mult(st.max ?? 0)}; the current reading is at the ${ordinalPct(pctile)} percentile, ${Math.abs(z).toFixed(1)} standard deviations ${z >= 0 ? "above" : "below"} the median.`,
+  const vsMed = st.current / st.median - 1;
+  const id = p.add("history", `Point-in-time ${name} over the five years to ${lastDate} (weekly; each week uses only fundamentals filed by then): ${mult(st.current)} now versus a five-year median of ${mult(st.median)} (${pct(Math.abs(vsMed))} ${vsMed >= 0 ? "above" : "below"}), interquartile range ${mult(lo)}–${mult(hi)}, full range ${mult(st.min ?? 0)}–${mult(st.max ?? 0)}; the current reading is at the ${ordinalPct(pctile)} percentile of the period.`,
     derived(`Weekly closing price × point-in-time shares ÷ trailing fundamentals filed by each week (${name}, five years)`, parts, `${name} history`, [{ label: "Weekly closing price", value: bars[bars.length - 1][4], asOf: lastDate }]), { v: st.current });
-  charts.push({ id: "valuation-history", type: "band", title: `${name} versus its five-year history`, subtitle: "Weekly, point-in-time · shaded band = median ± 1 standard deviation", unit: "mult",
-    dates: win.map((h) => h.date), values: values.map((v) => (v == null ? null : Math.round(v * 100) / 100)), median: st.median, sd: st.sd, f: id ?? undefined, size: "half" });
+  // Very high readings (earnings near zero) would flatten the chart: plot up to a cap and say so.
+  const cap = Math.max(hi * 2.5, st.median * 3);
+  const cut = finite.filter((v) => v > cap).length;
+  charts.push({ id: "valuation-history", type: "band", title: `${name} versus its five-year history`, subtitle: `Weekly, point-in-time · band = middle half of readings (25th–75th percentile)${cut ? ` · ${cut} week${cut === 1 ? "" : "s"} above ${mult(cap)} not plotted` : ""}`, unit: "mult",
+    dates: win.map((h) => h.date), values: values.map((v) => (v == null || v > cap ? null : Math.round(v * 100) / 100)), median: st.median, lo, hi, f: id ?? undefined, size: "half" });
 }
 const ordinalPct = (n: number) => ordinal(Math.max(1, Math.min(99, n)));
 

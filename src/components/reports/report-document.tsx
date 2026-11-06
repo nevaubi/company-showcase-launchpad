@@ -6,7 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { citationOrder } from "@/lib/reports/vet";
 import { compressRefs, readableDates, refCaption, refTarget } from "@/lib/reports/present";
 import { KINDS } from "@/lib/reports/kinds";
-import type { Claim, Fact, ReportContent, ReportTable, TableCell } from "@/lib/reports/types";
+import type { Claim, Fact, GlanceItem, ReportContent, ReportTable, TableCell } from "@/lib/reports/types";
+import { ReportChartView } from "@/components/reports/report-charts";
 import { readableOn, resolveBranding, type FirmBranding } from "@/lib/firm/core";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ function Cite({ ids, order, facts, ticker }: { ids: string[]; order: Map<string,
     const t = refTarget(f.ref, ticker, f.text);
     if (t) return <sup className="ml-0.5"><button type="button" onClick={() => open(t)} className={citeCls} title={f.text} aria-label={`Source ${n}: ${f.text}`}>{n}</button></sup>;
   }
+  const members = (f: Fact) => (f.ref.kind === "composite" ? f.ref.members.map((m) => facts.get(m)).filter((x): x is Fact => !!x) : []);
   return (
     <sup className="ml-0.5 whitespace-nowrap">
       <Popover>
@@ -39,6 +41,7 @@ function Cite({ ids, order, facts, ticker }: { ids: string[]; order: Map<string,
                     <span className="block">{readableDates(f.text)}</span>
                     <span className="mt-0.5 block text-[10.5px] text-muted-foreground">{refCaption(f.ref)}</span>
                     {t && <button type="button" onClick={() => open(t)} className="mt-1 inline-flex items-center gap-0.5 font-medium text-[color:var(--color-primary)] hover:underline">Open source <ExternalLink className="size-3" /></button>}
+                    {members(f).length > 0 && <MemberList members={members(f)} ticker={ticker} />}
                   </span>
                 </li>
               );
@@ -47,6 +50,55 @@ function Cite({ ids, order, facts, ticker }: { ids: string[]; order: Map<string,
         </PopoverContent>
       </Popover>
     </sup>
+  );
+}
+
+/** The sourced figures behind a composite fact (peer medians, fits, comparisons). */
+function MemberList({ members, ticker }: { members: Fact[]; ticker: string }) {
+  const { open } = useSource();
+  return (
+    <ul className="mt-1 space-y-0.5 border-l pl-2">
+      {members.map((m) => {
+        const t = refTarget(m.ref, ticker, m.text);
+        return (
+          <li key={m.id} className="text-[10.5px] text-muted-foreground">
+            {t ? <button type="button" onClick={() => open(t)} className="text-left hover:text-foreground hover:underline">{readableDates(m.text)}</button> : readableDates(m.text)}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function Glance({ items, facts, ticker }: { items: GlanceItem[]; facts: Map<string, Fact>; ticker: string }) {
+  const { open } = useSource();
+  return (
+    <div className="report-glance grid grid-cols-2 border-b sm:grid-cols-4" data-print-keep>
+      {items.map((g) => {
+        const f = g.f ? facts.get(g.f) : undefined;
+        const t = f ? refTarget(f.ref, ticker, f.text) : null;
+        const body = (
+          <>
+            <span className="block text-[10px] font-medium uppercase tracking-[0.06em] text-muted-foreground">{g.label}</span>
+            <span className="num mt-0.5 block text-[17px] font-semibold leading-tight tracking-tight">{readableDates(g.value)}</span>
+            {g.sub && <span className={cn("mt-0.5 block truncate text-[10.5px] text-muted-foreground", g.tone === "positive" && "text-positive", g.tone === "negative" && "text-negative")}>{readableDates(g.sub)}</span>}
+          </>
+        );
+        const cls = "min-w-0 border-r border-b px-4 py-2.5 text-left last:border-r-0 [&:nth-child(2n)]:border-r-0 sm:[&:nth-child(2n)]:border-r sm:[&:nth-child(4n)]:border-r-0 hover:bg-secondary/40";
+        if (t) return <button key={g.label} type="button" className={cls} onClick={() => open(t)} title={f?.text}>{body}</button>;
+        if (f?.ref.kind === "composite") return (
+          <Popover key={g.label}>
+            <PopoverTrigger asChild><button type="button" className={cls} title={f.text}>{body}</button></PopoverTrigger>
+            <PopoverContent align="start" className="w-96 p-3 text-xs">
+              <p>{readableDates(f.text)}</p>
+              <p className="mt-0.5 text-[10.5px] text-muted-foreground">{refCaption(f.ref)}</p>
+              <MemberList members={f.ref.members.map((m) => facts.get(m)).filter((x): x is Fact => !!x)} ticker={ticker} />
+            </PopoverContent>
+          </Popover>
+        );
+        return <div key={g.label} className={cls} title={f ? refCaption(f.ref) : undefined}>{body}</div>;
+      })}
+    </div>
   );
 }
 
@@ -98,6 +150,7 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
   const facts = useMemo(() => new Map(content.facts.map((f) => [f.id, f])), [content]);
   const order = useMemo(() => citationOrder(content.sections), [content]);
   const tables = new Map(content.tables.map((t) => [t.id, t]));
+  const charts = new Map((content.charts ?? []).map((c) => [c.id, c]));
   const b = resolveBranding(brand.branding);
   const strong = readableOn(b.primary) === "#ffffff" ? b.primary : "#111111";
   const def = KINDS[content.kind];
@@ -134,7 +187,12 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
         )}
       </div>
 
-      <div className="report-body space-y-6 px-7 py-6 text-[13.5px] leading-relaxed">
+      {content.glance && content.glance.length > 0 && <Glance items={content.glance} facts={facts} ticker={content.ticker} />}
+      {content.peers && content.peers.length > 0 && (
+        <p className="border-b px-7 py-1.5 text-[11px] text-muted-foreground">Peer set: {content.peers.map((p) => `${p.name} (${p.ticker})`).join(", ")}</p>
+      )}
+
+      <div className="report-body space-y-7 px-7 py-6 text-[13.5px] leading-relaxed">
         {content.sections.map((s) => (
           <section key={s.id} className="break-inside-avoid-page">
             <h3 className="mb-2 border-b pb-1 text-[15px] font-semibold tracking-tight" style={{ borderColor: b.accent }}>{s.title}</h3>
@@ -143,6 +201,11 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
               <ul className="mb-2 space-y-1.5 pl-4">
                 {s.bullets.map((x, i) => <li key={i} className="list-disc text-pretty marker:text-[color:var(--brand)]"><ClaimText c={x} order={order} facts={facts} ticker={content.ticker} /></li>)}
               </ul>
+            )}
+            {(s.charts ?? []).some((id) => charts.has(id)) && (
+              <div className="report-charts my-4 grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-2">
+                {(s.charts ?? []).map((id) => charts.get(id) && <ReportChartView key={id} chart={charts.get(id)!} facts={facts} ticker={content.ticker} />)}
+              </div>
             )}
             {s.tables.map((id) => tables.get(id) && <ReportTableView key={id} table={tables.get(id)!} ticker={content.ticker} />)}
           </section>

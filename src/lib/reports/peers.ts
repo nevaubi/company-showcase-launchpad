@@ -182,7 +182,10 @@ export function peerSnapshot(d: CompanyDataset, bars: Bar[] | null, price: { pri
       const shParts = partsOf(sh, "Shares outstanding");
       const mcap = price.price * sh.v;
       add("mcap", mcap, derived("Share price × shares outstanding", shParts, mkt), `${t} market cap at $${price.price.toFixed(2)} (${price.asOf}): ${money(mcap)}.`);
-      if (ni && ni.v > 0) add("pe", mcap / ni.v, derived("Market cap ÷ TTM net income", [...shParts, ...ni.parts], mkt), `${t} P/E on TTM net income${thru}, price as of ${price.asOf}: ${mult(mcap / ni.v)}.`);
+      // Same definition as the company valuation table (price ÷ TTM diluted EPS), so the report shows one P/E.
+      const eps = sum4(Q.income, "epsDiluted", last);
+      if (eps && eps.v > 0) add("pe", price.price / eps.v, derived("Share price ÷ TTM diluted EPS", eps.parts, mkt), `${t} P/E on TTM diluted EPS of $${eps.v.toFixed(2)}${thru}, price as of ${price.asOf}: ${mult(price.price / eps.v)}.`);
+      else if (ni && ni.v > 0) add("pe", mcap / ni.v, derived("Market cap ÷ TTM net income", [...shParts, ...ni.parts], mkt), `${t} P/E on TTM net income${thru}, price as of ${price.asOf}: ${mult(mcap / ni.v)}.`);
       if (fin && eq && eq.v > 0) add("pb", mcap / eq.v, derived("Market cap ÷ shareholders' equity", [...shParts, ...partsOf(eq, "Equity")], mkt), `${t} price to book, price as of ${price.asOf}: ${mult(mcap / eq.v)}.`);
       const debt = cellAt(Q.balance, "totalDebt", bi), cash = cellAt(Q.balance, "cash", bi), sti = cellAt(Q.balance, "shortTermInvestments", bi);
       if (!fin && debt && cash) {
@@ -216,22 +219,49 @@ export function lastClose(bars: Bar[] | null): { price: number; asOf: string } |
 }
 
 /**
- * Comparable companies: the curated peer list first, then the same industry, then the same sector,
- * each ranked by closeness in revenue (log distance). Only companies with stored datasets qualify.
+ * Comparable companies, in order: the same industry, the curated peer list, companies that list this
+ * one as their peer, then the same sector — each group ranked by closeness in revenue (log distance).
+ * Lenders/insurers are only compared with each other. Only companies with stored datasets qualify.
  */
-export function selectPeers(ticker: string, universe: Pick<UniverseEntry, "ticker" | "sector" | "industry" | "revenueTTM">[], curated: string[], max = 6): string[] {
+export function selectPeers(
+  ticker: string,
+  universe: Pick<UniverseEntry, "ticker" | "sector" | "industry" | "revenueTTM">[],
+  curated: string[],
+  reverse: string[] = [],
+  max = 6,
+): string[] {
   const self = universe.find((u) => u.ticker === ticker);
   const known = new Map(universe.map((u) => [u.ticker, u]));
+  const fin = isFinIndustry(self?.industry);
   const out: string[] = [];
-  const push = (t: string) => { if (t !== ticker && known.has(t) && !out.includes(t) && out.length < max) out.push(t); };
+  const push = (t: string) => {
+    const u = known.get(t);
+    if (t !== ticker && u && (u.revenueTTM ?? 0) > 0 && isFinIndustry(u.industry) === fin && !out.includes(t) && out.length < max) out.push(t);
+  };
+  const size = (u: { revenueTTM: number | null }) => Math.abs(Math.log(Math.max(u.revenueTTM ?? 1, 1)) - Math.log(Math.max(self?.revenueTTM ?? 1, 1)));
+  const bySize = (ts: string[]) => ts.map((t) => known.get(t)).filter((u): u is NonNullable<typeof u> => !!u).sort((a, b) => size(a) - size(b)).map((u) => u.ticker);
+  if (self) for (const t of bySize(universe.filter((x) => x.industry === self.industry).map((x) => x.ticker))) push(t);
   for (const t of curated) push(t);
-  if (!self) return out;
-  const size = (u: { revenueTTM: number | null }) => Math.abs(Math.log(Math.max(u.revenueTTM ?? 1, 1)) - Math.log(Math.max(self.revenueTTM ?? 1, 1)));
-  const fin = isFinIndustry(self.industry);
-  const pool = universe.filter((u) => u.ticker !== ticker && (u.revenueTTM ?? 0) > 0 && isFinIndustry(u.industry) === fin);
-  for (const u of pool.filter((x) => x.industry === self.industry).sort((a, b) => size(a) - size(b))) push(u.ticker);
-  for (const u of pool.filter((x) => x.sector === self.sector).sort((a, b) => size(a) - size(b))) push(u.ticker);
+  for (const t of bySize(reverse)) push(t);
+  if (self) for (const t of bySize(universe.filter((x) => x.sector === self.sector).map((x) => x.ticker))) push(t);
   return out;
+}
+
+/** Append today's price to stored daily bars (keeping the adjusted-close ratio) so returns end today. */
+export function withLivePrice(bars: Bar[] | null, live: { price: number; asOf: string } | null): Bar[] | null {
+  if (!bars?.length || !live) return bars;
+  const last = bars[bars.length - 1];
+  if (live.asOf <= last[0].slice(0, 10) || !(last[4] > 0)) return bars;
+  const adj = last[5] && last[4] ? (last[5] / last[4]) * live.price : live.price;
+  return [...bars, [live.asOf, live.price, live.price, live.price, live.price, adj, 0]];
+}
+
+/** Value at quantile q (0–1) of the finite values. */
+export function quantile(xs: number[], q: number): number | null {
+  const v = xs.filter(Number.isFinite).sort((a, b) => a - b);
+  if (!v.length) return null;
+  const pos = (v.length - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+  return v[lo] + (v[hi] - v[lo]) * (pos - lo);
 }
 
 // ---------- cross-company statistics ----------

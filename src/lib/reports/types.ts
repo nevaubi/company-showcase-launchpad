@@ -55,8 +55,9 @@ export interface ChartSeries {
   axis?: "left" | "right";
   unit: ChartUnit;
   points: ChartPoint[];
-  /** self = the report company (brand colour), bench = index, peer = muted, signed = green/red by sign */
-  tone?: "self" | "bench" | "peer" | "signed";
+  /** self = the report company (brand colour), bench = index, peer = muted, signed = green/red by sign; pos/neg/neutral = fixed semantic colours */
+  tone?: "self" | "bench" | "peer" | "signed" | "pos" | "neg" | "neutral";
+  opacity?: number;
 }
 interface ChartBase { id: string; title: string; subtitle?: string; note?: string; size?: "full" | "half" }
 export type ReportChart =
@@ -72,7 +73,8 @@ export type ReportChart =
       points: { ticker: string; self: boolean; x: number; y: number; fx?: string; fy?: string }[];
       fit?: { a: number; b: number; r2: number; f?: string };
     })
-  | (ChartBase & { type: "band"; unit: ChartUnit; dates: string[]; values: (number | null)[]; median: number; sd: number; f?: string })
+  /** lo/hi: the shaded band (interquartile range). */
+  | (ChartBase & { type: "band"; unit: ChartUnit; dates: string[]; values: (number | null)[]; median: number; lo: number; hi: number; f?: string })
   | (ChartBase & {
       type: "range"; unit: ChartUnit;
       rows: { label: string; low: number; high: number; f?: string; marks: { label: string; v: number; f?: string }[] }[];

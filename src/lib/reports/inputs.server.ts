@@ -4,7 +4,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import type { Bar, CompanyDataset, Filing, UniverseEntry } from "@/lib/financials/types";
-import { coverageOf } from "@/lib/coverage";
+import { COVERAGE, coverageOf } from "@/lib/coverage";
 import { lastClose, peerSnapshot, selectPeers, type PeerSnapshot } from "./peers";
 import type { Estimates } from "@/lib/estimates/core";
 import type { TrackedPromise } from "@/lib/earnings/promises";
@@ -49,7 +49,8 @@ async function loadBars(ticker: string): Promise<Bar[] | null> {
  * loads so memory stays small. A peer that fails to load is skipped.
  */
 async function loadPeers(ticker: string): Promise<PeerSnapshot[]> {
-  const list = selectPeers(ticker, await universe(), coverageOf(ticker)?.peers ?? []);
+  const reverse = COVERAGE.filter((c) => c.peers.includes(ticker)).map((c) => c.ticker);
+  const list = selectPeers(ticker, await universe(), coverageOf(ticker)?.peers ?? [], reverse);
   const out: PeerSnapshot[] = [];
   for (let i = 0; i < list.length; i += 2) {
     const got = await Promise.all(list.slice(i, i + 2).map(async (t) => {

@@ -11,6 +11,6 @@ export function money(v: number): string {
 }
 export const perShare = (v: number) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
 export const pct = (v: number, signed = false) => `${signed && v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
-export const mult = (v: number) => `${v.toFixed(1)}x`;
+export const mult = (v: number) => `${Math.abs(v) < 0.05 ? "0.0" : v.toFixed(1)}x`;
 /** Percentage-point change written out (the checker reads the signed number). */
 export const pp = (v: number) => `${v > 0 ? "+" : v < 0 ? "-" : ""}${Math.abs(v * 100).toFixed(1)} percentage points`;

@@ -120,7 +120,7 @@ export function isoWeek(date: string): string {
 
 /** Version key: changes when a new periodic filing or earnings release lands, or a new week starts. */
 /** Bump when the report format changes so stored reports are rewritten with it. */
-export const REPORT_FORMAT = "r2";
+export const REPORT_FORMAT = "r5";
 
 export function dataVersionOf(d: CompanyDataset, today: string): string {
   const periodic = d.filings.find((f) => f.form === "10-K" || f.form === "10-Q");
@@ -278,7 +278,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
       const mkt = [{ label: "Share price", value: inp.price.price, asOf: inp.price.asOf }];
       const sharesParts = partsOf(sharesCell, "Shares outstanding");
       const mcapRef: FactRef = { kind: "derived", formula: "Share price × shares outstanding", parts: sharesParts, market: mkt, label: "Market capitalization" };
-      const mcapId = p.add("valuation", `Market capitalization at ${perShare(inp.price.price)}: ${money(mcap)} (${(sharesCell.v / 1e6).toFixed(0)}M shares).`, mcapRef);
+      const mcapId = p.add("valuation", `Market capitalization at ${perShare(inp.price.price)}: ${money(mcap)} (${(sharesCell.v / 1e6).toFixed(0)}M shares).`, mcapRef, { v: mcap });
       val.mcap = mcapId;
       valuationRows.push({ label: "Market cap", cells: [{ text: money(mcap), ref: p.ref(mcapId) }, { text: "Price × shares outstanding" }] });
       const debt = cellAt(bal, "totalDebt", bi), cash = cellAt(bal, "cash", bi), sti = cellAt(bal, "shortTermInvestments", bi);
@@ -288,7 +288,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
         ev = mcap + debt.v - cash.v - (sti?.v ?? 0);
         evParts = [...sharesParts, ...partsOf(debt, "Total debt"), ...partsOf(cash, "Cash"), ...(sti ? partsOf(sti, "Short-term investments") : [])];
         const evRef: FactRef = { kind: "derived", formula: "Market cap + total debt − cash − short-term investments", parts: evParts, market: mkt, label: "Enterprise value" };
-        const evId = p.add("valuation", `Enterprise value: ${money(ev)}.`, evRef);
+        const evId = p.add("valuation", `Enterprise value: ${money(ev)}.`, evRef, { v: ev });
         val.ev = evId;
         valuationRows.push({ label: "Enterprise value", cells: [{ text: money(ev), ref: p.ref(evId) }, { text: "Market cap + debt − cash" }] });
       }
@@ -364,7 +364,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
       const verb = ({ main: "maintained", reit: "reiterated", up: "upgraded to", down: "downgraded to", init: "initiated at" } as Record<string, string>)[a.action] ?? "rated";
       p.add("street", `${a.date}: ${a.firm} ${verb} ${a.toGrade}${a.fromGrade && a.fromGrade !== a.toGrade ? ` (from ${a.fromGrade})` : ""}${a.target != null ? `, price target ${a.priorTarget != null ? `${perShare(a.priorTarget)} → ` : ""}${perShare(a.target)}` : ""}.`, mref(`${a.firm} action ${a.date}`));
     }
-    if (est.nextEarnings?.start) {
+    if (est.nextEarnings?.start && est.nextEarnings.start >= inp.today) {
       nextEarnings = est.nextEarnings.start;
       estIds.nextEarnings = p.add("estimates", `Next earnings date expected ${est.nextEarnings.start}${est.nextEarnings.end && est.nextEarnings.end !== est.nextEarnings.start ? ` to ${est.nextEarnings.end}` : ""}.`, mref("Earnings calendar"));
     }

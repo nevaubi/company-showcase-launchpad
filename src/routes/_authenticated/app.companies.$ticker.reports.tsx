@@ -238,8 +238,9 @@ function DownloadMenu({ content, brand }: { content: ReportContent | null; brand
     if (!content || docx || building) return;
     setBuilding(true);
     try {
-      const { reportToDocx } = await import("@/lib/export/report-docx");
-      setDocx(await reportToDocx(content, brand));
+      const [{ reportToDocx }, { captureCharts }] = await Promise.all([import("@/lib/export/report-docx"), import("@/lib/export/chart-capture")]);
+      const root = document.querySelector(".report-doc");
+      setDocx(await reportToDocx(content, brand, root ? await captureCharts(root) : new Map()));
     } catch (e) {
       toast.error(`Word export failed: ${(e as Error).message}`);
     } finally {

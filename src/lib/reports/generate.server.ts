@@ -21,7 +21,7 @@ export async function generateReportContent(kind: ReportKind, options: ReportOpt
   });
   const tableIds = new Set(built.tables.map((t) => t.id));
   const chartIds = new Set(built.charts.map((c) => c.id));
-  const { sections, qa } = vetSections(out.sections ?? [], defs, built.facts, tableIds, chartIds);
+  const { sections, qa } = vetSections(out.sections ?? [], defs, built.facts, tableIds, chartIds, { ticker: d.profile.ticker, peers: built.peers ?? [] });
   if (!sections.some((s) => s.paragraphs.length || s.bullets.length)) throw new Error("The draft didn't pass source checks; try again");
   const usedTables = new Set(sections.flatMap((s) => s.tables));
   const charts = built.charts.filter((c) => sections.some((s) => s.charts?.includes(c.id)));

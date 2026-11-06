@@ -79,24 +79,42 @@ export const sentences = (t: string) => t.split(/(?<=[.!?])\s+(?=[A-Z"'(“$+\-�
 
 export interface VetResult { claim: Claim | null; numbers: number; verified: number; removed: { text: string; reason: string }[] }
 
-export function vetClaim(c: Claim, facts: Map<string, Fact>, factNums: Map<string, NumToken[]>): VetResult {
+/** Names a sentence must use before it may quote a peer's figure (ticker, full name, distinctive first word). */
+const GENERIC = new Set(["bank", "the", "first", "general", "american", "united", "international", "national", "global", "capital"]);
+export function companyAliases(ticker: string, name: string): string[] {
+  const first = name.split(/[\s,.]+/)[0] ?? "";
+  const core = name.replace(/,?\s+(inc|corp|corporation|co|company|plc|ltd|holdings|group)\.?$/i, "");
+  return [...new Set([ticker, name, core, ...(first.length >= 4 && !GENERIC.has(first.toLowerCase()) ? [first] : [])].filter(Boolean))];
+}
+const mentions = (s: string, alias: string) => new RegExp(`(^|[^A-Za-z])${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![A-Za-z])`, "i").test(s);
+
+/**
+ * owners: facts about another company (a peer) → names the sentence must mention for that fact to count,
+ * so a peer's number can't be passed off as the subject company's.
+ */
+export function vetClaim(c: Claim, facts: Map<string, Fact>, factNums: Map<string, NumToken[]>, owners?: Map<string, string[]>): VetResult {
   const cited = new Set(c.factIds.filter((id) => facts.has(id)));
   const text = c.text.replace(/\s*\[(?:F\d+(?:,\s*)?)+\]/g, "").replace(/\*\*|__|`/g, "").trim();
   const kept: string[] = [];
   const removed: VetResult["removed"] = [];
   let numbers = 0, verified = 0;
+  let prev = "";
   for (const s of sentences(text)) {
     const nums = numbersIn(s);
     let ok = true;
+    // The peer may be named in this sentence or the one before ("Microsoft leads. Its margin is 47%.").
+    const ctx = `${prev} ${s}`;
+    prev = s;
+    const owned = (id: string) => { const a = owners?.get(id); return !a || a.some((x) => mentions(ctx, x)); };
     for (const n of nums) {
       numbers++;
-      const inCited = [...cited].some((id) => factNums.get(id)!.some((m) => close(n, m)));
+      const inCited = [...cited].some((id) => owned(id) && factNums.get(id)!.some((m) => close(n, m)));
       if (inCited) { verified++; continue; }
       // Not in the cited facts: accept another fact only if it is about the same thing.
       const words = stems(s);
       let best: { id: string; score: number } | null = null;
       for (const [id, ms] of factNums) {
-        if (!ms.some((m) => close(n, m))) continue;
+        if (!owned(id) || !ms.some((m) => close(n, m))) continue;
         const fw = stems(facts.get(id)!.text);
         let score = 0;
         for (const w of fw) if (words.has(w)) score++;
@@ -120,18 +138,28 @@ export function vetSections(
   facts: Fact[],
   tableIds: Set<string>,
   chartIds: Set<string> = new Set(),
+  /** The report's company and its peers' names, for the peer-attribution check. */
+  subject?: { ticker: string; peers: { ticker: string; name: string }[] },
 ): { sections: ReportSection[]; qa: ReportQa } {
   // Plot-only facts were never shown to the writer, so they can't be cited.
   const citable = facts.filter((f) => !f.chart);
   const byId = new Map(citable.map((f) => [f.id, f]));
   const nums = new Map(citable.map((f) => [f.id, numbersIn(f.text)]));
+  const owners = new Map<string, string[]>();
+  if (subject) {
+    const names = new Map(subject.peers.map((p) => [p.ticker, companyAliases(p.ticker, p.name)]));
+    for (const f of citable) {
+      const tk = "tk" in f.ref ? f.ref.tk : undefined;
+      if (tk && tk !== subject.ticker) owners.set(f.id, names.get(tk) ?? [tk]);
+    }
+  }
   const qa: ReportQa = { claims: 0, citedClaims: 0, numbers: 0, verifiedNumbers: 0, removed: [] };
   const sections: ReportSection[] = [];
   for (const def of defs) {
     const r = raw.find((x) => x.id === def.id);
     const vet = (list: Claim[]) => list.flatMap((c) => {
       if (!c.text?.trim()) return [];
-      const v = vetClaim(c, byId, nums);
+      const v = vetClaim(c, byId, nums, owners);
       qa.claims++;
       qa.numbers += v.numbers;
       qa.verifiedNumbers += v.verified;
