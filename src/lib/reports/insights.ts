@@ -249,12 +249,14 @@ export function buildInsights(c: InsightCtx): Insights {
     const implied = fit.a + fit.b * sp.x;
     const per10 = fit.b * 0.1;
     const xl = self.fin ? "return on equity" : "TTM revenue growth", yl = METRIC_DEF[yk].short;
-    const weak = fit.r2 < 0.15 ? " — a weak relationship, so the gap says little on its own" : fit.r2 < 0.35 ? " — a moderate relationship" : "";
-    const gapTxt = implied > 0 ? `; at ${t}'s ${pct(sp.x)} ${self.fin ? "ROE" : "growth"} the fit implies ${mult(implied)} versus ${mult(sp.y)} actual, a ${pct(Math.abs(sp.y / implied - 1))} ${sp.y >= implied ? "premium" : "discount"}` : "";
+    const weak = fit.r2 < 0.15 ? " — too weak a relationship to read a premium or discount from" : fit.r2 < 0.35 ? " — a moderate relationship" : "";
+    const meaningful = fit.r2 >= 0.15;
+    // A weak fit says nothing about one company's premium, so no implied multiple is quoted or drawn.
+    const gapTxt = meaningful && implied > 0 ? `; at ${t}'s ${pct(sp.x)} ${self.fin ? "ROE" : "growth"} the fit implies ${mult(implied)} versus ${mult(sp.y)} actual, a ${pct(Math.abs(sp.y / implied - 1))} ${sp.y >= implied ? "premium" : "discount"}` : "";
     fitId = p.add("peers", `Across ${pts.length} companies (${t} and peers), ${yl} ${per10 >= 0 ? "rises" : "falls"} by ${mult(Math.abs(per10))} for every 10 percentage points of ${xl} (R² ${fit.r2.toFixed(2)})${gapTxt}${weak}.`,
-      composite(`${yl} vs ${xl} across peers`, "Least-squares fit across the peer set", pts.flatMap((q) => [q.fx, q.fy])), { v: implied > 0 ? sp.y / implied - 1 : 0 });
-    charts.push({ id: "peer-scatter", type: "scatter", title: self.fin ? "Return on equity vs price-to-book" : "Growth vs EV / sales", subtitle: `${t} and peers · line = least-squares fit (R² ${fit.r2.toFixed(2)})`,
-      xLabel: self.fin ? "TTM return on equity" : "TTM revenue growth", yLabel: METRIC_DEF[yk].label, xUnit: "pct", yUnit: "mult", points: pts, fit: { ...fit, f: fitId ?? undefined }, size: "half" });
+      composite(`${yl} vs ${xl} across peers`, "Least-squares fit across the peer set", pts.flatMap((q) => [q.fx, q.fy])), { v: meaningful && implied > 0 ? sp.y / implied - 1 : 0 });
+    charts.push({ id: "peer-scatter", type: "scatter", title: self.fin ? "Return on equity vs price-to-book" : "Growth vs EV / sales", subtitle: meaningful ? `${t} and peers · line = least-squares fit (R² ${fit.r2.toFixed(2)})` : `${t} and peers · no meaningful linear fit (R² ${fit.r2.toFixed(2)}), so no trend line`,
+      xLabel: self.fin ? "TTM return on equity" : "TTM revenue growth", yLabel: METRIC_DEF[yk].label, xUnit: "pct", yUnit: "mult", points: pts, ...(meaningful ? { fit: { ...fit, f: fitId ?? undefined } } : {}), size: "half" });
   }
   if (peers.length >= 2) {
     const panel: PeerMetricKey[] = self.fin ? ["growth", "netMargin", "roe", "pe", "pb", "ret1y"] : ["growth", "opMargin", "fcfMargin", "evSales", "pe", "ret1y"];
@@ -348,7 +350,7 @@ export function buildInsights(c: InsightCtx): Insights {
   // ---------- consensus ----------
   const est = inp.estimates;
   if (est) {
-    const labels = ["90 days ago", "60 days ago", "30 days ago", "7 days ago", "Now"];
+    const labels = ["90d ago", "60d ago", "30d ago", "7d ago", "Now"];
     const rev: ChartSeries[] = [];
     for (const per of est.periods) {
       const tr = per.trend;
@@ -506,6 +508,12 @@ function segmentHistory(c: InsightCtx, charts: ReportChart[]) {
   const latest = [...new Set(facts.filter((f) => f.end === ends[ends.length - 1]).map((f) => f.member))]
     .map((m) => at.get(`${m}|${ends[ends.length - 1]}`)!).sort((a, b) => b.value - a.value);
   const members = latest.slice(0, 6).map((f) => f.member);
+  // Plot only the run of recent years in which every shown segment is reported, so a renamed or
+  // newly created segment can't make an earlier year look smaller than it was.
+  let from = ends.length - 1;
+  while (from > 0 && members.every((m) => at.has(`${m}|${ends[from - 1]}`))) from--;
+  ends.splice(0, from);
+  if (ends.length < 2) return;
   const label = latest[0].axisLabel;
   const src = (f: SegmentFact): SourceRef => ({ accn: f.accn, concept: f.concept, start: f.start, end: f.end, value: f.value });
   const fy = (e: string) => `FY${e.slice(0, 4)}`;

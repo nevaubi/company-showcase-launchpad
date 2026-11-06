@@ -8,7 +8,7 @@
 // paused guard (refuses to run while paused unless --resume).
 import { args, log, sb, sleep } from "./lib/supa";
 import { CURATED_COVERAGE } from "@/lib/coverage";
-import { ensureReport } from "@/lib/reports/store.server";
+import { STALE_LOCK_MS, ensureReport } from "@/lib/reports/store.server";
 import { loadReportInputs, loadDataset } from "@/lib/reports/inputs.server";
 import { dataVersionOf } from "@/lib/reports/facts";
 import { KIND_ORDER } from "@/lib/reports/kinds";
@@ -30,7 +30,7 @@ async function main() {
   const lease = setInterval(() => { renew().then(({ error }) => error && log(`lease renewal failed: ${error.message}`)); }, 60_000);
 
   // Work list: slots that are missing or whose data version moved.
-  const { data: rows } = await sb.from("reports").select("ticker, kind, status, data_version").eq("scope", "shared").eq("variant", "base");
+  const { data: rows } = await sb.from("reports").select("ticker, kind, status, data_version, started_at").eq("scope", "shared").eq("variant", "base");
   const have = new Map((rows ?? []).map((r) => [`${r.ticker}:${r.kind}`, r]));
   const today = new Date().toISOString().slice(0, 10);
   const todo: { ticker: string; kind: ReportKind }[] = [];
@@ -38,7 +38,8 @@ async function main() {
     let version: string | null = null;
     for (const k of kinds) {
       const r = have.get(`${t}:${k}`);
-      if (r?.status === "generating") continue;
+      // Skip slots another writer holds; a lock older than the stale window was abandoned and is retaken.
+      if (r?.status === "generating" && r.started_at && Date.now() - Date.parse(r.started_at) < STALE_LOCK_MS) continue;
       if (r?.status === "ready") {
         version ??= await loadDataset(t).then((d) => dataVersionOf(d, today)).catch(() => null);
         if (!version || r.data_version === version) continue;

@@ -113,3 +113,22 @@ describe("report insights", () => {
     expect(rel?.ref.kind).toBe("composite");
   });
 });
+
+describe("segment and fit charts", () => {
+  const jpm = load("JPM");
+  const peers = ["BAC", "WFC", "C", "GS", "MS"].map((t) => peerSnapshot(load(t), bars(t), lastClose(bars(t))));
+  const built = buildReportData({ today: "2026-11-06", data: jpm, price: { price: 337, asOf: "2026-11-06" }, estimates: null, promises: null, reactions: null, coverage: null, peers, prices: { self: bars("JPM"), spy: bars("SPY") } });
+  it("plots only years in which every shown segment is reported", () => {
+    const mix = built.charts.find((c) => c.id === "segment-mix");
+    expect(mix && mix.type === "stacked").toBe(true);
+    if (!mix || mix.type !== "stacked") return;
+    for (const s of mix.series) for (const pt of s.points) expect(pt.v).not.toBeNull();
+  });
+  it("draws a trend line only when the peer fit explains something", () => {
+    const sc = built.charts.find((c) => c.id === "peer-scatter");
+    if (!sc || sc.type !== "scatter") return;
+    const fact = built.facts.find((f) => f.area === "peers" && f.text.includes("R²"))!;
+    const r2 = Number(/R² ([\d.]+)/.exec(fact.text)![1]);
+    expect(!!sc.fit).toBe(r2 >= 0.15);
+  });
+});

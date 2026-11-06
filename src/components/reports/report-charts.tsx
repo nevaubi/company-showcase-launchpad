@@ -129,7 +129,7 @@ function Frame({ chart, legend, children, picked, facts, ticker, onClose }: {
         <span className="block text-[11px] font-semibold uppercase tracking-[0.06em] text-[color:var(--brand-accent-ink,var(--color-muted-foreground))]">{chart.title}</span>
         {chart.subtitle && <span className="block text-[10.5px] text-muted-foreground">{readableDates(chart.subtitle)}</span>}
       </figcaption>
-      {legend && legend.length > 1 && (
+      {legend && (legend.length > 1 || legend[0]?.line) && (
         <ul className="mb-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10.5px] text-muted-foreground">
           {legend.map((l) => (
             <li key={l.name} className="inline-flex items-center gap-1">
@@ -216,7 +216,7 @@ function Combo({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "combo" 
         <Axis y={yL} x0={m.l} x1={w - m.r} ticks={yL.ticks(4)} unit={unitL} side="left" />
         {right.length > 0 && <Axis y={yR} x0={m.l} x1={w - m.r} ticks={yR.ticks(4)} unit={right[0].unit} side="right" />}
         {chart.x.map((lab, i) => (i % step === 0 || i === n - 1) && (n - 1 - i >= step * (lineOnly ? 0.8 : 0.5) || i === n - 1) ? (
-          <text key={i} x={cx(i)} y={H - 6} textAnchor={lineOnly && i === n - 1 ? "end" : lineOnly && i === 0 ? "start" : "middle"} style={{ fill: C.muted, fontSize: FONT - 1 }}>{dateTick(lab)}</text>
+          <text key={i} x={cx(i)} y={H - 6} textAnchor={lineOnly && n > 8 && i === n - 1 ? "end" : lineOnly && n > 8 && i === 0 ? "start" : "middle"} style={{ fill: C.muted, fontSize: FONT - 1 }}>{dateTick(lab)}</text>
         ) : null)}
         {/* bars */}
         {chart.x.map((_, i) => {
@@ -267,7 +267,10 @@ function Combo({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "combo" 
 
 // ---------- horizontal bars (bridges, contributions) ----------
 function HBar({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "hbar" }>; ctx: Ctx; w: number }) {
-  const rowH = 22, labelW = Math.min(170, w * 0.38), valW = 64;
+  // Label column sized to the longest label (≈6px per character), truncated only when it can't fit.
+  const longest = Math.max(...chart.rows.map((r) => r.label.length), 4);
+  const labelW = Math.min(Math.max(70, longest * 6 + 6), w * 0.46), maxChars = Math.floor((labelW - 4) / 6);
+  const rowH = 22, valW = 64;
   const H = chart.rows.length * rowH + 8;
   const x = scaleLinear().domain(niceDomain(chart.rows.map((r) => r.v))).range([labelW + 6, w - valW]);
   if (w < 40) return null;
@@ -281,7 +284,7 @@ function HBar({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "hbar" }>
           <g key={r.label} style={{ cursor: r.f ? "pointer" : undefined }} onClick={() => ctx.onPick(r.f, r.label)}>
             <title>{`${r.label}: ${fmtChart(r.v, chart.unit, { signed: true })}`}</title>
             {r.self && <line x1={0} x2={w} y1={y - 2} y2={y - 2} style={{ stroke: C.grid }} />}
-            <text x={labelW} y={y + rowH / 2 - 2} dy="0.32em" textAnchor="end" style={{ fill: C.ink, fontSize: FONT, fontWeight: r.self ? 600 : 400 }}>{r.label.length > 28 ? `${r.label.slice(0, 27)}…` : r.label}</text>
+            <text x={labelW} y={y + rowH / 2 - 2} dy="0.32em" textAnchor="end" style={{ fill: C.ink, fontSize: FONT, fontWeight: r.self ? 600 : 400 }}>{r.label.length > maxChars ? `${r.label.slice(0, maxChars - 1)}…` : r.label}<title>{r.label}</title></text>
             <rect x={Math.min(x(0), x(r.v))} width={Math.max(1, Math.abs(x(r.v) - x(0)))} y={y + 3} height={rowH - 10} rx={1.5} style={{ fill: color, opacity: r.self ? 1 : 0.85 }} />
             <text x={w - valW + 6} y={y + rowH / 2 - 2} dy="0.32em" style={{ fill: r.self ? C.ink : C.muted, fontSize: FONT, fontWeight: r.self ? 600 : 400 }} className="num">{fmtChart(r.v, chart.unit, { signed: true })}</text>
           </g>

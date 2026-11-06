@@ -120,7 +120,7 @@ export function isoWeek(date: string): string {
 
 /** Version key: changes when a new periodic filing or earnings release lands, or a new week starts. */
 /** Bump when the report format changes so stored reports are rewritten with it. */
-export const REPORT_FORMAT = "r5";
+export const REPORT_FORMAT = "r6";
 
 export function dataVersionOf(d: CompanyDataset, today: string): string {
   const periodic = d.filings.find((f) => f.form === "10-K" || f.form === "10-Q");
