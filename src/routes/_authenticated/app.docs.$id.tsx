@@ -10,6 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { COVERAGE } from "@/lib/coverage";
 import { fmtRelative } from "@/lib/format";
+import { ShareWithFirm } from "@/components/firm/share-with-firm";
+import { useFirm } from "@/components/firm/firm-context";
 
 export const Route = createFileRoute("/_authenticated/app/docs/$id")({
   head: () => ({
@@ -30,6 +32,7 @@ type SaveState = "idle" | "saving" | "saved" | "error";
 function DocPage() {
   const { id } = Route.useParams();
   const qc = useQueryClient();
+  const { userId } = useFirm();
   const q = useQuery({
     queryKey: ["document", id],
     queryFn: async () => {
@@ -113,6 +116,7 @@ function DocPage() {
 
   const d = q.data;
   const content = (d.content ?? {}) as Record<string, unknown>;
+  const readOnly = !!userId && d.user_id !== userId;
 
   return (
     <div className={d.kind === "sheet" ? "-mx-4 -mb-16 -mt-6 flex h-[calc(100dvh-3rem)] flex-col lg:-mx-8" : "-mx-4 -mb-16 -mt-6 flex flex-col lg:-mx-8"}>
@@ -122,7 +126,9 @@ function DocPage() {
         </Link>
         <input
           value={title}
+          readOnly={readOnly}
           onChange={(e) => {
+            if (readOnly) return;
             setTitle(e.target.value);
             queue({ title: e.target.value.trim() || "Untitled" });
           }}
@@ -130,7 +136,8 @@ function DocPage() {
           maxLength={140}
           aria-label="Title"
         />
-        <Select
+        <ShareWithFirm table="documents" id={d.id} ownerId={d.user_id} firmId={d.firm_id} invalidate={[["document", id], ["documents"]]} />
+        {!readOnly && <Select
           value={ticker ?? "none"}
           onValueChange={(v) => {
             const t = v === "none" ? null : v;
@@ -149,8 +156,8 @@ function DocPage() {
               </SelectItem>
             ))}
           </SelectContent>
-        </Select>
-        <span className="flex w-28 items-center justify-end gap-1 text-[11px] text-muted-foreground">
+        </Select>}
+        {!readOnly && <span className="flex w-28 items-center justify-end gap-1 text-[11px] text-muted-foreground">
           {save === "saving" ? (
             <>
               <Loader2 className="size-3 animate-spin" /> Saving
@@ -164,12 +171,12 @@ function DocPage() {
               <Check className="size-3" /> {savedAt ? `Saved ${fmtRelative(savedAt)}` : "Saved"}
             </>
           )}
-        </span>
+        </span>}
       </div>
       {d.kind === "sheet" ? (
-        <SheetEditor initial={content as Partial<SheetContent>} onChange={onSheet} />
+        <SheetEditor initial={content as Partial<SheetContent>} onChange={onSheet} readOnly={readOnly} />
       ) : (
-        <DocEditor initialHtml={String(content.html ?? "")} title={title} ticker={ticker} onChange={onDoc} />
+        <DocEditor initialHtml={String(content.html ?? "")} title={title} ticker={ticker} onChange={onDoc} readOnly={readOnly} />
       )}
     </div>
   );

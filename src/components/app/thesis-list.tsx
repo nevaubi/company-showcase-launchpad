@@ -5,9 +5,9 @@ import { useQuotes } from "@/lib/data";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-export type ThesisRow = { id: string; ticker: string; title: string; stance: string; entry_price: number | null; target_price: number | null; status: string; updated_at: string };
+export type ThesisRow = { id: string; ticker: string; title: string; stance: string; entry_price: number | null; target_price: number | null; status: string; updated_at: string; user_id?: string; firm_id?: string | null };
 
-export function ThesisList({ theses, loading }: { theses: ThesisRow[]; loading?: boolean }) {
+export function ThesisList({ theses, loading, userId }: { theses: ThesisRow[]; loading?: boolean; userId?: string | null }) {
   const quotes = useQuotes([...new Set(theses.map((t) => t.ticker))]);
   const qmap = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, q]));
   if (loading)
@@ -37,6 +37,7 @@ export function ThesisList({ theses, loading }: { theses: ThesisRow[]; loading?:
                   {t.stance}
                 </Badge>
                 {t.status === "closed" && <Badge variant="outline">Closed</Badge>}
+                {userId && t.user_id && (t.user_id !== userId ? <Badge variant="outline">Firm</Badge> : t.firm_id ? <Badge variant="outline">Shared</Badge> : null)}
                 <span className={cn("num ml-auto text-xs", pnl == null ? "text-muted-foreground" : pnl >= 0 ? "text-positive" : "text-negative")}>{fmtPct(pnl, 1, true)}</span>
               </div>
               <p className="mt-1 truncate text-[13px] font-medium">{t.title}</p>

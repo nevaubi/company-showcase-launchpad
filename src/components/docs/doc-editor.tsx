@@ -38,7 +38,7 @@ import { cn } from "@/lib/utils";
 
 type Mode = "continue" | "summarize" | "rewrite" | "draft" | "critique";
 
-export function DocEditor({ initialHtml, title, ticker, onChange }: { initialHtml: string; title: string; ticker: string | null; onChange: (html: string) => void }) {
+export function DocEditor({ initialHtml, title, ticker, onChange, readOnly = false }: { initialHtml: string; title: string; ticker: string | null; onChange: (html: string) => void; readOnly?: boolean }) {
   const qc = useQueryClient();
   const [aiBusy, setAiBusy] = useState<Mode | null>(null);
   const [prompt, setPrompt] = useState("");
@@ -58,6 +58,7 @@ export function DocEditor({ initialHtml, title, ticker, onChange }: { initialHtm
       TableCell,
     ],
     content: initialHtml || "",
+    editable: !readOnly,
     editorProps: { attributes: { class: "prose-filing doc-surface min-h-[60vh] outline-none" } },
     onUpdate: ({ editor: e }) => onChange(e.getHTML()),
   });
@@ -92,7 +93,7 @@ export function DocEditor({ initialHtml, title, ticker, onChange }: { initialHtm
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="sticky top-12 z-10 flex flex-wrap items-center gap-0.5 border-b bg-card/95 px-3 py-1.5 backdrop-blur">
+      {!readOnly && <div className="sticky top-12 z-10 flex flex-wrap items-center gap-0.5 border-b bg-card/95 px-3 py-1.5 backdrop-blur">
         <Tool editor={editor} label="Heading" icon={<Heading2 />} active={editor?.isActive("heading", { level: 2 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} />
         <Tool editor={editor} label="Subheading" icon={<Heading3 />} active={editor?.isActive("heading", { level: 3 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} />
         <Tool editor={editor} label="Bold" icon={<Bold />} active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()} />
@@ -106,15 +107,15 @@ export function DocEditor({ initialHtml, title, ticker, onChange }: { initialHtm
         <span className="mx-1 h-5 w-px bg-border" />
         <Tool editor={editor} label="Undo" icon={<Undo2 />} onClick={() => editor?.chain().focus().undo().run()} />
         <Tool editor={editor} label="Redo" icon={<Redo2 />} onClick={() => editor?.chain().focus().redo().run()} />
-      </div>
+      </div>}
 
-      <div className="grid grid-cols-1 min-h-0 flex-1 gap-0 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className={cn("grid grid-cols-1 min-h-0 flex-1 gap-0", !readOnly && "xl:grid-cols-[minmax(0,1fr)_19rem]")}>
         <div className="bg-paper/40 px-4 py-8">
           <div className="mx-auto max-w-3xl rounded-lg border bg-card px-10 py-10 shadow-paper">
             <EditorContent editor={editor} />
           </div>
         </div>
-        <aside className="border-l bg-card p-4">
+        {!readOnly && <aside className="border-l bg-card p-4">
           <p className="eyebrow flex items-center gap-1.5">
             <Sparkles className="size-3" /> Writing assistant
           </p>
@@ -149,7 +150,7 @@ export function DocEditor({ initialHtml, title, ticker, onChange }: { initialHtm
               </Button>
             ))}
           </div>
-        </aside>
+        </aside>}
       </div>
       <DataTableDialog open={tableOpen} onOpenChange={setTableOpen} editor={editor} defaultTicker={ticker ?? "AAPL"} />
     </div>

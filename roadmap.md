@@ -2,7 +2,7 @@
 
 ## Institutional platform (requested Nov 6 — "all, proceed")
 - [x] M1 Firm workspaces: firms, roles (owner/admin/analyst/viewer), invites, shared coverage list with assigned analyst/rating/restricted flag, firm notes, branding (logo, colors, disclaimer)
-  - [ ] M1b Share theses and docs with the firm from their pages (database already supports it)
+  - [x] M1b Share theses and docs with a firm from their pages (Private / Shared with firm), "Mine / Shared with me" filters, teammates open shared items view-only
   - [ ] M1c Invite emails (needs an email sender domain); today invites are copy-link + in-app
 - [x] M2 Report library: company primer, earnings preview, earnings recap and IC memo per company (shared, refreshed when filings/week change), cited sentences + numbered sources, PDF (print) and Word download, customize (sections, order, length, audience, stance, emphasis), firm/personal templates, firm branding, library page with coverage matrix
   - [ ] M2b Pre-write standard reports for all 78 core companies (`bun scripts/reports-pregen.ts --max=40` per run; 8 written for NVDA/AAPL) and schedule it after ingest

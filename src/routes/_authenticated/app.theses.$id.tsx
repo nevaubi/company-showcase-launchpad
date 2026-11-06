@@ -19,6 +19,8 @@ import { fundamentalsDigest } from "@/lib/financials/summary";
 import { fmtDate, fmtPct, fmtPrice, fmtRelative } from "@/lib/format";
 import { reviewThesis, type ThesisReview } from "@/lib/thesis.functions";
 import { currentUserId } from "@/lib/workspace";
+import { ShareWithFirm } from "@/components/firm/share-with-firm";
+import { useFirm } from "@/components/firm/firm-context";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/theses/$id")({
@@ -52,6 +54,7 @@ function ThesisDetail() {
   const [kind, setKind] = useState<(typeof KINDS)[number]["v"]>("note");
   const [review, setReview] = useState<(ThesisReview & { reviewedAt: string }) | null>(null);
 
+  const { userId } = useFirm();
   const t = useQuery({
     queryKey: ["thesis", id],
     queryFn: async () => {
@@ -133,6 +136,7 @@ function ThesisDetail() {
     );
 
   const th = t.data;
+  const mine = th.user_id === userId;
   const entry = th.entry_price != null ? Number(th.entry_price) : null;
   const target = th.target_price != null ? Number(th.target_price) : null;
   const dir = th.stance === "short" ? -1 : 1;
@@ -184,7 +188,9 @@ function ThesisDetail() {
             Opened {fmtDate(opened)} · {daysOpen} days · horizon {th.horizon ?? "—"}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <ShareWithFirm table="theses" id={th.id} ownerId={th.user_id} firmId={th.firm_id} invalidate={[["thesis", id], ["theses"]]} />
+          {mine && <>
           <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
             <Pencil /> Edit
           </Button>
@@ -208,6 +214,7 @@ function ThesisDetail() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+          </>}
         </div>
       </div>
 
@@ -305,7 +312,7 @@ function ThesisDetail() {
           </Panel>
 
           <Panel title="Log" subtitle="Earnings, catalysts, and second thoughts" bodyClassName="p-0">
-            <form
+            {mine && <form
               className="grid grid-cols-1 gap-2 border-b p-4"
               onSubmit={(e) => {
                 e.preventDefault();
@@ -330,7 +337,7 @@ function ThesisDetail() {
                   {addUpdate.isPending && <Loader2 className="animate-spin" />} Add entry
                 </Button>
               </div>
-            </form>
+            </form>}
             <ol className="divide-y">
               {updates.map((u) => (
                 <li key={u.id} className="group px-4 py-3">
@@ -339,9 +346,9 @@ function ThesisDetail() {
                       {u.kind}
                     </Badge>
                     {fmtDate(u.created_at)}
-                    <button onClick={() => delUpdate.mutate(u.id)} className="ml-auto opacity-0 transition-opacity hover:text-negative group-hover:opacity-100" aria-label="Delete entry">
+                    {mine && <button onClick={() => delUpdate.mutate(u.id)} className="ml-auto opacity-0 transition-opacity hover:text-negative group-hover:opacity-100" aria-label="Delete entry">
                       <Trash2 className="size-3.5" />
-                    </button>
+                    </button>}
                   </div>
                   <p className="mt-1.5 text-sm leading-relaxed">{u.body}</p>
                 </li>
@@ -351,7 +358,7 @@ function ThesisDetail() {
           </Panel>
         </div>
       </div>
-      <ThesisForm open={editing} onOpenChange={setEditing} initial={draft} />
+      {mine && <ThesisForm open={editing} onOpenChange={setEditing} initial={draft} />}
     </div>
   );
 }

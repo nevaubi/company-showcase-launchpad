@@ -34,13 +34,18 @@ interface Sel {
   r: number;
 }
 
-export function SheetEditor({ initial, onChange }: { initial: Partial<SheetContent>; onChange: (c: SheetContent) => void }) {
-  const [cells, setCells] = useState<Record<string, string>>(initial.cells ?? {});
-  const [formats, setFormats] = useState<Record<string, CellFormat>>(initial.formats ?? {});
-  const [dims, setDims] = useState({ rows: Math.max(initial.rows ?? 40, 20), cols: Math.max(initial.cols ?? 12, 8) });
+export function SheetEditor({ initial, onChange, readOnly = false }: { initial: Partial<SheetContent>; onChange: (c: SheetContent) => void; readOnly?: boolean }) {
+  const [cells, setCellsRaw] = useState<Record<string, string>>(initial.cells ?? {});
+  const [formats, setFormatsRaw] = useState<Record<string, CellFormat>>(initial.formats ?? {});
+  const [dims, setDimsRaw] = useState({ rows: Math.max(initial.rows ?? 40, 20), cols: Math.max(initial.cols ?? 12, 8) });
   const [sel, setSel] = useState<Sel>({ c: 0, r: 0 });
   const [anchor, setAnchor] = useState<Sel | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
+  const [editing, setEditingRaw] = useState<string | null>(null);
+  // A teammate's shared sheet opens view-only: every edit path goes through these setters.
+  const setCells: typeof setCellsRaw = readOnly ? () => {} : setCellsRaw;
+  const setFormats: typeof setFormatsRaw = readOnly ? () => {} : setFormatsRaw;
+  const setDims: typeof setDimsRaw = readOnly ? () => {} : setDimsRaw;
+  const setEditing = (v: string | null) => { if (!readOnly || v === null) setEditingRaw(v); };
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiBusy, setAiBusy] = useState(false);
   const grid = useRef<HTMLDivElement>(null);

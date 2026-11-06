@@ -8,6 +8,7 @@ import { ThesisList } from "@/components/app/thesis-list";
 import { ThesisForm } from "@/components/app/thesis-form";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useFirm } from "@/components/firm/firm-context";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/theses/")({
@@ -37,7 +38,10 @@ function Theses() {
       return data;
     },
   });
-  const list = (q.data ?? []).filter((t) => t.status === tab);
+  const { userId } = useFirm();
+  const [owner, setOwner] = useState<"all" | "mine" | "shared">("all");
+  const hasShared = (q.data ?? []).some((t) => t.user_id !== userId);
+  const list = (q.data ?? []).filter((t) => t.status === tab && (owner === "all" || (owner === "mine") === (t.user_id === userId)));
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
@@ -56,6 +60,15 @@ function Theses() {
             {t} ({(q.data ?? []).filter((x) => x.status === t).length})
           </button>
         ))}
+        {hasShared && (
+          <span className="ml-auto flex gap-1">
+            {(["all", "mine", "shared"] as const).map((o) => (
+              <button key={o} onClick={() => setOwner(o)} className={cn("rounded-md px-3 py-1.5 text-sm", owner === o ? "bg-secondary font-medium" : "text-muted-foreground hover:bg-secondary")}>
+                {o === "all" ? "Everyone" : o === "mine" ? "Mine" : "Shared with me"}
+              </button>
+            ))}
+          </span>
+        )}
       </div>
       {q.isError ? (
         <p className="text-sm text-negative">{(q.error as Error).message}</p>
@@ -69,7 +82,7 @@ function Theses() {
         </Empty>
       ) : (
         <div className="rounded-lg border bg-card shadow-paper">
-          <ThesisList theses={list} loading={q.isLoading} />
+          <ThesisList theses={list} loading={q.isLoading} userId={userId} />
         </div>
       )}
       <ThesisForm open={open} onOpenChange={setOpen} />
