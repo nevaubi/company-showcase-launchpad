@@ -450,5 +450,20 @@
 
 @media print {
   aside, header, nav, [data-print-hide] { display: none !important; }
-  .memo-print { font-size: 10px; }
+
+  /* Report library: print only the document, in brand colours, on A4/Letter. */
+  @page { size: auto; margin: 12mm 12mm 14mm; }
+  html.printing-report body * { visibility: hidden; }
+  html.printing-report .report-doc, html.printing-report .report-doc * { visibility: visible; }
+  html.printing-report .report-doc {
+    position: absolute; inset: 0 auto auto 0; width: 100%; box-shadow: none; border: 0;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 11.5px;
+  }
+  html.printing-report .report-doc [data-print-hide] { display: none !important; }
+  html.printing-report .report-doc .report-body { padding: 14px 0; }
+  html.printing-report .report-doc .cite, html.printing-report .report-doc .cell-link { color: inherit; text-decoration: none; }
+  html.printing-report .report-doc .report-table, html.printing-report .report-doc li { break-inside: avoid; }
+  html.printing-report .report-doc h3 { break-after: avoid; }
+  html.printing-report .report-doc .overflow-x-auto { overflow: visible; }
+  html.printing-report .report-doc table { min-width: 0; }
 }

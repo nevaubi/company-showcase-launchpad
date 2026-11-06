@@ -5,6 +5,7 @@ import { useProfile, useWatchlist, type AppPath } from "@/lib/workspace";
 import {
   Activity,
   BookOpenText,
+  FileText,
   Bot,
   Building2,
   ChevronsUpDown,
@@ -76,6 +77,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     items: [
       { to: "/app/theses", label: "Theses", icon: BookOpenText },
       { to: "/app/research", label: "Research agent", icon: Bot },
+      { to: "/app/reports", label: "Reports", icon: FileText },
       { to: "/app/docs", label: "Docs & sheets", icon: FileSpreadsheet },
       { to: "/app/firm", label: "Firm", icon: Users },
       { to: "/app/status", label: "Data status", icon: DatabaseZap },

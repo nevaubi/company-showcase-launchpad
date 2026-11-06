@@ -1,78 +1,64 @@
-import { Fragment, useMemo } from "react";
+import { useMemo } from "react";
 import { ExternalLink, Info, ShieldCheck } from "lucide-react";
-import { useSource, type SourceTarget } from "@/components/source/source-context";
+import { useSource } from "@/components/source/source-context";
 import { BrandedCover, BRAND_FONT } from "@/components/firm/branded-cover";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { citationOrder, numbersIn } from "@/lib/reports/vet";
+import { citationOrder } from "@/lib/reports/vet";
+import { compressRefs, readableDates, refCaption, refTarget } from "@/lib/reports/present";
 import { KINDS } from "@/lib/reports/kinds";
-import type { Claim, Fact, FactRef, ReportContent, ReportTable, TableCell } from "@/lib/reports/types";
-import { resolveBranding, type FirmBranding } from "@/lib/firm/core";
+import type { Claim, Fact, ReportContent, ReportTable, TableCell } from "@/lib/reports/types";
+import { readableOn, resolveBranding, type FirmBranding } from "@/lib/firm/core";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-/** Turn a fact/cell reference into a source-panel target (null for market/firm data, shown as a note). */
-export function refTarget(ref: FactRef, ticker: string, text: string): SourceTarget | null {
-  const n = numbersIn(text).at(-1);
-  const unit = !n ? "usd" : n.kind === "pct" ? "pct" : n.kind === "mult" ? "ratio" : /\$\d+\.\d{2}$/.test(n.raw) && Math.abs(n.value) < 5000 ? "usdPerShare" : "usd";
-  const label = text.length > 90 ? `${text.slice(0, 88)}…` : text;
-  switch (ref.kind) {
-    case "sec": return { ticker, label, unit, value: ref.src.value, src: ref.src };
-    case "derived": return { ticker, label, unit, value: n?.value ?? 0, derived: { formula: ref.formula, parts: ref.parts } };
-    case "filing": return { ticker, label: ref.label, unit: "usd", value: 0, doc: { accn: ref.accn, doc: ref.doc, form: ref.form, filed: ref.filed, title: ref.label } };
-    case "web": return { ticker, label: ref.label, unit: "usd", value: 0, external: { url: ref.url, quote: ref.quote, date: ref.date, confidence: "Verbatim quote checked against the transcript" } };
-    default: return null;
-  }
-}
-
-export function refCaption(ref: FactRef): string {
-  switch (ref.kind) {
-    case "sec": return `SEC XBRL · ${ref.src.concept} · ${ref.src.start ? `${ref.src.start} → ` : ""}${ref.src.end} · ${ref.src.accn}`;
-    case "derived": return `Calculated · ${ref.formula}`;
-    case "filing": return `${ref.form === "4" ? "Form 4" : `Form ${ref.form}`} filed ${ref.filed} · ${ref.accn}`;
-    case "web": return `${ref.label}${ref.url ? ` · ${new URL(ref.url).hostname.replace(/^www\./, "")}` : ""}`;
-    case "market": return `Market data as of ${ref.asOf} (third-party; not from SEC filings)`;
-    case "firm": return `Firm coverage record as of ${ref.asOf}`;
-  }
-}
+const citeCls = "cite num inline-block rounded-sm px-px align-baseline text-[9.5px] font-semibold leading-[1.2] hover:bg-highlight-soft text-[color:var(--brand-link,var(--color-primary))] hover:underline";
 
 function Cite({ ids, order, facts, ticker }: { ids: string[]; order: Map<string, number>; facts: Map<string, Fact>; ticker: string }) {
   const { open } = useSource();
-  if (!ids.length) return null;
+  const items = ids.map((id) => ({ id, f: facts.get(id), n: order.get(id) })).filter((x): x is { id: string; f: Fact; n: number } => !!x.f && !!x.n).sort((a, b) => a.n - b.n);
+  if (!items.length) return null;
+  if (items.length === 1) {
+    const { f, n } = items[0];
+    const t = refTarget(f.ref, ticker, f.text);
+    if (t) return <sup className="ml-0.5"><button type="button" onClick={() => open(t)} className={citeCls} title={f.text} aria-label={`Source ${n}: ${f.text}`}>{n}</button></sup>;
+  }
   return (
     <sup className="ml-0.5 whitespace-nowrap">
-      {ids.map((id, i) => {
-        const f = facts.get(id);
-        const n = order.get(id);
-        if (!f || !n) return null;
-        const t = refTarget(f.ref, ticker, f.text);
-        return (
-          <Fragment key={id}>
-            {i > 0 && <span className="text-muted-foreground">,</span>}
-            {t ? (
-              <button type="button" onClick={() => open(t)} className="cite num text-[9.5px] font-semibold text-[color:var(--brand-link,var(--color-primary))] hover:underline" title={f.text} aria-label={`Source ${n}: ${f.text}`}>{n}</button>
-            ) : (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <button type="button" className="cite num text-[9.5px] font-semibold text-[color:var(--brand-link,var(--color-primary))] hover:underline" aria-label={`Source ${n}`}>{n}</button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 text-xs"><p className="font-medium">{f.text}</p><p className="mt-1 text-muted-foreground">{refCaption(f.ref)}</p></PopoverContent>
-              </Popover>
-            )}
-          </Fragment>
-        );
-      })}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button type="button" className={citeCls} aria-label={`Sources ${compressRefs(items.map((x) => x.n))}`}>{compressRefs(items.map((x) => x.n))}</button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="max-h-80 w-96 overflow-y-auto p-0 text-xs">
+          <ul className="divide-y">
+            {items.map(({ id, f, n }) => {
+              const t = refTarget(f.ref, ticker, f.text);
+              return (
+                <li key={id} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-1 px-3 py-2">
+                  <span className="num text-muted-foreground">{n}.</span>
+                  <span>
+                    <span className="block">{readableDates(f.text)}</span>
+                    <span className="mt-0.5 block text-[10.5px] text-muted-foreground">{refCaption(f.ref)}</span>
+                    {t && <button type="button" onClick={() => open(t)} className="mt-1 inline-flex items-center gap-0.5 font-medium text-[color:var(--color-primary)] hover:underline">Open source <ExternalLink className="size-3" /></button>}
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </PopoverContent>
+      </Popover>
     </sup>
   );
 }
 
 function ClaimText({ c, order, facts, ticker }: { c: Claim; order: Map<string, number>; facts: Map<string, Fact>; ticker: string }) {
-  return <>{c.text}<Cite ids={c.factIds} order={order} facts={facts} ticker={ticker} /></>;
+  return <>{readableDates(c.text)}<Cite ids={c.factIds} order={order} facts={facts} ticker={ticker} /></>;
 }
 
-function CellView({ cell, ticker }: { cell: TableCell | null; ticker: string }) {
+function CellView({ cell, ticker, label }: { cell: TableCell | null; ticker: string; label: string }) {
   const { open } = useSource();
   if (!cell) return <span className="text-muted-foreground">—</span>;
-  const t = cell.ref ? refTarget(cell.ref, ticker, cell.text) : null;
+  const base = cell.ref ? refTarget(cell.ref, ticker, cell.text) : null;
+  const t = base && !base.doc && !base.external ? { ...base, label } : base;
   const cls = cn(cell.tone === "positive" && "text-positive", cell.tone === "negative" && "text-negative");
   if (!t) return <span className={cls} title={cell.ref ? refCaption(cell.ref) : undefined}>{cell.text}</span>;
   return <button type="button" onClick={() => open(t)} className={cn("cell-link hover:underline", cls)} title={refCaption(cell.ref!)}>{cell.text}</button>;
@@ -94,7 +80,7 @@ export function ReportTableView({ table, ticker }: { table: ReportTable; ticker:
             {table.rows.map((r) => (
               <tr key={r.label} className="border-b border-border/70">
                 <td className={cn("py-1 pr-3 text-left", r.bold && "font-semibold")}>{r.label}</td>
-                {r.cells.map((c, i) => <td key={i} className={cn("num whitespace-nowrap py-1 pl-3 text-right", r.bold && "font-semibold")}><CellView cell={c} ticker={ticker} /></td>)}
+                {r.cells.map((c, i) => <td key={i} className={cn("num whitespace-nowrap py-1 pl-3 text-right", r.bold && "font-semibold")}><CellView cell={c} ticker={ticker} label={`${r.label} · ${table.columns[i]}`} /></td>)}
               </tr>
             ))}
           </tbody>
@@ -113,13 +99,14 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
   const order = useMemo(() => citationOrder(content.sections), [content]);
   const tables = new Map(content.tables.map((t) => [t.id, t]));
   const b = resolveBranding(brand.branding);
+  const strong = readableOn(b.primary) === "#ffffff" ? b.primary : "#111111";
   const def = KINDS[content.kind];
   const sources = [...order.entries()].sort((a, b) => a[1] - b[1]).map(([id, n]) => ({ n, f: facts.get(id)! })).filter((x) => x.f);
   const { open } = useSource();
   const verified = content.qa.numbers ? `${content.qa.verifiedNumbers} of ${content.qa.numbers} figures matched to their sources` : "Every statement cites its sources";
 
   return (
-    <article className={cn("report-doc bg-card text-card-foreground shadow-paper", className)} style={{ fontFamily: BRAND_FONT[b.font], ["--brand" as string]: b.primary, ["--brand-accent-ink" as string]: b.primary }}>
+    <article className={cn("report-doc bg-card text-card-foreground shadow-paper", className)} style={{ fontFamily: BRAND_FONT[b.font], ["--brand" as string]: strong, ["--brand-accent-ink" as string]: strong }}>
       <BrandedCover
         branding={brand.branding}
         logo={brand.logo}
@@ -170,7 +157,7 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
                 <li key={f.id} className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-1">
                   <span className="num text-right text-muted-foreground">{n}.</span>
                   <span>
-                    <span>{f.text.length > 220 ? `${f.text.slice(0, 218)}…` : f.text}</span>{" "}
+                    <span>{readableDates(f.text.length > 220 ? `${f.text.slice(0, 218)}…` : f.text)}</span>{" "}
                     <span className="text-muted-foreground">— {refCaption(f.ref)}</span>
                     {t && <button type="button" onClick={() => open(t)} className="ml-1 inline-flex items-center gap-0.5 text-[color:var(--color-primary)] hover:underline" data-print-hide>open <ExternalLink className="size-3" /></button>}
                   </span>

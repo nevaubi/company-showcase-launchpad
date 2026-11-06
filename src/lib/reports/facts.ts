@@ -7,6 +7,13 @@ import type { Estimates, PeriodCode } from "@/lib/estimates/core";
 import type { Fact, FactArea, FactRef, ReportInputs, ReportTable, TableCell } from "./types";
 
 // ---------- formatting (ASCII minus so the number checker can read it back) ----------
+/** SEC parts behind a fact reference (a plain SEC value becomes its single part). */
+function derivedParts(r: FactRef): DerivedPart[] {
+  if (r.kind === "derived") return r.parts;
+  if (r.kind === "sec") return [{ ...r.src, label: r.label, sign: 1 } as unknown as DerivedPart];
+  return [];
+}
+
 export function money(v: number): string {
   const s = v < 0 ? "-" : "";
   const a = Math.abs(v);
@@ -14,6 +21,7 @@ export function money(v: number): string {
   if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(a >= 1e10 ? 1 : 2)}B`;
   if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(a >= 1e8 ? 0 : 1)}M`;
   if (a >= 1e3) return `${s}$${(a / 1e3).toFixed(0)}K`;
+  if (a === 0) return "$0";
   return `${s}$${a.toFixed(2)}`;
 }
 export const perShare = (v: number) => `${v < 0 ? "-" : ""}$${Math.abs(v).toFixed(2)}`;
@@ -257,31 +265,35 @@ export function buildReportData(inp: ReportInputs): ReportData {
     const sharesCell = cellAt(Q.balance, "sharesOutstanding", Q.balance.periods.length - 1) ?? cellAt(Q.income, "sharesDiluted", qPeriods.length - 1);
     if (sharesCell) {
       const mcap = inp.price.price * sharesCell.v;
-      const mcapRef: FactRef = { kind: "derived", formula: "Share price × shares outstanding", parts: partsOf(sharesCell, "Shares outstanding"), label: "Market capitalization" };
+      const mkt = [{ label: "Share price", value: inp.price.price, asOf: inp.price.asOf }];
+      const sharesParts = partsOf(sharesCell, "Shares outstanding");
+      const mcapRef: FactRef = { kind: "derived", formula: "Share price × shares outstanding", parts: sharesParts, market: mkt, label: "Market capitalization" };
       const mcapId = p.add("valuation", `Market capitalization at ${perShare(inp.price.price)}: ${money(mcap)} (${(sharesCell.v / 1e6).toFixed(0)}M shares).`, mcapRef);
       valuationRows.push({ label: "Market cap", cells: [{ text: money(mcap), ref: p.ref(mcapId) }, { text: "Price × shares outstanding" }] });
       const debt = cellAt(bal, "totalDebt", bi), cash = cellAt(bal, "cash", bi), sti = cellAt(bal, "shortTermInvestments", bi);
       let ev: number | null = null;
+      let evParts: DerivedPart[] = sharesParts;
       if (debt && cash) {
         ev = mcap + debt.v - cash.v - (sti?.v ?? 0);
-        const evRef: FactRef = { kind: "derived", formula: "Market cap + total debt − cash − short-term investments", parts: [...partsOf(sharesCell, "Shares outstanding"), ...partsOf(debt, "Total debt"), ...partsOf(cash, "Cash"), ...(sti ? partsOf(sti, "Short-term investments") : [])], label: "Enterprise value" };
+        evParts = [...sharesParts, ...partsOf(debt, "Total debt"), ...partsOf(cash, "Cash"), ...(sti ? partsOf(sti, "Short-term investments") : [])];
+        const evRef: FactRef = { kind: "derived", formula: "Market cap + total debt − cash − short-term investments", parts: evParts, market: mkt, label: "Enterprise value" };
         const evId = p.add("valuation", `Enterprise value: ${money(ev)}.`, evRef);
         valuationRows.push({ label: "Enterprise value", cells: [{ text: money(ev), ref: p.ref(evId) }, { text: "Market cap + debt − cash" }] });
       }
       if (ttmEps && ttmEps.v > 0) {
-        const id = p.add("valuation", `Price-to-earnings on trailing diluted EPS: ${mult(inp.price.price / ttmEps.v)}.`, { kind: "derived", formula: "Share price ÷ TTM diluted EPS", parts: (ttmEps.ref as Extract<FactRef, { kind: "derived" }>).parts, label: "P/E (TTM)" });
+        const id = p.add("valuation", `Price-to-earnings on trailing diluted EPS: ${mult(inp.price.price / ttmEps.v)}.`, { kind: "derived", formula: "Share price ÷ TTM diluted EPS", parts: derivedParts(ttmEps.ref), market: mkt, label: "P/E (TTM)" });
         valuationRows.push({ label: "P/E (TTM)", cells: [{ text: mult(inp.price.price / ttmEps.v), ref: p.ref(id) }, { text: "Price ÷ TTM diluted EPS" }] });
       }
       if (ev != null && ttmRev && ttmRev.v > 0) {
-        const id = p.add("valuation", `Enterprise value to trailing revenue: ${mult(ev / ttmRev.v)}.`, { kind: "derived", formula: "EV ÷ TTM revenue", parts: (ttmRev.ref as Extract<FactRef, { kind: "derived" }>).parts, label: "EV/Sales (TTM)" });
+        const id = p.add("valuation", `Enterprise value to trailing revenue: ${mult(ev / ttmRev.v)}.`, { kind: "derived", formula: "EV ÷ TTM revenue", parts: [...evParts, ...derivedParts(ttmRev.ref)], market: mkt, label: "EV/Sales (TTM)" });
         valuationRows.push({ label: "EV / Sales (TTM)", cells: [{ text: mult(ev / ttmRev.v), ref: p.ref(id) }, { text: "EV ÷ TTM revenue" }] });
       }
       if (ttmFcf) {
-        const id = p.add("valuation", `Free-cash-flow yield (TTM free cash flow ÷ market cap): ${pct(ttmFcf.v / mcap)}.`, { kind: "derived", formula: "TTM free cash flow ÷ market cap", parts: (ttmFcf.ref as Extract<FactRef, { kind: "derived" }>).parts, label: "FCF yield" });
+        const id = p.add("valuation", `Free-cash-flow yield (TTM free cash flow ÷ market cap): ${pct(ttmFcf.v / mcap)}.`, { kind: "derived", formula: "TTM free cash flow ÷ market cap", parts: [...derivedParts(ttmFcf.ref), ...sharesParts], market: mkt, label: "FCF yield" });
         valuationRows.push({ label: "FCF yield", cells: [{ text: pct(ttmFcf.v / mcap), ref: p.ref(id) }, { text: "TTM FCF ÷ market cap" }] });
       }
       if (ttmDiv && ttmDiv.v > 0) {
-        const id = p.add("valuation", `Dividend yield (TTM dividends per share ÷ price): ${pct(ttmDiv.v / inp.price.price)}.`, { kind: "derived", formula: "TTM dividends per share ÷ share price", parts: (ttmDiv.ref as Extract<FactRef, { kind: "derived" }>).parts, label: "Dividend yield" });
+        const id = p.add("valuation", `Dividend yield (TTM dividends per share ÷ price): ${pct(ttmDiv.v / inp.price.price)}.`, { kind: "derived", formula: "TTM dividends per share ÷ share price", parts: derivedParts(ttmDiv.ref), market: mkt, label: "Dividend yield" });
         valuationRows.push({ label: "Dividend yield", cells: [{ text: pct(ttmDiv.v / inp.price.price), ref: p.ref(id) }, { text: "TTM DPS ÷ price" }] });
       }
     }

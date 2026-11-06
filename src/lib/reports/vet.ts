@@ -3,7 +3,22 @@
 // facts (or, failing that, in another fact, which is then added to the citation).
 import type { Claim, Fact, ReportQa, ReportSection } from "./types";
 
-export interface NumToken { raw: string; value: number; kind: "money" | "pct" | "mult" | "plain" }
+/** dir: direction the wording asserts (−1 "fell 5%", +1 "+5%"/"grew 5%", 0 neutral like "fell to $5B"). */
+export interface NumToken { raw: string; value: number; kind: "money" | "pct" | "mult" | "plain"; dir: -1 | 0 | 1 }
+
+const NEG_CUE = /\b(fell|falls|fall|declin\w*|decreas\w*|down|dropp?\w*|slid|slipp?\w*|contract\w*|shr[ai]nk\w*|lower(?:ed)?|loss(?:es)?|negative|compress\w*|weaken\w*|cut)\b/gi;
+const POS_CUE = /\b(rose|rise|rises|grew|grow\w*|up|increas\w*|gain\w*|expand\w*|climb\w*|jump\w*|higher|improv\w*|accelerat\w*)\b/gi;
+
+/** Direction asserted by the closest cue word in the few words before a number. */
+function direction(before: string): -1 | 0 | 1 {
+  const last = (re: RegExp) => { let m: RegExpExecArray | null, at = -1, len = 0; re.lastIndex = 0; while ((m = re.exec(before))) { at = m.index; len = m[0].length; } return { at, end: at + len }; };
+  const n = last(NEG_CUE), p = last(POS_CUE);
+  const cue = n.at > p.at ? { ...n, d: -1 as const } : p.at >= 0 ? { ...p, d: 1 as const } : null;
+  if (!cue) return 0;
+  const gap = before.slice(cue.end);
+  if (/\b(to|from|at|than|vs\.?|versus)\b/i.test(gap) || gap.trim().split(/\s+/).filter(Boolean).length > 4) return 0;
+  return cue.d;
+}
 
 const SCALE: Record<string, number> = { k: 1e3, m: 1e6, b: 1e9, t: 1e12, thousand: 1e3, million: 1e6, billion: 1e9, trillion: 1e12, bn: 1e9, mn: 1e6 };
 const NUM_RE = /([+\-−–]?)(\$?)(\d[\d,]*(?:\.\d+)?)\s?(%|x\b|×|bps\b|basis points|(?:thousand|million|billion|trillion|bn|mn)\b|[KMBT]\b)?/gi;
@@ -11,6 +26,7 @@ const NUM_RE = /([+\-−–]?)(\$?)(\d[\d,]*(?:\.\d+)?)\s?(%|x\b|×|bps\b|basis 
 /** Numbers that need a source. Years, quarter/fiscal labels, dates and small counts are exempt. */
 export function numbersIn(text: string): NumToken[] {
   const out: NumToken[] = [];
+  let lastEnd = 0;
   for (const m of text.matchAll(NUM_RE)) {
     const [raw, sign, dollar, digits, unitRaw] = m;
     const idx = m.index ?? 0;
@@ -31,18 +47,31 @@ export function numbersIn(text: string): NumToken[] {
     else if (unit === "x" || unit === "×") kind = "mult";
     else if (unit === "bps" || unit === "basis points") { kind = "pct"; value = n / 10000; }
     else if (SCALE[unit]) { value = n * SCALE[unit]; if (!dollar) kind = "money"; }
-    out.push({ raw: raw.trim(), value: neg ? -value : value, kind });
+    const plus = sign === "+";
+    const dir: NumToken["dir"] = neg ? -1 : plus ? 1 : direction(text.slice(Math.max(lastEnd, idx - 48), idx));
+    lastEnd = idx + raw.length;
+    out.push({ raw: raw.trim(), value: neg ? -value : value, kind, dir });
   }
   return out;
 }
 
+/** a = number in model text, b = number in a source fact. Size must match and so must direction when the text asserts one. */
 function close(a: NumToken, b: NumToken): boolean {
+  if (a.dir !== 0 && b.value !== 0 && Math.sign(b.value) !== a.dir) return false;
   const sameKind = a.kind === b.kind || (a.kind === "plain" && b.kind !== "pct") || (b.kind === "plain" && a.kind !== "pct");
   if (!sameKind) return false;
   if (a.kind === "pct" || b.kind === "pct") return Math.abs(Math.abs(a.value) - Math.abs(b.value)) <= 0.0006;
   const x = Math.abs(a.value), y = Math.abs(b.value);
   if (x === 0 || y === 0) return x === y;
   return Math.abs(x - y) / Math.max(x, y) <= 0.006;
+}
+
+const STOP = new Set(["this", "that", "with", "from", "were", "have", "than", "over", "into", "versus", "which", "while", "their", "also", "about", "after", "before", "year", "years", "quarter", "quarters", "fiscal", "reported", "period", "ended", "total", "latest", "prior", "compared", "against", "same", "most", "more", "less"]);
+/** Topic words (4-letter stems) used to check that a fallback source is about the same thing. */
+function stems(t: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of t.toLowerCase().match(/[a-z][a-z&-]{3,}/g) ?? []) if (!STOP.has(w)) out.add(w.slice(0, 4));
+  return out;
 }
 
 /** Split on sentence ends only (a period inside "$416.2B" is not one). */
@@ -63,8 +92,17 @@ export function vetClaim(c: Claim, facts: Map<string, Fact>, factNums: Map<strin
       numbers++;
       const inCited = [...cited].some((id) => factNums.get(id)!.some((m) => close(n, m)));
       if (inCited) { verified++; continue; }
-      const other = [...factNums.entries()].find(([, ms]) => ms.some((m) => close(n, m)));
-      if (other) { cited.add(other[0]); verified++; continue; }
+      // Not in the cited facts: accept another fact only if it is about the same thing.
+      const words = stems(s);
+      let best: { id: string; score: number } | null = null;
+      for (const [id, ms] of factNums) {
+        if (!ms.some((m) => close(n, m))) continue;
+        const fw = stems(facts.get(id)!.text);
+        let score = 0;
+        for (const w of fw) if (words.has(w)) score++;
+        if (score > 0 && (!best || score > best.score)) best = { id, score };
+      }
+      if (best) { cited.add(best.id); verified++; continue; }
       ok = false;
       removed.push({ text: s, reason: `"${n.raw}" doesn't match any source` });
       break;

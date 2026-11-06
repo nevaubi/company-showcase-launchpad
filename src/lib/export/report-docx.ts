@@ -6,7 +6,7 @@ import {
 } from "docx";
 import { citationOrder } from "@/lib/reports/vet";
 import { KINDS } from "@/lib/reports/kinds";
-import { refCaption } from "@/components/reports/report-document";
+import { compressRefs, readableDates, refCaption } from "@/lib/reports/present";
 import type { Claim, Fact, ReportContent, ReportTable } from "@/lib/reports/types";
 import { readableOn, resolveBranding, type FirmBranding } from "@/lib/firm/core";
 
@@ -26,7 +26,7 @@ async function logoRun(dataUrl: string | null): Promise<ImageRun | null> {
 
 function claimRuns(c: Claim, order: Map<string, number>, font: string): TextRun[] {
   const nums = c.factIds.map((id) => order.get(id)).filter((n): n is number => !!n);
-  return [new TextRun({ text: c.text, font, size: 21 }), ...(nums.length ? [new TextRun({ text: nums.join(","), superScript: true, font, size: 15, color: "555555" })] : [])];
+  return [new TextRun({ text: readableDates(c.text), font, size: 21 }), ...(nums.length ? [new TextRun({ text: compressRefs(nums), superScript: true, font, size: 15, color: "555555" })] : [])];
 }
 
 function tableBlock(t: ReportTable, brand: string, font: string): (Paragraph | Table)[] {
@@ -57,6 +57,7 @@ export async function reportToDocx(content: ReportContent, brand: { branding: Fi
   const order = citationOrder(content.sections);
   const facts = new Map(content.facts.map((f) => [f.id, f]));
   const tables = new Map(content.tables.map((t) => [t.id, t]));
+  const strong = readableOn(b.primary) === "#ffffff" ? b.primary : "#111111";
   const logo = await logoRun(brand.logo);
   const shade = { type: ShadingType.CLEAR, color: "auto", fill: hex(b.primary) };
 
@@ -65,7 +66,7 @@ export async function reportToDocx(content: ReportContent, brand: { branding: Fi
     new Paragraph({ shading: shade, spacing: { before: 120 }, children: [new TextRun({ text: KINDS[content.kind].label.toUpperCase(), color: ink, font, size: 16, bold: true })] }),
     new Paragraph({ shading: shade, border: { top: { style: BorderStyle.SINGLE, size: 18, color: hex(b.accent), space: 6 } }, children: [new TextRun({ text: content.title, bold: true, color: ink, font, size: 40 })] }),
     new Paragraph({ shading: shade, children: [new TextRun({ text: content.subtitle, color: ink, font, size: 22 })] }),
-    new Paragraph({ shading: shade, spacing: { after: 240 }, children: [new TextRun({ text: `${content.name} (${content.ticker}) · ${content.asOf}${content.priceAsOf ? ` · prices as of ${content.priceAsOf}` : ""}${b.signature && brand.preparedBy ? ` · prepared by ${brand.preparedBy}` : ""}`, color: ink, font, size: 17 })] }),
+    new Paragraph({ shading: shade, spacing: { after: 240 }, children: [new TextRun({ text: readableDates(`${content.name} (${content.ticker}) · ${content.asOf}${content.priceAsOf ? ` · prices as of ${content.priceAsOf}` : ""}${b.signature && brand.preparedBy ? ` · prepared by ${brand.preparedBy}` : ""}`), color: ink, font, size: 17 })] }),
   ];
 
   const body: (Paragraph | Table)[] = [];
@@ -73,7 +74,7 @@ export async function reportToDocx(content: ReportContent, brand: { branding: Fi
     body.push(new Paragraph({ heading: HeadingLevel.HEADING_2, spacing: { before: 280, after: 100 }, border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: hex(b.accent), space: 2 } }, children: [new TextRun({ text: s.title, bold: true, font, size: 26, color: "111111" })] }));
     for (const p of s.paragraphs) body.push(new Paragraph({ spacing: { after: 120, line: 300 }, children: claimRuns(p, order, font) }));
     for (const x of s.bullets) body.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 80, line: 290 }, children: claimRuns(x, order, font) }));
-    for (const id of s.tables) { const t = tables.get(id); if (t) body.push(...tableBlock(t, b.primary, font)); }
+    for (const id of s.tables) { const t = tables.get(id); if (t) body.push(...tableBlock(t, strong, font)); }
   }
 
   body.push(new Paragraph({ pageBreakBefore: true, heading: HeadingLevel.HEADING_2, children: [new TextRun({ text: "Sources", bold: true, font, size: 24 })] }));
@@ -82,7 +83,7 @@ export async function reportToDocx(content: ReportContent, brand: { branding: Fi
     if (!f) continue;
     body.push(new Paragraph({ spacing: { after: 40 }, children: [
       new TextRun({ text: `${n}. `, bold: true, size: 15, font }),
-      new TextRun({ text: `${f.text} — ${refCaption(f.ref)}`, size: 15, font, color: "333333" }),
+      new TextRun({ text: `${readableDates(f.text)} — ${refCaption(f.ref)}`, size: 15, font, color: "333333" }),
       ...(f.ref.kind === "web" ? [new TextRun({ text: ` ${f.ref.url}`, size: 14, font, color: "1D4ED8" })] : []),
     ] }));
   }

@@ -946,6 +946,56 @@ export type Database = {
         }
         Relationships: []
       }
+      report_runs: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          kind: string
+          ms: number | null
+          report_id: string | null
+          scope: string
+          source: string
+          status: string
+          ticker: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind: string
+          ms?: number | null
+          report_id?: string | null
+          scope: string
+          source?: string
+          status?: string
+          ticker: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          kind?: string
+          ms?: number | null
+          report_id?: string | null
+          scope?: string
+          source?: string
+          status?: string
+          ticker?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_runs_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       report_templates: {
         Row: {
           created_at: string

@@ -32,10 +32,27 @@ describe("claim vetting", () => {
     const r = vetClaim({ text: "Growth was +6.4%.", factIds: ["F1"] }, facts, nums);
     expect(r.claim?.factIds.sort()).toEqual(["F1", "F2"]);
   });
+  it("won't borrow a matching number from a fact about something else", () => {
+    const f = new Map([["F6", fact("F6", "FY2025 revenue: $416.2B.")], ["F7", fact("F7", "Consensus next-fiscal-year EPS growth: +9.1%.")]]);
+    const n = new Map([...f].map(([k, x]) => [k, numbersIn(x.text)]));
+    expect(vetClaim({ text: "Services margin expanded 9.1%.", factIds: ["F6"] }, f, n).claim).toBeNull();
+  });
   it("drops a sentence with an invented number but keeps the rest", () => {
     const r = vetClaim({ text: "Revenue was $416.2B. Margins should reach 48.0% next year.", factIds: ["F1"] }, facts, nums);
     expect(r.claim?.text).toBe("Revenue was $416.2B.");
     expect(r.removed).toHaveLength(1);
+  });
+  it("does not let a decline be verified by a gain of the same size", () => {
+    const f = new Map([["F3", fact("F3", "Q3 EPS growth vs a year ago: -12.0%.")]]);
+    const n = new Map([...f].map(([k, x]) => [k, numbersIn(x.text)]));
+    expect(vetClaim({ text: "EPS fell 12.0% from a year ago.", factIds: ["F3"] }, f, n).claim?.text).toBe("EPS fell 12.0% from a year ago.");
+    expect(vetClaim({ text: "EPS grew 12.0% from a year ago.", factIds: ["F3"] }, f, n).claim).toBeNull();
+  });
+  it("matches a net loss in words to a negative reported value, and ignores 'fell to' levels", () => {
+    const f = new Map([["F4", fact("F4", "FY2025 net income: -$1.5B.")], ["F5", fact("F5", "Q3 free cash flow: $5.0B.")]]);
+    const n = new Map([...f].map(([k, x]) => [k, numbersIn(x.text)]));
+    expect(vetClaim({ text: "The company posted a net loss of $1.5B.", factIds: ["F4"] }, f, n).claim).not.toBeNull();
+    expect(vetClaim({ text: "Free cash flow fell to $5.0B.", factIds: ["F5"] }, f, n).claim).not.toBeNull();
   });
   it("drops a claim with numbers but no valid citation", () => {
     const r = vetClaim({ text: "Revenue was $999.0B.", factIds: ["F9"] }, facts, nums);
@@ -81,10 +98,40 @@ describe("fact pack", () => {
   it("derives market cap from price and SEC shares", () => {
     const f = built.facts.find((x) => x.text.startsWith("Market capitalization"))!;
     expect(f.ref.kind).toBe("derived");
+    if (f.ref.kind !== "derived") return;
+    expect(f.ref.market).toEqual([{ label: "Share price", value: 200, asOf: "2026-11-05" }]);
+    expect(f.ref.parts.some((p) => p.label === "Shares outstanding")).toBe(true);
+  });
+  it("lists every input behind EV/Sales, not just revenue", () => {
+    const f = built.facts.find((x) => x.text.startsWith("Enterprise value to trailing revenue"))!;
+    if (f.ref.kind !== "derived") throw new Error("expected derived");
+    const labels = f.ref.parts.map((p) => p.label);
+    expect(labels).toContain("Shares outstanding");
+    expect(labels).toContain("Cash");
+    expect(labels.some((l) => /debt/i.test(l))).toBe(true);
+    expect(f.ref.parts.some((p) => p.concept === "Revenues" || /Revenue/.test(p.concept))).toBe(true);
+    expect(f.ref.market?.[0].value).toBe(200);
   });
   it("versions by filing and week", () => {
     expect(built.dataVersion.endsWith(isoWeek("2026-11-06"))).toBe(true);
     expect(isoWeek("2026-01-01")).toBe("2026-W01");
     expect(pct(0.0641, true)).toBe("+6.4%");
+  });
+});
+
+describe("report presentation", () => {
+  it("compresses citation runs", async () => {
+    const { compressRefs } = await import("./present");
+    expect(compressRefs([1, 2, 3, 4, 7, 9, 10])).toBe("1–4,7,9,10");
+    expect(compressRefs([5, 3, 4, 3])).toBe("3–5");
+  });
+  it("shows ISO dates in prose as readable dates", async () => {
+    const { readableDates } = await import("./present");
+    expect(readableDates("expected on 2026-11-17.")).toBe("expected on Nov 17, 2026.");
+  });
+  it("labels price-based figures with the dated share price", async () => {
+    const { refCaption } = await import("./present");
+    expect(refCaption({ kind: "derived", formula: "Share price × shares outstanding", parts: [], label: "Market cap", market: [{ label: "Share price", value: 186.03, asOf: "2026-11-06" }] }))
+      .toBe("Calculated · Share price × shares outstanding · uses share price $186.03 as of 2026-11-06 (market data)");
   });
 });

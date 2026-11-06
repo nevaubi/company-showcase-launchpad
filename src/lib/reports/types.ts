@@ -7,7 +7,7 @@ export type ReportScope = "shared" | "firm" | "user";
 /** Where a fact comes from. Every number in a report resolves to one of these. */
 export type FactRef =
   | { kind: "sec"; src: SourceRef; label: string }
-  | { kind: "derived"; formula: string; parts: DerivedPart[]; label: string }
+  | { kind: "derived"; formula: string; parts: DerivedPart[]; label: string; /** Non-SEC inputs (share price), shown with their date */ market?: { label: string; value: number; asOf: string }[] }
   | { kind: "filing"; accn: string; doc: string; form: string; filed: string; label: string }
   | { kind: "web"; url: string; label: string; date?: string; quote?: string }
   /** Third-party market data (prices, consensus); the provider is not named in the UI. */

@@ -4,7 +4,9 @@
 - [x] M1 Firm workspaces: firms, roles (owner/admin/analyst/viewer), invites, shared coverage list with assigned analyst/rating/restricted flag, firm notes, branding (logo, colors, disclaimer)
   - [ ] M1b Share theses and docs with the firm from their pages (database already supports it)
   - [ ] M1c Invite emails (needs an email sender domain); today invites are copy-link + in-app
-- [ ] M2 Report library: pre-generated company primer, earnings preview, earnings recap and IC memo per company (background job, cached, refreshed when data changes); instant view/download (PDF, Word); customize (sections, tone, length) with firm templates/presets and branding
+- [x] M2 Report library: company primer, earnings preview, earnings recap and IC memo per company (shared, refreshed when filings/week change), cited sentences + numbered sources, PDF (print) and Word download, customize (sections, order, length, audience, stance, emphasis), firm/personal templates, firm branding, library page with coverage matrix
+  - [ ] M2b Pre-write standard reports for all 78 core companies (`bun scripts/reports-pregen.ts --max=40` per run; 8 written for NVDA/AAPL) and schedule it after ingest
+  - [ ] M2c Extend reports to the partner-universe companies once their datasets finish backfilling
 - [ ] M3 SEC redline engine: consecutive 10-K/10-Q section diff (risk factors, MD&A, footnotes), changed/added/removed paragraphs, materiality ranking, source links
 - [ ] M4 Cross-company KPI & segment matrix + industry deep dives (normalized calendar quarters), assistant tools to query it
 - [ ] M5 Interactive web financial model (driver-based 3-statement + DCF) and Wall Street-grade Excel model export (live formulas, inputs/formulas color convention, sensitivity table)

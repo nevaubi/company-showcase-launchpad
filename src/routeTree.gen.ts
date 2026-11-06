@@ -22,6 +22,7 @@ import { Route as AuthenticatedAppHedgeFundsRouteImport } from './routes/_authen
 import { Route as AuthenticatedAppIdeasRouteImport } from './routes/_authenticated/app.ideas'
 import { Route as AuthenticatedAppMacroRouteImport } from './routes/_authenticated/app.macro'
 import { Route as AuthenticatedAppMarketsRouteImport } from './routes/_authenticated/app.markets'
+import { Route as AuthenticatedAppReportsRouteImport } from './routes/_authenticated/app.reports'
 import { Route as AuthenticatedAppResearchRouteImport } from './routes/_authenticated/app.research'
 import { Route as AuthenticatedAppSectorsRouteImport } from './routes/_authenticated/app.sectors'
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
@@ -48,6 +49,7 @@ import { Route as AuthenticatedAppCompaniesTickerFinancialsRouteImport } from '.
 import { Route as AuthenticatedAppCompaniesTickerInsidersRouteImport } from './routes/_authenticated/app.companies.$ticker.insiders'
 import { Route as AuthenticatedAppCompaniesTickerIrRouteImport } from './routes/_authenticated/app.companies.$ticker.ir'
 import { Route as AuthenticatedAppCompaniesTickerMemoRouteImport } from './routes/_authenticated/app.companies.$ticker.memo'
+import { Route as AuthenticatedAppCompaniesTickerReportsRouteImport } from './routes/_authenticated/app.companies.$ticker.reports'
 import { Route as AuthenticatedAppCompaniesTickerValuationRouteImport } from './routes/_authenticated/app.companies.$ticker.valuation'
 
 const IndexRoute = IndexRouteImport.update({
@@ -113,6 +115,11 @@ const AuthenticatedAppMacroRoute = AuthenticatedAppMacroRouteImport.update({
 const AuthenticatedAppMarketsRoute = AuthenticatedAppMarketsRouteImport.update({
   id: '/markets',
   path: '/markets',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppReportsRoute = AuthenticatedAppReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const AuthenticatedAppResearchRoute =
@@ -267,6 +274,12 @@ const AuthenticatedAppCompaniesTickerMemoRoute =
     path: '/memo',
     getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
   } as any)
+const AuthenticatedAppCompaniesTickerReportsRoute =
+  AuthenticatedAppCompaniesTickerReportsRouteImport.update({
+    id: '/reports',
+    path: '/reports',
+    getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
+  } as any)
 const AuthenticatedAppCompaniesTickerValuationRoute =
   AuthenticatedAppCompaniesTickerValuationRouteImport.update({
     id: '/valuation',
@@ -286,6 +299,7 @@ export interface FileRoutesByFullPath {
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
@@ -312,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/app/companies/$ticker/ir': typeof AuthenticatedAppCompaniesTickerIrRoute
   '/app/companies/$ticker/memo': typeof AuthenticatedAppCompaniesTickerMemoRoute
+  '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
@@ -325,6 +340,7 @@ export interface FileRoutesByTo {
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
@@ -350,6 +366,7 @@ export interface FileRoutesByTo {
   '/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/app/companies/$ticker/ir': typeof AuthenticatedAppCompaniesTickerIrRoute
   '/app/companies/$ticker/memo': typeof AuthenticatedAppCompaniesTickerMemoRoute
+  '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
@@ -367,6 +384,7 @@ export interface FileRoutesById {
   '/_authenticated/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/_authenticated/app/macro': typeof AuthenticatedAppMacroRoute
   '/_authenticated/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/_authenticated/app/reports': typeof AuthenticatedAppReportsRoute
   '/_authenticated/app/research': typeof AuthenticatedAppResearchRoute
   '/_authenticated/app/sectors': typeof AuthenticatedAppSectorsRoute
   '/_authenticated/app/status': typeof AuthenticatedAppStatusRoute
@@ -393,6 +411,7 @@ export interface FileRoutesById {
   '/_authenticated/app/companies/$ticker/insiders': typeof AuthenticatedAppCompaniesTickerInsidersRoute
   '/_authenticated/app/companies/$ticker/ir': typeof AuthenticatedAppCompaniesTickerIrRoute
   '/_authenticated/app/companies/$ticker/memo': typeof AuthenticatedAppCompaniesTickerMemoRoute
+  '/_authenticated/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/_authenticated/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
   '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
@@ -410,6 +429,7 @@ export interface FileRouteTypes {
     | '/app/ideas'
     | '/app/macro'
     | '/app/markets'
+    | '/app/reports'
     | '/app/research'
     | '/app/sectors'
     | '/app/status'
@@ -436,6 +456,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/insiders'
     | '/app/companies/$ticker/ir'
     | '/app/companies/$ticker/memo'
+    | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
     | '/app/companies/$ticker/'
   fileRoutesByTo: FileRoutesByTo
@@ -449,6 +470,7 @@ export interface FileRouteTypes {
     | '/app/ideas'
     | '/app/macro'
     | '/app/markets'
+    | '/app/reports'
     | '/app/research'
     | '/app/sectors'
     | '/app/status'
@@ -474,6 +496,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/insiders'
     | '/app/companies/$ticker/ir'
     | '/app/companies/$ticker/memo'
+    | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
     | '/app/companies/$ticker'
   id:
@@ -490,6 +513,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/ideas'
     | '/_authenticated/app/macro'
     | '/_authenticated/app/markets'
+    | '/_authenticated/app/reports'
     | '/_authenticated/app/research'
     | '/_authenticated/app/sectors'
     | '/_authenticated/app/status'
@@ -516,6 +540,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/companies/$ticker/insiders'
     | '/_authenticated/app/companies/$ticker/ir'
     | '/_authenticated/app/companies/$ticker/memo'
+    | '/_authenticated/app/companies/$ticker/reports'
     | '/_authenticated/app/companies/$ticker/valuation'
     | '/_authenticated/app/companies/$ticker/'
   fileRoutesById: FileRoutesById
@@ -620,6 +645,13 @@ declare module '@tanstack/react-router' {
       path: '/markets'
       fullPath: '/app/markets'
       preLoaderRoute: typeof AuthenticatedAppMarketsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/reports': {
+      id: '/_authenticated/app/reports'
+      path: '/reports'
+      fullPath: '/app/reports'
+      preLoaderRoute: typeof AuthenticatedAppReportsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/research': {
@@ -804,6 +836,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCompaniesTickerMemoRouteImport
       parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
     }
+    '/_authenticated/app/companies/$ticker/reports': {
+      id: '/_authenticated/app/companies/$ticker/reports'
+      path: '/reports'
+      fullPath: '/app/companies/$ticker/reports'
+      preLoaderRoute: typeof AuthenticatedAppCompaniesTickerReportsRouteImport
+      parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
+    }
     '/_authenticated/app/companies/$ticker/valuation': {
       id: '/_authenticated/app/companies/$ticker/valuation'
       path: '/valuation'
@@ -839,6 +878,7 @@ interface AuthenticatedAppCompaniesTickerRouteChildren {
   AuthenticatedAppCompaniesTickerInsidersRoute: typeof AuthenticatedAppCompaniesTickerInsidersRoute
   AuthenticatedAppCompaniesTickerIrRoute: typeof AuthenticatedAppCompaniesTickerIrRoute
   AuthenticatedAppCompaniesTickerMemoRoute: typeof AuthenticatedAppCompaniesTickerMemoRoute
+  AuthenticatedAppCompaniesTickerReportsRoute: typeof AuthenticatedAppCompaniesTickerReportsRoute
   AuthenticatedAppCompaniesTickerValuationRoute: typeof AuthenticatedAppCompaniesTickerValuationRoute
   AuthenticatedAppCompaniesTickerIndexRoute: typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
@@ -863,6 +903,8 @@ const AuthenticatedAppCompaniesTickerRouteChildren: AuthenticatedAppCompaniesTic
       AuthenticatedAppCompaniesTickerIrRoute,
     AuthenticatedAppCompaniesTickerMemoRoute:
       AuthenticatedAppCompaniesTickerMemoRoute,
+    AuthenticatedAppCompaniesTickerReportsRoute:
+      AuthenticatedAppCompaniesTickerReportsRoute,
     AuthenticatedAppCompaniesTickerValuationRoute:
       AuthenticatedAppCompaniesTickerValuationRoute,
     AuthenticatedAppCompaniesTickerIndexRoute:
@@ -881,6 +923,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppIdeasRoute: typeof AuthenticatedAppIdeasRoute
   AuthenticatedAppMacroRoute: typeof AuthenticatedAppMacroRoute
   AuthenticatedAppMarketsRoute: typeof AuthenticatedAppMarketsRoute
+  AuthenticatedAppReportsRoute: typeof AuthenticatedAppReportsRoute
   AuthenticatedAppResearchRoute: typeof AuthenticatedAppResearchRoute
   AuthenticatedAppSectorsRoute: typeof AuthenticatedAppSectorsRoute
   AuthenticatedAppStatusRoute: typeof AuthenticatedAppStatusRoute
@@ -903,6 +946,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppIdeasRoute: AuthenticatedAppIdeasRoute,
   AuthenticatedAppMacroRoute: AuthenticatedAppMacroRoute,
   AuthenticatedAppMarketsRoute: AuthenticatedAppMarketsRoute,
+  AuthenticatedAppReportsRoute: AuthenticatedAppReportsRoute,
   AuthenticatedAppResearchRoute: AuthenticatedAppResearchRoute,
   AuthenticatedAppSectorsRoute: AuthenticatedAppSectorsRoute,
   AuthenticatedAppStatusRoute: AuthenticatedAppStatusRoute,
