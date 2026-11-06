@@ -12,7 +12,8 @@
   - [x] M3b Comparisons stored for all 78 core companies (312 pairs, last two 10-Ks and 10-Qs each); watchlist alerts for material wording changes
   - [ ] M3d Store comparisons for new filings automatically (scheduled runs are capped at ~2s, too short to parse two filings; today new pairs are compared on the spot in the browser and stored when `bun scripts/redlines.ts` runs)
   - [ ] M3c Table-level redlines for notes (debt maturities, segment tables) and 8-K exhibit comparisons
-- [ ] M4 Cross-company KPI & segment matrix + industry deep dives (normalized calendar quarters), assistant tools to query it
+- [ ] M4 Cross-company KPI & segment matrix + industry deep dives (normalized calendar quarters), assistant tools to query it — PAUSED Nov 6 for publish: groups/families/matching/calendar-quarter core written (`src/lib/kpis/core.ts`); next: `scripts/kpi-matrix.ts` build, `/app/kpis` page, assistant tool, tests
+- [x] Publish the current work live (requested Nov 6)
 - [ ] M5 Interactive web financial model (driver-based 3-statement + DCF) and Wall Street-grade Excel model export (live formulas, inputs/formulas color convention, sensitivity table)
 - [ ] M6 Call tone analysis: prepared remarks vs Q&A tone discrepancies, across-call trend; timed briefs
 - [ ] M7 Monitors & scheduled deliverables: user/firm monitors, scheduled briefs (in-app inbox), email + Slack/Teams/Outlook/Box delivery where connectable
