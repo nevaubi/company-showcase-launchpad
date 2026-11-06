@@ -117,6 +117,7 @@ export type Database = {
         Row: {
           content: Json
           created_at: string
+          firm_id: string | null
           id: string
           kind: string
           ticker: string | null
@@ -127,6 +128,7 @@ export type Database = {
         Insert: {
           content?: Json
           created_at?: string
+          firm_id?: string | null
           id?: string
           kind: string
           ticker?: string | null
@@ -137,6 +139,7 @@ export type Database = {
         Update: {
           content?: Json
           created_at?: string
+          firm_id?: string | null
           id?: string
           kind?: string
           ticker?: string | null
@@ -144,7 +147,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "documents_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       filing_documents: {
         Row: {
@@ -170,6 +181,256 @@ export type Database = {
           content_type?: string
           doc?: string
           path?: string
+        }
+        Relationships: []
+      }
+      firm_activity: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          detail: Json
+          firm_id: string
+          id: number
+          ticker: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          firm_id: string
+          id?: never
+          ticker?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          detail?: Json
+          firm_id?: string
+          id?: never
+          ticker?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_activity_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      firm_coverage: {
+        Row: {
+          analyst_id: string | null
+          created_at: string
+          firm_id: string
+          note: string | null
+          priority: number
+          rating: string
+          restricted: boolean
+          restricted_reason: string | null
+          target_price: number | null
+          ticker: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          analyst_id?: string | null
+          created_at?: string
+          firm_id: string
+          note?: string | null
+          priority?: number
+          rating?: string
+          restricted?: boolean
+          restricted_reason?: string | null
+          target_price?: number | null
+          ticker: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          analyst_id?: string | null
+          created_at?: string
+          firm_id?: string
+          note?: string | null
+          priority?: number
+          rating?: string
+          restricted?: boolean
+          restricted_reason?: string | null
+          target_price?: number | null
+          ticker?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_coverage_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      firm_invites: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          firm_id: string
+          id: string
+          invited_by: string
+          role: Database["public"]["Enums"]["firm_role"]
+          token: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          firm_id: string
+          id?: string
+          invited_by: string
+          role?: Database["public"]["Enums"]["firm_role"]
+          token?: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          firm_id?: string
+          id?: string
+          invited_by?: string
+          role?: Database["public"]["Enums"]["firm_role"]
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_invites_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      firm_members: {
+        Row: {
+          display_name: string | null
+          email: string | null
+          firm_id: string
+          joined_at: string
+          role: Database["public"]["Enums"]["firm_role"]
+          title: string | null
+          user_id: string
+        }
+        Insert: {
+          display_name?: string | null
+          email?: string | null
+          firm_id: string
+          joined_at?: string
+          role?: Database["public"]["Enums"]["firm_role"]
+          title?: string | null
+          user_id: string
+        }
+        Update: {
+          display_name?: string | null
+          email?: string | null
+          firm_id?: string
+          joined_at?: string
+          role?: Database["public"]["Enums"]["firm_role"]
+          title?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_members_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      firm_notes: {
+        Row: {
+          author_id: string
+          body: string
+          context: Json
+          created_at: string
+          firm_id: string
+          id: string
+          pinned: boolean
+          ticker: string | null
+          updated_at: string
+        }
+        Insert: {
+          author_id: string
+          body: string
+          context?: Json
+          created_at?: string
+          firm_id: string
+          id?: string
+          pinned?: boolean
+          ticker?: string | null
+          updated_at?: string
+        }
+        Update: {
+          author_id?: string
+          body?: string
+          context?: Json
+          created_at?: string
+          firm_id?: string
+          id?: string
+          pinned?: boolean
+          ticker?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "firm_notes_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      firms: {
+        Row: {
+          branding: Json
+          created_at: string
+          created_by: string
+          id: string
+          logo_data: string | null
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          branding?: Json
+          created_at?: string
+          created_by: string
+          id?: string
+          logo_data?: string | null
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          branding?: Json
+          created_at?: string
+          created_by?: string
+          id?: string
+          logo_data?: string | null
+          name?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -939,6 +1200,7 @@ export type Database = {
           conviction: number
           created_at: string
           entry_price: number | null
+          firm_id: string | null
           horizon: string | null
           id: string
           is_public: boolean
@@ -957,6 +1219,7 @@ export type Database = {
           conviction?: number
           created_at?: string
           entry_price?: number | null
+          firm_id?: string | null
           horizon?: string | null
           id?: string
           is_public?: boolean
@@ -975,6 +1238,7 @@ export type Database = {
           conviction?: number
           created_at?: string
           entry_price?: number | null
+          firm_id?: string | null
           horizon?: string | null
           id?: string
           is_public?: boolean
@@ -988,7 +1252,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "theses_firm_id_fkey"
+            columns: ["firm_id"]
+            isOneToOne: false
+            referencedRelation: "firms"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       thesis_updates: {
         Row: {
@@ -1054,6 +1326,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_firm_invite: { Args: { _token: string }; Returns: string }
       alt_event_buckets: {
         Args: never
         Returns: {
@@ -1074,6 +1347,29 @@ export type Database = {
           tickers: number
         }[]
       }
+      create_firm: { Args: { _name: string }; Returns: string }
+      firm_role_rank: {
+        Args: { _role: Database["public"]["Enums"]["firm_role"] }
+        Returns: number
+      }
+      get_firm_invite: {
+        Args: { _token: string }
+        Returns: {
+          accepted: boolean
+          email: string
+          expired: boolean
+          firm_name: string
+          role: Database["public"]["Enums"]["firm_role"]
+        }[]
+      }
+      has_firm_role: {
+        Args: {
+          _firm: string
+          _min: Database["public"]["Enums"]["firm_role"]
+          _user: string
+        }
+        Returns: boolean
+      }
       ir_coverage: {
         Args: never
         Returns: {
@@ -1088,9 +1384,34 @@ export type Database = {
           waiting: number
         }[]
       }
+      is_firm_member: {
+        Args: { _firm: string; _user: string }
+        Returns: boolean
+      }
+      my_firm_invites: {
+        Args: never
+        Returns: {
+          expires_at: string
+          firm_name: string
+          role: Database["public"]["Enums"]["firm_role"]
+          token: string
+        }[]
+      }
+      remove_firm_member: {
+        Args: { _firm: string; _user: string }
+        Returns: undefined
+      }
+      set_firm_member_role: {
+        Args: {
+          _firm: string
+          _role: Database["public"]["Enums"]["firm_role"]
+          _user: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
-      [_ in never]: never
+      firm_role: "owner" | "admin" | "analyst" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1217,6 +1538,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      firm_role: ["owner", "admin", "analyst", "viewer"],
+    },
   },
 } as const

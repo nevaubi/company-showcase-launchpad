@@ -22,8 +22,11 @@ import {
   Crosshair,
   PieChart,
   Search,
+  Users,
+  Check,
   X,
 } from "lucide-react";
+import { FirmProvider, useFirm } from "@/components/firm/firm-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Logo } from "@/components/brand/logo";
 import { SourceProvider, useSource } from "@/components/source/source-context";
@@ -74,6 +77,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
       { to: "/app/theses", label: "Theses", icon: BookOpenText },
       { to: "/app/research", label: "Research agent", icon: Bot },
       { to: "/app/docs", label: "Docs & sheets", icon: FileSpreadsheet },
+      { to: "/app/firm", label: "Firm", icon: Users },
       { to: "/app/status", label: "Data status", icon: DatabaseZap },
     ],
   },
@@ -81,9 +85,11 @@ const NAV: { heading: string; items: NavItem[] }[] = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
-    <SourceProvider>
-      <ShellInner>{children}</ShellInner>
-    </SourceProvider>
+    <FirmProvider>
+      <SourceProvider>
+        <ShellInner>{children}</ShellInner>
+      </SourceProvider>
+    </FirmProvider>
   );
 }
 
@@ -274,6 +280,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
   const navigate = useNavigate();
   const name = me.data?.profile?.display_name || me.data?.user.email?.split("@")[0] || "Analyst";
   const email = me.data?.user.email ?? "";
+  const { firms, firm, setActive } = useFirm();
 
   const signOut = async () => {
     await qc.cancelQueries();
@@ -292,15 +299,31 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
             </span>
             <span className={cn("min-w-0 flex-1", collapsed && "lg:hidden")}>
               <span className="block truncate text-[13px] font-medium">{name}</span>
-              <span className="block truncate text-[11px] text-muted-foreground">{email}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{firm ? firm.name : email}</span>
             </span>
             <ChevronsUpDown className={cn("size-3.5 text-muted-foreground", collapsed && "lg:hidden")} />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-56">
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-            {me.data?.profile?.is_demo ? "Shared demo workspace" : "Signed in"}
+            {me.data?.profile?.is_demo ? "Shared demo workspace" : email || "Signed in"}
           </DropdownMenuLabel>
+          {firms.length > 1 && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Switch firm</DropdownMenuLabel>
+              {firms.map((f) => (
+                <DropdownMenuItem key={f.id} onClick={() => setActive(f.id)}>
+                  <Check className={cn("size-4", f.id === firm?.id ? "opacity-100" : "opacity-0")} />
+                  <span className="truncate">{f.name}</span>
+                </DropdownMenuItem>
+              ))}
+            </>
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link to="/app/firm"><Users className="size-4" /> {firm ? "Firm workspace" : "Create a firm"}</Link>
+          </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to="/">Front page</Link>
           </DropdownMenuItem>

@@ -25,6 +25,7 @@ import { RelatedCompanies } from "@/components/company/related";
 import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
 import { coverageOf } from "@/lib/coverage";
+import { FirmNotes } from "@/components/firm/firm-notes";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   head: ({ params }) => ({ meta: [
@@ -145,6 +146,8 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         <SetupPanel ticker={ticker} data={data} price={price} />
         <CatalystsTimeline ticker={ticker} data={data} />
       </div>
+
+      <FirmNotes ticker={ticker} />
 
       <AboutPanel ticker={ticker} data={data} />
       <details className="border-y py-3"><summary className="cursor-pointer text-sm font-semibold">Management & board</summary><div className="pt-3"><LeadershipPanel ticker={ticker} /></div></details>

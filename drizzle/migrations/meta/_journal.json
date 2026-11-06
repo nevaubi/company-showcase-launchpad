@@ -162,6 +162,27 @@
       "when": 1793903862550,
       "tag": "0022_alt_signal_functions",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793984200694,
+      "tag": "0023_firm_workspaces",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793984712103,
+      "tag": "0024_firm_security",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793984730519,
+      "tag": "0025_firm_invite_log_cascade",
+      "breakpoints": true
     }
   ]
 }

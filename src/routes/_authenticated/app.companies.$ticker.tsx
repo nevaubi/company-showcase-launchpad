@@ -11,6 +11,7 @@ import { coverageOf } from "@/lib/coverage";
 import { fmtPct, fmtPrice, fmtSigned } from "@/lib/format";
 import { useToggleFollow } from "@/lib/workspace";
 import { useSource } from "@/components/source/source-context";
+import { CoverageChip, RestrictedBanner } from "@/components/firm/coverage-chip";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
@@ -126,6 +127,7 @@ function CompanyLayout() {
               <Star className={cn(follow.isFollowed(ticker) && "fill-current")} />
               {follow.isFollowed(ticker) ? "Following" : "Follow"}
             </Button>
+            <CoverageChip ticker={ticker} price={q?.price ?? null} />
             {latest10K && (
               <Button
                 size="xs"
@@ -163,6 +165,8 @@ function CompanyLayout() {
           </div>
         </div>
       </div>
+
+      <RestrictedBanner ticker={ticker} />
 
       <nav aria-label="Company research" className="mb-4 flex flex-wrap items-center gap-1 border-b pb-1">
         <Button variant={pathname.replace(/\/$/, "") === `/app/companies/${ticker}` ? "secondary" : "ghost"} size="sm" asChild><Link to="/app/companies/$ticker" params={{ ticker }}>Overview</Link></Button>

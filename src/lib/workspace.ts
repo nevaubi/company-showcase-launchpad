@@ -15,6 +15,7 @@ export type AppPath =
   | "/app/theses"
   | "/app/research"
   | "/app/docs"
+  | "/app/firm"
   | "/app/status";
 
 export async function currentUserId() {

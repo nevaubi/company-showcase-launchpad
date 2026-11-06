@@ -1,5 +1,17 @@
 # Filed Under — roadmap
 
+## Institutional platform (requested Nov 6 — "all, proceed")
+- [ ] M1 Firm workspaces: firms, roles (owner/admin/analyst/viewer), invites, shared coverage list with assigned analyst/rating/restricted flag, firm notes, branding (logo, colors, disclaimer)
+- [ ] M2 Report library: pre-generated company primer, earnings preview, earnings recap and IC memo per company (background job, cached, refreshed when data changes); instant view/download (PDF, Word); customize (sections, tone, length) with firm templates/presets and branding
+- [ ] M3 SEC redline engine: consecutive 10-K/10-Q section diff (risk factors, MD&A, footnotes), changed/added/removed paragraphs, materiality ranking, source links
+- [ ] M4 Cross-company KPI & segment matrix + industry deep dives (normalized calendar quarters), assistant tools to query it
+- [ ] M5 Interactive web financial model (driver-based 3-statement + DCF) and Wall Street-grade Excel model export (live formulas, inputs/formulas color convention, sensitivity table)
+- [ ] M6 Call tone analysis: prepared remarks vs Q&A tone discrepancies, across-call trend; timed briefs
+- [ ] M7 Monitors & scheduled deliverables: user/firm monitors, scheduled briefs (in-app inbox), email + Slack/Teams/Outlook/Box delivery where connectable
+- [ ] M8 Supply-chain contagion map: interactive multi-order ripple with sourced evidence per edge and historical comparison
+- [ ] M9 Live earnings call: capture webcast audio, real-time transcript, live extraction of guidance/KPIs vs consensus and prior guidance, live tone
+- [ ] M10 Landing page, pricing tiers, paid access (payments + seat entitlements)
+
 ## Research experience review (Nov 5)
 - [x] Review main research flows on desktop and mobile
 - [x] Fix discovered phone valuation overflow, cramped company headers, clipped assistant drafts and invalid saved filters

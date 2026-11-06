@@ -17,6 +17,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
+import { Route as AuthenticatedAppFirmRouteImport } from './routes/_authenticated/app.firm'
 import { Route as AuthenticatedAppHedgeFundsRouteImport } from './routes/_authenticated/app.hedge-funds'
 import { Route as AuthenticatedAppIdeasRouteImport } from './routes/_authenticated/app.ideas'
 import { Route as AuthenticatedAppMacroRouteImport } from './routes/_authenticated/app.macro'
@@ -29,6 +30,10 @@ import { Route as AuthenticatedAppCompaniesIndexRouteImport } from './routes/_au
 import { Route as AuthenticatedAppCompaniesTickerRouteImport } from './routes/_authenticated/app.companies.$ticker'
 import { Route as AuthenticatedAppDocsIndexRouteImport } from './routes/_authenticated/app.docs.index'
 import { Route as AuthenticatedAppDocsIdRouteImport } from './routes/_authenticated/app.docs.$id'
+import { Route as AuthenticatedAppFirmIndexRouteImport } from './routes/_authenticated/app.firm.index'
+import { Route as AuthenticatedAppFirmBrandingRouteImport } from './routes/_authenticated/app.firm.branding'
+import { Route as AuthenticatedAppFirmCoverageRouteImport } from './routes/_authenticated/app.firm.coverage'
+import { Route as AuthenticatedAppJoinTokenRouteImport } from './routes/_authenticated/app.join.$token'
 import { Route as AuthenticatedAppSectorsSectorRouteImport } from './routes/_authenticated/app.sectors_.$sector'
 import { Route as AuthenticatedAppThesesIndexRouteImport } from './routes/_authenticated/app.theses.index'
 import { Route as AuthenticatedAppThesesIdRouteImport } from './routes/_authenticated/app.theses.$id'
@@ -82,6 +87,11 @@ const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
 const AuthenticatedAppAltDataRoute = AuthenticatedAppAltDataRouteImport.update({
   id: '/alt-data',
   path: '/alt-data',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppFirmRoute = AuthenticatedAppFirmRouteImport.update({
+  id: '/firm',
+  path: '/firm',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const AuthenticatedAppHedgeFundsRoute =
@@ -150,6 +160,30 @@ const AuthenticatedAppDocsIdRoute = AuthenticatedAppDocsIdRouteImport.update({
   path: '/docs/$id',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppFirmIndexRoute =
+  AuthenticatedAppFirmIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedAppFirmRoute,
+  } as any)
+const AuthenticatedAppFirmBrandingRoute =
+  AuthenticatedAppFirmBrandingRouteImport.update({
+    id: '/branding',
+    path: '/branding',
+    getParentRoute: () => AuthenticatedAppFirmRoute,
+  } as any)
+const AuthenticatedAppFirmCoverageRoute =
+  AuthenticatedAppFirmCoverageRouteImport.update({
+    id: '/coverage',
+    path: '/coverage',
+    getParentRoute: () => AuthenticatedAppFirmRoute,
+  } as any)
+const AuthenticatedAppJoinTokenRoute =
+  AuthenticatedAppJoinTokenRouteImport.update({
+    id: '/join/$token',
+    path: '/join/$token',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppSectorsSectorRoute =
   AuthenticatedAppSectorsSectorRouteImport.update({
     id: '/sectors_/$sector',
@@ -247,6 +281,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
+  '/app/firm': typeof AuthenticatedAppFirmRouteWithChildren
   '/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
@@ -258,11 +293,15 @@ export interface FileRoutesByFullPath {
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/app/firm/branding': typeof AuthenticatedAppFirmBrandingRoute
+  '/app/firm/coverage': typeof AuthenticatedAppFirmCoverageRoute
+  '/app/join/$token': typeof AuthenticatedAppJoinTokenRoute
   '/app/sectors/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs/': typeof AuthenticatedAppDocsIndexRoute
+  '/app/firm/': typeof AuthenticatedAppFirmIndexRoute
   '/app/theses/': typeof AuthenticatedAppThesesIndexRoute
   '/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
@@ -292,11 +331,15 @@ export interface FileRoutesByTo {
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/app/firm/branding': typeof AuthenticatedAppFirmBrandingRoute
+  '/app/firm/coverage': typeof AuthenticatedAppFirmCoverageRoute
+  '/app/join/$token': typeof AuthenticatedAppJoinTokenRoute
   '/app/sectors/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/app/companies': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs': typeof AuthenticatedAppDocsIndexRoute
+  '/app/firm': typeof AuthenticatedAppFirmIndexRoute
   '/app/theses': typeof AuthenticatedAppThesesIndexRoute
   '/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
@@ -319,6 +362,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
+  '/_authenticated/app/firm': typeof AuthenticatedAppFirmRouteWithChildren
   '/_authenticated/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/_authenticated/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/_authenticated/app/macro': typeof AuthenticatedAppMacroRoute
@@ -330,11 +374,15 @@ export interface FileRoutesById {
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   '/_authenticated/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
+  '/_authenticated/app/firm/branding': typeof AuthenticatedAppFirmBrandingRoute
+  '/_authenticated/app/firm/coverage': typeof AuthenticatedAppFirmCoverageRoute
+  '/_authenticated/app/join/$token': typeof AuthenticatedAppJoinTokenRoute
   '/_authenticated/app/sectors_/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/_authenticated/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/_authenticated/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/_authenticated/app/docs/': typeof AuthenticatedAppDocsIndexRoute
+  '/_authenticated/app/firm/': typeof AuthenticatedAppFirmIndexRoute
   '/_authenticated/app/theses/': typeof AuthenticatedAppThesesIndexRoute
   '/_authenticated/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/_authenticated/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
@@ -357,6 +405,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/app'
     | '/app/alt-data'
+    | '/app/firm'
     | '/app/hedge-funds'
     | '/app/ideas'
     | '/app/macro'
@@ -368,11 +417,15 @@ export interface FileRouteTypes {
     | '/app/'
     | '/app/companies/$ticker'
     | '/app/docs/$id'
+    | '/app/firm/branding'
+    | '/app/firm/coverage'
+    | '/app/join/$token'
     | '/app/sectors/$sector'
     | '/app/theses/$id'
     | '/api/public/jobs/$job'
     | '/app/companies/'
     | '/app/docs/'
+    | '/app/firm/'
     | '/app/theses/'
     | '/app/companies/$ticker/alt-data'
     | '/app/companies/$ticker/calls'
@@ -402,11 +455,15 @@ export interface FileRouteTypes {
     | '/app/supply-chain'
     | '/app'
     | '/app/docs/$id'
+    | '/app/firm/branding'
+    | '/app/firm/coverage'
+    | '/app/join/$token'
     | '/app/sectors/$sector'
     | '/app/theses/$id'
     | '/api/public/jobs/$job'
     | '/app/companies'
     | '/app/docs'
+    | '/app/firm'
     | '/app/theses'
     | '/app/companies/$ticker/alt-data'
     | '/app/companies/$ticker/calls'
@@ -428,6 +485,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/app'
     | '/_authenticated/app/alt-data'
+    | '/_authenticated/app/firm'
     | '/_authenticated/app/hedge-funds'
     | '/_authenticated/app/ideas'
     | '/_authenticated/app/macro'
@@ -439,11 +497,15 @@ export interface FileRouteTypes {
     | '/_authenticated/app/'
     | '/_authenticated/app/companies/$ticker'
     | '/_authenticated/app/docs/$id'
+    | '/_authenticated/app/firm/branding'
+    | '/_authenticated/app/firm/coverage'
+    | '/_authenticated/app/join/$token'
     | '/_authenticated/app/sectors_/$sector'
     | '/_authenticated/app/theses/$id'
     | '/api/public/jobs/$job'
     | '/_authenticated/app/companies/'
     | '/_authenticated/app/docs/'
+    | '/_authenticated/app/firm/'
     | '/_authenticated/app/theses/'
     | '/_authenticated/app/companies/$ticker/alt-data'
     | '/_authenticated/app/companies/$ticker/calls'
@@ -523,6 +585,13 @@ declare module '@tanstack/react-router' {
       path: '/alt-data'
       fullPath: '/app/alt-data'
       preLoaderRoute: typeof AuthenticatedAppAltDataRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/firm': {
+      id: '/_authenticated/app/firm'
+      path: '/firm'
+      fullPath: '/app/firm'
+      preLoaderRoute: typeof AuthenticatedAppFirmRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/hedge-funds': {
@@ -607,6 +676,34 @@ declare module '@tanstack/react-router' {
       path: '/docs/$id'
       fullPath: '/app/docs/$id'
       preLoaderRoute: typeof AuthenticatedAppDocsIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/firm/': {
+      id: '/_authenticated/app/firm/'
+      path: '/'
+      fullPath: '/app/firm/'
+      preLoaderRoute: typeof AuthenticatedAppFirmIndexRouteImport
+      parentRoute: typeof AuthenticatedAppFirmRoute
+    }
+    '/_authenticated/app/firm/branding': {
+      id: '/_authenticated/app/firm/branding'
+      path: '/branding'
+      fullPath: '/app/firm/branding'
+      preLoaderRoute: typeof AuthenticatedAppFirmBrandingRouteImport
+      parentRoute: typeof AuthenticatedAppFirmRoute
+    }
+    '/_authenticated/app/firm/coverage': {
+      id: '/_authenticated/app/firm/coverage'
+      path: '/coverage'
+      fullPath: '/app/firm/coverage'
+      preLoaderRoute: typeof AuthenticatedAppFirmCoverageRouteImport
+      parentRoute: typeof AuthenticatedAppFirmRoute
+    }
+    '/_authenticated/app/join/$token': {
+      id: '/_authenticated/app/join/$token'
+      path: '/join/$token'
+      fullPath: '/app/join/$token'
+      preLoaderRoute: typeof AuthenticatedAppJoinTokenRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/sectors_/$sector': {
@@ -717,6 +814,21 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedAppFirmRouteChildren {
+  AuthenticatedAppFirmBrandingRoute: typeof AuthenticatedAppFirmBrandingRoute
+  AuthenticatedAppFirmCoverageRoute: typeof AuthenticatedAppFirmCoverageRoute
+  AuthenticatedAppFirmIndexRoute: typeof AuthenticatedAppFirmIndexRoute
+}
+
+const AuthenticatedAppFirmRouteChildren: AuthenticatedAppFirmRouteChildren = {
+  AuthenticatedAppFirmBrandingRoute: AuthenticatedAppFirmBrandingRoute,
+  AuthenticatedAppFirmCoverageRoute: AuthenticatedAppFirmCoverageRoute,
+  AuthenticatedAppFirmIndexRoute: AuthenticatedAppFirmIndexRoute,
+}
+
+const AuthenticatedAppFirmRouteWithChildren =
+  AuthenticatedAppFirmRoute._addFileChildren(AuthenticatedAppFirmRouteChildren)
+
 interface AuthenticatedAppCompaniesTickerRouteChildren {
   AuthenticatedAppCompaniesTickerAltDataRoute: typeof AuthenticatedAppCompaniesTickerAltDataRoute
   AuthenticatedAppCompaniesTickerCallsRoute: typeof AuthenticatedAppCompaniesTickerCallsRoute
@@ -764,6 +876,7 @@ const AuthenticatedAppCompaniesTickerRouteWithChildren =
 
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAltDataRoute: typeof AuthenticatedAppAltDataRoute
+  AuthenticatedAppFirmRoute: typeof AuthenticatedAppFirmRouteWithChildren
   AuthenticatedAppHedgeFundsRoute: typeof AuthenticatedAppHedgeFundsRoute
   AuthenticatedAppIdeasRoute: typeof AuthenticatedAppIdeasRoute
   AuthenticatedAppMacroRoute: typeof AuthenticatedAppMacroRoute
@@ -775,6 +888,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
   AuthenticatedAppCompaniesTickerRoute: typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   AuthenticatedAppDocsIdRoute: typeof AuthenticatedAppDocsIdRoute
+  AuthenticatedAppJoinTokenRoute: typeof AuthenticatedAppJoinTokenRoute
   AuthenticatedAppSectorsSectorRoute: typeof AuthenticatedAppSectorsSectorRoute
   AuthenticatedAppThesesIdRoute: typeof AuthenticatedAppThesesIdRoute
   AuthenticatedAppCompaniesIndexRoute: typeof AuthenticatedAppCompaniesIndexRoute
@@ -784,6 +898,7 @@ interface AuthenticatedAppRouteChildren {
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAltDataRoute: AuthenticatedAppAltDataRoute,
+  AuthenticatedAppFirmRoute: AuthenticatedAppFirmRouteWithChildren,
   AuthenticatedAppHedgeFundsRoute: AuthenticatedAppHedgeFundsRoute,
   AuthenticatedAppIdeasRoute: AuthenticatedAppIdeasRoute,
   AuthenticatedAppMacroRoute: AuthenticatedAppMacroRoute,
@@ -796,6 +911,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppCompaniesTickerRoute:
     AuthenticatedAppCompaniesTickerRouteWithChildren,
   AuthenticatedAppDocsIdRoute: AuthenticatedAppDocsIdRoute,
+  AuthenticatedAppJoinTokenRoute: AuthenticatedAppJoinTokenRoute,
   AuthenticatedAppSectorsSectorRoute: AuthenticatedAppSectorsSectorRoute,
   AuthenticatedAppThesesIdRoute: AuthenticatedAppThesesIdRoute,
   AuthenticatedAppCompaniesIndexRoute: AuthenticatedAppCompaniesIndexRoute,
