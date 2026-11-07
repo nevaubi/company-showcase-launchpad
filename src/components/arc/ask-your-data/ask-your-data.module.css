@@ -1,0 +1,200 @@
+/* Ask your data. Three bands in one card: the question, the generated SQL, and the result stage.
+   Geometry: the card pads 12px around the field and 16px around rows; nested radii step down from --radius-panel by
+   the padding, so every corner is concentric. The stage holds a fixed height in every state, so nothing below jumps. */
+.root {
+  --ayd-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --ayd-inner-radius: calc(var(--radius-panel) - 12px);
+  --ayd-stage-height: 300px;
+  container-type: inline-size;
+  position: relative;
+  width: 100%;
+  max-width: 720px;
+  min-width: 0;
+  margin-inline: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  line-height: 20px;
+  letter-spacing: var(--tracking-body);
+}
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+
+/* Question */
+.ask { padding: 12px; }
+.field { display: flex; height: 44px; align-items: center; gap: 10px; padding: 0 5px 0 14px; border: 1px solid var(--border); border-radius: var(--ayd-inner-radius); background: var(--background); cursor: text; transition: border-color var(--duration-fast) var(--ease-standard); }
+.field:focus-within { border-color: color-mix(in oklab, var(--accent) 55%, var(--border)); }
+.source { display: inline-flex; flex: none; height: 20px; align-items: center; gap: 6px; padding-right: 10px; border-right: 1px solid var(--border); color: var(--text-secondary); }
+.source svg { display: block; flex: none; }
+.sourceName { white-space: nowrap; }
+.input { flex: 1; min-width: 0; height: 100%; margin: 0; border: 0; padding: 0; background: transparent; color: var(--foreground); font: inherit; letter-spacing: inherit; text-overflow: ellipsis; outline: none; }
+.input::placeholder { color: var(--text-muted); }
+.send { position: relative; display: grid; flex: none; width: 32px; height: 32px; place-items: center; border: 0; border-radius: calc(var(--ayd-inner-radius) - 6px); padding: 0; background: var(--accent); color: var(--accent-foreground); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard); }
+.send:active:not(:disabled) { transform: scale(.94); }
+.send:disabled { background: var(--surface-muted); color: var(--text-muted); cursor: default; }
+@media (hover: hover) and (pointer: fine) { .send:hover:not(:disabled) { background: var(--accent-strong, var(--accent)); } }
+.sendIcon { display: grid; grid-area: 1 / 1; place-items: center; }
+.sendIcon svg { display: block; }
+.stopIcon { display: block; width: 10px; height: 10px; border-radius: 2.5px; background: currentColor; }
+
+/* Generated SQL. The row is one button laid under its content; only Copy sits above it and takes its own clicks. */
+.sql { border-top: 1px solid var(--border); }
+.sqlHead { position: relative; display: grid; min-height: 48px; grid-template-columns: 16px auto minmax(0, 1fr) 16px auto 16px; align-items: center; column-gap: 10px; padding: 0 12px 0 16px; }
+.sqlToggle { position: absolute; inset: 0; z-index: 0; margin: 0; border: 0; padding: 0; background: transparent; cursor: pointer; -webkit-tap-highlight-color: transparent; --focus-outline-offset: -2px; transition: background-color var(--duration-fast) var(--ease-standard); }
+.sqlToggle:disabled { cursor: default; }
+.sqlToggle:active:not(:disabled) { background: var(--surface-muted); }
+@media (hover: hover) and (pointer: fine) { .sqlToggle:hover:not(:disabled) { background: color-mix(in oklab, var(--surface-muted) 70%, transparent); } }
+.sqlHead > :not(.sqlToggle) { position: relative; z-index: 1; pointer-events: none; }
+.sqlHead > .sqlCopy { pointer-events: auto; }
+.pgMark { display: block; }
+.sqlTitle { min-width: 0; font-weight: 500; white-space: nowrap; }
+.sqlTitleText { display: block; }
+.sqlMeta { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 13px; white-space: nowrap; }
+.sqlMeta .swapItem { overflow: hidden; text-overflow: ellipsis; }
+.metaShort { display: none; }
+.sqlCopy { display: inline-flex; align-items: center; margin-right: -4px; }
+.sql[data-empty] .sqlCopy { opacity: .5; }
+.chevron { color: var(--text-muted); transition: transform var(--duration-standard) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard); }
+.sql[data-open]:not([data-empty]) .chevron { transform: rotate(180deg); }
+.sql[data-empty] .chevron { opacity: .4; }
+.sqlClip { overflow: hidden; }
+.sqlBody { padding: 0 12px 12px; }
+
+.code { display: grid; grid-template-columns: auto minmax(0, 1fr); border: 1px solid var(--border-subtle); border-radius: var(--ayd-inner-radius); background: color-mix(in oklab, var(--surface-muted) 60%, var(--surface)); font-family: var(--ayd-mono); font-size: var(--text-xs); line-height: 20px; letter-spacing: 0; }
+.gutter { display: flex; min-width: 3ch; flex-direction: column; padding: 10px 0 10px 14px; color: var(--text-muted); font-variant-numeric: tabular-nums; text-align: right; user-select: none; }
+.gutter span { opacity: 0; transition: opacity var(--duration-fast) var(--ease-standard); }
+.gutter span[data-on] { opacity: .75; }
+.pre { margin: 0; padding: 10px 14px; overflow-x: auto; color: var(--foreground); font: inherit; white-space: pre; scrollbar-width: thin; --focus-outline-offset: -2px; border-radius: 0 var(--ayd-inner-radius) var(--ayd-inner-radius) 0; }
+.pre code { font: inherit; }
+.tk { animation: ayd-fade 140ms var(--ease-standard) both; }
+.code[data-settled] .tk { animation: none; }
+.ghost { color: transparent; user-select: none; }
+.tkKeyword { color: color-mix(in oklab, var(--series-2) 78%, var(--foreground)); }
+.tkFunction { color: color-mix(in oklab, var(--series-1) 80%, var(--foreground)); }
+.tkString { color: color-mix(in oklab, var(--series-4) 74%, var(--foreground)); }
+.tkNumber { color: color-mix(in oklab, var(--series-3) 72%, var(--foreground)); }
+.tkComment { color: var(--text-muted); }
+.tkPunct { color: var(--text-secondary); }
+
+/* Status glyphs share one 16px slot and cross in place. */
+.glyph { display: grid; width: 16px; height: 16px; place-items: center; }
+.glyphItem { display: grid; grid-area: 1 / 1; place-items: center; color: var(--text-secondary); }
+.glyphItem svg { display: block; }
+.glyphItem[data-kind="check"] { color: var(--success); }
+.glyphItem[data-kind="alert"] { color: var(--danger); }
+.spinner { animation: ayd-spin .8s linear infinite; }
+
+/* Result stage */
+.stage { border-top: 1px solid var(--border); padding: 16px; }
+.stageHead { display: flex; min-height: 44px; align-items: center; gap: 12px; }
+.headText { flex: 1; min-width: 0; }
+.swap { display: grid; min-width: 0; }
+.swapItem { display: block; grid-area: 1 / 1; min-width: 0; }
+.headLine { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 8px; align-items: center; }
+.headLine > .glyph { grid-row: 1; }
+.headLine > .headCopy { grid-column: 2; }
+.headCopy { display: block; min-width: 0; }
+.headTitle { display: flex; min-width: 0; align-items: center; gap: 6px; font-weight: 500; white-space: nowrap; }
+.headTitleText { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.headCount { display: inline-flex; flex: none; gap: 6px; color: var(--text-secondary); font-weight: 400; }
+.count { display: inline-block; font-variant-numeric: tabular-nums; text-align: right; }
+.headSub { display: block; overflow: hidden; color: var(--text-muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.views { flex: none; }
+.viewsInline { display: none; }
+
+.stageBody { position: relative; height: var(--ayd-stage-height); margin-top: 12px; }
+.stageLayer { position: absolute; inset: 0; display: flex; flex-direction: column; }
+
+.result { display: flex; height: 100%; flex-direction: column; gap: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; color: var(--text-secondary); font-size: var(--text-xs); line-height: 16px; list-style: none; }
+.legendItem { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.legendValue { color: var(--foreground); font-variant-numeric: tabular-nums; }
+.dot { display: block; flex: none; width: 8px; height: 8px; border-radius: 2.5px; }
+.chartArea { position: relative; flex: 1; min-height: 120px; }
+.chartLayer { position: absolute; inset: 0; }
+
+.plot { position: relative; width: 100%; height: 100%; border-radius: 10px; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+.svg { display: block; overflow: visible; }
+.grid { stroke: var(--border-subtle); stroke-width: 1; shape-rendering: crispEdges; }
+.baseline { stroke: var(--border); stroke-width: 1; shape-rendering: crispEdges; }
+.axisText, .axisLabel { fill: var(--text-muted); font-family: var(--font-body); font-size: var(--text-xs); }
+.axisText { font-variant-numeric: tabular-nums; }
+.hoverBand { fill: color-mix(in oklab, var(--surface-muted) 80%, transparent); }
+.column { transition: opacity var(--duration-fast) var(--ease-standard); }
+.column[data-dim] { opacity: .5; }
+
+.tooltip { position: absolute; top: 0; left: 0; z-index: 2; display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised); box-shadow: var(--shadow-floating); pointer-events: none; transition: transform 140ms var(--ease-standard); animation: ayd-fade 120ms var(--ease-standard) both; }
+.tipHead { margin-bottom: 2px; font-size: 13px; font-weight: 500; line-height: 18px; }
+.tipRow { display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; align-items: center; gap: 8px; font-size: 13px; line-height: 18px; }
+.tipLabel { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.tipValue { font-variant-numeric: tabular-nums; text-align: right; }
+.tipTotal { grid-template-columns: minmax(0, 1fr) auto; margin-top: 2px; padding: 4px 0 0 16px; border-top: 1px solid var(--border-subtle); }
+
+.tableWrap { height: 100%; overflow: auto; border: 1px solid var(--border); border-radius: 12px; scrollbar-width: thin; --focus-outline-offset: -2px; }
+.table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.table th, .table td { height: 32px; padding: 0 12px; border-bottom: 1px solid var(--border-subtle); text-align: left; white-space: nowrap; }
+.table thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); color: var(--text-muted); font-weight: 400; box-shadow: inset 0 -1px 0 var(--border); border-bottom: 0; }
+.table tbody th { color: var(--text-secondary); font-weight: 400; }
+.table tbody tr:last-child > * { border-bottom: 0; }
+@media (hover: hover) and (pointer: fine) { .table tbody tr:hover > * { background: color-mix(in oklab, var(--surface-muted) 60%, transparent); } }
+.table .num { text-align: right; }
+.table td.num { font-variant-numeric: tabular-nums; }
+.thInner { display: inline-flex; align-items: center; gap: 6px; }
+
+.insight { display: flex; min-height: 40px; gap: 8px; margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 20px; }
+.insightIcon { flex: none; margin-top: 3px; color: var(--accent); }
+.insightText { min-width: 0; }
+.insightSpacer { min-height: 40px; }
+
+/* Pending: a quiet chart outline. Writing holds still; running breathes in a slow wave until the result lands. */
+.skeleton { display: flex; height: 100%; flex-direction: column; gap: 12px; }
+.skeletonLegend { display: flex; height: 16px; align-items: center; gap: 16px; }
+.skeletonLegend span, .skeletonInsight { display: block; width: 72px; height: 8px; border-radius: 4px; background: var(--surface-muted); }
+.skeletonPlot { position: relative; display: flex; flex: 1; min-height: 120px; align-items: flex-end; justify-content: space-around; padding: 8px 0 20px 44px; }
+.skeletonPlot::after { position: absolute; right: 0; bottom: 20px; left: 44px; height: 1px; background: var(--border); content: ""; }
+.skeletonPlot span { display: block; width: min(28px, 5%); border-radius: 4px 4px 0 0; background: var(--surface-muted); transform-origin: 50% 100%; }
+.skeleton[data-running] .skeletonPlot span { animation: ayd-breathe 1.2s var(--ease-standard) infinite alternate; }
+.skeletonInsight { width: 62%; min-height: 8px; margin: 6px 0 26px 22px; }
+.root[data-offscreen] .skeletonPlot span, .root[data-offscreen] .spinner { animation-play-state: paused; }
+
+/* Empty and error */
+.message { display: flex; height: 100%; flex-direction: column; gap: 12px; }
+.messageText { margin: 0; color: var(--text-secondary); font-size: 13px; }
+.messageActions { display: flex; gap: 8px; }
+.errorDetail { margin: 0; padding: 10px 12px; overflow-x: auto; border: 1px solid color-mix(in oklab, var(--danger) 28%, var(--border)); border-radius: 12px; background: color-mix(in oklab, var(--danger) 5%, var(--surface)); color: var(--foreground); font-family: var(--ayd-mono); font-size: var(--text-xs); line-height: 20px; white-space: pre-wrap; }
+.suggestions { display: flex; flex-direction: column; margin: 0 -12px; padding: 0; list-style: none; }
+.suggestion { display: flex; width: 100%; min-height: 40px; align-items: center; gap: 10px; margin: 0; border: 0; border-radius: 12px; padding: 0 12px; background: transparent; color: var(--foreground); font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; --focus-outline-offset: -2px; transition: background-color var(--duration-fast) var(--ease-standard); }
+.suggestion:active { background: var(--surface-muted); }
+@media (hover: hover) and (pointer: fine) {
+  .suggestion:hover { background: color-mix(in oklab, var(--surface-muted) 75%, transparent); }
+  .suggestion:hover .suggestionIcon { color: var(--text-secondary); }
+}
+.suggestionIcon { flex: none; color: var(--text-muted); transition: color var(--duration-fast) var(--ease-standard); }
+.suggestionText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@keyframes ayd-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ayd-spin { to { transform: rotate(360deg); } }
+@keyframes ayd-breathe { from { opacity: .55; } to { opacity: 1; } }
+
+/* Narrow cards: the source keeps its icon, the chart switch drops into the result, and the stage grows to fit wrapped text. */
+@container (max-width: 520px) {
+  .stageBody { height: 352px; }
+  .metaFull { display: none; }
+  .metaShort { display: inline; }
+  .sourceName { display: none; }
+  .source { padding-right: 8px; }
+  .views { display: none; }
+  .viewsInline { display: flex; }
+  .viewsInline > * { flex: 1; }
+  .stage { padding: 16px 12px 12px; }
+  .sqlHead { padding-left: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tk, .tooltip { animation: none; }
+  .spinner, .skeleton[data-running] .skeletonPlot span { animation: none; }
+  .tooltip, .column, .chevron, .gutter span { transition: none; }
+}

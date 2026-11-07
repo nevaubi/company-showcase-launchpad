@@ -16,6 +16,7 @@ import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as MockupsArcGalleryRouteImport } from './routes/mockups.arc-gallery'
+import { Route as MockupsArcMotionRouteImport } from './routes/mockups.arc-motion'
 import { Route as MockupsLandingHeroRouteImport } from './routes/mockups.landing-hero'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
@@ -95,6 +96,11 @@ const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
 const MockupsArcGalleryRoute = MockupsArcGalleryRouteImport.update({
   id: '/mockups/arc-gallery',
   path: '/mockups/arc-gallery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MockupsArcMotionRoute = MockupsArcMotionRouteImport.update({
+  id: '/mockups/arc-motion',
+  path: '/mockups/arc-motion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MockupsLandingHeroRoute = MockupsLandingHeroRouteImport.update({
@@ -364,6 +370,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/mockups/arc-gallery': typeof MockupsArcGalleryRoute
+  '/mockups/arc-motion': typeof MockupsArcMotionRoute
   '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -417,6 +424,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/mockups/arc-gallery': typeof MockupsArcGalleryRoute
+  '/mockups/arc-motion': typeof MockupsArcMotionRoute
   '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -471,6 +479,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/mockups/arc-gallery': typeof MockupsArcGalleryRoute
+  '/mockups/arc-motion': typeof MockupsArcMotionRoute
   '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/_authenticated/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -527,6 +536,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/app'
     | '/mockups/arc-gallery'
+    | '/mockups/arc-motion'
     | '/mockups/landing-hero'
     | '/app/alt-data'
     | '/app/calendars'
@@ -580,6 +590,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/mockups/arc-gallery'
+    | '/mockups/arc-motion'
     | '/mockups/landing-hero'
     | '/app/alt-data'
     | '/app/calendars'
@@ -633,6 +644,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/app'
     | '/mockups/arc-gallery'
+    | '/mockups/arc-motion'
     | '/mockups/landing-hero'
     | '/_authenticated/app/alt-data'
     | '/_authenticated/app/calendars'
@@ -688,6 +700,7 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   MockupsArcGalleryRoute: typeof MockupsArcGalleryRoute
+  MockupsArcMotionRoute: typeof MockupsArcMotionRoute
   MockupsLandingHeroRoute: typeof MockupsLandingHeroRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
   ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
@@ -742,6 +755,13 @@ declare module '@tanstack/react-router' {
       path: '/mockups/arc-gallery'
       fullPath: '/mockups/arc-gallery'
       preLoaderRoute: typeof MockupsArcGalleryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/mockups/arc-motion': {
+      id: '/mockups/arc-motion'
+      path: '/mockups/arc-motion'
+      fullPath: '/mockups/arc-motion'
+      preLoaderRoute: typeof MockupsArcMotionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mockups/landing-hero': {
@@ -1217,6 +1237,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   MockupsArcGalleryRoute: MockupsArcGalleryRoute,
+  MockupsArcMotionRoute: MockupsArcMotionRoute,
   MockupsLandingHeroRoute: MockupsLandingHeroRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
   ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,

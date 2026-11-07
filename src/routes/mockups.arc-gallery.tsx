@@ -203,7 +203,8 @@ function Gallery() {
       <header className="mx-auto max-w-7xl px-6 pb-6 pt-10">
         <h1 className="text-2xl font-semibold">Component gallery</h1>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Twenty Arc components fitted to Filed Under. All data here is illustrative and not checked against filings.
+          Twenty Arc components fitted to Filed Under. All data here is illustrative and not checked against filings.{" "}
+          <a href="/mockups/arc-motion" className="underline underline-offset-2">See the animated set</a>
         </p>
       </header>
       <ArcScope>
