@@ -121,7 +121,13 @@ export function unitLabel(unit: Unit, scale: Scale = "M"): string {
 
 /** Human description of the active scale, for table captions. */
 export function scaleCaption(scale: Scale) {
-  return scale === "full" ? "US dollars" : scale === "K" ? "thousands of US dollars" : scale === "M" ? "millions of US dollars" : "billions of US dollars";
+  return scale === "full"
+    ? "US dollars"
+    : scale === "K"
+      ? "thousands of US dollars"
+      : scale === "M"
+        ? "millions of US dollars"
+        : "billions of US dollars";
 }
 
 export function fmtValueLong(v: number, unit: Unit | string): string {
@@ -134,7 +140,10 @@ export function fmtValueLong(v: number, unit: Unit | string): string {
   return n2.format(v);
 }
 
-export function fmtDate(d: string | null | undefined, opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" }) {
+export function fmtDate(
+  d: string | null | undefined,
+  opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" },
+) {
   if (!d) return "—";
   const date = d.length === 10 ? new Date(`${d}T12:00:00Z`) : new Date(d);
   if (Number.isNaN(date.getTime())) return d;
@@ -171,7 +180,11 @@ export function fiscalYearEndLabel(mmdd: string) {
   if (!mmdd || mmdd.length !== 4) return "—";
   const m = Number(mmdd.slice(0, 2));
   const d = Number(mmdd.slice(2));
-  return new Date(Date.UTC(2000, m - 1, d)).toLocaleDateString("en-US", { month: "long", day: "numeric", timeZone: "UTC" });
+  return new Date(Date.UTC(2000, m - 1, d)).toLocaleDateString("en-US", {
+    month: "long",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export function titleCase(s: string) {
@@ -208,3 +221,23 @@ export const INSIDER_CODES: Record<string, string> = {
   J: "Other",
   X: "Option exercise (in-the-money)",
 };
+
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+};
+/** SEC XML fields sometimes arrive with HTML entities still encoded ("EVP &amp; CFO"); decode them as plain text. */
+export function decodeEntities(s: string | null | undefined): string {
+  if (!s) return s ?? "";
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+    if (e[0] === "#") {
+      const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return Number.isFinite(n) ? String.fromCodePoint(n) : m;
+    }
+    return ENTITIES[e.toLowerCase()] ?? m;
+  });
+}

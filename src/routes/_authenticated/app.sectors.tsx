@@ -230,7 +230,8 @@ function Sectors() {
                       }
                       className={cn(
                         "cursor-pointer border-b last:border-0 hover:bg-secondary/60",
-                        picked.includes(r.symbol) && "bg-highlight-soft/40",
+                        picked.includes(r.symbol) &&
+                          "bg-secondary/70 shadow-[inset_2px_0_0_var(--ink)]",
                       )}
                     >
                       <td className="px-4 py-1.5">
@@ -269,7 +270,7 @@ function Sectors() {
 
         <Panel
           title="Relative performance, 1 year"
-          subtitle={`Rebased to 0% · S&P 500 dashed · ${picked.join(", ")}`}
+          subtitle={`Price return rebased to 0%, daily closes of the ETFs · S&P 500 dashed · ${picked.join(", ")}`}
         >
           {loaded ? (
             <TimeSeriesChart
@@ -326,6 +327,24 @@ function Sectors() {
         ) : (
           <Skeleton className="h-96" />
         )}
+        {corr && (
+          <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <span>0</span>
+            <span
+              className="h-2 w-40 rounded-full"
+              style={{
+                background:
+                  "linear-gradient(90deg, transparent, color-mix(in oklab, var(--chart-1) 70%, transparent))",
+              }}
+              aria-hidden
+            />
+            <span>1.0 correlation</span>
+            <span className="ml-2">
+              Negative values show without shading. Source: daily closes of the sector ETFs,
+              trailing 12 months.
+            </span>
+          </div>
+        )}
       </Panel>
     </div>
   );
@@ -376,7 +395,7 @@ function SectorFundamentals({
                   onClick={() => onSelect(x.sector)}
                   className={cn(
                     "cursor-pointer border-b last:border-0 hover:bg-secondary/60",
-                    selected === x.sector && "bg-highlight-soft",
+                    selected === x.sector && "bg-secondary/70 shadow-[inset_2px_0_0_var(--ink)]",
                   )}
                 >
                   <td className="px-4 py-2">
@@ -595,20 +614,26 @@ function SectorDetail({
                       </span>
                     </Link>
                   </td>
-                  <td className="max-w-56 truncate px-3 py-2 text-muted-foreground">
+                  <td
+                    className="max-w-[18rem] truncate px-3 py-2 text-muted-foreground"
+                    title={m.industry}
+                  >
                     {m.industry}
                   </td>
                   <td className="num px-3 py-2 text-right">
                     {m.mcap ? fmtCompactUsd(m.mcap) : "—"}
                   </td>
                   <td className="px-3 py-2">
-                    <span className="ml-auto flex w-20 items-center justify-end gap-1.5">
-                      <span
-                        className="h-1.5 rounded-full bg-chart-1"
-                        style={{
-                          width: `${agg.mcap && m.mcap ? Math.max(2, (m.mcap / agg.mcap) * 56) : 0}px`,
-                        }}
-                      />
+                    <span className="ml-auto flex w-28 items-center justify-end gap-1.5">
+                      {/* weight bar on a visible track, scaled to the largest member so small weights stay readable */}
+                      <span className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
+                        <span
+                          className="block h-full rounded-full bg-chart-1"
+                          style={{
+                            width: `${agg.mcap && m.mcap ? Math.max(3, (m.mcap / Math.max(...agg.members.map((x) => x.mcap ?? 0))) * 100) : 0}%`,
+                          }}
+                        />
+                      </span>
                       <span className="num text-[11px] text-muted-foreground">
                         {agg.mcap && m.mcap ? fmtPct(m.mcap / agg.mcap, 0) : "—"}
                       </span>

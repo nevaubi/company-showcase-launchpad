@@ -332,7 +332,7 @@ function Headline({
           ) : (
             <p className={cn("num mt-0.5 text-lg font-medium tabular-nums", c.t)}>{c.v}</p>
           )}
-          <p className="truncate text-[11px] text-muted-foreground" title={c.sub}>
+          <p className="line-clamp-2 text-[11px] leading-snug text-muted-foreground" title={c.sub}>
             {c.sub || " "}
           </p>
         </div>
@@ -403,7 +403,7 @@ function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
         <table className="w-full min-w-[760px] text-[13px]">
           <thead className="text-left">
             <tr className="border-b">
-              <th className={th}>Period</th>
+              <th className={cn(th, "sticky left-0 z-10 bg-card")}>Period</th>
               <th className={th}>EPS · low – high</th>
               <th className={cn(th, "text-right")}>Year ago</th>
               <th className={cn(th, "text-right")}>Growth</th>
@@ -418,7 +418,7 @@ function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
                 gr = growth(p.revenue.avg, p.revenue.year_ago);
               return (
                 <tr key={p.code} className="border-b align-top last:border-0">
-                  <td className="px-3 py-2.5">
+                  <td className="sticky left-0 z-10 bg-card px-3 py-2.5 whitespace-nowrap shadow-[1px_0_0_var(--border)] sm:shadow-none">
                     <p className="font-medium">{p.label}</p>
                     <p className="text-[11px] text-muted-foreground">
                       ends {fmtDate(p.end)}
@@ -1030,13 +1030,22 @@ function Surprises({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
 }
 
 /* ---------- analyst actions ---------- */
-const KIND_STYLE: Record<ActionKind, string> = {
-  upgrade: "border-positive/40 bg-positive-soft text-positive",
-  downgrade: "border-negative/40 bg-negative-soft text-negative",
-  initiate: "border-border bg-secondary text-foreground",
-  target: "border-border text-foreground",
-  reiterate: "border-border text-muted-foreground",
-  drop: "border-border text-muted-foreground line-through",
+// direction carries colour (a dot and the word); kinds without a direction stay neutral text
+const KIND_DOT: Record<ActionKind, string> = {
+  upgrade: "bg-positive",
+  downgrade: "bg-negative",
+  initiate: "bg-foreground/60",
+  target: "bg-muted-foreground/50",
+  reiterate: "bg-border",
+  drop: "bg-border",
+};
+const KIND_TEXT: Record<ActionKind, string> = {
+  upgrade: "text-positive font-medium",
+  downgrade: "text-negative font-medium",
+  initiate: "text-foreground",
+  target: "text-foreground",
+  reiterate: "text-muted-foreground",
+  drop: "text-muted-foreground line-through",
 };
 
 function Actions({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners> }) {
@@ -1134,10 +1143,11 @@ function Actions({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners> }
                       <td className="px-3 py-2">
                         <span
                           className={cn(
-                            "whitespace-nowrap rounded border px-1.5 py-0.5 text-[11px]",
-                            KIND_STYLE[kk],
+                            "inline-flex items-center gap-1.5 whitespace-nowrap text-[12px]",
+                            KIND_TEXT[kk],
                           )}
                         >
+                          <span className={cn("size-1.5 rounded-full", KIND_DOT[kk])} aria-hidden />
                           {ACTION_LABEL[kk]}
                         </span>
                       </td>

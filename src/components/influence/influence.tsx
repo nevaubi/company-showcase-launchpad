@@ -79,6 +79,10 @@ interface FeedItem {
   title: string;
   detail?: string;
   tone?: "pos" | "neg";
+  /** Direction word for trades ("Bought", "Sold"), shown in its own column so colour carries direction, not type */
+  action?: string;
+  /** Size of a trade, right-aligned */
+  amount?: string;
   onOpen: () => void;
 }
 export function InfluenceFeed({
@@ -110,7 +114,9 @@ export function InfluenceFeed({
       out.push({
         date: t.tx_date,
         kind: "Congress",
-        title: `${t.member} (${partyShort(t.party)}-${t.state_dst}) · ${t.type.toLowerCase()} ${t.amount}`,
+        title: `${t.member} (${partyShort(t.party)}-${t.state_dst})`,
+        action: /purchase/i.test(t.type) ? "Bought" : /sale/i.test(t.type) ? "Sold" : t.type,
+        amount: t.amount,
         detail: t.committee_flag
           ? `Sits on ${t.flag_committees.join(", ")}`
           : `${t.owner} · disclosed ${fmtDate(t.filed)}`,
@@ -175,12 +181,29 @@ export function InfluenceFeed({
           }),
       });
     }
+    // one line per person, day and direction; the row opens the first of that day's filings
+    const groups = new Map<
+      string,
+      { i: (typeof insiders)[number]; shares: number; value: number; n: number }
+    >();
     for (const i of insiders) {
       if (i.date < since) continue;
+      const k = `${i.date}|${i.name}|${i.code}`;
+      const g = groups.get(k);
+      if (g) {
+        g.shares += i.shares;
+        g.value += i.value ?? 0;
+        g.n += 1;
+      } else groups.set(k, { i, shares: i.shares, value: i.value ?? 0, n: 1 });
+    }
+    for (const { i, shares, value, n } of groups.values()) {
       out.push({
         date: i.date,
         kind: "Form 4",
-        title: `${i.name}${i.title ? ` (${i.title})` : ""} · ${i.code === "P" ? "bought" : i.code === "S" ? "sold" : i.code} ${sh(i.shares)} shares${i.value ? ` · ${usd(i.value)}` : ""}`,
+        title: `${i.name}${i.title ? ` (${i.title})` : ""}`,
+        detail: n > 1 ? `${n} transactions` : undefined,
+        action: i.code === "P" ? "Bought" : i.code === "S" ? "Sold" : i.code,
+        amount: `${sh(shares)} sh${value ? ` · ${usd(value)}` : ""}`,
         tone: i.code === "P" ? "pos" : i.code === "S" ? "neg" : undefined,
         onOpen: i.open,
       });
@@ -188,6 +211,14 @@ export function InfluenceFeed({
     return out.sort((a, b) => b.date.localeCompare(a.date)).slice(0, 80);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gov, flows, insiders, days]);
+
+  const f4 = useMemo(() => {
+    const since = new Date(Date.now() - +days * 864e5).toISOString().slice(0, 10);
+    const w = insiders.filter((i) => i.date >= since);
+    const sum = (code: string) =>
+      w.filter((i) => i.code === code).reduce((a, i) => a + (i.value ?? 0), 0);
+    return { bought: sum("P"), sold: sum("S"), n: w.length };
+  }, [insiders, days]);
 
   function openTrade(t: CongressTrade) {
     open({
@@ -223,6 +254,25 @@ export function InfluenceFeed({
       collapse={false}
       bodyClassName="p-0"
     >
+      {f4.n > 0 && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-3.5 py-2 text-[12px]">
+          <span className="text-muted-foreground">Form 4 open-market trades in window</span>
+          <span className="num tabular-nums">
+            <span className="text-positive">bought {usd(f4.bought)}</span>
+            <span className="mx-1.5 text-muted-foreground">·</span>
+            <span className="text-negative">sold {usd(f4.sold)}</span>
+          </span>
+          {f4.bought + f4.sold > 0 && (
+            <span className="flex h-1.5 w-40 overflow-hidden rounded-full bg-secondary" aria-hidden>
+              <span
+                className="bg-positive"
+                style={{ width: `${(f4.bought / (f4.bought + f4.sold)) * 100}%` }}
+              />
+              <span className="flex-1 bg-negative/70" />
+            </span>
+          )}
+        </div>
+      )}
       {!items.length ? (
         <p className="p-4 text-sm text-muted-foreground">No records in this window.</p>
       ) : (
@@ -237,22 +287,46 @@ export function InfluenceFeed({
                 <span className="num w-20 shrink-0 pt-0.5 text-[11.5px] text-muted-foreground">
                   {fmtDate(it.date, { month: "short", day: "numeric", year: "2-digit" })}
                 </span>
-                <span
-                  className={cn(
-                    "mt-0.5 w-20 shrink-0 rounded border px-1.5 text-center text-[10.5px]",
-                    it.tone === "pos" && "border-positive/40 text-positive",
-                    it.tone === "neg" && "border-negative/40 text-negative",
-                  )}
-                >
+                <span className="mt-0.5 w-20 shrink-0 rounded border border-border px-1.5 text-center text-[10.5px] text-muted-foreground">
                   {it.kind}
                 </span>
-                <span className="min-w-0 text-[12.5px]">
-                  <span className="block">{it.title}</span>
-                  {it.detail && (
+                <span className="min-w-0 flex-1 text-[12.5px]">
+                  <span className="block">
+                    {it.action && (
+                      <span
+                        className={cn(
+                          "mr-1.5 font-medium sm:hidden",
+                          it.tone === "pos" && "text-positive",
+                          it.tone === "neg" && "text-negative",
+                        )}
+                      >
+                        {it.action}
+                      </span>
+                    )}
+                    {it.title}
+                  </span>
+                  {(it.detail || it.amount) && (
                     <span className="block truncate text-[11px] text-muted-foreground">
+                      {it.amount && <span className="num sm:hidden">{it.amount}</span>}
+                      {it.amount && it.detail && <span className="sm:hidden"> · </span>}
                       {it.detail}
                     </span>
                   )}
+                </span>
+                {it.action && (
+                  <span
+                    className={cn(
+                      "hidden w-16 shrink-0 pt-0.5 text-[12px] font-medium sm:block",
+                      it.tone === "pos" && "text-positive",
+                      it.tone === "neg" && "text-negative",
+                      !it.tone && "text-muted-foreground",
+                    )}
+                  >
+                    {it.action}
+                  </span>
+                )}
+                <span className="num hidden w-40 shrink-0 pt-0.5 text-right text-[12px] tabular-nums sm:block">
+                  {it.amount ?? ""}
                 </span>
               </button>
             </li>
