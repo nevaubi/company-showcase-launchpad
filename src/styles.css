@@ -653,3 +653,23 @@
     gap: 14px 18px;
   }
 }
+
+/* Density modes (lib/prefs.ts, toggled with "D"): reading is the default; dense packs tables and panels. */
+html[data-density="dense"] main {
+  font-size: 0.8125rem;
+}
+html[data-density="dense"] main :is(td, th) {
+  padding-top: 0.2rem !important;
+  padding-bottom: 0.2rem !important;
+}
+html[data-density="dense"] main .research-table :is(th, td) {
+  padding: 0.2rem 0.5rem !important;
+  font-size: 0.75rem;
+}
+html[data-density="dense"] main section > header {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+html[data-density="dense"] main h1.font-display {
+  font-size: 1.25rem;
+}
