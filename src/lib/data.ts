@@ -11,6 +11,7 @@ import type {
 import { getMacroSeries, getNews, getPriceSeries, getQuotes } from "@/lib/market.functions";
 import { coverageOf, isBundled, type MacroDef } from "@/lib/coverage";
 import { hydrateDataset } from "@/lib/financials/dataset";
+import { decodeEntities } from "@/lib/format";
 import type { MacroSummary } from "@/lib/macro";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -30,7 +31,7 @@ async function getJson<T>(path: string): Promise<T> {
  */
 const PARTNER_DATA_URL =
   (import.meta.env.VITE_PARTNER_DATA_URL as string | undefined) ??
-  "https://www.filedunder.ai/api/app-data";
+  "https://filedunderai.vercel.app/api/app-data";
 
 /** In-flight and recent responses per path, so several price ranges or panels share one download. */
 const partnerCache = new Map<string, { at: number; p: Promise<unknown> }>();
@@ -252,12 +253,19 @@ async function freshSecData(
   }
 }
 
+const cleanTrade = (x: InsiderTrade): InsiderTrade => ({
+  ...x,
+  owner: decodeEntities(x.owner),
+  role: decodeEntities(x.role),
+});
+
 export const companyQuery = (ticker: string) =>
   queryOptions({
     queryKey: ["company", ticker.toUpperCase()],
     queryFn: async () => {
       const t = ticker.toUpperCase();
-      const d = hydrateDataset(await getDataset<CompanyDataset>("companies", t, isBundled(t)));
+      const raw = hydrateDataset(await getDataset<CompanyDataset>("companies", t, isBundled(t)));
+      const d = { ...raw, insiders: raw.insiders.map(cleanTrade) };
       const latestFiled = d.filings.reduce((m, f) => (f.filed > m ? f.filed : m), "");
       const fresh = await freshSecData(t, latestFiled || d.generatedAt.slice(0, 10));
       if (!fresh.filings.length && !fresh.insiders.length) return d;
@@ -270,7 +278,9 @@ export const companyQuery = (ticker: string) =>
           ...d.filings,
         ],
         insiders: [
-          ...fresh.insiders.filter((x) => !knownTrades.has(`${x.accn}|${x.date}|${x.shares}`)),
+          ...fresh.insiders
+            .filter((x) => !knownTrades.has(`${x.accn}|${x.date}|${x.shares}`))
+            .map(cleanTrade),
           ...d.insiders,
         ],
       };

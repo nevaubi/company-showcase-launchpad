@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
 
-// Work the partner pipeline (Filed Under, www.filedunder.ai) drives on a schedule:
+// Work the partner pipeline (Filed Under, filedunderai.vercel.app) drives on a schedule:
 //   POST /api/public/partner/status            → which report slots and supply sets exist
 //   POST /api/public/partner/report {ticker, kind} → write/refresh one shared standard report
 //   POST /api/public/partner/supply {ticker}       → extract and store one company's supply links

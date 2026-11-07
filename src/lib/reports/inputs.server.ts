@@ -11,7 +11,7 @@ import type { TrackedPromise } from "@/lib/earnings/promises";
 import type { MarketsFile } from "@/lib/markets/query";
 import type { ReportInputs } from "./types";
 
-const PARTNER_DATA_URL = process.env["PARTNER_DATA_URL"] || "https://www.filedunder.ai/api/app-data";
+const PARTNER_DATA_URL = process.env["PARTNER_DATA_URL"] || "https://filedunderai.vercel.app/api/app-data";
 const PARTNER_PATH = /^(companies|prices)\/[A-Za-z0-9_.-]{1,32}\.json$|^universe\.json$/;
 
 /** Company/price datasets from the partner data service (server key, never sent to browsers). */
