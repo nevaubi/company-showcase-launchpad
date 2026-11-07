@@ -22,7 +22,9 @@ export function PageHeader({
       <div className="min-w-0">
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h1 className="mt-1 font-display text-2xl leading-tight">{title}</h1>
-        {description && <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>}
+        {description && (
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p>
+        )}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>
@@ -48,7 +50,7 @@ export function Panel({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("min-w-0 border-y bg-card/40", className)}>
+    <section className={cn("panel-in min-w-0 border-y bg-card/40", className)}>
       {(title || actions) && (
         <header className="flex flex-wrap items-center gap-3 border-b px-3.5 py-2">
           <div className="min-w-0">
@@ -58,15 +60,23 @@ export function Panel({
           {actions && <div className="ml-auto flex items-center gap-1.5">{actions}</div>}
         </header>
       )}
-      <CollapsibleBody className={bodyClassName} limit={collapse === false ? 0 : collapse ?? 440}>
+      <CollapsibleBody className={bodyClassName} limit={collapse === false ? 0 : (collapse ?? 440)}>
         {children}
       </CollapsibleBody>
     </section>
   );
 }
 
-/** Clamps tall content to `limit` px with a fade and a Show more toggle (no inner scrolling). */
-function CollapsibleBody({ children, className, limit }: { children: ReactNode; className?: string; limit: number }) {
+/** Clamps tall content to `limit` px with a Show more toggle (no inner scrolling, no fade over the last rows). */
+function CollapsibleBody({
+  children,
+  className,
+  limit,
+}: {
+  children: ReactNode;
+  className?: string;
+  limit: number;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const [tall, setTall] = useState(false);
   const [open, setOpen] = useState(false);
@@ -89,9 +99,9 @@ function CollapsibleBody({ children, className, limit }: { children: ReactNode; 
       >
         {children}
       </div>
-      {clamped && <div className="pointer-events-none absolute inset-x-0 bottom-8 h-16 bg-gradient-to-t from-card to-transparent" />}
       {tall && (
-        <Button variant="ghost"
+        <Button
+          variant="ghost"
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={open}
@@ -126,14 +136,20 @@ export function Stat({
     <>
       <span className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
         {label}
-        {target && <FileText className="size-3 opacity-50 transition-opacity group-hover:opacity-100" />}
+        {target && (
+          <FileText className="size-3 opacity-50 transition-opacity group-hover:opacity-100" />
+        )}
       </span>
       <span className="num mt-0.5 block text-lg font-semibold leading-tight">{value}</span>
       {sub && (
         <span
           className={cn(
             "num mt-0.5 block text-[11px]",
-            tone === "positive" ? "text-positive" : tone === "negative" ? "text-negative" : "text-muted-foreground",
+            tone === "positive"
+              ? "text-positive"
+              : tone === "negative"
+                ? "text-negative"
+                : "text-muted-foreground",
           )}
         >
           {sub}
@@ -144,13 +160,29 @@ export function Stat({
   const cls = cn("group block min-w-0 border-b bg-card/40 px-3 py-2 text-left", className);
   if (!target) return <div className={cls}>{body}</div>;
   return (
-    <Button variant="ghost" onClick={() => open(target)} title={`Source: ${label}`} className={cn(cls, "h-auto w-full whitespace-normal rounded-none transition-colors hover:bg-highlight-soft/40")}>
+    <Button
+      variant="ghost"
+      onClick={() => open(target)}
+      title={`Source: ${label}`}
+      className={cn(
+        cls,
+        "h-auto w-full whitespace-normal rounded-none transition-colors hover:bg-highlight-soft/40",
+      )}
+    >
       {body}
     </Button>
   );
 }
 
-export function Empty({ title, children, icon }: { title: string; children?: ReactNode; icon?: ReactNode }) {
+export function Empty({
+  title,
+  children,
+  icon,
+}: {
+  title: string;
+  children?: ReactNode;
+  icon?: ReactNode;
+}) {
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed bg-card/50 px-6 py-14 text-center">
       {icon}

@@ -652,6 +652,7 @@ function Markets() {
                   size="xs"
                   variant={insight.data ? "outline" : "ink"}
                   disabled={!stats || insight.isPending}
+                  title={!stats ? "Available once the price history has loaded" : undefined}
                   onClick={() => insight.mutate()}
                 >
                   {insight.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />}{" "}

@@ -1,4 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { SectionNav } from "@/components/company/section-nav";
+import { friendlyError } from "@/lib/errors";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, Loader2, Newspaper, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
@@ -76,6 +78,18 @@ function OverviewSkeleton() {
     </div>
   );
 }
+
+const OVERVIEW_SECTIONS = [
+  { id: "ov-price", label: "Price" },
+  { id: "ov-changes", label: "Filing changes" },
+  { id: "ov-setup", label: "Setup & catalysts" },
+  { id: "ov-about", label: "About" },
+  { id: "ov-news", label: "News & calls" },
+  { id: "ov-filings", label: "Filings & insiders" },
+];
+// collapsible section headers match the Panel title style
+const SUMMARY =
+  "flex cursor-pointer list-none items-center gap-2 text-[13px] font-semibold tracking-tight before:text-[10px] before:text-muted-foreground before:content-['▸'] [[open]>&]:before:content-['▾']";
 
 function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }) {
   const year = usePrices(ticker, "1y");
@@ -211,51 +225,64 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         </div>
       </details>
 
+      <SectionNav sections={OVERVIEW_SECTIONS} />
+
       <BriefPanel ticker={ticker} />
 
-      <ResearchChart ticker={ticker} data={data} />
+      <div id="ov-price" className="scroll-mt-24">
+        <ResearchChart ticker={ticker} data={data} />
+      </div>
 
-      <FilingInsightsPanel ticker={ticker} />
+      <div id="ov-changes" className="scroll-mt-24">
+        <FilingInsightsPanel ticker={ticker} />
+      </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+      <div
+        id="ov-setup"
+        className="grid scroll-mt-24 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]"
+      >
         <SetupPanel ticker={ticker} data={data} price={price} />
         <CatalystsTimeline ticker={ticker} data={data} />
       </div>
 
       <FirmNotes ticker={ticker} />
 
-      <AboutPanel ticker={ticker} data={data} />
+      <div id="ov-about" className="scroll-mt-24">
+        <AboutPanel ticker={ticker} data={data} />
+      </div>
       <details className="border-y py-3">
-        <summary className="cursor-pointer text-sm font-semibold">Management & board</summary>
+        <summary className={SUMMARY}>Management & board</summary>
         <div className="pt-3">
           <LeadershipPanel ticker={ticker} />
         </div>
       </details>
       <details className="border-y py-3">
-        <summary className="cursor-pointer text-sm font-semibold">
-          Sector & peer fundamentals
-        </summary>
+        <summary className={SUMMARY}>Sector & peer fundamentals</summary>
         <div className="pt-3">
           <SectorTable ticker={ticker} />
         </div>
       </details>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+      <div
+        id="ov-news"
+        className="grid scroll-mt-24 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+      >
         <NarrativesPanel ticker={ticker} name={p.name} />
         <EarningsCallPanel ticker={ticker} />
       </div>
 
       <details className="border-y py-3">
-        <summary className="cursor-pointer text-sm font-semibold">
-          Financial trends · revenue, profitability & margins
-        </summary>
+        <summary className={SUMMARY}>Financial trends · revenue, profitability & margins</summary>
         <div className="grid grid-cols-1 gap-3 pt-3 lg:grid-cols-2">
           <RevenueBars ticker={ticker} data={data} />
           <MarginLines data={data} />
         </div>
       </details>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
+      <div
+        id="ov-filings"
+        className="grid scroll-mt-24 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]"
+      >
         <Panel
           title="Recent filings"
           actions={
@@ -349,7 +376,7 @@ function NarrativesPanel({ ticker, name }: { ticker: string; name: string }) {
         </div>
       ) : q.isError ? (
         <div className="p-4 text-sm text-muted-foreground">
-          Couldn't build narratives right now. {(q.error as Error).message}
+          Couldn't build narratives right now. {friendlyError(q.error)}
           <Button size="xs" variant="outline" className="ml-2" onClick={() => q.refetch()}>
             Retry
           </Button>

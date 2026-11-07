@@ -1,5 +1,15 @@
 import { createFileRoute, Link, notFound, Outlet, useRouterState } from "@tanstack/react-router";
-import { ArrowUpRight, Building, ChevronDown, Columns3, Globe, Sparkles, Star } from "lucide-react";
+import {
+  ArrowUpRight,
+  Building,
+  ChevronDown,
+  Columns3,
+  FileText,
+  Globe,
+  MoreHorizontal,
+  Sparkles,
+  Star,
+} from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -72,6 +82,9 @@ const TAB_GROUPS = [
   { label: "Documents", paths: ["reports", "calls", "filings", "redline"] },
 ];
 
+const edgarUrl = (cik: string | number) =>
+  `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=&dateb=&owner=include&count=40`;
+
 function CompanyLayout() {
   const { ticker: raw } = Route.useParams();
   const ticker = raw.toUpperCase();
@@ -84,6 +97,20 @@ function CompanyLayout() {
   const p = company.data?.profile;
   const latest10K = company.data?.filings.find((f) => f.form === "10-K");
   const latest10Q = company.data?.filings.find((f) => f.form === "10-Q");
+  const openFiling = (
+    f: { accn: string; doc: string; report?: string | null },
+    form: "10-K" | "10-Q",
+  ) =>
+    open({
+      ticker,
+      label:
+        form === "10-K"
+          ? `Annual report (${f.report?.slice(0, 4)})`
+          : `Quarterly report (${f.report})`,
+      unit: "usd",
+      value: 0,
+      doc: { accn: f.accn, doc: f.doc, title: `Latest Form ${form}` },
+    });
 
   return (
     <div>
@@ -127,7 +154,7 @@ function CompanyLayout() {
         </div>
         <div className="col-span-2 grid min-w-0 grid-cols-1 items-center gap-2 sm:grid-cols-[auto_minmax(0,1fr)]">
           {q ? (
-            <div className="flex shrink-0 items-baseline justify-end gap-2 sm:justify-start">
+            <div className="flex shrink-0 items-baseline gap-2">
               <p className="num text-2xl font-semibold">{fmtPrice(q.price)}</p>
               <p className={cn("num text-sm", q.change >= 0 ? "text-positive" : "text-negative")}>
                 {fmtSigned(q.change)} ({fmtPct(q.changePct, 2, true)})
@@ -136,7 +163,7 @@ function CompanyLayout() {
           ) : (
             <Skeleton className="h-8 w-32" />
           )}
-          <div className="flex min-w-0 flex-wrap justify-end gap-1">
+          <div className="flex min-w-0 flex-wrap justify-start gap-1 sm:justify-end">
             <Button
               size="xs"
               variant="outline"
@@ -157,16 +184,56 @@ function CompanyLayout() {
               <Star className={cn(follow.isFollowed(ticker) && "fill-current")} />
               {follow.isFollowed(ticker) ? "Following" : "Follow"}
             </Button>
-            <Button size="xs" variant="outline" asChild>
+            <Button size="xs" variant="outline" asChild className="hidden sm:inline-flex">
               <Link to="/app/compare" search={{ t: ticker }}>
                 <Columns3 /> Compare
               </Link>
             </Button>
             <CoverageChip ticker={ticker} price={q?.price ?? null} />
+            {/* Phone: the secondary actions live in one menu so the header stays one row */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="xs" variant="outline" className="sm:hidden" aria-label="More actions">
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link to="/app/compare" search={{ t: ticker }}>
+                    <Columns3 /> Compare
+                  </Link>
+                </DropdownMenuItem>
+                {latest10K && (
+                  <DropdownMenuItem onSelect={() => openFiling(latest10K, "10-K")}>
+                    <FileText /> Latest 10-K
+                  </DropdownMenuItem>
+                )}
+                {latest10Q && (
+                  <DropdownMenuItem onSelect={() => openFiling(latest10Q, "10-Q")}>
+                    <FileText /> Latest 10-Q
+                  </DropdownMenuItem>
+                )}
+                {p && (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <a href={p.investorRelations} target="_blank" rel="noreferrer">
+                        <Globe /> Investor relations <ArrowUpRight className="opacity-60" />
+                      </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <a href={edgarUrl(p.cik)} target="_blank" rel="noreferrer">
+                        EDGAR <ArrowUpRight className="opacity-60" />
+                      </a>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
             {latest10K && (
               <Button
                 size="xs"
                 variant="outline"
+                className="hidden sm:inline-flex"
                 onClick={() =>
                   open({
                     ticker,
@@ -184,6 +251,7 @@ function CompanyLayout() {
               <Button
                 size="xs"
                 variant="outline"
+                className="hidden sm:inline-flex"
                 onClick={() =>
                   open({
                     ticker,
@@ -199,17 +267,13 @@ function CompanyLayout() {
             )}
             {p && (
               <>
-                <Button size="xs" variant="ghost" asChild>
+                <Button size="xs" variant="ghost" asChild className="hidden sm:inline-flex">
                   <a href={p.investorRelations} target="_blank" rel="noreferrer">
                     <Globe /> IR <ArrowUpRight className="opacity-60" />
                   </a>
                 </Button>
-                <Button size="xs" variant="ghost" asChild>
-                  <a
-                    href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${p.cik}&type=&dateb=&owner=include&count=40`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
+                <Button size="xs" variant="ghost" asChild className="hidden sm:inline-flex">
+                  <a href={edgarUrl(p.cik)} target="_blank" rel="noreferrer">
                     EDGAR <ArrowUpRight className="opacity-60" />
                   </a>
                 </Button>
@@ -223,7 +287,7 @@ function CompanyLayout() {
 
       <nav
         aria-label="Company research"
-        className="mb-4 flex flex-wrap items-center gap-1 border-b pb-1"
+        className="no-scrollbar -mx-4 mb-4 flex items-center gap-1 overflow-x-auto border-b px-4 pb-1 whitespace-nowrap sm:mx-0 sm:flex-wrap sm:px-0 [&>*]:shrink-0"
       >
         <Button
           variant={
@@ -276,7 +340,7 @@ function CompanyLayout() {
         {TABS.find(
           (t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker)),
         ) && (
-          <span className="ml-auto py-1 text-xs text-muted-foreground">
+          <span className="ml-auto hidden py-1 text-xs text-muted-foreground sm:inline">
             {
               TABS.find(
                 (t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker)),

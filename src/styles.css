@@ -103,7 +103,7 @@
   --secondary: oklch(0.945 0.01 85);
   --secondary-foreground: oklch(0.22 0.012 260);
   --muted: oklch(0.955 0.009 85);
-  --muted-foreground: oklch(0.47 0.014 260);
+  --muted-foreground: oklch(0.45 0.014 260);
   --accent: oklch(0.94 0.012 85);
   --accent-foreground: oklch(0.19 0.012 260);
 
@@ -170,7 +170,9 @@
     letter-spacing: 0;
   }
 
-  .font-display, h1, h2 {
+  .font-display,
+  h1,
+  h2 {
     letter-spacing: 0;
     font-weight: 600;
   }
@@ -255,12 +257,25 @@
     color: var(--muted-foreground);
     border-bottom: 1px solid var(--rule);
   }
-  .research-table td { border-bottom: 1px solid var(--border); }
-  .research-table tbody tr:last-child td { border-bottom: 0; }
-  .research-table tbody tr:hover { background: var(--secondary); }
-  .research-table td.num { white-space: nowrap; }
-  .research-table :is(th, td) { padding: 0.5rem 0.75rem; }
-  .research-table td a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+  .research-table td {
+    border-bottom: 1px solid var(--border);
+  }
+  .research-table tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .research-table tbody tr:hover {
+    background: var(--secondary);
+  }
+  .research-table td.num {
+    white-space: nowrap;
+  }
+  .research-table :is(th, td) {
+    padding: 0.5rem 0.75rem;
+  }
+  .research-table td a:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
 
   .brand-invert {
     filter: invert(1) brightness(1.05);
@@ -430,9 +445,39 @@
   }
 }
 
+/* Horizontal strips (tab bars, chip rows) scroll without a visible bar */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Panels fade up once on mount; reduced-motion users get no movement (rule below) */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.panel-in {
+  animation: panel-in 160ms ease-out both;
+}
+
 /* Assistant: shimmering "thinking" text */
 .text-shimmer {
-  background: linear-gradient(90deg, var(--muted-foreground) 0%, var(--muted-foreground) 35%, var(--foreground) 50%, var(--muted-foreground) 65%, var(--muted-foreground) 100%);
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 0%,
+    var(--muted-foreground) 35%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 65%,
+    var(--muted-foreground) 100%
+  );
   background-size: 250% 100%;
   -webkit-background-clip: text;
   background-clip: text;
@@ -440,32 +485,85 @@
   animation: shimmer-text 2.2s linear infinite;
 }
 @keyframes shimmer-text {
-  from { background-position: 100% 0; }
-  to { background-position: -150% 0; }
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
-  .text-shimmer { animation: none; color: var(--muted-foreground); background: none; }
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .text-shimmer {
+    animation: none;
+    color: var(--muted-foreground);
+    background: none;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 @media print {
-  aside, header, nav, [data-print-hide] { display: none !important; }
+  aside,
+  header,
+  nav,
+  [data-print-hide] {
+    display: none !important;
+  }
 
   /* Report library: print only the document, in brand colours, on A4/Letter. */
-  @page { size: auto; margin: 12mm 12mm 14mm; }
-  html.printing-report body * { visibility: hidden; }
-  html.printing-report .report-doc, html.printing-report .report-doc * { visibility: visible; }
-  html.printing-report .report-doc {
-    position: absolute; inset: 0 auto auto 0; width: 100%; box-shadow: none; border: 0;
-    -webkit-print-color-adjust: exact; print-color-adjust: exact; font-size: 11.5px;
+  @page {
+    size: auto;
+    margin: 12mm 12mm 14mm;
   }
-  html.printing-report .report-doc [data-print-hide] { display: none !important; }
-  html.printing-report .report-doc .report-body { padding: 14px 0; }
-  html.printing-report .report-doc .cite, html.printing-report .report-doc .cell-link { color: inherit; text-decoration: none; }
-  html.printing-report .report-doc .report-table, html.printing-report .report-doc li { break-inside: avoid; }
-  html.printing-report .report-doc h3 { break-after: avoid; }
-  html.printing-report .report-doc .overflow-x-auto { overflow: visible; }
-  html.printing-report .report-doc table { min-width: 0; }
-  html.printing-report .report-doc .report-chart { break-inside: avoid; }
-  html.printing-report .report-doc .report-charts { gap: 14px 18px; }
+  html.printing-report body * {
+    visibility: hidden;
+  }
+  html.printing-report .report-doc,
+  html.printing-report .report-doc * {
+    visibility: visible;
+  }
+  html.printing-report .report-doc {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    box-shadow: none;
+    border: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    font-size: 11.5px;
+  }
+  html.printing-report .report-doc [data-print-hide] {
+    display: none !important;
+  }
+  html.printing-report .report-doc .report-body {
+    padding: 14px 0;
+  }
+  html.printing-report .report-doc .cite,
+  html.printing-report .report-doc .cell-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  html.printing-report .report-doc .report-table,
+  html.printing-report .report-doc li {
+    break-inside: avoid;
+  }
+  html.printing-report .report-doc h3 {
+    break-after: avoid;
+  }
+  html.printing-report .report-doc .overflow-x-auto {
+    overflow: visible;
+  }
+  html.printing-report .report-doc table {
+    min-width: 0;
+  }
+  html.printing-report .report-doc .report-chart {
+    break-inside: avoid;
+  }
+  html.printing-report .report-doc .report-charts {
+    gap: 14px 18px;
+  }
 }

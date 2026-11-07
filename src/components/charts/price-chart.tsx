@@ -23,7 +23,8 @@ function cssColor(name: string, fallback: string) {
   return `rgba(${r},${g},${b},${(a / 255).toFixed(3)})`;
 }
 
-const toTime = (d: string) => (d.length > 10 ? (Math.floor(new Date(d).getTime() / 1000) as number) : d);
+const toTime = (d: string) =>
+  d.length > 10 ? (Math.floor(new Date(d).getTime() / 1000) as number) : d;
 
 /** TradingView lightweight-charts wrapper, loaded on the client only. */
 export function PriceChart({
@@ -69,14 +70,54 @@ export function PriceChart({
       const chart = lc.createChart(el.current, {
         height,
         autoSize: true,
-        layout: { background: { color: "transparent" }, textColor: muted, fontFamily: "JetBrains Mono, monospace", fontSize: 10, attributionLogo: false },
-        grid: { vertLines: { visible: false }, horzLines: { color: border, style: lc.LineStyle.Dotted } },
-        rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: showVolume ? 0.24 : 0.06 } },
-        timeScale: { borderVisible: false, timeVisible: bars[0]?.[0].length > 10, secondsVisible: false },
-        crosshair: { mode: lc.CrosshairMode.Magnet, vertLine: { color: muted, labelBackgroundColor: fg }, horzLine: { color: muted, labelBackgroundColor: fg } },
+        layout: {
+          background: { color: "transparent" },
+          textColor: muted,
+          fontFamily: "JetBrains Mono, monospace",
+          fontSize: 10,
+          attributionLogo: false,
+        },
+        grid: {
+          vertLines: { visible: false },
+          horzLines: { color: border, style: lc.LineStyle.Dotted },
+        },
+        rightPriceScale: {
+          borderVisible: false,
+          scaleMargins: { top: 0.08, bottom: showVolume ? 0.24 : 0.06 },
+        },
+        timeScale: {
+          borderVisible: false,
+          timeVisible: bars[0]?.[0].length > 10,
+          secondsVisible: false,
+        },
+        // Axis ticks drop decimals the scale does not need ($250 rather than 250.00); crosshair labels keep full precision.
+        localization: {
+          tickmarksPriceFormatter: (ps: number[]) => {
+            const step = ps.length > 1 ? Math.abs(ps[1] - ps[0]) : 0;
+            const dp = step >= 1 || ps.some((p) => Math.abs(p) >= 1000) ? 0 : step >= 0.1 ? 1 : 2;
+            return ps.map((p) =>
+              p.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp }),
+            );
+          },
+        },
+        crosshair: {
+          mode: lc.CrosshairMode.Magnet,
+          vertLine: { color: muted, labelBackgroundColor: fg },
+          horzLine: { color: muted, labelBackgroundColor: fg },
+        },
         // Wheel/touch scrolling must move the page, never the chart; zoom via drag on the axes.
-        handleScroll: { mouseWheel: false, pressedMouseMove: true, horzTouchDrag: false, vertTouchDrag: false },
-        handleScale: { mouseWheel: false, pinch: false, axisPressedMouseMove: true, axisDoubleClickReset: true },
+        handleScroll: {
+          mouseWheel: false,
+          pressedMouseMove: true,
+          horzTouchDrag: false,
+          vertTouchDrag: false,
+        },
+        handleScale: {
+          mouseWheel: false,
+          pinch: false,
+          axisPressedMouseMove: true,
+          axisDoubleClickReset: true,
+        },
       });
       const closes = bars.map((b) => b[4]);
       let main;
@@ -88,7 +129,15 @@ export function PriceChart({
           wickUpColor: pos,
           wickDownColor: neg,
         });
-        main.setData(bars.map((b) => ({ time: toTime(b[0]) as never, open: b[1], high: b[2], low: b[3], close: b[4] })));
+        main.setData(
+          bars.map((b) => ({
+            time: toTime(b[0]) as never,
+            open: b[1],
+            high: b[2],
+            low: b[3],
+            close: b[4],
+          })),
+        );
       } else if (mode === "area") {
         main = chart.addSeries(lc.AreaSeries, {
           lineColor: fg,
@@ -102,7 +151,11 @@ export function PriceChart({
         main.setData(bars.map((b) => ({ time: toTime(b[0]) as never, value: b[4] })));
       }
       if (showVolume) {
-        const vol = chart.addSeries(lc.HistogramSeries, { priceScaleId: "vol", priceFormat: { type: "volume" }, color: c5 });
+        const vol = chart.addSeries(lc.HistogramSeries, {
+          priceScaleId: "vol",
+          priceFormat: { type: "volume" },
+          color: c5,
+        });
         chart.priceScale("vol").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
         vol.setData(
           bars.map((b) => ({
@@ -121,7 +174,11 @@ export function PriceChart({
           lastValueVisible: false,
           crosshairMarkerVisible: false,
         });
-        s.setData(bars.flatMap((b, i) => (vals[i] == null ? [] : [{ time: toTime(b[0]) as never, value: vals[i]! }])));
+        s.setData(
+          bars.flatMap((b, i) =>
+            vals[i] == null ? [] : [{ time: toTime(b[0]) as never, value: vals[i]! }],
+          ),
+        );
       };
       if (overlays.includes("sma20")) addLine(sma(closes, 20), c2);
       if (overlays.includes("sma50")) addLine(sma(closes, 50), c1);
@@ -138,22 +195,47 @@ export function PriceChart({
         const startDate = bars[0][0];
         const base = first.get(startDate) ?? compare.bars.find((b) => b[0] >= startDate)?.[4];
         if (base) {
-          const s = chart.addSeries(lc.LineSeries, { color: c1, lineWidth: 1, lineStyle: lc.LineStyle.Dashed, priceLineVisible: false, title: compare.label });
+          const s = chart.addSeries(lc.LineSeries, {
+            color: c1,
+            lineWidth: 1,
+            lineStyle: lc.LineStyle.Dashed,
+            priceLineVisible: false,
+            title: compare.label,
+          });
           const k = bars[0][4] / base;
-          s.setData(compare.bars.filter((b) => b[0] >= startDate).map((b) => ({ time: toTime(b[0]) as never, value: b[4] * k })));
+          s.setData(
+            compare.bars
+              .filter((b) => b[0] >= startDate)
+              .map((b) => ({ time: toTime(b[0]) as never, value: b[4] * k })),
+          );
         }
       }
       for (const l of levels) {
-        main.createPriceLine({ price: l.price, color: l.color ? cssColor(l.color.replace(/^var\((--[\w-]+)\)$/, "$1"), muted) : muted, lineWidth: 1, lineStyle: lc.LineStyle.Dashed, axisLabelVisible: true, title: l.label });
+        main.createPriceLine({
+          price: l.price,
+          color: l.color ? cssColor(l.color.replace(/^var\((--[\w-]+)\)$/, "$1"), muted) : muted,
+          lineWidth: 1,
+          lineStyle: lc.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: l.label,
+        });
       }
       if (levels.length) {
         // Keep entry/target lines in view even when price hasn't reached them.
         const lvl = levels.map((l) => l.price).filter(Number.isFinite);
         main.applyOptions({
-          autoscaleInfoProvider: (orig: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
+          autoscaleInfoProvider: (
+            orig: () => { priceRange: { minValue: number; maxValue: number } } | null,
+          ) => {
             const r = orig();
             if (!r) return r;
-            return { ...r, priceRange: { minValue: Math.min(r.priceRange.minValue, ...lvl), maxValue: Math.max(r.priceRange.maxValue, ...lvl) } };
+            return {
+              ...r,
+              priceRange: {
+                minValue: Math.min(r.priceRange.minValue, ...lvl),
+                maxValue: Math.max(r.priceRange.maxValue, ...lvl),
+              },
+            };
           },
         } as never);
       }
@@ -163,7 +245,10 @@ export function PriceChart({
         const lastDay = bars[bars.length - 1][0].slice(0, 10);
         const ms = markers
           .filter((m) => m.time >= firstDay && m.time <= lastDay)
-          .map((m) => ({ ...m, time: set.has(m.time) ? m.time : bars.find((b) => b[0] >= m.time)?.[0] }))
+          .map((m) => ({
+            ...m,
+            time: set.has(m.time) ? m.time : bars.find((b) => b[0] >= m.time)?.[0],
+          }))
           .filter((m): m is ChartMarker & { time: string } => !!m.time)
           .sort((a, b) => (a.time < b.time ? -1 : 1))
           .map((m) => ({
@@ -184,7 +269,19 @@ export function PriceChart({
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bars, mode, overlays.join(","), JSON.stringify(markers), height, showVolume, compare?.label, compare?.bars, JSON.stringify(levels)]);
+  }, [
+    bars,
+    mode,
+    overlays.join(","),
+    JSON.stringify(markers),
+    height,
+    showVolume,
+    compare?.label,
+    compare?.bars,
+    JSON.stringify(levels),
+  ]);
 
-  return <div ref={el} className={cn("w-full min-w-0 overflow-hidden", className)} style={{ height }} />;
+  return (
+    <div ref={el} className={cn("w-full min-w-0 overflow-hidden", className)} style={{ height }} />
+  );
 }

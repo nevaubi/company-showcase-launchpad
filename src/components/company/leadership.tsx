@@ -10,7 +10,13 @@ import { cn } from "@/lib/utils";
 import { CreditNote } from "./about";
 
 const TODAY = new Date().toISOString().slice(0, 10);
-const initials = (n: string) => n.split(/\s+/).filter((x) => /^[A-Z]/.test(x)).map((x) => x[0]).slice(0, 2).join("");
+const initials = (n: string) =>
+  n
+    .split(/\s+/)
+    .filter((x) => /^[A-Z]/.test(x))
+    .map((x) => x[0])
+    .slice(0, 2)
+    .join("");
 
 function Avatar({ p, size = "md" }: { p: Person; size?: "md" | "lg" }) {
   const [bad, setBad] = useState(false);
@@ -18,11 +24,28 @@ function Avatar({ p, size = "md" }: { p: Person; size?: "md" | "lg" }) {
   return (
     <div className={cn("relative shrink-0", cls)}>
       {p.photo && !bad ? (
-        <img src={commonsThumb(p.photo.url, 250)} alt={p.name} referrerPolicy="no-referrer" onError={() => setBad(true)} className={cn("rounded-full border object-cover object-top", cls)} loading="lazy" />
+        <img
+          src={commonsThumb(p.photo.url, 250)}
+          alt={p.name}
+          referrerPolicy="no-referrer"
+          onError={() => setBad(true)}
+          className={cn("rounded-full border object-cover object-top", cls)}
+          loading="lazy"
+        />
       ) : (
-        <div className={cn("grid place-items-center rounded-full border bg-secondary font-display text-muted-foreground", cls, size === "lg" ? "text-2xl" : "text-sm")}>{initials(p.name)}</div>
+        <div
+          className={cn(
+            "grid place-items-center rounded-full border bg-secondary font-display text-muted-foreground",
+            cls,
+            size === "lg" ? "text-2xl" : "text-sm",
+          )}
+        >
+          {initials(p.name)}
+        </div>
       )}
-      {p.photo && !bad && <CreditNote credit={p.photo.credit} className="absolute -bottom-1 -right-1 size-4 border" />}
+      {p.photo && !bad && (
+        <CreditNote credit={p.photo.credit} className="absolute -bottom-1 -right-1 size-4 border" />
+      )}
     </div>
   );
 }
@@ -30,7 +53,20 @@ function Avatar({ p, size = "md" }: { p: Person; size?: "md" | "lg" }) {
 function useOpenPerson(ticker: string) {
   const { open } = useSource();
   return (p: Person) =>
-    open({ ticker, label: `${p.name} · ${p.title}`, periodLabel: `${p.source.form} filed ${fmtDate(p.source.filed)}`, unit: "usd", value: 0, doc: { accn: p.source.accn, doc: p.source.doc, form: p.source.form, title: p.source.form, search: p.quote } });
+    open({
+      ticker,
+      label: `${p.name} · ${p.title}`,
+      periodLabel: `${p.source.form} filed ${fmtDate(p.source.filed)}`,
+      unit: "usd",
+      value: 0,
+      doc: {
+        accn: p.source.accn,
+        doc: p.source.doc,
+        form: p.source.form,
+        title: p.source.form,
+        search: p.quote,
+      },
+    });
 }
 
 function Meta({ p }: { p: Person }) {
@@ -38,8 +74,17 @@ function Meta({ p }: { p: Person }) {
   return (
     <p className="num mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-muted-foreground">
       {p.age && <span>Age {p.age}</span>}
-      {p.since && <span>{p.group === "board" ? "Director" : "In role"} since {p.since}{t ? ` · ${t}y` : ""}</span>}
-      {p.pay && <span>{p.pay.year} pay {fmtCompactUsd(p.pay.total)}</span>}
+      {p.since && (
+        <span>
+          {p.group === "board" ? "Director" : "In role"} since {p.since}
+          {t ? ` · ${t}y` : ""}
+        </span>
+      )}
+      {p.pay && (
+        <span>
+          {p.pay.year} pay {fmtCompactUsd(p.pay.total)}
+        </span>
+      )}
     </p>
   );
 }
@@ -66,15 +111,28 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
         <div className="min-w-0">
           <p className="eyebrow mb-3">Management</p>
           {ceo && (
-            <button onClick={() => openP(ceo)} className="flex w-full items-center gap-4 rounded-lg border bg-secondary/30 p-4 text-left transition-colors hover:bg-secondary">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => openP(ceo)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  openP(ceo);
+                }
+              }}
+              className="flex w-full items-center gap-4 rounded-lg border bg-secondary/30 p-4 text-left transition-colors hover:bg-secondary cursor-pointer"
+            >
               <Avatar p={ceo} size="lg" />
               <div className="min-w-0">
                 <p className="font-display text-xl leading-tight">{ceo.name}</p>
                 <p className="text-[13px]">{ceo.title}</p>
                 <Meta p={ceo} />
-                {ceo.bio && <p className="mt-1.5 line-clamp-2 text-[12px] text-muted-foreground">{ceo.bio}</p>}
+                {ceo.bio && (
+                  <p className="mt-1.5 line-clamp-2 text-[12px] text-muted-foreground">{ceo.bio}</p>
+                )}
               </div>
-            </button>
+            </div>
           )}
           {executives.length > 0 && (
             <div className="relative mt-4 pl-5">
@@ -83,14 +141,25 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                 {executives.map((p) => (
                   <li key={p.name} className="relative">
                     <span className="absolute -left-3.5 top-7 h-px w-3 bg-border" aria-hidden />
-                    <button onClick={() => openP(p)} className="flex w-full items-center gap-3 rounded-lg border p-2.5 text-left transition-colors hover:bg-secondary">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => openP(p)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openP(p);
+                        }
+                      }}
+                      className="flex w-full items-center gap-3 rounded-lg border p-2.5 text-left transition-colors hover:bg-secondary cursor-pointer"
+                    >
                       <Avatar p={p} />
                       <div className="min-w-0">
                         <p className="truncate text-[13px] font-medium">{p.name}</p>
                         <p className="line-clamp-2 text-[11.5px] leading-snug">{p.title}</p>
                         <Meta p={p} />
                       </div>
-                    </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -101,24 +170,44 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
         {board.length > 0 && (
           <div className="min-w-0">
             <p className="eyebrow mb-3">
-              Board of directors · {board.length} · {board.filter((b) => b.independent).length} independent
+              Board of directors · {board.length} · {board.filter((b) => b.independent).length}{" "}
+              independent
             </p>
             <ul className="divide-y rounded-lg border">
               {board.map((p) => (
                 <li key={p.name}>
-                  <button onClick={() => openP(p)} className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-secondary">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openP(p)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openP(p);
+                      }
+                    }}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-secondary cursor-pointer"
+                  >
                     <Avatar p={p} />
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium">
                         {p.name}
                         {p.chair && <Badge className="h-4 px-1.5 text-[10px]">Chair</Badge>}
-                        {p.independent && <Badge variant="outline" className="h-4 px-1.5 text-[10px]">Independent</Badge>}
+                        {p.independent && (
+                          <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
+                            Independent
+                          </Badge>
+                        )}
                       </p>
                       <p className="truncate text-[11.5px] text-muted-foreground">{p.title}</p>
                       <Meta p={p} />
-                      {p.committees?.length ? <p className="truncate text-[10.5px] text-muted-foreground">{p.committees.join(" · ")}</p> : null}
+                      {p.committees?.length ? (
+                        <p className="truncate text-[10.5px] text-muted-foreground">
+                          {p.committees.join(" · ")}
+                        </p>
+                      ) : null}
                     </div>
-                  </button>
+                  </div>
                 </li>
               ))}
             </ul>
