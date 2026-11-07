@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { DataUnavailable } from "@/components/app/data-unavailable";
 import { useMemo, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, CornerDownLeft, Download, Loader2, Sparkles, X } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
@@ -194,9 +195,11 @@ function Screener() {
     return (
       <div>
         <PageHeader eyebrow="Markets" title="Screener" />
-        <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-          The screener dataset is not available right now ({(file.error as Error).message}).
-        </p>
+        <DataUnavailable
+          title="The screener dataset is not available"
+          error={file.error}
+          onRetry={() => file.refetch()}
+        />
       </div>
     );
 

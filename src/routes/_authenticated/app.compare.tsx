@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { DataUnavailable } from "@/components/app/data-unavailable";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { X } from "lucide-react";
@@ -357,8 +358,36 @@ function Compare() {
             </button>
           ))}
         </div>
+      ) : !rows.length && datasets.length > 0 && datasets.every((d) => d.isError) ? (
+        <DataUnavailable
+          title="Company data could not be loaded"
+          error={datasets.find((d) => d.error)?.error}
+          onRetry={() => datasets.forEach((d) => void d.refetch())}
+        />
       ) : !rows.length ? (
-        <Skeleton className="h-[420px]" />
+        <div className="overflow-hidden rounded-lg border bg-card" aria-busy="true">
+          <div
+            className="grid gap-x-4 border-b px-3 py-2"
+            style={{ gridTemplateColumns: `12rem repeat(${tickers.length}, minmax(0, 1fr))` }}
+          >
+            <Skeleton className="h-4 w-16" />
+            {tickers.map((tk) => (
+              <Skeleton key={tk} className="ml-auto h-4 w-12" />
+            ))}
+          </div>
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="grid gap-x-4 border-b px-3 py-2.5 last:border-0"
+              style={{ gridTemplateColumns: `12rem repeat(${tickers.length}, minmax(0, 1fr))` }}
+            >
+              <Skeleton className="h-3.5 w-32" />
+              {tickers.map((tk) => (
+                <Skeleton key={tk} className="ml-auto h-3.5 w-14" />
+              ))}
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="grid gap-4">
           <div className="overflow-hidden rounded-lg border bg-card shadow-paper">

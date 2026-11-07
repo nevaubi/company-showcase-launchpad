@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { friendlyError } from "@/lib/errors";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink, Mic, RefreshCw, ScrollText } from "lucide-react";
@@ -30,8 +31,16 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
   const b = q.data?.brief;
   return (
     <Panel
-      title={<span className="flex items-center gap-1.5"><Mic className="size-3.5" /> Latest earnings call</span>}
-      subtitle={b ? `${b.title} · researched from ${b.sources.length} web sources · ${fmtRelative(b.generatedAt)}` : "Searching transcripts, press releases and coverage…"}
+      title={
+        <span className="flex items-center gap-1.5">
+          <Mic className="size-3.5" /> Latest earnings call
+        </span>
+      }
+      subtitle={
+        b
+          ? `${b.title} · researched from ${b.sources.length} web sources · ${fmtRelative(b.generatedAt)}`
+          : "Searching transcripts, press releases and coverage…"
+      }
       actions={
         <>
           <Button size="xs" variant="outline" asChild>
@@ -39,7 +48,13 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
               <ScrollText className="size-3" /> Full transcript
             </Link>
           </Button>
-          <Button size="xs" variant="ghost" onClick={refresh} disabled={refreshing || q.isLoading} aria-label="Refresh earnings call brief">
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={refresh}
+            disabled={refreshing || q.isLoading}
+            aria-label="Refresh earnings call brief"
+          >
             <RefreshCw className={refreshing ? "size-3 animate-spin" : "size-3"} />
           </Button>
         </>
@@ -51,12 +66,18 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
           <Skeleton className="h-12" />
           <Skeleton className="h-24" />
           <Skeleton className="h-16" />
-          <p className="text-[11px] text-muted-foreground">Reading the call coverage — this takes 20–40 seconds the first time.</p>
+          <p className="text-[11px] text-muted-foreground">
+            Reading the call coverage — this takes 20–40 seconds the first time.
+          </p>
         </div>
       ) : !b ? (
         <div className="p-4 text-sm text-muted-foreground">
-          {q.data?.error ?? (q.error as Error | null)?.message ?? "No brief available."}
-          <Button size="xs" variant="outline" className="ml-2" onClick={refresh}>Try again</Button>
+          {q.data?.error || q.error
+            ? friendlyError(q.data?.error ?? q.error)
+            : "No brief available."}
+          <Button size="xs" variant="outline" className="ml-2" onClick={refresh}>
+            Try again
+          </Button>
         </div>
       ) : (
         <div>
@@ -75,7 +96,9 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
             <div className="px-4 pt-3">
               <p className="eyebrow">Guidance & outlook</p>
               <ul className="mt-1 list-disc space-y-1 pl-4 text-[12.5px]">
-                {b.guidance.map((g) => <li key={g}>{g}</li>)}
+                {b.guidance.map((g) => (
+                  <li key={g}>{g}</li>
+                ))}
               </ul>
             </div>
           )}
@@ -83,7 +106,9 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
             <div className="px-4 pt-3">
               <p className="eyebrow">What analysts pressed on</p>
               <ul className="mt-1 list-disc space-y-1 pl-4 text-[12.5px] text-muted-foreground">
-                {b.analystQuestions.map((g) => <li key={g}>{g}</li>)}
+                {b.analystQuestions.map((g) => (
+                  <li key={g}>{g}</li>
+                ))}
               </ul>
             </div>
           )}
@@ -92,15 +117,24 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
             <ul className="mt-1.5 space-y-1">
               {b.sources.map((s) => (
                 <li key={s.url} className="min-w-0">
-                  <a href={s.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 truncate text-[12px] hover:underline">
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center gap-1 truncate text-[12px] hover:underline"
+                  >
                     <ExternalLink className="size-3 shrink-0" />
                     <span className="truncate">{s.title}</span>
-                    <span className="shrink-0 text-muted-foreground">· {new URL(s.url).hostname.replace(/^www\./, "")}</span>
+                    <span className="shrink-0 text-muted-foreground">
+                      · {new URL(s.url).hostname.replace(/^www\./, "")}
+                    </span>
                   </a>
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-[10.5px] text-muted-foreground">AI summary of third-party web sources — verify against the company's filings.</p>
+            <p className="mt-2 text-[10.5px] text-muted-foreground">
+              AI summary of third-party web sources — verify against the company's filings.
+            </p>
           </div>
         </div>
       )}

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { friendlyError } from "@/lib/errors";
 import { useMemo, useState } from "react";
 import { Segmented } from "@/components/app/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,7 +25,8 @@ import {
 } from "@/lib/statements/filed";
 import { FiledGrid, type GridRow } from "./filed-grid";
 
-const unitFor = (id: string) => (/eps|dps/.test(id) ? "usdPerShare" : /shares/.test(id) ? "shares" : "usd");
+const unitFor = (id: string) =>
+  /eps|dps/.test(id) ? "usdPerShare" : /shares/.test(id) ? "shares" : "usd";
 const conceptOf = (p: StdPoint) => (p.tag.includes(":") ? p.tag : `us-gaap:${p.tag}`);
 
 /** Every filing mapped onto one of five industry templates, so companies line up line for line. */
@@ -38,18 +40,39 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
   const series = useMemo(() => (std.data ? stdSeries(std.data) : null), [std.data]);
 
   const err = index.error ?? std.error ?? map.error;
-  if (err) return <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">Standardized statements for {ticker} are not available ({(err as Error).message}).</p>;
+  if (err)
+    return (
+      <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+        Standardized statements for {ticker} are not available. {friendlyError(err)}
+      </p>
+    );
   if (!index.data || !series || !map.data) return <Skeleton className="h-[480px]" />;
   const latest = index.data.filings[0];
-  if (!latest) return <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">No filings on file for {ticker}.</p>;
+  if (!latest)
+    return (
+      <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+        No filings on file for {ticker}.
+      </p>
+    );
   const tpl = latest.template;
   const lines = map.data.templates[tpl] ?? [];
   const ends = periodsFor(series, kind).slice(-(kind === "A" ? 10 : 12));
   const activeKey = target ? `${target.label}|${target.periodLabel}` : "";
-  const periodLabel = (e: string) => (kind === "A" ? `FY ending ${fmtDate(e)}` : `Quarter ending ${fmtDate(e)}`);
+  const periodLabel = (e: string) =>
+    kind === "A" ? `FY ending ${fmtDate(e)}` : `Quarter ending ${fmtDate(e)}`;
 
-  const openValue = (line: TemplateLine, e: string, val: NonNullable<ReturnType<typeof stdValue>>) => {
-    const base = { ticker, label: line.label, periodLabel: periodLabel(e), unit: unitFor(line.id), value: val.v };
+  const openValue = (
+    line: TemplateLine,
+    e: string,
+    val: NonNullable<ReturnType<typeof stdValue>>,
+  ) => {
+    const base = {
+      ticker,
+      label: line.label,
+      periodLabel: periodLabel(e),
+      unit: unitFor(line.id),
+      value: val.v,
+    };
     if (val.derived) {
       const { from, minus } = val.derived;
       open({
@@ -57,8 +80,24 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
         derived: {
           formula: `${from.q * 3}M YTD − ${minus.q * 3}M YTD`,
           parts: [
-            { accn: from.a, concept: conceptOf(from), start: startOf(from.d, from.q), end: from.d, value: from.v, label: `${from.q * 3} months to ${fmtDate(from.d)} (${from.form})`, sign: 1 },
-            { accn: minus.a, concept: conceptOf(minus), start: startOf(minus.d, minus.q), end: minus.d, value: minus.v, label: `${minus.q * 3} months to ${fmtDate(minus.d)} (${minus.form})`, sign: -1 },
+            {
+              accn: from.a,
+              concept: conceptOf(from),
+              start: startOf(from.d, from.q),
+              end: from.d,
+              value: from.v,
+              label: `${from.q * 3} months to ${fmtDate(from.d)} (${from.form})`,
+              sign: 1,
+            },
+            {
+              accn: minus.a,
+              concept: conceptOf(minus),
+              start: startOf(minus.d, minus.q),
+              end: minus.d,
+              value: minus.v,
+              label: `${minus.q * 3} months to ${fmtDate(minus.d)} (${minus.form})`,
+              sign: -1,
+            },
           ],
         },
       });
@@ -69,17 +108,37 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
       const inputs = lines
         .filter((l) => parts.includes(l.label))
         .map((l) => ({ l, x: stdValue(series, l, e, kind, basis) }))
-        .filter((z): z is { l: TemplateLine; x: NonNullable<ReturnType<typeof stdValue>> } => !!z.x && z.x.p.tag !== "calc");
+        .filter(
+          (z): z is { l: TemplateLine; x: NonNullable<ReturnType<typeof stdValue>> } =>
+            !!z.x && z.x.p.tag !== "calc",
+        );
       open({
         ...base,
         derived: {
           formula: val.p.plabel,
-          parts: inputs.map(({ l, x }) => ({ accn: x.p.a, concept: conceptOf(x.p), start: startOf(x.p.d, x.p.q), end: x.p.d, value: x.v, label: l.label, sign: /\s-\s/.test(` ${line.calc ?? ""} `.split(l.label)[0].slice(-3)) ? -1 : 1 })),
+          parts: inputs.map(({ l, x }) => ({
+            accn: x.p.a,
+            concept: conceptOf(x.p),
+            start: startOf(x.p.d, x.p.q),
+            end: x.p.d,
+            value: x.v,
+            label: l.label,
+            sign: /\s-\s/.test(` ${line.calc ?? ""} `.split(l.label)[0].slice(-3)) ? -1 : 1,
+          })),
         },
       });
       return;
     }
-    open({ ...base, src: { accn: val.p.a, concept: conceptOf(val.p), start: startOf(val.p.d, val.p.q), end: val.p.d, value: val.p.v } });
+    open({
+      ...base,
+      src: {
+        accn: val.p.a,
+        concept: conceptOf(val.p),
+        start: startOf(val.p.d, val.p.q),
+        end: val.p.d,
+        value: val.p.v,
+      },
+    });
   };
 
   const rows: GridRow[] = [];
@@ -104,7 +163,13 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
           : {
               text: fmtMillions(c.v, per),
               negative: c.v < 0,
-              mark: c.derived ? "derived" : c.p.tag === "calc" ? "calc" : c.restated ? "restated" : undefined,
+              mark: c.derived
+                ? "derived"
+                : c.p.tag === "calc"
+                  ? "calc"
+                  : c.restated
+                    ? "restated"
+                    : undefined,
               italic: !!c.derived || c.p.tag === "calc",
               title:
                 c.p.tag === "calc"
@@ -125,13 +190,25 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
           <span className="text-muted-foreground"> · from SIC {latest.sic ?? "–"}</span>
         </p>
         <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
-          <Segmented label="Frequency" value={kind} onChange={setKind} options={[{ v: "A", l: "Annual" }, { v: "Q", l: "Quarterly" }]} />
+          <Segmented
+            label="Frequency"
+            value={kind}
+            onChange={setKind}
+            options={[
+              { v: "A", l: "Annual" },
+              { v: "Q", l: "Quarterly" },
+            ]}
+          />
           <Segmented
             label="Basis"
             value={basis}
             onChange={setBasis}
             options={[
-              { v: "latest", l: "Latest filed", title: "The most recent filing that presented each period, restatements included" },
+              {
+                v: "latest",
+                l: "Latest filed",
+                title: "The most recent filing that presented each period, restatements included",
+              },
               { v: "first", l: "As first reported", title: "The original filing for each period" },
             ]}
           />
@@ -139,14 +216,27 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
       </div>
       <FiledGrid
         head="Template line"
-        columns={ends.map((e) => ({ key: e, top: kind === "A" ? "Fiscal year" : "Quarter", bottom: fmtDate(e) }))}
+        columns={ends.map((e) => ({
+          key: e,
+          top: kind === "A" ? "Fiscal year" : "Quarter",
+          bottom: fmtDate(e),
+        }))}
         rows={rows}
         footer={
           <span className="flex flex-wrap gap-x-4 gap-y-1">
-            <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-chart-3" /> Derived quarter</span>
-            <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-chart-4" /> Calculated</span>
-            <span className="inline-flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-chart-5" /> Restated in a later filing</span>
-            <span>USD millions except per share. Each value comes from one filing in the SEC Financial Statement Data Sets; hover for the filed label, click for the filing.</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-chart-3" /> Derived quarter
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-chart-4" /> Calculated
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="size-1.5 rounded-full bg-chart-5" /> Restated in a later filing
+            </span>
+            <span>
+              USD millions except per share. Each value comes from one filing in the SEC Financial
+              Statement Data Sets; hover for the filed label, click for the filing.
+            </span>
           </span>
         }
       />
@@ -156,7 +246,15 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
 }
 
 /** How the latest filing's own lines map onto the template. */
-function MappingTable({ ticker, accession, lines }: { ticker: string; accession: string; lines: TemplateLine[] }) {
+function MappingTable({
+  ticker,
+  accession,
+  lines,
+}: {
+  ticker: string;
+  accession: string;
+  lines: TemplateLine[];
+}) {
   const doc = useQuery(filedDocQuery(ticker, accession));
   const [openList, setOpenList] = useState(false);
   if (!doc.data) return null;
@@ -167,24 +265,40 @@ function MappingTable({ ticker, accession, lines }: { ticker: string; accession:
     if (p?.[4] != null) mapped[`${p[4]}:${p[5]}`] = lid;
   }
   const rows: GridRow[] = [];
-  for (const r of doc.data.reports.filter((x) => ["IS", "BS", "CF"].includes(x.stmt) && !x.inpth).sort((a, b) => STMT_ORDER[a.stmt] - STMT_ORDER[b.stmt])) {
+  for (const r of doc.data.reports
+    .filter((x) => ["IS", "BS", "CF"].includes(x.stmt) && !x.inpth)
+    .sort((a, b) => STMT_ORDER[a.stmt] - STMT_ORDER[b.stmt])) {
     rows.push({ key: `g-${r.report}`, label: STMT_LABEL[r.stmt], kind: "group", cells: [] });
     for (const ln of r.lines) {
       const lid = mapped[`${r.report}:${ln[0]}`];
       const unmapped = doc.data.std.unmapped.some((u) => u[0] === r.report && u[1] === ln[0]);
       if (!lid && !unmapped) continue;
-      rows.push({ key: `${r.report}-${ln[0]}`, label: ln[3], cells: [{ text: ln[1] + (ln[2] ? " (extension)" : "") }, { text: lid ? lab[lid] : "Not mapped" }] });
+      rows.push({
+        key: `${r.report}-${ln[0]}`,
+        label: ln[3],
+        cells: [
+          { text: ln[1] + (ln[2] ? " (extension)" : "") },
+          { text: lid ? lab[lid] : "Not mapped" },
+        ],
+      });
     }
   }
   return (
     <div className="grid gap-2">
-      <button onClick={() => setOpenList((v) => !v)} className="w-fit text-xs text-link hover:underline">
-        {openList ? "Hide" : "Show"} how the {doc.data.form} filed {fmtDate(doc.data.filed)} maps onto the template
+      <button
+        onClick={() => setOpenList((v) => !v)}
+        className="w-fit text-xs text-link hover:underline"
+      >
+        {openList ? "Hide" : "Show"} how the {doc.data.form} filed {fmtDate(doc.data.filed)} maps
+        onto the template
       </button>
       {openList && (
         <FiledGrid
           head="Filed line"
-          columns={[{ key: "tag", top: "XBRL tag" }, { key: "line", top: "Template line" }]}
+          columns={[
+            { key: "tag", top: "XBRL tag" },
+            { key: "line", top: "Template line" },
+          ]}
           rows={rows}
           scrollTo="start"
           maxHeight="420px"

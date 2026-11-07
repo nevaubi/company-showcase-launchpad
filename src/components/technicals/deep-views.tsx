@@ -73,7 +73,7 @@ function recentOf(H: Hist, events: { type: string; i: number }[], bars = 30) {
 function Missing({ symbol, what }: { symbol: string; what: string }) {
   return (
     <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-      No stored long-run daily history for {symbol} yet, so {what} is not available. The chart tab
+      No stored long-run daily history for {symbol} yet, so {what} cannot be shown. The chart tab
       uses live prices.
     </p>
   );

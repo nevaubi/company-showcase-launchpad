@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { DataUnavailable } from "@/components/app/data-unavailable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Download } from "lucide-react";
@@ -369,9 +370,14 @@ function KpiMatrix() {
     return (
       <div>
         <PageHeader eyebrow="Markets" title="KPI matrix" />
-        <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
-          The standardized KPI dataset is not available right now.
-        </p>
+        <DataUnavailable
+          title="The standardized KPI dataset is not available"
+          error={tax.error ?? latest.error}
+          onRetry={() => {
+            void tax.refetch();
+            void latest.refetch();
+          }}
+        />
       </div>
     );
   return (

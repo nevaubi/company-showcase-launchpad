@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { friendlyError } from "@/lib/errors";
 import { useMemo, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { Segmented } from "@/components/app/segmented";
@@ -36,12 +37,26 @@ export function AsReported({ ticker }: { ticker: string }) {
   const [report, setReport] = useState<number | null>(null);
   const [detail, setDetail] = useState(false);
 
-  if (index.isError) return <Empty text={`As-filed statements for ${ticker} are not loaded yet (${(index.error as Error).message}).`} />;
+  if (index.isError)
+    return (
+      <Empty
+        text={`As-filed statements for ${ticker} are not loaded yet. ${friendlyError(index.error)}`}
+      />
+    );
   if (!index.data) return <Skeleton className="h-[480px]" />;
-  if (!filings.length) return <Empty text={`No 10-K or 10-Q statements are on file for ${ticker} yet.`} />;
+  if (!filings.length)
+    return <Empty text={`No 10-K or 10-Q statements are on file for ${ticker} yet.`} />;
 
-  const reps = doc.data ? [...doc.data.reports].sort((a, b) => STMT_ORDER[a.stmt] - STMT_ORDER[b.stmt] || a.inpth - b.inpth || a.report - b.report) : [];
-  const current = reps.find((r) => r.report === report) ?? reps.find((r) => r.stmt === "IS" && !r.inpth) ?? reps[0];
+  const reps = doc.data
+    ? [...doc.data.reports].sort(
+        (a, b) =>
+          STMT_ORDER[a.stmt] - STMT_ORDER[b.stmt] || a.inpth - b.inpth || a.report - b.report,
+      )
+    : [];
+  const current =
+    reps.find((r) => r.report === report) ??
+    reps.find((r) => r.stmt === "IS" && !r.inpth) ??
+    reps[0];
 
   return (
     <div className="grid gap-3">
@@ -68,19 +83,37 @@ export function AsReported({ ticker }: { ticker: string }) {
             label="Statement"
             value={String(current.report)}
             onChange={(v) => setReport(Number(v))}
-            options={reps.map((r) => ({ v: String(r.report), l: STMT_LABEL[r.stmt] + (r.inpth ? " (parenthetical)" : "") }))}
+            options={reps.map((r) => ({
+              v: String(r.report),
+              l: STMT_LABEL[r.stmt] + (r.inpth ? " (parenthetical)" : ""),
+            }))}
           />
         )}
-        <label className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground" title="Segment, product and geography breakdowns the filing tags against each line (from its notes)">
-          <Switch checked={detail} onCheckedChange={setDetail} aria-label="Show breakdowns" /> Breakdowns
+        <label
+          className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground"
+          title="Segment, product and geography breakdowns the filing tags against each line (from its notes)"
+        >
+          <Switch checked={detail} onCheckedChange={setDetail} aria-label="Show breakdowns" />{" "}
+          Breakdowns
         </label>
-        <a href={meta.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-link hover:underline">
+        <a
+          href={meta.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-link hover:underline"
+        >
           Filing index on EDGAR <ExternalLink className="size-3" />
         </a>
       </div>
-      {doc.isError && <Empty text={`Could not load this filing (${(doc.error as Error).message}).`} />}
+      {doc.isError && <Empty text={`Could not load this filing. ${friendlyError(doc.error)}`} />}
       {!doc.data && !doc.isError && <Skeleton className="h-[420px]" />}
-      {doc.data && current && (current.stmt === "EQ" ? <EquityStatement ticker={ticker} doc={doc.data} r={current} /> : <Statement ticker={ticker} doc={doc.data} r={current} detail={detail} />)}
+      {doc.data &&
+        current &&
+        (current.stmt === "EQ" ? (
+          <EquityStatement ticker={ticker} doc={doc.data} r={current} />
+        ) : (
+          <Statement ticker={ticker} doc={doc.data} r={current} detail={detail} />
+        ))}
     </div>
   );
 }
@@ -97,7 +130,14 @@ function useOpenFact(ticker: string, doc: FiledDoc) {
       ticker,
       label,
       periodLabel: f[2] ? `${f[2] * 3} months ended ${fmtDate(f[1])}` : `As of ${fmtDate(f[1])}`,
-      unit: unit === "USD" ? "usd" : /\/shares$/.test(unit) ? "usdPerShare" : unit === "shares" ? "shares" : unit,
+      unit:
+        unit === "USD"
+          ? "usd"
+          : /\/shares$/.test(unit)
+            ? "usdPerShare"
+            : unit === "shares"
+              ? "shares"
+              : unit,
       value: shown,
       src: {
         accn: doc.accession,
@@ -116,15 +156,31 @@ function caption(doc: FiledDoc, sc: FiledScale) {
   return `${doc.form} · ${doc.registrant} · accession ${doc.accession} · USD in ${SCALE_WORD[sc.money]}${sc.shares !== 1 ? `, shares in ${SCALE_WORD[sc.shares]}` : ""}, except per-share amounts`;
 }
 
-function Statement({ ticker, doc, r, detail }: { ticker: string; doc: FiledDoc; r: FiledReport; detail: boolean }) {
+function Statement({
+  ticker,
+  doc,
+  r,
+  detail,
+}: {
+  ticker: string;
+  doc: FiledDoc;
+  r: FiledReport;
+  detail: boolean;
+}) {
   const { openFact, activeKey } = useOpenFact(ticker, doc);
   const sc = useMemo(() => scaleFor(r.facts, r.lines), [r]);
   const columns: [string, number][] = useMemo(() => {
     const plain = r.facts.filter((f) => !f[4] && !f[5]);
-    const keys = [...new Set((plain.length ? plain : r.facts).map((f) => `${f[1]}|${f[2]}`))].map((k) => k.split("|")).map(([d, q]) => [d, Number(q)] as [string, number]);
+    const keys = [...new Set((plain.length ? plain : r.facts).map((f) => `${f[1]}|${f[2]}`))]
+      .map((k) => k.split("|"))
+      .map(([d, q]) => [d, Number(q)] as [string, number]);
     return keys.sort((a, b) => b[0].localeCompare(a[0]) || a[1] - b[1]);
   }, [r]);
-  const cols: GridColumn[] = columns.map(([d, q]) => ({ key: `${d}|${q}`, top: q ? `${q * 3} months ended` : "As of", bottom: fmtDate(d) }));
+  const cols: GridColumn[] = columns.map(([d, q]) => ({
+    key: `${d}|${q}`,
+    top: q ? `${q * 3} months ended` : "As of",
+    bottom: fmtDate(d),
+  }));
   const byTag = useMemo(() => {
     const m: Record<string, FiledFact[]> = {};
     for (const f of r.facts) (m[f[0]] ??= []).push(f);
@@ -137,7 +193,8 @@ function Statement({ ticker, doc, r, detail }: { ticker: string; doc: FiledDoc; 
     const [line, tag, customN, plabel, negN] = ln;
     const custom = !!customN;
     const negating = !!negN;
-    if (prev != null && line > prev + 1) rows.push({ key: `sp-${line}`, label: "", kind: "spacer", cells: [] });
+    if (prev != null && line > prev + 1)
+      rows.push({ key: `sp-${line}`, label: "", kind: "spacer", cells: [] });
     prev = line;
     const facts = byTag[tag] ?? [];
     const groups: Record<string, FiledFact[]> = {};
@@ -181,7 +238,10 @@ function Statement({ ticker, doc, r, detail }: { ticker: string; doc: FiledDoc; 
       scrollTo="start"
       footer={
         <>
-          {caption(doc, sc)}. Labels, order and signs as filed; click a value to open the filing. Source: SEC Financial Statement Data Sets ({doc.source?.split("/").pop() ?? "quarterly set"}), statement {r.report} as rendered by EDGAR. Period ends are SEC's month-end rounding.
+          {caption(doc, sc)}. Labels, order and signs as filed; click a value to open the filing.
+          Source: SEC Financial Statement Data Sets (
+          {doc.source?.split("/").pop() ?? "quarterly set"}), statement {r.report} as rendered by
+          EDGAR. Period ends are SEC's month-end rounding.
         </>
       }
     />
@@ -192,7 +252,9 @@ function Statement({ ticker, doc, r, detail }: { ticker: string; doc: FiledDoc; 
 function EquityStatement({ ticker, doc, r }: { ticker: string; doc: FiledDoc; r: FiledReport }) {
   const { openFact, activeKey } = useOpenFact(ticker, doc);
   const sc = useMemo(() => scaleFor(r.facts, r.lines), [r]);
-  const comps = [...new Set(r.facts.map((f) => f[4] ?? ""))].sort((a, b) => (a === "" ? 1 : b === "" ? -1 : 0));
+  const comps = [...new Set(r.facts.map((f) => f[4] ?? ""))].sort((a, b) =>
+    a === "" ? 1 : b === "" ? -1 : 0,
+  );
   const durs = [...new Set(r.facts.filter((f) => f[2] > 0).map((f) => `${f[1]}|${f[2]}`))]
     .map((k) => k.split("|"))
     .map(([d, q]) => [d, Number(q)] as [string, number])
@@ -203,13 +265,24 @@ function EquityStatement({ ticker, doc, r }: { ticker: string; doc: FiledDoc; r:
   const rows: GridRow[] = [];
   const blocks: [string | null, number][] = durs.length ? [...durs].reverse() : [[null, 0]];
   for (const [d, q] of blocks) {
-    if (d) rows.push({ key: `g-${d}-${q}`, label: `${q * 3} months ended ${fmtDate(d)}`, kind: "group", cells: [] });
+    if (d)
+      rows.push({
+        key: `g-${d}-${q}`,
+        label: `${q * 3} months ended ${fmtDate(d)}`,
+        kind: "group",
+        cells: [],
+      });
     const begin = d ? startOfPrior(d, q) : null;
     r.lines.forEach((ln, li) => {
       const [, tag, customN, plabel, negN] = ln;
       const fs = byTag[tag] ?? [];
       const instant = fs.length > 0 && fs.every((f) => f[2] === 0);
-      const want = (f: FiledFact) => (!d ? true : instant ? f[2] === 0 && f[1] === (li < firstDur ? begin : d) : f[1] === d && f[2] === q);
+      const want = (f: FiledFact) =>
+        !d
+          ? true
+          : instant
+            ? f[2] === 0 && f[1] === (li < firstDur ? begin : d)
+            : f[1] === d && f[2] === q;
       const row = comps.map((c) => fs.find((f) => (f[4] ?? "") === c && !f[5] && want(f)));
       if (!row.some(Boolean)) return;
       rows.push({
@@ -222,8 +295,15 @@ function EquityStatement({ ticker, doc, r }: { ticker: string; doc: FiledDoc; r:
           const shown = negN ? -f[6] : f[6];
           const unit = unitOf(f[3], tag, !!customN);
           const label = `${plabel}${f[4] ? ` · ${memberText(f[4])}` : ""}`;
-          const periodLabel = f[2] ? `${f[2] * 3} months ended ${fmtDate(f[1])}` : `As of ${fmtDate(f[1])}`;
-          return { text: fmtFiled(shown, unit, sc), negative: shown < 0, onClick: () => openFact(label, tag, !!customN, f, shown), active: activeKey === `${label}|${periodLabel}` };
+          const periodLabel = f[2]
+            ? `${f[2] * 3} months ended ${fmtDate(f[1])}`
+            : `As of ${fmtDate(f[1])}`;
+          return {
+            text: fmtFiled(shown, unit, sc),
+            negative: shown < 0,
+            onClick: () => openFact(label, tag, !!customN, f, shown),
+            active: activeKey === `${label}|${periodLabel}`,
+          };
         }),
       });
     });
@@ -231,10 +311,16 @@ function EquityStatement({ ticker, doc, r }: { ticker: string; doc: FiledDoc; r:
   return (
     <FiledGrid
       head={STMT_LABEL.EQ}
-      columns={comps.map((c) => ({ key: c || "total", top: "Component", bottom: c ? memberText(c) : "Total" }))}
+      columns={comps.map((c) => ({
+        key: c || "total",
+        top: "Component",
+        bottom: c ? memberText(c) : "Total",
+      }))}
       rows={rows}
       scrollTo="start"
-      footer={<>{caption(doc, sc)}. Equity components are the filing's EquityComponentsAxis members.</>}
+      footer={
+        <>{caption(doc, sc)}. Equity components are the filing's EquityComponentsAxis members.</>
+      }
     />
   );
 }
