@@ -36,6 +36,7 @@ export function PriceChart({
   showVolume = true,
   compare,
   levels = [],
+  bands = [],
   className,
 }: {
   bars: Bar[];
@@ -47,6 +48,8 @@ export function PriceChart({
   compare?: { label: string; bars: Bar[] } | null;
   /** Horizontal reference lines (entry, target, support…) */
   levels?: { price: number; label: string; color?: string }[];
+  /** Shaded price zones from a start date to the last bar (open gaps, ranges) */
+  bands?: { from: string; top: number; bottom: number; tone?: "positive" | "negative" | "muted" }[];
   className?: string;
 }) {
   const el = useRef<HTMLDivElement>(null);
@@ -189,6 +192,27 @@ export function PriceChart({
         addLine(bb.upper, c5, 1, true);
         addLine(bb.lower, c5, 1, true);
       }
+      for (const band of bands) {
+        if (!(band.top > band.bottom)) continue;
+        const pts = bars.filter((b) => b[0].slice(0, 10) >= band.from);
+        if (!pts.length) continue;
+        const base = band.tone === "positive" ? pos : band.tone === "negative" ? neg : c5;
+        const fill = base.replace(/[\d.]+\)$/, "0.14)");
+        const s = chart.addSeries(lc.BaselineSeries, {
+          baseValue: { type: "price", price: band.bottom },
+          topFillColor1: fill,
+          topFillColor2: fill,
+          topLineColor: base.replace(/[\d.]+\)$/, "0.45)"),
+          bottomFillColor1: "rgba(0,0,0,0)",
+          bottomFillColor2: "rgba(0,0,0,0)",
+          bottomLineColor: "rgba(0,0,0,0)",
+          lineWidth: 1,
+          priceLineVisible: false,
+          lastValueVisible: false,
+          crosshairMarkerVisible: false,
+        });
+        s.setData(pts.map((b) => ({ time: toTime(b[0]) as never, value: band.top })));
+      }
       if (compare && compare.bars.length && bars.length) {
         // Rebase the comparison series to the main series' first close.
         const first = new Map(compare.bars.map((b) => [b[0], b[4]]));
@@ -279,6 +303,7 @@ export function PriceChart({
     compare?.label,
     compare?.bars,
     JSON.stringify(levels),
+    JSON.stringify(bands),
   ]);
 
   return (

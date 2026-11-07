@@ -27,6 +27,7 @@ import {
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 import { ResearchChart } from "@/components/company/research-chart";
+import { CompanyIndicators } from "@/components/technicals/deep-views";
 import { AboutPanel } from "@/components/company/about";
 import { LeadershipPanel } from "@/components/company/leadership";
 import { SectorTable } from "@/components/company/sector-table";
@@ -231,6 +232,10 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <div id="ov-price" className="scroll-mt-24">
         <ResearchChart ticker={ticker} data={data} />
+      </div>
+
+      <div id="ov-indicators" className="scroll-mt-24">
+        <CompanyIndicators ticker={ticker} />
       </div>
 
       <div id="ov-changes" className="scroll-mt-24">

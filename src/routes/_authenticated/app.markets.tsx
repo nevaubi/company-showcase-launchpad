@@ -60,7 +60,9 @@ const RANGES: { r: Range; i: Interval; l: string }[] = [
 const pageSearch = z.object({
   symbol: z.string().max(12).default("NVDA"),
   range: z.enum(["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"]).default("1y"),
-  view: z.enum(["chart", "signals", "risk", "quant", "cross", "market"]).default("chart"),
+  view: z
+    .enum(["chart", "indicators", "signals", "risk", "quant", "cross", "market"])
+    .default("chart"),
 });
 
 export const Route = createFileRoute("/_authenticated/app/markets")({
@@ -319,6 +321,7 @@ function Markets() {
           onChange={(v) => navigate({ search: (p) => ({ ...p, view: v }) })}
           options={[
             { v: "chart", l: "Chart" },
+            { v: "indicators", l: "Indicators" },
             { v: "signals", l: "Signals" },
             { v: "risk", l: "Risk" },
             { v: "quant", l: "Quant" },
@@ -329,7 +332,7 @@ function Markets() {
         <span className="text-[11px] text-muted-foreground">
           {s.view === "market"
             ? "Across every tracked company"
-            : "Signals, risk and quant use the stored daily history since 2008"}
+            : "Indicators, signals, risk and quant use the stored daily history since 2008"}
         </span>
       </div>
 

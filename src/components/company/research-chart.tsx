@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePrices, type Range } from "@/lib/data";
 import { marketsQuery } from "@/lib/markets/query";
 import { performance, readTechnicals } from "@/lib/company/technicals";
+import { openGaps, type OhlcBar } from "@/lib/technicals/dense";
 import { fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
@@ -23,7 +24,7 @@ const RANGES: { id: Range; label: string }[] = [
   { id: "10y", label: "10Y" },
 ];
 
-type Layer = "averages" | "index" | "earnings" | "filings" | "insiders" | "levels";
+type Layer = "averages" | "index" | "earnings" | "filings" | "insiders" | "levels" | "gaps";
 const LAYERS: { id: Layer; label: string; dot: string }[] = [
   { id: "averages", label: "50/200-day avg", dot: "bg-chart-1" },
   { id: "index", label: "vs S&P 500", dot: "bg-chart-5" },
@@ -31,6 +32,7 @@ const LAYERS: { id: Layer; label: string; dot: string }[] = [
   { id: "filings", label: "10-K / 10-Q", dot: "bg-chart-3" },
   { id: "insiders", label: "Insider buys/sells", dot: "bg-chart-4" },
   { id: "levels", label: "Support / resistance", dot: "bg-muted-foreground" },
+  { id: "gaps", label: "Open gaps", dot: "bg-highlight" },
 ];
 
 /** Research price chart: area price with averages, index comparison, dated events and a plain-language read. */
@@ -107,6 +109,25 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
       ...(res ? [{ price: res.price, label: "Resistance", color: "var(--muted-foreground)" }] : []),
     ];
   }, [on, mc, px]);
+
+  // Open 2% gaps over the last five years, shaded from the gap day to today when it falls inside the view.
+  const gaps = useMemo(
+    () => (on.has("gaps") ? openGaps((long.data?.bars ?? []) as unknown as OhlcBar[]) : []),
+    [on, long.data],
+  );
+  const bands = useMemo(() => {
+    const first = bars[0]?.[0]?.slice(0, 10);
+    if (!first) return [];
+    return gaps
+      .filter((g) => g.date >= first)
+      .slice(-8)
+      .map((g) => ({
+        from: g.date,
+        top: g.top,
+        bottom: g.bottom,
+        tone: (g.dir > 0 ? "positive" : "negative") as "positive" | "negative",
+      }));
+  }, [gaps, bars]);
 
   const overlays: Overlay[] =
     on.has("averages") && range !== "1mo" && range !== "3mo" ? ["sma50", "sma200"] : [];
@@ -196,6 +217,7 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
                 overlays={overlays}
                 markers={markers}
                 levels={levels}
+                bands={bands}
                 compare={
                   on.has("index") && spyView.data
                     ? { label: "S&P 500", bars: spyView.data.bars }

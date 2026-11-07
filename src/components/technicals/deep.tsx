@@ -1581,7 +1581,9 @@ export function MarketScan({
                     </span>
                     <span className="text-[12px] text-muted-foreground">{sg.text}</span>
                     {(P.excess ?? 0) > 0 ? (
-                      <Chip className="border-positive/40 text-positive">historically outperformed</Chip>
+                      <Chip className="border-positive/40 text-positive">
+                        historically outperformed
+                      </Chip>
                     ) : (
                       <Chip className="border-negative/40 text-negative">historically lagged</Chip>
                     )}
@@ -1666,7 +1668,9 @@ export function MarketScan({
 
 function ScanTable({ rows, onPick }: { rows: StateRow[]; onPick: (s: string) => void }) {
   const [sort, setSort] = useState<{ k: keyof StateRow; d: 1 | -1 }>({ k: "r63", d: -1 });
-  const [filter, setFilter] = useState<"all" | "up" | "down" | "squeeze" | "ob" | "os">("all");
+  const [filter, setFilter] = useState<
+    "all" | "up" | "down" | "squeeze" | "ob" | "os" | "stup" | "stdown" | "nearhi" | "nearlo"
+  >("all");
   const list = rows
     .filter(
       (r) =>
@@ -1679,7 +1683,15 @@ function ScanTable({ rows, onPick }: { rows: StateRow[]; onPick: (s: string) => 
               ? r.squeeze > 0
               : filter === "ob"
                 ? (r.rsi ?? 0) >= 70
-                : (r.rsi ?? 100) <= 30),
+                : filter === "os"
+                  ? (r.rsi ?? 100) <= 30
+                  : filter === "stup"
+                    ? r.st === 1
+                    : filter === "stdown"
+                      ? r.st === -1
+                      : filter === "nearhi"
+                        ? (r.from_hi ?? -1) >= -0.02
+                        : (r.from_lo ?? 1) <= 0.05),
     )
     .sort((a, b) => {
       const x = a[sort.k] as number | null,
@@ -1697,9 +1709,15 @@ function ScanTable({ rows, onPick }: { rows: StateRow[]; onPick: (s: string) => 
     { k: "vs50", l: "vs 50d", f: (v) => pp(v) },
     { k: "vs200", l: "vs 200d", f: (v) => pp(v) },
     { k: "from_hi", l: "From high", f: (v) => pp(v) },
+    { k: "from_lo", l: "From low", f: (v) => pp(v) },
     { k: "rsi", l: "RSI", f: (v) => f2(v, 0) },
+    { k: "macd_hist", l: "MACD hist", f: (v) => f2(v, 2) },
     { k: "adx", l: "ADX", f: (v) => f2(v, 0) },
+    { k: "st", l: "Supertrend", f: (v) => (v == null ? "–" : v > 0 ? "▲ up" : "▼ down") },
+    { k: "squeeze", l: "Squeeze bars", f: (v) => (v ? String(v) : "–") },
+    { k: "vol21", l: "Vol 21d", f: (v) => pc(v, 0) },
     { k: "vol21_pct", l: "Vol pctile", f: (v) => (v == null ? "–" : `${Math.round(v * 100)}`) },
+    { k: "rs63", l: "RS 3M vs SPY", f: (v) => pp(v) },
   ];
   return (
     <Panel
@@ -1718,6 +1736,10 @@ function ScanTable({ rows, onPick }: { rows: StateRow[]; onPick: (s: string) => 
             { v: "squeeze", l: "Squeeze" },
             { v: "ob", l: "RSI ≥ 70" },
             { v: "os", l: "RSI ≤ 30" },
+            { v: "stup", l: "Supertrend up" },
+            { v: "stdown", l: "Supertrend down" },
+            { v: "nearhi", l: "Within 2% of high" },
+            { v: "nearlo", l: "Within 5% of low" },
           ]}
         />
       }
@@ -1725,7 +1747,7 @@ function ScanTable({ rows, onPick }: { rows: StateRow[]; onPick: (s: string) => 
       bodyClassName="p-0"
     >
       <div className="max-h-[60vh] overflow-auto scrollbar-thin">
-        <table className="w-full min-w-[900px] text-[12.5px]">
+        <table className="w-full min-w-[1280px] text-[12.5px]">
           <thead className="sticky top-0 z-10 bg-card">
             <tr className="border-b text-left">
               <th className={th}>Company</th>
@@ -1775,7 +1797,9 @@ function ScanTable({ rows, onPick }: { rows: StateRow[]; onPick: (s: string) => 
                       key={c.k}
                       className={cn(
                         "num px-3 py-1 text-right",
-                        c.f === pp || ["r21", "r63", "r252", "vs50", "vs200"].includes(c.k)
+                        ["r21", "r63", "r252", "vs50", "vs200", "rs63", "macd_hist", "st"].includes(
+                          c.k,
+                        )
                           ? tone(v)
                           : "",
                       )}
@@ -1797,7 +1821,9 @@ function ScanTable({ rows, onPick }: { rows: StateRow[]; onPick: (s: string) => 
       </div>
       <Note>
         Showing up to 150 rows. Click a row to open its technicals. Values are from each company's
-        latest daily close in the stored history.
+        latest daily close in the stored history. RS 3M vs SPY: 63-day price change relative to SPY
+        (ratio of the two price changes, minus 1). Squeeze bars: consecutive bars with Bollinger
+        bands inside the Keltner channel.
       </Note>
     </Panel>
   );
