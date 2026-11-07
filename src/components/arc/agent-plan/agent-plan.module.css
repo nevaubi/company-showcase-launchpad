@@ -1,0 +1,164 @@
+.root {
+  --ap-pad: 20px;
+  --ap-lead: 20px;
+  --ap-gap: 12px;
+  --ap-trail: 48px;
+  --ap-row-radius: 14px;
+  position: relative;
+  container-type: inline-size;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  line-height: 20px;
+  letter-spacing: var(--tracking-body);
+}
+
+/* Header */
+.header { position: relative; display: grid; gap: 2px; padding: 16px var(--ap-pad) 15px; border-bottom: 1px solid var(--border); }
+.headRow { display: flex; min-width: 0; align-items: center; gap: var(--ap-gap); }
+.mark { display: grid; flex: none; width: var(--ap-lead); height: 20px; place-items: center; }
+.mark svg { width: 16px; height: 16px; }
+.heading { flex: 1; min-width: 0; margin: 0; overflow: hidden; font-size: var(--text-sm); font-weight: 500; line-height: 20px; letter-spacing: var(--tracking-body); text-overflow: ellipsis; white-space: nowrap; }
+.count { color: var(--text-secondary); font-weight: 400; }
+.headMeta { display: inline-grid; flex: none; justify-items: end; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.headMeta > * { grid-area: 1 / 1; }
+.goal { margin: 0; padding-left: calc(var(--ap-lead) + var(--ap-gap)); color: var(--text-secondary); text-wrap: pretty; }
+.goalFlush { padding-left: 0; }
+/* The divider under the header is the progress line: a 2px accent fill that grows from the left over the 1px rule. */
+.progress { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; overflow: hidden; pointer-events: none; }
+.fill { display: block; height: 100%; background: var(--accent); transform-origin: 0 50%; }
+
+/* Rolling numbers keep tabular digits inside a reserved width. */
+.roll { display: inline-grid; justify-items: end; font-variant-numeric: tabular-nums; transition: width var(--duration-standard) var(--ease-standard); }
+.rollValue { grid-area: 1 / 1; }
+
+/* Steps */
+.listWrap { padding: 6px 8px; }
+.list { display: grid; margin: 0; padding: 0; list-style: none; }
+/* Rows stay transparent, so the plan sits on whatever surface hosts it. */
+.row { position: relative; overflow: hidden; border-radius: var(--ap-row-radius); transition: box-shadow var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+/* A dragged row is the one floating layer, so it alone gets a fill and a shadow. */
+.row[data-dragging] { z-index: 1; background: var(--surface-raised); box-shadow: var(--shadow-floating); }
+.rowInner { display: grid; grid-template-columns: var(--ap-lead) minmax(0, 1fr) var(--ap-trail); column-gap: var(--ap-gap); align-items: start; padding: 8px 12px; }
+/* A step the agent inserts mid-run arrives with a faint accent wash that fades out, so the eye finds what changed. */
+.row[data-fresh] { animation: ap-fresh 1.8s var(--ease-standard) both; }
+@keyframes ap-fresh { from, 35% { background-color: color-mix(in oklab, var(--accent) 8%, transparent); } to { background-color: transparent; } }
+
+.lead { display: grid; height: 20px; place-items: center; }
+.lead > * { grid-area: 1 / 1; }
+.glyph { display: grid; width: 16px; height: 16px; place-items: center; }
+.glyph svg { display: block; width: 16px; height: 16px; overflow: visible; }
+
+/* Status glyphs: a ring waits, a spinning arc works, two bars pause, a disc with a check is done, a disc with a mark failed, a dashed ring skipped. */
+.ring { fill: none; stroke: var(--border-strong); stroke-width: 1.5; }
+.track { fill: none; stroke: var(--border); stroke-width: 1.5; }
+.arc { fill: none; stroke: var(--accent); stroke-width: 1.5; stroke-linecap: round; }
+.spin { transform-origin: 50% 50%; animation: ap-spin .8s linear infinite; }
+@keyframes ap-spin { to { transform: rotate(360deg); } }
+.pausedRing { fill: none; stroke: var(--text-muted); stroke-width: 1.5; }
+.pausedBars { fill: none; stroke: var(--text-secondary); stroke-width: 1.5; stroke-linecap: round; }
+.doneDisc { fill: var(--success); }
+.failDisc { fill: var(--danger); }
+.ink { fill: none; stroke: var(--surface); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.inkDot { fill: var(--surface); }
+.skipRing { fill: none; stroke: var(--text-muted); stroke-width: 1.5; stroke-dasharray: 2.45 2.45; }
+.skipDash { fill: none; stroke: var(--text-muted); stroke-width: 1.5; stroke-linecap: round; }
+
+/* The grip sits in the lead column while the plan is a draft. */
+.grip { --focus-outline-offset: -2px; display: grid; width: 24px; height: 28px; margin: -4px -2px; place-items: center; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--text-muted); cursor: grab; touch-action: none; user-select: none; -webkit-tap-highlight-color: transparent; transition: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+.grip:active, .row[data-dragging] .grip { color: var(--foreground); cursor: grabbing; }
+
+.body { display: grid; min-width: 0; }
+/* The title edits in place: a textarea over a hidden copy of its text, so it wraps exactly like the read-only title and the row never shifts. */
+.title { position: relative; display: grid; min-width: 0; }
+.title[data-value]::after { grid-area: 1 / 1; margin: -4px -8px; padding: 4px 8px; content: attr(data-value) " "; overflow-wrap: anywhere; visibility: hidden; white-space: pre-wrap; pointer-events: none; }
+.field { grid-area: 1 / 1; min-width: 0; margin: -4px -8px; padding: 4px 8px; overflow: hidden; border: 0; border-radius: 8px; background: transparent; color: var(--foreground); font: inherit; letter-spacing: inherit; line-height: 20px; overflow-wrap: anywhere; white-space: pre-wrap; resize: none; cursor: text; box-shadow: inset 0 0 0 1px transparent; transition: background-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard); }
+.field::placeholder { color: var(--text-muted); opacity: 1; }
+.field:focus { background: var(--surface); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.titleText { display: block; min-width: 0; color: var(--foreground); overflow-wrap: anywhere; transition: color var(--duration-standard) var(--ease-standard); }
+/* Finished work steps back so the eye goes to what is next. */
+.row[data-state="done"] .titleText { color: var(--text-secondary); }
+.row[data-state="skipped"] .titleText { color: var(--text-muted); }
+.chunk { animation: ap-chunk 150ms var(--ease-enter) both; }
+@keyframes ap-chunk { from { opacity: 0; } }
+
+.note { display: flex; align-items: center; gap: 6px; margin: 2px 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 16px; }
+.noteMark { display: grid; flex: none; width: 12px; height: 12px; }
+.noteMark svg { width: 12px; height: 12px; }
+
+.collapse { overflow: hidden; }
+.subs { display: grid; margin: 0; padding: 0; list-style: none; }
+.sub { overflow: hidden; }
+.subInner { display: flex; min-width: 0; align-items: center; gap: 6px; padding-top: 4px; color: var(--text-secondary); font-size: var(--text-xs); line-height: 16px; }
+.subInner svg { flex: none; color: var(--text-muted); }
+.subText { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fail { display: grid; justify-items: start; gap: 8px; padding-top: 6px; padding-bottom: 2px; }
+.failText { margin: 0; color: var(--text-secondary); font-size: var(--text-xs); line-height: 16px; }
+.failLabel { color: var(--danger); font-weight: 500; }
+.failActions { display: flex; flex-wrap: wrap; gap: 6px; }
+.mini { --focus-outline-offset: -2px; display: inline-flex; height: 28px; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--foreground); font: inherit; font-size: var(--text-xs); font-weight: 500; line-height: 16px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard); }
+.mini svg { flex: none; }
+.mini[data-tone="accent"] { border-color: var(--accent); background: var(--accent); color: var(--accent-foreground); }
+.mini:active { opacity: .84; }
+
+.trail { display: grid; height: 20px; align-items: center; justify-items: end; color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.trailItem { display: grid; grid-area: 1 / 1; }
+.remove { --focus-outline-offset: -2px; display: grid; width: 24px; height: 24px; margin-right: -4px; place-items: center; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--text-muted); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard); }
+
+.add { --focus-outline-offset: -2px; display: grid; width: 100%; grid-template-columns: var(--ap-lead) auto; column-gap: var(--ap-gap); align-items: center; justify-content: start; padding: 8px 12px; border: 0; border-radius: var(--ap-row-radius); background: none; color: var(--text-secondary); font: inherit; letter-spacing: inherit; line-height: 20px; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+.add:active { color: var(--foreground); background: var(--surface-muted); }
+.empty { margin: 0; padding: 8px 12px 8px calc(12px + var(--ap-lead) + var(--ap-gap)); color: var(--text-muted); }
+
+/* Footer: its height follows the phase on a spring; the rows inside crossfade. */
+.footWrap { overflow: hidden; }
+.foot { position: relative; padding: 12px var(--ap-pad); }
+/* The separator is drawn inside the footer, so it rides along with the footer's height spring. */
+.foot::before { position: absolute; top: 0; right: 0; left: 0; height: 1px; background: var(--border); content: ""; }
+.footRow { display: flex; min-height: var(--control-height-sm); flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.footRow[data-phase="done"] { flex-wrap: nowrap; align-items: flex-start; justify-content: space-between; }
+.footRow .approve { border-color: var(--accent); background: var(--accent); color: var(--accent-foreground); }
+.footStatus { position: relative; display: grid; flex: 1; min-width: 0; color: var(--text-secondary); }
+.footStatus > * { grid-area: 1 / 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pauseSlot { display: inline-flex; }
+.summary { flex: 1; min-width: 0; margin: 0; padding-block: 8px; color: var(--text-secondary); text-wrap: pretty; }
+.summary strong { color: var(--foreground); font-weight: 500; }
+
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
+
+@media (hover: hover) and (pointer: fine) {
+  .grip:hover { color: var(--foreground); background: var(--surface-muted); }
+  .field:hover:not(:focus) { background: var(--surface-muted); }
+  .mini:hover { background: var(--surface-muted); }
+  .mini[data-tone="accent"]:hover { background: var(--accent); opacity: .9; }
+  .add:hover { color: var(--foreground); background: var(--surface-muted); }
+  .remove:hover { color: var(--foreground); background: var(--surface-muted); }
+  /* With a mouse, remove appears with the row; touch keeps it visible. */
+  .remove { opacity: 0; }
+  .row:hover .remove, .row:focus-within .remove { opacity: 1; }
+}
+
+@container (max-width: 420px) {
+  .header { padding-inline: 16px; }
+  .listWrap { padding-inline: 4px; }
+  .foot { padding-inline: 16px; }
+  .footRow[data-phase="draft"] > * { flex: 1 1 0; }
+  .footRow[data-phase="done"] { flex-wrap: wrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin, .chunk, .row[data-fresh] { animation: none; }
+  .row, .grip, .field, .titleText, .mini, .remove, .add, .roll { transition: none; }
+}
+
+@media (forced-colors: active) {
+  .fill { background: Highlight; }
+  .doneDisc, .failDisc { fill: CanvasText; }
+  .ink { stroke: Canvas; }
+  .inkDot { fill: Canvas; }
+}

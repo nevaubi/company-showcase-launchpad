@@ -1,0 +1,129 @@
+.root { position: relative; display: inline-flex; flex: none; height: 40px; max-width: 100%; vertical-align: middle; font-family: var(--font-body); font-size: var(--text-sm); line-height: var(--leading-body); letter-spacing: var(--tracking-body); color: var(--foreground); }
+
+.surface {
+  --shimmer-base: color-mix(in oklab, var(--foreground) 50%, var(--surface));
+  position: absolute; top: 0; z-index: 1; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--border); border-radius: 20px; background: var(--surface);
+  transition: border-radius var(--duration-considered) var(--ease-standard), box-shadow var(--duration-standard) var(--ease-standard);
+}
+.root[data-align="center"] .surface { left: 50%; translate: -50% 0; }
+.root[data-align="start"] .surface { left: 0; }
+.root[data-align="end"] .surface { right: 0; }
+.surface[data-expanded="true"] { z-index: 30; border-radius: 22px; box-shadow: var(--shadow-floating); }
+
+/* Header row: the pill itself. 38px inside a 1px border, so the 24px orb and the 30px buttons sit concentric with the 20px radius. */
+.row { position: relative; display: flex; flex: none; align-items: center; height: 38px; min-width: 0; }
+.head {
+  --focus-outline-offset: -2px;
+  position: relative; display: flex; flex: 1 1 auto; align-items: center; gap: 8px; min-width: 0; height: 38px; box-sizing: border-box;
+  padding: 0 14px 0 7px; border: 0; border-radius: 19px; background: transparent; color: inherit; font: inherit; text-align: start;
+  cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--duration-fast) var(--ease-standard);
+}
+.head[data-actions] { padding-right: 10px; }
+@media (hover: hover) and (pointer: fine) {
+  .surface[data-expanded="false"] .head:hover { background: color-mix(in oklab, var(--surface-muted) 70%, var(--surface)); }
+}
+/* An anchor of the panel never scales; it answers a press with color. */
+.surface[data-expanded="false"] .head:active { background: var(--surface-muted); }
+
+/* Orb: mark, ring, glyph morphs and the approval dot. */
+.orb, .orbSpace { position: relative; display: grid; flex: none; width: 24px; height: 24px; place-items: center; }
+.ring { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; stroke-width: 1.5; }
+.track { stroke: var(--border); opacity: 0; transition: opacity var(--duration-standard) var(--ease-standard); }
+.spinner { transform-origin: 12px 12px; transform-box: view-box; animation: spin .9s linear infinite; animation-play-state: paused; }
+.arc { stroke: var(--foreground); stroke-linecap: round; opacity: 0; transition: opacity var(--duration-standard) var(--ease-standard), stroke var(--duration-standard) var(--ease-standard); }
+/* The closed ring keeps its last color while it fades, then resets. */
+.closed { stroke: var(--success); stroke-linecap: round; transform: rotate(-90deg); transform-origin: 12px 12px; transform-box: view-box; transition: stroke 0s linear var(--duration-standard); }
+.orb[data-state="working"] .spinner { animation-play-state: running; }
+.orb:is([data-state="working"], [data-state="paused"], [data-state="needs-input"]) .track { opacity: 1; }
+.orb:is([data-state="working"], [data-state="paused"]) .arc { opacity: 1; }
+.orb[data-state="paused"] .arc { stroke: var(--text-muted); }
+.orb[data-state="done"] .closed { stroke: var(--success); transition: none; }
+.orb[data-state="failed"] .closed { stroke: var(--danger); transition: none; }
+
+.glyph { position: absolute; inset: 0; display: grid; place-items: center; }
+.glyph > svg { width: 12px; height: 12px; transition: opacity var(--duration-standard) var(--ease-standard); }
+.glyph:is([data-glyph="check"], [data-glyph="cross"]) > svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.glyph[data-glyph="check"] { color: var(--success); }
+.glyph[data-glyph="cross"] { color: var(--danger); }
+.orb[data-state="paused"] .glyph[data-glyph="mark"] > svg { opacity: .5; }
+.stopGlyph { width: 8px; height: 8px; border-radius: 2px; background: var(--text-secondary); }
+.dot { position: absolute; top: 0; right: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
+/* One soft ping when input is needed, then it rests. */
+.dot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--accent); animation: ping .9s var(--ease-standard) .1s 1 both; }
+
+/* Label: icon and text roll as one unit inside a clipped slot. */
+.labelSlot {
+  position: relative; display: flex; flex: 0 1 auto; align-items: center; min-width: 0; height: 20px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - var(--fade, 0px)), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - var(--fade, 0px)), transparent);
+}
+.labelUnit { display: inline-flex; flex: none; align-items: center; gap: 6px; height: 20px; white-space: nowrap; }
+.labelIcon { flex: none; color: var(--text-secondary); }
+.labelText { color: var(--foreground); font-size: var(--text-sm); font-weight: 400; line-height: 20px; }
+.labelUnit[data-tone="quiet"] .labelText { color: var(--text-secondary); }
+.labelUnit[data-tone="live"] .labelText,
+.shimmer {
+  color: transparent; background-image: linear-gradient(90deg, var(--shimmer-base) 0%, var(--shimmer-base) 38%, var(--foreground) 50%, var(--shimmer-base) 62%, var(--shimmer-base) 100%);
+  background-size: 300% 100%; background-position: 100% 0; -webkit-background-clip: text; background-clip: text;
+  animation: shimmer 2.4s var(--ease-in-out) infinite;
+}
+.count { font-variant-numeric: tabular-nums; }
+.timer { flex: none; margin-left: auto; padding-left: 4px; color: var(--text-muted); font-size: var(--text-sm); line-height: 20px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Inline actions: 30px buttons, 4px from the edge, radius 15 inside the pill's 19. */
+.actions { display: flex; flex: none; align-items: center; gap: 4px; padding-right: 4px; }
+.surface .inlineButton { min-height: 30px; height: 30px; gap: 6px; padding-inline: 12px; border-radius: 15px; }
+.surface .iconButton { width: 30px; padding: 0; }
+.surface .accentButton { border-color: var(--accent); background: var(--accent); color: var(--accent-foreground); }
+
+/* Panel body, laid out at its final width so nothing reflows while the surface grows. */
+.body { box-sizing: border-box; display: grid; flex: none; grid-template-columns: minmax(0, 1fr); gap: 12px; width: var(--panel-w); padding: 6px 12px 12px; }
+.root[data-align="center"] .body { margin-left: calc((100% - var(--panel-w)) / 2); }
+.root[data-align="end"] .body { margin-left: calc(100% - var(--panel-w)); }
+.progress { display: grid; gap: 8px; padding-top: 2px; }
+.meta { display: flex; justify-content: space-between; gap: 12px; padding-inline: 2px; color: var(--text-muted); font-size: var(--text-xs); line-height: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.agentName { overflow: hidden; text-overflow: ellipsis; }
+.segments { display: flex; gap: 3px; height: 3px; }
+.segment { position: relative; flex: 1 1 0; overflow: hidden; border-radius: var(--radius-pill); background: var(--border); transition: background-color var(--duration-standard) var(--ease-standard); }
+.segment:is([data-status="active"], [data-status="waiting"]) { background: color-mix(in oklab, var(--accent) 24%, var(--border)); }
+.segmentFill { position: absolute; inset: 0; border-radius: inherit; background: var(--accent); transform-origin: left center; transition: transform var(--duration-considered) var(--ease-standard), background-color var(--duration-standard) var(--ease-standard); }
+.segment[data-status="failed"] .segmentFill { background: var(--danger); }
+.segment[data-status="skipped"] .segmentFill { background: var(--text-muted); }
+
+.steps { position: relative; display: grid; margin: 0; padding: 0; list-style: none; }
+.step { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 12px; align-items: start; padding-block: 4px; }
+.stepIcon { display: grid; height: 20px; place-items: center; color: var(--text-muted); }
+.stepText { position: relative; min-width: 0; color: var(--text-secondary); font-size: var(--text-sm); line-height: 20px; }
+.stepLabel { display: block; overflow-wrap: anywhere; }
+.stepTime { min-width: 3ch; color: var(--text-muted); font-size: var(--text-xs); line-height: 20px; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.step:is([data-status="active"], [data-status="waiting"], [data-status="failed"]) .stepIcon { color: var(--foreground); }
+.step[data-status="waiting"] .stepIcon { color: var(--accent); }
+.step[data-status="failed"] .stepIcon { color: var(--danger); }
+.step:is([data-status="waiting"], [data-status="failed"]) .stepText { color: var(--foreground); }
+.step[data-status="skipped"] .stepText { color: var(--text-muted); }
+.empty { margin: 0; padding: 4px 2px 0; color: var(--text-secondary); font-size: var(--text-sm); }
+
+.footer { display: flex; align-items: center; gap: 6px; min-height: var(--control-height-sm); }
+.slot { display: inline-flex; }
+.footer .open { margin-left: auto; }
+.footer .openIcon { width: var(--control-height-sm); padding: 0; }
+
+/* Width ghosts: never painted, never focusable, measured for the natural width of the pill. */
+.ghosts { position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: hidden; visibility: hidden; pointer-events: none; }
+.ghost { position: absolute; top: 0; left: 0; display: flex; box-sizing: border-box; width: max-content; height: 40px; align-items: center; border: 1px solid transparent; }
+.ghost .head { flex: none; cursor: default; }
+.ghost .labelSlot { flex: none; -webkit-mask-image: none; mask-image: none; }
+
+.srOnly { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes shimmer { 0% { background-position: 100% 0; } 72%, 100% { background-position: 0% 0; } }
+@keyframes ping { from { opacity: .4; transform: scale(1); } to { opacity: 0; transform: scale(2.6); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .surface, .head, .track, .arc, .segment, .segmentFill, .glyph > svg { transition: none; }
+  .spinner { animation: none; }
+  .dot::after { display: none; }
+  .labelUnit[data-tone="live"] .labelText, .shimmer { animation: none; background: none; color: var(--foreground); }
+}

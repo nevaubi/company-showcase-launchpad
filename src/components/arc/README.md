@@ -5,5 +5,5 @@ Free components from Arc (https://uiarc.dev), MIT licensed, copied from the publ
 imports are react, motion, lucide-react and @radix-ui/react-checkbox only). The `@uiarc` registry
 is listed in components.json for future additions.
 
-Always render them inside `<ArcScope>` (arc-scope.tsx), which maps Arc's tokens onto this app's
-theme. Pro components are not included.
+Pro items (Arc Pro licence, installed via the token-gated @uiarc-pro registry; token never committed) are also vendored here. Always render them inside `<ArcScope>` (arc-scope.tsx), which maps Arc's tokens onto this app's
+theme.

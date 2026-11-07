@@ -1,0 +1,13 @@
+.panel { box-sizing: border-box; width: 100%; max-width: 720px; border: 1px solid var(--border); border-radius: var(--radius-panel, 26px); padding: 24px 24px 16px; background: var(--surface); color: var(--foreground); font-family: var(--font-body); letter-spacing: var(--tracking-body); }
+.questionBox { margin-bottom: 12px; }
+.question { display: grid; }
+.questionText { grid-area: 1 / 1; margin: 0; color: var(--foreground); font-size: var(--text-base); font-weight: 500; line-height: 24px; text-wrap: pretty; }
+.body { min-width: 0; }
+.answer { margin: 0; color: var(--foreground); font-size: var(--text-sm); line-height: 23px; text-wrap: pretty; }
+.chunk { animation: sc-chunk 140ms var(--ease-standard) both; }
+@keyframes sc-chunk { from { opacity: 0; } to { opacity: 1; } }
+.code { border-radius: 5px; padding: 1px 5px; background: var(--surface-muted); color: var(--foreground); font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: .86em; letter-spacing: 0; }
+.note { display: grid; min-height: 18px; margin: 12px 0 0; color: var(--text-muted); font-size: var(--text-xs); line-height: 18px; }
+.noteText { grid-area: 1 / 1; }
+@media (max-width: 420px) { .panel { padding: 16px 16px 12px; } }
+@media (prefers-reduced-motion: reduce) { .chunk { animation: none; } }

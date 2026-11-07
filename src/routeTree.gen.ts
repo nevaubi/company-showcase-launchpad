@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as MockupsArcGalleryRouteImport } from './routes/mockups.arc-gallery'
 import { Route as MockupsLandingHeroRouteImport } from './routes/mockups.landing-hero'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
@@ -90,6 +91,11 @@ const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/app',
   path: '/app',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const MockupsArcGalleryRoute = MockupsArcGalleryRouteImport.update({
+  id: '/mockups/arc-gallery',
+  path: '/mockups/arc-gallery',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const MockupsLandingHeroRoute = MockupsLandingHeroRouteImport.update({
   id: '/mockups/landing-hero',
@@ -357,6 +363,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
+  '/mockups/arc-gallery': typeof MockupsArcGalleryRoute
   '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -409,6 +416,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/mockups/arc-gallery': typeof MockupsArcGalleryRoute
   '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -462,6 +470,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
+  '/mockups/arc-gallery': typeof MockupsArcGalleryRoute
   '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/_authenticated/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -517,6 +526,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/app'
+    | '/mockups/arc-gallery'
     | '/mockups/landing-hero'
     | '/app/alt-data'
     | '/app/calendars'
@@ -569,6 +579,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pricing'
     | '/reset-password'
+    | '/mockups/arc-gallery'
     | '/mockups/landing-hero'
     | '/app/alt-data'
     | '/app/calendars'
@@ -621,6 +632,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/_authenticated/app'
+    | '/mockups/arc-gallery'
     | '/mockups/landing-hero'
     | '/_authenticated/app/alt-data'
     | '/_authenticated/app/calendars'
@@ -675,6 +687,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   PricingRoute: typeof PricingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  MockupsArcGalleryRoute: typeof MockupsArcGalleryRoute
   MockupsLandingHeroRoute: typeof MockupsLandingHeroRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
   ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
@@ -723,6 +736,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app'
       preLoaderRoute: typeof AuthenticatedAppRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/mockups/arc-gallery': {
+      id: '/mockups/arc-gallery'
+      path: '/mockups/arc-gallery'
+      fullPath: '/mockups/arc-gallery'
+      preLoaderRoute: typeof MockupsArcGalleryRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/mockups/landing-hero': {
       id: '/mockups/landing-hero'
@@ -1196,6 +1216,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   PricingRoute: PricingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  MockupsArcGalleryRoute: MockupsArcGalleryRoute,
   MockupsLandingHeroRoute: MockupsLandingHeroRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
   ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,
