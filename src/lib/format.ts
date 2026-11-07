@@ -1,5 +1,9 @@
 import type { Unit } from "@/lib/financials/types";
 
+// HTML entity decoding lives in the pure redline extractor; re-exported here for callers
+// that only need formatting helpers (e.g. src/lib/data.ts cleaning insider names).
+export { decodeEntities } from "@/lib/redline/extract";
+
 const nf = (min: number, max: number) =>
   new Intl.NumberFormat("en-US", { minimumFractionDigits: min, maximumFractionDigits: max });
 const n0 = nf(0, 0);
