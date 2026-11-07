@@ -56,6 +56,7 @@ import { Route as AuthenticatedAppCompaniesTickerMemoRouteImport } from './route
 import { Route as AuthenticatedAppCompaniesTickerRedlineRouteImport } from './routes/_authenticated/app.companies.$ticker.redline'
 import { Route as AuthenticatedAppCompaniesTickerReportsRouteImport } from './routes/_authenticated/app.companies.$ticker.reports'
 import { Route as AuthenticatedAppCompaniesTickerValuationRouteImport } from './routes/_authenticated/app.companies.$ticker.valuation'
+import { Route as AuthenticatedAppSectorsGSlugRouteImport } from './routes/_authenticated/app.sectors_.g.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -318,6 +319,12 @@ const AuthenticatedAppCompaniesTickerValuationRoute =
     path: '/valuation',
     getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
   } as any)
+const AuthenticatedAppSectorsGSlugRoute =
+  AuthenticatedAppSectorsGSlugRouteImport.update({
+    id: '/sectors_/g/$slug',
+    path: '/sectors/g/$slug',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -365,6 +372,7 @@ export interface FileRoutesByFullPath {
   '/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRoutesByTo {
@@ -410,6 +418,7 @@ export interface FileRoutesByTo {
   '/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRoutesById {
@@ -460,6 +469,7 @@ export interface FileRoutesById {
   '/_authenticated/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/_authenticated/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/_authenticated/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/_authenticated/app/sectors_/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
 export interface FileRouteTypes {
@@ -510,6 +520,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/redline'
     | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
+    | '/app/sectors/g/$slug'
     | '/app/companies/$ticker/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -555,6 +566,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/redline'
     | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
+    | '/app/sectors/g/$slug'
     | '/app/companies/$ticker'
   id:
     | '__root__'
@@ -604,6 +616,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/companies/$ticker/redline'
     | '/_authenticated/app/companies/$ticker/reports'
     | '/_authenticated/app/companies/$ticker/valuation'
+    | '/_authenticated/app/sectors_/g/$slug'
     | '/_authenticated/app/companies/$ticker/'
   fileRoutesById: FileRoutesById
 }
@@ -948,6 +961,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCompaniesTickerValuationRouteImport
       parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
     }
+    '/_authenticated/app/sectors_/g/$slug': {
+      id: '/_authenticated/app/sectors_/g/$slug'
+      path: '/sectors/g/$slug'
+      fullPath: '/app/sectors/g/$slug'
+      preLoaderRoute: typeof AuthenticatedAppSectorsGSlugRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
@@ -1041,6 +1061,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppCompaniesIndexRoute: typeof AuthenticatedAppCompaniesIndexRoute
   AuthenticatedAppDocsIndexRoute: typeof AuthenticatedAppDocsIndexRoute
   AuthenticatedAppThesesIndexRoute: typeof AuthenticatedAppThesesIndexRoute
+  AuthenticatedAppSectorsGSlugRoute: typeof AuthenticatedAppSectorsGSlugRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
@@ -1068,6 +1089,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppCompaniesIndexRoute: AuthenticatedAppCompaniesIndexRoute,
   AuthenticatedAppDocsIndexRoute: AuthenticatedAppDocsIndexRoute,
   AuthenticatedAppThesesIndexRoute: AuthenticatedAppThesesIndexRoute,
+  AuthenticatedAppSectorsGSlugRoute: AuthenticatedAppSectorsGSlugRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =

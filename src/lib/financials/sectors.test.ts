@@ -24,8 +24,24 @@ const m = (over: Partial<CompanyMetrics>): CompanyMetrics => ({
 
 describe("sector roll-ups", () => {
   const [tech] = aggregateSectors([
-    m({ ticker: "A", mcap: 900, revenue: 100, netIncome: 30, operatingIncome: 40, fcf: 25, growth: 0.2 }),
-    m({ ticker: "B", mcap: 100, revenue: 100, netIncome: -10, operatingIncome: -5, fcf: -2, growth: -0.1 }),
+    m({
+      ticker: "A",
+      mcap: 900,
+      revenue: 100,
+      netIncome: 30,
+      operatingIncome: 40,
+      fcf: 25,
+      growth: 0.2,
+    }),
+    m({
+      ticker: "B",
+      mcap: 100,
+      revenue: 100,
+      netIncome: -10,
+      operatingIncome: -5,
+      fcf: -2,
+      growth: -0.1,
+    }),
   ]);
 
   it("weights margins by revenue, like an index", () => {
@@ -41,7 +57,22 @@ describe("sector roll-ups", () => {
     expect(tech.count).toBe(2);
   });
   it("leaves banks out of free-cash-flow yield", () => {
-    const [fin] = aggregateSectors([m({ sector: "Fin", bank: true, fcf: null, mcap: 500 }), m({ sector: "Fin", mcap: 100, fcf: 5 })]);
+    const [fin] = aggregateSectors([
+      m({ sector: "Fin", bank: true, fcf: null, mcap: 500 }),
+      m({ sector: "Fin", mcap: 100, fcf: 5 }),
+    ]);
     expect(fin.fcfYield).toBeCloseTo(0.05);
+  });
+});
+
+describe("sharesFor", () => {
+  it("prefers diluted shares unless they disagree with the cover page by more than 3x", async () => {
+    const { sharesFor } = await import("./sectors");
+    expect(sharesFor({ sharesOutstanding: 100, f: { dilutedShares: 102 } } as never)).toBe(102);
+    expect(
+      sharesFor({ sharesOutstanding: 98_248_111, f: { dilutedShares: 98_204_000_000 } } as never),
+    ).toBe(98_248_111);
+    expect(sharesFor({ sharesOutstanding: null, f: { dilutedShares: 50 } } as never)).toBe(50);
+    expect(sharesFor({ sharesOutstanding: 70, f: undefined } as never)).toBe(70);
   });
 });

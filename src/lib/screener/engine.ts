@@ -5,6 +5,7 @@
 // screener.json does not carry yet.
 import type { Quote } from "@/lib/market.functions";
 import type { UniverseEntry } from "@/lib/financials/types";
+import { sharesFor } from "@/lib/financials/sectors";
 
 export type FieldUnit =
   "usd" | "pct" | "pctl" | "x" | "corr" | "num" | "days" | "bool" | "score" | string;
@@ -322,7 +323,7 @@ export function basicRow(u: UniverseEntry, price: number | null): Row {
   const f = u.f;
   const t = f?.ttm ?? {};
   const bs = f?.bs ?? {};
-  const shares = u.sharesOutstanding ?? f?.dilutedShares ?? null;
+  const shares = u.sharesOutstanding ?? sharesFor(u);
   const mcap = price != null && shares ? price * shares : null;
   const fin = u.sector === "Financials";
   const debt = bs.totalDebt ?? null;

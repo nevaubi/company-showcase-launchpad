@@ -24,15 +24,27 @@ export interface CompanyMetrics {
   opMargin: number | null;
 }
 
+/**
+ * Share count for market cap: the latest quarter's diluted weighted shares, unless it disagrees with the
+ * cover-page count by more than 3x (a scale error in the filing's XBRL), then the cover-page count.
+ */
+export function sharesFor(u: Pick<UniverseEntry, "sharesOutstanding" | "f">): number | null {
+  const d = u.f?.dilutedShares ?? null,
+    c = u.sharesOutstanding ?? null;
+  if (d && c) return d / c > 3 || d / c < 1 / 3 ? c : d;
+  return d ?? c;
+}
+
 export function companyMetrics(u: UniverseEntry, price: number | null | undefined): CompanyMetrics {
   const f = u.f;
   const bank = isBankIndustry(u.industry);
-  const shares = f?.dilutedShares ?? u.sharesOutstanding ?? null;
+  const shares = sharesFor(u);
   const mcap = price && shares ? price * shares : null;
   const revenue = f?.ttm.revenue ?? u.revenueTTM ?? null;
   const netIncome = f?.ttm.netIncome ?? u.netIncomeTTM ?? null;
   // Filers without an operating-income subtotal (integrated oils) fall back to EBIT = EBITDA − D&A.
-  const ebit = f?.ttm.ebitda != null && f.ttm.dna != null ? f.ttm.ebitda - Math.abs(f.ttm.dna) : null;
+  const ebit =
+    f?.ttm.ebitda != null && f.ttm.dna != null ? f.ttm.ebitda - Math.abs(f.ttm.dna) : null;
   const operatingIncome = f?.ttm.operatingIncome ?? (bank ? null : ebit);
   const fcf = bank ? null : (f?.ttm.fcf ?? u.fcfTTM ?? null);
   return {
@@ -79,7 +91,11 @@ const median = (xs: (number | null)[]) => {
   return v.length % 2 ? v[(v.length - 1) / 2] : (v[v.length / 2 - 1] + v[v.length / 2]) / 2;
 };
 
-const ratio = (rows: CompanyMetrics[], num: (r: CompanyMetrics) => number | null, den: (r: CompanyMetrics) => number | null) => {
+const ratio = (
+  rows: CompanyMetrics[],
+  num: (r: CompanyMetrics) => number | null,
+  den: (r: CompanyMetrics) => number | null,
+) => {
   let n = 0;
   let d = 0;
   for (const r of rows) {
@@ -103,12 +119,36 @@ export function aggregateSectors(rows: CompanyMetrics[]): SectorAggregate[] {
         count: members.length,
         mcap: members.reduce((s, m) => s + (m.mcap ?? 0), 0),
         revenue: members.reduce((s, m) => s + (m.revenue ?? 0), 0),
-        netMargin: ratio(members, (m) => m.netIncome, (m) => m.revenue),
-        opMargin: ratio(members.filter((m) => m.operatingIncome != null), (m) => m.operatingIncome, (m) => m.revenue),
-        fcfMargin: ratio(members.filter((m) => !m.bank), (m) => m.fcf, (m) => m.revenue),
-        pe: ratio(profitable, (m) => m.mcap, (m) => (m.mcap != null ? m.netIncome : null)),
-        fcfYield: ratio(members.filter((m) => !m.bank), (m) => m.fcf, (m) => m.mcap),
-        netDebtToEbitda: ratio(members.filter((m) => !m.bank && m.ebitda != null && m.ebitda > 0), (m) => m.netDebt, (m) => m.ebitda),
+        netMargin: ratio(
+          members,
+          (m) => m.netIncome,
+          (m) => m.revenue,
+        ),
+        opMargin: ratio(
+          members.filter((m) => m.operatingIncome != null),
+          (m) => m.operatingIncome,
+          (m) => m.revenue,
+        ),
+        fcfMargin: ratio(
+          members.filter((m) => !m.bank),
+          (m) => m.fcf,
+          (m) => m.revenue,
+        ),
+        pe: ratio(
+          profitable,
+          (m) => m.mcap,
+          (m) => (m.mcap != null ? m.netIncome : null),
+        ),
+        fcfYield: ratio(
+          members.filter((m) => !m.bank),
+          (m) => m.fcf,
+          (m) => m.mcap,
+        ),
+        netDebtToEbitda: ratio(
+          members.filter((m) => !m.bank && m.ebitda != null && m.ebitda > 0),
+          (m) => m.netDebt,
+          (m) => m.ebitda,
+        ),
         medianGrowth: median(members.map((m) => m.growth)),
         medianCagr3y: median(members.map((m) => m.cagr3y)),
         members: [...members].sort((a, b) => (b.mcap ?? 0) - (a.mcap ?? 0)),
