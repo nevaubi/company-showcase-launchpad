@@ -60,17 +60,22 @@ export const universeQuery = queryOptions({
   queryKey: ["universe"],
   queryFn: async () => {
     const base = await getJson<Universe>("/data/universe.json");
+    // Partner data service (every covered company, rebuilt on schedule) wins; the bundled list and
+    // the `datasets` bucket fill in anything it doesn't have.
+    const partner = await partnerJson<Universe>("universe.json");
+    let extra: Universe | null = null;
     try {
       const { data } = await supabase.storage.from("datasets").download("universe.json");
-      if (data) {
-        const extra = JSON.parse(await data.text()) as Universe;
-        const have = new Set(base.companies.map((c) => c.ticker));
-        return { ...base, companies: [...base.companies, ...extra.companies.filter((c) => !have.has(c.ticker))] };
-      }
+      if (data) extra = JSON.parse(await data.text()) as Universe;
     } catch {
       /* bundled universe only */
     }
-    return base;
+    const fresh = new Map((partner?.companies ?? []).map((c) => [c.ticker, c]));
+    const seen = new Set<string>();
+    const companies = [...base.companies, ...(extra?.companies ?? []), ...(partner?.companies ?? [])]
+      .filter((c) => !seen.has(c.ticker) && (seen.add(c.ticker), true))
+      .map((c) => fresh.get(c.ticker) ?? c);
+    return { ...base, generatedAt: partner?.generatedAt ?? base.generatedAt, companies };
   },
   staleTime: Infinity,
 });

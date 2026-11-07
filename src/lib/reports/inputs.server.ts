@@ -1,5 +1,5 @@
-// Server-side loader for report inputs. Reads the stored copies (company datasets mirrored to the
-// private `datasets` bucket, filings/estimates/caches in tables) so reports are built from
+// Server-side loader for report inputs. Reads the stored copies (company datasets from the partner
+// data service, falling back to the private `datasets` bucket; filings/estimates/caches in tables) so reports are built from
 // trusted data, never from numbers a browser sent.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { hydrateDataset } from "@/lib/financials/dataset";
@@ -11,10 +11,37 @@ import type { TrackedPromise } from "@/lib/earnings/promises";
 import type { MarketsFile } from "@/lib/markets/query";
 import type { ReportInputs } from "./types";
 
-async function storageJson<T>(path: string): Promise<T | null> {
+const PARTNER_DATA_URL = process.env["PARTNER_DATA_URL"] || "https://www.filedunder.ai/api/app-data";
+const PARTNER_PATH = /^(companies|prices)\/[A-Za-z0-9_.-]{1,32}\.json$|^universe\.json$/;
+
+/** Company/price datasets from the partner data service (server key, never sent to browsers). */
+async function partnerJson<T>(path: string): Promise<T | null> {
+  const key = process.env["PARTNER_DATA_KEY"];
+  if (!key || !PARTNER_PATH.test(path)) return null;
+  try {
+    const res = await fetch(`${PARTNER_DATA_URL}?path=${encodeURIComponent(path)}`, {
+      headers: { "x-partner-key": key },
+      signal: AbortSignal.timeout(20_000),
+    });
+    return res.ok ? ((await res.json()) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function bucketJson<T>(path: string): Promise<T | null> {
   const { data, error } = await supabaseAdmin.storage.from("datasets").download(path);
   if (error || !data) return null;
   return JSON.parse(await data.text()) as T;
+}
+
+/** Partner data service first for datasets (all covered companies, rebuilt twice a week), then the `datasets` bucket. */
+async function storageJson<T>(path: string): Promise<T | null> {
+  if (path !== "universe.json") {
+    const remote = await partnerJson<T>(path);
+    if (remote) return remote;
+  }
+  return bucketJson<T>(path);
 }
 
 let marketsCache: { at: number; file: MarketsFile | null } | null = null;
@@ -29,12 +56,13 @@ let universeCache: { at: number; list: UniverseEntry[] } | null = null;
 async function universe(): Promise<UniverseEntry[]> {
   if (universeCache && Date.now() - universeCache.at < 3600_000) return universeCache.list;
   // Bundled core companies + the partner-universe companies built by the backfill.
-  const [core, extra] = await Promise.all([
-    storageJson<{ companies: UniverseEntry[] }>("universe-core.json"),
-    storageJson<{ companies: UniverseEntry[] }>("universe.json"),
+  const [partner, core, extra] = await Promise.all([
+    partnerJson<{ companies: UniverseEntry[] }>("universe.json"),
+    bucketJson<{ companies: UniverseEntry[] }>("universe-core.json"),
+    bucketJson<{ companies: UniverseEntry[] }>("universe.json"),
   ]);
   const seen = new Set<string>();
-  const list = [...(core?.companies ?? []), ...(extra?.companies ?? [])].filter((u) => !seen.has(u.ticker) && (seen.add(u.ticker), true));
+  const list = [...(partner?.companies ?? []), ...(core?.companies ?? []), ...(extra?.companies ?? [])].filter((u) => !seen.has(u.ticker) && (seen.add(u.ticker), true));
   universeCache = { at: Date.now(), list };
   return universeCache.list;
 }
