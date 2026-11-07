@@ -24,6 +24,7 @@ import { SectorTable } from "@/components/company/sector-table";
 import { RelatedCompanies } from "@/components/company/related";
 import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
+import { FilingInsightsPanel } from "@/components/company/filing-insights";
 import { coverageOf } from "@/lib/coverage";
 import { FirmNotes } from "@/components/firm/firm-notes";
 
@@ -141,6 +142,8 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       </div></details>
 
       <ResearchChart ticker={ticker} data={data} />
+
+      <FilingInsightsPanel ticker={ticker} />
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
         <SetupPanel ticker={ticker} data={data} price={price} />

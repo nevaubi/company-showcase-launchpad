@@ -54,7 +54,7 @@ export function SourcePanel() {
 
   const open = !!target;
   const filing = active ? byAccn.get(active.accn) : undefined;
-  const cik = company.data?.profile.cik ?? "";
+  const cik = target?.doc?.cik ?? company.data?.profile.cik ?? "";
 
   return (
     <aside
