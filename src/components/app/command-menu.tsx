@@ -10,6 +10,7 @@ import {
   FileText,
   Globe2,
   Grid3x3,
+  Lightbulb,
   LayoutDashboard,
   LineChart,
   PieChart,
@@ -50,6 +51,12 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     label: "Filings",
     icon: FileSearch,
     keywords: "10-k 10-q redline disclosure changes risk factors filing insights what changed",
+  },
+  {
+    to: "/app/insights",
+    label: "Insights",
+    icon: Lightbulb,
+    keywords: "kpi insights operating data trends mix traffic ticket backlog federal contracts lobbying short volume congress",
   },
   {
     to: "/app/kpis",

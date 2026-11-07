@@ -36,6 +36,7 @@ import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
 import { FilingInsightsPanel } from "@/components/company/filing-insights";
 import { BriefPanel } from "@/components/company/brief-panel";
+import { KpiInsightsPanel } from "@/components/company/kpi-insights";
 import { coverageOf } from "@/lib/coverage";
 import { FirmNotes } from "@/components/firm/firm-notes";
 
@@ -82,6 +83,7 @@ function OverviewSkeleton() {
 
 const OVERVIEW_SECTIONS = [
   { id: "ov-price", label: "Price" },
+  { id: "ov-operating", label: "Operating data" },
   { id: "ov-changes", label: "Filing changes" },
   { id: "ov-setup", label: "Setup & catalysts" },
   { id: "ov-about", label: "About" },
@@ -236,6 +238,10 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <div id="ov-indicators" className="scroll-mt-24">
         <CompanyIndicators ticker={ticker} />
+      </div>
+
+      <div id="ov-operating" className="scroll-mt-24" data-section="operating-insights">
+        <KpiInsightsPanel ticker={ticker} />
       </div>
 
       <div id="ov-changes" className="scroll-mt-24">
