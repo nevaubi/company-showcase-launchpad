@@ -15,6 +15,12 @@ export interface Step {
   sources?: { url: string; title?: string }[];
   output?: string;
   ms?: number;
+  /** The agent's one-line reason for an action, shown as narration. */
+  why?: string;
+  /** Epoch ms the step started (for live timers). */
+  startedAt?: number;
+  /** Tool calls issued in the same model step share a batch number. */
+  batch?: number;
 }
 
 export interface Plan {
@@ -29,6 +35,8 @@ export interface Turn {
   plan?: Plan;
   /** Live phase label for the shimmer line */
   phase?: string;
+  /** What the agent is doing, for the loader variant. */
+  activity?: "thinking" | "working" | "browsing";
   error?: string;
 }
 
@@ -98,6 +106,7 @@ export async function runAgent(opts: {
       if (step === maxSteps - 1) items.push({ role: "user", content: "Tool budget reached. Write the best answer you can from what you have, noting gaps." });
       compact(items);
       turn.phase = step === 0 ? "Thinking" : "Reasoning over results";
+      turn.activity = "thinking";
       emit();
       const res = await stepWithRetry(items, deep ? "high" : "medium", stopped);
       const out = JSON.parse(res.outputJson) as AgentOutputItem[];
@@ -138,6 +147,8 @@ export async function runAgent(opts: {
         break;
       }
       turn.phase = calls.length > 1 ? `Running ${calls.length} tools in parallel` : "Working";
+      turn.activity = calls.some((c) => String(c.name).startsWith("browser_")) ? "browsing" : "working";
+      const batch = step;
       emit();
       let failed = 0;
       // Plan / question tools are handled by the loop itself, the rest by the browser executor.
@@ -158,7 +169,7 @@ export async function runAgent(opts: {
           }
           if (name === "ask_user") {
             const q = { question: String(args.question ?? ""), options: ((args.options as string[]) ?? []).slice(0, 4) };
-            const st: Step = { kind: "tool", name, args, summary: q.question, status: "running" };
+            const st: Step = { kind: "tool", name, args, summary: q.question, status: "running", startedAt: Date.now(), batch };
             turn.steps.push(st);
             turn.phase = "Waiting for your answer";
             emit();
@@ -168,7 +179,16 @@ export async function runAgent(opts: {
             reply(`User answered: ${answer}`);
             return emit();
           }
-          const st: Step = { kind: "tool", name, args, summary: "…", status: "running" };
+          const st: Step = {
+            kind: "tool",
+            name,
+            args,
+            summary: "",
+            status: "running",
+            why: typeof args.why === "string" && args.why.trim() ? args.why.trim().slice(0, 200) : undefined,
+            startedAt: Date.now(),
+            batch,
+          };
           turn.steps.push(st);
           emit();
           const t0 = performance.now();
@@ -201,6 +221,7 @@ export async function runAgent(opts: {
     turn.error = msg === "Stopped" ? undefined : msg;
   }
   turn.phase = undefined;
+  turn.activity = undefined;
   turn.steps = turn.steps.map((s) => ({ ...s, status: s.status === "running" ? "error" : s.status }));
   emit();
   return turn;

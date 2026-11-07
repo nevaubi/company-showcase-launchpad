@@ -176,14 +176,16 @@ export const TOOL_DEFS = [
     type: "function",
     name: "run_code",
     description:
-      "Code interpreter: run JavaScript (async function body; use `return` for the result and console.log for output) in an isolated sandbox with no network. `data.universe` is every covered company's TTM fundamentals (same keys as screen_companies, plus ticker, name, sector). `data.companies[TICKER]` holds {income, balance, cashflow, kpis} each as {annual|quarterly: {periods: string[], rows: {metricKey: number[]}}} for the tickers you request. `data.prices[SYMBOL]` is [[date, close], ...] daily for requested symbols (2y). `stats` has mean, median, sum, stdev, cagr(a,b,years), corr(a,b). Use for regressions, DCFs, scenario math, custom screens, aggregations. 8s limit.",
+      "Code interpreter: run JavaScript (async function body; use `return` for the result and console.log for output) in an isolated sandbox with no network. `data.universe` is every covered company's TTM fundamentals (same keys as screen_companies, plus ticker, name, sector). `data.companies[TICKER]` holds {income, balance, cashflow, kpis} each as {annual|quarterly: {periods: string[], rows: {metricKey: number[]}}} for the tickers you request. `data.prices[SYMBOL]` is [[date, close], ...] daily for requested symbols (2y). `stats` has mean, median, sum, stdev, cagr(a,b,years), corr(a,b). Use for regressions, DCFs, scenario math, custom screens, aggregations. Return {view: <render_view spec object>} or {views: [...]} to draw computed charts/tables straight into the canvas. 8s limit.",
     parameters: obj(
       {
         code: str("JavaScript function body"),
         tickers: { type: "array", items: { type: "string" }, description: "Covered tickers whose statements to load into data.companies (max 12)" },
         price_symbols: { type: "array", items: { type: "string" }, description: "Symbols whose 2y daily closes to load into data.prices (max 8)" },
+        show_in_canvas: { type: "boolean", description: "Also show the code and its output as a view in the canvas (for models and analyses the user should see)" },
+        title: str("Short title for the canvas view (empty string if not shown)"),
       },
-      ["code", "tickers", "price_symbols"],
+      ["code", "tickers", "price_symbols", "show_in_canvas", "title"],
     ),
     strict: true,
   },
@@ -329,6 +331,138 @@ export const TOOL_DEFS = [
     parameters: obj({ url: str("Full https URL") }, ["url"]),
     strict: true,
   },
+  // ── On-page agency (side-panel assistant only). Every action carries a short `why`, shown to the user. ──
+  {
+    type: "function",
+    name: "scroll_to",
+    description:
+      "Scroll the user's page to a section, heading, tab label or phrase so they can see what you are talking about. Use after navigate_to or when the answer refers to something on the current page. Find targets with get_page_context (its outline lists section names).",
+    parameters: obj(
+      {
+        target: str("Section name, heading text, phrase on the page, or a data attribute like data-section=gaps"),
+        kind: { type: "string", enum: ["auto", "heading", "text", "section", "selector"], description: "How to match target; auto tries sections/headings, then text" },
+        why: str("One short line for the user, e.g. 'Scrolling to Gaps to check the open one at $182'"),
+      },
+      ["target", "kind", "why"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "highlight",
+    description:
+      "Outline the element you are discussing on the user's page, with a short callout label. Scrolls it into view. Several highlights can be on screen; they fade after ~9s. Use it when pointing at a number, row, chart or section.",
+    parameters: obj(
+      {
+        target: str("Section name, heading, or exact phrase/number shown on the page"),
+        kind: { type: "string", enum: ["auto", "heading", "text", "section", "selector"] },
+        label: str("Callout text, under 80 characters, e.g. 'Open gap $182-$186, unfilled'"),
+        why: str("One short line for the user"),
+      },
+      ["target", "kind", "label", "why"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "read_section",
+    description: "Read the text of one section of the user's current page (the card or block under a heading), in more detail than get_page_context.",
+    parameters: obj(
+      { target: str("Section name or heading"), kind: { type: "string", enum: ["auto", "heading", "text", "section", "selector"] }, why: str("One short line for the user") },
+      ["target", "kind", "why"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "click",
+    description:
+      "Press a safe in-app control on the user's page: a tab, a range toggle (1Y/5Y), a chart layer toggle, a segmented control, an expandable row, or an in-app link. Refuses form submits, typing, external links and anything with side effects (delete, buy, share, sign out).",
+    parameters: obj({ target: str("Visible label of the control, e.g. 'Quarterly' or '5Y'"), why: str("One short line for the user") }, ["target", "why"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "show_canvas",
+    description: "Open (or close) the wide canvas beside the chat, on a tab: views (dashboards you rendered), browser (live web browsers), files (deliverables).",
+    parameters: obj({ open: { type: "boolean" }, tab: { type: "string", enum: ["views", "browser", "files"] }, why: str("One short line for the user") }, ["open", "tab", "why"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "render_view",
+    description:
+      "Render a dashboard component into the canvas. `spec` is JSON (a string) of exactly one of: " +
+      '{"type":"kpis","title":"...","items":[{"label":"Revenue TTM","value":96.2e9,"unit":"$","delta":0.12,"note":"vs prior year"}]} | ' +
+      '{"type":"chart","chart":"line"|"bar"|"area","title":"...","unit":"$"|"%"|"","x":"period","series":["NVDA","AMD"],"data":[{"period":"FY24","NVDA":60.9e9,"AMD":22.7e9}]} | ' +
+      '{"type":"table","title":"...","columns":["Ticker","P/E"],"rows":[["NVDA",48.2]]} | ' +
+      '{"type":"note","title":"...","markdown":"..."} | ' +
+      '{"type":"code","title":"...","code":"...","stdout":"...","result":"..."} | ' +
+      '{"type":"image","title":"...","src":"https://...","caption":"..."} | {"type":"file","fileId":"<id from create_file>"}. ' +
+      "Use only numbers from tool outputs; deltas are fractions (0.12 = +12%); values are full (not pre-scaled). Several views build a dashboard.",
+    parameters: obj({ spec: str("JSON string of one view spec"), why: str("One short line for the user") }, ["spec", "why"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "create_file",
+    description:
+      "Make a downloadable file for the user, shown as a file card in the canvas: csv or xlsx (columns + rows), md (content = markdown), json (content = JSON text, or columns + rows). Use for tables, models, memos and data the user wants to keep.",
+    parameters: obj(
+      {
+        format: { type: "string", enum: ["csv", "xlsx", "md", "json"] },
+        name: str("File name without extension, e.g. 'semis-rnd-intensity'"),
+        columns: nullable({ type: "array", items: { type: "string" }, description: "Header row (csv/xlsx/json-from-rows)" }),
+        rows: nullable({ type: "array", items: { type: "array", items: { type: ["string", "number", "boolean", "null"] } }, description: "Data rows, same length as columns" }),
+        content: nullable(str("Markdown or JSON text")),
+        why: str("One short line for the user"),
+      },
+      ["format", "name", "columns", "rows", "content", "why"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "browser_task",
+    description:
+      "Start real web browsers (Browser Use cloud agents) that click, scroll, log through multi-page sites, fill search boxes, download files and take screenshots. Up to 4 run in parallel, each with its own goal. Use when read_webpage/web_extract can't do it: interactive sites, JS apps, paginated tables, downloading reports/CSVs, visual checks. The user watches them live in the canvas. Returns task ids; then poll browser_status until done.",
+    parameters: obj(
+      {
+        tasks: {
+          type: "array",
+          items: obj(
+            { goal: str("Concrete goal with what to return, e.g. 'On investor.nvidia.com find the latest 10-Q PDF, download it and report its filing date'"), start_url: nullable(str("Optional URL to start at")), screenshot: { type: "boolean", description: "Save a screenshot of the most relevant page" } },
+            ["goal", "start_url", "screenshot"],
+          ),
+        },
+        mode: { type: "string", enum: ["fast", "thorough"], description: "fast for simple lookups; thorough for long, multi-step work" },
+        why: str("One short line for the user"),
+      },
+      ["tasks", "mode", "why"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "browser_status",
+    description: "Progress of browser tasks: status, current page, recent steps, extracted text and the final result when done. Waits up to ~25s for progress before returning.",
+    parameters: obj({ task_ids: { type: "array", items: { type: "string" } }, why: str("One short line for the user") }, ["task_ids", "why"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "browser_files",
+    description: "List files a browser task downloaded or saved (screenshots, PDFs, CSVs) and add them to the canvas as file cards. Text files are returned inline (truncated).",
+    parameters: obj({ task_id: str("Browser task id"), why: str("One short line for the user") }, ["task_id", "why"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "browser_stop",
+    description: "Stop a running browser task.",
+    parameters: obj({ task_id: str("Browser task id"), why: str("One short line for the user") }, ["task_id", "why"]),
+    strict: true,
+  },
 ] as const;
 
 export type ToolName = (typeof TOOL_DEFS)[number]["name"];
@@ -369,5 +503,85 @@ export const TOOL_LABELS: Record<string, string> = {
   web_crawl: "Crawled site",
   web_extract: "Extracted data",
   fetch_url: "Fetched URL",
+  scroll_to: "Scrolled",
+  highlight: "Highlighted",
+  read_section: "Read section",
+  click: "Pressed",
+  show_canvas: "Opened canvas",
+  render_view: "Rendered view",
+  create_file: "Created file",
+  browser_task: "Started browser",
+  browser_status: "Checked browser",
+  browser_files: "Collected files",
+  browser_stop: "Stopped browser",
   reasoning: "Thought",
+};
+
+/** Present-tense labels for running tools. */
+export const TOOL_RUNNING: Record<string, string> = {
+  get_coverage: "Checking coverage",
+  get_financials: "Pulling financials",
+  get_segments: "Pulling segments",
+  list_filings: "Listing filings",
+  read_filing: "Reading filing",
+  search_filings: "Searching EDGAR",
+  get_price_history: "Analyzing prices",
+  get_quotes: "Fetching quotes",
+  get_insider_trades: "Pulling insider trades",
+  get_macro: "Pulling FRED series",
+  get_news: "Reading headlines",
+  web_search: "Searching the web",
+  web_research: "Researching the web",
+  read_webpage: "Reading web page",
+  get_earnings_call: "Reading earnings call",
+  screen_companies: "Screening companies",
+  run_code: "Running code",
+  get_alt_data: "Reading alt data",
+  get_supply_chain: "Mapping supply chain",
+  get_hedge_fund_data: "Reading hedge fund data",
+  get_treasury_auctions: "Reading Treasury auctions",
+  get_promises: "Checking management promises",
+  get_alerts: "Reading watchlist alerts",
+  get_estimates: "Reading analyst estimates",
+  get_filing_changes: "Comparing filings",
+  get_company_dossier: "Building company dossier",
+  simulate_supply_shock: "Simulating shock",
+  navigate_to: "Opening page",
+  get_page_context: "Reading your screen",
+  ask_user: "Waiting for you",
+  web_map: "Mapping site",
+  web_crawl: "Crawling site",
+  web_extract: "Extracting data",
+  fetch_url: "Fetching URL",
+  scroll_to: "Scrolling",
+  highlight: "Highlighting",
+  read_section: "Reading section",
+  click: "Pressing",
+  show_canvas: "Opening canvas",
+  render_view: "Rendering view",
+  create_file: "Creating file",
+  browser_task: "Starting browser",
+  browser_status: "Browsing",
+  browser_files: "Collecting files",
+  browser_stop: "Stopping browser",
+};
+
+/** Plural nouns for grouped finished calls: "Read 4 web pages". */
+export const TOOL_GROUP: Record<string, [string, string]> = {
+  read_webpage: ["Read", "web pages"],
+  read_filing: ["Read", "filings"],
+  get_financials: ["Pulled financials for", "companies"],
+  get_price_history: ["Analyzed", "price histories"],
+  web_research: ["Ran", "web searches"],
+  web_search: ["Ran", "web searches"],
+  web_extract: ["Extracted", "pages"],
+  fetch_url: ["Fetched", "URLs"],
+  highlight: ["Highlighted", "items"],
+  scroll_to: ["Scrolled to", "sections"],
+  render_view: ["Rendered", "views"],
+  create_file: ["Created", "files"],
+  browser_status: ["Checked browsers", "times"],
+  run_code: ["Ran code", "times"],
+  get_earnings_call: ["Read", "earnings calls"],
+  read_section: ["Read", "sections"],
 };

@@ -492,6 +492,62 @@
     background-position: -150% 0;
   }
 }
+/* Assistant on-page highlights (lib/research/dom-agent.ts). */
+.agent-mark {
+  position: fixed;
+  border: 1.5px solid var(--chart-1);
+  border-radius: 8px;
+  background: color-mix(in oklch, var(--chart-1) 6%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in oklch, var(--chart-1) 14%, transparent);
+  transition:
+    left 120ms ease-out,
+    top 120ms ease-out,
+    width 120ms ease-out,
+    height 120ms ease-out,
+    opacity 200ms ease-out;
+  animation: agent-mark-in 360ms ease-out;
+}
+.agent-mark-out {
+  opacity: 0;
+}
+.agent-mark-label {
+  position: absolute;
+  left: -1.5px;
+  bottom: calc(100% + 6px);
+  max-width: min(360px, 80vw);
+  border-radius: 6px;
+  background: var(--chart-1);
+  color: white;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.14);
+}
+@keyframes agent-mark-in {
+  from {
+    opacity: 0;
+    transform: scale(1.03);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.step-in {
+  animation: step-in 220ms ease-out both;
+}
+
 /* Pixel-grid loader (components/ui/loading-state.tsx). */
 @keyframes pixel-on {
   0%,

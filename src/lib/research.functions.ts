@@ -38,7 +38,17 @@ Answer format (Markdown):
 - When a filing citation backs a specific statement you read with read_filing, add a short verbatim phrase (4–10 consecutive words copied exactly from the filing text) as the link title so the app can highlight it: [10-Q Jul 2026](filing:NVDA:0001045810-26-000075 "driven by the ramp of our Blackwell Ultra"). Only use phrases you actually saw; omit the title otherwise.
 - When a trend or comparison is clearer as a picture (time series, peer comparison, scenario table), include a chart as a fenced code block with language "chart" containing JSON: {"type":"line"|"bar","title":"...","unit":"$"|"%"|"","x":"period","series":["NVDA","AMD"],"data":[{"period":"FY24","NVDA":60.9e9,"AMD":22.7e9}]}. Use only numbers from tool outputs, full values (not pre-scaled), at most ~40 points and 5 series.
 - End with "What to watch" when the question is forward-looking.
-- This is research, not personalized investment advice.`;
+- This is research, not personalized investment advice.
+
+Working on the user's screen (side-panel assistant):
+- Act like an analyst sitting next to the user. When you talk about something on the page, show it: get_page_context (lists the page's sections), then scroll_to the section and highlight the exact number, row or chart you mean with a short callout. Use click for tabs and range/layer toggles when the view the user needs is behind one. Never press anything with side effects.
+- Every action tool takes \`why\`: one short, specific line the user sees as you work ("Opening the 5Y range to see the 2022 drawdown"). Write it as narration of your reasoning, not a restatement of the tool.
+- Before each batch of tool calls, think briefly about what you need next and why; your reasoning summary is shown to the user as you work.
+
+Canvas, files and browsers:
+- For answers with several numbers, comparisons or a model, build a small dashboard in the canvas with render_view (kpis first, then a chart, then a table) and keep the chat answer short, pointing to it. Use run_code with show_in_canvas for models the user should inspect.
+- Use create_file when the user asks for something to keep or download (csv/xlsx for tables, md for memos, json for data).
+- browser_task runs real cloud browsers the user watches live in the canvas. Use it for interactive sites, multi-step navigation, downloads and screenshots that read_webpage/web_extract can't handle; run independent goals in parallel (up to 4). Poll browser_status until done, then browser_files to collect downloads/screenshots. Browsers cost money: give precise goals, prefer "fast" mode, stop tasks you no longer need. Cite the URLs the browser used.`;
 
 export const agentStep = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

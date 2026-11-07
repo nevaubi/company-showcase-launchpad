@@ -22,6 +22,10 @@ import type { UniverseEntry } from "@/lib/financials/types";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
+import { agentRoot, highlight, locate, outline, readRegion, regionOf, safeClick, scrollToEl, type LocateKind } from "@/lib/research/dom-agent";
+import { canvas, parseViewSpec } from "@/lib/research/views";
+import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
+import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
 const MAX = 9000;
 const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
@@ -149,7 +153,30 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
       }
       const r = await runSandbox(String(args.code ?? ""), { universe: flatUniverse(u.companies), companies, prices });
       const out = [r.logs.length ? `console:\n${r.logs.join("\n")}` : "", r.result ? `result:\n${r.result}` : "", r.error ? `ERROR: ${r.error}` : ""].filter(Boolean).join("\n\n");
-      return { output: clip(out || "(no output — use return or console.log)"), summary: r.ok ? `ran in ${r.ms}ms` : `error: ${r.error?.split("\n")[0].slice(0, 80)}` };
+      const extra: string[] = [];
+      if (args.show_in_canvas) {
+        canvas.addView({ type: "code", title: typeof args.title === "string" && args.title ? args.title : "Code run", code: String(args.code ?? "").slice(0, 12000), stdout: r.logs.join("\n").slice(0, 20000) || undefined, result: r.result.slice(0, 20000) || undefined, error: r.error?.slice(0, 4000) });
+        extra.push("Code and output shown in the canvas.");
+      }
+      // A returned {view: <spec>} (or {views: [...]}) renders straight into the canvas.
+      if (r.ok && r.result) {
+        try {
+          const parsed = JSON.parse(r.result) as { view?: unknown; views?: unknown[] };
+          for (const v of [...(parsed.view ? [parsed.view] : []), ...(Array.isArray(parsed.views) ? parsed.views : [])].slice(0, 8)) {
+            const pv = parseViewSpec(v);
+            if (pv.ok) {
+              canvas.addView(pv.spec);
+              extra.push(`Rendered ${pv.spec.type} view.`);
+            } else extra.push(`View rejected: ${pv.error}`);
+          }
+        } catch {
+          /* plain result */
+        }
+      }
+      return {
+        output: clip([out || "(no output — use return or console.log)", ...extra].join("\n\n")),
+        summary: r.ok ? `ran in ${r.ms}ms` : `error: ${r.error?.split("\n")[0].slice(0, 80)}`,
+      };
     }
     case "get_alt_data": {
       let q = supabase.from("alt_data").select("ticker,dataset,kind,date,title,value,unit,meta,source_url").order("date", { ascending: false }).limit(400);
@@ -302,9 +329,13 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
       return { output: `Opened ${href} for the user.`, summary: href };
     }
     case "get_page_context": {
-      const main = document.querySelector("main");
+      const main = agentRoot();
       const text = (main?.innerText ?? "").replace(/\n{2,}/g, "\n").slice(0, 6000);
-      return { output: `URL: ${location.pathname}${location.search}\nTitle: ${document.title}\nVisible content:\n${text}`, summary: location.pathname };
+      const sections = outline(main);
+      return {
+        output: `URL: ${location.pathname}${location.search}\nTitle: ${document.title}\nSections (targets for scroll_to/highlight/read_section): ${sections.join(" · ") || "none found"}\nVisible content:\n${text}`,
+        summary: location.pathname,
+      };
     }
     case "get_coverage": {
       const u = await qc.fetchQuery(universeQuery);
@@ -564,7 +595,183 @@ Month-start closes:\n${monthly.join("\n")}`;
       if ("error" in r && r.error) return { output: `Fetch failed: ${r.error}`, summary: "Fetch failed" };
       return { output: clip(`HTTP ${r.status} ${r.contentType} — ${r.url}\n${r.body}`), summary: `HTTP ${r.status} · ${hostOf(r.url)}` };
     }
+    case "scroll_to":
+    case "highlight":
+    case "read_section": {
+      const target = String(args.target ?? "");
+      const hit = locate(target, (args.kind as LocateKind) ?? "auto");
+      if (!hit) throw new Error(`Nothing matching "${target}" on this page. Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`);
+      const region = regionOf(hit.el);
+      scrollToEl(name === "highlight" ? hit.el : region);
+      if (name === "scroll_to") return { output: `Scrolled to "${hit.label}" (${hit.how} match).`, summary: hit.label };
+      if (name === "highlight") {
+        const label = String(args.label ?? hit.label);
+        highlight(hit.how === "text" ? hit.el : region, label);
+        return { output: `Highlighted "${hit.label}" for the user.`, summary: label };
+      }
+      const text = readRegion(hit.el, 8000);
+      return { output: `Section "${hit.label}":\n${text || "(no text)"}`, summary: hit.label };
+    }
+    case "click": {
+      const target = String(args.target ?? "");
+      const hit = locate(target, "auto");
+      if (!hit) throw new Error(`No control labelled "${target}" on this page`);
+      const r = safeClick(hit.el);
+      if (!r.ok) throw new Error(`Not pressed: ${r.reason}`);
+      await new Promise((res) => setTimeout(res, 350));
+      return { output: `Pressed "${r.label || hit.label}". Call read_section or get_page_context to see the result.`, summary: r.label || hit.label };
+    }
+    case "show_canvas": {
+      const tab = (args.tab as "views" | "browser" | "files") ?? "views";
+      if (args.open === false) canvas.hide();
+      else canvas.show(tab);
+      return { output: args.open === false ? "Canvas closed." : `Canvas open on ${tab}.`, summary: args.open === false ? "closed" : tab };
+    }
+    case "render_view": {
+      let raw: unknown = args.spec;
+      if (typeof raw === "string") {
+        try {
+          raw = JSON.parse(raw);
+        } catch (e) {
+          throw new Error(`spec is not valid JSON: ${(e as Error).message}`);
+        }
+      }
+      const r = parseViewSpec(raw);
+      if (!r.ok) throw new Error(`View rejected: ${r.error}`);
+      if (r.spec.type === "file" && !canvas.file(r.spec.fileId)) throw new Error(`No file with id ${r.spec.fileId}; create_file returns the id`);
+      const v = canvas.addView(r.spec);
+      return { output: `Rendered ${r.spec.type} view ${v.id} in the canvas.`, summary: r.spec.title ?? r.spec.type };
+    }
+    case "create_file": {
+      const built = await buildFile({
+        format: String(args.format) as FileFormat,
+        name: String(args.name ?? "file"),
+        columns: (args.columns as string[] | null) ?? null,
+        rows: (args.rows as Cell[][] | null) ?? null,
+        content: (args.content as string | null) ?? null,
+      });
+      const f = canvas.addFile({ name: built.name, mime: built.mime, size: built.size, url: URL.createObjectURL(built.blob), source: "assistant", preview: built.preview });
+      canvas.show("files");
+      return {
+        output: `Created ${f.name} (${fmtBytes(f.size)}), file id ${f.id}. The user can download it from the canvas; render_view {"type":"file","fileId":"${f.id}"} shows it in a dashboard.`,
+        summary: `${f.name} · ${fmtBytes(f.size)}`,
+      };
+    }
+    case "browser_task": {
+      const tasks = ((args.tasks as { goal: string; start_url: string | null; screenshot?: boolean }[]) ?? []).slice(0, 4);
+      if (!tasks.length) throw new Error("Give at least one task");
+      const r = await browserStart({
+        data: { tasks: tasks.map((t) => ({ goal: t.goal, start_url: t.start_url || null, screenshot: !!t.screenshot })), mode: args.mode === "thorough" ? "thorough" : "fast" },
+      });
+      const ok = r.runs.filter((x) => x.id);
+      const failed = r.runs.filter((x) => !x.id);
+      if (!ok.length) throw new Error(failed[0]?.error ?? "Browser Use did not start");
+      canvas.upsertRuns(ok.map((x) => ({ id: x.id, token: x.token, goal: x.goal, status: x.status, done: false, startedAt: Date.now() })));
+      canvas.show("browser");
+      return {
+        output: `Started ${ok.length} browser task(s): ${ok.map((x) => `${x.id} (${x.goal.slice(0, 60)})`).join("; ")}${failed.length ? `. Failed to start: ${failed.map((f) => f.error).join("; ")}` : ""}. Poll browser_status with these ids.`,
+        summary: `${ok.length} browser${ok.length === 1 ? "" : "s"} live`,
+      };
+    }
+    case "browser_status": {
+      const ids = ((args.task_ids as string[]) ?? []).slice(0, 6);
+      const handles = ids.map((id) => canvas.run(id)).filter((r): r is NonNullable<typeof r> => !!r && !!r.token);
+      if (!handles.length) throw new Error("Unknown task ids; use the ids browser_task returned");
+      const sig = (r: { status: string; steps?: unknown[] }) => `${r.status}:${r.steps?.length ?? 0}`;
+      const before = new Map(handles.map((h) => [h.id, sig(h)]));
+      const deadline = Date.now() + 25_000;
+      let runs: BrowserRunInfo[] = [];
+      for (;;) {
+        runs = (await browserStatus({ data: { runs: handles.map((h) => ({ id: h.id, token: h.token })) } })).runs as BrowserRunInfo[];
+        canvas.upsertRuns(runs);
+        const changed = runs.some((r) => r.done || before.get(r.id) !== sig(r));
+        if (changed || Date.now() > deadline) break;
+        await new Promise((res) => setTimeout(res, 4000));
+      }
+      const lines = runs.map((r) => {
+        const last = (r.steps ?? []).slice(-4).map((s) => `  · ${s.tool}: ${s.input.replace(/\s+/g, " ").slice(0, 120)}${s.output ? ` → ${s.output.replace(/\s+/g, " ").slice(0, 160)}` : ""}`);
+        return [
+          `${r.id}: ${r.status}${r.done ? " (done)" : ""}${r.currentUrl ? ` · at ${r.currentUrl}` : ""}${r.pageTitle ? ` (${r.pageTitle})` : ""}`,
+          ...last,
+          r.texts?.length ? `  text: ${r.texts[r.texts.length - 1].slice(0, 1500)}` : "",
+          r.result ? `  RESULT: ${r.result.slice(0, 4000)}` : "",
+          r.error ? `  ERROR: ${r.error}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+      });
+      const done = runs.filter((r) => r.done).length;
+      return { output: clip(lines.join("\n\n")), summary: `${done}/${runs.length} done` };
+    }
+    case "browser_files": {
+      const h = canvas.run(String(args.task_id ?? ""));
+      if (!h?.token) throw new Error("Unknown task id");
+      const { files } = await browserFiles({ data: { id: h.id, token: h.token } });
+      const added: string[] = [];
+      const inline: string[] = [];
+      for (const f of files) {
+        if (!f.url && !f.data) continue;
+        const mime = mimeOf(f.name);
+        let preview: string | undefined;
+        let url = f.url ?? "";
+        // Small files arrive inline (presigned URLs expire within a minute); keep a local copy.
+        if (f.data) {
+          const bin = atob(f.data);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          url = URL.createObjectURL(new Blob([bytes], { type: mime }));
+          if (mime.startsWith("text/") || mime === "application/json") {
+            preview = new TextDecoder().decode(bytes.subarray(0, 16000)).slice(0, 4000);
+            inline.push(`--- ${f.name} ---\n${preview}`);
+          }
+        }
+        const cf = canvas.addFile({ name: f.name, mime, size: f.size, url, source: "browser", preview });
+        added.push(`${cf.name} (${fmtBytes(cf.size)}, id ${cf.id})`);
+        if (mime.startsWith("image/")) canvas.addView({ type: "file", title: f.name, fileId: cf.id });
+      }
+      if (added.length) canvas.show("files");
+      return {
+        output: added.length ? `Added ${added.length} file(s) to the canvas: ${added.join("; ")}${inline.length ? `\n\n${clip(inline.join("\n\n"))}` : ""}` : "No files saved by this task yet.",
+        summary: `${added.length} file${added.length === 1 ? "" : "s"}`,
+      };
+    }
+    case "browser_stop": {
+      const h = canvas.run(String(args.task_id ?? ""));
+      if (!h?.token) throw new Error("Unknown task id");
+      await browserStop({ data: { id: h.id, token: h.token } });
+      canvas.upsertRuns([{ id: h.id, status: "cancelled", done: true }]);
+      return { output: `Stopped ${h.id}.`, summary: "stopped" };
+    }
     default:
       throw new Error(`Unknown tool ${name}`);
   }
 }
+
+interface BrowserRunInfo {
+  id: string;
+  token: string;
+  status: string;
+  done: boolean;
+  task?: string;
+  liveUrl?: string | null;
+  currentUrl?: string | null;
+  pageTitle?: string | null;
+  result?: string | null;
+  error?: string | null;
+  steps?: { id: number; tool: string; input: string; output: string; status: string }[];
+  texts?: string[];
+  costUsd?: string | null;
+}
+
+function mimeOf(name: string) {
+  if (/\.png$/i.test(name)) return "image/png";
+  if (/\.jpe?g$/i.test(name)) return "image/jpeg";
+  if (/\.webp$/i.test(name)) return "image/webp";
+  if (/\.pdf$/i.test(name)) return "application/pdf";
+  if (/\.csv$/i.test(name)) return "text/csv";
+  if (/\.json$/i.test(name)) return "application/json";
+  if (/\.(md|txt)$/i.test(name)) return "text/plain";
+  if (/\.xlsx$/i.test(name)) return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  return "application/octet-stream";
+}
+

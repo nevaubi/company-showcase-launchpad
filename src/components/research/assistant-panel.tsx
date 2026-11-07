@@ -2,21 +2,26 @@ import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowUp, Brain, Check, ChevronRight, Circle, CircleDot, Code2, Compass, Copy, FileSearch, Globe, GripHorizontal, ListChecks,
-  MessageCircleQuestion, MessageSquarePlus, Network, PanelRight, PictureInPicture2, ScanText, Sparkles, Square, TriangleAlert, Wrench, X,
+  ArrowUp, Check, ChevronRight, Circle, CircleDot, Copy, GripHorizontal, LayoutDashboard, ListChecks, MessageCircleQuestion, MessageSquare,
+  MessageSquarePlus, PanelRight, PanelRightClose, PictureInPicture2, Sparkles, Square, X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Canvas } from "@/components/research/canvas";
 import { ResearchMarkdown } from "@/components/research/markdown";
+import { Timeline } from "@/components/research/timeline";
 import { Button } from "@/components/ui/button";
+import LoadingState, { formatElapsed, type LoadingVariant } from "@/components/ui/loading-state";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { titleSession } from "@/lib/research.functions";
-import { runAgent, type Plan, type Question, type Step } from "@/lib/research/loop";
-import { TOOL_LABELS } from "@/lib/research/tool-defs";
+import { clearHighlights } from "@/lib/research/dom-agent";
+import { runAgent, type Plan, type Question, type Step, type Turn } from "@/lib/research/loop";
+import { canvas, useCanvas } from "@/lib/research/views";
 import { currentUserId } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
 
 export const ASSISTANT_WIDTH = "420px";
+const CHAT_WIDTH = 420;
 
 interface Msg {
   id: string;
@@ -25,37 +30,69 @@ interface Msg {
   steps: Step[];
   plan?: Plan;
   phase?: string;
+  activity?: Turn["activity"];
   pending?: boolean;
   error?: string;
+  startedAt?: number;
+  ms?: number;
 }
 
 function suggestionsFor(path: string): string[] {
   const t = path.match(/\/app\/companies\/([A-Z.-]+)/)?.[1];
   if (t)
-    return [`Summarize what matters on this page for ${t}`, `Build a quick DCF for ${t} with bear/base/bull cases`, `Map ${t}'s IR site and pull the latest guidance from its newest release`];
+    return [
+      `Walk me through what matters on this page for ${t}, pointing at each number`,
+      `Build a dashboard of ${t}'s growth, margins and cash flow vs two peers`,
+      `Open ${t}'s IR site in a browser, download the latest earnings deck and summarize it`,
+    ];
   if (path.includes("supply-chain")) return ["Explain the biggest risks on this map", "Which covered companies are most exposed to TSMC?", "Simulate a 25% drop in Apple demand"];
-  return ["Screen for >20% revenue growth and >25% FCF margins", "Which semis have the highest R&D intensity? Chart it", "Crawl the latest Fed statement and tell me what changed"];
+  return [
+    "Screen for >20% revenue growth and >25% FCF margins and put it in a dashboard",
+    "Which semis have the highest R&D intensity? Chart it and give me a CSV",
+    "Browse the latest Fed statement and the prior one in parallel and tell me what changed",
+  ];
 }
 
 const FLOAT_KEY = "fu:assistant-float";
 const DOCK_KEY = "fu:assistant-docked";
 
+const VARIANT: Record<NonNullable<Turn["activity"]>, LoadingVariant> = { thinking: "Dots", working: "Drive", browsing: "Orbit" };
+
+function useViewport() {
+  const [vp, setVp] = useState({ w: 1440, h: 900, ready: false });
+  useEffect(() => {
+    const read = () => setVp({ w: window.innerWidth, h: window.innerHeight, ready: true });
+    read();
+    window.addEventListener("resize", read);
+    return () => window.removeEventListener("resize", read);
+  }, []);
+  return vp;
+}
+
 export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open: boolean; onClose: () => void; docked: boolean; onDockedChange: (d: boolean) => void }) {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const path = useRouterState({ select: (s) => s.location.pathname });
+  const cv = useCanvas();
+  const vp = useViewport();
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [deep, setDeep] = useState(false);
   const [sid, setSid] = useState<string | null>(null);
   const [question, setQuestion] = useState<Question | null>(null);
+  const [mobilePane, setMobilePane] = useState<"chat" | "canvas">("chat");
   const answerRef = useRef<((a: string) => void) | null>(null);
   const stop = useRef(false);
   const scroller = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const handoffPending = useRef(false);
   const [box, setBox] = useState({ x: 0, y: 72, w: 440, h: 640 });
+
+  const mobile = vp.ready && vp.w < 640;
+  const wide = cv.open;
+  const wideW = Math.max(CHAT_WIDTH + 360, Math.min(1240, vp.w - (docked ? 48 : 16)));
+  const canvasCount = cv.views.length + cv.files.length + cv.runs.length;
 
   useEffect(() => {
     try {
@@ -66,7 +103,17 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       /* ignore */
     }
   }, [onDockedChange]);
-  useEffect(() => localStorage.setItem(DOCK_KEY, docked ? "1" : "0"), [docked]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(DOCK_KEY, docked ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [docked]);
+  // On phones the canvas takes the whole sheet when the agent opens it.
+  useEffect(() => {
+    if (mobile) setMobilePane(cv.open ? "canvas" : "chat");
+  }, [cv.open, cv.tab, mobile]);
 
   useEffect(() => {
     const el = scroller.current;
@@ -91,7 +138,10 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     }
     let width = el.clientWidth;
     const observer = new ResizeObserver(() => {
-      if (el.clientWidth !== width) { width = el.clientWidth; fit(); }
+      if (el.clientWidth !== width) {
+        width = el.clientWidth;
+        fit();
+      }
     });
     observer.observe(el);
     return () => observer.disconnect();
@@ -99,7 +149,10 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   useEffect(() => {
     const receive = (event: Event) => {
       const detail = (event as CustomEvent<unknown>).detail;
-      if (typeof detail === "string") { handoffPending.current = true; setInput(detail); }
+      if (typeof detail === "string") {
+        handoffPending.current = true;
+        setInput(detail);
+      }
     };
     window.addEventListener("fu:research-request", receive);
     return () => window.removeEventListener("fu:research-request", receive);
@@ -109,6 +162,9 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
   }, []);
+  useEffect(() => {
+    if (!open) clearHighlights();
+  }, [open]);
 
   function clampBox(b: typeof box) {
     const W = window.innerWidth, H = window.innerHeight;
@@ -126,7 +182,14 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      setBox((b) => (localStorage.setItem(FLOAT_KEY, JSON.stringify(b)), b));
+      setBox((b) => {
+        try {
+          localStorage.setItem(FLOAT_KEY, JSON.stringify(b));
+        } catch {
+          /* ignore */
+        }
+        return b;
+      });
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -148,6 +211,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     setBusy(true);
     stop.current = false;
     setInput("");
+    if (mobile) setMobilePane("chat");
     const userId = await currentUserId().catch(() => null);
     if (!userId) {
       toast.error("Sign in to use the assistant");
@@ -161,7 +225,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
         session = data.id;
         setSid(session);
         titleSession({ data: { question: q } })
-          .then((title) => session ? supabase.from("research_sessions").update({ title }).eq("id", session) : undefined)
+          .then((title) => (session ? supabase.from("research_sessions").update({ title }).eq("id", session) : undefined))
           .then(() => qc.invalidateQueries({ queryKey: ["research-sessions"] }))
           .catch(() => {});
       }
@@ -174,7 +238,11 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     const history = msgs.filter((m) => !m.pending);
     const now = Date.now();
     const asstId = `a-${now}`;
-    setMsgs([...history, { id: `u-${now}`, role: "user", content: q, steps: [] }, { id: asstId, role: "assistant", content: "", steps: [], pending: true, phase: "Thinking" }]);
+    setMsgs([...history, { id: `u-${now}`, role: "user", content: q, steps: [] }, { id: asstId, role: "assistant", content: "", steps: [], pending: true, phase: "Thinking", activity: "thinking", startedAt: now }]);
+    const cs = canvas.get();
+    const canvasNote = cs.views.length || cs.files.length || cs.runs.length
+      ? ` Canvas has ${cs.views.length} view(s), ${cs.files.length} file(s) [${cs.files.map((f) => `${f.name}=${f.id}`).join(", ").slice(0, 300)}], ${cs.runs.length} browser task(s) [${cs.runs.map((r) => `${r.id}:${r.status}`).join(", ").slice(0, 300)}].`
+      : "";
     // Context: recent turns (with each prior plan's notes, so follow-ups keep findings) + where the user is.
     const items: Record<string, unknown>[] = [
       ...history.slice(-14).map((m) => ({
@@ -183,7 +251,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       })),
       {
         role: "user",
-        content: `[Context — user is viewing ${window.location.pathname}${window.location.search} ("${document.title}"); mode: ${deep ? "deep research" : "fast"}; local time ${new Date().toLocaleString()}. Call get_page_context if the question refers to the page.]\n${q}`,
+        content: `[Context — user is viewing ${window.location.pathname}${window.location.search} ("${document.title}"); mode: ${deep ? "deep research" : "fast"}; screen ${window.innerWidth}px wide; canvas ${cs.open ? "open" : "closed"}.${canvasNote} Local time ${new Date().toLocaleString()}. Call get_page_context if the question refers to the page.]\n${q}`,
       },
     ];
     const turn = await runAgent({
@@ -200,7 +268,8 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
           setTimeout(() => inputRef.current?.focus(), 50);
         }),
     });
-    setMsgs((ms) => ms.map((m) => (m.id === asstId ? { ...m, ...turn, pending: false } : m)));
+    const ms = Date.now() - now;
+    setMsgs((all) => all.map((m) => (m.id === asstId ? { ...m, ...turn, pending: false, ms } : m)));
     await supabase.from("research_messages").insert({
       session_id: session,
       user_id: userId,
@@ -218,14 +287,35 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     if (answerRef.current) answer("(user stopped)");
   }
 
+  function newChat() {
+    setMsgs([]);
+    setSid(null);
+    canvas.reset();
+    clearHighlights();
+  }
+
+  const style = mobile
+    ? undefined
+    : docked
+      ? { width: wide ? `${wideW}px` : ASSISTANT_WIDTH }
+      : wide
+        ? { left: Math.max(8, Math.min(box.x, vp.w - wideW - 8)), top: box.y, width: wideW, height: Math.max(box.h, Math.min(760, vp.h - 96)) }
+        : { left: box.x, top: box.y, width: box.w, height: box.h };
+
+  const showChat = !mobile || mobilePane === "chat" || !wide;
+  const showCanvas = wide && (!mobile || mobilePane === "canvas");
+
   return (
     <aside
       aria-hidden={!open}
       aria-label="AI assistant"
-      style={docked ? { width: ASSISTANT_WIDTH } : { left: box.x, top: box.y, width: box.w, height: box.h }}
+      data-agent-ignore=""
+      style={style}
       className={cn(
         "fixed z-30 flex max-w-full flex-col bg-background max-sm:!inset-0 max-sm:!h-dvh max-sm:!w-full max-sm:!rounded-none",
-        docked ? "inset-y-0 right-0 w-full border-l border-rule transition-transform duration-300 max-sm:!w-full" : "overflow-hidden rounded-lg border border-rule shadow-lift transition-opacity duration-200",
+        docked
+          ? "inset-y-0 right-0 w-full border-l border-rule transition-[transform,width] duration-300 max-sm:!w-full"
+          : "overflow-hidden rounded-lg border border-rule shadow-lift transition-[opacity,width,height,left] duration-200",
         open ? (docked ? "translate-x-0 shadow-panel" : "opacity-100") : docked ? "pointer-events-none invisible translate-x-full" : "pointer-events-none invisible opacity-0",
       )}
     >
@@ -235,12 +325,27 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
           <Sparkles className="size-3.5" />
         </span>
         <p className="text-[13px] font-medium">Assistant</p>
-        <span className="truncate rounded border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{path.replace("/app", "") || "/dashboard"}</span>
+        <span className="hidden truncate rounded border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground min-[400px]:inline">{path.replace("/app", "") || "/dashboard"}</span>
         <div className="ml-auto flex items-center">
-          <Button variant="ghost" size="icon-sm" onClick={() => onDockedChange(!docked)} aria-label={docked ? "Pop out" : "Dock to side"} title={docked ? "Pop out & move" : "Dock to side"}>
+          {mobile && wide && (
+            <div className="mr-1 flex rounded-md border p-0.5" role="tablist" aria-label="Assistant view">
+              {(["chat", "canvas"] as const).map((p) => (
+                <button key={p} type="button" role="tab" aria-selected={mobilePane === p} onClick={() => setMobilePane(p)}
+                  className={cn("flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px]", mobilePane === p ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+                  {p === "chat" ? <MessageSquare className="size-3" /> : <LayoutDashboard className="size-3" />}
+                  {p === "chat" ? "Chat" : "Canvas"}
+                </button>
+              ))}
+            </div>
+          )}
+          <Button variant="ghost" size="icon-sm" className="relative" onClick={() => (wide ? canvas.hide() : canvas.show())} aria-pressed={wide} aria-label={wide ? "Collapse canvas" : "Expand canvas"} title={wide ? "Collapse canvas" : "Expand canvas: dashboards, browsers, files"}>
+            {wide ? <PanelRightClose /> : <LayoutDashboard />}
+            {!wide && canvasCount > 0 && <span className="num absolute -right-0.5 -top-0.5 grid min-w-3.5 place-items-center rounded-full bg-ink px-0.5 text-[9px] leading-[14px] text-ink-foreground">{canvasCount}</span>}
+          </Button>
+          <Button variant="ghost" size="icon-sm" className="max-sm:hidden" onClick={() => onDockedChange(!docked)} aria-label={docked ? "Pop out" : "Dock to side"} title={docked ? "Pop out & move" : "Dock to side"}>
             {docked ? <PictureInPicture2 /> : <PanelRight />}
           </Button>
-          <Button variant="ghost" size="icon-sm" disabled={busy} onClick={() => { setMsgs([]); setSid(null); }} aria-label="New chat" title="New chat">
+          <Button variant="ghost" size="icon-sm" disabled={busy} onClick={newChat} aria-label="New chat" title="New chat">
             <MessageSquarePlus />
           </Button>
           <Button variant="ghost" size="icon-sm" onClick={onClose} aria-label="Close assistant">
@@ -249,121 +354,126 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
         </div>
       </div>
 
-      <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-thin">
-        {!msgs.length ? (
-          <div className="animate-[rise_.4s_ease-out]">
-            <p className="font-display text-xl leading-tight">Your research desk</p>
-            <p className="mb-2 mt-4 text-[11px] font-medium text-muted-foreground">Suggested investigations</p>
-            <div className="grid grid-cols-1 gap-1.5">
-              {suggestionsFor(path).map((s) => (
-                <Button variant="ghost" key={s} onClick={() => setInput(s)} className="group h-auto w-full justify-start gap-2 whitespace-normal rounded-none border-b px-0 py-3 text-left text-[12.5px] leading-snug">
-                  <span className="flex-1">{s}</span>
-                  <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </Button>
-              ))}
+      <div className="flex min-h-0 flex-1">
+        {showChat && (
+          <div className={cn("flex min-h-0 min-w-0 flex-col", wide && !mobile ? "shrink-0 border-r" : "flex-1")} style={wide && !mobile ? { width: CHAT_WIDTH } : undefined}>
+            <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto px-4 py-4 scrollbar-thin">
+              {!msgs.length ? (
+                <div className="animate-[rise_.4s_ease-out]">
+                  <p className="font-display text-xl leading-tight">Your research desk</p>
+                  <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
+                    I can read this page with you, point at what matters, build dashboards and files in the canvas, and run real browsers in parallel.
+                  </p>
+                  <p className="mb-2 mt-4 text-[11px] font-medium text-muted-foreground">Suggested investigations</p>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {suggestionsFor(path).map((s) => (
+                      <Button variant="ghost" key={s} onClick={() => setInput(s)} className="group h-auto w-full justify-start gap-2 whitespace-normal rounded-none border-b px-0 py-3 text-left text-[12.5px] leading-snug">
+                        <span className="flex-1">{s}</span>
+                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-5">
+                  {msgs.map((m) =>
+                    m.role === "user" ? (
+                      <p key={m.id} className="step-in ml-auto max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-ink px-3 py-2 text-[13px] text-ink-foreground">
+                        {m.content}
+                      </p>
+                    ) : (
+                      <AssistantTurn key={m.id} m={m} canvasOpen={wide} />
+                    ),
+                  )}
+                  {question && (
+                    <div className="step-in rounded-xl border border-foreground/20 bg-card p-3 shadow-paper">
+                      <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        <MessageCircleQuestion className="size-3.5" /> Needs your input
+                      </p>
+                      <p className="mt-1.5 text-[13px] font-medium leading-snug">{question.question}</p>
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {question.options.map((o) => (
+                          <button key={o} onClick={() => answer(o)} className="rounded-full border bg-background px-2.5 py-1 text-[12px] transition-colors hover:border-foreground hover:bg-secondary">
+                            {o}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-[10.5px] text-muted-foreground">Or type your own answer below.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="shrink-0 border-t p-2.5">
+              <form
+                className="rounded-xl border bg-card p-1.5 shadow-paper transition-colors focus-within:border-foreground/40"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  ask(input);
+                }}
+              >
+                <Textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      ask(input);
+                    }
+                  }}
+                  rows={1}
+                  maxLength={4000}
+                  disabled={busy && !question}
+                  placeholder={question ? "Type your answer…" : busy ? "Working…" : "Ask, research, model, browse, or “show me…”"}
+                  className="max-h-36 min-h-9 resize-none border-0 bg-transparent px-1.5 text-[13px] shadow-none focus-visible:ring-0"
+                />
+                <div className="flex items-center gap-1 px-0.5">
+                  <div className="flex rounded-md border p-0.5 text-[10.5px]" role="radiogroup" aria-label="Research depth">
+                    {(["Fast", "Deep"] as const).map((l) => {
+                      const on = (l === "Deep") === deep;
+                      return (
+                        <Button variant="ghost" size="xs" key={l} type="button" role="radio" aria-checked={on} onClick={() => setDeep(l === "Deep")}
+                          className={cn("h-6 rounded px-1.5 text-[10.5px] transition-colors", on ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:text-foreground")}
+                          title={l === "Deep" ? "More loops, cross-checks and a self-review pass" : "Quick answers"}>
+                          {l}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <div className="ml-auto">
+                    {busy && !question ? (
+                      <Button type="button" size="icon-sm" variant="outline" onClick={halt} aria-label="Stop">
+                        <Square className="size-3 fill-current" />
+                      </Button>
+                    ) : (
+                      <Button type="submit" size="icon-sm" variant="ink" disabled={!input.trim()} aria-label="Send">
+                        <ArrowUp />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </form>
+              <p className="mt-1 text-center text-[10px] text-muted-foreground">
+                Saved to your <Link to="/app/research" className="underline">research history</Link>. Not investment advice.
+              </p>
             </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-5">
-            {msgs.map((m) =>
-              m.role === "user" ? (
-                <p key={m.id} className="ml-auto max-w-[88%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-ink px-3 py-2 text-[13px] text-ink-foreground">
-                  {m.content}
-                </p>
-              ) : (
-                <AssistantTurn key={m.id} m={m} />
-              ),
-            )}
-            {question && (
-              <div className="animate-[rise_.3s_ease-out] rounded-xl border border-foreground/20 bg-card p-3 shadow-paper">
-                <p className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                  <MessageCircleQuestion className="size-3.5" /> Needs your input
-                </p>
-                <p className="mt-1.5 text-[13px] font-medium leading-snug">{question.question}</p>
-                <div className="mt-2.5 flex flex-wrap gap-1.5">
-                  {question.options.map((o) => (
-                    <button key={o} onClick={() => answer(o)} className="rounded-full border bg-background px-2.5 py-1 text-[12px] transition-colors hover:border-foreground hover:bg-secondary">
-                      {o}
-                    </button>
-                  ))}
-                </div>
-                <p className="mt-2 text-[10.5px] text-muted-foreground">Or type your own answer below.</p>
-              </div>
-            )}
+        )}
+        {showCanvas && (
+          <div className="min-h-0 min-w-0 flex-1">
+            <Canvas onClose={() => canvas.hide()} />
           </div>
         )}
       </div>
-
-      <div className="shrink-0 border-t p-2.5">
-        <form
-          className="rounded-xl border bg-card p-1.5 shadow-paper transition-colors focus-within:border-foreground/40"
-          onSubmit={(e) => {
-            e.preventDefault();
-            ask(input);
-          }}
-        >
-          <Textarea
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                ask(input);
-              }
-            }}
-            rows={1}
-            maxLength={4000}
-            disabled={busy && !question}
-            placeholder={question ? "Type your answer…" : busy ? "Working…" : "Ask, research, model, or “take me to…”"}
-            className="max-h-36 min-h-9 resize-none border-0 bg-transparent px-1.5 text-[13px] shadow-none focus-visible:ring-0"
-          />
-          <div className="flex items-center gap-1 px-0.5">
-            <div className="flex rounded-md border p-0.5 text-[10.5px]" role="radiogroup" aria-label="Research depth">
-              {(["Fast", "Deep"] as const).map((l) => {
-                const on = (l === "Deep") === deep;
-                return (
-                  <Button variant="ghost" size="xs" key={l} type="button" role="radio" aria-checked={on} onClick={() => setDeep(l === "Deep")} className={cn("h-6 rounded px-1.5 text-[10.5px] transition-colors", on ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:text-foreground")}
-                    title={l === "Deep" ? "More loops, cross-checks and a self-review pass" : "Quick answers"}>
-                    {l}
-                  </Button>
-                );
-              })}
-            </div>
-            <div className="ml-auto">
-              {busy && !question ? (
-                <Button type="button" size="icon-sm" variant="outline" onClick={halt} aria-label="Stop">
-                  <Square className="size-3 fill-current" />
-                </Button>
-              ) : (
-                <Button type="submit" size="icon-sm" variant="ink" disabled={!input.trim()} aria-label="Send">
-                  <ArrowUp />
-                </Button>
-              )}
-            </div>
-          </div>
-        </form>
-        <p className="mt-1 text-center text-[10px] text-muted-foreground">
-          Saved to your <Link to="/app/research" className="underline">research history</Link>. Not investment advice.
-        </p>
-      </div>
-      {!docked && <div onPointerDown={(e) => drag(e, "resize")} className="absolute bottom-0 right-0 size-4 cursor-se-resize" aria-hidden><span className="absolute bottom-1 right-1 size-2 border-b-2 border-r-2 border-rule" /></div>}
+      {!docked && !mobile && (
+        <div onPointerDown={(e) => drag(e, "resize")} className="absolute bottom-0 right-0 size-4 cursor-se-resize" aria-hidden>
+          <span className="absolute bottom-1 right-1 size-2 border-b-2 border-r-2 border-rule" />
+        </div>
+      )}
     </aside>
   );
-}
-
-function stepIcon(s: Step) {
-  if (s.status === "error") return <TriangleAlert className="size-3 text-negative" />;
-  const c = "size-3";
-  if (s.kind === "think") return <Brain className={c} />;
-  if (s.name === "run_code") return <Code2 className={c} />;
-  if (s.name === "navigate_to" || s.name === "get_page_context") return <Compass className={c} />;
-  if (s.name === "ask_user") return <MessageCircleQuestion className={c} />;
-  if (s.name === "web_map" || s.name === "web_crawl") return <Network className={c} />;
-  if (s.name === "web_extract" || s.name === "fetch_url") return <ScanText className={c} />;
-  if (s.name.startsWith("read_") || s.name === "search_filings") return <FileSearch className={c} />;
-  if (s.kind === "web" || s.name.startsWith("web_")) return <Globe className={c} />;
-  return <Wrench className={c} />;
 }
 
 const host = (u: string) => {
@@ -374,54 +484,20 @@ const host = (u: string) => {
   }
 };
 
-function StepRow({ s }: { s: Step }) {
-  const [open, setOpen] = useState(false);
-  const detail = s.kind === "think" ? s.output : s.output || (s.args && Object.keys(s.args).length ? JSON.stringify(s.args, null, 2) : "");
-  const running = s.status === "running";
-  return (
-    <li className="relative">
-      <span className={cn("absolute -left-[19px] top-[3px] grid size-[15px] place-items-center rounded-full border bg-background", running && "border-foreground/50")}>
-        {running ? <span className="size-1.5 animate-[pulse-dot_1s_ease-in-out_infinite] rounded-full bg-foreground" /> : stepIcon(s)}
-      </span>
-      <button onClick={() => detail && setOpen((o) => !o)} className={cn("flex w-full min-w-0 items-baseline gap-1.5 text-left text-[11.5px]", detail && "hover:text-foreground")}>
-        <span className={cn("shrink-0 font-medium", running && "text-shimmer", s.kind === "think" && "font-normal italic text-muted-foreground")}>
-          {s.kind === "think" ? s.summary : (TOOL_LABELS[s.name] ?? s.name)}
-        </span>
-        {s.kind !== "think" && <span className={cn("truncate text-muted-foreground", s.status === "error" && "text-negative")}>{s.summary}</span>}
-        {s.ms != null && s.ms > 800 && <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">{(s.ms / 1000).toFixed(1)}s</span>}
-      </button>
-      {s.sources && s.sources.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {s.sources.slice(0, 6).map((x) => (
-            <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.title ?? x.url} className="inline-flex max-w-[150px] items-center gap-1 rounded border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground">
-              <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt="" className="size-3 rounded-sm" loading="lazy" />
-              <span className="truncate">{host(x.url)}</span>
-            </a>
-          ))}
-        </div>
-      )}
-      {open && detail && (
-        <pre className={cn("mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted/50 p-2 font-mono text-[10.5px] leading-relaxed text-muted-foreground scrollbar-thin", s.kind === "think" && "font-sans italic")}>
-          {detail}
-        </pre>
-      )}
-    </li>
-  );
-}
-
 function PlanCard({ plan, live }: { plan: Plan; live: boolean }) {
   const done = plan.steps.filter((s) => s.status === "done").length;
   return (
-    <details open={live ? true : undefined} className="border-y bg-card/40 p-2.5">
-      <summary className="cursor-pointer text-[11px] font-medium">Research plan · {done}/{plan.steps.length}</summary>
-      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        <ListChecks className="size-3.5" /> Plan
-        <span className="ml-auto font-mono normal-case tracking-normal">{done}/{plan.steps.length}</span>
-      </div>
+    <details open={live ? true : undefined} className="step-in rounded-lg border bg-card/40 px-2.5 py-2">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-medium">
+        <ListChecks className="size-3.5 text-muted-foreground" /> Plan
+        <span className="min-w-0 flex-1 truncate font-normal text-muted-foreground">· {plan.goal}</span>
+        <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+          {done}/{plan.steps.length}
+        </span>
+      </summary>
       <div className="mt-1.5 h-0.5 overflow-hidden rounded bg-muted">
         <div className="h-full bg-foreground transition-[width] duration-500" style={{ width: `${plan.steps.length ? (done / plan.steps.length) * 100 : 0}%` }} />
       </div>
-      <p className="mt-2 text-[12px] font-medium leading-snug">{plan.goal}</p>
       <ul className="mt-1.5 grid gap-1">
         {plan.steps.map((s, i) => (
           <li key={i} className={cn("flex items-start gap-1.5 text-[11.5px] leading-snug", s.status === "dropped" && "text-muted-foreground line-through", s.status === "done" && "text-muted-foreground")}>
@@ -434,35 +510,46 @@ function PlanCard({ plan, live }: { plan: Plan; live: boolean }) {
   );
 }
 
-function AssistantTurn({ m }: { m: Msg }) {
+function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
   const [open, setOpen] = useState(false);
   const steps = m.steps.filter((s) => s.name !== "sources");
   const sources = Array.from(new Map(m.steps.flatMap((s) => s.sources ?? []).map((x) => [x.url, x])).values());
-  const showSteps = open || m.pending;
-  const visibleSteps = open ? steps : steps.slice(-3);
   const tools = steps.filter((s) => s.kind !== "think").length;
+  const made = {
+    views: steps.filter((s) => s.status === "done" && (s.name === "render_view" || (s.name === "run_code" && /Rendered|canvas/.test(s.output ?? "")))).length,
+    files: steps.filter((s) => s.status === "done" && (s.name === "create_file" || s.name === "browser_files")).length,
+    browsers: steps.filter((s) => s.status === "done" && s.name === "browser_task").length,
+  };
+  const madeText = [made.views && `${made.views} view${made.views === 1 ? "" : "s"}`, made.files && `${made.files} file${made.files === 1 ? "" : "s"}`, made.browsers && `${made.browsers} browser run${made.browsers === 1 ? "" : "s"}`].filter(Boolean).join(" · ");
   return (
     <div className="grid grid-cols-1 gap-2.5">
       {m.plan && m.plan.steps.length > 0 && <PlanCard plan={m.plan} live={!!m.pending} />}
-      {steps.length > 0 && (
-        <div>
-          <Button variant="ghost" size="xs" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="h-6 px-0 text-[11px] text-muted-foreground">
-            <ChevronRight className={cn("size-3 transition-transform", showSteps && "rotate-90")} />
-            {m.pending ? "Working" : "Worked"} · {tools} tool{tools === 1 ? "" : "s"}
-            {sources.length > 0 && ` · ${sources.length} sources`}
-          </Button>
-          {showSteps && (
-            <ol className="ml-[7px] mt-1.5 grid grid-cols-1 gap-1.5 border-l pl-3">
-              {visibleSteps.map((s, i) => (
-                <StepRow key={i} s={s} />
-              ))}
-            </ol>
-          )}
-        </div>
-      )}
-      {m.pending && m.phase && <p className="text-shimmer text-[12px] font-medium">{m.phase}…</p>}
+      {steps.length > 0 &&
+        (m.pending ? (
+          <Timeline steps={steps} limit={10} />
+        ) : (
+          <div>
+            <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground">
+              <ChevronRight className={cn("size-3 transition-transform", open && "rotate-90")} />
+              Worked{m.ms ? ` for ${formatElapsed(m.ms)}` : ""} · {tools} step{tools === 1 ? "" : "s"}
+              {sources.length > 0 && ` · ${sources.length} sources`}
+            </button>
+            {open && (
+              <div className="mt-1">
+                <Timeline steps={steps} />
+              </div>
+            )}
+          </div>
+        ))}
+      {m.pending && m.phase && <LoadingState label={m.phase} variant={VARIANT[m.activity ?? "thinking"]} since={m.startedAt} className="step-in px-1.5" />}
       {m.content ? <ResearchMarkdown className={cn("text-[13px] leading-relaxed", m.pending && "opacity-60")}>{m.content}</ResearchMarkdown> : null}
       {m.error && <p className="rounded-md border border-negative/30 bg-negative-soft px-2.5 py-1.5 text-xs text-negative">{m.error}</p>}
+      {!m.pending && madeText && !canvasOpen && (
+        <button type="button" onClick={() => canvas.show(made.views ? "views" : made.files ? "files" : "browser")} className="step-in flex w-fit items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-[11.5px] shadow-paper transition-colors hover:border-foreground/40">
+          <LayoutDashboard className="size-3.5" /> {madeText} in the canvas
+          <ChevronRight className="size-3 text-muted-foreground" />
+        </button>
+      )}
       {!m.pending && m.content && (
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon-sm" className="size-6" aria-label="Copy answer" onClick={() => navigator.clipboard.writeText(m.content).then(() => toast.success("Copied"))}>
@@ -473,7 +560,20 @@ function AssistantTurn({ m }: { m: Msg }) {
               <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt={host(x.url)} className="size-4 rounded-sm border" loading="lazy" />
             </a>
           ))}
-          {sources.length > 0 && <details className="ml-1 text-[11px]"><summary className="cursor-pointer text-muted-foreground">All {sources.length} sources</summary><ul className="mt-2 space-y-1">{sources.map((x) => <li key={x.url}><a className="block truncate text-link hover:underline" href={x.url} target="_blank" rel="noreferrer">{x.title ?? host(x.url)}</a></li>)}</ul></details>}
+          {sources.length > 0 && (
+            <details className="ml-1 text-[11px]">
+              <summary className="cursor-pointer text-muted-foreground">All {sources.length} sources</summary>
+              <ul className="mt-2 space-y-1">
+                {sources.map((x) => (
+                  <li key={x.url}>
+                    <a className="block truncate text-link hover:underline" href={x.url} target="_blank" rel="noreferrer">
+                      {x.title ?? host(x.url)}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </div>
       )}
     </div>
