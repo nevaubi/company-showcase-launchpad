@@ -10,6 +10,7 @@ import {
   type CongressTrade,
   type GovFile,
   type OwnershipFlows,
+  sectionOfFact,
 } from "@/lib/influence/data";
 
 const usd = (v: number | null | undefined) => {
@@ -261,6 +262,51 @@ export function InfluenceFeed({
       <Note>
         Click a row for the source document. Congressional trades are disclosed with a delay of up
         to 45 days; dates shown are trade dates.
+      </Note>
+    </Panel>
+  );
+}
+
+/* ---------- AI read ---------- */
+export function InfluenceRead({
+  gov,
+  onSection,
+}: {
+  gov: GovFile;
+  onSection: (s: ReturnType<typeof sectionOfFact>) => void;
+}) {
+  const r = gov.ai_read;
+  if (!r?.sentences?.length) return null;
+  const facts = new Map((r.facts ?? []).map((f) => [f.id, f.text]));
+  return (
+    <Panel
+      title="Read"
+      subtitle={`${r.label ?? "AI-generated from the records on this tab"} · ${r.generated_at ? fmtDate(r.generated_at.slice(0, 10)) : ""}`}
+      collapse={false}
+    >
+      <ul className="grid gap-1.5 px-3.5 py-2.5 text-[13px]">
+        {r.sentences.map((s, k) => (
+          <li key={k} className="leading-relaxed">
+            {s.text}{" "}
+            {s.refs.map((id, j) => (
+              <button
+                key={id}
+                type="button"
+                title={facts.get(id)}
+                onClick={() => onSection(sectionOfFact(id, gov))}
+                className="num ml-0.5 rounded bg-secondary px-1 align-super text-[9.5px] text-muted-foreground hover:text-foreground"
+              >
+                {j + 1}
+              </button>
+            ))}
+          </li>
+        ))}
+      </ul>
+      <Note>
+        Each sentence cites the records it uses (hover a number for the record, click to open its
+        section). Numbers are checked against the records in code and a second model (
+        {r.check_model ?? "n/a"}) rejected sentences the records do not support
+        {r.dropped?.length ? ` (${r.dropped.length} dropped)` : ""}. Drafted by {r.model}.
       </Note>
     </Panel>
   );

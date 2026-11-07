@@ -185,10 +185,13 @@ export interface GovFile {
   >;
   ai_read?: {
     status?: string;
-    text?: string;
-    points?: { text: string; refs?: string[] }[];
+    sentences?: { text: string; refs: string[] }[];
+    facts?: { id: string; text: string }[];
+    dropped?: { text: string; reason: string }[];
     generated_at?: string;
     model?: string;
+    check_model?: string | null;
+    label?: string;
   } | null;
 }
 export const govQuery = (t: string) =>
@@ -256,3 +259,23 @@ export const initials = (name: string) =>
     .map((w) => w[0])
     .slice(0, 2)
     .join("");
+
+/** Which Insiders & influence section holds the record behind a read's fact id. */
+export function sectionOfFact(
+  id: string,
+  gov: GovFile,
+): "congress" | "holders" | "lobbying" | "government" | "trading" | "form4" | "overview" {
+  if (/^(lda|fec):/.test(id)) return "lobbying";
+  if (/^usa:/.test(id)) return "government";
+  if (/^13f:/.test(id)) return "holders";
+  if (/^finra:/.test(id)) return "trading";
+  if (/^form4:/.test(id)) return "form4";
+  if (gov.congress_trades.some((t) => t.id === id)) return "congress";
+  if ((gov.hearings ?? []).some((h) => h.id === id)) return "government";
+  if (
+    [...(gov.regulation?.rules ?? []), ...(gov.regulation?.proposed ?? [])].some((r) => r.id === id)
+  )
+    return "government";
+  if ((gov.legislation ?? []).some((l) => l.id === id)) return "government";
+  return "holders";
+}

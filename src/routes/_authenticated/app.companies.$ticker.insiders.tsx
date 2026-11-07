@@ -12,6 +12,7 @@ import {
   Government,
   Holders,
   InfluenceFeed,
+  InfluenceRead,
   Lobbying,
   SourceStatus,
 } from "@/components/influence/influence";
@@ -131,7 +132,17 @@ function Insiders() {
         (gov.isLoading || flows.isLoading || !company.data ? (
           <Skeleton className="h-96" />
         ) : (
-          <InfluenceFeed ticker={ticker} gov={gov.data} flows={F} insiders={form4} />
+          <>
+            {gov.data && (
+              <InfluenceRead
+                gov={gov.data}
+                onSection={(v) =>
+                  navigate({ search: { section: v === "overview" ? undefined : v }, replace: true })
+                }
+              />
+            )}
+            <InfluenceFeed ticker={ticker} gov={gov.data} flows={F} insiders={form4} />
+          </>
         ))}
       {section === "form4" &&
         (company.data ? (
