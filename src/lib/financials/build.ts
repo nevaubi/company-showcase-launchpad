@@ -279,10 +279,15 @@ function quarterCell(
     // Latest-filed on both sides keeps them on the same restatement basis when a later filing
     // restated the comparatives; when it didn't (a spin-off restates the 10-K total but not old
     // 10-Qs), the non-negative guard below drops the mismatched result instead of showing it.
-    const prevCum =
+    // Prefer the comparative as it stood when `cum` was filed: a later 10-Q can restate the old
+    // nine months for a divestiture (IFF FY2025) while the 10-K total isn't restated until the next
+    // 10-K, and mixing the two bases inflates the derived quarter. When the total itself was
+    // restated later, the restated comparative was filed before it and is still picked.
+    const prevPred =
       k - 1 === 1
-        ? choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f))
-        : choose(list, c, (f) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f));
+        ? (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f)
+        : (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f);
+    const prevCum = choose(list, c, (f) => prevPred(f) && f.filed <= cum.fact.filed) ?? choose(list, c, prevPred);
     if (prevCum && !(NON_NEGATIVE.has(def.key) && cum.fact.val - prevCum.fact.val < 0)) {
       const prevLabel = k - 1 === 1 ? "Q1 (3M)" : `${YTD_LABEL[k - 2]} (Q${k - 1} 10-Q)`;
       const parts: DerivedPart[] = [

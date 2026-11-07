@@ -204,3 +204,23 @@ describe("fiscal year in progress with a missing 10-Q", () => {
     expect(quarterEndAfter("2025-02-01", 2)).toBe("2025-07-31");
   });
 });
+
+describe("Q4 derivation across a later restatement", () => {
+  // FY2025 10-K total (filed Feb 2026) on the original basis; the FY2026 Q3 10-Q later restates the
+  // FY2025 nine months for a divestiture. Q4 must use the nine months as filed before the 10-K.
+  const facts = [
+    fact("2024-01-01", "2024-12-31", 400, "10-K", "2025-02-01"),
+    fact("2025-01-01", "2025-12-31", 480, "10-K", "2026-02-01"),
+    fact("2025-01-01", "2025-03-31", 100, "10-Q", "2025-04-30"),
+    fact("2025-04-01", "2025-06-30", 110, "10-Q", "2025-07-30"),
+    fact("2025-01-01", "2025-06-30", 210, "10-Q", "2025-07-30"),
+    fact("2025-01-01", "2025-09-30", 340, "10-Q", "2025-10-30"),
+    fact("2025-07-01", "2025-09-30", 130, "10-Q", "2025-10-30"),
+    fact("2025-01-01", "2025-09-30", 250, "10-Q", "2026-10-30"), // restated comparative
+  ];
+  it("subtracts the nine months filed before the 10-K, not the later restated figure", () => {
+    const q = buildStatements(filer({ Revenues: { facts }, OperatingIncomeLoss: { facts: OPINC } })).quarterly.income;
+    const cell = q.rows.find((r) => r.key === "revenue")!.cells[q.periods.findIndex((p) => p.key === "FY2025Q4")]!;
+    expect(cell.v).toBe(140); // 480 − 340, not 480 − 250
+  });
+});
