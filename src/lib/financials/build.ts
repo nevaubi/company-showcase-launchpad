@@ -142,6 +142,21 @@ export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
   return years;
 }
 
+/**
+ * True when the 10-K that filed `total` reports the prior fiscal year on the same basis as that
+ * year's own 10-K (within 0.5%), i.e. the filing carries no restatement. False when they differ or
+ * the comparative is missing.
+ */
+function totalOnOriginalBasis(list: RawFact[], total: RawFact) {
+  if (!total.start) return false;
+  const priorEnd = addDays(total.start, -1);
+  const isPrior = (f: RawFact) => !!f.start && near(f.end, priorEnd, 6) && inRange(durationDays(f.start, f.end), 350, 380) && isAnnualForm(f.form);
+  const inSameFiling = list.find((f) => f.accn === total.accn && isPrior(f));
+  const original = list.filter((f) => isPrior(f) && f.accn !== total.accn).sort((a, b) => (a.filed < b.filed ? -1 : 1))[0];
+  if (!inSameFiling || !original || !original.val) return false;
+  return Math.abs(inSameFiling.val / original.val - 1) <= 0.005;
+}
+
 /** Last day of the month `3 × q` months after the month before `start` (calendar quarter end). */
 export function quarterEndAfter(start: string, q: number) {
   const d = new Date(`${start}T00:00:00Z`);
@@ -279,15 +294,18 @@ function quarterCell(
     // Latest-filed on both sides keeps them on the same restatement basis when a later filing
     // restated the comparatives; when it didn't (a spin-off restates the 10-K total but not old
     // 10-Qs), the non-negative guard below drops the mismatched result instead of showing it.
-    // Prefer the comparative as it stood when `cum` was filed: a later 10-Q can restate the old
-    // nine months for a divestiture (IFF FY2025) while the 10-K total isn't restated until the next
-    // 10-K, and mixing the two bases inflates the derived quarter. When the total itself was
-    // restated later, the restated comparative was filed before it and is still picked.
     const prevPred =
       k - 1 === 1
         ? (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f)
         : (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f);
-    const prevCum = choose(list, c, (f) => prevPred(f) && f.filed <= cum.fact.filed) ?? choose(list, c, prevPred);
+    // A later 10-Q can restate the old nine months for a divestiture (IFF FY2025) while the 10-K
+    // total is still on the original basis; subtracting the restated YTD inflates Q4. When the
+    // 10-K's own prior-year comparative matches the original prior-year total, the 10-K wasn't
+    // restated, so use the nine months as filed before it. Otherwise (restated, or no way to
+    // tell) keep the latest-filed comparative.
+    const prevCum =
+      (k === 4 && totalOnOriginalBasis(list, cum.fact) ? choose(list, c, (f) => prevPred(f) && f.filed <= cum.fact.filed) : undefined) ??
+      choose(list, c, prevPred);
     if (prevCum && !(NON_NEGATIVE.has(def.key) && cum.fact.val - prevCum.fact.val < 0)) {
       const prevLabel = k - 1 === 1 ? "Q1 (3M)" : `${YTD_LABEL[k - 2]} (Q${k - 1} 10-Q)`;
       const parts: DerivedPart[] = [
