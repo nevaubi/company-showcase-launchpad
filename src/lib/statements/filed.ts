@@ -36,7 +36,16 @@ export interface FiledIndex {
 /** [line, tag, custom (0|1), filed label, negating (0|1), ...] */
 export type FiledLine = [number, string, number, string, number, ...unknown[]];
 /** [tag, ddate, qtrs, uom, segments, coregistrant, value, footnote] */
-export type FiledFact = [string, string, number, string, string | null, string | null, number | null, string | null];
+export type FiledFact = [
+  string,
+  string,
+  number,
+  string,
+  string | null,
+  string | null,
+  number | null,
+  string | null,
+];
 
 export interface FiledReport {
   report: number;
@@ -78,7 +87,21 @@ export interface StdMap {
 /** Per filing: template line id → [ddate, qtrs, value, tag | "calc", report, line, filed label][] */
 export interface StdFile {
   ticker: string;
-  filings: Record<string, { form: string; filed: string; fy: number | null; fp: string | null; period: string; template: TemplateId; lines: Record<string, [string, number, number, string, number | null, number | null, string][]> }>;
+  filings: Record<
+    string,
+    {
+      form: string;
+      filed: string;
+      fy: number | null;
+      fp: string | null;
+      period: string;
+      template: TemplateId;
+      lines: Record<
+        string,
+        [string, number, number, string, number | null, number | null, string][]
+      >;
+    }
+  >;
 }
 
 export interface KpiValue {
@@ -108,23 +131,88 @@ export interface KpiFile {
 
 const hour = 60 * 60 * 1000;
 export const filedIndexQuery = (t: string) =>
-  queryOptions({ queryKey: ["filed", "index", t], queryFn: () => partnerFile<FiledIndex>(`statements/${t}/index.json`), staleTime: hour, retry: 1 });
+  queryOptions({
+    queryKey: ["filed", "index", t],
+    queryFn: () => partnerFile<FiledIndex>(`statements/${t}/index.json`),
+    staleTime: hour,
+    retry: 1,
+  });
 export const filedDocQuery = (t: string, accession: string) =>
-  queryOptions({ queryKey: ["filed", "doc", t, accession], queryFn: () => partnerFile<FiledDoc>(`statements/${t}/${accession}.json.gz`), staleTime: 6 * hour, retry: 1 });
+  queryOptions({
+    queryKey: ["filed", "doc", t, accession],
+    queryFn: () => partnerFile<FiledDoc>(`statements/${t}/${accession}.json.gz`),
+    staleTime: 6 * hour,
+    retry: 1,
+  });
 export const stdFileQuery = (t: string) =>
-  queryOptions({ queryKey: ["filed", "std", t], queryFn: () => partnerFile<StdFile>(`statements/${t}/std.json.gz`), staleTime: hour, retry: 1 });
-export const stdMapQuery = queryOptions({ queryKey: ["filed", "stdmap"], queryFn: () => partnerFile<StdMap>("statements/std_map.json"), staleTime: 24 * hour, retry: 1 });
+  queryOptions({
+    queryKey: ["filed", "std", t],
+    queryFn: () => partnerFile<StdFile>(`statements/${t}/std.json.gz`),
+    staleTime: hour,
+    retry: 1,
+  });
+export const stdMapQuery = queryOptions({
+  queryKey: ["filed", "stdmap"],
+  queryFn: () => partnerFile<StdMap>("statements/std_map.json"),
+  staleTime: 24 * hour,
+  retry: 1,
+});
 export const kpiFileQuery = (t: string) =>
-  queryOptions({ queryKey: ["filed", "kpi", t], queryFn: () => partnerFile<KpiFile>(`kpis/${t}.json`), staleTime: hour, retry: 1 });
+  queryOptions({
+    queryKey: ["filed", "kpi", t],
+    queryFn: () => partnerFile<KpiFile>(`kpis/${t}.json`),
+    staleTime: hour,
+    retry: 1,
+  });
 
-export const STMT_LABEL: Record<StmtCode, string> = { BS: "Balance sheet", IS: "Income statement", CI: "Comprehensive income", CF: "Cash flow", EQ: "Shareholders' equity", UN: "Other statement" };
+export const STMT_LABEL: Record<StmtCode, string> = {
+  BS: "Balance sheet",
+  IS: "Income statement",
+  CI: "Comprehensive income",
+  CF: "Cash flow",
+  EQ: "Shareholders' equity",
+  UN: "Other statement",
+};
 export const STMT_ORDER: Record<StmtCode, number> = { IS: 1, CI: 2, BS: 3, CF: 4, EQ: 5, UN: 6 };
-export const TEMPLATE_NAME: Record<TemplateId, string> = { industrial: "Industrial and services", bank: "Bank and broker-dealer", insurer: "Insurer", reit: "REIT", utility: "Utility" };
+export const TEMPLATE_NAME: Record<TemplateId, string> = {
+  industrial: "Industrial and services",
+  bank: "Bank and broker-dealer",
+  insurer: "Insurer",
+  reit: "REIT",
+  utility: "Utility",
+};
 
-const TOTAL_TAGS = new Set(["Assets", "AssetsCurrent", "Liabilities", "LiabilitiesCurrent", "LiabilitiesAndStockholdersEquity", "StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest", "GrossProfit", "OperatingIncomeLoss", "NetIncomeLoss", "ProfitLoss", "Revenues", "CostsAndExpenses", "OperatingExpenses", "NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInInvestingActivities", "NetCashProvidedByUsedInFinancingActivities", "ComprehensiveIncomeNetOfTax", "InterestIncomeExpenseNet", "NoninterestIncome", "NoninterestExpense", "BenefitsLossesAndExpenses"]);
-const TOTAL_LABEL = /^(total|net (cash|income|earnings|increase|decrease|change|loss|revenue)|gross (profit|margin)|operating income|income before|comprehensive income)/i;
+const TOTAL_TAGS = new Set([
+  "Assets",
+  "AssetsCurrent",
+  "Liabilities",
+  "LiabilitiesCurrent",
+  "LiabilitiesAndStockholdersEquity",
+  "StockholdersEquity",
+  "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest",
+  "GrossProfit",
+  "OperatingIncomeLoss",
+  "NetIncomeLoss",
+  "ProfitLoss",
+  "Revenues",
+  "CostsAndExpenses",
+  "OperatingExpenses",
+  "NetCashProvidedByUsedInOperatingActivities",
+  "NetCashProvidedByUsedInInvestingActivities",
+  "NetCashProvidedByUsedInFinancingActivities",
+  "ComprehensiveIncomeNetOfTax",
+  "InterestIncomeExpenseNet",
+  "NoninterestIncome",
+  "NoninterestExpense",
+  "BenefitsLossesAndExpenses",
+]);
+const TOTAL_LABEL =
+  /^(total|net (cash|income|earnings|increase|decrease|change|loss|revenue)|gross (profit|margin)|operating income|income before|comprehensive income)/i;
 export const isTotalLine = (ln: FiledLine) => TOTAL_TAGS.has(ln[1]) || TOTAL_LABEL.test(ln[3]);
-export const isTotalTemplateLine = (id: string) => /total|operating$|net_income$|liab_equity|equity_parent|gross_profit|operating_income|cf_(operating|investing|financing)$/.test(id);
+export const isTotalTemplateLine = (id: string) =>
+  /total|operating$|net_income$|liab_equity|equity_parent|gross_profit|operating_income|cf_(operating|investing|financing)$/.test(
+    id,
+  );
 
 /* ---------- periods ---------- */
 const monthEnd = (y: number, m: number) => new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
@@ -133,13 +221,23 @@ export function shiftMonths(d: string, k: number) {
   const t = y * 12 + (m - 1) + k;
   return monthEnd(Math.floor(t / 12), (t % 12) + 1);
 }
-const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+const addDays = (d: string, n: number) =>
+  new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
 /** SEC rounds period ends to month ends; qtrs = quarters covered (0 = instant). */
-export const startOf = (ddate: string, qtrs: number) => (qtrs ? addDays(shiftMonths(ddate, -3 * qtrs), 1) : undefined);
+export const startOf = (ddate: string, qtrs: number) =>
+  qtrs ? addDays(shiftMonths(ddate, -3 * qtrs), 1) : undefined;
 const dayDiff = (a: string, b: string) => (Date.parse(a) - Date.parse(b)) / 86400000;
 
 /* ---------- units and scale ---------- */
-const PER_SHARE_TAGS = new Set(["EarningsPerShareBasic", "EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted", "IncomeLossFromContinuingOperationsPerBasicShare", "IncomeLossFromContinuingOperationsPerDilutedShare", "CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"]);
+const PER_SHARE_TAGS = new Set([
+  "EarningsPerShareBasic",
+  "EarningsPerShareDiluted",
+  "EarningsPerShareBasicAndDiluted",
+  "IncomeLossFromContinuingOperationsPerBasicShare",
+  "IncomeLossFromContinuingOperationsPerDilutedShare",
+  "CommonStockDividendsPerShareDeclared",
+  "CommonStockDividendsPerShareCashPaid",
+]);
 export const isPerShare = (u: string | null | undefined) => /\//.test(u ?? "");
 export const isShares = (u: string | null | undefined) => /^shares$/i.test(u ?? "");
 /** Some data-set EPS facts carry a currency-only unit; those exact concepts are per-share amounts. */
@@ -147,14 +245,20 @@ export function unitOf(uom: string, tag: string, custom: boolean) {
   if (!custom && PER_SHARE_TAGS.has(tag) && /^[A-Z]{3}$/.test(uom ?? "")) return `${uom}/shares`;
   return isShares(uom) ? "shares" : uom;
 }
-export interface FiledScale { money: number; shares: number }
+export interface FiledScale {
+  money: number;
+  shares: number;
+}
 /** The filer's rounding: the largest scale nearly every value is a whole multiple of. */
 export function scaleFor(facts: FiledFact[], lines: FiledLine[]): FiledScale {
   const custom = new Set(lines.filter((ln) => ln[2]).map((ln) => ln[1]));
-  const money = facts.filter((f) => unitOf(f[3], f[0], custom.has(f[0])) === "USD" && f[6] != null).map((f) => Math.abs(f[6]!));
+  const money = facts
+    .filter((f) => unitOf(f[3], f[0], custom.has(f[0])) === "USD" && f[6] != null)
+    .map((f) => Math.abs(f[6]!));
   const sh = facts.filter((f) => isShares(f[3]) && f[6] != null).map((f) => Math.abs(f[6]!));
   const share = (arr: number[], k: number) => arr.filter((v) => v % k === 0).length / arr.length;
-  const pick = (arr: number[]) => (!arr.length ? 1 : share(arr, 1e6) >= 0.9 ? 1e6 : share(arr, 1e3) >= 0.9 ? 1e3 : 1);
+  const pick = (arr: number[]) =>
+    !arr.length ? 1 : share(arr, 1e6) >= 0.9 ? 1e6 : share(arr, 1e3) >= 0.9 ? 1e3 : 1;
   return { money: pick(money), shares: pick(sh) };
 }
 export const SCALE_WORD: Record<number, string> = { 1e6: "millions", 1e3: "thousands", 1: "units" };
@@ -167,26 +271,45 @@ export function fmtFiled(v: number | null | undefined, uom: string, sc: FiledSca
   else if (uom === "USD") x = v / sc.money;
   else d = Math.abs(v) < 100 && v % 1 ? 2 : 0;
   if (!isPerShare(uom) && x % 1) d = Math.min(3, String(+x.toFixed(3)).split(".")[1]?.length ?? 0);
-  const s = Math.abs(x).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  const s = Math.abs(x).toLocaleString("en-US", {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
+  });
   return x < 0 ? `(${s})` : s;
 }
 /** USD in millions (the template view's fixed scale), per-share to two decimals. */
 export function fmtMillions(v: number, perShare: boolean) {
   if (perShare) return v < 0 ? `(${Math.abs(v).toFixed(2)})` : v.toFixed(2);
-  const s = Math.abs(v / 1e6).toLocaleString("en-US", { maximumFractionDigits: Math.abs(v) < 1e7 ? 1 : 0 });
+  const s = Math.abs(v / 1e6).toLocaleString("en-US", {
+    maximumFractionDigits: Math.abs(v) < 1e7 ? 1 : 0,
+  });
   return v < 0 ? `(${s})` : s;
 }
 
 /** "Segment=Member;Axis=Member" → readable member names. */
 export function memberText(seg: string | null | undefined, coreg?: string | null) {
-  let items = (seg ?? "").split(";").filter(Boolean).map((p) => p.split("="));
-  if (items.length > 1) items = items.filter(([, mem]) => !/^(OperatingSegments|SegmentReportingSegments)(Member)?$/.test(mem ?? ""));
-  const parts = items.map(([ax, mem]) => (mem || ax).replace(/Member$/, "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/([A-Z]{2,})([A-Z][a-z])/g, "$1 $2"));
+  let items = (seg ?? "")
+    .split(";")
+    .filter(Boolean)
+    .map((p) => p.split("="));
+  if (items.length > 1)
+    items = items.filter(
+      ([, mem]) => !/^(OperatingSegments|SegmentReportingSegments)(Member)?$/.test(mem ?? ""),
+    );
+  const parts = items.map(([ax, mem]) =>
+    (mem || ax)
+      .replace(/Member$/, "")
+      .replace(/([a-z])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]{2,})([A-Z][a-z])/g, "$1 $2"),
+  );
   if (coreg) parts.push(coreg.replace(/([a-z])([A-Z])/g, "$1 $2"));
   return parts.join(" · ");
 }
 
-export function filingName(f: Pick<FiledIndexEntry, "form" | "fp" | "fy" | "period" | "filed">, fmt: (d: string) => string) {
+export function filingName(
+  f: Pick<FiledIndexEntry, "form" | "fp" | "fy" | "period" | "filed">,
+  fmt: (d: string) => string,
+) {
   const period = f.fp && f.fy ? (f.fp === "FY" ? `FY ${f.fy}` : `${f.fp} ${f.fy}`) : fmt(f.period);
   return `${f.form} · ${period} · filed ${fmt(f.filed)}`;
 }
@@ -205,12 +328,23 @@ export interface StdPoint {
 /** For each template line and period: every filing that presented it, oldest filing first. */
 export function stdSeries(std: StdFile) {
   const out: Record<string, Record<string, StdPoint[]>> = {};
-  const fl = Object.entries(std.filings).sort((a, b) => a[1].filed.localeCompare(b[1].filed) || a[0].localeCompare(b[0]));
+  const fl = Object.entries(std.filings).sort(
+    (a, b) => a[1].filed.localeCompare(b[1].filed) || a[0].localeCompare(b[0]),
+  );
   for (const [a, f] of fl)
     for (const [lid, pts] of Object.entries(f.lines))
       for (const [d, q, v, tag, , , plabel] of pts) {
         const k = `${d}|${q}`;
-        ((out[lid] ??= {})[k] ??= []).push({ a, form: f.form, filed: f.filed, d, q, v, tag, plabel });
+        ((out[lid] ??= {})[k] ??= []).push({
+          a,
+          form: f.form,
+          filed: f.filed,
+          d,
+          q,
+          v,
+          tag,
+          plabel,
+        });
       }
   return out;
 }
@@ -232,7 +366,13 @@ export function periodsFor(series: Record<string, Record<string, StdPoint[]>>, k
     }
   return [...s].sort();
 }
-export function stdValue(series: Record<string, Record<string, StdPoint[]>>, line: TemplateLine, d: string, kind: "A" | "Q", basis: Basis): StdValue | null {
+export function stdValue(
+  series: Record<string, Record<string, StdPoint[]>>,
+  line: TemplateLine,
+  d: string,
+  kind: "A" | "Q",
+  basis: Basis,
+): StdValue | null {
   const byK = series[line.id] ?? {};
   const pick = (list: StdPoint[]) => (basis === "first" ? list[0] : list[list.length - 1]);
   const q = line.stmt === "BS" ? 0 : kind === "A" ? 4 : 1;
@@ -265,25 +405,47 @@ export function nearKey(byK: Record<string, StdPoint[]>, e: string, q: number) {
 
 /* ---------- adjusted (company non-GAAP reconciliations) ---------- */
 export const ADJ_FAMILIES = [
-  { id: "op", name: "Adjusted operating income", rx: /(adjusted|non-gaap|core|underlying|base business)[^%]*(operating (income|profit|earnings)|income from operations|segment profit|\bebit\b)|(operating (income|profit)|income from operations)[^%]*(adjusted|non-gaap|excluding)/i, gaap: "is_operating_income" },
-  { id: "eps", name: "Adjusted EPS", rx: /(adjusted|non-gaap|core|underlying|operating|base business)[^%]*(eps|earnings per (diluted )?share)|(eps|earnings per share)[^%]*(adjusted|non-gaap|excluding)/i, gaap: "is_eps_diluted" },
+  {
+    id: "op",
+    name: "Adjusted operating income",
+    rx: /(adjusted|non-gaap|core|underlying|base business)[^%]*(operating (income|profit|earnings)|income from operations|segment profit|\bebit\b)|(operating (income|profit)|income from operations)[^%]*(adjusted|non-gaap|excluding)/i,
+    gaap: "is_operating_income",
+  },
+  {
+    id: "eps",
+    name: "Adjusted EPS",
+    rx: /(adjusted|non-gaap|core|underlying|operating|base business)[^%]*(eps|earnings per (diluted )?share)|(eps|earnings per share)[^%]*(adjusted|non-gaap|excluding)/i,
+    gaap: "is_eps_diluted",
+  },
   { id: "ebitda", name: "Adjusted EBITDA", rx: /ebitda/i, gaap: "is_net_income" },
   { id: "fcf", name: "Free cash flow", rx: /free cash flow/i, gaap: "cf_operating" },
 ] as const;
 export function kpiItems(kpi: KpiFile | null | undefined): KpiItem[] {
   const out: KpiItem[] = [];
-  for (const g of kpi?.groups ?? []) for (const it of g.items) out.push({ ...it, category: g.category, subcategory: it.subcategory ?? g.subcategory });
+  for (const g of kpi?.groups ?? [])
+    for (const it of g.items)
+      out.push({ ...it, category: g.category, subcategory: it.subcategory ?? g.subcategory });
   return out;
 }
 const nvals = (it: KpiItem, K: "Q" | "A") => Object.keys(it.values?.[K] ?? {}).length;
 /** Up to two headline measures of one non-GAAP family, top-level and best covered first. */
 export function pickMeasures(items: KpiItem[], rx: RegExp, K: "Q" | "A") {
   const cand = items.filter(
-    (it) => rx.test(it.name) && !/%|pct|percent/i.test(it.unit ?? "") && !/\b(margins?|growth|ratios?|per unit|guidance|outlook|segments?)\b/i.test(it.name) && !/segment/i.test(it.category ?? "") && nvals(it, K) > 0,
+    (it) =>
+      rx.test(it.name) &&
+      !/%|pct|percent/i.test(it.unit ?? "") &&
+      !/\b(margins?|growth|ratios?|per unit|guidance|outlook|segments?)\b/i.test(it.name) &&
+      !/segment/i.test(it.category ?? "") &&
+      nvals(it, K) > 0,
   );
   const top = cand.filter((it) => !it.parent || !cand.some((c) => c.id === it.parent));
   const kids = (id: string) => items.filter((x) => x.parent === id).length;
-  top.sort((a, b) => Number(!!b.is_total) - Number(!!a.is_total) || kids(b.id) - kids(a.id) || nvals(b, K) - nvals(a, K));
+  top.sort(
+    (a, b) =>
+      Number(!!b.is_total) - Number(!!a.is_total) ||
+      kids(b.id) - kids(a.id) ||
+      nvals(b, K) - nvals(a, K),
+  );
   return top.slice(0, 2);
 }
 export function fmtKpiValue(v: number, unit: string | undefined, perShare: boolean) {

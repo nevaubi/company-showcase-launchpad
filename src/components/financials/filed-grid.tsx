@@ -24,10 +24,21 @@ export interface GridRow {
   cells: (GridCell | null)[];
 }
 
-const MARK: Record<NonNullable<GridCell["mark"]>, string> = { derived: "bg-chart-3", calc: "bg-chart-4", restated: "bg-chart-5" };
+const MARK: Record<NonNullable<GridCell["mark"]>, string> = {
+  derived: "bg-chart-3",
+  calc: "bg-chart-4",
+  restated: "bg-chart-5",
+};
 
 /** Dense statement grid: sticky line labels, right-aligned tabular values, every value clickable to its source. */
-export function FiledGrid({ head, columns, rows, scrollTo = "end", maxHeight = "70vh", footer }: {
+export function FiledGrid({
+  head,
+  columns,
+  rows,
+  scrollTo = "end",
+  maxHeight = "70vh",
+  footer,
+}: {
   head: string;
   columns: GridColumn[];
   rows: GridRow[];
@@ -46,11 +57,20 @@ export function FiledGrid({ head, columns, rows, scrollTo = "end", maxHeight = "
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
-              <th className="sticky left-0 top-0 z-30 min-w-56 max-w-80 border-b border-r bg-card px-4 py-2 text-left align-bottom font-medium sm:min-w-72">{head}</th>
+              <th className="sticky left-0 top-0 z-30 min-w-56 max-w-80 border-b border-r bg-card px-4 py-2 text-left align-bottom font-medium sm:min-w-72">
+                {head}
+              </th>
               {columns.map((c) => (
-                <th key={c.key} className="sticky top-0 z-20 min-w-28 border-b bg-card px-3 py-2 text-right align-bottom font-normal">
+                <th
+                  key={c.key}
+                  className="sticky top-0 z-20 min-w-28 border-b bg-card px-3 py-2 text-right align-bottom font-normal"
+                >
                   <span className="block text-[11px] text-muted-foreground">{c.top}</span>
-                  {c.bottom && <span className="num block text-xs font-medium text-foreground">{c.bottom}</span>}
+                  {c.bottom && (
+                    <span className="num block text-xs font-medium text-foreground">
+                      {c.bottom}
+                    </span>
+                  )}
                 </th>
               ))}
             </tr>
@@ -63,7 +83,9 @@ export function FiledGrid({ head, columns, rows, scrollTo = "end", maxHeight = "
                 </tr>
               ) : r.kind === "group" ? (
                 <tr key={r.key}>
-                  <td className="sticky left-0 z-10 border-b border-r bg-secondary px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{r.label}</td>
+                  <td className="sticky left-0 z-10 border-b border-r bg-secondary px-4 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {r.label}
+                  </td>
                   <td colSpan={columns.length} className="border-b bg-secondary" />
                 </tr>
               ) : (
@@ -80,7 +102,10 @@ export function FiledGrid({ head, columns, rows, scrollTo = "end", maxHeight = "
                   </td>
                   {r.cells.map((c, i) =>
                     !c ? (
-                      <td key={i} className="border-b px-3 py-1.5 text-right text-muted-foreground/60 group-hover:bg-secondary">
+                      <td
+                        key={i}
+                        className="border-b px-3 py-1.5 text-right text-muted-foreground/60 group-hover:bg-secondary"
+                      >
                         –
                       </td>
                     ) : (
@@ -95,11 +120,20 @@ export function FiledGrid({ head, columns, rows, scrollTo = "end", maxHeight = "
                           r.kind === "total" && "border-t border-t-rule",
                           c.negative && "text-negative",
                           c.italic && "italic",
-                          c.onClick && "cursor-pointer hover:bg-highlight-soft hover:underline focus-visible:outline-2 focus-visible:outline-ring",
+                          c.onClick &&
+                            "cursor-pointer hover:bg-highlight-soft hover:underline focus-visible:outline-2 focus-visible:outline-ring",
                           c.active && "bg-highlight-soft",
                         )}
                       >
-                        {c.mark && <span aria-hidden className={cn("absolute left-1 top-2 size-1 rounded-full", MARK[c.mark])} />}
+                        {c.mark && (
+                          <span
+                            aria-hidden
+                            className={cn(
+                              "absolute left-1 top-2 size-1 rounded-full",
+                              MARK[c.mark],
+                            )}
+                          />
+                        )}
                         {c.text}
                       </td>
                     ),

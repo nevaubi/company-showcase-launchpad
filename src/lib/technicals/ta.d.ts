@@ -136,16 +136,52 @@ export interface Sentence {
 
 declare const TA: {
   SIGNALS: Record<string, SignalDef>;
-  analyze(x: { o: number[]; h: number[]; l: number[]; c: number[]; v: number[]; tr: number[]; d: string[] }): Analysis;
-  risk(x: { c: number[]; bench: Record<string, { v: (number | null)[]; rate: boolean }>; windows: number[] }): Record<string, Record<number, { beta: Arr; corr: Arr }>>;
-  summary(st: TaState, extra?: { cone?: ConeRow[]; since?: string; rsSpy?: number | null; rsSector?: number | null; recent?: { type: string; date: string }[] }): Sentence[];
+  analyze(x: {
+    o: number[];
+    h: number[];
+    l: number[];
+    c: number[];
+    v: number[];
+    tr: number[];
+    d: string[];
+  }): Analysis;
+  risk(x: {
+    c: number[];
+    bench: Record<string, { v: (number | null)[]; rate: boolean }>;
+    windows: number[];
+  }): Record<string, Record<number, { beta: Arr; corr: Arr }>>;
+  summary(
+    st: TaState,
+    extra?: {
+      cone?: ConeRow[];
+      since?: string;
+      rsSpy?: number | null;
+      rsSector?: number | null;
+      recent?: { type: string; date: string }[];
+    },
+  ): Sentence[];
   validateSummary(sentences: Sentence[], values: Record<string, unknown>): string[];
   sma(a: Arr, n: number): Arr;
   ema(a: Arr, n: number): Arr;
   rsi(c: number[], n?: number): Arr;
-  macd(c: number[], fast?: number, slow?: number, sig?: number): { line: Arr; signal: Arr; hist: Arr };
-  bollinger(c: number[], n?: number, k?: number): { mid: Arr; upper: Arr; lower: Arr; width: Arr; pctb: Arr };
-  supertrend(h: number[], l: number[], c: number[], n?: number, mult?: number): { line: Arr; dir: Arr };
+  macd(
+    c: number[],
+    fast?: number,
+    slow?: number,
+    sig?: number,
+  ): { line: Arr; signal: Arr; hist: Arr };
+  bollinger(
+    c: number[],
+    n?: number,
+    k?: number,
+  ): { mid: Arr; upper: Arr; lower: Arr; width: Arr; pctb: Arr };
+  supertrend(
+    h: number[],
+    l: number[],
+    c: number[],
+    n?: number,
+    mult?: number,
+  ): { line: Arr; dir: Arr };
   realizedVol(c: number[], n: number): Arr;
   logRets(c: number[]): Arr;
   quantile(sorted: number[], q: number): number | null;
