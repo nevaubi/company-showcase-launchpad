@@ -22,7 +22,23 @@ async function getJson<T>(path: string): Promise<T> {
  */
 const PARTNER_DATA_URL = (import.meta.env.VITE_PARTNER_DATA_URL as string | undefined) ?? "https://www.filedunder.ai/api/app-data";
 
-async function partnerJson<T>(path: string): Promise<T | null> {
+/** In-flight and recent responses per path, so several price ranges or panels share one download. */
+const partnerCache = new Map<string, { at: number; p: Promise<unknown> }>();
+const PARTNER_TTL = 5 * 60_000;
+
+function partnerJson<T>(path: string): Promise<T | null> {
+  const hit = partnerCache.get(path);
+  if (hit && Date.now() - hit.at < PARTNER_TTL) return hit.p as Promise<T | null>;
+  const p = fetchPartner<T>(path).then((v) => {
+    if (v == null) partnerCache.delete(path);
+    return v;
+  });
+  partnerCache.set(path, { at: Date.now(), p });
+  if (partnerCache.size > 400) partnerCache.delete(partnerCache.keys().next().value!);
+  return p;
+}
+
+async function fetchPartner<T>(path: string): Promise<T | null> {
   if (!PARTNER_DATA_URL || PARTNER_DATA_URL === "off" || typeof window === "undefined") return null;
   try {
     const { data } = await supabase.auth.getSession();
