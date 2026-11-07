@@ -1,0 +1,162 @@
+// Supply-chain link extraction for one company, shared by scripts/supply-chain.ts and the partner
+// job route (src/routes/api/public/partner/$task.ts). Reads the latest 10-K + any newer 10-Q
+// (current links) and prior 10-Ks (history); every link must carry a quote found verbatim in the
+// filing text. Stored links are replaced only when every filing was read.
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { IR_MODELS, openaiStructured } from "@/lib/openai.server";
+import { normText, quoteInText, RELATIONS } from "@/lib/supply/core";
+
+const UA = "FiledUnder Research research@filedunder.ai";
+
+export interface SupplyCo { ticker: string; name: string; cik: string }
+export interface SupplyFiling { accn: string; form: string; filed: string; doc: string }
+
+export function htmlToText(html: string) {
+  return html
+    .replace(/<ix:header[\s\S]*?<\/ix:header>/gi, " ")
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ")
+    .replace(/<\/(p|div|tr|li|h\d)>|<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#8217;|&rsquo;/g, "’")
+    .replace(/&#8220;|&#8221;|&ldquo;|&rdquo;/g, '"')
+    .replace(/&#8212;|&mdash;/g, "—")
+    .replace(/&#\d+;|&\w+;/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n\s*\n+/g, "\n")
+    .trim();
+}
+
+const KEY = /customer|supplier|vendor|manufactur|foundr|depend|concentrat|% of (our )?(total |net )?(revenue|sales)|partner|alliance|collaborat|licens|compet|distribut|sole source|single source|contract with/i;
+
+export function relevant(text: string, cap = 90_000) {
+  const paras = text.split("\n").filter((p) => p.length > 60);
+  const keep = new Set<number>();
+  paras.forEach((p, i) => KEY.test(p) && /[A-Z][a-z]+/.test(p) && keep.add(i));
+  let out = "";
+  for (const i of [...keep].sort((a, b) => a - b)) {
+    if (out.length + paras[i].length > cap) break;
+    out += paras[i] + "\n";
+  }
+  return out;
+}
+
+const SCHEMA = {
+  type: "object", additionalProperties: false, required: ["links"],
+  properties: {
+    links: {
+      type: "array",
+      items: {
+        type: "object", additionalProperties: false,
+        required: ["counterparty", "counterparty_ticker", "domain", "relation", "detail", "share_pct", "amount_usd", "single_source", "regions", "risk", "quote", "product", "link_type"],
+        properties: {
+          counterparty: { type: "string" },
+          counterparty_ticker: { type: "string", description: "US listing ticker if public, else empty" },
+          domain: { type: "string", description: "company website domain, e.g. tsmc.com; empty if unsure" },
+          relation: { type: "string", enum: RELATIONS },
+          detail: { type: "string", description: "≤ 20 words: what flows between them" },
+          share_pct: { type: ["number", "null"], description: "% of the filer's revenue (customers) or purchases, only if stated" },
+          amount_usd: { type: ["number", "null"], description: "Dollar amount tied to this counterparty (revenue, purchase commitment, contract value) in full USD, only if stated" },
+          single_source: { type: "boolean", description: "true only if the text says sole, single or limited source / depends on this counterparty" },
+          regions: { type: "array", items: { type: "string" }, description: "Countries/regions the text ties to this link (e.g. Taiwan, China); empty if none" },
+          risk: { type: "string", description: "≤ 15 words: the dependency or concentration risk stated, empty if none" },
+          product: { type: "string", description: "≤ 6 words: the product, input or service involved (e.g. 'HBM memory', '3nm wafers', 'cloud compute'); empty if not stated" },
+          link_type: { type: "string", enum: ["foundry", "contract_manufacturer", "component", "materials", "logistics", "licensor", "licensee", "distributor", "reseller", "cloud", "joint_venture", "co_development", "end_customer", "government", "competitor", "other"] },
+          quote: { type: "string", description: "8–40 consecutive words copied exactly from the text" },
+        },
+      },
+    },
+  },
+};
+
+const INSTRUCTIONS = `You read excerpts of a company's 10-K or 10-Q and list the specific, NAMED organisations it does business with.
+relation = what the counterparty is to the filer: customer (buys from the filer), supplier (sells to / manufactures for the filer), partner (alliance, JV, licensing, co-development, distribution), competitor (named as a competitor).
+Rules:
+- Only organisations named in the text. Never infer from general knowledge. Skip "a customer", "certain suppliers".
+- quote must be copied character-for-character from the text and must mention the counterparty or its role. No ellipses.
+- share_pct only when the text states a percentage for that counterparty; amount_usd only when a dollar figure is stated for it (convert "$2.1 billion" to 2100000000).
+- single_source only when the text says sole/single/limited source or a stated dependency. regions: geographies the text ties to the link. risk: the stated dependency/concentration risk in a few words.
+- counterparty_ticker: the primary US ticker if the company is publicly listed (e.g. TSM for TSMC, MSFT for Microsoft); empty for private companies, governments, agencies.
+- product: what flows, only if stated. link_type: the most specific kind of relationship the text supports.
+- Prefer the most important links: concentration disclosures, sole-source suppliers, major partners. Up to 60 links. One row per counterparty+relation.`;
+
+/** Current set = latest 10-K + any newer 10-Q; history = the prior 10-Ks (for "what changed"). */
+export function filingSet(filings: SupplyFiling[], years = 3) {
+  const ks = filings.filter((f) => f.form === "10-K").sort((a, b) => b.filed.localeCompare(a.filed));
+  if (!ks.length) return [];
+  const q = filings.filter((f) => f.form === "10-Q" && f.filed > ks[0].filed).sort((a, b) => b.filed.localeCompare(a.filed))[0];
+  return [
+    { f: ks[0], current: true },
+    ...(q ? [{ f: q, current: true }] : []),
+    ...ks.slice(1, years).map((f) => ({ f, current: false })),
+  ];
+}
+
+type Log = (...m: unknown[]) => void;
+
+async function readFiling(co: SupplyCo, f: SupplyFiling, current: boolean, known: string, log: Log) {
+  const url = `https://www.sec.gov/Archives/edgar/data/${Number(co.cik)}/${f.accn.replace(/-/g, "")}/${f.doc}`;
+  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  if (!res.ok) throw new Error(`SEC ${res.status} for ${f.form} ${f.filed}`);
+  const text = htmlToText(await res.text());
+  const excerpt = relevant(text);
+  const { data, usage } = await openaiStructured<{ links: { counterparty: string; counterparty_ticker: string; domain: string; relation: string; detail: string; share_pct: number | null; amount_usd: number | null; single_source: boolean; regions: string[]; risk: string; quote: string; product: string; link_type: string }[] }>({
+    model: IR_MODELS.reason, name: "supply_links", instructions: INSTRUCTIONS, effort: "medium", schema: SCHEMA,
+    input: `Filer: ${co.name} (${co.ticker}). Known tickers: ${known}\n\n${f.form} excerpts:\n${excerpt}`,
+  });
+  const seen = new Set<string>();
+  const rows = data.links
+    .filter((l) => quoteInText(l.quote, text))
+    .map((l) => ({
+      ticker: co.ticker,
+      counterparty: l.counterparty.trim(),
+      counterparty_ticker: l.counterparty_ticker.trim().toUpperCase() || null,
+      counterparty_domain: l.domain.trim().toLowerCase().replace(/^https?:\/\/|^www\.|\/.*$/g, "") || null,
+      relation: l.relation, detail: l.detail, share_pct: l.share_pct, quote: l.quote,
+      amount_usd: l.amount_usd, single_source: !!l.single_source, regions: (l.regions ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 6), risk: l.risk?.trim() || null, product: l.product?.trim() || null, link_type: l.link_type || null,
+      accn: f.accn, doc: f.doc, form: f.form, filed: f.filed, is_current: current,
+    }))
+    .filter((r) => r.counterparty_ticker !== co.ticker)
+    .filter((r) => { const k = `${r.relation}:${r.counterparty_ticker ?? normText(r.counterparty)}`; return !seen.has(k) && !!seen.add(k); });
+  log(co.ticker, f.form, f.filed, `${rows.length}/${data.links.length} links verified`, `${usage.input_tokens}in/${usage.output_tokens}out`);
+  return rows;
+}
+
+export interface SupplyResult { ticker: string; status: "stored" | "no-10k" | "empty" | "failed" | "dry"; links: number; error?: string }
+
+/**
+ * Extract and store one company's links. `universe` names the tickers the model may map to.
+ * Filings are read in parallel; any failure keeps the stored links untouched.
+ */
+export async function extractSupply(
+  db: SupabaseClient,
+  co: SupplyCo,
+  filings: SupplyFiling[],
+  universe: { ticker: string; name: string }[],
+  opts: { years?: number; dry?: boolean; log?: Log } = {},
+): Promise<SupplyResult> {
+  const log = opts.log ?? (() => {});
+  const set = filingSet(filings, opts.years ?? 3);
+  if (!set.length) return { ticker: co.ticker, status: "no-10k", links: 0 };
+  const known = universe.map((c) => `${c.ticker}=${c.name}`).join(", ");
+  let all: Record<string, unknown>[];
+  try {
+    all = (await Promise.all(set.map(({ f, current }) => readFiling(co, f, current, known, log)))).flat();
+  } catch (e) {
+    const error = (e as Error).message.slice(0, 200);
+    log(co.ticker, "failed, kept existing links", error);
+    return { ticker: co.ticker, status: "failed", links: 0, error };
+  }
+  if (opts.dry) return { ticker: co.ticker, status: "dry", links: all.length };
+  if (!all.length) return { ticker: co.ticker, status: "empty", links: 0 };
+  await db.from("supply_links").delete().eq("ticker", co.ticker);
+  for (let i = 0; i < all.length; i += 200) {
+    const { error } = await db.from("supply_links").insert(all.slice(i, i + 200) as never);
+    if (error) {
+      log(co.ticker, "insert failed", error.message);
+      return { ticker: co.ticker, status: "failed", links: i, error: error.message };
+    }
+  }
+  return { ticker: co.ticker, status: "stored", links: all.length };
+}

@@ -53,7 +53,7 @@ async function markets(): Promise<MarketsFile | null> {
 }
 
 let universeCache: { at: number; list: UniverseEntry[] } | null = null;
-async function universe(): Promise<UniverseEntry[]> {
+export async function universe(): Promise<UniverseEntry[]> {
   if (universeCache && Date.now() - universeCache.at < 3600_000) return universeCache.list;
   // Bundled core companies + the partner-universe companies built by the backfill.
   const [partner, core, extra] = await Promise.all([

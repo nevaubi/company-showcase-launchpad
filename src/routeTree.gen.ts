@@ -39,6 +39,7 @@ import { Route as AuthenticatedAppSectorsSectorRouteImport } from './routes/_aut
 import { Route as AuthenticatedAppThesesIndexRouteImport } from './routes/_authenticated/app.theses.index'
 import { Route as AuthenticatedAppThesesIdRouteImport } from './routes/_authenticated/app.theses.$id'
 import { Route as ApiPublicJobsJobRouteImport } from './routes/api/public/jobs/$job'
+import { Route as ApiPublicPartnerTaskRouteImport } from './routes/api/public/partner/$task'
 import { Route as AuthenticatedAppCompaniesTickerIndexRouteImport } from './routes/_authenticated/app.companies.$ticker.index'
 import { Route as AuthenticatedAppCompaniesTickerAltDataRouteImport } from './routes/_authenticated/app.companies.$ticker.alt-data'
 import { Route as AuthenticatedAppCompaniesTickerCallsRouteImport } from './routes/_authenticated/app.companies.$ticker.calls'
@@ -215,6 +216,11 @@ const ApiPublicJobsJobRoute = ApiPublicJobsJobRouteImport.update({
   path: '/api/public/jobs/$job',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicPartnerTaskRoute = ApiPublicPartnerTaskRouteImport.update({
+  id: '/api/public/partner/$task',
+  path: '/api/public/partner/$task',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAppCompaniesTickerIndexRoute =
   AuthenticatedAppCompaniesTickerIndexRouteImport.update({
     id: '/',
@@ -320,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/app/sectors/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
+  '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs/': typeof AuthenticatedAppDocsIndexRoute
   '/app/firm/': typeof AuthenticatedAppFirmIndexRoute
@@ -361,6 +368,7 @@ export interface FileRoutesByTo {
   '/app/sectors/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
+  '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/app/companies': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs': typeof AuthenticatedAppDocsIndexRoute
   '/app/firm': typeof AuthenticatedAppFirmIndexRoute
@@ -407,6 +415,7 @@ export interface FileRoutesById {
   '/_authenticated/app/sectors_/$sector': typeof AuthenticatedAppSectorsSectorRoute
   '/_authenticated/app/theses/$id': typeof AuthenticatedAppThesesIdRoute
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
+  '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/_authenticated/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/_authenticated/app/docs/': typeof AuthenticatedAppDocsIndexRoute
   '/_authenticated/app/firm/': typeof AuthenticatedAppFirmIndexRoute
@@ -453,6 +462,7 @@ export interface FileRouteTypes {
     | '/app/sectors/$sector'
     | '/app/theses/$id'
     | '/api/public/jobs/$job'
+    | '/api/public/partner/$task'
     | '/app/companies/'
     | '/app/docs/'
     | '/app/firm/'
@@ -494,6 +504,7 @@ export interface FileRouteTypes {
     | '/app/sectors/$sector'
     | '/app/theses/$id'
     | '/api/public/jobs/$job'
+    | '/api/public/partner/$task'
     | '/app/companies'
     | '/app/docs'
     | '/app/firm'
@@ -539,6 +550,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/sectors_/$sector'
     | '/_authenticated/app/theses/$id'
     | '/api/public/jobs/$job'
+    | '/api/public/partner/$task'
     | '/_authenticated/app/companies/'
     | '/_authenticated/app/docs/'
     | '/_authenticated/app/firm/'
@@ -565,6 +577,7 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
+  ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -777,6 +790,13 @@ declare module '@tanstack/react-router' {
       path: '/api/public/jobs/$job'
       fullPath: '/api/public/jobs/$job'
       preLoaderRoute: typeof ApiPublicJobsJobRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/partner/$task': {
+      id: '/api/public/partner/$task'
+      path: '/api/public/partner/$task'
+      fullPath: '/api/public/partner/$task'
+      preLoaderRoute: typeof ApiPublicPartnerTaskRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/app/companies/$ticker/': {
@@ -1007,6 +1027,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
+  ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
