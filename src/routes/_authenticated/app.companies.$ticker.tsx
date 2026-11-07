@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound, Outlet, useRouterState } from "@tanstack/react-router";
-import { ArrowUpRight, Building, ChevronDown, Globe, Sparkles, Star } from "lucide-react";
+import { ArrowUpRight, Building, ChevronDown, Columns3, Globe, Sparkles, Star } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { requestResearch } from "@/lib/research/request";
 import { CompanyLogo } from "@/components/app/company-logo";
@@ -127,6 +127,9 @@ function CompanyLayout() {
             <Button size="xs" variant={follow.isFollowed(ticker) ? "secondary" : "outline"} onClick={() => follow.toggle(ticker)} disabled={follow.pending}>
               <Star className={cn(follow.isFollowed(ticker) && "fill-current")} />
               {follow.isFollowed(ticker) ? "Following" : "Follow"}
+            </Button>
+            <Button size="xs" variant="outline" asChild>
+              <Link to="/app/compare" search={{ t: ticker }}><Columns3 /> Compare</Link>
             </Button>
             <CoverageChip ticker={ticker} price={q?.price ?? null} />
             {latest10K && (
