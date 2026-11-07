@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStatements, type CompanyFacts, type RawFact } from "./build";
+import { buildStatements, quarterEndAfter, type CompanyFacts, type RawFact } from "./build";
 import { fmtCell, scaled, unitLabel } from "../format";
 
 let n = 0;
@@ -170,5 +170,37 @@ describe("unit scale", () => {
     expect(unitLabel("usd", "full")).toBe("$");
     expect(unitLabel("usd", "B")).toBe("$B");
     expect(unitLabel("shares", "M")).toBe("M sh");
+  });
+});
+
+describe("fiscal year in progress with a missing 10-Q", () => {
+  // FY2026 10-Qs: Q1 and Q3 present, the Q2 filing absent from companyfacts.
+  const facts = [
+    ...REVENUE,
+    fact("2026-01-01", "2026-03-31", 120, "10-Q", "2026-04-30"),
+    fact("2026-01-01", "2026-09-30", 400, "10-Q", "2026-10-30"),
+    fact("2026-07-01", "2026-09-30", 145, "10-Q", "2026-10-30"),
+  ];
+  const s = buildStatements(filer({ Revenues: { facts }, OperatingIncomeLoss: { facts: OPINC } }));
+  const q = s.quarterly.income;
+  const rev = q.rows.find((r) => r.key === "revenue")!;
+  const at = (key: string) => rev.cells[q.periods.findIndex((p) => p.key === key)];
+
+  it("keeps the nine-month quarter as Q3 instead of deriving Q2 as 9M − Q1", () => {
+    // The empty Q2 column is pruned like any period without figures; TTM then reports null
+    // because the quarters aren't contiguous, rather than summing the wrong four.
+    expect(q.periods.filter((p) => p.fy === 2026).map((p) => [p.key, p.start, p.end])).toEqual([
+      ["FY2026Q1", "2026-01-01", "2026-03-31"],
+      ["FY2026Q3", "2026-07-01", "2026-09-30"],
+    ]);
+    expect(at("FY2026Q1")?.v).toBe(120);
+    expect(at("FY2026Q3")?.v).toBe(145);
+    expect(at("FY2026Q3")?.src).toBeTruthy();
+  });
+
+  it("quarterEndAfter gives calendar quarter ends", () => {
+    expect(quarterEndAfter("2026-01-01", 2)).toBe("2026-06-30");
+    expect(quarterEndAfter("2025-10-01", 1)).toBe("2025-12-31");
+    expect(quarterEndAfter("2025-02-01", 2)).toBe("2025-07-31");
   });
 });

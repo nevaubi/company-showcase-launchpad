@@ -127,13 +127,26 @@ export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
     const fromStart = durations.filter((f) => near(f.start, start, 4) && f.form.startsWith("10-Q"));
     const bucket = (lo: number, hi: number) =>
       mostCommon(fromStart.filter((f) => inRange(durationDays(f.start!, f.end), lo, hi)).map((f) => f.end));
-    const qEnds = [bucket(80, 100), bucket(170, 195), bucket(260, 285)].filter((x): x is string => !!x);
+    // Keep quarters in position: when a 10-Q is missing from companyfacts (URI, DOW, ED and EIX lack
+    // their Q2 FY2026 facts), a later nine-month YTD must stay Q3. Dropping the gap turned it into
+    // "Q2" and derived Q2 as 9M − Q1, double the real quarter. The missing quarter keeps its
+    // calendar end and simply has no cells.
+    const found = [bucket(80, 100), bucket(170, 195), bucket(260, 285)];
+    const lastFound = found.reduce((acc, e, i) => (e ? i : acc), -1);
+    const qEnds = found.slice(0, lastFound + 1).map((e, i) => e ?? quarterEndAfter(start, i + 1));
     if (qEnds.length) {
       const end = addDays(start, durationDays(last.start, last.end));
       years.push({ fy: fiscalYearFromEnd(end), start, end, qEnds, partial: true });
     }
   }
   return years;
+}
+
+/** Last day of the month `3 × q` months after the month before `start` (calendar quarter end). */
+export function quarterEndAfter(start: string, q: number) {
+  const d = new Date(`${start}T00:00:00Z`);
+  const end = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 3 * q, 0));
+  return end.toISOString().slice(0, 10);
 }
 
 function inRange(n: number, lo: number, hi: number) {
