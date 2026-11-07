@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowUpRight, Calculator, FileText, Sigma, Sparkles, X } from "lucide-react";
+import { ArrowUpRight, Calculator, Check, Copy, FileText, Sigma, Sparkles, X } from "lucide-react";
+import { buildCitation } from "@/lib/source/citation";
 import { requestResearch } from "@/lib/research/request";
 import { useSource } from "./source-context";
 import { FilingViewer, type FactLocator } from "./filing-viewer";
@@ -30,6 +31,7 @@ export function SourcePanel() {
   const filings = company.data?.filings;
   const byAccn = useMemo(() => new Map((filings ?? []).map((f) => [f.accn, f])), [filings]);
   const [active, setActive] = useState<ActiveDoc | null>(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!target) return setActive(null);
@@ -174,10 +176,25 @@ export function SourcePanel() {
           </div>
           <footer className="flex shrink-0 items-center justify-between gap-2 border-t px-4 py-2">
             <span className="text-[11px] text-muted-foreground">{target.ticker} · Evidence</span>
+            <span className="flex items-center gap-1.5">
+            <Button size="xs" variant="ghost" onClick={() => {
+              const text = buildCitation(target, {
+                company: target.doc?.cik ? undefined : company.data?.profile.name,
+                cik,
+                accn: active?.accn,
+                doc: active?.doc,
+                filing: filing ? { form: filing.form, filed: filing.filed } : undefined,
+              });
+              void navigator.clipboard.writeText(text).then(() => {
+                setCopied(true);
+                window.setTimeout(() => setCopied(false), 1800);
+              });
+            }} aria-live="polite">{copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy citation"}</Button>
             <Button size="xs" variant="outline" onClick={() => {
               requestResearch(`Investigate ${target.ticker}: ${target.label}. Cross-check this evidence and explain its investment implications. ${target.external ? `Source: ${target.external.url}\n${target.external.quote ?? ""}` : `Filing: ${target.doc?.accn ?? target.src?.accn ?? "derived components"}\n${target.doc?.search ?? ""}`}`);
               close();
             }}><Sparkles /> Investigate</Button>
+            </span>
           </footer>
         </>
       )}

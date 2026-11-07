@@ -5,6 +5,7 @@ import {
   Building2,
   Columns3,
   CalendarDays,
+  FileSearch,
   FileSpreadsheet,
   FileText,
   Globe2,
@@ -43,6 +44,12 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     label: "Screener",
     icon: SlidersHorizontal,
     keywords: "screen filter prompt ai valuation growth momentum",
+  },
+  {
+    to: "/app/filings",
+    label: "Filings",
+    icon: FileSearch,
+    keywords: "10-k 10-q redline disclosure changes risk factors filing insights what changed",
   },
   {
     to: "/app/kpis",

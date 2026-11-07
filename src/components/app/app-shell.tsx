@@ -33,7 +33,7 @@ import { Logo } from "@/components/brand/logo";
 import { SourceProvider, useSource } from "@/components/source/source-context";
 import { PANEL_WIDTH, SourcePanel } from "@/components/source/source-panel";
 import { AssistantPanel } from "@/components/research/assistant-panel";
-import { CalendarDays, Columns3, Grid3x3, SlidersHorizontal, Sparkles } from "lucide-react";
+import { CalendarDays, Columns3, FileSearch, Grid3x3, SlidersHorizontal, Sparkles } from "lucide-react";
 import { CommandMenu } from "@/components/app/command-menu";
 import { AlertsBell } from "@/components/app/alerts-bell";
 import { CompanyLogo } from "@/components/app/company-logo";
@@ -60,6 +60,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
       { to: "/app/companies", label: "Companies", icon: Building2 },
       { to: "/app/screener", label: "Screener", icon: SlidersHorizontal },
       { to: "/app/compare", label: "Compare", icon: Columns3 },
+      { to: "/app/filings", label: "Filings", icon: FileSearch },
       { to: "/app/kpis", label: "KPI matrix", icon: Grid3x3 },
     ],
   },

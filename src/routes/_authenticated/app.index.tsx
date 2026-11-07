@@ -16,6 +16,7 @@ import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice, fmtRelative } from "@/lib/for
 import { useProfile, useWatchlist } from "@/lib/workspace";
 import { ThesisList } from "@/components/app/thesis-list";
 import { DailyBrief } from "@/components/app/daily-brief";
+import { MarketMoves } from "@/components/app/market-moves";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/")({
@@ -119,6 +120,8 @@ function Dashboard() {
           );
         })}
       </div>
+
+      <MarketMoves />
 
       {watch.isSuccess && <DailyBrief tickers={tickers} />}
 
