@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 import type { Bar } from "../financials/types";
-import { correlationMatrix, detectPatterns, earningsReactions, reactionStats, returnsByDate } from "./core";
+import {
+  correlationMatrix,
+  detectPatterns,
+  earningsReactions,
+  reactionStats,
+  returnsByDate,
+} from "./core";
 
 const day = (i: number) => new Date(Date.UTC(2024, 0, 1) + i * 86400000).toISOString().slice(0, 10);
-const mk = (closes: number[], vol = 1000): Bar[] => closes.map((c, i) => [day(i), c, c, c, c, c, vol]);
+const mk = (closes: number[], vol = 1000): Bar[] =>
+  closes.map((c, i) => [day(i), c, c, c, c, c, vol]);
 
 describe("earnings reactions", () => {
   it("measures close-before to close-day-after and excess vs SPY", () => {
@@ -34,7 +41,10 @@ describe("patterns", () => {
     expect(hits.map((h) => h.index)).toEqual([260]);
   });
   it("detects a golden cross when the 50d moves above the 200d", () => {
-    const closes = [...Array.from({ length: 220 }, () => 100), ...Array.from({ length: 60 }, (_, i) => 100 + i)];
+    const closes = [
+      ...Array.from({ length: 220 }, () => 100),
+      ...Array.from({ length: 60 }, (_, i) => 100 + i),
+    ];
     expect(detectPatterns(mk(closes)).some((h) => h.kind === "golden_cross")).toBe(true);
   });
 });

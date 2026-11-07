@@ -1,7 +1,14 @@
 import { queryOptions } from "@tanstack/react-query";
 import type { PatternEdge, PatternKind, Reaction, ReactionStats } from "./core";
 
-export interface PatternEvent { kind: PatternKind; date: string; price: number; fwd20: number | null; levels?: number[]; ago?: number }
+export interface PatternEvent {
+  kind: PatternKind;
+  date: string;
+  price: number;
+  fwd20: number | null;
+  levels?: number[];
+  ago?: number;
+}
 export interface MarketCompany {
   ticker: string;
   sector: string;
@@ -12,19 +19,36 @@ export interface MarketCompany {
   active: PatternEvent[];
   recent: PatternEvent[];
   edges: PatternEdge[];
-  levels: { support: { price: number; touches: number }[]; resistance: { price: number; touches: number }[] };
+  levels: {
+    support: { price: number; touches: number }[];
+    resistance: { price: number; touches: number }[];
+  };
 }
-export interface MarketsFile { generatedAt: string; companies: MarketCompany[] }
-export interface ReturnsFile { dates: string[]; returns: Record<string, (number | null)[]> }
+export interface MarketsFile {
+  generatedAt: string;
+  companies: MarketCompany[];
+}
+export interface ReturnsFile {
+  dates: string[];
+  returns: Record<string, (number | null)[]>;
+}
 
-const get = async <T,>(p: string) => {
+const get = async <T>(p: string) => {
   const r = await fetch(p);
   if (!r.ok) throw new Error(`Could not load ${p}`);
   return (await r.json()) as T;
 };
 
-export const marketsQuery = queryOptions({ queryKey: ["markets-file"], queryFn: () => get<MarketsFile>("/data/markets.json"), staleTime: Infinity });
-export const returnsQuery = queryOptions({ queryKey: ["returns-file"], queryFn: () => get<ReturnsFile>("/data/returns.json"), staleTime: Infinity });
+export const marketsQuery = queryOptions({
+  queryKey: ["markets-file"],
+  queryFn: () => get<MarketsFile>("/data/markets.json"),
+  staleTime: Infinity,
+});
+export const returnsQuery = queryOptions({
+  queryKey: ["returns-file"],
+  queryFn: () => get<ReturnsFile>("/data/returns.json"),
+  staleTime: Infinity,
+});
 
 /** Returns of one symbol as a date → return map (nulls dropped). */
 export function returnMap(f: ReturnsFile, sym: string): Map<string, number> {

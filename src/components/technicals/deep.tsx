@@ -1581,7 +1581,9 @@ export function MarketScan({
                     </span>
                     <span className="text-[12px] text-muted-foreground">{sg.text}</span>
                     {(P.excess ?? 0) > 0 ? (
-                      <Chip className="border-positive/40 text-positive">historically outperformed</Chip>
+                      <Chip className="border-positive/40 text-positive">
+                        historically outperformed
+                      </Chip>
                     ) : (
                       <Chip className="border-negative/40 text-negative">historically lagged</Chip>
                     )}
