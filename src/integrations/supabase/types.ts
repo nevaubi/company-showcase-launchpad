@@ -113,27 +113,6 @@ export type Database = {
         }
         Relationships: []
       }
-      company_visits: {
-        Row: {
-          last_seen_at: string
-          previous_seen_at: string | null
-          ticker: string
-          user_id: string
-        }
-        Insert: {
-          last_seen_at?: string
-          previous_seen_at?: string | null
-          ticker: string
-          user_id: string
-        }
-        Update: {
-          last_seen_at?: string
-          previous_seen_at?: string | null
-          ticker?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       documents: {
         Row: {
           content: Json
