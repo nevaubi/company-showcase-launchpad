@@ -14,7 +14,14 @@ import { getNarratives } from "@/lib/ai.functions";
 import { cellTarget, ratioTarget, ttmTarget } from "@/lib/financials/targets";
 import { latestYoY, ttm } from "@/lib/financials/metrics";
 import { alignByDate, annualizedVol, beta, maxDrawdown, returns } from "@/lib/indicators";
-import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice, fmtRelative, SEC_FORM_LABEL } from "@/lib/format";
+import {
+  fmtCompactUsd,
+  fmtDate,
+  fmtPct,
+  fmtPrice,
+  fmtRelative,
+  SEC_FORM_LABEL,
+} from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 import { ResearchChart } from "@/components/company/research-chart";
@@ -25,20 +32,29 @@ import { RelatedCompanies } from "@/components/company/related";
 import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
 import { FilingInsightsPanel } from "@/components/company/filing-insights";
+import { BriefPanel } from "@/components/company/brief-panel";
 import { coverageOf } from "@/lib/coverage";
 import { FirmNotes } from "@/components/firm/firm-notes";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
-  head: ({ params }) => ({ meta: [
-    { title: `${params.ticker} overview — Filed Under` },
-    { name: "description", content: `${coverageOf(params.ticker)?.shortName ?? params.ticker} price research, SEC fundamentals, management and catalysts.` },
-    { property: "og:title", content: `${params.ticker} research overview — Filed Under` },
-    { property: "og:description", content: "Price analysis, sourced fundamentals and company intelligence." },
-    { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
-  ] }),
+  head: ({ params }) => ({
+    meta: [
+      { title: `${params.ticker} overview — Filed Under` },
+      {
+        name: "description",
+        content: `${coverageOf(params.ticker)?.shortName ?? params.ticker} price research, SEC fundamentals, management and catalysts.`,
+      },
+      { property: "og:title", content: `${params.ticker} research overview — Filed Under` },
+      {
+        property: "og:description",
+        content: "Price analysis, sourced fundamentals and company intelligence.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: Overview,
 });
-
 
 function Overview() {
   const { ticker: raw } = Route.useParams();
@@ -79,7 +95,10 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
   const fcfT = ttmTarget(ticker, q.cashflow, "fcf", "Free cash flow");
   const gpT = ttmTarget(ticker, q.income, "grossProfit", "Gross profit");
   const epsT = ttmTarget(ticker, q.income, "epsDiluted", "Diluted EPS");
-  const gmT = gpT && revT ? ratioTarget(ticker, "Gross margin (TTM)", revT.periodLabel ?? "", gpT, revT) : null;
+  const gmT =
+    gpT && revT
+      ? ratioTarget(ticker, "Gross margin (TTM)", revT.periodLabel ?? "", gpT, revT)
+      : null;
   const niiT = ttmTarget(ticker, q.income, "netInterestIncome", "Net interest income");
   const yoy = latestYoY(q.income, "revenue");
   const lastQ = q.income.periods.length - 1;
@@ -98,48 +117,101 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       b = beta(returns(al.a), returns(al.b));
     }
     const ret1y = closes.length > 1 ? closes[closes.length - 1] / closes[0] - 1 : null;
-    return { hi, lo, beta: b, vol: closes.length > 20 ? annualizedVol(returns(closes)) : null, mdd: closes.length ? maxDrawdown(closes) : null, ret1y };
+    return {
+      hi,
+      lo,
+      beta: b,
+      vol: closes.length > 20 ? annualizedVol(returns(closes)) : null,
+      mdd: closes.length ? maxDrawdown(closes) : null,
+      ret1y,
+    };
   }, [year.data, spy.data]);
 
-  const sharesTarget = shares && p.sharesOutstandingAccn
-    ? {
-        ticker,
-        label: "Shares outstanding (cover page)",
-        periodLabel: p.sharesOutstandingAsOf ? `as of ${fmtDate(p.sharesOutstandingAsOf)}` : undefined,
-        unit: "shares",
-        value: shares,
-        src: { accn: p.sharesOutstandingAccn, concept: "dei:EntityCommonStockSharesOutstanding", end: p.sharesOutstandingAsOf ?? "", value: shares },
-      }
-    : null;
+  const sharesTarget =
+    shares && p.sharesOutstandingAccn
+      ? {
+          ticker,
+          label: "Shares outstanding (cover page)",
+          periodLabel: p.sharesOutstandingAsOf
+            ? `as of ${fmtDate(p.sharesOutstandingAsOf)}`
+            : undefined,
+          unit: "shares",
+          value: shares,
+          src: {
+            accn: p.sharesOutstandingAccn,
+            concept: "dei:EntityCommonStockSharesOutstanding",
+            end: p.sharesOutstandingAsOf ?? "",
+            value: shares,
+          },
+        }
+      : null;
 
   return (
     <div className="grid grid-cols-1 gap-3">
       <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Stat label="Market cap" value={fmtCompactUsd(mcap)} sub={shares ? `${(shares / 1e9).toFixed(2)}B shares` : "—"} target={sharesTarget} />
+        <Stat
+          label="Market cap"
+          value={fmtCompactUsd(mcap)}
+          sub={shares ? `${(shares / 1e9).toFixed(2)}B shares` : "—"}
+          target={sharesTarget}
+        />
         <Stat
           label="P/E (TTM)"
           value={price && epsTTM ? `${(price / epsTTM).toFixed(1)}×` : "—"}
           sub={epsTTM ? `EPS ${fmtPrice(epsTTM)}` : undefined}
           target={epsT}
         />
-        <Stat label="Revenue (TTM)" value={fmtCompactUsd(revT?.value)} sub={yoy != null ? `${fmtPct(yoy, 1, true)} YoY (latest qtr)` : undefined} tone={yoy != null && yoy >= 0 ? "positive" : "negative"} target={revT} />
-        <Stat label="Free cash flow (TTM)" value={fmtCompactUsd(fcfT?.value)} sub={fcfT && mcap ? `${fmtPct(fcfT.value / mcap)} FCF yield` : undefined} tone={fcfT && fcfT.value < 0 ? "negative" : "neutral"} target={fcfT} />
-      </div>
-      <details className="border-b pb-2"><summary className="cursor-pointer text-xs text-muted-foreground">More metrics · profitability, range & risk</summary><div className="grid grid-cols-2 gap-2 pt-2 md:grid-cols-4">
-        <Stat label="Net income (TTM)" value={fmtCompactUsd(niT?.value)} sub={niT && revT ? `${fmtPct(niT.value / revT.value)} margin` : undefined} target={niT} />
-        {gmT || !niiT ? (
-          <Stat label="Gross margin (TTM)" value={fmtPct(gmT?.value)} target={gmT} />
-        ) : (
-          <Stat label="Net interest income (TTM)" value={fmtCompactUsd(niiT.value)} sub={revT ? `${fmtPct(niiT.value / revT.value)} of revenue` : undefined} target={niiT} />
-        )}
         <Stat
-          label="52-week range"
-          value={stats.lo != null ? `${stats.lo.toFixed(0)}–${stats.hi?.toFixed(0)}` : "—"}
-          sub={stats.ret1y != null ? `${fmtPct(stats.ret1y, 1, true)} over 1Y` : undefined}
-          tone={stats.ret1y != null && stats.ret1y >= 0 ? "positive" : "negative"}
+          label="Revenue (TTM)"
+          value={fmtCompactUsd(revT?.value)}
+          sub={yoy != null ? `${fmtPct(yoy, 1, true)} YoY (latest qtr)` : undefined}
+          tone={yoy != null && yoy >= 0 ? "positive" : "negative"}
+          target={revT}
         />
-        <Stat label="Beta vs S&P 500" value={stats.beta != null ? stats.beta.toFixed(2) : "—"} sub={stats.vol != null ? `${fmtPct(stats.vol, 0)} ann. vol` : undefined} />
-      </div></details>
+        <Stat
+          label="Free cash flow (TTM)"
+          value={fmtCompactUsd(fcfT?.value)}
+          sub={fcfT && mcap ? `${fmtPct(fcfT.value / mcap)} FCF yield` : undefined}
+          tone={fcfT && fcfT.value < 0 ? "negative" : "neutral"}
+          target={fcfT}
+        />
+      </div>
+      <details className="border-b pb-2">
+        <summary className="cursor-pointer text-xs text-muted-foreground">
+          More metrics · profitability, range & risk
+        </summary>
+        <div className="grid grid-cols-2 gap-2 pt-2 md:grid-cols-4">
+          <Stat
+            label="Net income (TTM)"
+            value={fmtCompactUsd(niT?.value)}
+            sub={niT && revT ? `${fmtPct(niT.value / revT.value)} margin` : undefined}
+            target={niT}
+          />
+          {gmT || !niiT ? (
+            <Stat label="Gross margin (TTM)" value={fmtPct(gmT?.value)} target={gmT} />
+          ) : (
+            <Stat
+              label="Net interest income (TTM)"
+              value={fmtCompactUsd(niiT.value)}
+              sub={revT ? `${fmtPct(niiT.value / revT.value)} of revenue` : undefined}
+              target={niiT}
+            />
+          )}
+          <Stat
+            label="52-week range"
+            value={stats.lo != null ? `${stats.lo.toFixed(0)}–${stats.hi?.toFixed(0)}` : "—"}
+            sub={stats.ret1y != null ? `${fmtPct(stats.ret1y, 1, true)} over 1Y` : undefined}
+            tone={stats.ret1y != null && stats.ret1y >= 0 ? "positive" : "negative"}
+          />
+          <Stat
+            label="Beta vs S&P 500"
+            value={stats.beta != null ? stats.beta.toFixed(2) : "—"}
+            sub={stats.vol != null ? `${fmtPct(stats.vol, 0)} ann. vol` : undefined}
+          />
+        </div>
+      </details>
+
+      <BriefPanel ticker={ticker} />
 
       <ResearchChart ticker={ticker} data={data} />
 
@@ -153,18 +225,35 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       <FirmNotes ticker={ticker} />
 
       <AboutPanel ticker={ticker} data={data} />
-      <details className="border-y py-3"><summary className="cursor-pointer text-sm font-semibold">Management & board</summary><div className="pt-3"><LeadershipPanel ticker={ticker} /></div></details>
-      <details className="border-y py-3"><summary className="cursor-pointer text-sm font-semibold">Sector & peer fundamentals</summary><div className="pt-3"><SectorTable ticker={ticker} /></div></details>
+      <details className="border-y py-3">
+        <summary className="cursor-pointer text-sm font-semibold">Management & board</summary>
+        <div className="pt-3">
+          <LeadershipPanel ticker={ticker} />
+        </div>
+      </details>
+      <details className="border-y py-3">
+        <summary className="cursor-pointer text-sm font-semibold">
+          Sector & peer fundamentals
+        </summary>
+        <div className="pt-3">
+          <SectorTable ticker={ticker} />
+        </div>
+      </details>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <NarrativesPanel ticker={ticker} name={p.name} />
         <EarningsCallPanel ticker={ticker} />
       </div>
 
-      <details className="border-y py-3"><summary className="cursor-pointer text-sm font-semibold">Financial trends · revenue, profitability & margins</summary><div className="grid grid-cols-1 gap-3 pt-3 lg:grid-cols-2">
-        <RevenueBars ticker={ticker} data={data} />
-        <MarginLines data={data} />
-      </div></details>
+      <details className="border-y py-3">
+        <summary className="cursor-pointer text-sm font-semibold">
+          Financial trends · revenue, profitability & margins
+        </summary>
+        <div className="grid grid-cols-1 gap-3 pt-3 lg:grid-cols-2">
+          <RevenueBars ticker={ticker} data={data} />
+          <MarginLines data={data} />
+        </div>
+      </details>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]">
         <Panel
@@ -186,7 +275,14 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
                 <li key={f.accn}>
                   <button
                     onClick={() =>
-                      open({ ticker, label: SEC_FORM_LABEL[f.form] ?? f.form, periodLabel: f.report ?? f.filed, unit: "usd", value: 0, doc: { accn: f.accn, doc: f.doc, title: f.desc } })
+                      open({
+                        ticker,
+                        label: SEC_FORM_LABEL[f.form] ?? f.form,
+                        periodLabel: f.report ?? f.filed,
+                        unit: "usd",
+                        value: 0,
+                        doc: { accn: f.accn, doc: f.doc, title: f.desc },
+                      })
                     }
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-secondary"
                   >
@@ -194,7 +290,11 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
                       {f.form}
                     </Badge>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]">{f.items?.includes("2.02") ? "Results of operations" : (SEC_FORM_LABEL[f.form] ?? f.desc)}</span>
+                      <span className="block truncate text-[13px]">
+                        {f.items?.includes("2.02")
+                          ? "Results of operations"
+                          : (SEC_FORM_LABEL[f.form] ?? f.desc)}
+                      </span>
                       <span className="block text-[11px] text-muted-foreground">
                         {f.report ? `Period ${fmtDate(f.report)} · ` : ""}filed {fmtDate(f.filed)}
                       </span>
@@ -210,8 +310,9 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         <RelatedCompanies ticker={ticker} />
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Fundamentals through {q.income.periods[lastQ]?.label} ({fmtDate(q.income.periods[lastQ]?.end)}) and {a.income.periods.at(-1)?.label}. Dataset generated{" "}
-        {fmtDate(data.generatedAt)}. Click any figure to open its filing.
+        Fundamentals through {q.income.periods[lastQ]?.label} (
+        {fmtDate(q.income.periods[lastQ]?.end)}) and {a.income.periods.at(-1)?.label}. Dataset
+        generated {fmtDate(data.generatedAt)}. Click any figure to open its filing.
       </p>
     </div>
   );
@@ -233,7 +334,11 @@ function NarrativesPanel({ ticker, name }: { ticker: string; name: string }) {
           <Sparkles className="size-3.5" /> Trending narratives
         </span>
       }
-      subtitle={q.data ? `AI-clustered from ${news.length} recent ${q.data.via === "web" ? "articles found by web search" : "headlines"} · ${fmtRelative(q.data.cachedAt)}` : "Clustering recent headlines…"}
+      subtitle={
+        q.data
+          ? `AI-clustered from ${news.length} recent ${q.data.via === "web" ? "articles found by web search" : "headlines"} · ${fmtRelative(q.data.cachedAt)}`
+          : "Clustering recent headlines…"
+      }
       bodyClassName="p-0"
     >
       {q.isLoading ? (
@@ -264,12 +369,20 @@ function NarrativesPanel({ ticker, name }: { ticker: string; name: string }) {
                   )}
                   {n.title}
                 </p>
-                <p className="mt-1 pl-5.5 text-[13px] leading-relaxed text-muted-foreground">{n.summary}</p>
+                <p className="mt-1 pl-5.5 text-[13px] leading-relaxed text-muted-foreground">
+                  {n.summary}
+                </p>
                 <div className="mt-1.5 flex flex-wrap gap-1.5 pl-5.5">
                   {n.headlineIds.slice(0, 3).map((id) => {
                     const h = byId.get(id);
                     return h ? (
-                      <a key={id} href={h.link} target="_blank" rel="noreferrer" className="max-w-full truncate rounded border bg-card px-1.5 py-0.5 text-[10.5px] text-muted-foreground hover:text-foreground">
+                      <a
+                        key={id}
+                        href={h.link}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="max-w-full truncate rounded border bg-card px-1.5 py-0.5 text-[10.5px] text-muted-foreground hover:text-foreground"
+                      >
                         {h.publisher}: {h.title}
                       </a>
                     ) : null;
@@ -321,7 +434,11 @@ function RevenueBars({ ticker, data }: { ticker: string; data: CompanyDataset })
     parts: [{ id: "Net income", value: ni?.cells[i]?.v ?? 0, color: "var(--chart-2)" }],
   }));
   return (
-    <Panel title="Revenue and net income" subtitle="Quarterly · click a bar for its filing" bodyClassName="grid gap-2 p-3">
+    <Panel
+      title="Revenue and net income"
+      subtitle="Quarterly · click a bar for its filing"
+      bodyClassName="grid gap-2 p-3"
+    >
       <BarChart
         data={bars}
         height={170}
@@ -352,7 +469,9 @@ function MarginLines({ data }: { data: CompanyDataset }) {
     const r = k.rows.find((x) => x.key === key);
     return k.periods
       .map((p, i) => ({ date: new Date(`${p.end}T00:00:00Z`), value: r?.cells[i]?.v }))
-      .filter((x): x is { date: Date; value: number } => x.value != null && Number.isFinite(x.value))
+      .filter(
+        (x): x is { date: Date; value: number } => x.value != null && Number.isFinite(x.value),
+      )
       .slice(-24);
   };
   const series = [
@@ -367,11 +486,23 @@ function MarginLines({ data }: { data: CompanyDataset }) {
   );
 }
 
-function InsiderSummary({ ticker, data, price }: { ticker: string; data: CompanyDataset; price: number | null }) {
+function InsiderSummary({
+  ticker,
+  data,
+  price,
+}: {
+  ticker: string;
+  data: CompanyDataset;
+  price: number | null;
+}) {
   const { open } = useSource();
   const open90 = data.insiders.filter((t) => ["S", "P"].includes(t.code));
-  const sold = open90.filter((t) => t.code === "S").reduce((s, t) => s + t.shares * (t.price ?? 0), 0);
-  const bought = open90.filter((t) => t.code === "P").reduce((s, t) => s + t.shares * (t.price ?? 0), 0);
+  const sold = open90
+    .filter((t) => t.code === "S")
+    .reduce((s, t) => s + t.shares * (t.price ?? 0), 0);
+  const bought = open90
+    .filter((t) => t.code === "P")
+    .reduce((s, t) => s + t.shares * (t.price ?? 0), 0);
   const recent = data.insiders.slice(0, 6);
   return (
     <Panel
@@ -400,17 +531,35 @@ function InsiderSummary({ ticker, data, price }: { ticker: string; data: Company
         {recent.map((t, i) => (
           <li key={`${t.accn}-${i}`}>
             <button
-              onClick={() => open({ ticker, label: `Form 4 · ${t.owner}`, periodLabel: t.date, unit: "usd", value: 0, doc: { accn: t.accn, doc: t.doc, title: `${t.owner} — ${t.role}` } })}
+              onClick={() =>
+                open({
+                  ticker,
+                  label: `Form 4 · ${t.owner}`,
+                  periodLabel: t.date,
+                  unit: "usd",
+                  value: 0,
+                  doc: { accn: t.accn, doc: t.doc, title: `${t.owner} — ${t.role}` },
+                })
+              }
               className="flex w-full items-center gap-3 px-4 py-2 text-left text-[12.5px] transition-colors hover:bg-secondary"
             >
-              <span className={cn("num w-5 text-center font-semibold", t.acquired ? "text-positive" : "text-negative")}>{t.code}</span>
+              <span
+                className={cn(
+                  "num w-5 text-center font-semibold",
+                  t.acquired ? "text-positive" : "text-negative",
+                )}
+              >
+                {t.code}
+              </span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate">{t.owner}</span>
                 <span className="block truncate text-[11px] text-muted-foreground">{t.role}</span>
               </span>
               <span className="num text-right text-[11px]">
                 {t.shares.toLocaleString()} sh
-                <span className="block text-muted-foreground">{t.price ? fmtPrice(t.price) : "—"}</span>
+                <span className="block text-muted-foreground">
+                  {t.price ? fmtPrice(t.price) : "—"}
+                </span>
               </span>
             </button>
           </li>
