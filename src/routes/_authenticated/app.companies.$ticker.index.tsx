@@ -36,6 +36,7 @@ import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
 import { FilingInsightsPanel } from "@/components/company/filing-insights";
 import { BriefPanel } from "@/components/company/brief-panel";
+import { CompanyThemes } from "@/components/themes/company-themes";
 import { coverageOf } from "@/lib/coverage";
 import { FirmNotes } from "@/components/firm/firm-notes";
 
@@ -83,6 +84,7 @@ function OverviewSkeleton() {
 const OVERVIEW_SECTIONS = [
   { id: "ov-price", label: "Price" },
   { id: "ov-changes", label: "Filing changes" },
+  { id: "ov-themes", label: "Themes" },
   { id: "ov-setup", label: "Setup & catalysts" },
   { id: "ov-about", label: "About" },
   { id: "ov-news", label: "News & calls" },
@@ -240,6 +242,10 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <div id="ov-changes" className="scroll-mt-24">
         <FilingInsightsPanel ticker={ticker} />
+      </div>
+
+      <div id="ov-themes" className="scroll-mt-24">
+        <CompanyThemes ticker={ticker} />
       </div>
 
       <div

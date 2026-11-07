@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   Star,
   Users,
+  Quote,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -50,6 +51,12 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     label: "Filings",
     icon: FileSearch,
     keywords: "10-k 10-q redline disclosure changes risk factors filing insights what changed",
+  },
+  {
+    to: "/app/themes",
+    label: "Themes",
+    icon: Quote,
+    keywords: "themes tariffs ai glp-1 obesity reshoring nearshoring data center power china cyber incident union labor interest rates consumer weakness filing language trends basket",
   },
   {
     to: "/app/kpis",
