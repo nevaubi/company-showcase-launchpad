@@ -1,8 +1,10 @@
 import type { Unit } from "@/lib/financials/types";
 
-// HTML entity decoding lives in the pure redline extractor; re-exported here for callers
-// that only need formatting helpers (e.g. src/lib/data.ts cleaning insider names).
-export { decodeEntities } from "@/lib/redline/extract";
+import { decodeEntities as decodeHtml } from "@/lib/redline/extract";
+
+// HTML entity decoding lives in the pure redline extractor; this null-safe wrapper serves callers that
+// only need formatting helpers (e.g. src/lib/data.ts cleaning insider names and roles).
+export const decodeEntities = (s: string | null | undefined): string => (s ? decodeHtml(s) : "");
 
 const nf = (min: number, max: number) =>
   new Intl.NumberFormat("en-US", { minimumFractionDigits: min, maximumFractionDigits: max });
@@ -221,23 +223,3 @@ export const INSIDER_CODES: Record<string, string> = {
   J: "Other",
   X: "Option exercise (in-the-money)",
 };
-
-const ENTITIES: Record<string, string> = {
-  amp: "&",
-  lt: "<",
-  gt: ">",
-  quot: '"',
-  apos: "'",
-  nbsp: " ",
-};
-/** SEC XML fields sometimes arrive with HTML entities still encoded ("EVP &amp; CFO"); decode them as plain text. */
-export function decodeEntities(s: string | null | undefined): string {
-  if (!s) return s ?? "";
-  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
-    if (e[0] === "#") {
-      const n = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
-      return Number.isFinite(n) ? String.fromCodePoint(n) : m;
-    }
-    return ENTITIES[e.toLowerCase()] ?? m;
-  });
-}
