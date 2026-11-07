@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as MockupsLandingHeroRouteImport } from './routes/mockups.landing-hero'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
 import { Route as AuthenticatedAppCalendarsRouteImport } from './routes/_authenticated/app.calendars'
@@ -88,6 +89,11 @@ const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/app',
   path: '/app',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const MockupsLandingHeroRoute = MockupsLandingHeroRouteImport.update({
+  id: '/mockups/landing-hero',
+  path: '/mockups/landing-hero',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
   id: '/',
@@ -345,6 +351,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
+  '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/app/compare': typeof AuthenticatedAppCompareRoute
@@ -395,6 +402,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/app/compare': typeof AuthenticatedAppCompareRoute
@@ -446,6 +454,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
+  '/mockups/landing-hero': typeof MockupsLandingHeroRoute
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/_authenticated/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/_authenticated/app/compare': typeof AuthenticatedAppCompareRoute
@@ -499,6 +508,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/app'
+    | '/mockups/landing-hero'
     | '/app/alt-data'
     | '/app/calendars'
     | '/app/compare'
@@ -549,6 +559,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pricing'
     | '/reset-password'
+    | '/mockups/landing-hero'
     | '/app/alt-data'
     | '/app/calendars'
     | '/app/compare'
@@ -599,6 +610,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/_authenticated/app'
+    | '/mockups/landing-hero'
     | '/_authenticated/app/alt-data'
     | '/_authenticated/app/calendars'
     | '/_authenticated/app/compare'
@@ -651,6 +663,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   PricingRoute: typeof PricingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  MockupsLandingHeroRoute: typeof MockupsLandingHeroRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
   ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
 }
@@ -698,6 +711,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app'
       preLoaderRoute: typeof AuthenticatedAppRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/mockups/landing-hero': {
+      id: '/mockups/landing-hero'
+      path: '/mockups/landing-hero'
+      fullPath: '/mockups/landing-hero'
+      preLoaderRoute: typeof MockupsLandingHeroRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/app/': {
       id: '/_authenticated/app/'
@@ -1155,6 +1175,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   PricingRoute: PricingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  MockupsLandingHeroRoute: MockupsLandingHeroRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
   ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,
 }
