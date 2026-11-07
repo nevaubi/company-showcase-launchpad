@@ -7,16 +7,38 @@ import { z } from "zod";
 import { Loader2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader, Panel, Stat } from "@/components/app/page-header";
+import { Segmented } from "@/components/app/segmented";
+import { DeepViews, TechnicalRead } from "@/components/technicals/deep-views";
 import { PriceChart, type Overlay } from "@/components/charts/price-chart";
 import { TimeSeriesChart } from "@/components/charts/time-series";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getChartInsight } from "@/lib/ai.functions";
 import { BENCHMARKS, COVERAGE, coverageOf } from "@/lib/coverage";
 import { useCompany, usePrices, useQuotes, type Interval, type Range } from "@/lib/data";
-import { alignByDate, annualizedVol, beta, bollinger, correlation, macd, maxDrawdown, pctChangeOver, returns, rsi, sma } from "@/lib/indicators";
+import {
+  alignByDate,
+  annualizedVol,
+  beta,
+  bollinger,
+  correlation,
+  macd,
+  maxDrawdown,
+  pctChangeOver,
+  returns,
+  rsi,
+  sma,
+} from "@/lib/indicators";
 import { fmtDate, fmtPct, fmtPrice, fmtRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +58,7 @@ const RANGES: { r: Range; i: Interval; l: string }[] = [
 const pageSearch = z.object({
   symbol: z.string().max(12).default("NVDA"),
   range: z.enum(["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"]).default("1y"),
+  view: z.enum(["chart", "signals", "risk", "quant", "market"]).default("chart"),
 });
 
 export const Route = createFileRoute("/_authenticated/app/markets")({
@@ -45,9 +68,15 @@ export const Route = createFileRoute("/_authenticated/app/markets")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { title: "Technicals — Filed Under" },
-      { name: "description", content: "Candlestick charts, moving averages, RSI, MACD and AI chart reads." },
+      {
+        name: "description",
+        content: "Candlestick charts, moving averages, RSI, MACD and AI chart reads.",
+      },
       { property: "og:title", content: "Technicals — Filed Under" },
-      { property: "og:description", content: "Candlestick charts, moving averages, RSI, MACD and AI chart reads." },
+      {
+        property: "og:description",
+        content: "Candlestick charts, moving averages, RSI, MACD and AI chart reads.",
+      },
     ],
   }),
   component: Markets,
@@ -75,7 +104,12 @@ function Markets() {
   const series = usePrices(symbol, rr.r, rr.i);
   const daily = usePrices(symbol, "2y", "1d");
   const spy = usePrices("SPY", "2y", "1d");
-  const cmp = usePrices(compareSym === "none" ? "SPY" : compareSym, rr.r, rr.i, compareSym !== "none");
+  const cmp = usePrices(
+    compareSym === "none" ? "SPY" : compareSym,
+    rr.r,
+    rr.i,
+    compareSym !== "none",
+  );
   const quote = useQuotes([symbol]).data?.quotes[0];
   const company = useCompany(covered ? symbol : "AAPL");
   const releases = covered ? (company.data?.earningsReleases ?? []) : [];
@@ -113,7 +147,10 @@ function Markets() {
       corr = correlation(ra, rb);
     }
     const spyAdj = spy.data?.bars.map((x) => x[5]) ?? [];
-    const rel3m = pctChangeOver(adj, 63) != null && pctChangeOver(spyAdj, 63) != null ? pctChangeOver(adj, 63)! - pctChangeOver(spyAdj, 63)! : null;
+    const rel3m =
+      pctChangeOver(adj, 63) != null && pctChangeOver(spyAdj, 63) != null
+        ? pctChangeOver(adj, 63)! - pctChangeOver(spyAdj, 63)!
+        : null;
     const hi52 = Math.max(...yr.map((x) => x[2]));
     const lo52 = Math.min(...yr.map((x) => x[3]));
     const avgVol = yr.slice(-50).reduce((a, x) => a + x[6], 0) / Math.min(50, yr.length);
@@ -158,7 +195,8 @@ function Markets() {
   const insight = useMutation({
     mutationFn: () => {
       const st = stats!;
-      const round = (x: number | null | undefined, d = 2) => (x == null || !Number.isFinite(x) ? null : Number(x.toFixed(d)));
+      const round = (x: number | null | undefined, d = 2) =>
+        x == null || !Number.isFinite(x) ? null : Number(x.toFixed(d));
       return getChartInsight({
         data: {
           symbol,
@@ -184,10 +222,14 @@ function Markets() {
             high52w: round(st.hi52),
             low52w: round(st.lo52),
             volumeVs50dAvg: round(st.lastVol / st.avgVol, 2),
-            lastEarningsReactions: st.reactions
-              .slice(0, 4)
-              .map((r) => `${r.date}: ${(r.d1 * 100).toFixed(1)}% next day, ${r.d5 != null ? (r.d5 * 100).toFixed(1) + "% over 5d" : "n/a"}`)
-              .join("; ") || null,
+            lastEarningsReactions:
+              st.reactions
+                .slice(0, 4)
+                .map(
+                  (r) =>
+                    `${r.date}: ${(r.d1 * 100).toFixed(1)}% next day, ${r.d5 != null ? (r.d5 * 100).toFixed(1) + "% over 5d" : "n/a"}`,
+                )
+                .join("; ") || null,
           },
         },
       });
@@ -195,9 +237,17 @@ function Markets() {
     onError: (e) => toast.error((e as Error).message),
   });
 
-  const toggle = (o: Overlay) => setOverlays((xs) => (xs.includes(o) ? xs.filter((x) => x !== o) : [...xs, o]));
-  const markers = rr.i === "1d" || rr.i === "1wk" ? releases.map((r) => ({ time: r.filed, label: "E", color: "var(--chart-2)" })) : [];
-  const name = covered?.shortName ?? BENCHMARKS.find((b) => b.symbol === symbol)?.name ?? series.data?.name ?? symbol;
+  const toggle = (o: Overlay) =>
+    setOverlays((xs) => (xs.includes(o) ? xs.filter((x) => x !== o) : [...xs, o]));
+  const markers =
+    rr.i === "1d" || rr.i === "1wk"
+      ? releases.map((r) => ({ time: r.filed, label: "E", color: "var(--chart-2)" }))
+      : [];
+  const name =
+    covered?.shortName ??
+    BENCHMARKS.find((b) => b.symbol === symbol)?.name ??
+    series.data?.name ??
+    symbol;
 
   return (
     <div className="grid grid-cols-1 gap-5">
@@ -213,14 +263,21 @@ function Markets() {
           quote ? (
             <span className="num">
               {fmtPrice(quote.price)}{" "}
-              <span className={quote.change >= 0 ? "text-positive" : "text-negative"}>{fmtPct(quote.changePct, 2, true)}</span>
-              {quote.marketTime && <span className="text-muted-foreground"> · {fmtRelative(quote.marketTime)}</span>}
+              <span className={quote.change >= 0 ? "text-positive" : "text-negative"}>
+                {fmtPct(quote.changePct, 2, true)}
+              </span>
+              {quote.marketTime && (
+                <span className="text-muted-foreground"> · {fmtRelative(quote.marketTime)}</span>
+              )}
             </span>
           ) : undefined
         }
         actions={
           <>
-            <Select value={symbol} onValueChange={(v) => navigate({ search: (p) => ({ ...p, symbol: v }) })}>
+            <Select
+              value={symbol}
+              onValueChange={(v) => navigate({ search: (p) => ({ ...p, symbol: v }) })}
+            >
               <SelectTrigger className="w-56">
                 <SelectValue />
               </SelectTrigger>
@@ -253,203 +310,411 @@ function Markets() {
           </>
         }
       />
+      <div className="-mt-2 flex flex-wrap items-center gap-2">
+        <Segmented
+          label="View"
+          value={s.view}
+          onChange={(v) => navigate({ search: (p) => ({ ...p, view: v }) })}
+          options={[
+            { v: "chart", l: "Chart" },
+            { v: "signals", l: "Signals" },
+            { v: "risk", l: "Risk" },
+            { v: "quant", l: "Quant" },
+            { v: "market", l: "Market scan" },
+          ]}
+        />
+        <span className="text-[11px] text-muted-foreground">
+          {s.view === "market"
+            ? "Across every tracked company"
+            : "Signals, risk and quant use the stored daily history since 2008"}
+        </span>
+      </div>
 
-      <Panel
-        bodyClassName="p-2"
-        title={
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-md border bg-secondary/50 p-0.5">
-              {RANGES.map((x) => (
-                <button
-                  key={x.r}
-                  onClick={() => navigate({ search: (p) => ({ ...p, range: x.r as z.infer<typeof pageSearch>["range"] }) })}
-                  className={cn("num rounded px-2 py-0.5 text-[11px]", s.range === x.r ? "bg-card font-medium shadow-paper" : "text-muted-foreground")}
-                >
-                  {x.l}
-                </button>
-              ))}
-            </div>
-            <div className="flex rounded-md border bg-secondary/50 p-0.5">
-              {(["candles", "area"] as const).map((x) => (
-                <button key={x} onClick={() => setMode(x)} className={cn("rounded px-2 py-0.5 text-[11px] capitalize", mode === x ? "bg-card font-medium shadow-paper" : "text-muted-foreground")}>
-                  {x}
-                </button>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {OVERLAYS.map((o) => (
-                <button
-                  key={o.id}
-                  onClick={() => toggle(o.id)}
-                  className={cn("rounded-full border px-2 py-0.5 text-[11px] font-normal", overlays.includes(o.id) ? "border-foreground bg-ink text-ink-foreground" : "bg-card text-muted-foreground")}
-                >
-                  {o.l}
-                </button>
-              ))}
-            </div>
-          </div>
-        }
-        actions={
-          <Select value={compareSym} onValueChange={setCompareSym}>
-            <SelectTrigger className="h-7 w-40 text-xs">
-              <SelectValue placeholder="Compare" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No comparison</SelectItem>
-              {["SPY", "QQQ", ...(sectorEtf ? [sectorEtf] : []), ...COVERAGE.map((c) => c.ticker).filter((t) => t !== symbol)].map((x) => (
-                <SelectItem key={x} value={x}>
-                  vs {x}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
-      >
-        {series.isError ? (
-          <p className="p-8 text-center text-sm text-muted-foreground">Price data is unavailable for this range right now.</p>
-        ) : bars.length ? (
-          <>
-            <PriceChart
-              bars={bars}
-              mode={mode}
-              overlays={overlays}
-              markers={markers}
-              height={420}
-              compare={compareSym !== "none" && cmp.data ? { label: compareSym, bars: cmp.data.bars } : null}
-            />
-            <div className="grid grid-cols-1 gap-1 border-t pt-1 md:grid-cols-2">
-              <div>
-                <p className="px-2 pt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  RSI 14 <span className="num normal-case">{rsiVals.at(-1)?.toFixed(1)}</span>
-                </p>
-                <TimeSeriesChart
-                  height={120}
-                  endLabels={false}
-                  yDomain={[0, 100]}
-                  yFormat={(v) => v.toFixed(0)}
-                  series={[
-                    { id: "rsi", label: "RSI", color: "var(--chart-1)", points: dates.flatMap((d, i) => (rsiVals[i] == null ? [] : [{ date: d, value: rsiVals[i]! }])) },
-                    { id: "70", label: "70", color: "var(--negative)", dashed: true, points: dates.length ? [{ date: dates[0], value: 70 }, { date: dates.at(-1)!, value: 70 }] : [] },
-                    { id: "30", label: "30", color: "var(--positive)", dashed: true, points: dates.length ? [{ date: dates[0], value: 30 }, { date: dates.at(-1)!, value: 30 }] : [] },
-                  ]}
-                />
-              </div>
-              <div>
-                <p className="px-2 pt-1 text-[10px] uppercase tracking-wider text-muted-foreground">MACD 12·26·9</p>
-                <TimeSeriesChart
-                  height={120}
-                  endLabels={false}
-                  zeroLine
-                  yFormat={(v) => v.toFixed(1)}
-                  series={[
-                    { id: "macd", label: "MACD", color: "var(--chart-1)", points: dates.flatMap((d, i) => (m.line[i] == null ? [] : [{ date: d, value: m.line[i]! }])) },
-                    { id: "sig", label: "Signal", color: "var(--chart-2)", points: dates.flatMap((d, i) => (m.signal[i] == null ? [] : [{ date: d, value: m.signal[i]! }])) },
-                    { id: "hist", label: "Histogram", color: "var(--chart-5)", area: true, points: dates.flatMap((d, i) => (m.hist[i] == null ? [] : [{ date: d, value: m.hist[i]! }])) },
-                  ]}
-                />
-              </div>
-            </div>
-          </>
-        ) : (
-          <Skeleton className="h-[540px]" />
-        )}
-      </Panel>
+      {s.view !== "chart" ? (
+        <DeepViews
+          view={s.view}
+          symbol={symbol}
+          onPick={(t) => navigate({ search: (p) => ({ ...p, symbol: t, view: "signals" }) })}
+        />
+      ) : (
+        <>
+          <TechnicalRead
+            symbol={symbol}
+            onSignals={() => navigate({ search: (p) => ({ ...p, view: "signals" }) })}
+          />
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
-        <div className="grid grid-cols-1 content-start gap-3">
-          {stats ? (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Stat label="1M / 3M" value={fmtPct(stats.ret1m, 1, true)} sub={`${fmtPct(stats.ret3m, 1, true)} over 3M`} tone={(stats.ret1m ?? 0) >= 0 ? "positive" : "negative"} />
-              <Stat label="1Y return" value={fmtPct(stats.ret1y, 1, true)} sub={stats.rel3m != null ? `${fmtPct(stats.rel3m, 1, true)} vs SPY (3M)` : undefined} tone={(stats.ret1y ?? 0) >= 0 ? "positive" : "negative"} />
-              <Stat label="vs 50 / 200-day" value={stats.s50 ? fmtPct(stats.last / stats.s50 - 1, 1, true) : "—"} sub={stats.s200 ? `${fmtPct(stats.last / stats.s200 - 1, 1, true)} vs 200-day` : undefined} />
-              <Stat label="RSI 14" value={stats.rsi?.toFixed(1) ?? "—"} sub={stats.rsi == null ? undefined : stats.rsi > 70 ? "overbought" : stats.rsi < 30 ? "oversold" : "neutral"} />
-              <Stat label="Volatility (1Y)" value={fmtPct(stats.vol, 1)} sub={`max drawdown ${fmtPct(stats.mdd, 1)}`} />
-              <Stat label="Beta / corr. vs SPY" value={stats.beta?.toFixed(2) ?? "—"} sub={stats.corr != null ? `ρ = ${stats.corr.toFixed(2)}` : undefined} />
-              <Stat label="52-week range" value={`${fmtPrice(stats.lo52)} – ${fmtPrice(stats.hi52)}`} sub={`${fmtPct(stats.last / stats.hi52 - 1, 1, true)} from high`} />
-              <Stat label="Volume vs 50-day" value={`${(stats.lastVol / stats.avgVol).toFixed(2)}×`} sub={`${(stats.avgVol / 1e6).toFixed(1)}M avg`} />
-            </div>
-          ) : (
-            <Skeleton className="h-44" />
-          )}
-          {covered && stats && stats.reactions.length > 0 && (
-            <Panel title="Earnings reactions" subtitle="First session after each 8-K results release" bodyClassName="p-0">
-              <table className="w-full text-[13px]">
-                <thead>
-                  <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                    <th className="px-4 py-2 font-medium">Release</th>
-                    <th className="px-2 py-2 text-right font-medium">Gap</th>
-                    <th className="px-2 py-2 text-right font-medium">Day 1</th>
-                    <th className="px-4 py-2 text-right font-medium">Day 5</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stats.reactions.map((r) => (
-                    <tr key={r.accn} className="border-b last:border-0">
-                      <td className="num px-4 py-2 text-xs">{fmtDate(r.filed)}</td>
-                      {[r.gap, r.d1, r.d5].map((v, i) => (
-                        <td key={i} className={cn("num px-2 py-2 text-right last:px-4", v == null ? "text-muted-foreground" : v >= 0 ? "text-positive" : "text-negative")}>
-                          {fmtPct(v, 1, true)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Panel>
-          )}
-        </div>
-        <Panel
-          title={
-            <span className="flex items-center gap-1.5">
-              <Sparkles className="size-3.5" /> AI chart read
-            </span>
-          }
-          subtitle="Written from the statistics on this page — no invented numbers"
-          actions={
-            <Button size="xs" variant={insight.data ? "outline" : "ink"} disabled={!stats || insight.isPending} onClick={() => insight.mutate()}>
-              {insight.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />} {insight.data ? "Refresh" : "Analyze"}
-            </Button>
-          }
-        >
-          {insight.isPending ? (
-            <div className="space-y-2">
-              <Skeleton className="h-6 w-2/3" />
-              <Skeleton className="h-24" />
-            </div>
-          ) : insight.data ? (
-            <div className="grid grid-cols-1 gap-3">
-              <div className="flex items-center gap-2">
-                <Badge variant={insight.data.bias === "bullish" ? "positive" : insight.data.bias === "bearish" ? "negative" : "outline"} className="capitalize">
-                  {insight.data.bias}
-                </Badge>
-                <span className="text-[11px] text-muted-foreground">as of {fmtDate(stats?.asOf)}</span>
-              </div>
-              <p className="font-display text-xl leading-snug">{insight.data.headline}</p>
-              <ul className="space-y-2">
-                {insight.data.bullets.map((b) => (
-                  <li key={b} className="flex gap-2 text-[13px] leading-relaxed">
-                    <span className="mt-2 size-1.5 shrink-0 rounded-full bg-chart-2" />
-                    {b}
-                  </li>
-                ))}
-              </ul>
-              {insight.data.levels.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
-                  {insight.data.levels.map((l) => (
-                    <span key={l.label} className="rounded border bg-secondary/60 px-2 py-1 text-[11px]">
-                      {l.label}: <span className="num font-medium">{l.value}</span>
-                    </span>
+          <Panel
+            bodyClassName="p-2"
+            title={
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex rounded-md border bg-secondary/50 p-0.5">
+                  {RANGES.map((x) => (
+                    <button
+                      key={x.r}
+                      onClick={() =>
+                        navigate({
+                          search: (p) => ({
+                            ...p,
+                            range: x.r as z.infer<typeof pageSearch>["range"],
+                          }),
+                        })
+                      }
+                      className={cn(
+                        "num rounded px-2 py-0.5 text-[11px]",
+                        s.range === x.r
+                          ? "bg-card font-medium shadow-paper"
+                          : "text-muted-foreground",
+                      )}
+                    >
+                      {x.l}
+                    </button>
                   ))}
                 </div>
+                <div className="flex rounded-md border bg-secondary/50 p-0.5">
+                  {(["candles", "area"] as const).map((x) => (
+                    <button
+                      key={x}
+                      onClick={() => setMode(x)}
+                      className={cn(
+                        "rounded px-2 py-0.5 text-[11px] capitalize",
+                        mode === x ? "bg-card font-medium shadow-paper" : "text-muted-foreground",
+                      )}
+                    >
+                      {x}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {OVERLAYS.map((o) => (
+                    <button
+                      key={o.id}
+                      onClick={() => toggle(o.id)}
+                      className={cn(
+                        "rounded-full border px-2 py-0.5 text-[11px] font-normal",
+                        overlays.includes(o.id)
+                          ? "border-foreground bg-ink text-ink-foreground"
+                          : "bg-card text-muted-foreground",
+                      )}
+                    >
+                      {o.l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            }
+            actions={
+              <Select value={compareSym} onValueChange={setCompareSym}>
+                <SelectTrigger className="h-7 w-40 text-xs">
+                  <SelectValue placeholder="Compare" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No comparison</SelectItem>
+                  {[
+                    "SPY",
+                    "QQQ",
+                    ...(sectorEtf ? [sectorEtf] : []),
+                    ...COVERAGE.map((c) => c.ticker).filter((t) => t !== symbol),
+                  ].map((x) => (
+                    <SelectItem key={x} value={x}>
+                      vs {x}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            }
+          >
+            {series.isError ? (
+              <p className="p-8 text-center text-sm text-muted-foreground">
+                Price data is unavailable for this range right now.
+              </p>
+            ) : bars.length ? (
+              <>
+                <PriceChart
+                  bars={bars}
+                  mode={mode}
+                  overlays={overlays}
+                  markers={markers}
+                  height={420}
+                  compare={
+                    compareSym !== "none" && cmp.data
+                      ? { label: compareSym, bars: cmp.data.bars }
+                      : null
+                  }
+                />
+                <div className="grid grid-cols-1 gap-1 border-t pt-1 md:grid-cols-2">
+                  <div>
+                    <p className="px-2 pt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      RSI 14 <span className="num normal-case">{rsiVals.at(-1)?.toFixed(1)}</span>
+                    </p>
+                    <TimeSeriesChart
+                      height={120}
+                      endLabels={false}
+                      yDomain={[0, 100]}
+                      yFormat={(v) => v.toFixed(0)}
+                      series={[
+                        {
+                          id: "rsi",
+                          label: "RSI",
+                          color: "var(--chart-1)",
+                          points: dates.flatMap((d, i) =>
+                            rsiVals[i] == null ? [] : [{ date: d, value: rsiVals[i]! }],
+                          ),
+                        },
+                        {
+                          id: "70",
+                          label: "70",
+                          color: "var(--negative)",
+                          dashed: true,
+                          points: dates.length
+                            ? [
+                                { date: dates[0], value: 70 },
+                                { date: dates.at(-1)!, value: 70 },
+                              ]
+                            : [],
+                        },
+                        {
+                          id: "30",
+                          label: "30",
+                          color: "var(--positive)",
+                          dashed: true,
+                          points: dates.length
+                            ? [
+                                { date: dates[0], value: 30 },
+                                { date: dates.at(-1)!, value: 30 },
+                              ]
+                            : [],
+                        },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <p className="px-2 pt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      MACD 12·26·9
+                    </p>
+                    <TimeSeriesChart
+                      height={120}
+                      endLabels={false}
+                      zeroLine
+                      yFormat={(v) => v.toFixed(1)}
+                      series={[
+                        {
+                          id: "macd",
+                          label: "MACD",
+                          color: "var(--chart-1)",
+                          points: dates.flatMap((d, i) =>
+                            m.line[i] == null ? [] : [{ date: d, value: m.line[i]! }],
+                          ),
+                        },
+                        {
+                          id: "sig",
+                          label: "Signal",
+                          color: "var(--chart-2)",
+                          points: dates.flatMap((d, i) =>
+                            m.signal[i] == null ? [] : [{ date: d, value: m.signal[i]! }],
+                          ),
+                        },
+                        {
+                          id: "hist",
+                          label: "Histogram",
+                          color: "var(--chart-5)",
+                          area: true,
+                          points: dates.flatMap((d, i) =>
+                            m.hist[i] == null ? [] : [{ date: d, value: m.hist[i]! }],
+                          ),
+                        },
+                      ]}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <Skeleton className="h-[540px]" />
+            )}
+          </Panel>
+
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 content-start gap-3">
+              {stats ? (
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <Stat
+                    label="1M / 3M"
+                    value={fmtPct(stats.ret1m, 1, true)}
+                    sub={`${fmtPct(stats.ret3m, 1, true)} over 3M`}
+                    tone={(stats.ret1m ?? 0) >= 0 ? "positive" : "negative"}
+                  />
+                  <Stat
+                    label="1Y return"
+                    value={fmtPct(stats.ret1y, 1, true)}
+                    sub={
+                      stats.rel3m != null
+                        ? `${fmtPct(stats.rel3m, 1, true)} vs SPY (3M)`
+                        : undefined
+                    }
+                    tone={(stats.ret1y ?? 0) >= 0 ? "positive" : "negative"}
+                  />
+                  <Stat
+                    label="vs 50 / 200-day"
+                    value={stats.s50 ? fmtPct(stats.last / stats.s50 - 1, 1, true) : "—"}
+                    sub={
+                      stats.s200
+                        ? `${fmtPct(stats.last / stats.s200 - 1, 1, true)} vs 200-day`
+                        : undefined
+                    }
+                  />
+                  <Stat
+                    label="RSI 14"
+                    value={stats.rsi?.toFixed(1) ?? "—"}
+                    sub={
+                      stats.rsi == null
+                        ? undefined
+                        : stats.rsi > 70
+                          ? "overbought"
+                          : stats.rsi < 30
+                            ? "oversold"
+                            : "neutral"
+                    }
+                  />
+                  <Stat
+                    label="Volatility (1Y)"
+                    value={fmtPct(stats.vol, 1)}
+                    sub={`max drawdown ${fmtPct(stats.mdd, 1)}`}
+                  />
+                  <Stat
+                    label="Beta / corr. vs SPY"
+                    value={stats.beta?.toFixed(2) ?? "—"}
+                    sub={stats.corr != null ? `ρ = ${stats.corr.toFixed(2)}` : undefined}
+                  />
+                  <Stat
+                    label="52-week range"
+                    value={`${fmtPrice(stats.lo52)} – ${fmtPrice(stats.hi52)}`}
+                    sub={`${fmtPct(stats.last / stats.hi52 - 1, 1, true)} from high`}
+                  />
+                  <Stat
+                    label="Volume vs 50-day"
+                    value={`${(stats.lastVol / stats.avgVol).toFixed(2)}×`}
+                    sub={`${(stats.avgVol / 1e6).toFixed(1)}M avg`}
+                  />
+                </div>
+              ) : (
+                <Skeleton className="h-44" />
               )}
-              <p className="text-[11px] text-muted-foreground">Not investment advice.</p>
+              {covered && stats && stats.reactions.length > 0 && (
+                <Panel
+                  title="Earnings reactions"
+                  subtitle="First session after each 8-K results release"
+                  bodyClassName="p-0"
+                >
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                        <th className="px-4 py-2 font-medium">Release</th>
+                        <th className="px-2 py-2 text-right font-medium">Gap</th>
+                        <th className="px-2 py-2 text-right font-medium">Day 1</th>
+                        <th className="px-4 py-2 text-right font-medium">Day 5</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {stats.reactions.map((r) => (
+                        <tr key={r.accn} className="border-b last:border-0">
+                          <td className="num px-4 py-2 text-xs">{fmtDate(r.filed)}</td>
+                          {[r.gap, r.d1, r.d5].map((v, i) => (
+                            <td
+                              key={i}
+                              className={cn(
+                                "num px-2 py-2 text-right last:px-4",
+                                v == null
+                                  ? "text-muted-foreground"
+                                  : v >= 0
+                                    ? "text-positive"
+                                    : "text-negative",
+                              )}
+                            >
+                              {fmtPct(v, 1, true)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </Panel>
+              )}
             </div>
-          ) : (
-            <p className="text-sm text-muted-foreground">Get a plain-English read of trend, momentum, volatility and earnings behaviour for {symbol}.</p>
-          )}
-        </Panel>
-      </div>
+            <Panel
+              title={
+                <span className="flex items-center gap-1.5">
+                  <Sparkles className="size-3.5" /> AI chart read
+                </span>
+              }
+              subtitle="Written from the statistics on this page — no invented numbers"
+              actions={
+                <Button
+                  size="xs"
+                  variant={insight.data ? "outline" : "ink"}
+                  disabled={!stats || insight.isPending}
+                  onClick={() => insight.mutate()}
+                >
+                  {insight.isPending ? <Loader2 className="animate-spin" /> : <Sparkles />}{" "}
+                  {insight.data ? "Refresh" : "Analyze"}
+                </Button>
+              }
+            >
+              {insight.isPending ? (
+                <div className="space-y-2">
+                  <Skeleton className="h-6 w-2/3" />
+                  <Skeleton className="h-24" />
+                </div>
+              ) : insight.data ? (
+                <div className="grid grid-cols-1 gap-3">
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant={
+                        insight.data.bias === "bullish"
+                          ? "positive"
+                          : insight.data.bias === "bearish"
+                            ? "negative"
+                            : "outline"
+                      }
+                      className="capitalize"
+                    >
+                      {insight.data.bias}
+                    </Badge>
+                    <span className="text-[11px] text-muted-foreground">
+                      as of {fmtDate(stats?.asOf)}
+                    </span>
+                  </div>
+                  <p className="font-display text-xl leading-snug">{insight.data.headline}</p>
+                  <ul className="space-y-2">
+                    {insight.data.bullets.map((b) => (
+                      <li key={b} className="flex gap-2 text-[13px] leading-relaxed">
+                        <span className="mt-2 size-1.5 shrink-0 rounded-full bg-chart-2" />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                  {insight.data.levels.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {insight.data.levels.map((l) => (
+                        <span
+                          key={l.label}
+                          className="rounded border bg-secondary/60 px-2 py-1 text-[11px]"
+                        >
+                          {l.label}: <span className="num font-medium">{l.value}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground">Not investment advice.</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Get a plain-English read of trend, momentum, volatility and earnings behaviour for{" "}
+                  {symbol}.
+                </p>
+              )}
+            </Panel>
+          </div>
+        </>
+      )}
     </div>
   );
 }
-
