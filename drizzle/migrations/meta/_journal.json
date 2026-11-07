@@ -225,6 +225,13 @@
       "when": 1794083361879,
       "tag": "0031_company_visits",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1794084331266,
+      "tag": "0032_company_visits",
+      "breakpoints": true
     }
   ]
 }
