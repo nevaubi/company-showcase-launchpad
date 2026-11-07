@@ -38,6 +38,28 @@ function partnerJson<T>(path: string): Promise<T | null> {
   return p;
 }
 
+/**
+ * A file from the partner data service that our own site also serves (as-filed statements, the
+ * template map, KPI files). Throws when it is missing or the user isn't signed in, so callers can
+ * show a clear empty state. `.gz` files are decompressed in the browser.
+ */
+export async function partnerFile<T>(path: string): Promise<T> {
+  if (!PARTNER_DATA_URL || PARTNER_DATA_URL === "off") throw new Error("Partner data is turned off");
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Sign in to load this data");
+  const res = await fetch(`${PARTNER_DATA_URL}?path=${encodeURIComponent(path)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (res.status === 404) throw new Error("Not available for this company yet");
+  if (!res.ok) throw new Error(`Data service returned ${res.status}`);
+  if (!path.endsWith(".gz")) return (await res.json()) as T;
+  if (typeof DecompressionStream === "undefined" || !res.body) throw new Error("This browser cannot open compressed filings");
+  const text = await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).text();
+  return JSON.parse(text) as T;
+}
+
 async function fetchPartner<T>(path: string): Promise<T | null> {
   if (!PARTNER_DATA_URL || PARTNER_DATA_URL === "off" || typeof window === "undefined") return null;
   try {

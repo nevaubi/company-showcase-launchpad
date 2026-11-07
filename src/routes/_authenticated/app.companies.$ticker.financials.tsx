@@ -5,6 +5,9 @@ import { Download, FileSpreadsheet, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { StatementTable, statementToCsv, type StatementView } from "@/components/financials/statement-table";
 import { StatementChart } from "@/components/financials/statement-chart";
+import { AsReported } from "@/components/financials/as-reported";
+import { IndustryTemplate } from "@/components/financials/industry-template";
+import { AdjustedView } from "@/components/financials/adjusted-view";
 import { ScaleToggle } from "@/components/financials/scale-toggle";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
@@ -17,6 +20,7 @@ import { cn } from "@/lib/utils";
 import wordmark from "@/assets/brand/wordmark.png.asset.json";
 
 const pageSearch = z.object({
+  basis: z.enum(["normalized", "reported", "template", "adjusted"]).default("normalized"),
   statement: z.enum(["income", "balance", "cashflow", "kpis"]).default("income"),
   freq: z.enum(["annual", "quarterly"]).default("annual"),
   span: z.enum(["10", "20", "all"]).default("10"),
@@ -63,6 +67,27 @@ function Financials() {
 
   const filingsByAccn = useMemo(() => new Map((company.data?.filings ?? []).map((f) => [f.accn, f])), [company.data]);
 
+  const basisBar = (
+    <Segmented
+      label="Statement basis"
+      value={s.basis}
+      onChange={(v) => set({ basis: v })}
+      options={[
+        { v: "normalized", l: "Normalized", title: "One consistent set of lines across years, every value sourced to its filing" },
+        { v: "reported", l: "As reported", title: "Each filing's statements exactly as filed: its labels, order, signs and rounding" },
+        { v: "template", l: "Industry template", title: "Filings mapped onto industrial, bank, insurer, REIT or utility templates" },
+        { v: "adjusted", l: "Adjusted", title: "The company's non-GAAP measures beside GAAP" },
+      ]}
+    />
+  );
+  if (s.basis !== "normalized")
+    return (
+      <div className="grid grid-cols-1 gap-4">
+        <div className="flex flex-wrap items-center gap-2">{basisBar}</div>
+        {s.basis === "reported" ? <AsReported ticker={ticker} /> : s.basis === "template" ? <IndustryTemplate ticker={ticker} /> : <AdjustedView ticker={ticker} />}
+      </div>
+    );
+
   if (company.isError)
     return <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">Could not load {ticker}'s statements. Refresh to try again.</p>;
   if (!company.data) return <Skeleton className="h-[600px]" />;
@@ -104,6 +129,7 @@ function Financials() {
 
   return (
     <div className="grid grid-cols-1 gap-4">
+      <div className="flex flex-wrap items-center gap-2">{basisBar}</div>
       <div className="flex flex-wrap items-center gap-2">
         <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 scrollbar-thin">
           {STATEMENTS.map((x) => (
