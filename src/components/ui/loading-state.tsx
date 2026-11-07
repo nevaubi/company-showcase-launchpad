@@ -32,11 +32,12 @@ const orbit = Array.from({ length: 9 }, (_, i) => {
 
 export type LoadingVariant = "Drive" | "Dots" | "Orbit";
 
-const PATTERNS: Record<LoadingVariant, { delays: (number | null)[]; dur: number; round: boolean }> = {
-  Drive: { delays: chevron, dur: 650, round: false },
-  Dots: { delays: chevron, dur: 650, round: true },
-  Orbit: { delays: orbit, dur: 950, round: false },
-};
+const PATTERNS: Record<LoadingVariant, { delays: (number | null)[]; dur: number; round: boolean }> =
+  {
+    Drive: { delays: chevron, dur: 650, round: false },
+    Dots: { delays: chevron, dur: 650, round: true },
+    Orbit: { delays: orbit, dur: 950, round: false },
+  };
 
 /** Elapsed time since mount (or since `since`, epoch ms), ticking every 100 ms. */
 export function useElapsed(since?: number) {
@@ -56,14 +57,26 @@ export function formatElapsed(ms: number) {
 }
 
 /** The 3x3 pixel grid on its own, for inline use (tool rows, buttons). */
-export function PixelGrid({ variant = "Drive", className }: { variant?: LoadingVariant; className?: string }) {
+export function PixelGrid({
+  variant = "Drive",
+  className,
+}: {
+  variant?: LoadingVariant;
+  className?: string;
+}) {
   const { delays, dur, round } = PATTERNS[variant] ?? PATTERNS.Drive;
   return (
-    <span aria-hidden className={cn("grid shrink-0 grid-cols-[repeat(3,4px)] gap-[1.5px]", className)}>
+    <span
+      aria-hidden
+      className={cn("grid shrink-0 grid-cols-[repeat(3,4px)] gap-[1.5px]", className)}
+    >
       {delays.map((d, i) => (
         <span
           key={i}
-          className={cn("loader-pixel size-[4px] bg-foreground", round ? "rounded-full" : "rounded-[1px]")}
+          className={cn(
+            "loader-pixel size-[4px] bg-foreground",
+            round ? "rounded-full" : "rounded-[1px]",
+          )}
           style={{
             opacity: d === null ? 0.07 : 0.15,
             animation: d === null ? "none" : `pixel-on ${dur}ms ease-in-out ${d}ms infinite`,
@@ -90,7 +103,11 @@ export default function LoadingState({
 }) {
   const elapsed = useElapsed(since);
   return (
-    <div role="status" aria-live="polite" className={cn("flex w-fit items-center gap-2.5", className)}>
+    <div
+      role="status"
+      aria-live="polite"
+      className={cn("flex w-fit items-center gap-2.5", className)}
+    >
       <PixelGrid variant={variant} />
       <span
         className="loader-label bg-clip-text text-[13px] font-medium text-transparent"
@@ -103,7 +120,9 @@ export default function LoadingState({
       >
         {label}
       </span>
-      {showTimer && <span className="font-mono text-[12px] text-muted-foreground tabular-nums">{elapsed}</span>}
+      {showTimer && (
+        <span className="font-mono text-[12px] text-muted-foreground tabular-nums">{elapsed}</span>
+      )}
     </div>
   );
 }
