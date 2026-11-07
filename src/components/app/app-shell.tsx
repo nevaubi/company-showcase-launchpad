@@ -33,7 +33,7 @@ import { Logo } from "@/components/brand/logo";
 import { SourceProvider, useSource } from "@/components/source/source-context";
 import { PANEL_WIDTH, SourcePanel } from "@/components/source/source-panel";
 import { AssistantPanel } from "@/components/research/assistant-panel";
-import { Sparkles } from "lucide-react";
+import { SlidersHorizontal, Sparkles } from "lucide-react";
 import { CommandMenu } from "@/components/app/command-menu";
 import { AlertsBell } from "@/components/app/alerts-bell";
 import { CompanyLogo } from "@/components/app/company-logo";
@@ -58,6 +58,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     items: [
       { to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
       { to: "/app/companies", label: "Companies", icon: Building2 },
+      { to: "/app/screener", label: "Screener", icon: SlidersHorizontal },
     ],
   },
   {
@@ -142,20 +143,42 @@ function ShellInner({ children }: { children: ReactNode }) {
           mobileOpen ? "translate-x-0 shadow-lift" : "-translate-x-full",
         )}
       >
-        <SidebarContent onSearch={() => setCmdOpen(true)} collapsed={collapsed} onToggle={toggleCollapsed} />
+        <SidebarContent
+          onSearch={() => setCmdOpen(true)}
+          collapsed={collapsed}
+          onToggle={toggleCollapsed}
+        />
       </aside>
-      {mobileOpen && <div className="fixed inset-0 z-20 bg-ink/30 lg:hidden" onClick={() => setMobileOpen(false)} />}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-20 bg-ink/30 lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
 
       <div
         className={cn("transition-[padding] duration-300", collapsed ? "lg:pl-14" : "lg:pl-60")}
         style={target ? ({ "--panel": PANEL_WIDTH } as React.CSSProperties) : undefined}
       >
-        <div className={cn("transition-[padding] duration-300", target && "min-[1760px]:pr-[var(--panel)]", !target && aiOpen && aiDocked && "md:pr-[min(420px,100vw)]")}>
+        <div
+          className={cn(
+            "transition-[padding] duration-300",
+            target && "min-[1760px]:pr-[var(--panel)]",
+            !target && aiOpen && aiDocked && "md:pr-[min(420px,100vw)]",
+          )}
+        >
           <header className="@container sticky top-0 z-20 flex h-12 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur lg:px-6">
-            <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => setMobileOpen((o) => !o)} aria-label="Menu">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="lg:hidden"
+              onClick={() => setMobileOpen((o) => !o)}
+              aria-label="Menu"
+            >
               {mobileOpen ? <X /> : <Menu />}
             </Button>
-            <Button variant="outline"
+            <Button
+              variant="outline"
               onClick={() => setCmdOpen(true)}
               aria-label="Search companies, pages, filings"
               className="h-8 min-w-0 w-full max-w-sm justify-start gap-2 bg-card px-2.5 text-sm text-muted-foreground"
@@ -165,23 +188,46 @@ function ShellInner({ children }: { children: ReactNode }) {
               <kbd className="num rounded border bg-muted px-1.5 text-[10px]">⌘K</kbd>
             </Button>
             <MarketTape />
-            <div className="ml-auto md:ml-0"><AlertsBell /></div>
-            <Button variant={aiOpen ? "ink" : "outline"} size="sm" className="shrink-0" onClick={() => setAiOpen((o) => !o)} aria-label="Assistant">
+            <div className="ml-auto md:ml-0">
+              <AlertsBell />
+            </div>
+            <Button
+              variant={aiOpen ? "ink" : "outline"}
+              size="sm"
+              className="shrink-0"
+              onClick={() => setAiOpen((o) => !o)}
+              aria-label="Assistant"
+            >
               <Sparkles /> <span className="hidden sm:inline">Assistant</span>
-              <kbd className="num hidden rounded border px-1 text-[10px] opacity-70 md:inline">⌘J</kbd>
+              <kbd className="num hidden rounded border px-1 text-[10px] opacity-70 md:inline">
+                ⌘J
+              </kbd>
             </Button>
           </header>
           <main className="px-4 pb-12 pt-4 lg:px-6">{children}</main>
         </div>
       </div>
-      <AssistantPanel open={aiOpen} onClose={() => setAiOpen(false)} docked={aiDocked} onDockedChange={setAiDocked} />
+      <AssistantPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        docked={aiDocked}
+        onDockedChange={setAiDocked}
+      />
       <SourcePanel />
       <CommandMenu open={cmdOpen} onOpenChange={setCmdOpen} />
     </div>
   );
 }
 
-function SidebarContent({ onSearch, collapsed, onToggle }: { onSearch: () => void; collapsed: boolean; onToggle: () => void }) {
+function SidebarContent({
+  onSearch,
+  collapsed,
+  onToggle,
+}: {
+  onSearch: () => void;
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
   // Collapsing only applies on desktop; the phone drawer always shows labels.
   const lbl = collapsed ? "lg:hidden" : "";
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -191,11 +237,17 @@ function SidebarContent({ onSearch, collapsed, onToggle }: { onSearch: () => voi
   const quotes = useQuotes(tickers);
   const byTicker = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, q]));
 
-  const isActive = (item: NavItem) => (item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + "/"));
+  const isActive = (item: NavItem) =>
+    item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + "/");
 
   return (
     <>
-      <div className={cn("flex h-12 items-center gap-2 border-b border-sidebar-border px-4", collapsed && "lg:justify-center lg:px-0")}>
+      <div
+        className={cn(
+          "flex h-12 items-center gap-2 border-b border-sidebar-border px-4",
+          collapsed && "lg:justify-center lg:px-0",
+        )}
+      >
         <Link to="/app" className={lbl}>
           <Logo size="sm" />
         </Link>
@@ -208,7 +260,12 @@ function SidebarContent({ onSearch, collapsed, onToggle }: { onSearch: () => voi
           {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
         </button>
       </div>
-      <nav className={cn("flex-1 space-y-4 overflow-y-auto px-2.5 py-3 scrollbar-thin", collapsed && "lg:px-1.5")}>
+      <nav
+        className={cn(
+          "flex-1 space-y-4 overflow-y-auto px-2.5 py-3 scrollbar-thin",
+          collapsed && "lg:px-1.5",
+        )}
+      >
         {NAV.map((g) => (
           <div key={g.heading}>
             <p className={cn("eyebrow px-2 pb-1.5", lbl)}>{g.heading}</p>
@@ -235,7 +292,10 @@ function SidebarContent({ onSearch, collapsed, onToggle }: { onSearch: () => voi
         <div>
           <div className={cn("flex items-center justify-between px-2 pb-1.5", lbl)}>
             <p className="eyebrow">Watchlist</p>
-            <button onClick={onSearch} className="text-[11px] text-muted-foreground hover:text-foreground">
+            <button
+              onClick={onSearch}
+              className="text-[11px] text-muted-foreground hover:text-foreground"
+            >
               + Add
             </button>
           </div>
@@ -257,9 +317,17 @@ function SidebarContent({ onSearch, collapsed, onToggle }: { onSearch: () => voi
                   >
                     <CompanyLogo ticker={t} src={u?.logo} size="xs" />
                     <span className={cn("num font-medium", lbl)}>{t}</span>
-                    <span className={cn("num ml-auto text-[11px] text-muted-foreground", lbl)}>{q ? fmtPrice(q.price) : ""}</span>
+                    <span className={cn("num ml-auto text-[11px] text-muted-foreground", lbl)}>
+                      {q ? fmtPrice(q.price) : ""}
+                    </span>
                     {q && (
-                      <span className={cn("num w-12 text-right text-[11px]", lbl, q.changePct >= 0 ? "text-positive" : "text-negative")}>
+                      <span
+                        className={cn(
+                          "num w-12 text-right text-[11px]",
+                          lbl,
+                          q.changePct >= 0 ? "text-positive" : "text-negative",
+                        )}
+                      >
                         {fmtPct(q.changePct, 1, true)}
                       </span>
                     )}
@@ -267,7 +335,11 @@ function SidebarContent({ onSearch, collapsed, onToggle }: { onSearch: () => voi
                 </li>
               );
             })}
-            {!tickers.length && !watch.isLoading && <li className={cn("px-2 text-xs text-muted-foreground", lbl)}>Follow a company to see it here.</li>}
+            {!tickers.length && !watch.isLoading && (
+              <li className={cn("px-2 text-xs text-muted-foreground", lbl)}>
+                Follow a company to see it here.
+              </li>
+            )}
           </ul>
         </div>
       </nav>
@@ -301,9 +373,13 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
             </span>
             <span className={cn("min-w-0 flex-1", collapsed && "lg:hidden")}>
               <span className="block truncate text-[13px] font-medium">{name}</span>
-              <span className="block truncate text-[11px] text-muted-foreground">{firm ? firm.name : email}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">
+                {firm ? firm.name : email}
+              </span>
             </span>
-            <ChevronsUpDown className={cn("size-3.5 text-muted-foreground", collapsed && "lg:hidden")} />
+            <ChevronsUpDown
+              className={cn("size-3.5 text-muted-foreground", collapsed && "lg:hidden")}
+            />
           </button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-56">
@@ -313,10 +389,14 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
           {firms.length > 1 && (
             <>
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Switch firm</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+                Switch firm
+              </DropdownMenuLabel>
               {firms.map((f) => (
                 <DropdownMenuItem key={f.id} onClick={() => setActive(f.id)}>
-                  <Check className={cn("size-4", f.id === firm?.id ? "opacity-100" : "opacity-0")} />
+                  <Check
+                    className={cn("size-4", f.id === firm?.id ? "opacity-100" : "opacity-0")}
+                  />
                   <span className="truncate">{f.name}</span>
                 </DropdownMenuItem>
               ))}
@@ -324,7 +404,9 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link to="/app/firm"><Users className="size-4" /> {firm ? "Firm workspace" : "Create a firm"}</Link>
+            <Link to="/app/firm">
+              <Users className="size-4" /> {firm ? "Firm workspace" : "Create a firm"}
+            </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to="/">Front page</Link>
@@ -358,11 +440,16 @@ function MarketTape() {
           key={x.symbol}
           to="/app/markets"
           search={{ symbol: x.symbol }}
-          className={cn("num hidden items-baseline gap-1.5 whitespace-nowrap text-[11px]", i < 3 ? "@min-[1100px]:flex" : "@min-[1500px]:flex")}
+          className={cn(
+            "num hidden items-baseline gap-1.5 whitespace-nowrap text-[11px]",
+            i < 3 ? "@min-[1100px]:flex" : "@min-[1500px]:flex",
+          )}
         >
           <span className="font-medium">{TAPE_LABEL[x.symbol] ?? x.symbol}</span>
           <span className="text-muted-foreground">{x.price.toFixed(2)}</span>
-          <span className={x.changePct >= 0 ? "text-positive" : "text-negative"}>{fmtPct(x.changePct, 2, true)}</span>
+          <span className={x.changePct >= 0 ? "text-positive" : "text-negative"}>
+            {fmtPct(x.changePct, 2, true)}
+          </span>
         </Link>
       ))}
     </div>

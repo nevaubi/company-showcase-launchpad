@@ -1,5 +1,13 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
-import type { Bar, CompanyDataset, Filing, InsiderTrade, MacroSeries, PriceSeries, Universe } from "@/lib/financials/types";
+import type {
+  Bar,
+  CompanyDataset,
+  Filing,
+  InsiderTrade,
+  MacroSeries,
+  PriceSeries,
+  Universe,
+} from "@/lib/financials/types";
 import { getMacroSeries, getNews, getPriceSeries, getQuotes } from "@/lib/market.functions";
 import { coverageOf, isBundled, type MacroDef } from "@/lib/coverage";
 import { hydrateDataset } from "@/lib/financials/dataset";
@@ -20,7 +28,9 @@ async function getJson<T>(path: string): Promise<T> {
  * Partner data service (Filed Under pipeline): serves the same dataset files, rebuilt on a
  * schedule, to signed-in users only. Set VITE_PARTNER_DATA_URL to "off" to disable.
  */
-const PARTNER_DATA_URL = (import.meta.env.VITE_PARTNER_DATA_URL as string | undefined) ?? "https://www.filedunder.ai/api/app-data";
+const PARTNER_DATA_URL =
+  (import.meta.env.VITE_PARTNER_DATA_URL as string | undefined) ??
+  "https://www.filedunder.ai/api/app-data";
 
 /** In-flight and recent responses per path, so several price ranges or panels share one download. */
 const partnerCache = new Map<string, { at: number; p: Promise<unknown> }>();
@@ -44,7 +54,8 @@ function partnerJson<T>(path: string): Promise<T | null> {
  * show a clear empty state. `.gz` files are decompressed in the browser.
  */
 export async function partnerFile<T>(path: string): Promise<T> {
-  if (!PARTNER_DATA_URL || PARTNER_DATA_URL === "off") throw new Error("Partner data is turned off");
+  if (!PARTNER_DATA_URL || PARTNER_DATA_URL === "off")
+    throw new Error("Partner data is turned off");
   const { data } = await supabase.auth.getSession();
   const token = data.session?.access_token;
   if (!token) throw new Error("Sign in to load this data");
@@ -55,9 +66,38 @@ export async function partnerFile<T>(path: string): Promise<T> {
   if (res.status === 404) throw new Error("Not available for this company yet");
   if (!res.ok) throw new Error(`Data service returned ${res.status}`);
   if (!path.endsWith(".gz")) return (await res.json()) as T;
-  if (typeof DecompressionStream === "undefined" || !res.body) throw new Error("This browser cannot open compressed filings");
+  if (typeof DecompressionStream === "undefined" || !res.body)
+    throw new Error("This browser cannot open compressed filings");
   const text = await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).text();
   return JSON.parse(text) as T;
+}
+
+/** The screen agent: a plain-English request becomes a screen spec over the screener's fields. */
+export async function partnerScreen(body: {
+  prompt: string;
+  history?: { prompt: string; spec: unknown }[];
+  current?: unknown;
+}) {
+  if (!PARTNER_DATA_URL || PARTNER_DATA_URL === "off")
+    throw new Error("Partner data is turned off");
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) throw new Error("Sign in to use the screen agent");
+  const res = await fetch(PARTNER_DATA_URL.replace(/app-data$/, "app-screen"), {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(70_000),
+  });
+  const out = (await res.json().catch(() => ({}))) as {
+    spec?: unknown;
+    errors?: string[];
+    warnings?: string[];
+    model?: string;
+    error?: string;
+  };
+  if (!res.ok) throw new Error(out.error ?? `Screen agent returned ${res.status}`);
+  return out;
 }
 
 async function fetchPartner<T>(path: string): Promise<T | null> {
@@ -81,7 +121,12 @@ async function fetchPartner<T>(path: string): Promise<T | null> {
  * Covered companies come from the partner data service first; bundled snapshots (public/data)
  * and the private `datasets` bucket (scripts/extra-backfill.ts) are the fallback.
  */
-async function getDataset<T>(kind: "companies" | "prices", file: string, bundled: boolean, partner = true): Promise<T> {
+async function getDataset<T>(
+  kind: "companies" | "prices",
+  file: string,
+  bundled: boolean,
+  partner = true,
+): Promise<T> {
   if (partner) {
     const remote = await partnerJson<T>(`${kind}/${file}.json`);
     if (remote) return remote;
@@ -96,7 +141,10 @@ async function getDataset<T>(kind: "companies" | "prices", file: string, bundled
     }
   }
   const { data, error } = await supabase.storage.from("datasets").download(`${kind}/${file}.json`);
-  if (error || !data) throw new Error(`No ${kind === "companies" ? "SEC dataset" : "price history"} built yet for ${file}`);
+  if (error || !data)
+    throw new Error(
+      `No ${kind === "companies" ? "SEC dataset" : "price history"} built yet for ${file}`,
+    );
   return JSON.parse(await data.text()) as T;
 }
 
@@ -118,7 +166,11 @@ export const universeQuery = queryOptions({
     }
     const fresh = new Map((partner?.companies ?? []).map((c) => [c.ticker, c]));
     const seen = new Set<string>();
-    const companies = [...base.companies, ...(extra?.companies ?? []), ...(partner?.companies ?? [])]
+    const companies = [
+      ...base.companies,
+      ...(extra?.companies ?? []),
+      ...(partner?.companies ?? []),
+    ]
       .filter((c) => !seen.has(c.ticker) && (seen.add(c.ticker), true))
       .map((c) => fresh.get(c.ticker) ?? c);
     return { ...base, generatedAt: partner?.generatedAt ?? base.generatedAt, companies };
@@ -145,11 +197,26 @@ export const manifestQuery = queryOptions({
 });
 
 /** Filings and Form 4 trades the refresh job found after the snapshot was built. */
-async function freshSecData(ticker: string, since: string): Promise<{ filings: Filing[]; insiders: InsiderTrade[] }> {
+async function freshSecData(
+  ticker: string,
+  since: string,
+): Promise<{ filings: Filing[]; insiders: InsiderTrade[] }> {
   try {
     const [f, t] = await Promise.all([
-      supabase.from("sec_filings").select("*").eq("ticker", ticker).gt("filed", since).order("filed", { ascending: false }).limit(200),
-      supabase.from("insider_trades").select("*").eq("ticker", ticker).gt("filed", since).order("trade_date", { ascending: false }).limit(200),
+      supabase
+        .from("sec_filings")
+        .select("*")
+        .eq("ticker", ticker)
+        .gt("filed", since)
+        .order("filed", { ascending: false })
+        .limit(200),
+      supabase
+        .from("insider_trades")
+        .select("*")
+        .eq("ticker", ticker)
+        .gt("filed", since)
+        .order("trade_date", { ascending: false })
+        .limit(200),
     ]);
     return {
       filings: (f.data ?? []).map((r) => ({
@@ -198,8 +265,14 @@ export const companyQuery = (ticker: string) =>
       const knownTrades = new Set(d.insiders.map((x) => `${x.accn}|${x.date}|${x.shares}`));
       return {
         ...d,
-        filings: [...fresh.filings.filter((f) => f.form !== "4" && !known.has(f.accn)), ...d.filings],
-        insiders: [...fresh.insiders.filter((x) => !knownTrades.has(`${x.accn}|${x.date}|${x.shares}`)), ...d.insiders],
+        filings: [
+          ...fresh.filings.filter((f) => f.form !== "4" && !known.has(f.accn)),
+          ...d.filings,
+        ],
+        insiders: [
+          ...fresh.insiders.filter((x) => !knownTrades.has(`${x.accn}|${x.date}|${x.shares}`)),
+          ...d.insiders,
+        ],
       };
     },
     staleTime: 10 * 60_000,
@@ -208,15 +281,30 @@ export const companyQuery = (ticker: string) =>
 export const useUniverse = () => useQuery(universeQuery);
 export const useCompany = (ticker: string) => useQuery(companyQuery(ticker));
 
-export type Range = "1d" | "5d" | "1mo" | "3mo" | "6mo" | "ytd" | "1y" | "2y" | "5y" | "10y" | "max";
+export type Range =
+  "1d" | "5d" | "1mo" | "3mo" | "6mo" | "ytd" | "1y" | "2y" | "5y" | "10y" | "max";
 export type Interval = "1m" | "2m" | "5m" | "15m" | "30m" | "60m" | "1h" | "1d" | "1wk" | "1mo";
 
-const RANGE_DAYS: Partial<Record<Range, number>> = { "5d": 7, "1mo": 31, "3mo": 92, "6mo": 183, "1y": 366, "2y": 731, "5y": 1827, "10y": 3653 };
+const RANGE_DAYS: Partial<Record<Range, number>> = {
+  "5d": 7,
+  "1mo": 31,
+  "3mo": 92,
+  "6mo": 183,
+  "1y": 366,
+  "2y": 731,
+  "5y": 1827,
+  "10y": 3653,
+};
 
 /** Bundled ten-year daily snapshot plus any newer bars the refresh job stored. */
 async function storedDailyBars(symbol: string): Promise<PriceSeries> {
   const covered = !!coverageOf(symbol);
-  const s = await getDataset<PriceSeries>("prices", symbolFile(symbol), isBundled(symbol) || !covered, covered);
+  const s = await getDataset<PriceSeries>(
+    "prices",
+    symbolFile(symbol),
+    isBundled(symbol) || !covered,
+    covered,
+  );
   const last = s.bars.at(-1)?.[0] ?? "1900-01-01";
   try {
     const { data } = await supabase
@@ -227,7 +315,15 @@ async function storedDailyBars(symbol: string): Promise<PriceSeries> {
       .order("date")
       .limit(500);
     if (data?.length) {
-      const extra: Bar[] = data.map((r) => [r.date, r.open ?? r.close, r.high ?? r.close, r.low ?? r.close, r.close, r.adj_close ?? r.close, Number(r.volume ?? 0)]);
+      const extra: Bar[] = data.map((r) => [
+        r.date,
+        r.open ?? r.close,
+        r.high ?? r.close,
+        r.low ?? r.close,
+        r.close,
+        r.adj_close ?? r.close,
+        Number(r.volume ?? 0),
+      ]);
       return { ...s, bars: [...s.bars, ...extra], source: "snapshot" };
     }
   } catch {
@@ -243,14 +339,17 @@ function sliceRange(s: PriceSeries, range: Range): PriceSeries {
   if (last) {
     if (range === "ytd") bars = s.bars.filter((b) => b[0] >= `${last.slice(0, 4)}-01-01`);
     else if (days) {
-      const cut = new Date(new Date(`${last}T00:00:00Z`).getTime() - days * 86400000).toISOString().slice(0, 10);
+      const cut = new Date(new Date(`${last}T00:00:00Z`).getTime() - days * 86400000)
+        .toISOString()
+        .slice(0, 10);
       bars = s.bars.filter((b) => b[0] >= cut);
     }
   }
   return { ...s, bars };
 }
 
-const staleDays = (iso: string | undefined) => (iso ? (Date.now() - new Date(`${iso.slice(0, 10)}T21:00:00Z`).getTime()) / 86400000 : Infinity);
+const staleDays = (iso: string | undefined) =>
+  iso ? (Date.now() - new Date(`${iso.slice(0, 10)}T21:00:00Z`).getTime()) / 86400000 : Infinity;
 
 /** Daily ranges come from stored bars (fast, rate-limit proof); intraday and stale data go live. */
 export const pricesQuery = (symbol: string, range: Range = "1y", interval: Interval = "1d") =>
@@ -286,8 +385,12 @@ export const pricesQuery = (symbol: string, range: Range = "1y", interval: Inter
     retry: 1,
   });
 
-export const usePrices = (symbol: string, range: Range = "1y", interval: Interval = "1d", enabled = true) =>
-  useQuery({ ...pricesQuery(symbol, range, interval), enabled });
+export const usePrices = (
+  symbol: string,
+  range: Range = "1y",
+  interval: Interval = "1d",
+  enabled = true,
+) => useQuery({ ...pricesQuery(symbol, range, interval), enabled });
 
 async function snapshotQuote(s: string) {
   const p = sliceRange(await storedDailyBars(s), "1mo");
@@ -324,35 +427,75 @@ export const quotesQuery = (symbols: string[]) =>
       const have = new Set(live.quotes.map((q) => q.symbol.toUpperCase()));
       const missing = symbols.filter((s) => !have.has(s.toUpperCase()));
       const filled = await Promise.all(missing.map((s) => snapshotQuote(s).catch(() => null)));
-      const bySym = new Map([...live.quotes, ...filled.filter((q): q is NonNullable<typeof q> => !!q)].map((q) => [q.symbol.toUpperCase(), q]));
-      return { quotes: symbols.map((s) => bySym.get(s.toUpperCase())).filter((q): q is NonNullable<typeof q> => !!q), errors: missing.filter((s) => !bySym.has(s.toUpperCase())) };
+      const bySym = new Map(
+        [...live.quotes, ...filled.filter((q): q is NonNullable<typeof q> => !!q)].map((q) => [
+          q.symbol.toUpperCase(),
+          q,
+        ]),
+      );
+      return {
+        quotes: symbols
+          .map((s) => bySym.get(s.toUpperCase()))
+          .filter((q): q is NonNullable<typeof q> => !!q),
+        errors: missing.filter((s) => !bySym.has(s.toUpperCase())),
+      };
     },
     staleTime: 60_000,
     refetchInterval: 120_000,
   });
 
-export const useQuotes = (symbols: string[]) => useQuery({ ...quotesQuery(symbols), enabled: symbols.length > 0 });
+export const useQuotes = (symbols: string[]) =>
+  useQuery({ ...quotesQuery(symbols), enabled: symbols.length > 0 });
 
-type MacroRequest = Pick<MacroDef, "id" | "title" | "units"> & { frequency: string; since?: string; provider?: MacroDef["provider"] };
+type MacroRequest = Pick<MacroDef, "id" | "title" | "units"> & {
+  frequency: string;
+  since?: string;
+  provider?: MacroDef["provider"];
+};
 
 /** Bundled history plus observations the refresh job stored after it; live FRED/Treasury if no snapshot exists. */
 export const macroQuery = (def: MacroRequest) =>
   queryOptions({
     queryKey: ["macro", def.id, def.since ?? ""],
     queryFn: async (): Promise<MacroSeries> => {
-      const clip = (s: MacroSeries) => ({ ...s, observations: def.since ? s.observations.filter((o) => o[0] >= def.since!) : s.observations });
+      const clip = (s: MacroSeries) => ({
+        ...s,
+        observations: def.since ? s.observations.filter((o) => o[0] >= def.since!) : s.observations,
+      });
       try {
         const s = await getJson<MacroSeries>(`/data/macro/${def.id}.json`);
         const last = s.observations.at(-1)?.[0] ?? "1900-01-01";
         try {
-          const { data } = await supabase.from("macro_observations").select("date, value").eq("series_id", def.id).gt("date", last).order("date").limit(1000);
-          if (data?.length) return clip({ ...s, observations: [...s.observations, ...data.map((r) => [r.date, r.value] as [string, number])], source: "cloud" });
+          const { data } = await supabase
+            .from("macro_observations")
+            .select("date, value")
+            .eq("series_id", def.id)
+            .gt("date", last)
+            .order("date")
+            .limit(1000);
+          if (data?.length)
+            return clip({
+              ...s,
+              observations: [
+                ...s.observations,
+                ...data.map((r) => [r.date, r.value] as [string, number]),
+              ],
+              source: "cloud",
+            });
         } catch {
           /* snapshot only */
         }
         return clip(s);
       } catch {
-        const live = await getMacroSeries({ data: { id: def.id, since: def.since, title: def.title, units: def.units, frequency: def.frequency } });
+        const live = await getMacroSeries({
+          data: {
+            id: def.id,
+            since: def.since,
+            title: def.title,
+            units: def.units,
+            frequency: def.frequency,
+          },
+        });
         return live;
       }
     },
@@ -365,7 +508,9 @@ export const useMacro = (def: MacroRequest) => useQuery(macroQuery(def));
 export const macroSummariesQuery = queryOptions({
   queryKey: ["macro-summaries"],
   queryFn: async (): Promise<Map<string, MacroSummary>> => {
-    const base = await getJson<{ generatedAt: string; series: MacroSummary[] }>("/data/macro/index.json");
+    const base = await getJson<{ generatedAt: string; series: MacroSummary[] }>(
+      "/data/macro/index.json",
+    );
     const out = new Map(base.series.map((s) => [s.id, s]));
     try {
       const { data } = await supabase.from("macro_summaries").select("series_id, summary");

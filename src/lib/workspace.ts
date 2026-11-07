@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 export type AppPath =
   | "/app"
   | "/app/companies"
+  | "/app/screener"
   | "/app/markets"
   | "/app/sectors"
   | "/app/alt-data"
