@@ -1,6 +1,7 @@
 // Scans every covered company for trade-idea signals and replays each rule over history
 // (point-in-time) to attach hit rates. Writes public/data/signals.json. Usage:
 //   bun scripts/signals.ts
+import { readDataset } from "./lib/datasets";
 import { readFile, writeFile } from "node:fs/promises";
 import { hydrateDataset, isBankIndustry } from "../src/lib/financials/dataset";
 import type { Bar, CompanyDataset } from "../src/lib/financials/types";
@@ -13,8 +14,8 @@ const inputs: ScanInput[] = [];
 const scans: CompanyScan[] = [];
 for (const { ticker } of universe.companies) {
   try {
-    const dataset = hydrateDataset(JSON.parse(await readFile(`public/data/companies/${ticker}.json`, "utf8")) as CompanyDataset);
-    const bars = (JSON.parse(await readFile(`public/data/prices/${ticker}.json`, "utf8")) as { bars: Bar[] }).bars;
+    const dataset = hydrateDataset(await readDataset<CompanyDataset>("companies", ticker));
+    const bars = (await readDataset<{ bars: Bar[] }>("prices", ticker)).bars;
     if (bars.length < 260) continue;
     const input = { ticker, dataset, bars, bank: isBankIndustry(dataset.profile.industry), spy };
     inputs.push(input);

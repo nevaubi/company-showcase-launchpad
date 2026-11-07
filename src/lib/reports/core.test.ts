@@ -101,7 +101,7 @@ describe("options", () => {
 });
 
 describe("fact pack", () => {
-  const d = hydrateDataset(JSON.parse(readFileSync("public/data/companies/AAPL.json", "utf8")) as CompanyDataset);
+  const d = hydrateDataset(JSON.parse(readFileSync("src/test/fixtures/companies/AAPL.json", "utf8")) as CompanyDataset);
   const built = buildReportData({ today: "2026-11-06", data: d, price: { price: 200, asOf: "2026-11-05" }, estimates: null, promises: null, reactions: null, coverage: null });
 
   it("gives every fact a source and builds the summary tables", () => {

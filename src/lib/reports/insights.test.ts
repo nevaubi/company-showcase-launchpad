@@ -6,8 +6,8 @@ import { buildReportData } from "./facts";
 import { chartFactIds, keptFactIds } from "./chart-facts";
 import { lastClose, ols, peerSnapshot, quantile, selectPeers, withLivePrice } from "./peers";
 
-const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(`public/data/companies/${t}.json`, "utf8")) as CompanyDataset);
-const bars = (t: string) => (JSON.parse(readFileSync(`public/data/prices/${t}.json`, "utf8")) as { bars: Bar[] }).bars;
+const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(`src/test/fixtures/companies/${t}.json`, "utf8")) as CompanyDataset);
+const bars = (t: string) => (JSON.parse(readFileSync((t === "SPY" ? "public/data/prices/SPY.json" : `src/test/fixtures/prices/${t}.json`), "utf8")) as { bars: Bar[] }).bars;
 
 describe("peer selection", () => {
   const u = [

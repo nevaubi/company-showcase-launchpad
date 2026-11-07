@@ -6,7 +6,7 @@ import type { CompanyDataset } from "./types";
 import { hydrateDataset } from "./dataset";
 
 // Stored datasets are slimmed (no KPI statement); the app hydrates them on load, so do the same here.
-const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(path.resolve(__dirname, `../../../public/data/companies/${t}.json`), "utf8")) as CompanyDataset);
+const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(path.resolve(__dirname, `../../test/fixtures/companies/${t}.json`), "utf8")) as CompanyDataset);
 const ok = (r: Lookup | { error: string }) => {
   if ("error" in r) throw new Error(r.error);
   return r;

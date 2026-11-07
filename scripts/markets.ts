@@ -2,20 +2,21 @@
 //   public/data/markets.json  — earnings reactions + chart patterns per covered company
 //   public/data/returns.json  — 3 years of aligned daily returns (companies + ETFs) for the correlation explorer
 // Usage: bun scripts/markets.ts   (rerun after ingest)
+import { readDataset } from "./lib/datasets";
 import { readFile, writeFile } from "node:fs/promises";
 import { BENCHMARKS, COVERAGE } from "../src/lib/coverage";
 const symbolFile = (s: string) => s.replace(/\^/g, "IDX_").replace(/[^A-Za-z0-9_.-]/g, "_");
 import type { Bar } from "../src/lib/financials/types";
 import { detectPatterns, earningsReactions, patternEdges, reactionStats, supportResistance } from "../src/lib/markets/core";
 
-const load = async (s: string) => (JSON.parse(await readFile(`public/data/prices/${symbolFile(s)}.json`, "utf8")) as { bars: Bar[] }).bars;
+const load = async (s: string) => (await readDataset<{ bars: Bar[] }>("prices", symbolFile(s))).bars;
 const spy = await load("SPY");
 
 const companies: unknown[] = [];
 for (const co of COVERAGE) {
   try {
     const bars = await load(co.ticker);
-    const ds = JSON.parse(await readFile(`public/data/companies/${co.ticker}.json`, "utf8")) as { earningsReleases?: { filed: string; accn: string; doc: string }[] };
+    const ds = await readDataset<{ earningsReleases?: { filed: string; accn: string; doc: string }[] }>("companies", co.ticker);
     const reactions = earningsReactions(bars, ds.earningsReleases ?? [], spy);
     const hits = detectPatterns(bars);
     const last = bars.length - 1;

@@ -6,6 +6,7 @@
 // The extraction itself lives in src/lib/supply/extract.server.ts (shared with the partner job route).
 import { readFile } from "node:fs/promises";
 import { args, log, sb } from "./lib/supa";
+import { readDataset } from "./lib/datasets";
 import { extractSupply, type SupplyCo, type SupplyFiling } from "../src/lib/supply/extract.server";
 
 const universe = JSON.parse(await readFile("public/data/universe.json", "utf8")) as { companies: SupplyCo[] };
@@ -13,7 +14,7 @@ const covered = universe.companies;
 const only = args.only?.toUpperCase().split(",");
 
 async function filingsOf(t: string): Promise<SupplyFiling[]> {
-  const d = JSON.parse(await readFile(`public/data/companies/${t}.json`, "utf8")) as { filings: SupplyFiling[] };
+  const d = await readDataset<{ filings: SupplyFiling[] }>("companies", t);
   return d.filings;
 }
 

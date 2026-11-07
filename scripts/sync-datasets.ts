@@ -2,7 +2,7 @@
 // private `datasets` bucket so server code (report generation, peer comparisons) can read them.
 // Rerun after `bun scripts/ingest.ts` or `bun scripts/markets.ts`.
 // Usage: bun scripts/sync-datasets.ts [--only=AAPL,MSFT] [--prices-only]
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { args, log, sb } from "./lib/supa";
 
 const BUCKET = "datasets";
@@ -18,7 +18,9 @@ async function put(path: string, body: string) {
   throw new Error(`upload failed: ${path}`);
 }
 
-const pick = (dir: string) => readdirSync(dir).filter((f) => f.endsWith(".json") && (!only || only.includes(f.replace(/\.json$/, ""))));
+// Covered companies are no longer bundled (the partner data service serves them); only what is
+// still on disk (benchmarks, a local ingest run) is mirrored.
+const pick = (dir: string) => (existsSync(dir) ? readdirSync(dir) : []).filter((f) => f.endsWith(".json") && (!only || only.includes(f.replace(/\.json$/, ""))));
 const pricesOnly = args["prices-only"] !== undefined;
 let n = 0;
 if (!pricesOnly) {

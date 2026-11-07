@@ -64,7 +64,15 @@ async function getDataset<T>(kind: "companies" | "prices", file: string, bundled
     const remote = await partnerJson<T>(`${kind}/${file}.json`);
     if (remote) return remote;
   }
-  if (bundled) return getJson<T>(`/data/${kind}/${file}.json`);
+  // Benchmarks (SPY, sector ETFs, indexes) are still bundled; covered companies' files are not, so
+  // a missing bundled file falls through to the private `datasets` bucket.
+  if (bundled) {
+    try {
+      return await getJson<T>(`/data/${kind}/${file}.json`);
+    } catch (e) {
+      if (!partner) throw e;
+    }
+  }
   const { data, error } = await supabase.storage.from("datasets").download(`${kind}/${file}.json`);
   if (error || !data) throw new Error(`No ${kind === "companies" ? "SEC dataset" : "price history"} built yet for ${file}`);
   return JSON.parse(await data.text()) as T;
