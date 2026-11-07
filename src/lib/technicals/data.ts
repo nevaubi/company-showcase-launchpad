@@ -441,3 +441,84 @@ export const FACTOR_NAME: Record<string, string> = {
   cma: "Investment (conservative)",
   mom: "Momentum",
 };
+
+/* ---------- short interest, off-exchange volume, fails to deliver ---------- */
+export interface ShortInterestRow {
+  date: string;
+  short: number | null;
+  prev: number | null;
+  adv: number | null;
+  dtc: number | null;
+  chg_pct: number | null;
+  revised: string | null;
+  split: string | null;
+}
+export interface SourceRef {
+  url: string;
+  retrieved_at?: string;
+  method?: string;
+  page?: string;
+}
+export interface FlowsFile {
+  ticker: string;
+  generated: string;
+  short_interest: ShortInterestRow[];
+  ats_weekly: {
+    week: string;
+    tier?: string;
+    ats_shares: number | null;
+    otc_shares: number | null;
+    offex_shares: number | null;
+    consolidated_volume: number | null;
+    offex_share: number | null;
+    ats_share: number | null;
+    published?: string;
+    note: string | null;
+  }[];
+  ats_venues: {
+    week: string | null;
+    rows: {
+      name: string;
+      shares: number | null;
+      trades: number | null;
+      pct_of_ats: number | null;
+    }[];
+  };
+  src_short_interest: SourceRef;
+  src_weekly: SourceRef;
+  src_venues: SourceRef;
+  holders13dg?: unknown;
+  inst13f?: unknown;
+}
+export const flowsQuery = (sym: string) =>
+  queryOptions({
+    queryKey: ["flows", sym],
+    queryFn: () => partnerFile<FlowsFile>(`flows/${sym}.json`),
+    staleTime: H,
+    retry: 0,
+  });
+
+export interface AltFile {
+  ticker: string;
+  updated_at: string;
+  short_volume?: {
+    source: string;
+    url: string;
+    fields: string[];
+    rows: [string, number, number, number][];
+  };
+  ftd?: {
+    source: string;
+    url: string;
+    fields: string[];
+    rows: [string, number, number, string][];
+    through?: string;
+  };
+}
+export const altQuery = (sym: string) =>
+  queryOptions({
+    queryKey: ["altdata", sym],
+    queryFn: () => partnerFile<AltFile>(`altdata/${sym}.json`),
+    staleTime: H,
+    retry: 0,
+  });

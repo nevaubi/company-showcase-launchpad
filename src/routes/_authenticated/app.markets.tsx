@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { PageHeader, Panel, Stat } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { DeepViews, TechnicalRead } from "@/components/technicals/deep-views";
+import { ShortAndFlows } from "@/components/technicals/short-flows";
 import { PriceChart, type Overlay } from "@/components/charts/price-chart";
 import { TimeSeriesChart } from "@/components/charts/time-series";
 import { Badge } from "@/components/ui/badge";
@@ -713,6 +714,7 @@ function Markets() {
               )}
             </Panel>
           </div>
+          {covered && <ShortAndFlows symbol={symbol} />}
         </>
       )}
     </div>
