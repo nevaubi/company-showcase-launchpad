@@ -65,7 +65,6 @@ function Mockup() {
     <div className="bg-paper text-foreground antialiased">
       <Hero />
       <Sources />
-      <Figures />
       <Feature n="02" kicker="Supply chain" title={<>Every dependency,<br /><em>with the sentence behind it.</em></>}
         body="Suppliers, sub-suppliers and customers are read from annual reports and kept only when the supporting sentence appears verbatim. Each edge carries its quote, its share of revenue where disclosed, and the regional risk it concentrates.">
         <SupplyGraph />
@@ -275,7 +274,7 @@ function Sources() {
 }
 
 /* ================= Figures band ================= */
-function Figures() {
+export function Figures() {
   const [ref, on] = useInView<HTMLDivElement>(0.4);
   const items = [["1,844", "US companies covered"], ["74,400", "Investor-relations documents"], ["2.9M", "Sourced IR data points"], ["8", "Primary-source datasets"]];
   return (
