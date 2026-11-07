@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   Star,
   Users,
+  Radar,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -50,6 +51,12 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     label: "Filings",
     icon: FileSearch,
     keywords: "10-k 10-q redline disclosure changes risk factors filing insights what changed",
+  },
+  {
+    to: "/app/situations",
+    label: "Situations",
+    icon: Radar,
+    keywords: "screens insider buying cheap material weakness going concern auditor change covenant bridge loan federal contracts single source customer concentration red flags",
   },
   {
     to: "/app/kpis",

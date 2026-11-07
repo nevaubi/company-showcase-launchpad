@@ -9,6 +9,7 @@ export type AppPath =
   | "/app/kpis"
   | "/app/compare"
   | "/app/filings"
+  | "/app/situations"
   | "/app/markets"
   | "/app/calendars"
   | "/app/sectors"
