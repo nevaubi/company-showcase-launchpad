@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { z } from "zod";
+import { AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -120,12 +121,23 @@ function Calendars() {
           onChange={(v) => go({ tab: v, week: weekParam })}
           options={TABS.map((t) => ({ v: t, l: labels[t] }))}
         />
-        {missing.length > 0 && (
-          <span className="text-xs text-muted-foreground">
-            Not available right now: {missing.join(", ")}.
-          </span>
-        )}
       </div>
+      {missing.length > 0 && (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md border border-chart-4/30 bg-chart-4/5 px-3 py-2 text-xs"
+        >
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-chart-4" />
+          <p className="min-w-0">
+            <span className="font-medium">Could not load {missing.join(", ")}.</span>{" "}
+            <span className="text-muted-foreground">
+              {stamps.length
+                ? `The rest is current: ${stamps.join(", ")}.`
+                : "The data service did not respond; try again shortly."}
+            </span>
+          </p>
+        </div>
+      )}
       {loading ? (
         <Skeleton className="h-[560px]" />
       ) : tab === "week" ? (

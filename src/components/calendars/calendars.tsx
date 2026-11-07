@@ -2,7 +2,6 @@ import { Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
-import { Segmented } from "@/components/app/segmented";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -326,42 +325,50 @@ export function WeekAgenda({
     return m;
   }, [d, earn, divs, days]);
 
+  const nav = (
+    <>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="size-7"
+        aria-label="Previous week"
+        onClick={() => onWeek(addDays(week, -7))}
+      >
+        <ChevronLeft className="size-4" />
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs"
+        onClick={() => onWeek(weekStart(d.today))}
+      >
+        This week
+      </Button>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="size-7"
+        aria-label="Next week"
+        onClick={() => onWeek(addDays(week, 7))}
+      >
+        <ChevronRight className="size-4" />
+      </Button>
+    </>
+  );
   return (
     <Panel
-      title={`Week of ${fmtDate(week, { month: "long", day: "numeric", year: "numeric" })}`}
+      title={
+        <span className="flex items-center gap-1">
+          <span className="min-w-0 truncate">
+            Week of {fmtDate(week, { month: "long", day: "numeric", year: "numeric" })}
+          </span>
+          <span className="ml-1 flex items-center gap-0.5 sm:hidden">{nav}</span>
+        </span>
+      }
       subtitle="Scheduled releases, earnings, ex-dividend dates and IPO pricings. Times are Eastern."
       collapse={false}
       bodyClassName="p-0"
-      actions={
-        <>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-7"
-            aria-label="Previous week"
-            onClick={() => onWeek(addDays(week, -7))}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-7 text-xs"
-            onClick={() => onWeek(weekStart(d.today))}
-          >
-            This week
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-7"
-            aria-label="Next week"
-            onClick={() => onWeek(addDays(week, 7))}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-        </>
-      }
+      actions={<span className="hidden items-center gap-1.5 sm:flex">{nav}</span>}
     >
       <div className="grid grid-cols-1 divide-y md:grid-cols-5 md:divide-x md:divide-y-0">
         {days.map((day) => {
@@ -370,6 +377,7 @@ export function WeekAgenda({
           const minor = v.rel.length - key.length;
           const isToday = day === d.today;
           const past = day < d.today;
+          const empty = !v.rel.length && !v.earn.length && !v.div.length && !v.ipo.length;
           return (
             <div
               key={day}
@@ -379,130 +387,138 @@ export function WeekAgenda({
                 <p className="text-[13px] font-semibold">{DAY(day)}</p>
                 {isToday && <Badge tone="info">Today</Badge>}
               </div>
-              <Section label="Economy" count={v.rel.length} onMore={() => onDay("economic", day)}>
-                {key.length === 0 && minor === 0 && <Empty>No scheduled releases</Empty>}
-                {key.map((x) => {
-                  const m = releaseMeta(x.release);
-                  return (
+              {empty && <Empty>Nothing scheduled</Empty>}
+              {v.rel.length > 0 && (
+                <Section label="Economy" count={v.rel.length} onMore={() => onDay("economic", day)}>
+                  {key.map((x) => {
+                    const m = releaseMeta(x.release);
+                    return (
+                      <button
+                        key={x.release + x.release_date}
+                        type="button"
+                        onClick={() => o.release(x)}
+                        className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[12px] hover:bg-secondary"
+                        title={x.title}
+                      >
+                        <span className="num w-9 shrink-0 text-[11px] text-muted-foreground">
+                          {shortTime(x.release_time)}
+                        </span>
+                        <span
+                          className={cn("min-w-0 flex-1 truncate", m.weight === 3 && "font-medium")}
+                        >
+                          {m.label}
+                        </span>
+                        <Weight w={m.weight} />
+                      </button>
+                    );
+                  })}
+                  {minor > 0 && (
                     <button
-                      key={x.release + x.release_date}
                       type="button"
-                      onClick={() => o.release(x)}
-                      className="flex w-full items-center gap-2 rounded px-1 py-0.5 text-left text-[12px] hover:bg-secondary"
-                      title={x.title}
+                      onClick={() => onDay("economic", day)}
+                      className="px-1 text-[11px] text-muted-foreground hover:text-foreground"
                     >
-                      <span className="num w-9 shrink-0 text-[11px] text-muted-foreground">
-                        {shortTime(x.release_time)}
-                      </span>
-                      <span
-                        className={cn("min-w-0 flex-1 truncate", m.weight === 3 && "font-medium")}
-                      >
-                        {m.label}
-                      </span>
-                      <Weight w={m.weight} />
+                      +{minor} minor release{minor > 1 ? "s" : ""}
                     </button>
-                  );
-                })}
-                {minor > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => onDay("economic", day)}
-                    className="px-1 text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    +{minor} minor release{minor > 1 ? "s" : ""}
-                  </button>
-                )}
-              </Section>
-              <Section label="Earnings" count={v.earn.length} onMore={() => onDay("earnings", day)}>
-                {v.earn.length === 0 && <Empty>None scheduled</Empty>}
-                {v.earn.slice(0, 7).map((r) => (
-                  <div
-                    key={r.ticker + r.kind}
-                    className="flex items-center gap-1.5 px-1 py-0.5 text-[12px]"
-                  >
-                    <CompanyLogo ticker={r.ticker} src={r.logo} size="sm" />
-                    <Link
-                      to="/app/companies/$ticker/estimates"
-                      params={{ ticker: r.ticker }}
-                      className="font-medium hover:underline"
+                  )}
+                </Section>
+              )}
+              {v.earn.length > 0 && (
+                <Section
+                  label="Earnings"
+                  count={v.earn.length}
+                  onMore={() => onDay("earnings", day)}
+                >
+                  {v.earn.slice(0, 7).map((r) => (
+                    <div
+                      key={r.ticker + r.kind}
+                      className="flex items-center gap-1.5 px-1 py-0.5 text-[12px]"
                     >
-                      {r.ticker}
-                    </Link>
-                    {r.is_estimate && (
-                      <span
-                        className="text-[10px] text-muted-foreground"
-                        title="Date estimated by the data provider"
+                      <CompanyLogo ticker={r.ticker} src={r.logo} size="sm" />
+                      <Link
+                        to="/app/companies/$ticker/estimates"
+                        params={{ ticker: r.ticker }}
+                        className="font-medium hover:underline"
                       >
-                        est.
+                        {r.ticker}
+                      </Link>
+                      {r.is_estimate && (
+                        <span
+                          className="text-[10px] text-muted-foreground"
+                          title="Date estimated by the data provider"
+                        >
+                          est.
+                        </span>
+                      )}
+                      {r.kind === "reported" ? (
+                        <button
+                          type="button"
+                          onClick={() => o.report(r)}
+                          className={cn(
+                            "num ml-auto text-[11px] hover:underline",
+                            toneOf(r.last?.surprise_pct),
+                          )}
+                          title={`Reported EPS ${r.last?.eps_actual ?? "–"} against ${r.last?.eps_estimate?.toFixed(2) ?? "–"} expected`}
+                        >
+                          {r.last?.eps_actual?.toFixed(2) ?? "–"} (
+                          {signedPct(r.last?.surprise_pct, 0)})
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => o.earnings(r)}
+                          className="num ml-auto text-[11px] text-muted-foreground hover:text-foreground"
+                          title="Consensus EPS"
+                        >
+                          {r.eps != null ? r.eps.toFixed(2) : "–"}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {v.earn.length > 7 && (
+                    <button
+                      type="button"
+                      onClick={() => onDay("earnings", day)}
+                      className="px-1 text-[11px] text-muted-foreground hover:text-foreground"
+                    >
+                      +{v.earn.length - 7} more
+                    </button>
+                  )}
+                </Section>
+              )}
+              {v.div.length > 0 && (
+                <Section
+                  label="Ex-dividend"
+                  count={v.div.length}
+                  onMore={() => onDay("dividends", day)}
+                >
+                  {v.div.slice(0, 5).map((x) => (
+                    <button
+                      key={x.ticker + x.kind}
+                      type="button"
+                      onClick={() => (x.dec ? o.declaration(x.ticker, x.dec) : o.projected(x.row))}
+                      className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[12px] hover:bg-secondary"
+                    >
+                      <span className="font-medium">{x.ticker}</span>
+                      {x.kind === "projected" && (
+                        <span className="text-[10px] text-muted-foreground">proj.</span>
+                      )}
+                      <span className="num ml-auto text-[11px] text-muted-foreground">
+                        {fmtPerShare(x.amount)}
                       </span>
-                    )}
-                    {r.kind === "reported" ? (
-                      <button
-                        type="button"
-                        onClick={() => o.report(r)}
-                        className={cn(
-                          "num ml-auto text-[11px] hover:underline",
-                          toneOf(r.last?.surprise_pct),
-                        )}
-                        title={`Reported EPS ${r.last?.eps_actual ?? "–"} against ${r.last?.eps_estimate?.toFixed(2) ?? "–"} expected`}
-                      >
-                        {r.last?.eps_actual?.toFixed(2) ?? "–"} (
-                        {signedPct(r.last?.surprise_pct, 0)})
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => o.earnings(r)}
-                        className="num ml-auto text-[11px] text-muted-foreground hover:text-foreground"
-                        title="Consensus EPS"
-                      >
-                        {r.eps != null ? r.eps.toFixed(2) : "–"}
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {v.earn.length > 7 && (
-                  <button
-                    type="button"
-                    onClick={() => onDay("earnings", day)}
-                    className="px-1 text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    +{v.earn.length - 7} more
-                  </button>
-                )}
-              </Section>
-              <Section
-                label="Ex-dividend"
-                count={v.div.length}
-                onMore={() => onDay("dividends", day)}
-              >
-                {v.div.length === 0 && <Empty>None</Empty>}
-                {v.div.slice(0, 5).map((x) => (
-                  <button
-                    key={x.ticker + x.kind}
-                    type="button"
-                    onClick={() => (x.dec ? o.declaration(x.ticker, x.dec) : o.projected(x.row))}
-                    className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[12px] hover:bg-secondary"
-                  >
-                    <span className="font-medium">{x.ticker}</span>
-                    {x.kind === "projected" && (
-                      <span className="text-[10px] text-muted-foreground">proj.</span>
-                    )}
-                    <span className="num ml-auto text-[11px] text-muted-foreground">
-                      {fmtPerShare(x.amount)}
-                    </span>
-                  </button>
-                ))}
-                {v.div.length > 5 && (
-                  <button
-                    type="button"
-                    onClick={() => onDay("dividends", day)}
-                    className="px-1 text-[11px] text-muted-foreground hover:text-foreground"
-                  >
-                    +{v.div.length - 5} more
-                  </button>
-                )}
-              </Section>
+                    </button>
+                  ))}
+                  {v.div.length > 5 && (
+                    <button
+                      type="button"
+                      onClick={() => onDay("dividends", day)}
+                      className="px-1 text-[11px] text-muted-foreground hover:text-foreground"
+                    >
+                      +{v.div.length - 5} more
+                    </button>
+                  )}
+                </Section>
+              )}
               {v.ipo.length > 0 && (
                 <Section label="IPOs" count={v.ipo.length} onMore={() => onDay("ipos", day)}>
                   {v.ipo.map(({ r, what }) => (
@@ -587,15 +603,64 @@ function WindowPicker({
     past: "Past 14 days",
   };
   return (
-    <Segmented
+    <Pills
       label="Date range"
-      size="xs"
       value={value}
       onChange={onChange}
       options={WINDOWS.filter((k) => k !== "day" || day).map((k) => ({ v: k, l: labels[k] }))}
     />
   );
 }
+
+/** Second-level options: one row that scrolls sideways on a phone instead of stacking; counts as muted badges. */
+function Pills<T extends string>({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: T;
+  onChange: (v: T) => void;
+  options: { v: T; l: string; n?: number }[];
+}) {
+  return (
+    <div className="w-full overflow-x-auto [scrollbar-width:none] sm:w-auto">
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className="inline-flex snap-x flex-nowrap rounded-md border bg-secondary/50 p-0.5"
+      >
+        {options.map((o) => (
+          <button
+            key={o.v}
+            type="button"
+            role="radio"
+            aria-checked={value === o.v}
+            onClick={() => onChange(o.v)}
+            className={cn(
+              "inline-flex h-7 shrink-0 snap-start items-center gap-1.5 rounded px-2 text-[11px] whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              value === o.v
+                ? "bg-card font-medium text-foreground shadow-paper"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {o.l}
+            {o.n != null && (
+              <span className="num rounded bg-secondary px-1 text-[10px] font-normal text-muted-foreground">
+                {o.n}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Calendar tables scroll sideways on narrow screens with the first column pinned. */
+const TABLE =
+  "w-full min-w-[640px] text-[12px] [&_tr>*:first-child]:sticky [&_tr>*:first-child]:left-0 [&_tr>*:first-child]:z-[1] [&_tr>*:first-child]:bg-background";
 
 function DateHeader({
   day,
@@ -759,7 +824,7 @@ export function EarningsList({ d, day }: { d: CalData; day?: string }) {
         />
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-[12px]">
+        <table className={TABLE}>
           <thead>
             <tr className="border-b">
               <th className={th}>Company</th>
@@ -968,7 +1033,7 @@ export function EconomicList({ d, day }: { d: CalData; day?: string }) {
           <Switch checked={keyOnly} onCheckedChange={setKeyOnly} aria-label="Market-moving only" />{" "}
           Market-moving only
         </label>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex w-full gap-1 overflow-x-auto [scrollbar-width:none] sm:w-auto sm:flex-wrap">
           {GROUPS.map((g) => (
             <button
               key={g}
@@ -977,7 +1042,7 @@ export function EconomicList({ d, day }: { d: CalData; day?: string }) {
                 setGroups((s) => (s.includes(g) ? s.filter((x) => x !== g) : [...s, g]))
               }
               className={cn(
-                "rounded-full border px-2 py-0.5 text-[11px]",
+                "shrink-0 rounded-full border px-2 py-0.5 text-[11px] whitespace-nowrap",
                 groups.includes(g)
                   ? "border-foreground/40 bg-secondary text-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -988,58 +1053,60 @@ export function EconomicList({ d, day }: { d: CalData; day?: string }) {
           ))}
         </div>
       </div>
-      <table className="w-full text-[12px]">
-        <thead>
-          <tr className="border-b">
-            <th className={cn(th, "w-20")}>Time (ET)</th>
-            <th className={th}>Release</th>
-            <th className={th}>Group</th>
-            <th className={th}>Publisher</th>
-            <th className={cn(th, "w-16")}>Impact</th>
-          </tr>
-        </thead>
-        <tbody>
-          {byDay.length === 0 && (
-            <tr>
-              <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
-                No releases scheduled in this range.
-              </td>
+      <div className="overflow-x-auto">
+        <table className={TABLE}>
+          <thead>
+            <tr className="border-b">
+              <th className={cn(th, "w-20")}>Time (ET)</th>
+              <th className={th}>Release</th>
+              <th className={th}>Group</th>
+              <th className={th}>Publisher</th>
+              <th className={cn(th, "w-16")}>Impact</th>
             </tr>
-          )}
-          {byDay.map(([day_, xs]) => (
-            <Frag key={day_}>
-              <DateHeader day={day_} today={d.today} n={xs.length} cols={5} />
-              {xs.map((x) => {
-                const m = releaseMeta(x.release);
-                return (
-                  <tr
-                    key={x.release + x.release_date}
-                    className="cursor-pointer border-b hover:bg-secondary/50"
-                    onClick={() => o.release(x)}
-                  >
-                    <td className={cn(td, "num whitespace-nowrap text-muted-foreground")}>
-                      {x.release_time?.replace(" ET", "") ?? "–"}
-                    </td>
-                    <td className={td}>
-                      <span className={cn(m.weight === 3 && "font-medium")}>{m.label}</span>
-                      <span className="ml-2 text-muted-foreground">
-                        {x.title.toLowerCase() !== m.label.toLowerCase() ? x.title : ""}
-                      </span>
-                    </td>
-                    <td className={cn(td, "text-muted-foreground")}>{m.group}</td>
-                    <td className={cn(td, "whitespace-nowrap text-muted-foreground")}>
-                      {x.provider}
-                    </td>
-                    <td className={td}>
-                      <Weight w={m.weight} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </Frag>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {byDay.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-3 py-6 text-center text-muted-foreground">
+                  No releases scheduled in this range.
+                </td>
+              </tr>
+            )}
+            {byDay.map(([day_, xs]) => (
+              <Frag key={day_}>
+                <DateHeader day={day_} today={d.today} n={xs.length} cols={5} />
+                {xs.map((x) => {
+                  const m = releaseMeta(x.release);
+                  return (
+                    <tr
+                      key={x.release + x.release_date}
+                      className="cursor-pointer border-b hover:bg-secondary/50"
+                      onClick={() => o.release(x)}
+                    >
+                      <td className={cn(td, "num whitespace-nowrap text-muted-foreground")}>
+                        {x.release_time?.replace(" ET", "") ?? "–"}
+                      </td>
+                      <td className={td}>
+                        <span className={cn(m.weight === 3 && "font-medium")}>{m.label}</span>
+                        <span className="ml-2 text-muted-foreground">
+                          {x.title.toLowerCase() !== m.label.toLowerCase() ? x.title : ""}
+                        </span>
+                      </td>
+                      <td className={cn(td, "text-muted-foreground")}>{m.group}</td>
+                      <td className={cn(td, "whitespace-nowrap text-muted-foreground")}>
+                        {x.provider}
+                      </td>
+                      <td className={td}>
+                        <Weight w={m.weight} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </Frag>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
         Impact is a fixed editorial ranking of how much each release usually moves rates and
         equities, not a forecast. Click a row for the publisher's schedule.
@@ -1076,14 +1143,13 @@ export function DividendsList({ d, day }: { d: CalData; day?: string }) {
       bodyClassName="p-0"
     >
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-        <Segmented
+        <Pills
           label="View"
-          size="xs"
           value={view}
           onChange={setView}
           options={[
             { v: "upcoming", l: "Ex-dates" },
-            { v: "declared", l: `Recently declared ${declared.length}` },
+            { v: "declared", l: "Recently declared", n: declared.length },
             { v: "yield", l: "Highest yield" },
           ]}
         />
@@ -1098,203 +1164,209 @@ export function DividendsList({ d, day }: { d: CalData; day?: string }) {
         )}
       </div>
       {view === "upcoming" && (
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b">
-              <th className={th}>Company</th>
-              <th className={cn(th, "text-right")}>Amount</th>
-              <th className={th}>Basis</th>
-              <th className={th}>Record</th>
-              <th className={th}>Payable</th>
-              <th className={cn(th, "text-right")}>Fwd yield</th>
-              <th className={th}>Frequency</th>
-            </tr>
-          </thead>
-          <tbody>
-            {upcoming.length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
-                  No ex-dividend dates in this range.
-                </td>
+        <div className="overflow-x-auto">
+          <table className={TABLE}>
+            <thead>
+              <tr className="border-b">
+                <th className={th}>Company</th>
+                <th className={cn(th, "text-right")}>Amount</th>
+                <th className={th}>Basis</th>
+                <th className={th}>Record</th>
+                <th className={th}>Payable</th>
+                <th className={cn(th, "text-right")}>Fwd yield</th>
+                <th className={th}>Frequency</th>
               </tr>
-            )}
-            {groupBy(upcoming, (x) => x.date).map(([day_, xs]) => (
-              <Frag key={day_}>
-                <DateHeader day={day_} today={d.today} n={xs.length} cols={7} />
-                {xs.map((x) => (
+            </thead>
+            <tbody>
+              {upcoming.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                    No ex-dividend dates in this range.
+                  </td>
+                </tr>
+              )}
+              {groupBy(upcoming, (x) => x.date).map(([day_, xs]) => (
+                <Frag key={day_}>
+                  <DateHeader day={day_} today={d.today} n={xs.length} cols={7} />
+                  {xs.map((x) => (
+                    <tr
+                      key={x.ticker + x.kind + x.amount}
+                      className="cursor-pointer border-b hover:bg-secondary/50"
+                      onClick={() => (x.dec ? o.declaration(x.ticker, x.dec) : o.projected(x.row))}
+                    >
+                      <td className={td}>
+                        <span className="font-medium">{x.ticker}</span>
+                        <span className="ml-2 text-muted-foreground">{x.name}</span>
+                      </td>
+                      <td className={cn(td, "num text-right")}>{fmtPerShare(x.amount, 4)}</td>
+                      <td className={td}>
+                        {x.kind === "declared" ? (
+                          <span className="flex gap-1">
+                            <Badge tone="pos">declared</Badge>
+                            {x.dec?.kind === "special" && <Badge tone="warn">special</Badge>}
+                            {x.dec?.share_class && <Badge>{x.dec.share_class}</Badge>}
+                            {x.dec?.increase && <Badge tone="info">increase</Badge>}
+                          </span>
+                        ) : (
+                          <span title={x.row.projected?.basis}>
+                            <Badge>projected</Badge>
+                          </span>
+                        )}
+                      </td>
+                      <td className={cn(td, "num text-muted-foreground")}>
+                        {x.dec?.record
+                          ? fmtDate(x.dec.record, { month: "short", day: "numeric" })
+                          : "–"}
+                      </td>
+                      <td className={cn(td, "num text-muted-foreground")}>
+                        {x.dec?.payable
+                          ? fmtDate(x.dec.payable, { month: "short", day: "numeric" })
+                          : "–"}
+                      </td>
+                      <td className={cn(td, "num text-right")}>{fmtPct(x.row.yield_forward, 2)}</td>
+                      <td className={cn(td, "text-muted-foreground")}>{x.row.frequency ?? "–"}</td>
+                    </tr>
+                  ))}
+                </Frag>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {view === "declared" && (
+        <div className="overflow-x-auto">
+          <table className={TABLE}>
+            <thead>
+              <tr className="border-b">
+                <th className={th}>Filed</th>
+                <th className={th}>Company</th>
+                <th className={cn(th, "text-right")}>Amount</th>
+                <th className={cn(th, "text-right")}>Prior</th>
+                <th className={th}>Ex-date</th>
+                <th className={th}>Payable</th>
+                <th className={th}>From the filing</th>
+              </tr>
+            </thead>
+            <tbody>
+              {declared.map(({ r, x }) => {
+                const prior = (r.history ?? [])
+                  .filter(([dd]) => dd < (x.ex_date ?? x.filed))
+                  .slice(-1)[0];
+                const chg = prior && prior[1] ? x.amount / prior[1] - 1 : null;
+                return (
                   <tr
-                    key={x.ticker + x.kind + x.amount}
+                    key={r.ticker + x.accn + x.amount}
                     className="cursor-pointer border-b hover:bg-secondary/50"
-                    onClick={() => (x.dec ? o.declaration(x.ticker, x.dec) : o.projected(x.row))}
+                    onClick={() => o.declaration(r.ticker, x)}
                   >
-                    <td className={td}>
-                      <span className="font-medium">{x.ticker}</span>
-                      <span className="ml-2 text-muted-foreground">{x.name}</span>
+                    <td className={cn(td, "num whitespace-nowrap text-muted-foreground")}>
+                      {fmtDate(x.filed, { month: "short", day: "numeric" })}
                     </td>
-                    <td className={cn(td, "num text-right")}>{fmtPerShare(x.amount, 4)}</td>
-                    <td className={td}>
-                      {x.kind === "declared" ? (
-                        <span className="flex gap-1">
-                          <Badge tone="pos">declared</Badge>
-                          {x.dec?.kind === "special" && <Badge tone="warn">special</Badge>}
-                          {x.dec?.share_class && <Badge>{x.dec.share_class}</Badge>}
-                          {x.dec?.increase && <Badge tone="info">increase</Badge>}
-                        </span>
-                      ) : (
-                        <span title={x.row.projected?.basis}>
-                          <Badge>projected</Badge>
+                    <td className={cn(td, "whitespace-nowrap")}>
+                      <span className="font-medium">{r.ticker}</span>
+                      {x.kind === "special" && (
+                        <span className="ml-1">
+                          <Badge tone="warn">special</Badge>
                         </span>
                       )}
                     </td>
-                    <td className={cn(td, "num text-muted-foreground")}>
-                      {x.dec?.record
-                        ? fmtDate(x.dec.record, { month: "short", day: "numeric" })
+                    <td className={cn(td, "num text-right")}>{fmtPerShare(x.amount, 4)}</td>
+                    <td
+                      className={cn(
+                        td,
+                        "num text-right whitespace-nowrap",
+                        chg != null && chg > 0.001
+                          ? "text-positive"
+                          : chg != null && chg < -0.001
+                            ? "text-negative"
+                            : "text-muted-foreground",
+                      )}
+                    >
+                      {prior
+                        ? `${fmtPerShare(prior[1], 4)}${chg != null && Math.abs(chg) > 0.001 && x.kind !== "special" ? ` (${chg > 0 ? "+" : ""}${(chg * 100).toFixed(1)}%)` : ""}`
                         : "–"}
                     </td>
-                    <td className={cn(td, "num text-muted-foreground")}>
-                      {x.dec?.payable
-                        ? fmtDate(x.dec.payable, { month: "short", day: "numeric" })
-                        : "–"}
+                    <td className={cn(td, "num whitespace-nowrap")}>
+                      {x.ex_date ? fmtDate(x.ex_date, { month: "short", day: "numeric" }) : "–"}
                     </td>
-                    <td className={cn(td, "num text-right")}>{fmtPct(x.row.yield_forward, 2)}</td>
-                    <td className={cn(td, "text-muted-foreground")}>{x.row.frequency ?? "–"}</td>
-                  </tr>
-                ))}
-              </Frag>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {view === "declared" && (
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b">
-              <th className={th}>Filed</th>
-              <th className={th}>Company</th>
-              <th className={cn(th, "text-right")}>Amount</th>
-              <th className={cn(th, "text-right")}>Prior</th>
-              <th className={th}>Ex-date</th>
-              <th className={th}>Payable</th>
-              <th className={th}>From the filing</th>
-            </tr>
-          </thead>
-          <tbody>
-            {declared.map(({ r, x }) => {
-              const prior = (r.history ?? [])
-                .filter(([dd]) => dd < (x.ex_date ?? x.filed))
-                .slice(-1)[0];
-              const chg = prior && prior[1] ? x.amount / prior[1] - 1 : null;
-              return (
-                <tr
-                  key={r.ticker + x.accn + x.amount}
-                  className="cursor-pointer border-b hover:bg-secondary/50"
-                  onClick={() => o.declaration(r.ticker, x)}
-                >
-                  <td className={cn(td, "num whitespace-nowrap text-muted-foreground")}>
-                    {fmtDate(x.filed, { month: "short", day: "numeric" })}
-                  </td>
-                  <td className={cn(td, "whitespace-nowrap")}>
-                    <span className="font-medium">{r.ticker}</span>
-                    {x.kind === "special" && (
-                      <span className="ml-1">
-                        <Badge tone="warn">special</Badge>
+                    <td className={cn(td, "num whitespace-nowrap text-muted-foreground")}>
+                      {x.payable ? fmtDate(x.payable, { month: "short", day: "numeric" }) : "–"}
+                    </td>
+                    <td className={cn(td, "w-full max-w-0 min-w-[14rem]")}>
+                      <span className="line-clamp-2 text-[11.5px] text-muted-foreground">
+                        {x.quote}
                       </span>
-                    )}
-                  </td>
-                  <td className={cn(td, "num text-right")}>{fmtPerShare(x.amount, 4)}</td>
-                  <td
-                    className={cn(
-                      td,
-                      "num text-right whitespace-nowrap",
-                      chg != null && chg > 0.001
-                        ? "text-positive"
-                        : chg != null && chg < -0.001
-                          ? "text-negative"
-                          : "text-muted-foreground",
-                    )}
-                  >
-                    {prior
-                      ? `${fmtPerShare(prior[1], 4)}${chg != null && Math.abs(chg) > 0.001 && x.kind !== "special" ? ` (${chg > 0 ? "+" : ""}${(chg * 100).toFixed(1)}%)` : ""}`
-                      : "–"}
-                  </td>
-                  <td className={cn(td, "num whitespace-nowrap")}>
-                    {x.ex_date ? fmtDate(x.ex_date, { month: "short", day: "numeric" }) : "–"}
-                  </td>
-                  <td className={cn(td, "num whitespace-nowrap text-muted-foreground")}>
-                    {x.payable ? fmtDate(x.payable, { month: "short", day: "numeric" }) : "–"}
-                  </td>
-                  <td className={cn(td, "w-full max-w-0")}>
-                    <span className="line-clamp-2 text-[11.5px] text-muted-foreground">
-                      {x.quote}
-                    </span>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
       {view === "yield" && (
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b">
-              <th className={th}>Company</th>
-              <th className={cn(th, "text-right")}>Last</th>
-              <th className={th}>Frequency</th>
-              <th className={cn(th, "text-right")}>Forward annual</th>
-              <th className={cn(th, "text-right")}>Fwd yield</th>
-              <th className={cn(th, "text-right")}>TTM paid</th>
-              <th className={cn(th, "text-right")}>TTM yield</th>
-              <th className={th}>Next ex-date</th>
-            </tr>
-          </thead>
-          <tbody>
-            {yieldRows.map((r) => {
-              const dec = r.upcoming[0];
-              return (
-                <tr
-                  key={r.ticker}
-                  className="cursor-pointer border-b hover:bg-secondary/50"
-                  onClick={() => (dec ? o.declaration(r.ticker, dec) : o.projected(r))}
-                >
-                  <td className={td}>
-                    <span className="font-medium">{r.ticker}</span>
-                    <span className="ml-2 text-muted-foreground">
-                      {d.uni.get(r.ticker)?.name ?? r.name}
-                    </span>
-                  </td>
-                  <td className={cn(td, "num text-right")}>{fmtPerShare(r.last?.amount, 4)}</td>
-                  <td className={cn(td, "text-muted-foreground")}>{r.frequency}</td>
-                  <td className={cn(td, "num text-right")}>{fmtPerShare(r.forward_annual)}</td>
-                  <td className={cn(td, "num text-right font-medium")}>
-                    {fmtPct(r.yield_forward, 2)}
-                  </td>
-                  <td className={cn(td, "num text-right text-muted-foreground")}>
-                    {fmtPerShare(r.ttm)}
-                  </td>
-                  <td className={cn(td, "num text-right text-muted-foreground")}>
-                    {fmtPct(r.yield_ttm, 2)}
-                  </td>
-                  <td className={cn(td, "num whitespace-nowrap")}>
-                    {dec?.ex_date ? (
-                      <>
-                        {fmtDate(dec.ex_date, { month: "short", day: "numeric" })}{" "}
-                        <Badge tone="pos">declared</Badge>
-                      </>
-                    ) : r.projected ? (
-                      <>
-                        {fmtDate(r.projected.ex_date, { month: "short", day: "numeric" })}{" "}
-                        <Badge>projected</Badge>
-                      </>
-                    ) : (
-                      "–"
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="overflow-x-auto">
+          <table className={TABLE}>
+            <thead>
+              <tr className="border-b">
+                <th className={th}>Company</th>
+                <th className={cn(th, "text-right")}>Last</th>
+                <th className={th}>Frequency</th>
+                <th className={cn(th, "text-right")}>Forward annual</th>
+                <th className={cn(th, "text-right")}>Fwd yield</th>
+                <th className={cn(th, "text-right")}>TTM paid</th>
+                <th className={cn(th, "text-right")}>TTM yield</th>
+                <th className={th}>Next ex-date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {yieldRows.map((r) => {
+                const dec = r.upcoming[0];
+                return (
+                  <tr
+                    key={r.ticker}
+                    className="cursor-pointer border-b hover:bg-secondary/50"
+                    onClick={() => (dec ? o.declaration(r.ticker, dec) : o.projected(r))}
+                  >
+                    <td className={td}>
+                      <span className="font-medium">{r.ticker}</span>
+                      <span className="ml-2 text-muted-foreground">
+                        {d.uni.get(r.ticker)?.name ?? r.name}
+                      </span>
+                    </td>
+                    <td className={cn(td, "num text-right")}>{fmtPerShare(r.last?.amount, 4)}</td>
+                    <td className={cn(td, "text-muted-foreground")}>{r.frequency}</td>
+                    <td className={cn(td, "num text-right")}>{fmtPerShare(r.forward_annual)}</td>
+                    <td className={cn(td, "num text-right font-medium")}>
+                      {fmtPct(r.yield_forward, 2)}
+                    </td>
+                    <td className={cn(td, "num text-right text-muted-foreground")}>
+                      {fmtPerShare(r.ttm)}
+                    </td>
+                    <td className={cn(td, "num text-right text-muted-foreground")}>
+                      {fmtPct(r.yield_ttm, 2)}
+                    </td>
+                    <td className={cn(td, "num whitespace-nowrap")}>
+                      {dec?.ex_date ? (
+                        <>
+                          {fmtDate(dec.ex_date, { month: "short", day: "numeric" })}{" "}
+                          <Badge tone="pos">declared</Badge>
+                        </>
+                      ) : r.projected ? (
+                        <>
+                          {fmtDate(r.projected.ex_date, { month: "short", day: "numeric" })}{" "}
+                          <Badge>projected</Badge>
+                        </>
+                      ) : (
+                        "–"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
       <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
         {d.dividends?.sources.ex_date_rule} Forward yield is the latest regular payment times its
@@ -1341,20 +1413,20 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
       bodyClassName="p-0"
     >
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
-        <Segmented
+        <Pills
           label="Status"
-          size="xs"
           value={status}
           onChange={setStatus}
           options={[
             {
               v: "active",
-              l: `In registration ${cnt("filed") + cnt("amended") + cnt("effective")}`,
+              l: "In registration",
+              n: cnt("filed") + cnt("amended") + cnt("effective"),
             },
-            { v: "priced", l: `Priced ${cnt("priced")}` },
-            { v: "stalled", l: `Stalled ${cnt("stalled")}` },
-            { v: "withdrawn", l: `Withdrawn ${cnt("withdrawn")}` },
-            { v: "all", l: "All" },
+            { v: "priced", l: "Priced", n: cnt("priced") },
+            { v: "stalled", l: "Stalled", n: cnt("stalled") },
+            { v: "withdrawn", l: "Withdrawn", n: cnt("withdrawn") },
+            { v: "all", l: "All", n: all.length },
           ]}
         />
         <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -1364,7 +1436,7 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
         {day && <span className="text-xs text-muted-foreground">Showing {DAY(day)}</span>}
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-[12px]">
+        <table className={TABLE}>
           <thead>
             <tr className="border-b">
               <th className={th}>Company</th>
@@ -1394,7 +1466,7 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
             )}
             {rows.map((r) => (
               <tr key={r.cik} className="border-b hover:bg-secondary/50">
-                <td className={cn(td, "w-full max-w-0")}>
+                <td className={cn(td, "w-full max-w-0 min-w-[11rem]")}>
                   <p className="truncate font-medium" title={r.name}>
                     {r.name}
                   </p>
