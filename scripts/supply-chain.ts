@@ -9,7 +9,9 @@ import { args, log, sb } from "./lib/supa";
 import { readDataset } from "./lib/datasets";
 import { extractSupply, type SupplyCo, type SupplyFiling } from "../src/lib/supply/extract.server";
 
-const universe = JSON.parse(await readFile("public/data/universe.json", "utf8")) as { companies: SupplyCo[] };
+const universe = JSON.parse(await readFile("public/data/universe.json", "utf8")) as {
+  companies: SupplyCo[];
+};
 const covered = universe.companies;
 const only = args.only?.toUpperCase().split(",");
 
@@ -20,14 +22,20 @@ async function filingsOf(t: string): Promise<SupplyFiling[]> {
 
 const queue = covered.filter((c) => !only || only.includes(c.ticker));
 const conc = Number(args.concurrency ?? 6);
-await Promise.all(Array.from({ length: conc }, async () => {
-  for (let c = queue.shift(); c; c = queue.shift()) {
-    try {
-      const r = await extractSupply(sb, c, await filingsOf(c.ticker), covered, { years: Number(args.years ?? 3), dry: !!args.dry, log });
-      log(c.ticker, r.status, r.links, r.error ?? "");
-    } catch (e) {
-      log(c.ticker, "failed", (e as Error).message.slice(0, 200));
+await Promise.all(
+  Array.from({ length: conc }, async () => {
+    for (let c = queue.shift(); c; c = queue.shift()) {
+      try {
+        const r = await extractSupply(sb, c, await filingsOf(c.ticker), covered, {
+          years: Number(args.years ?? 3),
+          dry: !!args.dry,
+          log,
+        });
+        log(c.ticker, r.status, r.links, r.error ?? "");
+      } catch (e) {
+        log(c.ticker, "failed", (e as Error).message.slice(0, 200));
+      }
     }
-  }
-}));
+  }),
+);
 log("done");
