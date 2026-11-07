@@ -273,24 +273,6 @@ function Sources() {
   );
 }
 
-/* ================= Figures band ================= */
-export function Figures() {
-  const [ref, on] = useInView<HTMLDivElement>(0.4);
-  const items = [["1,844", "US companies covered"], ["74,400", "Investor-relations documents"], ["2.9M", "Sourced IR data points"], ["8", "Primary-source datasets"]];
-  return (
-    <section ref={ref} className="border-y border-rule bg-card">
-      <div className="mx-auto grid max-w-7xl grid-cols-2 px-8 md:grid-cols-4">
-        {items.map(([v, l], i) => (
-          <div key={l} className={`border-rule py-12 pr-6 transition-all duration-1000 ${EASE} ${i ? "md:border-l md:pl-8" : ""} ${on ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"}`} style={{ transitionDelay: `${i * 120}ms` }}>
-            <div style={SERIF} className="text-5xl font-light tabular-nums tracking-tight">{v}</div>
-            <div className="mt-2 text-[12px] text-muted-foreground">{l}</div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 /* ================= Feature frame ================= */
 function Feature({ n, kicker, title, body, children, flip }: { n: string; kicker: string; title: ReactNode; body: string; children: ReactNode; flip?: boolean }) {
   const [ref, on] = useInView<HTMLElement>(0.2);
