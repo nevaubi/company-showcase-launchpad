@@ -492,7 +492,33 @@
     background-position: -150% 0;
   }
 }
+/* Pixel-grid loader (components/ui/loading-state.tsx). */
+@keyframes pixel-on {
+  0%,
+  100% {
+    opacity: 0.12;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@keyframes loader-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
+  .loader-pixel {
+    animation: none !important;
+  }
+  .loader-label {
+    animation: none !important;
+    color: var(--muted-foreground);
+    background: none !important;
+  }
   .text-shimmer {
     animation: none;
     color: var(--muted-foreground);
