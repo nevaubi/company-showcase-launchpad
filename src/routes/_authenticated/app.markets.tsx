@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { PageHeader, Panel, Stat } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { DeepViews, TechnicalRead } from "@/components/technicals/deep-views";
+import { CrossSection } from "@/components/technicals/cross-section";
 import { ShortAndFlows } from "@/components/technicals/short-flows";
 import { PriceChart, type Overlay } from "@/components/charts/price-chart";
 import { TimeSeriesChart } from "@/components/charts/time-series";
@@ -59,7 +60,7 @@ const RANGES: { r: Range; i: Interval; l: string }[] = [
 const pageSearch = z.object({
   symbol: z.string().max(12).default("NVDA"),
   range: z.enum(["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "max"]).default("1y"),
-  view: z.enum(["chart", "signals", "risk", "quant", "market"]).default("chart"),
+  view: z.enum(["chart", "signals", "risk", "quant", "cross", "market"]).default("chart"),
 });
 
 export const Route = createFileRoute("/_authenticated/app/markets")({
@@ -321,6 +322,7 @@ function Markets() {
             { v: "signals", l: "Signals" },
             { v: "risk", l: "Risk" },
             { v: "quant", l: "Quant" },
+            { v: "cross", l: "Cross-section" },
             { v: "market", l: "Market scan" },
           ]}
         />
@@ -331,7 +333,12 @@ function Markets() {
         </span>
       </div>
 
-      {s.view !== "chart" ? (
+      {s.view === "cross" ? (
+        <CrossSection
+          symbol={symbol}
+          onPick={(t) => navigate({ search: (p) => ({ ...p, symbol: t, view: "cross" }) })}
+        />
+      ) : s.view !== "chart" ? (
         <DeepViews
           view={s.view}
           symbol={symbol}
