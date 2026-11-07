@@ -17,6 +17,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
+import { Route as AuthenticatedAppCompareRouteImport } from './routes/_authenticated/app.compare'
 import { Route as AuthenticatedAppFirmRouteImport } from './routes/_authenticated/app.firm'
 import { Route as AuthenticatedAppHedgeFundsRouteImport } from './routes/_authenticated/app.hedge-funds'
 import { Route as AuthenticatedAppIdeasRouteImport } from './routes/_authenticated/app.ideas'
@@ -93,6 +94,11 @@ const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
 const AuthenticatedAppAltDataRoute = AuthenticatedAppAltDataRouteImport.update({
   id: '/alt-data',
   path: '/alt-data',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppCompareRoute = AuthenticatedAppCompareRouteImport.update({
+  id: '/compare',
+  path: '/compare',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const AuthenticatedAppFirmRoute = AuthenticatedAppFirmRouteImport.update({
@@ -320,6 +326,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
+  '/app/compare': typeof AuthenticatedAppCompareRoute
   '/app/firm': typeof AuthenticatedAppFirmRouteWithChildren
   '/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
@@ -366,6 +373,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
+  '/app/compare': typeof AuthenticatedAppCompareRoute
   '/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
   '/app/kpis': typeof AuthenticatedAppKpisRoute
@@ -413,6 +421,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
+  '/_authenticated/app/compare': typeof AuthenticatedAppCompareRoute
   '/_authenticated/app/firm': typeof AuthenticatedAppFirmRouteWithChildren
   '/_authenticated/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/_authenticated/app/ideas': typeof AuthenticatedAppIdeasRoute
@@ -462,6 +471,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/app'
     | '/app/alt-data'
+    | '/app/compare'
     | '/app/firm'
     | '/app/hedge-funds'
     | '/app/ideas'
@@ -508,6 +518,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/app/alt-data'
+    | '/app/compare'
     | '/app/hedge-funds'
     | '/app/ideas'
     | '/app/kpis'
@@ -554,6 +565,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/app'
     | '/_authenticated/app/alt-data'
+    | '/_authenticated/app/compare'
     | '/_authenticated/app/firm'
     | '/_authenticated/app/hedge-funds'
     | '/_authenticated/app/ideas'
@@ -661,6 +673,13 @@ declare module '@tanstack/react-router' {
       path: '/alt-data'
       fullPath: '/app/alt-data'
       preLoaderRoute: typeof AuthenticatedAppAltDataRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/compare': {
+      id: '/_authenticated/app/compare'
+      path: '/compare'
+      fullPath: '/app/compare'
+      preLoaderRoute: typeof AuthenticatedAppCompareRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/firm': {
@@ -1000,6 +1019,7 @@ const AuthenticatedAppCompaniesTickerRouteWithChildren =
 
 interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAltDataRoute: typeof AuthenticatedAppAltDataRoute
+  AuthenticatedAppCompareRoute: typeof AuthenticatedAppCompareRoute
   AuthenticatedAppFirmRoute: typeof AuthenticatedAppFirmRouteWithChildren
   AuthenticatedAppHedgeFundsRoute: typeof AuthenticatedAppHedgeFundsRoute
   AuthenticatedAppIdeasRoute: typeof AuthenticatedAppIdeasRoute
@@ -1025,6 +1045,7 @@ interface AuthenticatedAppRouteChildren {
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAltDataRoute: AuthenticatedAppAltDataRoute,
+  AuthenticatedAppCompareRoute: AuthenticatedAppCompareRoute,
   AuthenticatedAppFirmRoute: AuthenticatedAppFirmRouteWithChildren,
   AuthenticatedAppHedgeFundsRoute: AuthenticatedAppHedgeFundsRoute,
   AuthenticatedAppIdeasRoute: AuthenticatedAppIdeasRoute,

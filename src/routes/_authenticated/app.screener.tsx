@@ -1,5 +1,4 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, CornerDownLeft, Download, Loader2, Sparkles, X } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
@@ -16,32 +15,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { partnerFile, partnerScreen, useQuotes, useUniverse } from "@/lib/data";
-import { COVERAGE_TICKERS } from "@/lib/coverage";
+import { partnerScreen } from "@/lib/data";
+import { useScreenRows } from "@/lib/screener/use-rows";
 import { useSessionState } from "@/lib/use-session-state";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   BASIC_FIELDS,
   BUCKET_ORDER,
-  fillFrom,
   COLSETS,
   INDEX_LABELS,
   LIVE_FIELDS,
   PRESETS,
-  basicRow,
   emptySpec,
   filterText,
   fmtField,
   mcapBucket,
-  rowsFromFile,
   run,
   validate,
-  withLive,
   type Catalogue,
   type FieldDef,
   type Row,
-  type ScreenerFile,
   type Spec,
 } from "@/lib/screener/engine";
 
@@ -74,14 +68,6 @@ const isSpec = (v: unknown): v is Spec =>
   !!v && typeof v === "object" && Array.isArray((v as Spec).filters);
 
 function Screener() {
-  const file = useQuery({
-    queryKey: ["screener-file"],
-    queryFn: () => partnerFile<ScreenerFile>("screener.json"),
-    staleTime: 3600_000,
-    retry: 1,
-  });
-  const uni = useUniverse();
-  const quotes = useQuotes(COVERAGE_TICKERS);
   const navigate = useNavigate();
   const [spec, setSpec] = useSessionState<Spec>("fu:screener:spec", emptySpec(), isSpec);
   const [colset, setColset] = useSessionState("fu:screener:colset", "Overview");
@@ -98,27 +84,8 @@ function Screener() {
   } | null>(null);
   const [history, setHistory] = useState<{ prompt: string; spec: Spec }[]>([]);
   const [shown, setShown] = useState(100);
+  const { file, F, rows } = useScreenRows(basic);
 
-  const F = useMemo(() => new Map((file.data?.fields ?? []).map((f) => [f.id, f])), [file.data]);
-  const rows = useMemo(() => {
-    if (!file.data) return [] as Row[];
-    const qs = new Map((quotes.data?.quotes ?? []).map((x) => [x.symbol, x]));
-    const byTk = new Map((uni.data?.companies ?? []).filter((c) => c.f).map((c) => [c.ticker, c]));
-    // screener.json values first; empty fundamentals filled from the partner universe (same SEC basis).
-    const rich = rowsFromFile(file.data).map((r) => {
-      const live = withLive(r, qs.get(r.ticker));
-      const u = byTk.get(r.ticker);
-      return u
-        ? fillFrom(live, basicRow(u, typeof live.price === "number" ? live.price : null))
-        : live;
-    });
-    if (!basic) return rich;
-    const have = new Set(rich.map((r) => r.ticker));
-    const extra = [...byTk.values()]
-      .filter((c) => !have.has(c.ticker))
-      .map((c) => basicRow(c, qs.get(c.ticker)?.price ?? null));
-    return [...rich, ...extra];
-  }, [file.data, uni.data, quotes.data, basic]);
   const cat: Catalogue = useMemo(
     () => ({
       fields: file.data?.fields ?? [],

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { FirmLogo } from "@/components/estimates/firm-logo";
-import { useSource, type SourceTarget } from "@/components/source/source-context";
+import { useSource } from "@/components/source/source-context";
 import type { Estimates as LiveEstimates } from "@/lib/estimates/core";
 import { startOf } from "@/lib/statements/filed";
 import { fmtDate, fmtRelative } from "@/lib/format";
@@ -36,7 +36,6 @@ import {
 } from "@/lib/estimates/street";
 
 /* ---------- source openers ---------- */
-type Open = (t: SourceTarget) => void;
 
 function useOpeners(ticker: string, d: StreetBundle) {
   const { open } = useSource();

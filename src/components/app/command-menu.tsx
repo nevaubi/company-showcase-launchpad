@@ -3,6 +3,7 @@ import {
   BookOpenText,
   Bot,
   Building2,
+  Columns3,
   FileSpreadsheet,
   FileText,
   Globe2,
