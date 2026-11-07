@@ -5,7 +5,7 @@ type Doc = { id: string; file: string; name: string; page: number; pages: number
 type Box = { x: number; y: number; w: number; h: number };
 
 /** Renders a real PDF page (pdf.js canvas) and highlights the cited text run. */
-export function PdfViewer({ doc }: { doc: Doc }) {
+export function PdfViewer({ doc, onLit }: { doc: Doc; onLit?: (v: boolean) => void }) {
   const host = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [box, setBox] = useState<Box | null>(null);
@@ -15,7 +15,7 @@ export function PdfViewer({ doc }: { doc: Doc }) {
 
   useEffect(() => {
     let dead = false;
-    setReady(false); setLit(false); setBox(null);
+    setReady(false); setLit(false); setBox(null); onLit?.(false);
     (async () => {
       const pdfjs = await import("pdfjs-dist");
       pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
@@ -44,7 +44,7 @@ export function PdfViewer({ doc }: { doc: Doc }) {
       }
       if (dead) return;
       setPageH(vp.height); setBox(found); setReady(true);
-      setTimeout(() => !dead && setLit(true), 650);
+      setTimeout(() => { if (!dead) { setLit(true); onLit?.(true); } }, 650);
     })();
     return () => { dead = true; };
   }, [doc.file, doc.find]);
@@ -78,7 +78,7 @@ export function PdfViewer({ doc }: { doc: Doc }) {
             style={{ transform: `translate3d(0,${-offset}px,0)` }}>
             <canvas ref={canvas} className={`block transition-opacity duration-700 ${ready ? "opacity-100" : "opacity-0"}`} />
             {box && (
-              <span className="pointer-events-none absolute rounded-[2px] bg-highlight/55 mix-blend-multiply transition-transform duration-[900ms] ease-[cubic-bezier(0.65,0,0.35,1)]"
+              <span data-pdf-hit className="pointer-events-none absolute rounded-[2px] bg-highlight/55 mix-blend-multiply transition-transform duration-[900ms] ease-[cubic-bezier(0.65,0,0.35,1)]"
                 style={{ left: box.x, top: box.y, width: box.w, height: box.h, transformOrigin: "left", transform: `scaleX(${lit ? 1 : 0})` }} />
             )}
             {box && (
