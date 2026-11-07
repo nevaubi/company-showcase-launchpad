@@ -1,0 +1,56 @@
+/* Arc (uiarc.dev, MIT) components read their own design tokens. This scope maps them onto the
+   app's theme so vendored Arc pieces look native. Arc's --accent means "the highlighted series",
+   unlike shadcn's --accent (a subtle hover background), so the mapping only applies inside
+   .arc-scope and never leaks into shadcn components. */
+.arc-scope {
+  --surface: var(--card);
+  --surface-muted: var(--muted);
+  --surface-raised: var(--popover);
+  --text-muted: var(--muted-foreground);
+  --text-secondary: color-mix(in oklch, var(--foreground) 74%, var(--background));
+  --border-strong: var(--rule);
+  --border-subtle: color-mix(in oklch, var(--border) 60%, var(--background));
+  --accent: var(--link);
+  --accent-subtle: color-mix(in oklch, var(--link) 12%, var(--background));
+  --success: var(--positive);
+  --danger: var(--negative);
+  --control-on: var(--foreground);
+  --series-1: var(--link);
+  --font-body: var(--font-sans);
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --leading-body: 1.45;
+  --tracking-body: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius-control: var(--radius-md);
+  --radius-panel: var(--radius-lg);
+  --radius-pill: 999px;
+  --control-height-sm: 28px;
+  --control-height-md: 34px;
+  --shadow-resting: 0 1px 0 oklch(0.2 0.01 260 / 4%);
+  --shadow-floating: var(--shadow-lift);
+  --ease-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.2, 0.9, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-instant: 120ms;
+  --duration-fast: 160ms;
+  --duration-standard: 240ms;
+  --duration-spring: 400ms;
+  --duration-considered: 480ms;
+  font-family: var(--font-sans);
+  color: var(--foreground);
+}
+@media (prefers-reduced-motion: reduce) {
+  .arc-scope {
+    --duration-instant: 0ms;
+    --duration-fast: 0ms;
+    --duration-standard: 0ms;
+    --duration-spring: 0ms;
+    --duration-considered: 0ms;
+  }
+}
