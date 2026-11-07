@@ -118,6 +118,7 @@ async function wikidataByCik(ciks: string[]): Promise<Map<string, WD>> {
     const values = ciks.slice(i, i + 120).flatMap((c) => [`"${c.padStart(10, "0")}"`, `"${c}"`]).join(" ");
     for (const b of await sparql(`SELECT ?cik ?label ?article ?inception ?website ?logo WHERE { VALUES ?cik { ${values} } ?item wdt:P5531 ?cik. ${FIELDS} }`))
       absorb(out, String(Number(b.cik.value)), b);
+    console.log(`  wikidata by CIK ${Math.min(i + 120, ciks.length)}/${ciks.length}`);
     await sleep(1200);
   }
   return out;
@@ -130,6 +131,7 @@ async function wikidataByTicker(tickers: string[]): Promise<Map<string, WD>> {
       ?item p:P414 ?st. ?st ps:P414 ?ex; pq:P249 ?sym. VALUES ?ex { wd:Q13677 wd:Q82059 }
       FILTER NOT EXISTS { ?st pq:P582 ?ended. } ${FIELDS} }`;
     for (const b of await sparql(q)) absorb(out, b.sym.value.replace(".", "-"), b);
+    console.log(`  wikidata by ticker ${Math.min(i + 80, tickers.length)}/${tickers.length}`);
     await sleep(1200);
   }
   return out;
