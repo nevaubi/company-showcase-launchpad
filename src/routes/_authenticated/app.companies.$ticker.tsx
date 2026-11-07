@@ -1,6 +1,11 @@
 import { createFileRoute, Link, notFound, Outlet, useRouterState } from "@tanstack/react-router";
 import { ArrowUpRight, Building, ChevronDown, Columns3, Globe, Sparkles, Star } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { requestResearch } from "@/lib/research/request";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { Button } from "@/components/ui/button";
@@ -24,7 +29,10 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
     return {
       meta: [
         { title: t },
-        { name: "description", content: `${c?.shortName} financials, filings, segments and insider trades with source attribution.` },
+        {
+          name: "description",
+          content: `${c?.shortName} financials, filings, segments and insider trades with source attribution.`,
+        },
         { property: "og:title", content: t },
         { property: "og:description", content: `${c?.shortName} research file on Filed Under.` },
         { property: "og:type", content: "website" },
@@ -54,7 +62,7 @@ const TABS = [
   { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
   { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
   { to: "/app/companies/$ticker/redline", label: "Filing changes" },
-  { to: "/app/companies/$ticker/insiders", label: "Insiders" },
+  { to: "/app/companies/$ticker/insiders", label: "Insiders & influence" },
   { to: "/app/companies/$ticker/alt-data", label: "Alt data" },
   { to: "/app/companies/$ticker/reports", label: "Reports" },
 ] as const;
@@ -83,7 +91,10 @@ function CompanyLayout() {
         <CompanyLogo ticker={ticker} src={p?.logo} size="lg" />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-2xl font-semibold leading-tight tracking-tight" title={p?.name ? `SEC registrant: ${p.name}` : undefined}>
+            <h1
+              className="truncate text-2xl font-semibold leading-tight tracking-tight"
+              title={p?.name ? `SEC registrant: ${p.name}` : undefined}
+            >
               {coverageOf(ticker)?.shortName ?? p?.name}
             </h1>
             <Badge variant="mono">
@@ -91,12 +102,14 @@ function CompanyLayout() {
             </Badge>
           </div>
           <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-            {p?.name && p.name.toLowerCase().replace(/[^a-z]/g, "") !== (coverageOf(ticker)?.shortName ?? "").toLowerCase().replace(/[^a-z]/g, "") && (
-              <>
-                <span className="num text-[11px] uppercase">{p.name}</span>
-                <span aria-hidden>·</span>
-              </>
-            )}
+            {p?.name &&
+              p.name.toLowerCase().replace(/[^a-z]/g, "") !==
+                (coverageOf(ticker)?.shortName ?? "").toLowerCase().replace(/[^a-z]/g, "") && (
+                <>
+                  <span className="num text-[11px] uppercase">{p.name}</span>
+                  <span aria-hidden>·</span>
+                </>
+              )}
             <span>{p?.sector}</span>
             <span aria-hidden>·</span>
             <span>{p?.industry}</span>
@@ -105,7 +118,8 @@ function CompanyLayout() {
                 <span aria-hidden>·</span>
                 <span className="inline-flex items-center gap-1">
                   <Building className="size-3.5" />
-                  {p.address.city.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}, {p.address.state}
+                  {p.address.city.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())},{" "}
+                  {p.address.state}
                 </span>
               </>
             )}
@@ -123,13 +137,30 @@ function CompanyLayout() {
             <Skeleton className="h-8 w-32" />
           )}
           <div className="flex min-w-0 flex-wrap justify-end gap-1">
-            <Button size="xs" variant="outline" onClick={() => requestResearch(`Build a sourced investment brief for ${ticker}: latest results, valuation, estimates, supply-chain risks and upcoming catalysts. Read the company pages and distinguish reported facts from estimates.`)}><Sparkles /> Research</Button>
-            <Button size="xs" variant={follow.isFollowed(ticker) ? "secondary" : "outline"} onClick={() => follow.toggle(ticker)} disabled={follow.pending}>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() =>
+                requestResearch(
+                  `Build a sourced investment brief for ${ticker}: latest results, valuation, estimates, supply-chain risks and upcoming catalysts. Read the company pages and distinguish reported facts from estimates.`,
+                )
+              }
+            >
+              <Sparkles /> Research
+            </Button>
+            <Button
+              size="xs"
+              variant={follow.isFollowed(ticker) ? "secondary" : "outline"}
+              onClick={() => follow.toggle(ticker)}
+              disabled={follow.pending}
+            >
               <Star className={cn(follow.isFollowed(ticker) && "fill-current")} />
               {follow.isFollowed(ticker) ? "Following" : "Follow"}
             </Button>
             <Button size="xs" variant="outline" asChild>
-              <Link to="/app/compare" search={{ t: ticker }}><Columns3 /> Compare</Link>
+              <Link to="/app/compare" search={{ t: ticker }}>
+                <Columns3 /> Compare
+              </Link>
             </Button>
             <CoverageChip ticker={ticker} price={q?.price ?? null} />
             {latest10K && (
@@ -137,7 +168,13 @@ function CompanyLayout() {
                 size="xs"
                 variant="outline"
                 onClick={() =>
-                  open({ ticker, label: `Annual report (${latest10K.report?.slice(0, 4)})`, unit: "usd", value: 0, doc: { accn: latest10K.accn, doc: latest10K.doc, title: "Latest Form 10-K" } })
+                  open({
+                    ticker,
+                    label: `Annual report (${latest10K.report?.slice(0, 4)})`,
+                    unit: "usd",
+                    value: 0,
+                    doc: { accn: latest10K.accn, doc: latest10K.doc, title: "Latest Form 10-K" },
+                  })
                 }
               >
                 Latest 10-K
@@ -147,7 +184,15 @@ function CompanyLayout() {
               <Button
                 size="xs"
                 variant="outline"
-                onClick={() => open({ ticker, label: `Quarterly report (${latest10Q.report})`, unit: "usd", value: 0, doc: { accn: latest10Q.accn, doc: latest10Q.doc, title: "Latest Form 10-Q" } })}
+                onClick={() =>
+                  open({
+                    ticker,
+                    label: `Quarterly report (${latest10Q.report})`,
+                    unit: "usd",
+                    value: 0,
+                    doc: { accn: latest10Q.accn, doc: latest10Q.doc, title: "Latest Form 10-Q" },
+                  })
+                }
               >
                 Latest 10-Q
               </Button>
@@ -160,7 +205,11 @@ function CompanyLayout() {
                   </a>
                 </Button>
                 <Button size="xs" variant="ghost" asChild>
-                  <a href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${p.cik}&type=&dateb=&owner=include&count=40`} target="_blank" rel="noreferrer">
+                  <a
+                    href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${p.cik}&type=&dateb=&owner=include&count=40`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     EDGAR <ArrowUpRight className="opacity-60" />
                   </a>
                 </Button>
@@ -172,23 +221,78 @@ function CompanyLayout() {
 
       <RestrictedBanner ticker={ticker} />
 
-      <nav aria-label="Company research" className="mb-4 flex flex-wrap items-center gap-1 border-b pb-1">
-        <Button variant={pathname.replace(/\/$/, "") === `/app/companies/${ticker}` ? "secondary" : "ghost"} size="sm" asChild><Link to="/app/companies/$ticker" params={{ ticker }}>Overview</Link></Button>
+      <nav
+        aria-label="Company research"
+        className="mb-4 flex flex-wrap items-center gap-1 border-b pb-1"
+      >
+        <Button
+          variant={
+            pathname.replace(/\/$/, "") === `/app/companies/${ticker}` ? "secondary" : "ghost"
+          }
+          size="sm"
+          asChild
+        >
+          <Link to="/app/companies/$ticker" params={{ ticker }}>
+            Overview
+          </Link>
+        </Button>
         {TAB_GROUPS.map((group) => {
           const tabs = TABS.filter((t) => group.paths.includes(t.to.split("/").at(-1) ?? ""));
           const active = tabs.find((t) => pathname.startsWith(t.to.replace("$ticker", ticker)));
-          return <DropdownMenu key={group.label}>
-            <DropdownMenuTrigger asChild><Button variant={active ? "secondary" : "ghost"} size="sm">{group.label}<ChevronDown className="size-3" /></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start">{tabs.map((t) => <DropdownMenuItem key={t.to} asChild><Link to={t.to} params={{ ticker }} aria-current={t === active ? "page" : undefined}>{t.label}</Link></DropdownMenuItem>)}</DropdownMenuContent>
-          </DropdownMenu>;
+          return (
+            <DropdownMenu key={group.label}>
+              <DropdownMenuTrigger asChild>
+                <Button variant={active ? "secondary" : "ghost"} size="sm">
+                  {group.label}
+                  <ChevronDown className="size-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                {tabs.map((t) => (
+                  <DropdownMenuItem key={t.to} asChild>
+                    <Link
+                      to={t.to}
+                      params={{ ticker }}
+                      aria-current={t === active ? "page" : undefined}
+                    >
+                      {t.label}
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
         })}
-        <Button variant="ghost" size="sm" asChild><Link to="/app/markets" search={{ symbol: ticker }}>Technicals <ArrowUpRight className="size-3" /></Link></Button>
-        <Button variant="ghost" size="sm" asChild><Link to="/app/supply-chain" search={{ t: ticker }}>Supply chain <ArrowUpRight className="size-3" /></Link></Button>
-        {TABS.find((t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker))) && <span className="ml-auto py-1 text-xs text-muted-foreground">{TABS.find((t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker)))?.label}</span>}
+        <Button variant="ghost" size="sm" asChild>
+          <Link to="/app/markets" search={{ symbol: ticker }}>
+            Technicals <ArrowUpRight className="size-3" />
+          </Link>
+        </Button>
+        <Button variant="ghost" size="sm" asChild>
+          <Link to="/app/supply-chain" search={{ t: ticker }}>
+            Supply chain <ArrowUpRight className="size-3" />
+          </Link>
+        </Button>
+        {TABS.find(
+          (t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker)),
+        ) && (
+          <span className="ml-auto py-1 text-xs text-muted-foreground">
+            {
+              TABS.find(
+                (t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker)),
+              )?.label
+            }
+          </span>
+        )}
       </nav>
 
       {company.isError ? (
-        <div className="flex flex-wrap items-center gap-3 border-l-2 border-negative p-4"><p className="text-sm text-negative">Company data is temporarily unavailable.</p><Button size="sm" variant="outline" onClick={() => company.refetch()}>Retry</Button></div>
+        <div className="flex flex-wrap items-center gap-3 border-l-2 border-negative p-4">
+          <p className="text-sm text-negative">Company data is temporarily unavailable.</p>
+          <Button size="sm" variant="outline" onClick={() => company.refetch()}>
+            Retry
+          </Button>
+        </div>
       ) : (
         <Outlet />
       )}
