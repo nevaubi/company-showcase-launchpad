@@ -14,6 +14,8 @@ import { BENCHMARKS, MACRO_SERIES } from "@/lib/coverage";
 import { changeText, fmtMacro, reading } from "@/lib/macro";
 import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice, fmtRelative } from "@/lib/format";
 import { useProfile, useWatchlist } from "@/lib/workspace";
+import { TodayDigest } from "@/components/changes/today-digest";
+import { useNewCounts } from "@/lib/changes/data";
 import { ThesisList } from "@/components/app/thesis-list";
 import { DailyBrief } from "@/components/app/daily-brief";
 import { MarketMoves } from "@/components/app/market-moves";
@@ -46,6 +48,7 @@ function Dashboard() {
   const universe = useUniverse();
   const tickers = (watch.data ?? []).map((w) => w.ticker);
   const quotes = useQuotes(tickers);
+  const fresh = useNewCounts(tickers);
   const sectorSyms = BENCHMARKS.filter((b) => b.group !== "macro" || b.symbol === "^VIX").map((b) => b.symbol);
   const sectorQuotes = useQuotes(sectorSyms);
 
@@ -125,6 +128,8 @@ function Dashboard() {
 
       {watch.isSuccess && <DailyBrief tickers={tickers} />}
 
+      {watch.isSuccess && <TodayDigest tickers={tickers} />}
+
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <Panel
           title="Watchlist"
@@ -171,7 +176,20 @@ function Dashboard() {
                         <Link to="/app/companies/$ticker" params={{ ticker: t }} className="flex items-center gap-2.5">
                           <CompanyLogo ticker={t} src={u?.logo} size="sm" />
                           <span>
-                            <span className="num block font-semibold">{t}</span>
+                            <span className="num flex items-center gap-1.5 font-semibold">
+                              {t}
+                              {fresh[t]?.n ? (
+                                <span
+                                  className={cn(
+                                    "rounded px-1 text-[10px] font-medium",
+                                    fresh[t].high ? "bg-highlight-soft text-highlight-foreground" : "bg-secondary text-muted-foreground",
+                                  )}
+                                  title={`${fresh[t].n} new event${fresh[t].n > 1 ? "s" : ""} since your last visit${fresh[t].high ? `, ${fresh[t].high} high tier` : ""}`}
+                                >
+                                  {fresh[t].n} new
+                                </span>
+                              ) : null}
+                            </span>
                             <span className="block text-[11px] text-muted-foreground">{u?.name}</span>
                           </span>
                         </Link>

@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   Star,
   Users,
+  Radar,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -58,6 +59,13 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     keywords: "kpi operating metrics comps backlog nim occupancy subscribers",
   },
   { to: "/app/markets", label: "Technicals", icon: LineChart, keywords: "chart price rsi macd" },
+  {
+    to: "/app/feed",
+    label: "What changed",
+    icon: Radar,
+    keywords:
+      "feed changes alerts news since last visit digest today insider filing 8-k analyst upgrades downgrades monitor",
+  },
   {
     to: "/app/calendars",
     label: "Calendars",

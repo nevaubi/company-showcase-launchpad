@@ -28,6 +28,7 @@ import { useToggleFollow } from "@/lib/workspace";
 import { useSource } from "@/components/source/source-context";
 import { CoverageChip, RestrictedBanner } from "@/components/firm/coverage-chip";
 import { cn } from "@/lib/utils";
+import { SinceVisitBadges } from "@/components/changes/company-changes";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
   beforeLoad: ({ params }) => {
@@ -151,6 +152,7 @@ function CompanyLayout() {
               </>
             )}
           </p>
+          <SinceVisitBadges ticker={ticker} />
         </div>
         <div className="col-span-2 grid min-w-0 grid-cols-1 items-center gap-2 sm:grid-cols-[auto_minmax(0,1fr)]">
           {q ? (

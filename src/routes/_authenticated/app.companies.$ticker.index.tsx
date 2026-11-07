@@ -36,6 +36,7 @@ import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
 import { FilingInsightsPanel } from "@/components/company/filing-insights";
 import { BriefPanel } from "@/components/company/brief-panel";
+import { WhatChangedPanel } from "@/components/changes/company-changes";
 import { coverageOf } from "@/lib/coverage";
 import { FirmNotes } from "@/components/firm/firm-notes";
 
@@ -82,6 +83,7 @@ function OverviewSkeleton() {
 
 const OVERVIEW_SECTIONS = [
   { id: "ov-price", label: "Price" },
+  { id: "ov-what-changed", label: "What changed" },
   { id: "ov-changes", label: "Filing changes" },
   { id: "ov-setup", label: "Setup & catalysts" },
   { id: "ov-about", label: "About" },
@@ -229,6 +231,10 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       <SectionNav sections={OVERVIEW_SECTIONS} />
 
       <BriefPanel ticker={ticker} />
+
+      <div id="ov-what-changed" className="scroll-mt-24" data-section="What changed">
+        <WhatChangedPanel ticker={ticker} />
+      </div>
 
       <div id="ov-price" className="scroll-mt-24">
         <ResearchChart ticker={ticker} data={data} />

@@ -11,6 +11,7 @@ export type AppPath =
   | "/app/filings"
   | "/app/markets"
   | "/app/calendars"
+  | "/app/feed"
   | "/app/sectors"
   | "/app/alt-data"
   | "/app/hedge-funds"

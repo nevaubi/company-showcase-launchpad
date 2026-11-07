@@ -26,6 +26,7 @@ import {
   Users,
   Check,
   X,
+  Radar,
 } from "lucide-react";
 import { FirmProvider, useFirm } from "@/components/firm/firm-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -57,6 +58,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
     heading: "Research",
     items: [
       { to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
+      { to: "/app/feed", label: "What changed", icon: Radar },
       { to: "/app/companies", label: "Companies", icon: Building2 },
       { to: "/app/screener", label: "Screener", icon: SlidersHorizontal },
       { to: "/app/compare", label: "Compare", icon: Columns3 },
