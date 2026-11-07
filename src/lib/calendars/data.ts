@@ -20,7 +20,14 @@ export interface EarningsEntry {
     eps_estimate: number | null;
     surprise_pct: number | null;
     beat: number | null;
+    /** the 8-K that reported this quarter */
+    report?: { filed: string; accn: string; url: string } | null;
+    /** one-day close-to-close move after the report, and the session it was measured on */
+    move?: number | null;
+    move_date?: string | null;
   } | null;
+  /** median absolute one-day move after the reports on file */
+  reaction?: { median_abs_move: number; n: number; basis: string } | null;
 }
 export interface EstimatesIndexRow {
   ticker: string;
@@ -51,6 +58,7 @@ export interface Declaration {
   payable: string | null;
   ex_date: string | null;
   increase: boolean;
+  share_class?: string | null;
   quote: string;
   filed: string;
   accn: string;
@@ -99,7 +107,7 @@ export interface IpoFiling {
 export interface IpoRow {
   cik: number;
   name: string;
-  status: "filed" | "amended" | "effective" | "priced" | "withdrawn";
+  status: "filed" | "amended" | "effective" | "stalled" | "priced" | "withdrawn";
   spac: boolean;
   sic: string | null;
   sic_desc: string | null;
@@ -113,11 +121,26 @@ export interface IpoRow {
   symbol: string | null;
   exchange: string | null;
   symbol_quote: string | null;
-  range: (IpoTerm & { lo: number; hi: number; unit: string }) | null;
+  range:
+    (IpoTerm & { lo: number; hi: number; unit: string; fixed?: boolean; assumed?: boolean }) | null;
   price: (IpoTerm & { value: number }) | null;
   shares: (IpoTerm & { value: number; unit: string }) | null;
   proceeds: number | null;
   direct_listing?: boolean;
+  underwriters?: (IpoTerm & { names: string[] }) | null;
+  first_day?: {
+    date: string;
+    open: number;
+    close: number;
+    symbol: string;
+    last_close: number;
+    last_date: string;
+    url: string;
+    source: string;
+    open_ret?: number;
+    close_ret?: number;
+    since_ret?: number;
+  } | null;
   filings: IpoFiling[];
 }
 export interface IposFile {

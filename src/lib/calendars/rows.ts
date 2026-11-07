@@ -27,21 +27,36 @@ export interface EarnRow extends EarningsEntry {
   sector: string;
   size: number;
   logo?: string;
+  /** upcoming: the scheduled date; reported: the 8-K that reported the latest quarter (date = its filing date) */
+  kind: "upcoming" | "reported";
+  /** an upcoming date already in the past whose results are not on file yet */
+  awaiting?: boolean;
 }
+/** Upcoming dates plus the latest reported quarter of each company, so past days show actual against expected. */
 export function earningsRows(d: CalData): EarnRow[] {
-  return (d.earnings?.companies ?? [])
-    .map((r) => {
-      const u = d.uni.get(r.ticker);
-      return {
-        ...earningsOf(r),
-        ticker: r.ticker,
-        name: u?.name ?? r.ticker,
-        sector: u?.sector ?? "",
-        size: u?.revenueTTM ?? 0,
-        logo: u?.logo,
-      };
-    })
-    .filter((r) => !!r.date);
+  const out: EarnRow[] = [];
+  for (const r of d.earnings?.companies ?? []) {
+    const u = d.uni.get(r.ticker);
+    const e = earningsOf(r);
+    const base = {
+      ...e,
+      ticker: r.ticker,
+      name: u?.name ?? r.ticker,
+      sector: u?.sector ?? "",
+      size: u?.revenueTTM ?? 0,
+      logo: u?.logo,
+    };
+    const filed = e.last?.report?.filed ?? null;
+    // a scheduled date that has passed and was met by a report within three days is shown as that report
+    const met = !!(e.date && filed && e.date <= d.today && Math.abs(dayDiff(filed, e.date)) <= 3);
+    if (e.date && !met) {
+      const awaiting = e.date < d.today && (!filed || dayDiff(filed, e.date) > 3);
+      out.push({ ...base, kind: "upcoming", awaiting });
+    }
+    if (filed && (met || !e.date || Math.abs(dayDiff(filed, e.date)) > 3))
+      out.push({ ...base, date: filed, is_estimate: false, kind: "reported" });
+  }
+  return out;
 }
 export interface DivEvent {
   ticker: string;

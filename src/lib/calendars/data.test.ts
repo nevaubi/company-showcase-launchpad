@@ -39,6 +39,87 @@ describe("calendar rows", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].eps).toBe(1.2);
   });
+  it("adds the latest reported quarter as its own row and flags past dates without results", () => {
+    const last = {
+      quarter_end: "2026-09-30",
+      eps_actual: 1.1,
+      eps_estimate: 1.0,
+      surprise_pct: 0.1,
+      beat: 1,
+      report: {
+        filed: "2026-11-03",
+        accn: "a",
+        url: "https://www.sec.gov/Archives/edgar/data/1/000000000126000001/x.htm",
+      },
+      move: 0.05,
+      move_date: "2026-11-04",
+    };
+    const rows = earningsRows({
+      ...base,
+      earnings: {
+        generated: "",
+        companies: [
+          {
+            ticker: "AAA",
+            next_earnings: "2027-02-01",
+            consensus_as_of: null,
+            eps_0q: 1.2,
+            earnings: {
+              date: "2027-02-01",
+              is_estimate: true,
+              call_date: null,
+              eps: 1.2,
+              revenue: null,
+              last,
+            },
+          },
+          {
+            ticker: "BBB",
+            next_earnings: "2026-11-05",
+            consensus_as_of: null,
+            eps_0q: 0.5,
+            earnings: {
+              date: "2026-11-05",
+              is_estimate: false,
+              call_date: null,
+              eps: 0.5,
+              revenue: null,
+              last: { ...last, report: { ...last.report, filed: "2026-08-05" } },
+            },
+          },
+        ],
+      },
+    });
+    const met = earningsRows({
+      ...base,
+      earnings: {
+        generated: "",
+        companies: [
+          {
+            ticker: "CCC",
+            next_earnings: "2026-11-04",
+            consensus_as_of: null,
+            eps_0q: 1,
+            earnings: {
+              date: "2026-11-04",
+              is_estimate: false,
+              call_date: null,
+              eps: 1,
+              revenue: null,
+              last,
+            },
+          },
+        ],
+      },
+    });
+    expect(met.map((r) => `${r.kind}:${r.date}`)).toEqual(["reported:2026-11-03"]);
+    expect(rows.map((r) => `${r.ticker}:${r.kind}:${r.date}:${r.awaiting ?? ""}`)).toEqual([
+      "AAA:upcoming:2027-02-01:false",
+      "AAA:reported:2026-11-03:",
+      "BBB:upcoming:2026-11-05:true",
+      "BBB:reported:2026-08-05:",
+    ]);
+  });
   it("drops a projection once a declaration lands near it", () => {
     const dec = {
       amount: 0.5,

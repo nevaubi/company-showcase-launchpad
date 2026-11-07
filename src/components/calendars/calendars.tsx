@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useSource } from "@/components/source/source-context";
+import { useWatchlist } from "@/lib/workspace";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
@@ -113,6 +114,47 @@ function useOpeners() {
           confidence: `${r.provider ?? "Yahoo Finance"} consensus, retrieved ${r.as_of?.slice(0, 10) ?? "–"}.`,
         },
       }),
+    report: (r: EarnRow) => {
+      const rep = r.last?.report;
+      const m = rep && /\/data\/(\d+)\/(\d{18})\/([^/?#]+)$/.exec(rep.url);
+      if (!rep || !m) return;
+      open({
+        ticker: r.ticker,
+        label: `${r.ticker} reported EPS, quarter ended ${r.last?.quarter_end}`,
+        periodLabel: r.last?.quarter_end ?? rep.filed,
+        unit: "USD/share",
+        value: r.last?.eps_actual ?? 0,
+        doc: {
+          accn: rep.accn,
+          doc: m[3],
+          form: "8-K",
+          filed: rep.filed,
+          title: `8-K filed ${rep.filed}: EPS ${r.last?.eps_actual ?? "–"} against the ${r.last?.eps_estimate?.toFixed(2) ?? "–"} estimate (${r.provider ?? "Yahoo Finance"} basis)`,
+        },
+      });
+    },
+    move: (r: EarnRow) =>
+      open({
+        ticker: r.ticker,
+        label:
+          r.kind === "reported"
+            ? `${r.ticker} move after the ${r.last?.report?.filed} report`
+            : `${r.ticker} typical earnings move`,
+        periodLabel:
+          r.kind === "reported" ? (r.last?.move_date ?? "") : `${r.reaction?.n ?? 0} reports`,
+        unit: "pct",
+        value: (r.kind === "reported" ? r.last?.move : r.reaction?.median_abs_move) ?? 0,
+        external: {
+          url: `https://finance.yahoo.com/quote/${r.ticker.replace(".", "-")}/history/`,
+          date: r.last?.move_date ?? undefined,
+          quote:
+            r.kind === "reported"
+              ? `${r.ticker} closed ${signedPct(r.last?.move, 2)} on ${r.last?.move_date} against the prior close, the first session after the 8-K filed ${r.last?.report?.filed}.`
+              : `Median absolute one-day move after ${r.ticker}'s last ${r.reaction?.n} earnings releases: ${((r.reaction?.median_abs_move ?? 0) * 100).toFixed(2)}%.`,
+          confidence:
+            "Computed by Filed Under from daily closes (Yahoo Finance chart API) around each 8-K Item 2.02 filing.",
+        },
+      }),
     release: (x: MacroRelease) =>
       open({
         ticker: "SPY",
@@ -196,6 +238,23 @@ function useOpeners() {
             value,
             external: { url: t.url ?? "", date: t.date, quote: t.quote },
           });
+    },
+    firstDay: (r: IpoRow) => {
+      const f = r.first_day;
+      if (!f) return;
+      open({
+        ticker: f.symbol,
+        label: `${r.name}: first trading day`,
+        periodLabel: f.date,
+        unit: "USD/share",
+        value: f.close,
+        external: {
+          url: f.url,
+          date: f.date,
+          quote: `${f.symbol} first session ${f.date}: opened $${f.open.toFixed(2)}, closed $${f.close.toFixed(2)}${r.price ? ` against the $${r.price.value.toFixed(2)} offer price (${signedPct(f.close_ret)} at the close)` : ""}. Latest close $${f.last_close.toFixed(2)} on ${f.last_date}${f.since_ret != null ? `, ${signedPct(f.since_ret)} since the offer` : ""}.`,
+          confidence: `${f.source}. The first bar must fall within ten days of the pricing date.`,
+        },
+      });
     },
     ipoFiling: (r: IpoRow, f: IpoRow["filings"][number]) =>
       f.doc
@@ -357,7 +416,10 @@ export function WeekAgenda({
               <Section label="Earnings" count={v.earn.length} onMore={() => onDay("earnings", day)}>
                 {v.earn.length === 0 && <Empty>None scheduled</Empty>}
                 {v.earn.slice(0, 7).map((r) => (
-                  <div key={r.ticker} className="flex items-center gap-1.5 px-1 py-0.5 text-[12px]">
+                  <div
+                    key={r.ticker + r.kind}
+                    className="flex items-center gap-1.5 px-1 py-0.5 text-[12px]"
+                  >
                     <CompanyLogo ticker={r.ticker} src={r.logo} size="sm" />
                     <Link
                       to="/app/companies/$ticker/estimates"
@@ -374,14 +436,29 @@ export function WeekAgenda({
                         est.
                       </span>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => o.earnings(r)}
-                      className="num ml-auto text-[11px] text-muted-foreground hover:text-foreground"
-                      title="Consensus EPS"
-                    >
-                      {r.eps != null ? r.eps.toFixed(2) : "–"}
-                    </button>
+                    {r.kind === "reported" ? (
+                      <button
+                        type="button"
+                        onClick={() => o.report(r)}
+                        className={cn(
+                          "num ml-auto text-[11px] hover:underline",
+                          toneOf(r.last?.surprise_pct),
+                        )}
+                        title={`Reported EPS ${r.last?.eps_actual ?? "–"} against ${r.last?.eps_estimate?.toFixed(2) ?? "–"} expected`}
+                      >
+                        {r.last?.eps_actual?.toFixed(2) ?? "–"} (
+                        {signedPct(r.last?.surprise_pct, 0)})
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => o.earnings(r)}
+                        className="num ml-auto text-[11px] text-muted-foreground hover:text-foreground"
+                        title="Consensus EPS"
+                      >
+                        {r.eps != null ? r.eps.toFixed(2) : "–"}
+                      </button>
+                    )}
                   </div>
                 ))}
                 {v.earn.length > 7 && (
@@ -564,10 +641,18 @@ function groupBy<T>(rows: T[], key: (r: T) => string) {
 }
 
 // ---------------------------------------------------------------- earnings
+const signedPct = (v: number | null | undefined, dp = 1) =>
+  v == null || !Number.isFinite(v) ? "–" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(dp)}%`;
+const toneOf = (v: number | null | undefined) =>
+  v == null ? "" : v > 0 ? "text-positive" : v < 0 ? "text-negative" : "";
+
 export function EarningsList({ d, day }: { d: CalData; day?: string }) {
   const o = useOpeners();
+  const watch = useWatchlist();
+  const watched = useMemo(() => new Set((watch.data ?? []).map((w) => w.ticker)), [watch.data]);
   const [win, setWin] = useState<WinKey>(day ? "day" : "week");
   const [sector, setSector] = useState("all");
+  const [mine, setMine] = useState(false);
   const [q, setQ] = useState("");
   const all = useMemo(() => earningsRows(d), [d]);
   const sectors = useMemo(
@@ -579,16 +664,25 @@ export function EarningsList({ d, day }: { d: CalData; day?: string }) {
     (r) =>
       r.date! >= w.from &&
       r.date! <= w.to &&
+      (!mine || watched.has(r.ticker)) &&
       (sector === "all" || r.sector === sector) &&
       (!q || r.ticker.includes(q.toUpperCase()) || r.name.toLowerCase().includes(q.toLowerCase())),
   );
   const groups = groupBy(rows, (r) => r.date!).map(
-    ([k, v]) => [k, v.sort((a, b) => b.size - a.size)] as const,
+    ([k, v]) =>
+      [
+        k,
+        v.sort(
+          (a, b) =>
+            Number(watched.has(b.ticker)) - Number(watched.has(a.ticker)) || b.size - a.size,
+        ),
+      ] as const,
   );
+  const reported = rows.filter((r) => r.kind === "reported").length;
   return (
     <Panel
       title="Earnings calendar"
-      subtitle={`${rows.length} companies · scheduled dates and consensus from ${all[0]?.provider ?? "Yahoo Finance"}; "est." marks a date the company has not confirmed`}
+      subtitle={`${rows.length} companies${reported ? `, ${reported} reported` : ""} · dates and consensus from ${all[0]?.provider ?? "Yahoo Finance"}; reported rows show the latest quarter against its estimate and the next day's move`}
       collapse={false}
       bodyClassName="p-0"
       actions={
@@ -604,24 +698,32 @@ export function EarningsList({ d, day }: { d: CalData; day?: string }) {
                 "ticker",
                 "name",
                 "sector",
-                "date_status",
-                "call_date",
-                "eps_consensus",
+                "status",
+                "eps_expected",
+                "eps_actual",
+                "surprise_pct",
+                "move_1d",
+                "typical_abs_move",
                 "revenue_consensus",
-                "last_quarter",
-                "last_surprise_pct",
               ],
               rows.map((r) => [
                 r.date,
                 r.ticker,
                 r.name,
                 r.sector,
-                r.is_estimate ? "estimated" : r.is_estimate === false ? "confirmed" : "",
-                r.call_date,
-                r.eps,
-                r.revenue,
-                r.last?.quarter_end,
-                r.last?.surprise_pct,
+                r.kind === "reported"
+                  ? "reported"
+                  : r.is_estimate
+                    ? "estimated"
+                    : r.is_estimate === false
+                      ? "confirmed"
+                      : "",
+                r.kind === "reported" ? r.last?.eps_estimate : r.eps,
+                r.kind === "reported" ? r.last?.eps_actual : null,
+                r.kind === "reported" ? r.last?.surprise_pct : null,
+                r.kind === "reported" ? r.last?.move : null,
+                r.reaction?.median_abs_move,
+                r.kind === "upcoming" ? r.revenue : null,
               ]),
             )
           }
@@ -632,6 +734,10 @@ export function EarningsList({ d, day }: { d: CalData; day?: string }) {
     >
       <div className="flex flex-wrap items-center gap-2 border-b px-3 py-2">
         <WindowPicker value={win} onChange={setWin} day={day} />
+        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Switch checked={mine} onCheckedChange={setMine} aria-label="Watchlist only" />
+          Watchlist only{watched.size ? ` (${watched.size})` : ""}
+        </label>
         <Select value={sector} onValueChange={setSector}>
           <SelectTrigger aria-label="Sector" className="h-7 w-48 text-xs">
             <SelectValue />
@@ -657,98 +763,158 @@ export function EarningsList({ d, day }: { d: CalData; day?: string }) {
           <thead>
             <tr className="border-b">
               <th className={th}>Company</th>
-              <th className={th}>Date</th>
-              <th className={cn(th, "text-right")}>EPS consensus</th>
-              <th className={cn(th, "text-right")}>Revenue consensus</th>
-              <th className={cn(th, "text-right")}>Last quarter EPS</th>
+              <th className={th}>Status</th>
+              <th className={cn(th, "text-right")}>EPS expected</th>
+              <th className={cn(th, "text-right")}>EPS actual</th>
               <th className={cn(th, "text-right")}>Surprise</th>
+              <th
+                className={cn(th, "text-right")}
+                title="Reported: the next session's close-to-close move. Upcoming: the median absolute move after recent reports."
+              >
+                Move
+              </th>
+              <th className={cn(th, "text-right")}>Revenue consensus</th>
             </tr>
           </thead>
           <tbody>
             {groups.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                  No earnings scheduled in this range.
+                <td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">
+                  {mine && !watched.size
+                    ? "Your watchlist is empty."
+                    : "No earnings in this range."}
                 </td>
               </tr>
             )}
             {groups.map(([day_, rs]) => (
               <Frag key={day_}>
-                <DateHeader day={day_} today={d.today} n={rs.length} cols={6} />
-                {rs.map((r) => (
-                  <tr key={r.ticker} className="border-b hover:bg-secondary/50">
-                    <td className={td}>
-                      <div className="flex min-w-0 items-center gap-2">
-                        <CompanyLogo ticker={r.ticker} src={r.logo} size="sm" />
-                        <Link
-                          to="/app/companies/$ticker/estimates"
-                          params={{ ticker: r.ticker }}
-                          className="font-medium hover:underline"
-                        >
-                          {r.ticker}
-                        </Link>
-                        <span className="max-w-64 truncate text-muted-foreground">{r.name}</span>
-                      </div>
-                    </td>
-                    <td className={cn(td, "whitespace-nowrap")}>
-                      {r.is_estimate ? (
-                        <Badge>est.</Badge>
-                      ) : r.is_estimate === false ? (
-                        <Badge tone="pos">confirmed</Badge>
-                      ) : null}
-                      {r.call_date &&
-                        r.call_date > r.date! &&
-                        dayDiff(r.date!, r.call_date) <= 3 && (
+                <DateHeader day={day_} today={d.today} n={rs.length} cols={7} />
+                {rs.map((r) => {
+                  const rep = r.kind === "reported";
+                  return (
+                    <tr key={r.ticker + r.kind} className="border-b hover:bg-secondary/50">
+                      <td className={td}>
+                        <div className="flex min-w-0 items-center gap-2">
+                          <CompanyLogo ticker={r.ticker} src={r.logo} size="sm" />
+                          <Link
+                            to="/app/companies/$ticker/estimates"
+                            params={{ ticker: r.ticker }}
+                            className="font-medium hover:underline"
+                          >
+                            {r.ticker}
+                          </Link>
+                          {watched.has(r.ticker) && (
+                            <span className="text-[10px] text-chart-1" title="On your watchlist">
+                              ●
+                            </span>
+                          )}
+                          <span className="max-w-64 truncate text-muted-foreground">{r.name}</span>
+                        </div>
+                      </td>
+                      <td className={cn(td, "whitespace-nowrap")}>
+                        {rep ? (
+                          <button
+                            type="button"
+                            onClick={() => o.report(r)}
+                            className="hover:opacity-80"
+                          >
+                            <Badge tone="info">reported</Badge>
+                          </button>
+                        ) : r.awaiting ? (
+                          <Badge tone="warn">results pending</Badge>
+                        ) : r.is_estimate ? (
+                          <Badge>est.</Badge>
+                        ) : r.is_estimate === false ? (
+                          <Badge tone="pos">confirmed</Badge>
+                        ) : null}
+                        {rep && r.last?.quarter_end && (
                           <span className="ml-1 text-[11px] text-muted-foreground">
-                            call {fmtDate(r.call_date, { month: "short", day: "numeric" })}
+                            qtr ended{" "}
+                            {fmtDate(r.last.quarter_end, { month: "short", day: "numeric" })}
                           </span>
                         )}
-                    </td>
-                    <td className={cn(td, "num text-right")}>
-                      <button
-                        type="button"
-                        onClick={() => o.earnings(r)}
-                        className="hover:underline"
-                      >
-                        {r.eps != null ? r.eps.toFixed(2) : "–"}
-                      </button>
-                    </td>
-                    <td className={cn(td, "num text-right")}>
-                      <button
-                        type="button"
-                        onClick={() => o.earnings(r)}
-                        className="hover:underline"
-                      >
-                        {fmtMoney(r.revenue)}
-                      </button>
-                    </td>
-                    <td className={cn(td, "num text-right text-muted-foreground")}>
-                      {r.last
-                        ? `${r.last.eps_actual?.toFixed(2) ?? "–"} vs ${r.last.eps_estimate?.toFixed(2) ?? "–"}`
-                        : "–"}
-                    </td>
-                    <td
-                      className={cn(
-                        td,
-                        "num text-right",
-                        (r.last?.surprise_pct ?? 0) > 0
-                          ? "text-positive"
-                          : (r.last?.surprise_pct ?? 0) < 0
-                            ? "text-negative"
-                            : "",
-                      )}
-                    >
-                      {r.last?.surprise_pct != null
-                        ? `${r.last.surprise_pct > 0 ? "+" : ""}${(r.last.surprise_pct * 100).toFixed(1)}%`
-                        : "–"}
-                    </td>
-                  </tr>
-                ))}
+                        {!rep &&
+                          r.call_date &&
+                          r.call_date > r.date! &&
+                          dayDiff(r.date!, r.call_date) <= 3 && (
+                            <span className="ml-1 text-[11px] text-muted-foreground">
+                              call {fmtDate(r.call_date, { month: "short", day: "numeric" })}
+                            </span>
+                          )}
+                      </td>
+                      <td className={cn(td, "num text-right")}>
+                        <button
+                          type="button"
+                          onClick={() => (rep ? o.report(r) : o.earnings(r))}
+                          className="hover:underline"
+                        >
+                          {(rep ? r.last?.eps_estimate : r.eps)?.toFixed(2) ?? "–"}
+                        </button>
+                      </td>
+                      <td className={cn(td, "num text-right font-medium")}>
+                        {rep ? (
+                          <button
+                            type="button"
+                            onClick={() => o.report(r)}
+                            className="hover:underline"
+                          >
+                            {r.last?.eps_actual?.toFixed(2) ?? "–"}
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground">–</span>
+                        )}
+                      </td>
+                      <td className={cn(td, "num text-right", rep && toneOf(r.last?.surprise_pct))}>
+                        {rep ? signedPct(r.last?.surprise_pct) : "–"}
+                      </td>
+                      <td className={cn(td, "num text-right", rep && toneOf(r.last?.move))}>
+                        {rep ? (
+                          <button
+                            type="button"
+                            onClick={() => o.move(r)}
+                            className="hover:underline"
+                          >
+                            {signedPct(r.last?.move)}
+                          </button>
+                        ) : r.reaction ? (
+                          <button
+                            type="button"
+                            onClick={() => o.move(r)}
+                            className="text-muted-foreground hover:underline"
+                            title={`Typical: ${r.reaction.basis} (${r.reaction.n} reports)`}
+                          >
+                            ±{(r.reaction.median_abs_move * 100).toFixed(1)}%
+                          </button>
+                        ) : (
+                          "–"
+                        )}
+                      </td>
+                      <td className={cn(td, "num text-right")}>
+                        {rep ? (
+                          <span className="text-muted-foreground">–</span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => o.earnings(r)}
+                            className="hover:underline"
+                          >
+                            {fmtMoney(r.revenue)}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </Frag>
             ))}
           </tbody>
         </table>
       </div>
+      <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
+        Reported rows use the provider's EPS basis for actual and estimate; the 8-K opens from the
+        status or EPS. Move is the one-day close-to-close return after the release; the typical move
+        is the median absolute move over the reports on file.
+      </p>
     </Panel>
   );
 }
@@ -971,6 +1137,7 @@ export function DividendsList({ d, day }: { d: CalData; day?: string }) {
                         <span className="flex gap-1">
                           <Badge tone="pos">declared</Badge>
                           {x.dec?.kind === "special" && <Badge tone="warn">special</Badge>}
+                          {x.dec?.share_class && <Badge>{x.dec.share_class}</Badge>}
                           {x.dec?.increase && <Badge tone="info">increase</Badge>}
                         </span>
                       ) : (
@@ -1144,11 +1311,12 @@ const STATUS_TONE: Record<IpoRow["status"], "pos" | "info" | "muted" | "neg" | "
   effective: "info",
   amended: "warn",
   filed: "muted",
+  stalled: "muted",
   withdrawn: "neg",
 };
 export function IposList({ d, day }: { d: CalData; day?: string }) {
   const o = useOpeners();
-  const [status, setStatus] = useState<"active" | "priced" | "all" | "withdrawn">(
+  const [status, setStatus] = useState<"active" | "priced" | "stalled" | "all" | "withdrawn">(
     day ? "priced" : "active",
   );
   const [spac, setSpac] = useState(false);
@@ -1184,6 +1352,7 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
               l: `In registration ${cnt("filed") + cnt("amended") + cnt("effective")}`,
             },
             { v: "priced", l: `Priced ${cnt("priced")}` },
+            { v: "stalled", l: `Stalled ${cnt("stalled")}` },
             { v: "withdrawn", l: `Withdrawn ${cnt("withdrawn")}` },
             { v: "all", l: "All" },
           ]}
@@ -1205,6 +1374,12 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
               <th className={cn(th, "text-right")}>Price</th>
               <th className={cn(th, "text-right")}>Shares</th>
               <th className={cn(th, "text-right")}>Proceeds</th>
+              <th
+                className={cn(th, "text-right")}
+                title="First session close against the offer price; below it, the return since the offer at the latest close"
+              >
+                First day
+              </th>
               <th className={th}>First filed</th>
               <th className={th}>Filings</th>
             </tr>
@@ -1212,7 +1387,7 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-6 text-center text-muted-foreground">
+                <td colSpan={10} className="px-3 py-6 text-center text-muted-foreground">
                   No registrants in this view.
                 </td>
               </tr>
@@ -1234,6 +1409,20 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
+                  {r.underwriters && r.underwriters.names.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => o.ipoTerm(r, "underwriters", r.underwriters!, 0, "count")}
+                      className="block max-w-full truncate text-left text-[11px] text-muted-foreground hover:text-foreground"
+                      title={r.underwriters.names.join(", ")}
+                    >
+                      <span className="text-foreground/70">Underwriters:</span>{" "}
+                      {r.underwriters.names.slice(0, 3).join(", ")}
+                      {r.underwriters.names.length > 3
+                        ? ` +${r.underwriters.names.length - 3}`
+                        : ""}
+                    </button>
+                  )}
                 </td>
                 <td className={cn(td, "whitespace-nowrap")}>
                   <Badge tone={STATUS_TONE[r.status]}>{r.status}</Badge>
@@ -1281,10 +1470,17 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
                         o.ipoTerm(r, "price range", r.range!, r.range!.hi, "USD/share")
                       }
                     >
-                      ${r.range.lo.toFixed(2)}–{r.range.hi.toFixed(2)}
+                      {r.range.lo === r.range.hi
+                        ? `$${r.range.lo.toFixed(2)}`
+                        : `$${r.range.lo.toFixed(2)}–${r.range.hi.toFixed(2)}`}
                     </button>
                   ) : (
                     "–"
+                  )}
+                  {r.range && r.range.lo === r.range.hi && (
+                    <p className="text-[10.5px] text-muted-foreground">
+                      {r.range.fixed ? "fixed price" : "expected"}
+                    </p>
                   )}
                 </td>
                 <td className={cn(td, "num text-right whitespace-nowrap")}>
@@ -1336,6 +1532,26 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
                   )}
                 </td>
                 <td className={cn(td, "num text-right")}>{fmtMoney(r.proceeds)}</td>
+                <td className={cn(td, "num text-right whitespace-nowrap")}>
+                  {r.first_day ? (
+                    <button
+                      type="button"
+                      onClick={() => o.firstDay(r)}
+                      className={cn("hover:underline", toneOf(r.first_day.close_ret))}
+                    >
+                      {r.first_day.close_ret != null
+                        ? signedPct(r.first_day.close_ret)
+                        : `$${r.first_day.close.toFixed(2)}`}
+                    </button>
+                  ) : (
+                    "–"
+                  )}
+                  {r.first_day?.since_ret != null && (
+                    <p className={cn("text-[10.5px]", toneOf(r.first_day.since_ret))}>
+                      {signedPct(r.first_day.since_ret)} since
+                    </p>
+                  )}
+                </td>
                 <td className={cn(td, "num whitespace-nowrap text-muted-foreground")}>
                   {r.first_filed
                     ? fmtDate(r.first_filed, { month: "short", day: "numeric", year: "2-digit" })
@@ -1363,8 +1579,10 @@ export function IposList({ d, day }: { d: CalData; day?: string }) {
       </div>
       <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
         {d.ipos?.method} Price ranges appear only once a company amends its registration with one;
-        final terms come from the 424B prospectus cover. Proceeds are price times base shares,
-        before any over-allotment.
+        final terms and underwriters come from the 424B prospectus cover. Proceeds are price times
+        base shares, before any over-allotment. Stalled: effective for more than 30 days with no
+        final prospectus. First day: the first session's close against the offer price (Yahoo
+        Finance daily bars).
       </p>
     </Panel>
   );
