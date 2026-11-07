@@ -392,14 +392,27 @@ export const TOOL_DEFS = [
     type: "function",
     name: "render_view",
     description:
-      "Render a dashboard component into the canvas. `spec` is JSON (a string) of exactly one of: " +
-      '{"type":"kpis","title":"...","items":[{"label":"Revenue TTM","value":96.2e9,"unit":"$","delta":0.12,"note":"vs prior year"}]} | ' +
-      '{"type":"chart","chart":"line"|"bar"|"area","title":"...","unit":"$"|"%"|"","x":"period","series":["NVDA","AMD"],"data":[{"period":"FY24","NVDA":60.9e9,"AMD":22.7e9}]} | ' +
-      '{"type":"table","title":"...","columns":["Ticker","P/E"],"rows":[["NVDA",48.2]]} | ' +
-      '{"type":"note","title":"...","markdown":"..."} | ' +
-      '{"type":"code","title":"...","code":"...","stdout":"...","result":"..."} | ' +
-      '{"type":"image","title":"...","src":"https://...","caption":"..."} | {"type":"file","fileId":"<id from create_file>"}. ' +
-      "Use only numbers from tool outputs; deltas are fractions (0.12 = +12%); values are full (not pre-scaled). Several views build a dashboard.",
+      "Render a view into the canvas (Datawrapper-style: title, subtitle, source line, data-table toggle). `spec` is a JSON string of ONE view. " +
+      "Every view takes optional title, subtitle, source (e.g. 'SEC 10-K filings'), span (1-4 grid columns; default 4 for tables/kpis/candles, 2 for charts). " +
+      "Charts with axes take annotations {lines:[{axis:'y',value:0.2,label:'Target'}], points:[{x:'FY24',y:60.9e9,label:'Blackwell ramp'}], ranges:[{axis:'x',from:'2020-03',to:'2020-06',label:'COVID'}]}. Units: $ % x bp ''. " +
+      "Types: " +
+      "kpis {items:[{label,value,unit,delta,note}]} | " +
+      'chart {chart:"line"|"bar"|"area"|"combo"|"stacked"|"stacked100", x:"period", series:[...], data:[{period:"FY24",NVDA:60.9e9}], unit; combo adds lineSeries:[...] (right axis) and rightUnit} | ' +
+      'hbar (ranked horizontal bars) {items:[{label,value}], unit, sort:"desc", highlight:["NVDA"]} | ' +
+      "scatter {xLabel, yLabel, xUnit, yUnit, points:[{x,y,label,size,group}], regression:true} | " +
+      "histogram {values:[...], bins, unit} | " +
+      'heatmap (e.g. monthly returns by year) {rows:["2024","2025"], cols:["Jan",...], values:[[0.02,null,...]], unit:"%", diverging:true} | ' +
+      'waterfall (bridge) {steps:[{label:"FY25 EBIT",value:100,total:true},{label:"Price",value:12},{label:"FY26 EBIT",value:112,total:true}], unit} | ' +
+      'sparktable {columns:[{key:"t",label:"Ticker",kind:"text"},{key:"px",label:"1Y",kind:"spark"},{key:"ret",label:"1Y return",kind:"delta"},{key:"pe",label:"P/E",kind:"x"}], rows:[{t:"NVDA",px:[...closes],ret:0.42,pe:48}]} (kinds: text num $ % x spark delta) | ' +
+      'candles {bars:[{t:"2026-11-02",o,h,l,c,v}], overlays:[{name:"SMA50",values:[...same length as bars]}], bands:[{from:180,to:186,label:"Open gap"}], events:[{t,label}]} | ' +
+      "treemap {items:[{label,value,group,change}]} | donut (2-6 parts only) {parts:[{label,value}]} | " +
+      'multiples (one small chart per item) {chart:"line"|"bar"|"area", items:[{title:"NVDA",data:[{x,y}]}], sharedY} | ' +
+      'timeline {events:[{date,label,detail,tone:"positive"|"negative"|"neutral"}]} | cards (side-by-side comparison, 2-4) {items:[{title,subtitle,metrics:[{label,value,unit,delta}]}]} | ' +
+      'mermaid (flowchart/sequence/org diagrams) {code:"flowchart LR\\n  A[Supplier] --> B[NVDA]"} | graph (network) {nodes:[{id,label,group}], edges:[{from,to,label,weight}], directed} | ' +
+      "table {columns, rows} | note {markdown} | code {code, stdout, result} | image {src, caption} | file {fileId} | " +
+      "dashboard {title, sections:[{heading, columns:1-4, items:[views with span]}]} or {tabs:[{label, sections:[...]}]}: a full layout such as a KPI row, then a 2-up, then a full-width table. " +
+      "Use only numbers from tool outputs; deltas and % values as fractions (0.12 = 12%); values full, not pre-scaled. Pick the chart that fits: trend → line, composition → stacked or treemap, ranking → hbar, relationship → scatter, distribution → histogram, bridge → waterfall, price action → candles. " +
+      "A rejected spec comes back as an error with a fix hint: correct it and call render_view once more. The result includes a self-check; fix reported problems.",
     parameters: obj({ spec: str("JSON string of one view spec"), why: str("One short line for the user") }, ["spec", "why"]),
     strict: true,
   },

@@ -18,9 +18,19 @@ export function ResearchMarkdown({ children, className }: { children: string; cl
         components={{
           pre: ({ children: c, node }) => {
             const code = node?.children?.[0] as { properties?: { className?: string[] }; children?: { value?: string }[] } | undefined;
-            if (code?.properties?.className?.includes("language-chart")) {
-              const spec = parseChartSpec(code.children?.map((t) => t.value ?? "").join("") ?? "");
+            const cls = code?.properties?.className ?? [];
+            if (cls.includes("language-chart")) {
+              const spec = parseChartSpec(code?.children?.map((t) => t.value ?? "").join("") ?? "");
               if (spec) return <AnswerChart spec={spec} />;
+            }
+            // Leaked data and unrequested code (see lib/research/sanitize.ts) stay collapsed.
+            if (cls.includes("language-data") || cls.includes("language-hidden-code")) {
+              return (
+                <details className="not-prose my-2 rounded-md border bg-muted/30 text-[11.5px]">
+                  <summary className="cursor-pointer select-none px-2 py-1 text-muted-foreground">{cls.includes("language-data") ? "Data" : "Code"}</summary>
+                  <pre className="max-h-64 overflow-auto border-t p-2 font-mono text-[10.5px] leading-relaxed scrollbar-thin">{c}</pre>
+                </details>
+              );
             }
             return <pre>{c}</pre>;
           },

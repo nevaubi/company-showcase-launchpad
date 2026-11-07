@@ -510,11 +510,15 @@
 .agent-mark-out {
   opacity: 0;
 }
+/* Positioned by dom-agent.ts (placeLabel) so it stays in the viewport and clear of the assistant panel. */
 .agent-mark-label {
-  position: absolute;
-  left: -1.5px;
-  bottom: calc(100% + 6px);
+  position: fixed;
   max-width: min(360px, 80vw);
+  transition:
+    left 120ms ease-out,
+    top 120ms ease-out,
+    opacity 200ms ease-out;
+  animation: agent-mark-in 360ms ease-out;
   border-radius: 6px;
   background: var(--chart-1);
   color: white;

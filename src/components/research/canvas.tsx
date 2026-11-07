@@ -1,111 +1,16 @@
 // The assistant's canvas: dashboard views it renders, live cloud browsers and file deliverables.
 import { useEffect, useRef, useState } from "react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   AppWindow, ArrowDown, ArrowUp, Download, ExternalLink, FileText, Hand, Image as ImageIcon, LayoutDashboard, Pin, PinOff, Square, X,
 } from "lucide-react";
 import { ResearchMarkdown } from "@/components/research/markdown";
+import { ViewRenderer, defaultSpan, spanClass } from "@/components/research/viz/view";
 import { Button } from "@/components/ui/button";
 import LoadingState, { PixelGrid } from "@/components/ui/loading-state";
 import { browserConfigured, browserStatus, browserStop } from "@/lib/browser.functions";
 import { fmtBytes } from "@/lib/research/files";
-import { canvas, orderedViews, useCanvas, type BrowserRun, type CanvasFile, type CanvasView, type ViewSpec } from "@/lib/research/views";
+import { canvas, orderedViews, useCanvas, type BrowserRun, type CanvasFile, type CanvasView } from "@/lib/research/views";
 import { cn } from "@/lib/utils";
-
-const COLORS = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--muted-foreground)"];
-
-function fmt(v: unknown, unit?: string) {
-  if (typeof v !== "number") return String(v ?? "—");
-  const a = Math.abs(v);
-  if (unit === "%") return `${(Math.abs(v) <= 1.5 ? v * 100 : v).toFixed(1)}%`;
-  if (unit === "x") return `${v.toFixed(1)}x`;
-  const n = a >= 1e12 ? `${(v / 1e12).toFixed(2)}T` : a >= 1e9 ? `${(v / 1e9).toFixed(1)}B` : a >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : a >= 1e3 ? `${(v / 1e3).toFixed(1)}K` : `${+v.toFixed(2)}`;
-  return unit === "$" ? `$${n}` : n;
-}
-
-function Kpis({ spec }: { spec: Extract<ViewSpec, { type: "kpis" }> }) {
-  return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-      {spec.items.map((k, i) => (
-        <div key={i} className="min-w-0 rounded-md border bg-background p-2.5">
-          <p className="truncate text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground">{k.label}</p>
-          <p className="num mt-1 truncate text-lg font-semibold tabular-nums">{typeof k.value === "number" ? fmt(k.value, k.unit) : k.value}</p>
-          <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-muted-foreground">
-            {k.delta != null && <span className={cn("num font-medium tabular-nums", k.delta > 0 ? "text-positive" : k.delta < 0 ? "text-negative" : "")}>{k.delta > 0 ? "+" : ""}{(k.delta * 100).toFixed(1)}%</span>}
-            {k.note && <span className="truncate">{k.note}</span>}
-          </p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ChartView({ spec }: { spec: Extract<ViewSpec, { type: "chart" }> }) {
-  const Chart = spec.chart === "bar" ? BarChart : spec.chart === "area" ? AreaChart : LineChart;
-  return (
-    <div className="h-60 w-full min-w-0">
-      <ResponsiveContainer width="100%" height="100%">
-        <Chart data={spec.data} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-          <XAxis dataKey={spec.x} tick={{ fontSize: 10 }} stroke="var(--muted-foreground)" minTickGap={16} />
-          <YAxis tick={{ fontSize: 10 }} width={48} stroke="var(--muted-foreground)" tickFormatter={(v) => fmt(v, spec.unit)} />
-          <Tooltip formatter={(v) => fmt(v, spec.unit)} contentStyle={{ fontSize: 11, background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)" }} />
-          {spec.series.length > 1 && <Legend wrapperStyle={{ fontSize: 10 }} />}
-          {spec.series.map((k, i) =>
-            spec.chart === "bar" ? (
-              <Bar key={k} dataKey={k} fill={COLORS[i % COLORS.length]} radius={[2, 2, 0, 0]} isAnimationActive={false} />
-            ) : spec.chart === "area" ? (
-              <Area key={k} dataKey={k} stroke={COLORS[i % COLORS.length]} fill={COLORS[i % COLORS.length]} fillOpacity={0.12} strokeWidth={2} connectNulls isAnimationActive={false} />
-            ) : (
-              <Line key={k} dataKey={k} stroke={COLORS[i % COLORS.length]} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
-            ),
-          )}
-        </Chart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-function TableView({ spec }: { spec: Extract<ViewSpec, { type: "table" }> }) {
-  const numeric = spec.columns.map((_, c) => spec.rows.every((r) => r[c] == null || typeof r[c] === "number"));
-  return (
-    <div className="max-h-96 overflow-auto rounded-md border scrollbar-thin">
-      <table className="w-full border-collapse text-[12px]">
-        <thead className="sticky top-0 bg-muted/90 backdrop-blur">
-          <tr>
-            {spec.columns.map((c, i) => (
-              <th key={i} className={cn("whitespace-nowrap border-b px-2 py-1.5 text-left text-[10.5px] font-medium uppercase tracking-wider text-muted-foreground", numeric[i] && "text-right")}>{c}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {spec.rows.map((r, i) => (
-            <tr key={i} className="border-b last:border-0 hover:bg-muted/40">
-              {r.map((v, j) => (
-                <td key={j} className={cn("px-2 py-1.5", numeric[j] && "num text-right tabular-nums")}>{typeof v === "number" ? (Math.abs(v) >= 1e4 ? fmt(v) : v.toLocaleString("en-US", { maximumFractionDigits: 2 })) : (v ?? "—")}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function CodeView({ spec }: { spec: Extract<ViewSpec, { type: "code" }> }) {
-  const [showCode, setShowCode] = useState(false);
-  return (
-    <div className="grid gap-1.5 text-[11px]">
-      <button type="button" onClick={() => setShowCode((s) => !s)} className="w-fit text-[11px] text-muted-foreground underline-offset-2 hover:underline">
-        {showCode ? "Hide code" : "Show code"}
-      </button>
-      {showCode && <pre className="max-h-64 overflow-auto rounded-md border bg-muted/40 p-2 font-mono leading-relaxed scrollbar-thin">{spec.code}</pre>}
-      {spec.stdout && <pre className="max-h-64 overflow-auto rounded-md border bg-background p-2 font-mono leading-relaxed scrollbar-thin">{spec.stdout}</pre>}
-      {spec.result && <pre className="max-h-64 overflow-auto rounded-md border bg-background p-2 font-mono leading-relaxed scrollbar-thin">{spec.result}</pre>}
-      {spec.error && <pre className="max-h-40 overflow-auto rounded-md border border-negative/30 bg-negative-soft p-2 font-mono text-negative scrollbar-thin">{spec.error}</pre>}
-    </div>
-  );
-}
 
 function FileCard({ f }: { f: CanvasFile }) {
   const img = f.mime.startsWith("image/");
@@ -131,31 +36,17 @@ function FileCard({ f }: { f: CanvasFile }) {
   );
 }
 
-function ViewBody({ v }: { v: CanvasView }) {
-  const s = v.spec;
-  if (s.type === "kpis") return <Kpis spec={s} />;
-  if (s.type === "chart") return <ChartView spec={s} />;
-  if (s.type === "table") return <TableView spec={s} />;
-  if (s.type === "note") return <ResearchMarkdown className="text-[13px] leading-relaxed">{s.markdown}</ResearchMarkdown>;
-  if (s.type === "code") return <CodeView spec={s} />;
-  if (s.type === "image")
-    return (
-      <figure>
-        <img src={s.src} alt={s.caption ?? s.title ?? "Image"} className="max-h-96 w-full rounded-md border object-contain" loading="lazy" />
-        {s.caption && <figcaption className="mt-1 text-[11px] text-muted-foreground">{s.caption}</figcaption>}
-      </figure>
-    );
-  const f = canvas.file(s.fileId);
+const renderFile = (id: string) => {
+  const f = canvas.file(id);
   return f ? <FileCard f={f} /> : <p className="text-[12px] text-muted-foreground">File no longer available.</p>;
-}
+};
 
 function ViewCard({ v, first, last }: { v: CanvasView; first: boolean; last: boolean }) {
   const s = v.spec;
-  const wide = s.type === "table" || s.type === "chart" || s.type === "kpis" || s.type === "note";
+  const status = useCanvas().rendered[v.id];
   return (
-    <section className={cn("step-in min-w-0 rounded-lg border bg-card p-3 shadow-paper", wide && "xl:col-span-2")} aria-label={s.title ?? s.type}>
-      <header className="mb-2 flex items-center gap-1">
-        <p className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{s.title ?? s.type[0].toUpperCase() + s.type.slice(1)}</p>
+    <section className={cn("step-in group/card relative min-w-0 rounded-lg border bg-card p-3 shadow-paper", spanClass(defaultSpan(s)), v.pinned && "ring-1 ring-foreground/15")} aria-label={s.title ?? s.type}>
+      <div className="absolute right-1.5 top-1.5 z-[2] flex items-center gap-0.5 rounded-md bg-card/90 opacity-0 backdrop-blur transition-opacity focus-within:opacity-100 group-hover/card:opacity-100">
         <Button variant="ghost" size="icon-sm" className="size-6" onClick={() => canvas.togglePin(v.id)} aria-label={v.pinned ? "Unpin" : "Pin to top"} title={v.pinned ? "Unpin" : "Pin to top"}>
           {v.pinned ? <PinOff className="size-3" /> : <Pin className="size-3" />}
         </Button>
@@ -168,8 +59,12 @@ function ViewCard({ v, first, last }: { v: CanvasView; first: boolean; last: boo
         <Button variant="ghost" size="icon-sm" className="size-6" onClick={() => canvas.removeView(v.id)} aria-label="Remove view">
           <X className="size-3" />
         </Button>
-      </header>
-      <ViewBody v={v} />
+      </div>
+      {v.pinned && <Pin className="absolute left-1.5 top-1.5 size-3 text-muted-foreground" aria-label="Pinned" />}
+      <div className={cn(v.pinned && "pl-3")}>
+        <ViewRenderer spec={s} renderFile={renderFile} onStatus={(st) => canvas.reportRender(v.id, st)} />
+      </div>
+      {status && !status.ok && <p className="sr-only">This view could not be drawn.</p>}
     </section>
   );
 }
@@ -299,7 +194,7 @@ function BrowserTab({ runs }: { runs: BrowserRun[] }) {
       </Empty>
     );
   return (
-    <div className={cn("grid grid-cols-1 gap-3", runs.length > 1 && "xl:grid-cols-2")}>
+    <div className={cn("grid grid-cols-1 gap-3", runs.length > 1 && "@3xl:grid-cols-2")}>
       {[...runs].reverse().map((r) => (
         <BrowserCard key={r.id} r={r} single={runs.length === 1} />
       ))}
@@ -343,13 +238,18 @@ export function Canvas({ onClose }: { onClose: () => void }) {
           <X />
         </Button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin">
+      <div className="@container min-h-0 flex-1 overflow-y-auto p-3 scrollbar-thin">
         {st.tab === "views" &&
-          (views.length ? (
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+          (views.length || st.building ? (
+            <div className="grid grid-cols-1 gap-3 @xl:grid-cols-2 @4xl:grid-cols-4">
               {views.map((v, i) => (
                 <ViewCard key={v.id} v={v} first={i === 0} last={i === views.length - 1} />
               ))}
+              {st.building && (
+                <div className="step-in grid min-h-40 place-items-center rounded-lg border border-dashed bg-card/50 @xl:col-span-2" aria-live="polite">
+                  <LoadingState label={st.building === "Building view" ? "Building view" : `Building ${st.building}`} variant="Drive" />
+                </div>
+              )}
             </div>
           ) : (
             <Empty icon={<LayoutDashboard className="size-5" />} title="Nothing rendered yet">
@@ -359,7 +259,7 @@ export function Canvas({ onClose }: { onClose: () => void }) {
         {st.tab === "browser" && <BrowserTab runs={st.runs} />}
         {st.tab === "files" &&
           (st.files.length ? (
-            <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-2 @3xl:grid-cols-2">
               {[...st.files].reverse().map((f) => (
                 <FileCard key={f.id} f={f} />
               ))}

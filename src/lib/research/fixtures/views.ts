@@ -1,0 +1,41 @@
+// One valid spec per view type, shared by the schema and render tests.
+export const VALID_SPECS: Record<string, unknown> = {
+  kpis: { type: "kpis", items: [{ label: "Revenue", value: 96.2e9, unit: "$", delta: 0.12 }] },
+  line: { type: "chart", chart: "line", title: "Revenue", x: "period", series: ["NVDA", "AMD"], unit: "$", data: [{ period: "FY24", NVDA: 60.9e9, AMD: 22.7e9 }, { period: "FY25", NVDA: 130.5e9, AMD: 25.8e9 }], annotations: { lines: [{ axis: "y", value: 1e11, label: "$100B" }], points: [{ x: "FY25", y: 130.5e9, label: "Blackwell" }] } },
+  combo: { type: "chart", chart: "combo", x: "q", series: ["Revenue", "Margin"], lineSeries: ["Margin"], unit: "$", rightUnit: "%", data: [{ q: "Q1", Revenue: 10, Margin: 0.3 }, { q: "Q2", Revenue: 12, Margin: 0.32 }] },
+  stacked100: { type: "chart", chart: "stacked100", x: "y", series: ["A", "B"], data: [{ y: "2024", A: 1, B: 3 }, { y: "2025", A: 2, B: 2 }] },
+  hbar: { type: "hbar", unit: "%", items: [{ label: "NVDA", value: 0.25 }, { label: "AMD", value: 0.2 }, { label: "INTC", value: -0.05 }], highlight: ["NVDA"] },
+  scatter: { type: "scatter", xLabel: "Growth", yLabel: "P/E", xUnit: "%", yUnit: "x", regression: true, points: [{ x: 0.1, y: 20, label: "A" }, { x: 0.3, y: 40, label: "B" }, { x: 0.5, y: 55, label: "C", size: 3 }] },
+  histogram: { type: "histogram", unit: "%", values: [0.01, -0.02, 0.03, 0.0, 0.015, -0.01, 0.02] },
+  heatmap: { type: "heatmap", unit: "%", rows: ["2024", "2025"], cols: ["Jan", "Feb", "Mar"], values: [[0.02, -0.01, null], [0.03, 0.01, -0.04]] },
+  waterfall: { type: "waterfall", unit: "$", steps: [{ label: "FY25", value: 100, total: true }, { label: "Price", value: 12 }, { label: "Costs", value: -5 }, { label: "FY26", value: 107, total: true }] },
+  sparktable: { type: "sparktable", columns: [{ key: "t", label: "Ticker", kind: "text" }, { key: "px", label: "1Y", kind: "spark" }, { key: "r", label: "Return", kind: "delta" }, { key: "pe", label: "P/E", kind: "x" }], rows: [{ t: "NVDA", px: [1, 2, 3], r: 0.4, pe: 48 }, { t: "AMD", px: [3, 2, 2.5], r: -0.1, pe: 30 }] },
+  candles: { type: "candles", bars: [{ t: "2026-11-02", o: 10, h: 12, l: 9, c: 11, v: 100 }, { t: "2026-11-03", o: 11, h: 11.5, l: 10, c: 10.2, v: 80 }], overlays: [{ name: "SMA", values: [null, 10.6] }], bands: [{ from: 11.6, to: 12, label: "Gap" }], events: [{ t: "2026-11-03", label: "Earnings" }] },
+  treemap: { type: "treemap", items: [{ label: "AAPL", value: 3e12, group: "Tech", change: 0.01 }, { label: "XOM", value: 4e11, group: "Energy", change: -0.02 }] },
+  donut: { type: "donut", parts: [{ label: "Data center", value: 80 }, { label: "Gaming", value: 15 }, { label: "Other", value: 5 }] },
+  multiples: { type: "multiples", chart: "line", unit: "%", items: [{ title: "NVDA", data: [{ x: 1, y: 0.1 }, { x: 2, y: 0.2 }] }, { title: "AMD", data: [{ x: 1, y: 0.05 }, { x: 2, y: 0.02 }] }] },
+  timeline: { type: "timeline", events: [{ date: "2026-08-27", label: "Q2 earnings", tone: "positive" }, { date: "2026-11-19", label: "Q3 earnings" }] },
+  cards: { type: "cards", items: [{ title: "NVDA", metrics: [{ label: "P/E", value: 48, unit: "x" }] }, { title: "AMD", metrics: [{ label: "P/E", value: 30, unit: "x" }] }] },
+  mermaid: { type: "mermaid", code: "flowchart LR\n  A[TSMC] --> B[NVDA]" },
+  graph: { type: "graph", directed: true, nodes: [{ id: "TSM" }, { id: "NVDA" }, { id: "MSFT" }], edges: [{ from: "TSM", to: "NVDA", weight: 2 }, { from: "NVDA", to: "MSFT" }] },
+  table: { type: "table", columns: ["Ticker", "P/E"], rows: [["NVDA", 48.2]] },
+  note: { type: "note", markdown: "**Takeaway**" },
+  code: { type: "code", code: "return 1", result: "1" },
+  image: { type: "image", src: "https://example.com/a.png" },
+  dashboard: {
+    type: "dashboard",
+    title: "NVDA",
+    sections: [
+      { heading: "Snapshot", columns: 1, items: [{ type: "kpis", items: [{ label: "Revenue", value: 1 }] }] },
+      { columns: 2, items: [{ type: "table", columns: ["a"], rows: [[1]] }, { type: "note", markdown: "x" }] },
+      { columns: 4, items: [{ type: "table", span: 4, columns: ["a"], rows: [[1]] }] },
+    ],
+  },
+  dashboardTabs: {
+    type: "dashboard",
+    tabs: [
+      { label: "Growth", sections: [{ columns: 1, items: [{ type: "note", markdown: "g" }] }] },
+      { label: "Value", sections: [{ columns: 1, items: [{ type: "note", markdown: "v" }] }] },
+    ],
+  },
+};

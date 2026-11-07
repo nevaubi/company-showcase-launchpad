@@ -2,12 +2,13 @@
 // timer, compact finished rows that expand, grouped repeats ("Read 4 web pages") and parallel batches.
 import { useState } from "react";
 import {
-  AppWindow, Brain, ChevronRight, Code2, Compass, Download, FileSearch, Globe, Highlighter, LayoutDashboard, MessageCircleQuestion,
+  AppWindow, AreaChart, BarChart3, BarChartHorizontal, Brain, CalendarRange, CandlestickChart, Gauge, GitBranch, Grid3x3, LayoutGrid, LineChart, Network as NetworkIcon, PieChart, ScatterChart, Table2, Workflow, ChevronRight, Code2, Compass, Download, FileSearch, Globe, Highlighter, LayoutDashboard, MessageCircleQuestion,
   MousePointerClick, Network, ScanText, ScrollText, TriangleAlert, Wrench,
 } from "lucide-react";
 import { PixelGrid, formatElapsed, useElapsed } from "@/components/ui/loading-state";
 import type { Step } from "@/lib/research/loop";
 import { argSummary, buildTimeline, type TimelineItem } from "@/lib/research/timeline";
+import { viewLabel } from "@/lib/research/view-spec";
 import { TOOL_GROUP, TOOL_LABELS, TOOL_RUNNING } from "@/lib/research/tool-defs";
 import { cn } from "@/lib/utils";
 
@@ -19,8 +20,27 @@ const host = (u: string) => {
   }
 };
 
+const VIEW_ICON: Record<string, typeof LineChart> = {
+  line: LineChart, area: AreaChart, bar: BarChart3, combo: BarChart3, stacked: BarChart3, stacked100: BarChart3, hbar: BarChartHorizontal,
+  scatter: ScatterChart, histogram: BarChart3, heatmap: Grid3x3, waterfall: BarChart3, sparktable: Table2, table: Table2, candles: CandlestickChart,
+  treemap: LayoutGrid, donut: PieChart, multiples: LayoutGrid, timeline: CalendarRange, cards: LayoutGrid, kpis: Gauge, mermaid: Workflow,
+  graph: NetworkIcon, dashboard: LayoutDashboard, note: ScrollText, code: Code2, image: LayoutDashboard, file: Download,
+};
+
+/** Small type thumbnail for render_view rows. */
+function ViewThumb({ type, className }: { type: string; className?: string }) {
+  const I = VIEW_ICON[type] ?? LayoutDashboard;
+  return (
+    <span className={cn("grid size-4 shrink-0 place-items-center rounded-[3px] bg-chart-1/15 text-foreground/80", className)}>
+      <I className="size-3" />
+    </span>
+  );
+}
+
 function StepIcon({ s, className }: { s: Step; className?: string }) {
   const c = cn("size-3.5 shrink-0", className);
+  if (s.name === "render_view" && s.status !== "error") return <ViewThumb type={viewLabel(s.args?.spec).type} />;
+  if (s.name === "mermaid") return <GitBranch className={c} />;
   if (s.status === "error") return <TriangleAlert className={cn(c, "text-negative/80")} />;
   if (s.kind === "think") return <Brain className={c} />;
   const n = s.name;
@@ -70,8 +90,13 @@ function ToolRow({ s, compact }: { s: Step; compact?: boolean }) {
   const running = s.status === "running";
   const error = s.status === "error";
   const label = running ? (TOOL_RUNNING[s.name] ?? TOOL_LABELS[s.name] ?? s.name) : (TOOL_LABELS[s.name] ?? s.name);
-  const brief = s.why || argSummary(s.name, s.args ?? {}) || s.summary;
-  const { args, output } = detailOf(s);
+  const view = s.name === "render_view" ? viewLabel(s.args?.spec) : null;
+  const brief = view ? view.title || s.why || view.type : s.why || argSummary(s.name, s.args ?? {}) || s.summary;
+  // Spec validation errors go back to the model; the user sees a neutral line, never the raw message.
+  const errorText = view ? "View needed a fix; the assistant is correcting it" : s.summary;
+  const { args: rawArgs, output } = detailOf(s);
+  // Never show the view spec JSON; the canvas shows the view.
+  const args = view ? "" : rawArgs;
   const expandable = !running && (args || output || s.why);
   return (
     <div className="step-in min-w-0">
@@ -85,9 +110,13 @@ function ToolRow({ s, compact }: { s: Step; compact?: boolean }) {
           running && "bg-muted/40",
         )}
       >
-        {running ? <PixelGrid variant={s.name.startsWith("browser_") ? "Orbit" : "Drive"} className="mx-[1px]" /> : <StepIcon s={s} className="text-muted-foreground" />}
+        {running ? (
+          view ? <span className="relative"><ViewThumb type={view.type} className="animate-pulse" /></span> : <PixelGrid variant={s.name.startsWith("browser_") ? "Orbit" : "Drive"} className="mx-[1px]" />
+        ) : (
+          <StepIcon s={s} className="text-muted-foreground" />
+        )}
         <span className={cn("shrink-0 font-medium", running ? "text-shimmer" : error ? "text-muted-foreground" : "text-foreground/90")}>{label}</span>
-        {!compact && <span className={cn("min-w-0 truncate text-muted-foreground", error && "text-negative/80")}>{error ? s.summary : brief}</span>}
+        {!compact && <span className={cn("min-w-0 truncate text-muted-foreground", error && "text-negative/80")}>{error ? errorText : brief}</span>}
         {running ? (
           <Elapsed since={s.startedAt} />
         ) : (

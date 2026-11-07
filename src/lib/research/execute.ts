@@ -22,8 +22,9 @@ import type { UniverseEntry } from "@/lib/financials/types";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
-import { agentRoot, highlight, locate, outline, readRegion, regionOf, safeClick, scrollToEl, type LocateKind } from "@/lib/research/dom-agent";
-import { canvas, parseViewSpec } from "@/lib/research/views";
+import { agentRoot, highlight, locate, outline, readRegion, regionOf, safeClick, bringIntoView, type LocateKind } from "@/lib/research/dom-agent";
+import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/views";
+import { viewLabel } from "@/lib/research/view-spec";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -602,12 +603,13 @@ Month-start closes:\n${monthly.join("\n")}`;
       const hit = locate(target, (args.kind as LocateKind) ?? "auto");
       if (!hit) throw new Error(`Nothing matching "${target}" on this page. Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`);
       const region = regionOf(hit.el);
-      scrollToEl(name === "highlight" ? hit.el : region);
-      if (name === "scroll_to") return { output: `Scrolled to "${hit.label}" (${hit.how} match).`, summary: hit.label };
+      const moved = name === "read_section" ? null : await bringIntoView(name === "highlight" ? hit.el : region);
+      const note = moved ? ` (${moved})` : "";
+      if (name === "scroll_to") return { output: `Scrolled to "${hit.label}" (${hit.how} match), clear of the assistant panel${note}.`, summary: hit.label };
       if (name === "highlight") {
         const label = String(args.label ?? hit.label);
         highlight(hit.how === "text" ? hit.el : region, label);
-        return { output: `Highlighted "${hit.label}" for the user.`, summary: label };
+        return { output: `Highlighted "${hit.label}" for the user${note}.`, summary: label };
       }
       const text = readRegion(hit.el, 8000);
       return { output: `Section "${hit.label}":\n${text || "(no text)"}`, summary: hit.label };
@@ -629,18 +631,32 @@ Month-start closes:\n${monthly.join("\n")}`;
     }
     case "render_view": {
       let raw: unknown = args.spec;
+      canvas.setBuilding(viewLabel(raw).title || "Building view");
       if (typeof raw === "string") {
         try {
           raw = JSON.parse(raw);
         } catch (e) {
-          throw new Error(`spec is not valid JSON: ${(e as Error).message}`);
+          canvas.setBuilding(null);
+          throw new Error(`spec is not valid JSON: ${(e as Error).message}. Send the spec as one JSON object string.`);
         }
       }
-      const r = parseViewSpec(raw);
-      if (!r.ok) throw new Error(`View rejected: ${r.error}`);
+      // One automatic repair pass (numeric strings, missing x/series, type aliases); else a short fix hint.
+      const r = parseOrRepair(raw);
+      if (!r.ok) canvas.setBuilding(null);
+      if (!r.ok) throw new Error(`View rejected: ${r.error}.${r.hint ? ` Fix: ${r.hint}` : ""}`);
+      if (r.spec.type === "file" && !canvas.file(r.spec.fileId)) canvas.setBuilding(null);
       if (r.spec.type === "file" && !canvas.file(r.spec.fileId)) throw new Error(`No file with id ${r.spec.fileId}; create_file returns the id`);
       const v = canvas.addView(r.spec);
-      return { output: `Rendered ${r.spec.type} view ${v.id} in the canvas.`, summary: r.spec.title ?? r.spec.type };
+      canvas.setBuilding(null);
+      // Self-check: wait for the canvas to draw it, then look for problems a reader would notice.
+      const drawn = await canvas.waitRender(v.id, JSON.stringify(r.spec).includes('"mermaid"') ? 4000 : 1200);
+      const problems = [...(drawn && !drawn.ok ? [`render failed: ${drawn.error}`] : []), ...checkView(r.spec)];
+      if (drawn && !drawn.ok) canvas.removeView(v.id);
+      const notes = [
+        r.repaired?.length ? `Auto-fixed: ${r.repaired.join("; ")}.` : "",
+        problems.length ? `Self-check found: ${problems.join("; ")}. ${drawn && !drawn.ok ? "The view was removed; send a corrected spec." : "Consider re-rendering a corrected view."}` : "Self-check passed.",
+      ].filter(Boolean);
+      return { output: `${drawn && !drawn.ok ? "View failed to render" : `Rendered ${r.spec.type} view "${r.spec.title ?? r.spec.type}" (${v.id}) in the canvas`}. ${notes.join(" ")}`, summary: r.spec.title ?? r.spec.type };
     }
     case "create_file": {
       const built = await buildFile({

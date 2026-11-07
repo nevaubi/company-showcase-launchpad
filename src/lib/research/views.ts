@@ -1,71 +1,9 @@
 // Canvas state for the assistant: dashboard views the agent renders, file deliverables and browser
 // tasks. Lives in memory for the current chat session (cleared on "New chat").
 import { useSyncExternalStore } from "react";
-import { z } from "zod";
+import type { ViewSpec } from "@/lib/research/view-spec";
 
-const num = z.number().finite();
-const cell = z.union([z.string().max(400), num, z.null()]);
-
-const Kpi = z.object({
-  label: z.string().min(1).max(60),
-  value: z.union([z.string().max(40), num]),
-  unit: z.enum(["$", "%", "x", ""]).optional(),
-  delta: num.nullable().optional(),
-  note: z.string().max(120).optional(),
-});
-
-export const ViewSpecSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("kpis"), title: z.string().max(120).optional(), items: z.array(Kpi).min(1).max(12) }),
-  z.object({
-    type: z.literal("chart"),
-    title: z.string().max(120).optional(),
-    chart: z.enum(["line", "bar", "area"]),
-    unit: z.enum(["$", "%", ""]).optional(),
-    x: z.string().min(1).max(40),
-    series: z.array(z.string().min(1).max(40)).min(1).max(6),
-    data: z.array(z.record(z.string(), cell)).min(1).max(400),
-  }),
-  z.object({
-    type: z.literal("table"),
-    title: z.string().max(120).optional(),
-    columns: z.array(z.string().min(1).max(60)).min(1).max(16),
-    rows: z.array(z.array(cell)).min(1).max(300),
-  }),
-  z.object({ type: z.literal("note"), title: z.string().max(120).optional(), markdown: z.string().min(1).max(12000) }),
-  z.object({
-    type: z.literal("code"),
-    title: z.string().max(120).optional(),
-    code: z.string().max(12000),
-    stdout: z.string().max(20000).optional(),
-    result: z.string().max(20000).optional(),
-    error: z.string().max(4000).optional(),
-  }),
-  z.object({ type: z.literal("image"), title: z.string().max(120).optional(), src: z.string().url().max(4000), caption: z.string().max(300).optional() }),
-  z.object({ type: z.literal("file"), title: z.string().max(120).optional(), fileId: z.string().min(1).max(80) }),
-]);
-
-export type ViewSpec = z.infer<typeof ViewSpecSchema>;
-
-/** Validate a render_view spec. Returns a readable error for the model on failure. */
-export function parseViewSpec(input: unknown): { ok: true; spec: ViewSpec } | { ok: false; error: string } {
-  const r = ViewSpecSchema.safeParse(input);
-  if (r.success) {
-    const s = r.data;
-    if (s.type === "chart") {
-      const keys = new Set(s.data.flatMap((d) => Object.keys(d)));
-      const missing = [s.x, ...s.series].filter((k) => !keys.has(k));
-      if (missing.length) return { ok: false, error: `chart data has no field(s): ${missing.join(", ")}` };
-    }
-    if (s.type === "table" && s.rows.some((row) => row.length !== s.columns.length)) {
-      return { ok: false, error: `every table row must have ${s.columns.length} cells` };
-    }
-    return { ok: true, spec: s };
-  }
-  const issue = r.error.issues[0];
-  const t = (input as { type?: unknown } | null)?.type;
-  if (issue?.code === "invalid_union_discriminator") return { ok: false, error: `unknown view type ${JSON.stringify(t)}; use kpis, chart, table, note, code, image or file` };
-  return { ok: false, error: `${issue?.path.join(".") || "spec"}: ${issue?.message ?? "invalid"}` };
-}
+export { parseViewSpec, parseOrRepair, checkView, type ViewSpec } from "@/lib/research/view-spec";
 
 export interface CanvasView {
   id: string;
@@ -109,9 +47,13 @@ export interface CanvasState {
   views: CanvasView[];
   files: CanvasFile[];
   runs: BrowserRun[];
+  /** Render outcome per view id, reported by the canvas after mounting. */
+  rendered: Record<string, { ok: boolean; error?: string }>;
+  /** Label of a view the agent is building right now (shown as a loading card). */
+  building: string | null;
 }
 
-let state: CanvasState = { open: false, tab: "views", views: [], files: [], runs: [] };
+let state: CanvasState = { open: false, tab: "views", views: [], files: [], runs: [], rendered: {}, building: null };
 const subs = new Set<() => void>();
 const set = (next: Partial<CanvasState>) => {
   state = { ...state, ...next };
@@ -141,7 +83,8 @@ export const canvas = {
     return v;
   },
   removeView(id: string) {
-    set({ views: state.views.filter((v) => v.id !== id) });
+    const { [id]: _gone, ...rendered } = state.rendered;
+    set({ views: state.views.filter((v) => v.id !== id), rendered });
   },
   togglePin(id: string) {
     set({ views: state.views.map((v) => (v.id === id ? { ...v, pinned: !v.pinned } : v)) });
@@ -176,7 +119,30 @@ export const canvas = {
   },
   reset() {
     for (const f of state.files) if (f.url.startsWith("blob:")) URL.revokeObjectURL(f.url);
-    set({ open: false, tab: "views", views: [], files: [], runs: [] });
+    set({ open: false, tab: "views", views: [], files: [], runs: [], rendered: {}, building: null });
+  },
+  setBuilding(label: string | null) {
+    if (state.building !== label) set(label && !state.open ? { building: label, open: true, tab: "views" } : { building: label });
+  },
+  reportRender(id: string, status: { ok: boolean; error?: string }) {
+    const prev = state.rendered[id];
+    if (prev && !prev.ok && status.ok) return; // a later "ok" never hides an error
+    set({ rendered: { ...state.rendered, [id]: status } });
+  },
+  /** Resolve with a view's render outcome once the canvas reports it (or null after `ms`). */
+  waitRender(id: string, ms = 1500): Promise<{ ok: boolean; error?: string } | null> {
+    return new Promise((resolve) => {
+      const done = (v: { ok: boolean; error?: string } | null) => {
+        clearTimeout(t);
+        unsub();
+        resolve(v);
+      };
+      const unsub = canvas.subscribe(() => {
+        const r = state.rendered[id];
+        if (r && !r.ok) done(r);
+      });
+      const t = setTimeout(() => done(state.rendered[id] ?? null), ms);
+    });
   },
 };
 

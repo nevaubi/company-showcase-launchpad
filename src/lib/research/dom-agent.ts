@@ -3,6 +3,9 @@
 // Read-mostly by design: clicks are limited to tabs, toggles, segmented controls and elements that
 // opt in with data-agent-click, and never submit forms, follow external links or confirm anything.
 
+import { avoidance, freeRegion, panelSideAwayFrom, placeLabel, scrollOffset, type Rect, type Viewport } from "@/lib/research/panel-geometry";
+import { canvas } from "@/lib/research/views";
+
 export type LocateKind = "auto" | "heading" | "text" | "section" | "selector";
 
 export interface Located {
@@ -140,8 +143,55 @@ export function outline(root: HTMLElement = agentRoot(), max = 40) {
 
 const reduced = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+// ── Panel awareness: never scroll a target, or place a callout, under the assistant's own panel. ──
+
+const toRect = (r: DOMRect | { left: number; top: number; right: number; bottom: number }): Rect => ({ left: r.left, top: r.top, right: r.right, bottom: r.bottom });
+
+/** The assistant panel's on-screen box and mode, or null when it is closed/hidden. */
+export function panelInfo(doc: Document = document): { rect: Rect; docked: boolean; wide: boolean } | null {
+  const el = doc.querySelector<HTMLElement>("aside[aria-label='AI assistant']");
+  if (!el || el.getAttribute("aria-hidden") === "true") return null;
+  const r = el.getBoundingClientRect();
+  if (r.width < 4 || r.height < 4) return null;
+  return { rect: toRect(r), docked: el.dataset.docked === "1", wide: el.dataset.wide === "1" };
+}
+
+const viewport = (): Viewport => ({ w: window.innerWidth, h: window.innerHeight });
+const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Scroll so the element sits in the part of the screen the panel doesn't cover. If the panel covers it
+ * horizontally: collapse an expanded canvas, or move a floating panel to the other side. Returns what
+ * was done (for the agent's narration), or null.
+ */
+export async function bringIntoView(el: HTMLElement): Promise<string | null> {
+  const behavior: ScrollBehavior = reduced() ? "auto" : "smooth";
+  // Nested scroll containers first (tables, panels), then the page with the panel offset.
+  el.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "auto" });
+  let action: string | null = null;
+  let panel = panelInfo(el.ownerDocument);
+  let free = freeRegion(viewport(), panel?.rect ?? null);
+  const what = avoidance(toRect(el.getBoundingClientRect()), free, panel);
+  if (what === "collapse-canvas") {
+    canvas.hide();
+    action = "collapsed the canvas so the page is visible";
+    await settle(340);
+  } else if (what === "move-panel") {
+    const side = panelSideAwayFrom(toRect(el.getBoundingClientRect()), viewport());
+    window.dispatchEvent(new CustomEvent("fu:assistant-avoid", { detail: { side } }));
+    action = `moved the assistant to the ${side}`;
+    await settle(260);
+  }
+  panel = panelInfo(el.ownerDocument);
+  free = freeRegion(viewport(), panel?.rect ?? null);
+  const dy = scrollOffset(toRect(el.getBoundingClientRect()), free);
+  if (Math.abs(dy) > 2) window.scrollBy?.({ top: dy, behavior });
+  return action;
+}
+
+/** Back-compat: synchronous centre scroll (used where panel awareness doesn't matter). */
 export function scrollToEl(el: HTMLElement) {
-  el.scrollIntoView?.({ block: "center", inline: "nearest", behavior: reduced() ? "auto" : "smooth" });
+  void bringIntoView(el);
 }
 
 export function readRegion(el: HTMLElement, max = 6000) {
@@ -155,6 +205,7 @@ interface Mark {
   id: number;
   el: HTMLElement;
   box: HTMLDivElement;
+  tag: HTMLSpanElement;
   timer: ReturnType<typeof setTimeout>;
 }
 const marks = new Map<number, Mark>();
@@ -176,9 +227,18 @@ function layer(doc: Document) {
 
 function place() {
   raf = 0;
+  if (!marks.size) return;
+  const vp = viewport();
+  const panel = panelInfo();
+  const free = freeRegion(vp, panel?.rect ?? null);
   for (const m of marks.values()) {
     const r = m.el.getBoundingClientRect();
     Object.assign(m.box.style, { left: `${r.left - 4}px`, top: `${r.top - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
+    const lw = m.tag.offsetWidth || Math.min(360, 8 * (m.tag.textContent?.length ?? 10) + 16);
+    const lh = m.tag.offsetHeight || 22;
+    const p = placeLabel(toRect({ left: r.left - 4, top: r.top - 4, right: r.right + 4, bottom: r.bottom + 4 }), free, { w: lw, h: lh }, vp);
+    Object.assign(m.tag.style, { left: `${p.left}px`, top: `${p.top}px` });
+    m.tag.dataset.side = p.side;
   }
 }
 function schedule() {
@@ -190,6 +250,8 @@ function listen() {
   listening = true;
   window.addEventListener("scroll", schedule, true);
   window.addEventListener("resize", schedule);
+  // The panel moving or the canvas opening changes the free region.
+  canvas.subscribe(schedule);
 }
 
 export function highlight(el: HTMLElement, label: string, ms = 9000) {
@@ -199,13 +261,16 @@ export function highlight(el: HTMLElement, label: string, ms = 9000) {
   const tag = doc.createElement("span");
   tag.className = "agent-mark-label";
   tag.textContent = label.slice(0, 120);
-  box.appendChild(tag);
-  layer(doc).appendChild(box);
+  const l = layer(doc);
+  l.appendChild(box);
+  l.appendChild(tag);
   const id = nextMark++;
   const timer = setTimeout(() => clearHighlight(id), ms);
-  marks.set(id, { id, el, box, timer });
+  marks.set(id, { id, el, box, tag, timer });
   listen();
   place();
+  // Keep following while smooth scrolling settles.
+  for (const t of [120, 260, 450, 700]) setTimeout(schedule, t);
   return id;
 }
 
@@ -214,7 +279,11 @@ export function clearHighlight(id: number) {
   if (!m) return;
   clearTimeout(m.timer);
   m.box.classList.add("agent-mark-out");
-  setTimeout(() => m.box.remove(), 250);
+  m.tag.classList.add("agent-mark-out");
+  setTimeout(() => {
+    m.box.remove();
+    m.tag.remove();
+  }, 250);
   marks.delete(id);
 }
 

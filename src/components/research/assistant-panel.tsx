@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEvent } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,6 +17,7 @@ import { titleSession } from "@/lib/research.functions";
 import { clearHighlights } from "@/lib/research/dom-agent";
 import { runAgent, type Plan, type Question, type Step, type Turn } from "@/lib/research/loop";
 import { canvas, useCanvas } from "@/lib/research/views";
+import { sanitizeAnswer, wantsCode } from "@/lib/research/sanitize";
 import { currentUserId } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,8 @@ interface Msg {
   pending?: boolean;
   error?: string;
   startedAt?: number;
+  /** The user asked for code, so code blocks stay visible. */
+  allowCode?: boolean;
   ms?: number;
 }
 
@@ -165,6 +168,17 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   useEffect(() => {
     if (!open) clearHighlights();
   }, [open]);
+  // The page agent asks the floating panel to step aside when it would cover what it is pointing at.
+  useEffect(() => {
+    const avoid = (e: Event) => {
+      const side = (e as CustomEvent<{ side: "left" | "right" }>).detail?.side;
+      if (docked || !side) return;
+      setBox((b) => clampBox({ ...b, x: side === "left" ? 8 : window.innerWidth - b.w - 8 }));
+    };
+    window.addEventListener("fu:assistant-avoid", avoid);
+    return () => window.removeEventListener("fu:assistant-avoid", avoid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docked]);
 
   function clampBox(b: typeof box) {
     const W = window.innerWidth, H = window.innerHeight;
@@ -238,7 +252,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     const history = msgs.filter((m) => !m.pending);
     const now = Date.now();
     const asstId = `a-${now}`;
-    setMsgs([...history, { id: `u-${now}`, role: "user", content: q, steps: [] }, { id: asstId, role: "assistant", content: "", steps: [], pending: true, phase: "Thinking", activity: "thinking", startedAt: now }]);
+    setMsgs([...history, { id: `u-${now}`, role: "user", content: q, steps: [] }, { id: asstId, role: "assistant", content: "", steps: [], pending: true, phase: "Thinking", activity: "thinking", startedAt: now, allowCode: wantsCode(q) }]);
     const cs = canvas.get();
     const canvasNote = cs.views.length || cs.files.length || cs.runs.length
       ? ` Canvas has ${cs.views.length} view(s), ${cs.files.length} file(s) [${cs.files.map((f) => `${f.name}=${f.id}`).join(", ").slice(0, 300)}], ${cs.runs.length} browser task(s) [${cs.runs.map((r) => `${r.id}:${r.status}`).join(", ").slice(0, 300)}].`
@@ -269,6 +283,10 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
         }),
     });
     const ms = Date.now() - now;
+    // Never show leaked specs/JSON/traces: convert or hide them; valid view specs go to the canvas.
+    const clean = sanitizeAnswer(turn.content, { allowCode: wantsCode(q) });
+    for (const v of clean.views) canvas.addView(v);
+    turn.content = clean.markdown;
     setMsgs((all) => all.map((m) => (m.id === asstId ? { ...m, ...turn, pending: false, ms } : m)));
     await supabase.from("research_messages").insert({
       session_id: session,
@@ -310,6 +328,8 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       aria-hidden={!open}
       aria-label="AI assistant"
       data-agent-ignore=""
+      data-docked={docked ? "1" : "0"}
+      data-wide={wide ? "1" : "0"}
       style={style}
       className={cn(
         "fixed z-30 flex max-w-full flex-col bg-background max-sm:!inset-0 max-sm:!h-dvh max-sm:!w-full max-sm:!rounded-none",
@@ -512,6 +532,7 @@ function PlanCard({ plan, live }: { plan: Plan; live: boolean }) {
 
 function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
   const [open, setOpen] = useState(false);
+  const shown = useMemo(() => (m.pending ? sanitizeAnswer(m.content, { allowCode: m.allowCode }).markdown : m.content), [m.content, m.pending, m.allowCode]);
   const steps = m.steps.filter((s) => s.name !== "sources");
   const sources = Array.from(new Map(m.steps.flatMap((s) => s.sources ?? []).map((x) => [x.url, x])).values());
   const tools = steps.filter((s) => s.kind !== "think").length;
@@ -542,7 +563,7 @@ function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
           </div>
         ))}
       {m.pending && m.phase && <LoadingState label={m.phase} variant={VARIANT[m.activity ?? "thinking"]} since={m.startedAt} className="step-in px-1.5" />}
-      {m.content ? <ResearchMarkdown className={cn("text-[13px] leading-relaxed", m.pending && "opacity-60")}>{m.content}</ResearchMarkdown> : null}
+      {shown ? <ResearchMarkdown className={cn("text-[13px] leading-relaxed", m.pending && "opacity-60")}>{shown}</ResearchMarkdown> : null}
       {m.error && <p className="rounded-md border border-negative/30 bg-negative-soft px-2.5 py-1.5 text-xs text-negative">{m.error}</p>}
       {!m.pending && madeText && !canvasOpen && (
         <button type="button" onClick={() => canvas.show(made.views ? "views" : made.files ? "files" : "browser")} className="step-in flex w-fit items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-[11.5px] shadow-paper transition-colors hover:border-foreground/40">
