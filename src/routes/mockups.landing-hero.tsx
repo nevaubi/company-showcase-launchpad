@@ -1,235 +1,275 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export const Route = createFileRoute("/mockups/landing-hero")({
   head: () => ({
     meta: [
-      { title: "Landing hero mockups · Filed Under" },
-      { name: "description", content: "Internal test page with landing hero design concepts for Filed Under." },
+      { title: "Landing hero mockup · Filed Under" },
+      { name: "description", content: "Internal test page: editorial, scroll-driven landing hero concept for Filed Under." },
       { name: "robots", content: "noindex, nofollow" },
-      { property: "og:title", content: "Landing hero mockups · Filed Under" },
-      { property: "og:description", content: "Internal design concepts for the Filed Under landing page." },
+      { property: "og:title", content: "Landing hero mockup · Filed Under" },
+      { property: "og:description", content: "Internal editorial hero concept for the Filed Under landing page." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
+    links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..800;1,6..72,300..800&display=swap",
+      },
+    ],
   }),
-  component: MockupsPage,
+  component: Mockup,
 });
 
-type Fact = { label: string; value: string; concept: string; period: string };
-type Co = { ticker: string; name: string; form: string; filed: string; accession: string; facts: Fact[] };
+const SERIF = { fontFamily: "'Newsreader', Georgia, serif" } as const;
+const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+/** progress of p inside [a,b] → 0..1 */
+const seg = (p: number, a: number, b: number) => clamp((p - a) / (b - a));
+const ease = (t: number) => 1 - Math.pow(1 - t, 3);
 
-// Figures as reported in each company's latest annual 10-K at time of writing.
-const COMPANIES: Co[] = [
-  {
-    ticker: "AAPL", name: "Apple Inc.", form: "10-K", filed: "2024-11-01", accession: "0000320193-24-000123",
-    facts: [
-      { label: "Net sales", value: "$391.0B", concept: "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax", period: "FY2024" },
-      { label: "Net income", value: "$93.7B", concept: "us-gaap:NetIncomeLoss", period: "FY2024" },
-    ],
-  },
-  {
-    ticker: "NVDA", name: "NVIDIA Corp.", form: "10-K", filed: "2025-02-26", accession: "0001045810-25-000023",
-    facts: [
-      { label: "Revenue", value: "$130.5B", concept: "us-gaap:Revenues", period: "FY2025" },
-      { label: "Net income", value: "$72.9B", concept: "us-gaap:NetIncomeLoss", period: "FY2025" },
-    ],
-  },
-  {
-    ticker: "MSFT", name: "Microsoft Corp.", form: "10-K", filed: "2024-07-30", accession: "0000950170-24-087843",
-    facts: [
-      { label: "Revenue", value: "$245.1B", concept: "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax", period: "FY2024" },
-      { label: "Net income", value: "$88.1B", concept: "us-gaap:NetIncomeLoss", period: "FY2024" },
-    ],
-  },
+// Illustrative figures for the mockup (FY2024 Apple 10-K); verify before production use.
+const ROWS = [
+  { t: "AAPL", n: "Apple", rev: "391.0", ni: "93.7", chg: "+2.0%" },
+  { t: "MSFT", n: "Microsoft", rev: "245.1", ni: "88.1", chg: "+15.7%" },
+  { t: "NVDA", n: "NVIDIA", rev: "130.5", ni: "72.9", chg: "+114%" },
+  { t: "AMZN", n: "Amazon", rev: "638.0", ni: "59.2", chg: "+11.0%" },
+  { t: "JPM", n: "JPMorgan", rev: "180.6", ni: "58.5", chg: "+12.0%" },
+  { t: "GOOGL", n: "Alphabet", rev: "350.0", ni: "100.1", chg: "+13.9%" },
 ];
+const TAPE = ["AAPL 10-K", "NVDA 8-K EX-99.1", "JPM FORM 4", "MSFT 10-Q", "TSLA 13G/A", "AMZN DEF 14A", "LMT USASPENDING", "PFE CLINICALTRIALS", "GE IR DECK p.14", "COST 10-Q"];
 
-const CONCEPTS = ["Forensic terminal", "Confluence matrix", "Living desk"] as const;
-
-function MockupsPage() {
-  const [concept, setConcept] = useState<(typeof CONCEPTS)[number]>(CONCEPTS[0]);
-  return (
-    <div className="min-h-screen bg-paper text-foreground">
-      <div className="sticky top-0 z-20 border-b border-rule bg-paper/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-2 text-xs">
-          <span className="font-mono uppercase tracking-wider text-muted-foreground">Mockup · not live</span>
-          <div className="ml-auto flex gap-1 rounded-md border border-rule p-0.5">
-            {CONCEPTS.map((c) => (
-              <button key={c} onClick={() => setConcept(c)}
-                className={`rounded px-2.5 py-1 transition-colors ${concept === c ? "bg-ink text-ink-foreground" : "hover:bg-muted"}`}>
-                {c}
-              </button>
-            ))}
-          </div>
-          <Link to="/" className="text-link underline-offset-2 hover:underline">Back to site</Link>
-        </div>
-      </div>
-      <div key={concept} className="animate-rise">
-        {concept === "Forensic terminal" && <Terminal />}
-        {concept === "Confluence matrix" && <Matrix />}
-        {concept === "Living desk" && <Desk />}
-      </div>
-    </div>
-  );
-}
-
-/* ---------- Concept 1: click a number, the filing opens beside it ---------- */
-function Terminal() {
-  const [i, setI] = useState(0);
-  const [f, setF] = useState<number | null>(null);
-  const co = COMPANIES[i];
-  const fact = f === null ? null : co.facts[f];
-  return (
-    <section className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-4 py-16 lg:grid-cols-[1.1fr_1fr]">
-      <div className="min-w-0">
-        <p className="font-mono text-xs uppercase tracking-widest text-muted-foreground">Equity research, filed under its source</p>
-        <h1 className="mt-4 font-display text-4xl leading-[1.05] tracking-tight md:text-6xl">
-          Every number <span className="hl-sweep">opens its filing.</span>
-        </h1>
-        <p className="mt-5 max-w-md text-muted-foreground">
-          Click any figure on the right. You land on the exact SEC line it came from — accession, concept and period.
-        </p>
-        <div className="mt-8 flex gap-2">
-          {COMPANIES.map((c, k) => (
-            <button key={c.ticker} onClick={() => { setI(k); setF(null); }}
-              className={`rounded-md border px-3 py-1.5 font-mono text-sm transition-all ${k === i ? "border-ink bg-ink text-ink-foreground" : "border-rule hover:border-ink"}`}>
-              {c.ticker}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="min-w-0 rounded-lg border border-rule bg-card shadow-paper">
-        <div className="flex items-center justify-between border-b border-rule px-4 py-2 text-xs">
-          <span className="font-medium">{co.name}</span>
-          <span className="font-mono text-muted-foreground">{co.form} · filed {co.filed}</span>
-        </div>
-        <div className="grid grid-cols-2 divide-x divide-rule">
-          {co.facts.map((x, k) => (
-            <button key={x.label} onClick={() => setF(k)}
-              className={`group p-4 text-left transition-colors ${f === k ? "bg-highlight-soft" : "hover:bg-muted"}`}>
-              <div className="text-xs text-muted-foreground">{x.label} · {x.period}</div>
-              <div className="mt-1 font-mono text-2xl tabular-nums">
-                <span className={f === k ? "hl-sweep" : "border-b border-dashed border-ink-muted"}>{x.value}</span>
-              </div>
-              <div className="mt-2 text-[11px] text-link opacity-0 transition-opacity group-hover:opacity-100">View source →</div>
-            </button>
-          ))}
-        </div>
-        <div className="border-t border-rule p-4 font-mono text-xs">
-          {fact ? (
-            <div key={`${i}-${f}`} className="animate-rise space-y-1.5">
-              <Row k="Accession" v={co.accession} />
-              <Row k="Concept" v={fact.concept} />
-              <Row k="Period" v={fact.period} />
-              <Row k="Value" v={fact.value} hl />
-            </div>
-          ) : (
-            <p className="text-muted-foreground">↑ Click a number to trace it.</p>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function Row({ k, v, hl }: { k: string; v: string; hl?: boolean }) {
-  return (
-    <div className="flex gap-3">
-      <span className="w-20 shrink-0 text-muted-foreground">{k}</span>
-      <span className={`min-w-0 break-all ${hl ? "bg-highlight px-1 text-highlight-foreground" : ""}`}>{v}</span>
-    </div>
-  );
-}
-
-/* ---------- Concept 2: layers of evidence light up together ---------- */
-const LAYERS = ["Financials", "Insider trades", "Filing changes", "Supply chain", "Gov. contracts", "IR KPIs"];
-function Matrix() {
-  const [hot, setHot] = useState(0);
+function useScrollProgress<T extends HTMLElement>() {
+  const ref = useRef<T>(null);
+  const [p, setP] = useState(0);
   useEffect(() => {
-    const t = setInterval(() => setHot((h) => (h + 1) % COMPANIES.length), 2200);
-    return () => clearInterval(t);
+    let raf = 0;
+    const on = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = ref.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        setP(clamp(-r.top / (r.height - window.innerHeight)));
+      });
+    };
+    on();
+    window.addEventListener("scroll", on, { passive: true });
+    window.addEventListener("resize", on);
+    return () => { window.removeEventListener("scroll", on); window.removeEventListener("resize", on); };
   }, []);
+  return [ref, p] as const;
+}
+
+function Mockup() {
+  const [ref, p] = useScrollProgress<HTMLDivElement>();
+
+  // Scene timings
+  const s1 = ease(seg(p, 0.0, 0.18));   // headline settles, page recedes
+  const s2 = ease(seg(p, 0.18, 0.4));  // camera pushes into the AAPL revenue cell
+  const s3 = ease(seg(p, 0.4, 0.62));  // filing slides in, highlighter sweeps
+  const s4 = ease(seg(p, 0.62, 0.82)); // pull back: the stack of source layers
+  const s5 = ease(seg(p, 0.85, 1));    // close + CTA
+
+  const zoom = 1 + s2 * 1.4 - s3 * 0.5 - s4 * 0.9;
+  const pageFade = 1 - s2 * 0.9;
+
   return (
-    <section className="mx-auto max-w-6xl px-4 py-16">
-      <h1 className="max-w-3xl font-display text-4xl leading-[1.05] tracking-tight md:text-6xl">
-        When the evidence <span className="hl-sweep">lines up</span>, you see it first.
-      </h1>
-      <p className="mt-5 max-w-xl text-muted-foreground">
-        Six independent source layers per company. A signal only lights when it traces back to a document.
-      </p>
-      <div className="mt-10 overflow-x-auto rounded-lg border border-rule bg-card shadow-paper">
-        <table className="w-full min-w-[560px] text-sm">
-          <thead>
-            <tr className="border-b border-rule text-xs text-muted-foreground">
-              <th className="p-3 text-left font-normal">Company</th>
-              {LAYERS.map((l) => <th key={l} className="p-3 text-center font-normal">{l}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {COMPANIES.map((c, r) => (
-              <tr key={c.ticker} className={`border-b border-rule last:border-0 transition-colors ${r === hot ? "bg-highlight-soft" : ""}`}>
-                <td className="p-3 font-mono">{c.ticker}</td>
-                {LAYERS.map((l, k) => (
-                  <td key={l} className="p-3 text-center">
-                    <span
-                      className={`inline-block size-2.5 rounded-full transition-all duration-500 ${r === hot ? "bg-ink scale-125" : "bg-rule"}`}
-                      style={{ transitionDelay: r === hot ? `${k * 90}ms` : "0ms" }}
-                    />
-                  </td>
+    <div className="bg-paper text-foreground">
+      {/* Masthead */}
+      <header className="border-b-2 border-ink">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <span>Saturday, 7 November 2026</span>
+          <span className="hidden sm:inline">Mockup · not the live site</span>
+          <Link to="/" className="hover:text-foreground">Back to site</Link>
+        </div>
+        <div className="mx-auto max-w-7xl border-t border-rule px-6 py-3 text-center">
+          <div style={SERIF} className="text-4xl font-semibold tracking-tight md:text-5xl">Filed Under</div>
+        </div>
+        <Tape />
+      </header>
+
+      {/* Cinematic scroll stage */}
+      <div ref={ref} className="relative" style={{ height: "520vh" }}>
+        <div className="sticky top-0 h-screen overflow-hidden">
+          {/* Layer A: the broadsheet front page */}
+          <div
+            className="absolute inset-0 mx-auto grid max-w-7xl grid-cols-1 gap-8 px-6 pt-10 will-change-transform lg:grid-cols-[1.35fr_1fr]"
+            style={{
+              transform: `translateX(${-s3 * 28 + s4 * 28}%) scale(${zoom})`,
+              transformOrigin: "82% 17%",
+              opacity: 1 - Math.min(0.94, s4 * 2),
+            }}
+          >
+            <div className="min-w-0" style={{ opacity: pageFade }}>
+              <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-negative">Research · Provenance</div>
+              <h1 style={SERIF} className="mt-3 text-5xl font-medium leading-[0.95] tracking-[-0.02em] md:text-7xl xl:text-8xl">
+                <Word d={0}>Every</Word> <Word d={80}>number</Word> <Word d={160}>has</Word>{" "}
+                <Word d={240}><em className="font-normal">a source.</em></Word>
+              </h1>
+              <p style={SERIF} className="mt-6 max-w-xl text-xl leading-snug text-muted-foreground md:text-2xl" >
+                US equity research where each figure traces to the SEC filing, the agency record or the investor deck it came from.
+              </p>
+              <div className="mt-8 grid max-w-xl grid-cols-3 border-y border-rule font-mono text-xs">
+                {[["1,844", "companies"], ["2.9M", "IR facts"], ["74K", "IR documents"]].map(([v, l]) => (
+                  <div key={l} className="border-r border-rule py-3 pr-3 last:border-0 [&:not(:first-child)]:pl-3">
+                    <div className="text-xl tabular-nums text-foreground">{v}</div>
+                    <div className="uppercase tracking-wider text-muted-foreground">{l}</div>
+                  </div>
                 ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+              </div>
+              <div className="mt-6 font-mono text-[11px] uppercase tracking-[0.2em] text-muted-foreground" style={{ opacity: 1 - s1 * 1.5 }}>
+                ↓ Scroll to trace a number
+              </div>
+            </div>
+
+            {/* Data table — the "camera" pushes into AAPL revenue */}
+            <div className="min-w-0 border-t-2 border-ink pt-2">
+              <div className="flex items-baseline justify-between">
+                <span style={SERIF} className="text-lg font-semibold">Annual results</span>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">$bn · latest FY</span>
+              </div>
+              <table className="mt-2 w-full font-mono text-sm tabular-nums">
+                <thead>
+                  <tr className="border-b border-ink text-[10px] uppercase tracking-wider text-muted-foreground">
+                    <th className="py-1.5 text-left font-normal">Co.</th>
+                    <th className="py-1.5 text-right font-normal">Revenue</th>
+                    <th className="py-1.5 text-right font-normal">Net inc.</th>
+                    <th className="py-1.5 text-right font-normal">YoY</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ROWS.map((r, i) => {
+                    const target = i === 0;
+                    return (
+                      <tr key={r.t} className="border-b border-rule" style={{ opacity: target ? 1 : 1 - s2 * 0.85 }}>
+                        <td className="py-2"><span className="text-foreground">{r.t}</span> <span className="hidden text-muted-foreground xl:inline">{r.n}</span></td>
+                        <td className="py-2 text-right">
+                          <span className="relative inline-block px-1">
+                            {target && (
+                              <span aria-hidden className="absolute inset-0 origin-left bg-highlight"
+                                style={{ transform: `scaleX(${s2 >= 1 ? 1 : s2 * 0.15 + s3})`, opacity: Math.min(1, s2 * 2) }} />
+                            )}
+                            <span className="relative">{r.rev}</span>
+                          </span>
+                        </td>
+                        <td className="py-2 text-right">{r.ni}</td>
+                        <td className={`py-2 text-right ${r.chg.startsWith("+") ? "text-positive" : "text-negative"}`}>{r.chg}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p style={SERIF} className="mt-3 text-sm italic text-muted-foreground">Click any figure on Filed Under to open its filing.</p>
+            </div>
+          </div>
+
+          {/* Layer B: the filing itself, sliding in from the right */}
+          <div
+            className="pointer-events-none absolute inset-y-0 right-0 flex w-full items-center justify-end px-6 md:w-[58%]"
+            style={{ transform: `translateX(${(1 - s3) * 110 + s4 * 110}%)`, opacity: s3 * (1 - s4) }}
+          >
+            <article className="w-full max-w-xl border border-ink bg-card shadow-lift">
+              <div className="flex items-center justify-between border-b border-ink bg-ink px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-ink-foreground">
+                <span>Form 10-K · Apple Inc.</span><span>Filed 2024-11-01</span>
+              </div>
+              <div className="p-5">
+                <div style={SERIF} className="text-center text-sm font-semibold uppercase tracking-wider">Consolidated Statements of Operations</div>
+                <div className="mt-1 text-center font-mono text-[10px] text-muted-foreground">(In millions, except per-share amounts)</div>
+                <table className="mt-4 w-full font-mono text-[13px] tabular-nums">
+                  <tbody>
+                    <FilingRow l="Net sales: Products" v="294,866" />
+                    <FilingRow l="Net sales: Services" v="96,169" />
+                    <tr className="border-t border-ink">
+                      <td className="py-1.5 font-semibold">Total net sales</td>
+                      <td className="py-1.5 text-right">
+                        <span className="relative inline-block px-1">
+                          <span aria-hidden className="absolute inset-0 origin-left bg-highlight" style={{ transform: `scaleX(${seg(s3, 0.5, 1)})` }} />
+                          <span className="relative font-semibold">391,035</span>
+                        </span>
+                      </td>
+                    </tr>
+                    <FilingRow l="Cost of sales" v="210,352" muted />
+                  </tbody>
+                </table>
+                <dl className="mt-5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 border-t border-rule pt-3 font-mono text-[11px]" style={{ opacity: seg(s3, 0.6, 1) }}>
+                  <dt className="text-muted-foreground">Accession</dt><dd>0000320193-24-000123</dd>
+                  <dt className="text-muted-foreground">Concept</dt><dd className="break-all">us-gaap:RevenueFromContractWith…</dd>
+                  <dt className="text-muted-foreground">Period</dt><dd>FY2024 · 52 weeks to 28 Sep 2024</dd>
+                </dl>
+              </div>
+            </article>
+          </div>
+
+          {/* Layer C: the stack of sources */}
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center px-6" style={{ opacity: s4 * (1 - s5) }}>
+            <div className="w-full max-w-4xl">
+              <div style={SERIF} className="mb-6 text-center text-3xl font-medium md:text-5xl" >Not one source. <em className="font-normal">Eight.</em></div>
+              <div className="grid grid-cols-2 border-l border-t border-ink md:grid-cols-4">
+                {[
+                  ["SEC XBRL", "Statements"], ["Form 4", "Insiders"], ["8-K / EX-99", "Releases"], ["IR decks", "KPIs by cell"],
+                  ["10-K text", "Supply chain"], ["USAspending", "Contracts"], ["Redlines", "What changed"], ["FRED", "Macro"],
+                ].map(([a, b], i) => (
+                  <div key={a} className="border-b border-r border-ink bg-paper p-4"
+                    style={{ transform: `translateY(${(1 - seg(s4, i * 0.06, 0.5 + i * 0.06)) * 40}px)`, opacity: seg(s4, i * 0.06, 0.5 + i * 0.06) }}>
+                    <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">{b}</div>
+                    <div style={SERIF} className="mt-1 text-xl font-medium">{a}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Layer D: close */}
+          <div className="absolute inset-0 flex items-center justify-center px-6 text-center" style={{ opacity: s5, transform: `translateY(${(1 - s5) * 30}px)`, pointerEvents: s5 > 0.5 ? "auto" : "none" }}>
+            <div>
+              <div className="mx-auto mb-6 inline-block -rotate-3 border-2 border-negative px-3 py-1 font-mono text-xs uppercase tracking-[0.3em] text-negative">Filed under: verified</div>
+              <h2 style={SERIF} className="text-5xl font-medium leading-[0.95] tracking-tight md:text-7xl">Read the market<br /><em className="font-normal">from the record.</em></h2>
+              <div className="mt-8 flex justify-center gap-3">
+                <Link to="/auth" className="bg-ink px-5 py-2.5 font-mono text-xs uppercase tracking-[0.18em] text-ink-foreground transition-opacity hover:opacity-85">Start reading</Link>
+                <Link to="/pricing" className="border border-ink px-5 py-2.5 font-mono text-xs uppercase tracking-[0.18em] transition-colors hover:bg-muted">Pricing</Link>
+              </div>
+            </div>
+          </div>
+
+          {/* Scene progress rail */}
+          <div className="absolute bottom-6 left-6 hidden font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground md:block">
+            {["Front page", "The number", "The filing", "The record", "Begin"].map((l, i) => {
+              const on = Math.min(4, Math.floor(p * 5)) === i;
+              return <div key={l} className={`flex items-center gap-2 py-0.5 transition-colors ${on ? "text-foreground" : ""}`}>
+                <span className={`h-px transition-all ${on ? "w-8 bg-ink" : "w-3 bg-rule"}`} />{String(i + 1).padStart(2, "0")} {l}
+              </div>;
+            })}
+          </div>
+        </div>
       </div>
-      <p className="mt-3 font-mono text-[11px] text-muted-foreground">Illustrative animation — the dots are not live signals.</p>
-    </section>
+    </div>
   );
 }
 
-/* ---------- Concept 3: the assistant works in front of you ---------- */
-const STEPS = [
-  "Opening NVDA 10-K (filed 2025-02-26)",
-  "Reading us-gaap:Revenues for FY2025",
-  "Cross-checking IR data center segment",
-  "Scanning supply chain for single-source suppliers",
-  "Writing cited summary",
-];
-function Desk() {
-  const [n, setN] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setN((x) => (x >= STEPS.length + 2 ? 0 : x + 1)), 900);
-    return () => clearInterval(t);
-  }, []);
+function Word({ children, d }: { children: React.ReactNode; d: number }) {
+  return <span className="inline-block animate-rise" style={{ animationDelay: `${d}ms` }}>{children}</span>;
+}
+
+function FilingRow({ l, v, muted }: { l: string; v: string; muted?: boolean }) {
   return (
-    <section className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 lg:grid-cols-2">
-      <div className="min-w-0">
-        <h1 className="font-display text-4xl leading-[1.05] tracking-tight md:text-6xl">
-          An analyst that <span className="hl-sweep">shows its work.</span>
-        </h1>
-        <p className="mt-5 max-w-md text-muted-foreground">
-          Ask anything. Watch it open filings, check numbers and cite every line it writes.
-        </p>
-        <div className="mt-8 inline-flex items-center gap-2 rounded-md border border-rule px-3 py-2 text-sm">
-          <kbd className="rounded border border-rule px-1.5 font-mono text-xs">⌘J</kbd> Ask the assistant
-        </div>
+    <tr className={muted ? "text-muted-foreground" : ""}>
+      <td className="py-1.5">{l}</td><td className="py-1.5 text-right">{v}</td>
+    </tr>
+  );
+}
+
+function Tape() {
+  const items = [...TAPE, ...TAPE];
+  return (
+    <div className="overflow-hidden border-t border-ink bg-ink py-1.5 text-ink-foreground">
+      <div className="flex w-max animate-ticker gap-8 whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.15em]">
+        {items.map((t, i) => (
+          <span key={i} className="flex items-center gap-2"><span className="size-1.5 rounded-full bg-highlight" />{t}</span>
+        ))}
       </div>
-      <div className="min-w-0 rounded-lg border border-rule bg-card p-4 shadow-panel">
-        <div className="rounded-md bg-muted px-3 py-2 text-sm">How dependent is NVIDIA on a single supplier?</div>
-        <ol className="mt-4 space-y-2">
-          {STEPS.map((s, k) => (
-            <li key={s} className={`flex items-center gap-2 text-sm transition-opacity duration-300 ${k < n ? "opacity-100" : "opacity-0"}`}>
-              <span className={`size-1.5 rounded-full ${k === n - 1 ? "bg-highlight animate-pulse-dot" : "bg-positive"}`} />
-              <span className={k === n - 1 ? "text-shimmer" : "text-muted-foreground"}>{s}</span>
-            </li>
-          ))}
-        </ol>
-        <div className={`mt-4 border-t border-rule pt-3 text-sm transition-opacity duration-500 ${n > STEPS.length ? "opacity-100" : "opacity-0"}`}>
-          NVIDIA reported <span className="bg-highlight px-1 text-highlight-foreground">$130.5B</span> of FY2025 revenue
-          <sup className="ml-0.5 font-mono text-link">[1]</sup> and names a single foundry partner for its wafers.
-          <sup className="ml-0.5 font-mono text-link">[2]</sup>
-        </div>
-      </div>
-    </section>
+    </div>
   );
 }
