@@ -241,7 +241,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "search_documents",
-    description: "Full-text search inside stored IR documents (releases, supplements, presentations, transcripts, remarks since 2021, plus their parsed tables) across one, several or all covered companies. Supports quoted phrases, OR and -exclusions. Returns ranked snippets with ticker, document id, type, fiscal label, page and source URL; follow up with read_ir_document for context. Use for questions like 'which companies mentioned tariffs in Q3 calls' or 'where does X report backlog'.",
+    description: "Full-text search inside stored IR documents (releases, supplements, transcripts and prepared remarks since 2023, plus their parsed tables) across one, several or all covered companies. Supports quoted phrases, OR and -exclusions. Returns ranked snippets with ticker, document id, type, fiscal label, page and source URL; follow up with read_ir_document for context. Use for questions like 'which companies mentioned tariffs in Q3 calls' or 'where does X report backlog'.",
     parameters: obj(
       {
         query: str("Search words or a quoted phrase"),

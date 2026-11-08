@@ -76,7 +76,7 @@ export function DocSearch({ ticker }: { ticker: string }) {
           <Search className="size-3.5" /> Search inside documents
         </span>
       }
-      subtitle="Releases, supplements, decks and transcripts since 2021 · quotes for phrases, OR for either, - to exclude"
+      subtitle="Releases, supplements, transcripts and remarks since 2023 · quotes for phrases, OR for either, - to exclude"
       actions={
         <Segmented
           label="Scope"
