@@ -29,7 +29,8 @@
 2. **What changed since you last looked:** per-watchlist digest (in-app + optional weekly email).
 3. **Bank KPI map** (built for BAC) rolled out to the other banks, then other sectors with dense IR KPIs.
 4. **Agent upgrades:** saved research threads, scheduled agent questions ("rerun every Monday"), and export to memo/Excel.
-5. Extend deep coverage beyond the 78 core companies — only when you decide which tickers, respecting your earlier rule not to start deep builds for the new tickers.
+5. **Docling indexing service (hosted on Render):** a small Docling server on Render converts filings, IR PDFs, decks and spreadsheets into clean structured text, tables and page positions. We store passages with their page/cell locators and search vectors, so the assistant pulls exact, well-structured passages (better context, fewer misread tables) and every quote still opens its source. It runs on stored documents in small nightly batches and is called only from the server with a secret key. Cost: a paid Render instance (CPU is fine to start; a GPU instance is faster on scanned decks). Your Render account and API key are needed.
+6. Extend deep coverage beyond the 78 core companies — only when you decide which tickers, respecting your earlier rule not to start deep builds for the new tickers.
 
 ## Phase 4 — Launch polish
 
@@ -42,10 +43,12 @@
 - Insider trades: keep visible to signed-out visitors, or members only?
 - Paid plans at launch, or free with waitlist for now?
 - Which of Phase 3 matters most to you first?
+- Docling: do you already have a Render account, and should it index everything stored (~74K IR documents) or start with the 78 core companies?
 
 ## Technical details
 
 - Replace `USING (true)` / `auth.uid() IS NOT NULL` read policies with `USING (public.has_app_access(auth.uid()))`; same for `storage.objects` on bucket `datasets`.
 - `REVOKE EXECUTE ... FROM anon` (and `authenticated` where admin/server-only) on SECURITY DEFINER functions; keep `has_app_access`/`has_role` callable by authenticated.
 - Shared `requireAppAccess` middleware after `requireSupabaseAuth` for research/AI server functions.
+- Docling: `docling-serve` Docker image on a Render web service behind a shared-secret header (`DOCLING_URL`, `DOCLING_KEY` secrets); `scripts/docling-index.ts` + a rotating job read from the `ir-documents` bucket, write `doc_chunks` (text, page, bbox/`{t,r,c}`, embedding via pgvector) service-role-only; agent retrieval through an authed server function.
 - Chunked rebuild jobs reuse `job_state` cursors and `RUN_BUDGET_MS`; signals/markets outputs move from `public/data` JSON to Cloud tables merged in `src/lib/data.ts`-style loaders (getDataset untouched).
