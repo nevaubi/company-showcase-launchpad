@@ -52,63 +52,35 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { HUB_GROUPS, hubFor, isPageActive } from "@/lib/nav";
+import { ShieldCheck } from "lucide-react";
 
-type NavItem = { to: AppPath; label: string; icon: typeof LayoutDashboard; exact?: boolean };
+const HUB_ICON: Record<string, typeof LayoutDashboard> = {
+  dashboard: LayoutDashboard,
+  signals: Radar,
+  companies: Building2,
+  filings: FileSearch,
+  markets: LineChart,
+  supply: Network,
+  alt: Activity,
+  ideas: Crosshair,
+  agent: Bot,
+  library: BookOpenText,
+  firm: Users,
+  admin: ShieldCheck,
+};
 
-const NAV: { heading: string; items: NavItem[] }[] = [
-  {
-    heading: "Research",
-    items: [
-      { to: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
-      { to: "/app/feed", label: "What changed", icon: Radar },
-      { to: "/app/agents", label: "Agents", icon: BellRing },
-      { to: "/app/earnings", label: "Earnings", icon: CalendarCheck },
-      { to: "/app/companies", label: "Companies", icon: Building2 },
-      { to: "/app/screener", label: "Screener", icon: SlidersHorizontal },
-      { to: "/app/compare", label: "Compare", icon: Columns3 },
-      { to: "/app/filings", label: "Filings", icon: FileSearch },
-      { to: "/app/situations", label: "Situations", icon: Radar },
-      { to: "/app/kpis", label: "KPI matrix", icon: Grid3x3 },
-      { to: "/app/insights", label: "Insights", icon: Lightbulb },
-    ],
-  },
-  {
-    heading: "Markets",
-    items: [
-      { to: "/app/markets", label: "Technicals", icon: LineChart },
-      { to: "/app/calendars", label: "Calendars", icon: CalendarDays },
-      { to: "/app/sectors", label: "Sectors", icon: PieChart },
-      { to: "/app/alt-data", label: "Alt data", icon: Activity },
-      { to: "/app/hedge-funds", label: "Hedge funds", icon: Landmark },
-      { to: "/app/ideas", label: "Trade ideas", icon: Crosshair },
-      { to: "/app/supply-chain", label: "Supply chain", icon: Network },
-      { to: "/app/macro", label: "Macro", icon: Globe2 },
-    ],
-  },
-  {
-    heading: "Workspace",
-    items: [
-      { to: "/app/theses", label: "Theses", icon: BookOpenText },
-      { to: "/app/research", label: "Research agent", icon: Bot },
-      { to: "/app/reports", label: "Reports", icon: FileText },
-      { to: "/app/docs", label: "Docs & sheets", icon: FileSpreadsheet },
-      { to: "/app/firm", label: "Firm", icon: Users },
-      { to: "/app/status", label: "Data status", icon: DatabaseZap },
-    ],
-  },
-];
-
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({ children, isAdmin = false }: { children: ReactNode; isAdmin?: boolean }) {
   return (
     <FirmProvider>
       <SourceProvider>
-        <ShellInner>{children}</ShellInner>
+        <ShellInner isAdmin={isAdmin}>{children}</ShellInner>
       </SourceProvider>
     </FirmProvider>
   );
 }
 
-function ShellInner({ children }: { children: ReactNode }) {
+function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boolean }) {
   const { target } = useSource();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [cmdOpen, setCmdOpen] = useState(false);
@@ -159,6 +131,7 @@ function ShellInner({ children }: { children: ReactNode }) {
           onSearch={() => setCmdOpen(true)}
           collapsed={collapsed}
           onToggle={toggleCollapsed}
+          isAdmin={isAdmin}
         />
       </aside>
       {mobileOpen && (
@@ -216,7 +189,10 @@ function ShellInner({ children }: { children: ReactNode }) {
               </kbd>
             </Button>
           </header>
-          <main className="px-4 pb-12 pt-4 lg:px-6">{children}</main>
+          <main className="px-4 pb-12 pt-4 lg:px-6">
+            <HubTabs pathname={pathname} />
+            {children}
+          </main>
         </div>
       </div>
       <AssistantPanel
@@ -235,10 +211,12 @@ function SidebarContent({
   onSearch,
   collapsed,
   onToggle,
+  isAdmin,
 }: {
   onSearch: () => void;
   collapsed: boolean;
   onToggle: () => void;
+  isAdmin: boolean;
 }) {
   // Collapsing only applies on desktop; the phone drawer always shows labels.
   const lbl = collapsed ? "lg:hidden" : "";
@@ -249,8 +227,7 @@ function SidebarContent({
   const quotes = useQuotes(tickers);
   const byTicker = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, q]));
 
-  const isActive = (item: NavItem) =>
-    item.exact ? pathname === item.to : pathname === item.to || pathname.startsWith(item.to + "/");
+  const activeHub = hubFor(pathname)?.id;
 
   return (
     <>
@@ -278,26 +255,31 @@ function SidebarContent({
           collapsed && "lg:px-1.5",
         )}
       >
-        {NAV.map((g) => (
+        {HUB_GROUPS.filter((g) => !g.admin || isAdmin).map((g) => (
           <div key={g.heading}>
-            <p className={cn("eyebrow px-2 pb-1.5", lbl)}>{g.heading}</p>
-            <ul className="space-y-0.5">
-              {g.items.map((item) => (
-                <li key={item.to}>
-                  <Link
-                    to={item.to}
-                    className={cn(
-                      "flex h-8 items-center gap-2.5 rounded-md px-2 text-[13px] text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                      isActive(item) && "bg-sidebar-accent font-medium text-sidebar-foreground",
-                      collapsed && "lg:justify-center lg:px-0",
-                    )}
-                    title={collapsed ? item.label : undefined}
-                  >
-                    <item.icon className="size-4 shrink-0 opacity-80" />
-                    <span className={lbl}>{item.label}</span>
-                  </Link>
-                </li>
-              ))}
+            <p className={cn("eyebrow px-2 pb-1.5", lbl, collapsed && "lg:hidden")}>{g.heading}</p>
+            <ul className="space-y-px">
+              {g.hubs.map((hub) => {
+                const Icon = HUB_ICON[hub.id] ?? LayoutDashboard;
+                const active = activeHub === hub.id;
+                return (
+                  <li key={hub.id}>
+                    <Link
+                      to={hub.pages[0].to}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "relative grid h-8 grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2.5 rounded-md px-2 text-[13px] text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                        active && "bg-sidebar-accent font-medium text-sidebar-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-foreground",
+                        collapsed && "lg:flex lg:justify-center lg:px-0",
+                      )}
+                      title={collapsed ? hub.label : undefined}
+                    >
+                      <Icon className="size-4 justify-self-center" strokeWidth={1.75} />
+                      <span className={cn("truncate", lbl)}>{hub.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           </div>
         ))}
@@ -465,5 +447,31 @@ function MarketTape() {
         </Link>
       ))}
     </div>
+  );
+}
+
+/** Tabs across the top of every page that belongs to a multi-page hub. */
+function HubTabs({ pathname }: { pathname: string }) {
+  const hub = hubFor(pathname);
+  if (!hub || hub.pages.length < 2) return null;
+  if (pathname.startsWith("/app/companies/")) return null;
+  return (
+    <nav aria-label={hub.label} className="-mx-1 mb-4 flex gap-1 overflow-x-auto border-b scrollbar-thin">
+      {hub.pages.map((p) => {
+        const active = isPageActive(p, pathname);
+        return (
+          <Link
+            key={p.to}
+            to={p.to}
+            className={cn(
+              "-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-[13px] transition-colors",
+              active ? "border-foreground font-medium text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {p.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { z } from "zod";
 import { ArrowRight, Loader2, MailCheck, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import "@lovable.dev/cloud-auth-js/styles.css";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
 import { useDemoSignIn } from "@/hooks/use-demo-sign-in";
@@ -114,7 +113,7 @@ function AuthPage() {
     }
   };
 
-  const oauth = async (provider: "google" | "lovable") => {
+  const oauth = async (provider: "google") => {
     setError(null);
     setBusy(provider);
     try {
@@ -195,9 +194,6 @@ function AuthPage() {
                       {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}
                       Continue with Google
                     </Button>
-                    <button type="button" className="lovable-auth-button" onClick={() => oauth("lovable")} disabled={!!busy}>
-                      Continue with Lovable
-                    </button>
                   </div>
                 </>
               )}

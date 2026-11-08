@@ -10,7 +10,7 @@ import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -53,6 +53,29 @@ export async function runJob(job: JobName): Promise<{ ok: boolean; items: number
 }
 
 const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }>> = {
+  /** Analyst estimates: refresh the three stalest companies that already have estimates stored. */
+  async estimates() {
+    const { data: rows } = await supabaseAdmin.from("analyst_estimates").select("ticker, fetched_at").order("fetched_at", { ascending: true }).limit(3);
+    const batch = (rows ?? []).filter((r) => Date.now() - Date.parse(r.fetched_at) > 12 * 3600000).map((r) => r.ticker);
+    if (!batch.length) return { ok: true, items: 0, detail: { note: "all fresh" } };
+    const { fetchEstimates } = await import("@/lib/estimates.server");
+    const left = budget();
+    const failed: string[] = [];
+    let items = 0;
+    for (const t of batch) {
+      if (!left()) break;
+      try {
+        const fresh = await fetchEstimates(t);
+        const { error } = await supabaseAdmin.from("analyst_estimates").upsert({ ticker: t, payload: fresh as never, fetched_at: fresh.asOf });
+        if (error) throw new Error(error.message);
+        items++;
+      } catch (e) {
+        failed.push(`${t}: ${(e as Error).message}`);
+      }
+    }
+    return { ok: failed.length < batch.length, items, detail: { tickers: batch, failed } };
+  },
+
   /** Daily bars for ten symbols per run. */
   async prices() {
     const symbols = [...COVERAGE.map((c) => c.ticker), ...BENCHMARKS.map((b) => b.symbol)];

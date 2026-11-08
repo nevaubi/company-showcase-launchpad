@@ -1525,6 +1525,54 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      waitlist: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          display_name: string | null
+          email: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          display_name?: string | null
+          email?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          display_name?: string | null
+          email?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       watchlist: {
         Row: {
           created_at: string
@@ -1576,6 +1624,10 @@ export type Database = {
         }[]
       }
       create_firm: { Args: { _name: string }; Returns: string }
+      decide_waitlist: {
+        Args: { _status: string; _user: string }
+        Returns: undefined
+      }
       firm_role_rank: {
         Args: { _role: Database["public"]["Enums"]["firm_role"] }
         Returns: number
@@ -1590,11 +1642,19 @@ export type Database = {
           role: Database["public"]["Enums"]["firm_role"]
         }[]
       }
+      has_app_access: { Args: { _user: string }; Returns: boolean }
       has_firm_role: {
         Args: {
           _firm: string
           _min: Database["public"]["Enums"]["firm_role"]
           _user: string
+        }
+        Returns: boolean
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
         }
         Returns: boolean
       }
@@ -1639,6 +1699,7 @@ export type Database = {
       }
     }
     Enums: {
+      app_role: "admin"
       firm_role: "owner" | "admin" | "analyst" | "viewer"
     }
     CompositeTypes: {
@@ -1767,6 +1828,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin"],
       firm_role: ["owner", "admin", "analyst", "viewer"],
     },
   },

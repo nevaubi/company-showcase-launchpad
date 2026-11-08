@@ -1,0 +1,2 @@
+DROP POLICY IF EXISTS "Signed-in users can read job runs" ON public.job_runs;
+CREATE POLICY "Admins read job runs" ON public.job_runs FOR SELECT TO authenticated USING (public.has_role(auth.uid(), 'admin'));

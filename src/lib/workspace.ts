@@ -27,7 +27,9 @@ export type AppPath =
   | "/app/docs"
   | "/app/reports"
   | "/app/firm"
-  | "/app/status";
+  | "/app/status"
+  | "/app/portfolio"
+  | "/app/admin";
 
 export async function currentUserId() {
   const { data } = await supabase.auth.getUser();

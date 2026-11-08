@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { CloudOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { friendlyError } from "@/lib/errors";
@@ -40,9 +39,6 @@ export function DataUnavailable({
             <RefreshCw /> Retry
           </Button>
         )}
-        <Button size="sm" variant="ghost" asChild>
-          <Link to="/app/status">Data status</Link>
-        </Button>
       </div>
     </div>
   );

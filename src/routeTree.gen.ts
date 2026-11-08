@@ -17,6 +17,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as ShareIdRouteImport } from './routes/share.$id'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
+import { Route as AuthenticatedAppAdminRouteImport } from './routes/_authenticated/app.admin'
 import { Route as AuthenticatedAppAgentsRouteImport } from './routes/_authenticated/app.agents'
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
 import { Route as AuthenticatedAppCalendarsRouteImport } from './routes/_authenticated/app.calendars'
@@ -104,6 +105,11 @@ const ShareIdRoute = ShareIdRouteImport.update({
 const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppAdminRoute = AuthenticatedAppAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const AuthenticatedAppAgentsRoute = AuthenticatedAppAgentsRouteImport.update({
@@ -392,6 +398,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/share/$id': typeof ShareIdRoute
+  '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -449,6 +456,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/share/$id': typeof ShareIdRoute
+  '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -507,6 +515,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/share/$id': typeof ShareIdRoute
+  '/_authenticated/app/admin': typeof AuthenticatedAppAdminRoute
   '/_authenticated/app/agents': typeof AuthenticatedAppAgentsRoute
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/_authenticated/app/calendars': typeof AuthenticatedAppCalendarsRoute
@@ -567,6 +576,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/app'
     | '/share/$id'
+    | '/app/admin'
     | '/app/agents'
     | '/app/alt-data'
     | '/app/calendars'
@@ -624,6 +634,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/share/$id'
+    | '/app/admin'
     | '/app/agents'
     | '/app/alt-data'
     | '/app/calendars'
@@ -681,6 +692,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/app'
     | '/share/$id'
+    | '/_authenticated/app/admin'
     | '/_authenticated/app/agents'
     | '/_authenticated/app/alt-data'
     | '/_authenticated/app/calendars'
@@ -800,6 +812,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/app/'
       preLoaderRoute: typeof AuthenticatedAppIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/admin': {
+      id: '/_authenticated/app/admin'
+      path: '/admin'
+      fullPath: '/app/admin'
+      preLoaderRoute: typeof AuthenticatedAppAdminRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/agents': {
@@ -1215,6 +1234,7 @@ const AuthenticatedAppCompaniesTickerRouteWithChildren =
   )
 
 interface AuthenticatedAppRouteChildren {
+  AuthenticatedAppAdminRoute: typeof AuthenticatedAppAdminRoute
   AuthenticatedAppAgentsRoute: typeof AuthenticatedAppAgentsRoute
   AuthenticatedAppAltDataRoute: typeof AuthenticatedAppAltDataRoute
   AuthenticatedAppCalendarsRoute: typeof AuthenticatedAppCalendarsRoute
@@ -1250,6 +1270,7 @@ interface AuthenticatedAppRouteChildren {
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
+  AuthenticatedAppAdminRoute: AuthenticatedAppAdminRoute,
   AuthenticatedAppAgentsRoute: AuthenticatedAppAgentsRoute,
   AuthenticatedAppAltDataRoute: AuthenticatedAppAltDataRoute,
   AuthenticatedAppCalendarsRoute: AuthenticatedAppCalendarsRoute,

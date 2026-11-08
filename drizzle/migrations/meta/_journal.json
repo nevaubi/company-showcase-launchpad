@@ -232,6 +232,20 @@
       "when": 1794084331266,
       "tag": "0032_company_visits",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1794106366425,
+      "tag": "0033_admin_roles_waitlist",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1794106501734,
+      "tag": "0034_job_runs_admin_only",
+      "breakpoints": true
     }
   ]
 }
