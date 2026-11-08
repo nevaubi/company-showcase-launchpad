@@ -14,7 +14,9 @@ export type ChangeType =
   | "technical"
   | "dividend"
   | "ipo"
-  | "macro";
+  | "macro"
+  | "sec_review"
+  | "short_interest";
 
 export interface ChangeEvidence {
   label: string;

@@ -17,12 +17,15 @@ import {
   SourceStatus,
 } from "@/components/influence/influence";
 import { ShortAndFlows } from "@/components/technicals/short-flows";
+import { Form144Panel } from "@/components/insiders/form144-panel";
+import { form144Query } from "@/lib/filings/review";
 import { govQuery, type OwnershipFlows } from "@/lib/influence/data";
 import { flowsQuery } from "@/lib/technicals/data";
 
 const SECTIONS = [
   "overview",
   "form4",
+  "form144",
   "congress",
   "holders",
   "lobbying",
@@ -64,6 +67,7 @@ function Insiders() {
   const company = useCompany(ticker);
   const gov = useQuery(govQuery(ticker));
   const flows = useQuery(flowsQuery(ticker));
+  const f144 = useQuery(form144Query(ticker));
   const { open } = useSource();
   const F = flows.data as OwnershipFlows | undefined;
 
@@ -94,6 +98,7 @@ function Insiders() {
   const counts: Record<(typeof SECTIONS)[number], number | null> = {
     overview: null,
     form4: company.data?.insiders.length ?? null,
+    form144: f144.data?.notices.length || null,
     congress: gov.data?.congress_trades.length ?? null,
     holders: (F?.holders13dg?.current.length ?? 0) + (F?.inst13f ? 1 : 0) || null,
     lobbying: gov.data?.lobbying?.filing_count ?? null,
@@ -106,6 +111,7 @@ function Insiders() {
   const label: Record<(typeof SECTIONS)[number], string> = {
     overview: "What changed",
     form4: "Form 4",
+    form144: "Proposed sales",
     congress: "Congress",
     holders: "Holders",
     lobbying: "Lobbying & PAC",
@@ -150,6 +156,7 @@ function Insiders() {
         ) : (
           <Skeleton className="h-[600px]" />
         ))}
+      {section === "form144" && <Form144Panel ticker={ticker} />}
       {section === "congress" &&
         (gov.data ? (
           <CongressTrades ticker={ticker} gov={gov.data} />
@@ -175,7 +182,9 @@ function Insiders() {
           <Empty loading={gov.isLoading} what="government records" />
         ))}
       {section === "trading" && <ShortAndFlows symbol={ticker} />}
-      {gov.data && section !== "form4" && section !== "trading" && <SourceStatus gov={gov.data} />}
+      {gov.data && section !== "form4" && section !== "form144" && section !== "trading" && (
+        <SourceStatus gov={gov.data} />
+      )}
     </div>
   );
 }

@@ -13,6 +13,8 @@ export const TYPE_LABEL: Record<ChangeType, string> = {
   dividend: "Dividends",
   ipo: "IPOs",
   macro: "Macro",
+  sec_review: "SEC reviews",
+  short_interest: "Short interest",
 };
 
 /** Short singular label for chips and badges. */
@@ -28,6 +30,8 @@ export const TYPE_SHORT: Record<ChangeType, string> = {
   dividend: "dividend",
   ipo: "IPO",
   macro: "macro",
+  sec_review: "SEC review",
+  short_interest: "short interest",
 };
 
 export const TIER_LABEL: Record<ChangeTier, string> = {

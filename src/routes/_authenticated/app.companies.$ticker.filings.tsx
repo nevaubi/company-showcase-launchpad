@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowUpRight, FileText, Loader2, Megaphone, Search } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
+import { CommentLetters } from "@/components/filings/comment-letters";
 import { useSource } from "@/components/source/source-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -153,6 +154,8 @@ function Filings() {
             ))}
           </ul>
         </Panel>
+
+        <CommentLetters ticker={ticker} />
 
         <Panel title="Full-text search" subtitle="EDGAR full-text search across this company's filings since 2001">
           <form
