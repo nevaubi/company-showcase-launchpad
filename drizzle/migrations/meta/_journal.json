@@ -246,6 +246,13 @@
       "when": 1794106501734,
       "tag": "0034_job_runs_admin_only",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1794107297321,
+      "tag": "0035_owner_admin_on_signup",
+      "breakpoints": true
     }
   ]
 }
