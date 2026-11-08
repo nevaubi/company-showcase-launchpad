@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIMITS, PRICES, canUse, effectiveTier, trialDaysLeft } from "./plans";
+import { LIMITS, PRICES, canUse, effectiveTier, trialDaysLeft, tierFromPriceId } from "./plans";
 
 const now = new Date("2026-11-08T00:00:00Z");
 const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000);
@@ -28,6 +28,10 @@ describe("plans", () => {
   it("prices", () => {
     expect(PRICES.research).toEqual({ monthly: 39, yearly: 390 });
     expect(PRICES.pro).toEqual({ monthly: 129, yearly: 1290 });
+  });
+  it("checkout price maps to tier", () => {
+    expect(tierFromPriceId("pro_yearly")).toBe("pro");
+    expect(tierFromPriceId("research_monthly")).toBe("research");
   });
   it("features per tier", () => {
     expect(canUse("trial", "exports")).toBe(false);

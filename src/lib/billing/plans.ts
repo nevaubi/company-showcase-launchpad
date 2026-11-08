@@ -57,6 +57,11 @@ export function trialDaysLeft(approvedAt: Date, now: Date): number {
   return Math.max(0, Math.ceil(ms / 86_400_000));
 }
 
+/** Stripe price lookup keys look like "pro_monthly" / "research_yearly". */
+export function tierFromPriceId(priceId: string | null | undefined): "research" | "pro" {
+  return priceId?.startsWith("pro_") ? "pro" : "research";
+}
+
 export const TIER_LABEL: Record<Tier, string> = {
   trial: "Free trial", research: "Research", pro: "Pro", expired: "Trial ended", none: "No access",
 };

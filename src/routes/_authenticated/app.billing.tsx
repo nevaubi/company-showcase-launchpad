@@ -5,6 +5,30 @@ import { PageHeader, Panel } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LIMITS, PRICES, TIER_LABEL, trialDaysLeft, type Tier } from "@/lib/billing/plans";
+import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
+import { getStripe, getStripeEnvironment } from "@/lib/stripe";
+import { createCheckoutSession, createPortalSession } from "@/lib/payments.functions";
+
+function Checkout({ priceId }: { priceId: string }) {
+  const create = useServerFn(createCheckoutSession);
+  const fetchClientSecret = async () => {
+    const r = await create({
+      data: { priceId: priceId as never, returnUrl: `${window.location.origin}/app/billing?checkout=done`, environment: getStripeEnvironment() },
+    });
+    if ("error" in r) throw new Error(r.error);
+    return r.clientSecret;
+  };
+  return (
+    <EmbeddedCheckoutProvider stripe={getStripe()} options={{ fetchClientSecret }}>
+      <EmbeddedCheckout />
+    </EmbeddedCheckoutProvider>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/app/billing")({
   head: () => ({
@@ -38,9 +62,39 @@ function BillingPage() {
     },
   });
   const d = q.data;
+  const [yearly, setYearly] = useState(false);
+  const [priceId, setPriceId] = useState<string | null>(null);
+  const portal = useServerFn(createPortalSession);
+  const testMode = (import.meta.env.VITE_PAYMENTS_CLIENT_TOKEN as string | undefined)?.startsWith("pk_test_");
+  const openPortal = async () => {
+    try {
+      const r = await portal({ data: { returnUrl: window.location.href, environment: getStripeEnvironment() } });
+      if ("error" in r) throw new Error(r.error);
+      window.open(r.url, "_blank");
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
   return (
     <div className="mx-auto max-w-4xl">
-      <PageHeader eyebrow="Account" title="Billing and plan" description="Your plan, trial and AI usage. Reading company data is unlimited on every plan." />
+      {testMode && <p className="mb-3 rounded-md border bg-muted px-3 py-2 text-center text-xs text-muted-foreground">Payments in the preview are in test mode — use card 4242 4242 4242 4242.</p>}
+      <PageHeader
+        eyebrow="Account"
+        title="Billing and plan"
+        description="Your plan, trial and AI usage. Reading company data is unlimited on every plan."
+        actions={
+          <>
+            <div className="flex items-center gap-2 text-sm"><span>Monthly</span><Switch checked={yearly} onCheckedChange={setYearly} aria-label="Yearly billing" /><span>Yearly</span></div>
+            {(d?.tier === "research" || d?.tier === "pro") && <Button variant="outline" onClick={openPortal}>Manage billing</Button>}
+          </>
+        }
+      />
+      <Dialog open={!!priceId} onOpenChange={(o) => !o && setPriceId(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogTitle>Checkout</DialogTitle>
+          {priceId && <Checkout priceId={priceId} />}
+        </DialogContent>
+      </Dialog>
       {d && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Panel title="Your plan" className="min-w-0">
@@ -66,7 +120,9 @@ function BillingPage() {
                 <li>Excel and Word exports</li>
                 {t === "pro" ? <li>Deep mode, web research, cloud browsers, scheduled briefs</li> : <li>Basic alerts</li>}
               </ul>
-              <Button className="mt-4 w-full" disabled>Checkout coming soon</Button>
+              <Button className="mt-4 w-full" disabled={d.tier === t} onClick={() => setPriceId(`${t}_${yearly ? "yearly" : "monthly"}`)}>
+                {d.tier === t ? "Current plan" : `Subscribe ${yearly ? "yearly" : "monthly"}`}
+              </Button>
             </Panel>
           ))}
         </div>
