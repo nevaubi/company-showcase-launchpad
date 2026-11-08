@@ -29,7 +29,7 @@ export type AppPath =
   | "/app/firm"
   | "/app/status"
   | "/app/portfolio"
-  | "/app/admin";
+  | "/app/admin" | "/app/freshness";
 
 export async function currentUserId() {
   const { data } = await supabase.auth.getUser();

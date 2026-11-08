@@ -3,7 +3,6 @@ import { createFileRoute, Link, notFound, Outlet, useRouterState } from "@tansta
 import {
   ArrowUpRight,
   Building,
-  ChevronDown,
   Columns3,
   FileText,
   Globe,
@@ -64,24 +63,40 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
   ),
 });
 
-const TABS = [
-  { to: "/app/companies/$ticker", label: "Overview", exact: true },
-  { to: "/app/companies/$ticker/financials", label: "Financials" },
-  { to: "/app/companies/$ticker/valuation", label: "Valuation" },
-  { to: "/app/companies/$ticker/ir", label: "IR data" },
-  { to: "/app/companies/$ticker/earnings", label: "Earnings & promises" },
-  { to: "/app/companies/$ticker/estimates", label: "Estimates & analysts" },
-  { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
-  { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
-  { to: "/app/companies/$ticker/redline", label: "Filing changes" },
-  { to: "/app/companies/$ticker/insiders", label: "Insiders & influence" },
-  { to: "/app/companies/$ticker/alt-data", label: "Alt data" },
-  { to: "/app/companies/$ticker/reports", label: "Reports" },
-] as const;
-const TAB_GROUPS = [
-  { label: "Financials", paths: ["financials", "valuation", "ir"] },
-  { label: "Intelligence", paths: ["earnings", "estimates", "insiders", "alt-data"] },
-  { label: "Documents", paths: ["reports", "calls", "filings", "redline"] },
+type Sub = { to: string; label: string; exact?: boolean };
+const TAB_GROUPS: { label: string; subs: Sub[] }[] = [
+  { label: "Overview", subs: [{ to: "/app/companies/$ticker", label: "Overview", exact: true }] },
+  { label: "Financials", subs: [{ to: "/app/companies/$ticker/financials", label: "Statements" }] },
+  {
+    label: "Valuation",
+    subs: [
+      { to: "/app/companies/$ticker/valuation", label: "Valuation" },
+      { to: "/app/companies/$ticker/estimates", label: "Estimates & analysts" },
+    ],
+  },
+  { label: "IR data", subs: [{ to: "/app/companies/$ticker/ir", label: "IR data" }] },
+  {
+    label: "Earnings",
+    subs: [
+      { to: "/app/companies/$ticker/earnings", label: "Results & promises" },
+      { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
+    ],
+  },
+  {
+    label: "Filings",
+    subs: [
+      { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
+      { to: "/app/companies/$ticker/redline", label: "Filing changes" },
+      { to: "/app/companies/$ticker/reports", label: "Reports" },
+    ],
+  },
+  {
+    label: "Ownership",
+    subs: [
+      { to: "/app/companies/$ticker/insiders", label: "Insiders & influence" },
+      { to: "/app/companies/$ticker/alt-data", label: "Alt data" },
+    ],
+  },
 ];
 
 const edgarUrl = (cik: string | number) =>
@@ -289,70 +304,68 @@ function CompanyLayout() {
 
       <RestrictedBanner ticker={ticker} />
 
-      <nav
-        aria-label="Company research"
-        className="no-scrollbar -mx-4 mb-4 flex items-center gap-1 overflow-x-auto border-b px-4 pb-1 whitespace-nowrap sm:mx-0 sm:flex-wrap sm:px-0 [&>*]:shrink-0"
-      >
-        <Button
-          variant={
-            pathname.replace(/\/$/, "") === `/app/companies/${ticker}` ? "secondary" : "ghost"
-          }
-          size="sm"
-          asChild
-        >
-          <Link to="/app/companies/$ticker" params={{ ticker }}>
-            Overview
-          </Link>
-        </Button>
-        {TAB_GROUPS.map((group) => {
-          const tabs = TABS.filter((t) => group.paths.includes(t.to.split("/").at(-1) ?? ""));
-          const active = tabs.find((t) => pathname.startsWith(t.to.replace("$ticker", ticker)));
-          return (
-            <DropdownMenu key={group.label}>
-              <DropdownMenuTrigger asChild>
-                <Button variant={active ? "secondary" : "ghost"} size="sm">
-                  {group.label}
-                  <ChevronDown className="size-3" />
+      {(() => {
+        const here = pathname.replace(/\/$/, "");
+        const isSub = (t: Sub) => {
+          const u = t.to.replace("$ticker", ticker);
+          return t.exact ? here === u : here.startsWith(u);
+        };
+        const activeGroup = TAB_GROUPS.find((g) => g.subs.some(isSub)) ?? TAB_GROUPS[0];
+        return (
+          <div className="mb-4">
+            <nav
+              aria-label="Company research"
+              className="no-scrollbar -mx-4 flex items-center gap-1 overflow-x-auto border-b px-4 whitespace-nowrap sm:mx-0 sm:px-0 [&>*]:shrink-0"
+            >
+              {TAB_GROUPS.map((g) => (
+                <Link
+                  key={g.label}
+                  to={g.subs[0].to as "/app/companies/$ticker"}
+                  params={{ ticker }}
+                  aria-current={g === activeGroup ? "page" : undefined}
+                  className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
+                    g === activeGroup
+                      ? "border-foreground font-medium text-foreground"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {g.label}
+                </Link>
+              ))}
+              <span className="ml-auto flex gap-1">
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/app/markets" search={{ symbol: ticker }}>
+                    Technicals <ArrowUpRight className="size-3" />
+                  </Link>
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                {tabs.map((t) => (
-                  <DropdownMenuItem key={t.to} asChild>
-                    <Link
-                      to={t.to}
-                      params={{ ticker }}
-                      aria-current={t === active ? "page" : undefined}
-                    >
-                      {t.label}
-                    </Link>
-                  </DropdownMenuItem>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link to="/app/supply-chain" search={{ t: ticker }}>
+                    Supply chain <ArrowUpRight className="size-3" />
+                  </Link>
+                </Button>
+              </span>
+            </nav>
+            {activeGroup.subs.length > 1 && (
+              <div className="no-scrollbar mt-2 flex gap-1 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
+                {activeGroup.subs.map((t) => (
+                  <Link
+                    key={t.to}
+                    to={t.to as "/app/companies/$ticker"}
+                    params={{ ticker }}
+                    className={`rounded-md px-2.5 py-1 text-xs ${
+                      isSub(t)
+                        ? "bg-secondary font-medium text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {t.label}
+                  </Link>
                 ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          );
-        })}
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/app/markets" search={{ symbol: ticker }}>
-            Technicals <ArrowUpRight className="size-3" />
-          </Link>
-        </Button>
-        <Button variant="ghost" size="sm" asChild>
-          <Link to="/app/supply-chain" search={{ t: ticker }}>
-            Supply chain <ArrowUpRight className="size-3" />
-          </Link>
-        </Button>
-        {TABS.find(
-          (t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker)),
-        ) && (
-          <span className="ml-auto hidden py-1 text-xs text-muted-foreground sm:inline">
-            {
-              TABS.find(
-                (t) => !("exact" in t) && pathname.startsWith(t.to.replace("$ticker", ticker)),
-              )?.label
-            }
-          </span>
-        )}
-      </nav>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {company.isError ? (
         <div className="flex flex-wrap items-center gap-3 border-l-2 border-negative p-4">

@@ -2,7 +2,7 @@
 // HTTP call is short-lived and Workers allow six concurrent outbound requests),
 // advancing a cursor in job_state so successive runs rotate through everything.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { BENCHMARKS, COVERAGE, MACRO_SERIES } from "@/lib/coverage";
+import { BENCHMARKS, COVERAGE, MACRO_SERIES, isBundled } from "@/lib/coverage";
 import { form4XmlPath, parseForm4 } from "@/lib/financials/form4";
 import { summarize } from "@/lib/macro";
 import { fetchCboeDaily, fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo, isCboeIndex, isTreasurySeries, pool, toBars } from "@/lib/market-data.server";
@@ -10,7 +10,7 @@ import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -53,6 +53,27 @@ export async function runJob(job: JobName): Promise<{ ok: boolean; items: number
 }
 
 const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }>> = {
+  /**
+   * Alt data, daily per company: one (company, quick public source) pair per run, rotating through
+   * the 78 core companies only. Slow sources (13D/13G history, federal contracts) stay in
+   * `scripts/alt-data.ts`; 8-K/SEC form rows already refresh in the `sec` job.
+   */
+  async "alt-data"() {
+    const { ADAPTERS, altFetch, altRowsForDb } = await import("@/lib/alt/collect.server");
+    const sets = ["regulatory", "fda", "recalls", "complaints", "bank", "attention", "consumer", "trials"];
+    const cos = COVERAGE.filter((c) => isBundled(c.ticker));
+    const { start } = await advance("alt-data", cos.length * sets.length, 1);
+    const c = cos[Math.floor(start / sets.length)];
+    const set = sets[start % sets.length];
+    altFetch.timeoutMs = RUN_BUDGET_MS - 300;
+    altFetch.tries = 1;
+    const rows = await ADAPTERS[set]({ ticker: c.ticker, name: c.shortName, cik: c.cik, sector: c.sector, industry: c.industry });
+    if (rows.length) {
+      const { error } = await supabaseAdmin.from("alt_data").upsert(altRowsForDb(rows) as never, { onConflict: "uid" });
+      if (error) throw new Error(error.message);
+    }
+    return { ok: true, items: rows.length, detail: { ticker: c.ticker, set } };
+  },
   /** Analyst estimates: refresh the three stalest companies that already have estimates stored. */
   async estimates() {
     const { data: rows } = await supabaseAdmin.from("analyst_estimates").select("ticker, fetched_at").order("fetched_at", { ascending: true }).limit(3);
