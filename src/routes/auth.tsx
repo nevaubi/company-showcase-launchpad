@@ -1,11 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { z } from "zod";
-import { ArrowRight, Loader2, MailCheck, Sparkles } from "lucide-react";
+import { Loader2, MailCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
-import { useDemoSignIn } from "@/hooks/use-demo-sign-in";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,9 +22,9 @@ export const Route = createFileRoute("/auth")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { title: "Sign in — Filed Under" },
-      { name: "description", content: "Sign in to Filed Under, or open the demo workspace with live SEC, market and macro data." },
+      { name: "description", content: "Sign in to Filed Under or join the waitlist for source-linked equity research." },
       { property: "og:title", content: "Sign in — Filed Under" },
-      { property: "og:description", content: "Source-linked equity research. Sign in or try the demo workspace." },
+      { property: "og:description", content: "Source-linked equity research. Sign in or join the waitlist." },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -67,7 +66,6 @@ function AuthPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [sentTo, setSentTo] = useState<{ kind: "confirm" | "reset"; email: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const demo = useDemoSignIn();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -170,25 +168,7 @@ function AuthPage() {
 
               {mode !== "forgot" && (
                 <>
-                  <Button
-                    variant="highlight"
-                    size="lg"
-                    className="mt-8 w-full justify-between"
-                    disabled={demo.pending}
-                    onClick={() => demo.signIn(safeRedirect(search.redirect))}
-                  >
-                    <span className="flex items-center gap-2">
-                      {demo.pending ? <Loader2 className="animate-spin" /> : <Sparkles />}
-                      Open the demo workspace
-                    </span>
-                    <ArrowRight />
-                  </Button>
-                  <p className="mt-2 text-center text-xs text-muted-foreground">No signup — a shared analyst account with sample theses.</p>
-
-                  <div className="my-6 flex items-center gap-3 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-                    <span className="h-px flex-1 bg-border" /> or <span className="h-px flex-1 bg-border" />
-                  </div>
-
+                  <div className="mt-8" />
                   <div className="grid grid-cols-1 gap-2">
                     <Button variant="outline" size="lg" onClick={() => oauth("google")} disabled={!!busy}>
                       {busy === "google" ? <Loader2 className="animate-spin" /> : <GoogleIcon />}

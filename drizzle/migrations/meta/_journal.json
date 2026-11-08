@@ -274,6 +274,13 @@
       "when": 1794123356936,
       "tag": "0038_plan_cancellation_and_features",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1794124801635,
+      "tag": "0039_remove_demo_access",
+      "breakpoints": true
     }
   ]
 }

@@ -1,8 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Check, Loader2 } from "lucide-react";
+import { Check } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
 import { Button } from "@/components/ui/button";
-import { useDemoSignIn } from "@/hooks/use-demo-sign-in";
 import { cn } from "@/lib/utils";
 import { LIMITS, PRICES } from "@/lib/billing/plans";
 
@@ -71,7 +70,6 @@ const PLANS = [
 ];
 
 function Pricing() {
-  const demo = useDemoSignIn();
   return (
     <div className="paper-grain min-h-screen">
       <SiteHeader />
@@ -117,15 +115,6 @@ function Pricing() {
               </Button>
             </section>
           ))}
-        </div>
-        <div className="mt-12 flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-card px-6 py-5">
-          <p className="text-sm">
-            <span className="font-medium">Not sure yet?</span>{" "}
-            <span className="text-muted-foreground">Open the shared demo workspace — no signup.</span>
-          </p>
-          <Button variant="highlight" onClick={() => demo.signIn()} disabled={demo.pending}>
-            {demo.pending && <Loader2 className="animate-spin" />} Open the demo
-          </Button>
         </div>
         <section className="mt-24 grid grid-cols-1 gap-10 lg:grid-cols-[0.8fr_1.2fr]">
           <h2 className="font-display text-4xl">Questions</h2>

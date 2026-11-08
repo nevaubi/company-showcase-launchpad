@@ -380,7 +380,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" side="top" className="w-56">
           <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
-            {me.data?.profile?.is_demo ? "Shared demo workspace" : email || "Signed in"}
+            {email || "Signed in"}
           </DropdownMenuLabel>
           {firms.length > 1 && (
             <>
