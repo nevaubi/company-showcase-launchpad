@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { fetchYahooNews, type NewsItem } from "@/lib/market.functions";
 
 export interface Narrative {
@@ -84,7 +84,7 @@ async function webNarratives(ticker: string, name: string, structured: Structure
 }
 
 export const getNarratives = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: tickerSchema, name: z.string().max(80) }).parse(d))
   .handler(async ({ data }) => {
     const { cached, structured } = await import("@/lib/ai.server");
@@ -148,7 +148,7 @@ export const getNarratives = createServerFn({ method: "POST" })
   });
 
 export const getChartInsight = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -185,7 +185,7 @@ export const getChartInsight = createServerFn({ method: "POST" })
   });
 
 export const getMacroBrief = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({

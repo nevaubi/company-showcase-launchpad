@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { MacroSeries, PriceSeries } from "@/lib/financials/types";
 import { fetchFred, fetchTreasury, fetchYahoo, isTreasurySeries, pool, toBars, yahooGet } from "@/lib/market-data.server";
 
@@ -14,7 +14,7 @@ const RANGES = ["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y",
 const INTERVALS = ["1m", "2m", "5m", "15m", "30m", "60m", "1h", "1d", "1wk", "1mo"] as const;
 
 export const getPriceSeries = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({ symbol: symbolSchema, range: z.enum(RANGES).default("1y"), interval: z.enum(INTERVALS).default("1d") })
@@ -52,7 +52,7 @@ export interface Quote {
 }
 
 export const getQuotes = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ symbols: z.array(symbolSchema).min(1).max(40) }).parse(d))
   .handler(async ({ data }): Promise<{ quotes: Quote[]; errors: string[] }> => {
     const { COVERAGE } = await import("@/lib/coverage");
@@ -161,12 +161,12 @@ export async function fetchYahooNews(query: string, count = 12): Promise<NewsIte
 }
 
 export const getNews = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ query: z.string().min(1).max(60) }).parse(d))
   .handler(async ({ data }) => ({ items: await fetchYahooNews(data.query, 12) }));
 
 export const getMacroSeries = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({

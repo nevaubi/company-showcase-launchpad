@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { coverageOf } from "@/lib/coverage";
 
 export interface SupplyNote {
@@ -31,7 +31,7 @@ const SCHEMA = {
 
 /** Cited analyst note on one company's supply chain; every point references the link ids it rests on. */
 export const getSupplyNote = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: z.string().regex(/^[A-Z.-]{1,8}$/) }).parse(d))
   .handler(async ({ data, context }): Promise<SupplyNote & { cachedAt?: string }> => {
     const co = coverageOf(data.ticker);

@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { RedlineSummary } from "@/lib/redline/summary";
 
 const accn = z.string().regex(/^\d{10}-\d{2}-\d{6}$/);
@@ -47,7 +47,7 @@ async function filingHtml(cik: string, accnNo: string, docName: string): Promise
  * later viewer reads it instantly) and returns it. The browser never downloads or diffs the two filings.
  */
 export const computeRedline = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -120,7 +120,7 @@ export const computeRedline = createServerFn({ method: "POST" })
  * bullets survive only if their quote is verbatim in the cited change.
  */
 export const summarizeRedline = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ fromAccn: accn, toAccn: accn }).parse(d))
   .handler(async ({ data, context }): Promise<RedlineSummary> => {
     const { REDLINE_VERSION } = await import("@/lib/redline/core");

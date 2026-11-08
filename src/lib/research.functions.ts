@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { TOOL_DEFS } from "@/lib/research/tool-defs";
 import { COVERAGE } from "@/lib/coverage";
 
@@ -52,7 +52,7 @@ Canvas, files and browsers:
 - browser_task runs real cloud browsers the user watches live in the canvas. Use it for interactive sites, multi-step navigation, downloads and screenshots that read_webpage/web_extract can't handle; run independent goals in parallel (up to 4). Poll browser_status until done, then browser_files to collect downloads/screenshots. Browsers cost money: give precise goals, prefer "fast" mode, stop tasks you no longer need. Cite the URLs the browser used.`;
 
 export const agentStep = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -84,7 +84,7 @@ export const agentStep = createServerFn({ method: "POST" })
   });
 
 export const titleSession = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ question: z.string().min(1).max(2000) }).parse(d))
   .handler(async ({ data }) => {
     const { structured } = await import("@/lib/ai.server");

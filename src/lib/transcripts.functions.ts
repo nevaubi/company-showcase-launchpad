@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { coverageOf } from "@/lib/coverage";
 import type { ParsedTranscript, TranscriptRef } from "@/lib/transcripts/parse";
 
@@ -13,7 +13,7 @@ export interface EarningsTranscript extends ParsedTranscript, TranscriptRef {
 
 /** Recent earnings-call transcripts for a covered company (newest first), found with web search. */
 export const listEarningsCalls = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: z.string().min(1).max(8) }).parse(d))
   .handler(async ({ data }): Promise<{ calls: TranscriptRef[]; error?: string }> => {
     const co = coverageOf(data.ticker);
@@ -24,7 +24,7 @@ export const listEarningsCalls = createServerFn({ method: "POST" })
 
 /** Full transcript, parsed into speaker turns. Transcripts never change, so they're cached for 60 days. */
 export const getEarningsTranscript = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: z.string().min(1).max(8), url: z.string().url().max(300) }).parse(d))
   .handler(async ({ data }): Promise<{ transcript: EarningsTranscript | null; error?: string }> => {
     const co = coverageOf(data.ticker);

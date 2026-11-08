@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { ISO3, latestByCountry, riskTier, WGI, type CountryScore } from "@/lib/supply/region";
 
 const WB = "https://api.worldbank.org/v2";
@@ -36,7 +36,7 @@ async function scores(countries: string[]): Promise<CountryScore[]> {
 }
 
 export const getCountryScores = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ countries: z.array(z.string().max(60)).max(60) }).parse(d))
   .handler(async ({ data }) => {
     const { cached } = await import("@/lib/ai.server");
@@ -69,7 +69,7 @@ async function federalRegister(country: string): Promise<{ items: PolicyAction[]
 
 /** Sourced region brief: governance scores (World Bank), U.S. trade/sanctions actions naming the country (Federal Register), recent supply-chain news (web). */
 export const getRegionDossier = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ country: z.string().min(2).max(60), theme: z.string().max(80).optional() }).parse(d))
   .handler(async ({ data }): Promise<RegionDossier & { cachedAt: string }> => {
     const { cached } = await import("@/lib/ai.server");

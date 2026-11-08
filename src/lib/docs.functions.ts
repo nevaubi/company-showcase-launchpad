@@ -1,12 +1,12 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const ALLOWED = "h2, h3, p, ul, ol, li, strong, em, mark, blockquote, table, thead, tbody, tr, th, td, a";
 
 /** Writing assistant for research docs. Returns sanitized-by-schema HTML fragments. */
 export const docAssist = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -59,7 +59,7 @@ Use exact figures with periods. When you use the reported fundamentals provided,
 
 /** Natural-language to spreadsheet cells, using FU()/PRICE() formulas for live data. */
 export const sheetAssist = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({

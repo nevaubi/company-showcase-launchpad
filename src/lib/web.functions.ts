@@ -1,11 +1,11 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { coverageOf } from "@/lib/coverage";
 
 /** Web search (Tavily) for signed-in users. */
 export const webSearch = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -27,7 +27,7 @@ export const webSearch = createServerFn({ method: "POST" })
 
 /** Read one web page as markdown (Firecrawl). */
 export const readWebpage = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000) }).parse(d))
   .handler(async ({ data }) => {
     const { firecrawlScrape } = await import("@/lib/web.server");
@@ -55,7 +55,7 @@ export interface EarningsBrief {
  * Firecrawl reads the best pages, the AI writes a sourced brief. Cached per ticker for 12h.
  */
 export const getEarningsCallBrief = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: z.string().min(1).max(8), refresh: z.boolean().default(false) }).parse(d))
   .handler(async ({ data }): Promise<{ brief: EarningsBrief | null; error?: string }> => {
     const co = coverageOf(data.ticker);
@@ -133,7 +133,7 @@ const errOut = (e: unknown) => ({ error: (e as Error).message });
 
 /** Discover URLs on a site (Firecrawl map). */
 export const mapSite = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000), search: z.string().max(200).optional(), limit: z.number().int().min(1).max(500).default(100) }).parse(d))
   .handler(async ({ data }) => {
     const { firecrawlMap } = await import("@/lib/web.server");
@@ -146,7 +146,7 @@ export const mapSite = createServerFn({ method: "POST" })
 
 /** Bounded multi-page crawl (Firecrawl crawl). */
 export const crawlSite = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000), limit: z.number().int().min(1).max(25).default(8), includePaths: z.array(z.string().max(200)).max(10).optional() }).parse(d))
   .handler(async ({ data }) => {
     const { firecrawlCrawl } = await import("@/lib/web.server");
@@ -160,7 +160,7 @@ export const crawlSite = createServerFn({ method: "POST" })
 
 /** Prompted structured extraction from a page (Firecrawl json). */
 export const extractFromPage = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000), prompt: z.string().min(3).max(2000) }).parse(d))
   .handler(async ({ data }) => {
     const { firecrawlExtract } = await import("@/lib/web.server");
@@ -174,7 +174,7 @@ export const extractFromPage = createServerFn({ method: "POST" })
 
 /** Raw GET of a public URL (APIs, JSON, CSV). */
 export const fetchUrl = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ url: z.string().url().max(2000) }).parse(d))
   .handler(async ({ data }) => {
     const { fetchPublic } = await import("@/lib/web.server");

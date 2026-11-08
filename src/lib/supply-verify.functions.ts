@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export interface VerifyEvidence { id: string; quote: string; url: string; title: string; publishedAt?: string; stance: "supports" | "contradicts" | "context" }
 export interface VerifyResult {
@@ -28,7 +28,7 @@ const SCHEMA = {
  * sentences that verbatim name both companies, then the model grades them. Cached 14 days per link.
  */
 export const verifySupplyLink = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<VerifyResult & { cachedAt?: string }> => {
     const empty = (error: string): VerifyResult => ({ verdict: "unconfirmed", summary: "", facts: [], evidence: [], searched: 0, read: 0, error });

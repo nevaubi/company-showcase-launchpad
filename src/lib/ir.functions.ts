@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { IrPayload } from "@/lib/ir/payload";
 
 const tickerSchema = z.string().regex(/^[A-Z.]{1,6}$/);
@@ -10,7 +10,7 @@ const rebuilding = new Map<string, Promise<IrPayload | null>>();
 
 /** Precomputed segment/KPI series plus the company's stored IR document library. */
 export const getIrData = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
   .handler(async ({ data, context }) => {
     // The document list and the precomputed breakdowns load in parallel.
@@ -94,7 +94,7 @@ export const getIrData = createServerFn({ method: "GET" })
 
 /** A company's stored slide/chart images for the library (paged; they can number in the thousands). */
 export const getIrImages = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
   .handler(async ({ data, context }) => {
     const out: Record<string, unknown>[] = [];
@@ -134,7 +134,7 @@ export interface IrDocRow {
 
 /** Short-lived download link for a stored IR file. */
 export const getIrDownload = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase.from("ir_documents").select("path, title, ext").eq("id", data.id).maybeSingle();
@@ -148,7 +148,7 @@ export const getIrDownload = createServerFn({ method: "POST" })
 
 /** HTML of a stored IR document (or its rendition, for PDFs, spreadsheets and slide images) for the source viewer. */
 export const getIrHtml = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ id: z.union([z.string().uuid(), z.string().regex(/^x:[A-Za-z0-9_-]{1,64}$/)]) }).parse(d))
   .handler(async ({ data, context }) => {
     if (data.id.startsWith("x:")) {

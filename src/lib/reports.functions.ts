@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { ReportKind, ReportOptions } from "@/lib/reports/types";
 
 /** A report slot without its (large) content; the browser reads content directly under RLS. */
@@ -39,7 +39,7 @@ const input = z.object({
  * caller or their firm. Numbers come only from server-loaded data and pass source checks.
  */
 export const requestReport = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => input.parse(d))
   .handler(async ({ data, context }): Promise<ReportRow> => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");

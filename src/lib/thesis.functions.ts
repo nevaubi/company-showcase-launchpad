@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 export interface ThesisReview {
   verdict: "intact" | "weakening" | "broken" | "strengthening";
@@ -12,7 +12,7 @@ export interface ThesisReview {
 
 /** AI review of a saved thesis against the latest reported fundamentals and price. */
 export const reviewThesis = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({

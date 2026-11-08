@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { coverageOf } from "@/lib/coverage";
 import { vetPromises, type CallText, type RawPromise, type TrackedPromise } from "@/lib/earnings/promises";
 
@@ -10,7 +10,7 @@ import { vetPromises, type CallText, type RawPromise, type TrackedPromise } from
  * in the cited call survive (`vetPromises`), and a grade needs a verbatim later-call quote.
  */
 export const getPromises = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: z.string().min(1).max(8) }).parse(d))
   .handler(async ({ data }): Promise<{ promises: TrackedPromise[]; calls: { url: string; date: string; quarter: string | null }[]; error?: string }> => {
     const co = coverageOf(data.ticker);
@@ -71,7 +71,7 @@ export const getPromises = createServerFn({ method: "POST" })
 
 /** Earnings preview (next print) and recap (latest print); may only cite browser-assembled fact ids. */
 export const getEarningsNotes = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({

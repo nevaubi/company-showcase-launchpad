@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { archiveUrl, fetchSec, searchEdgarFullText, type FullTextHit } from "@/lib/sec.server";
 
 const cikSchema = z.string().regex(/^\d{1,10}$/);
@@ -15,7 +15,7 @@ const docSchema = z
 const MAX_BYTES = 20 * 1024 * 1024;
 
 export const getFilingDocument = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ cik: cikSchema, accn: accnSchema, doc: docSchema }).parse(d))
   .handler(async ({ data }) => {
     const url = archiveUrl(data.cik, data.accn, data.doc);
@@ -50,7 +50,7 @@ export interface FilingDocumentEntry {
 }
 
 export const getFilingIndex = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ cik: cikSchema, accn: accnSchema }).parse(d))
   .handler(async ({ data }) => {
     const url = archiveUrl(data.cik, data.accn, `${data.accn}-index.htm`);
@@ -74,7 +74,7 @@ export const getFilingIndex = createServerFn({ method: "GET" })
   });
 
 export const searchFilings = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({

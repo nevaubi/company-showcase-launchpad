@@ -1,6 +1,6 @@
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { coverageOf } from "@/lib/coverage";
 import type { Estimates } from "@/lib/estimates/core";
 
@@ -12,7 +12,7 @@ const STALE_MS = 6 * 3600_000;
  * stored copy if the provider throttles.
  */
 export const getEstimates = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: z.string().min(1).max(10) }).parse(d))
   .handler(async ({ data, context }): Promise<{ estimates: Estimates | null; error: string | null }> => {
     const t = data.ticker.toUpperCase();

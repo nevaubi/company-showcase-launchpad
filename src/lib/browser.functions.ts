@@ -1,9 +1,9 @@
 // Server functions behind the assistant's in-panel browser (Browser Use Cloud).
 // Every run handle carries an HMAC of (run id, user id) keyed on the server secret, so a signed-in
 // user can only read, list files of, or stop runs they started. The API key never reaches the client.
+import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function sign(runId: string, userId: string) {
   const { browserUseKey } = await import("@/lib/browser-use.server");
@@ -26,7 +26,7 @@ async function verify(handle: { id: string; token: string }, userId: string) {
 const Handle = z.object({ id: z.string().min(8).max(80).regex(/^[A-Za-z0-9-]+$/), token: z.string().length(32) });
 
 export const browserConfigured = createServerFn({ method: "GET" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .handler(async () => {
     const { browserUseKey } = await import("@/lib/browser-use.server");
     return { configured: !!browserUseKey() };
@@ -34,7 +34,7 @@ export const browserConfigured = createServerFn({ method: "GET" })
 
 /** Start one or more browser agents in parallel. */
 export const browserStart = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) =>
     z
       .object({
@@ -68,7 +68,7 @@ export const browserStart = createServerFn({ method: "POST" })
   });
 
 export const browserStatus = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ runs: z.array(Handle).min(1).max(6) }).parse(d))
   .handler(async ({ data, context }) => {
     const { getRun } = await import("@/lib/browser-use.server");
@@ -86,7 +86,7 @@ export const browserStatus = createServerFn({ method: "POST" })
   });
 
 export const browserFiles = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => Handle.parse(d))
   .handler(async ({ data, context }) => {
     await verify(data, context.userId);
@@ -116,7 +116,7 @@ export const browserFiles = createServerFn({ method: "POST" })
   });
 
 export const browserStop = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
+  .middleware([requireAppAccess])
   .inputValidator((d: unknown) => Handle.parse(d))
   .handler(async ({ data, context }) => {
     await verify(data, context.userId);
