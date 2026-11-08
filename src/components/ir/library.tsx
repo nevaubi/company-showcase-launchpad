@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getIrDownload, getIrImages, type IrDocRow } from "@/lib/ir.functions";
+import { mergeStore, STORE_PREFIX, storeUrl, type StoreDoc } from "@/lib/ir/store";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +60,21 @@ function KindIcon({ ext }: { ext: string | null }) {
 
 const yearOf = (d: IrDocRow) => (d.filed ?? d.period ?? "").slice(0, 4);
 
-export function IrLibrary({ ticker, documents: files, images = 0 }: { ticker: string; documents: IrDocRow[]; images?: number }) {
+export function IrLibrary({
+  ticker,
+  documents: own,
+  images = 0,
+  store = [],
+}: {
+  ticker: string;
+  documents: IrDocRow[];
+  images?: number;
+  /** Filed Under pipeline store documents (ir/{T}.json); rows already in the app library are skipped. */
+  store?: StoreDoc[];
+}) {
+  const storeById = useMemo(() => new Map(store.map((d) => [`${STORE_PREFIX}${d.id}`, d])), [store]);
+  const extra = useMemo(() => mergeStore(own, store), [own, store]);
+  const files = useMemo(() => (extra.length ? [...own, ...extra] : own), [own, extra]);
   const { open } = useSource();
   const download = useServerFn(getIrDownload);
   const fetchImages = useServerFn(getIrImages);
@@ -94,7 +109,25 @@ export function IrLibrary({ ticker, documents: files, images = 0 }: { ticker: st
   const total = files.reduce((n, d) => n + (d.bytes ?? 0), 0);
   const read = files.filter((d) => d.extract_status?.startsWith("ok")).length;
 
+  const openStore = async (d: IrDocRow, mode: "view" | "save") => {
+    const s = storeById.get(d.id);
+    if (!s?.storage_path) {
+      toast.error("This document isn't stored");
+      return;
+    }
+    try {
+      const url = await storeUrl(s.storage_path);
+      if (mode === "view") window.open(url, "_blank", "noopener");
+      else window.location.href = url;
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
   const view = async (d: IrDocRow) => {
+    if (d.source === "store") {
+      await openStore(d, "view");
+      return;
+    }
     if (d.viewable) {
       open({ ticker, label: docTitle(d), unit: "usd", value: 0, doc: { accn: d.accn ?? "", doc: "", filed: d.filed ?? undefined, title: docTitle(d), irDoc: d.id } });
       return;
@@ -107,6 +140,10 @@ export function IrLibrary({ ticker, documents: files, images = 0 }: { ticker: st
     }
   };
   const save = async (d: IrDocRow) => {
+    if (d.source === "store") {
+      await openStore(d, "save");
+      return;
+    }
     try {
       const { url } = await download({ data: { id: d.id } });
       window.location.href = url;
@@ -118,7 +155,7 @@ export function IrLibrary({ ticker, documents: files, images = 0 }: { ticker: st
   return (
     <Panel
       title="IR document library"
-      subtitle={`${(files.length + images).toLocaleString()} files stored permanently${images ? ` (${images.toLocaleString()} slide images)` : ""} · ${(total / 1e6).toFixed(1)} MB of documents · ${read.toLocaleString()} read for data · earnings releases, supplements, presentations and data files from EDGAR and the IR website`}
+      subtitle={`${(files.length + images).toLocaleString()} files stored permanently${images ? ` (${images.toLocaleString()} slide images)` : ""}${extra.length ? ` (${extra.length.toLocaleString()} from the Filed Under document store)` : ""} · ${(total / 1e6).toFixed(1)} MB of documents · ${read.toLocaleString()} read for data · earnings releases, supplements, presentations and data files from EDGAR and the IR website`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Segmented label="Document type" value={kind} onChange={(v) => (setKind(v), setLimit(150))} options={[{ v: "all", l: "All" }, ...kinds.map((k) => ({ v: k, l: KIND_LABEL[k] ?? k }))]} size="xs" />

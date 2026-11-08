@@ -240,6 +240,27 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "list_ir_documents",
+    description: "The Filed Under IR document store for a covered company (releases, presentations, financial supplements, transcripts, prepared remarks, annual reports collected from 8-K exhibits and the IR website, about 90 per company). Returns id, type, fiscal label, period end, publish date, pages and source URL, newest first. Use before read_ir_document.",
+    parameters: obj(
+      {
+        ticker: str("Covered ticker"),
+        doc_type: nullable({ type: "string", enum: ["release", "presentation", "supplement", "transcript", "remarks", "annual_report", "other"] }),
+        query: nullable(str("Words to match in the title or fiscal label, e.g. 'Q3 FY26' or 'investor day'")),
+      },
+      ["ticker", "doc_type", "query"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "read_ir_document",
+    description: "Text of one stored IR document by id from list_ir_documents, page by page. With query, returns only passages around each match (with page numbers); without, the first pages. Cite as the document's source URL with the page number.",
+    parameters: obj({ ticker: str("Covered ticker"), doc_id: str("16-character id from list_ir_documents"), query: nullable(str("Phrase to find")) }, ["ticker", "doc_id", "query"]),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_company_dossier",
     description: "One call that joins everything known about a covered company over the last 12 months: filings, open-market insider trades, Form 144 proposed sales, SEC comment letters, alt-data events (13D/G, 8-K items, contracts, FDA, recalls, regulatory), verbatim-verified supply-chain intel, supply links and rule-based trade ideas. Use first for 'what's going on with X' questions, then drill in.",
     parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),

@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { DocTables } from "@/components/ir/doc-tables";
+import { storeIndexQuery } from "@/lib/ir/store";
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -72,6 +73,7 @@ function IrPage() {
   );
   const clearFocus = useCallback(() => navigate({ search: {}, replace: true }), [navigate]);
   const fetchIr = useServerFn(getIrData);
+  const store = useQuery(storeIndexQuery(ticker));
   const q = useQuery({
     queryKey: ["ir", ticker],
     queryFn: async () => {
@@ -163,7 +165,7 @@ function IrPage() {
         </Panel>
       )}
       <DocTables ticker={ticker} />
-      <IrLibrary ticker={ticker} documents={data.documents} images={data.images} />
+      <IrLibrary ticker={ticker} documents={data.documents} images={data.images} store={store.data?.documents} />
     </div>
   );
 }

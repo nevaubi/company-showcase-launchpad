@@ -27,6 +27,7 @@ import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/
 import { viewLabel } from "@/lib/research/view-spec";
 import { partnerFile } from "@/lib/data";
 import type { CommentsFile, Form144File } from "@/lib/filings/review";
+import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -268,6 +269,38 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
       const all = await qc.fetchQuery(alertsQuery(tickers));
       const rows = all.filter((a) => !args.ticker || a.ticker === String(args.ticker).toUpperCase()).slice(0, 60);
       return { output: clip(rows.map((a) => `${a.at.slice(0, 10)} ${a.ticker} [${a.kind}] ${a.title}${a.detail ? ` — ${a.detail}` : ""}${a.filing ? ` accn ${a.filing.accn}` : a.url ? ` <${a.url}>` : ""}`).join("\n") || "No alerts."), summary: `${rows.length} alerts` };
+    }
+    case "list_ir_documents": {
+      const t = String(args.ticker).toUpperCase();
+      const idx = await qc.fetchQuery(storeIndexQuery(t)).catch(() => null);
+      if (!idx) return { output: `No stored IR documents for ${t}.`, summary: "none" };
+      const needle = String(args.query ?? "").trim().toLowerCase();
+      const rows = idx.documents
+        .filter((d) => !args.doc_type || d.doc_type === args.doc_type)
+        .filter((d) => !needle || `${d.title ?? ""} ${d.fiscal_label ?? ""}`.toLowerCase().includes(needle))
+        .sort((a, b) => (b.published ?? b.period_end ?? "").localeCompare(a.published ?? a.period_end ?? ""))
+        .slice(0, 60);
+      return {
+        output: clip(
+          rows
+            .map((d) => `${d.id} | ${d.doc_type ?? "other"} | ${d.fiscal_label ?? ""} | period ${d.period_end ?? "?"} | published ${d.published ?? "?"} | ${d.pages ?? "?"}pp | ${(d.title ?? "").split("||")[0].slice(0, 100)} | ${d.text_path ? "text" : "no text"} <${d.url}>`)
+            .join("\n") || "No documents match.",
+        ),
+        summary: `${rows.length} of ${idx.documents.length} documents`,
+      };
+    }
+    case "read_ir_document": {
+      const t = String(args.ticker).toUpperCase();
+      const idx = await qc.fetchQuery(storeIndexQuery(t));
+      const d = idx.documents.find((x) => x.id === String(args.doc_id));
+      if (!d) return { output: `Unknown document ${args.doc_id} for ${t}; call list_ir_documents first.`, summary: "not found" };
+      const pages = await storeText(d);
+      const head = `${(d.title ?? "").split("||")[0]} (${d.doc_type ?? "document"}, ${d.fiscal_label ?? d.period_end ?? ""}) <${d.url}>`;
+      if (args.query) {
+        const hits = passages(pages, String(args.query));
+        return { output: clip(`${head}\n` + (hits.map((h) => `[page ${h.page}] ${h.text}`).join("\n---\n") || `No match for "${args.query}".`)), summary: `${hits.length} passages` };
+      }
+      return { output: clip(`${head}\n` + pages.map((p, i) => `[page ${i + 1}] ${p}`).join("\n")), summary: `${pages.length} pages` };
     }
     case "get_treasury_auctions": {
       const a = await qc.fetchQuery(auctionsQuery);
