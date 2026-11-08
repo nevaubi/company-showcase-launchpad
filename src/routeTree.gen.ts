@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as CompaniesTickerRouteImport } from './routes/companies.$ticker'
 import { Route as ShareIdRouteImport } from './routes/share.$id'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAdminRouteImport } from './routes/_authenticated/app.admin'
@@ -99,6 +100,11 @@ const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/app',
   path: '/app',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const CompaniesTickerRoute = CompaniesTickerRouteImport.update({
+  id: '/companies/$ticker',
+  path: '/companies/$ticker',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const ShareIdRoute = ShareIdRouteImport.update({
   id: '/share/$id',
@@ -417,6 +423,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
+  '/companies/$ticker': typeof CompaniesTickerRoute
   '/share/$id': typeof ShareIdRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
@@ -478,6 +485,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/companies/$ticker': typeof CompaniesTickerRoute
   '/share/$id': typeof ShareIdRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
@@ -540,6 +548,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
+  '/companies/$ticker': typeof CompaniesTickerRoute
   '/share/$id': typeof ShareIdRoute
   '/_authenticated/app/admin': typeof AuthenticatedAppAdminRoute
   '/_authenticated/app/agents': typeof AuthenticatedAppAgentsRoute
@@ -604,6 +613,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/app'
+    | '/companies/$ticker'
     | '/share/$id'
     | '/app/admin'
     | '/app/agents'
@@ -665,6 +675,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pricing'
     | '/reset-password'
+    | '/companies/$ticker'
     | '/share/$id'
     | '/app/admin'
     | '/app/agents'
@@ -726,6 +737,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/_authenticated/app'
+    | '/companies/$ticker'
     | '/share/$id'
     | '/_authenticated/app/admin'
     | '/_authenticated/app/agents'
@@ -789,6 +801,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   PricingRoute: typeof PricingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  CompaniesTickerRoute: typeof CompaniesTickerRoute
   ShareIdRoute: typeof ShareIdRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
   ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
@@ -838,6 +851,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app'
       preLoaderRoute: typeof AuthenticatedAppRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/companies/$ticker': {
+      id: '/companies/$ticker'
+      path: '/companies/$ticker'
+      fullPath: '/companies/$ticker'
+      preLoaderRoute: typeof CompaniesTickerRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/share/$id': {
       id: '/share/$id'
@@ -1390,6 +1410,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   PricingRoute: PricingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  CompaniesTickerRoute: CompaniesTickerRoute,
   ShareIdRoute: ShareIdRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
   ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,
