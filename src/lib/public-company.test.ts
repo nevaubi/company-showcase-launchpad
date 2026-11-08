@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { hydrateDataset } from "@/lib/financials/dataset";
-import { buildPublicSnapshot, isPublicTicker } from "./public-company";
+import { buildPublicSnapshot, isPublicTicker, PUBLIC_TICKERS } from "./public-company";
 
 const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(`src/test/fixtures/companies/${t}.json`, "utf8")));
 
 describe("public sample companies", () => {
-  it("only NVDA, AAPL and BAC are public", () => {
-    expect(["NVDA", "aapl", "BAC"].every(isPublicTicker)).toBe(true);
-    expect(isPublicTicker("MSFT")).toBe(false);
+  it("the 78 core companies are public, nothing else", () => {
+    expect(["NVDA", "aapl", "BAC", "MSFT"].every(isPublicTicker)).toBe(true);
+    expect(PUBLIC_TICKERS.length).toBe(78);
+    expect(isPublicTicker("FROG")).toBe(false);
   });
   it("every shown value links to an SEC filing", () => {
     const s = buildPublicSnapshot(load("NVDA"));

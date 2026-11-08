@@ -14,7 +14,9 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as CompaniesIndexRouteImport } from './routes/companies.index'
 import { Route as CompaniesTickerRouteImport } from './routes/companies.$ticker'
 import { Route as ShareIdRouteImport } from './routes/share.$id'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
@@ -96,10 +98,20 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/app',
   path: '/app',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const CompaniesIndexRoute = CompaniesIndexRouteImport.update({
+  id: '/companies/',
+  path: '/companies/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const CompaniesTickerRoute = CompaniesTickerRouteImport.update({
   id: '/companies/$ticker',
@@ -422,9 +434,11 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRoute
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/companies/$ticker': typeof CompaniesTickerRoute
   '/share/$id': typeof ShareIdRoute
+  '/companies/': typeof CompaniesIndexRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
@@ -485,8 +499,10 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/companies/$ticker': typeof CompaniesTickerRoute
   '/share/$id': typeof ShareIdRoute
+  '/companies': typeof CompaniesIndexRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
@@ -547,9 +563,11 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/companies/$ticker': typeof CompaniesTickerRoute
   '/share/$id': typeof ShareIdRoute
+  '/companies/': typeof CompaniesIndexRoute
   '/_authenticated/app/admin': typeof AuthenticatedAppAdminRoute
   '/_authenticated/app/agents': typeof AuthenticatedAppAgentsRoute
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
@@ -612,9 +630,11 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pricing'
     | '/reset-password'
+    | '/sitemap.xml'
     | '/app'
     | '/companies/$ticker'
     | '/share/$id'
+    | '/companies/'
     | '/app/admin'
     | '/app/agents'
     | '/app/alt-data'
@@ -675,8 +695,10 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pricing'
     | '/reset-password'
+    | '/sitemap.xml'
     | '/companies/$ticker'
     | '/share/$id'
+    | '/companies'
     | '/app/admin'
     | '/app/agents'
     | '/app/alt-data'
@@ -736,9 +758,11 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pricing'
     | '/reset-password'
+    | '/sitemap.xml'
     | '/_authenticated/app'
     | '/companies/$ticker'
     | '/share/$id'
+    | '/companies/'
     | '/_authenticated/app/admin'
     | '/_authenticated/app/agents'
     | '/_authenticated/app/alt-data'
@@ -801,8 +825,10 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   PricingRoute: typeof PricingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   CompaniesTickerRoute: typeof CompaniesTickerRoute
   ShareIdRoute: typeof ShareIdRoute
+  CompaniesIndexRoute: typeof CompaniesIndexRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
   ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
@@ -845,12 +871,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/app': {
       id: '/_authenticated/app'
       path: '/app'
       fullPath: '/app'
       preLoaderRoute: typeof AuthenticatedAppRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/companies/': {
+      id: '/companies/'
+      path: '/companies'
+      fullPath: '/companies/'
+      preLoaderRoute: typeof CompaniesIndexRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/companies/$ticker': {
       id: '/companies/$ticker'
@@ -1410,8 +1450,10 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   PricingRoute: PricingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   CompaniesTickerRoute: CompaniesTickerRoute,
   ShareIdRoute: ShareIdRoute,
+  CompaniesIndexRoute: CompaniesIndexRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
   ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,

@@ -1,15 +1,17 @@
 // Public sample company pages: a small, sourced snapshot built from the stored SEC dataset.
 // Pure (no Node/browser APIs) so the server function, the page and tests share it.
 import type { CompanyDataset, Statement, StatementKey } from "@/lib/financials/types";
+import { CURATED_COVERAGE } from "@/lib/coverage";
 
-/** The only companies viewable without signing in. */
-export const PUBLIC_TICKERS = ["NVDA", "AAPL", "BAC"] as const;
-export type PublicTicker = (typeof PUBLIC_TICKERS)[number];
+/** The only companies viewable without signing in: the 78 core (curated) companies. */
+export const PUBLIC_COMPANIES = CURATED_COVERAGE.map((c) => ({ ticker: c.ticker, name: c.shortName, sector: c.sector, industry: c.industry }));
+export const PUBLIC_TICKERS = PUBLIC_COMPANIES.map((c) => c.ticker);
+const NAMES = new Map(PUBLIC_COMPANIES.map((c) => [c.ticker, c.name]));
+/** Featured on the index and as quick links. */
+export const FEATURED_TICKERS = ["NVDA", "AAPL", "BAC"];
 
-export const PUBLIC_NAMES: Record<PublicTicker, string> = { NVDA: "NVIDIA", AAPL: "Apple", BAC: "Bank of America" };
-
-export function isPublicTicker(t: string): t is PublicTicker {
-  return (PUBLIC_TICKERS as readonly string[]).includes(t.toUpperCase());
+export function isPublicTicker(t: string): boolean {
+  return NAMES.has(t.toUpperCase());
 }
 
 export interface PublicSource { form: string; filed: string | null; accn: string; concept: string; url: string }
@@ -61,7 +63,7 @@ export function buildPublicSnapshot(d: CompanyDataset, years = 5): PublicSnapsho
     .map((f) => ({ form: f.form, filed: f.filed, desc: f.desc ?? null, url: secDocUrl(p.cik, f.accn, f.doc) }));
   const addr = (p as { address?: { city?: string; state?: string } }).address;
   return {
-    ticker: p.ticker, name: PUBLIC_NAMES[p.ticker as PublicTicker] ?? p.name, exchange: p.exchange, sector: p.sector, industry: p.industry,
+    ticker: p.ticker, name: NAMES.get(p.ticker) ?? p.name, exchange: p.exchange, sector: p.sector, industry: p.industry,
     city: addr?.city ? `${addr.city}${addr.state ? `, ${addr.state}` : ""}` : null,
     description: (p as { description?: string }).description ?? null,
     logo: (p as { logo?: string }).logo ?? null,

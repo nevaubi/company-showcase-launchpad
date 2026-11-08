@@ -1,0 +1,12 @@
+# Filed Under
+
+> US equity research where every number links to the SEC filing it came from.
+
+Filed Under builds company financials directly from SEC EDGAR (XBRL facts, 10-K, 10-Q, 8-K and Form 4 filings). Each public company page shows five years of revenue, net income, diluted EPS, operating cash flow, free cash flow and total assets, and every figure links to its source filing. Members get quarterly data, valuation, insider activity, investor-relations documents and an AI research assistant that cites filings.
+
+## Pages
+
+- [Companies](https://filedunder.ai/companies): Index of the 78 covered US companies by sector.
+- [NVIDIA (NVDA)](https://filedunder.ai/companies/NVDA): Annual results sourced to SEC filings.
+- [Apple (AAPL)](https://filedunder.ai/companies/AAPL): Annual results sourced to SEC filings.
+- [Pricing](https://filedunder.ai/pricing): Free trial, Research and Pro plans.

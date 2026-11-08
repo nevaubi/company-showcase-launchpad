@@ -4,7 +4,7 @@ import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
 import { Button } from "@/components/ui/button";
 import { fmtCompactUsd, fmtValueLong } from "@/lib/format";
 import { getPublicCompany } from "@/lib/public-company.functions";
-import { PUBLIC_TICKERS } from "@/lib/public-company";
+import { FEATURED_TICKERS } from "@/lib/public-company";
 
 const SITE = "https://filedunder.ai";
 
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/companies/$ticker")({
   head: ({ params, loaderData }) => {
     const t = params.ticker.toUpperCase();
     const name = loaderData?.name ?? t;
-    const title = `${name} (${t}) financials, sourced to the SEC — Filed Under`;
+    const title = `${name} (${t}) revenue, earnings and cash flow by year — Filed Under`;
     const desc = `${name}'s revenue, earnings and cash flow for the last five years, with every number linked to the SEC filing it came from.`;
     const url = `${SITE}/companies/${t}`;
     return {
@@ -33,6 +33,21 @@ export const Route = createFileRoute("/companies/$ticker")({
         { name: "twitter:description", content: desc },
       ],
       links: [{ rel: "canonical", href: url }],
+      scripts: loaderData
+        ? [{
+            type: "application/ld+json",
+            children: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Dataset",
+              name: `${name} (${t}) annual financials`,
+              description: desc,
+              url,
+              creator: { "@type": "Organization", name: "Filed Under", url: SITE },
+              isBasedOn: "https://www.sec.gov/edgar",
+              about: { "@type": "Corporation", name, tickerSymbol: t },
+            }),
+          }]
+        : [],
     };
   },
   notFoundComponent: () => (
@@ -40,6 +55,7 @@ export const Route = createFileRoute("/companies/$ticker")({
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-6 py-24 text-center">
         <h1 className="font-display text-4xl">This company isn't public yet</h1>
+        <p className="mt-3"><Link to="/companies" className="underline">See the companies you can open</Link></p>
         <p className="mt-3 text-muted-foreground">Join the waitlist to research all covered companies.</p>
         <Button asChild className="mt-6"><Link to="/auth" search={{ mode: "signup" }}>Join the waitlist</Link></Button>
       </main>
@@ -55,8 +71,8 @@ function PublicCompany() {
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-6 pb-24 pt-12">
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span className="eyebrow">Sample company</span>
-          {PUBLIC_TICKERS.map((t) => (
+          <Link to="/companies" className="eyebrow hover:text-foreground">All companies</Link>
+          {FEATURED_TICKERS.map((t) => (
             <Link key={t} to="/companies/$ticker" params={{ ticker: t }} className="rounded border px-2 py-0.5 hover:text-foreground" activeProps={{ className: "bg-card text-foreground" }}>{t}</Link>
           ))}
         </div>

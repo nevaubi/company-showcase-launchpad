@@ -11,6 +11,21 @@ export const Route = createFileRoute("/")({
       { property: "og:description", content: "Every figure backfilled, reconciled and cited before it reaches you." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:url", content: "https://filedunder.ai/" },
+    ],
+    links: [{ rel: "canonical", href: "https://filedunder.ai/" }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: JSON.stringify({
+          "@context": "https://schema.org",
+          "@type": "Organization",
+          name: "Filed Under",
+          url: "https://filedunder.ai/",
+          logo: "https://filedunder.ai/favicon.png",
+          description: "US equity research where every number links to its SEC source.",
+        }),
+      },
     ],
   }),
   component: Home,
