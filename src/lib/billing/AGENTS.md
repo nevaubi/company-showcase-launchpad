@@ -1,0 +1,1 @@
+- Plan limits and tiers are enforced in SQL (`effective_tier`, `plan_limit`, `consume_usage`) and mirrored in `plans.ts`; the Stripe webhook writes `subscriptions`.
