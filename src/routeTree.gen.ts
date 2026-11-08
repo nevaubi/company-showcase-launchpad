@@ -24,6 +24,7 @@ import { Route as AuthenticatedAppFilingsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppFirmRouteImport } from './routes/_authenticated/app.firm'
 import { Route as AuthenticatedAppHedgeFundsRouteImport } from './routes/_authenticated/app.hedge-funds'
 import { Route as AuthenticatedAppIdeasRouteImport } from './routes/_authenticated/app.ideas'
+import { Route as AuthenticatedAppInsightsRouteImport } from './routes/_authenticated/app.insights'
 import { Route as AuthenticatedAppKpisRouteImport } from './routes/_authenticated/app.kpis'
 import { Route as AuthenticatedAppMacroRouteImport } from './routes/_authenticated/app.macro'
 import { Route as AuthenticatedAppMarketsRouteImport } from './routes/_authenticated/app.markets'
@@ -137,6 +138,12 @@ const AuthenticatedAppIdeasRoute = AuthenticatedAppIdeasRouteImport.update({
   path: '/ideas',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppInsightsRoute =
+  AuthenticatedAppInsightsRouteImport.update({
+    id: '/insights',
+    path: '/insights',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppKpisRoute = AuthenticatedAppKpisRouteImport.update({
   id: '/kpis',
   path: '/kpis',
@@ -359,6 +366,7 @@ export interface FileRoutesByFullPath {
   '/app/firm': typeof AuthenticatedAppFirmRouteWithChildren
   '/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
+  '/app/insights': typeof AuthenticatedAppInsightsRoute
   '/app/kpis': typeof AuthenticatedAppKpisRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
@@ -409,6 +417,7 @@ export interface FileRoutesByTo {
   '/app/filings': typeof AuthenticatedAppFilingsRoute
   '/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/app/ideas': typeof AuthenticatedAppIdeasRoute
+  '/app/insights': typeof AuthenticatedAppInsightsRoute
   '/app/kpis': typeof AuthenticatedAppKpisRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
@@ -462,6 +471,7 @@ export interface FileRoutesById {
   '/_authenticated/app/firm': typeof AuthenticatedAppFirmRouteWithChildren
   '/_authenticated/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
   '/_authenticated/app/ideas': typeof AuthenticatedAppIdeasRoute
+  '/_authenticated/app/insights': typeof AuthenticatedAppInsightsRoute
   '/_authenticated/app/kpis': typeof AuthenticatedAppKpisRoute
   '/_authenticated/app/macro': typeof AuthenticatedAppMacroRoute
   '/_authenticated/app/markets': typeof AuthenticatedAppMarketsRoute
@@ -516,6 +526,7 @@ export interface FileRouteTypes {
     | '/app/firm'
     | '/app/hedge-funds'
     | '/app/ideas'
+    | '/app/insights'
     | '/app/kpis'
     | '/app/macro'
     | '/app/markets'
@@ -566,6 +577,7 @@ export interface FileRouteTypes {
     | '/app/filings'
     | '/app/hedge-funds'
     | '/app/ideas'
+    | '/app/insights'
     | '/app/kpis'
     | '/app/macro'
     | '/app/markets'
@@ -618,6 +630,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/firm'
     | '/_authenticated/app/hedge-funds'
     | '/_authenticated/app/ideas'
+    | '/_authenticated/app/insights'
     | '/_authenticated/app/kpis'
     | '/_authenticated/app/macro'
     | '/_authenticated/app/markets'
@@ -772,6 +785,13 @@ declare module '@tanstack/react-router' {
       path: '/ideas'
       fullPath: '/app/ideas'
       preLoaderRoute: typeof AuthenticatedAppIdeasRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/insights': {
+      id: '/_authenticated/app/insights'
+      path: '/insights'
+      fullPath: '/app/insights'
+      preLoaderRoute: typeof AuthenticatedAppInsightsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/kpis': {
@@ -1104,6 +1124,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppFirmRoute: typeof AuthenticatedAppFirmRouteWithChildren
   AuthenticatedAppHedgeFundsRoute: typeof AuthenticatedAppHedgeFundsRoute
   AuthenticatedAppIdeasRoute: typeof AuthenticatedAppIdeasRoute
+  AuthenticatedAppInsightsRoute: typeof AuthenticatedAppInsightsRoute
   AuthenticatedAppKpisRoute: typeof AuthenticatedAppKpisRoute
   AuthenticatedAppMacroRoute: typeof AuthenticatedAppMacroRoute
   AuthenticatedAppMarketsRoute: typeof AuthenticatedAppMarketsRoute
@@ -1134,6 +1155,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppFirmRoute: AuthenticatedAppFirmRouteWithChildren,
   AuthenticatedAppHedgeFundsRoute: AuthenticatedAppHedgeFundsRoute,
   AuthenticatedAppIdeasRoute: AuthenticatedAppIdeasRoute,
+  AuthenticatedAppInsightsRoute: AuthenticatedAppInsightsRoute,
   AuthenticatedAppKpisRoute: AuthenticatedAppKpisRoute,
   AuthenticatedAppMacroRoute: AuthenticatedAppMacroRoute,
   AuthenticatedAppMarketsRoute: AuthenticatedAppMarketsRoute,
