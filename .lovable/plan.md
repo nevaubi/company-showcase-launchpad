@@ -1,54 +1,63 @@
-# Production rollout: hardening, reliability, intelligence
+# Production rollout: brainstorm and phased plan
 
-## What the scan found (today)
+Decisions so far: free trial + one paid tier (Pro), access tied to plan, guided tour on first login, security and waitlist hardening first.
 
-- **Waitlist can be bypassed.** The waiting-list screen only blocks the app pages. Research tables (supply links, supply signals, alt data, estimates, filings, redlines, IR series) and the datasets file store allow *any signed-in user*, so a pending signup can still read everything directly. Insider trades are readable even signed out.
-- **30 backend functions** with elevated rights are callable by signed-out or signed-in users; some should be admin- or server-only.
-- 5 tables have access rules turned on but no rules (fine if server-only, needs confirming); one extension sits in the public area.
-- Nightly trade ideas, market stats and supply-chain signals still only refresh by hand.
+## Phase 1 — Security and waitlist hardening (first)
 
-## Phase 1 — Launch blockers (security and access)
+1. Research tables and the datasets store readable only by approved, admin, demo or paying users, not just "signed in". Same rule on every server function that returns research data or spends AI credits.
+2. Review the ~30 elevated backend functions: remove signed-out access where not needed; admin actions admin-only.
+3. Insider trades and anything else readable signed-out: keep public only what marketing pages use.
+4. Test the full flow end to end: new signup lands on waiting list, admin approves, user gets in; declined user stays out.
+5. Waitlist emails: "you're on the list" and "you're approved".
+6. Rerun the security scan until clean.
 
-1. Change every research table and the datasets store so reads require `has_app_access` (approved, admin or demo), not just being signed in. Decide whether insider trades stay public (used on marketing pages?) or move behind access.
-2. Review all 30 elevated functions: revoke signed-out access everywhere it isn't needed; restrict admin actions (waitlist decisions, job tools) to admins.
-3. Add the same access check to every server function that returns research data or spends AI credits, so the waitlist holds even when calling the server directly.
-4. Per-user daily limits on AI features (agent, reports, briefs) to cap cost at launch.
-5. Rerun the security scan until no errors remain.
+## Phase 2 — Roles and plans (governance)
 
-## Phase 2 — Reliability and operations
+- Roles: admin, plus plan-based access: **Trial** (e.g. 14 days, full product, lower limits), **Pro** (paid), **Expired** (read-only or locked screen with upgrade).
+- One access check (`can use app` + `which plan`) used by pages, server functions and data rules, so hiding a link is never the only protection.
+- Admin can: approve waitlist, extend trials, grant Pro manually (friends, partners), see each user's plan and usage.
 
-1. Move the heavy nightly rebuilds (trade ideas, market stats, supply-chain signals) into chunked jobs that process a few companies per run with a saved cursor, so they finish over the night within run limits.
-2. Freshness page: email/alert the admin when any source goes stale or a job fails repeatedly.
-3. Error tracking for the published site (runtime errors + failed server calls) shown in Admin.
-4. Waitlist: confirmation email on signup and an "you're approved" email; test the full new-signup → approve flow end to end.
-5. Basic product analytics in Admin: signups, active users, most-used pages and AI spend.
+## Phase 3 — Stripe payments
 
-## Phase 3 — Intelligence and capability
+- Run the payment-provider check, then enable built-in Stripe (test mode first, no account needed to start).
+- One Pro product, monthly + yearly prices; checkout, customer billing portal (cancel/update card), webhook that keeps each user's plan in sync.
+- Trial starts on approval; ends into upgrade screen. Pricing page on the public site.
+- Needed from you: price points and trial length.
 
-1. **Confluence signals:** one ranked daily list per company combining insider buying, filing language changes, alt-data shifts, supply-chain events and estimate revisions, every item linked to its source.
-2. **What changed since you last looked:** per-watchlist digest (in-app + optional weekly email).
-3. **Bank KPI map** (built for BAC) rolled out to the other banks, then other sectors with dense IR KPIs.
-4. **Agent upgrades:** saved research threads, scheduled agent questions ("rerun every Monday"), and export to memo/Excel.
-5. **Docling indexing service (hosted on Render):** a small Docling server on Render converts filings, IR PDFs, decks and spreadsheets into clean structured text, tables and page positions. We store passages with their page/cell locators and search vectors, so the assistant pulls exact, well-structured passages (better context, fewer misread tables) and every quote still opens its source. It runs on stored documents in small nightly batches and is called only from the server with a secret key. Cost: a paid Render instance (CPU is fine to start; a GPU instance is faster on scanned decks). Your Render account and API key are needed.
-6. Extend deep coverage beyond the 78 core companies — only when you decide which tickers, respecting your earlier rule not to start deep builds for the new tickers.
+## Phase 4 — Limits and logging
 
-## Phase 4 — Launch polish
+- Per-plan daily limits on costly AI: agent runs, reports, briefs, redlines, cloud browser runs. Clear "X of Y used today" in the app and a friendly limit message.
+- Usage log per user (AI calls, cost estimate, feature) feeding an Admin "Usage and spend" page.
+- Error tracking for the live site (page crashes and failed server calls) in Admin, plus alerts when data goes stale or jobs keep failing.
+- Audit log of admin actions (approvals, plan grants).
 
-- Landing page: real, sourced example figures instead of illustrative ones; pricing/plan page if you plan to charge.
-- Terms, privacy policy, data-source disclaimers ("not investment advice").
-- SEO titles/descriptions on public pages, social share image.
+## Phase 5 — Onboarding and walkthroughs
 
-## Questions for you
+- Guided tour on first login: sidebar hubs, company page, click-to-source, the assistant (Cmd+J), watchlist. Skippable, restartable from Help.
+- Empty-state hints on pages that start blank (watchlist, theses, paper trades).
+- "Getting started" sample: preload a company (e.g. NVDA) and a sample question.
 
-- Insider trades: keep visible to signed-out visitors, or members only?
-- Paid plans at launch, or free with waitlist for now?
-- Which of Phase 3 matters most to you first?
-- Docling: do you already have a Render account, and should it index everything stored (~74K IR documents) or start with the 78 core companies?
+## Phase 6 — Marketing and launch
+
+- Homepage figures replaced with real, sourced numbers.
+- Pricing page, terms, privacy policy, "not investment advice" disclaimers.
+- SEO titles/descriptions and share image on public pages; analytics on signups and conversions.
+- Launch emails to waitlist in batches so load and AI spend ramp gradually.
+
+## Later — Intelligence (from the earlier plan)
+
+Confluence signals, "what changed since you last looked" digests, bank KPI map for other banks, saved/scheduled agent threads, Docling indexing on Render.
+
+## Open questions
+
+- Pro price (monthly/yearly) and trial length?
+- After trial without paying: read-only or locked?
+- Business country for Stripe tax handling?
 
 ## Technical details
 
-- Replace `USING (true)` / `auth.uid() IS NOT NULL` read policies with `USING (public.has_app_access(auth.uid()))`; same for `storage.objects` on bucket `datasets`.
-- `REVOKE EXECUTE ... FROM anon` (and `authenticated` where admin/server-only) on SECURITY DEFINER functions; keep `has_app_access`/`has_role` callable by authenticated.
-- Shared `requireAppAccess` middleware after `requireSupabaseAuth` for research/AI server functions.
-- Docling: `docling-serve` Docker image on a Render web service behind a shared-secret header (`DOCLING_URL`, `DOCLING_KEY` secrets); `scripts/docling-index.ts` + a rotating job read from the `ir-documents` bucket, write `doc_chunks` (text, page, bbox/`{t,r,c}`, embedding via pgvector) service-role-only; agent retrieval through an authed server function.
-- Chunked rebuild jobs reuse `job_state` cursors and `RUN_BUDGET_MS`; signals/markets outputs move from `public/data` JSON to Cloud tables merged in `src/lib/data.ts`-style loaders (getDataset untouched).
+- `has_app_access` extended to include active trial/Pro from a `subscriptions` table (written only by the Stripe webhook / admin RPC); RLS on research tables and `storage.objects` (datasets) uses it; shared `requireAppAccess` middleware after `requireSupabaseAuth`.
+- `REVOKE EXECUTE ... FROM anon` on SECURITY DEFINER functions not needed publicly.
+- `usage_events` (user, feature, units, cost) service-role write; limits checked server-side before AI calls; `admin_audit` table.
+- Stripe via built-in payments: webhook route under `/api/public/stripe/webhook` with signature verification.
+- Tour: lightweight step component with `data-tour` anchors, seen-state stored per user.
