@@ -50,7 +50,7 @@ export interface IrFocus {
 type ExportKind = { kind: "view" } | { kind: "all" } | { kind: "group"; group: PayloadGroup };
 
 /** Opens the source panel for one cell: the stored document at that cell, or the calculation's parts. */
-function openIrCell(open: (t: SourceTarget) => void, ticker: string, payload: IrPayload, s: PayloadSeries, end: string, freq: Freq, c: PayloadCell) {
+export function openIrCell(open: (t: SourceTarget) => void, ticker: string, payload: IrPayload, s: PayloadSeries, end: string, freq: Freq, c: PayloadCell) {
   const periodLabel = periodLong(end, freq, c.m);
   const derived = derivedOf(payload, c);
   if (derived) return open({ ticker, label: s.label, periodLabel, unit: s.unit, value: c.v, derived }), true;

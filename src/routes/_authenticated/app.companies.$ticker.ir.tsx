@@ -7,6 +7,7 @@ import { z } from "zod";
 import { CheckCircle2, FileStack, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { IrBreakdowns } from "@/components/ir/breakdowns";
+import { IrFinancialMap } from "@/components/ir/financial-map";
 import { IrLibrary } from "@/components/ir/library";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -141,6 +142,9 @@ function IrPage() {
         documents={data.documents.length + (data.images ?? 0)}
         builtAt={data.builtAt}
       />
+      {data.payload && data.payload.series.length > 0 && (
+        <IrFinancialMap ticker={ticker} payload={data.payload} />
+      )}
       {data.payload && data.payload.series.length > 0 ? (
         <IrBreakdowns
           ticker={ticker}
