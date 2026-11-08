@@ -1,5 +1,10 @@
 # Filed Under — roadmap
 
+## Waitlist emails and trial activation (Nov 8)
+- [ ] Automatic branded waitlist receipt and approval emails — blocked until the owner configures an email sender domain.
+- [ ] Approval email sign-in/account-creation links and explicit terms acceptance before starting the 14-day trial; preserve existing subscribers and already-started trials.
+- [ ] Verify receipt, approval, acceptance and one-time trial activation end to end.
+
 ## Institutional platform (requested Nov 6 — "all, proceed")
 - [x] M1 Firm workspaces: firms, roles (owner/admin/analyst/viewer), invites, shared coverage list with assigned analyst/rating/restricted flag, firm notes, branding (logo, colors, disclaimer)
   - [x] M1b Share theses and docs with a firm from their pages (Private / Shared with firm), "Mine / Shared with me" filters, teammates open shared items view-only
