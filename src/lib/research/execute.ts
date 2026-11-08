@@ -28,6 +28,7 @@ import { viewLabel } from "@/lib/research/view-spec";
 import { partnerFile } from "@/lib/data";
 import type { CommentsFile, Form144File } from "@/lib/filings/review";
 import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
+import { searchDocuments } from "@/lib/ir/search";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -269,6 +270,19 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
       const all = await qc.fetchQuery(alertsQuery(tickers));
       const rows = all.filter((a) => !args.ticker || a.ticker === String(args.ticker).toUpperCase()).slice(0, 60);
       return { output: clip(rows.map((a) => `${a.at.slice(0, 10)} ${a.ticker} [${a.kind}] ${a.title}${a.detail ? ` — ${a.detail}` : ""}${a.filing ? ` accn ${a.filing.accn}` : a.url ? ` <${a.url}>` : ""}`).join("\n") || "No alerts."), summary: `${rows.length} alerts` };
+    }
+    case "search_documents": {
+      const hits = await searchDocuments({
+        q: String(args.query),
+        tickers: Array.isArray(args.tickers) ? (args.tickers as string[]).map((t) => t.toUpperCase()) : undefined,
+        types: Array.isArray(args.doc_types) ? (args.doc_types as string[]) : undefined,
+        since: args.since ? String(args.since) : undefined,
+        limit: 40,
+      });
+      return {
+        output: clip(hits.map((h) => `${h.ticker} | doc ${h.doc_id} | ${h.doc_type ?? "doc"} ${h.fiscal_label ?? ""} | published ${h.published ?? "?"} | page ${h.page ?? "?"}${h.kind === "table" ? " (table)" : ""} | ${h.snippet.replace(/[«»]/g, "")} <${h.url ?? ""}>`).join("\n") || "No matches."),
+        summary: `${hits.length} matches`,
+      };
     }
     case "list_ir_documents": {
       const t = String(args.ticker).toUpperCase();
