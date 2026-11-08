@@ -25,6 +25,8 @@ import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/i
 import { agentRoot, highlight, locate, outline, readRegion, regionOf, safeClick, bringIntoView, type LocateKind } from "@/lib/research/dom-agent";
 import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/views";
 import { viewLabel } from "@/lib/research/view-spec";
+import { partnerFile } from "@/lib/data";
+import type { CommentsFile, Form144File } from "@/lib/filings/review";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -275,18 +277,30 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
     case "get_company_dossier": {
       const t = String(args.ticker).toUpperCase();
       const since = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
-      const [d, links, alt, sig, ideas] = await Promise.all([
+      const [d, links, alt, sig, ideas, f144, review] = await Promise.all([
         dataset(qc, t),
         qc.fetchQuery(supplyLinksQuery),
         supabase.from("alt_data").select("dataset,kind,date,title,value,unit,source_url").eq("ticker", t).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(60),
         supabase.from("supply_signals").select("kind,title,detail,impact,quote,filed,form,accn,url").eq("ticker", t).order("filed", { ascending: false }).limit(40),
         fetch("/data/signals.json").then((r) => r.json()).catch(() => null),
+        partnerFile<Form144File>(`form144/${t}.json`).catch(() => null),
+        partnerFile<CommentsFile>(`comments/${t}.json`).catch(() => null),
       ]);
       const out: string[] = [`DOSSIER ${t} — everything Filed Under knows, last 12 months`];
       const u = (await qc.fetchQuery(universeQuery)).companies.find((c) => c.ticker === t);
       if (u) out.push(`SNAPSHOT: ${JSON.stringify(flatUniverse([u])[0]).slice(0, 600)}`);
       out.push("FILINGS:", ...d.filings.filter((f) => f.filed >= since).slice(0, 15).map((f) => `${f.filed} ${f.form} ${f.desc ?? ""} ${f.items ? `items ${f.items}` : ""} accn ${f.accn}`));
       out.push("INSIDERS (open market):", ...d.insiders.filter((x) => (x.code === "P" || x.code === "S") && x.date >= since).slice(0, 12).map((x) => `${x.date} ${x.owner} (${x.role}) ${x.code === "P" ? "BUY" : "SELL"} ${x.shares} @ ${x.price ?? "?"}${x.plan10b5 ? " 10b5-1" : ""} accn ${x.accn}`));
+      if (f144?.notices.length)
+        out.push(
+          `PROPOSED INSIDER SALES (Form 144; open = no matching Form 4 sale yet): open $${Math.round(f144.summary.open.value).toLocaleString()} · 90d ${f144.summary.d90.n} notices $${Math.round(f144.summary.d90.value).toLocaleString()}`,
+          ...f144.notices.slice(0, 10).map((n) => `${n.filed} ${n.person ?? "?"} (${n.relationship ?? "affiliate"}) $${Math.round(n.value ?? 0).toLocaleString()} sale ~${n.sale_date ?? "?"} ${n.plan ? `10b5-1 adopted ${n.plan_adopted[0] ?? "?"}` : "no plan"} [${n.status}] <${n.url ?? ""}>`),
+        );
+      if (review?.threads.length)
+        out.push(
+          "SEC COMMENT LETTERS:",
+          ...review.threads.slice(0, 4).map((th) => `${th.first}..${th.last} ${th.form ?? ""} ${th.period ?? ""} [${th.status}] topics: ${th.topics.map((k) => review.topics[k] ?? k).join(", ") || "n/a"}; ${th.letters.flatMap((l) => l.comments ?? []).slice(0, 3).map((c) => `"${c.text.slice(0, 160)}"`).join(" ")} <${th.letters[0]?.url ?? ""}>`),
+        );
       out.push("ALT DATA EVENTS:", ...(alt.data ?? []).map((r: any) => `${r.date} [${r.dataset}] ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""} <${r.source_url}>`));
       out.push("SUPPLY-CHAIN INTEL (verbatim-verified):", ...(sig.data ?? []).map((r: any) => `${r.filed ?? ""} [${r.kind}/${r.impact}] ${r.title}: "${String(r.quote).slice(0, 220)}" ${r.accn ? `accn ${r.accn}` : r.url ?? ""}`));
       const g = focusGraph(t, links, Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName])));

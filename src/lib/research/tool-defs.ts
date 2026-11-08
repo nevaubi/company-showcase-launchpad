@@ -241,7 +241,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_company_dossier",
-    description: "One call that joins everything known about a covered company over the last 12 months: filings, open-market insider trades, alt-data events (13D/G, 8-K items, contracts, FDA, recalls, regulatory), verbatim-verified supply-chain intel, supply links and rule-based trade ideas. Use first for 'what's going on with X' questions, then drill in.",
+    description: "One call that joins everything known about a covered company over the last 12 months: filings, open-market insider trades, Form 144 proposed sales, SEC comment letters, alt-data events (13D/G, 8-K items, contracts, FDA, recalls, regulatory), verbatim-verified supply-chain intel, supply links and rule-based trade ideas. Use first for 'what's going on with X' questions, then drill in.",
     parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
     strict: true,
   },
