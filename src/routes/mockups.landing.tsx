@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import chicago from "@/assets/chicago-lasalle.mp4.asset.json";
+import { ChicagoNightVideoHero, ChicagoSplitVideoHero } from "@/components/landing-video/hero-video";
 import { ArcScope } from "@/components/arc/arc-scope";
 import { AiAnswer, type AnswerEvent } from "@/components/arc/blocks/ai-answer/ai-answer";
 import { AiInsightCard, type Insight, type InsightMetric } from "@/components/arc/blocks/ai-insight-card/ai-insight-card";
@@ -49,7 +50,8 @@ function useInView<T extends HTMLElement>(threshold = 0.3) {
 function Landing() {
   return (
     <div className="bg-paper text-foreground antialiased">
-      <Hero />
+      <ChicagoNightVideoHero primaryAction={{ label: "Request access", href: "/signup" }} secondaryAction={{ label: "See the memo", href: "#memo" }} />
+      <ChicagoSplitVideoHero primaryAction={{ label: "Request access", href: "/signup" }} secondaryAction={{ label: "See the memo", href: "#memo" }} />
       <Proof />
       <ArcScope>
         <Section title="Watch it write the memo" body="Filed Under drafts the recap the way an analyst would. It pulls the number behind each claim, tightens the prose and leaves every change tinted until you accept it.">
