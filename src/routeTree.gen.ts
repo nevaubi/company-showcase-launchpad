@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
+import { Route as ShareIdRouteImport } from './routes/share.$id'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
 import { Route as AuthenticatedAppCalendarsRouteImport } from './routes/_authenticated/app.calendars'
@@ -28,10 +29,12 @@ import { Route as AuthenticatedAppInsightsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAppKpisRouteImport } from './routes/_authenticated/app.kpis'
 import { Route as AuthenticatedAppMacroRouteImport } from './routes/_authenticated/app.macro'
 import { Route as AuthenticatedAppMarketsRouteImport } from './routes/_authenticated/app.markets'
+import { Route as AuthenticatedAppPortfolioRouteImport } from './routes/_authenticated/app.portfolio'
 import { Route as AuthenticatedAppReportsRouteImport } from './routes/_authenticated/app.reports'
 import { Route as AuthenticatedAppResearchRouteImport } from './routes/_authenticated/app.research'
 import { Route as AuthenticatedAppScreenerRouteImport } from './routes/_authenticated/app.screener'
 import { Route as AuthenticatedAppSectorsRouteImport } from './routes/_authenticated/app.sectors'
+import { Route as AuthenticatedAppSituationsRouteImport } from './routes/_authenticated/app.situations'
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
 import { Route as AuthenticatedAppSupplyChainRouteImport } from './routes/_authenticated/app.supply-chain'
 import { Route as AuthenticatedAppCompaniesIndexRouteImport } from './routes/_authenticated/app.companies.index'
@@ -90,6 +93,11 @@ const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
   id: '/app',
   path: '/app',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const ShareIdRoute = ShareIdRouteImport.update({
+  id: '/share/$id',
+  path: '/share/$id',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAppIndexRoute = AuthenticatedAppIndexRouteImport.update({
   id: '/',
@@ -159,6 +167,12 @@ const AuthenticatedAppMarketsRoute = AuthenticatedAppMarketsRouteImport.update({
   path: '/markets',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppPortfolioRoute =
+  AuthenticatedAppPortfolioRouteImport.update({
+    id: '/portfolio',
+    path: '/portfolio',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppReportsRoute = AuthenticatedAppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -181,6 +195,12 @@ const AuthenticatedAppSectorsRoute = AuthenticatedAppSectorsRouteImport.update({
   path: '/sectors',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppSituationsRoute =
+  AuthenticatedAppSituationsRouteImport.update({
+    id: '/situations',
+    path: '/situations',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppStatusRoute = AuthenticatedAppStatusRouteImport.update({
   id: '/status',
   path: '/status',
@@ -358,6 +378,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
+  '/share/$id': typeof ShareIdRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/app/compare': typeof AuthenticatedAppCompareRoute
@@ -370,10 +391,12 @@ export interface FileRoutesByFullPath {
   '/app/kpis': typeof AuthenticatedAppKpisRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/portfolio': typeof AuthenticatedAppPortfolioRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/screener': typeof AuthenticatedAppScreenerRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/app/situations': typeof AuthenticatedAppSituationsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app/': typeof AuthenticatedAppIndexRoute
@@ -410,6 +433,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/share/$id': typeof ShareIdRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/app/compare': typeof AuthenticatedAppCompareRoute
@@ -421,10 +445,12 @@ export interface FileRoutesByTo {
   '/app/kpis': typeof AuthenticatedAppKpisRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/portfolio': typeof AuthenticatedAppPortfolioRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/screener': typeof AuthenticatedAppScreenerRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/app/situations': typeof AuthenticatedAppSituationsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app': typeof AuthenticatedAppIndexRoute
@@ -463,6 +489,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
+  '/share/$id': typeof ShareIdRoute
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/_authenticated/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/_authenticated/app/compare': typeof AuthenticatedAppCompareRoute
@@ -475,10 +502,12 @@ export interface FileRoutesById {
   '/_authenticated/app/kpis': typeof AuthenticatedAppKpisRoute
   '/_authenticated/app/macro': typeof AuthenticatedAppMacroRoute
   '/_authenticated/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/_authenticated/app/portfolio': typeof AuthenticatedAppPortfolioRoute
   '/_authenticated/app/reports': typeof AuthenticatedAppReportsRoute
   '/_authenticated/app/research': typeof AuthenticatedAppResearchRoute
   '/_authenticated/app/screener': typeof AuthenticatedAppScreenerRoute
   '/_authenticated/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/_authenticated/app/situations': typeof AuthenticatedAppSituationsRoute
   '/_authenticated/app/status': typeof AuthenticatedAppStatusRoute
   '/_authenticated/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
@@ -518,6 +547,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/app'
+    | '/share/$id'
     | '/app/alt-data'
     | '/app/calendars'
     | '/app/compare'
@@ -530,10 +560,12 @@ export interface FileRouteTypes {
     | '/app/kpis'
     | '/app/macro'
     | '/app/markets'
+    | '/app/portfolio'
     | '/app/reports'
     | '/app/research'
     | '/app/screener'
     | '/app/sectors'
+    | '/app/situations'
     | '/app/status'
     | '/app/supply-chain'
     | '/app/'
@@ -570,6 +602,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/pricing'
     | '/reset-password'
+    | '/share/$id'
     | '/app/alt-data'
     | '/app/calendars'
     | '/app/compare'
@@ -581,10 +614,12 @@ export interface FileRouteTypes {
     | '/app/kpis'
     | '/app/macro'
     | '/app/markets'
+    | '/app/portfolio'
     | '/app/reports'
     | '/app/research'
     | '/app/screener'
     | '/app/sectors'
+    | '/app/situations'
     | '/app/status'
     | '/app/supply-chain'
     | '/app'
@@ -622,6 +657,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/_authenticated/app'
+    | '/share/$id'
     | '/_authenticated/app/alt-data'
     | '/_authenticated/app/calendars'
     | '/_authenticated/app/compare'
@@ -634,10 +670,12 @@ export interface FileRouteTypes {
     | '/_authenticated/app/kpis'
     | '/_authenticated/app/macro'
     | '/_authenticated/app/markets'
+    | '/_authenticated/app/portfolio'
     | '/_authenticated/app/reports'
     | '/_authenticated/app/research'
     | '/_authenticated/app/screener'
     | '/_authenticated/app/sectors'
+    | '/_authenticated/app/situations'
     | '/_authenticated/app/status'
     | '/_authenticated/app/supply-chain'
     | '/_authenticated/app/'
@@ -676,6 +714,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   PricingRoute: typeof PricingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
+  ShareIdRoute: typeof ShareIdRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
   ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
 }
@@ -723,6 +762,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app'
       preLoaderRoute: typeof AuthenticatedAppRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/share/$id': {
+      id: '/share/$id'
+      path: '/share/$id'
+      fullPath: '/share/$id'
+      preLoaderRoute: typeof ShareIdRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/app/': {
       id: '/_authenticated/app/'
@@ -815,6 +861,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppMarketsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/portfolio': {
+      id: '/_authenticated/app/portfolio'
+      path: '/portfolio'
+      fullPath: '/app/portfolio'
+      preLoaderRoute: typeof AuthenticatedAppPortfolioRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/reports': {
       id: '/_authenticated/app/reports'
       path: '/reports'
@@ -841,6 +894,13 @@ declare module '@tanstack/react-router' {
       path: '/sectors'
       fullPath: '/app/sectors'
       preLoaderRoute: typeof AuthenticatedAppSectorsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/situations': {
+      id: '/_authenticated/app/situations'
+      path: '/situations'
+      fullPath: '/app/situations'
+      preLoaderRoute: typeof AuthenticatedAppSituationsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/status': {
@@ -1128,10 +1188,12 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppKpisRoute: typeof AuthenticatedAppKpisRoute
   AuthenticatedAppMacroRoute: typeof AuthenticatedAppMacroRoute
   AuthenticatedAppMarketsRoute: typeof AuthenticatedAppMarketsRoute
+  AuthenticatedAppPortfolioRoute: typeof AuthenticatedAppPortfolioRoute
   AuthenticatedAppReportsRoute: typeof AuthenticatedAppReportsRoute
   AuthenticatedAppResearchRoute: typeof AuthenticatedAppResearchRoute
   AuthenticatedAppScreenerRoute: typeof AuthenticatedAppScreenerRoute
   AuthenticatedAppSectorsRoute: typeof AuthenticatedAppSectorsRoute
+  AuthenticatedAppSituationsRoute: typeof AuthenticatedAppSituationsRoute
   AuthenticatedAppStatusRoute: typeof AuthenticatedAppStatusRoute
   AuthenticatedAppSupplyChainRoute: typeof AuthenticatedAppSupplyChainRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
@@ -1159,10 +1221,12 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppKpisRoute: AuthenticatedAppKpisRoute,
   AuthenticatedAppMacroRoute: AuthenticatedAppMacroRoute,
   AuthenticatedAppMarketsRoute: AuthenticatedAppMarketsRoute,
+  AuthenticatedAppPortfolioRoute: AuthenticatedAppPortfolioRoute,
   AuthenticatedAppReportsRoute: AuthenticatedAppReportsRoute,
   AuthenticatedAppResearchRoute: AuthenticatedAppResearchRoute,
   AuthenticatedAppScreenerRoute: AuthenticatedAppScreenerRoute,
   AuthenticatedAppSectorsRoute: AuthenticatedAppSectorsRoute,
+  AuthenticatedAppSituationsRoute: AuthenticatedAppSituationsRoute,
   AuthenticatedAppStatusRoute: AuthenticatedAppStatusRoute,
   AuthenticatedAppSupplyChainRoute: AuthenticatedAppSupplyChainRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
@@ -1198,6 +1262,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   PricingRoute: PricingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
+  ShareIdRoute: ShareIdRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
   ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,
 }

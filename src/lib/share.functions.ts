@@ -28,6 +28,7 @@ export const getSharedView = createServerFn({ method: "GET" })
       svg: kind === "svg" ? str(c.svg, 900_000) : undefined,
       width: typeof c.width === "number" ? c.width : undefined,
       height: typeof c.height === "number" ? c.height : undefined,
-      view: kind === "view" ? (c.view as unknown) : undefined,
+      // Serialized as a JSON string: the view spec is validated again on the page (parseViewSpec).
+      viewJson: kind === "view" && c.view !== undefined ? JSON.stringify(c.view).slice(0, 900_000) : undefined,
     };
   });

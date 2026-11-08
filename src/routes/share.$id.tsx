@@ -35,7 +35,7 @@ function SharedPage() {
       </div>
     );
   }
-  const parsed = s.kind === "view" ? parseViewSpec(s.view) : null;
+  const parsed = s.kind === "view" && s.viewJson ? parseViewSpec(safeJson(s.viewJson)) : null;
   return (
     <div className="min-h-screen bg-background">
       <header className="flex items-center gap-3 border-b px-4 py-3 lg:px-8">
@@ -70,4 +70,12 @@ function SharedPage() {
       </main>
     </div>
   );
+}
+
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }

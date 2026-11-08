@@ -140,7 +140,10 @@ function stripMarkdown(md: string) {
 function leaves(views: ViewSpec[]): { key: string; v: LeafSpec }[] {
   const out: { key: string; v: LeafSpec }[] = [];
   views.forEach((v, i) => {
-    if (v.type !== "dashboard") return out.push({ key: String(i), v });
+    if (v.type !== "dashboard") {
+      out.push({ key: String(i), v });
+      return;
+    }
     const sections = v.sections ?? v.tabs?.flatMap((t) => t.sections) ?? [];
     let j = 0;
     for (const sec of sections) for (const item of sec.items) out.push({ key: `${i}.${j++}`, v: item as LeafSpec });
