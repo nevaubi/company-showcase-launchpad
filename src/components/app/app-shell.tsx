@@ -63,6 +63,7 @@ const NAV: { heading: string; items: NavItem[] }[] = [
       { to: "/app/screener", label: "Screener", icon: SlidersHorizontal },
       { to: "/app/compare", label: "Compare", icon: Columns3 },
       { to: "/app/filings", label: "Filings", icon: FileSearch },
+      { to: "/app/situations", label: "Situations", icon: Radar },
       { to: "/app/kpis", label: "KPI matrix", icon: Grid3x3 },
       { to: "/app/insights", label: "Insights", icon: Lightbulb },
     ],

@@ -60,6 +60,12 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     keywords: "kpi insights operating data trends mix traffic ticket backlog federal contracts lobbying short volume congress",
   },
   {
+    to: "/app/situations",
+    label: "Situations",
+    icon: Radar,
+    keywords: "screens insider buying cheap material weakness going concern auditor change covenant bridge loan federal contracts single source customer concentration red flags",
+  },
+  {
     to: "/app/kpis",
     label: "KPI matrix",
     icon: Grid3x3,
