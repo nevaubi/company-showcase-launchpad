@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LIMITS, PRICES, TIER_LABEL, trialDaysLeft, type Tier } from "@/lib/billing/plans";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
@@ -51,17 +51,32 @@ function BillingPage() {
       const uid = u.user!.id;
       const day = new Date().toISOString().slice(0, 10);
       const month = day.slice(0, 7);
-      const [tier, wl, usage] = await Promise.all([
+      const [tier, wl, usage, sub] = await Promise.all([
         supabase.rpc("effective_tier", { _user: uid }),
         supabase.from("waitlist").select("decided_at, created_at, status").eq("user_id", uid).maybeSingle(),
         supabase.from("usage_counters").select("kind, period, used").eq("user_id", uid).in("period", [day, month]),
+        supabase.from("subscriptions").select("status, current_period_end, cancel_at_period_end").eq("user_id", uid).maybeSingle(),
       ]);
       const used = (k: string, p: string) => usage.data?.find((r) => r.kind === k && r.period === p)?.used ?? 0;
       const approved = wl.data?.status === "approved" ? new Date(wl.data.decided_at ?? wl.data.created_at) : null;
-      return { tier: (tier.data ?? "none") as Tier, approved, agent: used("agent", day), report: used("report", month) };
+      return { tier: (tier.data ?? "none") as Tier, approved, agent: used("agent", day), report: used("report", month), sub: sub.data };
     },
   });
   const d = q.data;
+  const qc = useQueryClient();
+  // Back from checkout: the webhook lands within seconds, so poll the plan briefly.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("checkout")) return;
+    toast.success("Payment received — activating your plan…");
+    let n = 0;
+    const t = setInterval(() => {
+      n++;
+      qc.invalidateQueries({ queryKey: ["billing"] });
+      if (n >= 6) clearInterval(t);
+    }, 3000);
+    window.history.replaceState(null, "", "/app/billing");
+    return () => clearInterval(t);
+  }, [qc]);
   const [yearly, setYearly] = useState(false);
   const [priceId, setPriceId] = useState<string | null>(null);
   const portal = useServerFn(createPortalSession);
@@ -85,7 +100,7 @@ function BillingPage() {
         actions={
           <>
             <div className="flex items-center gap-2 text-sm"><span>Monthly</span><Switch checked={yearly} onCheckedChange={setYearly} aria-label="Yearly billing" /><span>Yearly</span></div>
-            {(d?.tier === "research" || d?.tier === "pro") && <Button variant="outline" onClick={openPortal}>Manage billing</Button>}
+            {d?.sub && <Button variant="outline" onClick={openPortal}>Manage billing</Button>}
           </>
         }
       />
@@ -102,6 +117,13 @@ function BillingPage() {
               <span className="font-display text-xl">{TIER_LABEL[d.tier]}</span>
               {d.tier === "trial" && d.approved && <Badge variant="secondary">{trialDaysLeft(d.approved, new Date())} days left</Badge>}
             </div>
+            {d.sub && d.sub.current_period_end && (d.tier === "research" || d.tier === "pro") && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {d.sub.cancel_at_period_end || d.sub.status === "canceled" ? "Ends on " : "Renews on "}
+                {new Date(d.sub.current_period_end).toLocaleDateString()}
+              </p>
+            )}
+            {d.sub?.status === "past_due" && <p className="mt-2 text-sm text-destructive">Your last payment failed. Use Manage billing to update your card.</p>}
             {d.tier === "expired" && <p className="mt-2 text-sm text-muted-foreground">Your trial has ended. Your saved work is kept; AI tools and exports are locked until you subscribe.</p>}
           </Panel>
           <Panel title="Usage" className="min-w-0">

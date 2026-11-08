@@ -4,6 +4,7 @@ import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
 import { Button } from "@/components/ui/button";
 import { useDemoSignIn } from "@/hooks/use-demo-sign-in";
 import { cn } from "@/lib/utils";
+import { LIMITS, PRICES } from "@/lib/billing/plans";
 
 export const Route = createFileRoute("/pricing")({
   head: () => ({
@@ -11,10 +12,10 @@ export const Route = createFileRoute("/pricing")({
       { title: "Pricing — Filed Under" },
       {
         name: "description",
-        content: "Plans for individual investors, professional analysts and research teams. Start free with source-linked financials.",
+        content: "14-day free trial, then Research ($39/mo) or Pro ($129/mo). Source-linked US equity research with an AI research agent.",
       },
       { property: "og:title", content: "Pricing — Filed Under" },
-      { property: "og:description", content: "Start free. Upgrade for the research agent, unlimited source panels, theses and exports." },
+      { property: "og:description", content: "14-day free trial, then Research or Pro. Every number links to its SEC source." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -24,42 +25,48 @@ export const Route = createFileRoute("/pricing")({
 
 const PLANS = [
   {
-    name: "Reader",
+    name: "Free trial",
     price: "$0",
-    cadence: "forever",
-    blurb: "For checking the numbers behind the headlines.",
-    cta: "Create free account",
+    cadence: "for 14 days",
+    blurb: "Everything to evaluate the platform once you're off the waiting list.",
+    cta: "Join the waiting list",
     features: [
-      "Covered companies' statements, annual & quarterly",
+      "Every covered company: financials, filings, IR data, valuation",
       "Click-to-source on every value",
-      "SEC filing viewer and insider trades",
-      "Macro dashboard",
-      "20 research-agent questions / month",
+      `${LIMITS.trial.agent} research-agent questions a day`,
+      `${LIMITS.trial.report} custom AI reports`,
+      "Read-only after 14 days — your saved work stays",
     ],
   },
   {
-    name: "Analyst",
-    price: "$29",
-    cadence: "per month",
-    blurb: "For investors who build their own models.",
-    cta: "Start 14-day trial",
+    name: "Research",
+    price: `$${PRICES.research.monthly}`,
+    cadence: `per month · $${PRICES.research.yearly}/yr`,
+    blurb: "For investors who read and verify.",
+    cta: "Start with a free trial",
+    features: [
+      "Everything in the trial, without the time limit",
+      "Unlimited report library",
+      "Excel and Word exports",
+      `${LIMITS.research.agent} research-agent questions a day`,
+      `${LIMITS.research.report} custom AI reports a month`,
+      "Basic alerts",
+    ],
+  },
+  {
+    name: "Pro",
+    price: `$${PRICES.pro.monthly}`,
+    cadence: `per month · $${PRICES.pro.yearly.toLocaleString()}/yr`,
+    blurb: "For analysts who want the work done for them.",
+    cta: "Start with a free trial",
     featured: true,
     features: [
-      "Everything in Reader",
-      "Technicals with intraday data and earnings reactions",
-      "Unlimited research-agent questions with citations",
-      "Theses with price tracking and updates",
-      "Docs & sheets with the AI pane",
-      "CSV export of any table",
+      "Everything in Research",
+      `${LIMITS.pro.agent} research-agent questions a day, deep mode`,
+      `${LIMITS.pro.report} custom AI reports a month`,
+      "Web research and cloud browsers in the agent",
+      "Scheduled AI briefs and digests",
     ],
-  },
-  {
-    name: "Desk",
-    price: "$149",
-    cadence: "per seat / month",
-    blurb: "For funds and research teams.",
-    cta: "Talk to us",
-    features: ["Everything in Analyst", "Shared theses and watchlists", "Bulk exports and API access", "Custom coverage requests", "SSO and audit log"],
   },
 ];
 
@@ -127,7 +134,7 @@ function Pricing() {
               ["Where does the data come from?", "SEC EDGAR (XBRL company facts, inline-XBRL filings, Form 4, 8-K), Yahoo Finance for prices and FRED for macro. Every financial value carries its accession number."],
               ["How are quarterly cash flows calculated?", "10-Qs report cash flow year-to-date. We derive each discrete quarter by subtracting the prior year-to-date figure, and the source panel shows both parts."],
               ["Is this investment advice?", "No. Filed Under is a research tool. Verify anything important in the source document — that's what the panel is for."],
-              ["Can I cancel anytime?", "Yes. Plans are month to month."],
+              ["Can I cancel anytime?", "Yes. Cancel from the Billing page; your plan keeps working until the end of the period you paid for."],
             ].map(([q, a]) => (
               <div key={q} className="py-5">
                 <dt className="font-medium">{q}</dt>

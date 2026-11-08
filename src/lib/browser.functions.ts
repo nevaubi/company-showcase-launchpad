@@ -1,7 +1,7 @@
 // Server functions behind the assistant's in-panel browser (Browser Use Cloud).
 // Every run handle carries an HMAC of (run id, user id) keyed on the server secret, so a signed-in
 // user can only read, list files of, or stop runs they started. The API key never reaches the client.
-import { requireAppAccess } from "@/lib/app-access-middleware";
+import { requireAppAccess, requireFeature } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
@@ -34,7 +34,7 @@ export const browserConfigured = createServerFn({ method: "GET" })
 
 /** Start one or more browser agents in parallel. */
 export const browserStart = createServerFn({ method: "POST" })
-  .middleware([requireAppAccess])
+  .middleware([requireFeature("browser")])
   .inputValidator((d: unknown) =>
     z
       .object({

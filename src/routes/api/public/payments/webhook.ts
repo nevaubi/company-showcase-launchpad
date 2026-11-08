@@ -21,6 +21,7 @@ async function upsertSubscription(sub: any, env: StripeEnv) {
       stripe_subscription_id: sub.id,
       price_id: priceId,
       current_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
+      cancel_at_period_end: !!sub.cancel_at_period_end || !!sub.cancel_at,
       environment: env,
       updated_at: new Date().toISOString(),
     },

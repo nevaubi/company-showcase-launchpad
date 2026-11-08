@@ -47,6 +47,8 @@ export function effectiveTier(x: TierInputs): Tier {
   if (x.isAdmin) return "pro";
   const s = x.subscription;
   if (s && ["active", "trialing", "past_due"].includes(s.status) && (!s.periodEnd || s.periodEnd > x.now)) return s.tier;
+  // Cancelled plans keep working until the paid period ends.
+  if (s && s.status === "canceled" && s.periodEnd && s.periodEnd > x.now) return s.tier;
   if (!x.approvedAt) return "none";
   const ends = x.approvedAt.getTime() + TRIAL_DAYS * 86_400_000;
   return x.now.getTime() < ends ? "trial" : "expired";

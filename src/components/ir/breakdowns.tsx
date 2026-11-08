@@ -1,3 +1,4 @@
+import { useFeatureGate } from "@/hooks/use-plan";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { CheckCircle2, ChevronDown, ChevronsDown, Download, FileSpreadsheet, FileText, Loader2, Search, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -133,7 +134,9 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
     onFocusDone?.();
   }, [focus, byKey, payload, open, ticker, onFocusDone]);
 
+  const exportGate = useFeatureGate();
   const runExport = async (what: ExportKind) => {
+    if (!exportGate("exports")) return;
     const key = what.kind === "group" ? what.group.id : what.kind;
     if (exporting) return;
     setExporting(key);
@@ -352,7 +355,9 @@ function BreakdownCard({
 
   const openCell = (s: PayloadSeries, end: string, c: PayloadCell) => openIrCell(open, ticker, payload, s, end, freq, c);
 
+  const gate = useFeatureGate();
   const download = () => {
+    if (!gate("exports")) return;
     const blob = new Blob([groupCsv(payload, group, cols, freq)], { type: "text/csv;charset=utf-8" });
     downloadBlob(blob, `${ticker}-${slug(title)}-${freq === "q" ? "quarterly" : "annual"}.csv`);
   };

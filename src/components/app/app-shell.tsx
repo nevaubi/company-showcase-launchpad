@@ -1,3 +1,4 @@
+import { TrialBanner } from "@/hooks/use-plan";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -191,6 +192,7 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
           </header>
           <main className="px-4 pb-12 pt-4 lg:px-6">
             <HubTabs pathname={pathname} />
+            <TrialBanner />
             {children}
           </main>
         </div>

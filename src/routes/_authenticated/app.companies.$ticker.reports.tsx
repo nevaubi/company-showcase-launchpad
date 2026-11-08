@@ -1,3 +1,4 @@
+import { useFeatureGate } from "@/hooks/use-plan";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
@@ -247,7 +248,9 @@ function DownloadMenu({ content, brand }: { content: ReportContent | null; brand
       setBuilding(false);
     }
   };
+  const gate = useFeatureGate();
   const print = () => {
+    if (!gate("exports")) return;
     const root = document.documentElement;
     const done = () => { root.classList.remove("printing-report"); window.removeEventListener("afterprint", done); };
     root.classList.add("printing-report");
@@ -265,7 +268,7 @@ function DownloadMenu({ content, brand }: { content: ReportContent | null; brand
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-60">
         <DropdownMenuItem onClick={print}>PDF<span className="ml-auto text-[11px] text-muted-foreground">Print → Save as PDF</span></DropdownMenuItem>
-        <DropdownMenuItem disabled={!docx} onClick={() => docx && downloadBlob(docx, `${file}.docx`)}>
+        <DropdownMenuItem disabled={!docx} onClick={() => docx && gate("exports") && downloadBlob(docx, `${file}.docx`)}>
           Word (.docx)<span className="ml-auto text-[11px] text-muted-foreground">{docx ? <Badge variant="outline">Ready</Badge> : building ? "Preparing…" : ""}</span>
         </DropdownMenuItem>
       </DropdownMenuContent>

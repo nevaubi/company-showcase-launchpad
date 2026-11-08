@@ -1283,6 +1283,7 @@ export type Database = {
       }
       subscriptions: {
         Row: {
+          cancel_at_period_end: boolean
           current_period_end: string | null
           environment: string
           price_id: string | null
@@ -1294,6 +1295,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          cancel_at_period_end?: boolean
           current_period_end?: string | null
           environment?: string
           price_id?: string | null
@@ -1305,6 +1307,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          cancel_at_period_end?: boolean
           current_period_end?: string | null
           environment?: string
           price_id?: string | null
@@ -1749,6 +1752,7 @@ export type Database = {
         Args: { _firm: string; _user: string }
         Returns: undefined
       }
+      require_feature: { Args: { _feature: string }; Returns: boolean }
       set_firm_member_role: {
         Args: {
           _firm: string
@@ -1756,6 +1760,10 @@ export type Database = {
           _user: string
         }
         Returns: undefined
+      }
+      tier_has_feature: {
+        Args: { _feature: string; _tier: string }
+        Returns: boolean
       }
     }
     Enums: {

@@ -69,6 +69,11 @@ export const agentStep = createServerFn({ method: "POST" })
       const { chargeUsage } = await import("@/lib/billing/charge");
       await chargeUsage(context.supabase, "agent");
     }
+    // Deep mode is a Pro feature; other plans run the same question in normal mode.
+    if (data.effort === "high") {
+      const { data: ok } = await context.supabase.rpc("require_feature", { _feature: "deep_mode" });
+      if (!ok) data.effort = "medium";
+    }
     const { generateResponse } = await import("@lovable.dev/ai-gateway");
     const { friendlyAiError, MODEL } = await import("@/lib/ai.server");
     try {

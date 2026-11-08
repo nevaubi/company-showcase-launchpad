@@ -1,3 +1,4 @@
+import { useFeatureGate } from "@/hooks/use-plan";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { z } from "zod";
@@ -102,7 +103,9 @@ function Financials() {
     setChartOpen(true);
   };
 
+  const gate = useFeatureGate();
   const download = () => {
+    if (!gate("exports")) return;
     const blob = new Blob([statementToCsv(st, scale)], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);

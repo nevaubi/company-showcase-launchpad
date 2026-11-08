@@ -19,6 +19,11 @@ describe("plans", () => {
     expect(effectiveTier({ ...base, approvedAt: daysAgo(40), subscription: { tier: "pro", status: "active", periodEnd: null } })).toBe("pro");
     expect(effectiveTier({ ...base, approvedAt: daysAgo(40), subscription: { tier: "pro", status: "canceled", periodEnd: null } })).toBe("expired");
   });
+  it("cancelled plan works until period end, then trial-expired", () => {
+    const later = new Date(now.getTime() + 5 * 86_400_000);
+    expect(effectiveTier({ ...base, approvedAt: daysAgo(40), subscription: { tier: "research", status: "canceled", periodEnd: later } })).toBe("research");
+    expect(effectiveTier({ ...base, approvedAt: daysAgo(40), subscription: { tier: "research", status: "canceled", periodEnd: daysAgo(1) } })).toBe("expired");
+  });
   it("admins are Pro", () => expect(effectiveTier({ ...base, isAdmin: true })).toBe("pro"));
   it("limits per tier", () => {
     expect(LIMITS.trial).toEqual({ agent: 10, report: 2 });
