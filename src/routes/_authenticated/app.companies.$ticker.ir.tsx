@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { DocTables } from "@/components/ir/doc-tables";
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -161,6 +162,7 @@ function IrPage() {
           </p>
         </Panel>
       )}
+      <DocTables ticker={ticker} />
       <IrLibrary ticker={ticker} documents={data.documents} images={data.images} />
     </div>
   );
