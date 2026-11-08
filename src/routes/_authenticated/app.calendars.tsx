@@ -13,6 +13,7 @@ import {
   IposList,
   WeekAgenda,
 } from "@/components/calendars/calendars";
+import { CatalystCalendar } from "@/components/calendars/catalysts";
 import type { CalData } from "@/lib/calendars/rows";
 import {
   dividendsQuery,
@@ -25,7 +26,7 @@ import {
 import { useUniverse } from "@/lib/data";
 import { fmtRelative } from "@/lib/format";
 
-const TABS = ["week", "earnings", "economic", "dividends", "ipos"] as const;
+const TABS = ["week", "catalysts", "earnings", "economic", "dividends", "ipos"] as const;
 const search = z.object({
   tab: z.enum(TABS).optional(),
   week: z
@@ -101,6 +102,7 @@ function Calendars() {
     });
   const labels: Record<(typeof TABS)[number], string> = {
     week: "Week",
+    catalysts: "Catalysts",
     earnings: "Earnings",
     economic: "Economic",
     dividends: "Dividends",
@@ -147,6 +149,8 @@ function Calendars() {
           onWeek={(w) => go({ tab: "week", week: w })}
           onDay={(t, dd) => go({ tab: t, day: dd })}
         />
+      ) : tab === "catalysts" ? (
+        <CatalystCalendar d={d} />
       ) : tab === "earnings" ? (
         <EarningsList key={day ?? "all"} d={d} day={day} />
       ) : tab === "economic" ? (
