@@ -20,7 +20,13 @@ import { ResearchMarkdown } from "@/components/research/markdown";
 import { ViewRenderer } from "@/components/research/viz/view";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import LoadingState from "@/components/ui/loading-state";
@@ -52,11 +58,22 @@ import { cn } from "@/lib/utils";
 
 export type AgentsTab = "inbox" | "tasks" | "monitors" | "interests";
 
-export function AgentsPage({ tab, item, onTab, onItem }: { tab: AgentsTab; item?: string; onTab: (t: AgentsTab) => void; onItem: (id?: string) => void }) {
+export function AgentsPage({
+  tab,
+  item,
+  onTab,
+  onItem,
+}: {
+  tab: AgentsTab;
+  item?: string;
+  onTab: (t: AgentsTab) => void;
+  onItem: (id?: string) => void;
+}) {
   const state = useAgentsState({ poll: true });
   useWatchlistSync(state.data);
 
-  if (state.isLoading) return <LoadingState label="Loading your agents" variant="Dots" className="mt-10" />;
+  if (state.isLoading)
+    return <LoadingState label="Loading your agents" variant="Dots" className="mt-10" />;
   if (state.error || !state.data)
     return (
       <div className="mt-8 rounded-md border border-border p-6 text-sm">
@@ -95,7 +112,10 @@ export function AgentsPage({ tab, item, onTab, onItem }: { tab: AgentsTab; item?
 function useWatchlistSync(s: AgentsState | undefined) {
   const watch = useWatchlist();
   const act = useAgentAction();
-  const tickers = useMemo(() => (watch.data ?? []).map((w: { ticker: string }) => w.ticker).sort(), [watch.data]);
+  const tickers = useMemo(
+    () => (watch.data ?? []).map((w: { ticker: string }) => w.ticker).sort(),
+    [watch.data],
+  );
   useEffect(() => {
     if (!s || !watch.data) return;
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -114,11 +134,25 @@ const SEVERITY: Record<string, string> = {
   info: "bg-muted text-muted-foreground",
 };
 
-function InboxTab({ s, openId, onOpen }: { s: AgentsState; openId?: string; onOpen: (id?: string) => void }) {
+function InboxTab({
+  s,
+  openId,
+  onOpen,
+}: {
+  s: AgentsState;
+  openId?: string;
+  onOpen: (id?: string) => void;
+}) {
   const act = useAgentAction();
   const [filter, setFilter] = useState<"all" | "unread" | "pinned" | "report" | "alert">("all");
   const cards = s.inbox.filter((c) =>
-    filter === "all" ? true : filter === "unread" ? !c.read_at : filter === "pinned" ? c.pinned : c.kind === filter,
+    filter === "all"
+      ? true
+      : filter === "unread"
+        ? !c.read_at
+        : filter === "pinned"
+          ? c.pinned
+          : c.kind === filter,
   );
   const open = s.inbox.find((c) => c.id === openId);
   return (
@@ -138,7 +172,11 @@ function InboxTab({ s, openId, onOpen }: { s: AgentsState; openId?: string; onOp
             ]}
           />
           {s.unread > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => act.mutate({ action: "inbox.read_all" })}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => act.mutate({ action: "inbox.read_all" })}
+            >
               <Check className="mr-1 h-3.5 w-3.5" /> Mark all read
             </Button>
           )}
@@ -161,7 +199,9 @@ function InboxTab({ s, openId, onOpen }: { s: AgentsState; openId?: string; onOp
                   )}
                 >
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    {!c.read_at && <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-label="Unread" />}
+                    {!c.read_at && (
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-label="Unread" />
+                    )}
                     <span className="uppercase tracking-wide">{c.kind}</span>
                     <span>·</span>
                     <span>{c.source?.task ?? c.source?.monitor ?? "Agent"}</span>
@@ -169,16 +209,34 @@ function InboxTab({ s, openId, onOpen }: { s: AgentsState; openId?: string; onOp
                     {c.pinned && <Pin className="h-3 w-3" />}
                   </div>
                   <div className="mt-0.5 line-clamp-1 text-sm font-medium">{c.title}</div>
-                  <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{c.summary}</div>
+                  <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                    {c.summary}
+                  </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     {c.severity && c.severity !== "info" && (
-                      <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", SEVERITY[c.severity] ?? SEVERITY.info)}>{c.severity}</span>
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                          SEVERITY[c.severity] ?? SEVERITY.info,
+                        )}
+                      >
+                        {c.severity}
+                      </span>
                     )}
                     {(c.tickers ?? []).slice(0, 6).map((t) => (
-                      <span key={t} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]">{t}</span>
+                      <span
+                        key={t}
+                        className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]"
+                      >
+                        {t}
+                      </span>
                     ))}
-                    {c.n_views > 0 && <span className="text-[10px] text-muted-foreground">{c.n_views} views</span>}
-                    {c.n_files > 0 && <span className="text-[10px] text-muted-foreground">{c.n_files} files</span>}
+                    {c.n_views > 0 && (
+                      <span className="text-[10px] text-muted-foreground">{c.n_views} views</span>
+                    )}
+                    {c.n_files > 0 && (
+                      <span className="text-[10px] text-muted-foreground">{c.n_files} files</span>
+                    )}
                   </div>
                 </button>
               </li>
@@ -187,7 +245,13 @@ function InboxTab({ s, openId, onOpen }: { s: AgentsState; openId?: string; onOp
         )}
       </div>
       <div className="min-w-0">
-        {open ? <InboxDetail card={open} onClose={() => onOpen(undefined)} /> : <p className="mt-10 text-sm text-muted-foreground">Select a report or alert to read it.</p>}
+        {open ? (
+          <InboxDetail card={open} onClose={() => onOpen(undefined)} />
+        ) : (
+          <p className="mt-10 text-sm text-muted-foreground">
+            Select a report or alert to read it.
+          </p>
+        )}
       </div>
     </div>
   );
@@ -210,11 +274,15 @@ function EvidenceList({ items }: { items: Evidence[] }) {
   if (!items.length) return null;
   const md = items
     .slice(0, 40)
-    .map((e) => (e.url ? `- [${e.label}](${e.url})` : e.cite ? `- [${e.label}](${e.cite})` : `- ${e.label}`))
+    .map((e) =>
+      e.url ? `- [${e.label}](${e.url})` : e.cite ? `- [${e.label}](${e.cite})` : `- ${e.label}`,
+    )
     .join("\n");
   return (
     <section className="mt-6">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sources</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Sources
+      </h3>
       <ResearchMarkdown className="mt-2 text-sm">{md}</ResearchMarkdown>
     </section>
   );
@@ -222,19 +290,29 @@ function EvidenceList({ items }: { items: Evidence[] }) {
 
 function InboxDetail({ card, onClose }: { card: InboxCard; onClose: () => void }) {
   const act = useAgentAction();
-  const item = useQuery({ queryKey: ["agents-item", card.id], queryFn: () => fetchInboxItem(card.id), staleTime: 5 * 60_000 });
+  const item = useQuery({
+    queryKey: ["agents-item", card.id],
+    queryFn: () => fetchInboxItem(card.id),
+    staleTime: 5 * 60_000,
+  });
   return (
     <article className="rounded-md border border-border p-5">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-            {card.kind} · {card.source?.task ?? card.source?.monitor ?? "Agent"} · {fmtRelative(card.created_at)}
+            {card.kind} · {card.source?.task ?? card.source?.monitor ?? "Agent"} ·{" "}
+            {fmtRelative(card.created_at)}
           </p>
           <h2 className="mt-1 text-xl font-semibold leading-tight">{card.title}</h2>
           {card.tickers?.length ? (
             <div className="mt-2 flex flex-wrap gap-1.5">
               {card.tickers.slice(0, 12).map((t) => (
-                <Link key={t} to="/app/companies/$ticker" params={{ ticker: t }} className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted/70">
+                <Link
+                  key={t}
+                  to="/app/companies/$ticker"
+                  params={{ ticker: t }}
+                  className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted/70"
+                >
                   {t}
                 </Link>
               ))}
@@ -242,14 +320,24 @@ function InboxDetail({ card, onClose }: { card: InboxCard; onClose: () => void }
           ) : null}
         </div>
         <div className="flex gap-1">
-          <Button variant="ghost" size="sm" onClick={() => act.mutate({ action: "inbox.update", id: card.id, pinned: !card.pinned })}>
-            <Pin className={cn("mr-1 h-3.5 w-3.5", card.pinned && "fill-current")} /> {card.pinned ? "Unpin" : "Pin"}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() =>
+              act.mutate({ action: "inbox.update", id: card.id, pinned: !card.pinned })
+            }
+          >
+            <Pin className={cn("mr-1 h-3.5 w-3.5", card.pinned && "fill-current")} />{" "}
+            {card.pinned ? "Unpin" : "Pin"}
           </Button>
           <Button
             variant="ghost"
             size="sm"
             onClick={() =>
-              act.mutate({ action: "inbox.delete", id: card.id }, { onSuccess: () => onClose(), onError: (e) => toast.error(friendlyError(e)) })
+              act.mutate(
+                { action: "inbox.delete", id: card.id },
+                { onSuccess: () => onClose(), onError: (e) => toast.error(friendlyError(e)) },
+              )
             }
           >
             <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
@@ -287,12 +375,19 @@ function InboxDetail({ card, onClose }: { card: InboxCard; onClose: () => void }
           })}
           {item.data.files?.length ? (
             <section className="mt-6">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Files</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Files
+              </h3>
               <ul className="mt-2 flex flex-wrap gap-2">
                 {item.data.files.map((f) => (
                   <li key={f.name}>
                     {f.url ? (
-                      <a href={f.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs hover:bg-muted/50">
+                      <a
+                        href={f.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs hover:bg-muted/50"
+                      >
                         <Download className="h-3.5 w-3.5" /> {f.name}
                       </a>
                     ) : (
@@ -304,7 +399,12 @@ function InboxDetail({ card, onClose }: { card: InboxCard; onClose: () => void }
             </section>
           ) : null}
           <EvidenceList items={item.data.evidence ?? []} />
-          {item.data.model && <p className="mt-6 text-[11px] text-muted-foreground">Written by {item.data.model}; every figure is checked against the cited data before delivery.</p>}
+          {item.data.model && (
+            <p className="mt-6 text-[11px] text-muted-foreground">
+              Written by {item.data.model}; every figure is checked against the cited data before
+              delivery.
+            </p>
+          )}
         </div>
       )}
     </article>
@@ -346,10 +446,33 @@ function draftFromTask(t: AgentTask): TaskDraft {
 }
 
 function draftFromTemplate(t: TemplateTask): TaskDraft {
-  return { name: t.name, prompt: t.prompt, notes: "", cron: t.cron, once: false, scope: t.scope, deliverable: t.deliverable, deep: t.deep, enabled: true, budget_usd: t.deep ? 1 : 0.4, template: t.id };
+  return {
+    name: t.name,
+    prompt: t.prompt,
+    notes: "",
+    cron: t.cron,
+    once: false,
+    scope: t.scope,
+    deliverable: t.deliverable,
+    deep: t.deep,
+    enabled: true,
+    budget_usd: t.deep ? 1 : 0.4,
+    template: t.id,
+  };
 }
 
-const BLANK_TASK: TaskDraft = { name: "", prompt: "", notes: "", cron: "0 7 * * 1", once: false, scope: { kind: "watchlist" }, deliverable: "report", deep: false, enabled: true, budget_usd: 0.4 };
+const BLANK_TASK: TaskDraft = {
+  name: "",
+  prompt: "",
+  notes: "",
+  cron: "0 7 * * 1",
+  once: false,
+  scope: { kind: "watchlist" },
+  deliverable: "report",
+  deep: false,
+  enabled: true,
+  budget_usd: 0.4,
+};
 
 function TasksTab({ s }: { s: AgentsState }) {
   const act = useAgentAction();
@@ -364,7 +487,9 @@ function TasksTab({ s }: { s: AgentsState }) {
           </Button>
         </div>
         {!s.tasks.length ? (
-          <p className="mt-3 text-sm text-muted-foreground">No scheduled tasks yet. Start from a template below or write your own.</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            No scheduled tasks yet. Start from a template below or write your own.
+          </p>
         ) : (
           <ul className="mt-3 divide-y divide-border rounded-md border border-border">
             {s.tasks.map((t) => {
@@ -379,15 +504,28 @@ function TasksTab({ s }: { s: AgentsState }) {
                       {t.deep && <Badge variant="outline">Deep</Badge>}
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
-                      {t.schedule.kind === "cron" ? describeCron(t.schedule.cron, t.schedule.tz) : "Run once"} · {scopeLabel(t.scope)} ·{" "}
-                      {DELIVERABLE_LABEL[t.deliverable]}
+                      {t.schedule.kind === "cron"
+                        ? describeCron(t.schedule.cron, t.schedule.tz)
+                        : "Run once"}{" "}
+                      · {scopeLabel(t.scope)} · {DELIVERABLE_LABEL[t.deliverable]}
                       {t.next_at && t.enabled ? ` · next ${fmtRelative(t.next_at)}` : ""}
                     </div>
                     {t.running ? (
-                      <LoadingState label="Running" variant="Drive" since={t.running_since ? Date.parse(t.running_since) : undefined} className="mt-1.5" />
+                      <LoadingState
+                        label="Running"
+                        variant="Drive"
+                        since={t.running_since ? Date.parse(t.running_since) : undefined}
+                        className="mt-1.5"
+                      />
                     ) : last ? (
-                      <div className={cn("mt-1 text-[11px]", last.status === "failed" ? "text-destructive" : "text-muted-foreground")}>
-                        Last run {last.started_at ? fmtRelative(last.started_at) : ""}: {last.status}
+                      <div
+                        className={cn(
+                          "mt-1 text-[11px]",
+                          last.status === "failed" ? "text-destructive" : "text-muted-foreground",
+                        )}
+                      >
+                        Last run {last.started_at ? fmtRelative(last.started_at) : ""}:{" "}
+                        {last.status}
                         {last.error ? ` (${last.error.slice(0, 120)})` : ""}
                         {last.seconds ? ` · ${Math.round(last.seconds)}s` : ""}
                         {last.cost_usd_est != null ? ` · ~$${last.cost_usd_est.toFixed(2)}` : ""}
@@ -395,7 +533,23 @@ function TasksTab({ s }: { s: AgentsState }) {
                     ) : null}
                   </div>
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="sm" disabled={t.running} onClick={() => act.mutate({ action: "task.run", id: t.id }, { onSuccess: () => toast.success("Queued: results arrive in your inbox in a few minutes"), onError: (e) => toast.error(friendlyError(e)) })}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={t.running}
+                      onClick={() =>
+                        act.mutate(
+                          { action: "task.run", id: t.id },
+                          {
+                            onSuccess: () =>
+                              toast.success(
+                                "Queued: results arrive in your inbox in a few minutes",
+                              ),
+                            onError: (e) => toast.error(friendlyError(e)),
+                          },
+                        )
+                      }
+                    >
                       <Play className="mr-1 h-3.5 w-3.5" /> Run now
                     </Button>
                     <Button variant="ghost" size="sm" onClick={() => setDraft(draftFromTask(t))}>
@@ -412,7 +566,12 @@ function TasksTab({ s }: { s: AgentsState }) {
         <h2 className="text-sm font-semibold">Templates</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {s.templates.tasks.map((t) => (
-            <button key={t.id} type="button" onClick={() => setDraft(draftFromTemplate(t))} className="rounded-md border border-border p-3 text-left transition-colors hover:bg-muted/50">
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setDraft(draftFromTemplate(t))}
+              className="rounded-md border border-border p-3 text-left transition-colors hover:bg-muted/50"
+            >
               <div className="text-sm font-medium">{t.name}</div>
               <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">{t.description}</div>
               <div className="mt-2 text-[11px] text-muted-foreground">
@@ -429,7 +588,9 @@ function TasksTab({ s }: { s: AgentsState }) {
 
 function ScopeField({ value, onChange }: { value: Scope; onChange: (s: Scope) => void }) {
   const [tickers, setTickers] = useState(value.kind === "tickers" ? value.tickers.join(", ") : "");
-  const [sector, setSector] = useState(value.kind === "sector" ? value.sector : "Information Technology");
+  const [sector, setSector] = useState(
+    value.kind === "sector" ? value.sector : "Information Technology",
+  );
   return (
     <div className="space-y-2">
       <Segmented
@@ -437,7 +598,13 @@ function ScopeField({ value, onChange }: { value: Scope; onChange: (s: Scope) =>
         onChange={(k) =>
           onChange(
             k === "tickers"
-              ? { kind: "tickers", tickers: tickers.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) }
+              ? {
+                  kind: "tickers",
+                  tickers: tickers
+                    .split(/[\s,]+/)
+                    .map((x) => x.trim().toUpperCase())
+                    .filter(Boolean),
+                }
               : k === "sector"
                 ? { kind: "sector", sector }
                 : ({ kind: k } as Scope),
@@ -458,7 +625,13 @@ function ScopeField({ value, onChange }: { value: Scope; onChange: (s: Scope) =>
           placeholder="NVDA, AMD, AVGO"
           onChange={(e) => {
             setTickers(e.target.value);
-            onChange({ kind: "tickers", tickers: e.target.value.split(/[\s,]+/).map((x) => x.trim().toUpperCase()).filter(Boolean) });
+            onChange({
+              kind: "tickers",
+              tickers: e.target.value
+                .split(/[\s,]+/)
+                .map((x) => x.trim().toUpperCase())
+                .filter(Boolean),
+            });
           }}
         />
       )}
@@ -483,7 +656,15 @@ const CRON_PRESETS: { label: string; cron: string }[] = [
   { label: "1st of month", cron: "0 7 1 * *" },
 ];
 
-function TaskDialog({ draft: initial, tz, onClose }: { draft: TaskDraft; tz: string; onClose: () => void }) {
+function TaskDialog({
+  draft: initial,
+  tz,
+  onClose,
+}: {
+  draft: TaskDraft;
+  tz: string;
+  onClose: () => void;
+}) {
   const act = useAgentAction();
   const [d, setD] = useState(initial);
   const set = <K extends keyof TaskDraft>(k: K, v: TaskDraft[K]) => setD((x) => ({ ...x, [k]: v }));
@@ -523,12 +704,25 @@ function TaskDialog({ draft: initial, tz, onClose }: { draft: TaskDraft; tz: str
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="task-name">Name</Label>
-            <Input id="task-name" value={d.name} onChange={(e) => set("name", e.target.value)} placeholder="Monday watchlist changes" />
+            <Input
+              id="task-name"
+              value={d.name}
+              onChange={(e) => set("name", e.target.value)}
+              placeholder="Monday watchlist changes"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="task-prompt">What should the agent do?</Label>
-            <Textarea id="task-prompt" rows={6} value={d.prompt} onChange={(e) => set("prompt", e.target.value)} placeholder="For each company in {scope}, summarize new risk factors, insider trades over $250K and estimate moves since last week. Cite every figure." />
-            <p className="text-[11px] text-muted-foreground">{"{scope}"} is replaced with the companies in scope.</p>
+            <Textarea
+              id="task-prompt"
+              rows={6}
+              value={d.prompt}
+              onChange={(e) => set("prompt", e.target.value)}
+              placeholder="For each company in {scope}, summarize new risk factors, insider trades over $250K and estimate moves since last week. Cite every figure."
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {"{scope}"} is replaced with the companies in scope.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Companies</Label>
@@ -538,19 +732,37 @@ function TaskDialog({ draft: initial, tz, onClose }: { draft: TaskDraft; tz: str
             <div className="space-y-1.5">
               <Label>Schedule</Label>
               <div className="flex items-center gap-2">
-                <Switch checked={!d.once} onCheckedChange={(v) => set("once", !v)} id="task-recurring" />
-                <label htmlFor="task-recurring" className="text-sm">Recurring</label>
+                <Switch
+                  checked={!d.once}
+                  onCheckedChange={(v) => set("once", !v)}
+                  id="task-recurring"
+                />
+                <label htmlFor="task-recurring" className="text-sm">
+                  Recurring
+                </label>
               </div>
               {!d.once && (
                 <>
                   <div className="flex flex-wrap gap-1">
                     {CRON_PRESETS.map((p) => (
-                      <Button key={p.cron} type="button" variant={d.cron === p.cron ? "secondary" : "ghost"} size="sm" className="h-7 px-2 text-xs" onClick={() => set("cron", p.cron)}>
+                      <Button
+                        key={p.cron}
+                        type="button"
+                        variant={d.cron === p.cron ? "secondary" : "ghost"}
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => set("cron", p.cron)}
+                      >
                         {p.label}
                       </Button>
                     ))}
                   </div>
-                  <Input value={d.cron} onChange={(e) => set("cron", e.target.value)} className="font-mono text-xs" aria-label="Cron expression" />
+                  <Input
+                    value={d.cron}
+                    onChange={(e) => set("cron", e.target.value)}
+                    className="font-mono text-xs"
+                    aria-label="Cron expression"
+                  />
                   <p className="text-[11px] text-muted-foreground">{describeCron(d.cron, tz)}</p>
                 </>
               )}
@@ -561,30 +773,76 @@ function TaskDialog({ draft: initial, tz, onClose }: { draft: TaskDraft; tz: str
                 value={d.deliverable}
                 onChange={(v) => set("deliverable", v)}
                 label="Deliverable"
-                options={(Object.keys(DELIVERABLE_LABEL) as Deliverable[]).map((k) => ({ v: k, l: DELIVERABLE_LABEL[k] }))}
+                options={(Object.keys(DELIVERABLE_LABEL) as Deliverable[]).map((k) => ({
+                  v: k,
+                  l: DELIVERABLE_LABEL[k],
+                }))}
               />
               <div className="mt-3 flex items-center gap-2">
-                <Switch checked={d.deep} onCheckedChange={(v) => setD((x) => ({ ...x, deep: v, budget_usd: v ? Math.max(x.budget_usd, 1) : x.budget_usd }))} id="task-deep" />
-                <label htmlFor="task-deep" className="text-sm">Deep research (more sources, slower)</label>
+                <Switch
+                  checked={d.deep}
+                  onCheckedChange={(v) =>
+                    setD((x) => ({
+                      ...x,
+                      deep: v,
+                      budget_usd: v ? Math.max(x.budget_usd, 1) : x.budget_usd,
+                    }))
+                  }
+                  id="task-deep"
+                />
+                <label htmlFor="task-deep" className="text-sm">
+                  Deep research (more sources, slower)
+                </label>
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <Label htmlFor="task-budget" className="text-xs font-normal text-muted-foreground">Cost cap per run ($)</Label>
-                <Input id="task-budget" type="number" min={0.05} max={5} step={0.05} value={d.budget_usd} onChange={(e) => set("budget_usd", Number(e.target.value))} className="h-8 w-24" />
+                <Label htmlFor="task-budget" className="text-xs font-normal text-muted-foreground">
+                  Cost cap per run ($)
+                </Label>
+                <Input
+                  id="task-budget"
+                  type="number"
+                  min={0.05}
+                  max={5}
+                  step={0.05}
+                  value={d.budget_usd}
+                  onChange={(e) => set("budget_usd", Number(e.target.value))}
+                  className="h-8 w-24"
+                />
               </div>
             </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="task-notes">Notes for the agent (optional)</Label>
-            <Textarea id="task-notes" rows={2} value={d.notes} onChange={(e) => set("notes", e.target.value)} placeholder="Skip companies with nothing new. Keep it under one page." />
+            <Textarea
+              id="task-notes"
+              rows={2}
+              value={d.notes}
+              onChange={(e) => set("notes", e.target.value)}
+              placeholder="Skip companies with nothing new. Keep it under one page."
+            />
           </div>
           <div className="flex items-center gap-2">
-            <Switch checked={d.enabled} onCheckedChange={(v) => set("enabled", v)} id="task-enabled" />
-            <label htmlFor="task-enabled" className="text-sm">Enabled</label>
+            <Switch
+              checked={d.enabled}
+              onCheckedChange={(v) => set("enabled", v)}
+              id="task-enabled"
+            />
+            <label htmlFor="task-enabled" className="text-sm">
+              Enabled
+            </label>
           </div>
         </div>
         <DialogFooter className="gap-2 sm:justify-between">
           {d.id ? (
-            <Button variant="ghost" onClick={() => act.mutate({ action: "task.delete", id: d.id! }, { onSuccess: onClose, onError: (e) => toast.error(friendlyError(e)) })}>
+            <Button
+              variant="ghost"
+              onClick={() =>
+                act.mutate(
+                  { action: "task.delete", id: d.id! },
+                  { onSuccess: onClose, onError: (e) => toast.error(friendlyError(e)) },
+                )
+              }
+            >
               <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
             </Button>
           ) : (
@@ -606,7 +864,12 @@ function TaskDialog({ draft: initial, tz, onClose }: { draft: TaskDraft; tz: str
 
 // ───────────────────────────── Monitors
 
-type MonitorDraft = Partial<AgentMonitor> & { type: AgentMonitor["type"]; name: string; scope: Scope; params: Record<string, unknown> };
+type MonitorDraft = Partial<AgentMonitor> & {
+  type: AgentMonitor["type"];
+  name: string;
+  scope: Scope;
+  params: Record<string, unknown>;
+};
 
 function MonitorsTab({ s }: { s: AgentsState }) {
   const act = useAgentAction();
@@ -615,9 +878,14 @@ function MonitorsTab({ s }: { s: AgentsState }) {
     <div className="mt-5 space-y-8">
       <section>
         <h2 className="text-sm font-semibold">Your monitors</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Monitors check the published data on a schedule and send an alert only when something new matches. Most run without the model.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Monitors check the published data on a schedule and send an alert only when something new
+          matches. Most run without the model.
+        </p>
         {!s.monitors.length ? (
-          <p className="mt-3 text-sm text-muted-foreground">No monitors yet. Add one from the list below.</p>
+          <p className="mt-3 text-sm text-muted-foreground">
+            No monitors yet. Add one from the list below.
+          </p>
         ) : (
           <ul className="mt-3 divide-y divide-border rounded-md border border-border">
             {s.monitors.map((m) => (
@@ -631,13 +899,34 @@ function MonitorsTab({ s }: { s: AgentsState }) {
                   </div>
                   <div className="mt-0.5 text-xs text-muted-foreground">
                     {MONITOR_LABEL[m.type]} · {scopeLabel(m.scope)} · {m.seen_count} items seen
-                    {m.last_checked ? ` · checked ${fmtRelative(m.last_checked)}` : " · first check pending"}
+                    {m.last_checked
+                      ? ` · checked ${fmtRelative(m.last_checked)}`
+                      : " · first check pending"}
                   </div>
-                  {m.last_error && <div className="mt-0.5 text-[11px] text-destructive">{m.last_error.slice(0, 160)}</div>}
+                  {m.last_error && (
+                    <div className="mt-0.5 text-[11px] text-destructive">
+                      {m.last_error.slice(0, 160)}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Switch checked={m.enabled} onCheckedChange={(v) => act.mutate({ action: "monitor.save", monitor: { ...m, enabled: v } })} aria-label="Enabled" />
-                  <Button variant="ghost" size="sm" onClick={() => act.mutate({ action: "monitor.check", id: m.id }, { onSuccess: () => toast.success("Checking now") })}>
+                  <Switch
+                    checked={m.enabled}
+                    onCheckedChange={(v) =>
+                      act.mutate({ action: "monitor.save", monitor: { ...m, enabled: v } })
+                    }
+                    aria-label="Enabled"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      act.mutate(
+                        { action: "monitor.check", id: m.id },
+                        { onSuccess: () => toast.success("Checking now") },
+                      )
+                    }
+                  >
                     Check now
                   </Button>
                   <Button variant="ghost" size="sm" onClick={() => setDraft({ ...m })}>
@@ -658,8 +947,20 @@ function MonitorsTab({ s }: { s: AgentsState }) {
             {s.suggestions.map((sug, i) => (
               <li key={i} className="rounded-md border border-border p-3">
                 <div className="text-sm font-medium">{sug.name}</div>
-                {sug.reason && <div className="mt-1 text-xs text-muted-foreground">{sug.reason}</div>}
-                <Button size="sm" variant="outline" className="mt-2" onClick={() => act.mutate({ action: "suggestion.accept", index: i }, { onSuccess: () => toast.success("Monitor added") })}>
+                {sug.reason && (
+                  <div className="mt-1 text-xs text-muted-foreground">{sug.reason}</div>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() =>
+                    act.mutate(
+                      { action: "suggestion.accept", index: i },
+                      { onSuccess: () => toast.success("Monitor added") },
+                    )
+                  }
+                >
                   Add monitor
                 </Button>
               </li>
@@ -674,7 +975,17 @@ function MonitorsTab({ s }: { s: AgentsState }) {
             <button
               key={t.id}
               type="button"
-              onClick={() => setDraft({ name: t.name, type: t.type, params: t.params, scope: t.scope, escalate: t.escalate, enabled: true, cooldown_hours: 0 })}
+              onClick={() =>
+                setDraft({
+                  name: t.name,
+                  type: t.type,
+                  params: t.params,
+                  scope: t.scope,
+                  escalate: t.escalate,
+                  enabled: true,
+                  cooldown_hours: 0,
+                })
+              }
               className="rounded-md border border-border p-3 text-left transition-colors hover:bg-muted/50"
             >
               <div className="flex items-center gap-1.5 text-sm font-medium">
@@ -692,8 +1003,18 @@ function MonitorsTab({ s }: { s: AgentsState }) {
 }
 
 /** Editable parameters: numbers and strings shown as fields, booleans as switches, lists as comma-separated text. */
-function ParamFields({ params, onChange }: { params: Record<string, unknown>; onChange: (p: Record<string, unknown>) => void }) {
-  const entries = Object.entries(params).filter(([, v]) => ["number", "string", "boolean"].includes(typeof v) || (Array.isArray(v) && v.every((x) => typeof x === "string")));
+function ParamFields({
+  params,
+  onChange,
+}: {
+  params: Record<string, unknown>;
+  onChange: (p: Record<string, unknown>) => void;
+}) {
+  const entries = Object.entries(params).filter(
+    ([, v]) =>
+      ["number", "string", "boolean"].includes(typeof v) ||
+      (Array.isArray(v) && v.every((x) => typeof x === "string")),
+  );
   if (!entries.length) return null;
   const label = (k: string) => k.replace(/_/g, " ");
   return (
@@ -703,15 +1024,29 @@ function ParamFields({ params, onChange }: { params: Record<string, unknown>; on
           <Label className="text-xs capitalize">{label(k)}</Label>
           {typeof v === "boolean" ? (
             <div>
-              <Switch checked={v} onCheckedChange={(x) => onChange({ ...params, [k]: x })} aria-label={label(k)} />
+              <Switch
+                checked={v}
+                onCheckedChange={(x) => onChange({ ...params, [k]: x })}
+                aria-label={label(k)}
+              />
             </div>
           ) : Array.isArray(v) ? (
-            <Input value={v.join(", ")} onChange={(e) => onChange({ ...params, [k]: e.target.value.split(/\s*,\s*/).filter(Boolean) })} />
+            <Input
+              value={v.join(", ")}
+              onChange={(e) =>
+                onChange({ ...params, [k]: e.target.value.split(/\s*,\s*/).filter(Boolean) })
+              }
+            />
           ) : (
             <Input
               type={typeof v === "number" ? "number" : "text"}
               value={String(v)}
-              onChange={(e) => onChange({ ...params, [k]: typeof v === "number" ? Number(e.target.value) : e.target.value })}
+              onChange={(e) =>
+                onChange({
+                  ...params,
+                  [k]: typeof v === "number" ? Number(e.target.value) : e.target.value,
+                })
+              }
             />
           )}
         </div>
@@ -738,12 +1073,18 @@ function MonitorDialog({ draft: initial, onClose }: { draft: MonitorDraft; onClo
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{d.id ? "Edit monitor" : `New monitor: ${MONITOR_LABEL[d.type]}`}</DialogTitle>
+          <DialogTitle>
+            {d.id ? "Edit monitor" : `New monitor: ${MONITOR_LABEL[d.type]}`}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="mon-name">Name</Label>
-            <Input id="mon-name" value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} />
+            <Input
+              id="mon-name"
+              value={d.name}
+              onChange={(e) => setD({ ...d, name: e.target.value })}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Companies</Label>
@@ -751,17 +1092,38 @@ function MonitorDialog({ draft: initial, onClose }: { draft: MonitorDraft; onClo
           </div>
           <ParamFields params={d.params} onChange={(params) => setD({ ...d, params })} />
           <div className="flex items-center gap-2">
-            <Switch checked={!!d.escalate} onCheckedChange={(v) => setD({ ...d, escalate: v })} id="mon-escalate" />
-            <label htmlFor="mon-escalate" className="text-sm">Add a short written analysis when it fires</label>
+            <Switch
+              checked={!!d.escalate}
+              onCheckedChange={(v) => setD({ ...d, escalate: v })}
+              id="mon-escalate"
+            />
+            <label htmlFor="mon-escalate" className="text-sm">
+              Add a short written analysis when it fires
+            </label>
           </div>
           <div className="flex items-center gap-2">
-            <Label htmlFor="mon-cool" className="text-xs font-normal text-muted-foreground">Quiet period after an alert (hours)</Label>
-            <Input id="mon-cool" type="number" min={0} max={720} value={d.cooldown_hours ?? 0} onChange={(e) => setD({ ...d, cooldown_hours: Number(e.target.value) })} className="h-8 w-24" />
+            <Label htmlFor="mon-cool" className="text-xs font-normal text-muted-foreground">
+              Quiet period after an alert (hours)
+            </Label>
+            <Input
+              id="mon-cool"
+              type="number"
+              min={0}
+              max={720}
+              value={d.cooldown_hours ?? 0}
+              onChange={(e) => setD({ ...d, cooldown_hours: Number(e.target.value) })}
+              className="h-8 w-24"
+            />
           </div>
         </div>
         <DialogFooter className="gap-2 sm:justify-between">
           {d.id ? (
-            <Button variant="ghost" onClick={() => act.mutate({ action: "monitor.delete", id: d.id! }, { onSuccess: onClose })}>
+            <Button
+              variant="ghost"
+              onClick={() =>
+                act.mutate({ action: "monitor.delete", id: d.id! }, { onSuccess: onClose })
+              }
+            >
               <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
             </Button>
           ) : (
@@ -779,11 +1141,15 @@ function MonitorDialog({ draft: initial, onClose }: { draft: MonitorDraft; onClo
 // ───────────────────────────── Interests
 
 function Weights({ title, w }: { title: string; w: Record<string, number> }) {
-  const rows = Object.entries(w).sort((a, b) => b[1] - a[1]).slice(0, 15);
+  const rows = Object.entries(w)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15);
   const max = rows[0]?.[1] || 1;
   return (
     <div>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
       {!rows.length ? (
         <p className="mt-2 text-xs text-muted-foreground">Nothing yet.</p>
       ) : (
@@ -792,9 +1158,14 @@ function Weights({ title, w }: { title: string; w: Record<string, number> }) {
             <li key={k} className="flex items-center gap-2 text-xs">
               <span className="w-28 truncate font-mono">{k}</span>
               <span className="h-1.5 flex-1 rounded bg-muted">
-                <span className="block h-1.5 rounded bg-foreground/60" style={{ width: `${Math.max(4, (v / max) * 100)}%` }} />
+                <span
+                  className="block h-1.5 rounded bg-foreground/60"
+                  style={{ width: `${Math.max(4, (v / max) * 100)}%` }}
+                />
               </span>
-              <span className="w-10 text-right tabular-nums text-muted-foreground">{v.toFixed(1)}</span>
+              <span className="w-10 text-right tabular-nums text-muted-foreground">
+                {v.toFixed(1)}
+              </span>
             </li>
           ))}
         </ul>
@@ -803,7 +1174,15 @@ function Weights({ title, w }: { title: string; w: Record<string, number> }) {
   );
 }
 
-function ListEditor({ label, values, onSave }: { label: string; values: string[]; onSave: (v: string[]) => void }) {
+function ListEditor({
+  label,
+  values,
+  onSave,
+}: {
+  label: string;
+  values: string[];
+  onSave: (v: string[]) => void;
+}) {
   const [text, setText] = useState(values.join(", "));
   useEffect(() => setText(values.join(", ")), [values.join(",")]);
   return (
@@ -811,7 +1190,11 @@ function ListEditor({ label, values, onSave }: { label: string; values: string[]
       <Label className="text-xs">{label}</Label>
       <div className="flex gap-2">
         <Input value={text} onChange={(e) => setText(e.target.value)} />
-        <Button variant="outline" size="sm" onClick={() => onSave(text.split(/\s*,\s*/).filter(Boolean))}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => onSave(text.split(/\s*,\s*/).filter(Boolean))}
+        >
           Save
         </Button>
       </div>
@@ -827,7 +1210,9 @@ function InterestsTab({ s }: { s: AgentsState }) {
       <section>
         <h2 className="text-sm font-semibold">What the agents think you care about</h2>
         <p className="mt-1 text-xs text-muted-foreground">
-          Built from the companies you open, the questions you ask, your watchlist and saved screens. It shapes the "Insights for you" note and suggested monitors. {it.events} signals recorded
+          Built from the companies you open, the questions you ask, your watchlist and saved
+          screens. It shapes the "Insights for you" note and suggested monitors. {it.events} signals
+          recorded
           {it.updated_at ? `, updated ${fmtRelative(it.updated_at)}` : ""}.
         </p>
         <div className="mt-4 grid gap-6 sm:grid-cols-2">
@@ -855,26 +1240,63 @@ function InterestsTab({ s }: { s: AgentsState }) {
               { v: "off", l: "Off" },
             ]}
           />
-          <Button variant="outline" size="sm" className="mt-2" onClick={() => act.mutate({ action: "insights.run" }, { onSuccess: () => toast.success("Generating; it arrives in your inbox shortly") })}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2"
+            onClick={() =>
+              act.mutate(
+                { action: "insights.run" },
+                { onSuccess: () => toast.success("Generating; it arrives in your inbox shortly") },
+              )
+            }
+          >
             <Sparkles className="mr-1 h-3.5 w-3.5" /> Generate now
           </Button>
         </div>
         <Toggle
           label="Email me new reports and alerts"
-          hint={s.email_configured ? `Sent to ${s.email ?? "your account email"}.` : "Email isn't set up on the server yet; everything still arrives in the inbox."}
+          hint={
+            s.email_configured
+              ? `Sent to ${s.email ?? "your account email"}.`
+              : "Email isn't set up on the server yet; everything still arrives in the inbox."
+          }
           checked={s.settings.email}
           disabled={!s.email_configured}
           onChange={(v) => act.mutate({ action: "settings", email: v })}
         />
-        <ListEditor label="Always include these companies" values={it.pins.tickers} onSave={(v) => act.mutate({ action: "interests.update", pins: { tickers: v } })} />
-        <ListEditor label="Never suggest these companies" values={it.muted.tickers} onSave={(v) => act.mutate({ action: "interests.update", muted: { tickers: v } })} />
-        <ListEditor label="Topics to follow" values={it.pins.topics} onSave={(v) => act.mutate({ action: "interests.update", pins: { topics: v } })} />
-        <Button variant="ghost" size="sm" onClick={() => act.mutate({ action: "interests.update", clear: true }, { onSuccess: () => toast.success("Cleared") })}>
+        <ListEditor
+          label="Always include these companies"
+          values={it.pins.tickers}
+          onSave={(v) => act.mutate({ action: "interests.update", pins: { tickers: v } })}
+        />
+        <ListEditor
+          label="Never suggest these companies"
+          values={it.muted.tickers}
+          onSave={(v) => act.mutate({ action: "interests.update", muted: { tickers: v } })}
+        />
+        <ListEditor
+          label="Topics to follow"
+          values={it.pins.topics}
+          onSave={(v) => act.mutate({ action: "interests.update", pins: { topics: v } })}
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() =>
+            act.mutate(
+              { action: "interests.update", clear: true },
+              { onSuccess: () => toast.success("Cleared") },
+            )
+          }
+        >
           <Trash2 className="mr-1 h-3.5 w-3.5" /> Clear what was learned
         </Button>
         {it.recent.length ? (
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Recent signals</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Recent signals
+            </h3>
             <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
               {it.recent.slice(0, 12).map((e, i) => (
                 <li key={i}>
@@ -891,10 +1313,28 @@ function InterestsTab({ s }: { s: AgentsState }) {
   );
 }
 
-function Toggle({ label, hint, checked, onChange, disabled }: { label: string; hint?: ReactNode; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+function Toggle({
+  label,
+  hint,
+  checked,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  hint?: ReactNode;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <div className="flex items-start gap-3">
-      <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} aria-label={label} className="mt-0.5" />
+      <Switch
+        checked={checked}
+        onCheckedChange={onChange}
+        disabled={disabled}
+        aria-label={label}
+        className="mt-0.5"
+      />
       <div>
         <div className="text-sm">{label}</div>
         {hint && <div className="text-xs text-muted-foreground">{hint}</div>}

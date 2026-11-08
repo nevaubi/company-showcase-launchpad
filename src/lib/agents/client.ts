@@ -10,7 +10,9 @@ const PARTNER_DATA_URL =
   (import.meta.env.VITE_PARTNER_DATA_URL as string | undefined) ??
   "https://filedunderai.vercel.app/api/app-data";
 const AGENTS_URL =
-  PARTNER_DATA_URL && PARTNER_DATA_URL !== "off" ? PARTNER_DATA_URL.replace(/app-data$/, "app-agents") : null;
+  PARTNER_DATA_URL && PARTNER_DATA_URL !== "off"
+    ? PARTNER_DATA_URL.replace(/app-data$/, "app-agents")
+    : null;
 
 export type Scope =
   | { kind: "watchlist" }
@@ -87,7 +89,14 @@ export interface InboxCard {
   title: string;
   summary: string;
   created_at: string;
-  source?: { task_id?: string; task?: string; monitor_id?: string; monitor?: string; type?: string; run_id?: string };
+  source?: {
+    task_id?: string;
+    task?: string;
+    monitor_id?: string;
+    monitor?: string;
+    type?: string;
+    run_id?: string;
+  };
   tickers?: string[];
   severity?: "info" | "notable" | "high" | string;
   read_at: string | null;
@@ -103,12 +112,22 @@ export interface Evidence {
   cite?: string;
 }
 
-export interface InboxItem extends Omit<InboxCard, "read_at" | "pinned" | "n_views" | "n_files" | "n_evidence"> {
+export interface InboxItem extends Omit<
+  InboxCard,
+  "read_at" | "pinned" | "n_views" | "n_files" | "n_evidence"
+> {
   report_md?: string;
   views?: unknown[];
   files?: { name: string; url: string | null; bytes?: number; content_type?: string }[];
   evidence?: Evidence[];
-  hits?: { key: string; title: string; summary?: string; tickers?: string[]; severity?: string; evidence?: Evidence[] }[];
+  hits?: {
+    key: string;
+    title: string;
+    summary?: string;
+    tickers?: string[];
+    severity?: string;
+    evidence?: Evidence[];
+  }[];
   model?: string;
 }
 
@@ -134,7 +153,11 @@ export interface TemplateMonitor {
 }
 
 export interface Interests {
-  weights: { tickers: Record<string, number>; sectors: Record<string, number>; topics: Record<string, number> };
+  weights: {
+    tickers: Record<string, number>;
+    sectors: Record<string, number>;
+    topics: Record<string, number>;
+  };
   pins: { tickers: string[]; topics: string[] };
   muted: { tickers: string[]; topics: string[] };
   updated_at: string | null;
@@ -145,7 +168,12 @@ export interface Interests {
 
 export interface AgentsState {
   tz: string;
-  settings: { email: boolean; learning: boolean; insights: "weekly" | "daily" | "off"; insights_next_at: string | null };
+  settings: {
+    email: boolean;
+    learning: boolean;
+    insights: "weekly" | "daily" | "off";
+    insights_next_at: string | null;
+  };
   watchlist: string[];
   portfolio: { ticker: string; weight?: number | null; shares?: number | null }[];
   tasks: AgentTask[];
@@ -170,7 +198,10 @@ async function call<T>(init?: { body?: unknown }): Promise<T> {
   if (!AGENTS_URL) throw new Error("Agents are turned off");
   const res = await fetch(AGENTS_URL, {
     method: init?.body ? "POST" : "GET",
-    headers: { Authorization: `Bearer ${await token()}`, ...(init?.body ? { "Content-Type": "application/json" } : {}) },
+    headers: {
+      Authorization: `Bearer ${await token()}`,
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+    },
     body: init?.body ? JSON.stringify(init.body) : undefined,
     signal: AbortSignal.timeout(30_000),
   });
@@ -200,15 +231,27 @@ export type AgentAction =
   | { action: "inbox.update"; id: string; read?: boolean; pinned?: boolean }
   | { action: "inbox.read_all" }
   | { action: "inbox.delete"; id: string }
-  | { action: "interests.update"; clear?: boolean; pins?: Partial<Interests["pins"]>; muted?: Partial<Interests["muted"]>; learning?: boolean }
-  | { action: "settings"; email?: boolean; insights?: "weekly" | "daily" | "off"; learning?: boolean }
+  | {
+      action: "interests.update";
+      clear?: boolean;
+      pins?: Partial<Interests["pins"]>;
+      muted?: Partial<Interests["muted"]>;
+      learning?: boolean;
+    }
+  | {
+      action: "settings";
+      email?: boolean;
+      insights?: "weekly" | "daily" | "off";
+      learning?: boolean;
+    }
   | { action: "insights.run" }
   | { action: "suggestion.accept"; index: number };
 
 export function useAgentAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: AgentAction) => call<{ state?: AgentsState } & Record<string, unknown>>({ body }),
+    mutationFn: (body: AgentAction) =>
+      call<{ state?: AgentsState } & Record<string, unknown>>({ body }),
     onSuccess: (out) => {
       if (out.state) qc.setQueryData(agentsKey, out.state);
     },
@@ -220,7 +263,14 @@ export function fetchInboxItem(id: string) {
 }
 
 // ---- interest learning: page views are batched and sent every 30 seconds (only when learning is on server-side).
-type InterestEvent = { kind: "view" | "section" | "question" | "screen" | "watch" | "task"; t?: string; path?: string; section?: string; q?: string; ts: string };
+type InterestEvent = {
+  kind: "view" | "section" | "question" | "screen" | "watch" | "task";
+  t?: string;
+  path?: string;
+  section?: string;
+  q?: string;
+  ts: string;
+};
 const queue: InterestEvent[] = [];
 let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -242,7 +292,10 @@ export function recordInterest(e: Omit<InterestEvent, "ts">) {
 export function useCompanyInterest(ticker: string | undefined) {
   useEffect(() => {
     if (!ticker) return;
-    const t = setTimeout(() => recordInterest({ kind: "view", t: ticker, path: window.location.pathname }), 5000);
+    const t = setTimeout(
+      () => recordInterest({ kind: "view", t: ticker, path: window.location.pathname }),
+      5000,
+    );
     return () => clearTimeout(t);
   }, [ticker]);
 }
@@ -277,8 +330,10 @@ export function describeCron(cron: string, tz?: string) {
   const time = `${((hh + 11) % 12) + 1}:${mi.padStart(2, "0")} ${hh < 12 ? "am" : "pm"}`;
   if (dom === "*" && mon === "*" && dow === "*") return `Daily at ${time}${zone}`;
   if (dom === "*" && mon === "*" && dow === "1-5") return `Weekdays at ${time}${zone}`;
-  if (dom === "*" && mon === "*" && /^\d$/.test(dow)) return `${DOW[Number(dow)]}days at ${time}${zone}`;
-  if (/^\d+$/.test(dom) && mon === "*" && dow === "*") return `Monthly on day ${dom} at ${time}${zone}`;
+  if (dom === "*" && mon === "*" && /^\d$/.test(dow))
+    return `${DOW[Number(dow)]}days at ${time}${zone}`;
+  if (/^\d+$/.test(dom) && mon === "*" && dow === "*")
+    return `Monthly on day ${dom} at ${time}${zone}`;
   return `${cron}${zone}`;
 }
 

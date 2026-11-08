@@ -83,8 +83,21 @@ export interface Scorecard {
   quarter_end: string | null;
   metrics: ScoreMetric[];
   kpis: ScoreMetric[];
-  guidance: { label?: string; text?: string; quote?: string; low?: number | null; high?: number | null; period?: string }[];
-  guided_for_quarter: { label?: string; low?: number | null; high?: number | null; actual?: number | null; result?: string }[];
+  guidance: {
+    label?: string;
+    text?: string;
+    quote?: string;
+    low?: number | null;
+    high?: number | null;
+    period?: string;
+  }[];
+  guided_for_quarter: {
+    label?: string;
+    low?: number | null;
+    high?: number | null;
+    actual?: number | null;
+    result?: string;
+  }[];
   consensus: { basis: string; end?: string; eps?: number | null; revenue?: number | null } | null;
   latency_seconds: number | null;
 }
@@ -103,12 +116,40 @@ export interface Preview {
   sector: string;
   industry: string;
   generated: string;
-  report: { date: string; is_estimate: boolean; call_date: string | null; days_until: number; source?: { provider: string; url: string } };
-  last_report: { quarter_end: string; eps_actual: number | null; eps_estimate: number | null; surprise_pct: number | null; filed: string; url: string; move: number | null } | null;
+  report: {
+    date: string;
+    is_estimate: boolean;
+    call_date: string | null;
+    days_until: number;
+    source?: { provider: string; url: string };
+  };
+  last_report: {
+    quarter_end: string;
+    eps_actual: number | null;
+    eps_estimate: number | null;
+    surprise_pct: number | null;
+    filed: string;
+    url: string;
+    move: number | null;
+  } | null;
   consensus: {
     period: { label: string; end: string };
-    eps: { avg: number; low: number; high: number; n: number; year_ago: number | null; yoy: number | null } | null;
-    revenue: { avg: number; low: number; high: number; n: number; year_ago: number | null; yoy: number | null } | null;
+    eps: {
+      avg: number;
+      low: number;
+      high: number;
+      n: number;
+      year_ago: number | null;
+      yoy: number | null;
+    } | null;
+    revenue: {
+      avg: number;
+      low: number;
+      high: number;
+      n: number;
+      year_ago: number | null;
+      yoy: number | null;
+    } | null;
   } | null;
   street: {
     ratings?: { buy: number; hold: number; sell: number; other: number };
@@ -116,13 +157,55 @@ export interface Preview {
     targets_n?: number;
     price?: number | null;
     price_date?: string;
-    d90?: { since: string; count: number; upgrades: number; downgrades: number; initiations: number; target_raises: number; target_cuts: number; median_target_move: number | null };
+    d90?: {
+      since: string;
+      count: number;
+      upgrades: number;
+      downgrades: number;
+      initiations: number;
+      target_raises: number;
+      target_cuts: number;
+      median_target_move: number | null;
+    };
   } | null;
   kpis: PreviewKpi[];
-  guidance: { label?: string; low?: number | null; high?: number | null; actual?: number | null; result?: string; period?: string }[] | null;
-  reactions: { rows: { filed: string; day0: string; timing: string; abn: number | null; a5: number | null; a20: number | null }[]; summary?: Record<string, number | null> } | null;
-  filing_changes: { form: string; filed: string; url: string; totals: { added: number; removed: number; modified: number; numbers: number }; top_sections: { title: string; counts: Record<string, number> }[] } | null;
-  insiders: { since: string; buys: number; sells: number; buy_value: number; sell_value: number; plan_sells: number; discretionary_sell_value: number } | null;
+  guidance:
+    | {
+        label?: string;
+        low?: number | null;
+        high?: number | null;
+        actual?: number | null;
+        result?: string;
+        period?: string;
+      }[]
+    | null;
+  reactions: {
+    rows: {
+      filed: string;
+      day0: string;
+      timing: string;
+      abn: number | null;
+      a5: number | null;
+      a20: number | null;
+    }[];
+    summary?: Record<string, number | null>;
+  } | null;
+  filing_changes: {
+    form: string;
+    filed: string;
+    url: string;
+    totals: { added: number; removed: number; modified: number; numbers: number };
+    top_sections: { title: string; counts: Record<string, number> }[];
+  } | null;
+  insiders: {
+    since: string;
+    buys: number;
+    sells: number;
+    buy_value: number;
+    sell_value: number;
+    plan_sells: number;
+    discretionary_sell_value: number;
+  } | null;
   listen_for: { text: string; refs: string[] }[];
   facts: { id: string; text: string }[];
 }
