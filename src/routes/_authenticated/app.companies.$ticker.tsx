@@ -1,3 +1,4 @@
+import { useCompanyInterest } from "@/lib/agents/client";
 import { createFileRoute, Link, notFound, Outlet, useRouterState } from "@tanstack/react-router";
 import {
   ArrowUpRight,
@@ -88,6 +89,7 @@ const edgarUrl = (cik: string | number) =>
 
 function CompanyLayout() {
   const { ticker: raw } = Route.useParams();
+  useCompanyInterest(raw?.toUpperCase());
   const ticker = raw.toUpperCase();
   const company = useCompany(ticker);
   const quote = useQuotes([ticker]);
