@@ -97,7 +97,7 @@ export function ChicagoNightVideoHero({
   return (
     <section className={[styles.frame, styles.tall, className].filter(Boolean).join(" ")} aria-labelledby={id}>
       <VideoBackdrop clip={clip} scrim="strong" controlPosition="top-right">
-        <motion.div className={styles.centerCopy} variants={group} initial="hidden" animate="shown">
+        <motion.div className={styles.centerCopy} variants={group} initial={false} animate="shown">
           <motion.p variants={rise} className={styles.eyebrow}>
             <span className={styles.liveDot} aria-hidden="true" />
             {copy.eyebrow}
@@ -175,7 +175,7 @@ export function ChicagoSplitVideoHero({ primaryAction = defaultPrimary, secondar
   const scene = scenes[active];
   return (
     <section className={[styles.split, className].filter(Boolean).join(" ")} aria-labelledby="vh-split-title">
-      <motion.div className={styles.splitCopy} variants={group} initial="hidden" animate="shown">
+      <motion.div className={styles.splitCopy} variants={group} initial={false} animate="shown">
         <motion.p variants={rise} className={styles.eyebrowMuted}>{copy.eyebrow}</motion.p>
         <motion.h1 id="vh-split-title" variants={rise} className={styles.titleDark}>
           {copy.title}
@@ -253,7 +253,7 @@ export function MarketsVideoHero({ primaryAction = defaultPrimary, secondaryActi
     <section className={[styles.frame, styles.tall, className].filter(Boolean).join(" ")} aria-labelledby="vh-market-title">
       <VideoBackdrop clip={clips.marketTerminal} scrim="side" controlPosition="bottom-right">
         <div className={styles.marketGrid}>
-          <motion.div className={styles.leftCopy} variants={group} initial="hidden" animate="shown">
+          <motion.div className={styles.leftCopy} variants={group} initial={false} animate="shown">
             <motion.p variants={rise} className={styles.eyebrow}>
               <span className={styles.liveDot} aria-hidden="true" />
               {copy.eyebrow}
