@@ -1,0 +1,12 @@
+/* Copy beside the live demo on wide screens, alternating sides; stacked on narrow ones. */
+.stack { display: grid; gap: clamp(64px, 9vw, 120px); container-type: inline-size; }
+.section { display: grid; gap: 28px; align-items: center; }
+@container (min-width: 960px) {
+  .section { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 56px; }
+  .section[data-flip="true"] { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+  .section[data-flip="true"] .copy { order: 2; }
+}
+.copy { display: grid; gap: 12px; max-width: 44ch; }
+.title { margin: 0; color: var(--foreground); font-size: clamp(24px, 3vw, 34px); font-weight: 500; letter-spacing: -.02em; line-height: 1.15; text-wrap: balance; }
+.body { margin: 0; color: var(--text-secondary); font-size: var(--text-base); line-height: 1.6; text-wrap: pretty; }
+.demo { min-width: 0; }

@@ -1,0 +1,24 @@
+/* Shared layout for the Filed Under heroes: a rounded stage, centered copy, and room for the effect around it. */
+.frame { border-radius: 28px; border: 1px solid var(--border); background: var(--surface); }
+.dots { border-radius: inherit; background: var(--surface); }
+.fill { display: grid; place-items: center; min-height: clamp(560px, 82vh, 820px); padding-block: 72px; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); }
+.ink { display: grid; place-items: center; min-height: clamp(560px, 82vh, 820px); padding-block: 72px; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)); background: var(--surface); border-radius: inherit; }
+.center { position: relative; z-index: 1; display: grid; justify-items: center; gap: 22px; max-width: 760px; text-align: center; pointer-events: none; }
+.center a, .center button { pointer-events: auto; }
+.inkTitle { max-width: 15ch; }
+.lede { max-width: 56ch; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+.fine { margin: 0; color: var(--text-muted); font-size: var(--text-xs); }
+
+.strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; width: 100%; max-width: 640px; margin: 10px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--border); }
+.strip li { display: grid; gap: 2px; padding: 14px 12px 0; text-align: left; }
+.strip li + li { border-left: 1px solid var(--border); }
+.strip strong { color: var(--foreground); font-size: var(--text-sm); font-weight: 500; }
+.strip span { color: var(--text-muted); font-size: var(--text-xs); }
+@media (max-width: 560px) {
+  .strip { grid-template-columns: minmax(0, 1fr); }
+  .strip li + li { border-left: 0; border-top: 1px solid var(--border); padding-bottom: 12px; }
+}
+
+.sandWrap { width: 100%; margin-bottom: 8px; pointer-events: auto; }
+.sand { width: 100%; font-family: var(--font-display); font-size: clamp(3.4rem, 1.2rem + 9vw, 8.5rem); font-weight: 500; letter-spacing: -.035em; line-height: 1; color: var(--foreground); }
