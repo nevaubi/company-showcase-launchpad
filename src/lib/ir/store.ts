@@ -60,7 +60,10 @@ export function storeRow(d: StoreDoc): IrDocRow {
     accn: /\/(\d{18})\//.exec(d.url)?.[1]?.replace(/^(\d{10})(\d{2})(\d{6})$/, "$1-$2-$3") ?? null,
     exhibit: null,
     kind: KIND[d.doc_type ?? "other"] ?? "other",
-    title: (d.title ?? "").split("||")[0].replace(/, opens in new window/gi, "").trim(),
+    title: (d.title ?? "")
+      .split("||")[0]
+      .replace(/, opens in new window/gi, "")
+      .trim(),
     period: d.period_end,
     filed: d.published ?? d.fetched_at?.slice(0, 10) ?? null,
     ext: (d.ext ?? "").replace(/^\./, "") || null,
@@ -101,7 +104,10 @@ export function passages(pages: string[], query: string, radius = 600, max = 8) 
     const low = pages[i].toLowerCase();
     let at = low.indexOf(q);
     while (at >= 0 && out.length < max) {
-      out.push({ page: i + 1, text: pages[i].slice(Math.max(0, at - radius), at + q.length + radius) });
+      out.push({
+        page: i + 1,
+        text: pages[i].slice(Math.max(0, at - radius), at + q.length + radius),
+      });
       at = low.indexOf(q, at + q.length + radius);
     }
   }

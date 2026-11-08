@@ -32,7 +32,9 @@ describe("IR store", () => {
   it("skips documents the app library already has and unstored ones", () => {
     const app = [{ ...storeRow(doc()), id: "app-1", source: "sec" }];
     expect(mergeStore(app, [doc()])).toHaveLength(0);
-    expect(mergeStore([], [doc(), doc({ id: "b", url: "https://x", storage_path: null })])).toHaveLength(1);
+    expect(
+      mergeStore([], [doc(), doc({ id: "b", url: "https://x", storage_path: null })]),
+    ).toHaveLength(1);
   });
 
   it("finds passages with page numbers", () => {
