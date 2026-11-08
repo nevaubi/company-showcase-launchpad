@@ -1281,6 +1281,42 @@ export type Database = {
         }
         Relationships: []
       }
+      subscriptions: {
+        Row: {
+          current_period_end: string | null
+          environment: string
+          price_id: string | null
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          tier: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          current_period_end?: string | null
+          environment?: string
+          price_id?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tier?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          current_period_end?: string | null
+          environment?: string
+          price_id?: string | null
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          tier?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       supply_links: {
         Row: {
           accn: string
@@ -1525,6 +1561,27 @@ export type Database = {
           },
         ]
       }
+      usage_counters: {
+        Row: {
+          kind: string
+          period: string
+          used: number
+          user_id: string
+        }
+        Insert: {
+          kind: string
+          period: string
+          used?: number
+          user_id: string
+        }
+        Update: {
+          kind?: string
+          period?: string
+          used?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
@@ -1623,11 +1680,13 @@ export type Database = {
           tickers: number
         }[]
       }
+      consume_usage: { Args: { _kind: string }; Returns: Json }
       create_firm: { Args: { _name: string }; Returns: string }
       decide_waitlist: {
         Args: { _status: string; _user: string }
         Returns: undefined
       }
+      effective_tier: { Args: { _user: string }; Returns: string }
       firm_role_rank: {
         Args: { _role: Database["public"]["Enums"]["firm_role"] }
         Returns: number
@@ -1685,6 +1744,7 @@ export type Database = {
           token: string
         }[]
       }
+      plan_limit: { Args: { _kind: string; _tier: string }; Returns: number }
       remove_firm_member: {
         Args: { _firm: string; _user: string }
         Returns: undefined

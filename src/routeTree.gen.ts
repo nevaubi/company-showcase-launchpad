@@ -20,6 +20,7 @@ import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedAppAdminRouteImport } from './routes/_authenticated/app.admin'
 import { Route as AuthenticatedAppAgentsRouteImport } from './routes/_authenticated/app.agents'
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
+import { Route as AuthenticatedAppBillingRouteImport } from './routes/_authenticated/app.billing'
 import { Route as AuthenticatedAppCalendarsRouteImport } from './routes/_authenticated/app.calendars'
 import { Route as AuthenticatedAppCompareRouteImport } from './routes/_authenticated/app.compare'
 import { Route as AuthenticatedAppEarningsRouteImport } from './routes/_authenticated/app.earnings'
@@ -121,6 +122,11 @@ const AuthenticatedAppAgentsRoute = AuthenticatedAppAgentsRouteImport.update({
 const AuthenticatedAppAltDataRoute = AuthenticatedAppAltDataRouteImport.update({
   id: '/alt-data',
   path: '/alt-data',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppBillingRoute = AuthenticatedAppBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const AuthenticatedAppCalendarsRoute =
@@ -408,6 +414,7 @@ export interface FileRoutesByFullPath {
   '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
+  '/app/billing': typeof AuthenticatedAppBillingRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/app/compare': typeof AuthenticatedAppCompareRoute
   '/app/earnings': typeof AuthenticatedAppEarningsRoute
@@ -467,6 +474,7 @@ export interface FileRoutesByTo {
   '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
+  '/app/billing': typeof AuthenticatedAppBillingRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/app/compare': typeof AuthenticatedAppCompareRoute
   '/app/earnings': typeof AuthenticatedAppEarningsRoute
@@ -527,6 +535,7 @@ export interface FileRoutesById {
   '/_authenticated/app/admin': typeof AuthenticatedAppAdminRoute
   '/_authenticated/app/agents': typeof AuthenticatedAppAgentsRoute
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
+  '/_authenticated/app/billing': typeof AuthenticatedAppBillingRoute
   '/_authenticated/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/_authenticated/app/compare': typeof AuthenticatedAppCompareRoute
   '/_authenticated/app/earnings': typeof AuthenticatedAppEarningsRoute
@@ -589,6 +598,7 @@ export interface FileRouteTypes {
     | '/app/admin'
     | '/app/agents'
     | '/app/alt-data'
+    | '/app/billing'
     | '/app/calendars'
     | '/app/compare'
     | '/app/earnings'
@@ -648,6 +658,7 @@ export interface FileRouteTypes {
     | '/app/admin'
     | '/app/agents'
     | '/app/alt-data'
+    | '/app/billing'
     | '/app/calendars'
     | '/app/compare'
     | '/app/earnings'
@@ -707,6 +718,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/admin'
     | '/_authenticated/app/agents'
     | '/_authenticated/app/alt-data'
+    | '/_authenticated/app/billing'
     | '/_authenticated/app/calendars'
     | '/_authenticated/app/compare'
     | '/_authenticated/app/earnings'
@@ -846,6 +858,13 @@ declare module '@tanstack/react-router' {
       path: '/alt-data'
       fullPath: '/app/alt-data'
       preLoaderRoute: typeof AuthenticatedAppAltDataRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/billing': {
+      id: '/_authenticated/app/billing'
+      path: '/billing'
+      fullPath: '/app/billing'
+      preLoaderRoute: typeof AuthenticatedAppBillingRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/calendars': {
@@ -1257,6 +1276,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAdminRoute: typeof AuthenticatedAppAdminRoute
   AuthenticatedAppAgentsRoute: typeof AuthenticatedAppAgentsRoute
   AuthenticatedAppAltDataRoute: typeof AuthenticatedAppAltDataRoute
+  AuthenticatedAppBillingRoute: typeof AuthenticatedAppBillingRoute
   AuthenticatedAppCalendarsRoute: typeof AuthenticatedAppCalendarsRoute
   AuthenticatedAppCompareRoute: typeof AuthenticatedAppCompareRoute
   AuthenticatedAppEarningsRoute: typeof AuthenticatedAppEarningsRoute
@@ -1294,6 +1314,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAdminRoute: AuthenticatedAppAdminRoute,
   AuthenticatedAppAgentsRoute: AuthenticatedAppAgentsRoute,
   AuthenticatedAppAltDataRoute: AuthenticatedAppAltDataRoute,
+  AuthenticatedAppBillingRoute: AuthenticatedAppBillingRoute,
   AuthenticatedAppCalendarsRoute: AuthenticatedAppCalendarsRoute,
   AuthenticatedAppCompareRoute: AuthenticatedAppCompareRoute,
   AuthenticatedAppEarningsRoute: AuthenticatedAppEarningsRoute,

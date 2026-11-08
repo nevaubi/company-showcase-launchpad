@@ -10,6 +10,7 @@ export type AppPath =
   | "/app/insights"
   | "/app/compare"
   | "/app/filings"
+  | "/app/billing"
   | "/app/situations"
   | "/app/markets"
   | "/app/calendars"

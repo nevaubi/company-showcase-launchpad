@@ -48,6 +48,11 @@ export const requestReport = createServerFn({ method: "POST" })
     const { coverageOf } = await import("@/lib/coverage");
     if (!coverageOf(data.ticker)) throw new Error("That company isn't covered");
     const userId = context.userId;
+    // Shared standard reports are the library (free to read); custom or forced rebuilds use AI credits.
+    if (data.scope !== "shared" || data.force) {
+      const { chargeUsage } = await import("@/lib/billing/charge");
+      await chargeUsage(context.supabase, "report");
+    }
 
     let firmName: string | null = null;
     let coverage = null as import("@/lib/reports/types").ReportInputs["coverage"];

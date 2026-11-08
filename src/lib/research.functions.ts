@@ -62,7 +62,13 @@ export const agentStep = createServerFn({ method: "POST" })
       .refine((x) => JSON.stringify(x.items).length < 900_000, "Conversation is too long — start a new session.")
       .parse(d),
   )
-  .handler(async ({ data }) => {
+  .handler(async ({ data, context }) => {
+    // A new question ends with the user's message; tool continuations don't count again.
+    const last = data.items[data.items.length - 1] as { role?: string; type?: string };
+    if (last?.role === "user") {
+      const { chargeUsage } = await import("@/lib/billing/charge");
+      await chargeUsage(context.supabase, "agent");
+    }
     const { generateResponse } = await import("@lovable.dev/ai-gateway");
     const { friendlyAiError, MODEL } = await import("@/lib/ai.server");
     try {

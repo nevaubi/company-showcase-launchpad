@@ -77,7 +77,7 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; hubs: Hub[] }[] = [
           { to: "/app/docs", label: "Docs & sheets" },
         ],
       },
-      { id: "firm", label: "Firm", pages: [{ to: "/app/firm", label: "Firm" }] },
+      { id: "firm", label: "Firm", pages: [{ to: "/app/firm", label: "Firm" }, { to: "/app/billing", label: "Billing" }] },
     ],
   },
   {

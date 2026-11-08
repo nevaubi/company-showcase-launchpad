@@ -260,6 +260,13 @@
       "when": 1794121918316,
       "tag": "0036_gate_research_data_on_app_access",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1794122366966,
+      "tag": "0037_plans_and_usage_limits",
+      "breakpoints": true
     }
   ]
 }
