@@ -1,9 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
-import { useDemoSignIn } from "@/hooks/use-demo-sign-in";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -19,7 +18,6 @@ function useSignedIn() {
 
 export function SiteHeader({ className }: { className?: string }) {
   const signedIn = useSignedIn();
-  const demo = useDemoSignIn();
   return (
     <header className={cn("sticky top-0 z-30 border-b border-transparent bg-background/80 backdrop-blur-md", className)}>
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-6">
@@ -49,9 +47,8 @@ export function SiteHeader({ className }: { className?: string }) {
               <Button variant="ghost" asChild className="hidden sm:inline-flex">
                 <Link to="/auth">Sign in</Link>
               </Button>
-              <Button onClick={() => demo.signIn()} disabled={demo.pending}>
-                {demo.pending && <Loader2 className="animate-spin" />}
-                Try the demo
+              <Button asChild>
+                <Link to="/auth" search={{ mode: "signup" }}>Join the waitlist</Link>
               </Button>
             </>
           )}
