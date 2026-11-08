@@ -15,7 +15,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/lib/data";
 import { coverageOf } from "@/lib/coverage";
 import { defaultBase, REDLINE_VERSION, textsOf, type FilingRef, type Redline } from "@/lib/redline/core";
-import { getFilingDocument } from "@/lib/sec.functions";
 import { summarizeRedline } from "@/lib/redline.functions";
 import type { RedlineSummary } from "@/lib/redline/summary";
 import type { Filing } from "@/lib/financials/types";
@@ -61,14 +60,9 @@ function useRedline(ticker: string, cik: string | undefined, form: "10-K" | "10-
       const { data: row } = await supabase.from("filing_redlines").select("payload, summary")
         .eq("from_accn", from!.accn).eq("to_accn", to!.accn).eq("version", REDLINE_VERSION).maybeSingle();
       if (row) return { redline: row.payload as unknown as Redline, stored: true, summary: (row.summary as unknown as RedlineSummary) ?? null };
-      // Not precomputed: read both filings and compare them here.
-      const [a, b] = await Promise.all([
-        getFilingDocument({ data: { cik: cik!, accn: from!.accn, doc: from!.doc } }),
-        getFilingDocument({ data: { cik: cik!, accn: to!.accn, doc: to!.doc } }),
-      ]);
-      const { computeRedlineInBrowser } = await import("@/lib/redline/compute-browser");
-      const redline = await computeRedlineInBrowser({ ticker, form, from: ref(from!), to: ref(to!), oldHtml: a.html, newHtml: b.html });
-      return { redline, stored: false, summary: null };
+      // Not precomputed: the server reads both filings, compares them and stores the result for everyone.
+      const { computeRedline } = await import("@/lib/redline.functions");
+      return computeRedline({ data: { ticker, cik: cik!, form, from: ref(from!), to: ref(to!) } });
     },
   });
 }
