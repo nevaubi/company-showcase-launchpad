@@ -126,9 +126,14 @@ export async function exhibitsOf(c: CoverageCompany, f: Candidate): Promise<Cand
 /** Downloadable files linked from the IR site (pdf, xlsx, pptx, docx…). */
 export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]> {
   const { firecrawlLinks, firecrawlMap } = await import("@/lib/web.server");
-  const pages = await firecrawlMap(c.ir, { limit: 400 });
+  const { coverageDetails } = await import("@/lib/coverage-details.server");
+  const details = coverageDetails(c.ticker);
+  const irSite = c.ir || details.ir || "";
+  const website = c.website || details.website || irSite;
+  if (!irSite) return [];
+  const pages = await firecrawlMap(irSite, { limit: 400 });
   const PAGE_RE = /(financial|quarter|results|earnings|events|presentation|report|filings|supplement|fact|kpi|metrics|investor-day)/i;
-  const picked = [c.ir, ...pages.filter((p) => PAGE_RE.test(p) && !IR_FILE_RE.test(p.split("?")[0]))].slice(0, 6);
+  const picked = [irSite, ...pages.filter((p) => PAGE_RE.test(p) && !IR_FILE_RE.test(p.split("?")[0]))].slice(0, 6);
   const links = new Set<string>(pages.filter((l) => IR_FILE_RE.test(l.split("?")[0])));
   for (const page of picked) {
     try {
@@ -140,8 +145,8 @@ export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]>
   // Tavily finds decks and supplements hosted on CDNs the IR pages only link via scripts.
   try {
     const { tavilySearch } = await import("@/lib/web.server");
-    const host = new URL(c.ir).hostname.replace(/^www\./, "");
-    const site = new URL(c.website).hostname.replace(/^www\./, "");
+    const host = new URL(irSite).hostname.replace(/^www\./, "");
+    const site = new URL(website).hostname.replace(/^www\./, "");
     for (const q of [`${c.shortName} investor presentation earnings slides pdf`, `${c.shortName} financial supplement quarterly data xlsx`]) {
       const r = await tavilySearch(q, { maxResults: 10, depth: "basic" });
       for (const x of r.results) {

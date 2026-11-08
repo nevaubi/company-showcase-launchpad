@@ -9,10 +9,12 @@ export interface CoverageCompany {
   sector: string;
   industry: string;
   sectorEtf: string;
-  website: string;
-  ir: string;
-  founded: number;
-  description: string;
+  /** Descriptive fields: present on the curated list; for the generated list they live server-side
+   *  (coverage-details.server.ts, coverageDetails()) so they stay out of the browser bundle. */
+  website?: string;
+  ir?: string;
+  founded?: number;
+  description?: string;
   peers: string[];
   /** Industry group shared across the whole universe (partner taxonomy), for peer grouping */
   group?: string;

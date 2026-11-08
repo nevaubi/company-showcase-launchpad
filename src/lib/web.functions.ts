@@ -69,10 +69,14 @@ async function buildBrief(co: NonNullable<ReturnType<typeof coverageOf>>): Promi
     const { tavilySearch, firecrawlScrape } = await import("@/lib/web.server");
     const { structured } = await import("@/lib/ai.server");
     try {
-      const irHost = new URL(co.ir).hostname;
+      const { coverageDetails } = await import("@/lib/coverage-details.server");
+      const irSite = co.ir || coverageDetails(co.ticker).ir || "";
+      const irHost = irSite ? new URL(irSite).hostname : null;
       const [calls, ir] = await Promise.all([
         tavilySearch(`${co.shortName} ${co.ticker} latest quarterly earnings call transcript highlights guidance`, { topic: "news", days: 120, maxResults: 8 }),
-        tavilySearch(`${co.shortName} quarterly results press release`, { maxResults: 4, domains: [irHost] }).catch(() => ({ results: [] })),
+        irHost
+          ? tavilySearch(`${co.shortName} quarterly results press release`, { maxResults: 4, domains: [irHost] }).catch(() => ({ results: [] }))
+          : Promise.resolve({ results: [] as Awaited<ReturnType<typeof tavilySearch>>["results"] }),
       ]);
       const ranked = [...ir.results, ...calls.results].filter((r, i, a) => a.findIndex((x) => x.url === r.url) === i);
       if (!ranked.length) return { brief: null, error: "No recent earnings call coverage found" };
