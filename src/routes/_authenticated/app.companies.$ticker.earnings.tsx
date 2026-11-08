@@ -1,3 +1,4 @@
+import { EarningsWorkflowPanel } from "@/components/earnings/earnings-views";
 import { createFileRoute } from "@tanstack/react-router";
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
@@ -85,6 +86,7 @@ function Earnings() {
 
   return (
     <div className="grid grid-cols-1 gap-5">
+      <EarningsWorkflowPanel ticker={ticker} />
       <Notes
         ticker={ticker}
         facts={facts}

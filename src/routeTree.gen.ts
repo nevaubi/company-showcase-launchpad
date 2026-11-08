@@ -21,6 +21,7 @@ import { Route as AuthenticatedAppAgentsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAppAltDataRouteImport } from './routes/_authenticated/app.alt-data'
 import { Route as AuthenticatedAppCalendarsRouteImport } from './routes/_authenticated/app.calendars'
 import { Route as AuthenticatedAppCompareRouteImport } from './routes/_authenticated/app.compare'
+import { Route as AuthenticatedAppEarningsRouteImport } from './routes/_authenticated/app.earnings'
 import { Route as AuthenticatedAppFeedRouteImport } from './routes/_authenticated/app.feed'
 import { Route as AuthenticatedAppFilingsRouteImport } from './routes/_authenticated/app.filings'
 import { Route as AuthenticatedAppFirmRouteImport } from './routes/_authenticated/app.firm'
@@ -126,6 +127,12 @@ const AuthenticatedAppCompareRoute = AuthenticatedAppCompareRouteImport.update({
   path: '/compare',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppEarningsRoute =
+  AuthenticatedAppEarningsRouteImport.update({
+    id: '/earnings',
+    path: '/earnings',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppFeedRoute = AuthenticatedAppFeedRouteImport.update({
   id: '/feed',
   path: '/feed',
@@ -389,6 +396,7 @@ export interface FileRoutesByFullPath {
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/app/compare': typeof AuthenticatedAppCompareRoute
+  '/app/earnings': typeof AuthenticatedAppEarningsRoute
   '/app/feed': typeof AuthenticatedAppFeedRoute
   '/app/filings': typeof AuthenticatedAppFilingsRoute
   '/app/firm': typeof AuthenticatedAppFirmRouteWithChildren
@@ -445,6 +453,7 @@ export interface FileRoutesByTo {
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/app/compare': typeof AuthenticatedAppCompareRoute
+  '/app/earnings': typeof AuthenticatedAppEarningsRoute
   '/app/feed': typeof AuthenticatedAppFeedRoute
   '/app/filings': typeof AuthenticatedAppFilingsRoute
   '/app/hedge-funds': typeof AuthenticatedAppHedgeFundsRoute
@@ -502,6 +511,7 @@ export interface FileRoutesById {
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
   '/_authenticated/app/calendars': typeof AuthenticatedAppCalendarsRoute
   '/_authenticated/app/compare': typeof AuthenticatedAppCompareRoute
+  '/_authenticated/app/earnings': typeof AuthenticatedAppEarningsRoute
   '/_authenticated/app/feed': typeof AuthenticatedAppFeedRoute
   '/_authenticated/app/filings': typeof AuthenticatedAppFilingsRoute
   '/_authenticated/app/firm': typeof AuthenticatedAppFirmRouteWithChildren
@@ -561,6 +571,7 @@ export interface FileRouteTypes {
     | '/app/alt-data'
     | '/app/calendars'
     | '/app/compare'
+    | '/app/earnings'
     | '/app/feed'
     | '/app/filings'
     | '/app/firm'
@@ -617,6 +628,7 @@ export interface FileRouteTypes {
     | '/app/alt-data'
     | '/app/calendars'
     | '/app/compare'
+    | '/app/earnings'
     | '/app/feed'
     | '/app/filings'
     | '/app/hedge-funds'
@@ -673,6 +685,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/alt-data'
     | '/_authenticated/app/calendars'
     | '/_authenticated/app/compare'
+    | '/_authenticated/app/earnings'
     | '/_authenticated/app/feed'
     | '/_authenticated/app/filings'
     | '/_authenticated/app/firm'
@@ -815,6 +828,13 @@ declare module '@tanstack/react-router' {
       path: '/compare'
       fullPath: '/app/compare'
       preLoaderRoute: typeof AuthenticatedAppCompareRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/earnings': {
+      id: '/_authenticated/app/earnings'
+      path: '/earnings'
+      fullPath: '/app/earnings'
+      preLoaderRoute: typeof AuthenticatedAppEarningsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/feed': {
@@ -1199,6 +1219,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAltDataRoute: typeof AuthenticatedAppAltDataRoute
   AuthenticatedAppCalendarsRoute: typeof AuthenticatedAppCalendarsRoute
   AuthenticatedAppCompareRoute: typeof AuthenticatedAppCompareRoute
+  AuthenticatedAppEarningsRoute: typeof AuthenticatedAppEarningsRoute
   AuthenticatedAppFeedRoute: typeof AuthenticatedAppFeedRoute
   AuthenticatedAppFilingsRoute: typeof AuthenticatedAppFilingsRoute
   AuthenticatedAppFirmRoute: typeof AuthenticatedAppFirmRouteWithChildren
@@ -1233,6 +1254,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAltDataRoute: AuthenticatedAppAltDataRoute,
   AuthenticatedAppCalendarsRoute: AuthenticatedAppCalendarsRoute,
   AuthenticatedAppCompareRoute: AuthenticatedAppCompareRoute,
+  AuthenticatedAppEarningsRoute: AuthenticatedAppEarningsRoute,
   AuthenticatedAppFeedRoute: AuthenticatedAppFeedRoute,
   AuthenticatedAppFilingsRoute: AuthenticatedAppFilingsRoute,
   AuthenticatedAppFirmRoute: AuthenticatedAppFirmRouteWithChildren,

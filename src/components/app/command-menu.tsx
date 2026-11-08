@@ -19,6 +19,7 @@ import {
   Users,
   Radar,
   BellRing,
+  CalendarCheck,
 } from "lucide-react";
 import {
   CommandDialog,
@@ -79,6 +80,12 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     icon: Radar,
     keywords:
       "feed changes alerts news since last visit digest today insider filing 8-k analyst upgrades downgrades monitor",
+  },
+  {
+    to: "/app/earnings",
+    label: "Earnings season",
+    icon: CalendarCheck,
+    keywords: "earnings season calendar beats misses surprise reaction preview scorecard",
   },
   {
     to: "/app/agents",
