@@ -236,7 +236,7 @@ function Research() {
   }
 
   return (
-    <div className="-mx-4 -mb-16 -mt-6 grid h-[calc(100dvh-3rem)] grid-cols-1 lg:-mx-8 lg:grid-cols-[16rem_minmax(0,1fr)]">
+    <div className="-mx-4 -mb-12 -mt-4 grid h-[calc(100dvh-3rem)] grid-cols-1 lg:-mx-6 lg:grid-cols-[16rem_minmax(0,1fr)]">
       <aside className="hidden flex-col border-r bg-sidebar lg:flex">
         <div className="p-3">
           <Button variant="outline" className="w-full justify-start" onClick={() => navigate({ search: {} })} disabled={busy}>

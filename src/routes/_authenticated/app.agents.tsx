@@ -12,7 +12,7 @@ export const Route = createFileRoute("/_authenticated/app/agents")({
   validateSearch: (s) => search.parse(s),
   head: () => ({
     meta: [
-      { title: "Agents — Filed Under" },
+      { title: "Alerts — Filed Under" },
       {
         name: "description",
         content: "Scheduled research tasks, always-on monitors and an inbox of sourced reports and alerts.",
@@ -29,7 +29,7 @@ function Agents() {
     <div className="grid grid-cols-1 gap-4">
       <PageHeader
         eyebrow="Agents"
-        title="Agents"
+        title="Alerts"
         description="Tasks run on a schedule and deliver sourced reports; monitors watch the data and alert you when something new matches."
       />
       <AgentsPage
