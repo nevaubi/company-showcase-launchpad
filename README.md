@@ -1,10 +1,8 @@
-# Company Showcase Launchpad
+# Filed Under
 
-create the landing page as well as auth, test user sign in, and use a few real companies and real data and ensure full functionality.
+Source-linked US equity research: every figure opens the SEC filing it came from.
 
-This project was built with [Lovable](https://lovable.dev).
-
-**Live app**: https://company-showcase-launchpad.lovable.app
+**Live app**: https://filedunder.ai
 
 ## Build with Lovable
 
