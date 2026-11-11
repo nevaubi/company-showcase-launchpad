@@ -64,6 +64,7 @@ function Financials() {
   const [charted, setCharted] = useState<Partial<Record<StatementKey, string[]>>>({});
   const [chartOpen, setChartOpen] = useState(true);
   const [exporting, setExporting] = useState(false);
+  const gate = useFeatureGate();
   const set = (patch: Partial<z.infer<typeof pageSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
   const filingsByAccn = useMemo(() => new Map((company.data?.filings ?? []).map((f) => [f.accn, f])), [company.data]);
@@ -103,7 +104,6 @@ function Financials() {
     setChartOpen(true);
   };
 
-  const gate = useFeatureGate();
   const download = () => {
     if (!gate("exports")) return;
     const blob = new Blob([statementToCsv(st, scale)], { type: "text/csv" });
