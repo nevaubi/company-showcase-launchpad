@@ -100,6 +100,8 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   const [listening, setListening] = useState(false);
   const recording = useRef<Recording | null>(null);
   const voiceRef = useRef(false);
+  const handsFree = useRef(false);
+  const queued = useRef<{ q: string; spoken: boolean } | null>(null);
   voiceRef.current = voice;
 
   const mobile = vp.ready && vp.w < 640;
@@ -251,10 +253,18 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     setInput("");
   }
 
-  async function ask(text: string) {
+  async function ask(text: string, spoken = false) {
     if (question) return answer(text);
     const q = text.trim();
-    if (!q || busy) return;
+    if (!q) return;
+    handsFree.current = spoken;
+    if (busy) {
+      // Steering: a new message while the assistant is working stops that run and takes over.
+      queued.current = { q, spoken };
+      setInput("");
+      halt();
+      return;
+    }
     setBusy(true);
     stop.current = false;
     setInput("");
@@ -307,7 +317,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       qc,
       items,
       deep,
-      ctx: { navigate: (href) => navigate({ href }), narrate: voiceRef.current ? (text) => speakText(text) : undefined },
+      ctx: { navigate: (href) => navigate({ href }), narrate: voiceRef.current ? (text) => speakText(text).then(() => undefined) : undefined },
       stopped: () => stop.current,
       onUpdate: (t) => setMsgs((ms) => ms.map((m) => (m.id === asstId ? { ...m, ...t } : m))),
       onAsk: (qq) =>
@@ -324,7 +334,13 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     turn.content = clean.markdown;
     // Give the screen back: whatever the assistant collapsed or narrowed returns to the user's setting.
     window.dispatchEvent(new CustomEvent("fu:layout", { detail: { sidebar: "restore", panel: "restore" } }));
-    if (voiceRef.current && !stop.current && turn.content) void speakText(plainForSpeech(turn.content));
+    if (voiceRef.current && !stop.current && turn.content) {
+      // After a spoken question, the answer is followed by listening again, so the exchange carries on without a tap.
+      const again = handsFree.current;
+      void speakText(plainForSpeech(turn.content, 600)).then((finished) => {
+        if (finished && again && voiceRef.current && !recording.current && !queued.current) void listenRef.current();
+      });
+    }
     setMsgs((all) => all.map((m) => (m.id === asstId ? { ...m, ...turn, pending: false, ms } : m)));
     await supabase.from("research_messages").insert({
       session_id: session,
@@ -351,29 +367,57 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     });
   }
 
-  /** Tap to talk: the first tap records, the second sends what was heard. */
-  async function talk() {
-    if (recording.current) {
-      const rec = recording.current;
-      recording.current = null;
-      setListening(false);
-      try {
-        const heard = await rec.stop();
-        if (heard) await ask(heard);
-        else toast.message("Didn't catch that. Try again a little closer to the microphone.");
-      } catch (e) {
-        toast.error((e as Error).message || "Couldn't transcribe that");
-      }
-      return;
+  /** Send what was said. Runs on a tap, or by itself when the speaker pauses. */
+  async function sendSpoken(quiet = false) {
+    const rec = recording.current;
+    if (!rec) return;
+    recording.current = null;
+    setListening(false);
+    try {
+      const heard = await rec.stop();
+      if (heard) await askRef.current(heard, true);
+      else if (!quiet) toast.message("Didn't catch that. Try again a little closer to the microphone.");
+    } catch (e) {
+      toast.error((e as Error).message || "Couldn't transcribe that");
     }
+  }
+
+  /** Start listening. It sends by itself after a pause, and gives up quietly if nothing is said. */
+  async function listen() {
+    if (recording.current) return;
     stopSpeaking();
     try {
-      recording.current = await startRecording();
+      const rec = await startRecording({
+        onDone: (spoke) => {
+          if (recording.current !== rec) return;
+          if (spoke) return void sendSpoken(true);
+          recording.current = null;
+          setListening(false);
+          rec.cancel();
+        },
+      });
+      recording.current = rec;
       setListening(true);
     } catch (e) {
       toast.error((e as Error).name === "NotAllowedError" ? "Allow microphone access in your browser to talk to the assistant" : (e as Error).message);
     }
   }
+
+  /** Tap to talk: the first tap listens, a second tap sends at once. Talking over the assistant interrupts it. */
+  function talk() {
+    return recording.current ? sendSpoken() : listen();
+  }
+  const askRef = useRef(ask);
+  askRef.current = ask;
+  const listenRef = useRef(listen);
+  listenRef.current = listen;
+  // A message sent while a run was in flight goes out as soon as that run has stopped.
+  useEffect(() => {
+    if (busy || !queued.current) return;
+    const next = queued.current;
+    queued.current = null;
+    void askRef.current(next.q, next.spoken);
+  }, [busy]);
 
   function halt() {
     stopSpeaking();
@@ -484,7 +528,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
                         {m.content}
                       </p>
                     ) : (
-                      <AssistantTurn key={m.id} m={m} canvasOpen={wide} latest={m.id === msgs[msgs.length - 1]?.id} />
+                      <AssistantTurn key={m.id} m={m} canvasOpen={wide} latest={m.id === msgs[msgs.length - 1]?.id} onReply={(t) => void ask(t, handsFree.current)} />
                     ),
                   )}
                   {question && (
@@ -527,8 +571,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
                   }}
                   rows={1}
                   maxLength={4000}
-                  disabled={busy && !question}
-                  placeholder={listening ? "Listening… tap the microphone to send" : question ? "Type your answer…" : busy ? "Working…" : "Ask, research, model, browse, or “show me…”"}
+                  placeholder={listening ? "Listening… pause when you're done" : question ? "Type your answer…" : busy ? "Working… type or talk to redirect" : "Ask, research, model, browse, or “show me…”"}
                   className="max-h-36 min-h-9 resize-none border-0 bg-transparent px-1.5 text-[13px] shadow-none focus-visible:ring-0"
                 />
                 <div className="flex items-center gap-1 px-0.5">
@@ -545,11 +588,9 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
                     })}
                   </div>
                   <div className="ml-auto flex items-center gap-1">
-                    {!(busy && !question) && (
-                      <Button type="button" size="icon-sm" variant={listening ? "ink" : "ghost"} onClick={talk} aria-pressed={listening} aria-label={listening ? "Stop and send" : "Ask by voice"} title={listening ? "Listening. Tap to send." : "Ask by voice"} className={cn(listening && "animate-pulse")}>
-                        <Mic />
-                      </Button>
-                    )}
+                    <Button type="button" size="icon-sm" variant={listening ? "ink" : "ghost"} onClick={talk} aria-pressed={listening} aria-label={listening ? "Stop and send" : "Ask by voice"} title={listening ? "Listening. Pause to send, or tap." : busy ? "Interrupt by voice" : "Ask by voice"} className={cn(listening && "animate-pulse")}>
+                      <Mic />
+                    </Button>
                     {busy && !question ? (
                       <Button type="button" size="icon-sm" variant="outline" onClick={halt} aria-label="Stop">
                         <Square className="size-3 fill-current" />
@@ -666,11 +707,12 @@ function Walkthrough({ pins, current, onShow, onClear }: { pins: Pin[]; current:
   );
 }
 
-function AssistantTurn({ m, canvasOpen, latest }: { m: Msg; canvasOpen: boolean; latest: boolean }) {
+function AssistantTurn({ m, canvasOpen, latest, onReply }: { m: Msg; canvasOpen: boolean; latest: boolean; onReply: (text: string) => void }) {
   const [open, setOpen] = useState(false);
   const [stop, setStop] = useState(0);
   const navigate = useNavigate();
   const pins = useMemo(() => m.steps.flatMap((s) => (s.status === "done" ? (s.pins ?? []) : [])), [m.steps]);
+  const choices = useMemo(() => [...m.steps].reverse().find((s) => s.status === "done" && s.choices?.length)?.choices ?? [], [m.steps]);
   async function showStop(n: number) {
     const pin = pins.find((p) => p.n === n);
     if (!pin) return;
@@ -746,6 +788,15 @@ function AssistantTurn({ m, canvasOpen, latest }: { m: Msg; canvasOpen: boolean;
             setStop(0);
           }}
         />
+      )}
+      {!m.pending && latest && choices.length > 0 && (
+        <div className="step-in flex flex-wrap gap-1.5" role="group" aria-label="Suggested replies">
+          {choices.map((c) => (
+            <button key={c} type="button" onClick={() => onReply(c)} className="rounded-full border bg-background px-2.5 py-1 text-[12px] transition-colors hover:border-foreground hover:bg-secondary">
+              {c}
+            </button>
+          ))}
+        </div>
       )}
       {m.error && <p className="rounded-md border border-negative/30 bg-negative-soft px-2.5 py-1.5 text-xs text-negative">{m.error}</p>}
       {!m.pending && madeText && !canvasOpen && (

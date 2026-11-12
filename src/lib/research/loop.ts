@@ -24,6 +24,8 @@ export interface Step {
   batch?: number;
   /** Set on highlight and guide steps: the numbered stops left on the page. */
   pins?: Pin[];
+  /** Set on a suggest_replies step: next moves shown as buttons under the answer. */
+  choices?: string[];
 }
 
 export interface Plan {
@@ -201,6 +203,7 @@ export async function runAgent(opts: {
             st.output = r.output.slice(0, 4000);
             st.status = "done";
             st.pins = r.pins;
+            st.choices = r.choices;
             reply(r.output);
           } catch (e) {
             failed++;

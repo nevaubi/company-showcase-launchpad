@@ -17,9 +17,9 @@ export const speak = createServerFn({ method: "POST" })
       const audio = await generateSpeech({
         model: SPEECH_MODEL,
         input: data.text,
-        voice: "nova",
+        voice: "marin",
         response_format: "mp3",
-        instructions: "You are an equity research analyst talking a colleague through a company. Speak clearly and evenly, at a natural pace, without salesmanship. Read dollar amounts and percentages the way a person would say them.",
+        instructions: "Voice: warm, relaxed and conversational, like a sharp colleague talking across a desk, not a presenter reading a script. Pacing: natural and a little brisk, with small pauses between ideas and a slight lift on questions. Tone: plain and unhurried, never salesy, never dramatic. Say dollar amounts, percentages, dates and tickers the way a person would say them out loud.",
       });
       const bytes = new Uint8Array(await (await audio.blob()).arrayBuffer());
       return { mime: "audio/mpeg", audio: Buffer.from(bytes).toString("base64") };
