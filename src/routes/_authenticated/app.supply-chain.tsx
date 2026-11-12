@@ -30,6 +30,7 @@ import { focusGraph, linkDollars, nodeRisk, RELATIONS, secondOrder, simulateShoc
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+import { hasSupplyFlow, SupplySankey } from "@/components/supply/supply-sankey";
 const SupplyMap = lazy(() => import("@/components/supply/supply-map"));
 
 export const Route = createFileRoute("/_authenticated/app/supply-chain")({
@@ -201,6 +202,8 @@ function SupplyChainPage() {
               <Network className="size-6" />
               No named customers or suppliers found in {focus.name}'s latest 10-K yet.
             </div>
+          ) : view === "flow" && hasSupplyFlow(graph, revenue) ? (
+            <SupplySankey ticker={ticker} focusName={focus.name} graph={graph} revenue={revenue} selected={selected} onSelect={(k) => { setSelected(k); setTab("evidence"); }} />
           ) : view === "flow" ? (
             <SupplyFlow focusName={focus.name} graph={graph} revenue={revenue} selected={selected} onSelect={(k) => { setSelected(k); setTab("evidence"); }} />
           ) : (
@@ -210,7 +213,7 @@ function SupplyChainPage() {
               </Suspense>
             </ClientOnly>
           )}
-          <p className="pointer-events-none absolute bottom-2 left-14 text-[10.5px] text-muted-foreground">Line thickness = stated share of revenue or purchases · dashed = second-order link</p>
+          {!(view === "flow" && hasSupplyFlow(graph, revenue)) && (<p className="pointer-events-none absolute bottom-2 left-14 text-[10.5px] text-muted-foreground">Line thickness = stated share of revenue or purchases · dashed = second-order link</p>)}
         </div>
 
         <Panel title="Analysis" className="min-w-0">
