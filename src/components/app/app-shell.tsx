@@ -94,6 +94,17 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
       localStorage.setItem("fu:sidebar", c ? "0" : "1");
       return !c;
     });
+  // The assistant can collapse the sidebar while it shows something wide; "restore" goes back to the user's own setting.
+  useEffect(() => {
+    const onLayout = (e: Event) => {
+      const want = (e as CustomEvent<{ sidebar?: string }>).detail?.sidebar;
+      if (want === "collapse") setCollapsed(true);
+      else if (want === "expand") setCollapsed(false);
+      else if (want === "restore") setCollapsed(localStorage.getItem("fu:sidebar") === "1");
+    };
+    window.addEventListener("fu:layout", onLayout);
+    return () => window.removeEventListener("fu:layout", onLayout);
+  }, []);
   useEffect(() => setAiOpen(localStorage.getItem("fu:assistant") === "1"), []);
   useEffect(() => localStorage.setItem("fu:assistant", aiOpen ? "1" : "0"), [aiOpen]);
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -150,7 +161,7 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
           className={cn(
             "transition-[padding] duration-300",
             target && "min-[1760px]:pr-[var(--panel)]",
-            !target && aiOpen && aiDocked && "md:pr-[min(420px,100vw)]",
+            !target && aiOpen && aiDocked && "md:pr-[min(var(--assistant-w,420px),100vw)]",
           )}
         >
           <header className="@container sticky top-0 z-20 flex h-12 items-center gap-3 border-b bg-background/90 px-4 backdrop-blur lg:px-6">

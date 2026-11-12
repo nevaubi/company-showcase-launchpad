@@ -3,7 +3,7 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowUp, Check, ChevronLeft, ChevronRight, Circle, CircleDot, Copy, EyeOff, GripHorizontal, LayoutDashboard, ListChecks, MapPin, MessageCircleQuestion, MessageSquare,
-  MessageSquarePlus, PanelRight, PanelRightClose, PictureInPicture2, Sparkles, Square, X,
+  MessageSquarePlus, Mic, PanelRight, PanelRightClose, PictureInPicture2, Sparkles, Square, Volume2, VolumeX, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Canvas } from "@/components/research/canvas";
@@ -14,7 +14,8 @@ import LoadingState, { formatElapsed, type LoadingVariant } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { titleSession } from "@/lib/research.functions";
-import { beginTour, clearHighlights, showPin, type Pin } from "@/lib/research/dom-agent";
+import { beginTour, clearHighlights, setCurrentStop, showPin, type Pin } from "@/lib/research/dom-agent";
+import { plainForSpeech, speakText, startRecording, stopSpeaking, type Recording } from "@/lib/research/voice";
 import { runAgent, type Plan, type Question, type Step, type Turn } from "@/lib/research/loop";
 import { canvas, useCanvas } from "@/lib/research/views";
 import { sanitizeAnswer, wantsCode } from "@/lib/research/sanitize";
@@ -56,6 +57,8 @@ function suggestionsFor(path: string): string[] {
   ];
 }
 
+const COMPACT_WIDTH = "320px";
+const VOICE_KEY = "fu:assistant-voice";
 const FLOAT_KEY = "fu:assistant-float";
 const DOCK_KEY = "fu:assistant-docked";
 
@@ -91,6 +94,13 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const handoffPending = useRef(false);
   const [box, setBox] = useState({ x: 0, y: 72, w: 440, h: 640 });
+  /** The assistant narrowed itself to show something wide; cleared when the turn ends. */
+  const [compact, setCompact] = useState(false);
+  const [voice, setVoice] = useState(false);
+  const [listening, setListening] = useState(false);
+  const recording = useRef<Recording | null>(null);
+  const voiceRef = useRef(false);
+  voiceRef.current = voice;
 
   const mobile = vp.ready && vp.w < 640;
   const wide = cv.open;
@@ -106,6 +116,29 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       /* ignore */
     }
   }, [onDockedChange]);
+  useEffect(() => {
+    try {
+      setVoice(localStorage.getItem(VOICE_KEY) === "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    const onLayout = (e: Event) => {
+      const want = (e as CustomEvent<{ panel?: string }>).detail?.panel;
+      if (want === "compact") setCompact(true);
+      else if (want === "normal" || want === "restore") setCompact(false);
+    };
+    window.addEventListener("fu:layout", onLayout);
+    return () => window.removeEventListener("fu:layout", onLayout);
+  }, []);
+  // The page's right padding follows the docked panel's width.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--assistant-w", compact ? COMPACT_WIDTH : ASSISTANT_WIDTH);
+  }, [compact]);
+  useEffect(() => {
+    if (!open) stopSpeaking();
+  }, [open]);
   useEffect(() => {
     try {
       localStorage.setItem(DOCK_KEY, docked ? "1" : "0");
@@ -274,7 +307,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       qc,
       items,
       deep,
-      ctx: { navigate: (href) => navigate({ href }) },
+      ctx: { navigate: (href) => navigate({ href }), narrate: voiceRef.current ? (text) => speakText(text) : undefined },
       stopped: () => stop.current,
       onUpdate: (t) => setMsgs((ms) => ms.map((m) => (m.id === asstId ? { ...m, ...t } : m))),
       onAsk: (qq) =>
@@ -289,6 +322,9 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     const clean = sanitizeAnswer(turn.content, { allowCode: wantsCode(q) });
     for (const v of clean.views) canvas.addView(v);
     turn.content = clean.markdown;
+    // Give the screen back: whatever the assistant collapsed or narrowed returns to the user's setting.
+    window.dispatchEvent(new CustomEvent("fu:layout", { detail: { sidebar: "restore", panel: "restore" } }));
+    if (voiceRef.current && !stop.current && turn.content) void speakText(plainForSpeech(turn.content));
     setMsgs((all) => all.map((m) => (m.id === asstId ? { ...m, ...turn, pending: false, ms } : m)));
     await supabase.from("research_messages").insert({
       session_id: session,
@@ -302,12 +338,51 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     setBusy(false);
   }
 
+  function toggleVoice() {
+    setVoice((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(VOICE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      if (!next) stopSpeaking();
+      return next;
+    });
+  }
+
+  /** Tap to talk: the first tap records, the second sends what was heard. */
+  async function talk() {
+    if (recording.current) {
+      const rec = recording.current;
+      recording.current = null;
+      setListening(false);
+      try {
+        const heard = await rec.stop();
+        if (heard) await ask(heard);
+        else toast.message("Didn't catch that. Try again a little closer to the microphone.");
+      } catch (e) {
+        toast.error((e as Error).message || "Couldn't transcribe that");
+      }
+      return;
+    }
+    stopSpeaking();
+    try {
+      recording.current = await startRecording();
+      setListening(true);
+    } catch (e) {
+      toast.error((e as Error).name === "NotAllowedError" ? "Allow microphone access in your browser to talk to the assistant" : (e as Error).message);
+    }
+  }
+
   function halt() {
+    stopSpeaking();
     stop.current = true;
     if (answerRef.current) answer("(user stopped)");
   }
 
   function newChat() {
+    stopSpeaking();
     setMsgs([]);
     setSid(null);
     canvas.reset();
@@ -317,10 +392,12 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   const style = mobile
     ? undefined
     : docked
-      ? { width: wide ? `${wideW}px` : ASSISTANT_WIDTH }
+      ? { width: wide ? `${wideW}px` : compact ? COMPACT_WIDTH : ASSISTANT_WIDTH }
       : wide
         ? { left: Math.max(8, Math.min(box.x, vp.w - wideW - 8)), top: box.y, width: wideW, height: Math.max(box.h, Math.min(760, vp.h - 96)) }
-        : { left: box.x, top: box.y, width: box.w, height: box.h };
+        : compact
+          ? { left: box.x + (box.w - Math.min(box.w, 340)), top: box.y, width: Math.min(box.w, 340), height: Math.min(box.h, 440) }
+          : { left: box.x, top: box.y, width: box.w, height: box.h };
 
   const showChat = !mobile || mobilePane === "chat" || !wide;
   const showCanvas = wide && (!mobile || mobilePane === "canvas");
@@ -364,6 +441,9 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
             {wide ? <PanelRightClose /> : <LayoutDashboard />}
             {!wide && canvasCount > 0 && <span className="num absolute -right-0.5 -top-0.5 grid min-w-3.5 place-items-center rounded-full bg-ink px-0.5 text-[9px] leading-[14px] text-ink-foreground">{canvasCount}</span>}
           </Button>
+          <Button variant="ghost" size="icon-sm" onClick={toggleVoice} aria-pressed={voice} aria-label={voice ? "Turn voice off" : "Turn voice on"} title={voice ? "Voice on: answers and walkthroughs are read aloud" : "Read answers and walkthroughs aloud"}>
+            {voice ? <Volume2 /> : <VolumeX />}
+          </Button>
           <Button variant="ghost" size="icon-sm" className="max-sm:hidden" onClick={() => onDockedChange(!docked)} aria-label={docked ? "Pop out" : "Dock to side"} title={docked ? "Pop out & move" : "Dock to side"}>
             {docked ? <PictureInPicture2 /> : <PanelRight />}
           </Button>
@@ -404,7 +484,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
                         {m.content}
                       </p>
                     ) : (
-                      <AssistantTurn key={m.id} m={m} canvasOpen={wide} />
+                      <AssistantTurn key={m.id} m={m} canvasOpen={wide} latest={m.id === msgs[msgs.length - 1]?.id} />
                     ),
                   )}
                   {question && (
@@ -448,7 +528,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
                   rows={1}
                   maxLength={4000}
                   disabled={busy && !question}
-                  placeholder={question ? "Type your answer…" : busy ? "Working…" : "Ask, research, model, browse, or “show me…”"}
+                  placeholder={listening ? "Listening… tap the microphone to send" : question ? "Type your answer…" : busy ? "Working…" : "Ask, research, model, browse, or “show me…”"}
                   className="max-h-36 min-h-9 resize-none border-0 bg-transparent px-1.5 text-[13px] shadow-none focus-visible:ring-0"
                 />
                 <div className="flex items-center gap-1 px-0.5">
@@ -464,7 +544,12 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
                       );
                     })}
                   </div>
-                  <div className="ml-auto">
+                  <div className="ml-auto flex items-center gap-1">
+                    {!(busy && !question) && (
+                      <Button type="button" size="icon-sm" variant={listening ? "ink" : "ghost"} onClick={talk} aria-pressed={listening} aria-label={listening ? "Stop and send" : "Ask by voice"} title={listening ? "Listening. Tap to send." : "Ask by voice"} className={cn(listening && "animate-pulse")}>
+                        <Mic />
+                      </Button>
+                    )}
                     {busy && !question ? (
                       <Button type="button" size="icon-sm" variant="outline" onClick={halt} aria-label="Stop">
                         <Square className="size-3 fill-current" />
@@ -581,7 +666,7 @@ function Walkthrough({ pins, current, onShow, onClear }: { pins: Pin[]; current:
   );
 }
 
-function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
+function AssistantTurn({ m, canvasOpen, latest }: { m: Msg; canvasOpen: boolean; latest: boolean }) {
   const [open, setOpen] = useState(false);
   const [stop, setStop] = useState(0);
   const navigate = useNavigate();
@@ -591,8 +676,29 @@ function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
     if (!pin) return;
     setStop(n);
     const r = await showPin(pin, (href) => navigate({ href }));
-    if (!r.ok) toast.error(r.reason);
+    if (!r.ok) return void toast.error(r.reason);
+    let voiceOn = false;
+    try {
+      voiceOn = localStorage.getItem(VOICE_KEY) === "1";
+    } catch {
+      /* ignore */
+    }
+    if (voiceOn) void speakText(`${pin.label}. ${pin.explain ?? ""}`);
   }
+  // The card on the page has its own Back and Next; the strip here follows whichever stop is showing.
+  const showRef = useRef(showStop);
+  showRef.current = showStop;
+  useEffect(() => {
+    if (!latest || !pins.length) return;
+    const onStep = (e: Event) => void showRef.current((e as CustomEvent<{ n: number }>).detail.n);
+    const onCurrent = (e: Event) => setStop((e as CustomEvent<{ n: number | null }>).detail.n ?? 0);
+    window.addEventListener("fu:tour-step", onStep);
+    window.addEventListener("fu:tour-current", onCurrent);
+    return () => {
+      window.removeEventListener("fu:tour-step", onStep);
+      window.removeEventListener("fu:tour-current", onCurrent);
+    };
+  }, [latest, pins.length]);
   const shown = useMemo(() => (m.pending ? sanitizeAnswer(m.content, { allowCode: m.allowCode }).markdown : m.content), [m.content, m.pending, m.allowCode]);
   const steps = m.steps.filter((s) => s.name !== "sources");
   const sources = Array.from(new Map(m.steps.flatMap((s) => s.sources ?? []).map((x) => [x.url, x])).values());
@@ -635,6 +741,7 @@ function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
           current={stop}
           onShow={showStop}
           onClear={() => {
+            setCurrentStop(null);
             clearHighlights();
             setStop(0);
           }}
