@@ -5,7 +5,7 @@ import { z } from "zod";
 import { Segmented } from "@/components/app/segmented";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSource } from "@/components/source/source-context";
-import { useCompany } from "@/lib/data";
+import { pricesQuery, useCompany } from "@/lib/data";
 import { InsiderTable } from "@/components/app/insider-table";
 import {
   CongressTrades,
@@ -18,6 +18,7 @@ import {
 } from "@/components/influence/influence";
 import { ShortAndFlows } from "@/components/technicals/short-flows";
 import { Form144Panel } from "@/components/insiders/form144-panel";
+import { InsiderActivity } from "@/components/insiders/insider-activity";
 import { form144Query } from "@/lib/filings/review";
 import { govQuery, type OwnershipFlows } from "@/lib/influence/data";
 import { flowsQuery } from "@/lib/technicals/data";
@@ -68,6 +69,7 @@ function Insiders() {
   const gov = useQuery(govQuery(ticker));
   const flows = useQuery(flowsQuery(ticker));
   const f144 = useQuery(form144Query(ticker));
+  const prices = useQuery({ ...pricesQuery(ticker, "2y"), enabled: section === "form4" });
   const { open } = useSource();
   const F = flows.data as OwnershipFlows | undefined;
 
@@ -152,7 +154,26 @@ function Insiders() {
         ))}
       {section === "form4" &&
         (company.data ? (
-          <InsiderTable rows={company.data.insiders.map((t) => ({ ...t, ticker }))} />
+          <>
+            {prices.data && prices.data.bars.length > 1 && (
+              <InsiderActivity
+                ticker={ticker}
+                insiders={company.data.insiders}
+                bars={prices.data.bars}
+                onOpen={(t) =>
+                  open({
+                    ticker,
+                    label: `Form 4 · ${t.owner}`,
+                    periodLabel: t.date,
+                    unit: "usd",
+                    value: t.value,
+                    doc: { accn: t.accn, doc: t.doc, title: `${t.owner}: Form 4 filed ${t.filed}` },
+                  })
+                }
+              />
+            )}
+            <InsiderTable rows={company.data.insiders.map((t) => ({ ...t, ticker }))} />
+          </>
         ) : (
           <Skeleton className="h-[600px]" />
         ))}
