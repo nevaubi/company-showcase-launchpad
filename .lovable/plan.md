@@ -36,7 +36,7 @@ MS 591, PG 222, WMT 208, MA 199, XOM 199, SO 138, FCX 97, DE 64, WFC 60, GS 54, 
 Proposed order: the banks first (JPM, BAC, WFC, GS, MS, then PNC), then MA, XOM, PG, WMT, SO, FCX, DE, then the rest.
 
 ## HOOD and OSCR
-Neither has any investor-relations documents stored, and neither is one of the 78 core companies. Adding them means a full first pass: find their filings and IR site, store the documents, read them, then build their figure series. That's a new-company deep build, which your earlier rule paused, so it needs your go-ahead.
+Neither has any investor-relations documents stored, and neither is one of the 78 core companies. Adding them means a full first pass: find their filings and IR site, store the documents, read them, then build their figure series. **Approved as an exception**: run the full IR backfill and figure series for HOOD and OSCR only. The pause on deep builds for other new companies stays in place.
 
 ## Technical notes
 - The paused job is `ir-canon` (paused_reason: OpenAI 429 credit_balance_exhausted). `ir-extract-runner` and `ir-vision-runner` cursors last moved Nov 5.
