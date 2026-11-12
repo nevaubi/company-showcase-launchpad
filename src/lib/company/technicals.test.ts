@@ -34,4 +34,23 @@ describe("chart read", () => {
     const bars = series(600, (i) => (i < 300 ? 200 - i * 0.3 : 110 + (i - 300) * 0.8));
     expect(readTechnicals(bars, bars).cross?.kind).toBe("golden");
   });
+
+  it("reports an old cross as history once the price has gone the other way", () => {
+    // Falls, rallies through a golden cross, then sells off hard in the last 40 sessions.
+    const bars = series(700, (i) => (i < 300 ? 200 - i * 0.3 : i < 660 ? 110 + (i - 300) * 0.8 : 398 - (i - 660) * 4));
+    const r = readTechnicals(bars, bars);
+    const cross = r.insights.find((x) => /cross/i.test(x.title))!;
+    expect(r.cross?.kind).toBe("golden");
+    expect(cross.tone).toBe("neutral");
+    expect(cross.title).toMatch(/^Golden cross, \d+ months ago$/);
+    expect(cross.detail).toContain("no longer describes the trend");
+  });
+
+  it("keeps a recent cross as a live signal", () => {
+    // The cross lands about 36 sessions before the last bar.
+    const bars = series(480, (i) => (i < 400 ? 200 - i * 0.2 : 120 + (i - 400) * 0.9));
+    const cross = readTechnicals(bars, bars).insights.find((x) => /cross/i.test(x.title))!;
+    expect(cross.title).toBe("Golden cross");
+    expect(cross.tone).toBe("positive");
+  });
 });

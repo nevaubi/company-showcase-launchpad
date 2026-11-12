@@ -39,6 +39,8 @@ export function SetupPanel({
   const next = useNextEarnings(ticker, releases);
   const days = next ? Math.round((Date.parse(next.date) - Date.parse(today())) / 86_400_000) : null;
   const px = price ?? mc?.price ?? null;
+  // The earnings and level statistics are precomputed; say so when that run is more than a few days behind.
+  const staleDays = mc ? Math.round((Date.parse(today()) - Date.parse(mc.asOf)) / 86_400_000) : 0;
   const sup = mc?.levels.support
     .filter((l) => px == null || l.price < px)
     .sort((a, b) => b.price - a.price)[0];
@@ -55,7 +57,11 @@ export function SetupPanel({
           <Gauge className="size-3.5" /> Setup at a glance
         </span>
       }
-      subtitle={mc ? `Prices through ${fmtDate(mc.asOf)} · rules-based, no forecasts` : "Loading…"}
+      subtitle={
+        mc
+          ? `Prices through ${fmtDate(mc.asOf)}${staleDays > 4 ? ` (${staleDays} days old; levels and signals may have moved)` : ""} · rules-based, no forecasts`
+          : "Loading…"
+      }
     >
       {!mc ? (
         m.isLoading ? (

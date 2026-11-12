@@ -58,6 +58,9 @@ export interface TechRead {
   cross: { kind: "golden" | "death"; date: string } | null;
 }
 
+/** About three months of trading: past this, a moving-average cross is reported as history. */
+export const STALE_CROSS_SESSIONS = 63;
+
 export function readTechnicals(bars: Bar[], index: Bar[]): TechRead {
   const empty: TechRead = { insights: [], rsi14: null, sma50: null, sma200: null, hi52: null, lo52: null, pos52: null, volRatio: null, cross: null };
   if (bars.length < 30) return empty;
@@ -96,10 +99,20 @@ export function readTechnicals(bars: Bar[], index: Bar[]): TechRead {
     });
   }
   if (cross) {
+    const golden = cross.kind === "golden";
+    const name = golden ? "Golden cross" : "Death cross";
+    // A cross is a signal for the weeks after it. Months later it is history, and it must not read as a
+    // current bullish or bearish call next to a price that has since gone the other way.
+    const sessions = bars.length - 1 - bars.findIndex((b) => b[0] === cross!.date);
+    const fresh = sessions <= STALE_CROSS_SESSIONS;
+    const months = Math.max(1, Math.round(sessions / 21));
+    const against = m50 != null && (golden ? px < m50 : px > m50);
     insights.push({
-      tone: cross.kind === "golden" ? "positive" : "negative",
-      title: cross.kind === "golden" ? "Golden cross" : "Death cross",
-      detail: `The 50-day average crossed ${cross.kind === "golden" ? "above" : "below"} the 200-day on ${cross.date}.`,
+      tone: fresh ? (golden ? "positive" : "negative") : "neutral",
+      title: fresh ? name : `${name}, ${months} month${months === 1 ? "" : "s"} ago`,
+      detail:
+        `The 50-day average crossed ${golden ? "above" : "below"} the 200-day on ${cross.date}.` +
+        (fresh ? "" : against ? ` Price has since moved ${golden ? "below" : "above"} its 50-day average, so the cross no longer describes the trend.` : " It is an old signal, not a current one."),
     });
   }
   const pos52 = hi52 > lo52 ? (px - lo52) / (hi52 - lo52) : null;

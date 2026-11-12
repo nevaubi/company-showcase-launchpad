@@ -116,8 +116,14 @@ function Dashboard() {
           const b = BENCHMARKS.find((x) => x.symbol === s);
           return (
             <Link key={s} to="/app/markets" search={{ symbol: s }} className="rounded-lg border bg-card px-3 py-2 shadow-paper transition-colors hover:bg-secondary/60">
-              <p className="truncate text-[11px] text-muted-foreground">{b?.name.replace(/ \(.*\)/, "") ?? s}</p>
-              <p className="num text-sm font-medium">{q ? fmtPrice(q.price) : "—"}</p>
+              {/* These are ETF prices, not index levels, so the ticker is part of the label. */}
+              <p className="flex items-baseline justify-between gap-1 text-[11px] text-muted-foreground">
+                <span className="truncate">{b?.name.replace(/ \(.*\)/, "") ?? s}</span>
+                {!s.startsWith("^") && <span className="num shrink-0 text-[10px]">{s}</span>}
+              </p>
+              <p className="num text-sm font-medium" title={s.startsWith("^") ? "Index level" : `${s} share price`}>
+                {q ? (s.startsWith("^") ? q.price.toFixed(2) : fmtPrice(q.price)) : "—"}
+              </p>
               <p className={cn("num text-[11px]", (q?.changePct ?? 0) >= 0 ? "text-positive" : "text-negative")}>{q ? fmtPct(q.changePct, 2, true) : ""}</p>
             </Link>
           );

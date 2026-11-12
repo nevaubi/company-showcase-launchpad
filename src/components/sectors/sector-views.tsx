@@ -12,7 +12,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, ordinal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   BREAKDOWN_METRICS,
@@ -223,7 +223,7 @@ function PctBar({ p }: { p: number }) {
   return (
     <span
       className="inline-flex items-center gap-1.5"
-      title={`${Math.round(p * 100)}th percentile of its 10-year range`}
+      title={`${ordinal(Math.round(p * 100))} percentile of its 10-year range`}
     >
       <span className="relative h-1.5 w-14 rounded-full bg-secondary">
         <span

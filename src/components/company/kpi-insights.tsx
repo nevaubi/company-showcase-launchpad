@@ -171,7 +171,14 @@ export function KpiInsightsPanel({ ticker }: { ticker: string }) {
     >
       <KpiInsightCards f={f} />
       <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
-        {f.label}.{n ? ` Drafted by ${f.models.draft}, checked by ${f.models.check}.` : ""} {f.signals.length} signals from {f.kpi_count} KPI series;
+        {f.label}.{" "}
+        {n ? (
+          <>
+            Drafted by one model and{" "}
+            <span title={`Drafted by ${f.models.draft}; checked by ${f.models.check}`} className="underline decoration-dotted underline-offset-2">checked by a second</span>.{" "}
+          </>
+        ) : null}
+        {f.signals.length} signals from {f.kpi_count} KPI series;
         signals are ordered by how far a value moved against its own history, its peers or a prior period, not by any view of the stock.
       </p>
     </Panel>

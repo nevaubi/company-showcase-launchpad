@@ -17,7 +17,7 @@ import { getMacroBrief } from "@/lib/ai.functions";
 import { CURVE_TENORS, MACRO_TILES, macroDef, type MacroDef, type MacroGroup } from "@/lib/coverage";
 import { macroQuery, macroSummariesQuery } from "@/lib/data";
 import { changeText, displayUnits, fmtMacro, recessionBands, transformed, valueAt, type MacroSummary } from "@/lib/macro";
-import { fmtDate, fmtRelative } from "@/lib/format";
+import { fmtDate, fmtRelative, ordinal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { GROUPS, GROUP_IDS, macroSearch } from "@/lib/macro-search";
 
@@ -69,7 +69,7 @@ function Macro() {
       const readings = MACRO_TILES.flatMap((d) => {
         const r = sm?.get(d.id);
         if (!r || r.latest == null) return [];
-        const pct = r.pct10y != null ? `; ${Math.round(r.pct10y * 100)}th percentile of 10 years` : "";
+        const pct = r.pct10y != null ? `; ${ordinal(Math.round(r.pct10y * 100))} percentile of 10 years` : "";
         return [{ id: d.id, title: `${d.title} (${displayUnits(d)}) — ${d.agency}`.slice(0, 140), latest: fmtMacro(d, r.latest), date: r.date ?? "", change: `${changeText(d, r)}; 1Y ago ${fmtMacro(d, r.yearAgo)}${pct}`.slice(0, 160) }];
       });
       const asOf = readings.map((r) => r.date).sort().at(-1) ?? new Date().toISOString().slice(0, 10);
@@ -221,7 +221,7 @@ function PercentileBar({ def, s }: { def: MacroDef; s: MacroSummary }) {
         </span>
       </TooltipTrigger>
       <TooltipContent className="text-xs">
-        {Math.round(p * 100)}th percentile of the last 10 years · range {fmtMacro(def, s.min10y)} – {fmtMacro(def, s.max10y)}
+        {ordinal(Math.round(p * 100))} percentile of the last 10 years · range {fmtMacro(def, s.min10y)} – {fmtMacro(def, s.max10y)}
       </TooltipContent>
     </Tooltip>
   );

@@ -2,6 +2,7 @@
 // Everything is derived from ta.js (the same library the signal statistics use), so a value shown here matches
 // the value the scorecard and the summary sentences use.
 import TA, { type Analysis, type TaEvent } from "./ta";
+import { ordinal } from "@/lib/format";
 import type { Hist } from "./data";
 
 type Arr = (number | null)[];
@@ -504,7 +505,7 @@ export function indicatorBoard(H: Hist, A: Analysis): BoardGroup[] {
         label: "Bollinger width (20, 2)",
         value: fin(st.bbWidth) ? `${(st.bbWidth * 100).toFixed(1)}%` : "–",
         read: fin(st.bbWidthPct)
-          ? `${Math.round(st.bbWidthPct * 100)}th percentile of the last year: ${st.bbWidthPct <= 0.2 ? "narrow" : st.bbWidthPct >= 0.8 ? "wide" : "typical"}`
+          ? `${ordinal(Math.round(st.bbWidthPct * 100))} percentile of the last year: ${st.bbWidthPct <= 0.2 ? "narrow" : st.bbWidthPct >= 0.8 ? "wide" : "typical"}`
           : "–",
         tone: 0,
         formula:
