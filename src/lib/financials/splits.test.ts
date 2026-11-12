@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { hydrateDataset } from "./dataset";
 import { hasSplitRestatement, isSplitRestated, splitFactors, splitStep } from "./splits";
-import type { CompanyDataset, Statement } from "./types";
+import type { CompanyDataset, Period, Statement } from "./types";
 
 const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(path.resolve(__dirname, `../../test/fixtures/companies/${t}.json`), "utf8")) as CompanyDataset);
 const cells = (st: Statement, key: string) => st.rows.find((r) => r.key === key)!.cells;
@@ -39,6 +39,46 @@ describe("splitFactors", () => {
   });
   it("handles one period that a later filing already restated among unrestated ones", () => {
     expect(splitFactors([4532, 17773, 4385, 4324, 17136, 16977])).toEqual([4, 1, 4, 4, 1, 1]);
+  });
+});
+
+describe("splits placed by the quarterly series", () => {
+  const years = (from: number, n: number): Period[] => Array.from({ length: n }, (_, i) => ({ key: `FY${from + i}`, label: `FY${from + i}`, fy: from + i, end: `${from + i}-12-31` }));
+  // A 3-for-1 split in a year the share count also grew 22%: the yearly step is 3.66, not 3.
+  const shares = [853, 887, 3249, 3386, 3475];
+
+  it("is missed from the yearly counts alone, because the step is far from a round multiple", () => {
+    expect(splitFactors(shares)).toEqual([1, 1, 1, 1, 1]);
+  });
+  it("is placed on the nearest sizeable yearly step once the quarterly counts prove the split", () => {
+    expect(splitFactors(shares, 0.04, { periods: years(2018, 5), known: [{ factor: 3, fy: 2021 }] })).toEqual([3, 3, 1, 1, 1]);
+  });
+  it("is not placed outside the years a 10-K would have restated", () => {
+    expect(splitFactors(shares, 0.04, { periods: years(2018, 5), known: [{ factor: 3, fy: 2030 }] })).toEqual([1, 1, 1, 1, 1]);
+    expect(splitFactors(shares, 0.04, { periods: years(2018, 5), known: [{ factor: 3, fy: 2018 }] })).toEqual([1, 1, 1, 1, 1]);
+  });
+  it("does not place a split twice when the yearly step was already found", () => {
+    expect(splitFactors([600, 610, 2440, 2460], 0.04, { periods: years(2018, 4), known: [{ factor: 4, fy: 2021 }] })).toEqual([4, 4, 1, 1]);
+  });
+  it("needs a real jump to place a split on: steady counts stay as filed", () => {
+    expect(splitFactors([1000, 1010, 1020, 1030], 0.04, { periods: years(2018, 4), known: [{ factor: 2, fy: 2021 }] })).toEqual([1, 1, 1, 1]);
+  });
+});
+
+describe("real share-count shapes from the live data", () => {
+  const years = (from: number, n: number): Period[] => Array.from({ length: n }, (_, i) => ({ key: `FY${from + i}`, label: `FY${from + i}`, fy: from + i, end: `${from + i}-12-31` }));
+  it("Tesla: basic shares show the 5-for-1 and the 3-for-1 that diluted shares blur (millions, as filed)", () => {
+    const basic = [128.2, 144.2, 166, 853, 887, 2798, 2959, 3130, 3174, 3197, 3225];
+    const diluted = [128.2, 144.2, 166, 853, 887, 3249, 3386, 3475, 3485, 3498, 3528];
+    const known = [{ factor: 5, fy: 2019 }, { factor: 3, fy: 2021 }];
+    const anchors = { periods: years(2015, 11), known };
+    expect(splitFactors(basic, 0.04, anchors)).toEqual([15, 15, 15, 3, 3, 1, 1, 1, 1, 1, 1]);
+    // Even on the diluted count, where the 3-for-1 year reads 3.66, the quarterly split places it.
+    expect(splitFactors(diluted, 0.04, anchors)).toEqual([15, 15, 15, 3, 3, 1, 1, 1, 1, 1, 1]);
+  });
+  it("Palo Alto: a 3-for-1 then a 2-for-1 in quarterly basic shares, with a gap quarter and an acquisition after", () => {
+    const q = [null, null, 97, null, 293, 295, 297, null, 300, 302, 304, null, 310, 639, 646, null, 654, 659, 665, null, 679, 704, 801, null];
+    expect(splitFactors(q)).toEqual([6, 6, 6, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]);
   });
 });
 
