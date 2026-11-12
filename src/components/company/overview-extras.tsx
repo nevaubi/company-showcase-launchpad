@@ -11,10 +11,10 @@ import { marketsQuery } from "@/lib/markets/query";
 import { PATTERN_META } from "@/lib/markets/core";
 import {
   buildTimeline,
-  estimateNextEarnings,
   type EventKind,
   type TimelineEvent,
 } from "@/lib/company/catalysts";
+import { useNextEarnings } from "@/hooks/use-next-earnings";
 import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
@@ -35,14 +35,8 @@ export function SetupPanel({
 }) {
   const m = useQuery(marketsQuery);
   const mc = m.data?.companies.find((c) => c.ticker === ticker);
-  const next = useMemo(
-    () =>
-      estimateNextEarnings(
-        data.earningsReleases.map((r) => r.filed),
-        today(),
-      ),
-    [data.earningsReleases],
-  );
+  const releases = useMemo(() => data.earningsReleases.map((r) => r.filed), [data.earningsReleases]);
+  const next = useNextEarnings(ticker, releases);
   const days = next ? Math.round((Date.parse(next.date) - Date.parse(today())) / 86_400_000) : null;
   const px = price ?? mc?.price ?? null;
   const sup = mc?.levels.support
@@ -76,7 +70,7 @@ export function SetupPanel({
               {
                 k: "Next earnings",
                 v: days != null ? `${days}d` : "—",
-                sub: next ? fmtDate(next.date) : "",
+                sub: next ? `${fmtDate(next.date)}${next.estimated ? " (est.)" : ""}` : "",
               },
               {
                 k: "Avg 2-day move",
@@ -103,7 +97,7 @@ export function SetupPanel({
               </p>
               {next && (
                 <p className="text-[11px] text-muted-foreground">
-                  Next-date estimate: {next.basis}
+                  {next.estimated ? `Next date is an estimate: ${next.basis}` : `Next date from ${next.basis}`}
                 </p>
               )}
               {s?.continuation != null && (
