@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
-/** Sticky chip row that jumps to the page's sections and marks the one in view. */
+/** Sticky chip row that jumps to the page's sections and marks the one in view. Shown at every width: long pages need it on desktop too. */
 export function SectionNav({ sections }: { sections: { id: string; label: string }[] }) {
   const [active, setActive] = useState(sections[0]?.id);
   useEffect(() => {
@@ -24,7 +24,7 @@ export function SectionNav({ sections }: { sections: { id: string; label: string
   return (
     <nav
       aria-label="On this page"
-      className="no-scrollbar sticky top-12 z-10 -mx-4 flex gap-1 overflow-x-auto border-b bg-background/95 px-4 py-1.5 backdrop-blur lg:hidden"
+      className="no-scrollbar sticky top-12 z-10 -mx-4 flex gap-1 overflow-x-auto border-b bg-background/95 px-4 py-1.5 backdrop-blur"
     >
       {sections.map((s) => (
         <a

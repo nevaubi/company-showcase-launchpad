@@ -1,0 +1,7 @@
+/* Three cards across on a wide page, then two, then one. The cards size themselves; this only places them. */
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-3); align-items: start; }
+.grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid[data-count="1"] { grid-template-columns: minmax(0, 1fr); }
+.card { margin-inline: 0; }
+@media (max-width: 1180px) { .grid, .grid[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .grid, .grid[data-count="2"] { grid-template-columns: minmax(0, 1fr); } }

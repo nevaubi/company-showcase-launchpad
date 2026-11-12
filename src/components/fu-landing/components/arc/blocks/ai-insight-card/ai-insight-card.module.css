@@ -1,0 +1,125 @@
+/* AI insight card. Head (name, period, Explain), value row, sparkline, then a panel with the answer, drivers and follow-ups.
+   Type sizes: 28px for the value, 14px for body, 12px for meta. Spacing steps 4, 8, 12, 16, 20. */
+.root { container-type: inline-size; box-sizing: border-box; width: 100%; margin-inline: auto; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-panel); background: var(--surface); color: var(--foreground); font-family: var(--font-body); font-size: var(--text-sm); letter-spacing: var(--tracking-body); line-height: 20px; }
+/* Doubled so a host that stretches its children (max-width: 100%) still leaves the card at a readable width. */
+.root.root { max-width: 640px; }
+.root *, .root *::before, .root *::after { box-sizing: border-box; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+
+/* Head */
+.head { display: flex; min-height: var(--control-height-sm); align-items: center; justify-content: space-between; gap: 12px; }
+.titleRow { display: flex; min-width: 0; align-items: baseline; gap: 8px; }
+.title { margin: 0; font-size: var(--text-sm); font-weight: 500; line-height: 20px; white-space: nowrap; }
+.period { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: var(--text-xs); text-overflow: ellipsis; white-space: nowrap; }
+/* One width for Explain, Stop and Hide, so the head never shifts when the label crossfades. */
+.explain.explain { flex: none; min-width: 96px; }
+.explain svg { width: 14px; height: 14px; }
+.sparkle { width: 14px; height: 14px; flex: none; color: var(--accent); }
+.stopIcon { fill: currentColor; stroke-width: 0; transform: scale(.78); }
+
+/* Value row */
+.valueRow { display: flex; min-width: 0; align-items: baseline; gap: 8px; margin-top: 4px; }
+.value { font-size: var(--text-2xl); font-weight: 500; letter-spacing: -.025em; line-height: 36px; font-variant-numeric: tabular-nums; }
+.delta { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.delta[data-tone="bad"], .driverDelta[data-tone="bad"] { color: var(--danger); }
+.delta[data-tone="good"], .driverDelta[data-tone="good"] { color: var(--success); }
+.delta[data-tone="neutral"], .driverDelta[data-tone="neutral"] { color: var(--text-secondary); }
+.compare { min-width: 0; overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
+.legend { display: flex; flex: none; gap: 12px; margin-left: auto; color: var(--text-muted); font-size: var(--text-xs); }
+.legendItem { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.swatchCurrent, .swatchPrevious { display: inline-block; flex: none; width: 12px; }
+.swatchCurrent { height: 2px; border-radius: 1px; background: var(--accent); }
+.swatchPrevious { height: 0; border-top: 1.5px dashed var(--text-muted); }
+
+/* Chart */
+.chart { position: relative; height: 112px; margin-top: 12px; border-radius: 8px; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+.chartSvg { display: block; overflow: visible; }
+.baseline { stroke: var(--border-subtle); stroke-width: 1; }
+.lineCurrent { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.linePrevious { fill: none; stroke: var(--text-muted); stroke-width: 1.5; stroke-dasharray: 3 4; stroke-linecap: round; opacity: .75; }
+.guide { stroke: var(--border); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0; transition: opacity var(--duration-fast) var(--ease-standard), stroke var(--duration-fast) var(--ease-standard); }
+.guide:is([data-state="mentioned"], [data-state="active"]) { opacity: 1; }
+.guide[data-state="active"] { stroke: var(--accent); }
+.scrubLine { stroke: var(--border); stroke-width: 1; }
+
+.annotationDot, .annotationBadge, .scrubDot, .scrubDotPrevious { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); }
+.annotationDot { width: 9px; height: 9px; background: var(--surface); box-shadow: inset 0 0 0 2px var(--accent); opacity: 0; transform: translate(-50%, -50%) scale(.5); pointer-events: none; transition: opacity var(--duration-fast) var(--ease-standard), transform .2s var(--ease-standard), background-color var(--duration-fast) var(--ease-standard); }
+.annotationDot[data-state="active"] { background: var(--accent); box-shadow: 0 0 0 2px var(--surface); }
+.annotationBadge { display: grid; width: 18px; height: 18px; place-items: center; border: 1px solid var(--border); background: var(--surface); color: var(--text-secondary); font-size: var(--text-xs); font-variant-numeric: tabular-nums; line-height: 1; opacity: 0; transform: translate(-50%, -50%) scale(.8); pointer-events: none; cursor: default; transition: opacity var(--duration-fast) var(--ease-standard), transform .2s var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
+.annotationDot:is([data-state="mentioned"], [data-state="active"]), .annotationBadge:is([data-state="mentioned"], [data-state="active"]) { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.annotationBadge:is([data-state="mentioned"], [data-state="active"]) { pointer-events: auto; }
+.annotationBadge[data-state="active"], .driver[data-active] .rank { border-color: var(--accent); background: var(--accent); color: var(--accent-foreground); }
+
+.scrubDot { width: 9px; height: 9px; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); pointer-events: none; }
+.scrubDotPrevious { width: 7px; height: 7px; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--text-muted); pointer-events: none; }
+.tooltip { position: absolute; top: -4px; z-index: 2; display: inline-flex; height: 28px; align-items: center; gap: 10px; padding: 0 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-raised); box-shadow: var(--shadow-raised); color: var(--foreground); font-size: var(--text-xs); white-space: nowrap; transform: translateX(-50%); pointer-events: none; }
+.tooltipLabel { color: var(--text-muted); }
+.tooltipRow { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+.chartEmpty { display: grid; height: 112px; margin-top: 12px; place-items: center; border-radius: 14px; background: var(--surface-muted); color: var(--text-muted); }
+.axis { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; color: var(--text-muted); font-size: var(--text-xs); line-height: 16px; }
+
+/* Panel. The clip leaves 4px each side so focus rings on the chips are never cut while the height animates. */
+.panelClip { overflow: hidden; margin-inline: -4px; padding-inline: 4px; }
+.panel { margin-top: 16px; padding-top: 16px; padding-bottom: 2px; border-top: 1px solid var(--border-subtle); }
+
+/* The answer's full text sits invisible underneath and reserves its height, so streaming never grows the card. */
+.textBox { position: relative; }
+.ghost { min-height: 44px; margin: 0; line-height: 22px; text-wrap: pretty; visibility: hidden; }
+.textLayer { position: absolute; inset: 0; }
+.text { margin: 0; line-height: 22px; text-wrap: pretty; }
+.chunk { animation: aic-fade .14s ease-out both; }
+@keyframes aic-fade { from { opacity: 0; } }
+.mention { text-decoration-line: underline; text-decoration-color: var(--border); text-decoration-thickness: 1px; text-underline-offset: 4px; transition: text-decoration-color var(--duration-fast) var(--ease-standard); }
+.mention[data-active] { text-decoration-color: var(--accent); }
+.stopped { color: var(--text-muted); }
+.thinking { display: flex; height: 22px; align-items: center; gap: 8px; color: var(--text-secondary); }
+.error { display: flex; min-height: 32px; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.errorIcon { width: 14px; height: 14px; flex: none; color: var(--danger); }
+.errorText { min-width: 0; flex: 1; color: var(--text-secondary); }
+.retry.retry { min-height: 28px; padding-inline: 8px; }
+.retry svg { width: 14px; height: 14px; }
+
+/* Drivers: rank, label, contribution bar, signed delta. Unread rows hold their place as quiet skeletons. */
+.drivers { display: grid; margin: 12px -8px 0; padding: 0; list-style: none; }
+.driver { display: grid; height: 36px; grid-template-columns: 18px minmax(0, 1fr) 96px 64px; align-items: center; column-gap: 12px; padding: 0 8px; border-radius: 12px; transition: background-color var(--duration-fast) var(--ease-standard); }
+.driver[data-active] { background: var(--surface-muted); }
+.rank { display: grid; width: 18px; height: 18px; place-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--text-muted); font-size: var(--text-xs); font-variant-numeric: tabular-nums; line-height: 1; transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
+.driver[data-shown] .rank { color: var(--text-secondary); }
+.driverBody { position: relative; min-width: 0; height: 20px; }
+.skeleton { position: absolute; inset: 0; display: flex; align-items: center; transition: opacity .12s var(--ease-standard); }
+.skeleton i { display: block; height: 8px; border-radius: 4px; background: var(--surface-muted); }
+.driverLabel { display: block; overflow: hidden; line-height: 20px; text-overflow: ellipsis; white-space: nowrap; opacity: 0; transition: opacity var(--duration-fast) var(--ease-standard); }
+.driver[data-shown] .skeleton { opacity: 0; }
+.driver[data-shown] .driverLabel, .driver[data-shown] .driverDelta { opacity: 1; }
+.bar { display: block; height: 6px; overflow: hidden; border-radius: 3px; background: var(--surface-muted); }
+.bar i { display: block; height: 100%; border-radius: 3px; transition: width .24s var(--ease-standard); }
+.bar i[data-tone="bad"] { background: var(--danger); }
+.bar i[data-tone="good"] { background: var(--success); }
+.bar i[data-tone="neutral"] { background: var(--text-muted); }
+.driverDelta { overflow: hidden; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; opacity: 0; transition: opacity var(--duration-fast) var(--ease-standard); }
+
+/* Follow-ups */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.chip { display: inline-flex; height: 32px; align-items: center; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-secondary); font: inherit; font-size: var(--text-sm); line-height: 20px; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard), opacity var(--duration-fast) var(--ease-standard), transform .12s var(--ease-standard); }
+.chip:active:not(:disabled) { background: var(--surface-muted); color: var(--foreground); transform: scale(.97); }
+.chip[aria-pressed="true"] { border-color: color-mix(in oklab, var(--accent) 45%, var(--border)); background: var(--accent-subtle); color: var(--foreground); }
+.chip:disabled { cursor: not-allowed; opacity: .5; }
+@media (hover: hover) and (pointer: fine) {
+  .chip:hover:not(:disabled) { background: var(--surface-muted); color: var(--foreground); }
+  .chip[aria-pressed="true"]:hover:not(:disabled) { background: var(--accent-subtle); }
+}
+
+.footer { display: flex; min-width: 0; justify-content: space-between; gap: 12px; margin-top: 16px; color: var(--text-muted); font-size: var(--text-xs); line-height: 16px; }
+.meta { display: inline-flex; min-width: 0; align-items: center; gap: 6px; }
+.meta svg { display: block; width: 14px; height: 14px; flex: none; }
+.metaText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@container (max-width: 460px) {
+  .legend { display: none; }
+  .driver { grid-template-columns: 18px minmax(0, 1fr) 48px 60px; column-gap: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chunk { animation: none; }
+  .bar i, .annotationDot, .annotationBadge { transition-duration: 0s; }
+}
