@@ -253,6 +253,25 @@ describe("tour card and page reading", () => {
     expect(tourStops()).toHaveLength(0);
   });
 
+  it("stops playing as soon as the user redirects, keeping the stops already shown", async () => {
+    page(html);
+    window.scrollBy = vi.fn();
+    beginTour();
+    let said = 0;
+    const r = await playStops(
+      [
+        { target: "$4.31B", kind: "text", label: "Revenue up 11.9%", explain: "The top line." },
+        { target: "Cash flow", kind: "section", label: "FCF doubled", explain: "Cash followed earnings." },
+      ],
+      0,
+      () => void said++,
+      () => said >= 1,
+    );
+    expect(r.pins.map((p) => p.n)).toEqual([1]);
+    expect(r.missed).toEqual([]);
+    clearHighlights();
+  });
+
   it("greps the page by phrase or regular expression and says where each match is", () => {
     page(html);
     const r = findOnPage("revenue");

@@ -544,12 +544,15 @@ export async function playStops(
   dwellMs = 1100,
   /** Called once a stop is on screen, e.g. to read it aloud. The walkthrough waits for it before moving on. */
   onStop?: (pin: Pin) => Promise<void> | void,
+  /** Checked before each stop: when true the rest are not played. */
+  shouldStop?: () => boolean,
 ): Promise<{ pins: Pin[]; missed: string[]; notes: string[] }> {
   const pins: Pin[] = [];
   const missed: string[] = [];
   const notes: string[] = [];
   planned = tour.length + stops.length;
   for (let i = 0; i < stops.length; i++) {
+    if (shouldStop?.()) break;
     const s = stops[i];
     const kind = s.kind ?? "auto";
     const near = s.near?.trim() || undefined;
