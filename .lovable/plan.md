@@ -25,11 +25,18 @@ Collection is in good shape. The value is now stuck behind one billing problem a
 
 ## Proposed plan
 0. **Finish the banks first**: once unblocked, read the 113 files left for JPM, BAC and WFC. Run PNC's full collect-and-read pass. Then rebuild all five banks' figure series and financial maps, and check BAC's map fills more than two zones.
-1. **Unblock**: top up the OpenAI key, or move the figure-name step to the built-in AI service so it can't stall on someone's card again. Show any paused step on the admin Data freshness page.
+1. **Unblock** (you've topped up the key): resume the paused figure-name step, and optionally move the figure-name step to the built-in AI service so it can't stall on someone's card again. Show any paused step on the admin Data freshness page.
 2. **Read the backlog in priority order**: spreadsheets first, then press-release and supplement PDFs, then slides. Skip logos and photos completely.
 3. **Recover rejected figures**: look at a sample of high-reject documents, fix the common causes (unit scaling, rows split across lines), and re-check those documents again.
 4. **Stop duplicating the partner**: before saving any new document locally, skip it if the partner store already has it.
 5. **Watchdog**: alert on the freshness page when nothing has been read for 48h or a step is paused.
+
+## Next companies (files waiting to be read)
+MS 591, PG 222, WMT 208, MA 199, XOM 199, SO 138, FCX 97, DE 64, WFC 60, GS 54, IBM 42, BAC 32, AMD 22, JPM 21, INTC 16, TSLA 14, PM 10. The rest have almost nothing left.
+Proposed order: the banks first (JPM, BAC, WFC, GS, MS, then PNC), then MA, XOM, PG, WMT, SO, FCX, DE, then the rest.
+
+## HOOD and OSCR
+Neither has any investor-relations documents stored, and neither is one of the 78 core companies. Adding them means a full first pass: find their filings and IR site, store the documents, read them, then build their figure series. That's a new-company deep build, which your earlier rule paused, so it needs your go-ahead.
 
 ## Technical notes
 - The paused job is `ir-canon` (paused_reason: OpenAI 429 credit_balance_exhausted). `ir-extract-runner` and `ir-vision-runner` cursors last moved Nov 5.
