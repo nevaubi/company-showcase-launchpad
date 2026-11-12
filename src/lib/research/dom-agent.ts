@@ -101,17 +101,25 @@ export function locate(target: string, kind: LocateKind = "auto", root: HTMLElem
     if (best && best.score >= 45) return best;
   }
   if (kind === "heading" || kind === "section") return best && best.score >= 30 ? best : null;
-  // Text search: smallest block element containing the phrase.
+  // Text search: the tightest element containing the phrase. A text node that holds the phrase itself wins
+  // outright; otherwise the parent with the least text does, so a wrapper with stray text of its own
+  // (whitespace, a label) never beats the cell or line the phrase is actually in.
   const q = norm(t);
   const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let node: Node | null;
   let hit: HTMLElement | null = null;
+  let hitSize = Infinity;
   while ((node = walker.nextNode())) {
     const parent = node.parentElement;
     if (!parent || ignored(parent)) continue;
-    if (norm(node.textContent ?? "").includes(q) || norm(parent.textContent ?? "").includes(q)) {
+    if (norm(node.textContent ?? "").includes(q)) {
       hit = parent;
       break;
+    }
+    const size = (parent.textContent ?? "").length;
+    if (size < hitSize && norm(parent.textContent ?? "").includes(q)) {
+      hit = parent;
+      hitSize = size;
     }
   }
   if (hit) {
@@ -206,8 +214,13 @@ interface Mark {
   el: HTMLElement;
   box: HTMLDivElement;
   tag: HTMLSpanElement;
-  timer: ReturnType<typeof setTimeout>;
+  /** null for a numbered stop, which stays until it is cleared. */
+  timer: ReturnType<typeof setTimeout> | null;
+  /** Stop number in the current walkthrough. */
+  n?: number;
 }
+/** Numbered stops kept on screen at once; older ones drop off so a long walkthrough doesn't bury the page. */
+const MAX_STOPS = 12;
 const marks = new Map<number, Mark>();
 let nextMark = 1;
 let raf = 0;
@@ -254,19 +267,32 @@ function listen() {
   canvas.subscribe(schedule);
 }
 
-export function highlight(el: HTMLElement, label: string, ms = 9000) {
+/**
+ * Outline an element with a callout. With `ms` of 0 the mark stays until cleared; `n` numbers it as a
+ * walkthrough stop (showing a stop again replaces its earlier mark) and `pulse` draws the eye on replay.
+ */
+export function highlight(el: HTMLElement, label: string, ms = 9000, opts: { n?: number; pulse?: boolean } = {}) {
   const doc = el.ownerDocument;
+  if (opts.n != null) for (const m of [...marks.values()]) if (m.n === opts.n) clearHighlight(m.id);
   const box = doc.createElement("div");
-  box.className = "agent-mark";
+  box.className = opts.pulse ? "agent-mark agent-mark-pulse" : "agent-mark";
   const tag = doc.createElement("span");
   tag.className = "agent-mark-label";
-  tag.textContent = label.slice(0, 120);
+  if (opts.n != null) {
+    const badge = doc.createElement("b");
+    badge.className = "agent-mark-n";
+    badge.textContent = String(opts.n);
+    tag.appendChild(badge);
+  }
+  tag.appendChild(doc.createTextNode(label.slice(0, 120)));
   const l = layer(doc);
   l.appendChild(box);
   l.appendChild(tag);
   const id = nextMark++;
-  const timer = setTimeout(() => clearHighlight(id), ms);
-  marks.set(id, { id, el, box, tag, timer });
+  const timer = ms > 0 ? setTimeout(() => clearHighlight(id), ms) : null;
+  marks.set(id, { id, el, box, tag, timer, n: opts.n });
+  const kept = [...marks.values()].filter((m) => m.timer === null);
+  for (const m of kept.slice(0, Math.max(0, kept.length - MAX_STOPS))) clearHighlight(m.id);
   listen();
   place();
   // Keep following while smooth scrolling settles.
@@ -277,7 +303,7 @@ export function highlight(el: HTMLElement, label: string, ms = 9000) {
 export function clearHighlight(id: number) {
   const m = marks.get(id);
   if (!m) return;
-  clearTimeout(m.timer);
+  if (m.timer) clearTimeout(m.timer);
   m.box.classList.add("agent-mark-out");
   m.tag.classList.add("agent-mark-out");
   setTimeout(() => {
@@ -292,6 +318,86 @@ export function clearHighlights() {
 }
 
 export const activeHighlights = () => marks.size;
+
+// ── Walkthrough stops: numbered highlights that persist, are cited from the answer, and can be shown again. ──
+
+export interface Pin {
+  /** Stop number within one assistant turn, from 1. */
+  n: number;
+  target: string;
+  kind: LocateKind;
+  /** Section the target sits in, when the same text appears more than once on the page. */
+  near?: string;
+  label: string;
+  /** One or two sentences on what this part of the page is and why it matters, shown beside the stop. */
+  explain?: string;
+  /** A tab or toggle that has to be pressed for the target to be on screen. */
+  click?: string;
+  /** Path and query of the page the stop is on. */
+  path: string;
+}
+
+let pinSeq = 0;
+
+/** Start a new assistant turn: numbering restarts and the previous turn's marks come off the page. */
+export function beginTour() {
+  pinSeq = 0;
+  clearHighlights();
+}
+export const nextPin = () => ++pinSeq;
+export const pagePath = () => `${window.location.pathname}${window.location.search}`;
+
+/** locate(), searching inside the section named by `near` first. */
+export function locateNear(target: string, kind: LocateKind = "auto", near?: string): Located | null {
+  if (near?.trim()) {
+    const scope = locate(near, "auto");
+    if (scope) {
+      const hit = locate(target, kind, regionOf(scope.el));
+      if (hit) return hit;
+    }
+  }
+  return locate(target, kind);
+}
+
+/** How many places on the page show this text (capped at 20), to warn about ambiguous targets. */
+export function countText(target: string, root: HTMLElement = agentRoot()) {
+  const q = norm(target);
+  if (!q) return 0;
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  let count = 0;
+  while ((node = walker.nextNode()) && count < 20) {
+    const parent = node.parentElement;
+    if (!parent || ignored(parent) || !visible(parent)) continue;
+    if (norm(node.textContent ?? "").includes(q)) count++;
+  }
+  return count;
+}
+
+/** Show a stop again: go to its page if needed, scroll it clear of the panel and re-mark it. */
+export async function showPin(pin: Pin, navigate?: (href: string) => void): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (pagePath() !== pin.path) {
+    if (!navigate) return { ok: false, reason: "That stop is on another page" };
+    navigate(pin.path);
+    for (let i = 0; i < 16 && pagePath() !== pin.path; i++) await settle(250);
+    if (pagePath() !== pin.path) return { ok: false, reason: "Couldn't open the page that stop is on" };
+  }
+  let hit: Located | null = null;
+  for (let i = 0; i < 16; i++) {
+    hit = locateNear(pin.target, pin.kind, pin.near);
+    if (hit) break;
+    // The stop sat behind a tab or toggle: press it again once the page has had a moment to draw.
+    if (pin.click && i === 2) {
+      const control = locate(pin.click, "auto");
+      if (control) safeClick(control.el);
+    }
+    await settle(250);
+  }
+  if (!hit) return { ok: false, reason: "That part of the page isn't showing any more. A tab or range may have changed." };
+  await bringIntoView(hit.el);
+  highlight(hit.how === "text" ? hit.el : regionOf(hit.el), pin.label, 0, { n: pin.n, pulse: true });
+  return { ok: true };
+}
 
 // ── Safe clicks ──
 
@@ -321,4 +427,100 @@ export function safeClick(el: HTMLElement): { ok: true; label: string } | { ok: 
   const control = el.closest<HTMLElement>("button,[role=tab],[role=radio],[role=switch],[role=checkbox],[role=menuitemradio],[role=option],a,[data-agent-click],summary") ?? el;
   control.click();
   return { ok: true, label: (control.getAttribute("aria-label") ?? control.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60) };
+}
+
+// ── Guided walkthrough: several stops played in order, one at a time. ──
+
+export interface StopSpec {
+  target: string;
+  kind?: LocateKind;
+  near?: string;
+  /** Safe control (tab, range toggle) to press before looking for the target. */
+  click?: string;
+  label: string;
+  explain?: string;
+}
+
+/**
+ * Play stops in order: press the stop's control if it names one, scroll the target clear of the panel,
+ * mark and number it, then dwell so the user can follow before the next one. A stop that can't be found
+ * is reported and skipped; the rest still play.
+ */
+export async function playStops(stops: StopSpec[], dwellMs = 1100): Promise<{ pins: Pin[]; missed: string[]; notes: string[] }> {
+  const pins: Pin[] = [];
+  const missed: string[] = [];
+  const notes: string[] = [];
+  for (let i = 0; i < stops.length; i++) {
+    const s = stops[i];
+    const kind = s.kind ?? "auto";
+    const near = s.near?.trim() || undefined;
+    let click: string | undefined;
+    if (s.click?.trim()) {
+      const control = locate(s.click, "auto");
+      const pressed = control ? safeClick(control.el) : null;
+      if (pressed?.ok) {
+        click = s.click.trim();
+        await settle(350);
+      } else {
+        notes.push(`"${s.click}" was not pressed (${!control ? "no such control" : pressed && !pressed.ok ? pressed.reason : "unknown"})`);
+      }
+    }
+    const hit = locateNear(s.target, kind, near);
+    if (!hit) {
+      missed.push(s.target);
+      continue;
+    }
+    const moved = await bringIntoView(hit.el);
+    if (moved && !notes.includes(moved)) notes.push(moved);
+    const n = nextPin();
+    highlight(hit.how === "text" ? hit.el : regionOf(hit.el), s.label, 0, { n, pulse: true });
+    pins.push({ n, target: s.target, kind, near, label: s.label, explain: s.explain?.trim() || undefined, click, path: pagePath() });
+    if (i < stops.length - 1 && dwellMs > 0) await settle(dwellMs);
+  }
+  return { pins, missed, notes };
+}
+
+/**
+ * What is on the page, component by component: each section with what it holds (table, chart, controls and
+ * which are on), whether it is on screen, and the start of its text. Gives the agent the page's structure,
+ * not only its words.
+ */
+export function pageMap(root: HTMLElement = agentRoot(), max = 24): string[] {
+  const out: string[] = [];
+  const seen = new Set<HTMLElement>();
+  const vh = (typeof window !== "undefined" && window.innerHeight) || 800;
+  for (const el of root.querySelectorAll<HTMLElement>("[data-section],h1,h2,h3")) {
+    if (ignored(el) || !visible(el)) continue;
+    const label = labelOf(el);
+    if (!label || label.length > 80) continue;
+    const region = regionOf(el);
+    if (seen.has(region)) continue;
+    seen.add(region);
+    // A heading whose "region" wraps several other sections is a page title, not a component.
+    if (region.querySelectorAll("[data-section],h2,h3").length > 2 && !region.hasAttribute("data-section")) {
+      out.push(`- ${label} [page heading]`);
+    } else {
+      const holds: string[] = [];
+      const table = region.querySelector("table");
+      if (table) holds.push(`table, ${table.querySelectorAll("tr").length} rows`);
+      if (region.querySelector(".recharts-wrapper, svg.recharts-surface, canvas, figure svg, [data-chart]")) holds.push("chart");
+      const controls = [...region.querySelectorAll<HTMLElement>("[role=tab],[role=radio],[role=switch],[aria-pressed]")]
+        .filter((c) => !ignored(c))
+        .slice(0, 8)
+        .map((c) => {
+          const l = (c.getAttribute("aria-label") || c.textContent || "").replace(/\s+/g, " ").trim().slice(0, 24);
+          const on = ["aria-selected", "aria-checked", "aria-pressed"].some((a) => c.getAttribute(a) === "true");
+          return l ? (on ? `${l} (on)` : l) : "";
+        })
+        .filter(Boolean);
+      if (controls.length) holds.push(`controls: ${controls.join(", ")}`);
+      const r = region.getBoundingClientRect();
+      const where = r.width === 0 && r.height === 0 ? "" : r.bottom < 0 ? "above the screen" : r.top > vh ? "below the screen" : "on screen";
+      const text = ((region.innerText ?? region.textContent ?? "") as string).replace(/\s+/g, " ").trim();
+      const preview = (text.startsWith(label) ? text.slice(label.length) : text).trim().slice(0, 140);
+      out.push(`- ${label}${holds.length ? ` [${holds.join("; ")}]` : ""}${where ? ` (${where})` : ""}${preview ? `: ${preview}` : ""}`);
+    }
+    if (out.length >= max) break;
+  }
+  return out;
 }

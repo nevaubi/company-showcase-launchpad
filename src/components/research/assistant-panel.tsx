@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as RPointerEven
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowUp, Check, ChevronRight, Circle, CircleDot, Copy, GripHorizontal, LayoutDashboard, ListChecks, MessageCircleQuestion, MessageSquare,
+  ArrowUp, Check, ChevronLeft, ChevronRight, Circle, CircleDot, Copy, EyeOff, GripHorizontal, LayoutDashboard, ListChecks, MapPin, MessageCircleQuestion, MessageSquare,
   MessageSquarePlus, PanelRight, PanelRightClose, PictureInPicture2, Sparkles, Square, X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import LoadingState, { formatElapsed, type LoadingVariant } from "@/components/u
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { titleSession } from "@/lib/research.functions";
-import { clearHighlights } from "@/lib/research/dom-agent";
+import { beginTour, clearHighlights, showPin, type Pin } from "@/lib/research/dom-agent";
 import { runAgent, type Plan, type Question, type Step, type Turn } from "@/lib/research/loop";
 import { canvas, useCanvas } from "@/lib/research/views";
 import { sanitizeAnswer, wantsCode } from "@/lib/research/sanitize";
@@ -250,6 +250,8 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
     }
 
     const history = msgs.filter((m) => !m.pending);
+    // A new turn numbers its stops from 1 and takes the last turn's marks off the page.
+    beginTour();
     const now = Date.now();
     const asstId = `a-${now}`;
     setMsgs([...history, { id: `u-${now}`, role: "user", content: q, steps: [] }, { id: asstId, role: "assistant", content: "", steps: [], pending: true, phase: "Thinking", activity: "thinking", startedAt: now, allowCode: wantsCode(q) }]);
@@ -530,8 +532,67 @@ function PlanCard({ plan, live }: { plan: Plan; live: boolean }) {
   );
 }
 
+/** The numbered stops a turn left on the page: step through them, jump to one, or clear them. */
+function Walkthrough({ pins, current, onShow, onClear }: { pins: Pin[]; current: number; onShow: (n: number) => void; onClear: () => void }) {
+  const idx = pins.findIndex((p) => p.n === current);
+  const step = (d: 1 | -1) => onShow(pins[idx < 0 ? (d === 1 ? 0 : pins.length - 1) : (idx + d + pins.length) % pins.length].n);
+  return (
+    <div className="step-in rounded-lg border bg-card/40 px-2.5 py-2">
+      <div className="flex items-center gap-1.5 text-[11px] font-medium">
+        <MapPin className="size-3.5 text-muted-foreground" /> On the page
+        <span className="font-normal text-muted-foreground">
+          · {idx >= 0 ? `stop ${idx + 1} of ${pins.length}` : `${pins.length} stop${pins.length === 1 ? "" : "s"}`}
+        </span>
+        <div className="ml-auto flex items-center">
+          {pins.length > 1 && (
+            <>
+              <Button variant="ghost" size="icon-sm" className="size-6" aria-label="Previous stop" onClick={() => step(-1)}>
+                <ChevronLeft className="size-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon-sm" className="size-6" aria-label="Next stop" onClick={() => step(1)}>
+                <ChevronRight className="size-3.5" />
+              </Button>
+            </>
+          )}
+          <Button variant="ghost" size="icon-sm" className="size-6" aria-label="Clear highlights from the page" title="Clear highlights from the page" onClick={onClear}>
+            <EyeOff className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+      <ol className="mt-1.5 grid gap-0.5">
+        {pins.map((p) => (
+          <li key={p.n}>
+            <button
+              type="button"
+              onClick={() => onShow(p.n)}
+              aria-current={p.n === current ? "step" : undefined}
+              className={cn("flex w-full items-start gap-2 rounded-md px-1 py-1 text-left text-[11.5px] leading-snug transition-colors hover:bg-muted/60", p.n === current && "bg-muted/60")}
+            >
+              <span className="agent-pin-ref !ml-0 mt-px shrink-0">{p.n}</span>
+              <span className="min-w-0 flex-1">
+                <span className={cn(p.n === current && "font-medium")}>{p.label}</span>
+                {p.n === current && p.explain && <span className="mt-0.5 block text-muted-foreground">{p.explain}</span>}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
 function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
   const [open, setOpen] = useState(false);
+  const [stop, setStop] = useState(0);
+  const navigate = useNavigate();
+  const pins = useMemo(() => m.steps.flatMap((s) => (s.status === "done" ? (s.pins ?? []) : [])), [m.steps]);
+  async function showStop(n: number) {
+    const pin = pins.find((p) => p.n === n);
+    if (!pin) return;
+    setStop(n);
+    const r = await showPin(pin, (href) => navigate({ href }));
+    if (!r.ok) toast.error(r.reason);
+  }
   const shown = useMemo(() => (m.pending ? sanitizeAnswer(m.content, { allowCode: m.allowCode }).markdown : m.content), [m.content, m.pending, m.allowCode]);
   const steps = m.steps.filter((s) => s.name !== "sources");
   const sources = Array.from(new Map(m.steps.flatMap((s) => s.sources ?? []).map((x) => [x.url, x])).values());
@@ -563,7 +624,22 @@ function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
           </div>
         ))}
       {m.pending && m.phase && <LoadingState label={m.phase} variant={VARIANT[m.activity ?? "thinking"]} since={m.startedAt} className="step-in px-1.5" />}
-      {shown ? <ResearchMarkdown className={cn("text-[13px] leading-relaxed", m.pending && "opacity-60")}>{shown}</ResearchMarkdown> : null}
+      {shown ? (
+        <ResearchMarkdown className={cn("text-[13px] leading-relaxed", m.pending && "opacity-60")} onPin={pins.length ? showStop : undefined}>
+          {shown}
+        </ResearchMarkdown>
+      ) : null}
+      {!m.pending && pins.length > 0 && (
+        <Walkthrough
+          pins={pins}
+          current={stop}
+          onShow={showStop}
+          onClear={() => {
+            clearHighlights();
+            setStop(0);
+          }}
+        />
+      )}
       {m.error && <p className="rounded-md border border-negative/30 bg-negative-soft px-2.5 py-1.5 text-xs text-negative">{m.error}</p>}
       {!m.pending && madeText && !canvasOpen && (
         <button type="button" onClick={() => canvas.show(made.views ? "views" : made.files ? "files" : "browser")} className="step-in flex w-fit items-center gap-1.5 rounded-md border bg-card px-2 py-1 text-[11.5px] shadow-paper transition-colors hover:border-foreground/40">
