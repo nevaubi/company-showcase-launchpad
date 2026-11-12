@@ -33,16 +33,6 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; hubs: Hub[] }[] = [
           { to: "/app/kpis", label: "KPI matrix" },
         ],
       },
-      // Reports lead this hub so the primers, previews and recaps are one click from the sidebar.
-      {
-        id: "library",
-        label: "Reports",
-        pages: [
-          { to: "/app/reports", label: "Reports" },
-          { to: "/app/theses", label: "Theses" },
-          { to: "/app/docs", label: "Docs & sheets" },
-        ],
-      },
       {
         id: "filings",
         label: "Filings",
@@ -78,6 +68,15 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; hubs: Hub[] }[] = [
     heading: "Workspace",
     hubs: [
       { id: "agent", label: "Research agent", pages: [{ to: "/app/research", label: "Research agent" }] },
+      {
+        id: "library",
+        label: "Library",
+        pages: [
+          { to: "/app/theses", label: "Theses" },
+          { to: "/app/reports", label: "Reports" },
+          { to: "/app/docs", label: "Docs & sheets" },
+        ],
+      },
       { id: "firm", label: "Firm", pages: [{ to: "/app/firm", label: "Firm" }, { to: "/app/billing", label: "Billing" }] },
     ],
   },

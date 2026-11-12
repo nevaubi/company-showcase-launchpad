@@ -30,11 +30,9 @@ export function fmtChart(v: number | null | undefined, unit: ChartUnit, opts: { 
   const a = Math.abs(v);
   switch (unit) {
     case "usd": {
-      // Compact labels drop the decimal only from 10 of the unit up, so $4.3B and $5.4B don't both read "$5B"; a round "$4.0B" tick reads "$4B".
-      const scaled = (n: number) => (opts.compact ? (n >= 10 ? n.toFixed(0) : n.toFixed(1).replace(/\.0$/, "")) : n.toFixed(n >= 100 ? 0 : 1));
       if (a >= 1e12) return `${sign}$${(a / 1e12).toFixed(a >= 1e13 ? 0 : 1)}T`;
-      if (a >= 1e9) return `${sign}$${scaled(a / 1e9)}B`;
-      if (a >= 1e6) return `${sign}$${scaled(a / 1e6)}M`;
+      if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(a >= 1e11 || opts.compact ? 0 : 1)}B`;
+      if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(a >= 1e8 || opts.compact ? 0 : 1)}M`;
       if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(0)}K`;
       return `${sign}$${a.toFixed(0)}`;
     }

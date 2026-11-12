@@ -18,8 +18,6 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as CompaniesIndexRouteImport } from './routes/companies.index'
 import { Route as CompaniesTickerRouteImport } from './routes/companies.$ticker'
-import { Route as ResearchIndexRouteImport } from './routes/research.index'
-import { Route as ResearchTickerRouteImport } from './routes/research.$ticker'
 import { Route as ShareIdRouteImport } from './routes/share.$id'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAdminRouteImport } from './routes/_authenticated/app.admin'
@@ -118,16 +116,6 @@ const CompaniesIndexRoute = CompaniesIndexRouteImport.update({
 const CompaniesTickerRoute = CompaniesTickerRouteImport.update({
   id: '/companies/$ticker',
   path: '/companies/$ticker',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResearchIndexRoute = ResearchIndexRouteImport.update({
-  id: '/research/',
-  path: '/research/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ResearchTickerRoute = ResearchTickerRouteImport.update({
-  id: '/research/$ticker',
-  path: '/research/$ticker',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShareIdRoute = ShareIdRouteImport.update({
@@ -449,10 +437,8 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/companies/$ticker': typeof CompaniesTickerRoute
-  '/research/$ticker': typeof ResearchTickerRoute
   '/share/$id': typeof ShareIdRoute
   '/companies/': typeof CompaniesIndexRoute
-  '/research/': typeof ResearchIndexRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
@@ -515,10 +501,8 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/companies/$ticker': typeof CompaniesTickerRoute
-  '/research/$ticker': typeof ResearchTickerRoute
   '/share/$id': typeof ShareIdRoute
   '/companies': typeof CompaniesIndexRoute
-  '/research': typeof ResearchIndexRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
   '/app/agents': typeof AuthenticatedAppAgentsRoute
   '/app/alt-data': typeof AuthenticatedAppAltDataRoute
@@ -582,10 +566,8 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/companies/$ticker': typeof CompaniesTickerRoute
-  '/research/$ticker': typeof ResearchTickerRoute
   '/share/$id': typeof ShareIdRoute
   '/companies/': typeof CompaniesIndexRoute
-  '/research/': typeof ResearchIndexRoute
   '/_authenticated/app/admin': typeof AuthenticatedAppAdminRoute
   '/_authenticated/app/agents': typeof AuthenticatedAppAgentsRoute
   '/_authenticated/app/alt-data': typeof AuthenticatedAppAltDataRoute
@@ -651,10 +633,8 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/app'
     | '/companies/$ticker'
-    | '/research/$ticker'
     | '/share/$id'
     | '/companies/'
-    | '/research/'
     | '/app/admin'
     | '/app/agents'
     | '/app/alt-data'
@@ -717,10 +697,8 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sitemap.xml'
     | '/companies/$ticker'
-    | '/research/$ticker'
     | '/share/$id'
     | '/companies'
-    | '/research'
     | '/app/admin'
     | '/app/agents'
     | '/app/alt-data'
@@ -783,10 +761,8 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_authenticated/app'
     | '/companies/$ticker'
-    | '/research/$ticker'
     | '/share/$id'
     | '/companies/'
-    | '/research/'
     | '/_authenticated/app/admin'
     | '/_authenticated/app/agents'
     | '/_authenticated/app/alt-data'
@@ -851,10 +827,8 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   CompaniesTickerRoute: typeof CompaniesTickerRoute
-  ResearchTickerRoute: typeof ResearchTickerRoute
   ShareIdRoute: typeof ShareIdRoute
   CompaniesIndexRoute: typeof CompaniesIndexRoute
-  ResearchIndexRoute: typeof ResearchIndexRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
   ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
@@ -923,20 +897,6 @@ declare module '@tanstack/react-router' {
       path: '/companies/$ticker'
       fullPath: '/companies/$ticker'
       preLoaderRoute: typeof CompaniesTickerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/research/': {
-      id: '/research/'
-      path: '/research'
-      fullPath: '/research/'
-      preLoaderRoute: typeof ResearchIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/research/$ticker': {
-      id: '/research/$ticker'
-      path: '/research/$ticker'
-      fullPath: '/research/$ticker'
-      preLoaderRoute: typeof ResearchTickerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/share/$id': {
@@ -1492,10 +1452,8 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   CompaniesTickerRoute: CompaniesTickerRoute,
-  ResearchTickerRoute: ResearchTickerRoute,
   ShareIdRoute: ShareIdRoute,
   CompaniesIndexRoute: CompaniesIndexRoute,
-  ResearchIndexRoute: ResearchIndexRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
   ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,

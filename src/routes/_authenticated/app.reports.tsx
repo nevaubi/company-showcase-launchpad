@@ -132,7 +132,7 @@ function ReportLibrary() {
 
       <Panel
         title="All reports"
-        subtitle={list.data ? `${ready} ready${list.data.length > ready ? ` · ${list.data.length - ready} being written` : ""}` : undefined}
+        subtitle={list.data ? `${ready} ready · ${list.data.length} total` : undefined}
         collapse={false}
         actions={
           <div className="relative">
