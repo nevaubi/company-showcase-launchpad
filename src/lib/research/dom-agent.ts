@@ -206,8 +206,13 @@ interface Mark {
   el: HTMLElement;
   box: HTMLDivElement;
   tag: HTMLSpanElement;
-  timer: ReturnType<typeof setTimeout>;
+  /** null for a numbered stop, which stays until it is cleared. */
+  timer: ReturnType<typeof setTimeout> | null;
+  /** Stop number in the current walkthrough. */
+  n?: number;
 }
+/** Numbered stops kept on screen at once; older ones drop off so a long walkthrough doesn't bury the page. */
+const MAX_STOPS = 12;
 const marks = new Map<number, Mark>();
 let nextMark = 1;
 let raf = 0;
@@ -254,19 +259,32 @@ function listen() {
   canvas.subscribe(schedule);
 }
 
-export function highlight(el: HTMLElement, label: string, ms = 9000) {
+/**
+ * Outline an element with a callout. With `ms` of 0 the mark stays until cleared; `n` numbers it as a
+ * walkthrough stop (showing a stop again replaces its earlier mark) and `pulse` draws the eye on replay.
+ */
+export function highlight(el: HTMLElement, label: string, ms = 9000, opts: { n?: number; pulse?: boolean } = {}) {
   const doc = el.ownerDocument;
+  if (opts.n != null) for (const m of [...marks.values()]) if (m.n === opts.n) clearHighlight(m.id);
   const box = doc.createElement("div");
-  box.className = "agent-mark";
+  box.className = opts.pulse ? "agent-mark agent-mark-pulse" : "agent-mark";
   const tag = doc.createElement("span");
   tag.className = "agent-mark-label";
-  tag.textContent = label.slice(0, 120);
+  if (opts.n != null) {
+    const badge = doc.createElement("b");
+    badge.className = "agent-mark-n";
+    badge.textContent = String(opts.n);
+    tag.appendChild(badge);
+  }
+  tag.appendChild(doc.createTextNode(label.slice(0, 120)));
   const l = layer(doc);
   l.appendChild(box);
   l.appendChild(tag);
   const id = nextMark++;
-  const timer = setTimeout(() => clearHighlight(id), ms);
-  marks.set(id, { id, el, box, tag, timer });
+  const timer = ms > 0 ? setTimeout(() => clearHighlight(id), ms) : null;
+  marks.set(id, { id, el, box, tag, timer, n: opts.n });
+  const kept = [...marks.values()].filter((m) => m.timer === null);
+  for (const m of kept.slice(0, Math.max(0, kept.length - MAX_STOPS))) clearHighlight(m.id);
   listen();
   place();
   // Keep following while smooth scrolling settles.
@@ -277,7 +295,7 @@ export function highlight(el: HTMLElement, label: string, ms = 9000) {
 export function clearHighlight(id: number) {
   const m = marks.get(id);
   if (!m) return;
-  clearTimeout(m.timer);
+  if (m.timer) clearTimeout(m.timer);
   m.box.classList.add("agent-mark-out");
   m.tag.classList.add("agent-mark-out");
   setTimeout(() => {
@@ -292,6 +310,77 @@ export function clearHighlights() {
 }
 
 export const activeHighlights = () => marks.size;
+
+// ── Walkthrough stops: numbered highlights that persist, are cited from the answer, and can be shown again. ──
+
+export interface Pin {
+  /** Stop number within one assistant turn, from 1. */
+  n: number;
+  target: string;
+  kind: LocateKind;
+  /** Section the target sits in, when the same text appears more than once on the page. */
+  near?: string;
+  label: string;
+  /** Path and query of the page the stop is on. */
+  path: string;
+}
+
+let pinSeq = 0;
+
+/** Start a new assistant turn: numbering restarts and the previous turn's marks come off the page. */
+export function beginTour() {
+  pinSeq = 0;
+  clearHighlights();
+}
+export const nextPin = () => ++pinSeq;
+export const pagePath = () => `${window.location.pathname}${window.location.search}`;
+
+/** locate(), searching inside the section named by `near` first. */
+export function locateNear(target: string, kind: LocateKind = "auto", near?: string): Located | null {
+  if (near?.trim()) {
+    const scope = locate(near, "auto");
+    if (scope) {
+      const hit = locate(target, kind, regionOf(scope.el));
+      if (hit) return hit;
+    }
+  }
+  return locate(target, kind);
+}
+
+/** How many places on the page show this text (capped at 20), to warn about ambiguous targets. */
+export function countText(target: string, root: HTMLElement = agentRoot()) {
+  const q = norm(target);
+  if (!q) return 0;
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let node: Node | null;
+  let count = 0;
+  while ((node = walker.nextNode()) && count < 20) {
+    const parent = node.parentElement;
+    if (!parent || ignored(parent) || !visible(parent)) continue;
+    if (norm(node.textContent ?? "").includes(q)) count++;
+  }
+  return count;
+}
+
+/** Show a stop again: go to its page if needed, scroll it clear of the panel and re-mark it. */
+export async function showPin(pin: Pin, navigate?: (href: string) => void): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (pagePath() !== pin.path) {
+    if (!navigate) return { ok: false, reason: "That stop is on another page" };
+    navigate(pin.path);
+    for (let i = 0; i < 16 && pagePath() !== pin.path; i++) await settle(250);
+    if (pagePath() !== pin.path) return { ok: false, reason: "Couldn't open the page that stop is on" };
+  }
+  let hit: Located | null = null;
+  for (let i = 0; i < 16; i++) {
+    hit = locateNear(pin.target, pin.kind, pin.near);
+    if (hit) break;
+    await settle(250);
+  }
+  if (!hit) return { ok: false, reason: "That part of the page isn't showing any more. A tab or range may have changed." };
+  await bringIntoView(hit.el);
+  highlight(hit.how === "text" ? hit.el : regionOf(hit.el), pin.label, 0, { n: pin.n, pulse: true });
+  return { ok: true };
+}
 
 // ── Safe clicks ──
 

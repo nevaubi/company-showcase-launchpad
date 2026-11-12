@@ -7,14 +7,17 @@ import { AnswerChart, parseChartSpec } from "@/components/research/answer-chart"
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 
-/** Markdown with filing:TICKER:ACCESSION[:DOC] links (optional "quoted phrase" title) that open the source panel. */
-export function ResearchMarkdown({ children, className }: { children: string; className?: string }) {
+/**
+ * Markdown with filing:TICKER:ACCESSION[:DOC] links (optional "quoted phrase" title) that open the source panel,
+ * and pin:N links that show walkthrough stop N on the page (plain text when no onPin handler is given).
+ */
+export function ResearchMarkdown({ children, className, onPin }: { children: string; className?: string; onPin?: (n: number) => void }) {
   const { open } = useSource();
   return (
     <div className={cn("prose-filing", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        urlTransform={(url) => (url.startsWith("filing:") ? url : defaultUrlTransform(url))}
+        urlTransform={(url) => (url.startsWith("filing:") || /^pin:\d+$/.test(url) ? url : defaultUrlTransform(url))}
         components={{
           pre: ({ children: c, node }) => {
             const code = node?.children?.[0] as { properties?: { className?: string[] }; children?: { value?: string }[] } | undefined;
@@ -55,6 +58,21 @@ export function ResearchMarkdown({ children, className }: { children: string; cl
                   <FileText className="size-3 self-center" />
                   {label}
                 </Button>
+              );
+            }
+            if (href?.startsWith("pin:")) {
+              const n = Number(href.slice(4));
+              if (!onPin || !Number.isInteger(n)) return <>{label}</>;
+              return (
+                <button
+                  type="button"
+                  onClick={() => onPin(n)}
+                  title={`Show stop ${n} on the page`}
+                  className="inline cursor-pointer rounded-sm border-b border-dashed border-foreground/40 text-left font-medium transition-colors hover:bg-highlight-soft"
+                >
+                  {label}
+                  <span className="agent-pin-ref">{n}</span>
+                </button>
               );
             }
             if (href?.startsWith("/app/")) return <Link to={href}>{label}</Link>;

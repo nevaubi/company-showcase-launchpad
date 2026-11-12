@@ -165,7 +165,7 @@ export const TOOL_DEFS = [
         sector: nullable(str("Optional sector name filter (substring)")),
         sort_by: str("Metric to sort by"),
         descending: { type: "boolean" },
-        limit: { type: "integer", description: "1-78" },
+        limit: { type: "integer", description: "1-100" },
         columns: { type: "array", items: { type: "string" }, description: "Metric keys to show" },
       },
       ["filters", "sector", "sort_by", "descending", "limit", "columns"],
@@ -387,15 +387,16 @@ export const TOOL_DEFS = [
     type: "function",
     name: "highlight",
     description:
-      "Outline the element you are discussing on the user's page, with a short callout label. Scrolls it into view. Several highlights can be on screen; they fade after ~9s. Use it when pointing at a number, row, chart or section.",
+      "Outline the element you are discussing on the user's page, with a short callout label. Scrolls it into view. Each highlight becomes a numbered stop that stays on the page and that the user can replay; the result gives its number. Use it when pointing at a number, row, chart or section, and cite the stop in your answer as [short phrase](pin:N).",
     parameters: obj(
       {
         target: str("Section name, heading, or exact phrase/number shown on the page"),
         kind: { type: "string", enum: ["auto", "heading", "text", "section", "selector"] },
-        label: str("Callout text, under 80 characters, e.g. 'Open gap $182-$186, unfilled'"),
+        label: str("Callout text, under 80 characters, stating the takeaway, e.g. 'Open gap $182-$186, unfilled'"),
+        near: nullable(str("Section or heading the target sits in, when the same text or number appears more than once on the page; null otherwise")),
         why: str("One short line for the user"),
       },
-      ["target", "kind", "label", "why"],
+      ["target", "kind", "label", "near", "why"],
     ),
     strict: true,
   },

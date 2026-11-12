@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { activeHighlights, clearHighlights, clickRefusal, highlight, locate, matchScore, outline, readRegion, regionOf, safeClick } from "./dom-agent";
+import { activeHighlights, beginTour, clearHighlights, clickRefusal, countText, highlight, locate, locateNear, matchScore, nextPin, outline, pagePath, readRegion, regionOf, safeClick, showPin } from "./dom-agent";
 
 function page(html: string) {
   document.body.innerHTML = `<main>${html}</main><aside aria-label="AI assistant"><h2>Gaps</h2><button>Delete chat</button></aside>`;
@@ -119,5 +119,45 @@ describe("highlights", () => {
     clearHighlights();
     expect(activeHighlights()).toBe(0);
     vi.useRealTimers();
+  });
+});
+
+describe("walkthrough stops", () => {
+  it("numbers stops, keeps them until cleared and replaces a stop shown again", () => {
+    vi.useFakeTimers();
+    page(`<p id="a">Revenue $96.2B</p><p id="b">Gross margin 71.2%</p>`);
+    beginTour();
+    const first = nextPin();
+    highlight(document.getElementById("a")!, "Revenue up 12%", 0, { n: first });
+    highlight(document.getElementById("b")!, "Margin down 210bp", 0, { n: nextPin() });
+    vi.advanceTimersByTime(60_000);
+    expect(activeHighlights()).toBe(2);
+    const labels = [...document.querySelectorAll(".agent-mark-label:not(.agent-mark-out)")].map((l) => l.textContent);
+    expect(labels).toEqual(["1Revenue up 12%", "2Margin down 210bp"]);
+    highlight(document.getElementById("a")!, "Revenue up 12%", 0, { n: first, pulse: true });
+    expect(activeHighlights()).toBe(2);
+    beginTour();
+    expect(activeHighlights()).toBe(0);
+    expect(nextPin()).toBe(1);
+    vi.useRealTimers();
+  });
+
+  it("searches inside the named section first and counts repeated text", () => {
+    page(`<section data-section="Income statement"><p>Revenue $4.3B</p></section><section data-section="Segments"><p id="seg">Revenue $4.3B</p></section>`);
+    expect(countText("$4.3B")).toBe(2);
+    expect(locateNear("$4.3B", "text")?.el.id).toBe("");
+    expect(locateNear("$4.3B", "text", "Segments")?.el.id).toBe("seg");
+    expect(locateNear("$4.3B", "text", "No such section")?.el.id).toBe("");
+  });
+
+  it("shows a stop again on its page and reports one that is gone", async () => {
+    page(`<p id="t">Free cash flow $1.1B</p>`);
+    window.scrollBy = vi.fn(); // not implemented in jsdom
+    beginTour();
+    const pin = { n: 1, target: "Free cash flow", kind: "text" as const, label: "FCF doubled", path: pagePath() };
+    expect(await showPin(pin)).toEqual({ ok: true });
+    expect(document.querySelector(".agent-mark-label")?.textContent).toBe("1FCF doubled");
+    expect(await showPin({ ...pin, path: "/app/elsewhere" })).toEqual({ ok: false, reason: "That stop is on another page" });
+    clearHighlights();
   });
 });

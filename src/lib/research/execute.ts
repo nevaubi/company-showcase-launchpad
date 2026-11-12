@@ -22,7 +22,7 @@ import type { UniverseEntry } from "@/lib/financials/types";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
-import { agentRoot, highlight, locate, outline, readRegion, regionOf, safeClick, bringIntoView, type LocateKind } from "@/lib/research/dom-agent";
+import { agentRoot, countText, highlight, locate, locateNear, nextPin, outline, pagePath, readRegion, regionOf, safeClick, bringIntoView, type LocateKind, type Pin } from "@/lib/research/dom-agent";
 import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/views";
 import { viewLabel } from "@/lib/research/view-spec";
 import { partnerFile } from "@/lib/data";
@@ -42,6 +42,8 @@ export interface ToolRun {
   summary: string;
   /** Filings referenced, for citation chips */
   refs?: { ticker: string; accn: string; doc?: string; label: string }[];
+  /** The walkthrough stop a highlight created, so the UI can cite and replay it. */
+  pin?: Pin;
 }
 
 function fmtVal(v: number, unit: Row["unit"]) {
@@ -54,7 +56,11 @@ function fmtVal(v: number, unit: Row["unit"]) {
 
 async function dataset(qc: QueryClient, ticker: string): Promise<CompanyDataset> {
   const t = ticker.toUpperCase();
-  if (!coverageOf(t)) throw new Error(`${t} is not in coverage. Covered: ${COVERAGE.map((c) => c.ticker).join(", ")}. Use web_search for other companies.`);
+  if (!coverageOf(t)) {
+    // Suggest near matches instead of listing all ~1,800 covered tickers into the model's context.
+    const close = COVERAGE.filter((c) => c.ticker.startsWith(t.slice(0, 2)) || c.shortName.toUpperCase().includes(t)).slice(0, 8).map((c) => `${c.ticker} (${c.shortName})`);
+    throw new Error(`${t} is not in coverage (${COVERAGE.length} companies).${close.length ? ` Closest: ${close.join(", ")}.` : ""} Use screen_companies to find covered tickers, or web_search for other companies.`);
+  }
   return qc.fetchQuery(companyQuery(t));
 }
 
@@ -139,7 +145,7 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
       const sk = String(args.sort_by ?? "revenue");
       rows.sort((a, b) => ((Number(b[sk]) || -Infinity) - (Number(a[sk]) || -Infinity)) * (args.descending === false ? -1 : 1));
       const cols = [...new Set([sk, ...((args.columns as string[]) ?? [])])].slice(0, 8);
-      const n = Math.max(1, Math.min(78, Number(args.limit) || 15));
+      const n = Math.max(1, Math.min(100, Number(args.limit) || 15));
       const lines = rows.slice(0, n).map((r) => `${r.ticker} ${r.name} | ${cols.map((c) => `${c} ${fmtMetric(c, r[c])}`).join(" | ")}`);
       return { output: `${rows.length} companies match (TTM, from SEC statements).\n${lines.join("\n")}`, summary: `${rows.length} matches` };
     }
@@ -661,7 +667,9 @@ Month-start closes:\n${monthly.join("\n")}`;
     case "highlight":
     case "read_section": {
       const target = String(args.target ?? "");
-      const hit = locate(target, (args.kind as LocateKind) ?? "auto");
+      const kind = (args.kind as LocateKind) ?? "auto";
+      const near = typeof args.near === "string" && args.near.trim() ? args.near.trim() : undefined;
+      const hit = name === "highlight" ? locateNear(target, kind, near) : locate(target, kind);
       if (!hit) throw new Error(`Nothing matching "${target}" on this page. Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`);
       const region = regionOf(hit.el);
       const moved = name === "read_section" ? null : await bringIntoView(name === "highlight" ? hit.el : region);
@@ -669,8 +677,15 @@ Month-start closes:\n${monthly.join("\n")}`;
       if (name === "scroll_to") return { output: `Scrolled to "${hit.label}" (${hit.how} match), clear of the assistant panel${note}.`, summary: hit.label };
       if (name === "highlight") {
         const label = String(args.label ?? hit.label);
-        highlight(hit.how === "text" ? hit.el : region, label);
-        return { output: `Highlighted "${hit.label}" for the user${note}.`, summary: label };
+        const n = nextPin();
+        highlight(hit.how === "text" ? hit.el : region, label, 0, { n });
+        const dupes = hit.how === "text" && !near ? countText(target) : 0;
+        const warn = dupes > 1 ? ` Note: "${target}" appears ${dupes} times on this page and the first was marked. If that is the wrong one, call highlight again with near set to the section it sits in.` : "";
+        return {
+          output: `Highlighted "${hit.label}" for the user as stop ${n}${note}. It stays on the page. In your answer, tie the point to it with a markdown link: [short phrase](pin:${n}).${warn}`,
+          summary: label,
+          pin: { n, target, kind, near, label, path: pagePath() },
+        };
       }
       const text = readRegion(hit.el, 8000);
       return { output: `Section "${hit.label}":\n${text || "(no text)"}`, summary: hit.label };

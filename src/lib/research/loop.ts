@@ -5,6 +5,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { agentStep, type AgentOutputItem } from "@/lib/research.functions";
 import { runTool, type AgentCtx } from "@/lib/research/execute";
+import type { Pin } from "@/lib/research/dom-agent";
 
 export interface Step {
   kind: "tool" | "web" | "think";
@@ -21,6 +22,8 @@ export interface Step {
   startedAt?: number;
   /** Tool calls issued in the same model step share a batch number. */
   batch?: number;
+  /** Set on a highlight step: the numbered stop it left on the page. */
+  pin?: Pin;
 }
 
 export interface Plan {
@@ -197,6 +200,7 @@ export async function runAgent(opts: {
             st.summary = r.summary;
             st.output = r.output.slice(0, 4000);
             st.status = "done";
+            st.pin = r.pin;
             reply(r.output);
           } catch (e) {
             failed++;

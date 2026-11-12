@@ -528,6 +528,55 @@
   line-height: 1.35;
   box-shadow: 0 4px 14px rgb(0 0 0 / 0.14);
 }
+/* Numbered walkthrough stops. */
+.agent-mark-n {
+  display: inline-grid;
+  place-items: center;
+  min-width: 16px;
+  height: 16px;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: white;
+  color: var(--chart-1);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 1px;
+}
+.agent-pin-ref {
+  display: inline-grid;
+  place-items: center;
+  min-width: 15px;
+  height: 15px;
+  margin-left: 4px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--chart-1);
+  color: white;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: 1px;
+}
+.agent-mark-pulse {
+  animation:
+    agent-mark-in 360ms ease-out,
+    agent-mark-pulse 900ms ease-out 2;
+}
+@keyframes agent-mark-pulse {
+  from {
+    box-shadow: 0 0 0 4px color-mix(in oklch, var(--chart-1) 40%, transparent);
+  }
+  to {
+    box-shadow: 0 0 0 16px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-mark-pulse {
+    animation: none;
+  }
+}
 @keyframes agent-mark-in {
   from {
     opacity: 0;
