@@ -449,7 +449,7 @@ export const TOOL_DEFS = [
     type: "function",
     name: "guide",
     description:
-      "Walk the user through the current page in ONE call: an ordered list of 1-4 stops (up to 8 only when the user asks for the whole page at once). Each stop is scrolled into view, outlined and numbered in turn with a short pause between them, and stays on the page with its explanation beside it so the user can step back and forth. Use this instead of several highlight calls whenever you explain a page, a table or a chart, or point at more than one thing. Order stops top to bottom. Call get_page_context first to get real targets. A stop behind a tab or range toggle can name it in click.",
+      "Walk the user through the current page in ONE call: an ordered list of 1-4 stops (up to 8 only when the user asks for the whole page at once). Each stop is scrolled into view, outlined and numbered in turn with a short pause between them, and stays on the page with its explanation beside it so the user can step back and forth. Use this instead of several highlight calls whenever you explain a page, a table or a chart, or point at more than one thing. Order stops top to bottom. Call get_page_context first to get real targets. A stop behind a tab or range toggle can name it in click. Pass 2 to 4 next moves in replies; they show as buttons under your answer, so you do not need suggest_replies as well.",
     parameters: obj(
       {
         stops: {
@@ -466,9 +466,10 @@ export const TOOL_DEFS = [
             ["target", "kind", "near", "click", "label", "explain"],
           ),
         },
+        replies: nullable({ type: "array", items: str("What the user would say next, six words or fewer, e.g. 'Go deeper on margins'") }),
         why: str("One short line for the user"),
       },
-      ["stops", "why"],
+      ["stops", "replies", "why"],
     ),
     strict: true,
   },

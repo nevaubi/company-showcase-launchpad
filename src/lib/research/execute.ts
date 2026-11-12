@@ -86,6 +86,8 @@ export interface AgentCtx {
   navigate?: (href: string) => void;
   /** Read a walkthrough stop aloud; the walkthrough waits for it to finish before moving on. */
   narrate?: (text: string) => Promise<void>;
+  /** True once the user has stopped or redirected the run; long page actions end early. */
+  stopped?: () => boolean;
 }
 
 const PAGE_PATH: Record<string, (t: string) => string> = {
@@ -736,17 +738,24 @@ Month-start closes:\n${monthly.join("\n")}`;
       ).filter((s) => s.target.trim());
       if (!stops.length) throw new Error("Give at least one stop with a target");
       const say = ctx.narrate;
-      const r = await playStops(stops, 1100, say ? (p) => say(`${p.label}. ${p.explain ?? ""}`) : undefined);
+      const r = await playStops(stops, 1100, say ? (p) => say(`${p.label}. ${p.explain ?? ""}`) : undefined, ctx.stopped);
       if (!r.pins.length) throw new Error(`None of the stops were found on this page (${r.missed.map((m) => `"${m}"`).join(", ")}). Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`);
       const lines = r.pins.map((p) => `${p.n}. ${p.label}`);
+      const seen = new Set<string>();
+      const replies = ((args.replies as unknown[] | null | undefined) ?? [])
+        .map((o) => String(o ?? "").replace(/\s+/g, " ").trim().slice(0, 60))
+        .filter((o) => o && !seen.has(o.toLowerCase()) && seen.add(o.toLowerCase()))
+        .slice(0, 4);
       return {
         output:
           `Walked the user through ${r.pins.length} stop${r.pins.length === 1 ? "" : "s"}, each numbered and left on the page with its explanation beside it:\n${lines.join("\n")}` +
           (r.missed.length ? `\nNot found and skipped: ${r.missed.map((m) => `"${m}"`).join(", ")}. Sections here: ${outline().slice(0, 25).join(" · ")}.` : "") +
           (r.notes.length ? `\nNotes: ${r.notes.join("; ")}.` : "") +
-          `\nIn your answer, tie each point to its stop with a markdown link such as [short phrase](pin:${r.pins[0].n}).`,
+          (replies.length >= 2 ? `\nNext moves are shown as buttons under your answer: ${replies.join(" | ")}. Do not list them in the text.` : "") +
+          `\nThe user has already seen and heard each stop. Do not repeat them. Answer in one or two sentences that add the takeaway across them, linking a stop where useful, e.g. [short phrase](pin:${r.pins[0].n}), then ask one question.`,
         summary: `${r.pins.length} stop${r.pins.length === 1 ? "" : "s"}`,
         pins: r.pins,
+        choices: replies.length >= 2 ? replies : undefined,
       };
     }
     case "get_site_map": {

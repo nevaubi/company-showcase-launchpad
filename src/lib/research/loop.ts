@@ -72,15 +72,37 @@ export function compact(items: Record<string, unknown>[], budget = 700_000) {
 
 const TRANSIENT = /timeout|timed out|fetch failed|network|502|503|504|429|rate|overloaded|ECONN/i;
 
+/** Resolve with the promise, or reject as soon as the user stops, so a new message never waits on an abandoned call. */
+function untilStopped<T>(work: Promise<T>, stopped: () => boolean): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setInterval(() => {
+      if (!stopped()) return;
+      clearInterval(timer);
+      reject(new Error("Stopped"));
+    }, 150);
+    work.then(
+      (v) => {
+        clearInterval(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearInterval(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 async function stepWithRetry(items: Record<string, unknown>[], effort: "medium" | "high", stopped: () => boolean) {
   let last: unknown;
   for (let a = 0; a < 3; a++) {
     if (stopped()) throw new Error("Stopped");
     try {
-      return await agentStep({ data: { items, effort } });
+      return await untilStopped(agentStep({ data: { items, effort } }), stopped);
     } catch (e) {
       last = e;
       const m = (e as Error).message ?? "";
+      if (m === "Stopped") throw e;
       if (/too long/i.test(m)) compact(items, 400_000);
       else if (!TRANSIENT.test(m)) throw e;
       await new Promise((r) => setTimeout(r, 1200 * (a + 1)));
@@ -184,6 +206,7 @@ export async function runAgent(opts: {
             reply(`User answered: ${answer}`);
             return emit();
           }
+          if (stopped()) throw new Error("Stopped");
           const st: Step = {
             kind: "tool",
             name,
@@ -198,7 +221,7 @@ export async function runAgent(opts: {
           emit();
           const t0 = performance.now();
           try {
-            const r = await runTool(qc, name, args, ctx);
+            const r = await runTool(qc, name, args, { ...ctx, stopped });
             st.summary = r.summary;
             st.output = r.output.slice(0, 4000);
             st.status = "done";
