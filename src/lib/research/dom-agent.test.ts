@@ -150,6 +150,15 @@ describe("walkthrough stops", () => {
     expect(locateNear("$4.3B", "text", "No such section")?.el.id).toBe("");
   });
 
+  it("marks the cell a phrase is in, not a wrapper that merely contains it", () => {
+    page(`<section data-section="Income statement">
+      <h2>Income statement</h2>
+      <table><tr><td>Revenue</td><td id="rev">$4.31B</td></tr><tr><td id="gm">Gross margin</td><td>22.1%</td></tr></table>
+    </section>`);
+    expect(locateNear("Gross margin", "text", "Income statement")?.el.id).toBe("gm");
+    expect(locateNear("$4.31B", "text", "Income statement")?.el.id).toBe("rev");
+  });
+
   it("shows a stop again on its page and reports one that is gone", async () => {
     page(`<p id="t">Free cash flow $1.1B</p>`);
     window.scrollBy = vi.fn(); // not implemented in jsdom

@@ -101,17 +101,25 @@ export function locate(target: string, kind: LocateKind = "auto", root: HTMLElem
     if (best && best.score >= 45) return best;
   }
   if (kind === "heading" || kind === "section") return best && best.score >= 30 ? best : null;
-  // Text search: smallest block element containing the phrase.
+  // Text search: the tightest element containing the phrase. A text node that holds the phrase itself wins
+  // outright; otherwise the parent with the least text does, so a wrapper with stray text of its own
+  // (whitespace, a label) never beats the cell or line the phrase is actually in.
   const q = norm(t);
   const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let node: Node | null;
   let hit: HTMLElement | null = null;
+  let hitSize = Infinity;
   while ((node = walker.nextNode())) {
     const parent = node.parentElement;
     if (!parent || ignored(parent)) continue;
-    if (norm(node.textContent ?? "").includes(q) || norm(parent.textContent ?? "").includes(q)) {
+    if (norm(node.textContent ?? "").includes(q)) {
       hit = parent;
       break;
+    }
+    const size = (parent.textContent ?? "").length;
+    if (size < hitSize && norm(parent.textContent ?? "").includes(q)) {
+      hit = parent;
+      hitSize = size;
     }
   }
   if (hit) {
