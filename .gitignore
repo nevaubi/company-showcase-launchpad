@@ -34,3 +34,6 @@ dist-ssr
 # Covered companies datasets come from the partner data service (scripts/lib/datasets.ts);
 # a local ingest run may write them here but they are never committed.
 /public/data/companies/
+
+# Local component preview harness (standalone vite page), never part of the app
+.preview/
