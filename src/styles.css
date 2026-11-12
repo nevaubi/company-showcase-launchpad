@@ -562,14 +562,19 @@
 .agent-mark-pulse {
   animation:
     agent-mark-in 360ms ease-out,
-    agent-mark-pulse 900ms ease-out 2;
+    agent-mark-pulse 1400ms ease-out 1;
 }
+/* The stop being shown is briefly spotlit: the rest of the page dims, then comes back. */
 @keyframes agent-mark-pulse {
   from {
-    box-shadow: 0 0 0 4px color-mix(in oklch, var(--chart-1) 40%, transparent);
+    box-shadow:
+      0 0 0 4px color-mix(in oklch, var(--chart-1) 45%, transparent),
+      0 0 0 200vmax color-mix(in oklch, black 18%, transparent);
   }
   to {
-    box-shadow: 0 0 0 16px transparent;
+    box-shadow:
+      0 0 0 4px color-mix(in oklch, var(--chart-1) 14%, transparent),
+      0 0 0 200vmax transparent;
   }
 }
 @media (prefers-reduced-motion: reduce) {

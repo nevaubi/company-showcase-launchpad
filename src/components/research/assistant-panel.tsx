@@ -569,7 +569,10 @@ function Walkthrough({ pins, current, onShow, onClear }: { pins: Pin[]; current:
               className={cn("flex w-full items-start gap-2 rounded-md px-1 py-1 text-left text-[11.5px] leading-snug transition-colors hover:bg-muted/60", p.n === current && "bg-muted/60")}
             >
               <span className="agent-pin-ref !ml-0 mt-px shrink-0">{p.n}</span>
-              <span className="min-w-0 flex-1">{p.label}</span>
+              <span className="min-w-0 flex-1">
+                <span className={cn(p.n === current && "font-medium")}>{p.label}</span>
+                {p.n === current && p.explain && <span className="mt-0.5 block text-muted-foreground">{p.explain}</span>}
+              </span>
             </button>
           </li>
         ))}
@@ -582,7 +585,7 @@ function AssistantTurn({ m, canvasOpen }: { m: Msg; canvasOpen: boolean }) {
   const [open, setOpen] = useState(false);
   const [stop, setStop] = useState(0);
   const navigate = useNavigate();
-  const pins = useMemo(() => m.steps.flatMap((s) => (s.pin && s.status === "done" ? [s.pin] : [])), [m.steps]);
+  const pins = useMemo(() => m.steps.flatMap((s) => (s.status === "done" ? (s.pins ?? []) : [])), [m.steps]);
   async function showStop(n: number) {
     const pin = pins.find((p) => p.n === n);
     if (!pin) return;

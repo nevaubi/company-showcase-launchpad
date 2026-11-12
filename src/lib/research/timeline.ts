@@ -34,6 +34,10 @@ export function argSummary(name: string, a: Record<string, unknown>): string {
   if (name === "create_file") return `${s(a.name)}.${s(a.format)}`;
   if (name === "run_code") return s(a.title) || ((a.tickers as string[] | undefined) ?? []).join(", ");
   if (name === "highlight") return s(a.label) || s(a.target);
+  if (name === "guide") {
+    const n = ((a.stops as unknown[] | undefined) ?? []).length;
+    return `${n} stop${n === 1 ? "" : "s"}`;
+  }
   for (const k of ["target", "query", "q", "ticker", "symbol", "page", "series_id", "url", "accession"]) {
     const v = a[k];
     if (typeof v === "string" && v) return k === "url" ? hostOf(v) : v.slice(0, 90);

@@ -402,6 +402,33 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "guide",
+    description:
+      "Walk the user through the current page in ONE call: an ordered list of 2-8 stops. Each stop is scrolled into view, outlined and numbered in turn with a short pause between them, and stays on the page with its explanation beside it so the user can step back and forth. Use this instead of several highlight calls whenever you explain a page, a table or a chart, or point at more than one thing. Order stops top to bottom. Call get_page_context first to get real targets. A stop behind a tab or range toggle can name it in click.",
+    parameters: obj(
+      {
+        stops: {
+          type: "array",
+          items: obj(
+            {
+              target: str("Section name, heading, or exact phrase/number shown on the page"),
+              kind: { type: "string", enum: ["auto", "heading", "text", "section", "selector"] },
+              near: nullable(str("Section the target sits in, when the same text or number appears more than once; null otherwise")),
+              click: nullable(str("Visible label of a tab or toggle to press first so the target is showing, e.g. 'Quarterly'; null otherwise")),
+              label: str("Callout on the page, under 80 characters, stating the takeaway, e.g. 'Gross margin down 210bp YoY'"),
+              explain: str("One or two plain sentences: what this part of the page is and why it matters here"),
+            },
+            ["target", "kind", "near", "click", "label", "explain"],
+          ),
+        },
+        why: str("One short line for the user"),
+      },
+      ["stops", "why"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "read_section",
     description: "Read the text of one section of the user's current page (the card or block under a heading), in more detail than get_page_context.",
     parameters: obj(
@@ -555,6 +582,7 @@ export const TOOL_LABELS: Record<string, string> = {
   fetch_url: "Fetched URL",
   scroll_to: "Scrolled",
   highlight: "Highlighted",
+  guide: "Walked the page",
   read_section: "Read section",
   click: "Pressed",
   show_canvas: "Opened canvas",
@@ -605,6 +633,7 @@ export const TOOL_RUNNING: Record<string, string> = {
   fetch_url: "Fetching URL",
   scroll_to: "Scrolling",
   highlight: "Highlighting",
+  guide: "Walking you through the page",
   read_section: "Reading section",
   click: "Pressing",
   show_canvas: "Opening canvas",

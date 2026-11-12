@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { activeHighlights, beginTour, clearHighlights, clickRefusal, countText, highlight, locate, locateNear, matchScore, nextPin, outline, pagePath, readRegion, regionOf, safeClick, showPin } from "./dom-agent";
+import { activeHighlights, beginTour, clearHighlights, clickRefusal, countText, highlight, locate, locateNear, matchScore, nextPin, outline, pageMap, pagePath, playStops, readRegion, regionOf, safeClick, showPin } from "./dom-agent";
 
 function page(html: string) {
   document.body.innerHTML = `<main>${html}</main><aside aria-label="AI assistant"><h2>Gaps</h2><button>Delete chat</button></aside>`;
@@ -168,5 +168,43 @@ describe("walkthrough stops", () => {
     expect(document.querySelector(".agent-mark-label")?.textContent).toBe("1FCF doubled");
     expect(await showPin({ ...pin, path: "/app/elsewhere" })).toEqual({ ok: false, reason: "That stop is on another page" });
     clearHighlights();
+  });
+});
+
+describe("guided walkthrough", () => {
+  const html = `<h1>Northwind</h1>
+    <section data-section="Income statement"><h2>Income statement</h2>
+      <div role="tablist"><button role="tab" aria-selected="true">Annual</button><button role="tab" aria-selected="false">Quarterly</button></div>
+      <table><tr><td>Revenue</td><td id="rev">$4.31B</td></tr><tr><td>Gross margin</td><td id="gm">22.1%</td></tr></table>
+    </section>
+    <section data-section="Cash flow"><h2>Cash flow</h2><p id="fcf">Free cash flow $412M</p></section>`;
+
+  it("plays stops in order, numbers them and skips one it can't find", async () => {
+    page(html);
+    window.scrollBy = vi.fn();
+    beginTour();
+    const r = await playStops(
+      [
+        { target: "$4.31B", kind: "text", near: "Income statement", label: "Revenue up 11.9%", explain: "The top line for the quarter." },
+        { target: "Backlog", kind: "text", label: "Not on this page" },
+        { target: "22.1%", kind: "text", near: "Income statement", click: "Quarterly", label: "Margin down 210bp" },
+        { target: "Cash flow", kind: "section", label: "FCF doubled" },
+      ],
+      0,
+    );
+    expect(r.pins.map((p) => [p.n, p.label])).toEqual([[1, "Revenue up 11.9%"], [2, "Margin down 210bp"], [3, "FCF doubled"]]);
+    expect(r.missed).toEqual(["Backlog"]);
+    expect(r.pins[0].explain).toBe("The top line for the quarter.");
+    expect(r.pins[1].click).toBe("Quarterly");
+    expect(activeHighlights()).toBe(3);
+    clearHighlights();
+  });
+
+  it("describes each component: what it holds and which controls are on", () => {
+    page(html);
+    const map = pageMap();
+    expect(map.find((l) => l.startsWith("- Income statement"))).toMatch(/table, 2 rows; controls: Annual \(on\), Quarterly/);
+    expect(map.find((l) => l.startsWith("- Cash flow"))).toContain("Free cash flow $412M");
+    expect(map.filter((l) => l.startsWith("- Income statement"))).toHaveLength(1);
   });
 });

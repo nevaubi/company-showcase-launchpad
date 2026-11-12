@@ -47,7 +47,7 @@ function StepIcon({ s, className }: { s: Step; className?: string }) {
   if (n === "run_code") return <Code2 className={c} />;
   if (n === "navigate_to" || n === "get_page_context") return <Compass className={c} />;
   if (n === "scroll_to" || n === "read_section") return <ScrollText className={c} />;
-  if (n === "highlight") return <Highlighter className={c} />;
+  if (n === "highlight" || n === "guide") return <Highlighter className={c} />;
   if (n === "click") return <MousePointerClick className={c} />;
   if (n === "render_view" || n === "show_canvas") return <LayoutDashboard className={c} />;
   if (n === "create_file" || n === "browser_files") return <Download className={c} />;

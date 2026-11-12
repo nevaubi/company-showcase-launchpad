@@ -22,7 +22,7 @@ import type { UniverseEntry } from "@/lib/financials/types";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
-import { agentRoot, countText, highlight, locate, locateNear, nextPin, outline, pagePath, readRegion, regionOf, safeClick, bringIntoView, type LocateKind, type Pin } from "@/lib/research/dom-agent";
+import { agentRoot, countText, highlight, locate, locateNear, nextPin, outline, pageMap, pagePath, playStops, readRegion, regionOf, safeClick, bringIntoView, type LocateKind, type Pin, type StopSpec } from "@/lib/research/dom-agent";
 import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/views";
 import { viewLabel } from "@/lib/research/view-spec";
 import { partnerFile } from "@/lib/data";
@@ -42,8 +42,8 @@ export interface ToolRun {
   summary: string;
   /** Filings referenced, for citation chips */
   refs?: { ticker: string; accn: string; doc?: string; label: string }[];
-  /** The walkthrough stop a highlight created, so the UI can cite and replay it. */
-  pin?: Pin;
+  /** The walkthrough stops a highlight or guide call left on the page, so the UI can cite and replay them. */
+  pins?: Pin[];
 }
 
 function fmtVal(v: number, unit: Row["unit"]) {
@@ -128,7 +128,19 @@ export function flatUniverse(companies: UniverseEntry[]) {
 const fmtMetric = (k: string, v: unknown) =>
   typeof v !== "number" ? String(v ?? "—") : /Margin|Growth|Cagr|Intensity/.test(k) ? `${(v * 100).toFixed(1)}%` : k === "epsDiluted" ? `$${v.toFixed(2)}` : `$${(v / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M`;
 
-export async function runTool(qc: QueryClient, name: string, args: Record<string, unknown>, ctx: AgentCtx = {}): Promise<ToolRun> {
+// Tools that move the user's page run one at a time, in the order the model issued them. Issued together
+// they would otherwise scroll and mark at once and fight over the viewport.
+const PAGE_TOOLS = new Set(["scroll_to", "highlight", "read_section", "click", "guide", "navigate_to"]);
+let pageQueue: Promise<unknown> = Promise.resolve();
+
+export function runTool(qc: QueryClient, name: string, args: Record<string, unknown>, ctx: AgentCtx = {}): Promise<ToolRun> {
+  if (!PAGE_TOOLS.has(name)) return runToolNow(qc, name, args, ctx);
+  const run = pageQueue.then(() => runToolNow(qc, name, args, ctx));
+  pageQueue = run.catch(() => undefined);
+  return run;
+}
+
+async function runToolNow(qc: QueryClient, name: string, args: Record<string, unknown>, ctx: AgentCtx = {}): Promise<ToolRun> {
   switch (name) {
     case "screen_companies": {
       const u = await qc.fetchQuery(universeQuery);
@@ -400,8 +412,9 @@ export async function runTool(qc: QueryClient, name: string, args: Record<string
       const main = agentRoot();
       const text = (main?.innerText ?? "").replace(/\n{2,}/g, "\n").slice(0, 6000);
       const sections = outline(main);
+      const map = pageMap(main);
       return {
-        output: `URL: ${location.pathname}${location.search}\nTitle: ${document.title}\nSections (targets for scroll_to/highlight/read_section): ${sections.join(" · ") || "none found"}\nVisible content:\n${text}`,
+        output: `URL: ${location.pathname}${location.search}\nTitle: ${document.title}\nSections (targets for guide/scroll_to/highlight/read_section): ${sections.join(" · ") || "none found"}\nComponents, top to bottom (what each holds, its controls and which are on, where it is):\n${map.join("\n") || "none found"}\nVisible content:\n${text}`,
         summary: location.pathname,
       };
     }
@@ -684,11 +697,36 @@ Month-start closes:\n${monthly.join("\n")}`;
         return {
           output: `Highlighted "${hit.label}" for the user as stop ${n}${note}. It stays on the page. In your answer, tie the point to it with a markdown link: [short phrase](pin:${n}).${warn}`,
           summary: label,
-          pin: { n, target, kind, near, label, path: pagePath() },
+          pins: [{ n, target, kind, near, label, path: pagePath() }],
         };
       }
       const text = readRegion(hit.el, 8000);
       return { output: `Section "${hit.label}":\n${text || "(no text)"}`, summary: hit.label };
+    }
+    case "guide": {
+      const stops = ((args.stops as Record<string, unknown>[] | undefined) ?? []).slice(0, 8).map(
+        (s): StopSpec => ({
+          target: String(s.target ?? ""),
+          kind: (s.kind as LocateKind) ?? "auto",
+          near: typeof s.near === "string" ? s.near : undefined,
+          click: typeof s.click === "string" ? s.click : undefined,
+          label: String(s.label ?? s.target ?? "").slice(0, 120),
+          explain: typeof s.explain === "string" ? s.explain.slice(0, 400) : undefined,
+        }),
+      ).filter((s) => s.target.trim());
+      if (!stops.length) throw new Error("Give at least one stop with a target");
+      const r = await playStops(stops);
+      if (!r.pins.length) throw new Error(`None of the stops were found on this page (${r.missed.map((m) => `"${m}"`).join(", ")}). Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`);
+      const lines = r.pins.map((p) => `${p.n}. ${p.label}`);
+      return {
+        output:
+          `Walked the user through ${r.pins.length} stop${r.pins.length === 1 ? "" : "s"}, each numbered and left on the page with its explanation beside it:\n${lines.join("\n")}` +
+          (r.missed.length ? `\nNot found and skipped: ${r.missed.map((m) => `"${m}"`).join(", ")}. Sections here: ${outline().slice(0, 25).join(" · ")}.` : "") +
+          (r.notes.length ? `\nNotes: ${r.notes.join("; ")}.` : "") +
+          `\nIn your answer, tie each point to its stop with a markdown link such as [short phrase](pin:${r.pins[0].n}).`,
+        summary: `${r.pins.length} stop${r.pins.length === 1 ? "" : "s"}`,
+        pins: r.pins,
+      };
     }
     case "click": {
       const target = String(args.target ?? "");
