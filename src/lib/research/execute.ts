@@ -413,7 +413,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const href = mk(t);
       if (!ctx.navigate) return { output: "Navigation is only available in the side-panel assistant. Give the user this link instead: " + href, summary: href };
       ctx.navigate(href);
-      return { output: `Opened ${href} for the user.`, summary: href };
+      return { output: `Opened ${href} for the user. Opening a page is not the answer: wait for it, call get_page_context, then point at what the user asked for with guide or highlight before you reply.`, summary: href };
     }
     case "get_page_context": {
       const main = agentRoot();
@@ -768,7 +768,7 @@ Month-start closes:\n${monthly.join("\n")}`;
       if (!ctx.navigate) return { output: `Navigation is only available in the side-panel assistant. Give the user this link instead: ${path}`, summary: path };
       ctx.navigate(path);
       await new Promise((res) => setTimeout(res, 500));
-      return { output: `Opened ${path} for the user. Call get_page_context to see what is on it.`, summary: path };
+      return { output: `Opened ${path} for the user. Opening a page is not the answer: wait for it, call get_page_context, then point at what the user asked for with guide or highlight before you reply.`, summary: path };
     }
     case "find_on_page": {
       const q = String(args.query ?? "");
