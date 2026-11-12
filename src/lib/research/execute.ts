@@ -45,6 +45,8 @@ export interface ToolRun {
   refs?: { ticker: string; accn: string; doc?: string; label: string }[];
   /** The walkthrough stops a highlight or guide call left on the page, so the UI can cite and replay them. */
   pins?: Pin[];
+  /** Next moves offered to the user as buttons under the answer. */
+  choices?: string[];
 }
 
 function fmtVal(v: number, unit: Row["unit"]) {
@@ -708,6 +710,19 @@ Month-start closes:\n${monthly.join("\n")}`;
       const text = readRegion(hit.el, 8000);
       return { output: `Section "${hit.label}":\n${text || "(no text)"}`, summary: hit.label };
     }
+    case "suggest_replies": {
+      const seen = new Set<string>();
+      const choices = ((args.options as unknown[] | undefined) ?? [])
+        .map((o) => String(o ?? "").replace(/\s+/g, " ").trim().slice(0, 60))
+        .filter((o) => o && !seen.has(o.toLowerCase()) && seen.add(o.toLowerCase()))
+        .slice(0, 4);
+      if (choices.length < 2) throw new Error("Give 2 to 4 different options");
+      return {
+        output: `Shown as buttons under your answer: ${choices.join(" | ")}. Now give your short answer and end with one question. Do not list these options again in the text.`,
+        summary: `${choices.length} options`,
+        choices,
+      };
+    }
     case "guide": {
       const stops = ((args.stops as Record<string, unknown>[] | undefined) ?? []).slice(0, 8).map(
         (s): StopSpec => ({
@@ -716,7 +731,7 @@ Month-start closes:\n${monthly.join("\n")}`;
           near: typeof s.near === "string" ? s.near : undefined,
           click: typeof s.click === "string" ? s.click : undefined,
           label: String(s.label ?? s.target ?? "").slice(0, 120),
-          explain: typeof s.explain === "string" ? s.explain.slice(0, 400) : undefined,
+          explain: typeof s.explain === "string" ? s.explain.slice(0, 260) : undefined,
         }),
       ).filter((s) => s.target.trim());
       if (!stops.length) throw new Error("Give at least one stop with a target");

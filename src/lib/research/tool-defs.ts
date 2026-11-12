@@ -449,19 +449,19 @@ export const TOOL_DEFS = [
     type: "function",
     name: "guide",
     description:
-      "Walk the user through the current page in ONE call: an ordered list of 2-8 stops. Each stop is scrolled into view, outlined and numbered in turn with a short pause between them, and stays on the page with its explanation beside it so the user can step back and forth. Use this instead of several highlight calls whenever you explain a page, a table or a chart, or point at more than one thing. Order stops top to bottom. Call get_page_context first to get real targets. A stop behind a tab or range toggle can name it in click.",
+      "Walk the user through the current page in ONE call: an ordered list of 1-4 stops (up to 8 only when the user asks for the whole page at once). Each stop is scrolled into view, outlined and numbered in turn with a short pause between them, and stays on the page with its explanation beside it so the user can step back and forth. Use this instead of several highlight calls whenever you explain a page, a table or a chart, or point at more than one thing. Order stops top to bottom. Call get_page_context first to get real targets. A stop behind a tab or range toggle can name it in click.",
     parameters: obj(
       {
         stops: {
           type: "array",
           items: obj(
             {
-              target: str("Section name, heading, or exact phrase/number shown on the page"),
+              target: str("Section name, heading, or exact phrase/number shown on the page. For a figure, its label or value as shown, not the page title"),
               kind: { type: "string", enum: ["auto", "heading", "text", "section", "selector"] },
               near: nullable(str("Section the target sits in, when the same text or number appears more than once; null otherwise")),
               click: nullable(str("Visible label of a tab or toggle to press first so the target is showing, e.g. 'Quarterly'; null otherwise")),
-              label: str("Callout on the page, under 80 characters, stating the takeaway, e.g. 'Gross margin down 210bp YoY'"),
-              explain: str("One or two plain sentences: what this part of the page is and why it matters here"),
+              label: str("Callout on the page, eight words or fewer, stating the takeaway, e.g. 'Gross margin down 210bp YoY'"),
+              explain: str("One plain spoken sentence, 25 words or fewer: what this is and why it matters here"),
             },
             ["target", "kind", "near", "click", "label", "explain"],
           ),
@@ -469,6 +469,20 @@ export const TOOL_DEFS = [
         why: str("One short line for the user"),
       },
       ["stops", "why"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "suggest_replies",
+    description:
+      "Offer the user 2 to 4 short next moves as tappable buttons under your answer, so the conversation can go where they want: a deeper look at what you just showed, the next part of the page, a related check. Call it once, last, right before your final answer, whenever you end a turn with a question or there is an obvious next step. Each option is what the user would say, in their words.",
+    parameters: obj(
+      {
+        options: { type: "array", items: str("What the user would say, six words or fewer, e.g. 'Go deeper on margins'") },
+        why: str("One short line for the user"),
+      },
+      ["options", "why"],
     ),
     strict: true,
   },
@@ -628,6 +642,7 @@ export const TOOL_LABELS: Record<string, string> = {
   scroll_to: "Scrolled",
   highlight: "Highlighted",
   guide: "Walked the page",
+  suggest_replies: "Offered next steps",
   get_site_map: "Read the site map",
   go_to_path: "Opened page",
   find_on_page: "Searched the page",
@@ -685,6 +700,7 @@ export const TOOL_RUNNING: Record<string, string> = {
   scroll_to: "Scrolling",
   highlight: "Highlighting",
   guide: "Walking you through the page",
+  suggest_replies: "Lining up next steps",
   get_site_map: "Reading the site map",
   go_to_path: "Opening page",
   find_on_page: "Searching the page",
