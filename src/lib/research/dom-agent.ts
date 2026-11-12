@@ -252,6 +252,12 @@ function place() {
     const p = placeLabel(toRect({ left: r.left - 4, top: r.top - 4, right: r.right + 4, bottom: r.bottom + 4 }), free, { w: lw, h: lh }, vp);
     Object.assign(m.tag.style, { left: `${p.left}px`, top: `${p.top}px` });
     m.tag.dataset.side = p.side;
+    if (card && m.n === currentN) {
+      const cw = card.offsetWidth || 300;
+      const ch = card.offsetHeight || 150;
+      const c = placeLabel(toRect({ left: r.left - 4, top: r.top - 4, right: r.right + 4, bottom: r.bottom + 4 }), free, { w: cw, h: ch }, vp, 12);
+      Object.assign(card.style, { left: `${c.left}px`, top: `${c.top}px` });
+    }
   }
 }
 function schedule() {
@@ -284,7 +290,11 @@ export function highlight(el: HTMLElement, label: string, ms = 9000, opts: { n?:
     badge.textContent = String(opts.n);
     tag.appendChild(badge);
   }
-  tag.appendChild(doc.createTextNode(label.slice(0, 120)));
+  const text = doc.createElement("span");
+  text.className = "agent-mark-text";
+  text.textContent = label.slice(0, 120);
+  tag.appendChild(text);
+  if (opts.n != null && currentN != null) tag.dataset.state = opts.n === currentN ? "current" : "min";
   const l = layer(doc);
   l.appendChild(box);
   l.appendChild(tag);
@@ -315,6 +325,12 @@ export function clearHighlight(id: number) {
 
 export function clearHighlights() {
   for (const id of [...marks.keys()]) clearHighlight(id);
+  card?.remove();
+  card = null;
+  if (currentN != null) {
+    currentN = null;
+    if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("fu:tour-current", { detail: { n: null } }));
+  }
 }
 
 export const activeHighlights = () => marks.size;
@@ -338,11 +354,86 @@ export interface Pin {
 }
 
 let pinSeq = 0;
+/** The stops of the walkthrough on screen, and which one the reader is on. */
+let tour: Pin[] = [];
+let currentN: number | null = null;
+let card: HTMLDivElement | null = null;
+/** While a guide is still adding stops: how many it means to make, so the card can say "2 of 5" before all exist. */
+let planned = 0;
 
 /** Start a new assistant turn: numbering restarts and the previous turn's marks come off the page. */
 export function beginTour() {
   pinSeq = 0;
+  tour = [];
+  planned = 0;
+  setCurrentStop(null);
   clearHighlights();
+}
+
+export const tourStops = () => tour;
+export const currentStop = () => currentN;
+
+/**
+ * Make stop `n` the one being read. It gets a card beside it on the page (its takeaway, the explanation,
+ * where it sits in the sequence, back and next); the other stops shrink to their number so the page stays
+ * readable. null puts every stop back to its plain label.
+ */
+export function setCurrentStop(n: number | null) {
+  currentN = n != null && tour.some((p) => p.n === n) ? n : null;
+  for (const m of marks.values()) {
+    if (m.n == null) continue;
+    if (currentN == null) delete m.tag.dataset.state;
+    else m.tag.dataset.state = m.n === currentN ? "current" : "min";
+  }
+  card?.remove();
+  card = null;
+  const pin = tour.find((p) => p.n === currentN);
+  if (pin && typeof document !== "undefined") {
+    const doc = document;
+    const idx = tour.indexOf(pin);
+    const el = (tag: string, cls: string, text?: string) => {
+      const e = doc.createElement(tag);
+      e.className = cls;
+      if (text != null) e.textContent = text;
+      return e;
+    };
+    card = el("div", "agent-tour") as HTMLDivElement;
+    card.setAttribute("role", "dialog");
+    const total = Math.max(planned, tour.length);
+    card.setAttribute("aria-label", `Stop ${idx + 1} of ${total}: ${pin.label}`);
+    const head = el("div", "agent-tour-head");
+    head.append(el("span", "agent-pin-ref", String(pin.n)), el("span", "agent-tour-count", `Stop ${idx + 1} of ${total}`));
+    const close = el("button", "agent-tour-x", "×") as HTMLButtonElement;
+    close.type = "button";
+    close.setAttribute("aria-label", "Close this stop");
+    close.addEventListener("click", () => setCurrentStop(null));
+    head.append(close);
+    card.append(head, el("p", "agent-tour-title", pin.label));
+    if (pin.explain) card.append(el("p", "agent-tour-text", pin.explain));
+    // Back and Next appear once the guide has finished placing its stops.
+    if (tour.length > 1 && !planned) {
+      const foot = el("div", "agent-tour-foot");
+      const go = (label: string, to: Pin | undefined, primary: boolean) => {
+        const b = el("button", primary ? "agent-tour-btn agent-tour-next" : "agent-tour-btn", label) as HTMLButtonElement;
+        b.type = "button";
+        b.disabled = !to;
+        b.addEventListener("click", () => to && window.dispatchEvent(new CustomEvent("fu:tour-step", { detail: { n: to.n } })));
+        return b;
+      };
+      const last = idx === tour.length - 1;
+      const next = go(last ? "Done" : "Next", tour[idx + 1], true);
+      if (last) {
+        next.disabled = false;
+        next.addEventListener("click", () => setCurrentStop(null));
+      }
+      foot.append(go("Back", tour[idx - 1], false), next);
+      card.append(foot);
+    }
+    layer(doc).appendChild(card);
+    schedule();
+    for (const t of [120, 260, 450, 700]) setTimeout(schedule, t);
+  }
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("fu:tour-current", { detail: { n: currentN } }));
 }
 export const nextPin = () => ++pinSeq;
 export const pagePath = () => `${window.location.pathname}${window.location.search}`;
@@ -396,6 +487,8 @@ export async function showPin(pin: Pin, navigate?: (href: string) => void): Prom
   if (!hit) return { ok: false, reason: "That part of the page isn't showing any more. A tab or range may have changed." };
   await bringIntoView(hit.el);
   highlight(hit.how === "text" ? hit.el : regionOf(hit.el), pin.label, 0, { n: pin.n, pulse: true });
+  if (!tour.some((p) => p.n === pin.n)) tour = [...tour, pin].sort((a, b) => a.n - b.n);
+  setCurrentStop(pin.n);
   return { ok: true };
 }
 
@@ -446,10 +539,16 @@ export interface StopSpec {
  * mark and number it, then dwell so the user can follow before the next one. A stop that can't be found
  * is reported and skipped; the rest still play.
  */
-export async function playStops(stops: StopSpec[], dwellMs = 1100): Promise<{ pins: Pin[]; missed: string[]; notes: string[] }> {
+export async function playStops(
+  stops: StopSpec[],
+  dwellMs = 1100,
+  /** Called once a stop is on screen, e.g. to read it aloud. The walkthrough waits for it before moving on. */
+  onStop?: (pin: Pin) => Promise<void> | void,
+): Promise<{ pins: Pin[]; missed: string[]; notes: string[] }> {
   const pins: Pin[] = [];
   const missed: string[] = [];
   const notes: string[] = [];
+  planned = tour.length + stops.length;
   for (let i = 0; i < stops.length; i++) {
     const s = stops[i];
     const kind = s.kind ?? "auto";
@@ -468,15 +567,22 @@ export async function playStops(stops: StopSpec[], dwellMs = 1100): Promise<{ pi
     const hit = locateNear(s.target, kind, near);
     if (!hit) {
       missed.push(s.target);
+      planned = Math.max(tour.length, planned - 1);
       continue;
     }
     const moved = await bringIntoView(hit.el);
     if (moved && !notes.includes(moved)) notes.push(moved);
     const n = nextPin();
     highlight(hit.how === "text" ? hit.el : regionOf(hit.el), s.label, 0, { n, pulse: true });
-    pins.push({ n, target: s.target, kind, near, label: s.label, explain: s.explain?.trim() || undefined, click, path: pagePath() });
-    if (i < stops.length - 1 && dwellMs > 0) await settle(dwellMs);
+    const pin: Pin = { n, target: s.target, kind, near, label: s.label, explain: s.explain?.trim() || undefined, click, path: pagePath() };
+    pins.push(pin);
+    tour = [...tour.filter((p) => p.n !== n), pin].sort((a, b) => a.n - b.n);
+    setCurrentStop(n);
+    if (onStop) await onStop(pin);
+    else if (i < stops.length - 1 && dwellMs > 0) await settle(dwellMs);
   }
+  planned = 0;
+  if (pins.length) setCurrentStop(pins[pins.length - 1].n);
   return { pins, missed, notes };
 }
 
@@ -523,4 +629,119 @@ export function pageMap(root: HTMLElement = agentRoot(), max = 24): string[] {
     if (out.length >= max) break;
   }
   return out;
+}
+
+/** Add a stop made by a single highlight call to the walkthrough, so it can be stepped through like the rest. */
+export function addTourStop(pin: Pin) {
+  tour = [...tour.filter((p) => p.n !== pin.n), pin].sort((a, b) => a.n - b.n);
+}
+
+// ── Reading the page like a developer would: search it, pull a table out, inspect one element. ──
+
+const sectionOf = (el: HTMLElement) => {
+  const box = el.closest<HTMLElement>("[data-section]") ?? null;
+  if (box) return box.getAttribute("data-section") ?? "";
+  // Nearest heading above the element inside its card or section.
+  const region = el.closest<HTMLElement>("section,article,[data-slot=card],figure") ?? agentRoot(el.ownerDocument);
+  const h = region.querySelector<HTMLElement>("h1,h2,h3,[role=heading]");
+  return h ? labelOf(h) : "";
+};
+const onScreen = (el: HTMLElement) => {
+  const r = el.getBoundingClientRect();
+  const vh = (typeof window !== "undefined" && window.innerHeight) || 800;
+  return r.width === 0 && r.height === 0 ? "" : r.bottom < 0 ? "above the screen" : r.top > vh ? "below the screen" : "on screen";
+};
+
+export interface PageMatch {
+  text: string;
+  section: string;
+  tag: string;
+  where: string;
+}
+
+/**
+ * Search the page's text, like grep: a plain phrase (case-insensitive) or a regular expression. Each match
+ * comes back with the line it sits in, its section, its element and where it is, ready to pass to highlight.
+ */
+export function findOnPage(query: string, opts: { regex?: boolean; limit?: number } = {}, root: HTMLElement = agentRoot()): { total: number; matches: PageMatch[] } {
+  const limit = Math.max(1, Math.min(40, opts.limit ?? 12));
+  let test: (s: string) => boolean;
+  if (opts.regex) {
+    let re: RegExp;
+    try {
+      re = new RegExp(query, "i");
+    } catch (e) {
+      throw new Error(`Not a valid regular expression: ${(e as Error).message}`);
+    }
+    test = (s) => re.test(s);
+  } else {
+    const q = norm(query);
+    if (!q) return { total: 0, matches: [] };
+    test = (s) => norm(s).includes(q);
+  }
+  const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const seen = new Set<HTMLElement>();
+  const matches: PageMatch[] = [];
+  let total = 0;
+  let node: Node | null;
+  while ((node = walker.nextNode())) {
+    const parent = node.parentElement;
+    if (!parent || ignored(parent) || !visible(parent)) continue;
+    if (!test(node.textContent ?? "")) continue;
+    const line = (parent.closest("tr,li,p,dd,dt,figcaption,h1,h2,h3,h4") as HTMLElement | null) ?? parent;
+    if (seen.has(line)) continue;
+    seen.add(line);
+    total++;
+    if (matches.length < limit) matches.push({ text: (line.innerText ?? line.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 180), section: sectionOf(line), tag: line.tagName.toLowerCase(), where: onScreen(line) });
+  }
+  return { total, matches };
+}
+
+/** A table on the page as rows of cells (header row first when it has one), for exact figures. */
+export function readTable(el: HTMLElement, maxRows = 40): { caption: string; rows: string[][]; total: number } | null {
+  const table = el.matches("table") ? el : regionOf(el).querySelector("table");
+  if (!table) return null;
+  const trs = [...table.querySelectorAll("tr")];
+  const rows = trs.slice(0, Math.max(1, Math.min(200, maxRows))).map((tr) => [...tr.querySelectorAll("th,td")].map((c) => ((c as HTMLElement).innerText ?? c.textContent ?? "").replace(/\s+/g, " ").trim()));
+  return { caption: (table.querySelector("caption")?.textContent ?? sectionOf(table as HTMLElement)).replace(/\s+/g, " ").trim(), rows, total: trs.length };
+}
+
+/** One element in detail: what it is in the markup, the section path down to it, what it holds and where it is. */
+export function inspectElement(el: HTMLElement): string {
+  const region = regionOf(el);
+  const attrs = (e: HTMLElement) =>
+    [...e.attributes]
+      .filter((a) => /^(id|role|data-(section|slot|state|agent-click|chart)|aria-(label|selected|pressed|expanded|current|checked))$/.test(a.name))
+      .map((a) => `${a.name}="${a.value.slice(0, 60)}"`)
+      .join(" ");
+  const path: string[] = [];
+  for (let e: HTMLElement | null = el; e && e !== agentRoot(el.ownerDocument); e = e.parentElement) {
+    const l = e.getAttribute("data-section") ?? (e.matches("section,article,[data-slot=card],figure,table") ? labelOf(e) || e.tagName.toLowerCase() : "");
+    if (l && path[0] !== l) path.unshift(l);
+  }
+  const holds: string[] = [];
+  const table = region.querySelector("table");
+  if (table) holds.push(`table with ${table.querySelectorAll("tr").length} rows`);
+  const charts = region.querySelectorAll(".recharts-wrapper, svg.recharts-surface, canvas, figure svg, [data-chart]").length;
+  if (charts) holds.push(`${charts} chart${charts === 1 ? "" : "s"}`);
+  const controls = [...region.querySelectorAll<HTMLElement>("[role=tab],[role=radio],[role=switch],[aria-pressed],a[href^='/'],button")]
+    .filter((c) => !ignored(c) && visible(c))
+    .slice(0, 14)
+    .map((c) => {
+      const l = (c.getAttribute("aria-label") || c.textContent || "").replace(/\s+/g, " ").trim().slice(0, 28);
+      const on = ["aria-selected", "aria-checked", "aria-pressed"].some((a) => c.getAttribute(a) === "true");
+      const can = clickRefusal(c) == null;
+      return l ? `${l}${on ? " (on)" : ""}${can ? "" : " (not pressable)"}` : "";
+    })
+    .filter(Boolean);
+  const r = el.getBoundingClientRect();
+  return [
+    `Element: <${el.tagName.toLowerCase()}${attrs(el) ? ` ${attrs(el)}` : ""}>`,
+    `Component: <${region.tagName.toLowerCase()}${attrs(region) ? ` ${attrs(region)}` : ""}>`,
+    `Section path: ${path.join(" › ") || "(top of page)"}`,
+    `Position: ${onScreen(el) || "not laid out"}, ${Math.round(r.width)}×${Math.round(r.height)}px`,
+    `Holds: ${holds.join("; ") || "text only"}`,
+    `Controls: ${controls.join(", ") || "none"}`,
+    `Text: ${((region.innerText ?? region.textContent ?? "") as string).replace(/\s+/g, " ").trim().slice(0, 600)}`,
+  ].join("\n");
 }

@@ -528,6 +528,104 @@
   line-height: 1.35;
   box-shadow: 0 4px 14px rgb(0 0 0 / 0.14);
 }
+/* The stop being read gets a card on the page; the others shrink to their number. */
+.agent-mark-label[data-state="min"] .agent-mark-text,
+.agent-mark-label[data-state="current"] {
+  display: none;
+}
+.agent-mark-label[data-state="min"] {
+  padding: 3px;
+  border-radius: 999px;
+}
+.agent-mark-label[data-state="min"] .agent-mark-n {
+  margin-right: 0;
+}
+.agent-tour {
+  position: fixed;
+  width: min(320px, calc(100vw - 16px));
+  pointer-events: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--card-foreground);
+  padding: 12px 14px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.16);
+  font-size: 12.5px;
+  line-height: 1.5;
+  transition:
+    left 160ms ease-out,
+    top 160ms ease-out;
+  animation: agent-mark-in 240ms ease-out;
+}
+.agent-tour-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.agent-tour-head .agent-pin-ref {
+  margin-left: 0;
+}
+.agent-tour-x {
+  margin-left: auto;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted-foreground);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.agent-tour-x:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.agent-tour-title {
+  margin: 8px 0 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.agent-tour-text {
+  margin: 4px 0 0;
+  color: var(--muted-foreground);
+}
+.agent-tour-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+.agent-tour-btn {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: none;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.agent-tour-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.agent-tour-next {
+  border-color: var(--chart-1);
+  background: var(--chart-1);
+  color: white;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-tour {
+    animation: none;
+    transition: none;
+  }
+}
 /* Numbered walkthrough stops. */
 .agent-mark-n {
   display: inline-grid;

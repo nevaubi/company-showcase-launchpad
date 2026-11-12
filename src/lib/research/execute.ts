@@ -22,7 +22,8 @@ import type { UniverseEntry } from "@/lib/financials/types";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
 import { annualizedVol, maxDrawdown, pctChangeOver, returns, sma } from "@/lib/indicators";
-import { agentRoot, countText, highlight, locate, locateNear, nextPin, outline, pageMap, pagePath, playStops, readRegion, regionOf, safeClick, bringIntoView, type LocateKind, type Pin, type StopSpec } from "@/lib/research/dom-agent";
+import { addTourStop, agentRoot, countText, findOnPage, highlight, inspectElement, locate, locateNear, nextPin, outline, pageMap, pagePath, playStops, readRegion, readTable, regionOf, safeClick, bringIntoView, type LocateKind, type Pin, type StopSpec } from "@/lib/research/dom-agent";
+import { isAppPath, siteMapText } from "@/lib/research/site-map";
 import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/views";
 import { viewLabel } from "@/lib/research/view-spec";
 import { partnerFile } from "@/lib/data";
@@ -81,6 +82,8 @@ function htmlToText(html: string) {
 /** App hooks available to the side-panel assistant. */
 export interface AgentCtx {
   navigate?: (href: string) => void;
+  /** Read a walkthrough stop aloud; the walkthrough waits for it to finish before moving on. */
+  narrate?: (text: string) => Promise<void>;
 }
 
 const PAGE_PATH: Record<string, (t: string) => string> = {
@@ -130,7 +133,7 @@ const fmtMetric = (k: string, v: unknown) =>
 
 // Tools that move the user's page run one at a time, in the order the model issued them. Issued together
 // they would otherwise scroll and mark at once and fight over the viewport.
-const PAGE_TOOLS = new Set(["scroll_to", "highlight", "read_section", "click", "guide", "navigate_to"]);
+const PAGE_TOOLS = new Set(["scroll_to", "highlight", "read_section", "click", "guide", "navigate_to", "go_to_path", "set_layout", "find_on_page", "read_table", "inspect_element"]);
 let pageQueue: Promise<unknown> = Promise.resolve();
 
 export function runTool(qc: QueryClient, name: string, args: Record<string, unknown>, ctx: AgentCtx = {}): Promise<ToolRun> {
@@ -691,13 +694,15 @@ Month-start closes:\n${monthly.join("\n")}`;
       if (name === "highlight") {
         const label = String(args.label ?? hit.label);
         const n = nextPin();
+        const pin: Pin = { n, target, kind, near, label, path: pagePath() };
         highlight(hit.how === "text" ? hit.el : region, label, 0, { n });
+        addTourStop(pin);
         const dupes = hit.how === "text" && !near ? countText(target) : 0;
         const warn = dupes > 1 ? ` Note: "${target}" appears ${dupes} times on this page and the first was marked. If that is the wrong one, call highlight again with near set to the section it sits in.` : "";
         return {
           output: `Highlighted "${hit.label}" for the user as stop ${n}${note}. It stays on the page. In your answer, tie the point to it with a markdown link: [short phrase](pin:${n}).${warn}`,
           summary: label,
-          pins: [{ n, target, kind, near, label, path: pagePath() }],
+          pins: [pin],
         };
       }
       const text = readRegion(hit.el, 8000);
@@ -715,7 +720,8 @@ Month-start closes:\n${monthly.join("\n")}`;
         }),
       ).filter((s) => s.target.trim());
       if (!stops.length) throw new Error("Give at least one stop with a target");
-      const r = await playStops(stops);
+      const say = ctx.narrate;
+      const r = await playStops(stops, 1100, say ? (p) => say(`${p.label}. ${p.explain ?? ""}`) : undefined);
       if (!r.pins.length) throw new Error(`None of the stops were found on this page (${r.missed.map((m) => `"${m}"`).join(", ")}). Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`);
       const lines = r.pins.map((p) => `${p.n}. ${p.label}`);
       return {
@@ -727,6 +733,47 @@ Month-start closes:\n${monthly.join("\n")}`;
         summary: `${r.pins.length} stop${r.pins.length === 1 ? "" : "s"}`,
         pins: r.pins,
       };
+    }
+    case "get_site_map": {
+      const t = location.pathname.match(/\/app\/companies\/([A-Za-z0-9.-]+)/)?.[1] ?? new URLSearchParams(location.search).get("t");
+      return { output: `${siteMapText(t)}\nYou are on ${location.pathname}${location.search}.`, summary: "App pages" };
+    }
+    case "go_to_path": {
+      const path = String(args.path ?? "");
+      if (!isAppPath(path)) throw new Error(`"${path}" is not a page in the app. Call get_site_map for the real paths.`);
+      if (!ctx.navigate) return { output: `Navigation is only available in the side-panel assistant. Give the user this link instead: ${path}`, summary: path };
+      ctx.navigate(path);
+      await new Promise((res) => setTimeout(res, 500));
+      return { output: `Opened ${path} for the user. Call get_page_context to see what is on it.`, summary: path };
+    }
+    case "find_on_page": {
+      const q = String(args.query ?? "");
+      const r = findOnPage(q, { regex: args.regex === true, limit: Number(args.limit) || 12 });
+      if (!r.total) return { output: `No match for "${q}" on this page. Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`, summary: "No match" };
+      const lines = r.matches.map((m, i) => `${i + 1}. [${m.section || "no section"}] <${m.tag}> ${m.where ? `(${m.where}) ` : ""}${m.text}`);
+      return { output: `${r.total} match${r.total === 1 ? "" : "es"} for "${q}"${r.total > r.matches.length ? `, first ${r.matches.length} shown` : ""}:\n${lines.join("\n")}\nTo point at one, use guide or highlight with the matched text as target and its section as near.`, summary: `${r.total} match${r.total === 1 ? "" : "es"}` };
+    }
+    case "read_table": {
+      const target = String(args.target ?? "");
+      const hit = locate(target, "auto");
+      if (!hit) throw new Error(`Nothing matching "${target}" on this page. Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`);
+      const t = readTable(hit.el, Number(args.max_rows) || 40);
+      if (!t) throw new Error(`"${hit.label}" has no table. Use read_section for its text.`);
+      return { output: clip(`Table "${t.caption || hit.label}" (${t.rows.length} of ${t.total} rows):\n${t.rows.map((r) => r.join(" | ")).join("\n")}`), summary: `${t.total} rows` };
+    }
+    case "inspect_element": {
+      const target = String(args.target ?? "");
+      const hit = locate(target, (args.kind as LocateKind) ?? "auto");
+      if (!hit) throw new Error(`Nothing matching "${target}" on this page. Sections here: ${outline().slice(0, 25).join(" · ") || "none"}`);
+      return { output: inspectElement(hit.el), summary: hit.label };
+    }
+    case "set_layout": {
+      const sidebar = args.sidebar === "collapse" || args.sidebar === "expand" ? args.sidebar : undefined;
+      const panel = args.panel === "compact" || args.panel === "normal" ? args.panel : undefined;
+      window.dispatchEvent(new CustomEvent("fu:layout", { detail: { sidebar, panel } }));
+      await new Promise((res) => setTimeout(res, 320));
+      const did = [sidebar && `sidebar ${sidebar === "collapse" ? "collapsed" : "expanded"}`, panel && `assistant panel ${panel === "compact" ? "narrowed" : "back to normal"}`].filter(Boolean);
+      return { output: did.length ? `Done: ${did.join(", ")}. Both go back to how the user had them when you finish answering.` : "Nothing changed.", summary: did.join(", ") || "no change" };
     }
     case "click": {
       const target = String(args.target ?? "");

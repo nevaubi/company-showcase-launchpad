@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { activeHighlights, beginTour, clearHighlights, clickRefusal, countText, highlight, locate, locateNear, matchScore, nextPin, outline, pageMap, pagePath, playStops, readRegion, regionOf, safeClick, showPin } from "./dom-agent";
+import { activeHighlights, addTourStop, beginTour, currentStop, findOnPage, inspectElement, readTable, setCurrentStop, tourStops, clearHighlights, clickRefusal, countText, highlight, locate, locateNear, matchScore, nextPin, outline, pageMap, pagePath, playStops, readRegion, regionOf, safeClick, showPin } from "./dom-agent";
 
 function page(html: string) {
   document.body.innerHTML = `<main>${html}</main><aside aria-label="AI assistant"><h2>Gaps</h2><button>Delete chat</button></aside>`;
@@ -206,5 +206,72 @@ describe("guided walkthrough", () => {
     expect(map.find((l) => l.startsWith("- Income statement"))).toMatch(/table, 2 rows; controls: Annual \(on\), Quarterly/);
     expect(map.find((l) => l.startsWith("- Cash flow"))).toContain("Free cash flow $412M");
     expect(map.filter((l) => l.startsWith("- Income statement"))).toHaveLength(1);
+  });
+});
+
+describe("tour card and page reading", () => {
+  const html = `<h1>Northwind</h1>
+    <section data-section="Income statement"><h2>Income statement</h2>
+      <div role="tablist"><button role="tab" aria-selected="true">Annual</button><button role="tab" aria-selected="false">Quarterly</button></div>
+      <table><tr><th>Line</th><th>FY26</th></tr><tr><td>Revenue</td><td>$4.31B</td></tr><tr><td>Gross margin</td><td>22.1%</td></tr></table>
+    </section>
+    <section data-section="Cash flow"><h2>Cash flow</h2><p>Free cash flow $412M</p><p>Revenue conversion 9.6%</p></section>`;
+
+  it("shows a card for the stop being read, shrinks the others and steps with Back and Next", async () => {
+    page(html);
+    window.scrollBy = vi.fn();
+    beginTour();
+    const r = await playStops(
+      [
+        { target: "$4.31B", kind: "text", label: "Revenue up 11.9%", explain: "The top line." },
+        { target: "Cash flow", kind: "section", label: "FCF doubled", explain: "Cash followed earnings." },
+      ],
+      0,
+    );
+    expect(tourStops().map((p) => p.n)).toEqual([1, 2]);
+    expect(currentStop()).toBe(2);
+    const card = document.querySelector(".agent-tour")!;
+    expect(card.querySelector(".agent-tour-count")?.textContent).toBe("Stop 2 of 2");
+    expect(card.querySelector(".agent-tour-title")?.textContent).toBe("FCF doubled");
+    expect(card.querySelector(".agent-tour-text")?.textContent).toBe("Cash followed earnings.");
+    const states = [...document.querySelectorAll<HTMLElement>(".agent-mark-label:not(.agent-mark-out)")].map((l) => l.dataset.state);
+    expect(states).toEqual(["min", "current"]);
+    const asked: number[] = [];
+    const onStep = (e: Event) => asked.push((e as CustomEvent<{ n: number }>).detail.n);
+    window.addEventListener("fu:tour-step", onStep);
+    (card.querySelector(".agent-tour-btn") as HTMLButtonElement).click();
+    window.removeEventListener("fu:tour-step", onStep);
+    expect(asked).toEqual([1]);
+    await showPin(r.pins[0]);
+    expect(document.querySelector(".agent-tour-count")?.textContent).toBe("Stop 1 of 2");
+    setCurrentStop(null);
+    expect(document.querySelector(".agent-tour")).toBeNull();
+    expect([...document.querySelectorAll<HTMLElement>(".agent-mark-label:not(.agent-mark-out)")].map((l) => l.dataset.state)).toEqual([undefined, undefined]);
+    addTourStop({ n: 3, target: "Revenue", kind: "text", label: "x", path: pagePath() });
+    expect(tourStops()).toHaveLength(3);
+    beginTour();
+    expect(tourStops()).toHaveLength(0);
+  });
+
+  it("greps the page by phrase or regular expression and says where each match is", () => {
+    page(html);
+    const r = findOnPage("revenue");
+    expect(r.total).toBe(2);
+    expect(r.matches.map((m) => [m.section, m.tag])).toEqual([["Income statement", "tr"], ["Cash flow", "p"]]);
+    expect(findOnPage("\\$\\d+M", { regex: true }).matches[0].text).toBe("Free cash flow $412M");
+    expect(findOnPage("backlog").total).toBe(0);
+    expect(() => findOnPage("(", { regex: true })).toThrow(/valid regular expression/);
+  });
+
+  it("reads a table as rows and inspects a component", () => {
+    page(html);
+    const t = readTable(locate("Income statement")!.el)!;
+    expect(t.rows).toEqual([["Line", "FY26"], ["Revenue", "$4.31B"], ["Gross margin", "22.1%"]]);
+    expect(t.total).toBe(3);
+    expect(readTable(locate("Cash flow")!.el)).toBeNull();
+    const info = inspectElement(locate("Income statement")!.el);
+    expect(info).toContain('data-section="Income statement"');
+    expect(info).toContain("table with 3 rows");
+    expect(info).toContain("Annual (on), Quarterly");
   });
 });
