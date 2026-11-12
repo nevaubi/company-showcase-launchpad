@@ -21,7 +21,7 @@ import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
 import { SupplyIntel, CounterpartyEvidence } from "@/components/supply/supply-intel";
 import { ConfidenceBadge, DependencyCard, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
 import { allSignalsQuery, ConcentrationHistory, DeepVerify, EcosystemBasket, FragilityTable, FreshnessBadge, FreshnessStrip, RegionShockPanel, WorldExposureMap } from "@/components/supply/supply-plus";
-import { canonCountry } from "@/lib/supply/analytics";
+import { canonCountry, countryExposure } from "@/lib/supply/analytics";
 import { AgreementTermsPanel, RegionDossierPanel, RegionRiskRegister } from "@/components/supply/supply-region";
 import { confidence, mirrors, type ProLink } from "@/lib/supply/core";
 import { useUniverse } from "@/lib/data";
@@ -105,6 +105,13 @@ function SupplyChainPage() {
       exposure,
     };
   }, [risks, graph, revenue]);
+  // The same hotspot list the region register below shows, so the header and the register never disagree.
+  const hotspotRegions = useMemo(() => {
+    if (summary.hotspots.length) return summary.hotspots;
+    return countryExposure((all as ProLink[]).filter((l) => l.ticker === ticker), (signals ?? []).filter((x) => x.ticker === ticker), revenue)
+      .filter((r) => r.hotspot && r.country !== "United States" && r.country.length < 40)
+      .map((r) => r.country);
+  }, [summary.hotspots, all, signals, ticker, revenue]);
 
   const go = (tk: string) => {
     setSelected(null);
@@ -143,10 +150,16 @@ function SupplyChainPage() {
       />
 
       <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
-        <Stat label="Disclosed $ exposure" value={summary.exposure.length ? fmtCompactUsd(summary.exposure.reduce((s, x) => s + x.d!, 0)) : "—"} hint={`${summary.exposure.length} quantified links`} />
-        <Stat label="Concentrated (≥10%)" value={String(summary.conc)} hint="counterparties" />
-        <Stat label="Single-source" value={String(summary.single)} hint="stated dependencies" icon={<Lock className="size-3.5" />} />
-        <Stat label="Hotspot regions" value={summary.hotspots.length ? summary.hotspots.slice(0, 3).join(", ") : "None stated"} hint="tied to links in the filing" icon={<Globe2 className="size-3.5" />} />
+        <Stat loading={isLoading} label="Disclosed $ exposure" value={summary.exposure.length ? fmtCompactUsd(summary.exposure.reduce((s, x) => s + x.d!, 0)) : "—"} hint={`${summary.exposure.length} quantified links`} />
+        <Stat loading={isLoading} label="Concentrated (≥10%)" value={String(summary.conc)} hint="counterparties" />
+        <Stat loading={isLoading} label="Single-source" value={String(summary.single)} hint="stated dependencies" icon={<Lock className="size-3.5" />} />
+        <Stat
+          loading={isLoading}
+          label="Hotspot regions"
+          value={hotspotRegions.length ? `${hotspotRegions.slice(0, 3).join(", ")}${hotspotRegions.length > 3 ? ` +${hotspotRegions.length - 3}` : ""}` : "None stated"}
+          hint={summary.hotspots.length ? "tied to links in the filing" : hotspotRegions.length ? "named in filings and calls · see the region register" : "in filings and calls"}
+          icon={<Globe2 className="size-3.5" />}
+        />
         <FreshnessStrip links={graph.flatMap((n) => n.links) as ProLink[]} today={today} />
       </div>
 
@@ -159,7 +172,7 @@ function SupplyChainPage() {
             className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-opacity", !visible.has(r) && "opacity-40")}
           >
             <span className="size-2.5 rounded-full" style={{ background: RELATION_COLOR[r] }} />
-            {RELATION_LABEL[r]} <span className="num text-muted-foreground">{counts[r]}</span>
+            {RELATION_LABEL[r]} <span className="num text-muted-foreground">{isLoading ? "…" : counts[r]}</span>
           </button>
         ))}
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -399,15 +412,16 @@ function SupplyChainPage() {
   );
 }
 
-function Stat({ label, value, hint, icon }: { label: string; value: string; hint: string; icon?: React.ReactNode }) {
+function Stat({ label, value, hint, icon, loading }: { label: string; value: string; hint: string; icon?: React.ReactNode; loading?: boolean }) {
   return (
     <div className="min-w-0 rounded-lg border bg-card p-3">
       <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
         {icon}
         {label}
       </p>
-      <p className="num mt-0.5 truncate text-lg font-semibold">{value}</p>
-      <p className="text-[10.5px] text-muted-foreground">{hint}</p>
+      {/* A zero while the records are still loading reads as "no exposure", so show a placeholder until they arrive. */}
+      {loading ? <Skeleton className="mt-1.5 h-5 w-16" /> : <p className="num mt-0.5 truncate text-lg font-semibold">{value}</p>}
+      <p className="text-[10.5px] text-muted-foreground">{loading ? "Loading records…" : hint}</p>
     </div>
   );
 }

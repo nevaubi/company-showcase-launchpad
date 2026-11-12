@@ -11,10 +11,10 @@ import { marketsQuery } from "@/lib/markets/query";
 import { PATTERN_META } from "@/lib/markets/core";
 import {
   buildTimeline,
-  estimateNextEarnings,
   type EventKind,
   type TimelineEvent,
 } from "@/lib/company/catalysts";
+import { useNextEarnings } from "@/hooks/use-next-earnings";
 import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
@@ -35,16 +35,12 @@ export function SetupPanel({
 }) {
   const m = useQuery(marketsQuery);
   const mc = m.data?.companies.find((c) => c.ticker === ticker);
-  const next = useMemo(
-    () =>
-      estimateNextEarnings(
-        data.earningsReleases.map((r) => r.filed),
-        today(),
-      ),
-    [data.earningsReleases],
-  );
+  const releases = useMemo(() => data.earningsReleases.map((r) => r.filed), [data.earningsReleases]);
+  const next = useNextEarnings(ticker, releases);
   const days = next ? Math.round((Date.parse(next.date) - Date.parse(today())) / 86_400_000) : null;
   const px = price ?? mc?.price ?? null;
+  // The earnings and level statistics are precomputed; say so when that run is more than a few days behind.
+  const staleDays = mc ? Math.round((Date.parse(today()) - Date.parse(mc.asOf)) / 86_400_000) : 0;
   const sup = mc?.levels.support
     .filter((l) => px == null || l.price < px)
     .sort((a, b) => b.price - a.price)[0];
@@ -61,7 +57,11 @@ export function SetupPanel({
           <Gauge className="size-3.5" /> Setup at a glance
         </span>
       }
-      subtitle={mc ? `Prices through ${fmtDate(mc.asOf)} · rules-based, no forecasts` : "Loading…"}
+      subtitle={
+        mc
+          ? `Prices through ${fmtDate(mc.asOf)}${staleDays > 4 ? ` (${staleDays} days old; levels and signals may have moved)` : ""} · rules-based, no forecasts`
+          : "Loading…"
+      }
     >
       {!mc ? (
         m.isLoading ? (
@@ -76,7 +76,7 @@ export function SetupPanel({
               {
                 k: "Next earnings",
                 v: days != null ? `${days}d` : "—",
-                sub: next ? fmtDate(next.date) : "",
+                sub: next ? `${fmtDate(next.date)}${next.estimated ? " (est.)" : ""}` : "",
               },
               {
                 k: "Avg 2-day move",
@@ -103,7 +103,7 @@ export function SetupPanel({
               </p>
               {next && (
                 <p className="text-[11px] text-muted-foreground">
-                  Next-date estimate: {next.basis}
+                  {next.estimated ? `Next date is an estimate: ${next.basis}` : `Next date from ${next.basis}`}
                 </p>
               )}
               {s?.continuation != null && (

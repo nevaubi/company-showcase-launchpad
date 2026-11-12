@@ -12,7 +12,7 @@ import { useSource, type SourceTarget } from "@/components/source/source-context
 import { coverageOf } from "@/lib/coverage";
 import { useCompany } from "@/lib/data";
 import { marketsQuery } from "@/lib/markets/query";
-import { estimateNextEarnings } from "@/lib/company/catalysts";
+import { useNextEarnings } from "@/hooks/use-next-earnings";
 import { credibility, type PromiseStatus, type TrackedPromise } from "@/lib/earnings/promises";
 import { getEarningsNotes, getPromises } from "@/lib/earnings.functions";
 import { quoteLink } from "@/lib/supply/counterparty";
@@ -76,6 +76,9 @@ function Earnings() {
   const m = useQuery(marketsQuery);
   const mc = m.data?.companies.find((c) => c.ticker === ticker);
 
+  const releases = useMemo(() => company.data?.earningsReleases.map((r) => r.filed), [company.data]);
+  const next = useNextEarnings(ticker, releases);
+
   const facts = useMemo(
     () =>
       company.data
@@ -91,14 +94,7 @@ function Earnings() {
         ticker={ticker}
         facts={facts}
         ready={!!company.data && !!m.data && !promises.isLoading}
-        next={
-          company.data
-            ? estimateNextEarnings(
-                company.data.earningsReleases.map((r) => r.filed),
-                today(),
-              )
-            : null
-        }
+        next={next}
       />
       <PromisePanel
         loading={promises.isLoading}
@@ -206,7 +202,7 @@ function Notes({
   ticker: string;
   facts: Fact[];
   ready: boolean;
-  next: { date: string } | null;
+  next: { date: string; estimated: boolean } | null;
 }) {
   const fn = useServerFn(getEarningsNotes);
   const [bump, setBump] = useState(0);
@@ -295,7 +291,7 @@ function Notes({
         }
         subtitle={
           next
-            ? `Estimated ${fmtDate(next.date)}${days != null ? ` · ${days >= 0 ? `in ${days} days` : `${-days} days ago`}` : ""} (from past release timing)`
+            ? `${next.estimated ? "Estimated " : ""}${fmtDate(next.date)}${days != null ? ` · ${days >= 0 ? `in ${days} days` : `${-days} days ago`}` : ""} (${next.estimated ? "from past release timing" : "from the earnings calendar"})`
             : "Next date not yet estimable"
         }
         actions={

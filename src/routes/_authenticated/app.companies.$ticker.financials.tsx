@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCompany } from "@/lib/data";
 import { useUnitScale } from "@/hooks/use-preference";
 import { scaleCaption } from "@/lib/format";
+import { hasSplitRestatement } from "@/lib/financials/splits";
 import type { StatementKey } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 import wordmark from "@/assets/brand/wordmark.png.asset.json";
@@ -214,6 +215,11 @@ function Financials() {
         <p>
           Values in {scaleCaption(scale)}. Negatives in parentheses. Reported values use the latest filing that disclosed the period.
         </p>
+        {hasSplitRestatement(st) && (
+          <p>
+            Per-share figures and share counts are restated to today's share basis for stock splits, so every year compares like for like. Click one to see the figure as filed.
+          </p>
+        )}
       </div>
     </div>
   );

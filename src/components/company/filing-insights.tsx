@@ -143,7 +143,8 @@ export function FilingInsightsPanel({ ticker }: { ticker: string }) {
             .filter(([, v]) => v)
             .map(([k, v]) => `${v} ${k}`)
             .join(", ") || "none"}
-          . {f.method} Drafted by {f.models.draft}, checked by {f.models.check}.
+          . {f.method} Drafted by one model and{" "}
+          <span title={`Drafted by ${f.models.draft}; checked by ${f.models.check}`} className="underline decoration-dotted underline-offset-2">checked by a second</span>.
         </span>
       </div>
     </Panel>

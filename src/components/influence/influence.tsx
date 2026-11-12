@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { useSource } from "@/components/source/source-context";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, humanizeDates } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   initials,
@@ -361,7 +361,7 @@ export function InfluenceRead({
       <ul className="grid gap-1.5 px-3.5 py-2.5 text-[13px]">
         {r.sentences.map((s, k) => (
           <li key={k} className="leading-relaxed">
-            {s.text}{" "}
+            {humanizeDates(s.text)}{" "}
             {s.refs.map((id, j) => (
               <button
                 key={id}
@@ -378,9 +378,10 @@ export function InfluenceRead({
       </ul>
       <Note>
         Each sentence cites the records it uses (hover a number for the record, click to open its
-        section). Numbers are checked against the records in code and a second model (
-        {r.check_model ?? "n/a"}) rejected sentences the records do not support
-        {r.dropped?.length ? ` (${r.dropped.length} dropped)` : ""}. Drafted by {r.model}.
+        section). Numbers are checked against the records in code, and{" "}
+        <span title={`Drafted by ${r.model}; checked by ${r.check_model ?? "n/a"}`} className="underline decoration-dotted underline-offset-2">a second model</span>{" "}
+        rejected sentences the records do not support
+        {r.dropped?.length ? ` (${r.dropped.length} dropped)` : ""}.
       </Note>
     </Panel>
   );

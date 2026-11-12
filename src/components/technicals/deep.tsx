@@ -10,7 +10,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { useSource } from "@/components/source/source-context";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, ordinal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import TA, { type Analysis } from "@/lib/technicals/ta";
 import {
@@ -253,7 +253,7 @@ export function SymbolRead({
                   trend: {R.trend}
                 </Chip>
                 <Chip
-                  title={`20-day volatility ${pc(R.v20, 1)}, ${Math.round(R.vol_pct * 100)}th percentile of the trailing 3 years, since ${R.vol_since}`}
+                  title={`20-day volatility ${pc(R.v20, 1)}, ${ordinal(Math.round(R.vol_pct * 100))} percentile of the trailing 3 years, since ${R.vol_since}`}
                 >
                   volatility: {R.vol}
                 </Chip>
@@ -713,7 +713,7 @@ export function RiskView({ H, A, Q }: { H: Hist; A: Analysis; Q?: QuantFile | nu
     setCalc({
       title: `${H.sym} · ${n}-day realized volatility`,
       value: pc(z.current, 1),
-      sub: `${Math.round((z.pct ?? 0) * 100)}th percentile of ${z.count.toLocaleString()} windows · median ${pc(z.p50, 1)}`,
+      sub: `${ordinal(Math.round((z.pct ?? 0) * 100))} percentile of ${z.count.toLocaleString()} windows · median ${pc(z.p50, 1)}`,
       formula: `Sample SD of the last ${n} daily log returns × √252.`,
       cols: ["Day", "Close", "Log return", `${n}d vol`],
       rows,
@@ -760,7 +760,7 @@ export function RiskView({ H, A, Q }: { H: Hist; A: Analysis; Q?: QuantFile | nu
                       <Num onClick={() => coneCalc(z.n)}>{pc(z.current, 1)}</Num>
                     </td>
                     <td className="num px-3 py-1.5 text-right">
-                      {z.pct == null ? "–" : `${Math.round(z.pct * 100)}th`}
+                      {z.pct == null ? "–" : `${ordinal(Math.round(z.pct * 100))}`}
                     </td>
                     <td className="px-3 py-1.5">
                       <div className="relative h-2 w-full min-w-28 rounded-full bg-secondary">

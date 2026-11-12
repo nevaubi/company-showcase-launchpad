@@ -25,6 +25,25 @@ export function estimateNextEarnings(dates: string[], today: string): { date: st
   return { date: new Date(next).toISOString().slice(0, 10), basis: "typical gap between releases" };
 }
 
+export interface NextEarnings {
+  date: string;
+  /** Where the date comes from, worded to follow "Date from" or "Next-date estimate:". */
+  basis: string;
+  /** True when no calendar date is known and the date is projected from past release timing. */
+  estimated: boolean;
+}
+
+/**
+ * The next earnings date, one answer for every page: the date on the earnings calendar when it is known and
+ * still ahead, otherwise a projection from past release dates, flagged as an estimate.
+ */
+export function nextEarnings(calendar: string | null | undefined, releases: string[], today: string): NextEarnings | null {
+  const c = calendar?.slice(0, 10);
+  if (c && /^\d{4}-\d{2}-\d{2}$/.test(c) && c >= today) return { date: c, basis: "the earnings calendar", estimated: false };
+  const est = estimateNextEarnings(releases, today);
+  return est ? { ...est, estimated: true } : null;
+}
+
 export type EventKind = "earnings" | "annual" | "quarterly" | "8k" | "proxy" | "insider_buy" | "insider_sell" | "pattern" | "alt" | "intel";
 
 export interface TimelineEvent {

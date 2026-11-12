@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Panel } from "@/components/app/page-header";
 import { briefQuery, type BriefFact } from "@/lib/insights/brief";
-import { fmtRelative } from "@/lib/format";
+import { fmtRelative, humanizeDates } from "@/lib/format";
 
 const chip =
   "num ml-0.5 rounded bg-secondary px-1 align-super text-[9.5px] text-muted-foreground hover:text-foreground";
@@ -60,7 +60,7 @@ export function BriefPanel({ ticker }: { ticker: string }) {
       <ul className="grid gap-1.5 px-3.5 py-2.5 text-[13px]">
         {b.sentences.map((s, k) => (
           <li key={k} className="leading-relaxed">
-            {s.text}{" "}
+            {humanizeDates(s.text)}{" "}
             {s.refs.map((id, j) => {
               const f = facts.get(id);
               return f ? <FactLink key={id} ticker={ticker} f={f} n={j + 1} /> : null;
@@ -70,10 +70,10 @@ export function BriefPanel({ ticker }: { ticker: string }) {
       </ul>
       <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
         Hover a number for the record a sentence rests on; click it to open the tab that shows it.
-        Every number was checked against the records in code and a second model (
-        {b.models.check ?? "n/a"}) rejected unsupported sentences
-        {b.dropped.length ? ` (${b.dropped.length} dropped)` : ""}. Drafted by {b.models.draft} from{" "}
-        {b.facts_considered} records.
+        Every number was checked against the records in code, and{" "}
+        <span title={`Drafted by ${b.models.draft}; checked by ${b.models.check ?? "n/a"}`} className="underline decoration-dotted underline-offset-2">a second model</span>{" "}
+        rejected unsupported sentences
+        {b.dropped.length ? ` (${b.dropped.length} dropped)` : ""}. Written from {b.facts_considered} records.
       </p>
     </Panel>
   );

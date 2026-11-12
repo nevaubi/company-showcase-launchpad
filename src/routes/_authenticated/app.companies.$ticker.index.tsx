@@ -40,6 +40,7 @@ import { WhatChangedPanel } from "@/components/changes/company-changes";
 import { KpiInsightsPanel } from "@/components/company/kpi-insights";
 import { coverageOf } from "@/lib/coverage";
 import { FirmNotes } from "@/components/firm/firm-notes";
+import { insiderWindow, insiderWindowLabel } from "@/lib/insiders/window";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   head: ({ params }) => ({
@@ -540,18 +541,15 @@ function InsiderSummary({
   price: number | null;
 }) {
   const { open } = useSource();
-  const open90 = data.insiders.filter((t) => ["S", "P"].includes(t.code));
-  const sold = open90
-    .filter((t) => t.code === "S")
-    .reduce((s, t) => s + t.shares * (t.price ?? 0), 0);
-  const bought = open90
-    .filter((t) => t.code === "P")
-    .reduce((s, t) => s + t.shares * (t.price ?? 0), 0);
+  // The same 90-day window the summary above and the ownership page use, so the totals agree.
+  const w = insiderWindow(data.insiders);
+  const sold = w.sold;
+  const bought = w.bought;
   const recent = data.insiders.slice(0, 6);
   return (
     <Panel
       title="Insider activity"
-      subtitle={`Last ${new Set(data.insiders.map((t) => t.accn)).size} Form 4 filings`}
+      subtitle={`${insiderWindowLabel(w, fmtDate)} · ${w.filings} Form 4 filing${w.filings === 1 ? "" : "s"}`}
       actions={
         <Button size="xs" variant="ghost" asChild>
           <Link to="/app/companies/$ticker/insiders" params={{ ticker }}>
@@ -563,11 +561,15 @@ function InsiderSummary({
     >
       <div className="grid grid-cols-2 border-b">
         <div className="border-r px-4 py-3">
-          <p className="text-[11px] text-muted-foreground">Open-market sales</p>
+          <p className="text-[11px] text-muted-foreground">
+            Open-market sales{w.sales > 0 ? ` · ${w.sales}` : ""}
+          </p>
           <p className="num text-lg font-medium text-negative">{fmtCompactUsd(sold)}</p>
         </div>
         <div className="px-4 py-3">
-          <p className="text-[11px] text-muted-foreground">Open-market buys</p>
+          <p className="text-[11px] text-muted-foreground">
+            Open-market buys{w.buys > 0 ? ` · ${w.buys}` : ""}
+          </p>
           <p className="num text-lg font-medium text-positive">{fmtCompactUsd(bought)}</p>
         </div>
       </div>

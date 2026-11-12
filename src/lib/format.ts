@@ -223,3 +223,18 @@ export const INSIDER_CODES: Record<string, string> = {
   J: "Other",
   X: "Option exercise (in-the-money)",
 };
+
+/** 1st, 2nd, 3rd, 4th, 11th, 22nd: a whole number with its English ordinal ending. */
+export const ordinal = (n: number) => {
+  const v = Math.abs(Math.round(n));
+  const end = v % 100 >= 11 && v % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][v % 10] ?? "th");
+  return `${Math.round(n)}${end}`;
+};
+
+/**
+ * Prose with machine dates made readable: "fell from 2026-10-06 to 2026-11-04" becomes "fell from Oct 6, 2026
+ * to Nov 4, 2026". Only whole ISO dates are touched, so accession numbers and ids are left alone.
+ */
+export function humanizeDates(text: string): string {
+  return text.replace(/(?<![\w-])(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?![\w-])/g, (m) => fmtDate(m));
+}

@@ -24,7 +24,7 @@ import {
   type MultipleKey,
   type MultipleStats,
 } from "@/lib/financials/valuation";
-import { fmtCompactUsd, fmtDate, fmtPrice } from "@/lib/format";
+import { fmtCompactUsd, fmtDate, fmtPrice, ordinal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const pageSearch = z.object({
@@ -153,7 +153,7 @@ function Valuation() {
         <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Info className="size-3.5" />
           {s.span}-year median {fmtMultiple(sel.kind, st.median)} · range {fmtMultiple(sel.kind, st.min)}–{fmtMultiple(sel.kind, st.max)} · now at the{" "}
-          {st.percentile == null ? "—" : `${Math.round(st.percentile * 100)}th`} percentile. Share counts are restated for stock splits.
+          {st.percentile == null ? "—" : `${ordinal(Math.round(st.percentile * 100))}`} percentile. Share counts are restated for stock splits.
         </p>
       </Panel>
 
@@ -264,7 +264,7 @@ function MultipleCard({
               {pct != null && <span className="absolute top-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground" style={{ left: `${pct * 100}%` }} />}
             </span>
           </TooltipTrigger>
-          <TooltipContent className="text-xs">{pct == null ? "No history" : `${Math.round(pct * 100)}th percentile of the window`}</TooltipContent>
+          <TooltipContent className="text-xs">{pct == null ? "No history" : `${ordinal(Math.round(pct * 100))} percentile of the window`}</TooltipContent>
         </Tooltip>
         <button onClick={showSource} className="text-[10px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
           source
