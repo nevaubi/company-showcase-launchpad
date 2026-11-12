@@ -48,6 +48,15 @@ export function compressRefs(ns: number[]): string {
   return out.join(",");
 }
 
-/** Show ISO dates in prose as "Nov 17, 2026" (the checks run on the stored text). */
-export const readableDates = (t: string) => t.replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (d) => fmtDate(d));
+const ENTITY: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+/** Decode the few XML/HTML entities that reach stored text from SEC XML (e.g. "CEO &amp; President"). */
+export const decodeEntities = (t: string) =>
+  t.replace(/&(amp|lt|gt|quot|apos|nbsp|#(\d{1,6})|#x([0-9a-f]{1,6}));/gi, (m, name: string, dec?: string, hex?: string) => {
+    if (dec) return String.fromCodePoint(Number(dec));
+    if (hex) return String.fromCodePoint(parseInt(hex, 16));
+    return ENTITY[name.toLowerCase()] ?? m;
+  });
+
+/** Display form of stored report text: ISO dates as "Nov 17, 2026" and XML entities decoded (the checks run on the stored text). */
+export const readableDates = (t: string) => decodeEntities(t).replace(/\b(\d{4}-\d{2}-\d{2})\b/g, (d) => fmtDate(d));
 

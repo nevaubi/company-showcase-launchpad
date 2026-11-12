@@ -12,7 +12,10 @@ export function useReportList(ticker?: string) {
     queryKey: ["reports", ticker ?? "all"],
     queryFn: async () => {
       let q = supabase.from("reports").select(META).order("updated_at", { ascending: false }).limit(ticker ? 100 : 400);
+      // A company's own Reports tab still needs its failed slot (to show the error and retry); the library
+      // lists only slots that have something to read or are being written, so failures don't crowd out ready reports.
       if (ticker) q = q.eq("ticker", ticker);
+      else q = q.or("status.neq.failed,title.not.is.null");
       const { data, error } = await q;
       if (error) throw error;
       return data as unknown as ReportMeta[];

@@ -8,8 +8,13 @@ const tagVal = (xml: string, path: string[]): string | undefined => {
     if (!m) return undefined;
     scope = m[1];
   }
-  return scope.replace(/<[^>]+>/g, "").trim() || undefined;
+  return decodeXml(scope.replace(/<[^>]+>/g, "")).trim() || undefined;
 };
+
+/** XML character entities in Form 4 text values ("CEO &amp; President"). */
+const decodeXml = (t: string) =>
+  t.replace(/&(amp|lt|gt|quot|apos|#(\d{1,6})|#x([0-9a-f]{1,6}));/gi, (m, name: string, dec?: string, hex?: string) =>
+    dec ? String.fromCodePoint(Number(dec)) : hex ? String.fromCodePoint(parseInt(hex, 16)) : ({ amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" } as Record<string, string>)[name.toLowerCase()] ?? m);
 
 /** Form 4 owner names are "LAST FIRST MIDDLE"; present them as "First Middle Last". */
 export function personName(raw: string) {

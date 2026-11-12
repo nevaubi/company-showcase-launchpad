@@ -31,6 +31,9 @@ export function SiteHeader({ className }: { className?: string }) {
           <Link to="/" hash="sources" className="transition-colors hover:text-foreground">
             Sources
           </Link>
+          <Link to="/research" className="transition-colors hover:text-foreground" activeProps={{ className: "text-foreground" }}>
+            Research
+          </Link>
           <Link to="/companies" className="transition-colors hover:text-foreground" activeProps={{ className: "text-foreground" }}>
             Companies
           </Link>
@@ -75,6 +78,7 @@ export function SiteFooter() {
           title="Product"
           links={[
             { label: "Financials", to: "/" },
+            { label: "Research", to: "/research" },
             { label: "Companies", to: "/companies" },
             { label: "Pricing", to: "/pricing" },
             { label: "Sign in", to: "/auth" },
@@ -114,7 +118,7 @@ export function SiteFooter() {
   );
 }
 
-function FooterCol({ title, links }: { title: string; links: { label: string; to: "/" | "/pricing" | "/auth" | "/companies" }[] }) {
+function FooterCol({ title, links }: { title: string; links: { label: string; to: "/" | "/pricing" | "/auth" | "/companies" | "/research" }[] }) {
   return (
     <div>
       <p className="eyebrow">{title}</p>
