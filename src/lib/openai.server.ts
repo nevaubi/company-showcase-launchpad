@@ -77,6 +77,7 @@ export function claudeContent(parts: InputPart[]): unknown[] {
 
 /** USD per million tokens: input, output, cache read, 5-minute cache write. Only prices verified on the provider's page. */
 const PRICES: [prefix: string, p: [number, number, number, number]][] = [
+  ["inclusionai/ling-3.0-flash-vl", [0.06, 0.18, 0.012, 0]],
   ["claude-sonnet-5-5", [2, 10, 0.1, 2.5]],
   ["claude-haiku-5-5", [0.1, 0.5, 0.01, 0.125]],
 ];
@@ -255,6 +256,7 @@ export async function openaiStructured<T>(opts: {
   maxOutputTokens?: number;
   signal?: AbortSignal;
 }): Promise<{ data: T; usage: Usage; model: string }> {
+  if (opts.model.startsWith("inclusionai/")) return openRouterStructured<T>(opts);
   if (opts.model.startsWith("claude-")) return anthropicStructured<T>(opts);
   if (useGateway()) return gatewayStructured<T>(opts);
   const key = process.env["OPENAI_API_KEY"];
@@ -301,6 +303,47 @@ export async function openaiStructured<T>(opts: {
     throw new OpenAIError(`OpenAI ${res.status}${code || type ? ` ${code || type}` : ""}: ${msg}`, kind, res.status, Number.isFinite(ra) && ra > 0 ? ra * 1000 : undefined);
   }
   return parseResponse<T>(res);
+}
+
+/** OpenRouter connector credentials stay server-side; no fallback to a different provider. */
+async function openRouterStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+  const key = process.env["UDC_OPENROUTER_API_KEY"];
+  const gatewayKey = process.env["LOVABLE_API_KEY"];
+  if (!key || !gatewayKey) throw new OpenAIError("OpenRouter connection is not configured", "auth", 0);
+  const parts: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;
+  let res: Response;
+  try {
+    res = await fetch("https://connector-gateway.lovable.dev/udc_openrouter/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${gatewayKey}`, "X-Connection-Api-Key": key },
+      signal: opts.signal ?? AbortSignal.timeout(180_000),
+      body: JSON.stringify({
+        model: opts.model,
+        messages: [
+          { role: "system", content: opts.instructions },
+          { role: "user", content: parts.map((p) => p.type === "input_text" ? { type: "text", text: p.text } : { type: "image_url", image_url: { url: p.image_url } }) },
+        ],
+        max_tokens: opts.maxOutputTokens ?? 32_000,
+        response_format: { type: "json_schema", json_schema: { name: opts.name, schema: opts.schema, strict: true } },
+      }),
+    });
+  } catch {
+    throw new OpenAIError("OpenRouter connection request failed", "transient", 0);
+  }
+  if (!res.ok) {
+    // Do not log credential-bearing request objects or arbitrary provider messages.
+    const kind = res.status === 402 ? "quota" : classifyOpenAIError(res.status, "", "", "");
+    throw new OpenAIError(`OpenRouter request failed (${res.status})`, kind, res.status);
+  }
+  const j = await res.json() as { model?: string; error?: { code?: number }; choices?: { finish_reason?: string; message?: { content?: string | null } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } };
+  const usage: Usage = { input_tokens: j.usage?.prompt_tokens ?? 0, output_tokens: j.usage?.completion_tokens ?? 0, cached_tokens: j.usage?.prompt_tokens_details?.cached_tokens ?? 0 };
+  if (j.error) throw new OpenAIError("OpenRouter returned a provider error", "rejected", 200, undefined, usage);
+  if (j.choices?.[0]?.finish_reason !== "stop") throw new OpenAIError("OpenRouter response incomplete", "rejected", 200, undefined, usage);
+  try {
+    return { data: JSON.parse((j.choices[0].message?.content ?? "").replace(/^```(?:json)?\s*|\s*```$/g, "")) as T, model: j.model ?? opts.model, usage };
+  } catch {
+    throw new OpenAIError("OpenRouter returned invalid JSON", "rejected", 200, undefined, usage);
+  }
 }
 
 /**

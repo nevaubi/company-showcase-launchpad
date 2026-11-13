@@ -140,21 +140,35 @@ export async function readPage(o: {
 
   if (!isClaude(o.model)) {
     try {
-      const r = await openaiStructured<VisionOutput>({
+      const call = (prompt: string) => openaiStructured<VisionOutput>({
         model: o.model,
         name: "ir_page",
         instructions: VISION_INSTRUCTIONS,
         input: [
-          { type: "input_text", text },
+          { type: "input_text", text: prompt },
           { type: "input_image", image_url: image, detail: "high" },
         ],
         schema: SCHEMA,
         effort,
         maxOutputTokens: 32_000,
       });
+      const r = await call(text);
       bill(r.usage);
-      const missing = unaccounted(r.data, o.tokens).length;
-      return { ...visionFacts(r.data, o.tokens, o.page, o.filed, o.ocr), kind: r.data.page_kind, usage, usd, missing, missingAfter: missing, skipped: r.data.skipped?.length ?? 0, followUp: false };
+      let out = r.data;
+      const missing = unaccounted(out, o.tokens);
+      // Explicit opt-in for comparison loops; existing single-call runs stay unchanged.
+      const followUp = o.followUp === true && missing.length >= 2;
+      if (followUp) {
+        try {
+          const second = await call(`${text}\n\n${followUpPrompt(missing)}`);
+          bill(second.usage);
+          out = mergeVision(out, second.data);
+        } catch (e) {
+          if (!(e instanceof OpenAIError && e.kind === "rejected")) throw e;
+          bill(e.usage);
+        }
+      }
+      return { ...visionFacts(out, o.tokens, o.page, o.filed, o.ocr), kind: out.page_kind, usage, usd, missing: missing.length, missingAfter: unaccounted(out, o.tokens).length, skipped: out.skipped?.length ?? 0, followUp };
     } catch (e) {
       if (e instanceof OpenAIError && e.kind === "rejected") {
         bill(e.usage);
