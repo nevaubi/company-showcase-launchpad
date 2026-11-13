@@ -25,3 +25,9 @@ We shouldn't compete on prices. That market depends on physical exchange connect
 ## Open questions
 - Licensing: we need to check which rights we have to resell the partner corpus and IR documents, such as company press releases.
 - Coverage depth: most companies don't have full IR coverage yet. A sellable package needs consistent coverage, for example the 78 core companies first.
+
+## Likely product-market fit
+- **Best fit: analysts who have to defend every number.** Buy-side analysts at small and mid-size funds, independent research shops and RIAs. They pay because "where did this figure come from?" otherwise takes them hours. Click-to-source and figures read from IR documents (KPIs that aren't in XBRL) save that time, and Bloomberg is too expensive for most of them.
+- **Top offering: a cited AI research analyst with deep KPI data.** The assistant answers questions and writes reports, and every sentence links to the exact filing line or IR cell. The $129 Pro plan is the main product.
+- **Second offering, later: a data license.** Sourced KPI datasets sold to quant funds and AI labs, as in the packages above. Higher value per deal, but it needs consistent coverage first.
+- **How to test it:** interview 10 to 15 waitlist users, track which feature they come back to each week, and offer Pro to the first 20 at a founding price.
