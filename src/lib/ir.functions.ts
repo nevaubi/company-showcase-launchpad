@@ -15,7 +15,7 @@ const rebuilding = new Map<string, Promise<IrPayload | null>>();
  * CompressionStream itself stalled bank-sized responses (≈1.7 MB compressed) before any byte
  * was sent; fully compressed bytes in 64 KB chunks stream reliably.
  */
-async function gzipStream(bytes: Uint8Array): Promise<ReadableStream<Uint8Array>> {
+async function gzipStream(bytes: Uint8Array<ArrayBuffer>): Promise<ReadableStream<Uint8Array>> {
   const gz = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
   let at = 0;
   return new ReadableStream<Uint8Array>({
