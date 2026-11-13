@@ -295,7 +295,8 @@ export function visionFacts(out: VisionOutput, tokens: PageToken[], page: number
   const used = new Set<number>();
   const rows: VisionFact[] = [];
   let rejected = 0;
-  const latest = filed ? Date.parse(filed) + 10 * 86_400_000 : Infinity;
+  // Nothing reported can end after the filing (or, for undated files, after today): later periods are guidance.
+  const latest = Math.min(filed ? Date.parse(filed) + 10 * 86_400_000 : Infinity, Date.now() + 10 * 86_400_000);
   for (const panel of out.panels ?? []) {
     const periods = new Map(panel.periods.map((p) => [p.p, p]));
     for (const row of panel.rows) {

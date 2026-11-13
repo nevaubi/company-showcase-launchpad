@@ -37,3 +37,15 @@ describe("table reader follow-up", () => {
     expect(mergeFactRows(a, b).map((f) => f.label)).toEqual(["first", "new"]);
   });
 });
+
+import { factsFromModel, type ModelOutput } from "@/lib/ir/extract-core";
+
+describe("table facts on undated files", () => {
+  it("rejects periods after today (guidance, not results)", () => {
+    const tables = [{ index: 0, rows: [["", "2099"], ["Revenue", "1,200"]] }] as never;
+    const out = { tables: [{ t: 0, periods: [{ p: 0, period_start: "2099-01-01", period_end: "2099-12-31", months: 12 }], rows: [{ r: 1, label: "Revenue", category: "segment", metric: "revenue", breakdown: "", parent: "", is_total: true, unit: "usd", scale: 1e6, cells: [{ c: 1, p: 0 }] }] }] } as unknown as ModelOutput;
+    const r = factsFromModel(out, tables, null);
+    expect(r.rows).toHaveLength(0);
+    expect(r.rejected).toBe(1);
+  });
+});

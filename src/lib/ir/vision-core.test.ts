@@ -53,6 +53,13 @@ describe("visionFacts", () => {
   });
   const base = { parent: "", breakdown: "", category: "segment" as const, metric: "revenue" as const, is_total: false };
 
+  it("rejects periods after today on undated files (guidance, not results)", () => {
+    const future = { panels: [{ title: "Guidance", periods: [{ p: 0, period_start: "2099-01-01", period_end: "2099-12-31", months: 12 }], rows: [{ ...base, label: "Cloud", unit: "usd" as const, scale: 1e6, values: [{ w: 0, p: 0, read: "$4.2B" }] }] }], page_kind: "chart" } as VisionOutput;
+    const r = visionFacts(future, tokens, 1, null);
+    expect(r.rows).toHaveLength(0);
+    expect(r.rejected).toBe(1);
+  });
+
   it("takes the value from the token, using its printed suffix over the model's scale", () => {
     const r = visionFacts(out([{ ...base, label: "Cloud", unit: "usd", scale: 1e6, values: [{ w: 0, p: 0, read: "$4.2B" }] }]), tokens, 3, "2025-10-28");
     expect(r.rows[0].value).toBe(4.2e9);

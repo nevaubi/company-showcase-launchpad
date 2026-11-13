@@ -230,7 +230,8 @@ export function factsFromModel(out: ModelOutput, tables: ParsedTable[], filed?: 
   const rows: FactRow[] = [];
   const seen = new Set<string>();
   let rejected = 0;
-  const latest = filed ? Date.parse(filed) + 10 * 86_400_000 : Infinity;
+  // Nothing reported can end after the filing (or, for undated files, after today): later periods are guidance.
+  const latest = Math.min(filed ? Date.parse(filed) + 10 * 86_400_000 : Infinity, Date.now() + 10 * 86_400_000);
   for (const tb of out.tables ?? []) {
     const table = tables[tb.t];
     if (!table) {
