@@ -46,23 +46,29 @@ const SYNONYMS: [RegExp, string][] = [
 ];
 const expand = (q: string) => [q, ...SYNONYMS.filter(([re]) => re.test(q)).map(([re, to]) => q.replace(re, to))];
 
+const STOP = new Set(["the", "and", "for", "of", "on", "in", "to", "a", "an", "by", "per", "vs", "with", "from", "at", "or"]);
 const words = (q: string) =>
   q
     .toLowerCase()
     .split(/[^a-z0-9%]+/)
-    .filter((w) => w.length > 1);
+    .filter((w) => w && !STOP.has(w) && (w.length > 2 || /\d/.test(w)));
 
-/** Score text against query words: every word must appear; earlier and denser matches rank higher. */
+const tokens = (text: string) => new Set(text.toLowerCase().split(/[^a-z0-9%]+/).filter(Boolean));
+
+/** Score in 0..~2: every query word must appear as a whole word (or a whole-word prefix for words of 4+ letters);
+ * normalised by the number of words so a long phrasing never beats a short one; earlier matches rank higher. */
 function matchScore(text: string, q: string[]): number {
   if (!q.length) return 1;
   const t = text.toLowerCase();
+  const toks = [...tokens(text)];
   let s = 0;
   for (const w of q) {
+    const hit = toks.some((x) => x === w || (w.length >= 4 && x.startsWith(w)) || (w.endsWith("s") && x === w.slice(0, -1)));
+    if (!hit) return 0;
     const i = t.indexOf(w);
-    if (i < 0) return 0;
-    s += 1 + 1 / (1 + i / 40);
+    s += 1 + 1 / (1 + Math.max(i, 0) / 40);
   }
-  return s;
+  return s / q.length;
 }
 
 export function fmtKpi(v: number, unit: string | undefined): string {
@@ -105,7 +111,19 @@ type Vals = Record<string, KpiValue & { page?: number | string; doc?: string }>;
 export function seriesOf(item: KpiItem, freq: Freq): { vals: Vals; basis: string } {
   const v = (item.values ?? {}) as Record<string, Vals | undefined>;
   const has = (k: string) => Object.keys(v[k] ?? {}).length > 0;
-  if (freq === "A") return { vals: v.A ?? {}, basis: "annual" };
+  if (freq === "A") {
+    if (has("A")) return { vals: v.A as Vals, basis: "annual" };
+    // Balances and ratios: the year-end point-in-time value (latest observation in each calendar year).
+    const src = (has("I") ? v.I : v.Q) ?? {};
+    const byYear: Vals = {};
+    for (const k of Object.keys(src).sort()) byYear[k.slice(0, 4)] = src[k];
+    const vals: Vals = {};
+    for (const [, x] of Object.entries(byYear)) {
+      const key = Object.keys(src).find((k) => src[k] === x);
+      if (key) vals[key] = x;
+    }
+    return { vals, basis: has("I") ? "year-end, point in time" : "year-end of quarterly" };
+  }
   if (has("Q")) return { vals: v.Q as Vals, basis: "quarterly" };
   if (has("I")) return { vals: v.I as Vals, basis: "point in time" };
   if (has("T")) return { vals: v.T as Vals, basis: "trailing" };
@@ -115,25 +133,57 @@ export function seriesOf(item: KpiItem, freq: Freq): { vals: Vals; basis: string
 /** Table-of-contents sheets of a workbook hold page numbers, not figures. */
 const isIndexGroup = (g: KpiFile["groups"][number]) => /^workbook:\s*(index|contents|toc)\b/i.test(g.category.trim());
 
-/** One line per period, newest first, with the printed figure, its page and a short verbatim quote. */
+const DAY = 86400_000;
+const days = (a: string, b: string) => (Date.parse(a) - Date.parse(b)) / DAY;
+/** The key nearest to `target` days before `end`, within `tol` days; null when there is none. */
+function nearKey(keys: string[], end: string, target: number, tol: number): string | null {
+  let best: string | null = null;
+  let err = Infinity;
+  for (const k of keys) {
+    const e = Math.abs(days(end, k) - target);
+    if (e <= tol && e < err) {
+      best = k;
+      err = e;
+    }
+  }
+  return best;
+}
+
+/** One line per period, newest first. QoQ and YoY come from the dates, not the positions, so gaps in a series never
+ * compare the wrong quarters; a change is omitted when no matching period exists. The source link is printed once per
+ * document and the verbatim quote on the newest row only. */
 export function kpiLines(item: KpiItem, freq: Freq, periods: number): string[] {
-  const { vals } = seriesOf(item, freq);
-  const ends = Object.keys(vals).sort().reverse().slice(0, periods);
+  const { vals, basis } = seriesOf(item, freq);
+  const all = Object.keys(vals).sort();
+  const ends = [...all].reverse().slice(0, periods);
+  const seen = new Set<string>();
   return ends.map((end, i) => {
     const v = vals[end] as KpiValue & { page?: number | string; sheet?: string | null; cell?: string | null };
-    const prior = vals[ends[i + 1]];
-    const yearAgoEnd = freq === "Q" ? ends[i + 4] : ends[i + 1];
-    const yearAgo = yearAgoEnd ? vals[yearAgoEnd] : undefined;
     const chg: string[] = [];
-    if (prior && freq === "Q") chg.push(`QoQ ${fmtDelta(v.v, prior.v, item.unit)}`);
-    if (yearAgo) chg.push(`YoY ${fmtDelta(v.v, yearAgo.v, item.unit)}`);
-    const quote = v.quote ? ` "${v.quote.replace(/\s+/g, " ").slice(0, 110)}"` : "";
-    return `  ${v.label ?? end} (${end}): ${fmtKpi(v.v, item.unit)}${chg.length ? ` [${chg.join(", ")}]` : ""} — ${docTitle(v.doc_title)}${v.page ? ` p.${v.page}` : v.sheet ? ` sheet "${v.sheet}"${v.cell ? ` ${v.cell}` : ""}` : ""}${quote}${cite(v)}`;
+    if (freq === "Q") {
+      const p = nearKey(all, end, 91, 15);
+      if (p) chg.push(`QoQ ${fmtDelta(v.v, vals[p].v, item.unit)}`);
+    }
+    const y = nearKey(all, end, 365, 20);
+    if (y) chg.push(`YoY ${fmtDelta(v.v, vals[y].v, item.unit)} vs ${y}`);
+    const where = v.page ? ` p.${v.page}` : v.sheet ? ` sheet "${v.sheet}"${v.cell ? ` ${v.cell}` : ""}` : "";
+    const quote = i === 0 && v.quote ? ` "${v.quote.replace(/\s+/g, " ").slice(0, 110)}"` : "";
+    const key = `${v.url ?? ""}#${v.page ?? ""}`;
+    const link = v.url && !seen.has(key) ? cite(v) : "";
+    if (v.url) seen.add(key);
+    const shown = fmtKpi(v.v, item.unit);
+    const printed = v.printed && !shown.includes(v.printed.replace(/\s+/g, "")) ? ` (printed "${v.printed.replace(/\s+/g, "")}")` : "";
+    const partial = freq === "A" && basis.startsWith("year-end") && i === 0 && all.length > 1 && end.slice(5, 7) !== all[all.length - 2].slice(5, 7) ? " (latest observation, year not complete)" : "";
+    return `  ${v.label ?? end} (${end})${partial}: ${shown}${printed}${chg.length ? ` [${chg.join(", ")}]` : ""} — ${docTitle(v.doc_title)}${where}${quote}${link}`;
   });
 }
 
 function fmtDelta(a: number, b: number, unit: string | undefined): string {
   const u = (unit ?? "").toUpperCase();
+  if (u === "BPS" || u === "BP") {
+    const d = a - b;
+    return `${d >= 0 ? "+" : ""}${d.toFixed(0)} bp`;
+  }
   if (u === "%" || u === "PCT" || u === "PERCENT") {
     const d = a - b;
     return `${d >= 0 ? "+" : ""}${d.toFixed(2)} pp`;
@@ -182,31 +232,42 @@ export async function getKpis(qc: QueryClient, args: Record<string, unknown>): P
           .map((it) => it.name)
           .join("; ")}`;
       }),
-      "Call get_kpis again with query (e.g. 'net interest margin', 'CET1', 'card net charge-off') to get the values.",
     ];
-    return { output: clip(lines.join("\n")), summary: `${t} KPI map` };
+    const tail = "Call get_kpis again with query (e.g. 'net interest margin', 'CET1', 'card net charge-off') to get the values.";
+    let body = lines.join("\n");
+    if (body.length > MAX - tail.length - 40) body = `${body.slice(0, MAX - tail.length - 60)}\n…[more categories]`;
+    return { output: `${body}\n${tail}`, summary: `${t} KPI map` };
   }
 
   const variants = expand(String(args.query)).map(words);
   const hay = (it: KpiItem, g: KpiFile["groups"][number]) => `${it.name} ${g.category} ${g.subcategory ?? ""} ${it.description ?? ""}`;
   // Every word must match in some phrasing; if none does, fall back to the items matching the most words.
-  let scored0 = groups.flatMap((g) => g.items.map((it) => ({ it, g, s: Math.max(...variants.map((v) => matchScore(hay(it, g), v))) })));
+  const phrase = String(args.query).toLowerCase().trim();
+  let scored0 = groups.flatMap((g) =>
+    g.items.map((it) => ({ it, g, s: Math.max(...variants.map((v, k) => matchScore(hay(it, g), v) * (k === 0 ? 1.25 : 1))) + (it.name.toLowerCase().includes(phrase) ? 1 : 0) })),
+  );
   const hasVals = (it: KpiItem) => Object.keys(seriesOf(it, freq).vals).length > 0;
   if (!scored0.some((x) => x.s > 0 && hasVals(x.it)) && q.length > 1)
     scored0 = scored0.map((x) => ({ ...x, s: q.filter((w) => hay(x.it, x.g).toLowerCase().includes(w)).length >= Math.ceil(q.length / 2) ? q.filter((w) => hay(x.it, x.g).toLowerCase().includes(w)).length / 2 : 0 }));
   const scored = scored0
     .filter((x) => x.s > 0 && hasVals(x.it))
-    .map((x) => ({ ...x, s: x.s + (isCurrent(x.it) ? 6 : 0) + (x.it.is_total ? 0.5 : 0) + (variants.some((v) => matchScore(x.it.name, v)) ? 1.5 : 0) - x.it.name.length / 400 }))
-    .sort((a, b) => b.s - a.s)
-    .slice(0, Math.max(1, Math.min(Number(args.max_items) || 8, 20)));
+    .map((x) => ({ ...x, s: x.s + (isCurrent(x.it) ? 3 : 0) + (x.it.is_total ? 0.2 : 0) + (variants.some((v) => matchScore(x.it.name, v)) ? 0.8 : 0) - x.it.name.length / 400 }))
+    .sort((a, b) => b.s - a.s);
+  const maxItems = Math.max(1, Math.min(Number(args.max_items) || 8, 20));
   if (!scored.length)
     return { output: `No ${t} KPI matches "${args.query}" (${freq === "Q" ? "quarterly" : "annual"}). Call get_kpis with a null query to see the categories.`, summary: "no match" };
   const out = [`${t} KPIs matching "${args.query}" (${freq === "Q" ? "quarterly" : "annual"}, newest first). Cite as the document link with its page; a value with no page is from a workbook cell or a curated series.${idxDropped ? " Workbook contents pages are excluded." : ""}`];
-  for (const { it, g } of scored) {
-    out.push(`${it.name} [${g.category}${it.parent ? ` > child of ${it.parent}` : ""}${isCurrent(it) ? "" : ", no longer reported"}] id ${it.id}, unit ${it.unit ?? "n/a"}, ${seriesOf(it, freq).basis}${it.description && it.description !== it.subcategory ? ` — ${it.description.slice(0, 160)}` : ""}`);
-    out.push(...kpiLines(it, freq, periods));
+  let shownItems = 0;
+  for (const { it, g } of scored.slice(0, maxItems)) {
+    const block = [`${it.name} [${g.category}${it.parent ? ` > child of ${it.parent}` : ""}${isCurrent(it) ? "" : ", no longer reported"}] id ${it.id}, unit ${it.unit ?? "n/a"}, ${seriesOf(it, freq).basis}${it.description && it.description !== it.subcategory ? ` — ${it.description.slice(0, 160)}` : ""}`, ...kpiLines(it, freq, periods)].join("\n");
+    // Whole items only: stop before the clip would cut one in half.
+    if (out.join("\n").length + block.length > MAX - 200) break;
+    out.push(block);
+    shownItems++;
   }
-  return { output: clip(out.join("\n")), summary: `${scored.length} ${t} KPIs` };
+  const more = scored.length - shownItems;
+  if (more > 0) out.push(`${more} more KPIs matched; narrow the query or lower periods to see them.`);
+  return { output: out.join("\n"), summary: `${shownItems} ${t} KPIs` };
 }
 
 /* ---------------------------------------------------------------- KPI signals */
@@ -261,6 +322,16 @@ export function renderSignals(f: KpiInsightsFile, n: number): string {
 
 /* ---------------------------------------------------------------- earnings */
 
+/** Fields the pipeline stores as fractions (0.032 = 3.2%). They are rewritten as percent strings before the model sees
+ * them, because names like surprise_pct invite reading -0.032 as "-0.03%". */
+const FRACTION_KEYS = new Set(["surprise_pct", "beat_rate", "median_surprise", "median_move", "move", "spy_move", "excess", "median_abs_move", "yoy", "offex_share", "ats_share", "vol21_pct", "vol21", "vs50", "vs200", "from_hi", "from_lo", "r21", "r63", "r252", "rs63"]);
+export function asPercents(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(asPercents);
+  if (v && typeof v === "object")
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === "number" && FRACTION_KEYS.has(k) ? `${(x * 100).toFixed(Math.abs(x) < 0.1 ? 2 : 1)}%` : asPercents(x)]));
+  return v;
+}
+
 /** Compact any JSON for the model: long arrays are cut, long strings shortened. */
 export function compact(v: unknown, arr = 8, str = 400, depth = 0): unknown {
   if (depth > 6) return "…";
@@ -277,13 +348,13 @@ export async function getEarningsWorkup(qc: QueryClient, args: Record<string, un
   const out: string[] = [];
   const up = season?.upcoming?.find((r: { ticker: string }) => r.ticker === t);
   const rep = season?.reported?.find((r: { ticker: string }) => r.ticker === t);
-  if (up) out.push(`NEXT REPORT: ${JSON.stringify(compact(up))}`);
-  if (rep) out.push(`LAST REPORT (season tracker; move = next-day stock move, excess = vs SPY): ${JSON.stringify(compact(rep))}`);
-  if (preview) out.push(`PREVIEW (consensus, last report, KPIs to watch with quotes): ${JSON.stringify(compact(preview, 6, 300))}`);
-  if (score) out.push(`SCORECARD of the latest results filing (actuals vs consensus, guidance given, guided-for-quarter outcome): ${JSON.stringify(compact(score, 10, 300))}`);
+  if (up) out.push(`NEXT REPORT: ${JSON.stringify(asPercents(compact(up)))}`);
+  if (rep) out.push(`LAST REPORT (season tracker; move = next-day stock move, excess = vs SPY): ${JSON.stringify(asPercents(compact(rep)))}`);
+  if (preview) out.push(`PREVIEW (consensus, last report, KPIs to watch with quotes): ${JSON.stringify(asPercents(compact(preview, 6, 300)))}`);
+  if (score) out.push(`SCORECARD of the latest results filing (actuals vs consensus, guidance given, guided-for-quarter outcome): ${JSON.stringify(asPercents(compact(score, 10, 300)))}`);
   if (!out.length) return { output: `No earnings preview or scorecard for ${t}. Use get_estimates, get_earnings_call and list_ir_documents.`, summary: "none" };
   const sec = season?.sectors?.find((s: { sector: string }) => s.sector === (preview?.sector ?? up?.sector ?? rep?.sector));
-  if (sec) out.push(`SECTOR THIS SEASON: ${JSON.stringify(compact(sec))}`);
+  if (sec) out.push(`SECTOR THIS SEASON: ${JSON.stringify(asPercents(compact(sec)))}`);
   return { output: clip(out.join("\n")), summary: `earnings workup for ${t}` };
 }
 
@@ -298,14 +369,14 @@ export async function getEarningsSeason(qc: QueryClient, args: Record<string, un
   const ex = rows.filter((r) => typeof r.excess === "number").sort((a, b) => (b.excess as number) - (a.excess as number));
   const out = [
     `Earnings season as of ${season.as_of} (window ${season.window_days} days): ${reported.length} reported, ${upcoming.length} upcoming${sector ? ` in sectors matching "${args.sector}"` : ""}.`,
-    `SECTORS: ${JSON.stringify(compact(season.sectors, 12))}`,
-    `BIGGEST POSITIVE REACTIONS vs SPY: ${JSON.stringify(compact(ex.slice(0, 10)))}`,
-    `BIGGEST NEGATIVE REACTIONS vs SPY: ${JSON.stringify(compact(ex.slice(-10).reverse()))}`,
-    `NEXT TO REPORT: ${JSON.stringify(compact([...upcoming].sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 20)))}`,
+    `SECTORS: ${JSON.stringify(asPercents(compact((season.sectors ?? []).filter((x: { sector: string }) => !sector || x.sector.toLowerCase().includes(sector)), 12)))}`,
+    `BIGGEST POSITIVE REACTIONS vs SPY: ${JSON.stringify(asPercents(compact(ex.length > 20 ? ex.slice(0, 10) : ex.slice(0, Math.ceil(ex.length / 2)))))}`,
+    `BIGGEST NEGATIVE REACTIONS vs SPY: ${JSON.stringify(asPercents(compact(ex.length > 20 ? ex.slice(-10).reverse() : ex.slice(Math.ceil(ex.length / 2)).reverse())))}`,
+    `NEXT TO REPORT: ${JSON.stringify(asPercents(compact([...upcoming].sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 20))))}`,
   ];
-  if (season.drivers) out.push(`DRIVERS: ${JSON.stringify(compact(season.drivers, 8))}`);
+  if (season.drivers) out.push(`DRIVERS: ${JSON.stringify(asPercents(compact(season.drivers, 8)))}`);
   const moves = (season as unknown as { kpi_moves?: unknown }).kpi_moves;
-  if (moves) out.push(`KPI MOVES: ${JSON.stringify(compact(moves, 10))}`);
+  if (moves) out.push(`KPI MOVES: ${JSON.stringify(asPercents(compact(moves, 10)))}`);
   return { output: clip(out.join("\n")), summary: `${reported.length} reported, ${upcoming.length} upcoming` };
 }
 
@@ -330,13 +401,14 @@ export async function getQuantProfile(qc: QueryClient, args: Record<string, unkn
   const st = (states as unknown as { rows?: ({ t: string; events?: [string, string][] } & Record<string, unknown>)[] } | null)?.rows?.find((r) => r.t === t);
   if (st) {
     const { events, ...rest } = st;
-    out.push(`TECHNICAL STATE (vs50/vs200/from_hi/r21/r63/r252 are fractions; vol21_pct is a percentile): ${JSON.stringify(compact(rest))}`);
+    out.push(`TECHNICAL STATE (vs50/vs200 = distance from the moving average; from_hi/from_lo = distance from the 52-week high/low; r21/r63/r252 = returns; vol21_pct = percentile of 21-day volatility in its own history): ${JSON.stringify(asPercents(compact(rest)))}`);
     // Each recent event with its historical forward return across all tracked stocks since 2008 (base rate, not a forecast).
     const base = (signals as unknown as { signals?: Record<string, Record<string, { n?: number; mean?: number; hit?: number; excess?: number }>> } | null)?.signals ?? {};
     for (const [name, date] of events ?? []) {
       const b = base[name];
-      const h = b?.["20"] ?? b?.["5"];
-      out.push(`  event ${name} on ${date}${h ? `: historically ${h.n} events, 20-day mean return ${((h.mean ?? 0) * 100).toFixed(2)}%, hit rate ${((h.hit ?? 0) * 100).toFixed(0)}%, excess vs all stocks ${((h.excess ?? 0) * 100).toFixed(2)}%` : ""}`);
+      const hz = b?.["20"] ? "20" : "5";
+      const h = b?.[hz];
+      out.push(`  event ${name} on ${date}${h ? `: historically ${h.n} events, ${hz}-day mean return ${((h.mean ?? 0) * 100).toFixed(2)}%, hit rate ${((h.hit ?? 0) * 100).toFixed(0)}%, excess vs all stocks ${((h.excess ?? 0) * 100).toFixed(2)}%` : ""}`);
     }
   }
   if (peers) {
@@ -358,7 +430,7 @@ export async function getQuantProfile(qc: QueryClient, args: Record<string, unkn
     const w = wk[wk.length - 1];
     out.push(`OFF-EXCHANGE: week of ${w.week}, ${((w.offex_share as number) * 100).toFixed(1)}% of volume off-exchange${w.ats_share != null ? ` (ATS ${(w.ats_share * 100).toFixed(1)}%)` : ""}`);
   }
-  if (sit) out.push(`SPECIAL SITUATION COMPONENTS (as of ${sit.as_of}): ${JSON.stringify(compact(sit.components, 4, 240))}`);
+  if (sit) out.push(`SPECIAL SITUATION COMPONENTS (as of ${sit.as_of}): ${JSON.stringify(asPercents(compact(sit.components, 4, 240)))}`);
   if (brief?.sentences?.length) out.push(`30-DAY BRIEF (${brief.label}): ${brief.sentences.map((s: { text: string }) => s.text).join(" ")}`);
   if (!out.length) return { output: `No computed market profile for ${t}. Use get_price_history.`, summary: "none" };
   return { output: clip(out.join("\n")), summary: `market profile for ${t}` };
@@ -378,7 +450,7 @@ interface DocTablesFile {
 }
 
 function tableText(tb: DocTablesFile["tables"][number], maxRows: number): string {
-  const head = tb.header.map((h) => h.join(" | ")).filter(Boolean);
+  const head = [...new Set(tb.header.map((h) => h.join(" | ")).filter((l) => l.replace(/[|\s]/g, "")))];
   const rows = tb.rows.slice(0, maxRows).map((r) => r.map((c) => c.replace(/\s+/g, " ").trim()).join(" | "));
   return [...head, ...rows, ...(tb.rows.length > maxRows ? [`…+${tb.rows.length - maxRows} rows`] : [])].join("\n");
 }
@@ -390,12 +462,15 @@ export async function searchDocTables(qc: QueryClient, args: Record<string, unkn
   const store = await safe(qc.fetchQuery(storeIndexQuery(t)));
   const meta = new Map((store?.documents ?? []).map((d) => [d.id, d]));
   const docQ = words(String(args.doc_query ?? ""));
+  const docScore = (d: DocTablesIndex["documents"][number], m: { fiscal_label?: string | null; period_end?: string | null } | undefined) =>
+    matchScore(`${(d.title ?? "").split("||")[0]} ${d.doc_type ?? ""} ${m?.fiscal_label ?? ""} ${m?.period_end ?? ""}`, docQ);
   const q = words(String(args.query));
   const docs = idx.documents
     .filter((d) => d.n_tables > 0)
     .map((d) => ({ d, m: meta.get(d.id) }))
-    .filter(({ d, m }) => !docQ.length || matchScore(`${d.title ?? ""} ${d.doc_type ?? ""} ${m?.fiscal_label ?? ""} ${m?.period_end ?? ""}`, docQ) > 0)
-    .sort((a, b) => (b.m?.period_end ?? b.m?.published ?? "").localeCompare(a.m?.period_end ?? a.m?.published ?? ""))
+    .map((x) => ({ ...x, ds: docQ.length ? docScore(x.d, x.m) : 1 }))
+    .filter((x) => x.ds > 0)
+    .sort((a, b) => Math.round(b.ds * 2) - Math.round(a.ds * 2) || (b.m?.period_end ?? b.m?.published ?? "").localeCompare(a.m?.period_end ?? a.m?.published ?? ""))
     .slice(0, Math.max(1, Math.min(Number(args.max_docs) || 4, 8)));
   if (!docs.length) return { output: `No ${t} documents with parsed tables match "${args.doc_query}".`, summary: "no documents" };
   const files = await Promise.all(docs.map(({ d }) => safe(partnerFile<DocTablesFile>(`doctables/${t}/${d.id}.json`))));
@@ -407,8 +482,18 @@ export async function searchDocTables(qc: QueryClient, args: Record<string, unkn
       if (s > 0) hits.push({ s, doc: docs[i], tb });
     }
   });
-  hits.sort((a, b) => b.s - a.s);
-  const top = hits.slice(0, Math.max(1, Math.min(Number(args.max_tables) || 3, 6)));
+  // Same table in several quarters' documents: keep the newest copy; ties go to the newer document.
+  const when = (h: (typeof hits)[number]) => h.doc.m?.period_end ?? h.doc.m?.published ?? "";
+  hits.sort((a, b) => b.s - a.s || when(b).localeCompare(when(a)));
+  const seenT = new Set<string>();
+  const top = hits
+    .filter((h) => {
+      const sig = `${h.tb.caption ?? ""}|${h.tb.rows.map((r) => r[0] ?? "").join("|")}`.toLowerCase();
+      if (seenT.has(sig)) return false;
+      seenT.add(sig);
+      return true;
+    })
+    .slice(0, Math.max(1, Math.min(Number(args.max_tables) || 3, 6)));
   if (!top.length)
     return { output: `No table in ${docs.map(({ d }) => d.title).join("; ")} matches "${args.query}". Try other words or search_documents.`, summary: "no tables" };
   const out = top.map(
@@ -442,7 +527,10 @@ export async function computedDigest(qc: QueryClient, t: string): Promise<string
   if (score) out.push(`LATEST RESULTS SCORECARD: filed ${score.filed}, quarter ${score.quarter_end ?? "?"}, ${score.metrics.length} metrics, ${score.guidance.length} guidance items <${score.filing_url}>`);
   if (sit) out.push(`SITUATIONS: ${Object.entries(sit.components ?? {}).map(([k, c]) => `${k}: ${(c as { headline?: string; dir?: string }).headline ?? ""} (${(c as { dir?: string }).dir ?? "?"})`).join("; ")}`);
   if (read) out.push(`QUANT: ${read.sentences.map((s: { text: string }) => s.text).join(" ")}`);
-  return out.length > 1 ? out : [];
+  if (out.length <= 1) return [];
+  // Keep the digest short so the dossier's filings and accession numbers stay inside the clip.
+  const text = out.join("\n");
+  return text.length > 2600 ? [`${text.slice(0, 2600)}…`] : out;
 }
 
 /* ---------------------------------------------------------------- earnings calls */

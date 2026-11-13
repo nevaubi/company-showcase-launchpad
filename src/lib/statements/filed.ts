@@ -115,7 +115,7 @@ export const stdFileQuery = (t: string) =>
   queryOptions({ queryKey: ["filed", "std", t], queryFn: () => partnerFile<StdFile>(`statements/${t}/std.json.gz`), staleTime: hour, retry: 1 });
 export const stdMapQuery = queryOptions({ queryKey: ["filed", "stdmap"], queryFn: () => partnerFile<StdMap>("statements/std_map.json"), staleTime: 24 * hour, retry: 1 });
 export const kpiFileQuery = (t: string) =>
-  queryOptions({ queryKey: ["filed", "kpi", t], queryFn: () => partnerFile<KpiFile>(`kpis/${t}.json`), staleTime: hour, retry: 1 });
+  queryOptions({ queryKey: ["filed", "kpi", t], queryFn: () => partnerFile<KpiFile>(`kpis/${t}.json`), staleTime: hour, gcTime: 2 * hour, retry: 1 });
 
 export const STMT_LABEL: Record<StmtCode, string> = { BS: "Balance sheet", IS: "Income statement", CI: "Comprehensive income", CF: "Cash flow", EQ: "Shareholders' equity", UN: "Other statement" };
 export const STMT_ORDER: Record<StmtCode, number> = { IS: 1, CI: 2, BS: 3, CF: 4, EQ: 5, UN: 6 };

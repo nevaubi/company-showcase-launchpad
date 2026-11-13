@@ -350,7 +350,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     case "get_company_dossier": {
       const t = String(args.ticker).toUpperCase();
       const since = new Date(Date.now() - 365 * 86400_000).toISOString().slice(0, 10);
-      const [d, links, alt, sig, ideas, f144, review] = await Promise.all([
+      const [d, links, alt, sig, ideas, f144, review, computed] = await Promise.all([
         dataset(qc, t),
         qc.fetchQuery(supplyLinksQuery),
         supabase.from("alt_data").select("dataset,kind,date,title,value,unit,source_url").eq("ticker", t).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(60),
@@ -358,6 +358,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         fetch("/data/signals.json").then((r) => r.json()).catch(() => null),
         partnerFile<Form144File>(`form144/${t}.json`).catch(() => null),
         partnerFile<CommentsFile>(`comments/${t}.json`).catch(() => null),
+        computedDigest(qc, t).catch(() => [] as string[]),
       ]);
       const out: string[] = [`DOSSIER ${t} — everything Filed Under knows, last 12 months`];
       const u = (await qc.fetchQuery(universeQuery)).companies.find((c) => c.ticker === t);
@@ -381,7 +382,6 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const myIdeas = (ideas?.ideas ?? []).filter((i: any) => i.ticker === t);
       if (myIdeas.length) out.push("RULE-BASED TRADE IDEAS:", ...myIdeas.map((i: any) => JSON.stringify(i).slice(0, 400)));
       // Computed layer first in the output so truncation never drops it.
-      const computed = await computedDigest(qc, t).catch(() => []);
       if (computed.length) out.splice(1, 0, ...computed);
       return { output: clip(out.join("\n")), summary: `dossier for ${t}`, refs: d.filings.slice(0, 3).map((f) => ({ ticker: t, accn: f.accn, doc: f.doc, label: f.form })) };
     }
