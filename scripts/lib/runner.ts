@@ -13,6 +13,7 @@
  *  - back-pressure: waits while the database is slow and sheds workers until it recovers, so the
  *    app stays usable during bulk runs
  */
+import { writeFileSync } from "node:fs";
 import { rebuildCompany } from "@/lib/ir/rebuild.server";
 import { OpenAIError } from "@/lib/openai.server";
 import { args, dbGate, dbLatency, log, sb, sleep } from "./supa";
@@ -28,6 +29,8 @@ export interface RunUsage {
   output_tokens: number;
   /** estimated spend in USD when the model's prices are known */
   usd?: number;
+  /** estimated Lovable AI Gateway credits */
+  credits?: number;
 }
 
 export interface RunnerOpts<T extends RunnerItem> {
@@ -42,6 +45,10 @@ export interface RunnerOpts<T extends RunnerItem> {
   idleMinutes?: number;
   /** pause the job once the estimated spend of this run passes this many USD */
   maxUsd?: number;
+  /** pause the job once this run's estimated gateway credits pass this many */
+  maxCredits?: number;
+  /** write {credits, usd, done, facts, stop} here when the run ends (orchestrators keep a ledger) */
+  spendFile?: string;
 }
 
 /** Database/network hiccups (statement timeouts, gateway pages) are retried instead of failing the item. */
@@ -73,6 +80,7 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   let tokensIn = 0;
   let tokensOut = 0;
   let usd = 0;
+  let credits = 0;
   let stop: string | null = null;
   // item id → database/network failures in a row (bounded retries)
   const infraFails = new Map<string, number>();
@@ -149,9 +157,14 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
         tokensIn += r.usage?.input_tokens ?? 0;
         tokensOut += r.usage?.output_tokens ?? 0;
         usd += r.usage?.usd ?? 0;
+        credits += r.usage?.credits ?? 0;
         rateHits = Math.max(0, rateHits - 1);
         infraFails.delete(item.id);
         log(`${item.ticker.padEnd(5)} ${String(r.facts).padStart(4)} facts ${r.note ? `${r.note} ` : ""}${((Date.now() - t0) / 1000).toFixed(0)}s  ${item.label.slice(0, 60)}`);
+        if (o.maxCredits != null && credits > o.maxCredits && !stop) {
+          stop = `budget: this run used about ${credits.toFixed(1)} credits (cap ${o.maxCredits}) — rerun with --resume to continue`;
+          await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
+        }
         if (o.maxUsd && usd > o.maxUsd && !stop) {
           stop = `budget: this run spent about $${usd.toFixed(0)} (cap $${o.maxUsd}) — rerun with --resume to continue`;
           await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
@@ -203,7 +216,7 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   const stats = setInterval(
     () =>
       log(
-        `— ${o.job}: ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens${usd ? `, ~$${usd.toFixed(2)}` : ""}, concurrency ${concurrency}`,
+        `— ${o.job}: ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens${usd ? `, ~$${usd.toFixed(2)}` : ""}${credits ? `, ~${credits.toFixed(2)} credits` : ""}, concurrency ${concurrency}`,
       ),
     120_000,
   );
@@ -215,5 +228,6 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   await flush(true);
   clearInterval(leaseTimer);
   await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
-  log(stop ? `${o.job} STOPPED — ${stop}` : `${o.job} finished — ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens${usd ? `, ~$${usd.toFixed(2)}` : ""}`);
+  log(stop ? `${o.job} STOPPED — ${stop}` : `${o.job} finished — ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens${usd ? `, ~$${usd.toFixed(2)}` : ""}${credits ? `, ~${credits.toFixed(2)} credits` : ""}`);
+  if (o.spendFile) writeFileSync(o.spendFile, JSON.stringify({ credits, usd, done, facts, tokensIn, tokensOut, stop }));
 }

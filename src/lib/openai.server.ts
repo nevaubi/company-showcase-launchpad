@@ -82,6 +82,22 @@ const PRICES: [prefix: string, p: [number, number, number, number]][] = [
   ["claude-haiku-5-5", [0.1, 0.5, 0.01, 0.125]],
 ];
 
+/**
+ * Lovable AI Gateway credits per million tokens (input, output), fitted from this project's
+ * gateway request logs (exact for Gemini; Luna rounded up). Used for run spend caps.
+ */
+const GATEWAY_CREDITS: [prefix: string, p: [number, number]][] = [
+  ["google/gemini-3.1-flash-lite", [1, 6]],
+  ["openai/gpt-6-luna", [0.25, 2.05]],
+];
+
+/** Estimated gateway credits of one call, or undefined when the model's rates aren't known here. */
+export function estimateCredits(model: string, u: Usage): number | undefined {
+  const p = GATEWAY_CREDITS.find(([k]) => model.startsWith(k))?.[1];
+  if (!p) return undefined;
+  return (u.input_tokens * p[0] + u.output_tokens * p[1]) / 1e6;
+}
+
 /** Estimated spend of one call, or undefined when the model's prices aren't known here. */
 export function estimateUsd(model: string, u: Usage): number | undefined {
   const p = PRICES.find(([k]) => model.startsWith(k))?.[1];

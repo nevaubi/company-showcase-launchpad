@@ -8,11 +8,12 @@
  * model (scripts/lib/vision-page.ts), keep only facts that point at a real token (value re-read
  * from it, box = token box), drop numbers the table pass already stored, save page images and
  * inject them into the document's HTML copy so click-to-source can outline the exact number.
- * --max-usd pauses the job once this run's estimated spend passes the cap (Claude models).
+ * --max-usd pauses the job once this run's estimated spend passes the cap (Claude models);
+ * --max-credits does the same for estimated gateway credits (Gemini, GPT).
  */
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { IR_MODELS, type Usage } from "@/lib/openai.server";
+import { estimateCredits, IR_MODELS, type Usage } from "@/lib/openai.server";
 import { numberTokens, parseBboxHtml, type PageWords, type VisionFact } from "@/lib/ir/vision-core";
 import { pool } from "@/lib/ir/extract.server";
 import { COVERAGE } from "@/lib/coverage";
@@ -32,7 +33,7 @@ const verifier = args.verify as string | undefined;
 const escalation = args.escalate;
 const documentIds = args.documents?.split(",").filter(Boolean);
 if (escalation && verifier) throw new Error("Choose escalation or verification, not both");
-const names = new Map(COVERAGE.map((c) => [c.ticker, c.name]));
+const names = new Map(COVERAGE.map((c) => [c.ticker, c.shortName]));
 type Doc = { id: string; ticker: string; label: string; kind: string; ext: string | null; path: string; rendition_path: string | null; title: string; filed: string | null; accn: string | null; bytes: number | null };
 
 const sh = run;
@@ -132,9 +133,14 @@ async function processDoc(d: Doc) {
     let failedPages = 0;
     let disagreed = 0;
     let escalated = 0;
+    let credits = 0;
     const results = await pool(candidates, 4, async (j) => {
       const tokens = numberTokens(j.words);
-      const read = async (m: string) => readPage({ model: m, context, page: j.page, pageCount, tokens, jpeg: await modelImage(j.image, j.w, j.h, m), ocr: j.ocr, filed: d.filed, quality: args.quality !== undefined, followUp: args.loop !== undefined, effort: args.quality !== undefined ? "high" : undefined });
+      const read = async (m: string) => {
+        const res = await readPage({ model: m, context, page: j.page, pageCount, tokens, jpeg: await modelImage(j.image, j.w, j.h, m), ocr: j.ocr, filed: d.filed, quality: args.quality !== undefined, followUp: args.loop !== undefined, effort: args.quality !== undefined ? "high" : undefined });
+        credits += estimateCredits(m, res.usage) ?? 0;
+        return res;
+      };
       let [r, v] = await Promise.all([read(model), verifier ? read(verifier) : null]);
       let pageModel = model;
       if (escalation && needsVisionEscalation(r, j.ocr)) {
@@ -191,8 +197,8 @@ async function processDoc(d: Doc) {
     }
     const extra = [rejected ? `${rejected} rejected` : "", failedPages ? `${failedPages} pages unreadable` : "", disagreed ? `${disagreed} unconfirmed` : ""].filter(Boolean).join(", ");
     await mark(d, facts.length ? `ok (${facts.length} facts, ${pagesWithFacts.length} pages${extra ? `, ${extra}` : ""})` : extra ? `no data (${extra})` : "no data", facts.length);
-    const note = [`${candidates.length}pp`, escalated ? `${escalated} escalated` : "", rejected ? `${rejected} rej` : "", followUps ? `${followUps} 2nd look` : "", failedPages ? `${failedPages} failed` : "", usage.usd ? `$${usage.usd.toFixed(3)}` : ""].filter(Boolean).join(" ");
-    return { facts: facts.length, note, usage };
+    const note = [`${candidates.length}pp`, escalated ? `${escalated} escalated` : "", rejected ? `${rejected} rej` : "", followUps ? `${followUps} 2nd look` : "", failedPages ? `${failedPages} failed` : "", usage.usd ? `$${usage.usd.toFixed(3)}` : "", credits ? `${credits.toFixed(3)} cr` : ""].filter(Boolean).join(" ");
+    return { facts: facts.length, note, usage: { ...usage, credits } };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -262,6 +268,8 @@ await runBatch<Doc>({
   concurrency: Number(args.concurrency ?? 8),
   idleMinutes: args.watch !== undefined ? Number(args.idle ?? 30) : undefined,
   maxUsd: args["max-usd"] ? Number(args["max-usd"]) : undefined,
+  maxCredits: args["max-credits"] ? Number(args["max-credits"]) : undefined,
+  spendFile: args["spend-file"],
   claim,
   release: (d, status) => sb.from("ir_documents").update({ vision_status: status, vision_at: status ? new Date().toISOString() : null }).eq("id", d.id),
   reset: () => {
