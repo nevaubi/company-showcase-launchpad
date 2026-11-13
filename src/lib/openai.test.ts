@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyOpenAIError, openaiStructured } from "@/lib/openai.server";
+import { classifyOpenAIError, openaiStructured, parseOpenRouterStream } from "@/lib/openai.server";
 import { vi } from "vitest";
 
 describe("Ling OpenRouter reader", () => {
@@ -13,7 +13,22 @@ describe("Ling OpenRouter reader", () => {
       expect(r.data.ok).toBe(true);
       expect(request.mock.calls[0]?.[0]).toBe("https://connector-gateway.lovable.dev/udc_openrouter/v1/chat/completions");
       expect(JSON.parse(request.mock.calls[0]?.[1].body).model).toBe("inclusionai/ling-3.0-flash-vl");
+      expect(JSON.parse(request.mock.calls[0]?.[1].body).stream).toBe(true);
     } finally { vi.unstubAllGlobals(); vi.unstubAllEnvs(); }
+  });
+  it("assembles split streaming JSON and ignores keep-alives", async () => {
+    const events = ': OPENROUTER PROCESSING\n\ndata: {"choices":[{"delta":{"content":"{\\\"ok\\\":"}}]}\n\ndata: {"choices":[{"delta":{"content":"true}"},"finish_reason":"stop"}]}\n\ndata: {"choices":[],"usage":{"prompt_tokens":23}}\n\ndata: [DONE]\n';
+    const stream = new ReadableStream({ start(c) { for (let i = 0; i < events.length; i += 7) c.enqueue(new TextEncoder().encode(events.slice(i, i + 7))); c.close(); } });
+    const r = await parseOpenRouterStream(new Response(stream));
+    expect(r.choices?.[0]?.message?.content).toBe('{"ok":true}');
+    expect(r.usage?.prompt_tokens).toBe(23);
+  });
+  it("rejects valid-looking JSON when the stream ends before completion", async () => {
+    await expect(parseOpenRouterStream(new Response('data: {"choices":[{"delta":{"content":"{}"}}]}\n'))).rejects.toMatchObject({ kind: "transient" });
+  });
+  it("classifies a response-body connection reset as retryable", async () => {
+    const stream = new ReadableStream({ start(c) { c.error(new Error("ECONNRESET")); } });
+    await expect(parseOpenRouterStream(new Response(stream))).rejects.toMatchObject({ kind: "transient", message: "OpenRouter response stream interrupted" });
   });
 });
 

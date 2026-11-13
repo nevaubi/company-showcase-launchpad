@@ -11,7 +11,8 @@ import { pool } from "@/lib/ir/extract.server";
 import { COVERAGE } from "@/lib/coverage";
 import type { Effort } from "@/lib/openai.server";
 import { args, sb } from "./lib/supa";
-import { imageSize, modelImage, ocrImage, readPage, visionEffort } from "./lib/vision-page";
+import { imageSize, modelImage, ocrImage, readPage, visionEffort, type PageRead } from "./lib/vision-page";
+import { OpenAIError } from "@/lib/openai.server";
 
 const model = args.model ?? "claude-sonnet-5-5";
 const effort = (args.effort as Effort | undefined) ?? visionEffort(model);
@@ -48,6 +49,7 @@ type Stored = { period_end: string; months: number; value: number; metric: strin
 const key = (f: { period_end: string; months: number; value: number; unit: string; locator?: { w?: number; box?: number[] } | null }) => `${f.locator?.w ?? f.locator?.box?.join(",") ?? ""}|${f.period_end}|${f.months}|${f.unit}|${f.value}`;
 let base = 0, cand = 0, both = 0, sameMetric = 0, fails = 0, inTok = 0, outTok = 0, cacheTok = 0, usd = 0, followUps = 0, missing = 0, missingAfter = 0, tokTotal = 0, secs = 0;
 const report: unknown[] = [];
+if (keep) writeFileSync(`${keep}/sample.json`, JSON.stringify(sample.map((d) => ({ id: d.id })), null, 1));
 const started = Date.now();
 await pool(sample, Math.max(1, Math.min(8, Number(args.concurrency ?? 4))), async (d) => {
   const dir = `/tmp/irvp/${d.id}`;
@@ -62,11 +64,19 @@ await pool(sample, Math.max(1, Math.min(8, Number(args.concurrency ?? 4))), asyn
     const context = `Company: ${d.ticker} (${names.get(d.ticker) ?? d.ticker}). Document: ${d.title} (${d.kind}, filed ${d.filed ?? "unknown"}).`;
     const t0 = Date.now();
     const read = async (m: string) => {
+      if (m.startsWith("inclusionai/") && tokens.length > 4) {
+        const chunks: PageRead[] = [];
+        for (let start = 0; start < tokens.length; start += 4) chunks.push(await readTokens(m, tokens.slice(start, start + 4)));
+        return { ...chunks[0], rows: chunks.flatMap((c) => c.rows), rejected: chunks.reduce((s, c) => s + c.rejected, 0), missing: chunks.reduce((s, c) => s + c.missing, 0), missingAfter: chunks.reduce((s, c) => s + c.missingAfter, 0), skipped: chunks.reduce((s, c) => s + c.skipped, 0), usd: chunks.reduce((s, c) => s + c.usd, 0), followUp: chunks.some((c) => c.followUp), failed: chunks.find((c) => c.failed)?.failed, usage: { input_tokens: chunks.reduce((s, c) => s + c.usage.input_tokens, 0), output_tokens: chunks.reduce((s, c) => s + c.usage.output_tokens, 0), cached_tokens: chunks.reduce((s, c) => s + c.usage.cached_tokens, 0) } } as PageRead;
+      }
+      return readTokens(m, tokens);
+    };
+    const readTokens = async (m: string, subset: typeof tokens) => {
       for (let attempt = 0; ; attempt++) {
         try {
-          return await readPage({ model: m, effort: m === model ? effort : visionEffort(m), context, page: 1, pageCount: 1, tokens, jpeg: await modelImage(img, w, h, m), ocr: true, filed: d.filed, followUp: args.loop === "true" || (m.startsWith("claude-") && args["no-followup"] === undefined) });
+          return await readPage({ model: m, effort: m === model ? effort : visionEffort(m), context: `${context}${subset.length < tokens.length ? " Account ONLY for the supplied token IDs; do not return other numbers from the image." : ""}`, page: 1, pageCount: 1, tokens: subset, maxOutputTokens: m.startsWith("inclusionai/") ? 8192 : undefined, jpeg: await modelImage(img, w, h, m), ocr: true, filed: d.filed, followUp: args.loop === "true" || (m.startsWith("claude-") && args["no-followup"] === undefined) });
         } catch (e) {
-          if (attempt >= 2 || !/ECONNRESET|transient|connection request failed/i.test(String(e))) throw e;
+          if (attempt >= 2 || !(e instanceof OpenAIError && e.kind === "transient") && !/ECONNRESET/i.test(String(e))) throw e;
           await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
         }
       }
@@ -105,8 +115,10 @@ await pool(sample, Math.max(1, Math.min(8, Number(args.concurrency ?? 4))), asyn
     }
   } catch (e) {
     fails++;
+    report.push({ id: d.id, ticker: d.ticker, title: d.title, failed: String(e).slice(0, 140) });
     console.log(`${d.ticker} FAILED ${(e as Error).message.slice(0, 140)}`);
   } finally {
+    if (keep) writeFileSync(`${keep}/report.json`, JSON.stringify(report, null, 1));
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -125,6 +125,7 @@ export async function readPage(o: {
   filed: string | null;
   effort?: Effort;
   followUp?: boolean;
+  maxOutputTokens?: number;
 }): Promise<PageRead> {
   const effort = o.effort ?? visionEffort(o.model);
   const text = `${o.context} Page ${o.page} of ${o.pageCount}.\n\nNumber tokens printed on the page (${o.tokens.length}):\n${renderTokens(o.tokens)}`;
@@ -150,7 +151,7 @@ export async function readPage(o: {
         ],
         schema: SCHEMA,
         effort,
-        maxOutputTokens: 32_000,
+        maxOutputTokens: o.maxOutputTokens ?? 32_000,
       });
       const r = await call(text);
       bill(r.usage);

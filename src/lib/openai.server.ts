@@ -319,6 +319,10 @@ async function openRouterStructured<T>(opts: Parameters<typeof openaiStructured>
       signal: opts.signal ?? AbortSignal.timeout(180_000),
       body: JSON.stringify({
         model: opts.model,
+        stream: true,
+        stream_options: { include_usage: true },
+        // The connector closes replies at 90s; avoid hidden reasoning consuming that window.
+        reasoning: { enabled: false },
         messages: [
           { role: "system", content: opts.instructions },
           { role: "user", content: parts.map((p) => p.type === "input_text" ? { type: "text", text: p.text } : { type: "image_url", image_url: { url: p.image_url } }) },
@@ -335,7 +339,9 @@ async function openRouterStructured<T>(opts: Parameters<typeof openaiStructured>
     const kind = res.status === 402 ? "quota" : classifyOpenAIError(res.status, "", "", "");
     throw new OpenAIError(`OpenRouter request failed (${res.status})`, kind, res.status);
   }
-  const j = await res.json() as { model?: string; error?: { code?: number }; choices?: { finish_reason?: string; message?: { content?: string | null } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } };
+  const j = res.headers.get("content-type")?.includes("text/event-stream")
+    ? await parseOpenRouterStream(res)
+    : await res.json() as OpenRouterReply;
   const usage: Usage = { input_tokens: j.usage?.prompt_tokens ?? 0, output_tokens: j.usage?.completion_tokens ?? 0, cached_tokens: j.usage?.prompt_tokens_details?.cached_tokens ?? 0 };
   if (j.error) throw new OpenAIError("OpenRouter returned a provider error", "rejected", 200, undefined, usage);
   if (j.choices?.[0]?.finish_reason !== "stop") throw new OpenAIError("OpenRouter response incomplete", "rejected", 200, undefined, usage);
@@ -344,6 +350,49 @@ async function openRouterStructured<T>(opts: Parameters<typeof openaiStructured>
   } catch {
     throw new OpenAIError("OpenRouter returned invalid JSON", "rejected", 200, undefined, usage);
   }
+}
+
+type OpenRouterReply = { model?: string; error?: { code?: number }; choices?: { finish_reason?: string; message?: { content?: string | null } }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } } };
+
+/** Consume keep-alives and split SSE chunks; never accept partial JSON after a broken stream. */
+export async function parseOpenRouterStream(res: Response): Promise<OpenRouterReply> {
+  if (!res.body) throw new OpenAIError("OpenRouter response body missing", "transient", 200);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  const reply: OpenRouterReply = { choices: [{ message: { content: "" } }] };
+  let buffer = "", text = "", finish = "", done = false;
+  const line = (raw: string) => {
+    const s = raw.trim();
+    if (!s.startsWith("data:")) return;
+    const data = s.slice(5).trim();
+    if (data === "[DONE]") { done = true; return; }
+    const chunk = JSON.parse(data) as OpenRouterReply & { choices?: { delta?: { content?: string }; finish_reason?: string }[] };
+    if (chunk.error) throw new OpenAIError("OpenRouter stream provider error", "transient", 200);
+    reply.model = chunk.model ?? reply.model;
+    reply.usage = chunk.usage ?? reply.usage;
+    text += chunk.choices?.[0]?.delta?.content ?? "";
+    finish = chunk.choices?.[0]?.finish_reason ?? finish;
+  };
+  try {
+    while (!done) {
+      const r = await reader.read();
+      buffer += decoder.decode(r.value, { stream: !r.done });
+      let end: number;
+      while ((end = buffer.indexOf("\n")) >= 0) {
+        line(buffer.slice(0, end)); buffer = buffer.slice(end + 1);
+      }
+      if (r.done) { if (buffer.trim()) line(buffer); break; }
+    }
+  } catch (e) {
+    if (e instanceof OpenAIError) throw e;
+    throw new OpenAIError("OpenRouter response stream interrupted", "transient", 200);
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+  if (!done || !finish) throw new OpenAIError("OpenRouter response stream incomplete", "transient", 200);
+  reply.choices = [{ finish_reason: finish, message: { content: text } }];
+  return reply;
 }
 
 /**
