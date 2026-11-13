@@ -216,7 +216,7 @@ async function gatewayChat<T>(opts: Parameters<typeof openaiStructured>[0], mode
         ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
         max_tokens: opts.maxOutputTokens ?? 32_000,
         response_format: { type: "json_schema", json_schema: { name: opts.name, schema: opts.schema, strict: true } },
-      } as unknown as Parameters<typeof generateChatCompletion<"openai/gpt-6.1-terra">>[0], // shared shape across chat models; verified live
+      } as unknown as Parameters<typeof generateChatCompletion<"google/gemini-3-flash-preview">>[0], // shared shape across chat models; verified live
       opts.signal ? { signal: opts.signal } : undefined,
     )) as typeof j;
   } catch (e) {
