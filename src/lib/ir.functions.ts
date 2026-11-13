@@ -2,6 +2,7 @@ import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { IrPayload } from "@/lib/ir/payload";
+import type { StoreRef } from "@/lib/ir/store";
 
 const tickerSchema = z.string().regex(/^[A-Z.]{1,6}$/);
 const DOC_COLUMNS = "id, source, source_url, accn, exhibit, kind, title, period, filed, ext, bytes, extract_status, extract_facts, rendition_path, pages";
@@ -155,11 +156,29 @@ export const getIrHtml = createServerFn({ method: "GET" })
       const { loadExternalDoc } = await import("@/lib/ir/external.server");
       const doc = await loadExternalDoc(data.id.slice(2));
       if (!doc) throw new Error("Document not found");
-      const isSec = /^https:\/\/www\.sec\.gov\//.test(doc.url);
-      const res = isSec ? await (await import("@/lib/sec.server")).fetchSec(doc.url) : await fetch(doc.url, { signal: AbortSignal.timeout(20_000) });
-      const type = res.headers.get("content-type") ?? "";
-      if (!res.ok || !/html|text\/plain/.test(type)) throw new Error("This document has no in-app copy; open the original");
-      return { html: await res.text(), contentType: "text/html", sourceUrl: doc.url, rendition: false, title: doc.title };
+      const ext = (doc.ext ?? "").toLowerCase();
+      const htmlFile = /^\.html?$/.test(ext);
+      const base = { contentType: "text/html", sourceUrl: doc.url, title: doc.title };
+      // A stored PDF, deck or workbook is shown from its page text in the document store. The browser reads that
+      // text with the user's own access (irstore/…), so nothing large passes through this function.
+      if (doc.text_path && !htmlFile) {
+        const store: StoreRef = { text: doc.text_path, original: doc.storage_path ?? null, ext };
+        return { ...base, html: "", rendition: true, store };
+      }
+      try {
+        const isSec = /^https:\/\/www\.sec\.gov\//.test(doc.url);
+        const res = isSec ? await (await import("@/lib/sec.server")).fetchSec(doc.url) : await fetch(doc.url, { signal: AbortSignal.timeout(20_000) });
+        const type = res.headers.get("content-type") ?? "";
+        if (res.ok && /html|text\/plain/.test(type)) return { ...base, html: await res.text(), rendition: false };
+      } catch {
+        // the stored copy below stands in
+      }
+      // The page no longer answers, or refuses this server: the stored HTML original stands in for it.
+      if (doc.storage_path && htmlFile) {
+        const store: StoreRef = { original: doc.storage_path, ext };
+        return { ...base, html: "", rendition: false, store };
+      }
+      throw new Error("This document has no in-app copy; open the original");
     }
     const { data: row } = await context.supabase.from("ir_documents").select("path, rendition_path, source_url, ext, title").eq("id", data.id).maybeSingle();
     const path = row?.rendition_path || (row?.ext?.startsWith("htm") ? row.path : null);

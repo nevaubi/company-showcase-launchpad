@@ -22,8 +22,10 @@ export type KpiInsightKind =
   | "other";
 
 export interface KpiSource {
+  /** Document id in the pipeline's store */
   doc?: string;
-  page?: number;
+  /** Page of that document; some files carry it as text */
+  page?: number | string;
   sheet?: string;
   cell?: string;
   quote?: string;

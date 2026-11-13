@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getIrDownload, getIrImages, type IrDocRow } from "@/lib/ir.functions";
 import { mergeStore, STORE_PREFIX, storeUrl, type StoreDoc } from "@/lib/ir/store";
+import { EXT_PREFIX } from "@/lib/ir/external";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -125,6 +126,12 @@ export function IrLibrary({
   };
   const view = async (d: IrDocRow) => {
     if (d.source === "store") {
+      // A stored document with page text opens in the source panel, like the app's own copies.
+      const s = storeById.get(d.id);
+      if (s?.text_path) {
+        open({ ticker, label: docTitle(d), unit: "usd", value: 0, doc: { accn: d.accn ?? "", doc: "", filed: d.filed ?? undefined, title: docTitle(d), irDoc: `${EXT_PREFIX}${s.id}` } });
+        return;
+      }
       await openStore(d, "view");
       return;
     }

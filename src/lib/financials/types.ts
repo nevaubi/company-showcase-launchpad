@@ -21,6 +21,10 @@ export interface SourceRef {
   irDoc?: string;
   /** Verbatim passage to find in the document (partner-corpus IR values) */
   search?: string;
+  /** The printed line that holds the value, and the page (1-based) or worksheet of the stored document it is on */
+  quote?: string;
+  page?: number;
+  sheet?: string;
 }
 
 export interface DerivedPart extends SourceRef {

@@ -11,6 +11,9 @@ export interface PayloadPart {
   d?: number;
   l?: PayloadLocator;
   x?: string;
+  /** page (1-based) or worksheet of the stored document that prints the line in `x` */
+  p?: number;
+  sh?: string;
   s?: string;
   e: string;
   m: number;
@@ -22,6 +25,9 @@ export interface PayloadCell {
   l?: PayloadLocator;
   /** printed text of the source cell */
   x?: string;
+  /** page (1-based) or worksheet of the stored document that prints the line in `x` */
+  p?: number;
+  sh?: string;
   s?: string;
   e?: string;
   m?: number;

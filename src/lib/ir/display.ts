@@ -155,7 +155,7 @@ export function printedToken(quote: string, value: number): string {
   return hit ?? quote;
 }
 
-export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell["l"]; x?: string; s?: string; e?: string }, label: string): SourceRef | undefined {
+export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell["l"]; x?: string; p?: number; sh?: string; s?: string; e?: string }, label: string): SourceRef | undefined {
   if (c.d == null) return undefined;
   const doc = p.docs[c.d];
   if (!doc) return undefined;
@@ -167,7 +167,8 @@ export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell[
     end: c.e ?? "",
     value: c.v,
     irDoc: doc.id,
-    ...(doc.id.startsWith("x:") && c.x ? { search: printedToken(c.x, c.v) } : {}),
+    // Partner-corpus values cite a printed line: the viewer goes to its page, finds the line, then the figure in it.
+    ...(doc.id.startsWith("x:") && c.x ? { search: printedToken(c.x, c.v), quote: c.x, ...(c.p ? { page: c.p } : {}), ...(c.sh ? { sheet: c.sh } : {}) } : {}),
     ...(Array.isArray(l) ? { cell: { t: l[0], r: l[1], c: l[2] } } : l ? { box: l } : {}),
   } as SourceRef;
 }

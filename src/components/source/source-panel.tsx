@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, Calculator, Check, Copy, FileText, Sigma, Sparkles, X } from "lucide-react";
 import { buildCitation } from "@/lib/source/citation";
 import { requestResearch } from "@/lib/research/request";
-import { useSource } from "./source-context";
+import { useSource, type SourceTarget } from "./source-context";
 import { FilingViewer, type FactLocator } from "./filing-viewer";
 import { useCompany } from "@/lib/data";
 import { getFilingIndex } from "@/lib/sec.functions";
@@ -35,9 +35,10 @@ export function SourcePanel() {
 
   useEffect(() => {
     if (!target) return setActive(null);
-    if (target.external) return setActive(null);
+    // Evidence held as a stored document opens in the viewer; other public evidence is shown as its quote.
+    if (target.external && !target.doc?.irDoc) return setActive(null);
     if (target.doc?.irDoc) {
-      setActive({ accn: target.doc.accn, irDoc: target.doc.irDoc, locator: target.doc.search ? { search: target.doc.search } : undefined });
+      setActive({ accn: target.doc.accn, irDoc: target.doc.irDoc, locator: docLocator(target.doc) });
     } else if (target.doc) {
       setActive({ accn: target.doc.accn, doc: target.doc.doc ? renderableDoc(target.doc.doc) : undefined, locator: target.doc.search ? { search: target.doc.search } : undefined });
     } else if (target.src) {
@@ -161,11 +162,19 @@ export function SourcePanel() {
           </div>
 
           <div className="min-h-0 flex-1">
-            {target.external ? <div className="space-y-4 p-5">
-              {target.external.quote && <blockquote className="border-l-2 border-highlight pl-4 text-sm leading-relaxed">“{target.external.quote}”</blockquote>}
-              <Button variant="outline" size="sm" asChild><a href={target.external.url} target="_blank" rel="noreferrer">Open original record <ArrowUpRight /></a></Button>
-            </div> : active?.irDoc ? (
-              <FilingViewer key={active.irDoc} irDocId={active.irDoc} cik={cik} accn={active.accn} doc="" locator={active.locator} className="h-full" />
+            {active?.irDoc ? (
+              <FilingViewer
+                key={active.irDoc}
+                irDocId={active.irDoc}
+                cik={cik}
+                accn={active.accn}
+                doc=""
+                locator={active.locator}
+                className="h-full"
+                fallback={target.external ? <div className="absolute inset-0 z-10 overflow-y-auto bg-background"><ExternalEvidence external={target.external} /></div> : undefined}
+              />
+            ) : target.external ? (
+              <ExternalEvidence external={target.external} />
             ) : active && cik ? (
               <ResolvedViewer cik={cik} accn={active.accn} doc={active.doc} filing={filing} locator={active.locator} />
             ) : (
@@ -303,7 +312,26 @@ function renderableDoc(doc: string) {
 }
 
 function locatorOf(src: SourceRef, unit: string, elementId?: string): FactLocator {
-  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId, cell: src.cell, box: src.box, search: src.search };
+  return { concept: src.concept, start: src.start, end: src.end, value: src.value, unit: guessUnit(src.concept, unit), elementId, cell: src.cell, box: src.box, search: src.search, quote: src.quote, page: src.page, sheet: src.sheet };
+}
+
+/** Where to go in a whole document: a passage to find, a quoted line, its page or worksheet. Nothing when none is given. */
+function docLocator(doc: NonNullable<SourceTarget["doc"]>): FactLocator | undefined {
+  if (!doc.search && !doc.quote && doc.page == null && !doc.sheet) return undefined;
+  return { search: doc.search, quote: doc.quote, page: doc.page, sheet: doc.sheet };
+}
+
+function ExternalEvidence({ external }: { external: NonNullable<SourceTarget["external"]> }) {
+  return (
+    <div className="space-y-4 p-5">
+      {external.quote && <blockquote className="border-l-2 border-highlight pl-4 text-sm leading-relaxed">“{external.quote}”</blockquote>}
+      <Button variant="outline" size="sm" asChild>
+        <a href={external.url} target="_blank" rel="noreferrer">
+          Open original record <ArrowUpRight />
+        </a>
+      </Button>
+    </div>
+  );
 }
 
 function guessUnit(concept: string, fallback: string) {
