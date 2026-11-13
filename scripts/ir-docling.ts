@@ -13,7 +13,8 @@
  *        page by page by ir-vision, so they're marked `skipped:slides` for the table reader.
  *      - spreadsheets → scripts/ir-renditions.ts --sheets (every worksheet becomes a table)
  * Docling needs a Python env: python3 -m venv /tmp/dvenv && /tmp/dvenv/bin/pip install docling
- *   bun scripts/ir-docling.ts --tickers=CVS,MCK [--workers=4] [--threads=4] [--force] [--no-docling] [--python=/tmp/dvenv/bin/python]
+ *   bun scripts/ir-docling.ts --tickers=CVS,MCK [--phase=dates|files] [--workers=4] [--threads=4] [--force] [--no-docling] [--python=/tmp/dvenv/bin/python]
+ * --phase=dates runs step 1 only (seconds per company, so reading can start); --phase=files the rest.
  */
 import { spawn, execFileSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -28,14 +29,15 @@ if (!TICKERS.length) throw new Error("--tickers=CVS,MCK required");
 const WORKERS = Number(args.workers ?? 4);
 const THREADS = Number(args.threads ?? 4);
 const PYTHON = args.python ?? "/tmp/dvenv/bin/python";
-const USE_DOCLING = args["no-docling"] === undefined && existsSync(PYTHON);
+const PHASE = args.phase ?? "all";
+const USE_DOCLING = PHASE !== "dates" && args["no-docling"] === undefined && existsSync(PYTHON);
 const DOCLING_KINDS = ["press-release", "supplement", "data", "other"];
 const MAX_DOCLING_PAGES = 90;
 const JOB_TIMEOUT_MS = 20 * 60_000;
 const WORK = "/tmp/irdl";
 mkdirSync(WORK, { recursive: true });
 const log = (s: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${s}`);
-if (!USE_DOCLING) log(args["no-docling"] !== undefined ? "Docling off (--no-docling): layout copies only" : `Docling env not found at ${PYTHON} — layout copies only`);
+if (!USE_DOCLING && PHASE !== "dates") log(args["no-docling"] !== undefined ? "Docling off (--no-docling): layout copies only" : `Docling env not found at ${PYTHON} — layout copies only`);
 
 // ---------- Docling worker pool ----------
 interface Job {
@@ -187,7 +189,9 @@ async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {
 const htmlText = (html: string) => html.replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 
 // ---------- main ----------
-const docling = USE_DOCLING ? new DoclingPool(WORKERS) : null;
+// Workers start on the first PDF that needs them (loading the models takes ~20 s each).
+let docling: DoclingPool | null = null;
+const doclingPool = () => (docling ??= new DoclingPool(WORKERS));
 const summary: Record<string, unknown>[] = [];
 for (const ticker of TICKERS) {
   const t0 = Date.now();
@@ -196,7 +200,7 @@ for (const ticker of TICKERS) {
   const stat = { ticker, docs: docs.length, dated: 0, accn: 0, markdown: 0, docling: 0, doclingFailed: 0, layout: 0, decks: 0, failed: 0, pages: { docling: 0, layout: 0, ocr: 0, empty: 0 }, sheets: 0, undated: 0 };
 
   // 1. Dates and accession numbers that need no download.
-  for (const d of docs) {
+  for (const d of PHASE === "files" ? [] : docs) {
     const patch: Record<string, unknown> = {};
     if (!d.accn) {
       const a = accnFromSecUrl(d.source_url);
@@ -212,16 +216,27 @@ for (const ticker of TICKERS) {
     }
   }
 
+  if (PHASE === "dates") {
+    stat.undated = docs.filter((d) => !d.filed).length;
+    summary.push(stat);
+    log(`${ticker} dated: ${stat.dated} dates, ${stat.accn} accession numbers, ${stat.undated} still undated`);
+    continue;
+  }
+
   // 2. Renditions for Markdown and PDF copies.
   const todo = docs.filter((d) => d.path && (d.ext === "md" || d.ext === "pdf") && (args.force !== undefined || d.rendition_path == null));
-  const dateFromText = async (d: Doc, text: string) => {
-    if (d.filed) return;
+  /** Filing date from printed text, written in the same update that makes the file readable. */
+  const textDate = (d: Doc, text: string): Record<string, unknown> => {
+    if (d.filed) return {};
     const f = inferFiled({ text, periodEnd: index.get(d.source_url)?.period_end });
-    if (f.filed) {
-      await update(d.id, { filed: f.filed });
-      d.filed = f.filed;
-      stat.dated++;
-    }
+    if (!f.filed) return {};
+    d.filed = f.filed;
+    stat.dated++;
+    return { filed: f.filed };
+  };
+  const dateFromText = async (d: Doc, text: string) => {
+    const patch = textDate(d, text);
+    if (Object.keys(patch).length) await update(d.id, patch);
   };
   await pool(todo, Math.max(2, WORKERS * 2), async (d) => {
     const dir = join(WORK, d.id);
@@ -233,9 +248,8 @@ for (const ticker of TICKERS) {
         const md = await file.text();
         const r = markdownRendition(md, d.title);
         await upload(rpath, r.html);
-        await update(d.id, { rendition_path: rpath, pages: r.pages, extract_status: null, extracted_at: null });
+        await update(d.id, { rendition_path: rpath, pages: r.pages, extract_status: null, extracted_at: null, ...textDate(d, md) });
         stat.markdown++;
-        await dateFromText(d, md);
         return;
       }
       mkdirSync(dir, { recursive: true });
@@ -245,11 +259,11 @@ for (const ticker of TICKERS) {
       const layoutPages = text.split("\f");
       if (layoutPages.length > 1 && !layoutPages[layoutPages.length - 1].trim()) layoutPages.pop();
       const deck = d.kind === "presentation";
-      const wantDocling = !!docling && !deck && DOCLING_KINDS.includes(d.kind) && layoutPages.length <= MAX_DOCLING_PAGES;
+      const wantDocling = USE_DOCLING && !deck && DOCLING_KINDS.includes(d.kind) && layoutPages.length <= MAX_DOCLING_PAGES;
       let dl: DoclingDoc | null = null;
       if (wantDocling) {
         const out = join(dir, "docling.json");
-        const r = await docling!.convert(src, out);
+        const r = await doclingPool().convert(src, out);
         if (r.ok) dl = JSON.parse(readFileSync(out, "utf8")) as DoclingDoc;
         else {
           stat.doclingFailed++;
@@ -258,12 +272,11 @@ for (const ticker of TICKERS) {
       }
       const r = pdfRendition({ title: d.title, layoutPages, docling: dl, engine: dl ? "docling-hybrid" : "pdftotext-layout", scanned: "text" });
       await upload(rpath, r.html);
-      await update(d.id, { rendition_path: rpath, pages: layoutPages.length, extract_status: deck ? "skipped:slides" : null, extracted_at: null });
+      await update(d.id, { rendition_path: rpath, pages: layoutPages.length, extract_status: deck ? "skipped:slides" : null, extracted_at: null, ...textDate(d, layoutPages.slice(0, 3).join("\n")) });
       if (dl) stat.docling++;
       else if (deck) stat.decks++;
       else stat.layout++;
       for (const k of ["docling", "layout", "ocr", "empty"] as const) stat.pages[k] += r.stats[k];
-      await dateFromText(d, layoutPages.slice(0, 3).join("\n"));
       if (dl) log(`${ticker} docling ${layoutPages.length}p (${r.stats.docling} docling / ${r.stats.layout} layout / ${r.stats.ocr} scanned) ${d.title.slice(0, 60)}`);
     } catch (e) {
       stat.failed++;
@@ -291,6 +304,6 @@ for (const ticker of TICKERS) {
   summary.push(stat);
   log(`${ticker} prepared in ${((Date.now() - t0) / 1000).toFixed(0)}s: ${JSON.stringify(stat)}`);
 }
-docling?.close();
-writeFileSync(join(WORK, "summary.json"), JSON.stringify(summary, null, 1));
+(docling as DoclingPool | null)?.close();
+writeFileSync(join(WORK, `summary-${PHASE}-${TICKERS.join("_").slice(0, 60)}.json`), JSON.stringify(summary, null, 1));
 process.exit(0);

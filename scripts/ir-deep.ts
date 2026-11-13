@@ -1,13 +1,14 @@
 /**
  * Deep IR build for chosen companies, one company at a time, end to end:
- *   skip companies that already have IR figures → prepare files (ir-docling.ts: dates, Docling/OCR
- *   copies, spreadsheets) → read tables (ir-extract.ts) → read slides and scanned pages (ir-vision.ts)
- *   → retry failed files once → rebuild the company's series → write a per-company report.
+ *   skip companies that already have IR figures → filing dates (ir-docling.ts --phase=dates) → read
+ *   tables (ir-extract.ts) → read slides and scanned pages (ir-vision.ts) → retry failed files once
+ *   → rebuild the company's series → per-company report. Docling/OCR conversion of PDFs, Markdown and
+ *   spreadsheets runs in the background meanwhile; converted files are read in a final pass.
  * Table reading of company N+1 overlaps with slide reading of company N (separate leases).
  * Spend: each reader reports estimated gateway credits in a spend file; the running total lives in
  * job_state `ir-deep-ledger` (cursor = millicredits), and every reader is capped at what is left.
  *   bun scripts/ir-deep.ts --tickers=CVS,MCK --budget=200 [--model=google/gemini-3.1-flash-lite]
- *     [--escalate=openai/gpt-6-luna] [--chunk=16000] [--skip-prepare] [--include-existing] [--reset-ledger]
+ *     [--escalate=openai/gpt-6-luna] [--chunk=16000] [--skip-prepare] [--include-existing] [--continue=CVS] [--reset-ledger]
  */
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -181,36 +182,44 @@ async function report(ticker: string, parts: Record<string, unknown>) {
 
 // ---------- main ----------
 const queue: string[] = [];
+// --continue lists companies this pipeline already started (partial figures are its own work).
+const CONTINUE = new Set((args.continue ?? "").split(",").filter(Boolean));
 for (const t of TICKERS) {
   const n = await count(sb.from("ir_kpi_facts").select("id", { count: "exact", head: true }).eq("ticker", t));
-  if (n && args["include-existing"] === undefined) log(`${t}: skipped — already has ${n.toLocaleString()} IR figures`);
+  if (n && args["include-existing"] === undefined && !CONTINUE.has(t)) log(`${t}: skipped — already has ${n.toLocaleString()} IR figures`);
   else queue.push(t);
 }
 log(`companies: ${queue.join(", ")} | budget ${BUDGET} credits, ${(await spent()).toFixed(2)} already used | ${MODEL} → ${ESCALATE}`);
 
-// File preparation is CPU-bound (Docling) and reading is network-bound, so companies are prepared
-// back to back in the background while earlier companies are being read.
-const prepared = new Map<string, Promise<void>>();
-let prepChain: Promise<void> = Promise.resolve();
-for (const t of queue) {
-  prepChain = prepChain.then(async () => {
-    if (args["skip-prepare"] !== undefined) return;
-    log(`${t}: preparing files`);
-    const r = await run(`${t}-prepare`, "scripts/ir-docling.ts", [`--tickers=${t}`, "--workers=4", "--threads=4"], join(OUT, `${t}.prepare.log`));
-    log(r.code === 0 ? `${t}: files prepared` : `${t}: preparation exited ${r.code} (see ${OUT}/${t}.prepare.log) — reading what is ready`);
-  });
-  prepared.set(t, prepChain);
+// 1. Dates first (seconds per company): the readers validate periods against filing dates.
+if (args["skip-prepare"] === undefined) {
+  const r = await run("dates", "scripts/ir-docling.ts", [`--tickers=${queue.join(",")}`, "--phase=dates"], join(OUT, "dates.log"));
+  log(r.code === 0 ? "filing dates set from evidence" : `dating exited ${r.code} (see ${OUT}/dates.log)`);
 }
 
+// 2. File conversion (Docling, CPU-bound) runs company by company in the background while the
+//    already-readable files (HTML exhibits) are read; converted PDFs are read in a final pass.
+let files: Promise<void> = Promise.resolve();
+for (const t of queue) {
+  files = files.then(async () => {
+    if (args["skip-prepare"] !== undefined) return;
+    log(`${t}: converting files`);
+    const r = await run(`${t}-files`, "scripts/ir-docling.ts", [`--tickers=${t}`, "--phase=files", "--workers=4", "--threads=4"], join(OUT, `${t}.prepare.log`));
+    log(r.code === 0 ? `${t}: files converted` : `${t}: conversion exited ${r.code} (see ${OUT}/${t}.prepare.log)`);
+  });
+}
+
+// 3. Per company: tables, then slides (in the background, one company at a time).
+const results = new Map<string, Record<string, unknown>>();
 let slides: Promise<unknown> = Promise.resolve();
+let stopped: string | null = null;
 for (const t of queue) {
   if ((await cap(1)) < 0.5) {
+    stopped = "budget spent";
     log(`budget spent — stopping before ${t}`);
     break;
   }
   const t0 = Date.now();
-  await prepared.get(t);
-  const unreadable = await markUnreadable(t);
   log(`${t}: reading tables`);
   const tables = await extract(t);
   log(`${t}: tables done — ${tables.done} files, ${tables.facts} figures, ${tables.credits.toFixed(2)} credits${tables.stop ? ` (stopped: ${tables.stop})` : ""}`);
@@ -220,21 +229,46 @@ for (const t of queue) {
     log(`${t}: reading slides and scanned pages`);
     const vis = await vision(t);
     log(`${t}: slides done — ${vis.done} files, ${vis.facts} figures, ${vis.credits.toFixed(2)} credits${vis.stop ? ` (stopped: ${vis.stop})` : ""}`);
+    results.set(t, { tables, slides: vis, minutes: +((Date.now() - t0) / 60000).toFixed(1) });
     try {
       await dbGate("ir-deep");
       await rebuildCompany(t);
     } catch (e) {
       log(`${t}: rebuild failed: ${(e as Error).message.slice(0, 160)}`);
     }
-    await report(t, { unreadable, tables, slides: vis, minutes: +((Date.now() - t0) / 60000).toFixed(1) });
+    await report(t, { stage: "first pass", ...results.get(t) });
   })();
   if (tables.stop?.startsWith("budget") || tables.stop?.startsWith("auth") || tables.stop?.startsWith("quota")) {
+    stopped = tables.stop;
     log(`stopping: ${tables.stop}`);
     break;
   }
 }
 await slides;
-await prepChain;
+
+// 4. Final pass: files converted while earlier companies were read, plus one retry of failures.
+await files;
+if (!stopped) {
+  for (const t of queue) {
+    const unreadable = await markUnreadable(t);
+    const waiting = await count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", t).is("extract_status", null).is("extracted_at", null).or("ext.in.(htm,html),rendition_path.like.%html").in("kind", EXTRACTABLE));
+    let late = null;
+    if (waiting) {
+      log(`${t}: reading ${waiting} converted files`);
+      late = await extract(t);
+      log(`${t}: converted files done — ${late.done} files, ${late.facts} figures, ${late.credits.toFixed(2)} credits${late.stop ? ` (stopped: ${late.stop})` : ""}`);
+    }
+    try {
+      await dbGate("ir-deep");
+      await rebuildCompany(t);
+    } catch (e) {
+      log(`${t}: rebuild failed: ${(e as Error).message.slice(0, 160)}`);
+    }
+    await report(t, { stage: "final", unreadable, ...results.get(t), converted: late });
+    if (late?.stop?.startsWith("budget")) break;
+  }
+}
 await ledgerLock;
+writeFileSync(join(OUT, "last-run.json"), JSON.stringify({ at: new Date().toISOString(), queue, stopped }));
 log(`all done — ${(await spent()).toFixed(2)} of ${BUDGET} credits used`);
 process.exit(0);
