@@ -46,6 +46,7 @@ if (!USE_DOCLING && PHASE !== "dates") log(args["no-docling"] !== undefined ? "D
 interface Job {
   src: string;
   out: string;
+  ocr: boolean;
   resolve: (r: { ok: boolean; error?: string; seconds?: number }) => void;
 }
 class DoclingPool {
@@ -60,9 +61,9 @@ class DoclingPool {
     if (job) w.run(job);
     else this.idle.push(w);
   }
-  convert(src: string, out: string) {
+  convert(src: string, out: string, ocr: boolean) {
     return new Promise<{ ok: boolean; error?: string; seconds?: number }>((resolve) => {
-      const job = { src, out, resolve };
+      const job = { src, out, ocr, resolve };
       const w = this.idle.shift();
       if (w) w.run(job);
       else this.queue.push(job);
@@ -120,7 +121,7 @@ class Worker {
       log(`docling worker ${this.n}: timeout on ${job.src} — restarting it`);
       this.proc.kill("SIGKILL");
     }, JOB_TIMEOUT_MS);
-    this.proc.stdin.write(`${JSON.stringify({ src: job.src, out: job.out })}\n`);
+    this.proc.stdin.write(`${JSON.stringify({ src: job.src, out: job.out, ocr: job.ocr })}\n`);
   }
   kill() {
     this.closed = true;
@@ -289,7 +290,9 @@ for (const ticker of TICKERS) {
       let dl: DoclingDoc | null = null;
       if (wantDocling) {
         const out = join(dir, "docling.json");
-        const r = await doclingPool().convert(src, out);
+        // OCR only when some page has no text layer (scanned); on text PDFs it changes nothing but time.
+        const scannedPages = layoutPages.filter((p) => p.replace(/\s/g, "").length < 40).length;
+        const r = await doclingPool().convert(src, out, scannedPages > 0);
         if (r.ok) dl = JSON.parse(readFileSync(out, "utf8")) as DoclingDoc;
         else {
           stat.doclingFailed++;
