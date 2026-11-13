@@ -192,5 +192,5 @@
 
 - [x] Company page redesign: research price chart + read, About with photos, leadership & board, sector comparison, related companies
 - [x] Mirror partner company + price files to Cloud (1,844 each)
-- [ ] Mirror partner IR store (193K docs, ~99 GB) — waiting on user go-ahead for storage size
+- [ ] Mirror partner IR store — 46 GB / 564 of 1,844 companies done; paused by partner "daily data limit"; resume with `bun scripts/partner-mirror-ir.ts` (skips finished files)
 - [ ] Deep IR builds for all ~1,844 companies ($200 AI cap) — after IR mirror
