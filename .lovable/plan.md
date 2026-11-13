@@ -1,33 +1,28 @@
-# Databento review and a Filed Under data product
+# Keep our own copy of the partner data on Lovable Cloud
 
-## Why Databento is working
-- **It isn't only a reseller.** It puts its own servers in more than 70 exchanges' data centers, writes its own feed handlers and stores over 20 PB of raw data. Other vendors can't easily copy that.
-- **It takes a slow process and makes it quick.** Getting market data used to take months of contracts and setup work. Databento offers one simple connection, pay-as-you-go pricing and free credits to start.
-- **It was built by traders.** The founders came from high-frequency trading firms, so they designed it around the problems firms hit once the data is in real use.
-- **It caught the AI wave.** It has signed five of the six biggest AI labs, which buy clean market data to train their models and run them.
-- **It runs lean.** About 40 people, profitable, revenue more than doubled since July, valued at $1.1B, and 97% of business customers stay.
+## Goal
+Copy the partner data into your Cloud, so the app keeps working with up-to-date data even if the partner service is down, and you own the corpus you might later sell.
 
-## Should Filed Under sell data too?
-We shouldn't compete on prices. That market depends on physical exchange connections we don't have. Our edge is **SEC and investor-relations data with a source attached to every figure**: about 47K HOOD figures, roughly 2.9M IR figures, supply-chain links, filing redlines and insider trades. Each one links back to its filing, page or cell. Quant funds and AI labs pay for this kind of verifiable, point-in-time fundamental data.
+## What's on your Cloud today
+- Stored files: 22 GB of IR documents (86K files), 336 MB of company and price files (564 files), 156 MB of SEC filings.
+- Database: 1.8 GB, with 24% of the disk used.
 
-## Possible data packages
-1. **Company KPIs from IR documents, with sources.** Quarterly and monthly operating figures (deposits, users, premiums) that aren't in XBRL. Each value would include its document, page and quote.
-2. **Point-in-time fundamentals.** Statements showing only what had been filed by each date, so backtests don't use information from the future.
-3. **Supply-chain graph.** Supplier and customer links, each backed by an exact quote from the 10-K.
-4. **Filing changes.** Scored redlines between filings (risk-factor changes, guidance language).
-5. **Corpus for AI labs.** The cleaned, sourced document corpus, licensed for model training and retrieval.
+## Steps
+1. **Measure first.** Read the partner's file lists to count how many company, price and IR files exist and their total size. Report this to you before copying anything large.
+2. **Company financials and prices (small, do first).** Twice a week, after the partner's refresh, copy every company and price file into the Cloud storage the app already uses as its backup. The app's current loading order doesn't change: partner first, then this copy.
+3. **Partner IR store (large).** Copy the documents we don't already have, matching by link and fingerprint so nothing is stored twice. Start with the 78 core companies, then the rest, in small batches that don't slow the site. Include each document's extracted text and tables so source clicks work from your copy.
+4. **Keep it fresh.** A scheduled job picks up new or changed partner files each week, and the admin Data freshness page shows when the last copy ran and anything missing.
+5. **Check.** Compare file counts and fingerprints against the partner's lists, then turn off the partner service in a test and confirm company pages, IR Data and source clicks still load.
 
-## Delivery, in stages
-- Stage 1: a public catalog page with sample files and a "request access" form, to test demand.
-- Stage 2: downloadable files (CSV or Parquet) and a data access key for paying customers, billed through the existing payments setup.
-- Stage 3: usage-based pricing for API access.
+## Cost and space
+The ~162K-document IR store will probably add tens of GB of storage, which uses Cloud credits. Step 1 gives the real size. If it's large, we stop and ask before copying it all. The database disk itself barely grows, because the files live in storage, not the database.
 
-## Open questions
-- Licensing: we need to check which rights we have to resell the partner corpus and IR documents, such as company press releases.
-- Coverage depth: most companies don't have full IR coverage yet. A sellable package needs consistent coverage, for example the 78 core companies first.
+## Rules kept
+- Data loading code (`getDataset`) and the ingest output format stay unchanged; the copy reuses the existing backup location.
+- No new deep data builds for extra companies; this only copies what the partner already made.
+- The partner key stays server-only.
 
-## Likely product-market fit
-- **Best fit: analysts who have to defend every number.** Buy-side analysts at small and mid-size funds, independent research shops and RIAs. They pay because "where did this figure come from?" otherwise takes them hours. Click-to-source and figures read from IR documents (KPIs that aren't in XBRL) save that time, and Bloomberg is too expensive for most of them.
-- **Top offering: a cited AI research analyst with deep KPI data.** The assistant answers questions and writes reports, and every sentence links to the exact filing line or IR cell. The $129 Pro plan is the main product.
-- **Second offering, later: a data license.** Sourced KPI datasets sold to quant funds and AI labs, as in the packages above. Higher value per deal, but it needs consistent coverage first.
-- **How to test it:** interview 10 to 15 waitlist users, track which feature they come back to each week, and offer Pro to the first 20 at a founding price.
+## Technical
+- New `scripts/partner-mirror.ts` (resumable, `dbGate`/`runBatch` throttled): lists `companies/`, `prices/`, `ir/{T}.json`, `irstore/`, `doctables/`, and writes to the `datasets` and `ir-documents` buckets, with a `partner_mirror` manifest table (path, sha256, bytes, mirrored_at; service-role only).
+- A small `partner-mirror` job in `jobs.server.ts` with a cursor, respecting `RUN_BUDGET_MS`. The bulk first copy runs as a script.
+- Mirrored IR rows are marked `source='partner'` so the IR library keeps deduping by source URL.
