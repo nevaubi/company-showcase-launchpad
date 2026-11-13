@@ -24,6 +24,7 @@ const { data: docs } = await sb
   .from("ir_documents")
   .select("id, ticker, title, kind, ext, path, filed, extract_facts")
   .eq("kind", "image")
+  .in("ticker", args.ticker ? [String(args.ticker).toUpperCase()] : COVERAGE.map((c) => c.ticker))
   .in("ext", ["jpg", "jpeg"])
   .like("vision_status", "ok (%")
   .order("vision_at", { ascending: false })
@@ -36,7 +37,7 @@ const sample = same
   : (docs ?? [])
   .filter((d) => {
     const k = perTicker.get(d.ticker) ?? 0;
-    if (k >= 2) return false;
+    if (k >= (args.ticker ? n : 2)) return false;
     perTicker.set(d.ticker, k + 1);
     return true;
   })
