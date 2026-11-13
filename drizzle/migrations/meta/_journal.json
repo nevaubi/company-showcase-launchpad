@@ -281,6 +281,20 @@
       "when": 1794124801635,
       "tag": "0039_remove_demo_access",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1794554840926,
+      "tag": "0040_partner_mirror_manifest",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1794555152887,
+      "tag": "0041_members_read_partner_ir_copy",
+      "breakpoints": true
     }
   ]
 }

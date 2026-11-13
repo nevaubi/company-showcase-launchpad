@@ -63,14 +63,38 @@ export async function partnerFile<T>(path: string): Promise<T> {
   const res = await fetch(`${PARTNER_DATA_URL}?path=${encodeURIComponent(path)}`, {
     headers: { Authorization: `Bearer ${token}` },
     signal: AbortSignal.timeout(30_000),
-  });
-  if (res.status === 404) throw new Error("Not available for this company yet");
-  if (!res.ok) throw new Error(`Data service returned ${res.status}`);
+  }).catch(() => null);
+  if (res?.status === 404) throw new Error("Not available for this company yet");
+  if (!res?.ok) {
+    // Partner down: IR indexes, Docling tables and store objects have a copy in this Cloud
+    // (scripts/partner-mirror-ir.ts).
+    const copy = await mirroredPartnerFile<T>(path);
+    if (copy !== undefined) return copy;
+    throw new Error(`Data service returned ${res?.status ?? "no response"}`);
+  }
   if (!path.endsWith(".gz")) return (await res.json()) as T;
   if (typeof DecompressionStream === "undefined" || !res.body)
     throw new Error("This browser cannot open compressed filings");
   const text = await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).text();
   return JSON.parse(text) as T;
+}
+
+async function mirroredPartnerFile<T>(path: string): Promise<T | undefined> {
+  try {
+    if (path.startsWith("irstore/")) {
+      const { data } = await supabase.storage
+        .from("ir-documents")
+        .createSignedUrl(`partner/${path.slice(8)}`, 600);
+      return data ? ({ url: data.signedUrl } as T) : undefined;
+    }
+    if (/^(ir|doctables)\//.test(path) && path.endsWith(".json")) {
+      const { data } = await supabase.storage.from("datasets").download(path);
+      return data ? (JSON.parse(await data.text()) as T) : undefined;
+    }
+  } catch {
+    /* no copy */
+  }
+  return undefined;
 }
 
 /** The screen agent: a plain-English request becomes a screen spec over the screener's fields. */

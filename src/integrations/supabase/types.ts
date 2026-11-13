@@ -988,6 +988,39 @@ export type Database = {
         }
         Relationships: []
       }
+      partner_mirror: {
+        Row: {
+          bytes: number | null
+          error: string | null
+          kind: string
+          mirrored_at: string
+          path: string
+          sha256: string | null
+          status: string
+          ticker: string
+        }
+        Insert: {
+          bytes?: number | null
+          error?: string | null
+          kind: string
+          mirrored_at?: string
+          path: string
+          sha256?: string | null
+          status?: string
+          ticker: string
+        }
+        Update: {
+          bytes?: number | null
+          error?: string | null
+          kind?: string
+          mirrored_at?: string
+          path?: string
+          sha256?: string | null
+          status?: string
+          ticker?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
