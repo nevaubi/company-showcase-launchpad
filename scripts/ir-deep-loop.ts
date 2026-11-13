@@ -4,8 +4,9 @@
  *   1. Background: every few hours resume the partner IR mirror (it stops cleanly on the partner's
  *      daily limit) and then register newly copied files (ir-import-partner.ts), so companies whose
  *      files weren't copied yet become readable.
- *   2. Next batch: companies this loop started that still have unread files first (`--continue`),
- *      then companies with stored IR files and no IR figures, largest revenue first.
+ *   2. Next batch: companies this loop started whose run didn't reach its final report (stopped on
+ *      credits or cut off) first (`--continue`), then companies with stored IR files and no IR
+ *      figures, largest revenue first. A company that fails to finish three times is left for review.
  *   3. scripts/ir-deep.ts on the batch with no budget cap.
  *   4. When a run stops on credits (quota/auth) wait and try again — the first item of the next run
  *      is the probe; nothing is skipped or marked failed while credits are out.
@@ -41,8 +42,8 @@ interface LoopState {
   attempted: string[];
   done: string[];
   lastMirror: string | null;
-  /** unread count when a company was last resumed; unchanged after a full run means it is stuck */
-  lastUnread?: Record<string, number>;
+  /** times a company was resumed without finishing (credit outages don't count) */
+  resumes?: Record<string, number>;
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -73,6 +74,15 @@ async function count(q: PromiseLike<{ count: number | null }>) {
 }
 const facts = (t: string) => count(sb.from("ir_kpi_facts").select("id", { count: "exact", head: true }).eq("ticker", t));
 const files = (t: string) => count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", t).not("path", "is", null));
+/** ir-deep.ts wrote its final report for the company (private storage copy, else this sandbox's). */
+async function finished(t: string) {
+  let r: { stage?: string } | null = null;
+  const { data } = await sb.storage.from("ir-documents").download(`ops/ir-deep/${t}.json`);
+  if (data) r = JSON.parse(await data.text()) as { stage?: string };
+  else if (existsSync(`${OUT}/${t}.report.json`)) r = JSON.parse(readFileSync(`${OUT}/${t}.report.json`, "utf8")) as { stage?: string };
+  // Reports from before stages were recorded only exist for companies whose run completed.
+  return !!r && (r.stage === undefined || r.stage === "final");
+}
 const EXTRACTABLE = "(press-release,supplement,presentation,data,other)";
 async function unread(t: string) {
   const [tables, slides, unconverted] = await Promise.all([
@@ -123,21 +133,25 @@ while (deepRunning()) {
   await sleep(5 * 60_000);
 }
 
+let creditStop = false;
 for (let cycle = 1; ; cycle++) {
   await maybeMirror();
-  // 1. Companies this loop started that still have unread files.
+  // 1. Companies this loop started whose run never reached its final report.
   const resume: string[] = [];
-  state.lastUnread ??= {};
+  state.resumes ??= {};
   for (const t of state.attempted) {
     if (state.done.includes(t)) continue;
-    const n = await unread(t);
-    if (n > 0 && state.lastUnread[t] !== n) {
-      resume.push(t);
-      state.lastUnread[t] = n;
-    } else {
-      if (n > 0) log(`${t}: ${n} files still unread after a full run — leaving them for review`);
+    if (await finished(t)) {
+      const n = await unread(t);
+      if (n) log(`${t}: finished with ${n} files no reader could take — left for review`);
       state.done.push(t);
+      continue;
     }
+    if (!creditStop) state.resumes[t] = (state.resumes[t] ?? 0) + 1;
+    if (state.resumes[t] > 3) {
+      log(`${t}: didn't finish after 3 resumes — left for review`);
+      state.done.push(t);
+    } else resume.push(t);
   }
   // 2. New companies: stored files, no figures, largest first.
   const fresh: string[] = [];
@@ -162,11 +176,12 @@ for (let cycle = 1; ; cycle++) {
   log(`cycle ${cycle}: ${batch.join(", ")}${resume.length ? ` (continuing ${resume.slice(0, BATCH).join(", ")})` : ""}`);
   const lastRun = `${OUT}/last-run.json`;
   const before = existsSync(lastRun) ? readFileSync(lastRun, "utf8") : "";
-  const code = await run("scripts/ir-deep.ts", [`--tickers=${batch.join(",")}`, `--continue=${state.attempted.join(",")}`, "--budget=100000000", "--reset-ledger"], `${OUT}/run.log`);
+  const code = await run("scripts/ir-deep.ts", [`--tickers=${batch.join(",")}`, `--continue=${state.attempted.join(",")}`, "--reset-ledger"], `${OUT}/run.log`);
   const after = existsSync(lastRun) ? readFileSync(lastRun, "utf8") : "";
   let stopped: string | null = code === 0 ? null : `exit ${code}`;
   if (after && after !== before) stopped = (JSON.parse(after) as { stopped: string | null }).stopped ?? stopped;
-  if (stopped && /quota|auth|credit|payment|402/i.test(stopped)) {
+  creditStop = !!stopped && /quota|auth|credit|payment|402/i.test(stopped);
+  if (creditStop) {
     log(`cycle ${cycle}: stopped on credits (${stopped.slice(0, 160)}) — waiting ${WAIT_MS / 60000} min, then probing again`);
     await sleep(WAIT_MS);
   } else if (stopped) {

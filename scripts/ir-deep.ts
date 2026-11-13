@@ -6,8 +6,9 @@
  *   spreadsheets runs in the background meanwhile; converted files are read in a final pass.
  * Table reading of company N+1 overlaps with slide reading of company N (separate leases).
  * Spend: each reader reports estimated gateway credits in a spend file; the running total lives in
- * job_state `ir-deep-ledger` (cursor = millicredits), and every reader is capped at what is left.
- *   bun scripts/ir-deep.ts --tickers=CVS,MCK --budget=200 [--model=google/gemini-3.1-flash-lite]
+ * job_state `ir-deep-ledger` (cursor = millicredits). With --budget every reader is capped at what is
+ * left; without it the run is uncapped (owner, Nov 13) and the ledger only records spend.
+ *   bun scripts/ir-deep.ts --tickers=CVS,MCK [--budget=200] [--model=google/gemini-3.1-flash-lite]
  *     [--escalate=openai/gpt-6-luna] [--chunk=16000] [--skip-prepare] [--include-existing] [--continue=CVS] [--reset-ledger]
  */
 import { spawn } from "node:child_process";
@@ -18,8 +19,8 @@ import { args, dbGate, sb } from "./lib/supa";
 
 const TICKERS = (args.tickers ?? "").split(",").map((t) => t.trim().toUpperCase()).filter(Boolean);
 if (!TICKERS.length) throw new Error("--tickers=CVS,MCK required");
-const BUDGET = Number(args.budget ?? 0);
-if (!(BUDGET > 0)) throw new Error("--budget=<credits> required");
+const BUDGET = args.budget === undefined ? Infinity : Number(args.budget);
+if (!(BUDGET > 0)) throw new Error("--budget must be a positive number of credits (omit it for no cap)");
 const MODEL = args.model ?? "google/gemini-3.1-flash-lite";
 const ESCALATE = args.escalate ?? "openai/gpt-6-luna";
 const CHUNK = args.chunk ?? "16000";
@@ -111,7 +112,9 @@ async function markUnreadable(ticker: string) {
   return { graphic: graphic.length, noText: noText.length };
 }
 
-const readerArgs = (ticker: string, credits: number) => [`--ticker=${ticker}`, `--model=${MODEL}`, `--escalate=${ESCALATE}`, "--quality", "--resume", `--max-credits=${credits.toFixed(2)}`];
+const readerArgs = (ticker: string, credits: number) => [`--ticker=${ticker}`, `--model=${MODEL}`, `--escalate=${ESCALATE}`, "--quality", "--resume", ...(Number.isFinite(credits) ? [`--max-credits=${credits.toFixed(2)}`] : [])];
+/** Stops that end the whole run (the next run resumes): spent budget or exhausted/blocked credits. */
+const fatal = (stop: string | null | undefined) => !!stop && /^(budget|auth|quota)/.test(stop);
 
 async function extract(ticker: string) {
   const logFile = join(OUT, `${ticker}.extract.log`);
@@ -191,7 +194,7 @@ for (const t of TICKERS) {
   if (n && args["include-existing"] === undefined && !CONTINUE.has(t)) log(`${t}: skipped — already has ${n.toLocaleString()} IR figures`);
   else queue.push(t);
 }
-log(`companies: ${queue.join(", ")} | budget ${BUDGET} credits, ${(await spent()).toFixed(2)} already used | ${MODEL} → ${ESCALATE}`);
+log(`companies: ${queue.join(", ")} | ${Number.isFinite(BUDGET) ? `budget ${BUDGET} credits` : "no spend cap"}, ${(await spent()).toFixed(2)} already used | ${MODEL} → ${ESCALATE}`);
 
 // 1. Dates first (seconds per company): the readers validate periods against filing dates.
 if (args["skip-prepare"] === undefined) {
@@ -238,9 +241,10 @@ for (const t of queue) {
     } catch (e) {
       log(`${t}: rebuild failed: ${(e as Error).message.slice(0, 160)}`);
     }
-    await report(t, { stage: "first pass", ...results.get(t) });
+    await report(t, { stage: fatal(vis.stop) ? "stopped" : "first pass", ...results.get(t) });
+    if (fatal(vis.stop)) stopped ??= vis.stop;
   })();
-  if (tables.stop?.startsWith("budget") || tables.stop?.startsWith("auth") || tables.stop?.startsWith("quota")) {
+  if (fatal(tables.stop)) {
     stopped = tables.stop;
     log(`stopping: ${tables.stop}`);
     break;
@@ -266,11 +270,14 @@ if (!stopped) {
     } catch (e) {
       log(`${t}: rebuild failed: ${(e as Error).message.slice(0, 160)}`);
     }
-    await report(t, { stage: "final", unreadable, ...results.get(t), converted: late });
-    if (late?.stop?.startsWith("budget")) break;
+    await report(t, { stage: fatal(late?.stop) ? "stopped" : "final", unreadable, ...results.get(t), converted: late });
+    if (fatal(late?.stop)) {
+      stopped = late!.stop;
+      break;
+    }
   }
 }
 await ledgerLock;
 writeFileSync(join(OUT, "last-run.json"), JSON.stringify({ at: new Date().toISOString(), queue, stopped }));
-log(`all done — ${(await spent()).toFixed(2)} of ${BUDGET} credits used`);
+log(`${stopped ? `stopped (${stopped})` : "all done"} — ${(await spent()).toFixed(2)} credits used${Number.isFinite(BUDGET) ? ` of ${BUDGET}` : ""}`);
 process.exit(0);
