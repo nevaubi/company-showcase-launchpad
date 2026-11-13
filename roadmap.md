@@ -1,7 +1,7 @@
 # Filed Under — roadmap
 
 ## HOOD parallel vision comparison (Nov 13)
-- [ ] Compare inclusionai/ling-3.0-flash-vl on OpenRouter against Gemini 3 Flash on identical HOOD pages with bounded follow-up reads; preserve existing facts. Blocked until OpenRouter access is configured.
+- [x] Connected OpenRouter and ran Ling/Gemini parallel reads with bounded follow-ups on 20 HOOD slides: 14 completed, Ling 94 figures, Gemini 139, 79 same-token/value/unit/period matches. Six connection failures; lower-concurrency retry also failed and timed out. Existing facts unchanged; visual spot-check found Net Deposits mislabeled as net_income, so agreement is not proof of correct meaning.
 
 ## Waitlist emails and trial activation (Nov 8)
 - [ ] Automatic branded waitlist receipt and approval emails — blocked until the owner configures an email sender domain.
