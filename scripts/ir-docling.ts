@@ -9,6 +9,8 @@
  *        for bitmap regions) in parallel persistent workers, merged page by page with the pdftotext
  *        layout grid so no printed number is lost (src/lib/ir/rendition.ts). Scanned pages keep their
  *        OCR words as searchable text; their numbers are read by the page-image reader (ir-vision).
+ *      - company-site copies of a release whose figures the SEC exhibit already prints → layout copy,
+ *        marked `skipped:duplicate of <id>` (src/lib/ir/dedupe.ts)
  *      - slide decks, transcripts, reports and very long PDFs → the layout grid only. Decks are read
  *        page by page by ir-vision, so they're marked `skipped:slides` for the table reader.
  *      - spreadsheets → scripts/ir-renditions.ts --sheets (every worksheet becomes a table)
@@ -21,6 +23,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFi
 import { createInterface } from "node:readline";
 import { join } from "node:path";
 import { accnFromSecUrl, inferFiled } from "@/lib/ir/doc-meta";
+import { duplicateOf, figureSet } from "@/lib/ir/dedupe";
 import { markdownRendition, pdfRendition, type DoclingDoc } from "@/lib/ir/rendition";
 import { args, dbGate, sb } from "./lib/supa";
 
@@ -238,6 +241,25 @@ for (const ticker of TICKERS) {
     const patch = textDate(d, text);
     if (Object.keys(patch).length) await update(d.id, patch);
   };
+  // Company-site copies of a release the SEC exhibit already prints are kept for viewing but not
+  // read again (src/lib/ir/dedupe.ts); the SEC copy carries the accession and exact filing date.
+  let secSets: Promise<{ id: string; figures: Set<string> }[]> | null = null;
+  const secCopies = () =>
+    (secSets ??= (async () => {
+      const sec = docs.filter((x) => x.path && x.source_url.includes("sec.gov") && (x.ext === "htm" || x.ext === "html"));
+      const out: { id: string; figures: Set<string> }[] = [];
+      await pool(sec, 8, async (x) => {
+        const { data } = await sb.storage.from("ir-documents").download(x.path!);
+        if (data) out.push({ id: x.id, figures: figureSet(htmlText(await data.text())) });
+      });
+      return out;
+    })());
+  const DEDUPE_KINDS = ["press-release", "supplement", "other", "data"];
+  const duplicate = async (d: Doc, text: string) =>
+    !d.source_url.includes("sec.gov") && DEDUPE_KINDS.includes(d.kind) ? duplicateOf(figureSet(text), await secCopies()) : null;
+  const dupStatus = (id: string) => ({ extract_status: `skipped:duplicate of ${id}`, vision_status: "skipped:duplicate" });
+  let duplicates = 0;
+
   await pool(todo, Math.max(2, WORKERS * 2), async (d) => {
     const dir = join(WORK, d.id);
     try {
@@ -247,8 +269,10 @@ for (const ticker of TICKERS) {
       if (d.ext === "md") {
         const md = await file.text();
         const r = markdownRendition(md, d.title);
+        const dup = await duplicate(d, md);
+        if (dup) duplicates++;
         await upload(rpath, r.html);
-        await update(d.id, { rendition_path: rpath, pages: r.pages, extract_status: null, extracted_at: null, ...textDate(d, md) });
+        await update(d.id, { rendition_path: rpath, pages: r.pages, extract_status: null, extracted_at: null, ...textDate(d, md), ...(dup ? dupStatus(dup.id) : {}) });
         stat.markdown++;
         return;
       }
@@ -259,7 +283,9 @@ for (const ticker of TICKERS) {
       const layoutPages = text.split("\f");
       if (layoutPages.length > 1 && !layoutPages[layoutPages.length - 1].trim()) layoutPages.pop();
       const deck = d.kind === "presentation";
-      const wantDocling = USE_DOCLING && !deck && DOCLING_KINDS.includes(d.kind) && layoutPages.length <= MAX_DOCLING_PAGES;
+      const dup = deck ? null : await duplicate(d, text);
+      if (dup) duplicates++;
+      const wantDocling = USE_DOCLING && !deck && !dup && DOCLING_KINDS.includes(d.kind) && layoutPages.length <= MAX_DOCLING_PAGES;
       let dl: DoclingDoc | null = null;
       if (wantDocling) {
         const out = join(dir, "docling.json");
@@ -272,7 +298,7 @@ for (const ticker of TICKERS) {
       }
       const r = pdfRendition({ title: d.title, layoutPages, docling: dl, engine: dl ? "docling-hybrid" : "pdftotext-layout", scanned: "text" });
       await upload(rpath, r.html);
-      await update(d.id, { rendition_path: rpath, pages: layoutPages.length, extract_status: deck ? "skipped:slides" : null, extracted_at: null, ...textDate(d, layoutPages.slice(0, 3).join("\n")) });
+      await update(d.id, { rendition_path: rpath, pages: layoutPages.length, extract_status: deck ? "skipped:slides" : null, extracted_at: null, ...textDate(d, layoutPages.slice(0, 3).join("\n")), ...(dup ? dupStatus(dup.id) : {}) });
       if (dl) stat.docling++;
       else if (deck) stat.decks++;
       else stat.layout++;
@@ -286,6 +312,18 @@ for (const ticker of TICKERS) {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  // Copies converted earlier but not read yet get the same check (text from their HTML copy).
+  const converted = docs.filter((d) => d.rendition_path && d.extract_status == null && !todo.includes(d) && (d.ext === "pdf" || d.ext === "md"));
+  await pool(converted, 6, async (d) => {
+    const { data } = await sb.storage.from("ir-documents").download(d.rendition_path!);
+    if (!data) return;
+    const dup = await duplicate(d, htmlText(await data.text()));
+    if (!dup) return;
+    duplicates++;
+    await update(d.id, dupStatus(dup.id));
+  });
+  (stat as Record<string, unknown>).duplicates = duplicates;
 
   // 3. Spreadsheets.
   const sheets = docs.filter((d) => d.path && ["xlsx", "xlsm", "xls", "csv"].includes(d.ext ?? "") && d.rendition_path == null);
