@@ -19,6 +19,7 @@ import { COVERAGE } from "@/lib/coverage";
 import { args, log, sb } from "./lib/supa";
 import { runBatch } from "./lib/runner";
 import { imageSize, modelImage, ocrImage as ocr, readPage, renderDpi, run, visionEffort } from "./lib/vision-page";
+import { needsVisionEscalation } from "@/lib/ir/vision-quality";
 
 const BUCKET = "ir-documents";
 const MIN_TOKENS = 6;
@@ -28,6 +29,9 @@ const PUBLISH_EDGE = 1600;
 const model = args.model ?? IR_MODELS.vision;
 /** optional second reader: a figure is kept only when both models read the same token, period and value */
 const verifier = args.verify as string | undefined;
+const escalation = args.escalate;
+const documentIds = args.documents?.split(",").filter(Boolean);
+if (escalation && verifier) throw new Error("Choose escalation or verification, not both");
 const names = new Map(COVERAGE.map((c) => [c.ticker, c.name]));
 type Doc = { id: string; ticker: string; label: string; kind: string; ext: string | null; path: string; rendition_path: string | null; title: string; filed: string | null; accn: string | null; bytes: number | null };
 
@@ -51,6 +55,7 @@ async function claim(): Promise<Doc | null> {
     .order("filed", { ascending: false, nullsFirst: false })
     .limit(16);
   if (args.ticker) q = q.in("ticker", args.ticker.split(","));
+  if (documentIds?.length) q = q.in("id", documentIds);
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   for (const d of data ?? []) {
@@ -126,10 +131,24 @@ async function processDoc(d: Doc) {
     let followUps = 0;
     let failedPages = 0;
     let disagreed = 0;
+    let escalated = 0;
     const results = await pool(candidates, 4, async (j) => {
       const tokens = numberTokens(j.words);
-      const read = async (m: string) => readPage({ model: m, context, page: j.page, pageCount, tokens, jpeg: await modelImage(j.image, j.w, j.h, m), ocr: j.ocr, filed: d.filed });
-      const [r, v] = await Promise.all([read(model), verifier ? read(verifier) : null]);
+      const read = async (m: string) => readPage({ model: m, context, page: j.page, pageCount, tokens, jpeg: await modelImage(j.image, j.w, j.h, m), ocr: j.ocr, filed: d.filed, quality: args.quality !== undefined, followUp: args.loop !== undefined, effort: args.quality !== undefined ? "high" : undefined });
+      let [r, v] = await Promise.all([read(model), verifier ? read(verifier) : null]);
+      let pageModel = model;
+      if (escalation && needsVisionEscalation(r, j.ocr)) {
+        const reviewed = await read(escalation);
+        usage.input_tokens += r.usage.input_tokens;
+        usage.output_tokens += r.usage.output_tokens;
+        usage.cached_tokens += r.usage.cached_tokens;
+        usage.usd += r.usd;
+        escalated++;
+        // The stronger model re-reads the whole page; do not union conflicting labels or periods.
+        if (reviewed.failed) throw new Error(`Escalation failed on page ${j.page}: ${reviewed.failed}`);
+        r = reviewed;
+        pageModel = escalation;
+      }
       if (v) {
         const key = (f: VisionFact) => `${f.locator.text}|${f.period_end}|${f.months}|${f.value}`;
         const ok = new Set(v.rows.map(key));
@@ -143,9 +162,9 @@ async function processDoc(d: Doc) {
       usage.usd += r.usd;
       if (r.followUp) followUps++;
       if (r.failed) failedPages++;
-      return { job: j, ...r };
+      return { job: j, pageModel, ...r };
     });
-    if (failedPages === candidates.length) {
+    if (failedPages > 0) {
       // Nothing usable came back for any page: leave a visible error rather than a silent "no data".
       throw new Error(`model answer unusable on every page (${results[0]?.failed ?? "unknown"})`);
     }
@@ -165,14 +184,14 @@ async function processDoc(d: Doc) {
     if (pagesWithFacts.length) await publishPages(d, candidates.filter((j) => pagesWithFacts.includes(j.page)), isImage, dir);
 
     await sb.from("ir_kpi_facts").delete().eq("document_id", d.id).eq("method", "vision");
-    const records = facts.map((f) => ({ document_id: d.id, ticker: d.ticker, ...f, accn: d.accn, doc: null, document_kind: d.kind === "image" ? "presentation" : d.kind, filed: d.filed, method: "vision", model: verifier ? `${model}+${verifier}` : model }));
+    const records = facts.map((f) => ({ document_id: d.id, ticker: d.ticker, ...f, accn: d.accn, doc: null, document_kind: d.kind === "image" ? "presentation" : d.kind, filed: d.filed, method: "vision", model: verifier ? `${model}+${verifier}` : results.find((r) => r.job.page === f.locator.page)?.pageModel ?? model }));
     for (let i = 0; i < records.length; i += 500) {
       const { error: e } = await sb.from("ir_kpi_facts").insert(records.slice(i, i + 500) as never);
       if (e) throw new Error(e.message);
     }
     const extra = [rejected ? `${rejected} rejected` : "", failedPages ? `${failedPages} pages unreadable` : "", disagreed ? `${disagreed} unconfirmed` : ""].filter(Boolean).join(", ");
     await mark(d, facts.length ? `ok (${facts.length} facts, ${pagesWithFacts.length} pages${extra ? `, ${extra}` : ""})` : extra ? `no data (${extra})` : "no data", facts.length);
-    const note = [`${candidates.length}pp`, rejected ? `${rejected} rej` : "", followUps ? `${followUps} 2nd look` : "", failedPages ? `${failedPages} failed` : "", usage.usd ? `$${usage.usd.toFixed(3)}` : ""].filter(Boolean).join(" ");
+    const note = [`${candidates.length}pp`, escalated ? `${escalated} escalated` : "", rejected ? `${rejected} rej` : "", followUps ? `${followUps} 2nd look` : "", failedPages ? `${failedPages} failed` : "", usage.usd ? `$${usage.usd.toFixed(3)}` : ""].filter(Boolean).join(" ");
     return { facts: facts.length, note, usage };
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -245,7 +264,12 @@ await runBatch<Doc>({
   maxUsd: args["max-usd"] ? Number(args["max-usd"]) : undefined,
   claim,
   release: (d, status) => sb.from("ir_documents").update({ vision_status: status, vision_at: status ? new Date().toISOString() : null }).eq("id", d.id),
-  reset: () => sb.from("ir_documents").update({ vision_status: null }).eq("vision_status", "working"),
+  reset: () => {
+    let q = sb.from("ir_documents").update({ vision_status: null }).eq("vision_status", "working");
+    if (args.ticker) q = q.in("ticker", args.ticker.split(","));
+    if (documentIds?.length) q = q.in("id", documentIds);
+    return q;
+  },
   process: processDoc,
 });
 // Clean any leftovers from interrupted documents.

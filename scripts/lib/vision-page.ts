@@ -13,6 +13,7 @@ import { promisify } from "node:util";
 import { join } from "node:path";
 import { claudeContent, claudeStructured, estimateUsd, openaiStructured, OpenAIError, type ClaudeMessage, type Effort, type Usage } from "@/lib/openai.server";
 import { followUpPrompt, mergeVision, parseTesseractTsv, renderTokens, unaccounted, VISION_INSTRUCTIONS, VISION_SCHEMA, visionFacts, type PageToken, type PageWords, type VisionFact, type VisionOutput } from "@/lib/ir/vision-core";
+import { VISION_QUALITY_PROMPT } from "@/lib/ir/vision-quality";
 
 const SCHEMA = VISION_SCHEMA as unknown as Record<string, unknown>;
 const isClaude = (model: string) => model.startsWith("claude-");
@@ -126,6 +127,7 @@ export async function readPage(o: {
   effort?: Effort;
   followUp?: boolean;
   maxOutputTokens?: number;
+  quality?: boolean;
 }): Promise<PageRead> {
   const effort = o.effort ?? visionEffort(o.model);
   const text = `${o.context} Page ${o.page} of ${o.pageCount}.\n\nNumber tokens printed on the page (${o.tokens.length}):\n${renderTokens(o.tokens)}`;
@@ -144,7 +146,7 @@ export async function readPage(o: {
       const call = (prompt: string) => openaiStructured<VisionOutput>({
         model: o.model,
         name: "ir_page",
-        instructions: VISION_INSTRUCTIONS,
+        instructions: o.quality ? `${VISION_INSTRUCTIONS}\n\n${VISION_QUALITY_PROMPT}` : VISION_INSTRUCTIONS,
         input: [
           { type: "input_text", text: prompt },
           { type: "input_image", image_url: image, detail: "high" },

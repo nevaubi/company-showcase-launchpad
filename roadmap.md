@@ -1,5 +1,8 @@
 # Filed Under — roadmap
 
+## HOOD Gemini with Luna escalation (Nov 13)
+- [x] Reread eleven HOOD presentations with Gemini 3.1 Flash Lite, quality prompting and bounded follow-ups; 29 pages escalated to GPT-6 Luna. No document failures; 3,398 figures stored, company rebuilt to 46,392 facts / 1,358 series. Dashboards retained 21/11/9 figures but still have 58/58/57 rejections; checks: quarters 867/1,020, years 86/118; 18 scale flags, 2 unlinked series, future period 2026-12-31 require review. Twelve tests passed; build OK. No other companies processed; UI not checked.
+
 ## HOOD parallel vision comparison (Nov 13)
 - [x] Fixed transport handling with streamed replies, typed body-interruption errors, capped token batches and local checkpoints. Reran all 20 identical pages: zero transport failures; Ling 69 figures, Gemini 250, 29 matching token/value/unit/period readings. Ling had incomplete model answers on 15 pages; these are rejected, not saved. No stored figures changed; 21 tests passed.
 - [x] Connected OpenRouter and ran Ling/Gemini parallel reads with bounded follow-ups on 20 HOOD slides: 14 completed, Ling 94 figures, Gemini 139, 79 same-token/value/unit/period matches. Six connection failures; lower-concurrency retry also failed and timed out. Existing facts unchanged; visual spot-check found Net Deposits mislabeled as net_income, so agreement is not proof of correct meaning.

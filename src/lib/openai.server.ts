@@ -182,7 +182,14 @@ async function gatewayStructured<T>(opts: Parameters<typeof openaiStructured>[0]
   // Gemini models are served on the chat-completions surface only.
   if (model.startsWith("google/")) return gatewayChat<T>(opts, model, content);
   try {
-    j = await generateResponse(
+    j = model === "openai/gpt-6-luna" ? await generateResponse({
+      model: "openai/gpt-6-luna",
+      instructions: opts.instructions,
+      input: [{ role: "user", content: content.map((part) => part.type === "input_image" ? { ...part, detail: part.detail ?? "high" } : part) }],
+      reasoning: { effort: opts.effort === "max" ? "xhigh" : opts.effort ?? "high" },
+      max_output_tokens: opts.maxOutputTokens ?? 64_000,
+      text: { format: { type: "json_schema", name: opts.name, schema: opts.schema, strict: true } },
+    }, opts.signal ? { signal: opts.signal } : undefined) : await generateResponse(
       {
         model: model as "openai/gpt-6.1-sol",
         instructions: opts.instructions,

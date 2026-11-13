@@ -1,0 +1,6 @@
+/** Escalate incomplete, rejected and OCR-based readings; never treat agreement as label proof. */
+export function needsVisionEscalation(read: { failed?: string; rejected: number; missingAfter: number }, ocr: boolean): boolean {
+  return ocr || Boolean(read.failed) || read.rejected > 0 || read.missingAfter > 0;
+}
+
+export const VISION_QUALITY_PROMPT = `Before returning JSON, inspect each panel's heading, row labels, column dates, units and footnotes against the image. Match each token by position, not by its numerical value. Keep the printed metric name: Net Deposits is not net income; assets under custody is not revenue; trading volumes are not deposits. Classify an operating KPI as other when no exact metric enum fits, rather than assigning an unrelated financial metric. Distinguish monthly observations, quarterly flows, year-to-date flows and point-in-time balances. Never infer an unreadable date or unit. Preserve scale once only and read parentheses as negative only where the image confirms them. Inspect dense dashboards left-to-right, panel-by-panel; account for every supplied token as a qualified figure or an explicit skip. Do not use a skip reason to avoid transcribing a qualifying KPI. No invented values, missing token IDs or unlabeled extrapolations.`;

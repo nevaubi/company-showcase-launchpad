@@ -1,5 +1,7 @@
 # IR data rules
 
+- Opt-in vision escalation re-reads incomplete/rejected/OCR pages with the stronger model and stores that page's model provenance; failed page reads stop document replacement, and targeted reruns scope claims and resets to their document ids to protect unrelated companies.
+
 - Explicit Ling reads use streamed server-only OpenRouter connector replies; comparison scripts use capped token batches, bounded retries and local checkpoints without writing facts, so interrupted or incomplete answers cannot change production data.
 
 - IR KPI extraction lets the model choose cell coordinates (tables) or number-token ids (slides/images, `src/lib/ir/vision-core.ts`) plus labels only; numbers are re-read from the cell/token. Q4 derivation, flattened-vs-nested merging, per-table scoping, subtotal/double-breakdown inference, partial "selected lines" detection and reconciliation stay pure in `src/lib/ir/kpis.ts`.
