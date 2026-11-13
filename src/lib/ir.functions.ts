@@ -50,7 +50,8 @@ export const getIrData = createServerFn({ method: "GET" })
       const { count } = await context.supabase.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", data.ticker).eq("kind", "image");
       return count ?? 0;
     };
-    // The partner corpus is the primary IR source; this site's own extractions are the fallback.
+    // Two IR sources: the partner corpus and this site's own deep builds. The page shows whichever
+    // covers more series (a company built here in depth beats a thin partner payload, and vice versa).
     const loadExternal = async () => {
       try {
         const { loadExternalPayload } = await import("@/lib/ir/external.server");
@@ -62,7 +63,7 @@ export const getIrData = createServerFn({ method: "GET" })
     };
     const [docs, loaded, images, external] = await Promise.all([loadDocs(), loadSeries(), countImages(), loadExternal()]);
     let { series, payload } = loaded;
-    if (external && external.series.length) {
+    if (external && external.series.length && external.series.length >= (payload?.series.length ?? 0)) {
       const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) }));
       const bytes = new TextEncoder().encode(JSON.stringify({ payload: external, builtAt: external.builtAt, documents, images, pending: 0, source: "partner" }));
       return { gz: new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip")) as ReadableStream<Uint8Array> };
