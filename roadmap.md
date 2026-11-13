@@ -191,3 +191,6 @@
 - [ ] Port partner-only pieces: macro store, 189-field screener, workspace
 
 - [x] Company page redesign: research price chart + read, About with photos, leadership & board, sector comparison, related companies
+- [x] Mirror partner company + price files to Cloud (1,844 each)
+- [ ] Mirror partner IR store (193K docs, ~99 GB) — waiting on user go-ahead for storage size
+- [ ] Deep IR builds for all ~1,844 companies ($200 AI cap) — after IR mirror

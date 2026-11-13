@@ -4,7 +4,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
-const URL_ = process.env.PARTNER_DATA_URL || "https://www.filedunder.ai/api/app-data";
+const URL_ = process.env.PARTNER_DATA_URL || "https://filedunderai.vercel.app/api/app-data";
 
 export async function readDataset<T>(kind: "companies" | "prices", file: string): Promise<T> {
   const local = `public/data/${kind}/${file}.json`;
