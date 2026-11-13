@@ -30,14 +30,25 @@ export function splitStep(later: number, earlier: number, tol: number, known: nu
   return r >= 1 ? s : 1 / s;
 }
 
+/** A split found on the quarterly series: its factor and the fiscal year of the first quarter on the new basis. */
+export interface KnownSplit {
+  factor: number;
+  fy: number;
+}
+
+/** Fiscal years to place a known split by, with the periods the share counts belong to. */
+export interface SplitAnchors {
+  periods: Period[];
+  known: KnownSplit[];
+}
+
 /**
- * For each period, the cumulative split factor between that period's filing basis and the latest one,
- * read from step jumps in a share-count series (4-for-1 shows as a count four times larger a period later).
- * 1 where nothing happened since. Periods without a count take the basis of the next period that has one.
+ * Where a share-count series steps by a split: a map from the index of the last period on the old basis to
+ * the factor that brings it onto the next period's basis.
  */
-export function splitFactors(shares: (number | null | undefined)[], tol = 0.04, known: number[] = []): number[] {
-  const out = new Array<number>(shares.length).fill(1);
+function detectSteps(shares: (number | null | undefined)[], tol: number, anchors?: SplitAnchors): Map<number, { factor: number; later: number }> {
   const at = shares.map((v, i) => (v != null && v > 0 ? i : -1)).filter((i) => i >= 0);
+  const factors = (anchors?.known ?? []).map((k) => k.factor);
   // A split is one clean step between two level stretches. Share issuance (a merger, a rescue, an IPO) shows
   // up in the weighted count over two periods, so the count is still moving on one side of the jump.
   const level = (i: number, j: number) => {
@@ -49,33 +60,64 @@ export function splitFactors(shares: (number | null | undefined)[], tol = 0.04, 
     if (k === 0) return 1;
     const gap = later - at[k - 1] - 1;
     // Each period without a count in between is another period of buybacks or issuance to allow for.
-    return splitStep(shares[later] as number, shares[at[k - 1]] as number, Math.min(0.06, tol + gap * 0.015), known);
+    return splitStep(shares[later] as number, shares[at[k - 1]] as number, Math.min(0.06, tol + gap * 0.015), factors);
   });
   // The neighbouring stretch must be level, or be the same step undone: one period already restated by a later
   // filing sits as a spike among unrestated ones.
   const undone = (f: number, g: number) => g !== 1 && Math.abs(f * g - 1) < 1e-9;
-  const stepAt = new Map<number, number>();
+  const steps = new Map<number, { factor: number; later: number }>();
   for (let k = 1; k < at.length; k++) {
     const f = raw[k];
     if (f === 1) continue;
     if (k + 1 < at.length && !level(at[k], at[k + 1]) && !undone(f, raw[k + 1])) continue;
     if (k - 2 >= 0 && !level(at[k - 2], at[k - 1]) && !undone(f, raw[k - 1])) continue;
-    stepAt.set(at[k - 1], f);
+    steps.set(at[k - 1], { factor: f, later: at[k] });
   }
+  if (!anchors) return steps;
+  // A split proven on the quarterly counts must also sit somewhere in the yearly ones, a year or two earlier
+  // (a 10-K restates its comparative years). When the company also issued or bought back a lot of stock that
+  // year, the yearly step is well off the round multiple, so look for the nearest sizeable step in that window.
+  const fy = (i: number) => anchors.periods[i]?.fy;
+  const up = (f: number) => (f >= 1 ? f : 1 / f);
+  for (const k of anchors.known) {
+    const s = up(k.factor);
+    const placed = [...steps.values()].some((x) => Math.abs(up(x.factor) / s - 1) < 1e-9 && Math.sign(Math.log(x.factor)) === Math.sign(Math.log(k.factor)) && fy(x.later) >= k.fy - 3 && fy(x.later) <= k.fy + 1);
+    if (placed) continue;
+    let best: { earlier: number; later: number; dev: number } | null = null;
+    for (let j = 1; j < at.length; j++) {
+      const later = at[j];
+      const earlier = at[j - 1];
+      if (steps.has(earlier) || fy(later) == null || fy(later) < k.fy - 3 || fy(later) > k.fy) continue;
+      const r = (shares[later] as number) / (shares[earlier] as number);
+      const size = k.factor >= 1 ? r : 1 / r;
+      const dev = Math.abs(size / s - 1);
+      if (size < 1.4 || dev > 0.3) continue;
+      if (!best || dev < best.dev) best = { earlier, later, dev };
+    }
+    if (best) steps.set(best.earlier, { factor: k.factor, later: best.later });
+  }
+  return steps;
+}
+
+/**
+ * For each period, the cumulative split factor between that period's filing basis and the latest one,
+ * read from step jumps in a share-count series (4-for-1 shows as a count four times larger a period later).
+ * 1 where nothing happened since. Periods without a count take the basis of the next period that has one.
+ */
+export function splitFactors(shares: (number | null | undefined)[], tol = 0.04, anchors?: SplitAnchors): number[] {
+  const steps = detectSteps(shares, tol, anchors);
+  const out = new Array<number>(shares.length).fill(1);
   let cum = 1;
   for (let i = shares.length - 1; i >= 0; i--) {
-    cum *= stepAt.get(i) ?? 1;
+    cum *= steps.get(i)?.factor ?? 1;
     out[i] = cum;
   }
   return out;
 }
 
-/** The individual split steps found in a share-count series, latest first. */
-export function splitSteps(shares: (number | null | undefined)[], tol = 0.04): number[] {
-  const f = splitFactors(shares, tol);
-  const steps: number[] = [];
-  for (let i = f.length - 1; i > 0; i--) if (f[i - 1] !== f[i]) steps.push(f[i - 1] / f[i]);
-  return steps;
+/** The splits found in a share-count series, with the fiscal year each new basis starts in. */
+export function splitEvents(shares: (number | null | undefined)[], periods: Period[], tol = 0.04): KnownSplit[] {
+  return [...detectSteps(shares, tol).values()].map((x) => ({ factor: x.factor, fy: periods[x.later].fy }));
 }
 
 const fmt = (v: number) => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString("en-US") : String(Math.round(v * 10000) / 10000));
@@ -113,13 +155,14 @@ function restateRow(row: Row, factors: number[]): Row {
 }
 
 /**
- * The share count each period's per-share figures were stated on: the reported diluted count, else basic,
+ * The share count each period's per-share figures were stated on: the reported basic count, else diluted,
  * else net income ÷ EPS where both were read from a filing and EPS is large enough for the division to hold.
  */
 export function shareBasis(income: Statement): (number | null)[] {
   const cell = (key: string, i: number) => rowOf(income.rows, key)?.cells[i];
   return income.periods.map((_, i) => {
-    const reported = cell("sharesDiluted", i)?.v ?? cell("sharesBasic", i)?.v;
+    // Basic first: the diluted count also moves when options and converts come into the money.
+    const reported = cell("sharesBasic", i)?.v ?? cell("sharesDiluted", i)?.v;
     if (reported != null && reported > 0) return reported;
     const ni = cell("netIncome", i);
     const eps = cell("epsDiluted", i) ?? cell("epsBasic", i);
@@ -129,20 +172,21 @@ export function shareBasis(income: Statement): (number | null)[] {
 }
 
 /**
- * Restate an income statement's per-share and share-count rows to the latest share basis. `known` lists
- * split factors already found on the quarterly series, which confirm looser year-over-year matches.
+ * Restate an income statement's per-share and share-count rows to the latest share basis. `known` lists the
+ * splits already found on the quarterly series, which confirm and place the looser year-over-year steps.
  */
-export function restateIncomeForSplits(income: Statement, tol = 0.04, known: number[] = []): Statement {
-  const factors = splitFactors(shareBasis(income), tol, known);
+export function restateIncomeForSplits(income: Statement, known: KnownSplit[] = []): Statement {
+  const factors = splitFactors(shareBasis(income), 0.04, known.length ? { periods: income.periods, known } : undefined);
   if (factors.every((f) => f === 1)) return income;
   return { ...income, rows: income.rows.map((r) => restateRow(r, factors)) };
 }
 
 /** Restate a balance sheet's share counts. They are point-in-time, so they carry their own step dates. */
-export function restateBalanceForSplits(balance: Statement, tol = 0.04, known: number[] = []): Statement {
+export function restateBalanceForSplits(balance: Statement, known: KnownSplit[] = []): Statement {
+  const anchors = known.length ? { periods: balance.periods, known } : undefined;
   return {
     ...balance,
-    rows: balance.rows.map((r) => (r.unit === "shares" ? restateRow(r, splitFactors(r.cells.map((c) => c?.v), tol, known)) : r)),
+    rows: balance.rows.map((r) => (r.unit === "shares" ? restateRow(r, splitFactors(r.cells.map((c) => c?.v), 0.04, anchors)) : r)),
   };
 }
 

@@ -3,7 +3,7 @@
 // SourceRef values that equal the cell value. `hydrateDataset` restores both, so
 // every consumer sees the full shape. Pure: shared by the app, ingest and tests.
 import { buildKpis } from "./build";
-import { rederiveQuarters, restateBalanceForSplits, restateIncomeForSplits, shareBasis, splitSteps } from "./splits";
+import { rederiveQuarters, restateBalanceForSplits, restateIncomeForSplits, shareBasis, splitEvents } from "./splits";
 import type { Cell, CompanyDataset, Row, Statement, StatementKey } from "./types";
 
 const BANK_INDUSTRY = /bank|brokerage|consumer finance/i;
@@ -47,14 +47,15 @@ export function hydrateDataset(d: CompanyDataset): CompanyDataset {
   const out = {} as CompanyDataset["statements"];
   // Splits are read off the quarterly share counts, where a restated count sits within a couple of percent of
   // a round multiple. Those factors then confirm the looser year-over-year steps.
-  const known = stored.quarterly?.income ? splitSteps(shareBasis(stored.quarterly.income)) : [];
+  const known = stored.quarterly?.income ? splitEvents(shareBasis(stored.quarterly.income), stored.quarterly.income.periods) : [];
   for (const freq of ["annual", "quarterly"] as const) {
     const s = stored[freq];
     const fix = (st: Statement | undefined): Statement =>
       st ? { ...st, rows: mapCells(st.rows, fullCell) } : { periods: s.income?.periods ?? [], rows: [] };
     // Per-share figures and share counts go onto today's share basis before anything is computed from them.
-    const income = restateIncomeForSplits(fix(s.income), undefined, known);
-    const balance = restateBalanceForSplits(fix(s.balance), undefined, known);
+    // The quarterly series is where splits are found; the yearly one is placed by them.
+    const income = restateIncomeForSplits(fix(s.income), freq === "annual" ? known : []);
+    const balance = restateBalanceForSplits(fix(s.balance), freq === "annual" ? known : []);
     const cashflow = fix(s.cashflow);
     const kpis: Statement = s.kpis
       ? fix(s.kpis)
