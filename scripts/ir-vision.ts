@@ -1,7 +1,7 @@
 /**
  * Vision pass over stored IR slides, chart images and scanned pages.
  *   bun scripts/ir-vision.ts [--concurrency=8] [--max=2000] [--ticker=AAPL] [--kind=image|presentation|pdf] [--model=claude-sonnet-5-5]
- *                            [--max-usd=500] [--watch --idle=30] [--resume] [--force] [--dry]
+ *                            [--verify=<second model>] [--max-usd=500] [--watch --idle=30] [--resume] [--force] [--dry]
  *
  * Per document: find the number tokens on each page (PDF text layer, or tesseract OCR for images
  * and scanned pages), skip pages without data, send page image + numbered tokens to the vision
@@ -26,6 +26,8 @@ const MAX_PAGES = 80;
 /** long edge of the page images stored for the viewer */
 const PUBLISH_EDGE = 1600;
 const model = args.model ?? IR_MODELS.vision;
+/** optional second reader: a figure is kept only when both models read the same token, period and value */
+const verifier = args.verify as string | undefined;
 const names = new Map(COVERAGE.map((c) => [c.ticker, c.name]));
 type Doc = { id: string; ticker: string; label: string; kind: string; ext: string | null; path: string; rendition_path: string | null; title: string; filed: string | null; accn: string | null; bytes: number | null };
 
@@ -123,9 +125,18 @@ async function processDoc(d: Doc) {
     const usage: Usage & { usd: number } = { input_tokens: 0, output_tokens: 0, cached_tokens: 0, usd: 0 };
     let followUps = 0;
     let failedPages = 0;
+    let disagreed = 0;
     const results = await pool(candidates, 4, async (j) => {
       const tokens = numberTokens(j.words);
-      const r = await readPage({ model, context, page: j.page, pageCount, tokens, jpeg: await modelImage(j.image, j.w, j.h, model), ocr: j.ocr, filed: d.filed });
+      const read = async (m: string) => readPage({ model: m, context, page: j.page, pageCount, tokens, jpeg: await modelImage(j.image, j.w, j.h, m), ocr: j.ocr, filed: d.filed });
+      const [r, v] = await Promise.all([read(model), verifier ? read(verifier) : null]);
+      if (v) {
+        const key = (f: VisionFact) => `${f.locator.text}|${f.period_end}|${f.months}|${f.value}`;
+        const ok = new Set(v.rows.map(key));
+        const kept = r.rows.filter((f) => ok.has(key(f)));
+        disagreed += r.rows.length - kept.length;
+        r.rows = kept;
+      }
       usage.input_tokens += r.usage.input_tokens;
       usage.output_tokens += r.usage.output_tokens;
       usage.cached_tokens += r.usage.cached_tokens;
@@ -154,12 +165,12 @@ async function processDoc(d: Doc) {
     if (pagesWithFacts.length) await publishPages(d, candidates.filter((j) => pagesWithFacts.includes(j.page)), isImage, dir);
 
     await sb.from("ir_kpi_facts").delete().eq("document_id", d.id).eq("method", "vision");
-    const records = facts.map((f) => ({ document_id: d.id, ticker: d.ticker, ...f, accn: d.accn, doc: null, document_kind: d.kind === "image" ? "presentation" : d.kind, filed: d.filed, method: "vision", model }));
+    const records = facts.map((f) => ({ document_id: d.id, ticker: d.ticker, ...f, accn: d.accn, doc: null, document_kind: d.kind === "image" ? "presentation" : d.kind, filed: d.filed, method: "vision", model: verifier ? `${model}+${verifier}` : model }));
     for (let i = 0; i < records.length; i += 500) {
       const { error: e } = await sb.from("ir_kpi_facts").insert(records.slice(i, i + 500) as never);
       if (e) throw new Error(e.message);
     }
-    const extra = [rejected ? `${rejected} rejected` : "", failedPages ? `${failedPages} pages unreadable` : ""].filter(Boolean).join(", ");
+    const extra = [rejected ? `${rejected} rejected` : "", failedPages ? `${failedPages} pages unreadable` : "", disagreed ? `${disagreed} unconfirmed` : ""].filter(Boolean).join(", ");
     await mark(d, facts.length ? `ok (${facts.length} facts, ${pagesWithFacts.length} pages${extra ? `, ${extra}` : ""})` : extra ? `no data (${extra})` : "no data", facts.length);
     const note = [`${candidates.length}pp`, rejected ? `${rejected} rej` : "", followUps ? `${followUps} 2nd look` : "", failedPages ? `${failedPages} failed` : "", usage.usd ? `$${usage.usd.toFixed(3)}` : ""].filter(Boolean).join(" ");
     return { facts: facts.length, note, usage };
