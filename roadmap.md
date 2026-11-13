@@ -1,5 +1,13 @@
 # Filed Under — roadmap
 
+## Deep IR build — first 10 companies (Nov 13)
+- [x] Gemini table-reading pilot on 14 already-read documents vs the earlier reader: 40K parts 31–47% agreement → 16K parts ~79–80% (8K no better; review pass +0–7 pts for +80% cost, not used for tables). Real disagreements: missed scale on one EDGAR workbook, year-to-date columns read as full year (rejected once filing dates are known), fiscal vs calendar quarter ends.
+- [x] File preparation (`scripts/ir-docling.ts`): evidence-only dates/accessions, Docling + OCR hybrid copies of PDF releases/supplements, Markdown copies, spreadsheets; DELL test: 105 files dated, 6 PDFs via Docling (63 pages), 0 failures.
+- [x] Orchestrator (`scripts/ir-deep.ts`): skip companies with figures, prepare → tables → slides → retry once → rebuild → report, credit ledger and per-reader caps.
+- [ ] Run CVS, MCK, BRK-B, CI, F, GM, DELL, KR, FDX, COF (120-credit cap) and report per company.
+- [ ] Review: undated IR-site files (no evidence of a date), scale flags, quarter/year reconciliation per company.
+- [ ] Next batch selection from the remaining no-figure companies (owner to approve).
+
 ## HOOD Gemini with Luna escalation (Nov 13)
 - [x] Reread eleven HOOD presentations with Gemini 3.1 Flash Lite, quality prompting and bounded follow-ups; 29 pages escalated to GPT-6 Luna. No document failures; 3,398 figures stored, company rebuilt to 46,392 facts / 1,358 series. Dashboards retained 21/11/9 figures but still have 58/58/57 rejections; checks: quarters 867/1,020, years 86/118; 18 scale flags, 2 unlinked series, future period 2026-12-31 require review. Twelve tests passed; build OK. No other companies processed; UI not checked.
 
