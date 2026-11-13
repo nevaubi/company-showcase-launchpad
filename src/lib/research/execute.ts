@@ -30,7 +30,7 @@ import { partnerFile } from "@/lib/data";
 import type { CommentsFile, Form144File } from "@/lib/filings/review";
 import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { searchDocuments } from "@/lib/ir/search";
-import { computedDigest, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
+import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -403,6 +403,22 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     }
     case "get_quant_profile": {
       const r = await getQuantProfile(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_call_analysis": {
+      const r = await getCallAnalysis(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_call_themes": {
+      const r = await getCallThemes(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_trial_catalysts": {
+      const r = await getTrialCatalysts(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_analyst_track_record": {
+      const r = await getAnalystTrackRecord(qc, args);
       return { output: r.output, summary: r.summary };
     }
     case "search_doc_tables": {

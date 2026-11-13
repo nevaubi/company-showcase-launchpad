@@ -444,3 +444,146 @@ export async function computedDigest(qc: QueryClient, t: string): Promise<string
   if (read) out.push(`QUANT: ${read.sentences.map((s: { text: string }) => s.text).join(" ")}`);
   return out.length > 1 ? out : [];
 }
+
+/* ---------------------------------------------------------------- earnings calls */
+
+interface CallQuote {
+  q: string;
+  p?: number;
+}
+interface CallRow {
+  call_id: string;
+  doc: string;
+  event_type: string;
+  title: string;
+  date: string;
+  label: string | null;
+  period_end: string | null;
+  has_qa: boolean;
+  pending?: boolean;
+  summary?: string;
+  themes?: { theme: string; label: string; sentiment: number; confidence: number; summary: string; quotes?: CallQuote[] }[];
+  guidance?: { metric: string; period: string; low: number | null; high: number | null; unit?: string; basis?: string; quote?: CallQuote }[];
+  changes?: { theme: string; text: string; quote?: CallQuote }[];
+  speakers?: { name: string; role: string | null; kind: string; share: number | null; hedge: number | null; tone: number | null }[];
+}
+interface CallsFile {
+  ticker: string;
+  docs: Record<string, { id: string; title: string; url: string; fiscal_label?: string | null }>;
+  calls: CallRow[];
+}
+
+const fmtGuide = (g: NonNullable<CallRow["guidance"]>[number]) => {
+  const f = (v: number | null) => (v == null ? "?" : fmtKpi(v, g.unit === "USD" ? "USD" : g.unit === "%" ? "%" : g.unit));
+  return g.low === g.high ? f(g.low) : `${f(g.low)} to ${f(g.high)}`;
+};
+
+export async function getCallAnalysis(_qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const t = String(args.ticker).toUpperCase();
+  const f = await safe(partnerFile<CallsFile>(`calls/${t}.json`));
+  if (!f?.calls?.length) return { output: `No analysed calls for ${t}. Use get_earnings_call or list_ir_documents with doc_type transcript.`, summary: "none" };
+  const wantAll = args.event_type === "all";
+  const calls = [...f.calls].filter((c) => wantAll || c.event_type === "earnings").sort((a, b) => b.date.localeCompare(a.date));
+  const analysed = calls.filter((c) => !c.pending && c.summary).slice(0, Math.max(1, Math.min(Number(args.calls) || 2, 4)));
+  const url = (c: CallRow, p?: number) => {
+    const u = f.docs[c.doc]?.url;
+    return u ? ` <${u}${p ? `#page=${p}` : ""}>` : "";
+  };
+  const out: string[] = [`${t} call analysis (${calls.length} ${wantAll ? "calls and conference appearances" : "earnings calls"} on file, ${calls.filter((c) => !c.pending).length} analysed). Quotes are verbatim from the transcript; cite the transcript link with the page.`];
+  for (const c of analysed) {
+    out.push(`\nCALL ${c.label ?? c.date} (${c.date}, ${c.event_type}${c.has_qa ? ", with Q&A" : ""})${url(c)}`);
+    out.push(`SUMMARY: ${c.summary}`);
+    if (c.guidance?.length) out.push("GUIDANCE GIVEN:", ...c.guidance.slice(0, 12).map((g) => `  ${g.metric} ${g.period}: ${fmtGuide(g)}${g.basis ? ` (${g.basis})` : ""}${g.quote ? ` "${g.quote.q.replace(/\s+/g, " ").slice(0, 140)}" p.${g.quote.p ?? "?"}` : ""}`));
+    if (c.changes?.length) out.push("CHANGED SINCE THE PRIOR CALL:", ...c.changes.slice(0, 8).map((x) => `  [${x.theme}] ${x.text}${x.quote ? ` "${x.quote.q.replace(/\s+/g, " ").slice(0, 120)}" p.${x.quote.p ?? "?"}` : ""}`));
+    if (c.themes?.length)
+      out.push(
+        "THEMES (sentiment -1..1):",
+        ...[...c.themes].sort((a, b) => b.confidence - a.confidence).slice(0, 8).map((x) => `  ${x.label} [${x.theme}] sentiment ${x.sentiment.toFixed(2)}: ${x.summary}${x.quotes?.[0] ? ` "${x.quotes[0].q.replace(/\s+/g, " ").slice(0, 120)}" p.${x.quotes[0].p ?? "?"}` : ""}`),
+      );
+    const mgmt = (c.speakers ?? []).filter((s) => s.kind === "management" && (s.share ?? 0) > 0.05);
+    if (mgmt.length) out.push(`MANAGEMENT LANGUAGE (hedge = hedging words per 1,000; tone = net positive per 1,000): ${mgmt.map((s) => `${s.name} (${s.role ?? "?"}) share ${((s.share ?? 0) * 100).toFixed(0)}%, hedge ${s.hedge ?? "?"}, tone ${s.tone ?? "?"}`).join("; ")}`);
+  }
+  const waiting = calls.filter((c) => c.pending || !c.summary).slice(0, 4);
+  if (waiting.length) out.push(`\nNot yet analysed (read with read_ir_document): ${waiting.map((c) => `${c.label ?? c.date} doc ${c.doc}`).join("; ")}`);
+  if (!analysed.length) out.push("No analysed call yet; read the latest transcript with read_ir_document.");
+  return { output: clip(out.join("\n")), summary: `${analysed.length} analysed calls for ${t}` };
+}
+
+interface ThemesFile {
+  taxonomy: { id: string; name: string; desc: string }[];
+  quarters: string[];
+  sectors: string[];
+  cells: Record<string, Record<string, Record<string, [number, number]>>>;
+}
+
+export async function getCallThemes(_qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const f = await safe(partnerFile<ThemesFile>("calls/themes.json"));
+  if (!f) return { output: "Call theme tracker unavailable.", summary: "none" };
+  const want = args.theme ? String(args.theme).toLowerCase() : null;
+  const sector = args.sector ? String(args.sector).toLowerCase() : null;
+  const themes = f.taxonomy.filter((x) => !want || x.id.includes(want) || x.name.toLowerCase().includes(want) || x.desc.toLowerCase().includes(want));
+  if (!themes.length) return { output: `No theme matches "${args.theme}". Themes: ${f.taxonomy.map((x) => `${x.id} (${x.name})`).join(", ")}`, summary: "no theme" };
+  const qs = f.quarters.slice(-6);
+  const out = [`Earnings-call themes by sector and calendar quarter: n = calls discussing it, s = average sentiment (-1..1). Latest quarter may be partial. Quarters: ${qs.join(", ")}`];
+  for (const th of themes.slice(0, want ? 3 : 26)) {
+    out.push(`${th.name} [${th.id}] — ${th.desc}`);
+    for (const [sec, cells] of Object.entries(f.cells[th.id] ?? {})) {
+      if (sector && !sec.toLowerCase().includes(sector)) continue;
+      out.push(`  ${sec}: ${qs.map((q) => (cells[q] ? `${q} n=${cells[q][0]} s=${cells[q][1].toFixed(2)}` : `${q} -`)).join(" | ")}`);
+    }
+    if (!want) out.push("");
+  }
+  return { output: clip(out.join("\n")), summary: `${themes.length} themes` };
+}
+
+/* ---------------------------------------------------------------- catalysts and analysts */
+
+interface CatalystsFile {
+  as_of: string;
+  rows: { ticker: string; nct: string; title: string; acronym?: string | null; phase: string; status: string; primary_completion: string; primary_completion_type?: string | null; enrollment?: number; conditions?: string[]; interventions?: string[] }[];
+}
+
+export async function getTrialCatalysts(_qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const f = await safe(partnerFile<CatalystsFile>("regulatory/catalysts.json"));
+  if (!f) return { output: "Clinical trial catalysts unavailable.", summary: "none" };
+  const t = args.ticker ? String(args.ticker).toUpperCase() : null;
+  const days = Math.max(1, Math.min(Number(args.days) || 120, 730));
+  const until = new Date(Date.parse(f.as_of) + days * 86400_000).toISOString().slice(0, 10);
+  const rows = f.rows
+    .filter((r) => (!t || r.ticker === t) && (t ? true : r.primary_completion >= f.as_of && r.primary_completion <= until))
+    .filter((r) => !args.phase || r.phase === args.phase)
+    .sort((a, b) => a.primary_completion.localeCompare(b.primary_completion))
+    .slice(0, 60);
+  if (!rows.length) return { output: `No registered trials ${t ? `for ${t}` : `completing within ${days} days`}.`, summary: "none" };
+  const out = [
+    `Clinical trials from ClinicalTrials.gov (as of ${f.as_of}); primary completion is the sponsor's date for the last primary-endpoint measurement, ${"not a readout date"}. ${t ? `All registered trials for ${t}.` : `Primary completion within ${days} days.`}`,
+    ...rows.map(
+      (r) =>
+        `${r.primary_completion}${r.primary_completion_type ? ` (${r.primary_completion_type.toLowerCase()})` : ""} ${r.ticker} ${r.phase} ${r.acronym ?? ""} — ${r.title.slice(0, 140)} [${r.status.toLowerCase().replace(/_/g, " ")}${r.enrollment ? `, n=${r.enrollment}` : ""}] ${(r.interventions ?? []).slice(0, 3).join(", ")} for ${(r.conditions ?? []).slice(0, 2).join(", ")} <https://clinicaltrials.gov/study/${r.nct}>`,
+    ),
+  ];
+  return { output: clip(out.join("\n")), summary: `${rows.length} trials` };
+}
+
+interface AnalystsFile {
+  attribution: string;
+  note?: string;
+  analysts: { name: string; firm: string; coverage: string[]; n_actions: number; last: string; accuracy?: Record<string, number | string | null> }[];
+}
+
+export async function getAnalystTrackRecord(_qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const t = String(args.ticker).toUpperCase();
+  const f = await safe(partnerFile<AnalystsFile>("estimates/analysts.json"));
+  if (!f) return { output: "Analyst track records unavailable.", summary: "none" };
+  const rows = f.analysts
+    .filter((a) => a.coverage.includes(t))
+    .sort((a, b) => Number(b.accuracy?.smart_score ?? -1) - Number(a.accuracy?.smart_score ?? -1))
+    .slice(0, 25);
+  if (!rows.length) return { output: `No tracked analysts cover ${t}.`, summary: "none" };
+  const acc = (a: (typeof rows)[number]) => {
+    const x = a.accuracy ?? {};
+    return [x.smart_score != null ? `score ${Number(x.smart_score).toFixed(0)}` : "", x.overall_success_rate != null ? `success ${Number(x.overall_success_rate).toFixed(0)}%` : "", x.overall_average_return != null ? `avg return ${Number(x.overall_average_return).toFixed(1)}%` : "", x.total_ratings != null ? `${x.total_ratings} ratings` : ""].filter(Boolean).join(", ");
+  };
+  const out = [`Analysts covering ${t}, best track record first (${f.attribution}). ${f.note ?? ""} Pair with get_estimates for their latest actions on ${t}.`, ...rows.map((a) => `${a.name} (${a.firm}): ${acc(a) || "no accuracy stats"}; ${a.n_actions} actions, last ${a.last}`)];
+  return { output: clip(out.join("\n")), summary: `${rows.length} analysts on ${t}` };
+}

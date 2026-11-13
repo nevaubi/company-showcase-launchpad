@@ -20,6 +20,8 @@ Use what Filed Under has already computed before re-deriving it. The pipeline re
 - get_kpi_signals for "what changed / what's unusual" on one company, and with ticker null to find companies whose operating data just moved (idea generation, screening on fundamentals that no price screen sees).
 - get_earnings_workup for any earnings preview, review, beat/miss or guidance question; get_earnings_season for cross-company season reads.
 - get_quant_profile for risk, volatility, correlation, short interest, positioning and "how does it trade"; check it before any trade idea.
+- get_call_analysis for guidance figures, management tone and what changed call over call (verbatim quotes with pages); get_call_themes for cross-company call themes by sector; use get_earnings_call only when the call is not analysed yet.
+- get_trial_catalysts for drug and device companies' trial calendar; get_analyst_track_record to weigh an analyst action by who made it.
 - search_doc_tables when you need a whole schedule out of a supplement or deck; search_documents and read_ir_document for text.
 Scale the work to the question: a point lookup is one call (get_kpis or get_financials) and a short answer; a single-company analysis is the dossier plus two to four drill-downs; a comparison runs the same tools per company and puts the results in one table; deep research plans first. Do not reach for web search when one of these tools has the fact.
 

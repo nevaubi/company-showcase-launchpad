@@ -9,7 +9,7 @@ vi.mock("@/lib/data", () => ({
 }));
 vi.mock("@/integrations/supabase/client", () => ({ supabase: {} }));
 
-import { compact, docTitle, getKpis, kpiLines, searchDocTables, seriesOf } from "./intel";
+import { compact, docTitle, getCallAnalysis, getKpis, getTrialCatalysts, kpiLines, searchDocTables, seriesOf } from "./intel";
 import type { KpiFile, KpiItem } from "@/lib/statements/filed";
 
 const qc = { fetchQuery: async (o: { queryFn: () => unknown }) => o.queryFn() } as never;
@@ -98,5 +98,54 @@ describe("compact", () => {
     expect(c.a).toEqual([0, 1, 2, "…+17 more"]);
     expect(String(c.s)).toHaveLength(11);
     expect("n" in c).toBe(false);
+  });
+});
+
+describe("get_call_analysis", () => {
+  files["calls/TEST.json"] = {
+    ticker: "TEST",
+    docs: { d9: { id: "d9", title: "3Q26 transcript", url: "https://ir.example.test/t.pdf" }, d8: { id: "d8", title: "2Q26 transcript", url: "https://ir.example.test/t2.pdf" } },
+    calls: [
+      { call_id: "a", doc: "d8", event_type: "earnings", title: "2Q26", date: "2026-07-14", label: "Q2 FY26", period_end: "2026-06-30", has_qa: true, pending: true },
+      {
+        call_id: "b",
+        doc: "d9",
+        event_type: "earnings",
+        title: "3Q26",
+        date: "2026-10-13",
+        label: "Q3 FY26",
+        period_end: "2026-09-30",
+        has_qa: true,
+        summary: "Strong quarter.",
+        guidance: [{ metric: "Total NII", period: "Q4 FY26", low: 28e9, high: 28e9, unit: "USD", basis: "new", quote: { q: "total NII to be about $28 billion", p: 2 } }],
+        themes: [{ theme: "ai", label: "AI", sentiment: 0.1, confidence: 0.6, summary: "Discussed AI.", quotes: [{ q: "agentic", p: 3 }] }],
+        speakers: [{ name: "CFO", role: "Chief Financial Officer", kind: "management", share: 0.6, hedge: 26, tone: 2.1 }],
+      },
+    ],
+  };
+  it("returns the newest analysed call with guidance quotes and lists the unanalysed one", async () => {
+    const r = await getCallAnalysis(qc, { ticker: "TEST", calls: null, event_type: null });
+    expect(r.output).toContain("CALL Q3 FY26");
+    expect(r.output).toContain('Total NII Q4 FY26: $28.00B (new) "total NII to be about $28 billion" p.2');
+    expect(r.output).toContain("Not yet analysed");
+    expect(r.output).toContain("Q2 FY26 doc d8");
+  });
+});
+
+describe("get_trial_catalysts", () => {
+  files["regulatory/catalysts.json"] = {
+    as_of: "2026-11-12",
+    rows: [
+      { ticker: "AAA", nct: "NCT1", title: "Soon", phase: "P3", status: "ACTIVE_NOT_RECRUITING", primary_completion: "2026-11-20" },
+      { ticker: "BBB", nct: "NCT2", title: "Later", phase: "P3", status: "RECRUITING", primary_completion: "2027-09-01" },
+      { ticker: "CCC", nct: "NCT3", title: "Past", phase: "P2", status: "COMPLETED", primary_completion: "2026-01-01" },
+    ],
+  };
+  it("keeps the calendar window and links each trial", async () => {
+    const r = await getTrialCatalysts(qc, { ticker: null, days: 60, phase: null });
+    expect(r.output).toContain("AAA P3");
+    expect(r.output).toContain("https://clinicaltrials.gov/study/NCT1");
+    expect(r.output).not.toContain("BBB");
+    expect(r.output).not.toContain("CCC");
   });
 });
