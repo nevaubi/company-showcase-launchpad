@@ -17,7 +17,7 @@ export interface SourceTarget {
   /** Exact iXBRL element id when known (segment facts) */
   elementId?: string;
   /** A whole document with no specific fact to highlight */
-  doc?: { accn: string; doc: string; form?: string; filed?: string; title?: string; search?: string; /** stored IR document id */ irDoc?: string; /** filer CIK when the filer is not a covered company (IPO registrants) */ cik?: string };
+  doc?: { accn: string; doc: string; form?: string; filed?: string; title?: string; search?: string; /** the printed line to find, and the page (1-based) or worksheet of a stored document it is on */ quote?: string; page?: number; sheet?: string; /** stored IR document id */ irDoc?: string; /** filer CIK when the filer is not a covered company (IPO registrants) */ cik?: string };
 }
 
 interface SourceCtx {

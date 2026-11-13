@@ -71,7 +71,8 @@ export function storeRow(d: StoreDoc): IrDocRow {
     extract_status: d.text_path ? "text" : null,
     extract_facts: null,
     pages: d.pages,
-    viewable: false,
+    // With page text the stored copy opens in the source panel; without it only the original can be opened.
+    viewable: !!d.text_path,
   };
 }
 
@@ -112,4 +113,79 @@ export function passages(pages: string[], query: string, radius = 600, max = 8) 
     }
   }
   return out;
+}
+
+/** What the source viewer needs to show a stored document: its page text, or its stored HTML original. */
+export interface StoreRef {
+  /** Object path of the extracted text (pages or worksheets) */
+  text?: string | null;
+  /** Object path of the original file */
+  original?: string | null;
+  ext?: string | null;
+}
+
+export interface StoreTextFile {
+  kind?: string;
+  pages?: unknown[];
+  sheets?: Record<string, unknown[][]>;
+}
+
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const isNum = (s: string) => /^[($-]*\$?\s*[\d,]+(\.\d+)?\)?%?$/.test(s.trim());
+const RENDITION_STYLE =
+  "<style>body{font:12.5px/1.5 -apple-system,Segoe UI,sans-serif;color:#111}" +
+  "h2{font-size:11.5px;font-weight:600;color:#666;margin:26px 0 8px;padding-top:10px;border-top:1px solid #d4d4d4}h2:first-of-type{margin-top:0;padding-top:0;border-top:0}" +
+  "table{border-collapse:collapse}table[data-page]{width:100%}table[data-page] td{padding:1px 4px;white-space:pre-wrap;overflow-wrap:anywhere}" +
+  "table[data-sheet] td{border:1px solid #e3e3e3;padding:2px 6px;white-space:nowrap}td.n{text-align:right;font-variant-numeric:tabular-nums}" +
+  "p.note{color:#666;font-size:11.5px;margin:6px 0}</style>";
+export const SHEET_MAX_ROWS = 2000;
+export const SHEET_MAX_COLS = 60;
+
+/**
+ * A stored document's extracted text as HTML the source viewer can search and highlight, in the same shape as the
+ * app's own renditions: a PDF or deck becomes one table per page (`#page-N`, `table[data-page]`, a row per printed
+ * line) and a workbook one table per worksheet (`table[data-sheet]`). Text is escaped; nothing from the file runs.
+ */
+export function renditionHtml(file: StoreTextFile, title: string): { html: string; pages: number } {
+  const parts = [`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>${RENDITION_STYLE}</head><body>`];
+  let pages = 0;
+  if (file.sheets && typeof file.sheets === "object") {
+    for (const [name, rows] of Object.entries(file.sheets)) {
+      if (!Array.isArray(rows)) continue;
+      pages++;
+      parts.push(`<h2>Sheet: ${esc(name)}</h2>`);
+      if (rows.length > SHEET_MAX_ROWS) parts.push(`<p class="note">Showing the first ${SHEET_MAX_ROWS.toLocaleString("en-US")} of ${rows.length.toLocaleString("en-US")} rows. The original file has the rest.</p>`);
+      parts.push(`<table data-sheet="${esc(name)}">`);
+      for (const row of rows.slice(0, SHEET_MAX_ROWS)) {
+        const cells = (Array.isArray(row) ? row : []).slice(0, SHEET_MAX_COLS).map((v) => {
+          const t = v == null ? "" : String(v).trim();
+          return `<td${isNum(t) ? ' class="n"' : ""}>${esc(t)}</td>`;
+        });
+        parts.push(`<tr>${cells.join("")}</tr>`);
+      }
+      parts.push("</table>");
+    }
+  } else {
+    for (const [i, p] of (file.pages ?? []).entries()) {
+      pages++;
+      const text = typeof p === "string" ? p : p == null ? "" : JSON.stringify(p);
+      const lines = text.split("\n").filter((l) => l.trim());
+      parts.push(`<h2 id="page-${i + 1}">Page ${i + 1}</h2>`);
+      if (!lines.length) parts.push(`<p class="note">No text on this page (a chart or a scanned page).</p>`);
+      parts.push(`<table data-page="${i + 1}">${lines.map((l) => `<tr><td>${esc(l)}</td></tr>`).join("")}</table>`);
+    }
+  }
+  if (!pages) parts.push(`<p class="note">No text was read from this document. Open the original file.</p>`);
+  parts.push("</body></html>");
+  return { html: parts.join(""), pages };
+}
+
+/** HTML of a stored document for the source viewer: built from its page text, or the stored HTML original. */
+export async function storeHtml(ref: StoreRef, title: string): Promise<string> {
+  const path = ref.text || ref.original;
+  if (!path) throw new Error("This document has no in-app copy; open the original");
+  const res = await fetch(await storeUrl(path), { signal: AbortSignal.timeout(45_000) });
+  if (!res.ok) throw new Error(`The stored copy could not be read (${res.status})`);
+  if (!ref.text) return await res.text();
+  return renditionHtml((await res.json()) as StoreTextFile, title).html;
 }

@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, ExternalLink, Loader2, Minus, Plus, ScanSearch, TriangleAlert } from "lucide-react";
 import { getFilingDocument } from "@/lib/sec.functions";
 import { getIrHtml } from "@/lib/ir.functions";
+import { storeHtml, type StoreRef } from "@/lib/ir/store";
+import { clearMarks, MARK_ATTR, markFigure, quotedRow } from "@/lib/source/locate";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -19,13 +21,17 @@ export interface FactLocator {
   cell?: { t: number; r: number; c: number };
   /** Region on a page image: page number and [x0, y0, x1, y1] fractions */
   box?: { p: number; b: number[] };
+  /** The printed line that holds the value, and the page (1-based) or worksheet of a stored document it is on */
+  quote?: string;
+  page?: number;
+  sheet?: string;
 }
 
 export type LocateStatus =
   | { kind: "idle" }
   | { kind: "exact"; count: number; how: string }
   | { kind: "text"; count: number; query: string }
-  | { kind: "missing"; quote?: boolean };
+  | { kind: "missing"; quote?: boolean; page?: number };
 
 const secBase = (cik: string, accn: string) =>
   `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accn.replace(/-/g, "")}/`;
@@ -119,6 +125,7 @@ function markText(doc: Document, query: string, limit = 40): HTMLElement[] {
     range.setEnd(t, idx + query.length);
     const mark = doc.createElement("mark");
     mark.className = "fu-hl";
+    mark.setAttribute(MARK_ATTR, "");
     try {
       range.surroundContents(mark);
       marks.push(mark);
@@ -157,9 +164,12 @@ export function FilingViewer({
   className,
   onStatus,
   irDocId,
+  fallback,
 }: {
   /** Stored IR document to show instead of an EDGAR document */
   irDocId?: string;
+  /** Shown instead of the error message when the document cannot be opened */
+  fallback?: ReactNode;
   cik: string;
   accn: string;
   doc: string;
@@ -175,7 +185,12 @@ export function FilingViewer({
 
   const q = useQuery<{ html: string; contentType: string; sourceUrl?: string }>({
     queryKey: irDocId ? ["ir-doc", irDocId] : ["filing-doc", cik, accn, doc],
-    queryFn: () => (irDocId ? getIrHtml({ data: { id: irDocId } }) : getFilingDocument({ data: { cik: String(Number(cik)), accn, doc } })),
+    queryFn: async () => {
+      if (!irDocId) return getFilingDocument({ data: { cik: String(Number(cik)), accn, doc } });
+      const r: { html: string; contentType: string; sourceUrl?: string; title?: string | null; store?: StoreRef } = await getIrHtml({ data: { id: irDocId } });
+      // A document held in the pipeline's store is read here, from its page text or its stored HTML original.
+      return r.store ? { ...r, html: await storeHtml(r.store, r.title ?? "Stored document") } : r;
+    },
     staleTime: Infinity,
     gcTime: 10 * 60_000,
     retry: 1,
@@ -206,6 +221,7 @@ export function FilingViewer({
     const d = frame.current?.contentDocument;
     if (!d?.body) return;
     d.body.style.setProperty("zoom", String(zoom));
+    clearMarks(d);
     d.querySelectorAll(".fu-hl").forEach((e) => e.classList.remove("fu-hl"));
     d.querySelectorAll(".fu-hl-row").forEach((e) => e.classList.remove("fu-hl-row"));
     d.querySelectorAll(".fu-box").forEach((e) => e.remove());
@@ -259,6 +275,40 @@ export function FilingViewer({
       );
       if (found.length) how = `iXBRL tag ${locator.concept}`;
     }
+    // A quoted line of a stored document: go to its page (or worksheet), find the line, then the figure in it.
+    const cited =
+      locator.page != null
+        ? d.querySelector<HTMLTableElement>(`table[data-page="${locator.page}"]`)
+        : locator.sheet
+          ? (Array.from(d.querySelectorAll<HTMLTableElement>("table[data-sheet]")).find((t) => t.getAttribute("data-sheet") === locator.sheet) ?? null)
+          : null;
+    if (!found.length && locator.quote) {
+      const row = (cited && quotedRow(cited, locator.quote)) || quotedRow(d.body, locator.quote);
+      if (row) {
+        const figure = locator.search && locator.search !== locator.quote ? markFigure(d, row, locator.search) : null;
+        found = [figure ?? (row.cells[0] as HTMLElement | undefined) ?? row];
+        const table = row.closest("table");
+        const line = Array.prototype.indexOf.call(table?.rows ?? [], row) + 1;
+        const page = table?.getAttribute("data-page");
+        const sheet = table?.getAttribute("data-sheet");
+        how = page ? `page ${page}, line ${line}` : sheet ? `sheet “${sheet}”, row ${line}` : "the quoted line";
+      }
+    }
+    // The line itself was not found on the cited page (the text was re-read since): the figure on that page still is.
+    if (!found.length && cited && locator.search) {
+      const figure = markFigure(d, cited, locator.search);
+      if (figure) {
+        found = [figure];
+        how = locator.page != null ? `page ${locator.page}` : `sheet “${locator.sheet}”`;
+      }
+    }
+    // Only a page or worksheet is cited: show it.
+    if (!found.length && cited && !locator.quote && !locator.search && locator.value == null) {
+      ((cited.previousElementSibling as HTMLElement | null) ?? cited).scrollIntoView({ block: "start" });
+      setHits([]);
+      report({ kind: "exact", count: 1, how: locator.page != null ? `page ${locator.page}` : `sheet “${locator.sheet}”` });
+      return;
+    }
     if (found.length) {
       found.forEach((el) => {
         if (el.classList.contains("fu-box")) return;
@@ -285,14 +335,17 @@ export function FilingViewer({
       }
     }
     setHits([]);
-    report({ kind: "missing", quote: !!locator.search });
+    // The line was not found, but its page is known: show that page instead of the top of the document.
+    const heading = cited ? ((cited.previousElementSibling as HTMLElement | null) ?? cited) : null;
+    heading?.scrollIntoView({ block: "start" });
+    report({ kind: "missing", quote: !!(locator.search || locator.quote), page: heading && locator.page != null ? locator.page : undefined });
   }, [locator, zoom, focusHit, report]);
 
   // Re-run when the locator changes on an already-loaded document.
   useEffect(() => {
     if (frame.current?.contentDocument?.readyState === "complete" && srcDoc) locate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.value, locator?.cell?.t, locator?.cell?.r, locator?.cell?.c, locator?.box?.p, locator?.box?.b?.join()]);
+  }, [locator?.concept, locator?.start, locator?.end, locator?.elementId, locator?.search, locator?.quote, locator?.page, locator?.sheet, locator?.value, locator?.cell?.t, locator?.cell?.r, locator?.cell?.c, locator?.box?.p, locator?.box?.b?.join()]);
 
   useEffect(() => {
     const d = frame.current?.contentDocument;
@@ -347,7 +400,8 @@ export function FilingViewer({
             <span>{irDocId ? "Opening stored document…" : `Retrieving ${doc} from SEC EDGAR…`}</span>
           </div>
         )}
-        {q.isError && (
+        {q.isError && fallback}
+        {q.isError && !fallback && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 p-8 text-center text-sm">
             <TriangleAlert className="size-5 text-negative" />
             <p className="max-w-sm text-muted-foreground">{(q.error as Error).message}</p>
@@ -357,7 +411,7 @@ export function FilingViewer({
               </Button>
               <Button size="sm" asChild>
                 <a href={url} target="_blank" rel="noreferrer">
-                  Open on SEC.gov
+                  {irDocId ? "Open the original" : "Open on SEC.gov"}
                 </a>
               </Button>
             </div>
@@ -366,7 +420,7 @@ export function FilingViewer({
         {srcDoc && (
           <iframe
             ref={frame}
-            title={`SEC filing ${accn}`}
+            title={irDocId ? "Stored document" : `SEC filing ${accn}`}
             srcDoc={srcDoc}
             onLoad={locate}
             sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
@@ -401,7 +455,9 @@ function StatusPill({ status, loading }: { status: LocateStatus; loading: boolea
       return (
         <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           <TriangleAlert className="size-3.5" />
-          {status.quote ? "Couldn't find the quoted passage" : "Couldn't pinpoint the value"} — showing the full document
+          {status.page
+            ? `Couldn't find the quoted line. Showing page ${status.page}`
+            : `${status.quote ? "Couldn't find the quoted passage" : "Couldn't pinpoint the value"} — showing the full document`}
         </span>
       );
     default:

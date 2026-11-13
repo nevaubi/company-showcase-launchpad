@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { ExternalLink, FileText } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { useSource } from "@/components/source/source-context";
+import { EXT_PREFIX } from "@/lib/ir/external";
 import {
   cardsOf,
   chartFor,
@@ -94,7 +95,8 @@ function SourceLinks({ ticker, label, sources }: { ticker: string; label: string
                 unit: "",
                 value: 0,
                 external: s.url ? { url: s.url, quote: s.quote, date: s.doc_title } : undefined,
-                doc: { accn: "", doc: "", title: s.doc_title ?? "Source document", irDoc: s.doc, search: s.quote?.split(/\s+/).slice(0, 12).join(" ") },
+                // The cited document is in the pipeline's store: open it at the cited page with the quoted line marked.
+                doc: { accn: "", doc: "", title: s.doc_title ?? "Source document", irDoc: `${EXT_PREFIX}${s.doc}`, search: s.quote?.split(/\s+/).slice(0, 12).join(" "), quote: s.quote, page: Number(s.page) || undefined, sheet: s.sheet },
               })
             }
           >

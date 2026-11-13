@@ -52,6 +52,6 @@ export async function loadExternalPayload(ticker: string): Promise<IrPayload | n
 }
 
 export async function loadExternalDoc(id: string): Promise<ExtDoc | null> {
-  const rows = await rest<ExtDoc>(`ir_documents?id=eq.${encodeURIComponent(id)}&select=id,url,title,doc_type,published&limit=1`);
+  const rows = await rest<ExtDoc>(`ir_documents?id=eq.${encodeURIComponent(id)}&select=id,url,title,doc_type,published,ext,storage_path,text_path,pages&limit=1`);
   return rows[0] ?? null;
 }

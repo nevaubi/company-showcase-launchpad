@@ -18,7 +18,7 @@ export interface ExtValue {
   fiscal_label: string | null;
   value: number | string;
   source_id: string;
-  anchor: { quote?: string | null; page?: number | null } | null;
+  anchor: { quote?: string | null; page?: number | null; sheet?: string | null } | null;
   derived: { formula?: string; inputs?: { kind: string; period_end: string }[] } | null;
 }
 export interface ExtDoc {
@@ -27,6 +27,11 @@ export interface ExtDoc {
   title: string | null;
   doc_type: string | null;
   published: string | null;
+  /** Stored copy in the pipeline's document store: file extension, original and extracted text object paths */
+  ext?: string | null;
+  storage_path?: string | null;
+  text_path?: string | null;
+  pages?: number | null;
 }
 
 /** Ids of documents served from the partner corpus carry this prefix. */
@@ -49,6 +54,12 @@ export function mapUnit(u: string | null): string {
 }
 
 const monthsOf = (kind: string) => (kind === "A" ? 12 : 3);
+/** Where the quoted line is printed in the stored document: page (PDFs, decks) or worksheet. */
+const placeOf = (v: ExtValue) => ({
+  ...(v.anchor?.quote ? { x: v.anchor.quote } : {}),
+  ...(typeof v.anchor?.page === "number" && v.anchor.page > 0 ? { p: v.anchor.page } : {}),
+  ...(v.anchor?.sheet ? { sh: v.anchor.sheet } : {}),
+});
 const secParts = (url: string) => {
   const m = url.match(/\/Archives\/edgar\/data\/\d+\/(\d{10})(\d{2})(\d{6})\/([^/?#]+)/);
   return m ? { accn: `${m[1]}-${m[2]}-${m[3]}`, doc: m[4] } : { accn: null, doc: null };
@@ -81,11 +92,11 @@ export function buildExternalPayload(ticker: string, defs: ExtDef[], values: Ext
         const src = all.get(`${v.kpi_id}|${inp.kind}|${inp.period_end}`);
         if (!src) return [];
         const label = `${defById.get(v.kpi_id)?.name ?? v.kpi_id} (${src.fiscal_label ?? inp.period_end})`;
-        return [{ label, v: Number(src.value), sign: (i === 0 ? 1 : -1) as 1 | -1, d: di(src.source_id), x: src.anchor?.quote ?? undefined, e: src.period_end, m: inp.kind === "A" ? 12 : inp.kind === "Q" ? 3 : 0 }];
+        return [{ label, v: Number(src.value), sign: (i === 0 ? 1 : -1) as 1 | -1, d: di(src.source_id), ...placeOf(src), e: src.period_end, m: inp.kind === "A" ? 12 : inp.kind === "Q" ? 3 : 0 }];
       });
       if (parts.length) return { ...base, f: { formula: v.derived.formula ?? "derived", parts } };
     }
-    return { ...base, d: di(v.source_id), x: v.anchor?.quote ?? undefined };
+    return { ...base, d: di(v.source_id), ...placeOf(v) };
   };
 
   const byKpi = new Map<string, { q: Record<string, PayloadCell>; y: Record<string, PayloadCell> }>();
