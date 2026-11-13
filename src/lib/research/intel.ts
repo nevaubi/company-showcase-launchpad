@@ -1,0 +1,677 @@
+// Executors for the assistant tools that read what the Filed Under pipeline has already computed: KPIs extracted
+// from company documents (each value with its document, page and printed quote), KPI signals, earnings previews and
+// scorecards, the quant read, correlation peers, short interest, special situations, the 30-day brief and the tables
+// parsed out of IR PDFs. These are the facts the pipeline spends hours producing; the assistant should start here
+// before re-deriving anything from raw filings or the web.
+import type { QueryClient } from "@tanstack/react-query";
+import { partnerFile } from "@/lib/data";
+import { kpiFileQuery, type KpiFile, type KpiItem, type KpiValue } from "@/lib/statements/filed";
+import { kpiInsightsQuery, kpiInsightsIndexQuery, type KpiInsightsFile, type KpiSource } from "@/lib/insights/kpi";
+import { previewQuery, scoreQuery, seasonQuery } from "@/lib/earnings/workflow";
+import { flowsQuery, quantReadQuery, signalsQuery, statesQuery } from "@/lib/technicals/data";
+import { peersQuery } from "@/lib/technicals/cross";
+import { situationQuery } from "@/lib/situations/data";
+import { briefQuery } from "@/lib/insights/brief";
+import { storeIndexQuery } from "@/lib/ir/store";
+
+const MAX = 9000;
+const clip = (s: string) => (s.length > MAX ? `${s.slice(0, MAX)}\n…[truncated]` : s);
+const safe = async <T>(p: Promise<T>): Promise<T | null> => {
+  try {
+    return await p;
+  } catch {
+    return null;
+  }
+};
+
+export interface IntelRun {
+  output: string;
+  summary: string;
+}
+
+/* ---------------------------------------------------------------- formatting */
+
+/** Analyst shorthand to the words companies print in supplements. */
+const SYNONYMS: [RegExp, string][] = [
+  [/\bnim\b|net interest margin/i, "net yield on interest-earning assets"],
+  [/\bcet ?1\b/i, "common equity tier 1"],
+  [/\bncos?\b/i, "net charge-off"],
+  [/\broe\b/i, "return on equity"],
+  [/\brotce\b/i, "return on tangible common equity"],
+  [/\befficiency ratio\b/i, "overhead ratio"],
+  [/\barpu\b/i, "average revenue per user"],
+  [/\bsss\b|same.store sales/i, "comparable sales"],
+  [/\bnrr\b/i, "net revenue retention"],
+  [/\brpo\b/i, "remaining performance obligations"],
+];
+const expand = (q: string) => [q, ...SYNONYMS.filter(([re]) => re.test(q)).map(([re, to]) => q.replace(re, to))];
+
+const STOP = new Set(["the", "and", "for", "of", "on", "in", "to", "a", "an", "by", "per", "vs", "with", "from", "at", "or"]);
+const words = (q: string) =>
+  q
+    .toLowerCase()
+    .split(/[^a-z0-9%]+/)
+    .filter((w) => w && !STOP.has(w) && (w.length > 2 || /\d/.test(w)));
+
+const tokens = (text: string) => new Set(text.toLowerCase().split(/[^a-z0-9%]+/).filter(Boolean));
+
+/** Score in 0..~2: every query word must appear as a whole word (or a whole-word prefix for words of 4+ letters);
+ * normalised by the number of words so a long phrasing never beats a short one; earlier matches rank higher. */
+function matchScore(text: string, q: string[]): number {
+  if (!q.length) return 1;
+  const t = text.toLowerCase();
+  const toks = [...tokens(text)];
+  let s = 0;
+  for (const w of q) {
+    const hit = toks.some((x) => x === w || (w.length >= 4 && x.startsWith(w)) || (w.endsWith("s") && x === w.slice(0, -1)));
+    if (!hit) return 0;
+    const i = t.indexOf(w);
+    s += 1 + 1 / (1 + Math.max(i, 0) / 40);
+  }
+  return s / q.length;
+}
+
+export function fmtKpi(v: number, unit: string | undefined): string {
+  const u = (unit ?? "").toUpperCase();
+  if (u === "%" || u === "PCT" || u === "PERCENT") return `${v.toFixed(Math.abs(v) < 10 ? 2 : 1)}%`;
+  if (u === "USD" || u === "$") {
+    const a = Math.abs(v);
+    if (a >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
+    if (a >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
+    if (a >= 1e3) return `$${(v / 1e3).toFixed(1)}K`;
+    return `$${v.toFixed(2)}`;
+  }
+  if (u === "USD/SHARE" || u === "USDPERSHARE") return `$${v.toFixed(2)}`;
+  const a = Math.abs(v);
+  if (a >= 1e9) return `${(v / 1e9).toFixed(2)}B${unit ? ` ${unit}` : ""}`;
+  if (a >= 1e6) return `${(v / 1e6).toFixed(1)}M${unit ? ` ${unit}` : ""}`;
+  return `${Number.isInteger(v) ? v.toLocaleString("en-US") : v.toFixed(2)}${unit ? ` ${unit}` : ""}`;
+}
+
+/** Some extracted titles repeat themselves ("3Q26 Earnings Supplement 3Q26 Earnings Supplement PDF"). */
+export const docTitle = (t: string | undefined) => {
+  if (!t) return "document";
+  const s = t.replace(/\s+PDF\s*$/i, "").trim();
+  const half = s.length / 2;
+  return Number.isInteger(half - 0.5) && s.slice(0, half - 0.5) === s.slice(half + 0.5) ? s.slice(0, half - 0.5) : s;
+};
+
+const cite = (x: { url?: string; page?: number | string | null; doc_title?: string }) =>
+  x.url ? ` <${x.url}${x.page ? `#page=${x.page}` : ""}>` : "";
+
+const pctChange = (a: number, b: number) => (b ? (a - b) / Math.abs(b) : NaN);
+
+/* ---------------------------------------------------------------- KPIs */
+
+type Freq = "Q" | "A";
+type Vals = Record<string, KpiValue & { page?: number | string; doc?: string }>;
+
+/** A KPI's series for a frequency. Balances and ratios (CET1, deposits, loans) are stored as point-in-time values
+ * under "I" and some companies' trailing figures under "T"; for quarterly reads they stand in when there is no "Q". */
+export function seriesOf(item: KpiItem, freq: Freq): { vals: Vals; basis: string } {
+  const v = (item.values ?? {}) as Record<string, Vals | undefined>;
+  const has = (k: string) => Object.keys(v[k] ?? {}).length > 0;
+  if (freq === "A") {
+    if (has("A")) return { vals: v.A as Vals, basis: "annual" };
+    // Balances and ratios: the year-end point-in-time value (latest observation in each calendar year).
+    const src = (has("I") ? v.I : v.Q) ?? {};
+    const byYear: Vals = {};
+    for (const k of Object.keys(src).sort()) byYear[k.slice(0, 4)] = src[k];
+    const vals: Vals = {};
+    for (const [, x] of Object.entries(byYear)) {
+      const key = Object.keys(src).find((k) => src[k] === x);
+      if (key) vals[key] = x;
+    }
+    return { vals, basis: has("I") ? "year-end, point in time" : "year-end of quarterly" };
+  }
+  if (has("Q")) return { vals: v.Q as Vals, basis: "quarterly" };
+  if (has("I")) return { vals: v.I as Vals, basis: "point in time" };
+  if (has("T")) return { vals: v.T as Vals, basis: "trailing" };
+  return { vals: {}, basis: "quarterly" };
+}
+
+/** Table-of-contents sheets of a workbook hold page numbers, not figures. */
+const isIndexGroup = (g: KpiFile["groups"][number]) => /^workbook:\s*(index|contents|toc)\b/i.test(g.category.trim());
+
+const DAY = 86400_000;
+const days = (a: string, b: string) => (Date.parse(a) - Date.parse(b)) / DAY;
+/** The key nearest to `target` days before `end`, within `tol` days; null when there is none. */
+function nearKey(keys: string[], end: string, target: number, tol: number): string | null {
+  let best: string | null = null;
+  let err = Infinity;
+  for (const k of keys) {
+    const e = Math.abs(days(end, k) - target);
+    if (e <= tol && e < err) {
+      best = k;
+      err = e;
+    }
+  }
+  return best;
+}
+
+/** One line per period, newest first. QoQ and YoY come from the dates, not the positions, so gaps in a series never
+ * compare the wrong quarters; a change is omitted when no matching period exists. The source link is printed once per
+ * document and the verbatim quote on the newest row only. */
+export function kpiLines(item: KpiItem, freq: Freq, periods: number): string[] {
+  const { vals, basis } = seriesOf(item, freq);
+  const all = Object.keys(vals).sort();
+  const ends = [...all].reverse().slice(0, periods);
+  const seen = new Set<string>();
+  return ends.map((end, i) => {
+    const v = vals[end] as KpiValue & { page?: number | string; sheet?: string | null; cell?: string | null };
+    const chg: string[] = [];
+    if (freq === "Q") {
+      const p = nearKey(all, end, 91, 15);
+      if (p) chg.push(`QoQ ${fmtDelta(v.v, vals[p].v, item.unit)}`);
+    }
+    const y = nearKey(all, end, 365, 20);
+    if (y) chg.push(`YoY ${fmtDelta(v.v, vals[y].v, item.unit)} vs ${y}`);
+    const where = v.page ? ` p.${v.page}` : v.sheet ? ` sheet "${v.sheet}"${v.cell ? ` ${v.cell}` : ""}` : "";
+    const quote = i === 0 && v.quote ? ` "${v.quote.replace(/\s+/g, " ").slice(0, 110)}"` : "";
+    const key = `${v.url ?? ""}#${v.page ?? ""}`;
+    const link = v.url && !seen.has(key) ? cite(v) : "";
+    if (v.url) seen.add(key);
+    const shown = fmtKpi(v.v, item.unit);
+    const printed = v.printed && !shown.includes(v.printed.replace(/\s+/g, "")) ? ` (printed "${v.printed.replace(/\s+/g, "")}")` : "";
+    const partial = freq === "A" && basis.startsWith("year-end") && i === 0 && all.length > 1 && end.slice(5, 7) !== all[all.length - 2].slice(5, 7) ? " (latest observation, year not complete)" : "";
+    return `  ${v.label ?? end} (${end})${partial}: ${shown}${printed}${chg.length ? ` [${chg.join(", ")}]` : ""} — ${docTitle(v.doc_title)}${where}${quote}${link}`;
+  });
+}
+
+function fmtDelta(a: number, b: number, unit: string | undefined): string {
+  const u = (unit ?? "").toUpperCase();
+  if (u === "BPS" || u === "BP") {
+    const d = a - b;
+    return `${d >= 0 ? "+" : ""}${d.toFixed(0)} bp`;
+  }
+  if (u === "%" || u === "PCT" || u === "PERCENT") {
+    const d = a - b;
+    return `${d >= 0 ? "+" : ""}${d.toFixed(2)} pp`;
+  }
+  const c = pctChange(a, b);
+  return Number.isFinite(c) ? `${c >= 0 ? "+" : ""}${(c * 100).toFixed(1)}%` : "n/a";
+}
+
+function latestEnd(item: KpiItem): string {
+  let last = "";
+  for (const d of Object.values((item.values ?? {}) as Record<string, Vals | undefined>)) for (const k of Object.keys(d ?? {})) if (k > last) last = k;
+  return last;
+}
+
+/** Items still reported (latest value within a year of the newest in the file), so legacy segments rank below current ones. */
+function current(file: KpiFile): { newest: string; isCurrent: (it: KpiItem) => boolean } {
+  let newest = "";
+  for (const g of file.groups) for (const it of g.items) newest = latestEnd(it) > newest ? latestEnd(it) : newest;
+  const cutoff = newest ? `${Number(newest.slice(0, 4)) - 1}${newest.slice(4)}` : "";
+  return { newest, isCurrent: (it) => latestEnd(it) >= cutoff };
+}
+
+export async function getKpis(qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const t = String(args.ticker).toUpperCase();
+  const file = await safe(qc.fetchQuery(kpiFileQuery(t)));
+  if (!file?.groups?.length)
+    return { output: `No document-extracted KPIs for ${t} yet. Use get_financials (XBRL) or search_documents instead.`, summary: "no KPIs" };
+  const freq: Freq = args.frequency === "annual" ? "A" : "Q";
+  const periods = Math.max(1, Math.min(Number(args.periods) || 5, 20));
+  const q = words(String(args.query ?? ""));
+  const { newest, isCurrent } = current(file);
+  const idxDropped = file.groups.filter(isIndexGroup).length;
+  const groups = file.groups.filter((g) => !isIndexGroup(g));
+  const nValues = groups.reduce((n, g) => n + g.items.reduce((m, it) => m + Object.values((it.values ?? {}) as Record<string, Vals | undefined>).reduce((k, d) => k + Object.keys(d ?? {}).length, 0), 0), 0);
+
+  if (!q.length) {
+    // No query: a map of what exists, so the next call can be precise.
+    const lines = [
+      `${t}: ${groups.reduce((n, g) => n + g.items.length, 0)} KPIs, ${nValues.toLocaleString("en-US")} values extracted from the company's own releases and supplements, latest period ${newest}. Every value carries its document, page and printed quote.`,
+      "Categories (current items / all items; sample of current items):",
+      ...groups.map((g) => {
+        const cur = g.items.filter(isCurrent);
+        return `- ${g.category}${g.subcategory ? ` / ${g.subcategory}` : ""}: ${cur.length}/${g.items.length} — ${cur
+          .filter((it) => !it.parent || it.is_total)
+          .slice(0, 8)
+          .map((it) => it.name)
+          .join("; ")}`;
+      }),
+    ];
+    const tail = "Call get_kpis again with query (e.g. 'net interest margin', 'CET1', 'card net charge-off') to get the values.";
+    let body = lines.join("\n");
+    if (body.length > MAX - tail.length - 40) body = `${body.slice(0, MAX - tail.length - 60)}\n…[more categories]`;
+    return { output: `${body}\n${tail}`, summary: `${t} KPI map` };
+  }
+
+  const variants = expand(String(args.query)).map(words);
+  const hay = (it: KpiItem, g: KpiFile["groups"][number]) => `${it.name} ${g.category} ${g.subcategory ?? ""} ${it.description ?? ""}`;
+  // Every word must match in some phrasing; if none does, fall back to the items matching the most words.
+  const phrase = String(args.query).toLowerCase().trim();
+  let scored0 = groups.flatMap((g) =>
+    g.items.map((it) => ({ it, g, s: Math.max(...variants.map((v, k) => matchScore(hay(it, g), v) * (k === 0 ? 1.25 : 1))) + (it.name.toLowerCase().includes(phrase) ? 1 : 0) })),
+  );
+  const hasVals = (it: KpiItem) => Object.keys(seriesOf(it, freq).vals).length > 0;
+  if (!scored0.some((x) => x.s > 0 && hasVals(x.it)) && q.length > 1)
+    scored0 = scored0.map((x) => ({ ...x, s: q.filter((w) => hay(x.it, x.g).toLowerCase().includes(w)).length >= Math.ceil(q.length / 2) ? q.filter((w) => hay(x.it, x.g).toLowerCase().includes(w)).length / 2 : 0 }));
+  const scored = scored0
+    .filter((x) => x.s > 0 && hasVals(x.it))
+    .map((x) => ({ ...x, s: x.s + (isCurrent(x.it) ? 3 : 0) + (x.it.is_total ? 0.2 : 0) + (variants.some((v) => matchScore(x.it.name, v)) ? 0.8 : 0) - x.it.name.length / 400 }))
+    .sort((a, b) => b.s - a.s);
+  const maxItems = Math.max(1, Math.min(Number(args.max_items) || 8, 20));
+  if (!scored.length)
+    return { output: `No ${t} KPI matches "${args.query}" (${freq === "Q" ? "quarterly" : "annual"}). Call get_kpis with a null query to see the categories.`, summary: "no match" };
+  const out = [`${t} KPIs matching "${args.query}" (${freq === "Q" ? "quarterly" : "annual"}, newest first). Cite as the document link with its page; a value with no page is from a workbook cell or a curated series.${idxDropped ? " Workbook contents pages are excluded." : ""}`];
+  let shownItems = 0;
+  for (const { it, g } of scored.slice(0, maxItems)) {
+    const block = [`${it.name} [${g.category}${it.parent ? ` > child of ${it.parent}` : ""}${isCurrent(it) ? "" : ", no longer reported"}] id ${it.id}, unit ${it.unit ?? "n/a"}, ${seriesOf(it, freq).basis}${it.description && it.description !== it.subcategory ? ` — ${it.description.slice(0, 160)}` : ""}`, ...kpiLines(it, freq, periods)].join("\n");
+    // Whole items only: stop before the clip would cut one in half.
+    if (out.join("\n").length + block.length > MAX - 200) break;
+    out.push(block);
+    shownItems++;
+  }
+  const more = scored.length - shownItems;
+  if (more > 0) out.push(`${more} more KPIs matched; narrow the query or lower periods to see them.`);
+  return { output: out.join("\n"), summary: `${shownItems} ${t} KPIs` };
+}
+
+/* ---------------------------------------------------------------- KPI signals */
+
+const srcLine = (s: KpiSource) => `${docTitle(s.doc_title ?? s.label)} p.${s.page ?? "?"}${s.quote ? ` "${s.quote.slice(0, 100)}"` : ""}${s.url ? ` <${s.url}${s.page ? `#page=${s.page}` : ""}>` : ""}`;
+
+export async function getKpiSignals(qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  if (args.ticker) {
+    const t = String(args.ticker).toUpperCase();
+    const f = await safe(qc.fetchQuery(kpiInsightsQuery(t)));
+    if (!f) return { output: `No KPI signals computed for ${t}.`, summary: "none" };
+    return { output: clip(renderSignals(f, 12)), summary: `${f.signals.length} signals for ${t}` };
+  }
+  const idx = await safe(qc.fetchQuery(kpiInsightsIndexQuery));
+  if (!idx) return { output: "The KPI signal index is not available.", summary: "none" };
+  const kind = args.kind ? String(args.kind) : null;
+  const sector = args.sector ? String(args.sector).toLowerCase() : null;
+  const rows = idx.order
+    .map((t) => idx.companies[t])
+    .filter((r) => r && r.n_signals > 0)
+    .filter((r) => !kind || r.kinds.includes(kind as never))
+    .filter((r) => !sector || (r.sector ?? "").toLowerCase().includes(sector))
+    .sort((a, b) => b.strength - a.strength)
+    .slice(0, 40);
+  const out = [
+    `Strongest KPI signals across ${idx.count} companies (${idx.method}). Strength is the size of the move against that KPI's own usual move. Call get_kpi_signals with a ticker for the figures and their sources.`,
+    ...rows.map(
+      (r) =>
+        `${r.ticker} ${r.name ?? ""} [${r.sector ?? "?"}] strength ${r.strength.toFixed(1)}: ${r.signals
+          .slice(0, 3)
+          .map((s) => `${s.kind}: ${s.reason}`)
+          .join(" | ")}${r.top ? ` — headline: ${r.top.title}` : ""}`,
+    ),
+  ];
+  return { output: clip(out.join("\n")), summary: `${rows.length} companies with signals` };
+}
+
+export function renderSignals(f: KpiInsightsFile, n: number): string {
+  const out = [`${f.ticker} ${f.name} — KPI signals (${f.label}), generated ${f.generated.slice(0, 10)}`];
+  for (const ins of f.insights.slice(0, 5)) out.push(`INSIGHT [${ins.kind}] ${ins.title}: ${ins.text}`);
+  for (const s of [...f.signals].sort((a, b) => b.strength - a.strength).slice(0, n)) {
+    out.push(`SIGNAL [${s.kind}] strength ${s.strength.toFixed(1)}: ${s.reason}`);
+    for (const id of s.facts) {
+      const fact = f.facts[id];
+      if (!fact) continue;
+      out.push(`  fact: ${fact.text}`);
+      for (const src of fact.sources.slice(0, 2)) out.push(`    source: ${srcLine(src)}`);
+    }
+  }
+  return out.join("\n");
+}
+
+/* ---------------------------------------------------------------- earnings */
+
+/** Fields the pipeline stores as fractions (0.032 = 3.2%). They are rewritten as percent strings before the model sees
+ * them, because names like surprise_pct invite reading -0.032 as "-0.03%". */
+const FRACTION_KEYS = new Set(["surprise_pct", "beat_rate", "median_surprise", "median_move", "move", "spy_move", "excess", "median_abs_move", "yoy", "offex_share", "ats_share", "vol21_pct", "vol21", "vs50", "vs200", "from_hi", "from_lo", "r21", "r63", "r252", "rs63"]);
+export function asPercents(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(asPercents);
+  if (v && typeof v === "object")
+    return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, typeof x === "number" && FRACTION_KEYS.has(k) ? `${(x * 100).toFixed(Math.abs(x) < 0.1 ? 2 : 1)}%` : asPercents(x)]));
+  return v;
+}
+
+/** Compact any JSON for the model: long arrays are cut, long strings shortened. */
+export function compact(v: unknown, arr = 8, str = 400, depth = 0): unknown {
+  if (depth > 6) return "…";
+  if (Array.isArray(v)) return v.length > arr ? [...v.slice(0, arr).map((x) => compact(x, arr, str, depth + 1)), `…+${v.length - arr} more`] : v.map((x) => compact(x, arr, str, depth + 1));
+  if (v && typeof v === "object") return Object.fromEntries(Object.entries(v).filter(([, x]) => x !== null && x !== undefined).map(([k, x]) => [k, compact(x, arr, str, depth + 1)]));
+  if (typeof v === "string" && v.length > str) return `${v.slice(0, str)}…`;
+  if (typeof v === "number" && !Number.isInteger(v)) return Number(v.toPrecision(5));
+  return v;
+}
+
+export async function getEarningsWorkup(qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const t = String(args.ticker).toUpperCase();
+  const [preview, score, season] = await Promise.all([safe(qc.fetchQuery(previewQuery(t))), safe(qc.fetchQuery(scoreQuery(t))), safe(qc.fetchQuery(seasonQuery))]);
+  const out: string[] = [];
+  const up = season?.upcoming?.find((r: { ticker: string }) => r.ticker === t);
+  const rep = season?.reported?.find((r: { ticker: string }) => r.ticker === t);
+  if (up) out.push(`NEXT REPORT: ${JSON.stringify(asPercents(compact(up)))}`);
+  if (rep) out.push(`LAST REPORT (season tracker; move = next-day stock move, excess = vs SPY): ${JSON.stringify(asPercents(compact(rep)))}`);
+  if (preview) out.push(`PREVIEW (consensus, last report, KPIs to watch with quotes): ${JSON.stringify(asPercents(compact(preview, 6, 300)))}`);
+  if (score) out.push(`SCORECARD of the latest results filing (actuals vs consensus, guidance given, guided-for-quarter outcome): ${JSON.stringify(asPercents(compact(score, 10, 300)))}`);
+  if (!out.length) return { output: `No earnings preview or scorecard for ${t}. Use get_estimates, get_earnings_call and list_ir_documents.`, summary: "none" };
+  const sec = season?.sectors?.find((s: { sector: string }) => s.sector === (preview?.sector ?? up?.sector ?? rep?.sector));
+  if (sec) out.push(`SECTOR THIS SEASON: ${JSON.stringify(asPercents(compact(sec)))}`);
+  return { output: clip(out.join("\n")), summary: `earnings workup for ${t}` };
+}
+
+export async function getEarningsSeason(qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const season = await safe(qc.fetchQuery(seasonQuery));
+  if (!season) return { output: "Earnings season tracker unavailable.", summary: "none" };
+  const sector = args.sector ? String(args.sector).toLowerCase() : null;
+  const bySector = <T extends { sector?: string }>(rows: T[]) => rows.filter((r) => !sector || (r.sector ?? "").toLowerCase().includes(sector));
+  const reported = bySector(season.reported ?? []);
+  const upcoming = bySector(season.upcoming ?? []);
+  const rows = reported as unknown as Record<string, unknown>[];
+  const ex = rows.filter((r) => typeof r.excess === "number").sort((a, b) => (b.excess as number) - (a.excess as number));
+  const out = [
+    `Earnings season as of ${season.as_of} (window ${season.window_days} days): ${reported.length} reported, ${upcoming.length} upcoming${sector ? ` in sectors matching "${args.sector}"` : ""}.`,
+    `SECTORS: ${JSON.stringify(asPercents(compact((season.sectors ?? []).filter((x: { sector: string }) => !sector || x.sector.toLowerCase().includes(sector)), 12)))}`,
+    `BIGGEST POSITIVE REACTIONS vs SPY: ${JSON.stringify(asPercents(compact(ex.length > 20 ? ex.slice(0, 10) : ex.slice(0, Math.ceil(ex.length / 2)))))}`,
+    `BIGGEST NEGATIVE REACTIONS vs SPY: ${JSON.stringify(asPercents(compact(ex.length > 20 ? ex.slice(-10).reverse() : ex.slice(Math.ceil(ex.length / 2)).reverse())))}`,
+    `NEXT TO REPORT: ${JSON.stringify(asPercents(compact([...upcoming].sort((a, b) => String(a.date).localeCompare(String(b.date))).slice(0, 20))))}`,
+  ];
+  if (season.drivers) out.push(`DRIVERS: ${JSON.stringify(asPercents(compact(season.drivers, 8)))}`);
+  const moves = (season as unknown as { kpi_moves?: unknown }).kpi_moves;
+  if (moves) out.push(`KPI MOVES: ${JSON.stringify(asPercents(compact(moves, 10)))}`);
+  return { output: clip(out.join("\n")), summary: `${reported.length} reported, ${upcoming.length} upcoming` };
+}
+
+/* ---------------------------------------------------------------- market profile */
+
+export async function getQuantProfile(qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const t = String(args.ticker).toUpperCase();
+  const [read, peers, flows, states, signals, sit, brief] = await Promise.all([
+    safe(qc.fetchQuery(quantReadQuery(t))),
+    safe(qc.fetchQuery(peersQuery(t))),
+    safe(qc.fetchQuery(flowsQuery(t))),
+    safe(qc.fetchQuery(statesQuery)),
+    safe(qc.fetchQuery(signalsQuery)),
+    safe(qc.fetchQuery(situationQuery(t))),
+    safe(qc.fetchQuery(briefQuery(t))),
+  ]);
+  const out: string[] = [];
+  if (read) {
+    out.push(`QUANT READ as of ${read.as_of}: ${read.sentences.map((s: { text: string }) => s.text).join(" ")}`);
+    out.push(`  stats: ${Object.entries(read.facts ?? {}).map(([k, v]) => `${k}=${Array.isArray(v) ? v[0] : v}`).join(", ")}`);
+  }
+  const st = (states as unknown as { rows?: ({ t: string; events?: [string, string][] } & Record<string, unknown>)[] } | null)?.rows?.find((r) => r.t === t);
+  if (st) {
+    const { events, ...rest } = st;
+    out.push(`TECHNICAL STATE (vs50/vs200 = distance from the moving average; from_hi/from_lo = distance from the 52-week high/low; r21/r63/r252 = returns; vol21_pct = percentile of 21-day volatility in its own history): ${JSON.stringify(asPercents(compact(rest)))}`);
+    // Each recent event with its historical forward return across all tracked stocks since 2008 (base rate, not a forecast).
+    const base = (signals as unknown as { signals?: Record<string, Record<string, { n?: number; mean?: number; hit?: number; excess?: number }>> } | null)?.signals ?? {};
+    for (const [name, date] of events ?? []) {
+      const b = base[name];
+      const hz = b?.["20"] ? "20" : "5";
+      const h = b?.[hz];
+      out.push(`  event ${name} on ${date}${h ? `: historically ${h.n} events, ${hz}-day mean return ${((h.mean ?? 0) * 100).toFixed(2)}%, hit rate ${((h.hit ?? 0) * 100).toFixed(0)}%, excess vs all stocks ${((h.excess ?? 0) * 100).toFixed(2)}%` : ""}`);
+    }
+  }
+  if (peers) {
+    out.push(`MOST CORRELATED (${peers.window}): ${peers.top.slice(0, 8).map((p: [string, number, string]) => `${p[0]} ${p[1].toFixed(2)}`).join(", ")}; sector median ${peers.sector_median?.toFixed?.(2)}, all-stock median ${peers.all_median?.toFixed?.(2)}`);
+    out.push(`LEAST CORRELATED: ${peers.bottom.slice(0, 5).map((p: [string, number, string]) => `${p[0]} ${p[1].toFixed(2)}`).join(", ")}`);
+  }
+  const si = (flows?.short_interest ?? []).filter((r) => r.short != null);
+  if (si.length) {
+    const last = si[si.length - 1];
+    const now = last.short as number;
+    const yr = si.find((r) => r.date >= `${Number(last.date.slice(0, 4)) - 1}${last.date.slice(4)}`) ?? si[0];
+    const yrChg = yr && yr !== last && yr.short ? pctChange(now, yr.short) : NaN;
+    out.push(
+      `SHORT INTEREST (FINRA): ${now.toLocaleString("en-US")} shares on ${last.date}, ${last.dtc ?? "?"} days to cover${last.chg_pct != null ? `, ${last.chg_pct >= 0 ? "+" : ""}${last.chg_pct}% vs prior report` : ""}${Number.isFinite(yrChg) ? `; ${yrChg >= 0 ? "+" : ""}${(yrChg * 100).toFixed(0)}% vs ${yr.date}` : ""}`,
+    );
+  }
+  const wk = (flows?.ats_weekly ?? []).filter((w) => w.offex_share != null);
+  if (wk.length) {
+    const w = wk[wk.length - 1];
+    out.push(`OFF-EXCHANGE: week of ${w.week}, ${((w.offex_share as number) * 100).toFixed(1)}% of volume off-exchange${w.ats_share != null ? ` (ATS ${(w.ats_share * 100).toFixed(1)}%)` : ""}`);
+  }
+  if (sit) out.push(`SPECIAL SITUATION COMPONENTS (as of ${sit.as_of}): ${JSON.stringify(asPercents(compact(sit.components, 4, 240)))}`);
+  if (brief?.sentences?.length) out.push(`30-DAY BRIEF (${brief.label}): ${brief.sentences.map((s: { text: string }) => s.text).join(" ")}`);
+  if (!out.length) return { output: `No computed market profile for ${t}. Use get_price_history.`, summary: "none" };
+  return { output: clip(out.join("\n")), summary: `market profile for ${t}` };
+}
+
+/* ---------------------------------------------------------------- parsed tables */
+
+interface DocTablesIndex {
+  ticker: string;
+  documents: { id: string; title: string | null; doc_type: string | null; url: string | null; pages: number | null; n_tables: number }[];
+}
+interface DocTablesFile {
+  id: string;
+  title: string | null;
+  url: string | null;
+  tables: { page: number | null; caption: string | null; n_rows: number; n_cols: number; header: string[][]; rows: string[][] }[];
+}
+
+function tableText(tb: DocTablesFile["tables"][number], maxRows: number): string {
+  const head = [...new Set(tb.header.map((h) => h.join(" | ")).filter((l) => l.replace(/[|\s]/g, "")))];
+  const rows = tb.rows.slice(0, maxRows).map((r) => r.map((c) => c.replace(/\s+/g, " ").trim()).join(" | "));
+  return [...head, ...rows, ...(tb.rows.length > maxRows ? [`…+${tb.rows.length - maxRows} rows`] : [])].join("\n");
+}
+
+export async function searchDocTables(qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const t = String(args.ticker).toUpperCase();
+  const idx = await safe(partnerFile<DocTablesIndex>(`doctables/${t}/index.json`));
+  if (!idx?.documents?.length) return { output: `No parsed tables for ${t}. Use read_ir_document instead.`, summary: "none" };
+  const store = await safe(qc.fetchQuery(storeIndexQuery(t)));
+  const meta = new Map((store?.documents ?? []).map((d) => [d.id, d]));
+  const docQ = words(String(args.doc_query ?? ""));
+  const docScore = (d: DocTablesIndex["documents"][number], m: { fiscal_label?: string | null; period_end?: string | null } | undefined) =>
+    matchScore(`${(d.title ?? "").split("||")[0]} ${d.doc_type ?? ""} ${m?.fiscal_label ?? ""} ${m?.period_end ?? ""}`, docQ);
+  const q = words(String(args.query));
+  const docs = idx.documents
+    .filter((d) => d.n_tables > 0)
+    .map((d) => ({ d, m: meta.get(d.id) }))
+    .map((x) => ({ ...x, ds: docQ.length ? docScore(x.d, x.m) : 1 }))
+    .filter((x) => x.ds > 0)
+    .sort((a, b) => Math.round(b.ds * 2) - Math.round(a.ds * 2) || (b.m?.period_end ?? b.m?.published ?? "").localeCompare(a.m?.period_end ?? a.m?.published ?? ""))
+    .slice(0, Math.max(1, Math.min(Number(args.max_docs) || 4, 8)));
+  if (!docs.length) return { output: `No ${t} documents with parsed tables match "${args.doc_query}".`, summary: "no documents" };
+  const files = await Promise.all(docs.map(({ d }) => safe(partnerFile<DocTablesFile>(`doctables/${t}/${d.id}.json`))));
+  const hits: { s: number; doc: (typeof docs)[number]; tb: DocTablesFile["tables"][number] }[] = [];
+  files.forEach((f, i) => {
+    for (const tb of f?.tables ?? []) {
+      const text = `${tb.caption ?? ""} ${tb.header.flat().join(" ")} ${tb.rows.map((r) => r[0] ?? "").join(" ")}`;
+      const s = matchScore(text, q) || (q.length > 1 ? matchScore(text, q.slice(0, -1)) * 0.5 : 0);
+      if (s > 0) hits.push({ s, doc: docs[i], tb });
+    }
+  });
+  // Same table in several quarters' documents: keep the newest copy; ties go to the newer document.
+  const when = (h: (typeof hits)[number]) => h.doc.m?.period_end ?? h.doc.m?.published ?? "";
+  hits.sort((a, b) => b.s - a.s || when(b).localeCompare(when(a)));
+  const seenT = new Set<string>();
+  const top = hits
+    .filter((h) => {
+      const sig = `${h.tb.caption ?? ""}|${h.tb.rows.map((r) => r[0] ?? "").join("|")}`.toLowerCase();
+      if (seenT.has(sig)) return false;
+      seenT.add(sig);
+      return true;
+    })
+    .slice(0, Math.max(1, Math.min(Number(args.max_tables) || 3, 6)));
+  if (!top.length)
+    return { output: `No table in ${docs.map(({ d }) => d.title).join("; ")} matches "${args.query}". Try other words or search_documents.`, summary: "no tables" };
+  const out = top.map(
+    ({ doc, tb }) =>
+      `TABLE from ${docTitle((doc.d.title ?? doc.d.id).split("||")[0])} (${doc.m?.fiscal_label ?? doc.m?.period_end ?? ""}) page ${tb.page ?? "?"}${tb.caption ? `, "${tb.caption}"` : ""}, ${tb.n_rows}x${tb.n_cols} <${doc.d.url ?? ""}${tb.page ? `#page=${tb.page}` : ""}>\n${tableText(tb, 40)}`,
+  );
+  return { output: clip(out.join("\n\n")), summary: `${top.length} tables` };
+}
+
+/* ---------------------------------------------------------------- dossier additions */
+
+/** The computed layer in a few lines, appended to get_company_dossier so the first call already sees it. */
+export async function computedDigest(qc: QueryClient, t: string): Promise<string[]> {
+  const [ki, brief, sit, read, score] = await Promise.all([
+    safe(qc.fetchQuery(kpiInsightsQuery(t))),
+    safe(qc.fetchQuery(briefQuery(t))),
+    safe(qc.fetchQuery(situationQuery(t))),
+    safe(qc.fetchQuery(quantReadQuery(t))),
+    safe(qc.fetchQuery(scoreQuery(t))),
+  ]);
+  const out: string[] = ["FILED UNDER COMPUTED LAYER (drill in with get_kpis, get_kpi_signals, get_earnings_workup, get_quant_profile, search_doc_tables):"];
+  if (brief?.sentences?.length) out.push(`BRIEF: ${brief.sentences.map((s: { text: string }) => s.text).join(" ")}`);
+  if (ki?.signals?.length)
+    out.push(
+      "KPI SIGNALS:",
+      ...[...ki.signals]
+        .sort((a, b) => b.strength - a.strength)
+        .slice(0, 5)
+        .map((s) => `  [${s.kind}] ${s.reason}${s.facts[0] && ki.facts[s.facts[0]]?.sources[0] ? ` — ${srcLine(ki.facts[s.facts[0]].sources[0])}` : ""}`),
+    );
+  if (score) out.push(`LATEST RESULTS SCORECARD: filed ${score.filed}, quarter ${score.quarter_end ?? "?"}, ${score.metrics.length} metrics, ${score.guidance.length} guidance items <${score.filing_url}>`);
+  if (sit) out.push(`SITUATIONS: ${Object.entries(sit.components ?? {}).map(([k, c]) => `${k}: ${(c as { headline?: string; dir?: string }).headline ?? ""} (${(c as { dir?: string }).dir ?? "?"})`).join("; ")}`);
+  if (read) out.push(`QUANT: ${read.sentences.map((s: { text: string }) => s.text).join(" ")}`);
+  if (out.length <= 1) return [];
+  // Keep the digest short so the dossier's filings and accession numbers stay inside the clip.
+  const text = out.join("\n");
+  return text.length > 2600 ? [`${text.slice(0, 2600)}…`] : out;
+}
+
+/* ---------------------------------------------------------------- earnings calls */
+
+interface CallQuote {
+  q: string;
+  p?: number;
+}
+interface CallRow {
+  call_id: string;
+  doc: string;
+  event_type: string;
+  title: string;
+  date: string;
+  label: string | null;
+  period_end: string | null;
+  has_qa: boolean;
+  pending?: boolean;
+  summary?: string;
+  themes?: { theme: string; label: string; sentiment: number; confidence: number; summary: string; quotes?: CallQuote[] }[];
+  guidance?: { metric: string; period: string; low: number | null; high: number | null; unit?: string; basis?: string; quote?: CallQuote }[];
+  changes?: { theme: string; text: string; quote?: CallQuote }[];
+  speakers?: { name: string; role: string | null; kind: string; share: number | null; hedge: number | null; tone: number | null }[];
+}
+interface CallsFile {
+  ticker: string;
+  docs: Record<string, { id: string; title: string; url: string; fiscal_label?: string | null }>;
+  calls: CallRow[];
+}
+
+const fmtGuide = (g: NonNullable<CallRow["guidance"]>[number]) => {
+  const f = (v: number | null) => (v == null ? "?" : fmtKpi(v, g.unit === "USD" ? "USD" : g.unit === "%" ? "%" : g.unit));
+  return g.low === g.high ? f(g.low) : `${f(g.low)} to ${f(g.high)}`;
+};
+
+export async function getCallAnalysis(_qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const t = String(args.ticker).toUpperCase();
+  const f = await safe(partnerFile<CallsFile>(`calls/${t}.json`));
+  if (!f?.calls?.length) return { output: `No analysed calls for ${t}. Use get_earnings_call or list_ir_documents with doc_type transcript.`, summary: "none" };
+  const wantAll = args.event_type === "all";
+  const calls = [...f.calls].filter((c) => wantAll || c.event_type === "earnings").sort((a, b) => b.date.localeCompare(a.date));
+  const analysed = calls.filter((c) => !c.pending && c.summary).slice(0, Math.max(1, Math.min(Number(args.calls) || 2, 4)));
+  const url = (c: CallRow, p?: number) => {
+    const u = f.docs[c.doc]?.url;
+    return u ? ` <${u}${p ? `#page=${p}` : ""}>` : "";
+  };
+  const out: string[] = [`${t} call analysis (${calls.length} ${wantAll ? "calls and conference appearances" : "earnings calls"} on file, ${calls.filter((c) => !c.pending).length} analysed). Quotes are verbatim from the transcript; cite the transcript link with the page.`];
+  for (const c of analysed) {
+    out.push(`\nCALL ${c.label ?? c.date} (${c.date}, ${c.event_type}${c.has_qa ? ", with Q&A" : ""})${url(c)}`);
+    out.push(`SUMMARY: ${c.summary}`);
+    if (c.guidance?.length) out.push("GUIDANCE GIVEN:", ...c.guidance.slice(0, 12).map((g) => `  ${g.metric} ${g.period}: ${fmtGuide(g)}${g.basis ? ` (${g.basis})` : ""}${g.quote ? ` "${g.quote.q.replace(/\s+/g, " ").slice(0, 140)}" p.${g.quote.p ?? "?"}` : ""}`));
+    if (c.changes?.length) out.push("CHANGED SINCE THE PRIOR CALL:", ...c.changes.slice(0, 8).map((x) => `  [${x.theme}] ${x.text}${x.quote ? ` "${x.quote.q.replace(/\s+/g, " ").slice(0, 120)}" p.${x.quote.p ?? "?"}` : ""}`));
+    if (c.themes?.length)
+      out.push(
+        "THEMES (sentiment -1..1):",
+        ...[...c.themes].sort((a, b) => b.confidence - a.confidence).slice(0, 8).map((x) => `  ${x.label} [${x.theme}] sentiment ${x.sentiment.toFixed(2)}: ${x.summary}${x.quotes?.[0] ? ` "${x.quotes[0].q.replace(/\s+/g, " ").slice(0, 120)}" p.${x.quotes[0].p ?? "?"}` : ""}`),
+      );
+    const mgmt = (c.speakers ?? []).filter((s) => s.kind === "management" && (s.share ?? 0) > 0.05);
+    if (mgmt.length) out.push(`MANAGEMENT LANGUAGE (hedge = hedging words per 1,000; tone = net positive per 1,000): ${mgmt.map((s) => `${s.name} (${s.role ?? "?"}) share ${((s.share ?? 0) * 100).toFixed(0)}%, hedge ${s.hedge ?? "?"}, tone ${s.tone ?? "?"}`).join("; ")}`);
+  }
+  const waiting = calls.filter((c) => c.pending || !c.summary).slice(0, 4);
+  if (waiting.length) out.push(`\nNot yet analysed (read with read_ir_document): ${waiting.map((c) => `${c.label ?? c.date} doc ${c.doc}`).join("; ")}`);
+  if (!analysed.length) out.push("No analysed call yet; read the latest transcript with read_ir_document.");
+  return { output: clip(out.join("\n")), summary: `${analysed.length} analysed calls for ${t}` };
+}
+
+interface ThemesFile {
+  taxonomy: { id: string; name: string; desc: string }[];
+  quarters: string[];
+  sectors: string[];
+  cells: Record<string, Record<string, Record<string, [number, number]>>>;
+}
+
+export async function getCallThemes(_qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const f = await safe(partnerFile<ThemesFile>("calls/themes.json"));
+  if (!f) return { output: "Call theme tracker unavailable.", summary: "none" };
+  const want = args.theme ? String(args.theme).toLowerCase() : null;
+  const sector = args.sector ? String(args.sector).toLowerCase() : null;
+  const themes = f.taxonomy.filter((x) => !want || x.id.includes(want) || x.name.toLowerCase().includes(want) || x.desc.toLowerCase().includes(want));
+  if (!themes.length) return { output: `No theme matches "${args.theme}". Themes: ${f.taxonomy.map((x) => `${x.id} (${x.name})`).join(", ")}`, summary: "no theme" };
+  const qs = f.quarters.slice(-6);
+  const out = [`Earnings-call themes by sector and calendar quarter: n = calls discussing it, s = average sentiment (-1..1). Latest quarter may be partial. Quarters: ${qs.join(", ")}`];
+  for (const th of themes.slice(0, want ? 3 : 26)) {
+    out.push(`${th.name} [${th.id}] — ${th.desc}`);
+    for (const [sec, cells] of Object.entries(f.cells[th.id] ?? {})) {
+      if (sector && !sec.toLowerCase().includes(sector)) continue;
+      out.push(`  ${sec}: ${qs.map((q) => (cells[q] ? `${q} n=${cells[q][0]} s=${cells[q][1].toFixed(2)}` : `${q} -`)).join(" | ")}`);
+    }
+    if (!want) out.push("");
+  }
+  return { output: clip(out.join("\n")), summary: `${themes.length} themes` };
+}
+
+/* ---------------------------------------------------------------- catalysts and analysts */
+
+interface CatalystsFile {
+  as_of: string;
+  rows: { ticker: string; nct: string; title: string; acronym?: string | null; phase: string; status: string; primary_completion: string; primary_completion_type?: string | null; enrollment?: number; conditions?: string[]; interventions?: string[] }[];
+}
+
+export async function getTrialCatalysts(_qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const f = await safe(partnerFile<CatalystsFile>("regulatory/catalysts.json"));
+  if (!f) return { output: "Clinical trial catalysts unavailable.", summary: "none" };
+  const t = args.ticker ? String(args.ticker).toUpperCase() : null;
+  const days = Math.max(1, Math.min(Number(args.days) || 120, 730));
+  const until = new Date(Date.parse(f.as_of) + days * 86400_000).toISOString().slice(0, 10);
+  const rows = f.rows
+    .filter((r) => (!t || r.ticker === t) && (t ? true : r.primary_completion >= f.as_of && r.primary_completion <= until))
+    .filter((r) => !args.phase || r.phase === args.phase)
+    .sort((a, b) => a.primary_completion.localeCompare(b.primary_completion))
+    .slice(0, 60);
+  if (!rows.length) return { output: `No registered trials ${t ? `for ${t}` : `completing within ${days} days`}.`, summary: "none" };
+  const out = [
+    `Clinical trials from ClinicalTrials.gov (as of ${f.as_of}); primary completion is the sponsor's date for the last primary-endpoint measurement, ${"not a readout date"}. ${t ? `All registered trials for ${t}.` : `Primary completion within ${days} days.`}`,
+    ...rows.map(
+      (r) =>
+        `${r.primary_completion}${r.primary_completion_type ? ` (${r.primary_completion_type.toLowerCase()})` : ""} ${r.ticker} ${r.phase} ${r.acronym ?? ""} — ${r.title.slice(0, 140)} [${r.status.toLowerCase().replace(/_/g, " ")}${r.enrollment ? `, n=${r.enrollment}` : ""}] ${(r.interventions ?? []).slice(0, 3).join(", ")} for ${(r.conditions ?? []).slice(0, 2).join(", ")} <https://clinicaltrials.gov/study/${r.nct}>`,
+    ),
+  ];
+  return { output: clip(out.join("\n")), summary: `${rows.length} trials` };
+}
+
+interface AnalystsFile {
+  attribution: string;
+  note?: string;
+  analysts: { name: string; firm: string; coverage: string[]; n_actions: number; last: string; accuracy?: Record<string, number | string | null> }[];
+}
+
+export async function getAnalystTrackRecord(_qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
+  const t = String(args.ticker).toUpperCase();
+  const f = await safe(partnerFile<AnalystsFile>("estimates/analysts.json"));
+  if (!f) return { output: "Analyst track records unavailable.", summary: "none" };
+  const rows = f.analysts
+    .filter((a) => a.coverage.includes(t))
+    .sort((a, b) => Number(b.accuracy?.smart_score ?? -1) - Number(a.accuracy?.smart_score ?? -1))
+    .slice(0, 25);
+  if (!rows.length) return { output: `No tracked analysts cover ${t}.`, summary: "none" };
+  const acc = (a: (typeof rows)[number]) => {
+    const x = a.accuracy ?? {};
+    return [x.smart_score != null ? `score ${Number(x.smart_score).toFixed(0)}` : "", x.overall_success_rate != null ? `success ${Number(x.overall_success_rate).toFixed(0)}%` : "", x.overall_average_return != null ? `avg return ${Number(x.overall_average_return).toFixed(1)}%` : "", x.total_ratings != null ? `${x.total_ratings} ratings` : ""].filter(Boolean).join(", ");
+  };
+  const out = [`Analysts covering ${t}, best track record first (${f.attribution}). ${f.note ?? ""} Pair with get_estimates for their latest actions on ${t}.`, ...rows.map((a) => `${a.name} (${a.firm}): ${acc(a) || "no accuracy stats"}; ${a.n_actions} actions, last ${a.last}`)];
+  return { output: clip(out.join("\n")), summary: `${rows.length} analysts on ${t}` };
+}
