@@ -1,4 +1,4 @@
-import { GatewayError, generateResponse } from "@lovable.dev/ai-gateway";
+import { GatewayError, generateChatCompletion, generateResponse } from "@lovable.dev/ai-gateway";
 
 // Server-only client for high-volume IR analysis (Lovable AI Gateway by default, or the owner's OPENAI_API_KEY), used for the
 // high-volume investor-relations analysis (table extraction, slide vision, reconciliation repair,
@@ -178,6 +178,8 @@ async function gatewayStructured<T>(opts: Parameters<typeof openaiStructured>[0]
   const content: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;
   const model = opts.model.includes("/") ? opts.model : `openai/${opts.model}`;
   let j: unknown;
+  // Gemini models are served on the chat-completions surface only.
+  if (model.startsWith("google/")) return gatewayChat<T>(opts, model, content);
   try {
     j = await generateResponse(
       {
@@ -199,6 +201,38 @@ async function gatewayStructured<T>(opts: Parameters<typeof openaiStructured>[0]
     throw new OpenAIError(`AI error: ${(e as Error).message}`, "transient", 0);
   }
   return parseResponse<T>(new Response(JSON.stringify(j)));
+}
+
+async function gatewayChat<T>(opts: Parameters<typeof openaiStructured>[0], model: string, content: InputPart[]): Promise<{ data: T; usage: Usage; model: string }> {
+  let j: { choices?: { message?: { content?: string | null }; finish_reason?: string }[]; usage?: { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } }; model?: string };
+  try {
+    j = (await generateChatCompletion(
+      {
+        model,
+        messages: [
+          { role: "system", content: opts.instructions },
+          { role: "user", content: content.map((c) => (c.type === "input_text" ? { type: "text", text: c.text } : { type: "image_url", image_url: { url: c.image_url } })) },
+        ],
+        ...(opts.effort ? { reasoning_effort: opts.effort } : {}),
+        max_tokens: opts.maxOutputTokens ?? 32_000,
+        response_format: { type: "json_schema", json_schema: { name: opts.name, schema: opts.schema, strict: true } },
+      } as unknown as Parameters<typeof generateChatCompletion<"openai/gpt-6.1-terra">>[0], // shared shape across chat models; verified live
+      opts.signal ? { signal: opts.signal } : undefined,
+    )) as typeof j;
+  } catch (e) {
+    if (e instanceof GatewayError) {
+      const ra = e.retryAfter ? e.retryAfter * 1000 : undefined;
+      throw new OpenAIError(`AI ${e.httpStatus ?? ""} ${e.code}: ${e.message}`, gatewayKind(e), e.httpStatus ?? 0, ra);
+    }
+    throw new OpenAIError(`AI error: ${(e as Error).message}`, "transient", 0);
+  }
+  const usage: Usage = { input_tokens: j.usage?.prompt_tokens ?? 0, output_tokens: j.usage?.completion_tokens ?? 0, cached_tokens: j.usage?.prompt_tokens_details?.cached_tokens ?? 0 };
+  const text = j.choices?.[0]?.message?.content ?? "";
+  try {
+    return { data: JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, "")) as T, usage, model: j.model ?? model };
+  } catch {
+    throw new OpenAIError(`AI returned unreadable JSON (${j.choices?.[0]?.finish_reason ?? "?"})`, "rejected", 200, undefined, usage);
+  }
 }
 
 export type InputPart = { type: "input_text"; text: string } | { type: "input_image"; image_url: string; detail?: "low" | "high" | "auto" };
