@@ -44,6 +44,8 @@ interface LoopState {
   lastMirror: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
+  /** unread files a company had when it finished; more than a few new ones later = revisit */
+  unreadAtDone?: Record<string, number>;
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -100,6 +102,8 @@ async function universe(): Promise<{ ticker: string; revenue: number }[]> {
 
 // ---------- background mirror ----------
 let mirroring = false;
+/** New files may have been registered since finished companies were last checked. */
+let importedSince = true;
 async function maybeMirror() {
   if (mirroring) return;
   if (state.lastMirror && Date.now() - Date.parse(state.lastMirror) < MIRROR_MS) return;
@@ -113,6 +117,7 @@ async function maybeMirror() {
       log("mirror run ended — registering newly copied files");
       await run("scripts/ir-import-partner.ts", [], `${OUT}/import.log`);
       log("import ended");
+      importedSince = true;
     } finally {
       mirroring = false;
     }
@@ -145,6 +150,7 @@ for (let cycle = 1; ; cycle++) {
       const n = await unread(t);
       if (n) log(`${t}: finished with ${n} files no reader could take — left for review`);
       state.done.push(t);
+      (state.unreadAtDone ??= {})[t] = n;
       continue;
     }
     if (!creditStop) state.resumes[t] = (state.resumes[t] ?? 0) + 1;
@@ -153,13 +159,30 @@ for (let cycle = 1; ; cycle++) {
       state.done.push(t);
     } else resume.push(t);
   }
-  // 2. New companies: stored files, no figures, largest first.
+  // 1b. Finished companies that gained new files since (the mirror copies more each day): read those.
+  if (importedSince && resume.length < BATCH) {
+    importedSince = false;
+    state.unreadAtDone ??= {};
+    for (const t of state.done) {
+      if (resume.length >= BATCH) break;
+      const n = await unread(t);
+      if (n >= (state.unreadAtDone[t] ?? 0) + 5) {
+        log(`${t}: ${n} unread files since it finished — reading the new ones`);
+        state.done = state.done.filter((x) => x !== t);
+        state.unreadAtDone[t] = n;
+        resume.push(t);
+      }
+    }
+  }
+  // 2. New companies: stored files, no figures, largest first. Companies with a handful of files
+  //    wait (the mirror is still copying theirs) unless nothing bigger is left.
   const fresh: string[] = [];
-  if (resume.length < BATCH) {
+  for (const minFiles of [10, 1]) {
+    if (fresh.length + resume.length >= BATCH) break;
     for (const c of await universe()) {
       if (fresh.length + resume.length >= BATCH) break;
-      if (state.attempted.includes(c.ticker)) continue;
-      if ((await files(c.ticker)) === 0) continue;
+      if (state.attempted.includes(c.ticker) || fresh.includes(c.ticker)) continue;
+      if ((await files(c.ticker)) < minFiles) continue;
       if ((await facts(c.ticker)) > 0) continue;
       fresh.push(c.ticker);
     }
