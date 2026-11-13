@@ -11,6 +11,9 @@
 - [ ] Review: undated IR-site files (no evidence of a date), scale flags, quarter/year reconciliation per company.
 - [x] Owner (Nov 13 12:02): no spend cap; keep looping nonstop. `scripts/ir-deep-loop.ts` (uncapped, resumes unfinished companies, next batch by revenue, mirror resume + import every 3h, pause-and-probe on credits, reports in private storage). Running while this sandbox is alive; next batch: COR, CAH, CNC, ELV, MPC, HUM, BG, ADM, MET, HCA.
 - [ ] Keep the loop running batch after batch; report per company.
+- [ ] When no unread no-figure companies remain, have the loop read new unread files of companies that already have figures (e.g. BAC shows 138 waiting) — reading new files, not redoing old ones.
+- [x] Removed 501 outlook/schedule figures stored with future dates (EQIX 268, NEE 163, DUK 55, CSCO, QCOM, HOOD, NVDA, CRM, C) and rebuilt those companies.
+- [x] IR tab no longer hangs on bank-sized data (Capital One, BofA load in ~4–5 s).
 
 ## HOOD Gemini with Luna escalation (Nov 13)
 - [x] Reread eleven HOOD presentations with Gemini 3.1 Flash Lite, quality prompting and bounded follow-ups; 29 pages escalated to GPT-6 Luna. No document failures; 3,398 figures stored, company rebuilt to 46,392 facts / 1,358 series. Dashboards retained 21/11/9 figures but still have 58/58/57 rejections; checks: quarters 867/1,020, years 86/118; 18 scale flags, 2 unlinked series, future period 2026-12-31 require review. Twelve tests passed; build OK. No other companies processed; UI not checked.
