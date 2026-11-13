@@ -176,6 +176,8 @@ async function report(ticker: string, parts: Record<string, unknown>) {
   const { data: series } = await sb.from("ir_company_series").select("stats, built_at").eq("ticker", ticker).maybeSingle();
   const r = { ticker, files: total, tableFacts: table, visionFacts: vis, waitingTables: waitingT, waitingSlides: waitingV, failedTables: errT, failedSlides: errV, series: series?.stats ?? null, builtAt: series?.built_at ?? null, ...parts, ledgerCredits: +(await spent()).toFixed(2) };
   writeFileSync(join(OUT, `${ticker}.report.json`), JSON.stringify(r, null, 1));
+  // Durable copy next to the files (the sandbox's /tmp doesn't survive restarts).
+  await sb.storage.from("ir-documents").upload(`ops/ir-deep/${ticker}.json`, new Blob([JSON.stringify(r)], { type: "application/json" }), { upsert: true, contentType: "application/json" }).then(undefined, () => undefined);
   log(`REPORT ${JSON.stringify(r)}`);
   return r;
 }
