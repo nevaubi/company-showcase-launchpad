@@ -31,3 +31,7 @@ The ~162K-document IR store will probably add tens of GB of storage, which uses 
 - **Database:** stay on Lovable Cloud. The files go in Cloud storage, and the database is only 24% full. A second database would split the data and add sync work without making anything faster. If space gets tight we can grow the disk or server size in place.
 - **Timing:** copying the partner data can fit in 1–2 hours if the store is in the tens of GB. Deep builds for all ~1,844 companies can't. HOOD alone took several hours of AI reading and about $10–20. At that rate, everything would run to thousands of dollars and days of reading.
 - **Proposed order:** (1) copy the partner data now (1–2 h); (2) deep builds for all ~1,844 companies, many at once, largest first, with Gemini 3.1 Flash Lite reading slides and GPT-6 Luna reviewing the hard pages. Companies that already have partner IR data reuse it instead of being read again, which saves the most time and money. (3) A spending cap you set, with progress for each company.
+
+## Decisions
+- Copy the partner data first, then the deep builds.
+- AI reading spend cap: **$200**. When it's reached, stop and report, with what each company cost.
