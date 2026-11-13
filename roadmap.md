@@ -4,9 +4,13 @@
 - [x] Gemini table-reading pilot on 14 already-read documents vs the earlier reader: 40K parts 31–47% agreement → 16K parts ~79–80% (8K no better; review pass +0–7 pts for +80% cost, not used for tables). Real disagreements: missed scale on one EDGAR workbook, year-to-date columns read as full year (rejected once filing dates are known), fiscal vs calendar quarter ends.
 - [x] File preparation (`scripts/ir-docling.ts`): evidence-only dates/accessions, Docling + OCR hybrid copies of PDF releases/supplements, Markdown copies, spreadsheets; DELL test: 105 files dated, 6 PDFs via Docling (63 pages), 0 failures.
 - [x] Orchestrator (`scripts/ir-deep.ts`): skip companies with figures, prepare → tables → slides → retry once → rebuild → report, credit ledger and per-reader caps.
-- [ ] Run CVS, MCK, BRK-B, CI, F, GM, DELL, KR, FDX, COF and report per company (cap lifted by owner).
+- [x] Run CVS, MCK, BRK-B, CI, F, GM, DELL, KR, FDX, COF and report per company — first passes done (~201K figures, ~89 credits); final pass for late-converted PDFs in progress.
+- [x] IR tab shows whichever source (partner corpus or own deep build) has more series, so deep builds are visible.
+- [ ] Label merging for deep-built companies: GPT-6 Luna canon on CVS produced no proposal that passed the safety checks (coverage dropped / values lost); try a stronger reasoning pass or tune batches before running it on other companies.
+- [ ] Monthly credit-metric 8-Ks (e.g. COF) are rejected because only 3/6/9/12-month periods are stored; decide whether to support monthly KPIs.
 - [ ] Review: undated IR-site files (no evidence of a date), scale flags, quarter/year reconciliation per company.
-- [ ] Owner (Nov 13 12:02): no spend cap; keep looping nonstop through every remaining no-figure company (owner refills credits); GPT-6 Luna whenever stronger vision is needed. Build a continuous loop: next batch by size, partner-mirror resume + import of newly copied files, pause-and-probe on credit exhaustion, per-company reports.
+- [x] Owner (Nov 13 12:02): no spend cap; keep looping nonstop. `scripts/ir-deep-loop.ts` (uncapped, resumes unfinished companies, next batch by revenue, mirror resume + import every 3h, pause-and-probe on credits, reports in private storage). Running while this sandbox is alive; next batch: COR, CAH, CNC, ELV, MPC, HUM, BG, ADM, MET, HCA.
+- [ ] Keep the loop running batch after batch; report per company.
 
 ## HOOD Gemini with Luna escalation (Nov 13)
 - [x] Reread eleven HOOD presentations with Gemini 3.1 Flash Lite, quality prompting and bounded follow-ups; 29 pages escalated to GPT-6 Luna. No document failures; 3,398 figures stored, company rebuilt to 46,392 facts / 1,358 series. Dashboards retained 21/11/9 figures but still have 58/58/57 rejections; checks: quarters 867/1,020, years 86/118; 18 scale flags, 2 unlinked series, future period 2026-12-31 require review. Twelve tests passed; build OK. No other companies processed; UI not checked.
@@ -201,4 +205,4 @@
 - [x] Company page redesign: research price chart + read, About with photos, leadership & board, sector comparison, related companies
 - [x] Mirror partner company + price files to Cloud (1,844 each)
 - [ ] Mirror partner IR store — 46 GB / 564 of 1,844 companies done; paused by partner "daily data limit"; resume with `bun scripts/partner-mirror-ir.ts` (skips finished files)
-- [ ] Deep IR builds for all ~1,844 companies ($200 AI cap) — after IR mirror
+- [ ] Deep IR builds for all ~1,844 companies (no cap, owner Nov 13) — running via `scripts/ir-deep-loop.ts`; companies whose IR files aren't mirrored yet wait for the mirror
