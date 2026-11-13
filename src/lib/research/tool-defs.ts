@@ -283,6 +283,73 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_kpis",
+    description: "Operating KPIs the pipeline extracted from the company's own earnings releases, financial supplements and decks (thousands of line items per company: segment revenue, NIM, CET1, charge-offs, deposits, backlog, users, units, margins), each value with its document, page and printed quote. Far deeper than XBRL. Call with query null first to see the categories, then with a query for the values. Prefer this over get_financials for anything a company reports outside the three statements. Cite the document link with its page.",
+    parameters: obj(
+      {
+        ticker: str("Covered ticker"),
+        query: nullable(str("KPI words, e.g. 'net interest margin', 'card net charge-off rate', 'AWS operating income'; null for the category map")),
+        frequency: nullable({ type: "string", enum: ["quarterly", "annual"] }),
+        periods: nullable({ type: "number", description: "Periods per KPI, newest first (default 5, max 20)" }),
+        max_items: nullable({ type: "number", description: "KPIs to return (default 8, max 20)" }),
+      },
+      ["ticker", "query", "frequency", "periods", "max_items"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_kpi_signals",
+    description: "Statistically unusual KPI moves the pipeline detected (a move several times that KPI's usual quarterly change, trend breaks, divergences), with the fact text and the source page and quote for each. With a ticker: that company's signals and checked insights. With ticker null: the companies with the strongest signals right now, optionally by sector or signal kind. Use for 'what changed', 'what's unusual', idea generation and screening on operating data.",
+    parameters: obj(
+      {
+        ticker: nullable(str("Covered ticker, or null for the cross-company ranking")),
+        sector: nullable(str("Sector name to filter the ranking, e.g. 'Financials'")),
+        kind: nullable(str("Signal kind to filter the ranking, e.g. 'trend'")),
+      },
+      ["ticker", "sector", "kind"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_earnings_workup",
+    description: "Everything precomputed about a company's earnings: next report date, consensus EPS and revenue, the last report's surprise and next-day stock move vs SPY, KPIs to watch with their quotes, the scorecard of the latest results filing (actuals vs consensus, guidance given and whether last quarter's guidance was met) and the sector's beat rate this season. Use first for earnings previews, reviews and 'did they beat'.",
+    parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_earnings_season",
+    description: "The earnings season tracker across all covered companies: beat rates and median surprise and move by sector, the biggest positive and negative stock reactions vs SPY, who reports next, and cross-company KPI moves. Use for 'how is earnings season going', 'who reports this week', sector reads.",
+    parameters: obj({ sector: nullable(str("Optional sector filter")) }, ["sector"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_quant_profile",
+    description: "The computed market profile of a stock: realized volatility and its percentile, beta, Sharpe, max drawdown, typical earnings move, factor fit, trend and volatility regime, technical state and active signals, the most and least correlated stocks over a year, FINRA short interest and days to cover, off-exchange volume share, special-situation flags (gaps, mean reversion, insider clusters and their base rates) and the 30-day brief. Use for risk, positioning, 'how does it trade', 'what moves with it' and before any trade idea.",
+    parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "search_doc_tables",
+    description: "Tables parsed (Docling, with layout) out of the company's IR PDFs: supplements, releases and decks, newest documents first. Returns the best-matching tables as rows with page number and source link. Use when you need a whole table (a segment schedule, a credit table, a capital table, guidance table) rather than one KPI.",
+    parameters: obj(
+      {
+        ticker: str("Covered ticker"),
+        query: str("Words in the table's caption, header or row labels, e.g. 'net charge-offs by portfolio'"),
+        doc_query: nullable(str("Words to pick documents, e.g. 'Q3 2026 supplement'; null for the newest")),
+        max_docs: nullable({ type: "number", description: "Documents to search (default 4, max 8)" }),
+        max_tables: nullable({ type: "number", description: "Tables to return (default 3, max 6)" }),
+      },
+      ["ticker", "query", "doc_query", "max_docs", "max_tables"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_supply_chain",
     description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession.",
     parameters: obj({ ticker: str("Covered ticker"), relation: nullable({ type: "string", enum: ["customer", "supplier", "partner", "competitor"] }) }, ["ticker", "relation"]),
@@ -606,6 +673,12 @@ export type ToolName = (typeof TOOL_DEFS)[number]["name"];
 
 export const TOOL_LABELS: Record<string, string> = {
   get_coverage: "Checked coverage",
+  get_kpis: "Pulled KPIs",
+  get_kpi_signals: "Checked KPI signals",
+  get_earnings_workup: "Pulled earnings workup",
+  get_earnings_season: "Read earnings season",
+  get_quant_profile: "Pulled market profile",
+  search_doc_tables: "Searched document tables",
   get_financials: "Pulled financials",
   get_segments: "Pulled segments",
   list_filings: "Listed filings",
@@ -665,6 +738,12 @@ export const TOOL_LABELS: Record<string, string> = {
 /** Present-tense labels for running tools. */
 export const TOOL_RUNNING: Record<string, string> = {
   get_coverage: "Checking coverage",
+  get_kpis: "Pulling KPIs",
+  get_kpi_signals: "Checking KPI signals",
+  get_earnings_workup: "Pulling earnings workup",
+  get_earnings_season: "Reading earnings season",
+  get_quant_profile: "Pulling market profile",
+  search_doc_tables: "Searching document tables",
   get_financials: "Pulling financials",
   get_segments: "Pulling segments",
   list_filings: "Listing filings",
@@ -737,4 +816,6 @@ export const TOOL_GROUP: Record<string, [string, string]> = {
   run_code: ["Ran code", "times"],
   get_earnings_call: ["Read", "earnings calls"],
   read_section: ["Read", "sections"],
+  get_kpis: ["Pulled KPIs for", "queries"],
+  search_doc_tables: ["Searched tables", "times"],
 };

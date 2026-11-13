@@ -30,6 +30,7 @@ import { partnerFile } from "@/lib/data";
 import type { CommentsFile, Form144File } from "@/lib/filings/review";
 import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { searchDocuments } from "@/lib/ir/search";
+import { computedDigest, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -379,7 +380,34 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       out.push(`SUPPLY LINKS: ${g.slice(0, 25).map((n) => `${n.relation}:${n.name}${n.links[0].share_pct != null ? `(${n.links[0].share_pct}%)` : ""}${(n.links[0] as RiskLink).single_source ? "[single-source]" : ""}`).join("; ")}`);
       const myIdeas = (ideas?.ideas ?? []).filter((i: any) => i.ticker === t);
       if (myIdeas.length) out.push("RULE-BASED TRADE IDEAS:", ...myIdeas.map((i: any) => JSON.stringify(i).slice(0, 400)));
+      // Computed layer first in the output so truncation never drops it.
+      const computed = await computedDigest(qc, t).catch(() => []);
+      if (computed.length) out.splice(1, 0, ...computed);
       return { output: clip(out.join("\n")), summary: `dossier for ${t}`, refs: d.filings.slice(0, 3).map((f) => ({ ticker: t, accn: f.accn, doc: f.doc, label: f.form })) };
+    }
+    case "get_kpis": {
+      const r = await getKpis(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_kpi_signals": {
+      const r = await getKpiSignals(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_earnings_workup": {
+      const r = await getEarningsWorkup(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_earnings_season": {
+      const r = await getEarningsSeason(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "get_quant_profile": {
+      const r = await getQuantProfile(qc, args);
+      return { output: r.output, summary: r.summary };
+    }
+    case "search_doc_tables": {
+      const r = await searchDocTables(qc, args);
+      return { output: r.output, summary: r.summary };
     }
     case "get_supply_chain": {
       const t = String(args.ticker).toUpperCase();
