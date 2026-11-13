@@ -127,7 +127,7 @@ async function extract(ticker: string) {
     }
     const c = await cap();
     if (c < 0.5) return { ...res, stop: "budget spent" };
-    const r = await run(`${ticker}-extract-${pass}`, "scripts/ir-extract.ts", [...readerArgs(ticker, c), `--chunk=${CHUNK}`, "--concurrency=12", "--chunk-concurrency=4", "--max=5000"], logFile);
+    const r = await run(`${ticker}-extract-${pass}`, "scripts/ir-extract.ts", [...readerArgs(ticker, c), `--chunk=${CHUNK}`, "--concurrency=20", "--chunk-concurrency=4", "--max=5000"], logFile);
     if (r.spend) {
       await addSpend(r.spend.credits);
       res.credits += r.spend.credits;
@@ -151,7 +151,7 @@ async function vision(ticker: string) {
     }
     const c = await cap();
     if (c < 0.5) return { ...res, stop: "budget spent" };
-    const r = await run(`${ticker}-vision-${pass}`, "scripts/ir-vision.ts", [...readerArgs(ticker, c), "--loop", "--concurrency=6", "--max=2000"], logFile);
+    const r = await run(`${ticker}-vision-${pass}`, "scripts/ir-vision.ts", [...readerArgs(ticker, c), "--loop", "--concurrency=8", "--max=2000"], logFile);
     if (r.spend) {
       await addSpend(r.spend.credits);
       res.credits += r.spend.credits;
