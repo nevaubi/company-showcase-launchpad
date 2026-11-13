@@ -1,5 +1,8 @@
 # Filed Under — roadmap
 
+## HOOD parallel vision comparison (Nov 13)
+- [ ] Compare inclusionai/ling-3.0-flash-vl on OpenRouter against Gemini 3 Flash on identical HOOD pages with bounded follow-up reads; preserve existing facts. Blocked until OpenRouter access is configured.
+
 ## Waitlist emails and trial activation (Nov 8)
 - [ ] Automatic branded waitlist receipt and approval emails — blocked until the owner configures an email sender domain.
 - [ ] Approval email sign-in/account-creation links and explicit terms acceptance before starting the 14-day trial; preserve existing subscribers and already-started trials.
