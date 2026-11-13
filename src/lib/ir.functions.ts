@@ -10,6 +10,24 @@ const EXTRACTABLE = ["press-release", "supplement", "presentation", "data", "oth
 const rebuilding = new Map<string, Promise<IrPayload | null>>();
 
 /** Precomputed segment/KPI series plus the company's stored IR document library. */
+/**
+ * Gzip the whole payload first, then hand the framework a plain chunked stream. Passing the
+ * CompressionStream itself stalled bank-sized responses (≈1.7 MB compressed) before any byte
+ * was sent; fully compressed bytes in 64 KB chunks stream reliably.
+ */
+async function gzipStream(bytes: Uint8Array): Promise<ReadableStream<Uint8Array>> {
+  const gz = new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+  let at = 0;
+  return new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (at >= gz.length) return controller.close();
+      // slice, not subarray: each chunk needs its own buffer (the serializer encodes a view's whole buffer).
+      controller.enqueue(gz.slice(at, at + 65536));
+      at += 65536;
+    },
+  });
+}
+
 export const getIrData = createServerFn({ method: "GET" })
   .middleware([requireAppAccess])
   .inputValidator((d: unknown) => z.object({ ticker: tickerSchema }).parse(d))
@@ -66,7 +84,7 @@ export const getIrData = createServerFn({ method: "GET" })
     if (external && external.series.length && external.series.length >= (payload?.series.length ?? 0)) {
       const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) }));
       const bytes = new TextEncoder().encode(JSON.stringify({ payload: external, builtAt: external.builtAt, documents, images, pending: 0, source: "partner" }));
-      return { gz: new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip")) as ReadableStream<Uint8Array> };
+      return { gz: await gzipStream(bytes) };
     }
     // Facts exist but no breakdowns are stored (first read, or a rebuild that never ran): build them
     // now rather than showing an empty page.
@@ -90,8 +108,7 @@ export const getIrData = createServerFn({ method: "GET" })
     // Bank payloads outgrow the RPC serializer's 32 MB cap even as one string, so stream gzipped
     // bytes (raw streams bypass that cap) and decompress in the browser.
     const bytes = new TextEncoder().encode(JSON.stringify({ payload, builtAt: series?.built_at ?? null, documents, images, pending }));
-    const gz = new Blob([bytes]).stream().pipeThrough(new CompressionStream("gzip")) as ReadableStream<Uint8Array>;
-    return { gz };
+    return { gz: await gzipStream(bytes) };
   });
 
 /** A company's stored slide/chart images for the library (paged; they can number in the thousands). */
