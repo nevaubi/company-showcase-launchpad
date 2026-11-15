@@ -10,7 +10,8 @@
 - [ ] Monthly credit-metric 8-Ks (e.g. COF) are rejected because only 3/6/9/12-month periods are stored; decide whether to support monthly KPIs.
 - [ ] Review: undated IR-site files (no evidence of a date), scale flags, quarter/year reconciliation per company.
 - [x] Owner (Nov 13 12:02): no spend cap; keep looping nonstop. `scripts/ir-deep-loop.ts` (uncapped, resumes unfinished companies, next batch by revenue, mirror resume + import every 3h, pause-and-probe on credits, reports in private storage). Running while this sandbox is alive; next batch: COR, CAH, CNC, ELV, MPC, HUM, BG, ADM, MET, HCA.
-- [ ] Keep the loop running batch after batch; report per company. Status Nov 13 21:35 UTC: 7 batches started, ~70 companies built (~1.6M figures); paused only when workspace credits run out (needs a refill, and a restart if the sandbox stopped: `setsid nohup bun scripts/ir-deep-loop.ts --force >> /tmp/ir-deep/loop.log 2>&1 &`).
+- [ ] Keep the loop running batch after batch; report per company (owner, Nov 15: "loop it"). Status Nov 15 17:46 UTC: batch 7 (FERG…BKR) first passes done, final pass running; next batches start automatically. Restart after a workspace restart: `setsid nohup bun scripts/ir-deep-loop.ts --force >> /tmp/ir-deep/loop.log 2>&1 &`.
+- [ ] Truly nonstop builds need an always-on worker outside this workspace (it stops whenever the workspace sleeps or restarts) — e.g. a hosted worker running the same scripts with Docling; needs the owner's hosting account.
 - [ ] When no unread no-figure companies remain, have the loop read new unread files of companies that already have figures (e.g. BAC shows 138 waiting) — reading new files, not redoing old ones.
 - [x] Removed 501 outlook/schedule figures stored with future dates (EQIX 268, NEE 163, DUK 55, CSCO, QCOM, HOOD, NVDA, CRM, C) and rebuilt those companies.
 - [x] IR tab no longer hangs on bank-sized data (Capital One, BofA load in ~4–5 s).
@@ -202,7 +203,7 @@
 - [x] IR page reads the partner corpus (~800 companies, quote-highlighted sources) with own data as fallback
 - [ ] Expand coverage beyond 78 companies (statements, prices, logos from partner bundles)
 - [ ] Partner PDFs/IR-site files open in-app (currently only SEC/HTML copies render)
-- [ ] Run supply chain, alt data, estimates, signals, company context for new tickers (spend cap)
+- [ ] Run supply chain, alt data, estimates, signals, company context for new tickers
 - [ ] Port partner-only pieces: macro store, 189-field screener, workspace
 
 - [x] Company page redesign: research price chart + read, About with photos, leadership & board, sector comparison, related companies
