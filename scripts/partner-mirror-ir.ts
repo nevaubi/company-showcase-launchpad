@@ -97,7 +97,8 @@ const progress = setInterval(() => {
 
 for (const ticker of tickers) {
   if (limited) break;
-  while (jobs.length > CONC * 20) await new Promise((s) => setTimeout(s, 250));
+  // Workers stop on the partner daily limit; don't wait forever for them to drain the queue.
+  while (jobs.length > CONC * 20 && !limited) await new Promise((s) => setTimeout(s, 250));
   try {
     const have = await doneSet(ticker);
     const idxRes = await partner(`ir/${ticker}.json`);
