@@ -7,7 +7,7 @@
 - [x] Run CVS, MCK, BRK-B, CI, F, GM, DELL, KR, FDX, COF and report per company — first passes done (~201K figures, ~89 credits); final pass for late-converted PDFs in progress.
 - [x] IR tab shows whichever source (partner corpus or own deep build) has more series, so deep builds are visible.
 - [ ] Label merging for deep-built companies: GPT-6 Luna canon on CVS produced no proposal that passed the safety checks (coverage dropped / values lost); try a stronger reasoning pass or tune batches before running it on other companies.
-- [ ] Monthly credit-metric 8-Ks (e.g. COF) are rejected because only 3/6/9/12-month periods are stored; decide whether to support monthly KPIs.
+- [ ] Monthly figures are rejected because only 3/6/9/12-month periods are stored: COF credit-metric 8-Ks, and Progressive's monthly releases (~150 of ~180 figures rejected per file, ~23 credits for PGR). Support monthly KPIs, or skip monthly-only releases before reading them.
 - [ ] Review: undated IR-site files (no evidence of a date), scale flags, quarter/year reconciliation per company.
 - [x] Owner (Nov 13 12:02): no spend cap; keep looping nonstop. `scripts/ir-deep-loop.ts` (uncapped, resumes unfinished companies, next batch by revenue, mirror resume + import every 3h, pause-and-probe on credits, reports in private storage). Running while this sandbox is alive; next batch: COR, CAH, CNC, ELV, MPC, HUM, BG, ADM, MET, HCA.
 - [ ] Keep the loop running batch after batch; report per company (owner, Nov 15: "loop it"). Status Nov 15 17:46 UTC: batch 7 (FERG…BKR) first passes done, final pass running; next batches start automatically. Restart after a workspace restart: `setsid nohup bun scripts/ir-deep-loop.ts --force >> /tmp/ir-deep/loop.log 2>&1 &`.
