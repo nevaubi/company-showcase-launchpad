@@ -219,7 +219,8 @@ async function gatewayStructured<T>(opts: Parameters<typeof openaiStructured>[0]
     );
   } catch (e) {
     if (e instanceof GatewayError) {
-      const ra = e.retryAfter ? e.retryAfter * 1000 : undefined;
+      // The gateway SDK already reports Retry-After in milliseconds.
+      const ra = e.retryAfter || undefined;
       throw new OpenAIError(`AI ${e.httpStatus ?? ""} ${e.code}: ${e.message}`, gatewayKind(e), e.httpStatus ?? 0, ra);
     }
     throw new OpenAIError(`AI error: ${(e as Error).message}`, "transient", 0);
@@ -245,7 +246,8 @@ async function gatewayChat<T>(opts: Parameters<typeof openaiStructured>[0], mode
     )) as typeof j;
   } catch (e) {
     if (e instanceof GatewayError) {
-      const ra = e.retryAfter ? e.retryAfter * 1000 : undefined;
+      // The gateway SDK already reports Retry-After in milliseconds.
+      const ra = e.retryAfter || undefined;
       throw new OpenAIError(`AI ${e.httpStatus ?? ""} ${e.code}: ${e.message}`, gatewayKind(e), e.httpStatus ?? 0, ra);
     }
     throw new OpenAIError(`AI error: ${(e as Error).message}`, "transient", 0);

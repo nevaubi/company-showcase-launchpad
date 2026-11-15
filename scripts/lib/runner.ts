@@ -193,7 +193,8 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
             rateHits = 0;
             log(`rate limited — concurrency now ${concurrency}`);
           }
-          await sleep(err.retryAfterMs ?? 15_000 + Math.random() * 15_000);
+          // Never trust a retry hint blindly: one sleeping worker holds up the whole batch.
+          await sleep(Math.min(err.retryAfterMs ?? 15_000 + Math.random() * 15_000, 90_000));
         } else {
           infraFails.delete(item.id);
           await o.release(item, `error: ${err.message.slice(0, 200)}`);
