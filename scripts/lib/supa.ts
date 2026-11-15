@@ -1,6 +1,30 @@
 // Service-role database client for local pipeline scripts (never bundled into the app).
 import { createClient } from "@supabase/supabase-js";
 
+/**
+ * Every database/storage request from a pipeline script gets a deadline. A request whose reply
+ * never arrives otherwise hangs its worker forever (a stuck runner held a whole company's batch
+ * for 20+ minutes); timing out turns it into a "fetch failed" that the runners already retry.
+ * Patched on the global fetch so the generated admin client (which calls `fetch` per request)
+ * is covered too. Scripts only — this module is never bundled into the app.
+ */
+const DB_HOST = new URL(process.env.SUPABASE_URL!).host;
+const REST_MS = Number(process.env.DB_FETCH_TIMEOUT_MS ?? 150_000);
+const STORAGE_MS = Number(process.env.DB_STORAGE_TIMEOUT_MS ?? 600_000);
+const baseFetch = globalThis.fetch;
+globalThis.fetch = Object.assign(
+  (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (!url.includes(DB_HOST) || init?.signal) return baseFetch(input, init);
+    const ms = url.includes("/storage/v1/") ? STORAGE_MS : REST_MS;
+    return baseFetch(input, { ...init, signal: AbortSignal.timeout(ms) }).catch((e: unknown) => {
+      if ((e as Error)?.name === "TimeoutError" || (e as Error)?.name === "AbortError") throw new TypeError(`fetch failed: no database reply within ${ms / 1000}s`);
+      throw e;
+    });
+  },
+  baseFetch,
+) as typeof fetch;
+
 export const sb = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { persistSession: false } });
 
 /** Page through a query 1,000 rows at a time (the API caps each response). */
@@ -34,9 +58,12 @@ const BUSY_MS = Number(process.env.DB_BUSY_MS ?? 1500);
 let latency = 0;
 let lastProbe = 0;
 let probing: Promise<void> | null = null;
+const PROBE_MS = 20_000;
 async function probe() {
   const t0 = Date.now();
-  await sb.from("job_state").select("job").limit(1);
+  // A probe that never answers must not freeze every worker waiting on the gate: after 20 s it
+  // counts as "busy" and the gate re-probes.
+  await Promise.race([sb.from("job_state").select("job").limit(1).then(undefined, () => undefined), sleep(PROBE_MS)]);
   latency = Date.now() - t0;
   lastProbe = Date.now();
 }
