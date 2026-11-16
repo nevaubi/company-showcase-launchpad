@@ -42,6 +42,7 @@ import { Route as AuthenticatedAppReportsRouteImport } from './routes/_authentic
 import { Route as AuthenticatedAppResearchRouteImport } from './routes/_authenticated/app.research'
 import { Route as AuthenticatedAppScreenerRouteImport } from './routes/_authenticated/app.screener'
 import { Route as AuthenticatedAppSectorsRouteImport } from './routes/_authenticated/app.sectors'
+import { Route as AuthenticatedAppSetupsRouteImport } from './routes/_authenticated/app.setups'
 import { Route as AuthenticatedAppSituationsRouteImport } from './routes/_authenticated/app.situations'
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
 import { Route as AuthenticatedAppSupplyChainRouteImport } from './routes/_authenticated/app.supply-chain'
@@ -244,6 +245,11 @@ const AuthenticatedAppScreenerRoute =
 const AuthenticatedAppSectorsRoute = AuthenticatedAppSectorsRouteImport.update({
   id: '/sectors',
   path: '/sectors',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppSetupsRoute = AuthenticatedAppSetupsRouteImport.update({
+  id: '/setups',
+  path: '/setups',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const AuthenticatedAppSituationsRoute =
@@ -461,6 +467,7 @@ export interface FileRoutesByFullPath {
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/screener': typeof AuthenticatedAppScreenerRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/app/setups': typeof AuthenticatedAppSetupsRoute
   '/app/situations': typeof AuthenticatedAppSituationsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
@@ -524,6 +531,7 @@ export interface FileRoutesByTo {
   '/app/research': typeof AuthenticatedAppResearchRoute
   '/app/screener': typeof AuthenticatedAppScreenerRoute
   '/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/app/setups': typeof AuthenticatedAppSetupsRoute
   '/app/situations': typeof AuthenticatedAppSituationsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
@@ -590,6 +598,7 @@ export interface FileRoutesById {
   '/_authenticated/app/research': typeof AuthenticatedAppResearchRoute
   '/_authenticated/app/screener': typeof AuthenticatedAppScreenerRoute
   '/_authenticated/app/sectors': typeof AuthenticatedAppSectorsRoute
+  '/_authenticated/app/setups': typeof AuthenticatedAppSetupsRoute
   '/_authenticated/app/situations': typeof AuthenticatedAppSituationsRoute
   '/_authenticated/app/status': typeof AuthenticatedAppStatusRoute
   '/_authenticated/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
@@ -657,6 +666,7 @@ export interface FileRouteTypes {
     | '/app/research'
     | '/app/screener'
     | '/app/sectors'
+    | '/app/setups'
     | '/app/situations'
     | '/app/status'
     | '/app/supply-chain'
@@ -720,6 +730,7 @@ export interface FileRouteTypes {
     | '/app/research'
     | '/app/screener'
     | '/app/sectors'
+    | '/app/setups'
     | '/app/situations'
     | '/app/status'
     | '/app/supply-chain'
@@ -785,6 +796,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/research'
     | '/_authenticated/app/screener'
     | '/_authenticated/app/sectors'
+    | '/_authenticated/app/setups'
     | '/_authenticated/app/situations'
     | '/_authenticated/app/status'
     | '/_authenticated/app/supply-chain'
@@ -1065,6 +1077,13 @@ declare module '@tanstack/react-router' {
       path: '/sectors'
       fullPath: '/app/sectors'
       preLoaderRoute: typeof AuthenticatedAppSectorsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/setups': {
+      id: '/_authenticated/app/setups'
+      path: '/setups'
+      fullPath: '/app/setups'
+      preLoaderRoute: typeof AuthenticatedAppSetupsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/situations': {
@@ -1376,6 +1395,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppResearchRoute: typeof AuthenticatedAppResearchRoute
   AuthenticatedAppScreenerRoute: typeof AuthenticatedAppScreenerRoute
   AuthenticatedAppSectorsRoute: typeof AuthenticatedAppSectorsRoute
+  AuthenticatedAppSetupsRoute: typeof AuthenticatedAppSetupsRoute
   AuthenticatedAppSituationsRoute: typeof AuthenticatedAppSituationsRoute
   AuthenticatedAppStatusRoute: typeof AuthenticatedAppStatusRoute
   AuthenticatedAppSupplyChainRoute: typeof AuthenticatedAppSupplyChainRoute
@@ -1414,6 +1434,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppResearchRoute: AuthenticatedAppResearchRoute,
   AuthenticatedAppScreenerRoute: AuthenticatedAppScreenerRoute,
   AuthenticatedAppSectorsRoute: AuthenticatedAppSectorsRoute,
+  AuthenticatedAppSetupsRoute: AuthenticatedAppSetupsRoute,
   AuthenticatedAppSituationsRoute: AuthenticatedAppSituationsRoute,
   AuthenticatedAppStatusRoute: AuthenticatedAppStatusRoute,
   AuthenticatedAppSupplyChainRoute: AuthenticatedAppSupplyChainRoute,

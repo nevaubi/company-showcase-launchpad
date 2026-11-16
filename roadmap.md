@@ -210,3 +210,5 @@
 - [x] Mirror partner company + price files to Cloud (1,844 each)
 - [ ] Mirror partner IR store — 46 GB / 564 of 1,844 companies done; paused by partner "daily data limit"; resume with `bun scripts/partner-mirror-ir.ts` (skips finished files)
 - [ ] Deep IR builds for all ~1,844 companies (no cap, owner Nov 13) — running via `scripts/ir-deep-loop.ts`; companies whose IR files aren't mirrored yet wait for the mirror
+
+- [ ] Short-term setups: rerun `bun scripts/setups.ts` daily after prices refresh (not yet scheduled; needs all price files, too heavy for a job). Lead-lag (supply links) and post-earnings drift strategies not built yet.
