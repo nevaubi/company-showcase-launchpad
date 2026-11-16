@@ -166,7 +166,10 @@ const today = regime[D - 1];
 const best = new Map<string, Setup>();
 for (const L of live) {
   const v = byKey.get(L.key);
-  if (!v?.passed) continue;
+  if (!v) continue;
+  // Proven = passed the strict gate. Near misses (positive and t >= 1.5 out of sample) are kept as watch-only.
+  const near = (v.outSample.avgNet ?? 0) > 0 && (v.outSample.t ?? 0) >= 1.5;
+  if (!v.passed && !near) continue;
   const rg = v.regimes[today];
   if (rg.n < GATE.minRegimeN || !((rg.avgNet ?? 0) > 0)) continue;
   const n = v.outSample.n;
@@ -181,17 +184,17 @@ for (const L of live) {
     ticker: L.ticker, name: meta.get(L.ticker)?.name ?? L.ticker, sector: meta.get(L.ticker)?.sector ?? "", key: L.key, strategy: v.strategy, side: L.side, horizon: L.h,
     firedAt: dates[L.i], detail: s.detail!(f, L.i), strength: +s.strength!(f, L.i).toFixed(2), price: +price.toFixed(2),
     stop: +(price - L.side * risk).toFixed(2), target: +(price + L.side * risk * (s.family === "momentum" ? 2 : 1.5)).toFixed(2),
-    edge: +edge.toFixed(5), spark: Array.from(f.a.c.slice(D - 60)).map((x) => +x.toFixed(2)),
+    proven: v.passed, edge: +edge.toFixed(5), spark: Array.from(f.a.c.slice(D - 60)).map((x) => +x.toFixed(2)),
   };
   const id = `${L.ticker}:${v.strategy}:${L.side}`;
-  if (!best.has(id) || best.get(id)!.edge < edge) best.set(id, setup);
+  if (!best.has(id) || Number(best.get(id)!.proven) < Number(v.passed) || (best.get(id)!.proven === v.passed && best.get(id)!.edge < edge)) best.set(id, setup);
 }
-const setups = [...best.values()].sort((a, b) => b.edge - a.edge);
-const pairsPassed = byKey.get(pairKey)?.passed && (byKey.get(pairKey)!.regimes[today].avgNet ?? 0) > 0;
+const setups = [...best.values()].sort((a, b) => Number(b.proven) - Number(a.proven) || b.edge - a.edge).slice(0, 150);
+const pairsPassed = !!byKey.get(pairKey)?.passed;
 
 const out: SetupsFile = {
   generatedAt: new Date().toISOString(), asOf: endDate, companies: scanned, regime: today, oosStart: OOS_START, gate: GATE,
-  variants, setups, pairs: pairsPassed ? livePairs.sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 60) : [],
+  variants, setups, pairsProven: pairsPassed, pairs: livePairs.sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 40),
 };
 await writeFile("public/data/setups.json", JSON.stringify(out));
 log("regime", today, "| setups", setups.length, "| pairs", out.pairs.length, "of", livePairs.length);

@@ -24,6 +24,8 @@ export interface Setup {
   target: number;
   /** Out-of-sample average net return in today's regime, shrunk toward zero for small samples. */
   edge: number;
+  /** Passed the strict gate; false = watch-only near miss. */
+  proven: boolean;
   spark: number[];
 }
 
@@ -54,8 +56,9 @@ export interface SetupsFile {
   gate: Record<string, number>;
   variants: VariantMeta[];
   setups: Setup[];
+  /** Whether the pairs strategy (key `pairs:L:20`) passed the gate; pairs are watch-only otherwise. */
+  pairsProven: boolean;
   pairs: PairSetup[];
-  /** Pairs strategy proof is in `variants` under key `pairs:L:20`. */
 }
 
 export const variantKey = (s: StrategyId, side: 1 | -1, h: number) => `${s}:${side > 0 ? "L" : "S"}:${h}`;
