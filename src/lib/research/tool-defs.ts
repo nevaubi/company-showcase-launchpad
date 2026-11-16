@@ -314,6 +314,28 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_setups",
+    description: "The short-term setups engine (refreshed nightly over every covered stock): today's setups (stock, long/short, strategy, hold, signal reason, price, stop, target, edge after costs) and the strategy scoreboard — each published strategy's out-of-sample trades, hit rate, t-stat, deflated Sharpe, drawdown, live record and which strict checks it fails. Use for trade-idea, 'is anything setting up on X', or 'which strategies work' questions. Watch-only setups are unproven; say so.",
+    parameters: obj(
+      {
+        ticker: nullable(str("Only setups on this ticker; null for all")),
+        family: nullable({ type: "string", enum: ["reversal", "momentum", "events", "links", "multi", "pairs"], description: "Strategy family: reversal = snap-back, links = supply chain, multi = confluence" }),
+        include_watch: nullable({ type: "boolean", description: "Include watch-only near misses (default true)" }),
+        max: nullable({ type: "number", description: "Setups to list (default 15, max 40)" }),
+      },
+      ["ticker", "family", "include_watch", "max"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "get_autopilots",
+    description: "The paper-trading autopilots the user can see (house bots and their own): rules, status, return vs SPY, closed trades, hit rate, average trade, max drawdown, Sharpe, open positions and the last run. Use when the user asks how the bots or paper strategies are doing.",
+    parameters: obj({}, []),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_kpi_signals",
     description: "Statistically unusual KPI moves the pipeline detected (a move several times that KPI's usual quarterly change, trend breaks, divergences), with the fact text and the source page and quote for each. With a ticker: that company's signals and checked insights. With ticker null: the companies with the strongest signals right now, optionally by sector or signal kind. Use for 'what changed', 'what's unusual', idea generation and screening on operating data.",
     parameters: obj(
@@ -731,6 +753,8 @@ export type ToolName = (typeof TOOL_DEFS)[number]["name"];
 export const TOOL_LABELS: Record<string, string> = {
   get_coverage: "Checked coverage",
   get_kpis: "Pulled KPIs",
+  get_setups: "Checked short-term setups",
+  get_autopilots: "Checked the autopilots",
   get_kpi_signals: "Checked KPI signals",
   get_earnings_workup: "Pulled earnings workup",
   get_earnings_season: "Read earnings season",
@@ -801,6 +825,8 @@ export const TOOL_LABELS: Record<string, string> = {
 export const TOOL_RUNNING: Record<string, string> = {
   get_coverage: "Checking coverage",
   get_kpis: "Pulling KPIs",
+  get_setups: "Checking short-term setups",
+  get_autopilots: "Checking the autopilots",
   get_kpi_signals: "Checking KPI signals",
   get_earnings_workup: "Pulling earnings workup",
   get_earnings_season: "Reading earnings season",

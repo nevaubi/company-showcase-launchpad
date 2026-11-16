@@ -30,6 +30,10 @@ import { partnerFile } from "@/lib/data";
 import { adjustedSummary, suspectNotices, type CommentsFile, type Form144File } from "@/lib/filings/review";
 import { irPageKey, loadIrPage } from "@/lib/ir/client";
 import { irSearch, type IrFreq } from "@/lib/research/ir-search";
+import { botsText, setupsText, type BotView } from "@/lib/research/trading-text";
+import { botsQuery, setupsQuery } from "@/lib/signals/queries";
+import { botStats } from "@/lib/signals/bots";
+import type { Family } from "@/lib/signals/strategies";
 import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { searchDocuments } from "@/lib/ir/search";
 import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
@@ -412,6 +416,31 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       }
       if (partner) return { output: partner.output, summary: partner.summary };
       return { output: `No document-extracted KPIs for ${t} yet. Use get_filing_detail or get_financials (XBRL) instead.`, summary: "no KPIs" };
+    }
+    case "get_setups": {
+      const f = await qc.fetchQuery(setupsQuery);
+      const family = typeof args.family === "string" ? (args.family as Family) : null;
+      return {
+        output: setupsText(f, { ticker: args.ticker ? String(args.ticker) : null, family, includeWatch: args.include_watch !== false, max: Number(args.max) || undefined }),
+        summary: args.ticker ? `setups on ${String(args.ticker).toUpperCase()}` : `setups ${f.asOf}`,
+      };
+    }
+    case "get_autopilots": {
+      const l = await qc.fetchQuery(botsQuery);
+      const views: BotView[] = l.bots.map((b) => ({
+        id: b.id,
+        name: b.name,
+        house: b.user_id == null,
+        status: b.status,
+        capital: b.capital,
+        startedOn: b.started_on,
+        lastAsOf: b.last_as_of,
+        lastError: b.last_error,
+        description: b.description,
+        stats: botStats(b.capital, l.equity.get(b.id) ?? [], l.closed.get(b.id) ?? []),
+        open: l.active.get(b.id)?.length ?? 0,
+      }));
+      return { output: botsText(views), summary: `${views.length} autopilots` };
     }
     case "get_kpi_signals": {
       const r = await getKpiSignals(qc, args);

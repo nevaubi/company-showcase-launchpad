@@ -230,4 +230,4 @@
 - [x] Filing typos: SEC notices whose stated value implies an impossible share price (e.g. Tenable Form 144, $4.1B for 12,000 shares) are flagged on the feed, Insiders tab and assistant, and left out of totals and ranking
 - [ ] Look polish, next: company page header density on phones, consistent empty states across hubs
 - [x] Assistant reads this site's own deep-read IR figures (quarterly, annual and monthly) through get_kpis, each value linked to the IR page cell that opens its source; picks the fuller of the two corpora like the IR page
-- [ ] Assistant: tools over setups/strategy scoreboard, autopilots and paper trades, and supply exposures; a platform-knowledge brief in context
+- [x] Assistant: get_setups (tonight's setups + strategy scoreboard with gate checks) and get_autopilots (paper bots vs SPY), with instructions to label watch-only ideas
