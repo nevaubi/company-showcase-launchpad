@@ -212,3 +212,13 @@
 - [ ] Deep IR builds for all ~1,844 companies (no cap, owner Nov 13) — running via `scripts/ir-deep-loop.ts`; companies whose IR files aren't mirrored yet wait for the mirror
 
 - [ ] Short-term setups: rerun `bun scripts/setups.ts` daily after prices refresh (not yet scheduled; needs all price files, too heavy for a job). Lead-lag (supply links) and post-earnings drift strategies not built yet.
+
+## Platform upgrade (requested Nov 16 21:22 UTC)
+- [ ] Setups: add more free granular data (FINRA daily short volume, SEC fails-to-deliver, earnings dates/surprise drift, insider clusters, VIX term structure / market regime, sector breadth) as point-in-time features; new strategies (post-earnings drift, supplier→customer lead-lag, short-squeeze/short-volume reversal, insider-cluster drift)
+- [ ] Setups auto-refresh: daily scheduled scan (light job reading Cloud prices) so strategies, backtests and live candidates recompute without a manual script
+- [ ] Auto paper trading: strategy "bots" that open/close paper trades on schedule from setup signals, with per-strategy equity curves, hit rate, drawdown, vs SPY; user can follow/unfollow strategies
+- [ ] IR tab UX: KPI overview of the most relevant series, gap-filled quarters (derived Q4 = FY − 9M, TTM), relevance ranking, grouped breakdowns, clearer gap/derived markers
+- [ ] Supply chain granularity: XBRL dimensional facts (revenue by geography/state, product, customer concentration, cost components, purchase obligations) → company "where money comes from / goes" maps; end-to-end tiered chain view
+- [ ] Alt data: more authoritative gov sources (e.g. NHTSA recalls, CFPB complaints, FDA, USPTO, H-1B, lobbying, FINRA/SEC market structure) collected on schedule with source URLs
+- [ ] Navigation/look cleanup: fewer hubs, clearer labels, consistent page headers
+- [ ] Assistant: more tools over cross-data (setups, paper bots, supply exposures, alt data, IR KPIs) and a platform-knowledge brief in context
