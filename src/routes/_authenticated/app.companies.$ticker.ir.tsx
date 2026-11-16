@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getIrData, type IrDocRow } from "@/lib/ir.functions";
+import { irPageKey, loadIrPage } from "@/lib/ir/client";
 import { secRevenueCheck } from "@/lib/ir/display";
 import type { IrPayload } from "@/lib/ir/payload";
 import { useCompany } from "@/lib/data";
@@ -77,20 +78,8 @@ function IrPage() {
   const fetchIr = useServerFn(getIrData);
   const store = useQuery(storeIndexQuery(ticker));
   const q = useQuery({
-    queryKey: ["ir", ticker],
-    queryFn: async () => {
-      const { gz } = await fetchIr({ data: { ticker } });
-      const json = await new Response(
-        (gz as ReadableStream<BufferSource>).pipeThrough(new DecompressionStream("gzip")),
-      ).text();
-      return JSON.parse(json) as {
-        payload: IrPayload | null;
-        builtAt: string | null;
-        documents: IrDocRow[];
-        images: number;
-        pending: number;
-      };
-    },
+    queryKey: irPageKey(ticker),
+    queryFn: () => loadIrPage(ticker, fetchIr),
     staleTime: 5 * 60_000,
     retry: 3,
     retryDelay: (n) => Math.min(2000 * 2 ** n, 15_000),

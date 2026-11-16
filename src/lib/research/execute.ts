@@ -28,6 +28,8 @@ import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/
 import { viewLabel } from "@/lib/research/view-spec";
 import { partnerFile } from "@/lib/data";
 import { adjustedSummary, suspectNotices, type CommentsFile, type Form144File } from "@/lib/filings/review";
+import { irPageKey, loadIrPage } from "@/lib/ir/client";
+import { irSearch, type IrFreq } from "@/lib/research/ir-search";
 import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { searchDocuments } from "@/lib/ir/search";
 import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
@@ -390,8 +392,26 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       return { output: clip(out.join("\n")), summary: `dossier for ${t}`, refs: d.filings.slice(0, 3).map((f) => ({ ticker: t, accn: f.accn, doc: f.doc, label: f.form })) };
     }
     case "get_kpis": {
-      const r = await getKpis(qc, args);
-      return { output: r.output, summary: r.summary };
+      // Two corpora: the pipeline's KPI files and this site's own deep reads (the IR page's payload).
+      // The IR page shows whichever covers more; follow the same choice, falling back when one has no match.
+      const t = String(args.ticker).toUpperCase();
+      const freq: IrFreq = args.frequency === "annual" ? "y" : args.frequency === "monthly" ? "m" : "q";
+      const [partner, ir] = await Promise.all([
+        freq === "m" ? Promise.resolve(null) : getKpis(qc, args).catch(() => null),
+        qc.fetchQuery({ queryKey: irPageKey(t), queryFn: () => loadIrPage(t), staleTime: 5 * 60_000 }).catch(() => null),
+      ]);
+      const pay = ir?.payload?.series.length ? ir.payload : null;
+      const partnerEmpty = !partner || /^No (document-extracted KPIs|.+ KPI matches)/.test(partner.output);
+      const own = () => {
+        const r = irSearch(pay!, { ticker: t, query: args.query ? String(args.query) : null, freq, periods: Number(args.periods) || undefined, maxItems: Number(args.max_items) || undefined });
+        return { output: r.output, summary: args.query ? `${r.matched} ${t} IR series` : `${t} IR map`, ok: !args.query || r.matched > 0 };
+      };
+      if (pay && (ir?.source !== "partner" || partnerEmpty)) {
+        const r = own();
+        if (r.ok || partnerEmpty) return { output: clip(r.output), summary: r.summary };
+      }
+      if (partner) return { output: partner.output, summary: partner.summary };
+      return { output: `No document-extracted KPIs for ${t} yet. Use get_filing_detail or get_financials (XBRL) instead.`, summary: "no KPIs" };
     }
     case "get_kpi_signals": {
       const r = await getKpiSignals(qc, args);

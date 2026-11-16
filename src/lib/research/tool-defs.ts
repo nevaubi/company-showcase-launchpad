@@ -299,12 +299,12 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_kpis",
-    description: "Operating KPIs the pipeline extracted from the company's own earnings releases, financial supplements and decks (thousands of line items per company: segment revenue, NIM, CET1, charge-offs, deposits, backlog, users, units, margins), each value with its document, page and printed quote. Far deeper than XBRL. Call with query null first to see the categories, then with a query for the values. Prefer this over get_financials for anything a company reports outside the three statements. Cite the document link with its page.",
+    description: "Operating KPIs read from the company's own earnings releases, financial supplements, decks and workbooks (thousands of line items per company: segment revenue, NIM, CET1, charge-offs, deposits, backlog, users, units, margins, monthly operating metrics), each value with its document, page and printed text. Covers the pipeline's KPI corpus and this site's own deep reads, whichever is fuller. Far deeper than XBRL. Call with query null first to see the categories, then with a query for the values. Prefer this over get_financials for anything a company reports outside the three statements. Cite each value as a markdown link to the <…> link or document URL it comes with.",
     parameters: obj(
       {
         ticker: str("Covered ticker"),
         query: nullable(str("KPI words, e.g. 'net interest margin', 'card net charge-off rate', 'AWS operating income'; null for the category map")),
-        frequency: nullable({ type: "string", enum: ["quarterly", "annual"] }),
+        frequency: nullable({ type: "string", enum: ["quarterly", "annual", "monthly"] }),
         periods: nullable({ type: "number", description: "Periods per KPI, newest first (default 5, max 20)" }),
         max_items: nullable({ type: "number", description: "KPIs to return (default 8, max 20)" }),
       },

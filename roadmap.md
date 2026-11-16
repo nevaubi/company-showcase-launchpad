@@ -229,4 +229,5 @@
 - [x] Navigation cleanup: sidebar down to 9 entries (Signals merged into Dashboard tabs; Firm and billing moved to the account menu); every page label matches its menu section; setups table fits without sideways scrolling
 - [x] Filing typos: SEC notices whose stated value implies an impossible share price (e.g. Tenable Form 144, $4.1B for 12,000 shares) are flagged on the feed, Insiders tab and assistant, and left out of totals and ranking
 - [ ] Look polish, next: company page header density on phones, consistent empty states across hubs
-- [ ] Assistant: more tools over cross-data (setups, paper bots, supply exposures, alt data, IR KPIs) and a platform-knowledge brief in context
+- [x] Assistant reads this site's own deep-read IR figures (quarterly, annual and monthly) through get_kpis, each value linked to the IR page cell that opens its source; picks the fuller of the two corpora like the IR page
+- [ ] Assistant: tools over setups/strategy scoreboard, autopilots and paper trades, and supply exposures; a platform-knowledge brief in context
