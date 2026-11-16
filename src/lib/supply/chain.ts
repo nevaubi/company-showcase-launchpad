@@ -192,3 +192,21 @@ export function buildChain(focus: string, links: RiskLink[], tagged: TaggedShare
 }
 
 export const TIER_LABEL = (t: number) => (t === 0 ? "Company" : t < 0 ? (t === -1 ? "Suppliers" : `Tier ${-t} suppliers`) : t === 1 ? "Customers" : `Their customers${t > 2 ? ` (${t})` : ""}`);
+
+/** The chain as text for the assistant: one line per edge, with its share, dollars and the filings that state it. */
+export function chainText(c: Chain, max = 40): string {
+  const byKey = new Map(c.nodes.map((n) => [n.key, n]));
+  const nm = (k: string) => {
+    const n = byKey.get(k);
+    return n ? `${n.name}${n.ticker && n.ticker !== n.name ? ` (${n.ticker})` : ""}` : k;
+  };
+  const lines = c.edges.slice(0, max).map((e) => {
+    const t = byKey.get(e.from)?.tier ?? 0;
+    const src = e.evidence
+      .slice(0, 3)
+      .map((ev) => (ev.kind === "text" ? `${ev.link.ticker} ${ev.link.form} ${ev.link.accn}` : `${ev.fact.ticker} ${ev.fact.form} ${ev.fact.accn} XBRL-tagged "${ev.fact.label}" ${(ev.fact.pct * 100).toFixed(1)}% of ${ev.fact.benchmark}`))
+      .join("; ");
+    return `[${TIER_LABEL(t)} → ${TIER_LABEL(t + 1)}] ${nm(e.from)} sells to ${nm(e.to)}${e.share != null ? ` | ${e.share}% of ${e.basis}` : ""}${e.dollars != null ? ` | ≈$${(e.dollars / 1e6).toFixed(0)}M` : ""}${e.sole ? " | SINGLE SOURCE" : ""}${e.confirmed ? " | both filings state it" : ""} | per ${src}`;
+  });
+  return `VALUE CHAIN (goods flow left to right; tiers ${c.tiers.join(", ")}; ${c.nodes.length - 1} companies):\n${lines.join("\n")}${c.edges.length > max ? `\n…${c.edges.length - max} more edges` : ""}`;
+}

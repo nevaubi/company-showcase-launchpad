@@ -58,3 +58,12 @@ describe("value chain", () => {
     expect(buildChain("NVDA", links, tagged, names, {}, { depth: 1 }).tiers).toEqual([-1, 0, 1]);
   });
 });
+
+describe("chain text for the assistant", () => {
+  it("lists each edge with its tier, share and source filing", async () => {
+    const { chainText } = await import("./chain");
+    const t = chainText(buildChain("NVDA", links, tagged, names, { NVDA: 100e9, AMAT: 27e9 }));
+    expect(t).toContain("[Company → Customers] NVIDIA (NVDA) sells to Microsoft (MSFT) | 19% of revenue | ≈$19000M | per NVDA 10-K a-3");
+    expect(t).toContain('XBRL-tagged "NVIDIA" 60.0% of purchases');
+  });
+});

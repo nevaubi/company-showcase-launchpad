@@ -1,7 +1,7 @@
 // End-to-end value chain view: tiers of suppliers → company → tiers of customers, every edge sized by
 // the share or dollars a filing states. Wide screens draw columns; phones get the same tiers as a list.
-import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Lock, ShieldCheck, Tag } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FileText, Lock, ShieldCheck, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
@@ -34,14 +34,24 @@ export function ValueChain({
   onDepth,
   selected,
   onSelect,
+  evidence,
+  onWide,
 }: {
   chain: Chain;
   depth: number;
   onDepth: (d: number) => void;
   selected: string | null;
-  onSelect: (key: string) => void;
+  onSelect: (key: string | null) => void;
+  /** Evidence card for the selected company, shown over the chart's right edge on wide screens. */
+  evidence?: ReactNode;
+  /** Told whether the evidence card is drawn over the chart (wide) or left to the page (narrow list). */
+  onWide?: (wide: boolean) => void;
 }) {
   const [ref, width] = useWidth<HTMLDivElement>();
+  const wide = width >= 640;
+  useEffect(() => {
+    if (width) onWide?.(wide);
+  }, [wide, width, onWide]);
   const [hover, setHover] = useState<string | null>(null);
   const byKey = useMemo(() => new Map(chain.nodes.map((n) => [n.key, n])), [chain]);
   const up = chain.nodes.filter((n) => n.tier < 0).length, down = chain.nodes.filter((n) => n.tier > 0).length;
@@ -65,7 +75,7 @@ export function ValueChain({
   }, [active, chain.edges]);
 
   return (
-    <div className="flex h-full min-w-0 flex-col">
+    <div className="flex min-w-0 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-2.5">
         <div className="min-w-0">
           <p className="text-sm font-medium">Value chain, end to end</p>
@@ -81,11 +91,24 @@ export function ValueChain({
           ))}
         </div>
       </div>
-      <div ref={ref} className="relative min-h-0 flex-1">
+      <div ref={ref} className="relative min-h-[420px]">
         {width === 0 ? null : width < 640 ? (
           <ChainList chain={chain} byKey={byKey} selected={selected} onSelect={onSelect} />
         ) : (
-          <ChainColumns chain={chain} byKey={byKey} width={width} lit={lit} selected={selected} onHover={setHover} onSelect={onSelect} />
+          <>
+            <ChainColumns chain={chain} byKey={byKey} width={width} lit={lit} selected={selected} onHover={setHover} onSelect={onSelect} />
+            {selected && evidence && (
+              <div className="absolute inset-y-2 right-2 flex w-[340px] max-w-[45%] flex-col rounded-lg border bg-card shadow-lg" data-section="Chain evidence">
+                <div className="flex items-center justify-between border-b px-3 py-1.5">
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Evidence</span>
+                  <button type="button" onClick={() => onSelect(null)} className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close evidence">
+                    <X className="size-3.5" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto p-3">{evidence}</div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -128,7 +151,7 @@ function ChainColumns({
   onSelect: (k: string) => void;
 }) {
   const maxRows = Math.max(1, ...chain.tiers.map((t) => chain.nodes.filter((n) => n.tier === t).length));
-  const height = Math.max(420, Math.min(560, maxRows * (BOX_H + GAP + 8) + 60));
+  const height = Math.max(420, maxRows * (BOX_H + GAP + 8) + 60);
   const { pos, boxW, colW, cols } = useMemo(() => layout(chain, width, height), [chain, width, height]);
   const boxH = BOX_H;
   return (
@@ -197,9 +220,9 @@ function ChainColumns({
   );
 }
 
-function ChainList({ chain, byKey, selected, onSelect }: { chain: Chain; byKey: Map<string, ChainNode>; selected: string | null; onSelect: (k: string) => void }) {
+function ChainList({ chain, byKey, selected, onSelect }: { chain: Chain; byKey: Map<string, ChainNode>; selected: string | null; onSelect: (k: string | null) => void }) {
   return (
-    <div className="h-full space-y-3 overflow-y-auto p-3">
+    <div className="space-y-3 p-3">
       {chain.tiers.map((t) => (
         <section key={t}>
           <p className="mb-1 text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">{TIER_LABEL(t)}</p>

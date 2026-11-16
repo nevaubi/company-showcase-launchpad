@@ -39,7 +39,9 @@ export function Panel({
   className,
   bodyClassName,
   collapse,
+  id,
 }: {
+  id?: string;
   /** Max body height before "Show more" (px); false disables collapsing. */
   collapse?: number | false;
   title?: ReactNode;
@@ -50,7 +52,7 @@ export function Panel({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("panel-in min-w-0 border-y bg-card/40", className)}>
+    <section id={id} className={cn("panel-in min-w-0 border-y bg-card/40", className)}>
       {(title || actions) && (
         <header className="flex flex-wrap items-center gap-3 border-b px-3.5 py-2">
           <div className="min-w-0">

@@ -14,7 +14,7 @@ import { alertsQuery } from "@/components/app/alerts-bell";
 import { durationDays } from "@/lib/financials/build";
 import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { runSandbox } from "@/lib/research/sandbox";
-import { supplyLinksQuery } from "@/lib/supply/query";
+import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtAlt } from "@/lib/alt/query";
 import { focusGraph, linkDollars, simulateShock, type RiskLink } from "@/lib/supply/core";
@@ -31,6 +31,7 @@ import { adjustedSummary, suspectNotices, type CommentsFile, type Form144File } 
 import { irPageKey, loadIrPage } from "@/lib/ir/client";
 import { irSearch, type IrFreq } from "@/lib/research/ir-search";
 import { botsText, setupsText, type BotView } from "@/lib/research/trading-text";
+import { buildChain, chainText } from "@/lib/supply/chain";
 import { botsQuery, setupsQuery } from "@/lib/signals/queries";
 import { botStats } from "@/lib/signals/bots";
 import type { Family } from "@/lib/signals/strategies";
@@ -489,7 +490,11 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         const d = linkDollars(l, revenue);
         return `${n.relation.toUpperCase()} ${n.name}${n.ticker ? ` (${n.ticker})` : ""}: ${l.detail}${l.share_pct != null ? ` | share ${l.share_pct}%` : ""}${d != null ? ` | ≈$${(d / 1e6).toFixed(0)}M` : ""}${l.single_source ? " | SINGLE SOURCE" : ""}${l.regions?.length ? ` | regions ${l.regions.join(", ")}` : ""}${l.risk ? ` | risk: ${l.risk}` : ""} | per ${l.ticker} ${l.form} ${l.accn}: "${l.quote}"`;
       });
-      return { output: clip(lines.join("\n") || `No named links for ${t}.`), summary: `${g.length} links for ${t}`, refs: g.slice(0, 5).map((n) => ({ ticker: n.links[0].ticker, accn: n.links[0].accn, label: n.name })) };
+      // End-to-end chain (suppliers' suppliers → … → customers' customers) incl. XBRL-tagged shares.
+      const tagged = await qc.fetchQuery(taggedSharesQuery).catch(() => []);
+      const chain = args.relation === "partner" || args.relation === "competitor" ? null : buildChain(t, links, tagged, names, revenue, { depth: 2 });
+      const body = [lines.join("\n") || `No named links for ${t}.`, chain && chain.edges.length ? chainText(chain) : ""].filter(Boolean).join("\n\n");
+      return { output: clip(body), summary: `${g.length} links for ${t}${chain ? ` · ${chain.nodes.length - 1} in the chain` : ""}`, refs: g.slice(0, 5).map((n) => ({ ticker: n.links[0].ticker, accn: n.links[0].accn, label: n.name })) };
     }
     case "simulate_supply_shock": {
       const t = String(args.ticker).toUpperCase();

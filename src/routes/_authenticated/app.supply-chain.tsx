@@ -75,6 +75,7 @@ function SupplyChainPage() {
   const [view, setView] = useSessionState<"network" | "flow" | "chain">("fu:supply:view", "network");
   const [chainDepth, setChainDepth] = useSessionState<number>("fu:supply:chain-depth", 2);
   const [chainSel, setChainSel] = useState<string | null>(null);
+  const [chainWide, setChainWide] = useState(true);
   const { data: tagged } = useQuery({ ...taggedSharesQuery, enabled: view === "chain" });
   const { open } = useSource();
   const { data: signals } = useQuery(allSignalsQuery);
@@ -120,12 +121,12 @@ function SupplyChainPage() {
       .map((r) => r.country);
   }, [summary.hotspots, all, signals, ticker, revenue]);
 
-  const go = (tk: string) => {
+  function go(tk: string) {
     setSelected(null);
     setChainSel(null);
     setShockSrc(null);
     navigate({ search: { t: tk } });
-  };
+  }
   const toggle = (r: Relation) =>
     setVisible((v) => {
       const n = new Set(v);
@@ -134,6 +135,17 @@ function SupplyChainPage() {
     });
   const openLink = (l: RiskLink, label: string) =>
     open({ ticker: l.ticker, label, unit: "usd", value: 0, doc: { accn: l.accn, doc: l.doc, form: l.form, filed: l.filed, title: `${l.ticker} ${l.form}`, search: l.quote } });
+  const chainEvidence =
+    chain && chainSel ? (
+      <ChainEvidence
+        chain={chain}
+        nodeKey={chainSel}
+        names={names}
+        onFocus={go}
+        onOpenText={openLink}
+        onOpenTag={(f) => open({ ticker: f.ticker, label: `${names[f.ticker] ?? f.ticker}: ${f.label} as a ${f.kind}`, periodLabel: fmtDate(f.period_end), unit: "pct", value: f.pct, src: { accn: f.accn, concept: "us-gaap:ConcentrationRiskPercentage1", end: f.period_end, value: f.pct }, elementId: f.element_id ?? undefined })}
+      />
+    ) : null;
 
   return (
     <div>
@@ -191,6 +203,8 @@ function SupplyChainPage() {
               </button>
             ))}
           </div>
+          {view !== "chain" && (
+            <>
           <div className="inline-flex rounded-md border p-0.5 text-xs">
             {([1, 2] as const).map((d) => (
               <button key={d} type="button" onClick={() => setDepth(d)} className={cn("rounded px-2.5 py-1", depth === d ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
@@ -210,16 +224,23 @@ function SupplyChainPage() {
               ))}
             </SelectContent>
           </Select>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="relative h-[640px] min-w-0 overflow-hidden rounded-xl border bg-card">
+      <div className={cn("grid grid-cols-1 gap-4", view !== "chain" && "lg:grid-cols-[minmax(0,1fr)_360px]")}>
+        <div className={cn("relative min-w-0 overflow-hidden rounded-xl border bg-card", view === "chain" && chain && chain.nodes.length > 1 ? "" : "h-[640px]")}>
           {linksQuery.isError && !links ? <div role="alert" className="grid h-full place-content-center gap-3 p-6 text-sm text-muted-foreground">Supply-chain records are temporarily unavailable.<Button variant="outline" size="sm" onClick={() => linksQuery.refetch()}>Retry</Button></div> : isLoading ? (
             <Skeleton className="h-full w-full" />
           ) : view === "chain" && chain ? (
             chain.nodes.length > 1 ? (
-              <ValueChain chain={chain} depth={chainDepth} onDepth={setChainDepth} selected={chainSel} onSelect={(k) => { setChainSel(k); setTab("evidence"); }} />
+              <ValueChain chain={chain} depth={chainDepth} onDepth={setChainDepth} selected={chainSel} onSelect={(k) => {
+                  setChainSel(k);
+                  setTab("evidence");
+                  // On phones the evidence sits under the list: bring it into view.
+                  if (k && !chainWide) requestAnimationFrame(() => document.getElementById("supply-analysis")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                }} evidence={chainSel ? chainEvidence : null} onWide={setChainWide} />
             ) : (
               <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
                 <Network className="size-6" />
@@ -245,7 +266,7 @@ function SupplyChainPage() {
           {view !== "chain" && !(view === "flow" && hasSupplyFlow(graph, revenue)) && (<p className="pointer-events-none absolute bottom-2 left-14 text-[10.5px] text-muted-foreground">Line thickness = stated share of revenue or purchases · dashed = second-order link</p>)}
         </div>
 
-        <Panel title="Analysis" className="min-w-0">
+        <Panel title="Analysis" className="min-w-0 scroll-mt-16" id="supply-analysis">
           <Tabs value={tab} onValueChange={setTab}>
             <TabsList className="mb-3 grid w-full grid-cols-5">
               <TabsTrigger value="evidence" className="px-1 text-xs">Evidence</TabsTrigger>
@@ -263,18 +284,11 @@ function SupplyChainPage() {
 
             <TabsContent value="evidence">
               {view === "chain" && chain ? (
-                chainSel ? (
-                  <ChainEvidence
-                    chain={chain}
-                    nodeKey={chainSel}
-                    names={names}
-                    onFocus={go}
-                    onOpenText={openLink}
-                    onOpenTag={(f) => open({ ticker: f.ticker, label: `${names[f.ticker] ?? f.ticker}: ${f.label} as a ${f.kind}`, periodLabel: fmtDate(f.period_end), unit: "pct", value: f.pct, src: { accn: f.accn, concept: "us-gaap:ConcentrationRiskPercentage1", end: f.period_end, value: f.pct }, elementId: f.element_id ?? undefined })}
-                  />
+                chainSel && !chainWide ? (
+                  chainEvidence
                 ) : (
                   <div className="space-y-2 text-sm text-muted-foreground">
-                    <p>Pick a company in the chain to see the filings that link it.</p>
+                    <p>{chainSel ? "The filings that link the company you picked are open beside the chain." : "Pick a company in the chain to see the filings that link it."}</p>
                     <p className="text-xs">The chain joins every quoted 10-K/10-Q link with customer and supplier shares companies tag in their XBRL, so it can reach past the companies we cover: a supplier's own customers and a customer's own customers.</p>
                   </div>
                 )

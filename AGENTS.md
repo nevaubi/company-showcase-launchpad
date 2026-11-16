@@ -40,6 +40,7 @@
 - Supply-chain exposure, second-order links and shock propagation are pure functions in `src/lib/supply/core.ts`; dollar exposure only comes from stated amounts or stated revenue shares × SEC revenue.
 - Earnings reactions, chart patterns and the correlation explorer use pure functions in `src/lib/markets/core.ts`, precomputed by `bun scripts/markets.ts` into `public/data/markets.json` and `returns.json` (3y aligned daily returns) so pages never download every price file; rerun after ingest.
 - Supply-chain analyst metrics are pure in `src/lib/supply/core.ts`; the analyst note may only cite stored link ids.
+- The end-to-end value chain (`src/lib/supply/chain.ts`) joins quoted supply links with XBRL-tagged customer/supplier shares (`xbrl_concentration`, names matched by `src/lib/xbrl/counterparty.ts`; rerun `scripts/xbrl-rematch.ts` after changing the matcher), so every edge keeps the filing that states it.
 - `scripts/supply-intel.ts` fills `supply_signals` with verbatim-verified quotes; failed stages keep stored rows.
 - `scripts/alt-data.ts` upserts `alt_data` (stable `uid`, `source_url` required); contract recipients match by name prefix; SEC form maps and signals are pure in `src/lib/alt/`.
 - OFR hedge fund data comes from `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json`, values as published with source URLs; rerun, never hand-edit.

@@ -7,6 +7,7 @@
  */
 import { buildDetail, DETAIL_FORMAT, type FilingDetail, type StoredDetail } from "@/lib/xbrl/detail";
 import { parseContexts, parseInlineFacts, parseLabels, parseUnits } from "@/lib/xbrl/inline";
+import { companyMatcher } from "@/lib/xbrl/counterparty";
 import { args, dbGate, log, sb, sleep } from "./lib/supa";
 
 const UA = "FiledUnder Research research@filedunder.ai";
@@ -70,25 +71,13 @@ async function stored(ticker: string): Promise<StoredDetail | null> {
   }
 }
 
-/** Customers/suppliers named after a covered company (first word match, longest name wins). */
-function matcher(universe: { ticker: string; name: string }[]) {
-  const norm = (s: string) => s.toLowerCase().replace(/[.,'’]/g, "").replace(/\b(inc|corp|corporation|co|company|ltd|plc|holdings?|group|the|llc|lp|sa|nv|ag)\b/g, " ").replace(/\s+/g, " ").trim();
-  const names = universe.map((u) => ({ t: u.ticker, n: norm(u.name) })).filter((x) => x.n.length >= 3).sort((a, b) => b.n.length - a.n.length);
-  return (label: string, self: string) => {
-    const l = norm(label);
-    if (!l || /^customer\b|^customer [a-z]$|^(one|two|three|four|five) customers?|^largest|^top|^major|^distributor|^other/.test(l)) return null;
-    const hit = names.find((x) => x.t !== self && (l === x.n || l.startsWith(`${x.n} `)));
-    return hit?.t ?? null;
-  };
-}
-
 async function main() {
   const { data: uni } = await sb.storage.from("datasets").download("universe.json");
   const universe = (JSON.parse(await uni!.text()) as { companies?: { ticker: string; cik: string; name: string }[] } | { ticker: string; cik: string; name: string }[]);
   const list = Array.isArray(universe) ? universe : (universe.companies ?? []);
   const want = args.tickers?.split(",").map((t) => t.toUpperCase());
   const todo = list.filter((c) => c.cik && (!want || want.includes(c.ticker)));
-  const match = matcher(list);
+  const match = companyMatcher(list);
   log(`${todo.length} companies`);
   // Full runs show on the admin freshness page (job "xbrl-detail").
   const record = !want && args.dry === undefined;
