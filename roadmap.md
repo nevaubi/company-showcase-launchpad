@@ -226,5 +226,7 @@
 - [ ] Supply chain granularity, next: concentration edges (from filing detail) on the supply-chain map, end-to-end tiered chain view
 - [ ] Filing detail follow-ups: history beyond the latest 10-K/10-Q (stitch prior filings for 5-year segment and geography trends); bank/insurer breakdowns (loan classes, premiums by line) currently filtered as accounting detail
 - [ ] Alt data: more authoritative gov sources (e.g. NHTSA recalls, CFPB complaints, FDA, USPTO, H-1B, lobbying, FINRA/SEC market structure) collected on schedule with source URLs
-- [ ] Navigation/look cleanup: fewer hubs, clearer labels, consistent page headers
+- [x] Navigation cleanup: sidebar down to 9 entries (Signals merged into Dashboard tabs; Firm and billing moved to the account menu); every page label matches its menu section; setups table fits without sideways scrolling
+- [x] Filing typos: SEC notices whose stated value implies an impossible share price (e.g. Tenable Form 144, $4.1B for 12,000 shares) are flagged on the feed, Insiders tab and assistant, and left out of totals and ranking
+- [ ] Look polish, next: company page header density on phones, consistent empty states across hubs
 - [ ] Assistant: more tools over cross-data (setups, paper bots, supply exposures, alt data, IR KPIs) and a platform-knowledge brief in context
