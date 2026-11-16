@@ -129,7 +129,7 @@ TOTALS AND HIERARCHY (critical — totals are verified by adding children):
 - Items that are subtracted (eliminations, intersegment, corporate and other, hedging) are children too, with the value sign as printed (parentheses = negative).
 - "breakdown" is a short name of the dimension, e.g. "Net sales by category", "Revenue by reportable segment", "Operating income by segment", "Noninterest expense".
 
-PERIODS: list each period column of a table once in "periods" (p = 0,1,2…), then map each row's number cells to a period with {c, p}. months = 3 for a quarter ("Three Months Ended", "Q3"), 6/9 for year-to-date, 12 for a full year, 0 for point-in-time values ("as of", end-of-period balances, subscribers at period end, store counts, backlog). Dates are ISO YYYY-MM-DD; period_start is the first day of the period (estimate from months and the fiscal calendar when not printed; use "" for months=0). When headers only say "Q3 FY25" or "Fiscal 2024", infer exact dates from the company's fiscal calendar and the document date.
+PERIODS: list each period column of a table once in "periods" (p = 0,1,2…), then map each row's number cells to a period with {c, p}. months = 3 for a quarter ("Three Months Ended", "Q3"), 6/9 for year-to-date, 12 for a full year, 1 for a single month (monthly operating statistics: "October 2025", "Month ended Oct 31"), 0 for point-in-time values ("as of", end-of-period balances, subscribers at period end, store counts, backlog). Dates are ISO YYYY-MM-DD; period_start is the first day of the period (estimate from months and the fiscal calendar when not printed; use "" for months=0). When headers only say "Q3 FY25" or "Fiscal 2024", infer exact dates from the company's fiscal calendar and the document date.
 SKIP: percent-change / growth / "% of total" / variance columns, constant-currency columns, guidance/outlook, non-GAAP reconciliation adjustments, per-share data, share counts, tax, interest, and consolidated statement lines that are not part of a breakdown.
 
 UNITS & SCALE: scale multiplies the printed number to absolute units ("in millions" → 1000000, "in thousands" → 1000, "in billions" → 1000000000); percentages, ratios, per-share amounts and prices use scale 1. unit: "usd" money, "pct" percentages (value as printed, e.g. 45.2), "bps" basis points, "count" counts/volumes, "usdPerShare" per-unit dollar amounts like ARPU or realized price per barrel, "ratio" multiples.
@@ -217,6 +217,15 @@ export interface FactRow {
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
+/** Period lengths readers may store: point in time, one month (monthly operating statistics), quarter, year-to-date, year. */
+export const PERIOD_MONTHS = [0, 1, 3, 6, 9, 12];
+const DAY_MS = 86_400_000;
+/** A one-month figure must span about a month when the start is given. */
+export const monthSpanOk = (per: { months: number; period_start: string; period_end: string }) => {
+  if (per.months !== 1 || !ISO.test(per.period_start)) return true;
+  const d = (Date.parse(per.period_end) - Date.parse(per.period_start)) / DAY_MS + 1;
+  return d >= 27 && d <= 32;
+};
 const SCALES = new Set([1, 1e3, 1e6, 1e9]);
 const cleanLabel = (s: string) =>
   s
@@ -248,7 +257,7 @@ export function factsFromModel(out: ModelOutput, tables: ParsedTable[], filed?: 
         const text = table.rows[row.r]?.[cell.c];
         const n = text == null ? null : parseNumber(text);
         const per = periods.get(cell.p);
-        const okPeriod = !!per && [0, 3, 6, 9, 12].includes(per.months) && ISO.test(per.period_end) && Date.parse(per.period_end) <= latest;
+        const okPeriod = !!per && PERIOD_MONTHS.includes(per.months) && ISO.test(per.period_end) && Date.parse(per.period_end) <= latest && monthSpanOk(per);
         if (n == null || !okPeriod || !SCALES.has(unitScale) || !label) {
           rejected++;
           continue;

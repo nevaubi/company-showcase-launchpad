@@ -218,7 +218,7 @@ Put these in "skipped" with the matching reason: growth rates, Y/Y or Q/Q change
 </how_to_read>
 
 <fields>
-- Periods: list each period once per panel (p = 0, 1, …) with ISO dates. months = 3 for a quarter, 6 / 9 for year-to-date, 12 for a full year or a trailing-twelve-months / trailing-four-quarters figure, 0 only for point-in-time values (balances and counts at a date: assets, loans, deposits, AUM, backlog, subscribers, stores, headcount). Flows — revenue, NOI, income, expenses, volumes produced or sold — always cover a period (3 / 6 / 9 / 12); use the document's reporting period when the page doesn't print one; period_start is the first day of the period ("" when months = 0). When the page says "Q3 FY25" or "2024", infer exact dates from the company's fiscal calendar and the document date.
+- Periods: list each period once per panel (p = 0, 1, …) with ISO dates. months = 3 for a quarter, 6 / 9 for year-to-date, 12 for a full year or a trailing-twelve-months / trailing-four-quarters figure, 1 for a single month (monthly operating statistics: "Oct 2025", "Month of October"), 0 only for point-in-time values (balances and counts at a date: assets, loans, deposits, AUM, backlog, subscribers, stores, headcount). Flows — revenue, NOI, income, expenses, volumes produced or sold — always cover a period (1 / 3 / 6 / 9 / 12); use the document's reporting period when the page doesn't print one; period_start is the first day of the period ("" when months = 0). When the page says "Q3 FY25" or "2024", infer exact dates from the company's fiscal calendar and the document date.
 - Units & scale: scale converts the printed number to absolute units — "$ in billions" or "$12.3B" → 1000000000, "in millions" → 1000000, "in thousands" → 1000; percentages, prices, per-unit amounts and ratios use scale 1. unit: usd, pct (as printed, 45.2), bps, count, usdPerShare (per-unit dollars such as ARPU or realized price per barrel), ratio.
 - Hierarchy: the printed total of a breakdown is a row with is_total = true and its components use parent = the total's exact label. When the total isn't printed on this page, leave parent "" and is_total = false. Keep different breakdowns apart with a short "breakdown" name such as "Revenue by segment".
 - Labels exactly as printed, without footnote markers. When the same line name appears under more than one heading on the page, prefix the heading so every label in a panel is unique ("Americas — iPhone", "North America — Copper sales (mm lbs)").
@@ -264,6 +264,15 @@ export interface VisionFact {
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
+/** Period lengths readers may store: point in time, one month (monthly operating statistics), quarter, year-to-date, year. */
+const PERIOD_MONTHS = [0, 1, 3, 6, 9, 12];
+const DAY_MS = 86_400_000;
+/** A one-month figure must span about a month when the start is given. */
+const monthSpanOk = (per: { months: number; period_start: string; period_end: string }) => {
+  if (per.months !== 1 || !ISO.test(per.period_start)) return true;
+  const d = (Date.parse(per.period_end) - Date.parse(per.period_start)) / DAY_MS + 1;
+  return d >= 27 && d <= 32;
+};
 const SCALES = new Set([1, 1e3, 1e6, 1e9]);
 const clean = (s: string) =>
   s
@@ -305,7 +314,7 @@ export function visionFacts(out: VisionOutput, tokens: PageToken[], page: number
         const tok = byId.get(ref.w);
         const per = periods.get(ref.p);
         const parsed = tok ? resolveValue(tok.text, ref.read, ocr) : null;
-        const okPeriod = !!per && [0, 3, 6, 9, 12].includes(per.months) && ISO.test(per.period_end) && Date.parse(per.period_end) <= latest;
+        const okPeriod = !!per && PERIOD_MONTHS.includes(per.months) && ISO.test(per.period_end) && Date.parse(per.period_end) <= latest && monthSpanOk(per);
         if (!tok || !parsed || used.has(ref.w) || !okPeriod || !label) {
           rejected++;
           continue;

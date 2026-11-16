@@ -133,3 +133,22 @@ describe("resolveValue", () => {
     expect(resolveValue("$271", "$2.81", true)).toBeNull();
   });
 });
+
+describe("monthly figures", () => {
+  const tokens = [{ w: 0, text: "1,250", box: [0.5, 0.1, 0.6, 0.12] as [number, number, number, number] }];
+  const base = { parent: "", breakdown: "", category: "operating" as const, metric: "volume" as const, is_total: false };
+  const page = (period_start: string, period_end: string, months: number): VisionOutput =>
+    ({ page_kind: "table", panels: [{ title: "Monthly traffic", periods: [{ p: 0, period_start, period_end, months }], rows: [{ ...base, label: "Revenue passenger miles", unit: "count", scale: 1e6, values: [{ w: 0, p: 0, read: "1,250" }] }] }] }) as unknown as VisionOutput;
+
+  it("keeps a one-month figure (monthly operating statistics)", () => {
+    const r = visionFacts(page("2025-10-01", "2025-10-31", 1), tokens, 1, "2025-11-15");
+    expect(r.rows).toHaveLength(1);
+    expect(r.rows[0].months).toBe(1);
+  });
+
+  it("rejects a 'month' whose dates span a quarter", () => {
+    const r = visionFacts(page("2025-07-01", "2025-09-30", 1), tokens, 1, "2025-11-15");
+    expect(r.rows).toHaveLength(0);
+    expect(r.rejected).toBe(1);
+  });
+});
