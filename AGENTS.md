@@ -58,3 +58,4 @@
 - Access: sidebar hubs and their page tabs come from `src/lib/nav.ts`; `/app` checks `has_app_access` (waitlist approved or admin) and admin paths need `has_role(admin)`, enforced in RLS (research tables/`datasets` read via `has_app_access`) and `requireAppAccess` on research/AI server fns, because hiding a link isn't security.
 
 - Partner mirror/import and IR-store/intel rules: see `scripts/AGENTS.md`.
+- Short-term setups: published price strategies (`src/lib/signals/strategies.ts`), point-in-time features (`features.ts`), walk-forward gate with costs, date clustering, BH-FDR and deflated Sharpe (`backtest.ts`, `stats.ts`) and pairs (`pairs.ts`) are pure; `bun scripts/setups.ts` scans the full `datasets` universe into `public/data/setups.json`. Setups are shown as proven only when their strategy passes every gate check; never loosen the gate to fill the page.
