@@ -58,6 +58,7 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; hubs: Hub[] }[] = [
         id: "ideas",
         label: "Ideas",
         pages: [
+          { to: "/app/setups", label: "Short-term setups" },
           { to: "/app/ideas", label: "Trade ideas" },
           { to: "/app/portfolio", label: "Paper portfolio" },
         ],
