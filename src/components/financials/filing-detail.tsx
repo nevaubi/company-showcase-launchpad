@@ -23,9 +23,11 @@ import {
   type SegmentMatrix,
 } from "@/lib/xbrl/detail";
 import { filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
+import { hasMoneyMap, MoneyMap } from "@/components/financials/money-map";
 
-type Section = "revenue" | "segments" | "concentration" | "geography" | "costs" | "commitments" | "inventory" | "other";
+type Section = "map" | "revenue" | "segments" | "concentration" | "geography" | "costs" | "commitments" | "inventory" | "other";
 const SECTION_LABEL: Record<Section, string> = {
+  map: "Money map",
   revenue: "Revenue mix",
   segments: "Segment P&L",
   concentration: "Concentration",
@@ -36,6 +38,7 @@ const SECTION_LABEL: Record<Section, string> = {
   other: "Other detail",
 };
 const SECTION_HINT: Record<Section, string> = {
+  map: "Where revenue comes from, which segments earn it and where it goes, built only from values tagged in the filing",
   revenue: "Revenue split by segment, product, channel and timing, as tagged in the filing",
   segments: "Every line the filing reports per segment: revenue, significant expenses, profit",
   concentration: "Customers, suppliers and regions the filing says make up a large share of revenue, purchases or receivables",
@@ -61,7 +64,8 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
     const has = new Set<Section>(d.tables.map((t) => t.family as Section));
     if (d.segments) has.add("segments");
     if (d.concentration.length) has.add("concentration");
-    return (["revenue", "segments", "concentration", "geography", "costs", "commitments", "inventory", "other"] as Section[]).filter((s) => has.has(s));
+    if (hasMoneyMap(d)) has.add("map");
+    return (["map", "revenue", "segments", "concentration", "geography", "costs", "commitments", "inventory", "other"] as Section[]).filter((s) => has.has(s));
   }, [d]);
 
   if (q.isLoading) return <Skeleton className="h-[480px]" />;
@@ -101,7 +105,9 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
         <Empty text={`${ticker}'s ${d.form} tags no business breakdowns beyond the statements themselves.`} />
       )}
       <p className="text-[11px] text-muted-foreground">{SECTION_HINT[active]}. Click any number to see it highlighted in the filing.</p>
-      {active === "segments" && d.segments ? (
+      {active === "map" ? (
+        <MoneyMap d={d} ticker={ticker} />
+      ) : active === "segments" && d.segments ? (
         <SegmentPnl m={d.segments} d={d} ticker={ticker} />
       ) : active === "concentration" ? (
         <Concentration rows={d.concentration} d={d} ticker={ticker} />
