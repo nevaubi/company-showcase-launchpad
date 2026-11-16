@@ -16,7 +16,9 @@ import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSource } from "@/components/source/source-context";
-import { supplyLinksQuery } from "@/lib/supply/query";
+import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
+import { buildChain } from "@/lib/supply/chain";
+import { ChainEvidence, ValueChain } from "@/components/supply/value-chain";
 import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
 import { SupplyIntel, CounterpartyEvidence } from "@/components/supply/supply-intel";
 import { ConfidenceBadge, DependencyCard, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
@@ -70,7 +72,10 @@ function SupplyChainPage() {
   const [tab, setTab] = useSessionState("fu:supply:tab", "evidence");
   const [shockSrc, setShockSrc] = useState<string | null>(null);
   const [shock, setShock] = useState(20);
-  const [view, setView] = useSessionState<"network" | "flow">("fu:supply:view", "network");
+  const [view, setView] = useSessionState<"network" | "flow" | "chain">("fu:supply:view", "network");
+  const [chainDepth, setChainDepth] = useSessionState<number>("fu:supply:chain-depth", 2);
+  const [chainSel, setChainSel] = useState<string | null>(null);
+  const { data: tagged } = useQuery({ ...taggedSharesQuery, enabled: view === "chain" });
   const { open } = useSource();
   const { data: signals } = useQuery(allSignalsQuery);
   const [country, setCountry] = useState<string | null>(null);
@@ -81,6 +86,7 @@ function SupplyChainPage() {
   const revenue = useMemo(() => Object.fromEntries((universe?.companies ?? []).map((c) => [c.ticker, c.revenueTTM ?? undefined])), [universe]);
   const all = links ?? [];
   const graph = useMemo(() => focusGraph(ticker, all, names), [ticker, all, names]);
+  const chain = useMemo(() => (view === "chain" ? buildChain(ticker, all as RiskLink[], tagged ?? [], names, revenue, { depth: chainDepth }) : null), [view, ticker, all, tagged, names, revenue, chainDepth]);
   const hop2 = useMemo(() => (depth === 2 ? secondOrder(ticker, graph, all, names) : []), [depth, ticker, graph, all, names]);
   const risks = useMemo(() => Object.fromEntries([...graph, ...hop2].map((n) => [n.key, nodeRisk(n.links as RiskLink[], revenue)])), [graph, hop2, revenue]);
   const focus: GraphNode = { key: "focus", name: names[ticker] ?? ticker, ticker, domain: null, relation: "focus", links: [] };
@@ -116,6 +122,7 @@ function SupplyChainPage() {
 
   const go = (tk: string) => {
     setSelected(null);
+    setChainSel(null);
     setShockSrc(null);
     navigate({ search: { t: tk } });
   };
@@ -178,9 +185,9 @@ function SupplyChainPage() {
         ))}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div className="inline-flex rounded-md border p-0.5 text-xs">
-            {(["network", "flow"] as const).map((v) => (
-              <button key={v} type="button" onClick={() => setView(v)} className={cn("rounded px-2.5 py-1", view === v ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
-                {v === "network" ? "Network" : "Flow"}
+            {(["network", "flow", "chain"] as const).map((v) => (
+              <button key={v} type="button" onClick={() => { setView(v); if (v === "chain") setTab("evidence"); }} className={cn("rounded px-2.5 py-1", view === v ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+                {v === "network" ? "Network" : v === "flow" ? "Flow" : "Chain"}
               </button>
             ))}
           </div>
@@ -210,6 +217,15 @@ function SupplyChainPage() {
         <div className="relative h-[640px] min-w-0 overflow-hidden rounded-xl border bg-card">
           {linksQuery.isError && !links ? <div role="alert" className="grid h-full place-content-center gap-3 p-6 text-sm text-muted-foreground">Supply-chain records are temporarily unavailable.<Button variant="outline" size="sm" onClick={() => linksQuery.refetch()}>Retry</Button></div> : isLoading ? (
             <Skeleton className="h-full w-full" />
+          ) : view === "chain" && chain ? (
+            chain.nodes.length > 1 ? (
+              <ValueChain chain={chain} depth={chainDepth} onDepth={setChainDepth} selected={chainSel} onSelect={(k) => { setChainSel(k); setTab("evidence"); }} />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
+                <Network className="size-6" />
+                No filing names a supplier or customer of {focus.name} yet, so there is no chain to draw.
+              </div>
+            )
           ) : graph.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
               <Network className="size-6" />
@@ -226,7 +242,7 @@ function SupplyChainPage() {
               </Suspense>
             </ClientOnly>
           )}
-          {!(view === "flow" && hasSupplyFlow(graph, revenue)) && (<p className="pointer-events-none absolute bottom-2 left-14 text-[10.5px] text-muted-foreground">Line thickness = stated share of revenue or purchases · dashed = second-order link</p>)}
+          {view !== "chain" && !(view === "flow" && hasSupplyFlow(graph, revenue)) && (<p className="pointer-events-none absolute bottom-2 left-14 text-[10.5px] text-muted-foreground">Line thickness = stated share of revenue or purchases · dashed = second-order link</p>)}
         </div>
 
         <Panel title="Analysis" className="min-w-0">
@@ -246,7 +262,23 @@ function SupplyChainPage() {
             </TabsContent>
 
             <TabsContent value="evidence">
-              {sel ? (
+              {view === "chain" && chain ? (
+                chainSel ? (
+                  <ChainEvidence
+                    chain={chain}
+                    nodeKey={chainSel}
+                    names={names}
+                    onFocus={go}
+                    onOpenText={openLink}
+                    onOpenTag={(f) => open({ ticker: f.ticker, label: `${names[f.ticker] ?? f.ticker}: ${f.label} as a ${f.kind}`, periodLabel: fmtDate(f.period_end), unit: "pct", value: f.pct, src: { accn: f.accn, concept: "us-gaap:ConcentrationRiskPercentage1", end: f.period_end, value: f.pct }, elementId: f.element_id ?? undefined })}
+                  />
+                ) : (
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    <p>Pick a company in the chain to see the filings that link it.</p>
+                    <p className="text-xs">The chain joins every quoted 10-K/10-Q link with customer and supplier shares companies tag in their XBRL, so it can reach past the companies we cover: a supplier's own customers and a customer's own customers.</p>
+                  </div>
+                )
+              ) : sel ? (
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
                     <CompanyLogo ticker={sel.ticker ?? sel.name.slice(0, 4).toUpperCase()} src={externalLogo(sel.domain, sel.ticker)} size="lg" />
