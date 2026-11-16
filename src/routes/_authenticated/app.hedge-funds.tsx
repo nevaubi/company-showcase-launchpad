@@ -56,7 +56,7 @@ function HedgeFunds() {
 
   return (
     <div>
-      <PageHeader eyebrow="Data" title="Hedge funds & funding" description="Where leverage is building in the financial system — SEC Form PF, CFTC futures positioning, Fed dealer surveys and sponsored repo via the Office of Financial Research — plus every U.S. Treasury auction since 2010, graded for demand." />
+      <PageHeader eyebrow="Markets" title="Hedge funds & funding" description="Where leverage is building in the financial system — SEC Form PF, CFTC futures positioning, Fed dealer surveys and sponsored repo via the Office of Financial Research — plus every U.S. Treasury auction since 2010, graded for demand." />
       <div className="mb-4 flex flex-wrap gap-1.5">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={cn("rounded-full border px-3 py-1 text-[12px]", t.id === tab ? "bg-foreground text-background" : "bg-card hover:bg-secondary")}>{t.label}</button>

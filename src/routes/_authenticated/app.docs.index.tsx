@@ -100,7 +100,7 @@ function Docs() {
   return (
     <div className="mx-auto max-w-5xl">
       <PageHeader
-        eyebrow="Workspace"
+        eyebrow="Library"
         title="Docs & sheets"
         description="Write notes with an AI assistant grounded in filings, and build spreadsheets whose cells pull sourced SEC values with =FU()."
         actions={

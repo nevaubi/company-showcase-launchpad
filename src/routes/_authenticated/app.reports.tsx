@@ -88,7 +88,7 @@ function ReportLibrary() {
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="Reports"
+        eyebrow="Library"
         title="Report library"
         description="Primers, earnings previews, recaps and IC memos written from SEC filings and market data, with every figure cited. Standard versions are shared and refresh when new filings land; customize your own and download them in your firm's branding."
         actions={

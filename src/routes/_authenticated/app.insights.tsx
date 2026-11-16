@@ -104,7 +104,7 @@ function Insights() {
   return (
     <div className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
       <PageHeader
-        eyebrow="Intelligence"
+        eyebrow="Dashboard"
         title="Insights"
         description="What each company's reported KPIs say when read against their own history, their peers, guidance, federal contracts, lobbying, trading and congressional records. Every figure links to the release, workbook cell or record it came from."
       />

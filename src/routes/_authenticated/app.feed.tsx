@@ -110,7 +110,7 @@ function Feed() {
   return (
     <div className="grid grid-cols-1 gap-4">
       <PageHeader
-        eyebrow="Monitoring"
+        eyebrow="Dashboard"
         title="What changed"
         description="Filing changes, 8-K events, insider trades, analyst actions, earnings, federal contracts, dividends, IPOs, IR documents and technical events in one stream. Each event shows the rule that ranked it and links to its source."
         actions={

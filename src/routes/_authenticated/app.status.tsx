@@ -239,7 +239,7 @@ function Status() {
   return (
     <div className="grid grid-cols-1 gap-5">
       <PageHeader
-        eyebrow="Provenance"
+        eyebrow="Admin"
         title="Data status"
         description="Every figure starts in a bundled snapshot built from primary sources; scheduled jobs then layer newer prices, filings, insider trades and economic prints on top."
       />

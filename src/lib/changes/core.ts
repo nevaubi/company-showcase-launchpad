@@ -69,8 +69,25 @@ export function filterEvents(events: ChangeEvent[], f: ChangeFilter): ChangeEven
   });
 }
 
+/**
+ * A dollar value stated in a filing that can't be right: more than a quarter of the company's market value
+ * at more than $2,000 a share (e.g. a Form 144 stating $4.1B for 12,000 shares). Returns the per-share
+ * figure the filing implies, or null when the value is plausible or the parts are missing.
+ */
+export function suspectStatedValue(e: ChangeEvent): { perShare: number; shareOfMcap: number } | null {
+  const m = e.metrics ?? {};
+  const value = typeof m.value === "number" ? m.value : null;
+  const shares = typeof m.shares === "number" ? m.shares : null;
+  const bps = typeof m.bps_mcap === "number" ? m.bps_mcap : null;
+  if (!value || !shares || bps == null || shares <= 0) return null;
+  const perShare = value / shares;
+  return Math.abs(bps) > 2500 && perShare > 2000 ? { perShare, shareOfMcap: Math.abs(bps) / 1e4 } : null;
+}
+
 /** The event's own size for ordering within a tier (share of market cap, then dollars, then relative change). */
 export function magnitude(e: ChangeEvent): number {
+  // A typo in the filing must not push the event to the top.
+  if (suspectStatedValue(e)) return 0;
   const m = e.metrics ?? {};
   const num = (k: string) =>
     typeof m[k] === "number" && Number.isFinite(m[k] as number) ? (m[k] as number) : null;

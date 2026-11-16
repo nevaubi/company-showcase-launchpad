@@ -194,7 +194,7 @@ function Screener() {
   if (file.isError)
     return (
       <div>
-        <PageHeader eyebrow="Markets" title="Screener" />
+        <PageHeader eyebrow="Companies" title="Screener" />
         <DataUnavailable
           title="The screener dataset is not available"
           error={file.error}
@@ -207,7 +207,7 @@ function Screener() {
   return (
     <div>
       <PageHeader
-        eyebrow="Markets"
+        eyebrow="Companies"
         title="Screener"
         description={
           file.data

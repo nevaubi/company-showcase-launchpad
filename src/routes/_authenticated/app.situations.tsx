@@ -33,7 +33,7 @@ function Situations() {
   return (
     <div className="grid gap-4">
       <PageHeader
-        eyebrow="Research"
+        eyebrow="Dashboard"
         title="Situations"
         description="Screens built from independent, sourced facts: Form 4 trades, filing text, 8-K items, federal awards, supply-chain disclosures, valuation history and technical base rates. Every row opens its evidence."
       />

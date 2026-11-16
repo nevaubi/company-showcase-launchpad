@@ -112,7 +112,7 @@ function Calendars() {
   return (
     <div className="grid gap-4">
       <PageHeader
-        eyebrow="Markets"
+        eyebrow="Filings"
         title="Calendars"
         description={`Earnings, economic releases, ex-dividend dates and the IPO pipeline${stamps.length ? ` · updated ${stamps.join(", ")}` : ""}`}
       />

@@ -45,7 +45,7 @@ function Theses() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        eyebrow="Thesis tracker"
+        eyebrow="Library"
         title="Theses"
         description="Write down why you own (or short) something, then let the price, the filings and an AI reviewer keep you honest."
         actions={

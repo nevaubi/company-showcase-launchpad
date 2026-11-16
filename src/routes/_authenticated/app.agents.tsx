@@ -28,7 +28,7 @@ function Agents() {
   return (
     <div className="grid grid-cols-1 gap-4">
       <PageHeader
-        eyebrow="Agents"
+        eyebrow="Dashboard"
         title="Alerts"
         description="Tasks run on a schedule and deliver sourced reports; monitors watch the data and alert you when something new matches."
       />

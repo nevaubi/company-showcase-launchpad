@@ -1,9 +1,9 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { ArrowUpRight } from "lucide-react";
 import type { MouseEvent } from "react";
-import { fmtBaseRate, TYPE_SHORT } from "@/lib/changes/core";
+import { fmtBaseRate, suspectStatedValue, TYPE_SHORT } from "@/lib/changes/core";
 import type { ChangeEvent, ChangeEvidence, ChangeTier } from "@/lib/changes/types";
-import { fmtDate } from "@/lib/format";
+import { fmtCompactUsd, fmtDate, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const TIER_BAR: Record<ChangeTier, string> = {
@@ -60,6 +60,7 @@ export function EventRow({
   const base = fmtBaseRate(e.base_rate);
   // Technical reasons already carry the base rate in words; show the formatted line instead.
   const reason = e.type === "technical" && base ? "Technical events are low tier." : e.reason;
+  const suspect = suspectStatedValue(e);
   return (
     <li className="grid grid-cols-[3px_minmax(0,1fr)] gap-x-3 px-3.5 py-2.5" data-event={e.id}>
       <span aria-hidden className={cn("rounded-full", TIER_BAR[e.tier])} />
@@ -101,6 +102,12 @@ export function EventRow({
           <span className="font-medium text-foreground/70">Why it ranks: </span>
           {reason}
         </p>
+        {suspect && (
+          <p className="mt-0.5 text-[11px] text-warning">
+            The filing states {fmtCompactUsd(e.metrics?.value as number, 2)} for {(e.metrics?.shares as number).toLocaleString("en-US")} shares (
+            {fmtPrice(suspect.perShare)} a share, {Math.round(suspect.shareOfMcap * 100)}% of the company's market value) — almost certainly a typo by the filer. Ranked as if the value were unknown.
+          </p>
+        )}
         {!compact && base && <p className="mt-0.5 text-[11px] text-muted-foreground">{base}</p>}
         {!compact && links.length > 0 && (
           <div className="-ml-1 mt-1 flex flex-wrap gap-x-1">

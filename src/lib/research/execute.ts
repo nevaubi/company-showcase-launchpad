@@ -27,7 +27,7 @@ import { isAppPath, siteMapText } from "@/lib/research/site-map";
 import { canvas, checkView, parseOrRepair, parseViewSpec } from "@/lib/research/views";
 import { viewLabel } from "@/lib/research/view-spec";
 import { partnerFile } from "@/lib/data";
-import type { CommentsFile, Form144File } from "@/lib/filings/review";
+import { adjustedSummary, suspectNotices, type CommentsFile, type Form144File } from "@/lib/filings/review";
 import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { searchDocuments } from "@/lib/ir/search";
 import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
@@ -367,10 +367,12 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       if (u) out.push(`SNAPSHOT: ${JSON.stringify(flatUniverse([u])[0]).slice(0, 600)}`);
       out.push("FILINGS:", ...d.filings.filter((f) => f.filed >= since).slice(0, 15).map((f) => `${f.filed} ${f.form} ${f.desc ?? ""} ${f.items ? `items ${f.items}` : ""} accn ${f.accn}`));
       out.push("INSIDERS (open market):", ...d.insiders.filter((x) => (x.code === "P" || x.code === "S") && x.date >= since).slice(0, 12).map((x) => `${x.date} ${x.owner} (${x.role}) ${x.code === "P" ? "BUY" : "SELL"} ${x.shares} @ ${x.price ?? "?"}${x.plan10b5 ? " 10b5-1" : ""} accn ${x.accn}`));
+      const f144bad = suspectNotices(f144?.notices ?? []);
+      const f144s = f144 ? adjustedSummary(f144, f144bad) : null;
       if (f144?.notices.length)
         out.push(
-          `PROPOSED INSIDER SALES (Form 144; open = no matching Form 4 sale yet): open $${Math.round(f144.summary.open.value).toLocaleString()} · 90d ${f144.summary.d90.n} notices $${Math.round(f144.summary.d90.value).toLocaleString()}`,
-          ...f144.notices.slice(0, 10).map((n) => `${n.filed} ${n.person ?? "?"} (${n.relationship ?? "affiliate"}) $${Math.round(n.value ?? 0).toLocaleString()} sale ~${n.sale_date ?? "?"} ${n.plan ? `10b5-1 adopted ${n.plan_adopted[0] ?? "?"}` : "no plan"} [${n.status}] <${n.url ?? ""}>`),
+          `PROPOSED INSIDER SALES (Form 144; open = no matching Form 4 sale yet): open $${Math.round(f144s!.open.value).toLocaleString()} · 90d ${f144s!.d90.n} notices $${Math.round(f144s!.d90.value).toLocaleString()}${f144bad.size ? " (totals exclude notices whose stated value is a filer typo)" : ""}`,
+          ...f144.notices.slice(0, 10).map((n) => `${n.filed} ${n.person ?? "?"} (${n.relationship ?? "affiliate"}) $${Math.round(n.value ?? 0).toLocaleString()}${f144bad.has(n.accession) ? ` [STATED VALUE IS A FILER TYPO: ${n.shares ?? "?"} shares; do not cite the dollar figure]` : ""} sale ~${n.sale_date ?? "?"} ${n.plan ? `10b5-1 adopted ${n.plan_adopted[0] ?? "?"}` : "no plan"} [${n.status}] <${n.url ?? ""}>`),
         );
       if (review?.threads.length)
         out.push(

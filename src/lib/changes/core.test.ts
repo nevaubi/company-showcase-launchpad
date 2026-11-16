@@ -8,6 +8,7 @@ import {
   groupByDay,
   newSince,
   rankEvents,
+  suspectStatedValue,
   visitBaseline,
 } from "./core";
 import type { ChangeEvent } from "./types";
@@ -164,5 +165,18 @@ describe("digest", () => {
     expect(s).toContain("+1.4% to +11.6%");
     expect(s).toContain("n=16,094");
     expect(s).toContain("not a forecast");
+  });
+});
+
+describe("stated values that can't be right", () => {
+  it("flags a Form 144 stating $4.1B for 12,000 shares and stops it leading the feed", () => {
+    const typo = ev({ id: "typo", sub: "form144", tier: "high", metrics: { value: 4_100_000_000, shares: 12_000, bps_mcap: 9624.41 } });
+    const real = ev({ id: "real", sub: "form144", tier: "high", metrics: { value: 38_418_359, shares: 1_496_042, bps_mcap: 220.16 } });
+    expect(suspectStatedValue(typo)?.perShare).toBeCloseTo(341_666.67, 1);
+    expect(suspectStatedValue(real)).toBeNull();
+    expect(rankEvents([typo, real]).map((e) => e.id)).toEqual(["real", "typo"]);
+  });
+  it("keeps a large but plausible sale (a big holder selling a block at a normal price)", () => {
+    expect(suspectStatedValue(ev({ metrics: { value: 3e9, shares: 60e6, bps_mcap: 3000 } }))).toBeNull();
   });
 });

@@ -107,7 +107,7 @@ function Companies() {
   return (
     <div>
       <PageHeader
-        eyebrow="Coverage"
+        eyebrow="Companies"
         title="Companies"
       />
       <div className="mb-3 flex flex-wrap items-center gap-2">

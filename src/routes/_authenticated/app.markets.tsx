@@ -256,7 +256,7 @@ function Markets() {
   return (
     <div className="grid grid-cols-1 gap-5">
       <PageHeader
-        eyebrow="Technical analysis"
+        eyebrow="Markets"
         title={
           <span className="flex flex-wrap items-baseline gap-3">
             {name}

@@ -266,7 +266,7 @@ function Compare() {
   return (
     <div>
       <PageHeader
-        eyebrow="Research"
+        eyebrow="Companies"
         title="Compare companies"
         description="Up to eight companies side by side. Market and ratio fields from the screener dataset; reported lines trace to the SEC filings."
       />

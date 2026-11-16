@@ -4,7 +4,9 @@ import { hubFor, isAdminPath, HUB_GROUPS } from "./nav";
 describe("navigation hubs", () => {
   it("groups merged pages under one hub", () => {
     expect(hubFor("/app/screener")?.id).toBe("companies");
-    expect(hubFor("/app/agents")?.id).toBe("signals");
+    expect(hubFor("/app/agents")?.id).toBe("dashboard");
+    expect(hubFor("/app")?.id).toBe("dashboard");
+    expect(hubFor("/app/billing")?.id).toBe("firm");
     expect(hubFor("/app/companies/AAPL/financials")?.id).toBe("companies");
   });
   it("data status and waitlist are admin-only", () => {
@@ -12,8 +14,8 @@ describe("navigation hubs", () => {
     expect(isAdminPath("/app/admin")).toBe(true);
     expect(isAdminPath("/app/feed")).toBe(false);
   });
-  it("non-admin menu has at most 11 entries", () => {
-    const n = HUB_GROUPS.filter((g) => !g.admin).reduce((s, g) => s + g.hubs.length, 0);
-    expect(n).toBeLessThanOrEqual(11);
+  it("the sidebar shows at most 9 entries to members", () => {
+    const n = HUB_GROUPS.filter((g) => !g.admin && g.menu !== false).reduce((s, g) => s + g.hubs.length, 0);
+    expect(n).toBeLessThanOrEqual(9);
   });
 });

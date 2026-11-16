@@ -49,7 +49,7 @@ function FirmLayout() {
   return (
     <div>
       <PageHeader
-        eyebrow="Firm workspace"
+        eyebrow="Account"
         title={
           <span className="inline-flex items-center gap-2">
             {firm.name}
@@ -97,7 +97,7 @@ function FirmOnboarding() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
-        eyebrow="Firm workspace"
+        eyebrow="Account"
         title="Research together"
         description="Create a firm to share a coverage list with ratings and target prices, assign analysts, keep a restricted list, write team notes and brand every exported report."
       />

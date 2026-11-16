@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { form144Query, NOTICE_STATUS, type Form144Notice } from "@/lib/filings/review";
-import { fmtCompactUsd, fmtDate, fmtInt } from "@/lib/format";
+import { adjustedSummary, form144Query, NOTICE_STATUS, suspectNotices, type Form144Notice } from "@/lib/filings/review";
+import { fmtCompactUsd, fmtDate, fmtInt, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const FILTERS = [
@@ -50,6 +50,7 @@ export function Form144Panel({ ticker }: { ticker: string }) {
     if (filter === "discretionary") return all.filter((n) => !n.plan);
     return all;
   }, [q.data, filter]);
+  const bad = useMemo(() => suspectNotices(q.data?.notices ?? []), [q.data]);
 
   if (q.isLoading) return <Skeleton className="h-96" />;
   if (q.isError || !q.data)
@@ -58,7 +59,8 @@ export function Form144Panel({ ticker }: { ticker: string }) {
         No Form 144 notices on file for this company in the last year.
       </p>
     );
-  const s = q.data.summary;
+  const s = adjustedSummary(q.data, bad);
+  const badRows = q.data.notices.filter((n) => bad.has(n.accession));
 
   return (
     <div className="grid gap-4">
@@ -93,6 +95,11 @@ export function Form144Panel({ ticker }: { ticker: string }) {
             note={`of ${s.d365.n} notices in 12 months`}
           />
         </div>
+        {badRows.length > 0 && (
+          <p className="border-t px-3.5 py-2 text-[11px] text-warning">
+            {badRows.map((n) => `${n.person ?? "One filer"} stated ${fmtCompactUsd(n.value, 2)} for ${fmtInt(n.shares)} shares (${fmtPrice(n.value! / n.shares!)} a share)`).join("; ")} — almost certainly a typo in the filing, so {badRows.length === 1 ? "it is" : "they are"} left out of the totals above.
+          </p>
+        )}
       </Panel>
 
       <Panel
@@ -145,7 +152,10 @@ export function Form144Panel({ ticker }: { ticker: string }) {
                       {[n.relationship, n.how].filter(Boolean).join(" · ") || "Affiliate"}
                     </span>
                   </td>
-                  <td className="num px-2 py-2 text-right">{fmtCompactUsd(n.value)}</td>
+                  <td className={cn("num px-2 py-2 text-right", bad.has(n.accession) && "text-warning")} title={bad.has(n.accession) ? "Value as stated in the filing; it implies an impossible per-share price" : undefined}>
+                    {fmtCompactUsd(n.value)}
+                    {bad.has(n.accession) && <span className="block text-[10px]">likely typo</span>}
+                  </td>
                   <td className="num px-2 py-2 text-right text-muted-foreground">
                     {fmtInt(n.shares)}
                     {n.pct_outstanding != null && n.pct_outstanding >= 0.01 && (

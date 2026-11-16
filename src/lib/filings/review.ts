@@ -50,6 +50,40 @@ export interface Form144File {
   notices: Form144Notice[];
 }
 
+/**
+ * Notices whose stated dollar value can't be right: a per-share price over $2,000 and more than 20×
+ * the median of the company's other notices (e.g. $4.1B stated for 12,000 shares of a $40 stock).
+ * Needs at least two priced notices to compare against.
+ */
+export function suspectNotices(notices: Form144Notice[]): Set<string> {
+  const priced = notices.filter((n) => n.value != null && n.value > 0 && n.shares != null && n.shares > 0);
+  const out = new Set<string>();
+  if (priced.length < 2) return out;
+  const per = priced.map((n) => n.value! / n.shares!).sort((a, b) => a - b);
+  const median = per[Math.floor(per.length / 2)];
+  for (const n of priced) {
+    const p = n.value! / n.shares!;
+    if (p > 2000 && p > median * 20) out.add(n.accession);
+  }
+  return out;
+}
+
+/** Summary values with suspect notices' stated dollars taken out of every window they fall in. */
+export function adjustedSummary(f: Form144File, bad: Set<string>): Form144File["summary"] {
+  if (!bad.size) return f.summary;
+  const gen = Date.parse(f.generated);
+  const minus = (days: number | null) =>
+    f.notices.filter((n) => bad.has(n.accession) && (days == null ? n.status === "open" : gen - Date.parse(n.filed) <= days * 86_400_000)).reduce((s, n) => s + (n.value ?? 0), 0);
+  const s = f.summary;
+  return {
+    ...s,
+    d30: { ...s.d30, value: s.d30.value - minus(30) },
+    d90: { ...s.d90, value: s.d90.value - minus(90) },
+    d365: { ...s.d365, value: s.d365.value - minus(365) },
+    open: { ...s.open, value: s.open.value - minus(null) },
+  };
+}
+
 export interface CommentLetter {
   accession: string;
   form: "UPLOAD" | "CORRESP";

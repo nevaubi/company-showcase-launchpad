@@ -120,7 +120,7 @@ function IdeasPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Markets"
+        eyebrow="Ideas"
         title="Trade ideas"
         description={`Setups found by fixed rules across ${data?.companies ?? "our"} covered companies. Each rule is replayed over 10 years using only data public at the time, so you can see how often it actually worked. Not investment advice.`}
       />

@@ -27,7 +27,6 @@ import {
   Users,
   Check,
   X,
-  Radar,
   BellRing,
   CalendarCheck,
 } from "lucide-react";
@@ -54,11 +53,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { HUB_GROUPS, hubFor, isPageActive } from "@/lib/nav";
-import { ShieldCheck } from "lucide-react";
+import { CreditCard, ShieldCheck } from "lucide-react";
 
 const HUB_ICON: Record<string, typeof LayoutDashboard> = {
   dashboard: LayoutDashboard,
-  signals: Radar,
   companies: Building2,
   filings: FileSearch,
   markets: LineChart,
@@ -268,7 +266,7 @@ function SidebarContent({
           collapsed && "lg:px-1.5",
         )}
       >
-        {HUB_GROUPS.filter((g) => !g.admin || isAdmin).map((g) => (
+        {HUB_GROUPS.filter((g) => g.menu !== false && (!g.admin || isAdmin)).map((g) => (
           <div key={g.heading}>
             <p className={cn("eyebrow px-2 pb-1.5", lbl, collapsed && "lg:hidden")}>{g.heading}</p>
             <ul className="space-y-px">
@@ -417,6 +415,11 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to="/">Front page</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link to="/app/billing">
+              <CreditCard className="size-4" /> Plan & billing
+            </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
             <Link to="/pricing">Plans & pricing</Link>

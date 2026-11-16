@@ -3,15 +3,19 @@ import type { AppPath } from "@/lib/workspace";
 /** A sidebar entry that groups several related pages under one set of tabs. */
 export type Hub = { id: string; label: string; pages: { to: AppPath; label: string; exact?: boolean }[] };
 
-export const HUB_GROUPS: { heading: string; admin?: boolean; hubs: Hub[] }[] = [
+/**
+ * `admin` groups show only to admins; `menu: false` groups stay out of the sidebar (reached from the
+ * account menu) but still give their pages hub tabs and a place in the assistant's site map.
+ */
+export const HUB_GROUPS: { heading: string; admin?: boolean; menu?: false; hubs: Hub[] }[] = [
   {
     heading: "Home",
     hubs: [
-      { id: "dashboard", label: "Dashboard", pages: [{ to: "/app", label: "Dashboard", exact: true }] },
       {
-        id: "signals",
-        label: "Signals",
+        id: "dashboard",
+        label: "Dashboard",
         pages: [
+          { to: "/app", label: "Overview", exact: true },
           { to: "/app/feed", label: "What changed" },
           { to: "/app/situations", label: "Situations" },
           { to: "/app/insights", label: "Insights" },
@@ -79,8 +83,12 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; hubs: Hub[] }[] = [
           { to: "/app/docs", label: "Docs & sheets" },
         ],
       },
-      { id: "firm", label: "Firm", pages: [{ to: "/app/firm", label: "Firm" }, { to: "/app/billing", label: "Billing" }] },
     ],
+  },
+  {
+    heading: "Account",
+    menu: false,
+    hubs: [{ id: "firm", label: "Account", pages: [{ to: "/app/firm", label: "Firm" }, { to: "/app/billing", label: "Plan & billing" }] }],
   },
   {
     heading: "Admin",

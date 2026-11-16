@@ -369,7 +369,7 @@ function KpiMatrix() {
   if (tax.isError || latest.isError)
     return (
       <div>
-        <PageHeader eyebrow="Markets" title="KPI matrix" />
+        <PageHeader eyebrow="Companies" title="KPI matrix" />
         <DataUnavailable
           title="The standardized KPI dataset is not available"
           error={tax.error ?? latest.error}
@@ -383,7 +383,7 @@ function KpiMatrix() {
   return (
     <div>
       <PageHeader
-        eyebrow="Markets"
+        eyebrow="Companies"
         title="KPI matrix"
         description={
           latest.data

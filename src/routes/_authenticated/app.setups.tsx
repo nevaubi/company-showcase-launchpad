@@ -172,15 +172,14 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-sm">
+            <table className="w-full min-w-[760px] text-sm">
               <thead className="text-left text-[11px] text-muted-foreground">
                 <tr>
                   <th className="py-2 pr-3 font-normal">Stock</th>
                   <th className="pr-3 font-normal">Setup</th>
                   <th className="pr-3 font-normal">Hold</th>
                   <th className="pr-3 font-normal">Last 60 days</th>
-                  <th className="pr-3 text-right font-normal">Price</th>
-                  <th className="pr-3 text-right font-normal">Stop / target</th>
+                  <th className="pr-3 text-right font-normal">Price · stop / target</th>
                   <th className="pr-3 text-right font-normal">Edge*</th>
                   <th />
                 </tr>
@@ -198,7 +197,7 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
                       </Link>
                     </td>
                     <td className="pr-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
                         <span className={cn("inline-flex items-center gap-0.5 text-xs font-semibold", s.side > 0 ? "text-positive" : "text-negative")}>
                           {s.side > 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
                           {sideLabel(s.side)}
@@ -206,12 +205,16 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
                         <span>{STRATEGY[s.strategy]?.label ?? s.strategy}</span>
                         {!s.proven && <span className="rounded border px-1 text-[10px] leading-4 text-muted-foreground">watch</span>}
                       </div>
-                      <div className="text-xs text-muted-foreground">{s.detail} · {fmtDate(s.firedAt)}</div>
+                      <div className="max-w-[17rem] truncate text-xs text-muted-foreground" title={`${s.detail} · signal ${fmtDate(s.firedAt)}`}>
+                        {s.detail} · signal {fmtDate(s.firedAt)}
+                      </div>
                     </td>
                     <td className="whitespace-nowrap pr-3 text-xs">{holdLabel(s.horizon)}</td>
                     <td className="pr-3"><Spark values={s.spark} /></td>
-                    <td className="pr-3 text-right tabular-nums">{fmtPrice(s.price)}</td>
-                    <td className="whitespace-nowrap pr-3 text-right text-xs tabular-nums text-muted-foreground">{fmtPrice(s.stop)} / {fmtPrice(s.target)}</td>
+                    <td className="whitespace-nowrap pr-3 text-right tabular-nums">
+                      <div>{fmtPrice(s.price)}</div>
+                      <div className="text-[11px] text-muted-foreground">{fmtPrice(s.stop)} / {fmtPrice(s.target)}</div>
+                    </td>
                     <td className={cn("pr-3 text-right tabular-nums", toneClass[toneOf(s.edge)])}>{fmtPct(s.edge, 2, true)}</td>
                     <td className="text-right">
                       <Button size="sm" variant="ghost" className="h-7" onClick={() => track.mutate(s)} disabled={track.isPending}>
