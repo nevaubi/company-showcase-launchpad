@@ -178,6 +178,27 @@ export type Database = {
           },
         ]
       }
+      earnings_events: {
+        Row: {
+          accn: string
+          filed: string
+          source: string
+          ticker: string
+        }
+        Insert: {
+          accn: string
+          filed: string
+          source?: string
+          ticker: string
+        }
+        Update: {
+          accn?: string
+          filed?: string
+          source?: string
+          ticker?: string
+        }
+        Relationships: []
+      }
       filing_documents: {
         Row: {
           accn: string
@@ -500,6 +521,51 @@ export type Database = {
           logo_data?: string | null
           name?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      insider_buys: {
+        Row: {
+          accn: string
+          filed: string
+          is_director: boolean
+          is_officer: boolean
+          owner: string
+          plan_10b5: boolean
+          role: string | null
+          shares: number | null
+          source: string
+          ticker: string
+          trade_date: string | null
+          value: number | null
+        }
+        Insert: {
+          accn: string
+          filed: string
+          is_director?: boolean
+          is_officer?: boolean
+          owner: string
+          plan_10b5?: boolean
+          role?: string | null
+          shares?: number | null
+          source?: string
+          ticker: string
+          trade_date?: string | null
+          value?: number | null
+        }
+        Update: {
+          accn?: string
+          filed?: string
+          is_director?: boolean
+          is_officer?: boolean
+          owner?: string
+          plan_10b5?: boolean
+          role?: string | null
+          shares?: number | null
+          source?: string
+          ticker?: string
+          trade_date?: string | null
+          value?: number | null
         }
         Relationships: []
       }
@@ -943,6 +1009,202 @@ export type Database = {
         }
         Relationships: []
       }
+      paper_bot_equity: {
+        Row: {
+          bot_id: string
+          date: string
+          equity: number
+          invested: number
+          open_positions: number
+          realized: number
+          spy: number | null
+        }
+        Insert: {
+          bot_id: string
+          date: string
+          equity: number
+          invested?: number
+          open_positions?: number
+          realized?: number
+          spy?: number | null
+        }
+        Update: {
+          bot_id?: string
+          date?: string
+          equity?: number
+          invested?: number
+          open_positions?: number
+          realized?: number
+          spy?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_bot_equity_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "paper_bots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paper_bot_positions: {
+        Row: {
+          atr: number | null
+          bot_id: string
+          close_requested: boolean
+          cost: number
+          created_at: string
+          entry_date: string | null
+          entry_price: number | null
+          exit_date: string | null
+          exit_price: number | null
+          exit_reason: string | null
+          horizon: number
+          id: string
+          name: string | null
+          notional: number | null
+          pnl: number | null
+          ret: number | null
+          ret_spy: number | null
+          sector: string | null
+          shares: number | null
+          side: number
+          signal_date: string
+          signal_price: number | null
+          spy_entry: number | null
+          status: string
+          stop: number | null
+          strategy: string
+          target: number | null
+          ticker: string
+          updated_at: string
+          variant: string
+        }
+        Insert: {
+          atr?: number | null
+          bot_id: string
+          close_requested?: boolean
+          cost?: number
+          created_at?: string
+          entry_date?: string | null
+          entry_price?: number | null
+          exit_date?: string | null
+          exit_price?: number | null
+          exit_reason?: string | null
+          horizon: number
+          id?: string
+          name?: string | null
+          notional?: number | null
+          pnl?: number | null
+          ret?: number | null
+          ret_spy?: number | null
+          sector?: string | null
+          shares?: number | null
+          side: number
+          signal_date: string
+          signal_price?: number | null
+          spy_entry?: number | null
+          status?: string
+          stop?: number | null
+          strategy: string
+          target?: number | null
+          ticker: string
+          updated_at?: string
+          variant: string
+        }
+        Update: {
+          atr?: number | null
+          bot_id?: string
+          close_requested?: boolean
+          cost?: number
+          created_at?: string
+          entry_date?: string | null
+          entry_price?: number | null
+          exit_date?: string | null
+          exit_price?: number | null
+          exit_reason?: string | null
+          horizon?: number
+          id?: string
+          name?: string | null
+          notional?: number | null
+          pnl?: number | null
+          ret?: number | null
+          ret_spy?: number | null
+          sector?: string | null
+          shares?: number | null
+          side?: number
+          signal_date?: string
+          signal_price?: number | null
+          spy_entry?: number | null
+          status?: string
+          stop?: number | null
+          strategy?: string
+          target?: number | null
+          ticker?: string
+          updated_at?: string
+          variant?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "paper_bot_positions_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "paper_bots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      paper_bots: {
+        Row: {
+          capital: number
+          created_at: string
+          description: string | null
+          id: string
+          last_as_of: string | null
+          last_error: string | null
+          last_run_at: string | null
+          name: string
+          rules: Json
+          slug: string | null
+          started_on: string
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          capital?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          last_as_of?: string | null
+          last_error?: string | null
+          last_run_at?: string | null
+          name: string
+          rules?: Json
+          slug?: string | null
+          started_on?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          capital?: number
+          created_at?: string
+          description?: string | null
+          id?: string
+          last_as_of?: string | null
+          last_error?: string | null
+          last_run_at?: string | null
+          name?: string
+          rules?: Json
+          slug?: string | null
+          started_on?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       paper_trades: {
         Row: {
           closed_at: string | null
@@ -1311,6 +1573,285 @@ export type Database = {
           report?: string | null
           size?: number | null
           ticker?: string
+        }
+        Relationships: []
+      }
+      setup_cycles: {
+        Row: {
+          as_of: string
+          cursor: number
+          detail: Json
+          finished_at: string | null
+          lease_until: string | null
+          phase: string
+          started_at: string
+          updated_at: string
+        }
+        Insert: {
+          as_of: string
+          cursor?: number
+          detail?: Json
+          finished_at?: string | null
+          lease_until?: string | null
+          phase?: string
+          started_at?: string
+          updated_at?: string
+        }
+        Update: {
+          as_of?: string
+          cursor?: number
+          detail?: Json
+          finished_at?: string | null
+          lease_until?: string | null
+          phase?: string
+          started_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      setup_results: {
+        Row: {
+          as_of: string
+          generated_at: string
+          payload: Json
+        }
+        Insert: {
+          as_of: string
+          generated_at?: string
+          payload: Json
+        }
+        Update: {
+          as_of?: string
+          generated_at?: string
+          payload?: Json
+        }
+        Relationships: []
+      }
+      setup_samples: {
+        Row: {
+          d: string
+          ex: number
+          gross: number
+          net: number
+          ticker: string
+          variant: string
+        }
+        Insert: {
+          d: string
+          ex: number
+          gross: number
+          net: number
+          ticker: string
+          variant: string
+        }
+        Update: {
+          d?: string
+          ex?: number
+          gross?: number
+          net?: number
+          ticker?: string
+          variant?: string
+        }
+        Relationships: []
+      }
+      setup_scan: {
+        Row: {
+          bars: number | null
+          claimed_at: string | null
+          error: string | null
+          samples: number | null
+          scanned_for: string | null
+          sector: string | null
+          ticker: string
+          updated_at: string
+        }
+        Insert: {
+          bars?: number | null
+          claimed_at?: string | null
+          error?: string | null
+          samples?: number | null
+          scanned_for?: string | null
+          sector?: string | null
+          ticker: string
+          updated_at?: string
+        }
+        Update: {
+          bars?: number | null
+          claimed_at?: string | null
+          error?: string | null
+          samples?: number | null
+          scanned_for?: string | null
+          sector?: string | null
+          ticker?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      setup_series: {
+        Row: {
+          above200: boolean | null
+          c: number[]
+          dv20: number | null
+          end_date: string
+          near_high: boolean | null
+          o: number[]
+          r21: number | null
+          r5: number | null
+          sector: string | null
+          short5: number | null
+          start_date: string
+          ticker: string
+          updated_at: string
+          vol60: number | null
+        }
+        Insert: {
+          above200?: boolean | null
+          c: number[]
+          dv20?: number | null
+          end_date: string
+          near_high?: boolean | null
+          o: number[]
+          r21?: number | null
+          r5?: number | null
+          sector?: string | null
+          short5?: number | null
+          start_date: string
+          ticker: string
+          updated_at?: string
+          vol60?: number | null
+        }
+        Update: {
+          above200?: boolean | null
+          c?: number[]
+          dv20?: number | null
+          end_date?: string
+          near_high?: boolean | null
+          o?: number[]
+          r21?: number | null
+          r5?: number | null
+          sector?: string | null
+          short5?: number | null
+          start_date?: string
+          ticker?: string
+          updated_at?: string
+          vol60?: number | null
+        }
+        Relationships: []
+      }
+      setup_signals: {
+        Row: {
+          atr: number | null
+          context: Json
+          cost: number | null
+          detail: string | null
+          dv20: number | null
+          fired_at: string
+          first_seen: string
+          horizon: number
+          last_seen: string
+          name: string | null
+          outcome_at: string | null
+          outcome_ex: number | null
+          outcome_net: number | null
+          price: number | null
+          sector: string | null
+          side: number
+          spark: number[] | null
+          strategy: string
+          strength: number | null
+          ticker: string
+          variant: string
+        }
+        Insert: {
+          atr?: number | null
+          context?: Json
+          cost?: number | null
+          detail?: string | null
+          dv20?: number | null
+          fired_at: string
+          first_seen: string
+          horizon: number
+          last_seen: string
+          name?: string | null
+          outcome_at?: string | null
+          outcome_ex?: number | null
+          outcome_net?: number | null
+          price?: number | null
+          sector?: string | null
+          side: number
+          spark?: number[] | null
+          strategy: string
+          strength?: number | null
+          ticker: string
+          variant: string
+        }
+        Update: {
+          atr?: number | null
+          context?: Json
+          cost?: number | null
+          detail?: string | null
+          dv20?: number | null
+          fired_at?: string
+          first_seen?: string
+          horizon?: number
+          last_seen?: string
+          name?: string | null
+          outcome_at?: string | null
+          outcome_ex?: number | null
+          outcome_net?: number | null
+          price?: number | null
+          sector?: string | null
+          side?: number
+          spark?: number[] | null
+          strategy?: string
+          strength?: number | null
+          ticker?: string
+          variant?: string
+        }
+        Relationships: []
+      }
+      setup_variant_stats: {
+        Row: {
+          as_of: string
+          stats: Json
+          updated_at: string
+          variant: string
+        }
+        Insert: {
+          as_of: string
+          stats: Json
+          updated_at?: string
+          variant: string
+        }
+        Update: {
+          as_of?: string
+          stats?: Json
+          updated_at?: string
+          variant?: string
+        }
+        Relationships: []
+      }
+      short_volume: {
+        Row: {
+          date: string
+          exempt_vol: number
+          short_vol: number
+          symbol: string
+          total_vol: number
+        }
+        Insert: {
+          date: string
+          exempt_vol?: number
+          short_vol: number
+          symbol: string
+          total_vol: number
+        }
+        Update: {
+          date?: string
+          exempt_vol?: number
+          short_vol?: number
+          symbol?: string
+          total_vol?: number
         }
         Relationships: []
       }
@@ -1780,12 +2321,15 @@ export type Database = {
           token: string
         }[]
       }
+      paper_bot_limit: { Args: { _user: string }; Returns: number }
       plan_limit: { Args: { _kind: string; _tier: string }; Returns: number }
       remove_firm_member: {
         Args: { _firm: string; _user: string }
         Returns: undefined
       }
+      request_bot_close: { Args: { _position: string }; Returns: undefined }
       require_feature: { Args: { _feature: string }; Returns: boolean }
+      reset_paper_bot: { Args: { _bot: string }; Returns: undefined }
       set_firm_member_role: {
         Args: {
           _firm: string
@@ -1793,6 +2337,54 @@ export type Database = {
           _user: string
         }
         Returns: undefined
+      }
+      setup_advance: {
+        Args: { _as_of: string; _from: string; _to: string }
+        Returns: boolean
+      }
+      setup_claim_tickers: {
+        Args: { _as_of: string; _n: number }
+        Returns: {
+          sector: string
+          ticker: string
+        }[]
+      }
+      setup_forward_stats: {
+        Args: never
+        Returns: {
+          avg_ex: number
+          avg_net: number
+          first_seen: string
+          hits: number
+          n: number
+          variant: string
+        }[]
+      }
+      setup_lease: {
+        Args: { _as_of: string; _phase: string; _secs: number }
+        Returns: boolean
+      }
+      setup_take: {
+        Args: { _as_of: string; _n: number; _phase: string }
+        Returns: number
+      }
+      setup_variant_daily: {
+        Args: { _variant: string }
+        Returns: {
+          d: string
+          ex: number
+          gross: number
+          hits: number
+          n: number
+          net: number
+        }[]
+      }
+      setup_variant_list: {
+        Args: never
+        Returns: {
+          n: number
+          variant: string
+        }[]
       }
       tier_has_feature: {
         Args: { _feature: string; _tier: string }

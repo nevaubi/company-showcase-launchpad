@@ -9,8 +9,9 @@ import { fetchCboeDaily, fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo,
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
+import { insiderBuyRows } from "@/lib/signals/events";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -53,6 +54,14 @@ export async function runJob(job: JobName): Promise<{ ok: boolean; items: number
 }
 
 const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }>> = {
+  /**
+   * Nightly short-term setups: closing bars, full rescan, strategy re-tests, today's setups and the
+   * paper autopilots, one small slice per call (several schedules call it in parallel after the close).
+   */
+  async setups() {
+    const { runSetups } = await import("@/lib/jobs/setups.server");
+    return runSetups(budget(1500));
+  },
   /**
    * Alt data, daily per company: one (company, quick public source) pair per run, rotating through
    * the 78 core companies only. Slow sources (13D/13G history, federal contracts) stay in
@@ -210,6 +219,9 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
           const { error } = await supabaseAdmin.from("sec_filings").upsert(fresh);
           if (error) throw new Error(error.message);
           filings += fresh.length;
+          // Earnings announcement dates for the setups engine (8-K item 2.02).
+          const earn = fresh.filter((f) => /^8-K/.test(f.form) && /(^|,)\s*2\.02/.test(f.items ?? "")).map((f) => ({ ticker: c.ticker, accn: f.accn, filed: f.filed, source: "sec-8k-2.02" }));
+          if (earn.length) await supabaseAdmin.from("earnings_events").upsert(earn, { onConflict: "ticker,accn", ignoreDuplicates: true });
         }
         // Parse up to two new Form 4s per company per run; the rest are picked up on later passes.
         const { data: parsedAlready } = await supabaseAdmin.from("insider_trades").select("accn").eq("ticker", c.ticker).gte("filed", since);
@@ -244,6 +256,9 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
           );
           if (error) throw new Error(error.message);
           trades += parsed.length;
+          // Open-market purchases by officers/directors feed the insider-cluster strategy.
+          const buys = insiderBuyRows(c.ticker, parsed.map((t) => ({ ...t, date: t.date })), "sec-form4");
+          if (buys.length) await supabaseAdmin.from("insider_buys").upsert(buys, { onConflict: "accn,owner", ignoreDuplicates: true });
         }
       } catch (e) {
         errors.push(`${c.ticker}: ${(e as Error).message}`);

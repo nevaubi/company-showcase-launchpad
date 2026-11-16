@@ -1,23 +1,27 @@
-// Short-term setup engine: runs every published strategy in src/lib/signals/strategies.ts over the
-// full universe, evaluates each variant walk-forward after costs (src/lib/signals/backtest.ts) and
-// writes today's setups for the variants that pass the strict gate to public/data/setups.json.
-// Usage: bun scripts/setups.ts [--cache=/tmp/px]   (cache holds prices/*.json + universe.json)
+// Short-term setup engine, full history. Runs every strategy in src/lib/signals/strategies.ts over the
+// whole universe with the shared one-ticker scan (src/lib/signals/scan.ts), adds earnings (SEC 8-K
+// 2.02), insider purchases (Form 4), FINRA short-sale volume, VIX term structure and supplier-customer
+// links, evaluates every variant out of sample after costs and writes:
+//   - public/data/setups.json (bundled fallback)
+//   - Cloud tables the daily setups job maintains from then on (samples, series, signals, stats, results)
+//   - datasets/setups/bench.json (calendar + benchmarks the job extends each day)
+// Usage: bun scripts/setups.ts [--cache=/tmp/px] [--no-db]
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { sb, args, log } from "./lib/supa";
+import { sb, args, log, selectAll, dbGate } from "./lib/supa";
 import type { Bar } from "../src/lib/financials/types";
 import { fetchYahoo, toBars } from "../src/lib/market-data.server";
-import { align, features, rollMean, roundTripCost, type Aligned } from "../src/lib/signals/features";
-import { STRATEGIES, STRATEGY } from "../src/lib/signals/strategies";
-import { evaluate, GATE, OOS_START, regimeAt, Samples, type Regime } from "../src/lib/signals/backtest";
+import { align, rollStd, type Aligned } from "../src/lib/signals/features";
+import { evaluate, GATE, OOS_START, Samples } from "../src/lib/signals/backtest";
 import { formPairs, PAIRS, spreadZ, tradePairs, type PairLeg } from "../src/lib/signals/pairs";
-import { variantKey, type PairSetup, type Setup, type SetupsFile, type VariantMeta } from "../src/lib/signals/setups";
+import { customerZ, LIVE_BARS, scanTicker, type Firing } from "../src/lib/signals/scan";
+import { benchFromBars, BENCH_SYMBOLS, contextFromBench, parseCboeCsv, VIX3M_URL } from "../src/lib/signals/context";
+import { parseShortVolume, FINRA_SHORT_URL } from "../src/lib/signals/finra";
+import type { TickerEvents } from "../src/lib/signals/events";
+import { pickSetups, variantKey, variantMeta, type LiveFiring, type MarketContext, type PairSetup, type SetupsFile } from "../src/lib/signals/setups";
 
 const CACHE = String(args.cache ?? "/tmp/px");
-const ETF: Record<string, string> = {
-  "Information Technology": "XLK", Financials: "XLF", "Health Care": "XLV", "Consumer Discretionary": "XLY", "Consumer Staples": "XLP",
-  Energy: "XLE", Industrials: "XLI", Materials: "XLB", "Real Estate": "XLRE", Utilities: "XLU", "Communication Services": "XLC",
-};
+const DB = args["no-db"] !== "true";
 const sf = (s: string) => s.replace(/\^/g, "IDX_").replace(/[^A-Za-z0-9_.-]/g, "_");
 
 async function bucketJson<T>(path: string): Promise<T | null> {
@@ -32,11 +36,15 @@ async function bucketJson<T>(path: string): Promise<T | null> {
 }
 
 async function benchBars(sym: string): Promise<Bar[]> {
+  const cached = `${CACHE}/bm/${sf(sym)}.json`;
   try {
-    return toBars(await fetchYahoo(sym, "10y", "1d"), false).filter((b) => b[0] >= "2015-01-01");
+    const bars = toBars(await fetchYahoo(sym, "10y", "1d"), false).filter((b) => b[0] >= "2015-01-01");
+    await mkdir(`${CACHE}/bm`, { recursive: true });
+    await writeFile(cached, JSON.stringify({ bars }));
+    return bars;
   } catch (e) {
-    log("yahoo failed", sym, (e as Error).message, "- using stored copy");
-    const f = `public/data/prices/${sf(sym)}.json`;
+    log("yahoo failed", sym, (e as Error).message, "- using cached copy");
+    const f = existsSync(cached) ? cached : `public/data/prices/${sf(sym)}.json`;
     return (JSON.parse(await readFile(f, "utf8")) as { bars: Bar[] }).bars;
   }
 }
@@ -44,9 +52,7 @@ async function benchBars(sym: string): Promise<Bar[]> {
 const universe = (await bucketJson<{ companies: { ticker: string; name: string; sector?: string }[] }>("universe.json"))!.companies;
 log("universe", universe.length);
 
-// ---- calendar & benchmarks
-const spyBars = await benchBars("SPY");
-const allDates = spyBars.map((b) => b[0]).filter((d) => d >= "2016-01-01");
+// ---- prices
 const priceFiles = new Map<string, Bar[]>();
 let loaded = 0;
 await Promise.all(Array.from({ length: 16 }, async (_, w) => {
@@ -60,143 +66,217 @@ await Promise.all(Array.from({ length: 16 }, async (_, w) => {
 const lastCount = new Map<string, number>();
 for (const bars of priceFiles.values()) for (const b of bars.slice(-15)) lastCount.set(b[0].slice(0, 10), (lastCount.get(b[0].slice(0, 10)) ?? 0) + 1);
 const endDate = [...lastCount.entries()].filter(([, n]) => n >= priceFiles.size * 0.5).map(([d]) => d).sort().at(-1)!;
-const dates = allDates.filter((d) => d <= endDate);
+
+// ---- calendar, benchmarks, VIX term structure
+const bm: Record<string, Bar[]> = {};
+for (const s of BENCH_SYMBOLS) bm[s] = await benchBars(s);
+const v3text = await fetch(VIX3M_URL, { headers: { "user-agent": "Mozilla/5.0" } }).then((r) => (r.ok ? r.text() : ""), () => "");
+const vix3m = parseCboeCsv(v3text);
+const bench = benchFromBars(bm, vix3m, endDate);
+const ctx = contextFromBench(bench);
+const { dates } = ctx;
 const D = dates.length;
-log("calendar", dates[0], "to", endDate, D, "bars;", priceFiles.size, "price files");
+log("calendar", dates[0], "to", endDate, D, "bars;", priceFiles.size, "price files; VIX3M days", vix3m.size);
 
-const spy = align(dates, spyBars);
-const vixA = align(dates, await benchBars("^VIX"));
-const spy200 = rollMean(spy.c, 200, spy.start);
-const regime: Regime[] = dates.map((_, i) => regimeAt(spy.c, spy200, vixA.c, i));
-const etfs = new Map<string, Aligned>();
-for (const s of new Set(Object.values(ETF))) etfs.set(s, align(dates, await benchBars(s)));
-/** Sector ETF close, chained onto SPY returns where the ETF has no history yet. */
-function benchFor(sector?: string): Aligned {
-  const e = sector ? etfs.get(ETF[sector]) : undefined;
-  if (!e) return spy;
-  const c = new Float64Array(D), o = new Float64Array(D);
-  c[0] = spy.c[0];
-  o[0] = spy.o[0];
-  for (let i = 1; i < D; i++) {
-    const have = e.start >= 0 && i > e.start;
-    const r = have ? e.c[i] / e.c[i - 1] : spy.c[i] / spy.c[i - 1];
-    c[i] = c[i - 1] * r;
-    o[i] = c[i - 1] * (have ? e.o[i] / e.c[i - 1] : spy.o[i] / spy.c[i - 1]);
+// ---- events
+const events = new Map<string, TickerEvents>();
+const ev = (t: string) => events.get(t) ?? (events.set(t, { earnings: [], buys: [], short: [] }), events.get(t)!);
+const earn = await selectAll<{ ticker: string; filed: string }>((a, b) => sb.from("earnings_events").select("ticker, filed").order("ticker").order("accn").range(a, b));
+for (const e of earn) ev(e.ticker).earnings.push(e.filed);
+const buys = await selectAll<{ ticker: string; filed: string; owner: string; value: number | null; plan_10b5: boolean }>((a, b) =>
+  sb.from("insider_buys").select("ticker, filed, owner, value, plan_10b5").order("accn").order("owner").range(a, b));
+for (const x of buys) ev(x.ticker).buys.push({ filed: x.filed, owner: x.owner, value: x.value ?? 0, plan: x.plan_10b5 });
+log("earnings events", earn.length, "insider buys", buys.length);
+// FINRA short volume: daily files cached locally (faster than reading millions of rows back).
+const keep = new Set(universe.map((u) => u.ticker));
+await mkdir(`${CACHE}/finra`, { recursive: true });
+const fdays = dates.filter((d) => d >= "2018-08-01");
+let fdone = 0;
+const fq = [...fdays];
+await Promise.all(Array.from({ length: 8 }, async () => {
+  for (let d = fq.shift(); d; d = fq.shift()) {
+    const local = `${CACHE}/finra/${d}.txt`;
+    let text = existsSync(local) ? await readFile(local, "utf8") : null;
+    if (text == null) {
+      const res = await fetch(FINRA_SHORT_URL(d), { headers: { "user-agent": "Mozilla/5.0" } }).catch(() => null);
+      text = res?.ok ? await res.text() : "";
+      await writeFile(local, text);
+    }
+    for (const r of parseShortVolume(text, keep)) ev(r.symbol).short.push({ date: r.date, ratio: r.short_vol / r.total_vol });
+    if (++fdone % 500 === 0) log("finra days", fdone);
   }
-  return { start: 0, c, o, h: c, l: c, v: new Float64Array(D) };
-}
-const benches = new Map<string, Aligned>();
+}));
 
-// ---- scan
-const samples = new Map<string, Samples>();
-const sample = (k: string) => samples.get(k) ?? (samples.set(k, new Samples()), samples.get(k)!);
-interface Live { ticker: string; key: string; i: number; f: ReturnType<typeof features>; side: 1 | -1; h: number }
-const live: Live[] = [];
-const legsBySector = new Map<string, PairLeg[]>();
-const meta = new Map(universe.map((u) => [u.ticker, u]));
-let scanned = 0;
+// ---- pass 1: aligned closes for customer momentum and pairs
+const A = new Map<string, Aligned>();
+const vol = new Map<string, Float64Array>();
 for (const u of universe) {
   const bars = priceFiles.get(u.ticker);
   if (!bars) continue;
   const a = align(dates, bars);
-  if (a.start < 0 || D - a.start < 300) continue;
-  const sector = u.sector ?? "";
-  const bench = benches.get(sector) ?? (benches.set(sector, benchFor(sector)), benches.get(sector)!);
-  const f = features(a, bench.c);
-  scanned++;
-  const next = new Map<string, number>();
-  for (const s of STRATEGIES) {
-    if (!s.fire) continue;
-    for (let i = a.start + 260; i < D; i++) {
-      const d = s.fire(f, i);
-      if (!d || !s.sides.includes(d)) continue;
-      const cost = roundTripCost(f.dv20[i]);
-      if (cost == null) continue;
-      for (const h of s.horizons) {
-        const key = variantKey(s.id, d, h);
-        if (i >= D - 3) live.push({ ticker: u.ticker, key, i, f, side: d, h });
-        if (i + h >= D || i < (next.get(key) ?? 0)) continue;
-        const r = a.c[i + h] / a.o[i + 1] - 1;
-        const rb = bench.c[i + h] / bench.o[i + 1] - 1;
-        const rs = spy.c[i + h] / spy.o[i + 1] - 1;
-        if (!Number.isFinite(r) || !Number.isFinite(rb) || !Number.isFinite(rs)) continue;
-        sample(key).push(i, d * (r - rb) - cost, d * (r - rs) - cost, d * r);
-        next.set(key, i + h + 1);
-      }
-    }
+  if (a.start < 0) continue;
+  A.set(u.ticker, a);
+  const r1 = new Float64Array(D);
+  for (let i = a.start + 1; i < D; i++) r1[i] = a.c[i] / a.c[i - 1] - 1;
+  vol.set(u.ticker, rollStd(r1, 60, a.start + 1));
+}
+// Supplier ← customer links, valid from the filing that first states them.
+const links = await selectAll<{ ticker: string; counterparty_ticker: string | null; relation: string; filed: string | null }>((a, b) =>
+  sb.from("supply_links").select("ticker, counterparty_ticker, relation, filed").in("relation", ["customer", "supplier"]).not("counterparty_ticker", "is", null).order("id").range(a, b));
+const customersOf = new Map<string, Map<string, string>>();
+for (const l of links) {
+  const [sup, cus] = l.relation === "customer" ? [l.ticker, l.counterparty_ticker!] : [l.counterparty_ticker!, l.ticker];
+  if (!l.filed || sup === cus || !A.has(sup) || !A.has(cus)) continue;
+  const m = customersOf.get(sup) ?? new Map<string, string>();
+  if (!m.has(cus) || l.filed < m.get(cus)!) m.set(cus, l.filed);
+  customersOf.set(sup, m);
+}
+const idxOf = (d: string) => {
+  let lo = 0, hi = D;
+  while (lo < hi) {
+    const m = (lo + hi) >> 1;
+    if (dates[m] < d) lo = m + 1;
+    else hi = m;
   }
-  if (sector) {
-    const legs = legsBySector.get(sector) ?? (legsBySector.set(sector, []), legsBySector.get(sector)!);
+  return lo;
+};
+log("suppliers with linked customers", customersOf.size);
+
+// ---- pass 2: scan
+const samples = new Map<string, Samples>();
+const sample = (k: string) => samples.get(k) ?? (samples.set(k, new Samples()), samples.get(k)!);
+const sampleRows: { ticker: string; variant: string; d: string; net: number; ex: number; gross: number }[] = [];
+const live: (LiveFiring & { firing: Firing })[] = [];
+const legsBySector = new Map<string, PairLeg[]>();
+const meta = new Map(universe.map((u) => [u.ticker, u]));
+const seriesRows: Record<string, unknown>[] = [];
+let scanned = 0, above = 0, highs = 0;
+const shortNow: number[] = [];
+for (const u of universe) {
+  const bars = priceFiles.get(u.ticker);
+  if (!bars || !A.has(u.ticker)) continue;
+  const cm = customersOf.get(u.ticker);
+  const cust = cm
+    ? customerZ(D, ctx.spy, [...cm.entries()].map(([t, filed]) => ({ from: idxOf(filed), c: A.get(t)!.c, vol60: vol.get(t)! })))
+    : undefined;
+  const out = scanTicker(ctx, { ticker: u.ticker, sector: u.sector ?? "", bars, events: events.get(u.ticker), cust });
+  if (!out) continue;
+  scanned++;
+  const { f, a } = out;
+  for (const s of out.samples) {
+    sample(s.variant).push(s.i, s.net, s.ex, s.gross);
+    sampleRows.push({ ticker: u.ticker, variant: s.variant, d: dates[s.i], net: +s.net.toFixed(6), ex: +s.ex.toFixed(6), gross: +s.gross.toFixed(6) });
+  }
+  const last = D - 1;
+  for (const F of out.firings.filter((x) => x.i >= D - LIVE_BARS)) {
+    live.push({
+      ticker: u.ticker, name: u.name, sector: u.sector ?? "", variant: F.variant, firedAt: dates[F.i], strength: F.strength, detail: F.detail,
+      price: a.c[last], atr: f.atr14[last], spark: Array.from(a.c.slice(D - 60)).map((x) => +x.toFixed(2)), firing: F,
+    });
+  }
+  const isAbove = a.c[last] > f.sma200[last], isHigh = a.c[last] >= 0.98 * f.max252[last];
+  if (isAbove) above++;
+  if (isHigh) highs++;
+  const s5 = f.ev?.shortRatio5[last];
+  if (s5 != null && Number.isFinite(s5)) shortNow.push(s5);
+  const from = Math.max(a.start, D - 300);
+  seriesRows.push({
+    ticker: u.ticker, sector: u.sector ?? null, start_date: dates[from], end_date: dates[last],
+    o: Array.from(a.o.slice(from)).map((x) => +x.toFixed(4)), c: Array.from(a.c.slice(from)).map((x) => +x.toFixed(4)),
+    dv20: Math.round(f.dv20[last]) || null, r5: +(a.c[last] / a.c[last - 5] - 1).toFixed(5), r21: +(a.c[last] / a.c[last - 21] - 1).toFixed(5),
+    vol60: Number.isFinite(f.vol60[last]) ? +f.vol60[last].toFixed(5) : null, above200: isAbove, near_high: isHigh,
+    short5: s5 != null && Number.isFinite(s5) ? +s5.toFixed(4) : null, updated_at: new Date().toISOString(),
+  });
+  if (u.sector) {
+    const legs = legsBySector.get(u.sector) ?? (legsBySector.set(u.sector, []), legsBySector.get(u.sector)!);
     legs.push({ ticker: u.ticker, o: a.o, c: a.c, start: a.start, dv20: f.dv20 });
   }
   if (scanned % 300 === 0) log("scanned", scanned);
 }
-log("scanned", scanned, "companies;", live.length, "live firings");
+log("scanned", scanned, "companies;", live.length, "live firings;", sampleRows.length, "samples");
 
 // ---- pairs
 const pairKey = variantKey("pairs", 1, 20);
 const livePairs: PairSetup[] = [];
 for (const [sector, legs] of legsBySector) {
+  const before = sample(pairKey).i.length;
   for (let F = PAIRS.window; F < D - 2; F += PAIRS.step) tradePairs(legs, formPairs(legs, F), F, D, sample(pairKey));
+  const s = sample(pairKey);
+  for (let k = before; k < s.i.length; k++) sampleRows.push({ ticker: `pair:${sector}`, variant: pairKey, d: dates[s.i[k]], net: +s.net[k].toFixed(6), ex: +s.exSpy[k].toFixed(6), gross: +s.gross[k].toFixed(6) });
   for (const p of formPairs(legs, D - 1)) {
     const z = spreadZ(legs, p, D - 1);
     if (Math.abs(z) < PAIRS.entryZ) continue;
-    const A = legs[p.a], B = legs[p.b];
+    const L = legs[p.a], R = legs[p.b];
     livePairs.push({
-      a: A.ticker, b: B.ticker, nameA: meta.get(A.ticker)?.name ?? A.ticker, nameB: meta.get(B.ticker)?.name ?? B.ticker, sector,
+      a: L.ticker, b: R.ticker, nameA: meta.get(L.ticker)?.name ?? L.ticker, nameB: meta.get(R.ticker)?.name ?? R.ticker, sector,
       z: +z.toFixed(2), beta: +p.beta.toFixed(3), halfLife: +p.hl.toFixed(1), rho: +p.rho.toFixed(3), adf: +p.adf.toFixed(2), side: z < 0 ? 1 : -1,
       zs: Array.from({ length: 120 }, (_, k) => +spreadZ(legs, p, D - 120 + k).toFixed(2)),
-      priceA: +A.c[D - 1].toFixed(2), priceB: +B.c[D - 1].toFixed(2),
+      priceA: +L.c[D - 1].toFixed(2), priceB: +R.c[D - 1].toFixed(2),
     });
   }
-  log("pairs", sector, sample(pairKey).i.length);
+  log("pairs", sector, s.i.length - before);
 }
 
-// ---- evaluate
+// ---- evaluate & publish
 const keys = [...samples.keys()].sort();
-const proofs = evaluate(keys.map((key) => ({ key, samples: samples.get(key)! })), dates, regime);
-const variants: VariantMeta[] = proofs.map((p) => {
-  const [s, side, h] = p.key.split(":");
-  return { ...p, strategy: s as VariantMeta["strategy"], side: side === "L" ? 1 : -1, horizon: Number(h) };
-});
-const byKey = new Map(variants.map((v) => [v.key, v]));
-const today = regime[D - 1];
-
-// ---- today's setups (passing variants that also work in today's regime)
-const best = new Map<string, Setup>();
-for (const L of live) {
-  const v = byKey.get(L.key);
-  if (!v) continue;
-  // Proven = passed the strict gate. Near misses (positive and t >= 1.5 out of sample) are kept as watch-only.
-  const near = (v.outSample.avgNet ?? 0) > 0 && (v.outSample.t ?? 0) >= 1.5;
-  if (!v.passed && !near) continue;
-  const rg = v.regimes[today];
-  if (rg.n < GATE.minRegimeN || !((rg.avgNet ?? 0) > 0)) continue;
-  const n = v.outSample.n;
-  const edge = (rg.avgNet! * n) / (n + 200);
-  const s = STRATEGY[v.strategy];
-  const f = L.f;
-  const last = D - 1;
-  const price = f.a.c[last], atr = f.atr14[last];
-  const k = s.family === "momentum" ? 2.5 : 2;
-  const risk = k * atr;
-  const setup: Setup = {
-    ticker: L.ticker, name: meta.get(L.ticker)?.name ?? L.ticker, sector: meta.get(L.ticker)?.sector ?? "", key: L.key, strategy: v.strategy, side: L.side, horizon: L.h,
-    firedAt: dates[L.i], detail: s.detail!(f, L.i), strength: +s.strength!(f, L.i).toFixed(2), price: +price.toFixed(2),
-    stop: +(price - L.side * risk).toFixed(2), target: +(price + L.side * risk * (s.family === "momentum" ? 2 : 1.5)).toFixed(2),
-    proven: v.passed, edge: +edge.toFixed(5), spark: Array.from(f.a.c.slice(D - 60)).map((x) => +x.toFixed(2)),
-  };
-  const id = `${L.ticker}:${v.strategy}:${L.side}`;
-  if (!best.has(id) || Number(best.get(id)!.proven) < Number(v.passed) || (best.get(id)!.proven === v.passed && best.get(id)!.edge < edge)) best.set(id, setup);
-}
-const setups = [...best.values()].sort((a, b) => Number(b.proven) - Number(a.proven) || b.edge - a.edge).slice(0, 150);
-const pairsPassed = !!byKey.get(pairKey)?.passed;
-
+const variants = evaluate(keys.map((key) => ({ key, samples: samples.get(key)! })), dates, ctx.regime).map((p) => variantMeta(p));
+const today = ctx.regime[D - 1];
+const setups = pickSetups(variants, live, today);
+const median = (x: number[]) => (x.length ? [...x].sort((a, b) => a - b)[Math.floor(x.length / 2)] : null);
+const market: MarketContext = {
+  vix: Number.isFinite(ctx.vix[D - 1]) ? +ctx.vix[D - 1].toFixed(2) : null,
+  vix3m: Number.isFinite(ctx.vix3m[D - 1]) ? +ctx.vix3m[D - 1].toFixed(2) : null,
+  vixRatio: Number.isFinite(ctx.vixRatio[D - 1]) ? +ctx.vixRatio[D - 1].toFixed(3) : null,
+  breadth200: scanned ? +(above / scanned).toFixed(4) : null,
+  nearHighs: scanned ? +(highs / scanned).toFixed(4) : null,
+  shortRatio: median(shortNow),
+};
 const out: SetupsFile = {
   generatedAt: new Date().toISOString(), asOf: endDate, companies: scanned, regime: today, oosStart: OOS_START, gate: GATE,
-  variants, setups, pairsProven: pairsPassed, pairs: livePairs.sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 40),
+  variants, setups, pairsProven: !!variants.find((v) => v.key === pairKey)?.passed, pairs: livePairs.sort((a, b) => Math.abs(b.z) - Math.abs(a.z)).slice(0, 40),
+  market, source: "full",
 };
 await writeFile("public/data/setups.json", JSON.stringify(out));
-log("regime", today, "| setups", setups.length, "| pairs", out.pairs.length, "of", livePairs.length);
+log("regime", today, "| setups", setups.length, "| pairs", out.pairs.length, "of", livePairs.length, "| market", JSON.stringify(market));
 for (const v of variants)
-  log(v.passed ? "PASS" : "fail", v.key.padEnd(18), `oos n=${v.outSample.n} net=${((v.outSample.avgNet ?? 0) * 100).toFixed(2)}% t=${v.outSample.t} dsr=${v.dsr} is=${((v.inSample.avgNet ?? 0) * 100).toFixed(2)}%`, v.failed.join("; "));
+  log(v.passed ? "PASS" : "fail", v.key.padEnd(20), `oos n=${v.outSample.n} net=${((v.outSample.avgNet ?? 0) * 100).toFixed(2)}% t=${v.outSample.t} dsr=${v.dsr} is=${((v.inSample.avgNet ?? 0) * 100).toFixed(2)}%`, v.failed.join("; "));
+
+if (DB) {
+  // Calendar + benchmarks for the daily job.
+  const { error: be } = await sb.storage.from("datasets").upload("setups/bench.json", new Blob([JSON.stringify(bench)], { type: "application/json" }), { upsert: true });
+  if (be) throw new Error(be.message);
+  // Samples: full replace.
+  await sb.from("setup_samples").delete().neq("variant", "");
+  const chunks: (typeof sampleRows)[] = [];
+  for (let k = 0; k < sampleRows.length; k += 5000) chunks.push(sampleRows.slice(k, k + 5000));
+  let wrote = 0;
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    for (let c = chunks.shift(); c; c = chunks.shift()) {
+      await dbGate("setups");
+      const { error } = await sb.from("setup_samples").insert(c);
+      if (error) throw new Error(error.message);
+      if ((wrote += c.length) % 100000 < 5000) log("samples written", wrote);
+    }
+  }));
+  for (let k = 0; k < seriesRows.length; k += 200) {
+    const { error } = await sb.from("setup_series").upsert(seriesRows.slice(k, k + 200));
+    if (error) throw new Error(error.message);
+  }
+  const sig = live.map((L) => ({
+    ticker: L.ticker, variant: L.variant, fired_at: L.firedAt, first_seen: endDate, last_seen: endDate, name: L.name, sector: L.sector,
+    strategy: L.firing.strategy, side: L.firing.side, horizon: L.firing.horizon, strength: +L.strength.toFixed(3), detail: L.detail,
+    price: +L.price.toFixed(4), atr: +L.atr.toFixed(4), dv20: null, cost: +L.firing.cost.toFixed(5), spark: L.spark,
+  }));
+  for (let k = 0; k < sig.length; k += 500) {
+    const { error } = await sb.from("setup_signals").upsert(sig.slice(k, k + 500), { onConflict: "ticker,variant,fired_at", ignoreDuplicates: true });
+    if (error) throw new Error(error.message);
+  }
+  const { error: ve } = await sb.from("setup_variant_stats").upsert(variants.map((v) => ({ variant: v.key, as_of: endDate, stats: v as never, updated_at: new Date().toISOString() })));
+  if (ve) throw new Error(ve.message);
+  const { error: re } = await sb.from("setup_results").upsert({ as_of: endDate, generated_at: out.generatedAt, payload: out as never });
+  if (re) throw new Error(re.message);
+  await sb.from("setup_cycles").upsert({ as_of: endDate, phase: "bots", cursor: 0, detail: { source: "full", pairs: out.pairs } as never, updated_at: new Date().toISOString() });
+  const scanRows = universe.map((u) => ({ ticker: u.ticker, sector: u.sector ?? null, scanned_for: endDate, claimed_at: null, updated_at: new Date().toISOString() }));
+  for (let k = 0; k < scanRows.length; k += 500) await sb.from("setup_scan").upsert(scanRows.slice(k, k + 500));
+  log("database updated for", endDate);
+}

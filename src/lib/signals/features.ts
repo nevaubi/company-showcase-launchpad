@@ -1,5 +1,6 @@
 // Point-in-time price features on a common trading calendar. Every value at index i uses bars <= i only.
 import type { Bar } from "../financials/types";
+import type { EventFeatures } from "./events";
 
 /** Daily OHLCV aligned to `dates`, split/dividend adjusted via the adjusted close; internal gaps forward-filled. */
 export interface Aligned {
@@ -95,6 +96,12 @@ export interface Features {
   dv20: Float64Array; // average daily dollar volume
   resid: Float64Array; // daily return net of beta x sector ETF return
   residSd60: Float64Array;
+  /** Earnings, insider and short-selling features (absent when the scan has no event data). */
+  ev?: EventFeatures;
+  /** Market context on the same calendar: VIX close and VIX / VIX3M (term structure; above 1 = inverted). */
+  mk?: { vix: ArrayLike<number>; vixRatio: ArrayLike<number> };
+  /** Supply-chain: customers' 21-day return net of SPY, in standard deviations (NaN when no linked customers). */
+  cust?: Float64Array;
 }
 
 /** `bench` is the sector ETF (or SPY) adjusted close on the same calendar. */
@@ -160,6 +167,12 @@ export function features(a: Aligned, bench: Float64Array): Features {
   const residSd60 = rollStd(resid, 60, from + 60);
   return { a, r1, vol20, vol60, sma20, sd20, sma200, rsi2, atr14, avgV50, max252, bbw, bbwMin125, dv20, resid, residSd60 };
 }
+
+/** Annual stock-borrow fee charged on short trades (general-collateral names). */
+export const BORROW_FEE = 0.03;
+
+/** Total cost of a trade: round trip plus borrow for shorts held `h` trading days. */
+export const tradeCost = (roundTrip: number, side: 1 | -1, h: number) => roundTrip + (side < 0 ? (BORROW_FEE * h) / 252 : 0);
 
 /** Round-trip trading cost (fraction) from average daily dollar volume; null below the liquidity floor. */
 export function roundTripCost(dv20: number): number | null {

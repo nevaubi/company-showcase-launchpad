@@ -2,13 +2,32 @@
 // -1 short or 0, using only data up to and including bar i; trades enter at the next open.
 import type { Features } from "./features";
 
-export type StrategyId = "reversal" | "residual" | "rsi2" | "gap" | "volShock" | "volPremium" | "high52" | "squeeze" | "tsmom" | "pairs";
+export type StrategyId =
+  | "reversal" | "residual" | "rsi2" | "gap" | "volShock" | "stressRev"
+  | "volPremium" | "high52" | "squeeze" | "tsmom"
+  | "pead" | "earnRunup" | "insider" | "shortFlow"
+  | "custMom" | "confluence" | "pairs";
+
+export type Family = "reversal" | "momentum" | "events" | "links" | "multi" | "pairs";
+
+export const FAMILY_LABEL: Record<Family, string> = {
+  reversal: "Snap-back",
+  momentum: "Momentum",
+  events: "Events",
+  links: "Supply chain",
+  multi: "Confluence",
+  pairs: "Pairs",
+};
 
 export interface StrategyDef {
   id: StrategyId;
   label: string;
-  family: "reversal" | "momentum" | "pairs";
+  family: Family;
   rule: string;
+  /** Data the rule needs beyond daily prices (shown on the strategy card). */
+  data?: string;
+  /** First year the needed data exists; earlier years can't produce trades. */
+  dataFrom?: string;
   source: string;
   horizons: number[];
   sides: (1 | -1)[];
@@ -108,6 +127,24 @@ export const STRATEGIES: StrategyDef[] = [
     detail: (f, i) => `${pct(f.r1[i])} on ${(f.a.v[i] / f.avgV50[i]).toFixed(1)}x normal volume`,
   },
   {
+    id: "stressRev",
+    label: "Panic-day snap back",
+    family: "reversal",
+    rule: "5-day drop net of its sector beyond 2 standard deviations while the market is stressed (VIX above 25 or VIX above 3-month VIX); bet on a rebound",
+    source: "Nagel (2012); Avellaneda & Lee (2010)",
+    data: "Cboe VIX and VIX3M",
+    horizons: [5],
+    sides: [1],
+    fire: (f, i) => {
+      const z = zRes(f, i), vix = f.mk?.vix[i] ?? NaN, ratio = f.mk?.vixRatio[i] ?? NaN;
+      if (!ok(z, vix)) return 0;
+      const stressed = vix >= 25 || (Number.isFinite(ratio) && ratio >= 1);
+      return stressed && z <= -2 ? 1 : 0;
+    },
+    strength: (f, i) => Math.abs(zRes(f, i)),
+    detail: (f, i) => `${zRes(f, i).toFixed(1)} standard deviations vs its sector; VIX ${(f.mk?.vix[i] ?? 0).toFixed(1)}${Number.isFinite(f.mk?.vixRatio[i] ?? NaN) ? `, term ratio ${(f.mk!.vixRatio[i]).toFixed(2)}` : ""}`,
+  },
+  {
     id: "volPremium",
     label: "High-volume attention",
     family: "momentum",
@@ -173,6 +210,98 @@ export const STRATEGIES: StrategyDef[] = [
     },
     strength: (f, i) => Math.abs(f.a.c[i - 21] / f.a.c[i - 252] - 1) / (f.vol60[i] * Math.sqrt(231)),
     detail: (f, i) => `${pct(f.a.c[i - 21] / f.a.c[i - 252] - 1)} over 12 months excluding the last one`,
+  },
+  {
+    id: "pead",
+    label: "Earnings drift",
+    family: "events",
+    rule: "3-day reaction to an earnings release (SEC 8-K item 2.02), net of its sector, beyond 2 standard deviations; bet the move continues",
+    source: "Bernard & Thomas (1989); Chan, Jegadeesh & Lakonishok (1996)",
+    data: "SEC 8-K item 2.02 filing dates",
+    horizons: [20, 40],
+    sides: [1, -1],
+    fire: (f, i) => {
+      const z = f.ev?.earnZ[i] ?? NaN;
+      return !ok(z) ? 0 : z >= 2 ? 1 : z <= -2 ? -1 : 0;
+    },
+    strength: (f, i) => Math.abs(f.ev!.earnZ[i]),
+    detail: (f, i) => `${pct(f.ev!.earnRet[i])} vs its sector over the 3 days around results (${f.ev!.earnZ[i].toFixed(1)} standard deviations)`,
+  },
+  {
+    id: "earnRunup",
+    label: "Pre-earnings run-up",
+    family: "events",
+    rule: "Five trading days before the expected results date (same quarter last year + 52 weeks); hold through the release",
+    source: "Frazzini & Lamont (2007); Barber et al. (2013)",
+    data: "SEC 8-K item 2.02 filing dates",
+    horizons: [6],
+    sides: [1],
+    fire: (f, i) => (f.ev?.earnAhead[i] === 5 ? 1 : 0),
+    strength: () => 1,
+    detail: () => "Results expected in about 5 trading days",
+  },
+  {
+    id: "insider",
+    label: "Insider buying cluster",
+    family: "events",
+    rule: "Two or more officers or directors buying on the open market (Form 4 code P, $25K+, not pre-planned) within 30 days",
+    source: "Cohen, Malloy & Pomorski (2012); Lakonishok & Lee (2001)",
+    data: "SEC Form 4 open-market purchases",
+    dataFrom: "2016",
+    horizons: [20, 40],
+    sides: [1],
+    fire: (f, i) => ((f.ev?.buyers30[i] ?? 0) >= 2 ? 1 : 0),
+    strength: (f, i) => f.ev!.buyers30[i],
+    detail: (f, i) => `${f.ev!.buyers30[i]} insiders bought ${f.ev!.buyValue30[i] >= 1e6 ? `$${(f.ev!.buyValue30[i] / 1e6).toFixed(1)}M` : `$${Math.round(f.ev!.buyValue30[i] / 1e3)}K`} in 30 days`,
+  },
+  {
+    id: "shortFlow",
+    label: "Short-selling flow",
+    family: "events",
+    rule: "5-day share of volume sold short beyond 2 standard deviations of its prior 60 days; heavy shorting → short, unusually light shorting → long",
+    source: "Boehmer, Jones & Zhang (2008); Diether, Lee & Werner (2009)",
+    data: "FINRA daily short-sale volume",
+    dataFrom: "2018",
+    horizons: [5, 10],
+    sides: [1, -1],
+    fire: (f, i) => {
+      const z = f.ev?.shortZ[i] ?? NaN;
+      if (!ok(z)) return 0;
+      // Fire on the first day past the threshold only.
+      const prev = f.ev!.shortZ[i - 1];
+      if (z >= 2 && !(prev >= 2)) return -1;
+      if (z <= -2 && !(prev <= -2)) return 1;
+      return 0;
+    },
+    strength: (f, i) => Math.abs(f.ev!.shortZ[i]),
+    detail: (f, i) => `${pct(f.ev!.shortRatio5[i])} of volume sold short over 5 days (${f.ev!.shortZ[i].toFixed(1)} standard deviations vs normal)`,
+  },
+  {
+    id: "custMom",
+    label: "Customer momentum",
+    family: "links",
+    rule: "Monthly: the company's customers named in its own or their SEC filings moved beyond 1 standard deviation vs the S&P 500 over 21 days; bet the supplier follows",
+    source: "Cohen & Frazzini (2008); Menzly & Ozbas (2010)",
+    data: "Supplier–customer links quoted from 10-K/10-Q filings",
+    dataFrom: "2023",
+    horizons: [21],
+    sides: [1, -1],
+    fire: (f, i) => {
+      if (i % 21 !== 0) return 0;
+      const z = f.cust?.[i] ?? NaN;
+      return !ok(z) ? 0 : z >= 1 ? 1 : z <= -1 ? -1 : 0;
+    },
+    strength: (f, i) => Math.abs(f.cust![i]),
+    detail: (f, i) => `Customers ${f.cust![i] >= 0 ? "up" : "down"} ${Math.abs(f.cust![i]).toFixed(1)} standard deviations vs the S&P 500 over 21 days`,
+  },
+  {
+    id: "confluence",
+    label: "Confluence",
+    family: "multi",
+    rule: "Two or more different strategies point the same way on the same stock within 3 trading days",
+    source: "Combination of the rules above; Asness et al. (2013) on combining signals",
+    horizons: [10],
+    sides: [1, -1],
   },
   {
     id: "pairs",

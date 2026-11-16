@@ -295,6 +295,20 @@
       "when": 1794555152887,
       "tag": "0041_members_read_partner_ir_copy",
       "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1794864877612,
+      "tag": "0042_trading_engine_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1794865600192,
+      "tag": "0043_setup_engine_phases",
+      "breakpoints": true
     }
   ]
 }
