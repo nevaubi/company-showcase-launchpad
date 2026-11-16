@@ -33,7 +33,7 @@ async function bucketJson<T>(path: string): Promise<T | null> {
 
 async function benchBars(sym: string): Promise<Bar[]> {
   try {
-    return toBars(await fetchYahoo(sym, "max", "1d"), false).filter((b) => b[0] >= "2015-01-01");
+    return toBars(await fetchYahoo(sym, "10y", "1d"), false).filter((b) => b[0] >= "2015-01-01");
   } catch (e) {
     log("yahoo failed", sym, (e as Error).message, "- using stored copy");
     const f = `public/data/prices/${sf(sym)}.json`;
