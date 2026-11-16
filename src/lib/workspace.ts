@@ -7,6 +7,7 @@ export type AppPath =
   | "/app/companies"
   | "/app/screener"
   | "/app/setups"
+  | "/app/autopilots"
   | "/app/kpis"
   | "/app/insights"
   | "/app/compare"

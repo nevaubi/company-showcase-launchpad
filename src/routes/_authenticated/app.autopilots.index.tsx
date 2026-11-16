@@ -19,7 +19,7 @@ import { usePlan } from "@/hooks/use-plan";
 import { AUTOPILOT_LIMIT } from "@/lib/billing/plans";
 import { fmtDate, fmtPct } from "@/lib/format";
 import { botStats, BotRulesSchema, type BotRules } from "@/lib/signals/bots";
-import { botsQuery, setupsQuery, type BotRow } from "@/lib/signals/queries";
+import { botsQuery, setupsQuery, type BotRow, type BotsList } from "@/lib/signals/queries";
 import { FAMILY_LABEL } from "@/lib/signals/strategies";
 import { isNearMiss } from "@/lib/signals/setups";
 import { rulesSummary, variantLabel } from "@/components/autopilot/shared";
@@ -46,6 +46,7 @@ function AutopilotsPage() {
   const { data: plan } = usePlan();
   const [uid, setUid] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const navigate = useNavigate();
   useEffect(() => {
     supabase.auth.getUser().then(({ data: u }) => setUid(u.user?.id ?? null));
   }, []);
@@ -77,7 +78,7 @@ function AutopilotsPage() {
       />
 
       <Panel title="House autopilots" subtitle="Run by Filed Under on the same rules for everyone — a live forward test of the backtests" collapse={false}>
-        <div className="grid grid-cols-1 gap-px overflow-hidden rounded-md border bg-border md:grid-cols-2 xl:grid-cols-3" data-section="House autopilots">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-section="House autopilots">
           {house.map((b) => <BotCard key={b.id} bot={b} data={data} />)}
         </div>
       </Panel>
@@ -89,7 +90,7 @@ function AutopilotsPage() {
         collapse={false}
       >
         {mine.length ? (
-          <div className="grid grid-cols-1 gap-px overflow-hidden rounded-md border bg-border md:grid-cols-2 xl:grid-cols-3" data-section="Your autopilots">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-section="Your autopilots">
             {mine.map((b) => <BotCard key={b.id} bot={b} data={data} own />)}
           </div>
         ) : (
@@ -100,18 +101,29 @@ function AutopilotsPage() {
         )}
       </Panel>
 
-      {creating && uid && <CreateDialog uid={uid} prefill={variant} onClose={() => setCreating(false)} atLimit={mine.length >= limit} limit={limit} />}
+      {creating && uid && (
+        <CreateDialog
+          uid={uid}
+          prefill={variant}
+          atLimit={mine.length >= limit}
+          limit={limit}
+          onClose={() => {
+            setCreating(false);
+            if (variant) navigate({ to: "/app/autopilots", search: {}, replace: true });
+          }}
+        />
+      )}
     </div>
   );
 }
 
-type BotsData = NonNullable<ReturnType<typeof useQuery<Awaited<ReturnType<typeof botsQuery.queryFn>>>>["data"]>;
-
-function BotCard({ bot, data, own }: { bot: BotRow; data: BotsData; own?: boolean }) {
+function BotCard({ bot, data, own }: { bot: BotRow; data: BotsList; own?: boolean }) {
   const qc = useQueryClient();
   const eq = data.equity.get(bot.id) ?? [];
   const closed = data.closed.get(bot.id) ?? [];
-  const active = data.active.get(bot.id)?.length ?? 0;
+  const activeRows = data.active.get(bot.id) ?? [];
+  const openN = activeRows.filter((r) => r.status === "open").length;
+  const queuedN = activeRows.length - openN;
   const s = botStats(Number(bot.capital), eq, closed);
   const toggle = useMutation({
     mutationFn: async () => {
@@ -121,26 +133,24 @@ function BotCard({ bot, data, own }: { bot: BotRow; data: BotsData; own?: boolea
     onSuccess: () => qc.invalidateQueries({ queryKey: ["autopilots"] }),
     onError: (e) => toast.error((e as Error).message),
   });
+  const tone = (v: number | null) => (v ? (v > 0 ? "text-positive" : "text-negative") : "");
   return (
-    <div className="flex min-w-0 flex-col bg-card p-3.5">
+    <div className="flex min-w-0 flex-col rounded-md border bg-card p-3.5">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <Link to="/app/autopilots/$botId" params={{ botId: bot.id }} className="font-medium hover:underline">{bot.name}</Link>
-          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{bot.description || rulesSummary(bot.rules)[0]}</p>
-        </div>
+        <Link to="/app/autopilots/$botId" params={{ botId: bot.id }} className="min-w-0 font-medium hover:underline">{bot.name}</Link>
         <span className={cn("shrink-0 rounded border px-1.5 py-0.5 text-[10px]", bot.status === "active" ? "text-positive" : "text-muted-foreground")}>{bot.status === "active" ? "Running" : "Paused"}</span>
       </div>
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <div className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs tabular-nums">
-          <div><div className="text-[10px] text-muted-foreground">Return</div><div className={cn("font-semibold", s.totalReturn ? (s.totalReturn > 0 ? "text-positive" : "text-negative") : "")}>{fmtPct(s.totalReturn, 2, true)}</div></div>
-          <div><div className="text-[10px] text-muted-foreground">vs S&P</div><div className={cn(s.excess ? (s.excess > 0 ? "text-positive" : "text-negative") : "")}>{fmtPct(s.excess, 2, true)}</div></div>
-          <div><div className="text-[10px] text-muted-foreground">Trades</div><div>{s.trades} <span className="text-muted-foreground">+{active}</span></div></div>
-          <div><div className="text-[10px] text-muted-foreground">Win rate</div><div>{fmtPct(s.hit, 0)}</div></div>
-          <div><div className="text-[10px] text-muted-foreground">Drawdown</div><div>{fmtPct(s.maxDrawdown, 1)}</div></div>
-          <div><div className="text-[10px] text-muted-foreground">Since</div><div>{fmtDate(bot.started_on)}</div></div>
-        </div>
-        {eq.length > 1 ? <Sparkline values={eq.map((e) => e.equity)} className="h-10 w-28" /> : <span className="text-[11px] text-muted-foreground">Curve after day 2</span>}
+      <p className="mt-0.5 line-clamp-2 min-h-8 text-xs text-muted-foreground">{bot.description || rulesSummary(bot.rules)[0]}</p>
+      <div className="mt-3 grid grid-cols-4 gap-2 text-xs tabular-nums">
+        <div><div className="text-[10px] text-muted-foreground">Return</div><div className={cn("font-semibold", tone(s.totalReturn))}>{fmtPct(s.totalReturn, 2, true)}</div></div>
+        <div><div className="text-[10px] text-muted-foreground">vs S&P</div><div className={tone(s.excess)}>{fmtPct(s.excess, 2, true)}</div></div>
+        <div><div className="text-[10px] text-muted-foreground">Trades</div><div title={`${s.trades} closed, ${openN} open, ${queuedN} queued for the next open`}>{s.trades}<span className="text-muted-foreground">{openN ? ` · ${openN} open` : ""}{queuedN ? ` · ${queuedN} queued` : ""}</span></div></div>
+        <div><div className="text-[10px] text-muted-foreground">Win rate</div><div>{fmtPct(s.hit, 0)}</div></div>
       </div>
+      <div className="mt-3 flex h-10 items-center">
+        {eq.length > 1 ? <Sparkline values={eq.map((e) => e.equity)} className="h-10 w-full" /> : <span className="text-[11px] text-muted-foreground">Equity curve appears after the second trading day</span>}
+      </div>
+      <div className="mt-2 text-[11px] text-muted-foreground">Since {fmtDate(bot.started_on)} · max drawdown {fmtPct(s.maxDrawdown, 1)}</div>
       {bot.last_error && <p className="mt-2 text-[11px] text-negative">{bot.last_error}</p>}
       <div className="mt-3 flex items-center gap-2">
         <Button asChild size="sm" variant="outline" className="h-7"><Link to="/app/autopilots/$botId" params={{ botId: bot.id }}>Positions & trades</Link></Button>

@@ -2368,17 +2368,7 @@ export type Database = {
         Args: { _as_of: string; _n: number; _phase: string }
         Returns: number
       }
-      setup_variant_daily: {
-        Args: { _variant: string }
-        Returns: {
-          d: string
-          ex: number
-          gross: number
-          hits: number
-          n: number
-          net: number
-        }[]
-      }
+      setup_variant_daily: { Args: { _variant: string }; Returns: Json }
       setup_variant_list: {
         Args: never
         Returns: {

@@ -261,8 +261,9 @@ const PHASES: Record<string, Phase> = {
       }
       const { data: rows, error } = await db().rpc("setup_variant_daily", { _variant: variants[k] });
       if (error) throw new Error(error.message);
-      const days: DailyAgg[] = ((rows ?? []) as { d: string; n: number; net: number; ex: number; gross: number; hits: number }[])
-        .map((r) => ({ i: idx.get(r.d) ?? -1, n: r.n, net: r.net, ex: r.ex, gross: r.gross, hits: r.hits }))
+      // One JSON array of [date, n, net, ex, gross, hits] per signal day (not row-limited).
+      const days: DailyAgg[] = ((rows ?? []) as unknown as [string, number, number, number, number, number][])
+        .map(([d, n, net, ex, gross, hits]) => ({ i: idx.get(d) ?? -1, n, net, ex, gross, hits }))
         .filter((r) => r.i >= 0);
       const partial = variantPartial(variants[k], days, ctx.dates, ctx.regime);
       await db().from("setup_variant_stats").upsert({ variant: variants[k], as_of: asOf, stats: { partial } as unknown as Json, updated_at: nowIso() });

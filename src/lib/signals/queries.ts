@@ -32,10 +32,17 @@ export interface BotRow {
   created_at: string;
 }
 
+export interface BotsList {
+  bots: BotRow[];
+  equity: Map<string, (EquityRow & { bot_id: string })[]>;
+  closed: Map<string, { bot_id: string; ret: number | null }[]>;
+  active: Map<string, { bot_id: string; status: string }[]>;
+}
+
 export const botsQuery = queryOptions({
   queryKey: ["autopilots", "list"],
   staleTime: 5 * 60_000,
-  queryFn: async () => {
+  queryFn: async (): Promise<BotsList> => {
     const { data, error } = await supabase.from("paper_bots").select("id, user_id, slug, name, description, rules, capital, status, started_on, last_as_of, last_error, created_at").order("created_at");
     if (error) throw error;
     const bots = (data ?? []) as BotRow[];

@@ -309,6 +309,13 @@
       "when": 1794865600192,
       "tag": "0043_setup_engine_phases",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1794866922600,
+      "tag": "0044_setup_engine_rpc_fixes",
+      "breakpoints": true
     }
   ]
 }

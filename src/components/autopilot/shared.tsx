@@ -39,7 +39,7 @@ export function BotStatStrip({ capital, equity, closed, open }: { capital: numbe
   return (
     <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-4 lg:grid-cols-8">
       <Stat className="border-0" label="Equity" value={fmtCompactUsd(last?.equity ?? capital)} sub={`from ${fmtCompactUsd(capital)}`} />
-      <Stat className="border-0" label="Return" value={fmtPct(s.totalReturn, 2, true)} tone={toneOf(s.totalReturn)} sub={`${fmtInt(s.days)} trading days`} />
+      <Stat className="border-0" label="Return" value={fmtPct(s.totalReturn, 2, true)} tone={toneOf(s.totalReturn)} sub={`${fmtInt(s.days)} trading day${s.days === 1 ? "" : "s"}`} />
       <Stat className="border-0" label="vs S&P 500" value={fmtPct(s.excess, 2, true)} tone={toneOf(s.excess)} sub={`S&P ${fmtPct(s.spyReturn, 2, true)}`} />
       <Stat className="border-0" label="Closed trades" value={fmtInt(s.trades)} sub={`${open} open or queued`} />
       <Stat className="border-0" label="Win rate" value={fmtPct(s.hit, 0)} />

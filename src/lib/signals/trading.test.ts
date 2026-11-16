@@ -185,6 +185,19 @@ describe("paper autopilots", () => {
     expect(day4.realized).toBeCloseTo(390, 2);
   });
 
+  it("sizes each fill on equity marked at real prices, never at a price from before the entry", () => {
+    const rules = parseRules({ select: "variants", variants: ["x:L:2"], positionPct: 0.1 });
+    const mk = (ticker: string, side: 1 | -1): Position => ({
+      id: ticker, bot_id: "b", ticker, name: ticker, sector: ticker, variant: "x:L:2", strategy: "x", side, horizon: 2, signal_date: "2026-11-02", signal_price: 100,
+      stop: null, target: null, atr: 1, cost: 0, status: "pending", entry_date: null, entry_price: null, shares: null, notional: null, spy_entry: null,
+      exit_date: null, exit_price: null, exit_reason: null, pnl: null, ret: null, ret_spy: null, close_requested: false,
+    });
+    // The day before entry AAA closed far below where it opens; that close must not mark the new position.
+    const bars = { AAA: { "2026-11-02": flat(50), "2026-11-03": flat(100) }, BBB: { "2026-11-03": flat(20) } };
+    const out = stepBot({ botId: "b", rules, capital: 100_000, calendar: cal.slice(0, 2), from: "2026-11-02", positions: [mk("AAA", 1), mk("BBB", -1)], realized: 0, bars, spy, candidates: [] });
+    expect(out.positions.map((p) => p.notional)).toEqual([10_000, 10_000]);
+  });
+
   it("uses stops when chosen and assumes the stop came first when both are touched", () => {
     const rules = parseRules({ exits: "stops" });
     const pos: Position = {

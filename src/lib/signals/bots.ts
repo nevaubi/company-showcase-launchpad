@@ -161,9 +161,10 @@ export function stepBot(inp: StepInput): { positions: Position[]; equity: Equity
   const dayIdx = new Map(calendar.map((d, k) => [d, k]));
   const lastPx = new Map<string, number>();
   const firstStep = inp.from == null ? calendar.length - 1 : calendar.findIndex((d) => d > inp.from!);
+  // Positions already open are marked at their latest close before the first step.
   for (let k = 0; k < Math.max(firstStep, 0); k++)
     for (const p of pos) {
-      const b = inp.bars[p.ticker]?.[calendar[k]];
+      const b = p.status === "open" ? inp.bars[p.ticker]?.[calendar[k]] : undefined;
       if (b) lastPx.set(p.ticker, b.c);
     }
   const markEquity = () => {
@@ -203,6 +204,7 @@ export function stepBot(inp: StepInput): { positions: Position[]; equity: Equity
       p.notional = round(notional, 2);
       p.shares = round(notional / bar.o, 6);
       p.spy_entry = inp.spy[date]?.o ?? null;
+      lastPx.set(p.ticker, bar.o);
       // Re-anchor stops to the actual fill.
       if (p.signal_price && p.stop != null && p.target != null) {
         const dStop = p.signal_price - p.stop, dTgt = p.target - p.signal_price;

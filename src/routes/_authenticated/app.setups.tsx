@@ -204,14 +204,14 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
                           {sideLabel(s.side)}
                         </span>
                         <span>{STRATEGY[s.strategy]?.label ?? s.strategy}</span>
-                        {!s.proven && <span className="rounded border px-1 text-[10px] text-muted-foreground">watch-only</span>}
+                        {!s.proven && <span className="rounded border px-1 text-[10px] leading-4 text-muted-foreground">watch</span>}
                       </div>
                       <div className="text-xs text-muted-foreground">{s.detail} · {fmtDate(s.firedAt)}</div>
                     </td>
-                    <td className="pr-3 text-xs">{holdLabel(s.horizon)}</td>
+                    <td className="whitespace-nowrap pr-3 text-xs">{holdLabel(s.horizon)}</td>
                     <td className="pr-3"><Spark values={s.spark} /></td>
                     <td className="pr-3 text-right tabular-nums">{fmtPrice(s.price)}</td>
-                    <td className="pr-3 text-right text-xs tabular-nums text-muted-foreground">{fmtPrice(s.stop)} / {fmtPrice(s.target)}</td>
+                    <td className="whitespace-nowrap pr-3 text-right text-xs tabular-nums text-muted-foreground">{fmtPrice(s.stop)} / {fmtPrice(s.target)}</td>
                     <td className={cn("pr-3 text-right tabular-nums", toneClass[toneOf(s.edge)])}>{fmtPct(s.edge, 2, true)}</td>
                     <td className="text-right">
                       <Button size="sm" variant="ghost" className="h-7" onClick={() => track.mutate(s)} disabled={track.isPending}>
@@ -321,7 +321,7 @@ function ProofPanel({ data }: { data: SetupsFile }) {
                           <span className="text-[10px] text-muted-foreground">{FAMILY_LABEL[v.family]}</span>
                         </div>
                       </td>
-                      <td className="pr-3 text-xs">{sideLabel(v.side)} · {holdLabel(v.horizon)}</td>
+                      <td className="whitespace-nowrap pr-3 text-xs">{sideLabel(v.side)} · {holdLabel(v.horizon)}</td>
                       <td className="pr-3 text-right tabular-nums">{fmtInt(v.outSample.n)}</td>
                       <td className={cn("pr-3 text-right tabular-nums", toneClass[toneOf(v.outSample.avgNet)])}>{fmtPct(v.outSample.avgNet, 2, true)}</td>
                       <td className="pr-3 text-right tabular-nums">{fmtPct(v.outSample.hit, 0)}</td>

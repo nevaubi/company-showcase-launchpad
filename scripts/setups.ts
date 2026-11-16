@@ -263,7 +263,8 @@ if (DB) {
     if (error) throw new Error(error.message);
   }
   const sig = live.map((L) => ({
-    ticker: L.ticker, variant: L.variant, fired_at: L.firedAt, first_seen: endDate, last_seen: endDate, name: L.name, sector: L.sector,
+    // first_seen = the real run date, so a full-history run never counts as a live catch (the live record needs first_seen = fired_at).
+    ticker: L.ticker, variant: L.variant, fired_at: L.firedAt, first_seen: new Date().toISOString().slice(0, 10), last_seen: endDate, name: L.name, sector: L.sector,
     strategy: L.firing.strategy, side: L.firing.side, horizon: L.firing.horizon, strength: +L.strength.toFixed(3), detail: L.detail,
     price: +L.price.toFixed(4), atr: +L.atr.toFixed(4), dv20: null, cost: +L.firing.cost.toFixed(5), spark: L.spark,
   }));
@@ -275,8 +276,10 @@ if (DB) {
   if (ve) throw new Error(ve.message);
   const { error: re } = await sb.from("setup_results").upsert({ as_of: endDate, generated_at: out.generatedAt, payload: out as never });
   if (re) throw new Error(re.message);
-  await sb.from("setup_cycles").upsert({ as_of: endDate, phase: "bots", cursor: 0, detail: { source: "full", pairs: out.pairs } as never, updated_at: new Date().toISOString() });
-  const scanRows = universe.map((u) => ({ ticker: u.ticker, sector: u.sector ?? null, scanned_for: endDate, claimed_at: null, updated_at: new Date().toISOString() }));
-  for (let k = 0; k < scanRows.length; k += 500) await sb.from("setup_scan").upsert(scanRows.slice(k, k + 500));
+  // Recorded as finished: autopilots only step on the nightly job's sessions.
+  await sb.from("setup_cycles").upsert({ as_of: endDate, phase: "done", cursor: 0, finished_at: new Date().toISOString(), detail: { source: "full" } as never, updated_at: new Date().toISOString() });
+  // Queue every ticker for the nightly scan (only new tickers are inserted; existing rows keep their progress).
+  const scanRows = universe.map((u) => ({ ticker: u.ticker, sector: u.sector ?? null }));
+  for (let k = 0; k < scanRows.length; k += 500) await sb.from("setup_scan").upsert(scanRows.slice(k, k + 500), { onConflict: "ticker", ignoreDuplicates: true });
   log("database updated for", endDate);
 }

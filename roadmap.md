@@ -214,9 +214,10 @@
 - [ ] Short-term setups: rerun `bun scripts/setups.ts` daily after prices refresh (not yet scheduled; needs all price files, too heavy for a job). Lead-lag (supply links) and post-earnings drift strategies not built yet.
 
 ## Platform upgrade (requested Nov 16 21:22 UTC)
-- [ ] Setups: add more free granular data (FINRA daily short volume, SEC fails-to-deliver, earnings dates/surprise drift, insider clusters, VIX term structure / market regime, sector breadth) as point-in-time features; new strategies (post-earnings drift, supplier→customer lead-lag, short-squeeze/short-volume reversal, insider-cluster drift)
-- [ ] Setups auto-refresh: daily scheduled scan (light job reading Cloud prices) so strategies, backtests and live candidates recompute without a manual script
-- [ ] Auto paper trading: strategy "bots" that open/close paper trades on schedule from setup signals, with per-strategy equity curves, hit rate, drawdown, vs SPY; user can follow/unfollow strategies
+- [x] Setups: FINRA daily short volume (2018+), 8-K 2.02 earnings dates, Form 4 insider purchases (2016+), VIX3M term structure, breadth; new strategies: earnings drift, pre-earnings run-up, insider clusters, short-selling flow, panic-day snap back, customer momentum (supply links), confluence; short borrow cost
+- [ ] Setups follow-ups: SEC fails-to-deliver data; options-implied context (current snapshot only, not backtestable)
+- [x] Setups auto-refresh: nightly `setups` job (4 parallel schedules, 21:00–06:00 UTC) refreshes closing bars, rescans every stock, re-tests every strategy, publishes setups and records live outcomes
+- [x] Auto paper trading: house + personal autopilots (/app/autopilots) with daily fills, exits, equity vs SPY, hit rate, drawdown, Sharpe; plan limits trial 2 / Research 5 / Pro 25
 - [ ] IR tab UX: KPI overview of the most relevant series, gap-filled quarters (derived Q4 = FY − 9M, TTM), relevance ranking, grouped breakdowns, clearer gap/derived markers
 - [ ] Supply chain granularity: XBRL dimensional facts (revenue by geography/state, product, customer concentration, cost components, purchase obligations) → company "where money comes from / goes" maps; end-to-end tiered chain view
 - [ ] Alt data: more authoritative gov sources (e.g. NHTSA recalls, CFPB complaints, FDA, USPTO, H-1B, lobbying, FINRA/SEC market structure) collected on schedule with source URLs
