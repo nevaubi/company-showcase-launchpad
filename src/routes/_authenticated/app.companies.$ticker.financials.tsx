@@ -9,6 +9,7 @@ import { StatementChart } from "@/components/financials/statement-chart";
 import { AsReported } from "@/components/financials/as-reported";
 import { IndustryTemplate } from "@/components/financials/industry-template";
 import { AdjustedView } from "@/components/financials/adjusted-view";
+import { FilingDetailView } from "@/components/financials/filing-detail";
 import { ScaleToggle } from "@/components/financials/scale-toggle";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ import { cn } from "@/lib/utils";
 import wordmark from "@/assets/brand/wordmark.png.asset.json";
 
 const pageSearch = z.object({
-  basis: z.enum(["normalized", "reported", "template", "adjusted"]).default("normalized"),
+  basis: z.enum(["normalized", "reported", "template", "adjusted", "detail"]).default("normalized"),
   statement: z.enum(["income", "balance", "cashflow", "kpis"]).default("income"),
   freq: z.enum(["annual", "quarterly"]).default("annual"),
   span: z.enum(["10", "20", "all"]).default("10"),
@@ -80,6 +81,7 @@ function Financials() {
         { v: "reported", l: "As reported", title: "Each filing's statements exactly as filed: its labels, order, signs and rounding" },
         { v: "template", l: "Industry template", title: "Filings mapped onto industrial, bank, insurer, REIT or utility templates" },
         { v: "adjusted", l: "Adjusted", title: "The company's non-GAAP measures beside GAAP" },
+        { v: "detail", l: "Segments & detail", title: "Revenue by product, geography and segment, each segment's costs, customer concentration, purchase obligations and inventory from the latest 10-K and 10-Q" },
       ]}
     />
   );
@@ -87,7 +89,7 @@ function Financials() {
     return (
       <div className="grid grid-cols-1 gap-4">
         <div className="flex flex-wrap items-center gap-2">{basisBar}</div>
-        {s.basis === "reported" ? <AsReported ticker={ticker} /> : s.basis === "template" ? <IndustryTemplate ticker={ticker} /> : <AdjustedView ticker={ticker} />}
+        {s.basis === "reported" ? <AsReported ticker={ticker} /> : s.basis === "template" ? <IndustryTemplate ticker={ticker} /> : s.basis === "detail" ? <FilingDetailView ticker={ticker} /> : <AdjustedView ticker={ticker} />}
       </div>
     );
 

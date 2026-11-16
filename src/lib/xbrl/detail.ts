@@ -13,6 +13,8 @@ export interface DetailValue {
 }
 export interface DetailPeriod {
   key: string;
+  /** column heading for maturity buckets ("Year 1", "After year 5") */
+  label?: string;
   start?: string;
   end: string;
   /** 12 = fiscal year, 3 = quarter, 0 = as of a date */
@@ -90,7 +92,7 @@ export const AXIS_LABEL: Record<string, string> = {
 /** Axes whose tables are accounting plumbing rather than business detail. */
 const NOISE_AXES = /EquityComponents|AwardType|FairValue|RetirementPlan|DefinedBenefit|IncomeTaxAuthority|LongtermDebtType|DebtInstrument|ShareRepurchase|SubsequentEvent|srt:RangeAxis|BusinessAcquisition|FinancialInstrument|ValuationAllowances|RestatementAdjustment|StatementClassOfStock|LegalEntity|RelatedParty|PlanName|Hedging|DerivativeInstrument|CreditFacility|LineOfCredit|Lessee|Lease|TitleOfIndividual|Director|Executive|Restructuring|Investment|Securit|Pledged|Maturity|ScenarioAxis|AdjustmentsForNewAccountingPronouncements|ChangeInAccountingEstimate|Antidilutive|Warrant|Option|Tranche|OwnershipAxis|Consolidated|Disposal|Award|Grant|TemporaryEquity|Partner|Variable|Collateral|Counterparty|Portfolio|Financing|Credit|Loan|Receivable|Liabilit|Tax|Unit|Vesting|Share|Stock|Equity/i;
 
-const REVENUE = /(^|:)(Revenues?|RevenueFromContractWithCustomer(Excluding|Including)AssessedTax|SalesRevenue(Net|GoodsNet|ServicesNet)|RevenuesNetOfInterestExpense|NetSales|Sales)$|Revenue$/;
+const REVENUE = /Revenues? ?FromExternalCustomers|(^|:)(Revenues?|RevenueFromContractWithCustomer(Excluding|Including)AssessedTax|SalesRevenue(Net|GoodsNet|ServicesNet)|RevenuesNetOfInterestExpense|NetSales|Sales)$|Revenue$/;
 const NOT_REVENUE = /Deferred|Receivable|Obligation|Unbilled|Cost|Expense|Allowance|Reserve|Recognized(Prior|In)|Increase|Decrease|Percentage/i;
 const COST = /Cost|Expense|Expenses|Charges?$|Fuel|Labor|Depreciation|Amortization|Impairment|Payments?ToSuppliers|MaterialsAndSupplies|Purchases/i;
 const PROFIT = /(OperatingIncomeLoss|GrossProfit|NetIncomeLoss|IncomeLossFromContinuingOperations|SegmentProfit|ProfitLoss|OperatingProfit|AdjustedEBITDA|Ebitda)/i;
@@ -98,6 +100,50 @@ const COMMIT = /PurchaseObligation|UnconditionalPurchaseObligation|RemainingPerf
 const INVENTORY = /^(us-gaap:)?Inventory(RawMaterials|WorkInProcess|FinishedGoods|Supplies|Parts|LIFOReserve|Gross|Net|ValuationReserves|NetOfAllowances)|Inventory(RawMaterialsAndSupplies|FinishedGoodsAndWorkInProcess)/i;
 const ASSETS_GEO = /LongLivedAssets|PropertyPlantAndEquipment(Net|Gross)|NoncurrentAssets|OperatingLeaseRightOfUseAsset/i;
 const CONC = /ConcentrationRiskPercentage[12]?$/;
+/** Liability roll-forwards and claim-development triangles: real, but not business detail. */
+const NOISE_CONCEPT = /Cumulative|Liabilit|Reinsurance|HeldForSale|NotSeparatelyPresented|ShortDuration|LongDuration|Accretion|Deferred|IncomeTax|Goodwill|Translation|Acquisition|Intangible|Allowance|Derivative|Notional|ShareBased|StockBased|Compensation|AggregateAvailable|TradingArrangement|AccumulatedDepreciation|AccumulatedAmortization|OtherCommitment/i;
+
+/** Maturity ladders ("…DueInSecondYear", "…ToBePaidYearThree"): bucket order and heading. */
+const BUCKETS: [RegExp, number, string][] = [
+  [/(RemainderOfFiscalYear|DueInRemainderOfFiscalYear)$/, 0, "Rest of year"],
+  [/BalanceOnFirstAnniversary$/, 1, "Year 1"],
+  [/BalanceOnSecondAnniversary$/, 2, "Year 2"],
+  [/BalanceOnThirdAnniversary$/, 3, "Year 3"],
+  [/BalanceOnFourthAnniversary$/, 4, "Year 4"],
+  [/BalanceOnFifthAnniversary$/, 5, "Year 5"],
+  [/BalanceAfterFifthAnniversary$/, 6, "After year 5"],
+  [/(DueInNextTwelveMonths|DueNextTwelveMonths|NextTwelveMonths|YearOne|DueInNextRollingTwelveMonths|InRollingYearOne)$/, 1, "Year 1"],
+  [/(DueInSecondYear|SecondYear|YearTwo|InRollingYearTwo)$/, 2, "Year 2"],
+  [/(DueInThirdYear|ThirdYear|YearThree|InRollingYearThree)$/, 3, "Year 3"],
+  [/(DueInFourthYear|FourthYear|YearFour|InRollingYearFour)$/, 4, "Year 4"],
+  [/(DueInFifthYear|FifthYear|YearFive|InRollingYearFive)$/, 5, "Year 5"],
+  [/(DueAfterFifthYear|DueAfterFiveYears|AfterFiveYears|AfterYearFive|Thereafter|DueThereafter|InRollingAfterYearFive)$/, 6, "After year 5"],
+];
+export function bucketOf(concept: string): { base: string; order: number; label: string } | null {
+  // "After year five" first, or "…AfterFifthYear" would read as year five.
+  for (const [re, order, label] of [...BUCKETS].sort((a, b) => b[1] - a[1])) {
+    const m = concept.match(re);
+    if (m) return { base: concept.slice(0, m.index).replace(/(ToBePaid|DueIn|Due|Payments?Due|In)$/, ""), order, label };
+  }
+  return null;
+}
+
+/** Plain names for the standard concepts that carry long official labels. */
+const SHORT: Record<string, string> = {
+  "us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax": "Revenue",
+  "us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax": "Revenue",
+  "us-gaap:Revenues": "Revenue",
+  "us-gaap:SalesRevenueNet": "Revenue",
+  "us-gaap:RevenuesNetOfInterestExpense": "Revenue, net of interest expense",
+  "us-gaap:CostOfGoodsAndServicesSold": "Cost of goods and services sold",
+  "us-gaap:CostOfRevenue": "Cost of revenue",
+  "us-gaap:OperatingIncomeLoss": "Operating income",
+  "us-gaap:LongLivedAssets": "Long-lived assets",
+  "us-gaap:PropertyPlantAndEquipmentNet": "Property, plant and equipment, net",
+  "us-gaap:PropertyPlantAndEquipmentGross": "Property, plant and equipment, gross",
+  "us-gaap:UnrecordedUnconditionalPurchaseObligation": "Purchase obligations",
+  "us-gaap:RevenueRemainingPerformanceObligation": "Remaining performance obligations (backlog)",
+};
 
 const SEG = "us-gaap:StatementBusinessSegmentsAxis";
 const CONS = "srt:ConsolidationItemsAxis";
@@ -124,7 +170,7 @@ export function memberLabel(member: string, labels: Map<string, string>): string
   return own ?? humanize(member);
 }
 
-const conceptLabel = (c: string, labels: Map<string, string>) => labels.get(c) ?? humanize(c);
+const conceptLabel = (c: string, labels: Map<string, string>) => SHORT[c] ?? labels.get(c) ?? humanize(c);
 
 /** Period key and shape for a context; durations other than a year or a quarter are dropped. */
 function periodOf(ctx: XbrlContext): DetailPeriod | null {
@@ -149,6 +195,7 @@ const familyOf = (concept: string, axis: string): DetailFamily | null => {
   if (REVENUE.test(concept) && !NOT_REVENUE.test(concept.split(":")[1] ?? concept)) return axis === "srt:StatementGeographicalAxis" ? "geography" : "revenue";
   if (axis === "srt:StatementGeographicalAxis" && ASSETS_GEO.test(concept)) return "geography";
   if (axis === "us-gaap:PropertyPlantAndEquipmentByTypeAxis") return "inventory";
+  if (NOISE_CONCEPT.test(concept)) return null;
   if (COST.test(concept) && (axis === "srt:ProductOrServiceAxis" || axis === "srt:StatementGeographicalAxis")) return "costs";
   if (NOISE_AXES.test(axis)) return null;
   return "other";
@@ -223,14 +270,17 @@ export function buildDetail(input: {
       const type = dims.find(([a]) => /ConcentrationRiskByTypeAxis/.test(a))?.[1] ?? "";
       const bench = dims.find(([a]) => /ConcentrationRiskByBenchmarkAxis/.test(a))?.[1] ?? "";
       const item = dims.find(([a]) => !/ConcentrationRiskBy(Type|Benchmark)Axis/.test(a));
-      const member = item?.[1] ?? type;
+      // "Geographic concentration: 100%" without the region it concerns says nothing.
+      if (!item) continue;
+      if (!/Concentration/i.test(type) && !bench) continue;
+      const member = item[1];
       const key = `${type}|${bench}|${member}`;
       const row = concentration.get(key) ?? {
         kind: kindOf(type),
         benchmark: benchOf(bench),
         benchmarkLabel: bench ? memberLabel(bench, labels) : "",
         member,
-        label: item ? memberLabel(item[1], labels) : memberLabel(type, labels),
+        label: memberLabel(item[1], labels),
         values: {},
       };
       row.values[p.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
@@ -262,6 +312,8 @@ export function buildDetail(input: {
     const [outer, inner] = dims.length === 2 ? (dims[1][0] === SEG ? [dims[1], dims[0]] : [dims[0], dims[1]]) : [dims[0], undefined];
     const family = familyOf(f.concept, inner && outer[0] === SEG ? inner[0] : outer[0]);
     if (!family) continue;
+    // Single-axis segment lines are all in the segment P&L; only the revenue mix repeats them.
+    if (!inner && outer[0] === SEG && family === "other") continue;
     const id = `${family}|${f.concept}|${f.unit}|${outer[0]}${inner ? `|${inner[0]}` : ""}`;
     let t = tables.get(id);
     if (!t) {
@@ -308,6 +360,64 @@ export function buildDetail(input: {
     const { _rows, ...rest } = t;
     out.push({ ...rest, periods: ps, rows, ...(tot ? { total: Object.fromEntries(ps.flatMap((k) => (tot[k] ? [[k, tot[k]]] : []))) } : {}) });
   }
+  // Two concepts with the same plain name (contract revenue vs total revenue) keep their official labels.
+  const titles = new Map<string, number>();
+  for (const t of out) titles.set(t.title, (titles.get(t.title) ?? 0) + 1);
+  for (const t of out)
+    if ((titles.get(t.title) ?? 0) > 1 && t.concept && SHORT[t.concept]) {
+      const official = labels.get(t.concept) ?? humanize(t.concept);
+      t.title = t.title.replace(t.conceptLabel, official);
+      t.conceptLabel = official;
+    }
+
+  // Maturity ladders: one table per obligation, a column per year bucket, instead of a table per year.
+  const ladders = new Map<string, DetailTable>();
+  const flat: DetailTable[] = [];
+  const ladderOf = (id: string, base: string, t: DetailTable, member?: boolean) => {
+    let L = ladders.get(id);
+    if (!L) {
+      const cl = conceptLabel(base, labels);
+      L = { id, family: "commitments", title: member ? `${cl} by year due — ${t.axisLabel.toLowerCase()}` : "Obligations by year due", concept: base, conceptLabel: cl, axis: member ? t.axis : "", axisLabel: member ? t.axisLabel : "Obligation", unit: t.unit, periods: [], rows: [] };
+      ladders.set(id, L);
+    }
+    return L;
+  };
+  const put = (L: DetailTable, member: string, label: string, b: { order: number; label: string }, v: DetailValue | undefined) => {
+    if (!v) return;
+    const key = `B${b.order}`;
+    periods[key] = { key, label: b.label, end: input.reportDate, months: 0 };
+    if (!L.periods.includes(key)) L.periods.push(key);
+    let r = L.rows.find((x) => x.member === member);
+    if (!r) L.rows.push((r = { member, label, values: {} }));
+    r.values[key] = v;
+  };
+  for (const t of out) {
+    const latest = t.periods[t.periods.length - 1];
+    const b = t.concept ? bucketOf(t.concept) : null;
+    if (b) {
+      const L = ladderOf(`ladder|${b.base}|${t.unit}|${t.axis}`, b.base, t, true);
+      for (const r of t.rows) put(L, r.member, r.label, b, r.values[latest]);
+      continue;
+    }
+    if (!t.concept) {
+      const keep = t.rows.filter((r) => {
+        const rb = bucketOf(r.member);
+        if (!rb) return true;
+        put(ladderOf(`ladder|lines|${t.unit}`, "", t), rb.base, conceptLabel(rb.base, labels), rb, r.values[latest]);
+        return false;
+      });
+      if (keep.length) flat.push({ ...t, rows: keep });
+      continue;
+    }
+    flat.push(t);
+  }
+  for (const L of ladders.values()) {
+    L.periods.sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    if (L.periods.length >= 2) flat.push(L);
+  }
+  out.length = 0;
+  out.push(...flat);
+
   const familyRank: DetailFamily[] = ["revenue", "costs", "geography", "concentration", "commitments", "inventory", "other"];
   const axisRank = (a: string) => ["us-gaap:StatementBusinessSegmentsAxis", "srt:ProductOrServiceAxis", "srt:StatementGeographicalAxis", "srt:MajorCustomersAxis"].indexOf(a) + 1 || 9;
   out.sort((a, b) => familyRank.indexOf(a.family) - familyRank.indexOf(b.family) || axisRank(a.axis) - axisRank(b.axis) || b.rows.length - a.rows.length);
@@ -326,7 +436,7 @@ export function buildDetail(input: {
     if (rows.length >= 2) segments = { periods: ps, segments: members, rows };
   }
 
-  const conc = [...concentration.values()].sort((a, b) => {
+  const conc = [...concentration.values()].filter((r) => r.kind !== "other" || r.benchmark !== "other").sort((a, b) => {
     const order = ["customer", "supplier", "geographic", "product", "credit", "other"];
     const last = (r: ConcentrationRow) => Object.entries(r.values).sort(([x], [y]) => byEnd(x, y)).at(-1)?.[1].v ?? 0;
     return order.indexOf(a.kind) - order.indexOf(b.kind) || last(b) - last(a);
@@ -349,3 +459,54 @@ export function buildDetail(input: {
 }
 
 export const FAMILY_TITLE = TITLE;
+
+/** What `detail/TICKER.json` holds: the latest 10-K and the latest 10-Q filed after it. */
+export interface StoredDetail {
+  ticker: string;
+  builtAt: string;
+  format: number;
+  annual: FilingDetail | null;
+  quarterly: FilingDetail | null;
+}
+
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const monthYear = (d: string) => `${MON[Number(d.slice(5, 7)) - 1]} ${d.slice(0, 4)}`;
+
+/** Column heading: "FY2026", "Jun 2026 qtr", "Sep 2026" (as of) or a maturity bucket. */
+export function detailPeriodLabel(p: DetailPeriod | undefined): string {
+  if (!p) return "";
+  if (p.label) return p.label;
+  if (p.months === 12) return `FY${p.end.slice(0, 4)}`;
+  if (p.months === 3) return `${monthYear(p.end)} qtr`;
+  return monthYear(p.end);
+}
+
+/** App unit for an XBRL unit; anything else (aircraft, stores, employees) is a plain count. */
+export function detailUnit(unit: string): "usd" | "shares" | "pct" | "usdPerShare" | "count" {
+  const u = unit.toLowerCase();
+  if (u === "usd") return "usd";
+  if (u === "shares") return "shares";
+  if (u === "pure") return "pct";
+  if (u === "usd/shares") return "usdPerShare";
+  return "count";
+}
+
+/** Share of the consolidated total that the listed items explain, for the latest period. */
+export function coverageOf(t: DetailTable): number | null {
+  const k = t.periods[t.periods.length - 1];
+  const total = t.total?.[k]?.v;
+  if (!total) return null;
+  const sum = t.rows.reduce((n, r) => n + (r.values[k]?.v ?? r.sub?.reduce((m, s) => m + (s.values[k]?.v ?? 0), 0) ?? 0), 0);
+  return sum / total;
+}
+
+/** Change between the two latest comparable periods of a row (same length), as a fraction. */
+export function changeOf(t: DetailTable, values: Record<string, DetailValue>, periods: Record<string, DetailPeriod>): number | null {
+  const ks = t.periods.filter((k) => periods[k] && !periods[k].label);
+  if (ks.length < 2) return null;
+  const [a, b] = [ks[ks.length - 2], ks[ks.length - 1]];
+  if (periods[a].months !== periods[b].months) return null;
+  const x = values[a]?.v;
+  const y = values[b]?.v;
+  return x && y !== undefined && x > 0 ? y / x - 1 : null;
+}

@@ -91,3 +91,51 @@ describe("filing detail", () => {
     expect(memberLabel("x:AmericasSegmentMember", new Map())).toBe("Americas Segment");
   });
 });
+
+describe("maturity ladders", () => {
+  const inst = `<xbrli:instant>2026-09-27</xbrli:instant>`;
+  const D = "us-gaap:UnrecordedUnconditionalPurchaseObligationByCategoryOfItemPurchasedAxis";
+  const ladderDoc = [
+    `<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>`,
+    ctx("i", inst),
+    ctx("fuel", inst, [[D, "x:FuelMember"]]),
+    ctx("air", inst, [[D, "x:AircraftMember"]]),
+    fact("us-gaap:UnrecordedUnconditionalPurchaseObligationToBePaidYearOne", "fuel", "500"),
+    fact("us-gaap:UnrecordedUnconditionalPurchaseObligationToBePaidYearTwo", "fuel", "400"),
+    fact("us-gaap:UnrecordedUnconditionalPurchaseObligationToBePaidYearOne", "air", "3,000"),
+    fact("us-gaap:UnrecordedUnconditionalPurchaseObligationToBePaidYearTwo", "air", "2,500"),
+    fact("us-gaap:PurchaseObligationDueInNextTwelveMonths", "i", "900"),
+    fact("us-gaap:PurchaseObligationDueInSecondYear", "i", "800"),
+    fact("us-gaap:PurchaseObligationDueAfterFifthYear", "i", "100"),
+  ].join("\n");
+  const d = buildDetail({ ticker: "X", accn: "a", form: "10-K", filed: "2026-11-04", reportDate: "2026-09-27", doc: "x.htm", facts: parseInlineFacts(ladderDoc), contexts: parseContexts(ladderDoc), labels: new Map() });
+
+  it("merges one table per year into one ladder per obligation", () => {
+    const t = d.tables.find((x) => x.axis === D)!;
+    expect(t.periods.map((k) => d.periods[k].label)).toEqual(["Year 1", "Year 2"]);
+    expect(t.rows.map((r) => [r.label, r.values.B1.v])).toEqual([["Aircraft", 3e9], ["Fuel", 5e8]]);
+    expect(d.tables.filter((x) => x.axis === D)).toHaveLength(1);
+  });
+
+  it("turns undimensioned due-by-year lines into one row", () => {
+    const t = d.tables.find((x) => x.title === "Obligations by year due")!;
+    expect(t.rows).toHaveLength(1);
+    expect(t.periods).toEqual(["B1", "B2", "B6"]);
+  });
+});
+
+describe("detail helpers", () => {
+  it("labels periods and units", async () => {
+    const { detailPeriodLabel, detailUnit } = await import("./detail");
+    expect(detailPeriodLabel({ key: "a", start: "2025-09-29", end: "2026-09-27", months: 12 })).toBe("FY2026");
+    expect(detailPeriodLabel({ key: "b", start: "2026-04-01", end: "2026-06-30", months: 3 })).toBe("Jun 2026 qtr");
+    expect(detailPeriodLabel({ key: "B1", end: "2026-09-27", months: 0, label: "Year 1" })).toBe("Year 1");
+    expect([detailUnit("USD"), detailUnit("pure"), detailUnit("Aircraft")]).toEqual(["usd", "pct", "count"]);
+  });
+
+  it("measures how much of the total the listed items explain", async () => {
+    const { coverageOf } = await import("./detail");
+    const t = { periods: ["p"], rows: [{ member: "a", label: "A", values: { p: { v: 60 } } }, { member: "b", label: "B", values: { p: { v: 30 } } }], total: { p: { v: 100 } } } as never;
+    expect(coverageOf(t)).toBeCloseTo(0.9);
+  });
+});
