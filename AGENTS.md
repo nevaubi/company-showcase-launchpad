@@ -58,3 +58,4 @@
 
 - Partner mirror/import and IR-store/intel rules: see `scripts/AGENTS.md`.
 - Trade ideas, short-term setups and paper autopilots: see `src/lib/signals/AGENTS.md`.
+- Filing detail (10-K/10-Q dimensional XBRL): see `src/lib/xbrl/AGENTS.md`.

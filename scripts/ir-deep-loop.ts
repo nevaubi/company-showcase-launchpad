@@ -12,7 +12,7 @@
  *      is the probe; nothing is skipped or marked failed while credits are out.
  * Attempted companies are remembered in the private bucket (ops/ir-deep-loop.json).
  * Single flight: job_state `ir-deep-loop` lease.
- *   bun scripts/ir-deep-loop.ts [--batch=10] [--wait-minutes=10] [--mirror-hours=3] [--seed=CVS,MCK]
+ *   bun scripts/ir-deep-loop.ts [--batch=10] [--wait-minutes=10] [--mirror-hours=3] [--detail-hours=12] [--seed=CVS,MCK]
  */
 import { execSync, spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -21,6 +21,8 @@ import { args, dbGate, sb } from "./lib/supa";
 const BATCH = Number(args.batch ?? 10);
 const WAIT_MS = Number(args["wait-minutes"] ?? 10) * 60_000;
 const MIRROR_MS = Number(args["mirror-hours"] ?? 3) * 3_600_000;
+/** Filing detail (10-K/10-Q breakdowns) re-check: only companies with a new filing are re-read. */
+const DETAIL_MS = Number(args["detail-hours"] ?? 12) * 3_600_000;
 const JOB = "ir-deep-loop";
 const STATE = "ops/ir-deep-loop.json";
 const OUT = "/tmp/ir-deep";
@@ -42,6 +44,7 @@ interface LoopState {
   attempted: string[];
   done: string[];
   lastMirror: string | null;
+  lastDetail?: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
   /** unread files a company had when it finished; more than a few new ones later = revisit */
@@ -124,6 +127,21 @@ async function maybeMirror() {
   })();
 }
 
+// ---------- background filing detail ----------
+let detailing = false;
+async function maybeDetail() {
+  if (detailing) return;
+  if (state.lastDetail && Date.now() - Date.parse(state.lastDetail) < DETAIL_MS) return;
+  detailing = true;
+  state.lastDetail = new Date().toISOString();
+  await saveState(state);
+  log("checking for new 10-K/10-Q filing detail in the background");
+  void run("scripts/xbrl-detail.ts", [], `${OUT}/detail.log`).finally(() => {
+    detailing = false;
+    log("filing detail check ended");
+  });
+}
+
 // ---------- main loop ----------
 /** A deep build started by hand (or a previous loop) shares the readers' leases: wait for it. */
 function deepRunning() {
@@ -141,6 +159,7 @@ while (deepRunning()) {
 let creditStop = false;
 for (let cycle = 1; ; cycle++) {
   await maybeMirror();
+  await maybeDetail();
   // 1. Companies this loop started whose run never reached its final report.
   const resume: string[] = [];
   state.resumes ??= {};

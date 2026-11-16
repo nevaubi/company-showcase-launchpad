@@ -4,7 +4,7 @@
 // long-lived assets sit. Pure: built by scripts/xbrl-detail.ts, rendered by the Financials tab.
 import { humanize, type XbrlContext, type XbrlFact } from "@/lib/xbrl/inline";
 
-export const DETAIL_FORMAT = 1;
+export const DETAIL_FORMAT = 3;
 
 export interface DetailValue {
   v: number;
@@ -90,7 +90,7 @@ export const AXIS_LABEL: Record<string, string> = {
 };
 
 /** Axes whose tables are accounting plumbing rather than business detail. */
-const NOISE_AXES = /EquityComponents|AwardType|FairValue|RetirementPlan|DefinedBenefit|IncomeTaxAuthority|LongtermDebtType|DebtInstrument|ShareRepurchase|SubsequentEvent|srt:RangeAxis|BusinessAcquisition|FinancialInstrument|ValuationAllowances|RestatementAdjustment|StatementClassOfStock|LegalEntity|RelatedParty|PlanName|Hedging|DerivativeInstrument|CreditFacility|LineOfCredit|Lessee|Lease|TitleOfIndividual|Director|Executive|Restructuring|Investment|Securit|Pledged|Maturity|ScenarioAxis|AdjustmentsForNewAccountingPronouncements|ChangeInAccountingEstimate|Antidilutive|Warrant|Option|Tranche|OwnershipAxis|Consolidated|Disposal|Award|Grant|TemporaryEquity|Partner|Variable|Collateral|Counterparty|Portfolio|Financing|Credit|Loan|Receivable|Liabilit|Tax|Unit|Vesting|Share|Stock|Equity/i;
+const NOISE_AXES = /Litigation|LossContingency|EquityComponents|AwardType|FairValue|RetirementPlan|DefinedBenefit|IncomeTaxAuthority|LongtermDebtType|DebtInstrument|ShareRepurchase|SubsequentEvent|srt:RangeAxis|BusinessAcquisition|FinancialInstrument|ValuationAllowances|RestatementAdjustment|StatementClassOfStock|LegalEntity|RelatedParty|PlanName|Hedging|DerivativeInstrument|CreditFacility|LineOfCredit|Lessee|Lease|TitleOfIndividual|Director|Executive|Restructuring|Investment|Securit|Pledged|Maturity|ScenarioAxis|AdjustmentsForNewAccountingPronouncements|ChangeInAccountingEstimate|Antidilutive|Warrant|Option|Tranche|OwnershipAxis|Consolidated|Disposal|Award|Grant|TemporaryEquity|Partner|Variable|Collateral|Counterparty|Portfolio|Financing|Credit|Loan|Receivable|Liabilit|Tax|Unit|Vesting|Share|Stock|Equity/i;
 
 const REVENUE = /Revenues? ?FromExternalCustomers|(^|:)(Revenues?|RevenueFromContractWithCustomer(Excluding|Including)AssessedTax|SalesRevenue(Net|GoodsNet|ServicesNet)|RevenuesNetOfInterestExpense|NetSales|Sales)$|Revenue$/;
 const NOT_REVENUE = /Deferred|Receivable|Obligation|Unbilled|Cost|Expense|Allowance|Reserve|Recognized(Prior|In)|Increase|Decrease|Percentage/i;
@@ -101,7 +101,7 @@ const INVENTORY = /^(us-gaap:)?Inventory(RawMaterials|WorkInProcess|FinishedGood
 const ASSETS_GEO = /LongLivedAssets|PropertyPlantAndEquipment(Net|Gross)|NoncurrentAssets|OperatingLeaseRightOfUseAsset/i;
 const CONC = /ConcentrationRiskPercentage[12]?$/;
 /** Liability roll-forwards and claim-development triangles: real, but not business detail. */
-const NOISE_CONCEPT = /Cumulative|Liabilit|Reinsurance|HeldForSale|NotSeparatelyPresented|ShortDuration|LongDuration|Accretion|Deferred|IncomeTax|Goodwill|Translation|Acquisition|Intangible|Allowance|Derivative|Notional|ShareBased|StockBased|Compensation|AggregateAvailable|TradingArrangement|AccumulatedDepreciation|AccumulatedAmortization|OtherCommitment/i;
+const NOISE_CONCEPT = /Cumulative|Liabilit|Reinsurance|HeldForSale|NotSeparatelyPresented|ShortDuration|LongDuration|Accretion|Deferred|IncomeTaxExpense|IncomeTaxesPaid|UnrecognizedTaxBenefits|Goodwill|Translation|Acquisition|Intangible|Allowance|Derivative|Notional|ShareBased|StockBased|Compensation|AggregateAvailable|TradingArrangement|AccumulatedDepreciation|AccumulatedAmortization|OtherCommitment|Litigation|LossContingency|IncreaseDecrease|CashAndCashEquivalents/i;
 
 /** Maturity ladders ("…DueInSecondYear", "…ToBePaidYearThree"): bucket order and heading. */
 const BUCKETS: [RegExp, number, string][] = [
@@ -113,10 +113,10 @@ const BUCKETS: [RegExp, number, string][] = [
   [/BalanceOnFifthAnniversary$/, 5, "Year 5"],
   [/BalanceAfterFifthAnniversary$/, 6, "After year 5"],
   [/(DueInNextTwelveMonths|DueNextTwelveMonths|NextTwelveMonths|YearOne|DueInNextRollingTwelveMonths|InRollingYearOne)$/, 1, "Year 1"],
-  [/(DueInSecondYear|SecondYear|YearTwo|InRollingYearTwo)$/, 2, "Year 2"],
-  [/(DueInThirdYear|ThirdYear|YearThree|InRollingYearThree)$/, 3, "Year 3"],
-  [/(DueInFourthYear|FourthYear|YearFour|InRollingYearFour)$/, 4, "Year 4"],
-  [/(DueInFifthYear|FifthYear|YearFive|InRollingYearFive)$/, 5, "Year 5"],
+  [/(DueInSecondYear|SecondYear|YearTwo|InRollingYearTwo|TwoYears|InTwoYears)$/, 2, "Year 2"],
+  [/(DueInThirdYear|ThirdYear|YearThree|InRollingYearThree|ThreeYears|InThreeYears)$/, 3, "Year 3"],
+  [/(DueInFourthYear|FourthYear|YearFour|InRollingYearFour|FourYears|InFourYears)$/, 4, "Year 4"],
+  [/(DueInFifthYear|FifthYear|YearFive|InRollingYearFive|FiveYears|InFiveYears)$/, 5, "Year 5"],
   [/(DueAfterFifthYear|DueAfterFiveYears|AfterFiveYears|AfterYearFive|Thereafter|DueThereafter|InRollingAfterYearFive)$/, 6, "After year 5"],
 ];
 export function bucketOf(concept: string): { base: string; order: number; label: string } | null {
@@ -299,7 +299,7 @@ export function buildDetail(input: {
       continue;
     }
     // Segment P&L matrix: every monetary flow tagged on the segment axis alone.
-    if (dims.length === 1 && dims[0][0] === SEG && f.unit === "USD" && p.months) {
+    if (dims.length === 1 && dims[0][0] === SEG && f.unit === "USD" && p.months && !NOISE_CONCEPT.test(f.concept)) {
       const member = dims[0][1];
       segMembers.set(member, memberLabel(member, labels));
       const kind = REVENUE.test(f.concept) && !NOT_REVENUE.test(f.concept) ? "revenue" : PROFIT.test(f.concept) ? "profit" : COST.test(f.concept) ? "cost" : "other";
@@ -356,9 +356,23 @@ export function buildDetail(input: {
     // A table needs at least two items (one member alone is a footnote, not a breakdown).
     const items = rows.length + rows.reduce((n, r) => n + (r.sub?.length ?? 0), 0);
     if (items < 2 && t.family !== "commitments" && t.family !== "inventory") continue;
+    // One inner member under every row (e.g. "aircraft type × purchase commitments"): flatten it.
+    const inner = new Set(rows.flatMap((r) => (r.sub ?? []).map((x) => x.member)));
+    let title = t.title;
+    if (inner.size === 1 && rows.every((r) => r.sub?.length === 1 && !Object.keys(r.values).length)) {
+      const only = rows[0].sub![0].label;
+      for (const r of rows) {
+        r.values = r.sub![0].values;
+        delete r.sub;
+      }
+      title = `${title.replace(/ and [^—]+$/, "")} — ${only}`;
+    }
     const tot = t.concept ? total.get(`${t.concept}|${t.unit}`) : undefined;
+    // A consolidated figure the items cannot plausibly add up to is a reused tag, not this table's total.
+    const sum = rows.reduce((n, r) => n + (r.values[latest]?.v ?? r.sub?.reduce((m, x) => m + (x.values[latest]?.v ?? 0), 0) ?? 0), 0);
+    const okTotal = tot && tot[latest] && tot[latest].v !== 0 && sum / tot[latest].v >= 0.3 && sum / tot[latest].v <= 1.5;
     const { _rows, ...rest } = t;
-    out.push({ ...rest, periods: ps, rows, ...(tot ? { total: Object.fromEntries(ps.flatMap((k) => (tot[k] ? [[k, tot[k]]] : []))) } : {}) });
+    out.push({ ...rest, title, periods: ps, rows, ...(okTotal ? { total: Object.fromEntries(ps.flatMap((k) => (tot![k] ? [[k, tot![k]]] : []))) } : {}) });
   }
   // Two concepts with the same plain name (contract revenue vs total revenue) keep their official labels.
   const titles = new Map<string, number>();
@@ -416,7 +430,22 @@ export function buildDetail(input: {
     if (L.periods.length >= 2) flat.push(L);
   }
   out.length = 0;
-  out.push(...flat);
+  // The same disclosure tagged under two concepts shows once; other look-alikes get their concept named.
+  const sig = (t: DetailTable) => JSON.stringify([t.unit, t.axis, t.rows.map((r) => [r.member, r.values[t.periods[t.periods.length - 1]]?.v])]);
+  const sigs = new Set<string>();
+  for (const t of flat) {
+    const k = sig(t);
+    if (sigs.has(k)) continue;
+    sigs.add(k);
+    out.push(t);
+  }
+  const named = new Map<string, number>();
+  for (const t of out) named.set(t.title, (named.get(t.title) ?? 0) + 1);
+  for (const t of out)
+    if ((named.get(t.title) ?? 0) > 1) {
+      const extra = t.concept ? humanize(t.concept) : detailUnit(t.unit) === "count" ? t.unit.replace(/^.*:/, "").toLowerCase() : t.unit === "USD" ? "" : t.unit;
+      if (extra && !t.title.includes(extra)) t.title = `${t.title} (${extra})`;
+    }
 
   const familyRank: DetailFamily[] = ["revenue", "costs", "geography", "concentration", "commitments", "inventory", "other"];
   const axisRank = (a: string) => ["us-gaap:StatementBusinessSegmentsAxis", "srt:ProductOrServiceAxis", "srt:StatementGeographicalAxis", "srt:MajorCustomersAxis"].indexOf(a) + 1 || 9;
@@ -433,6 +462,9 @@ export function buildDetail(input: {
     rows.sort((a, b) => rank[a.kind] - rank[b.kind] || Object.values(b.values).reduce((n, m) => n + Math.abs(m[latest]?.v ?? 0), 0) - Object.values(a.values).reduce((n, m) => n + Math.abs(m[latest]?.v ?? 0), 0));
     const revenueOf = (m: string) => Math.abs(rows.find((r) => r.kind === "revenue")?.values[m]?.[latest]?.v ?? 0);
     const members = [...segMembers.entries()].map(([member, label]) => ({ member, label })).sort((a, b) => revenueOf(b.member) - revenueOf(a.member));
+    const seen = new Map<string, number>();
+    for (const r of rows) seen.set(r.label, (seen.get(r.label) ?? 0) + 1);
+    for (const r of rows) if ((seen.get(r.label) ?? 0) > 1) r.label = labels.get(r.concept) ?? humanize(r.concept);
     if (rows.length >= 2) segments = { periods: ps, segments: members, rows };
   }
 

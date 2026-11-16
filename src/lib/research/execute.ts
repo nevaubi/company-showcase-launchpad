@@ -32,6 +32,8 @@ import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { searchDocuments } from "@/lib/ir/search";
 import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
+import { filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
+import { detailText, type DetailSection } from "@/lib/xbrl/text";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
 const MAX = 9000;
@@ -522,6 +524,37 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       }
       const out = [...groups.entries()].map(([k, v]) => `## ${k}\n${[...new Set(v)].join("\n")}`).join("\n\n");
       return { output: clip(out || "No segment facts found."), summary: `${d.profile.ticker} ${annual ? "annual" : "quarterly"} segments` };
+    }
+    case "get_filing_detail": {
+      const section = (args.section as DetailSection | null) ?? null;
+      if (!args.ticker) {
+        const { data, error } = await supabase
+          .from("xbrl_concentration")
+          .select("ticker, form, period_end, kind, benchmark, label, pct, accn, counterparty")
+          .in("kind", ["customer", "supplier"])
+          .order("pct", { ascending: false })
+          .limit(400);
+        if (error) throw error;
+        const seen = new Set<string>();
+        const rows = (data ?? []).filter((r) => {
+          const k = `${r.ticker}|${r.kind}|${r.benchmark}|${r.label}`;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        const lines = rows.slice(0, 60).map((r) => `${r.ticker} · ${r.kind} ${r.label}${r.counterparty ? ` (= ${r.counterparty})` : ""} · ${(Number(r.pct) * 100).toFixed(1)}% of ${r.benchmark} · ${r.form} ${r.period_end} (filing:${r.ticker}:${r.accn})`);
+        return { output: clip(`Largest single-customer and supplier concentrations tagged in covered companies' latest 10-K/10-Q filings (newest filing per company, highest share first):\n${lines.join("\n") || "None stored yet."}`), summary: "cross-company concentration" };
+      }
+      const t = String(args.ticker).toUpperCase();
+      const stored = await qc.fetchQuery(filingDetailQuery(t));
+      if (!stored) return { output: `Filing detail for ${t} has not been read yet.`, summary: `no filing detail for ${t}` };
+      let text = detailText(stored, { section, quarterly: args.filing === "quarterly" });
+      if (!section || section === "concentration") {
+        const named = await qc.fetchQuery(namedByQuery(t)).catch(() => []);
+        if (named.length) text += `\n### Named by other covered companies\n${named.map((r) => `${r.ticker} reports ${r.label} as a ${r.kind} at ${(Number(r.pct) * 100).toFixed(1)}% of ${r.benchmark} (${r.form} ${r.period_end}, filing:${r.ticker}:${r.accn})`).join("\n")}`;
+      }
+      const d = (args.filing === "quarterly" ? stored.quarterly : stored.annual) ?? stored.annual ?? stored.quarterly;
+      return { output: clip(text), summary: `${t} filing detail${section ? ` · ${section}` : ""}`, refs: d ? [{ ticker: t, accn: d.accn, doc: d.doc, label: d.form }] : undefined };
     }
     case "list_filings": {
       const d = await dataset(qc, String(args.ticker));

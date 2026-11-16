@@ -30,7 +30,7 @@ const NOTES: Record<string, string> = {
 /** Company tabs, as paths under /app/companies/TICKER. */
 export const COMPANY_TABS: { sub: string; label: string; note: string }[] = [
   { sub: "", label: "Overview", note: "Headline metrics, what changed, price and technical read, catalysts, peers" },
-  { sub: "/financials", label: "Statements", note: "Income statement, balance sheet, cash flow; every figure opens its filing" },
+  { sub: "/financials", label: "Statements", note: "Income statement, balance sheet, cash flow; every figure opens its filing. ?basis=detail: Segments & detail (revenue by product/geography/state, segment P&L, customer concentration, obligations by year, inventory)" },
   { sub: "/valuation", label: "Valuation", note: "Multiples and valuation history" },
   { sub: "/estimates", label: "Estimates & analysts", note: "Consensus, revisions, ratings and price targets" },
   { sub: "/ir", label: "IR data", note: "Segments and KPIs from releases, supplements and presentations" },

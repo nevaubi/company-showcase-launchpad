@@ -90,6 +90,9 @@ async function main() {
   const todo = list.filter((c) => c.cik && (!want || want.includes(c.ticker)));
   const match = matcher(list);
   log(`${todo.length} companies`);
+  // Full runs show on the admin freshness page (job "xbrl-detail").
+  const record = !want && args.dry === undefined;
+  const { data: run } = record ? await sb.from("job_runs").insert({ job: "xbrl-detail" }).select("id").single() : { data: null };
   let done = 0;
   let stats = { tables: 0, conc: 0, skipped: 0, failed: 0 };
   const queue = [...todo];
@@ -150,8 +153,10 @@ async function main() {
         if (up.error) throw new Error(up.error.message);
         const accns = [annual?.accn, quarterly?.accn].filter(Boolean) as string[];
         await sb.from("xbrl_concentration").delete().eq("ticker", c.ticker).not("accn", "in", `(${accns.map((a) => `"${a}"`).join(",")})`);
-        if (rows.length) {
-          const { error } = await sb.from("xbrl_concentration").upsert(rows, { onConflict: "ticker,accn,kind,benchmark,member,period_end" });
+        // Two filing types can fold into one kind/benchmark; keep the first of each key.
+        const keyed = new Map(rows.map((x) => [`${x.accn}|${x.kind}|${x.benchmark}|${x.member}|${x.period_end}`, x]).reverse());
+        if (keyed.size) {
+          const { error } = await sb.from("xbrl_concentration").upsert([...keyed.values()], { onConflict: "ticker,accn,kind,benchmark,member,period_end" });
           if (error) throw new Error(error.message);
         }
         done++;
@@ -163,6 +168,7 @@ async function main() {
     }
   };
   await Promise.all(Array.from({ length: Number(args.workers ?? 3) }, worker));
+  if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: stats.failed < Math.max(25, todo.length * 0.05), items: done, detail: { ...stats, companies: todo.length } }).eq("id", run.id);
   log(`DONE ${done} stored · ${stats.skipped} unchanged/no filings · ${stats.failed} failed · ${stats.tables} tables · ${stats.conc} concentration rows`);
 }
 

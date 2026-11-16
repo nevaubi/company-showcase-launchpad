@@ -44,6 +44,21 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_filing_detail",
+    description:
+      "The dimensional detail of a company's latest 10-K or 10-Q, grouped like an analyst reads it: revenue by segment, product, channel and geography (countries and US states); the segment P&L with each segment's significant expenses (ASC 280); customer, supplier and regional concentration percentages; purchase obligations and backlog by year due; inventory components; property by asset type; operating counts (stores, aircraft, properties). Every table carries the filing citation. With ticker null and section 'concentration': the covered companies most dependent on one customer, and who names whom. Prefer this over get_segments for anything beyond revenue by segment.",
+    parameters: obj(
+      {
+        ticker: nullable(str("Covered ticker, or null for the cross-company concentration ranking")),
+        section: nullable({ type: "string", enum: ["revenue", "segments", "concentration", "geography", "costs", "commitments", "inventory", "other"], description: "One section, or null for all" }),
+        filing: nullable({ type: "string", enum: ["annual", "quarterly"], description: "Latest 10-K (default) or the latest 10-Q filed after it" }),
+      },
+      ["ticker", "section", "filing"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "list_filings",
     description: "Recent SEC filings for a company with accession numbers, form types, periods and filing dates.",
     parameters: obj(
@@ -727,6 +742,7 @@ export const TOOL_LABELS: Record<string, string> = {
   get_analyst_track_record: "Checked analyst records",
   get_financials: "Pulled financials",
   get_segments: "Pulled segments",
+  get_filing_detail: "Read filing detail",
   list_filings: "Listed filings",
   read_filing: "Read filing",
   search_filings: "Searched EDGAR",
@@ -796,6 +812,7 @@ export const TOOL_RUNNING: Record<string, string> = {
   get_analyst_track_record: "Checking analyst records",
   get_financials: "Pulling financials",
   get_segments: "Pulling segments",
+  get_filing_detail: "Reading filing detail",
   list_filings: "Listing filings",
   read_filing: "Reading filing",
   search_filings: "Searching EDGAR",

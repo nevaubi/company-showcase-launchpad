@@ -169,12 +169,21 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
   const denom = Math.abs(t.total?.[latest]?.v ?? 0) || sumLatest;
   const showShare = money && t.rows.length >= 2 && denom > 0 && !d.periods[latest]?.label;
   const hasChange = t.periods.filter((k) => !d.periods[k]?.label).length >= 2;
-  const rowFor = (r: DetailRow, depth: number) => {
+  const rowFor = (r: DetailRow, depth: number, parent = "") => {
     const val = r.values[latest]?.v;
     const share = showShare && val !== undefined ? Math.abs(val) / denom : null;
     const ch = hasChange ? changeOf(t, r.values, d.periods) : null;
+    // A parent with only nested values is a group heading.
+    if (!depth && r.sub?.length && !Object.keys(r.values).length)
+      return (
+        <tr key={`${parent}/${r.member}`}>
+          <th scope="row" colSpan={t.periods.length + 1 + (hasChange ? 1 : 0) + (showShare ? 1 : 0)} className="border-b px-3 pb-1 pt-2 text-left text-[12px] font-semibold" title={r.member}>
+            {r.label}
+          </th>
+        </tr>
+      );
     return (
-      <tr key={`${depth}-${r.member}`} className="group">
+      <tr key={`${parent}/${r.member}`} className="group">
         <th scope="row" className={cn("max-w-72 border-b px-3 py-1 text-left font-normal group-hover:bg-secondary/60", depth ? "pl-7 text-muted-foreground" : "")} title={r.member}>
           <span className="line-clamp-2">{r.label}</span>
         </th>
@@ -220,7 +229,7 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
             </tr>
           </thead>
           <tbody>
-            {t.rows.flatMap((r) => [rowFor(r, 0), ...(r.sub ?? []).map((s) => rowFor(s, 1))])}
+            {t.rows.flatMap((r) => [rowFor(r, 0), ...(r.sub ?? []).map((s) => rowFor(s, 1, r.member))])}
             {t.total && Object.keys(t.total).length > 0 && (
               <tr className="font-medium">
                 <th scope="row" className="border-t-2 border-t-foreground/70 px-3 py-1 text-left">Consolidated total</th>
@@ -247,7 +256,8 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
   const [pk, setPk] = useState(m.periods[m.periods.length - 1]);
   const period = m.periods.includes(pk) ? pk : m.periods[m.periods.length - 1];
   const revenue = m.rows.find((r) => r.kind === "revenue");
-  const profit = m.rows.find((r) => r.kind === "profit");
+  const profits = m.rows.filter((r) => r.kind === "profit");
+  const profit = profits.find((r) => /OperatingIncomeLoss$/.test(r.concept)) ?? profits.find((r) => /SegmentProfit|OperatingProfit|Ebitda/i.test(r.concept)) ?? profits[0];
   const totalRev = revenue ? m.segments.reduce((n, s) => n + Math.max(0, revenue.values[s.member]?.[period]?.v ?? 0), 0) : 0;
   const segs = m.segments.filter((s) => m.rows.some((r) => r.values[s.member]?.[period]));
   let lastKind = "";
@@ -308,7 +318,9 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
             })}
             {revenue && profit && (
               <tr className="font-medium">
-                <th scope="row" className="sticky left-0 z-10 border-t-2 border-t-foreground/70 bg-card px-3 py-1 text-left">{profit.label} margin</th>
+                <th scope="row" className="sticky left-0 z-10 border-t-2 border-t-foreground/70 bg-card px-3 py-1 text-left" title={`${profit.label} ÷ ${revenue.label}`}>
+                  Margin <span className="text-[11px] font-normal text-muted-foreground">· {profit.label.toLowerCase()} ÷ revenue</span>
+                </th>
                 {segs.map((s) => {
                   const rv = revenue.values[s.member]?.[period];
                   const pv = profit.values[s.member]?.[period];

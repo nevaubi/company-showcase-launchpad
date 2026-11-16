@@ -1,0 +1,5 @@
+# Filing detail rules
+
+- Filing detail (Financials → Segments & detail, assistant `get_filing_detail`) is built purely in `detail.ts` from each company's latest 10-K and the latest 10-Q filed after it (`inline.ts` parses iXBRL facts, contexts and the label linkbase); `scripts/xbrl-detail.ts` stores `detail/TICKER.json` in `datasets` and concentration rows in `xbrl_concentration`, skipping filings already stored in the current `DETAIL_FORMAT`. Bump `DETAIL_FORMAT` whenever the builder's output changes so every company is rebuilt. It is a separate path from ingest, so the ingest output format and `getDataset` stay untouched.
+- Every value keeps its iXBRL element id, so a click highlights the exact tag; consolidated totals are shown only when the items plausibly add up to them (reused tags are dropped), and derived numbers (segment margin) carry their parts.
+- The scheduler's few-second limit cannot read a 10-K, so refreshes run as a script: `ir-deep-loop.ts` re-runs `xbrl-detail.ts` every 12 h (only companies with a new filing are re-read) and full runs log `job_runs` job `xbrl-detail` for the freshness page.

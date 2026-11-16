@@ -139,3 +139,44 @@ describe("detail helpers", () => {
     expect(coverageOf(t)).toBeCloseTo(0.9);
   });
 });
+
+describe("table cleanup", () => {
+  const inst = `<xbrli:instant>2026-09-27</xbrli:instant>`;
+  const A = "x:AircraftTypeAxis";
+  const C = "us-gaap:UnrecordedUnconditionalPurchaseObligationByCategoryOfItemPurchasedAxis";
+  const doc2 = [
+    `<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>`,
+    ctx("i", inst),
+    ctx("a1", inst, [[A, "x:B737Member"], [C, "x:AircraftMember"]]),
+    ctx("a2", inst, [[A, "x:A321Member"], [C, "x:AircraftMember"]]),
+    ctx("c1", inst, [[C, "x:AircraftMember"]]),
+    ctx("c2", inst, [[C, "x:CarrierMember"]]),
+    fact("us-gaap:UnrecordedUnconditionalPurchaseObligationMinimumQuantityRequired", "a1", "100"),
+    fact("us-gaap:UnrecordedUnconditionalPurchaseObligationMinimumQuantityRequired", "a2", "68"),
+    fact("x:LeasesNotYetCommenced", "c1", "15,400"),
+    fact("x:LeasesNotYetCommenced", "c2", "6,030"),
+    fact("x:LeasesNotYetCommenced", "i", "122"),
+  ].join("\n");
+  const d = buildDetail({ ticker: "X", accn: "a", form: "10-K", filed: "2026-11-04", reportDate: "2026-09-27", doc: "x.htm", facts: parseInlineFacts(doc2), contexts: parseContexts(doc2), labels: new Map() });
+
+  it("flattens a nested axis that has a single member", () => {
+    const t = d.tables.find((x) => x.axis === A)!;
+    expect(t.rows.map((r) => [r.member, r.sub, Object.values(r.values)[0].v])).toEqual([["x:B737Member", undefined, 1e8], ["x:A321Member", undefined, 6.8e7]]);
+  });
+
+  it("drops a consolidated figure the items cannot add up to", () => {
+    const t = d.tables.find((x) => x.concept === "x:LeasesNotYetCommenced" && x.axis === C);
+    expect(t?.total).toBeUndefined();
+  });
+});
+
+describe("assistant text", () => {
+  it("renders a section with its citation", async () => {
+    const { detailText } = await import("./text");
+    const d = buildDetail({ ticker: "X", accn: "0000-26-1", form: "10-K", filed: "2026-11-04", reportDate: "2026-09-27", doc: "x.htm", facts: parseInlineFacts(doc), contexts: parseContexts(doc), labels: parseLabels(lab) });
+    const t = detailText({ ticker: "X", builtAt: "", format: 3, annual: d, quarterly: null }, { section: "concentration" });
+    expect(t).toContain("filing:X:0000-26-1:x.htm");
+    expect(t).toContain("customer · share of revenue · Customer X: FY2026 22.0%");
+    expect(t).not.toContain("Segment P&L");
+  });
+});
