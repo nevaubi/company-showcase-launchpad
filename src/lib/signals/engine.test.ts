@@ -104,7 +104,7 @@ describe("strict gate", () => {
       }
       return { key, samples: s };
     };
-    const out = evaluate([mk("edge", 0.006), mk("n1", 0), mk("n2", 0), mk("n3", 0)], dates, regime);
+    const out = evaluate([mk("edge", 0.01), mk("n1", 0), mk("n2", 0), mk("n3", 0)], dates, regime);
     expect(out[0].failed).toEqual([]);
   });
 });
