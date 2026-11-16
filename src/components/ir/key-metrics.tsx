@@ -70,7 +70,14 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
       <div data-section="Key metrics">
         {view === "key" ? (
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full min-w-[640px] text-[13px]">
+            <table className="w-full min-w-[640px] table-fixed text-[13px]">
+              <colgroup>
+                <col />
+                <col className="w-32" />
+                <col className="w-32" />
+                <col className="w-32" />
+                <col className="w-36" />
+              </colgroup>
               <thead>
                 <tr className="text-left text-[11px] text-muted-foreground">
                   <th className="px-3.5 py-1.5 font-normal">Line</th>
@@ -83,7 +90,7 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
               <tbody className="divide-y border-t">
                 {lines.map((l) => (
                   <tr key={l.s.k} className="hover:bg-secondary/40">
-                    <td className="max-w-0 px-3.5 py-1.5">
+                    <td className="px-3.5 py-1.5">
                       <div className="truncate font-medium" title={l.s.label}>{l.s.label}</div>
                       <div className="truncate text-[11px] text-muted-foreground" title={l.groupTitle}>{l.groupTitle}</div>
                     </td>

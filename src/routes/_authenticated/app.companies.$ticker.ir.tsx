@@ -211,6 +211,8 @@ function IrSummary({
   }, [company.data, payload]);
   const secBad = sec.filter((c) => !c.ok);
   const s = payload?.stats;
+  // Values filled by calculation (fourth quarters, year-to-date differences, summed years).
+  const calculated = useMemo(() => (payload ? payload.series.reduce((n, x) => n + Object.values(x.q).filter((c) => c.f).length + Object.values(x.y).filter((c) => c.f).length, 0) : 0), [payload]);
 
   const stats: { label: string; value: string; hint?: string }[] = s
     ? [
@@ -233,7 +235,7 @@ function IrSummary({
         {
           label: "Data points",
           value: s.facts.toLocaleString(),
-          hint: `from ${s.documents.toLocaleString()} documents`,
+          hint: `from ${s.documents.toLocaleString()} documents${calculated ? ` · ${calculated.toLocaleString()} calculated` : ""}`,
         },
         {
           label: "Quarterly totals tie out",

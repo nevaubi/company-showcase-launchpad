@@ -53,3 +53,13 @@ describe("IR highlights", () => {
     expect(currency(p.groups[1], cells, Q.slice(-8)).tier).toBe(2);
   });
 });
+
+describe("IR highlights on roll-forwards", () => {
+  it("keeps only the ending line of a customer roll-forward", () => {
+    const beg = ser("Beginning funded customers", [20, 21, 22, 23, 24, 25, 26, 27, 28], { cat: "kpi", met: "users", unit: "count" });
+    const churn = ser("Churned customers", [-1, -1, -1, -1, -1, -1, -1, -1, -1], { cat: "kpi", met: "users", unit: "count" });
+    const end = ser("Ending funded customers", [21, 22, 23, 24, 25, 26, 27, 28, 29], { cat: "kpi", met: "users", unit: "count", total: true });
+    const p = payload([beg, churn, end], [grp("roll", "Ending funded customers", ["Beginning funded customers", "Churned customers", "Ending funded customers"], { cat: "kpi", met: "users", unit: "count" })]);
+    expect(keyLines(p, Q).map((l) => l.s.k)).toEqual(["Ending funded customers"]);
+  });
+});

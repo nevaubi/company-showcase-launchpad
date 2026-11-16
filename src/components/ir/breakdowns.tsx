@@ -102,7 +102,7 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
       .filter((g) => g.rows.some((r) => hasData(byKey.get(r.k), freq, cols)))
       .filter((g) => !q || groupTitle(g, g.root ? byKey.get(g.root) : undefined).toLowerCase().includes(q) || g.rows.some((r) => byKey.get(r.k)?.label.toLowerCase().includes(q)))
       .map((g) => ({ g, tier: currency(g, cellsOfKey, cols).tier }))
-      .sort((a, b) => Number(a.tier === 2) - Number(b.tier === 2) || groupOrder(a.g, b.g));
+      .sort((a, b) => a.tier - b.tier || groupOrder(a.g, b.g));
     const firstOld = list.findIndex((x) => x.tier === 2);
     return { groups: list.map((x) => x.g), older: firstOld };
   }, [payload, dim, byKey, freq, cols, q]);
