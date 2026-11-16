@@ -1,0 +1,93 @@
+import { describe, expect, it } from "vitest";
+import { buildDetail, memberLabel } from "./detail";
+import { factValue, parseContexts, parseInlineFacts, parseLabels, parseUnits } from "./inline";
+
+const ctx = (id: string, period: string, dims: [string, string][] = []) =>
+  `<xbrli:context id="${id}"><xbrli:entity><xbrli:identifier scheme="x">1</xbrli:identifier>${dims.length ? `<xbrli:segment>${dims.map(([a, m]) => `<xbrldi:explicitMember dimension="${a}">${m}</xbrldi:explicitMember>`).join("")}</xbrli:segment>` : ""}</xbrli:entity><xbrli:period>${period}</xbrli:period></xbrli:context>`;
+const fy = (y: number) => `<xbrli:startDate>${y - 1}-09-29</xbrli:startDate><xbrli:endDate>${y}-09-27</xbrli:endDate>`;
+const fact = (name: string, c: string, text: string, extra = "") => `<ix:nonFraction name="${name}" contextRef="${c}" unitRef="${/Percentage/.test(name) ? "pure" : "usd"}" decimals="-6" scale="${/Percentage/.test(name) ? -2 : 6}"${extra}>${text}</ix:nonFraction>`;
+
+const SEG = "us-gaap:StatementBusinessSegmentsAxis";
+const doc = [
+  `<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit><xbrli:unit id="pure"><xbrli:measure>xbrli:pure</xbrli:measure></xbrli:unit>`,
+  ctx("c26", fy(2026)),
+  ctx("c25", fy(2025)),
+  ctx("hand26", fy(2026), [[SEG, "x:HandsetsMember"]]),
+  ctx("auto26", fy(2026), [[SEG, "x:AutoMember"]]),
+  ctx("hand25", fy(2025), [[SEG, "x:HandsetsMember"]]),
+  ctx("cn26", fy(2026), [["srt:StatementGeographicalAxis", "country:CN"]]),
+  ctx("us26", fy(2026), [["srt:StatementGeographicalAxis", "country:US"]]),
+  ctx("tx26", fy(2026), [["srt:StatementGeographicalAxis", "stpr:TX"]]),
+  ctx("custX26", fy(2026), [["us-gaap:ConcentrationRiskByTypeAxis", "us-gaap:CustomerConcentrationRiskMember"], ["us-gaap:ConcentrationRiskByBenchmarkAxis", "us-gaap:SalesRevenueNetMember"], ["srt:MajorCustomersAxis", "x:CustomerXMember"]]),
+  ctx("inv", `<xbrli:instant>2026-09-27</xbrli:instant>`),
+  fact("us-gaap:Revenues", "c26", "44,284", ' id="f1"'),
+  fact("us-gaap:Revenues", "hand26", "28,000", ' id="f2"'),
+  fact("us-gaap:Revenues", "auto26", "4,000"),
+  fact("us-gaap:Revenues", "hand25", "27,000"),
+  fact("us-gaap:CostOfRevenue", "hand26", "12,000"),
+  fact("us-gaap:CostOfRevenue", "auto26", "2,500"),
+  fact("us-gaap:Revenues", "cn26", "18,600"),
+  fact("us-gaap:Revenues", "us26", "9,000"),
+  fact("us-gaap:Revenues", "tx26", "1,000"),
+  fact("us-gaap:ConcentrationRiskPercentage1", "custX26", "22", ' id="conc"'),
+  fact("us-gaap:InventoryRawMaterials", "inv", "1,200"),
+  fact("us-gaap:InventoryFinishedGoods", "inv", "—", ' format="ixt:fixed-zero"'),
+].join("\n");
+const lab = `<link:labelLink><link:loc xlink:href="x.xsd#x_CustomerXMember" xlink:label="loc1"/><link:label xlink:label="lab1" xlink:role="http://www.xbrl.org/2003/role/label">Customer X [Member]</link:label><link:labelArc xlink:from="loc1" xlink:to="lab1"/></link:labelLink>`;
+
+describe("inline XBRL parsing", () => {
+  it("reads scale, sign and SEC zero formats", () => {
+    expect(factValue({ scale: "6" }, "1,234")).toBe(1_234_000_000);
+    expect(factValue({ scale: "6", sign: "-" }, "5")).toBe(-5_000_000);
+    expect(factValue({ format: "ixt:fixed-zero" }, "—")).toBe(0);
+    expect(factValue({ scale: "-2" }, "22")).toBeCloseTo(0.22);
+  });
+
+  it("parses contexts with dimensions, units and labels", () => {
+    const c = parseContexts(doc);
+    expect(c.get("hand26")?.dims).toEqual([[SEG, "x:HandsetsMember"]]);
+    expect(parseUnits(doc).get("usd")).toBe("USD");
+    expect(parseLabels(lab).get("x:CustomerXMember")).toBe("Customer X");
+    expect(parseInlineFacts(doc).find((f) => f.id === "f2")?.value).toBe(28_000_000_000);
+  });
+});
+
+describe("filing detail", () => {
+  const d = buildDetail({ ticker: "X", accn: "a", form: "10-K", filed: "2026-11-04", reportDate: "2026-09-27", doc: "x.htm", facts: parseInlineFacts(doc), contexts: parseContexts(doc), labels: parseLabels(lab) });
+
+  it("groups revenue by segment with the consolidated total and both years", () => {
+    const t = d.tables.find((x) => x.family === "revenue" && x.axis === SEG)!;
+    expect(t.rows.map((r) => r.label)).toEqual(["Handsets", "Auto"]);
+    expect(t.periods).toHaveLength(2);
+    expect(Object.values(t.total ?? {}).map((v) => v.v)).toContain(44_284_000_000);
+  });
+
+  it("names countries and states and files them under geography", () => {
+    const t = d.tables.find((x) => x.family === "geography")!;
+    expect(t.rows.map((r) => r.label)).toEqual(["China", "United States", "Texas"]);
+  });
+
+  it("builds the segment P&L from every line tagged per segment", () => {
+    expect(d.segments?.segments.map((s) => s.label)).toEqual(["Handsets", "Auto"]);
+    expect(d.segments?.rows.map((r) => [r.concept, r.kind])).toEqual([
+      ["us-gaap:Revenues", "revenue"],
+      ["us-gaap:CostOfRevenue", "cost"],
+    ]);
+  });
+
+  it("reads customer concentration as a share of revenue", () => {
+    const c = d.concentration[0];
+    expect([c.kind, c.benchmark, c.label]).toEqual(["customer", "revenue", "Customer X"]);
+    expect(Object.values(c.values)[0].v).toBeCloseTo(0.22);
+    expect(Object.values(c.values)[0].id).toBe("conc");
+  });
+
+  it("lists undimensioned inventory components", () => {
+    const t = d.tables.find((x) => x.family === "inventory")!;
+    expect(t.rows.map((r) => r.member).sort()).toEqual(["us-gaap:InventoryFinishedGoods", "us-gaap:InventoryRawMaterials"]);
+  });
+
+  it("spells out unknown members", () => {
+    expect(memberLabel("x:AmericasSegmentMember", new Map())).toBe("Americas Segment");
+  });
+});

@@ -2231,6 +2231,63 @@ export type Database = {
         }
         Relationships: []
       }
+      xbrl_concentration: {
+        Row: {
+          accn: string
+          benchmark: string
+          benchmark_label: string
+          counterparty: string | null
+          created_at: string
+          element_id: string | null
+          filed: string
+          form: string
+          id: number
+          kind: string
+          label: string
+          member: string
+          pct: number
+          period_end: string
+          period_start: string | null
+          ticker: string
+        }
+        Insert: {
+          accn: string
+          benchmark: string
+          benchmark_label?: string
+          counterparty?: string | null
+          created_at?: string
+          element_id?: string | null
+          filed: string
+          form: string
+          id?: never
+          kind: string
+          label: string
+          member: string
+          pct: number
+          period_end: string
+          period_start?: string | null
+          ticker: string
+        }
+        Update: {
+          accn?: string
+          benchmark?: string
+          benchmark_label?: string
+          counterparty?: string | null
+          created_at?: string
+          element_id?: string | null
+          filed?: string
+          form?: string
+          id?: never
+          kind?: string
+          label?: string
+          member?: string
+          pct?: number
+          period_end?: string
+          period_start?: string | null
+          ticker?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

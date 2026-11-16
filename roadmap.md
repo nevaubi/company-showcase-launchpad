@@ -218,7 +218,8 @@
 - [ ] Setups follow-ups: SEC fails-to-deliver data; options-implied context (current snapshot only, not backtestable)
 - [x] Setups auto-refresh: nightly `setups` job (4 parallel schedules, 21:00–06:00 UTC) refreshes closing bars, rescans every stock, re-tests every strategy, publishes setups and records live outcomes
 - [x] Auto paper trading: house + personal autopilots (/app/autopilots) with daily fills, exits, equity vs SPY, hit rate, drawdown, Sharpe; plan limits trial 2 / Research 5 / Pro 25
-- [ ] IR tab UX: KPI overview of the most relevant series, gap-filled quarters (derived Q4 = FY − 9M, TTM), relevance ranking, grouped breakdowns, clearer gap/derived markers
+- [x] IR tab UX: Key metrics + biggest moves panel, quarterly columns cleaned of month-ends, Monthly view, Q2/Q3 filled from year-to-date columns, current breakdowns first, real gaps marked (payload rebuild running for all stored companies)
+- [ ] IR monthly flows: readers reject one-month figures (monthly net deposits, trading volumes, airline traffic); allow months = 1 in table/vision readers and reread monthly-metrics documents
 - [ ] Supply chain granularity: XBRL dimensional facts (revenue by geography/state, product, customer concentration, cost components, purchase obligations) → company "where money comes from / goes" maps; end-to-end tiered chain view
 - [ ] Alt data: more authoritative gov sources (e.g. NHTSA recalls, CFPB complaints, FDA, USPTO, H-1B, lobbying, FINRA/SEC market structure) collected on schedule with source URLs
 - [ ] Navigation/look cleanup: fewer hubs, clearer labels, consistent page headers
