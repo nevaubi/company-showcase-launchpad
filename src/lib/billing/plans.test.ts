@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIMITS, PRICES, canUse, effectiveTier, trialDaysLeft, tierFromPriceId } from "./plans";
+import { AUTOPILOT_LIMIT, LIMITS, PRICES, canUse, effectiveTier, trialDaysLeft, tierFromPriceId } from "./plans";
 
 const now = new Date("2026-11-08T00:00:00Z");
 const daysAgo = (d: number) => new Date(now.getTime() - d * 86_400_000);
@@ -43,5 +43,8 @@ describe("plans", () => {
     expect(canUse("research", "exports")).toBe(true);
     expect(canUse("research", "browser")).toBe(false);
     expect(canUse("pro", "browser")).toBe(true);
+  });
+  it("personal autopilots per plan, locked after the trial", () => {
+    expect(AUTOPILOT_LIMIT).toEqual({ trial: 2, research: 5, pro: 25, expired: 0, none: 0 });
   });
 });

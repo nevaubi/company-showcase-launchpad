@@ -150,3 +150,25 @@ export function pickSetups(variants: VariantMeta[], live: LiveFiring[], today: R
   }
   return [...best.values()].sort((a, b) => Number(b.proven) - Number(a.proven) || b.edge - a.edge).slice(0, max);
 }
+
+export interface GateCheck {
+  id: string;
+  label: string;
+  ok: boolean;
+}
+
+/** The eight checks of the strict gate, in display order (same rules as `finalize`). */
+export function gateChecks(v: VariantMeta, gate: Record<string, number> = GATE): GateCheck[] {
+  const o = v.outSample;
+  const goodRegimes = Object.values(v.regimes).filter((r) => r.n >= gate.minRegimeN && (r.avgNet ?? 0) > 0).length;
+  return [
+    { id: "n", label: `${gate.minN}+ trades out of sample`, ok: o.n >= gate.minN && o.days >= gate.minDays },
+    { id: "net", label: "Profitable after costs", ok: (o.avgNet ?? 0) > 0 },
+    { id: "t", label: `t-stat ≥ ${gate.minT}`, ok: (o.t ?? 0) >= gate.minT },
+    { id: "fdr", label: "Survives false-discovery control", ok: v.fdr },
+    { id: "dsr", label: `Deflated Sharpe ≥ ${gate.minDsr}`, ok: (v.dsr ?? 0) >= gate.minDsr },
+    { id: "is", label: "Worked in earlier years", ok: (v.inSample.avgNet ?? 0) > 0 },
+    { id: "spy", label: "Beats the S&P 500", ok: (o.avgExSpy ?? 0) > 0 },
+    { id: "regime", label: `Works in ${gate.minRegimes}+ market regimes`, ok: goodRegimes >= gate.minRegimes },
+  ];
+}

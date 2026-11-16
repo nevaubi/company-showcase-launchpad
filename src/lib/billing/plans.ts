@@ -21,6 +21,9 @@ export const LIMITS: Record<Tier, Record<UsageKind, number>> = {
   none: { agent: 0, report: 0 },
 };
 
+/** Personal paper autopilots per plan (SQL paper_bot_limit enforces the same numbers). Automations lock after the trial. */
+export const AUTOPILOT_LIMIT: Record<Tier, number> = { trial: 2, research: 5, pro: 25, expired: 0, none: 0 };
+
 export type Feature = "exports" | "deep_mode" | "browser" | "web_research" | "scheduled_briefs" | "alerts";
 
 const FEATURES: Record<Tier, Feature[]> = {

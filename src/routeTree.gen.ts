@@ -46,6 +46,7 @@ import { Route as AuthenticatedAppSetupsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAppSituationsRouteImport } from './routes/_authenticated/app.situations'
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
 import { Route as AuthenticatedAppSupplyChainRouteImport } from './routes/_authenticated/app.supply-chain'
+import { Route as AuthenticatedAppAutopilotsIndexRouteImport } from './routes/_authenticated/app.autopilots.index'
 import { Route as AuthenticatedAppCompaniesIndexRouteImport } from './routes/_authenticated/app.companies.index'
 import { Route as AuthenticatedAppCompaniesTickerRouteImport } from './routes/_authenticated/app.companies.$ticker'
 import { Route as AuthenticatedAppDocsIndexRouteImport } from './routes/_authenticated/app.docs.index'
@@ -269,6 +270,12 @@ const AuthenticatedAppSupplyChainRoute =
     path: '/supply-chain',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppAutopilotsIndexRoute =
+  AuthenticatedAppAutopilotsIndexRouteImport.update({
+    id: '/autopilots/',
+    path: '/autopilots/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppCompaniesIndexRoute =
   AuthenticatedAppCompaniesIndexRouteImport.update({
     id: '/companies/',
@@ -482,6 +489,7 @@ export interface FileRoutesByFullPath {
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/app/autopilots/': typeof AuthenticatedAppAutopilotsIndexRoute
   '/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs/': typeof AuthenticatedAppDocsIndexRoute
   '/app/firm/': typeof AuthenticatedAppFirmIndexRoute
@@ -545,6 +553,7 @@ export interface FileRoutesByTo {
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/app/autopilots': typeof AuthenticatedAppAutopilotsIndexRoute
   '/app/companies': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs': typeof AuthenticatedAppDocsIndexRoute
   '/app/firm': typeof AuthenticatedAppFirmIndexRoute
@@ -613,6 +622,7 @@ export interface FileRoutesById {
   '/api/public/jobs/$job': typeof ApiPublicJobsJobRoute
   '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/_authenticated/app/autopilots/': typeof AuthenticatedAppAutopilotsIndexRoute
   '/_authenticated/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/_authenticated/app/docs/': typeof AuthenticatedAppDocsIndexRoute
   '/_authenticated/app/firm/': typeof AuthenticatedAppFirmIndexRoute
@@ -681,6 +691,7 @@ export interface FileRouteTypes {
     | '/api/public/jobs/$job'
     | '/api/public/partner/$task'
     | '/api/public/payments/webhook'
+    | '/app/autopilots/'
     | '/app/companies/'
     | '/app/docs/'
     | '/app/firm/'
@@ -744,6 +755,7 @@ export interface FileRouteTypes {
     | '/api/public/jobs/$job'
     | '/api/public/partner/$task'
     | '/api/public/payments/webhook'
+    | '/app/autopilots'
     | '/app/companies'
     | '/app/docs'
     | '/app/firm'
@@ -811,6 +823,7 @@ export interface FileRouteTypes {
     | '/api/public/jobs/$job'
     | '/api/public/partner/$task'
     | '/api/public/payments/webhook'
+    | '/_authenticated/app/autopilots/'
     | '/_authenticated/app/companies/'
     | '/_authenticated/app/docs/'
     | '/_authenticated/app/firm/'
@@ -1105,6 +1118,13 @@ declare module '@tanstack/react-router' {
       path: '/supply-chain'
       fullPath: '/app/supply-chain'
       preLoaderRoute: typeof AuthenticatedAppSupplyChainRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/autopilots/': {
+      id: '/_authenticated/app/autopilots/'
+      path: '/autopilots'
+      fullPath: '/app/autopilots/'
+      preLoaderRoute: typeof AuthenticatedAppAutopilotsIndexRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/companies/': {
@@ -1405,6 +1425,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppJoinTokenRoute: typeof AuthenticatedAppJoinTokenRoute
   AuthenticatedAppSectorsSectorRoute: typeof AuthenticatedAppSectorsSectorRoute
   AuthenticatedAppThesesIdRoute: typeof AuthenticatedAppThesesIdRoute
+  AuthenticatedAppAutopilotsIndexRoute: typeof AuthenticatedAppAutopilotsIndexRoute
   AuthenticatedAppCompaniesIndexRoute: typeof AuthenticatedAppCompaniesIndexRoute
   AuthenticatedAppDocsIndexRoute: typeof AuthenticatedAppDocsIndexRoute
   AuthenticatedAppThesesIndexRoute: typeof AuthenticatedAppThesesIndexRoute
@@ -1445,6 +1466,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppJoinTokenRoute: AuthenticatedAppJoinTokenRoute,
   AuthenticatedAppSectorsSectorRoute: AuthenticatedAppSectorsSectorRoute,
   AuthenticatedAppThesesIdRoute: AuthenticatedAppThesesIdRoute,
+  AuthenticatedAppAutopilotsIndexRoute: AuthenticatedAppAutopilotsIndexRoute,
   AuthenticatedAppCompaniesIndexRoute: AuthenticatedAppCompaniesIndexRoute,
   AuthenticatedAppDocsIndexRoute: AuthenticatedAppDocsIndexRoute,
   AuthenticatedAppThesesIndexRoute: AuthenticatedAppThesesIndexRoute,

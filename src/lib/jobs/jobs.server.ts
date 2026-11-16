@@ -60,7 +60,7 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
    */
   async setups() {
     const { runSetups } = await import("@/lib/jobs/setups.server");
-    return runSetups(budget(1500));
+    return runSetups(budget(1000));
   },
   /**
    * Alt data, daily per company: one (company, quick public source) pair per run, rotating through
