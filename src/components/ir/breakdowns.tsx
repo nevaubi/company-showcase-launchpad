@@ -18,12 +18,19 @@ import { useCompany } from "@/lib/data";
 import { downloadBlob, fetchLogo, slug } from "@/lib/export/xlsx-theme";
 import { DIMENSIONS, derivedOf, fmtIr, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, refOf, rowLabel, unitCaption } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
+import { currency } from "@/lib/ir/highlights";
+import { cellsFor, periodGrids } from "@/lib/ir/periods";
 import { fmtCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const PALETTE = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-6)", "var(--chart-5)", "var(--ink-muted)", "var(--link)"];
-type Freq = "q" | "y";
+type Freq = "q" | "y" | "m";
 const SPANS: Record<Freq, { v: string; l: string }[]> = {
+  m: [
+    { v: "12", l: "12M" },
+    { v: "24", l: "24M" },
+    { v: "all", l: "All" },
+  ],
   q: [
     { v: "8", l: "8Q" },
     { v: "12", l: "12Q" },
@@ -36,7 +43,8 @@ const SPANS: Record<Freq, { v: string; l: string }[]> = {
     { v: "all", l: "All" },
   ],
 };
-const DEFAULT_SPAN: Record<Freq, string> = { q: "8", y: "5" };
+const DEFAULT_SPAN: Record<Freq, string> = { q: "8", y: "5", m: "12" };
+const FREQ_FILE: Record<Freq, string> = { q: "quarterly", y: "annual", m: "monthly" };
 /** Breakdowns rendered on first view; "show more" then adds STEP at a time. */
 const PAGE = 8;
 const STEP = 50;
@@ -79,18 +87,25 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
     return m;
   }, [payload]);
 
-  const all = freq === "q" ? payload.quarters : payload.years;
+  const grids = periodGrids(payload);
+  const all = grids[freq];
   const cols = useMemo(() => (span === "all" ? all : all.slice(-Number(span))), [all, span]);
   const q = query.trim().toLowerCase();
-  const groups = useMemo(
-    () =>
-      payload.groups
-        .filter((g) => inDimension(g, dim))
-        .filter((g) => g.rows.some((r) => hasData(byKey.get(r.k), freq, cols)))
-        .filter((g) => !q || groupTitle(g, g.root ? byKey.get(g.root) : undefined).toLowerCase().includes(q) || g.rows.some((r) => byKey.get(r.k)?.label.toLowerCase().includes(q)))
-        .sort(groupOrder),
-    [payload, dim, byKey, freq, cols, q],
-  );
+  // Breakdowns reported in the latest periods come first; older or discontinued tables follow.
+  const { groups, older } = useMemo(() => {
+    const cellsOfKey = (k: string) => {
+      const s = byKey.get(k);
+      return s ? cellsFor(s, freq) : undefined;
+    };
+    const list = payload.groups
+      .filter((g) => inDimension(g, dim))
+      .filter((g) => g.rows.some((r) => hasData(byKey.get(r.k), freq, cols)))
+      .filter((g) => !q || groupTitle(g, g.root ? byKey.get(g.root) : undefined).toLowerCase().includes(q) || g.rows.some((r) => byKey.get(r.k)?.label.toLowerCase().includes(q)))
+      .map((g) => ({ g, tier: currency(g, cellsOfKey, cols).tier }))
+      .sort((a, b) => Number(a.tier === 2) - Number(b.tier === 2) || groupOrder(a.g, b.g));
+    const firstOld = list.findIndex((x) => x.tier === 2);
+    return { groups: list.map((x) => x.g), older: firstOld };
+  }, [payload, dim, byKey, freq, cols, q]);
   const visible = groups.slice(0, shown);
   const remaining = groups.length - shown;
   const inViewAll = payload.checks.filter((c) => (c.kind === "fy" ? "y" : "q") === freq && cols.includes(c.e));
@@ -111,13 +126,13 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
     if (focused.current === id) return;
     focused.current = id;
     const s = byKey.get(focus.line);
-    const c = s && (focus.freq === "q" ? s.q : s.y)[focus.period];
+    const c = s && cellsFor(s, focus.freq)[focus.period];
     if (!s || !c) {
       toast.error("That number isn't in the current data", { description: "The line may have been renamed or re-read since the workbook was exported. Search for it below." });
       onFocusDone?.();
       return;
     }
-    const periods = focus.freq === "q" ? payload.quarters : payload.years;
+    const periods = periodGrids(payload)[focus.freq];
     setFreq(focus.freq);
     setSpan(periods.indexOf(focus.period) < periods.length - Number(DEFAULT_SPAN[focus.freq]) ? "all" : DEFAULT_SPAN[focus.freq]);
     setDim("all");
@@ -146,11 +161,16 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
     try {
       const cov = coverageOf(ticker);
       const dimLabel = DIMENSIONS.find((d) => d.v === dim)?.l ?? "All";
-      const periodWord = freq === "q" ? "quarter" : "year";
+      const periodWord = { q: "quarter", y: "year", m: "month" }[freq];
       const range = cols.length ? `${periodLabel(cols[0], freq)} – ${periodLabel(cols[cols.length - 1], freq)}` : "";
       const opts =
         what.kind === "all"
-          ? { groups: payload.groups, freqs: ["q", "y"] as Freq[], cols: undefined, scope: `Complete history — all ${payload.groups.length} breakdowns, quarterly and annual` }
+          ? {
+              groups: payload.groups,
+              freqs: (grids.m.length >= 3 ? ["q", "y", "m"] : ["q", "y"]) as Freq[],
+              cols: undefined,
+              scope: `Complete history — all ${payload.groups.length} breakdowns, quarterly${grids.m.length >= 3 ? ", annual and monthly" : " and annual"}`,
+            }
           : what.kind === "group"
             ? { groups: [what.group], freqs: [freq], cols: { [freq]: cols }, scope: `One breakdown — ${groupTitle(what.group, what.group.root ? byKey.get(what.group.root) : undefined)} · ${cols.length} ${periodWord}s (${range})` }
             : {
@@ -175,8 +195,8 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
         what.kind === "all"
           ? `${ticker}-ir-breakdowns-complete-${stamp}.xlsx`
           : what.kind === "group"
-            ? `${ticker}-${slug(groupTitle(what.group, what.group.root ? byKey.get(what.group.root) : undefined))}-${freq === "q" ? "quarterly" : "annual"}.xlsx`
-            : `${ticker}-ir-breakdowns-${dim === "all" ? "all" : slug(dimLabel)}-${freq === "q" ? "quarterly" : "annual"}-${stamp}.xlsx`;
+            ? `${ticker}-${slug(groupTitle(what.group, what.group.root ? byKey.get(what.group.root) : undefined))}-${FREQ_FILE[freq]}.xlsx`
+            : `${ticker}-ir-breakdowns-${dim === "all" ? "all" : slug(dimLabel)}-${FREQ_FILE[freq]}-${stamp}.xlsx`;
       downloadBlob(blob, name);
       toast.success("Excel workbook downloaded", {
         id: toastId,
@@ -193,7 +213,7 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
   };
 
   const range = (f: Freq) => {
-    const p = f === "q" ? payload.quarters : payload.years;
+    const p = grids[f];
     return p.length ? `${periodLabel(p[0], f)} – ${periodLabel(p[p.length - 1], f)}` : "";
   };
 
@@ -203,7 +223,16 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
       subtitle="Read from earnings releases, supplements, presentations and data files · click any value to open the stored document at that cell"
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Segmented label="Period type" value={freq} onChange={changeFreq} options={[{ v: "q", l: "Quarterly" }, { v: "y", l: "Annual" }]} />
+          <Segmented
+            label="Period type"
+            value={freq}
+            onChange={changeFreq}
+            options={[
+              { v: "q", l: "Quarterly" },
+              { v: "y", l: "Annual" },
+              ...(grids.m.length >= 3 ? [{ v: "m" as const, l: "Monthly", title: "Month-end balances and counts from monthly operating reports" }] : []),
+            ]}
+          />
           <Segmented label="Periods shown" value={span} onChange={setSpan} options={SPANS[freq]} />
           <ScaleToggle />
           <DropdownMenu>
@@ -222,7 +251,7 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
                 <span className="min-w-0">
                   <span className="block text-sm font-medium">Breakdowns in view</span>
                   <span className="block text-xs text-muted-foreground">
-                    {groups.length} breakdown{groups.length === 1 ? "" : "s"} · {cols.length} {freq === "q" ? "quarters" : "years"}
+                    {groups.length} breakdown{groups.length === 1 ? "" : "s"} · {cols.length} {{ q: "quarters", y: "years", m: "months" }[freq]}
                     {dim !== "all" || q ? " · current filters" : ""}
                   </span>
                 </span>
@@ -257,7 +286,13 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
         )}
         {partialInView > 0 && <span>{partialInView} breakdown{partialInView === 1 ? " lists" : "s list"} selected lines only — the rest is shown as “Not itemized”</span>}
         <span>
-          <em>Italic</em> = calculated ({freq === "q" ? "fourth quarter = full year − first three quarters" : "full year = sum of four quarters"})
+          {freq === "m" ? (
+            "Month-end balances and counts from monthly operating reports, with the quarter-end values in between"
+          ) : (
+            <>
+              <em>Italic</em> = calculated ({freq === "q" ? "fourth quarter = full year − first three quarters; second and third quarters from year-to-date columns" : "full year = sum of four quarters"})
+            </>
+          )}
         </span>
         <span>{groups.length} breakdowns</span>
       </div>
@@ -266,7 +301,12 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
         <p className="p-5 text-sm text-muted-foreground">{q ? `No lines match “${query}”.` : "Nothing in this view for the selected periods."}</p>
       ) : (
         <div className="grid grid-cols-1 divide-y">
-          {visible.map((g) => (
+          {visible.map((g, i) => [
+            i === older && (
+              <div key="__older" className="bg-secondary/40 px-4 py-1.5 text-[11px] text-muted-foreground">
+                Not in the latest {freq === "y" ? "years" : freq === "m" ? "months" : "quarters"} shown — older or discontinued tables
+              </div>
+            ),
             <BreakdownCard
               key={g.id}
               ticker={ticker}
@@ -280,8 +320,8 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
               highlight={q}
               exporting={exporting === g.id}
               onExcel={() => runExport({ kind: "group", group: g })}
-            />
-          ))}
+            />,
+          ])}
         </div>
       )}
       {remaining > 0 && (
@@ -307,7 +347,7 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
 
 function hasData(s: PayloadSeries | undefined, freq: Freq, cols: string[]) {
   if (!s) return false;
-  const cells = freq === "q" ? s.q : s.y;
+  const cells = cellsFor(s, freq);
   return cols.some((c) => cells[c]);
 }
 
@@ -340,7 +380,7 @@ function BreakdownCard({
   const [view, setView] = useState<"table" | "chart">("table");
   const root = group.root ? byKey.get(group.root) : undefined;
   const rows = group.rows.map((r) => ({ ...r, s: byKey.get(r.k)! })).filter((r) => r.s && hasData(r.s, freq, cols));
-  const cellsOf = (s: PayloadSeries) => (freq === "q" ? s.q : s.y);
+  const cellsOf = (s: PayloadSeries) => cellsFor(s, freq);
   const directKids = root ? rows.filter((r) => r.s.parent === root.k) : [];
   const chartable = root && directKids.length >= 2 && (root.unit === "usd" || root.unit === "count");
   const groupChecks = rows.flatMap((r) => (r.s.total ? cols.map((c) => checks.get(`${r.k}|${freq}|${c}`)).filter(Boolean) : [])) as PayloadCheck[];
@@ -359,7 +399,7 @@ function BreakdownCard({
   const download = () => {
     if (!gate("exports")) return;
     const blob = new Blob([groupCsv(payload, group, cols, freq)], { type: "text/csv;charset=utf-8" });
-    downloadBlob(blob, `${ticker}-${slug(title)}-${freq === "q" ? "quarterly" : "annual"}.csv`);
+    downloadBlob(blob, `${ticker}-${slug(title)}-${FREQ_FILE[freq]}.csv`);
   };
 
   const div = root?.unit === "usd" ? { full: 1, K: 1e3, M: 1e6, B: 1e9 }[scale] : 1;
@@ -485,6 +525,8 @@ function BreakdownCard({
             <tbody>
               {rows.map(({ k, s, depth }) => {
                 const cells = cellsOf(s);
+                const present = cols.map((e) => !!cells[e]);
+                const extent = { first: present.indexOf(true), last: present.lastIndexOf(true) };
                 const isRoot = root?.k === k;
                 const residual = isRoot && partialCols.size > 0 && (
                   <tr key="__residual" className="group">
@@ -538,10 +580,18 @@ function BreakdownCard({
                         {s.pit && <span className="ml-1 text-[10px] font-normal text-muted-foreground">(period end)</span>}
                       </span>
                     </th>
-                    {cols.map((e) => {
+                    {cols.map((e, i) => {
                       const c = cells[e];
                       const chk = s.total ? checks.get(`${k}|${freq}|${e}`) : undefined;
-                      if (!c) return <td key={e} className={cn("num border-b px-3 py-1 text-right text-muted-foreground/40", isRoot && "border-t-2 border-t-foreground/70")}>—</td>;
+                      if (!c) {
+                        // Before a line's first or after its last value stays blank; a dash marks a real gap.
+                        const gap = i > extent.first && i < extent.last;
+                        return (
+                          <td key={e} title={gap ? "Not printed in any stored document for this period" : undefined} className={cn("num border-b px-3 py-1 text-right text-muted-foreground/40", isRoot && "border-t-2 border-t-foreground/70")}>
+                            {gap ? "—" : ""}
+                          </td>
+                        );
+                      }
                       return (
                         <td key={e} className={cn("border-b p-0 group-hover:bg-secondary/60", isRoot && "border-t-2 border-t-foreground/70")}>
                           <Tooltip delayDuration={350}>

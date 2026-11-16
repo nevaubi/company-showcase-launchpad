@@ -2,6 +2,7 @@
 import type { Scale } from "@/lib/format";
 import type { IrPayload, PayloadCell, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import type { DerivedPart, SourceRef } from "@/lib/financials/types";
+import { cellsFor } from "@/lib/ir/periods";
 
 export const CATEGORY_LABEL: Record<string, string> = {
   segment: "segment",
@@ -130,14 +131,17 @@ export function unitCaption(unit: string, scale: Scale) {
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "Sep ’25" for a quarter end; "FY25" for a fiscal year end. */
-export function periodLabel(end: string, kind: "q" | "y") {
+export function periodLabel(end: string, kind: "q" | "y" | "m") {
   const yy = end.slice(2, 4);
   return kind === "y" ? `FY${yy}` : `${MON[Number(end.slice(5, 7)) - 1]} ’${yy}`;
 }
 
-export function periodLong(end: string, kind: "q" | "y", months?: number) {
+export function periodLong(end: string, kind: "q" | "y" | "m", months?: number) {
   const d = new Date(`${end}T12:00:00Z`).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  return kind === "y" ? `Fiscal year ended ${d}` : months && months !== 3 ? `${months} months ended ${d}` : `Quarter ended ${d}`;
+  if (kind === "y") return `Fiscal year ended ${d}`;
+  if (months === 0 || (kind === "m" && months == null)) return `As of ${d}`;
+  if (months === 1) return `Month ended ${d}`;
+  return months && months !== 3 ? `${months} months ended ${d}` : `Quarter ended ${d}`;
 }
 
 /** Source reference for one payload cell, pointing into the stored document or the SEC exhibit. */
@@ -180,14 +184,14 @@ export function derivedOf(p: IrPayload, c: PayloadCell): { formula: string; part
 }
 
 /** CSV of one breakdown (rows × visible periods), values in full units. */
-export function groupCsv(p: IrPayload, g: PayloadGroup, cols: string[], kind: "q" | "y") {
+export function groupCsv(p: IrPayload, g: PayloadGroup, cols: string[], kind: "q" | "y" | "m") {
   const byKey = new Map(p.series.map((s) => [s.k, s]));
   const esc = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
-  const lines = [["Line", "Unit", ...cols.map((c) => (kind === "y" ? `FY ending ${c}` : `Quarter ending ${c}`))].join(",")];
+  const lines = [["Line", "Unit", ...cols.map((c) => (kind === "y" ? `FY ending ${c}` : kind === "m" ? `Month ending ${c}` : `Quarter ending ${c}`))].join(",")];
   for (const r of g.rows) {
     const s = byKey.get(r.k);
     if (!s) continue;
-    const cells = kind === "y" ? s.y : s.q;
+    const cells = cellsFor(s, kind);
     lines.push([esc(`${"  ".repeat(r.depth ? 0 : 0)}${s.label}`), s.unit, ...cols.map((c) => (cells[c] ? String(cells[c].v) : ""))].join(","));
   }
   return lines.join("\n");

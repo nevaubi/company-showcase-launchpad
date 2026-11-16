@@ -2,6 +2,7 @@
 // Company → zones (revenue, profit, costs, KPIs, balances) → breakdowns → single lines.
 import { groupOrder, groupTitle, inDimension } from "@/lib/ir/display";
 import type { IrPayload, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
+import { periodGrids } from "@/lib/ir/periods";
 
 /** better / worse are judged per line: for costs and expenses, a fall is better. */
 export type Tone = "better" | "worse" | "mixed" | "flat" | "none";
@@ -99,7 +100,8 @@ export function zoneOf(g: Pick<PayloadGroup, "cat" | "met">) {
  * out (discontinued tables), so every tile shows the current state of the business.
  */
 export function buildMap(p: IrPayload, span = 13): FinancialMap {
-  const quarters = p.quarters.slice(-span);
+  // Quarter columns only: month-end balances from monthly reports would leave most tiles empty.
+  const quarters = periodGrids(p).q.slice(-span);
   const last = quarters[quarters.length - 1];
   const byKey = new Map(p.series.map((s) => [s.k, s]));
   const zones = new Map<string, MapTile[]>(ZONES.map((z) => [z.id, []]));

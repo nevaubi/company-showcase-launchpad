@@ -49,6 +49,8 @@ export interface PayloadSeries {
   pit?: boolean;
   q: Record<string, PayloadCell>;
   y: Record<string, PayloadCell>;
+  /** monthly view only: one-month flows and balances at month-ends that don't close a quarter */
+  mo?: Record<string, PayloadCell>;
 }
 export interface PayloadGroup {
   id: string;
@@ -87,6 +89,8 @@ export interface IrPayload {
   builtAt: string;
   quarters: string[];
   years: string[];
+  /** month-ends that carry monthly data (see `mo` on each series) */
+  months?: string[];
   docs: PayloadDoc[];
   series: PayloadSeries[];
   groups: PayloadGroup[];
@@ -141,7 +145,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   let built = buildIrSeries(facts, { labelMap });
   const unlink = neverTies(built.checks);
   if (unlink.size) built = buildIrSeries(facts, { labelMap, unlink });
-  const { series, quarters, years, checks } = built;
+  const { series, quarters, years, months, checks } = built;
   const docIndex = new Map<string, number>();
   const docs: PayloadDoc[] = [];
   const di = (f: IrFact) => {
@@ -180,7 +184,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
     return Object.fromEntries(Object.entries(cells).map(([e, c]) => [e, bad.has(e) ? { ...cellOf(c), w: "scale" as const } : cellOf(c)]));
   };
   const out: PayloadSeries[] = series
-    .filter((s) => Object.keys(s.cells).length || Object.keys(s.annual).length)
+    .filter((s) => Object.keys(s.cells).length || Object.keys(s.annual).length || Object.keys(s.monthly ?? {}).length)
     .map((s) => ({
       k: s.key,
       cat: s.category,
@@ -194,6 +198,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       ...(s.pit ? { pit: true } : {}),
       q: flagged(s.cells, s.unit),
       y: flagged(s.annual, s.unit),
+      ...(s.monthly && Object.keys(s.monthly).length ? { mo: Object.fromEntries(Object.entries(s.monthly).map(([e, c]) => [e, cellOf(c)])) } : {}),
     }));
   const kept = new Set(out.map((s) => s.k));
 
@@ -226,7 +231,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   }
 
   const pc = (c: ReconcileCheck): PayloadCheck => ({ k: c.totalKey, e: c.period, kind: c.kind, total: c.total, sum: c.sum, ok: c.ok, n: c.children, ...(c.partial ? { partial: true } : {}), ...(c.subtracted ? { sub: c.subtracted } : {}) });
-  const allPeriods = out.flatMap((s) => [...Object.keys(s.q), ...Object.keys(s.y)]).sort();
+  const allPeriods = out.flatMap((s) => [...Object.keys(s.q), ...Object.keys(s.y), ...Object.keys(s.mo ?? {})]).sort();
   const q = checks.filter((c) => c.kind === "q");
   const fy = checks.filter((c) => c.kind === "fy");
   return {
@@ -235,6 +240,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
     builtAt: new Date().toISOString(),
     quarters,
     years,
+    ...(months.length ? { months } : {}),
     docs,
     series: out,
     groups,

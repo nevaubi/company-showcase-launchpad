@@ -5,6 +5,7 @@ import type { Workbook } from "exceljs";
 import type { Scale } from "@/lib/format";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { groupOrder, groupTitle, inDimension, periodLabel, periodLong, rowLabel, unitCaption } from "@/lib/ir/display";
+import { cellsFor, periodGrids } from "@/lib/ir/periods";
 import {
   C,
   band,
@@ -31,7 +32,7 @@ import {
   usdNeedsDecimals,
 } from "@/lib/export/xlsx-theme";
 
-export type IrFreq = "q" | "y";
+export type IrFreq = "q" | "y" | "m";
 
 export interface IrExportOptions {
   ticker: string;
@@ -85,7 +86,7 @@ const KIND_ONE: Record<string, string> = {
   other: "Exhibit",
 };
 
-const FREQ_WORD: Record<IrFreq, string> = { q: "Quarterly", y: "Annual" };
+const FREQ_WORD: Record<IrFreq, string> = { q: "Quarterly", y: "Annual", m: "Monthly" };
 const FIRST = 3; // A = line, B = unit, C… = periods
 const HEAD = 4; // header rows 4–5, data from row 7
 
@@ -131,7 +132,8 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
   const groups = [...(o.groups ?? p.groups)].sort(groupOrder);
   const checkMap = new Map<string, PayloadCheck>();
   for (const c of p.checks) checkMap.set(`${c.k}|${c.kind === "fy" ? "y" : "q"}|${c.e}`, c);
-  const cellsOf = (s: PayloadSeries, f: IrFreq) => (f === "q" ? s.q : s.y);
+  const cellsOf = (s: PayloadSeries, f: IrFreq) => cellsFor(s, f);
+  const grids = periodGrids(p);
   const name = o.company ? `${o.company} (${o.ticker})` : o.ticker;
   const used = new Set<string>(["overview", "checks", "data & sources"]);
 
@@ -139,7 +141,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
   const addr = new Map<string, Addr>();
   const plans: SheetPlan[] = [];
   for (const f of o.freqs) {
-    const allCols = o.cols?.[f] ?? (f === "q" ? p.quarters : p.years);
+    const allCols = o.cols?.[f] ?? grids[f];
     for (const section of SECTIONS) {
       const gs = groups.filter((g) => sectionOf(g) === section.v);
       const rowsOf = (g: PayloadGroup) => g.rows.map((r) => ({ ...r, s: byKey.get(r.k)! })).filter((r) => r.s && allCols.some((e) => cellsOf(r.s, f)[e]));
@@ -150,7 +152,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
       const lo = has.indexOf(true);
       const hi = has.lastIndexOf(true);
       const cols = allCols.slice(lo, hi + 1);
-      const sheet = sheetName(o.freqs.length > 1 ? `${section.name} · ${f === "q" ? "Q" : "FY"}` : section.name, used);
+      const sheet = sheetName(o.freqs.length > 1 ? `${section.name} · ${{ q: "Q", y: "FY", m: "M" }[f]}` : section.name, used);
       const plan: SheetPlan = { name: sheet, freq: f, section, cols, blocks: [] };
       let r = HEAD + 3;
       for (const { g, rows } of withData) {
@@ -204,7 +206,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
     const h2 = ws.getRow(HEAD + 1);
     h1.getCell(1).value = "Line";
     h1.getCell(2).value = "Unit";
-    h2.getCell(1).value = f === "q" ? "Quarter ended" : "Fiscal year ended";
+    h2.getCell(1).value = f === "q" ? "Quarter ended" : f === "m" ? "Month ended" : "Fiscal year ended";
     plan.cols.forEach((e, j) => {
       h1.getCell(FIRST + j).value = periodLabel(e, f);
       const d = h2.getCell(FIRST + j);
@@ -466,7 +468,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
               unitShort(s.unit, "full"),
               periodLabel(e, pl.freq),
               new Date(`${e}T00:00:00Z`),
-              c.m ?? (pl.freq === "q" ? 3 : 12),
+              c.m ?? ({ q: 3, y: 12, m: 0 } as const)[pl.freq],
               cellValue(c.v, s.unit),
               c.f ? `Calculated: ${c.f.formula}` : "Printed",
               c.x ?? "",

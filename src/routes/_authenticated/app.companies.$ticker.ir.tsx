@@ -11,6 +11,7 @@ import { CheckCircle2, FileStack, Loader2, RefreshCw, TriangleAlert } from "luci
 import { Panel } from "@/components/app/page-header";
 import { IrBreakdowns } from "@/components/ir/breakdowns";
 import { IrFinancialMap } from "@/components/ir/financial-map";
+import { IrKeyMetrics } from "@/components/ir/key-metrics";
 import { IrLibrary } from "@/components/ir/library";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -36,7 +37,7 @@ const pageSearch = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
-  freq: z.enum(["q", "y"]).optional(),
+  freq: z.enum(["q", "y", "m"]).optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/ir")({
@@ -146,6 +147,7 @@ function IrPage() {
         documents={data.documents.length + (data.images ?? 0)}
         builtAt={data.builtAt}
       />
+      {data.payload && data.payload.series.length > 0 && <IrKeyMetrics ticker={ticker} payload={data.payload} />}
       {data.payload && data.payload.series.length > 0 && (
         <IrFinancialMap ticker={ticker} payload={data.payload} />
       )}

@@ -435,3 +435,55 @@ describe("brand names", () => {
     expect(Object.keys(lines[0].cells)).toHaveLength(2);
   });
 });
+
+describe("IR period grids and year-to-date quarters", () => {
+  const cash = (end: string, months: number, value: number, start: string | null) =>
+    f("Capital expenditures", end, months, value, { category: "cost", metric: "cost", parent: null, period_start: start });
+
+  it("keeps month-end balances that close no quarter out of the quarterly columns", () => {
+    const facts = [
+      f("Revenue", "2026-03-31", 3, 100, { parent: null, is_total: true }),
+      f("Revenue", "2026-06-30", 3, 110, { parent: null, is_total: true }),
+      f("Revenue", "2025-12-31", 12, 400, { parent: null, is_total: true, period_start: "2025-01-01" }),
+      ...["2026-04-30", "2026-05-31", "2026-06-30", "2026-07-31"].map((e, i) =>
+        f("Funded customers", e, 0, 26 + i, { category: "kpi", metric: "users", parent: null, unit: "count" }),
+      ),
+    ];
+    const out = buildIrSeries(facts);
+    expect(out.quarters).toEqual(["2025-12-31", "2026-03-31", "2026-06-30"]);
+    expect(out.months).toEqual(["2026-04-30", "2026-05-31", "2026-07-31"]);
+    const users = out.series.find((s) => s.label === "Funded customers")!;
+    expect(Object.keys(users.cells)).toEqual(["2026-06-30"]);
+    expect(Object.keys(users.monthly ?? {}).sort()).toEqual(["2026-04-30", "2026-05-31", "2026-07-31"]);
+  });
+
+  it("derives Q2 as six months minus Q1 and Q3 as nine months minus six months", () => {
+    const facts = [
+      f("Revenue", "2026-03-31", 3, 100, { parent: null, is_total: true }),
+      f("Revenue", "2026-06-30", 3, 110, { parent: null, is_total: true }),
+      f("Revenue", "2026-09-30", 3, 120, { parent: null, is_total: true }),
+      cash("2026-03-31", 3, -20, "2026-01-01"),
+      cash("2026-06-30", 6, -45, "2026-01-01"),
+      cash("2026-09-30", 9, -75, "2026-01-01"),
+    ];
+    const capex = buildIrSeries(facts).series.find((s) => s.label === "Capital expenditures")!;
+    expect(capex.cells["2026-06-30"].v).toBe(-25);
+    expect(capex.cells["2026-06-30"].derived?.formula).toBe("Six months YTD − Q1");
+    expect(capex.cells["2026-09-30"].v).toBe(-30);
+    expect(capex.cells["2026-09-30"].derived?.formula).toBe("Nine months YTD − six months YTD");
+  });
+
+  it("never subtracts a quarter from a different fiscal year", () => {
+    const facts = [
+      f("Revenue", "2026-03-31", 3, 100, { parent: null, is_total: true }),
+      f("Revenue", "2026-06-30", 3, 110, { parent: null, is_total: true }),
+      cash("2026-03-31", 3, -20, "2026-01-01"),
+      // A six-month column that started in October belongs to another fiscal year.
+      cash("2026-06-30", 6, -45, "2025-12-27"),
+    ];
+    const ok = buildIrSeries(facts).series.find((s) => s.label === "Capital expenditures")!;
+    expect(ok.cells["2026-06-30"]?.v).toBe(-25);
+    const other = buildIrSeries([...facts.slice(0, 3), cash("2026-06-30", 6, -45, "2025-10-01")]).series.find((s) => s.label === "Capital expenditures")!;
+    expect(other.cells["2026-06-30"]).toBeUndefined();
+  });
+});

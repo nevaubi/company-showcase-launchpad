@@ -20,7 +20,7 @@ export interface IrFact {
   is_total: boolean;
   period_start: string | null;
   period_end: string;
-  months: number; // 3, 6, 9, 12; 0 = point in time
+  months: number; // 1, 3, 6, 9, 12; 0 = point in time
   value: number;
   unit: string;
   accn: string | null;
@@ -62,6 +62,8 @@ export interface IrSeries {
   pit?: boolean;
   cells: Record<string, IrCell>; // quarter end (YYYY-MM-DD)
   annual: Record<string, IrCell>; // fiscal-year end
+  /** one-month flows, and balances at month-ends that don't close a fiscal quarter */
+  monthly?: Record<string, IrCell>;
 }
 
 export interface ReconcileCheck {
@@ -372,10 +374,83 @@ export function neverTies(checks: ReconcileCheck[]): Set<string> {
   return new Set([...by].filter(([, r]) => r.n >= 3 && r.close === 0).map(([k]) => k));
 }
 
+/** Calendar month a period really closes (52/53-week years end in the first days of the next month). */
+export function closingMonthOf(end: string): number {
+  const m = Number(end.slice(5, 7));
+  return Number(end.slice(8, 10)) <= 7 ? ((m + 10) % 12) + 1 : m;
+}
+
+/** The four calendar months that close a fiscal quarter (from the fiscal-year end, else the printed quarters). */
+export function fiscalQuarterMonths(fyEnd: number | null, quarterEnds: string[]): Set<number> | null {
+  let anchor = fyEnd;
+  if (anchor == null) {
+    const n = new Map<number, number>();
+    for (const e of quarterEnds) n.set(closingMonthOf(e) % 3, (n.get(closingMonthOf(e) % 3) ?? 0) + 1);
+    const r = [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (r == null) return null;
+    anchor = r === 0 ? 3 : r;
+  }
+  return new Set([0, 3, 6, 9].map((k) => ((anchor! - 1 + k) % 12) + 1));
+}
+
+/**
+ * Second and third quarters printed only year to date (typical of cash-flow tables):
+ * Q2 = six months − Q1, Q3 = nine months − six months (else nine months − Q1 − Q2). Flows only,
+ * inside one fiscal year, never negative for lines that can't be. Runs before fourth quarters are
+ * derived, so a year printed only as YTD columns still gets all four quarters.
+ */
+function fillYearToDateQuarters(all: Iterable<IrSeries>, quarters: string[], six: Map<string, IrFact[]>, nine: Map<string, IrFact[]>, qv: Map<string, Map<string, Vintage[]>>) {
+  const newestPerEnd = (list: IrFact[]) => {
+    const out = new Map<string, IrFact>();
+    for (const f of [...list].sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? ""))) if (!out.has(f.period_end)) out.set(f.period_end, f);
+    return [...out.values()].sort((a, b) => a.period_end.localeCompare(b.period_end));
+  };
+  const sameYear = (a: IrFact, b?: { period_start: string | null } | null) => !a.period_start || !b?.period_start || near(a.period_start, b.period_start, 10);
+  const partsOf = (label: string, c: IrCell, sign: 1 | -1): IrPart[] =>
+    c.fact ? [{ label, value: c.v, sign, fact: c.fact }] : (c.derived?.parts ?? []).map((p) => ({ ...p, sign: (p.sign * sign) as 1 | -1 }));
+  for (const s of all) {
+    if (s.pit || !FLOW_UNITS.has(s.unit)) continue;
+    const at = (end: number) => {
+      const hit = Object.entries(s.cells).find(([e]) => Math.abs(t(e) - end) <= 12 * DAY);
+      return hit ? { e: hit[0], c: hit[1] } : null;
+    };
+    const put = (end: string, v: number, formula: string, parts: IrPart[], filed: string) => {
+      if (v < 0 && NONNEG_METRICS.has(s.metric)) return;
+      const derived = { formula, parts };
+      s.cells[end] = { v, derived };
+      let per = qv.get(s.key);
+      if (!per) qv.set(s.key, (per = new Map()));
+      per.set(end, [...(per.get(end) ?? []), { v, derived, doc: "derived", filed }]);
+    };
+    const sixes = newestPerEnd(six.get(s.key) ?? []);
+    for (const f6 of sixes) {
+      const end = quarters.find((e) => near(e, f6.period_end));
+      if (!end || s.cells[end]) continue;
+      const q1 = at(t(f6.period_end) - 91 * DAY);
+      if (!q1 || !sameYear(f6, q1.c.fact)) continue;
+      put(end, f6.value - q1.c.v, "Six months YTD − Q1", [{ label: `Six months ending ${f6.period_end}`, value: f6.value, sign: 1, fact: f6 }, ...partsOf(`Quarter ending ${q1.e}`, q1.c, -1)], f6.filed ?? "");
+    }
+    for (const f9 of newestPerEnd(nine.get(s.key) ?? [])) {
+      const end = quarters.find((e) => near(e, f9.period_end));
+      if (!end || s.cells[end]) continue;
+      const nineP: IrPart = { label: `Nine months ending ${f9.period_end}`, value: f9.value, sign: 1, fact: f9 };
+      const f6 = sixes.find((x) => Math.abs(t(x.period_end) - (t(f9.period_end) - 91 * DAY)) <= 12 * DAY && sameYear(f9, x));
+      if (f6) {
+        put(end, f9.value - f6.value, "Nine months YTD − six months YTD", [nineP, { label: `Six months ending ${f6.period_end}`, value: f6.value, sign: -1, fact: f6 }], f9.filed ?? "");
+        continue;
+      }
+      const q1 = at(t(f9.period_end) - 182 * DAY);
+      const q2 = at(t(f9.period_end) - 91 * DAY);
+      if (!q1 || !q2 || !sameYear(f9, q1.c.fact)) continue;
+      put(end, f9.value - q1.c.v - q2.c.v, "Nine months YTD − Q1 − Q2", [nineP, ...partsOf(`Quarter ending ${q1.e}`, q1.c, -1), ...partsOf(`Quarter ending ${q2.e}`, q2.c, -1)], f9.filed ?? "");
+    }
+  }
+}
+
 export function buildIrSeries(
   input: IrFact[],
   opts: { labelMap?: Record<string, LabelMapEntry>; fyEndMonth?: number | null; unlink?: Set<string> } = {},
-): { series: IrSeries[]; quarters: string[]; years: string[]; checks: ReconcileCheck[] } {
+): { series: IrSeries[]; quarters: string[]; years: string[]; months: string[]; checks: ReconcileCheck[] } {
   const mapped = dropRepeatedTables(splitStockAndFlow(splitGeoColumns(qualifyGenericLines(applyLabelMap(input, opts.labelMap).filter((f) => Number.isFinite(f.value))))));
   // Trailing-twelve-month columns ending mid-year are not fiscal years.
   const fyEnd = opts.fyEndMonth ?? fiscalYearEndMonth(mapped);
@@ -392,15 +467,29 @@ export function buildIrSeries(
     if (!years.some((y) => near(y, e))) years.push(e);
   }
   for (const y of years) if (!quarters.some((e) => near(e, y))) quarters.push(y);
-  for (const f of facts.filter((x) => x.months === 0)) if (!quarters.some((e) => near(e, f.period_end, 20))) quarters.push(f.period_end);
+  // Balances at a month-end that closes no fiscal quarter (monthly operating data) go to the monthly
+  // grid, so quarterly tables don't fill with near-empty month columns.
+  const fyClose = years.length ? [...years.map(closingMonthOf).reduce((m, x) => m.set(x, (m.get(x) ?? 0) + 1), new Map<number, number>())].sort((a, b) => b[1] - a[1])[0][0] : null;
+  const qMonths = fiscalQuarterMonths(fyClose, quarters);
+  const closesQuarter = (d: string) => !qMonths || qMonths.has(closingMonthOf(d));
+  const months: string[] = [];
+  for (const f of facts.filter((x) => x.months === 0)) {
+    if (quarters.some((e) => near(e, f.period_end, 20))) continue;
+    if (closesQuarter(f.period_end)) quarters.push(f.period_end);
+    else if (!months.some((e) => near(e, f.period_end, 3))) months.push(f.period_end);
+  }
+  for (const f of facts.filter((x) => x.months === 1)) if (!months.some((e) => near(e, f.period_end, 3)) && !quarters.some((e) => near(e, f.period_end, 3))) months.push(f.period_end);
   quarters.sort();
   years.sort();
+  months.sort();
 
   // All vintages per series and period, newest filing first.
   const bySeries = new Map<string, IrSeries>();
   const qv = new Map<string, Map<string, Vintage[]>>(); // quarterly (3M or point in time)
   const fv = new Map<string, Map<string, Vintage[]>>(); // fiscal year
+  const mv = new Map<string, Map<string, Vintage[]>>(); // monthly view
   const nine = new Map<string, IrFact[]>();
+  const six = new Map<string, IrFact[]>();
   const votes = new Map<string, { total: number; n: number; breakdown: Map<string, number>; parent: Map<string, number> }>();
   const push = (m: Map<string, Map<string, Vintage[]>>, key: string, end: string, v: Vintage) => {
     let per = m.get(key);
@@ -437,9 +526,13 @@ export function buildIrSeries(
     if (f.months === 3) push(qv, key, snap(quarters, f.period_end), vin);
     else if (f.months === 0) {
       s.pit = true;
-      push(qv, key, quarters.find((e) => near(e, f.period_end, 20)) ?? f.period_end, vin);
-    } else if (f.months === 12) push(fv, key, snap(years, f.period_end), vin);
+      const qEnd = quarters.find((e) => near(e, f.period_end, 20));
+      if (qEnd) push(qv, key, qEnd, vin);
+      else push(mv, key, months.find((e) => near(e, f.period_end, 3)) ?? f.period_end, vin);
+    } else if (f.months === 1) push(mv, key, months.find((e) => near(e, f.period_end, 3)) ?? snap(quarters, f.period_end), vin);
+    else if (f.months === 12) push(fv, key, snap(years, f.period_end), vin);
     else if (f.months === 9) nine.set(key, [...(nine.get(key) ?? []), f]);
+    else if (f.months === 6) six.set(key, [...(six.get(key) ?? []), f]);
   }
   const top = <K>(m: Map<K, number>) => [...m.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
   for (const s of bySeries.values()) {
@@ -449,7 +542,7 @@ export function buildIrSeries(
     s.parent = top(vt.parent) || null;
   }
   mergeFlattened(bySeries, qv, fv, nine);
-  for (const m of [qv, fv]) for (const per of m.values()) for (const list of per.values()) list.sort((a, b) => b.filed.localeCompare(a.filed));
+  for (const m of [qv, fv, mv]) for (const per of m.values()) for (const list of per.values()) list.sort((a, b) => b.filed.localeCompare(a.filed));
 
   // Latest vintage per cell.
   for (const s of bySeries.values()) {
@@ -463,7 +556,13 @@ export function buildIrSeries(
       const v = pick(list);
       s.annual[end] = { v: v.v, fact: v.fact, derived: v.derived };
     }
+    for (const [end, list] of mv.get(s.key) ?? []) {
+      const v = pick(list);
+      (s.monthly ??= {})[end] = { v: v.v, fact: v.fact, derived: v.derived };
+    }
   }
+
+  fillYearToDateQuarters(bySeries.values(), quarters, six, nine, qv);
 
   // Fourth quarters: FY − (Q1+Q2+Q3), else FY − 9M YTD. Never for ratios, percentages or balances.
   for (const s of bySeries.values()) {
@@ -633,7 +732,7 @@ export function buildIrSeries(
     }
   }
   markPartialLists(checks, series);
-  return { series, quarters, years, checks };
+  return { series, quarters, years, months, checks };
 }
 
 /**
