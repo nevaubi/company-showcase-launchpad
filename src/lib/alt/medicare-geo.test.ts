@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drugKey, geoDistributions, geoRows, parseCsv, parseGeoCsv, partDOwners } from "./medicare-geo";
+import { drugKey, geoCompanyText, geoDistributions, geoRows, parseCsv, parseGeoCsv, partDOwners } from "./medicare-geo";
 
 const HEAD = "Prscrbr_Geo_Lvl,Prscrbr_Geo_Cd,Prscrbr_Geo_Desc,Brnd_Name,Gnrc_Name,Tot_Prscrbrs,Tot_Clms,Tot_30day_Fills,Tot_Drug_Cst,Tot_Benes";
 const csv = [
@@ -87,5 +87,18 @@ describe("geoDistributions", () => {
     });
     expect(m.get(2024)).toEqual({ csv: "https://data.cms.gov/sites/default/files/x/DY24_Geo.csv", id: "9b4c142c-69cc-4a96-a09a-7cf2ba7f5816" });
     expect(m.size).toBe(1);
+  });
+});
+
+describe("geoCompanyText", () => {
+  it("lists the latest year's states with share, slice of the state, index, change and their record links", () => {
+    const owners = new Map([[drugKey("Eliquis", "Apixaban"), "BMY"]]);
+    const recs = parseGeoCsv(csv);
+    const half = parseGeoCsv(csv).map((r) => ({ ...r, cost: r.cost / 2 }));
+    const rows = [...geoRows(2023, half, owners, "ds-0"), ...geoRows(2024, recs, owners, "ds-1")].map((r) => ({ ...r, ticker: r.ticker }));
+    const t = geoCompanyText(rows, "BMY");
+    expect(t).toContain("BMY Medicare Part D gross drug costs by prescriber state, 2024");
+    expect(t).toMatch(/TX \$1K · 60\.0% of company · 92\.31% of the state's Part D · index 4\.62 · \+100% vs 2023/);
+    expect(t).toContain("filter%5BPrscrbr_Geo_Desc%5D=Texas");
   });
 });

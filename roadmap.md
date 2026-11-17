@@ -211,7 +211,6 @@
 - [ ] Mirror partner IR store — 46 GB / 564 of 1,844 companies done; paused by partner "daily data limit"; resume with `bun scripts/partner-mirror-ir.ts` (skips finished files)
 - [ ] Deep IR builds for all ~1,844 companies (no cap, owner Nov 13) — running via `scripts/ir-deep-loop.ts`; companies whose IR files aren't mirrored yet wait for the mirror
 
-- [ ] Short-term setups: rerun `bun scripts/setups.ts` daily after prices refresh (not yet scheduled; needs all price files, too heavy for a job). Lead-lag (supply links) and post-earnings drift strategies not built yet.
 
 ## Platform upgrade (requested Nov 16 21:22 UTC)
 - [x] Setups: FINRA daily short volume (2018+), 8-K 2.02 earnings dates, Form 4 insider purchases (2016+), VIX3M term structure, breadth; new strategies: earnings drift, pre-earnings run-up, insider clusters, short-selling flow, panic-day snap back, customer momentum (supply links), confluence; short borrow cost
@@ -243,4 +242,5 @@
 - [x] Cross-company Exposures page: revenue by country/region (share, ~3-year change) and every lender's loans, deposits, charge-offs, allowance and nonaccrual from 10-K tags, click-to-source; assistant `get_exposures`
 - [x] Exposures: Insurers view (premiums earned and growth, written, loss & benefit ratio, prior-year reserve development, acquisition-cost ratio, underwriting income, reserves ÷ premiums), assistant get_exposures view "insurers"
 - [x] Exposures: bank deposits by state and metro (FDIC Summary of Deposits, 117 banks, 2021–2026) — company tile map + state ranking + assistant
+- [x] Medicare drug costs by state for every covered drug maker (CMS Part D prescribers by geography, 2020–2024, 52 companies): company map (share or over/under-index vs Medicare overall), state table with each state's top drugs, cross-company state ranking on Alt data, assistant get_alt_data medicare_states; weekly check for a new CMS year
 - [ ] Exposures: state-level revenue for non-banks is rarely tagged in 10-Ks (~8% of filings carry any state rows, mostly properties/PP&E); revisit with utilities (EIA, needs key) and insurers (premiums by state)

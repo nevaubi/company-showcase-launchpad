@@ -135,7 +135,7 @@ export function MedicareByState({ ticker, rows }: { ticker: string; rows: AltRow
                 <th className="px-2 py-2 text-right font-medium" title="Share of all Part D drug costs prescribed in the state">Of state</th>
                 <th className="px-2 py-2 text-right font-medium" title="State's share of the company's costs ÷ state's share of all Part D costs">Index</th>
                 <th className="px-2 py-2 text-right font-medium">vs {y0}</th>
-                <th className="hidden px-2 py-2 font-medium md:table-cell">Largest drug</th>
+                <th className="hidden px-2 py-2 font-medium md:table-cell xl:hidden 2xl:table-cell">Largest drug</th>
               </tr>
             </thead>
             <tbody>
@@ -145,7 +145,7 @@ export function MedicareByState({ ticker, rows }: { ticker: string; rows: AltRow
                 const top = (r.meta.drugs as GeoDrug[] | undefined)?.[0];
                 return (
                   <tr key={r.uid} className={cn("border-b last:border-0", sel === r.meta.state && "bg-secondary")} onMouseEnter={() => setSel(r.meta.state)}>
-                    <td className="px-2 py-1.5"><span className="num font-medium">{r.meta.state}</span> <span className="hidden text-[11px] text-muted-foreground sm:inline">{STATES[r.meta.state]}</span></td>
+                    <td className="whitespace-nowrap px-2 py-1.5" title={STATES[r.meta.state]}><span className="num font-medium">{r.meta.state}</span> <span className="hidden text-[11px] text-muted-foreground sm:inline xl:hidden 2xl:inline">{STATES[r.meta.state]}</span></td>
                     <td className="num px-2 text-right">
                       <button type="button" className="underline decoration-dotted underline-offset-2" onClick={() => src(`${ticker} Part D costs in ${STATES[r.meta.state] ?? r.meta.state}, ${y} (largest drug's record)`, r.value, r.source_url)}>{fmtAlt(r.value, "USD")}</button>
                     </td>
@@ -153,7 +153,7 @@ export function MedicareByState({ ticker, rows }: { ticker: string; rows: AltRow
                     <td className="num px-2 text-right">{pct(r.meta.market_share, 2)}</td>
                     <td className={cn("num px-2 text-right", r.meta.index > 1.15 ? "text-chart-1" : r.meta.index < 0.87 ? "text-chart-2" : "")}>{idx(r.meta.index)}</td>
                     <td className={cn("num px-2 text-right", g != null && g < 0 && "text-negative")} title={old?.value != null ? `${y0}: ${fmtAlt(old.value, "USD")}` : undefined}>{g == null ? (y0 === y ? "—" : "new") : `${g >= 0 ? "+" : ""}${(g * 100).toFixed(0)}%`}</td>
-                    <td className="hidden max-w-[11rem] truncate px-2 text-[12px] text-muted-foreground md:table-cell" title={top ? `${top.brand} (${top.generic}) ${fmtAlt(top.value, "USD")}` : undefined}>{top?.brand ?? "—"}</td>
+                    <td className="hidden max-w-[11rem] truncate px-2 text-[12px] text-muted-foreground md:table-cell xl:hidden 2xl:table-cell" title={top ? `${top.brand} (${top.generic}) ${fmtAlt(top.value, "USD")}` : undefined}>{top?.brand ?? "—"}</td>
                   </tr>
                 );
               })}
@@ -162,7 +162,7 @@ export function MedicareByState({ ticker, rows }: { ticker: string; rows: AltRow
         </div>
         {states.length > 12 && (
           <Button size="xs" variant="ghost" className="mt-1" onClick={() => setAll((a) => !a)}>
-            {all ? "Show fewer" : `All ${states.length} states`}
+            {all ? "Show fewer" : `All ${states.length} states and territories`}
           </Button>
         )}
         {drugs.length > 0 && (
