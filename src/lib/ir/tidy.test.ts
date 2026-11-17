@@ -72,9 +72,9 @@ describe("one table per subject", () => {
     expect(t.series.map((s) => s.label).sort()).toEqual(["Health Services", "Pharmacy Services", "Total revenues"]);
     expect(Object.keys(t.alias ?? {}).length).toBe(3);
   });
-  it("moves each period's tie-out check to the surviving total", () => {
+  it("checks every period of the merged table against the surviving total", () => {
     const root = t.groups[0].root!;
-    expect(t.checks.map((c) => `${c.k === root}|${c.e}`).sort()).toEqual(["true|2023-03-31", "true|2024-03-31"]);
+    expect(t.checks.map((c) => `${c.k === root}|${c.e}|${c.ok}`).sort()).toEqual(["true|2023-03-31|true", "true|2023-06-30|true", "true|2024-03-31|true", "true|2024-06-30|true"]);
   });
   it("never changes a number while merging", () => {
     for (const s of p.series) for (const [e, c] of Object.entries(s.q)) expect(cellsOf(t, s.k)![e]).toBe(c.v);
@@ -154,5 +154,91 @@ describe("bare totals", () => {
       ),
     );
     expect(out.series.find((s) => s.k === "t")?.label).toBe("Total revenue");
+  });
+});
+
+describe("segment tables", () => {
+  const M = 1e6;
+  const Q1 = "2025-03-31";
+  const Q2 = "2025-06-30";
+  // The company's segment revenue table (ties out) names the segments.
+  const revenue = [
+    line("r:hs", "Health Services", { [Q1]: 400 * M, [Q2]: 420 * M }, { parent: "r:t" }),
+    line("r:ps", "Pharmacy Services", { [Q1]: 600 * M, [Q2]: 630 * M }, { parent: "r:t" }),
+    line("r:t", "Total revenues", { [Q1]: 1000 * M, [Q2]: 1050 * M }, { total: true }),
+  ];
+  const revChecks: PayloadCheck[] = [
+    { k: "r:t", e: Q1, kind: "q", total: 1000 * M, sum: 1000 * M, ok: true, n: 2 },
+    { k: "r:t", e: Q2, kind: "q", total: 1050 * M, sum: 1050 * M, ok: true, n: 2 },
+  ];
+  const oi = (k: string, label: string, q: Vals, extra: Partial<PayloadSeries> = {}) => line(k, label, q, { met: "segment_profit", ...extra });
+  const loose = (id: string, rows: string[]): PayloadGroup => ({ id, cat: "segment", met: "segment_profit", unit: "usd", label: "", root: null, rows: rows.map((k) => ({ k, depth: 1 })) });
+  const scattered = [
+    // Q1 from one release's segment table, Q2 from each segment's own results table.
+    oi("a:hs", "Adjusted operating income — Health Services", { [Q1]: 40 * M }),
+    oi("a:ps", "Adjusted operating income — Pharmacy Services", { [Q1]: 60 * M }),
+    oi("b:hs", "Adjusted operating income", { [Q2]: 45 * M }, { sc: "Health Services segment results" }),
+    oi("b:ps", "Adjusted operating income", { [Q2]: 65 * M }, { sc: "Pharmacy Services segment results" }),
+    oi("c:t", "Adjusted operating income", { [Q1]: 100 * M, [Q2]: 110 * M }, { total: true, sc: "Consolidated summary" }),
+  ];
+  const build = () =>
+    tidyPayload(payload([...revenue, ...scattered], [table("rev", "r:t", ["r:hs", "r:ps"]), loose("l1", ["a:hs", "a:ps"]), loose("l2", ["b:hs"]), loose("l3", ["b:ps"]), loose("l4", ["c:t"])], revChecks));
+
+  it("gathers one measure's lines from every table into one row per segment, closed by the consolidated line", () => {
+    const t = build();
+    const g = t.groups.find((x) => x.t === "Adjusted operating income by segment");
+    expect(g).toBeTruthy();
+    const rows = g!.rows.map((r) => t.series.find((s) => s.k === r.k)!);
+    expect(rows.map((s) => s.label)).toEqual(["Pharmacy Services", "Health Services", "Adjusted operating income"]);
+    expect(cellsOf(t, "a:hs")).toEqual({ [Q1]: 40 * M, [Q2]: 45 * M });
+    expect(cellsOf(t, "a:ps")).toEqual({ [Q1]: 60 * M, [Q2]: 65 * M });
+    expect(t.checks.filter((x) => x.k === g!.root).map((x) => [x.e, x.ok])).toEqual([
+      [Q1, true],
+      [Q2, true],
+    ]);
+  });
+
+  it("keeps the revenue table's own total and checks", () => {
+    const t = build();
+    const rev = t.groups.find((x) => x.root === "r:t");
+    expect(rev?.rows.map((r) => r.k)).toEqual(["r:ps", "r:hs", "r:t"]);
+    expect(t.checks.filter((x) => x.k === "r:t").every((x) => x.ok)).toBe(true);
+  });
+
+  it("never takes a regional 'Other' as the segment table's 'Other'", () => {
+    const withOther = [
+      ...revenue.slice(0, 2),
+      line("r:o", "Other", { [Q1]: 5 * M }, { parent: "r:t" }),
+      line("r:t", "Total revenues", { [Q1]: 1005 * M, [Q2]: 1050 * M }, { total: true }),
+      line("g:o", "Other", { [Q2]: 77 * M }, { cat: "geography", parent: "g:t" }),
+      line("g:us", "United States", { [Q2]: 973 * M }, { cat: "geography", parent: "g:t" }),
+      line("g:t", "Total revenue", { [Q2]: 1050 * M }, { cat: "geography", total: true }),
+    ];
+    const t = tidyPayload(
+      payload(withOther, [table("rev", "r:t", ["r:hs", "r:ps", "r:o"]), table("geo", "g:t", ["g:us", "g:o"], { cat: "geography" })], [{ ...revChecks[0], total: 1005 * M, sum: 1005 * M, n: 3 }, revChecks[1]]),
+    );
+    expect(cellsOf(t, "r:o")).toEqual({ [Q1]: 5 * M });
+    expect(cellsOf(t, "g:o")).toEqual({ [Q2]: 77 * M });
+  });
+});
+
+describe("figures printed two ways", () => {
+  const M = 1e6;
+  const loose = (rows: string[]): PayloadGroup => ({ id: "loose", cat: "kpi", met: "other", unit: "usd", label: "", root: null, rows: rows.map((k) => ({ k, depth: 1 })) });
+  it("treats a rounded slide figure and the exact release figure as one, keeping the exact one", () => {
+    const s = [
+      line("a", "Premiums written", { "2025-03-31": 1308 * M, "2025-06-30": 1400 * M }, { cat: "kpi", met: "other" }),
+      line("b", "Premiums written", { "2025-03-31": 1300 * M, "2025-09-30": 1500 * M }, { cat: "kpi", met: "other" }),
+    ];
+    const t = tidyPayload(payload(s, [loose(["a", "b"])]));
+    expect(t.series).toHaveLength(1);
+    expect(cellsOf(t, "a")).toEqual({ "2025-03-31": 1308 * M, "2025-06-30": 1400 * M, "2025-09-30": 1500 * M });
+  });
+  it("still treats a real difference as a different line", () => {
+    const s = [
+      line("a", "Premiums written", { "2025-03-31": 1308 * M }, { cat: "kpi", met: "other" }),
+      line("b", "Premiums written", { "2025-03-31": 1200 * M }, { cat: "kpi", met: "other" }),
+    ];
+    expect(tidyPayload(payload(s, [loose(["a", "b"])])).series).toHaveLength(2);
   });
 });

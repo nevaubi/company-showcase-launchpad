@@ -8,6 +8,8 @@
 //     release no longer shows (a recast segment structure) are hidden for that period, so every
 //     column of a breakdown adds up to its total — and the check result is recorded per period.
 
+import { stockKind } from "@/lib/ir/stock";
+
 export interface IrFact {
   id?: string;
   document_id?: string;
@@ -409,7 +411,7 @@ function fillYearToDateQuarters(all: Iterable<IrSeries>, quarters: string[], six
   const partsOf = (label: string, c: IrCell, sign: 1 | -1): IrPart[] =>
     c.fact ? [{ label, value: c.v, sign, fact: c.fact }] : (c.derived?.parts ?? []).map((p) => ({ ...p, sign: (p.sign * sign) as 1 | -1 }));
   for (const s of all) {
-    if (s.pit || !FLOW_UNITS.has(s.unit)) continue;
+    if (stockKind(s) || !FLOW_UNITS.has(s.unit)) continue;
     const at = (end: number) => {
       const hit = Object.entries(s.cells).find(([e]) => Math.abs(t(e) - end) <= 12 * DAY);
       return hit ? { e: hit[0], c: hit[1] } : null;
@@ -566,7 +568,19 @@ export function buildIrSeries(
 
   // Fourth quarters: FY − (Q1+Q2+Q3), else FY − 9M YTD. Never for ratios, percentages or balances.
   for (const s of bySeries.values()) {
-    if (s.pit || !FLOW_UNITS.has(s.unit)) continue;
+    const stock = stockKind(s);
+    if (stock === "point") {
+      // A year-end balance printed in an annual column is the fourth quarter's balance: same date, same number.
+      for (const [fyEnd, list] of fv.get(s.key) ?? []) {
+        const v = list.find((x) => x.fact);
+        const q4 = snap(quarters, fyEnd);
+        if (!v?.fact || s.cells[q4] || !near(q4, v.fact.period_end, 7)) continue;
+        s.cells[q4] = { v: v.v, fact: v.fact };
+        push(qv, s.key, q4, { v: v.v, fact: v.fact, doc: v.doc, filed: v.filed });
+      }
+      continue;
+    }
+    if (stock || !FLOW_UNITS.has(s.unit)) continue;
     for (const [fyEnd, list] of fv.get(s.key) ?? []) {
       const fy = list.find((v) => v.fact)?.fact;
       if (!fy) continue;
@@ -595,9 +609,11 @@ export function buildIrSeries(
 
   // Fiscal years not printed: sum of the four quarters inside the year.
   for (const s of bySeries.values()) {
+    const stock = stockKind(s);
+    if (stock === "average") continue;
     for (const fyEnd of years) {
       if (s.annual[fyEnd]) continue;
-      if (s.pit) {
+      if (stock === "point") {
         const c = s.cells[snap(quarters, fyEnd)];
         if (c) {
           s.annual[fyEnd] = c;

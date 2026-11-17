@@ -165,6 +165,34 @@ describe("fiscal years and point-in-time values", () => {
     expect(subs.annual["2024-12-31"].v).toBe(800);
     expect(mac.annual["2024-12-31"].v).toBe(40);
   });
+
+  const q = ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31"];
+  it("never adds four quarter-end balances into a year, even when they were read as quarterly figures", () => {
+    const facts = [...q.map((e, i) => f("Period-end deposits", e, 3, 200 + i, { category: "balance", metric: "deposits", parent: null })), f("Mac", "2025-12-31", 12, 100, { period_start: "2025-01-01" })];
+    const s = buildIrSeries(facts).series.find((x) => x.label === "Period-end deposits")!;
+    expect(s.annual["2025-12-31"].v).toBe(203);
+  });
+  it("gives averages and prices no derived year and no derived fourth quarter", () => {
+    const facts = [
+      ...q.map((e, i) => f("Average loans", e, 3, 80 + i, { category: "kpi", metric: "loans", parent: null })),
+      ...q.slice(0, 3).map((e, i) => f("Average selling price", e, 3, 30 + i, { category: "kpi", metric: "price", parent: null })),
+      f("Average selling price", "2025-12-31", 12, 31, { category: "kpi", metric: "price", parent: null, period_start: "2025-01-01" }),
+      f("Mac", "2025-12-31", 12, 100, { period_start: "2025-01-01" }),
+    ];
+    const { series } = buildIrSeries(facts);
+    expect(series.find((s) => s.label === "Average loans")!.annual["2025-12-31"]).toBeUndefined();
+    expect(series.find((s) => s.label === "Average selling price")!.cells["2025-12-31"]).toBeUndefined();
+  });
+  it("takes a year-end balance printed in an annual column as the fourth quarter", () => {
+    const facts = [...q.slice(0, 3).map((e, i) => f("Total deposits", e, 3, 200 + i, { category: "balance", metric: "deposits", parent: null })), f("Total deposits", "2025-12-31", 12, 210, { category: "balance", metric: "deposits", parent: null })];
+    const s = buildIrSeries(facts).series[0];
+    expect(s.cells["2025-12-31"].v).toBe(210);
+    expect(s.cells["2025-12-31"].derived).toBeUndefined();
+  });
+  it("still derives a revenue line's fourth quarter", () => {
+    const facts = [...q.slice(0, 3).map((e) => f("Services", e, 3, 10)), f("Services", "2025-12-31", 12, 45, { period_start: "2025-01-01" })];
+    expect(buildIrSeries(facts).series[0].cells["2025-12-31"].v).toBe(15);
+  });
 });
 
 describe("flattened vs nested tables", () => {
@@ -485,5 +513,15 @@ describe("IR period grids and year-to-date quarters", () => {
     expect(ok.cells["2026-06-30"]?.v).toBe(-25);
     const other = buildIrSeries([...facts.slice(0, 3), cash("2026-06-30", 6, -45, "2025-10-01")]).series.find((s) => s.label === "Capital expenditures")!;
     expect(other.cells["2026-06-30"]).toBeUndefined();
+  });
+});
+
+describe("balances vs flows", () => {
+  it("treats net new assets as a flow even though its metric is assets", async () => {
+    const { stockKind } = await import("./stock");
+    expect(stockKind({ category: "kpi", metric: "assets", label: "Net new assets" })).toBeNull();
+    expect(stockKind({ category: "kpi", metric: "assets", label: "Total client assets" })).toBe("point");
+    expect(stockKind({ category: "balance", metric: "deposits", label: "Deposits — net change" })).toBe("point");
+    expect(stockKind({ category: "kpi", metric: "loans", label: "Average loans" })).toBe("average");
   });
 });

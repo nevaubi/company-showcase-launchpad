@@ -14,8 +14,9 @@
 // number or invents one.
 import { METRIC_LABEL, groupTitle } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
+import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 
-export const TIDY_VERSION = 2;
+export const TIDY_VERSION = 4;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -97,6 +98,22 @@ interface Agreement {
   exact: number;
   conflict: number;
 }
+/** Rounding step of a printed figure with at most two significant digits ($1.3 billion → 100 million), else 0. */
+function roundStep(v: number) {
+  const a = Math.abs(v);
+  if (!a || !Number.isFinite(a)) return 0;
+  const lead = 10 ** Math.floor(Math.log10(a));
+  for (const step of [lead, lead / 10]) if (step >= 1 && Math.abs(a / step - Math.round(a / step)) < 1e-9) return step;
+  return 0;
+}
+/** "$1.3 billion" on a slide and "$1,308 million" in the release are one figure. */
+function roundedAlike(x: number, y: number) {
+  if (Math.sign(x) !== Math.sign(y)) return false;
+  const step = Math.max(roundStep(x), roundStep(y));
+  return step > 0 && Math.abs(x - y) <= step / 2 && Math.abs(x - y) <= Math.max(Math.abs(x), Math.abs(y)) * 0.05;
+}
+/** x is the same figure as y printed with more digits ($1,489 million vs $1.5 billion). */
+const finer = (x: number, y: number) => roundedAlike(x, y) && roundStep(y) > 0 && roundStep(x) < roundStep(y);
 const distinctive = (v: number) => Math.abs(v) >= 1000 || (!Number.isInteger(v) && Math.abs(v) >= 1);
 /** Printed values of two lines in the periods both report (calculated cells and unit-flagged cells don't count). */
 function compare(a: PayloadSeries, b: PayloadSeries): Agreement {
@@ -108,7 +125,7 @@ function compare(a: PayloadSeries, b: PayloadSeries): Agreement {
       const y = cb[e];
       if (!y || x.f || y.f || x.w || y.w) continue;
       const tol = Math.max(Math.abs(x.v), Math.abs(y.v)) * 0.005 + (a.unit === "pct" || a.unit === "ratio" ? 0.05 : 0.5);
-      if (Math.abs(x.v - y.v) <= tol) {
+      if (Math.abs(x.v - y.v) <= tol || roundedAlike(x.v, y.v)) {
         r.agree++;
         if (x.v === y.v && distinctive(x.v)) r.exact++;
       } else r.conflict++;
@@ -182,6 +199,8 @@ interface Ctx {
   /** totals whose parts changed (a part merged away, or a part joined from another table) */
   touched: Set<string>;
   log?: string[];
+  /** fiscal year-ends of the payload, built on first use */
+  yearEnds?: Set<string>;
 }
 
 /** Copy b's cells into a where a has none (a printed cell beats a calculated one), then retire b. */
@@ -192,7 +211,8 @@ function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries) {
   for (const [kind, cb] of allCells(b)) {
     if (!Object.keys(cb).length) continue;
     const ca = kind === "q" ? a.q : kind === "y" ? a.y : (a.mo ??= {});
-    for (const [e, cell] of Object.entries(cb)) if (!ca[e] || (ca[e].f && !cell.f) || (ca[e].w && !cell.w && !cell.f)) ca[e] = cell;
+    for (const [e, cell] of Object.entries(cb))
+      if (!ca[e] || (ca[e].f && !cell.f) || (ca[e].w && !cell.w && !cell.f) || (!cell.f && !cell.w && finer(cell.v, ca[e].v))) ca[e] = cell;
   }
   if (b.total) a.total = true;
   for (const k of [a.parent, b.parent, a.k, b.k]) if (k) c.touched.add(k);
@@ -488,6 +508,41 @@ function orderRows(c: Ctx, g: PayloadGroup): { k: string; depth: number }[] {
   return out;
 }
 
+// ---------- 0. Balances and averages ----------
+/**
+ * Older builds added four quarter-end balances (or averages) into a "year" and subtracted quarters
+ * from a year-end balance to get a fourth quarter. Those cells go; a balance's year is its year-end
+ * quarter and its fourth quarter the year-end figure printed in an annual column.
+ */
+function stocks(c: Ctx) {
+  for (const s of c.byKey.values()) {
+    const kind = stockKind({ pit: s.pit, category: s.cat, metric: s.met, label: s.label, parent: s.parent ? c.byKey.get(s.parent)?.label : null, breakdown: s.bd ?? s.sc });
+    if (!kind) continue;
+    for (const cells of [s.q, s.y])
+      for (const [e, cell] of Object.entries(cells))
+        if (cell.f && FLOW_FORMULAS.test(cell.f.formula)) {
+          delete cells[e];
+          c.log?.push(`STOCK ${s.label} ${e}: dropped ${cell.f.formula}`);
+        }
+    if (kind !== "point") continue;
+    const near = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) <= 7 * 86_400_000;
+    for (const [e, cell] of Object.entries(s.y)) {
+      const q = Object.keys(s.q).find((x) => near(x, e));
+      if (!q && !cell.f) s.q[e] = cell;
+    }
+    for (const [e, cell] of Object.entries(s.q)) {
+      const y = Object.keys(s.y).find((x) => near(x, e));
+      if (!y && isYearEnd(c, e)) s.y[e] = cell;
+    }
+  }
+}
+/** A quarter-end that closes a fiscal year somewhere in this company's payload. */
+function isYearEnd(c: Ctx, e: string) {
+  const years = (c.yearEnds ??= new Set(c.p.years ?? []));
+  for (const y of years) if (Math.abs(Date.parse(y) - Date.parse(e)) <= 7 * 86_400_000) return true;
+  return false;
+}
+
 /**
  * Tie-out checks against the lines the table now shows: after lines merge, a stored check can count a
  * part twice or miss one, so each check is redone from the merged parts (same tolerance as the build).
@@ -535,6 +590,446 @@ function recheck(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): Payloa
   return out;
 }
 
+/**
+ * A total can only be tested when every part the table prints elsewhere is printed for that period
+ * too: a period missing one of its lines is left unchecked rather than flagged as not adding up.
+ */
+function checkable(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): PayloadCheck[] {
+  const partsOf = new Map<string, PayloadSeries[]>();
+  for (const g of groups) {
+    if (!g.root) continue;
+    const parts = g.rows.map((r) => c.byKey.get(r.k)).filter((s): s is PayloadSeries => !!s && s.parent === g.root);
+    if (parts.length) partsOf.set(g.root, parts);
+  }
+  const most = new Map<string, number>();
+  const present = (x: PayloadCheck) => (partsOf.get(x.k) ?? []).filter((s) => (x.kind === "fy" ? s.y : s.q)[x.e]).length;
+  for (const x of checks) most.set(`${x.k}|${x.kind}`, Math.max(most.get(`${x.k}|${x.kind}`) ?? 0, present(x)));
+  return checks.filter((x) => x.ok || x.partial || !partsOf.has(x.k) || present(x) >= (most.get(`${x.k}|${x.kind}`) ?? 0));
+}
+
+// ---------- 5. Segment matrices ----------
+// Releases print one measure per segment in many shapes: a "by segment" table, a results table per
+// segment ("Health Services: adjusted operating income …"), loose lines scoped to a segment. Lines that
+// name the same segment and the same measure become one row of one "<measure> by segment" table, whose
+// total is the consolidated line of that measure, so each segment reads as one continuous history.
+
+/** Words that say what is measured, not which segment. */
+const MEASURE_WORDS = new Set(["revenue", "sale", "income", "operating", "profit", "loss", "adjusted", "ebitda", "ebit", "margin", "gaap", "nongaap", "non", "earning", "contribution", "total", "net", "gross", "expense", "cost", "result", "performance", "profitability", "financial"]);
+const STOCK_WORDS = /\b(average|avg|balances?|ending|end of|outstanding|assets?|liabilit|deposits?|loans?|borrowings?|backlog|headcount|employees|rate|ratio|margin|yield|per share|change|%)/i;
+const SCOPED_FILLER = new Set(["measure", "reported", "segment", "segments", "before", "after", "loss"]);
+const ELIMINATION = /\b(eliminations?|intersegment|inter-segment|corporate|unallocated|reconciling|other)\b/i;
+
+interface Member {
+  key: string;
+  tokens: string[];
+  name: string;
+  /** printed in the most recent period */
+  last: string;
+  /** "Corporate/Other", "Eliminations": only a line printed as exactly that belongs to it */
+  generic: boolean;
+}
+const memberTokens = (piece: string) => labelTokens(piece).filter((w) => !MEASURE_WORDS.has(w) && !TABLE_WORDS.has(w));
+/** The words of a printed name that name the segment: "Health Care Benefits adjusted operating income" → "Health Care Benefits". */
+const cleanMember = (piece: string) => {
+  const words = piece.replace(/\((\d+|[a-z])\)/gi, " ").split(/\s+/).filter(Boolean);
+  const own = new Set(memberTokens(piece));
+  const isOwn = (w: string) => labelTokens(w).some((t) => own.has(t));
+  const first = words.findIndex(isOwn);
+  let last = -1;
+  for (let i = words.length - 1; i >= 0; i--) if (isOwn(words[i])) (last = i), (i = -1);
+  if (first < 0) return "";
+  return words
+    .slice(first, last + 1)
+    .join(" ")
+    .replace(/^[\s—–:,(-]+|[\s—–:,)-]+$/g, "")
+    .trim();
+};
+
+/** Names that only say "the rest" (Corporate/Other, eliminations): assigned only to a line printed as exactly that. */
+const GENERIC_MEMBER = new Set(["other", "corporate", "elimination", "intersegment", "unallocated", "reconciling", "item", "adjustment", "all"]);
+
+/**
+ * Segment names: the parts of the company's segment tables whose total is a consolidated line (not
+ * itself one segment's line) and whose parts add up to it in at least one period, so product lines
+ * inside one segment ("Pharmacy", "Front Store") never count as segments.
+ */
+function segmentMembers(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): Member[] {
+  const okRoots = new Set(checks.filter((x) => x.ok && !x.partial).map((x) => x.k));
+  const fromGroups = (list: PayloadGroup[]) => {
+    const found = new Map<string, Member>();
+    for (const g of list) {
+      for (const r of g.rows) {
+        const s = c.byKey.get(r.k);
+        if (!s || s.k === g.root || s.parent !== g.root) continue;
+        const last = [...periodsOf(s)].sort().at(-1) ?? "";
+        for (const piece of s.label.split(LABEL_SEP)) {
+          const tokens = memberTokens(piece);
+          if (!tokens.length || tokens.length > 5) continue;
+          const key = [...tokens].sort().join(" ");
+          const name = cleanMember(piece);
+          if (!name) continue;
+          const had = found.get(key);
+          if (!had || last > had.last) found.set(key, { key, tokens, name, last, generic: tokens.every((w) => GENERIC_MEMBER.has(w)) });
+        }
+      }
+    }
+    return [...found.values()];
+  };
+  const tables = groups.filter((g) => g.cat === "segment" && g.root && g.rows.filter((r) => c.byKey.get(r.k)?.parent === g.root).length >= 2);
+  const first = fromGroups(tables).filter((m) => !m.generic);
+  const consolidated = tables.filter((g) => {
+    const root = c.byKey.get(g.root!);
+    return !!root && okRoots.has(root.k) && !memberOf(root, first);
+  });
+  return fromGroups(consolidated);
+}
+
+/** The segment a line is about (from its label or its table), or null when it names none or two. */
+function memberOf(s: PayloadSeries, members: Member[]): { m: Member; inLabel: boolean } | null {
+  const hit = (text: string, own: boolean) => {
+    const words = new Set(labelTokens(text));
+    const rest = memberTokens(text);
+    const ms = members.filter((m) => m.tokens.every((w) => words.has(w)) && (!m.generic || (own && rest.length === m.tokens.length)));
+    // The longest name wins when one contains another ("Health Care Benefits" over "Health").
+    const top = ms.filter((m) => !ms.some((o) => o !== m && o.tokens.length > m.tokens.length && m.tokens.every((w) => o.tokens.includes(w))));
+    return top.length === 1 ? top[0] : top.length ? undefined : null;
+  };
+  const own = hit(s.label, true);
+  if (own) return { m: own, inLabel: true };
+  if (own === undefined) return null;
+  const scoped = s.sc ? hit(s.sc, false) : null;
+  return scoped ? { m: scoped, inLabel: false } : null;
+}
+
+/** What a line measures, as words: its own name without the segment, else its total's. */
+function measureOf(c: Ctx, s: PayloadSeries, m: Member | null, rootOf: Map<string, string>): string | null {
+  const words = (label: string) => {
+    let w = labelTokens(label).filter((x) => !TABLE_WORDS.has(x) && !(m && m.tokens.includes(x)));
+    for (const x of labelTokens(label, true)) if (MODIFIERS.has(x) && !w.includes(x)) w.push(x);
+    if (w.includes("income") || w.includes("profit")) w = w.filter((x) => x !== "loss");
+    return w;
+  };
+  let w = words(s.label);
+  if (m && !w.some((x) => MEASURE_WORDS.has(x))) {
+    // "Health Services" in a revenue table measures what the table's total measures.
+    const up = s.parent ? c.byKey.get(s.parent) : rootOf.get(s.k) ? c.byKey.get(rootOf.get(s.k)!) : undefined;
+    if (!up || up === s) return null;
+    w = [...new Set([...w, ...words(up.label).filter((x) => !(m && m.tokens.includes(x)))])];
+  }
+  if (!w.some((x) => MEASURE_WORDS.has(x))) return null;
+  // "Net revenues", "Revenues" and "Net sales" are one measure; companies rename it between eras.
+  if (w.includes("revenue") || w.includes("sale")) w = [...w.filter((x) => x !== "net" && x !== "sale"), "revenue"];
+  return [...new Set(w)].sort().join(" ");
+}
+
+/** "Operating income (loss) (GAAP measure) - Consolidated Totals" → "Operating income (GAAP)". */
+const measureTitle = (label: string, members: Member[] = []) => {
+  const gaap = /\bnon-?\s?gaap\b/i.test(label) ? " (non-GAAP)" : /\bgaap\b/i.test(label) ? " (GAAP)" : "";
+  const pieces = label
+    .replace(/\([^)]*\)/g, " ")
+    .split(LABEL_SEP)
+    .map((x) => x.replace(/^\s*(total|consolidated)\s+/i, "").replace(/\s+/g, " ").trim())
+    .filter((x) => x && !/^(consolidated|total|totals|consolidated totals?)$/i.test(x) && !members.some((m) => memberTokens(x).length && memberTokens(x).every((w) => m.tokens.includes(w))));
+  const base = (pieces[0] ?? "").replace(/\s+([,;:])/g, "$1").replace(/[,;:\s]+$/, "");
+  return base ? `${base[0].toUpperCase()}${base.slice(1)}${gaap}` : "";
+};
+
+/**
+ * Two lines that disagree only on full-year figures, where one side's year is the sum of the four
+ * quarters both print and the other's isn't: the year that adds up wins. Returns those cells, or
+ * null when any disagreement can't be settled that way.
+ */
+function settle(a: PayloadSeries, b: PayloadSeries): [string, PayloadCell][] | null {
+  // Only flows add up over a year; balances, averages and rates don't.
+  if (a.pit || b.pit || a.unit !== "usd" || [a, b].some((s) => STOCK_WORDS.test(`${s.label} ${s.sc ?? ""}`))) return null;
+  const q = { ...b.q, ...a.q };
+  const out: [string, PayloadCell][] = [];
+  for (const [kind, ca] of allCells(a)) {
+    const cb = (kind === "q" ? b.q : kind === "y" ? b.y : b.mo ?? {}) as Record<string, PayloadCell>;
+    for (const e of Object.keys(ca)) {
+      const x = ca[e];
+      const y = cb[e];
+      if (!y || x.f || y.f || x.w || y.w) continue;
+      const tol = Math.max(Math.abs(x.v), Math.abs(y.v)) * 0.005 + 0.5;
+      if (Math.abs(x.v - y.v) <= tol || roundedAlike(x.v, y.v)) continue;
+      if (kind !== "y") return null;
+      const end = Date.parse(e);
+      const quarters = Object.keys(q).filter((k) => {
+        const d = (end - Date.parse(k)) / 86_400_000;
+        return d >= 0 && d < 355;
+      });
+      if (quarters.length !== 4) return null;
+      const sum = quarters.reduce((n, k) => n + q[k].v, 0);
+      const t = Math.max(Math.abs(sum) * 0.005, 1.5e6);
+      const aOk = Math.abs(x.v - sum) <= t;
+      const bOk = Math.abs(y.v - sum) <= t;
+      if (aOk === bOk) return null;
+      if (bOk) out.push([e, y]);
+    }
+  }
+  return out;
+}
+
+function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): { groups: PayloadGroup[]; checks: PayloadCheck[] } {
+  const members = segmentMembers(c, groups, checks);
+  if (members.filter((m) => !m.generic).length < 2) return { groups, checks };
+  const groupOf = new Map<string, PayloadGroup>();
+  const rootOf = new Map<string, string>();
+  for (const g of groups)
+    for (const r of g.rows) {
+      groupOf.set(r.k, g);
+      if (g.root && r.k !== g.root) rootOf.set(r.k, g.root);
+    }
+  const isRoot = (s: PayloadSeries) => groupOf.get(s.k)?.root === s.k;
+  const okTotals = new Set(checks.filter((x) => x.ok && !x.partial).map((x) => x.k));
+  /** The total of its own breakdown that ties out (a segment's revenue by product): that table keeps it. */
+  const anchored = (s: PayloadSeries) => isRoot(s) && okTotals.has(s.k) && (groupOf.get(s.k)?.rows.length ?? 0) > 1;
+  /** A line can fold into another unless it closes a breakdown of its own. */
+  const foldable = (s: PayloadSeries) => !anchored(s);
+  /** A line that must stay in its table joins a segment table as a copy of the same printed cells. */
+  const copyOf = (s: PayloadSeries, tag: string): PayloadSeries => {
+    const copy: PayloadSeries = { ...s, k: `${s.k}~${tag}`, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) };
+    c.byKey.set(copy.k, copy);
+    c.p.series.push(copy);
+    return copy;
+  };
+  // measure key → member key → lines; measure key → consolidated lines
+  const parts = new Map<string, Map<string, PayloadSeries[]>>();
+  const totals = new Map<string, PayloadSeries[]>();
+  const memberByKey = new Map(members.map((m) => [m.key, m]));
+  for (const s of c.byKey.values()) {
+    if (c.removed.has(s.k) || !groupOf.has(s.k) || s.unit !== "usd" || s.pit) continue;
+    if (!["segment", "product", "kpi", "cost"].includes(s.cat) && !["revenue", "operating_income", "segment_profit", "gross_profit", "net_income"].includes(s.met)) continue;
+    let who = memberOf(s, members);
+    // "Other" or "Corporate" in a regional or product table is not the segment table's "Other".
+    if (who?.m.generic && s.cat !== "segment") who = null;
+    // In a segment's own results table, a line naming anything beyond the measure ("Net revenues:
+    // Other", "Premium revenues") is an item inside that segment, not the segment's figure.
+    if (who && !who.inLabel && labelTokens(s.label).some((w) => !MEASURE_WORDS.has(w) && !MODIFIERS.has(w) && !TABLE_WORDS.has(w) && !SCOPED_FILLER.has(w))) continue;
+    const measure = measureOf(c, s, who?.m ?? null, rootOf);
+    if (!measure) continue;
+    const key = `${s.unit}|${measure}`;
+    if (who) {
+      const byM = parts.get(key) ?? new Map<string, PayloadSeries[]>();
+      byM.set(who.m.key, [...(byM.get(who.m.key) ?? []), s]);
+      parts.set(key, byM);
+    } else if (s.total || isRoot(s) || /\bconsolidated\b/i.test(`${s.sc ?? ""} ${s.label}`)) totals.set(key, [...(totals.get(key) ?? []), s]);
+  }
+
+  const taken = new Set<string>();
+  const made: PayloadGroup[] = [];
+  const newChecks: PayloadCheck[] = [];
+  for (const [key, byM] of parts) {
+    if (byM.size < 2) continue;
+    // One line per segment: lines that never disagree fold into the fullest one.
+    const lists = [...byM.values()].map((list) => list.filter((s) => !taken.has(s.k) && !c.removed.has(s.k)).sort((a, b) => periodsOf(b).size - periodsOf(a).size)).filter((l) => l.length);
+    if (lists.length < 2) continue;
+    const heads = lists.map((l) => l[0]);
+    const tolOf = (v: number) => Math.max(Math.abs(v) * 0.005, 1.5e6);
+    // Where the fullest lines already add up to a printed consolidated line, a period is complete:
+    // another line's cell there would count something twice, so it doesn't fold in.
+    const complete = new Set<string>();
+    for (const t of totals.get(key) ?? [])
+      for (const [kind, cells] of [["q", t.q], ["y", t.y]] as const)
+        for (const [e, cell] of Object.entries(cells)) {
+          const present = heads.filter((h) => (kind === "q" ? h.q : h.y)[e]);
+          if (present.length >= 2 && Math.abs(present.reduce((x, h) => x + (kind === "q" ? h.q : h.y)[e].v, 0) - cell.v) <= tolOf(cell.v)) complete.add(`${kind}${e}`);
+        }
+    const rows: PayloadSeries[] = [];
+    for (const sorted of lists) {
+      const head = anchored(sorted[0]) ? copyOf(sorted[0], "seg") : sorted[0];
+      for (const b of sorted.slice(1)) {
+        if (c.removed.has(b.k)) continue;
+        let fix: [string, PayloadCell][] = [];
+        if (compare(head, b).conflict) {
+          const r = settle(head, b);
+          if (!r) continue;
+          fix = r;
+        }
+        const adds = [...Object.keys(b.q).filter((e) => !head.q[e]).map((e) => `q${e}`), ...Object.keys(b.y).filter((e) => !head.y[e]).map((e) => `y${e}`)];
+        const sharper = Object.keys(b.q).some((e) => head.q[e] && finer(b.q[e].v, head.q[e].v)) || Object.keys(b.y).some((e) => head.y[e] && finer(b.y[e].v, head.y[e].v));
+        if ((!adds.length && !fix.length && !sharper) || adds.some((x) => complete.has(x))) continue;
+        // A year whose printed figure is not the sum of its four printed quarters was misread on one side.
+        for (const [e, cell] of fix) {
+          c.log?.push(`FY ${head.label} ${e}: ${head.y[e]?.v} → ${cell.v} (sum of quarters)`);
+          head.y[e] = cell;
+        }
+        // A line that closes its own breakdown stays there; the segment row gets its printed cells.
+        absorb(c, head, foldable(b) ? b : copyOf(b, "x"));
+      }
+      rows.push(head);
+    }
+    const orig = new Map(rows.map((x) => [x.k, { label: x.label, parent: x.parent }]));
+    const ends = new Map<string, number>();
+    for (const s of rows) for (const e of Object.keys(s.q)) ends.set(e, (ends.get(e) ?? 0) + 1);
+    for (const s of rows) for (const e of Object.keys(s.y)) ends.set(`y${e}`, (ends.get(`y${e}`) ?? 0) + 1);
+    // Worth a table only when two segments are printed for the same period.
+    if (![...ends.values()].some((n) => n >= 2)) continue;
+    const sumOf = (list: PayloadSeries[], kind: "q" | "y", e: string) => {
+      const present = list.filter((s) => (kind === "q" ? s.q : s.y)[e]);
+      // Eliminations printed as positive numbers are taken away from the segments.
+      const elim = present.filter((s) => ELIMINATION.test(s.label) && (kind === "q" ? s.q : s.y)[e].v > 0);
+      return { n: present.length, sum: present.reduce((x, s) => x + (kind === "q" ? s.q : s.y)[e].v, 0), elim: elim.reduce((x, s) => x + (kind === "q" ? s.q : s.y)[e].v, 0), sub: elim.map((s) => s.label) };
+    };
+    const sumAt = (kind: "q" | "y", e: string) => sumOf(rows, kind, e);
+    // The consolidated line: the candidate whose numbers are the sum of the segments most often.
+    const tol = (v: number) => Math.max(Math.abs(v) * 0.005, 1.5e6);
+    /** The parts' sum that matches the total: as printed, or with positive eliminations taken away. */
+    const tie = (r: ReturnType<typeof sumOf>, v: number) =>
+      Math.abs(r.sum - v) <= tol(v) ? { ok: true, sum: r.sum, sub: [] as string[] } : r.elim && Math.abs(r.sum - 2 * r.elim - v) <= tol(v) ? { ok: true, sum: r.sum - 2 * r.elim, sub: r.sub } : { ok: false, sum: r.sum, sub: [] as string[] };
+    const score = (t: PayloadSeries, list = rows) => {
+      // Periods where every segment that is ever printed alongside the others is there.
+      const most = { q: 0, y: 0 };
+      for (const kind of ["q", "y"] as const)
+        for (const e of new Set(list.flatMap((x) => Object.keys(kind === "q" ? x.q : x.y)))) most[kind] = Math.max(most[kind], sumOf(list, kind, e).n);
+      let n = 0;
+      for (const [kind, cells] of [["q", t.q], ["y", t.y]] as const)
+        for (const [e, cell] of Object.entries(cells)) {
+          const r = sumOf(list, kind, e);
+          const k = r.n;
+          if (k < 2) continue;
+          // A "total" that is one segment's own number was read from the wrong row.
+          if (list.some((x) => (kind === "q" ? x.q : x.y)[e]?.v === cell.v)) n -= 2;
+          else if (tie(r, cell.v).ok) n += 2;
+          else if (k >= most[kind]) n -= 1;
+        }
+      return n;
+    };
+    const cands = (totals.get(key) ?? []).filter((t) => !taken.has(t.k) && !c.removed.has(t.k)).map((t) => ({ t, n: score(t) })).sort((a, b) => b.n - a.n || periodsOf(b.t).size - periodsOf(a.t).size);
+    let root: PayloadSeries | null = cands[0] && cands[0].n > 0 ? cands[0].t : null;
+    if (root) {
+      for (const { t } of cands.slice(1)) if (!c.removed.has(t.k) && foldable(t) && !compare(root, t).conflict && score(t) >= 0) absorb(c, root, t);
+      // A line whose numbers make the segments stop adding up to the total isn't one of them
+      // (an expense line a reader filed under revenue): it stays in its own table.
+      for (let changed = true; changed && rows.length > 2; ) {
+        changed = false;
+        const base = score(root);
+        for (const m of [...rows]) {
+          const without = rows.filter((x) => x !== m);
+          if (score(root, without) > base) {
+            rows.splice(rows.indexOf(m), 1);
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+    const named = [...rows].sort((a, b) => periodsOf(b).size - periodsOf(a).size).map((x) => orig.get(x.k)!);
+    const measure =
+      (root && measureTitle(root.label, members)) ||
+      named.map((o) => measureTitle(o.label, members)).find(Boolean) ||
+      named.map((o) => (o.parent ? measureTitle(c.byKey.get(resolve(c, o.parent))?.label ?? "", members) : "")).find(Boolean) ||
+      "";
+    // A measure needs a word of its own: "Net" or "Total" alone names nothing.
+    if (!measure || labelTokens(measure).every((w) => ["net", "gross"].includes(w))) continue;
+    const title = `${measure} by segment`;
+    ends.clear();
+    for (const x of rows) for (const e of Object.keys(x.q)) ends.set(e, (ends.get(e) ?? 0) + 1);
+    for (const x of rows) for (const e of Object.keys(x.y)) ends.set(`y${e}`, (ends.get(`y${e}`) ?? 0) + 1);
+    // The consolidated line also closes another breakdown (revenue by product): that table keeps it,
+    // and the segment table closes on a copy of the same printed cells.
+    if (root && isRoot(root)) {
+      const own = groupOf.get(root.k)!;
+      const inRows = new Set(rows.map((x) => x.k));
+      const others = own.rows.some((r) => r.k !== root!.k && c.byKey.get(r.k)?.parent === root!.k && !inRows.has(r.k));
+      if (others) root = { ...copyOf(root, "seg"), parent: null, total: true };
+      if (others) c.byKey.set(root.k, root), (c.p.series[c.p.series.length - 1] = root);
+    }
+    // Periods the consolidated line misses: another printed total that the segments add up to fills them.
+    if (root)
+      for (const { t } of cands) {
+        if (t === root || c.removed.has(t.k)) continue;
+        for (const [kind, cells] of [["q", t.q], ["y", t.y]] as const) {
+          const mine = kind === "q" ? root.q : root.y;
+          for (const [e, cell] of Object.entries(cells)) {
+            if (mine[e] || cell.f) continue;
+            const r = sumAt(kind, e);
+            if (r.n >= 2 && tie(r, cell.v).ok) mine[e] = cell;
+          }
+        }
+      }
+    // Only the segment lines move: what a release printed under them (a sub-breakdown, or another
+    // measure a reader nested there) stays in its own table.
+    const moving = new Map<string, number>();
+    for (const s of rows) moving.set(s.k, 1);
+    if (root) moving.set(root.k, 0);
+    for (const k of moving.keys()) {
+      taken.add(k);
+      const s = c.byKey.get(k)!;
+      if (s.parent) c.touched.add(s.parent);
+    }
+    // Rows read as the segment's name as that line printed it; the table title carries the measure.
+    for (const s of rows) {
+      const m = memberByKey.get([...byM].find(([, l]) => l.some((x) => resolve(c, x.k) === s.k))?.[0] ?? "");
+      const piece = m ? s.label.split(LABEL_SEP).find((x) => { const t = memberTokens(x); return t.length > 0 && t.every((w) => m.tokens.includes(w)) && m.tokens.every((w) => t.includes(w)); }) : undefined;
+      const name = piece ? cleanMember(piece) || m!.name : m?.name;
+      if (name && s.label !== name) {
+        c.renamed.set(s.label, name);
+        s.label = name;
+      }
+      s.parent = root?.k ?? null;
+      s.sc = undefined;
+    }
+    if (root) root.parent = null;
+    const latest = (s: PayloadSeries) => {
+      const e = Object.keys(s.q).sort().at(-1) ?? Object.keys(s.y).sort().at(-1);
+      return e ? (s.q[e] ?? s.y[e]).v : 0;
+    };
+    rows.sort((a, b) => Number(ELIMINATION.test(a.label)) - Number(ELIMINATION.test(b.label)) || latest(b) - latest(a));
+    const order: { k: string; depth: number }[] = rows.map((s) => ({ k: s.k, depth: 1 }));
+    if (root) order.push({ k: root.k, depth: 0 });
+    const label = root?.label ?? rows[0].label;
+    const met = rows.map((s) => s.met).sort((a, b) => rows.filter((s) => s.met === b).length - rows.filter((s) => s.met === a).length)[0];
+
+    made.push({ id: `segment|${met}|matrix:${key.split("|")[1]}|usd|`, cat: "segment", met, unit: "usd", label, bd: title, root: root?.k ?? null, rows: order, t: title });
+    c.log?.push(`MATRIX [${key}] ${title}: ${rows.map((s) => s.label).join(", ")}${root ? ` = ${root.label}` : ""}`);
+    if (root) {
+      // Tie-out from the segments as they now read; the old checks counted another table's parts.
+      for (const [kind, cells] of [["q", root.q], ["y", root.y]] as const)
+        for (const [e, cell] of Object.entries(cells)) {
+          const r = sumAt(kind, e);
+          const n = r.n;
+          if (n < 2) continue;
+          const { ok, sum, sub } = tie(r, cell.v);
+          const most = Math.max(...[...ends].filter(([x]) => (kind === "y") === x.startsWith("y")).map(([, v]) => v));
+          // A segment not printed for that period: nothing to check against.
+          if (!ok && n < most) continue;
+          newChecks.push({ k: root.k, e, kind: kind === "q" ? "q" : "fy", total: cell.v, sum, ok, n, ...(sub.length ? { sub } : {}) });
+        }
+    }
+  }
+  // Lines folded together above may sit in other tables: every table follows the merged lines.
+  const left: PayloadGroup[] = [];
+  for (const g of groups) {
+    const seen = new Set<string>();
+    const rows = g.rows.map((r) => ({ ...r, k: resolve(c, r.k) })).filter((r) => !taken.has(r.k) && !c.removed.has(r.k) && !seen.has(r.k) && (seen.add(r.k), true));
+    if (!rows.length) continue;
+    if (rows.length === g.rows.length) {
+      left.push(g);
+      continue;
+    }
+    // Lines whose total moved away no longer add up to anything here.
+    for (const r of rows) {
+      const x = c.byKey.get(r.k);
+      if (x?.parent && taken.has(x.parent)) x.parent = null;
+    }
+    // A total left without parts (or a table whose total moved) is a list of loose lines.
+    const rootGone = !!g.root && (taken.has(g.root) || !rows.some((r) => c.byKey.get(r.k)?.parent === g.root));
+    left.push({ ...g, rows: rootGone ? rows.map((r) => ({ ...r, depth: 1 })) : rows, root: rootGone ? null : g.root, ...(rootGone ? { t: undefined } : {}) });
+  }
+  const roots = new Set(made.map((g) => g.root).filter(Boolean));
+  const have = new Set<string>();
+  const kept: PayloadCheck[] = [];
+  for (const x of checks) {
+    const k = resolve(c, x.k);
+    const id = `${k}|${x.kind}|${x.e}`;
+    if (roots.has(k) || c.removed.has(k) || have.has(id)) continue;
+    have.add(id);
+    kept.push(k === x.k ? x : { ...x, k });
+  }
+  return { groups: [...made, ...left], checks: [...kept, ...newChecks] };
+}
+
 export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayload {
   if (p.tidy === TIDY_VERSION && !opts.log) return p;
   const series = p.series.map((s) => ({ ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) }));
@@ -542,6 +1037,7 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   const c: Ctx = { p: out, byKey: new Map(series.map((s) => [s.k, s])), alias: new Map(Object.entries(p.alias ?? {})), removed: new Set(), kids: new Map(), renamed: new Map(), touched: new Set(), log: opts.log };
   for (const s of series) if (s.parent) c.kids.set(s.parent, [...(c.kids.get(s.parent) ?? []), s]);
   const before = { groups: out.groups.length, series: series.length };
+  stocks(c);
 
   // 1–3. Subjects: rooted tables by unit and subject words (the dimension a reader assigned can
   // differ between releases of one table, so it isn't part of the subject); loose lists by their own key.
@@ -616,10 +1112,15 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
       checks.push(moved ? { ...x, k } : x);
     }
 
+  // 5. One table per measure by segment.
+  const mx = segmentMatrices(c, groups, checks);
+  groups = mx.groups;
+  checks.splice(0, checks.length, ...mx.checks);
+
   // 4. Titles that tell tables apart: the total's own name, else the unit, else the years covered.
   groups = splitLoose(c, groups);
   for (const g of groups) if (g.px && !g.t) g.t = g.px;
-  for (const g of groups) if (!g.root && !g.px) g.t = looseTitle(g);
+  for (const g of groups) if (!g.root && !g.px && !g.id.includes("|matrix:")) g.t = looseTitle(g);
   const byTitle = new Map<string, PayloadGroup[]>();
   for (const g of groups) {
     const ti = titleOf(g).toLowerCase();
@@ -677,7 +1178,7 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
     }
   }
   const kept = series.filter((s) => !c.removed.has(s.k));
-  const rechecked = c.removed.size ? recheck(c, groups, checks) : checks;
+  const rechecked = checkable(c, groups, c.removed.size ? recheck(c, groups, checks) : checks);
   const q = rechecked.filter((x) => x.kind === "q");
   const fy = rechecked.filter((x) => x.kind === "fy");
   return {
