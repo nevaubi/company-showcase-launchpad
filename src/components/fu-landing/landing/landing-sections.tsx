@@ -509,7 +509,7 @@ export function SiteFooter() {
   const cols = [
     { h: "Product", l: [["Click-to-source", "/features/click-to-source"], ["IR KPIs", "/features/ir-kpis"], ["Supply chain", "/features/supply-chain"], ["Research assistant", "/features/research-assistant"], ["Office Studio", "/features/office-studio"]] },
     { h: "Coverage", l: [["All companies", "/companies"], ["NVIDIA", "/companies/NVDA"], ["Apple", "/companies/AAPL"], ["Microsoft", "/companies/MSFT"]] },
-    { h: "Get started", l: [["Pricing", "/pricing"], ["Join the waitlist", "/auth?mode=signup"], ["Sign in", "/auth"]] },
+    { h: "Get started", l: [["Access & pricing", "/pricing"], ["Join the waitlist", "/auth?mode=signup"], ["Sign in", "/auth"]] },
   ];
   return (
     <footer className={styles.footer}>

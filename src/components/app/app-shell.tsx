@@ -486,7 +486,7 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
-            <Link to="/pricing">Plans & pricing</Link>
+            <Link to="/pricing">Access & pricing</Link>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={signOut}>

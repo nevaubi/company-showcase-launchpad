@@ -35,7 +35,7 @@ export function SiteHeader({ className }: { className?: string }) {
             Companies
           </Link>
           <Link to="/pricing" className="transition-colors hover:text-foreground" activeProps={{ className: "text-foreground" }}>
-            Pricing
+            Access
           </Link>
         </nav>
         <div className="ml-auto flex items-center gap-2">
@@ -76,7 +76,7 @@ export function SiteFooter() {
           links={[
             { label: "Financials", to: "/" },
             { label: "Companies", to: "/companies" },
-            { label: "Pricing", to: "/pricing" },
+            { label: "Access & pricing", to: "/pricing" },
             { label: "Sign in", to: "/auth" },
           ]}
         />
