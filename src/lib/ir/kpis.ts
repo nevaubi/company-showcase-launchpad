@@ -140,9 +140,13 @@ function quarterBefore(ends: string[], d: string, days: number) {
 }
 
 /** Snap a period end to an existing grid date within a few days (52/53-week filers). */
-function snap(ends: string[], d: string) {
-  return ends.find((e) => near(e, d)) ?? d;
+function snap(ends: string[], d: string, days = 6) {
+  let best: string | undefined;
+  for (const e of ends) if (near(e, d, days) && (!best || Math.abs(t(e) - t(d)) < Math.abs(t(best) - t(d)))) best = e;
+  return best ?? d;
 }
+/** How far a fact's date may sit from its column: printed dates are exact, dates read from text approximate. */
+const slack = (f: Pick<IrFact, "method">) => (f.method === "text" ? 24 : 6);
 
 export function applyLabelMap(facts: IrFact[], map: Record<string, LabelMapEntry> | undefined): IrFact[] {
   if (!map) return facts;
@@ -475,14 +479,22 @@ export function buildIrSeries(
   const facts = fyEnd ? mapped.filter((f) => f.months !== 12 || monthNear(f.period_end, fyEnd)) : mapped;
 
   // Period grids: quarter ends (3-month and point-in-time values) and fiscal-year ends.
-  const quarters: string[] = [];
-  for (const f of facts.filter((x) => x.months === 3).sort((a, b) => a.period_end.localeCompare(b.period_end))) {
-    if (!quarters.some((e) => near(e, f.period_end))) quarters.push(f.period_end);
-  }
+  // Printed column dates set the grid first; dates read from running text ("the fourth quarter")
+  // may be a calendar month-end guess for a 52/53-week quarter, so they join the nearest column.
+  // Printed column dates set the grid (a printed date a week from another can be a different period,
+  // e.g. a retail month next to a 12-week quarter). A date read from running text ("the fourth
+  // quarter") may be a calendar month-end guess for a 52/53-week quarter, so it joins the nearest
+  // printed column within a few weeks and only adds a column when none is near.
+  const gridOf = (list: IrFact[], into: string[]) => {
+    for (const f of [...list].sort((a, b) => Number(a.method === "text") - Number(b.method === "text") || a.period_end.localeCompare(b.period_end)))
+      if (!into.some((e) => near(e, f.period_end, slack(f)))) into.push(f.period_end);
+    return into;
+  };
+  const quarters = gridOf(facts.filter((x) => x.months === 3), []);
   const years: string[] = [];
-  for (const f of facts.filter((x) => x.months === 12).sort((a, b) => a.period_end.localeCompare(b.period_end))) {
-    const e = snap(quarters, f.period_end);
-    if (!years.some((y) => near(y, e))) years.push(e);
+  for (const f of facts.filter((x) => x.months === 12).sort((a, b) => Number(a.method === "text") - Number(b.method === "text") || a.period_end.localeCompare(b.period_end))) {
+    const e = snap(quarters, f.period_end, slack(f));
+    if (!years.some((y) => near(y, e, slack(f)))) years.push(e);
   }
   for (const y of years) if (!quarters.some((e) => near(e, y))) quarters.push(y);
   // Balances at a month-end that closes no fiscal quarter (monthly operating data) go to the monthly
@@ -492,7 +504,7 @@ export function buildIrSeries(
   const closesQuarter = (d: string) => !qMonths || qMonths.has(closingMonthOf(d));
   const months: string[] = [];
   for (const f of facts.filter((x) => x.months === 0)) {
-    if (quarters.some((e) => near(e, f.period_end, 20))) continue;
+    if (quarters.some((e) => near(e, f.period_end, Math.max(20, slack(f))))) continue;
     if (asOfRelease(f) && quarterBefore(quarters, f.period_end, AS_OF_DAYS)) continue;
     if (closesQuarter(f.period_end)) quarters.push(f.period_end);
     else if (!months.some((e) => near(e, f.period_end, 3))) months.push(f.period_end);
@@ -542,16 +554,16 @@ export function buildIrSeries(
     if (f.breakdown) vt.breakdown.set(f.breakdown, (vt.breakdown.get(f.breakdown) ?? 0) + 1);
     vt.parent.set(f.parent ?? "", (vt.parent.get(f.parent ?? "") ?? 0) + 1);
     const vin: Vintage = { v: f.value, fact: f, doc: docOf(f), filed: f.filed ?? "" };
-    if (f.months === 3) push(qv, key, snap(quarters, f.period_end), vin);
+    if (f.months === 3) push(qv, key, snap(quarters, f.period_end, slack(f)), vin);
     else if (f.months === 0) {
       s.pit = true;
       // "Costco currently operates 939 warehouses" is stated as of the release date: it belongs to
       // the quarter the release reports (the cell keeps its own as-of date).
-      const qEnd = quarters.find((e) => near(e, f.period_end, 20)) ?? (asOfRelease(f) ? quarterBefore(quarters, f.period_end, AS_OF_DAYS) : undefined);
+      const qEnd = quarters.find((e) => near(e, f.period_end, Math.max(20, slack(f)))) ?? (asOfRelease(f) ? quarterBefore(quarters, f.period_end, AS_OF_DAYS) : undefined);
       if (qEnd) push(qv, key, qEnd, vin);
       else push(mv, key, months.find((e) => near(e, f.period_end, 3)) ?? f.period_end, vin);
     } else if (f.months === 1) push(mv, key, months.find((e) => near(e, f.period_end, 3)) ?? snap(quarters, f.period_end), vin);
-    else if (f.months === 12) push(fv, key, snap(years, f.period_end), vin);
+    else if (f.months === 12) push(fv, key, snap(years, f.period_end, slack(f)), vin);
     else if (f.months === 9) nine.set(key, [...(nine.get(key) ?? []), f]);
     else if (f.months === 6) six.set(key, [...(six.get(key) ?? []), f]);
   }

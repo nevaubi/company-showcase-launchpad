@@ -60,7 +60,8 @@ type ExportKind = { kind: "view" } | { kind: "all" } | { kind: "group"; group: P
 
 /** Opens the source panel for one cell: the stored document at that cell, or the calculation's parts. */
 export function openIrCell(open: (t: SourceTarget) => void, ticker: string, payload: IrPayload, s: PayloadSeries, end: string, freq: Freq, c: PayloadCell) {
-  const periodLabel = periodLong(end, freq, c.m);
+  // A balance keeps its own as-of date ("as of Sep 24", stated in the release) under the quarter's column.
+  const periodLabel = periodLong(c.m === 0 && c.e ? c.e : end, freq, c.m);
   const derived = derivedOf(payload, c);
   if (derived) return open({ ticker, label: s.label, periodLabel, unit: s.unit, value: c.v, derived }), true;
   const src = refOf(payload, { ...c, e: c.e ?? end }, s.label);

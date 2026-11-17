@@ -543,3 +543,21 @@ describe("counts stated as of the release date", () => {
     expect(months).not.toContain("2026-09-24");
   });
 });
+
+describe("dates read from running text", () => {
+  it("join the printed quarter column instead of adding a near-duplicate one", () => {
+    const facts = [
+      f("Net sales", "2025-11-23", 3, 67_300),
+      f("Net sales", "2026-02-15", 3, 69_600),
+      // "comparable sales for the first quarter rose 6.4%": the reader guessed the calendar month-end
+      f("Comparable sales", "2025-11-30", 3, 6.4, { category: "kpi", metric: "other", unit: "pct", parent: null, method: "text", locator: { q: "Comparable sales for the first quarter rose 6.4%" } }),
+    ];
+    const { series, quarters } = buildIrSeries(facts);
+    expect(quarters).toEqual(["2025-11-23", "2026-02-15"]);
+    expect(series.find((s) => s.label === "Comparable sales")!.cells["2025-11-23"]?.v).toBe(6.4);
+  });
+  it("keep their own column when no printed column is near", () => {
+    const facts = [f("Net sales", "2025-11-23", 3, 67_300), f("Backlog", "2026-06-30", 3, 12, { category: "kpi", metric: "backlog", parent: null, method: "text", locator: { q: "Backlog of $12" } })];
+    expect(buildIrSeries(facts).quarters).toEqual(["2025-11-23", "2026-06-30"]);
+  });
+});
