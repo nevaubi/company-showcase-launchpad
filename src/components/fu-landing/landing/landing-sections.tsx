@@ -507,9 +507,9 @@ export function VideoCta({ clip, title, body }: { clip: VideoClip; title: string
 
 export function SiteFooter() {
   const cols = [
-    { h: "Product", l: ["Earnings recaps", "Ask the filings", "Quarterly models", "Verification"] },
-    { h: "Company", l: ["About", "Careers", "Contact"] },
-    { h: "Resources", l: ["Methodology", "Coverage list", "Changelog", "Security"] },
+    { h: "Product", l: [["Click-to-source", "/features/click-to-source"], ["IR KPIs", "/features/ir-kpis"], ["Supply chain", "/features/supply-chain"], ["Research assistant", "/features/research-assistant"], ["Office Studio", "/features/office-studio"]] },
+    { h: "Coverage", l: [["All companies", "/companies"], ["NVIDIA", "/companies/NVDA"], ["Apple", "/companies/AAPL"], ["Microsoft", "/companies/MSFT"]] },
+    { h: "Get started", l: [["Pricing", "/pricing"], ["Join the waitlist", "/auth?mode=signup"], ["Sign in", "/auth"]] },
   ];
   return (
     <footer className={styles.footer}>
@@ -521,7 +521,7 @@ export function SiteFooter() {
         {cols.map((c) => (
           <nav key={c.h} aria-label={c.h} className={styles.footerCol}>
             <b>{c.h}</b>
-            {c.l.map((x) => <a key={x} href={`#${x.toLowerCase().replace(/\s+/g, "-")}`}>{x}</a>)}
+            {c.l.map(([x, href]) => <a key={x} href={href}>{x}</a>)}
           </nav>
         ))}
       </div>
@@ -530,5 +530,35 @@ export function SiteFooter() {
         <span>Not investment advice. Data from public SEC filings.</span>
       </div>
     </footer>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Platform: links to the public feature pages                         */
+/* ------------------------------------------------------------------ */
+
+export function Platform({ features, companyCount }: { features: { slug: string; name: string; summary: string }[]; companyCount: number }) {
+  return (
+    <Section id="platform">
+      <SectionHead
+        eyebrow="The platform"
+        title={`${companyCount.toLocaleString()} US companies, every number traced to its filing`}
+        body="Open any covered company's sourced financials for free, then explore what members get."
+      />
+      <ul className={styles.principles}>
+        {features.map((f) => (
+          <li key={f.slug}>
+            <b>{f.name}</b>
+            <p>{f.summary}</p>
+            <a href={`/features/${f.slug}`}>Learn more <ArrowRight size={14} aria-hidden="true" /></a>
+          </li>
+        ))}
+        <li>
+          <b>Browse companies</b>
+          <p>Five years of revenue, earnings and cash flow for every covered company, each figure linked to the SEC.</p>
+          <a href="/companies">See all companies <ArrowRight size={14} aria-hidden="true" /></a>
+        </li>
+      </ul>
+    </Section>
   );
 }

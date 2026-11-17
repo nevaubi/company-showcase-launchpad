@@ -4,9 +4,11 @@ import { clips } from "./video-clips";
 import { ProvenanceSection } from "./provenance-demo";
 import { FiledUnderAgentSections } from "./filed-under-agent-sections";
 import {
-  AccuracyPipeline, Faq, Section, SectionHead, SiteFooter, SiteNav, SourcesStrip, VerificationLedger, VideoCta,
+  AccuracyPipeline, Faq, Platform, Section, SectionHead, SiteFooter, SiteNav, SourcesStrip, VerificationLedger, VideoCta,
 } from "./landing-sections";
 import styles from "./landing.module.css";
+import { FEATURES } from "@/lib/features";
+import { PUBLIC_COMPANIES } from "@/lib/public-company";
 
 function Product({ id = "product", tone = "plain" as const }: { id?: string; tone?: "plain" | "sunken" }) {
   return (
@@ -40,6 +42,7 @@ export function LandingVerification() {
         <AccuracyPipeline />
         <VerificationLedger />
         <Product />
+        <Platform features={FEATURES} companyCount={PUBLIC_COMPANIES.length} />
         <Faq />
         <VideoCta
           clip={clips.lakefront}

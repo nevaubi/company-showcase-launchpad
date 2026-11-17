@@ -6,10 +6,10 @@ import { buildPublicSnapshot, isPublicTicker, PUBLIC_TICKERS } from "./public-co
 const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(`src/test/fixtures/companies/${t}.json`, "utf8")));
 
 describe("public sample companies", () => {
-  it("the 78 core companies are public, nothing else", () => {
+  it("every covered company is public, unknown tickers are not", () => {
     expect(["NVDA", "aapl", "BAC", "MSFT"].every(isPublicTicker)).toBe(true);
-    expect(PUBLIC_TICKERS.length).toBe(78);
-    expect(isPublicTicker("FROG")).toBe(false);
+    expect(PUBLIC_TICKERS.length).toBeGreaterThan(1500);
+    expect(isPublicTicker("ZZZZQ")).toBe(false);
   });
   it("every shown value links to an SEC filing", () => {
     const s = buildPublicSnapshot(load("NVDA"));

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { buildPublicSnapshot, isPublicTicker } from "./public-company";
 
-/** Public (no sign-in) snapshot for the three sample companies only; every other ticker is refused. */
+/** Public (no sign-in) snapshot for any covered company; unknown tickers are refused. */
 export const getPublicCompany = createServerFn({ method: "GET" })
   .inputValidator((d: unknown) => z.object({ ticker: z.string().max(10) }).parse(d))
   .handler(async ({ data }) => {

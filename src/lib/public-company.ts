@@ -1,12 +1,19 @@
 // Public sample company pages: a small, sourced snapshot built from the stored SEC dataset.
 // Pure (no Node/browser APIs) so the server function, the page and tests share it.
 import type { CompanyDataset, Statement, StatementKey } from "@/lib/financials/types";
-import { CURATED_COVERAGE } from "@/lib/coverage";
+import { COVERAGE } from "@/lib/coverage";
 
-/** The only companies viewable without signing in: the 78 core (curated) companies. */
-export const PUBLIC_COMPANIES = CURATED_COVERAGE.map((c) => ({ ticker: c.ticker, name: c.shortName, sector: c.sector, industry: c.industry }));
+/** Every covered company has a public, indexable snapshot page. */
+export const PUBLIC_COMPANIES = COVERAGE.map((c) => ({ ticker: c.ticker, name: c.shortName, sector: c.sector, industry: c.industry }));
 export const PUBLIC_TICKERS = PUBLIC_COMPANIES.map((c) => c.ticker);
 const NAMES = new Map(PUBLIC_COMPANIES.map((c) => [c.ticker, c.name]));
+const BY_T = new Map(PUBLIC_COMPANIES.map((c) => [c.ticker, c]));
+/** Same-industry companies for internal links between public pages. */
+export function publicPeers(ticker: string, n = 8) {
+  const me = BY_T.get(ticker.toUpperCase());
+  if (!me) return [];
+  return PUBLIC_COMPANIES.filter((c) => c.ticker !== me.ticker && c.industry === me.industry).slice(0, n);
+}
 /** Featured on the index and as quick links. */
 export const FEATURED_TICKERS = ["NVDA", "AAPL", "BAC"];
 

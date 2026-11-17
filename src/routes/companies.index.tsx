@@ -9,8 +9,8 @@ export const Route = createFileRoute("/companies/")({
   head: () => ({
     meta: [
       { title: "Company financials sourced to SEC filings — Filed Under" },
-      { name: "description", content: "Revenue, earnings and cash flow for 78 large US companies, every number linked to the SEC filing it came from." },
-      { property: "og:title", content: "78 US companies, every number linked to its SEC filing" },
+      { name: "description", content: "Revenue, earnings and cash flow for every covered US public company, every number linked to the SEC filing it came from." },
+      { property: "og:title", content: "US company financials, every number linked to its SEC filing" },
       { property: "og:description", content: "Five years of revenue, earnings and cash flow, sourced to SEC filings." },
       { property: "og:type", content: "website" },
       { property: "og:url", content: URL },
@@ -32,7 +32,7 @@ function CompaniesIndex() {
         <p className="eyebrow">Companies</p>
         <h1 className="mt-4 font-display text-5xl leading-tight">Every number, linked to its filing.</h1>
         <p className="mt-4 max-w-2xl text-muted-foreground">
-          Five years of results for {PUBLIC_COMPANIES.length} large US companies. Click any figure to open the SEC filing it came from.
+          Five years of results for {PUBLIC_COMPANIES.length.toLocaleString()} US public companies. Click any figure to open the SEC filing it came from.
         </p>
         <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {sectors.map(([sector, list]) => (

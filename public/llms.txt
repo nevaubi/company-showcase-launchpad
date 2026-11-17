@@ -6,7 +6,7 @@ Filed Under builds company financials directly from SEC EDGAR (XBRL facts, 10-K,
 
 ## Pages
 
-- [Companies](https://filedunder.ai/companies): Index of the 78 covered US companies by sector.
+- [Companies](https://filedunder.ai/companies): Index of every covered US public company (~1,800) by sector, each with a sourced financials page at /companies/TICKER.
 - [NVIDIA (NVDA)](https://filedunder.ai/companies/NVDA): Annual results sourced to SEC filings.
 - [Apple (AAPL)](https://filedunder.ai/companies/AAPL): Annual results sourced to SEC filings.
 - [Pricing](https://filedunder.ai/pricing): Free trial, Research and Pro plans.

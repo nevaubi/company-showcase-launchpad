@@ -4,7 +4,7 @@ import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
 import { Button } from "@/components/ui/button";
 import { fmtCompactUsd, fmtValueLong } from "@/lib/format";
 import { getPublicCompany } from "@/lib/public-company.functions";
-import { FEATURED_TICKERS } from "@/lib/public-company";
+import { FEATURED_TICKERS, publicPeers } from "@/lib/public-company";
 
 const SITE = "https://filedunder.ai";
 
@@ -45,6 +45,16 @@ export const Route = createFileRoute("/companies/$ticker")({
               creator: { "@type": "Organization", name: "Filed Under", url: SITE },
               isBasedOn: "https://www.sec.gov/edgar",
               about: { "@type": "Corporation", name, tickerSymbol: t },
+            }),
+          }, {
+            type: "application/ld+json",
+            children: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "BreadcrumbList",
+              itemListElement: [
+                { "@type": "ListItem", position: 1, name: "Companies", item: `${SITE}/companies` },
+                { "@type": "ListItem", position: 2, name: `${name} (${t})`, item: url },
+              ],
             }),
           }]
         : [],
@@ -150,6 +160,18 @@ function PublicCompany() {
             <Button asChild size="lg" className="mt-6 w-full"><Link to="/auth" search={{ mode: "signup" }}>Join the waitlist</Link></Button>
           </section>
         </div>
+        {publicPeers(s.ticker).length > 0 && (
+          <section className="mt-6 min-w-0 rounded-xl border bg-card">
+            <h2 className="border-b px-5 py-4 text-base font-semibold">Similar companies</h2>
+            <div className="flex flex-wrap gap-2 p-5">
+              {publicPeers(s.ticker).map((c) => (
+                <Link key={c.ticker} to="/companies/$ticker" params={{ ticker: c.ticker }} className="rounded border px-2.5 py-1 text-sm hover:bg-muted/50">
+                  <span className="num font-medium">{c.ticker}</span> <span className="text-muted-foreground">{c.name}</span>
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
       </main>
       <SiteFooter />
     </div>

@@ -18,6 +18,7 @@ import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as CompaniesIndexRouteImport } from './routes/companies.index'
 import { Route as CompaniesTickerRouteImport } from './routes/companies.$ticker'
+import { Route as FeaturesSlugRouteImport } from './routes/features.$slug'
 import { Route as ShareIdRouteImport } from './routes/share.$id'
 import { Route as AuthenticatedAppIndexRouteImport } from './routes/_authenticated/app.index'
 import { Route as AuthenticatedAppAdminRouteImport } from './routes/_authenticated/app.admin'
@@ -128,6 +129,11 @@ const CompaniesIndexRoute = CompaniesIndexRouteImport.update({
 const CompaniesTickerRoute = CompaniesTickerRouteImport.update({
   id: '/companies/$ticker',
   path: '/companies/$ticker',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FeaturesSlugRoute = FeaturesSlugRouteImport.update({
+  id: '/features/$slug',
+  path: '/features/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShareIdRoute = ShareIdRouteImport.update({
@@ -517,6 +523,7 @@ export interface FileRoutesByFullPath {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/companies/$ticker': typeof CompaniesTickerRoute
+  '/features/$slug': typeof FeaturesSlugRoute
   '/share/$id': typeof ShareIdRoute
   '/companies/': typeof CompaniesIndexRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
@@ -593,6 +600,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/companies/$ticker': typeof CompaniesTickerRoute
+  '/features/$slug': typeof FeaturesSlugRoute
   '/share/$id': typeof ShareIdRoute
   '/companies': typeof CompaniesIndexRoute
   '/app/admin': typeof AuthenticatedAppAdminRoute
@@ -670,6 +678,7 @@ export interface FileRoutesById {
   '/sitemap.xml': typeof SitemapDotxmlRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/companies/$ticker': typeof CompaniesTickerRoute
+  '/features/$slug': typeof FeaturesSlugRoute
   '/share/$id': typeof ShareIdRoute
   '/companies/': typeof CompaniesIndexRoute
   '/_authenticated/app/admin': typeof AuthenticatedAppAdminRoute
@@ -749,6 +758,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/app'
     | '/companies/$ticker'
+    | '/features/$slug'
     | '/share/$id'
     | '/companies/'
     | '/app/admin'
@@ -825,6 +835,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sitemap.xml'
     | '/companies/$ticker'
+    | '/features/$slug'
     | '/share/$id'
     | '/companies'
     | '/app/admin'
@@ -901,6 +912,7 @@ export interface FileRouteTypes {
     | '/sitemap.xml'
     | '/_authenticated/app'
     | '/companies/$ticker'
+    | '/features/$slug'
     | '/share/$id'
     | '/companies/'
     | '/_authenticated/app/admin'
@@ -979,6 +991,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   CompaniesTickerRoute: typeof CompaniesTickerRoute
+  FeaturesSlugRoute: typeof FeaturesSlugRoute
   ShareIdRoute: typeof ShareIdRoute
   CompaniesIndexRoute: typeof CompaniesIndexRoute
   ApiPublicJobsJobRoute: typeof ApiPublicJobsJobRoute
@@ -1050,6 +1063,13 @@ declare module '@tanstack/react-router' {
       path: '/companies/$ticker'
       fullPath: '/companies/$ticker'
       preLoaderRoute: typeof CompaniesTickerRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/features/$slug': {
+      id: '/features/$slug'
+      path: '/features/$slug'
+      fullPath: '/features/$slug'
+      preLoaderRoute: typeof FeaturesSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/share/$id': {
@@ -1711,6 +1731,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   CompaniesTickerRoute: CompaniesTickerRoute,
+  FeaturesSlugRoute: FeaturesSlugRoute,
   ShareIdRoute: ShareIdRoute,
   CompaniesIndexRoute: CompaniesIndexRoute,
   ApiPublicJobsJobRoute: ApiPublicJobsJobRoute,
