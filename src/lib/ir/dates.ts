@@ -53,14 +53,19 @@ const isMonthEnd = (d: string) => {
 
 /**
  * A period end the document never prints, sitting on a calendar month-end, is a guess: when the
- * document prints exactly one period-end date within ten days of it, that date is the period end.
+ * document prints exactly one period-end date from 16 days before to 6 days after it, that date is the period end.
  * Pass `printedDates(text, true)` so a dateline or call date is never taken for a period end.
  * Returns the corrected date, or the original when there's no single printed candidate.
  */
 export function fixPeriodEnd(end: string, printed: Set<string>): string {
   if (printed.has(end) || !isMonthEnd(end)) return end;
   const t = Date.parse(`${end}T00:00:00Z`);
-  const near = [...printed].filter((d) => Math.abs(Date.parse(`${d}T00:00:00Z`) - t) <= 10 * DAY && d !== end);
+  // 52/53-week periods end up to ~2 weeks before the month-end (Marriott's 12-week quarter to June 15)
+  // or a few days after it (Kroger's to February 1); "through July 10" ten days later is not one.
+  const near = [...printed].filter((d) => {
+    const gap = Date.parse(`${d}T00:00:00Z`) - t;
+    return gap >= -16 * DAY && gap <= 6 * DAY && d !== end;
+  });
   return near.length === 1 ? near[0] : end;
 }
 

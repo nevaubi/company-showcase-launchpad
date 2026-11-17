@@ -25,7 +25,7 @@ describe("period-end dates printed in a document", () => {
     // a calendar-quarter company: the month-end itself is printed
     expect(fixPeriodEnd("2026-09-30", printedDates("three months ended September 30, 2026"))).toBe("2026-09-30");
     // two printed dates within ten days: no single answer
-    expect(fixPeriodEnd("2025-11-30", printedDates("weeks ended November 23, 2025 and weeks ended December 7, 2025", true))).toBe("2025-11-30");
+    expect(fixPeriodEnd("2025-11-30", printedDates("weeks ended November 16, 2025 and weeks ended November 23, 2025", true))).toBe("2025-11-30");
   });
   it("shifts the start with the end, so the period keeps its length", () => {
     const r = fixRowDates({ period_start: "2025-09-08", period_end: "2025-11-30", months: 3, period_label: "3M ending 2025-11-30" }, printedDates(COSTCO, true));
@@ -39,3 +39,11 @@ describe("table headers", () => {
     expect([...d].sort()).toEqual(["2025-08-31", "2026-08-30"]);
   });
 });
+
+describe("52/53-week windows", () => {
+  it("takes a period end two weeks before the guessed month-end, never a 'through' date after it", () => {
+    const d = printedDates("year-to-date, through July 10, 2007, the company repurchased shares. In the 2007 second quarter (12 week period from March 24, 2007 to June 15, 2007). Twelve Weeks Ended June 15, 2007 June 16, 2006", true);
+    expect(fixPeriodEnd("2007-06-30", d)).toBe("2007-06-15");
+  });
+});
+
