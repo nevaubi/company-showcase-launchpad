@@ -65,3 +65,39 @@ export function companyExposureText(index: ExposureIndex, ticker: string, names:
   if (c.bank) out.push(`Loan book: ${bankLine(ticker, names.get(ticker) ?? "", c.bank)}`);
   return out.join("\n");
 }
+
+interface DepositRow {
+  ticker: string;
+  date: string | null;
+  title: string;
+  value: number | null;
+  meta: Record<string, any>;
+  source_url: string | null;
+}
+
+/** Covered banks' deposits in one state (FDIC Summary of Deposits), largest first, with share of the state and 1-year change. */
+export function stateDepositsText(rows: DepositRow[], latest: string, state: string, names: Map<string, string>, limit = 40): string {
+  const st = state.trim().toUpperCase();
+  const now = rows.filter((r) => r.date === latest && r.meta?.state === st).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+  if (!now.length) return `No covered bank reports branch deposits in ${st} in the June ${latest.slice(0, 4)} FDIC survey. Use a two-letter state code.`;
+  const prev = new Map(rows.filter((r) => r.date !== latest && r.meta?.state === st).map((r) => [r.ticker, r.value ?? 0]));
+  const total = now[0].meta.state_total as number | undefined;
+  const sum = now.reduce((n, r) => n + (r.value ?? 0), 0);
+  const lines = now.slice(0, limit).map((r) => {
+    const p = prev.get(r.ticker);
+    const yr = !p ? "n/a" : p < (r.value ?? 0) * 0.05 ? `new to the state (was ${usd(p)})` : pct((r.value ?? 0) / p - 1, 1);
+    return `${r.ticker} ${names.get(r.ticker) ?? ""} · ${usd(r.value ?? 0)} in ${r.meta.branches} branches · ${pct(r.meta.market_share, 1)} of the state's deposits · ${pct(r.meta.share, 1)} of the bank's · 1-yr ${yr} · ${r.source_url}`;
+  });
+  return `Deposits in ${st} held by covered banks, FDIC Summary of Deposits June 30 ${latest.slice(0, 4)} (all insured deposits in the state: ${total ? usd(total) : "n/a"}; covered banks together ${total ? pct(sum / total, 1) : "n/a"}). Branch deposits are booked where the account is kept, so online banks concentrate in their home state.\n${lines.join("\n")}`;
+}
+
+/** One bank's largest states and metros (latest survey). */
+export function bankStatesText(rows: DepositRow[], ticker: string): string | null {
+  const mine = rows.filter((r) => r.ticker === ticker);
+  const latest = mine.map((r) => r.date ?? "").sort().at(-1);
+  if (!latest) return null;
+  const total = mine.find((r) => r.date === latest && !r.meta?.state);
+  const states = mine.filter((r) => r.date === latest && r.meta?.state).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+  const metros = ((total?.meta?.metros ?? []) as { name: string; value: number; share: number }[]).slice(0, 6);
+  return `Branch deposits June ${latest.slice(0, 4)} (FDIC): ${total ? usd(total.value ?? 0) : "n/a"} in ${states.length} states — ${states.slice(0, 8).map((r) => `${r.meta.state} ${pct(r.meta.share, 1)} of the bank (${pct(r.meta.market_share, 1)} of the state)`).join(", ")}${metros.length ? `; largest metros: ${metros.map((m) => `${m.name} ${pct(m.share, 0)}`).join(", ")}` : ""} · ${total?.source_url ?? ""}`;
+}

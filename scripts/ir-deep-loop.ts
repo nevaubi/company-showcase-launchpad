@@ -45,6 +45,7 @@ interface LoopState {
   done: string[];
   lastMirror: string | null;
   lastDetail?: string | null;
+  lastSod?: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
   /** unread files a company had when it finished; more than a few new ones later = revisit */
@@ -142,6 +143,20 @@ async function maybeDetail() {
   });
 }
 
+// ---------- background FDIC branch survey ----------
+/** The FDIC publishes each June 30 Summary of Deposits once a year (autumn); check weekly, import only when a new year is out. */
+let sodChecking = false;
+async function maybeSod() {
+  if (sodChecking) return;
+  if (state.lastSod && Date.now() - Date.parse(state.lastSod) < 7 * 86_400_000) return;
+  sodChecking = true;
+  state.lastSod = new Date().toISOString();
+  await saveState(state);
+  void run("scripts/gov-data.ts", ["--sod", "--if-new"], `${OUT}/sod.log`).finally(() => {
+    sodChecking = false;
+  });
+}
+
 // ---------- main loop ----------
 /** A deep build started by hand (or a previous loop) shares the readers' leases: wait for it. */
 function deepRunning() {
@@ -160,6 +175,7 @@ let creditStop = false;
 for (let cycle = 1; ; cycle++) {
   await maybeMirror();
   await maybeDetail();
+  await maybeSod();
   // 1. Companies this loop started whose run never reached its final report.
   const resume: string[] = [];
   state.resumes ??= {};

@@ -143,8 +143,12 @@ if (args.sod !== undefined) {
   const newest = Number((await fdicJson(`${SOD_API}?filters=CERT:3511&fields=YEAR&sort_by=YEAR&sort_order=DESC&limit=1`)).data?.[0]?.data?.YEAR);
   if (!newest) throw new Error("could not read the latest Summary of Deposits year");
   const { data: st } = await sb.from("job_state").select("cursor").eq("job", "gov-sod").maybeSingle();
+  // Full runs (and weekly up-to-date checks) show on the admin freshness page as job "gov-sod".
+  const record = args.dry === undefined && !args.tickers;
+  const { data: run } = record ? await sb.from("job_runs").insert({ job: "gov-sod" }).select("id").single() : { data: null };
   if (args["if-new"] !== undefined && (st?.cursor ?? 0) >= newest) {
     log(`Summary of Deposits up to date (${newest})`);
+    if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: true, items: 0, detail: { note: `up to date through June ${newest}` } }).eq("id", run.id);
   } else {
     const { data: regFile } = await sb.storage.from("datasets").download(REGISTRY_PATH);
     const reg = (regFile ? JSON.parse(await regFile.text()) : {}) as Record<string, AltRegistryEntry>;
@@ -172,6 +176,7 @@ if (args.sod !== undefined) {
       if (++done % 10 === 0 || only) log(`  ${done}/${list.length} ${b.ticker} (${e.name}) ${out.length} rows`);
     }
     if (args.dry === undefined && !only) await sb.from("job_state").upsert({ job: "gov-sod", cursor: newest, updated_at: new Date().toISOString() });
+    if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: true, items: rows, detail: { banks: done, year: newest } }).eq("id", run.id);
     log(`Summary of Deposits done: ${rows} rows for ${done} banks`);
   }
 }

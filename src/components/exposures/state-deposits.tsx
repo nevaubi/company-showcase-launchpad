@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { Empty } from "@/components/app/page-header";
-import { EvidenceButton } from "@/components/source/evidence-button";
+import { useSource } from "@/components/source/source-context";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UsTileMap } from "@/components/alt/us-tile-map";
@@ -22,6 +22,7 @@ const pct = (v: number | null | undefined, d = 1) => (v == null || !Number.isFin
 export function StateDeposits() {
   const q = useQuery(depositsByStateQuery());
   const uni = useUniverse();
+  const { open } = useSource();
   const [st, setSt] = useSessionState("fu:exposures:state", "TX");
   const [sort, setSort] = useState<{ c: Col; d: 1 | -1 }>({ c: "value", d: -1 });
   const byTk = useMemo(() => new Map((uni.data?.companies ?? []).map((c) => [c.ticker, c])), [uni.data]);
@@ -46,7 +47,9 @@ export function StateDeposits() {
       .filter((r) => r.meta.state === st)
       .map((r) => {
         const p = v.prev.get(`${r.ticker}|${st}`);
-        return { r, change: p?.value ? (r.value ?? 0) / p.value - 1 : null };
+        // A prior balance under 5% of today's is an entry into the state (an acquisition), not growth.
+        const fresh = !!p?.value && p.value < (r.value ?? 0) * 0.05;
+        return { r, change: p?.value && !fresh ? (r.value ?? 0) / p.value - 1 : null, fresh, prior: p?.value ?? null };
       });
     const val = (x: { r: AltRow; change: number | null }): number | string | null => (sort.c === "t" ? x.r.ticker : sort.c === "value" ? x.r.value : sort.c === "market" ? (x.r.meta.market_share ?? null) : sort.c === "branches" ? x.r.meta.branches : sort.c === "share" ? x.r.meta.share : x.change);
     return list.sort((a, b) => {
@@ -61,6 +64,7 @@ export function StateDeposits() {
   if (q.isLoading) return <Skeleton className="mt-4 h-[520px]" />;
   if (!v.latest || !v.now.length) return <Empty title="Deposit data is loading">The FDIC branch survey is still being imported.</Empty>;
   const s = v.perState.get(st);
+  const largest = rows.reduce<AltRow | null>((m, x) => (!m || (x.r.value ?? 0) > (m.value ?? 0) ? x.r : m), null);
   const year = v.latest.slice(0, 4);
   const states = [...v.perState.keys()].sort((a, b) => (STATES[a] ?? a).localeCompare(STATES[b] ?? b));
 
@@ -74,7 +78,7 @@ export function StateDeposits() {
   );
 
   return (
-    <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]" data-section="Deposits by state">
+    <div className="mt-4 grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,300px)_minmax(0,1fr)]" data-section="Deposits by state">
       <div className="min-w-0">
         <Select value={st} onValueChange={setSt}>
           <SelectTrigger aria-label="State" className="mb-2 h-8 w-full text-xs">
@@ -96,19 +100,20 @@ export function StateDeposits() {
           }}
           selected={st}
           onSelect={setSt}
+          scale="linear"
         />
         <p className="mt-2 text-[11px] text-muted-foreground">Shaded by the share of each state's deposits held by covered banks. Pick a state.</p>
       </div>
       <div className="min-w-0">
         <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
-          <Stat label={`${STATES[st] ?? st} deposits, Jun ${year}`} value={fmtAlt(s?.total || null, "USD")} hint="all FDIC-insured branches" />
+          <Stat label={`All deposits in ${st}`} value={fmtAlt(s?.total || null, "USD")} hint={`June ${year}, every insured branch`} />
           <Stat label="Covered banks there" value={String(s?.n ?? 0)} />
           <Stat label="Their combined share" value={pct(s && s.total ? s.sum / s.total : null)} />
-          <Stat label="Largest" value={rows[0] && sort.c === "value" && sort.d === -1 ? rows[0].r.ticker : (rows.slice().sort((a, b) => (b.r.value ?? 0) - (a.r.value ?? 0))[0]?.r.ticker ?? "—")} hint={rows.length ? pct(rows.slice().sort((a, b) => (b.r.value ?? 0) - (a.r.value ?? 0))[0].r.meta.market_share) + " of the state" : undefined} />
+          <Stat label="Largest covered bank" value={largest?.ticker ?? "—"} hint={largest ? `${pct(largest.meta.market_share)} of the state` : undefined} />
         </div>
         <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full min-w-[640px] border-separate border-spacing-0 text-[13px]">
+            <table className="w-full min-w-[520px] border-separate border-spacing-0 text-[13px]">
               <thead>
                 <tr>
                   <th className="sticky left-0 top-0 z-30 border-b border-r bg-card px-3 py-2 text-left">
@@ -121,27 +126,35 @@ export function StateDeposits() {
                   <Th c="branches">Branches</Th>
                   <Th c="share" title="The state's share of the bank's own branch deposits">Of bank</Th>
                   <Th c="change" title={`Vs June ${Number(year) - 1}`}>1-yr change</Th>
-                  <th className="sticky top-0 z-20 border-b bg-card px-2 py-2" />
                 </tr>
               </thead>
               <tbody>
-                {rows.map(({ r, change }) => (
+                {rows.map(({ r, change, fresh, prior }) => (
                   <tr key={r.uid} className="group">
-                    <td className="sticky left-0 z-10 max-w-52 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary">
-                      <span className="flex items-center gap-2">
+                    <td className="sticky left-0 z-10 max-w-48 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary">
+                      <span className="flex items-center gap-2" title={byTk.get(r.ticker)?.name}>
                         <CompanyLogo ticker={r.ticker} className="size-5" />
                         <Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="num font-medium hover:underline">
                           {r.ticker}
                         </Link>
-                        <span className="hidden truncate text-xs text-muted-foreground sm:inline" title={byTk.get(r.ticker)?.name}>
+                        <span className="hidden truncate text-xs text-muted-foreground 2xl:inline" title={byTk.get(r.ticker)?.name}>
                           {byTk.get(r.ticker)?.name}
                         </span>
                       </span>
                     </td>
-                    <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary">{fmtAlt(r.value, "USD")}</td>
+                    <td className="border-b px-3 py-1.5 text-right group-hover:bg-secondary">
+                      <button
+                        type="button"
+                        className="num whitespace-nowrap tabular-nums hover:underline"
+                        title="Open the FDIC record"
+                        onClick={() => r.source_url && open({ ticker: r.ticker, label: `${r.ticker} deposits in ${STATES[st] ?? st}, June ${year}`, unit: "usd", value: r.value ?? 0, external: { url: r.source_url, date: r.date ?? undefined } })}
+                      >
+                        {fmtAlt(r.value, "USD")}
+                      </button>
+                    </td>
                     <td className="border-b px-3 py-1.5 group-hover:bg-secondary">
                       <span className="flex items-center justify-end gap-2">
-                        <span className="h-1.5 w-20 overflow-hidden rounded-full bg-secondary">
+                        <span className="hidden h-1.5 w-14 overflow-hidden rounded-full bg-secondary sm:block">
                           <span className="block h-full rounded-full bg-foreground/70" style={{ width: `${Math.min(100, (r.meta.market_share ?? 0) * 100)}%` }} />
                         </span>
                         <span className="num w-12 text-right tabular-nums">{pct(r.meta.market_share)}</span>
@@ -149,8 +162,9 @@ export function StateDeposits() {
                     </td>
                     <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary">{r.meta.branches?.toLocaleString()}</td>
                     <td className="num border-b px-3 py-1.5 text-right tabular-nums text-muted-foreground group-hover:bg-secondary">{pct(r.meta.share)}</td>
-                    <td className={cn("num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary", change != null && change < 0 && "text-negative")}>{change == null ? "—" : `${change >= 0 ? "+" : ""}${(change * 100).toFixed(1)}%`}</td>
-                    <td className="border-b px-1 text-right group-hover:bg-secondary">{r.source_url && <EvidenceButton ticker={r.ticker} title={`${r.ticker} deposits in ${STATES[st] ?? st}, June ${year}`} url={r.source_url} date={r.date ?? undefined} />}</td>
+                    <td className={cn("num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary", change != null && change < 0 && "text-negative", fresh && "text-muted-foreground")} title={prior != null ? `June ${Number(year) - 1}: ${fmtAlt(prior, "USD")}` : undefined}>
+                      {fresh ? "new" : change == null ? "—" : `${change >= 0 ? "+" : ""}${(change * 100).toFixed(1)}%`}
+                    </td>
                   </tr>
                 ))}
               </tbody>

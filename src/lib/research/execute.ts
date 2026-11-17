@@ -40,7 +40,8 @@ import { searchDocuments } from "@/lib/ir/search";
 import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { exposureIndexQuery, filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
-import { companyExposureText, lendersText, regionText } from "@/lib/xbrl/exposure-text";
+import { bankStatesText, companyExposureText, lendersText, regionText, stateDepositsText } from "@/lib/xbrl/exposure-text";
+import { depositsByStateQuery } from "@/lib/alt/query";
 import { detailText, type DetailSection } from "@/lib/xbrl/text";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -624,14 +625,22 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       return { output: clip(text), summary: `${t} filing detail${section ? ` · ${section}` : ""}`, refs: d ? [{ ticker: t, accn: d.accn, doc: d.doc, label: d.form }] : undefined };
     }
     case "get_exposures": {
-      const index = await qc.fetchQuery(exposureIndexQuery);
-      if (!index) return { output: "The exposure index has not been built yet.", summary: "no exposure index" };
       const uni = await qc.fetchQuery(universeQuery);
       const names = new Map(uni.companies.map((c) => [c.ticker, c.name]));
       const limit = Math.min(120, Number(args.limit) || 40);
+      if (args.view === "deposits") {
+        const dep = await qc.fetchQuery(depositsByStateQuery());
+        if (!dep.latest) return { output: "FDIC deposit data has not been imported yet.", summary: "no deposit data" };
+        const st = String(args.region ?? "").toUpperCase();
+        return { output: clip(stateDepositsText(dep.rows, dep.latest, st, names, limit)), summary: `${st} deposits by bank` };
+      }
+      const index = await qc.fetchQuery(exposureIndexQuery);
+      if (!index) return { output: "The exposure index has not been built yet.", summary: "no exposure index" };
       if (args.view === "company") {
         const t = String(args.ticker ?? "").toUpperCase();
-        return { output: clip(companyExposureText(index, t, names)), summary: `${t} exposures` };
+        const dep = await qc.fetchQuery(depositsByStateQuery()).catch(() => null);
+        const states = dep ? bankStatesText(dep.rows, t) : null;
+        return { output: clip([companyExposureText(index, t, names), states].filter(Boolean).join("\n")), summary: `${t} exposures` };
       }
       if (args.view === "lenders") {
         const industries = new Map(uni.companies.map((c) => [c.ticker, c.industry]));

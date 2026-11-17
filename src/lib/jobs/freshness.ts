@@ -20,6 +20,8 @@ export const SOURCES: FreshnessSource[] = [
   { job: "gov-data", label: "Fails to deliver (SEC)", everyMin: 360 },
   // Script-run (ir-deep-loop, every 12 h): re-reads 10-K/10-Q breakdowns only for companies with a new filing.
   { job: "xbrl-detail", label: "Filing detail (10-K/10-Q breakdowns)", everyMin: 720 },
+  // Script-run weekly by ir-deep-loop: imports the FDIC's yearly June 30 branch survey once it is published.
+  { job: "gov-sod", label: "Bank deposits by state (FDIC)", everyMin: 7 * 1440 },
 ];
 
 export interface Run {

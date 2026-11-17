@@ -147,3 +147,16 @@ describe("assistant exposure text", () => {
     expect(l).toContain("filing:B:0002-26-1:x.htm");
   });
 });
+
+import { stateDepositsText } from "./exposure-text";
+describe("state deposits text", () => {
+  it("ranks banks in a state with market share, 1-year change and the FDIC link", () => {
+    const row = (ticker: string, date: string, value: number, meta: Record<string, unknown>) => ({ ticker, date, title: "Deposits · TX", value, meta: { state: "TX", ...meta }, source_url: `https://api.fdic.gov/banks/sod?${ticker}` });
+    const rows = [row("JPM", "2026-06-30", 300e9, { branches: 500, market_share: 0.2, share: 0.1, state_total: 1500e9 }), row("WFC", "2026-06-30", 150e9, { branches: 400, market_share: 0.1, share: 0.1, state_total: 1500e9 }), row("JPM", "2025-06-30", 250e9, {})];
+    const t = stateDepositsText(rows, "2026-06-30", "tx", new Map());
+    expect(t.indexOf("JPM")).toBeLessThan(t.indexOf("WFC"));
+    expect(t).toContain("covered banks together 30.0%");
+    expect(t).toContain("1-yr 20.0%");
+    expect(t).toContain("https://api.fdic.gov/banks/sod?JPM");
+  });
+});

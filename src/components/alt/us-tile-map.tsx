@@ -16,13 +16,15 @@ const TILES: Record<string, [number, number]> = {
  * Shades each state by `value` (0–1, relative to the largest); `label` prints under the code.
  * Colors come from the foreground token so the map follows the theme.
  */
-export function UsTileMap({ values, label, title, selected, onSelect, className }: { values: Record<string, number>; label?: (st: string) => string | null; title?: (st: string) => string; selected?: string | null; onSelect?: (st: string) => void; className?: string }) {
-  const max = Math.max(0, ...Object.values(values));
+export function UsTileMap({ values, label, title, selected, onSelect, className, scale = "sqrt" }: { values: Record<string, number>; label?: (st: string) => string | null; title?: (st: string) => string; selected?: string | null; onSelect?: (st: string) => void; className?: string; /** sqrt spreads small shares apart; linear (between the smallest and largest value) suits values that are all large */ scale?: "sqrt" | "linear" }) {
+  const vals = Object.values(values).filter((x) => x > 0);
+  const max = Math.max(0, ...vals);
+  const min = Math.min(max, ...vals);
   return (
     <div className={cn("grid w-full max-w-[560px] grid-cols-11 gap-[3px]", className)} role="list" aria-label="Map of US states">
       {Object.entries(TILES).map(([st, [r, c]]) => {
         const v = values[st] ?? 0;
-        const t = max > 0 ? Math.sqrt(v / max) : 0;
+        const t = max <= 0 || v <= 0 ? 0 : scale === "linear" ? (max > min ? 0.1 + (0.9 * (v - min)) / (max - min) : 1) : Math.sqrt(v / max);
         const text = label?.(st);
         const Tag = onSelect ? "button" : "div";
         return (

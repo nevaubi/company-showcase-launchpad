@@ -240,4 +240,5 @@
 - [x] Assistant: get_setups (tonight's setups + strategy scoreboard with gate checks) and get_autopilots (paper bots vs SPY), with instructions to label watch-only ideas
 - [x] Cross-company Exposures page: revenue by country/region (share, ~3-year change) and every lender's loans, deposits, charge-offs, allowance and nonaccrual from 10-K tags, click-to-source; assistant `get_exposures`
 - [ ] Exposures: insurer view (premiums by line and state, reserves) once insurer tables are read
-- [ ] Exposures: US-state revenue/loan exposure view (state-axis tables are already stored)
+- [x] Exposures: bank deposits by state and metro (FDIC Summary of Deposits, 117 banks, 2021–2026) — company tile map + state ranking + assistant
+- [ ] Exposures: state-level revenue for non-banks is rarely tagged in 10-Ks (~8% of filings carry any state rows, mostly properties/PP&E); revisit with utilities (EIA, needs key) and insurers (premiums by state)

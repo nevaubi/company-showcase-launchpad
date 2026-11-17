@@ -34,7 +34,7 @@ export function DepositsByState({ ticker, rows }: { ticker: string; rows: AltRow
   const pick = sel ? now.get(sel) : null;
 
   return (
-    <div className="grid grid-cols-1 gap-4 p-3.5 lg:grid-cols-[minmax(0,560px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-4 p-3.5 xl:grid-cols-[minmax(0,460px)_minmax(0,1fr)]">
       <div className="min-w-0">
         <div className="mb-3 grid grid-cols-3 gap-px overflow-hidden rounded-md border bg-border text-[12px]">
           <div className="bg-card px-2.5 py-1.5"><p className="text-[11px] text-muted-foreground">Branch deposits, Jun {y}</p><p className="num font-semibold">{fmtAlt(total?.value ?? null, "USD")}</p></div>
@@ -43,7 +43,10 @@ export function DepositsByState({ ticker, rows }: { ticker: string; rows: AltRow
         </div>
         <UsTileMap
           values={Object.fromEntries(states.map((r) => [r.meta.state, r.meta.share ?? 0]))}
-          label={(st) => (now.get(st) ? pct(now.get(st)!.meta.share, 0) : null)}
+          label={(st) => {
+            const x = now.get(st)?.meta.share as number | undefined;
+            return x == null ? null : x < 0.005 ? "<1%" : pct(x, 0);
+          }}
           title={(st) => {
             const r = now.get(st);
             return r ? `${STATES[st] ?? st}: ${fmtAlt(r.value, "USD")} · ${pct(r.meta.share)} of the bank's deposits · ${pct(r.meta.market_share)} of the state's · ${r.meta.branches} branches` : `${STATES[st] ?? st}: no branches`;
@@ -78,15 +81,17 @@ export function DepositsByState({ ticker, rows }: { ticker: string; rows: AltRow
             <tbody>
               {shown.map((r) => {
                 const old = then.get(r.meta.state);
-                const g = old?.value ? (r.value ?? 0) / old.value - 1 : null;
+                // under 5% of today's balance back then = it entered the state (an acquisition), not growth
+                const entered = !old || old.value == null || old.value < (r.value ?? 0) * 0.05;
+                const g = !entered ? (r.value ?? 0) / old!.value! - 1 : null;
                 return (
                   <tr key={r.uid} className={cn("border-b last:border-0", sel === r.meta.state && "bg-secondary")} onMouseEnter={() => setSel(r.meta.state)}>
-                    <td className="px-2 py-1.5"><span className="num font-medium">{r.meta.state}</span> <span className="text-[11px] text-muted-foreground">{STATES[r.meta.state]}</span></td>
+                    <td className="px-2 py-1.5"><span className="num font-medium">{r.meta.state}</span> <span className="hidden text-[11px] text-muted-foreground sm:inline">{STATES[r.meta.state]}</span></td>
                     <td className="num px-2 text-right">{fmtAlt(r.value, "USD")}</td>
                     <td className="num px-2 text-right">{pct(r.meta.share)}</td>
                     <td className="num px-2 text-right">{pct(r.meta.market_share)}</td>
                     <td className="num px-2 text-right">{r.meta.branches?.toLocaleString()}</td>
-                    <td className={cn("num px-2 text-right", g == null ? "text-muted-foreground" : g < 0 ? "text-negative" : "")}>{g == null ? (old ? "—" : "new") : `${g >= 0 ? "+" : ""}${(g * 100).toFixed(0)}%`}</td>
+                    <td className={cn("num px-2 text-right", entered ? "text-muted-foreground" : g! < 0 ? "text-negative" : "")} title={old?.value != null ? `June ${y0}: ${fmtAlt(old.value, "USD")}` : undefined}>{entered ? "new" : `${g! >= 0 ? "+" : ""}${(g! * 100).toFixed(0)}%`}</td>
                     <td className="px-1 text-right">{r.source_url && <EvidenceButton ticker={ticker} title={`${ticker} deposits in ${STATES[r.meta.state] ?? r.meta.state}, June ${y}`} url={r.source_url} date={r.date ?? undefined} />}</td>
                   </tr>
                 );
