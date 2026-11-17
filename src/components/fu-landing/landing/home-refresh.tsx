@@ -6,6 +6,7 @@ import irShot from "@/assets/landing/nvidia_ir.webp.asset.json";
 import valuationShot from "@/assets/landing/nvidia_valuation.webp.asset.json";
 import type { LandingStats } from "@/lib/landing-stats.functions";
 import s from "./home-refresh.module.css";
+import { FactoryDiagram } from "./factory-diagram";
 
 /* ---------- Live platform counts ---------- */
 
@@ -177,15 +178,15 @@ export function AiFactory() {
         Filed Under isn't one chatbot. It's an automated pipeline of specialized agents that collect, read, cross-check and
         verify financial documents around the clock, with evaluation gates between every stage.
       </p>
+      <FactoryDiagram />
       <ol className={s.factory} style={{ listStyle: "none", padding: 0 }}>
         {STAGES.map((x, k) => (
-          <motion.li key={x.t} className={s.stage} data-on={!reduce && k === on}
-            initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ delay: k * 0.07 }}>
+          <li key={x.t} className={s.stage} data-on={!reduce && k === on}>
             <span className={s.stageN}>0{k + 1}</span>
             <b>{x.t}</b>
             <p>{x.b}</p>
             <div className={s.agents}>{x.a.map((a) => <span key={a} className={s.agent}>{a}</span>)}</div>
-          </motion.li>
+          </li>
         ))}
       </ol>
       <div className={s.loops}>
