@@ -13,11 +13,56 @@ import { COVERAGE } from "@/lib/coverage";
 import { ftdRows, ftdUrl, latestLikelyPeriod, parseFtd, periodCode, prevPeriod, unzipText } from "@/lib/alt/ftd";
 import { CMS, displayBrand, drugYears, makerTicker, medicareRows, type CmsRecord, type Part } from "@/lib/alt/medicare";
 import { GEO_DATASET, geoDistributions, geoRows, parseGeoCsv, partDOwners } from "@/lib/alt/medicare-geo";
-import { normParent, parseTri, TRI_DATASET, triFileUrl, triMatcher, triRows } from "@/lib/alt/tri";
+import { normParent, parseTri, plantIndex, TRI_DATASET, triFileUrl, triMatcher, triRows } from "@/lib/alt/tri";
+import { countyLookup, PLANTS_PATH, type Plant } from "@/lib/alt/hazards";
 import { REGISTRY_PATH, type AltRegistryEntry } from "@/lib/alt/registry";
 import { parseBuckets, SOD_API, sodFilter, sodRows, sodUrl, type SodEntity } from "@/lib/alt/sod";
 import { staticRegistry } from "@/lib/alt/collect.server";
 import { args, dbGate, log, sb, sleep } from "./lib/supa";
+
+/**
+ * NWS forecast, county and fire-weather zones for each plant (api.weather.gov/points), so zone-based
+ * warnings match the plant's own zone rather than its whole county. Zones from the previous index are
+ * reused for plants that haven't moved; new plants are looked up a few at a time.
+ */
+async function addNwsZones(plants: Plant[]) {
+  const prev = new Map<string, Plant>();
+  try {
+    const { data } = await sb.storage.from("datasets").download(PLANTS_PATH);
+    if (data) for (const p of (JSON.parse(await data.text()).plants ?? []) as Plant[]) prev.set(p.id, p);
+  } catch { /* first build */ }
+  const todo: Plant[] = [];
+  for (const p of plants) {
+    const o = prev.get(p.id);
+    if (o?.z?.length && o.la === p.la && o.lo === p.lo) p.z = o.z;
+    else if (p.la != null && p.lo != null) todo.push(p);
+  }
+  log(`  NWS zones: ${plants.length - todo.length} reused, ${todo.length} to look up`);
+  const tail = (u: unknown) => (typeof u === "string" ? u.split("/").pop()! : null);
+  let done = 0;
+  const one = async (p: Plant) => {
+    for (let a = 0; a < 4; a++) {
+      try {
+        const r = await fetch(`https://api.weather.gov/points/${p.la!.toFixed(4)},${p.lo!.toFixed(4)}`, { headers: { "User-Agent": "FiledUnder research@filedunder.ai", Accept: "application/geo+json" }, signal: AbortSignal.timeout(15_000) });
+        if (r.status === 404) return; // outside NWS coverage
+        if (!r.ok) throw new Error(String(r.status));
+        const pr = ((await r.json()) as { properties?: Record<string, unknown> }).properties ?? {};
+        const z = [tail(pr.forecastZone), tail(pr.county), tail(pr.fireWeatherZone)].filter((x): x is string => !!x);
+        if (z.length) p.z = [...new Set(z)];
+        return;
+      } catch {
+        await new Promise((res) => setTimeout(res, 1500 * (a + 1)));
+      }
+    }
+  };
+  const queue = [...todo];
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    for (let p = queue.shift(); p; p = queue.shift()) {
+      await one(p);
+      if (++done % 500 === 0) log(`  NWS zones: ${done}/${todo.length}`);
+    }
+  }));
+}
 
 const UA = "FiledUnder Research research@filedunder.ai";
 const covered = new Set(COVERAGE.map((c) => c.ticker));
@@ -281,6 +326,17 @@ if (args.tri !== undefined) {
       for (const r of out) tickers.add(r.ticker);
       if (args.dry === undefined) await upsert(out);
       rows += out.length;
+      if (y === newest && !only) {
+        // compact plant index (with county FIPS) for the live hazard check
+        const census = await (await fetch("https://www2.census.gov/geo/docs/reference/codes2020/national_county2020.txt", { signal: AbortSignal.timeout(60_000) })).text();
+        const plants: Plant[] = plantIndex(y, recs, match, countyLookup(census));
+        await addNwsZones(plants);
+        log(`  plant index: ${plants.length} plants, ${plants.filter((p) => p.f).length} with a county code, ${plants.filter((p) => p.z?.length).length} with NWS zones`);
+        if (args.dry === undefined) {
+          const { error } = await sb.storage.from("datasets").upload(PLANTS_PATH, JSON.stringify({ year: y, plants }), { upsert: true, contentType: "application/json" });
+          if (error) throw new Error(error.message);
+        }
+      }
       if (args.unmatched !== undefined && y === newest) {
         const fac = new Map<string, Set<string>>();
         for (const r of recs) if (r.parent && !match(r.parent)) (fac.get(r.parent) ?? fac.set(r.parent, new Set()).get(r.parent)!).add(r.trifd);

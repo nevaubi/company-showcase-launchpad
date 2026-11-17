@@ -244,5 +244,7 @@
 - [x] Exposures: bank deposits by state and metro (FDIC Summary of Deposits, 117 banks, 2021–2026) — company tile map + state ranking + assistant
 - [x] Medicare drug costs by state for every covered drug maker (CMS Part D prescribers by geography, 2020–2024, 52 companies): company map (share or over/under-index vs Medicare overall), state table with each state's top drugs, cross-company state ranking on Alt data, assistant get_alt_data medicare_states; weekly check for a new CMS year
 - [x] EPA Toxics Release Inventory for every covered company with US plants (2019–2024, 433 companies): plant map and list (each opens its EPA page), releases, carcinogens, chemicals, production index (plants' reported production this year ÷ last year), cross-company leaderboards, assistant get_alt_data tri; weekly check for a new EPA year
-- [ ] Plants follow-ups: feed TRI plant locations into supply-chain region risk (storms, outages near a company's plants) and into the Exposures page
+- [x] Live plant warnings: NWS warnings (storm outline or the plant's own forecast/county/fire zone) and USGS M4.5+ quakes at covered companies' EPA-listed plants — Alt data hub panel, company Plants panel, assistant get_plant_hazards
+- [ ] Plants follow-ups: show plant warnings on the supply-chain map (supplier plants) and the Exposures page
+- [x] Wrap up, commit and publish all recent work (owner request Nov 17)
 - [ ] Exposures: state-level revenue for non-banks is rarely tagged in 10-Ks (~8% of filings carry any state rows, mostly properties/PP&E); revisit with utilities (EIA, needs key) and insurers (premiums by state)

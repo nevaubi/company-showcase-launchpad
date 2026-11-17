@@ -10,6 +10,7 @@ import { AltEventList, AltSeriesChart, MedicareDrugTable } from "@/components/al
 import { DepositsByState, isStateDeposit } from "@/components/alt/deposits-by-state";
 import { MedicareByState } from "@/components/alt/medicare-by-state";
 import { PlantsTri } from "@/components/alt/plants-tri";
+import { CompanyPlantHazards } from "@/components/alt/plant-hazards";
 import { altCompanyQuery, DATASETS, fmtAlt, seriesByTitle } from "@/lib/alt/query";
 import { cn } from "@/lib/utils";
 
@@ -109,6 +110,7 @@ function AltCompany() {
       {triRows.length > 0 && (ds === "all" || ds === "tri") && (
         <div data-section="Plants" className="min-w-0">
           <Panel collapse={false} title="Plants & releases" subtitle="The company's US plants that report to EPA's Toxics Release Inventory: where they are, what they release and how their production changed · EPA" bodyClassName="p-0">
+            <CompanyPlantHazards ticker={ticker} />
             <PlantsTri ticker={ticker} rows={triRows} />
           </Panel>
         </div>

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { normParent, parseTri, TRI_FACILITIES, TRI_PRODUCTION, TRI_RELEASES, triMatcher, triRows, triText } from "./tri";
 
-const HEAD = '"1. YEAR","2. TRIFD","3. FRS ID","4. FACILITY NAME","6. CITY","8. ST","12. LATITUDE","13. LONGITUDE","15. PARENT CO NAME","17. STANDARD PARENT CO NAME","23. INDUSTRY SECTOR","30. PRIMARY NAICS","37. CHEMICAL","46. CARCINOGEN","48. PFAS","50. UNIT OF MEASURE","65. ON-SITE RELEASE TOTAL","88. OFF-SITE RELEASE TOTAL","107. TOTAL RELEASES","119. PRODUCTION WSTE (8.1-8.7)","121. PROD_RATIO_OR_ ACTIVITY","122. 8.9 - PRODUCTION RATIO"';
+const HEAD = '"1. YEAR","2. TRIFD","3. FRS ID","4. FACILITY NAME","6. CITY","7. COUNTY","8. ST","12. LATITUDE","13. LONGITUDE","15. PARENT CO NAME","17. STANDARD PARENT CO NAME","23. INDUSTRY SECTOR","30. PRIMARY NAICS","37. CHEMICAL","46. CARCINOGEN","48. PFAS","50. UNIT OF MEASURE","65. ON-SITE RELEASE TOTAL","88. OFF-SITE RELEASE TOTAL","107. TOTAL RELEASES","119. PRODUCTION WSTE (8.1-8.7)","121. PROD_RATIO_OR_ ACTIVITY","122. 8.9 - PRODUCTION RATIO"';
 const line = (trifd: string, name: string, st: string, parent: string, chem: string, total: number, ratio: string, unit = "Pounds", kind = "PRODUCTION") =>
-  `2024,${trifd},1100${trifd.length},"${name}",TOWN,${st},40.1,-80.2,"${parent} SUB","${parent}",Chemicals,325199,"${chem}",NO,NO,${unit},${total},0,${total},${total * 2},${kind},${ratio}`;
+  `2024,${trifd},1100${trifd.length},"${name}",TOWN,HARRIS,${st},40.1,-80.2,"${parent} SUB","${parent}",Chemicals,325199,"${chem}",NO,NO,${unit},${total},0,${total},${total * 2},${kind},${ratio}`;
 const csv = [
   HEAD,
   line("A1", "PLANT ONE, UNIT 2", "TX", "ACME CHEMICAL CORP", "TOLUENE", 1000, "1.10"),

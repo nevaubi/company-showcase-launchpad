@@ -245,6 +245,13 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_plant_hazards",
+    description: "Live operational hazards at covered companies' US plants (EPA Toxics Release Inventory plant list with coordinates and counties): active National Weather Service warnings (hurricane, tropical storm, storm surge, tornado, severe storm, flood, winter storm, ice, extreme cold/heat, high wind, red flag/fire, tsunami) and USGS M4.5+ earthquakes in the past week within a magnitude-scaled distance. Storm-drawn warnings count a plant only inside the storm outline; area warnings only when they list the plant's own NWS forecast/county/fire zone. With a ticker: that company's affected plants and their warnings; without: every affected company, most severe first. A warning is not a reported outage — say so. Cite forecast.weather.gov / USGS links.",
+    parameters: obj({ ticker: nullable(str("Covered ticker; null for every affected company")) }, ["ticker"]),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "get_hedge_fund_data",
     description: "OFR Hedge Fund Monitor (SEC Form PF leverage/borrowing/liquidity/stress tests, CFTC futures positioning by trader type incl. leveraged-fund net positions in S&P, Nasdaq, VIX, Treasuries, FX, crypto; Fed SCOOS dealer survey; FICC sponsored repo). query='overview' returns the crowding composite, key leverage gauges and the most unusual readings; otherwise words to search series names/ids (e.g. 'leveraged net S&P', 'multi strategy leverage'). Returns z-score vs history, percentile, highs/lows, last 8 points and source URL.",
     parameters: obj({ query: str("'overview' or search words") }, ["query"]),

@@ -6,6 +6,7 @@ import { PageHeader, Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AltEventList } from "@/components/alt/alt-views";
 import { AltSignalsSection, SourceStrip } from "@/components/alt/alt-signals";
+import { PlantHazardsPanel } from "@/components/alt/plant-hazards";
 import { altFeedQuery, altLeadersQuery, DATASETS, fmtAlt, leaderStats, medicareStateQuery } from "@/lib/alt/query";
 import { STATES } from "@/lib/alt/sod";
 import { FTD_TITLE } from "@/lib/alt/ftd";
@@ -53,6 +54,7 @@ function AltHub() {
       <PageHeader eyebrow="Research" title="Alternative data" description="What changed across public registries (SEC, federal contracts, regulators, FDA, NHTSA, CFPB, FDIC), scored against each company's own history. Every row links to its record." />
       <SourceStrip />
       <AltSignalsSection />
+      <PlantHazardsPanel className="mb-5" />
       <h2 className="mb-2 text-[13px] font-semibold">Browse by dataset</h2>
       <div className="mb-4 flex flex-wrap gap-1.5">
         {Object.entries(DATASETS).map(([k, v]) => (

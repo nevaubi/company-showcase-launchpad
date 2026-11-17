@@ -22,6 +22,7 @@ export interface TriRec {
   frs: string;
   facility: string;
   city: string;
+  county: string;
   state: string;
   lat: number | null;
   lon: number | null;
@@ -52,7 +53,7 @@ export function parseTri(text: string): TriRec[] {
   const head = parseCsvLine(lines[0] ?? "").map((h) => h.replace(/^\uFEFF/, "").replace(/^\d+\.\s*/, "").trim());
   const ix = (k: string) => head.indexOf(k);
   const C = {
-    year: ix("YEAR"), trifd: ix("TRIFD"), frs: ix("FRS ID"), name: ix("FACILITY NAME"), city: ix("CITY"), st: ix("ST"), lat: ix("LATITUDE"), lon: ix("LONGITUDE"),
+    year: ix("YEAR"), trifd: ix("TRIFD"), frs: ix("FRS ID"), name: ix("FACILITY NAME"), city: ix("CITY"), county: ix("COUNTY"), st: ix("ST"), lat: ix("LATITUDE"), lon: ix("LONGITUDE"),
     parent: ix("PARENT CO NAME"), std: ix("STANDARD PARENT CO NAME"), sector: ix("INDUSTRY SECTOR"), naics: ix("PRIMARY NAICS"), chem: ix("CHEMICAL"),
     carc: ix("CARCINOGEN"), pfas: ix("PFAS"), unit: ix("UNIT OF MEASURE"), on: ix("ON-SITE RELEASE TOTAL"), off: ix("OFF-SITE RELEASE TOTAL"), tot: ix("TOTAL RELEASES"),
     waste: ix("PRODUCTION WSTE (8.1-8.7)"), kind: head.findIndex((h) => h.replace(/\s+/g, "") === "PROD_RATIO_OR_ACTIVITY"), ratio: ix("8.9 - PRODUCTION RATIO"),
@@ -74,6 +75,7 @@ export function parseTri(text: string): TriRec[] {
       frs: (r[C.frs] ?? "").trim(),
       facility: (r[C.name] ?? "").trim(),
       city: (r[C.city] ?? "").trim(),
+      county: C.county >= 0 ? (r[C.county] ?? "").trim() : "",
       state: (r[C.st] ?? "").trim(),
       lat: r[C.lat] ? Number(r[C.lat]) : null,
       lon: r[C.lon] ? Number(r[C.lon]) : null,
@@ -330,4 +332,16 @@ export function triText(rows: TextRow[], ticker: string, limit = 20): string {
   const rel = get(TRI_RELEASES, y);
   if (rel) lines.push(`RELEASES ${y}: on-site ${lbs(rel.meta.onsite)}, off-site ${lbs(rel.meta.offsite)}, carcinogens ${lbs(rel.meta.carcinogens)}, PFAS forms ${rel.meta.pfas_forms}`);
   return lines.join("\n");
+}
+
+/** Compact plant index for live hazard checks: one entry per matched plant in the year. */
+export function plantIndex(year: number, recs: TriRec[], match: (parent: string) => string | null, fips: (state: string, county: string) => string | null) {
+  const out = new Map<string, { t: string; id: string; n: string; c: string; s: string; f: string | null; la: number | null; lo: number | null }>();
+  for (const r of recs) {
+    if (r.year !== year || !r.parent || out.has(r.trifd)) continue;
+    const t = match(r.parent);
+    if (!t) continue;
+    out.set(r.trifd, { t, id: r.trifd, n: r.facility, c: r.city, s: r.state, f: fips(r.state, r.county), la: r.lat, lo: r.lon });
+  }
+  return [...out.values()];
 }

@@ -1,6 +1,8 @@
 // Browser-side executors for the research agent's function tools. Data comes from
 // the bundled SEC datasets plus live Yahoo/FRED/EDGAR calls through server functions.
 import { getEstimates } from "@/lib/estimates.functions";
+import { getPlantHazards } from "@/lib/hazards.functions";
+import { hazardLink } from "@/lib/alt/hazards";
 import { PERIOD_LABEL, actionSummary, ratingLabel } from "@/lib/estimates/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { companyQuery, macroQuery, newsQuery, pricesQuery, quotesQuery, universeQuery, type Range } from "@/lib/data";
@@ -651,6 +653,19 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       }
       const d = (args.filing === "quarterly" ? stored.quarterly : stored.annual) ?? stored.annual ?? stored.quarterly;
       return { output: clip(text), summary: `${t} filing detail${section ? ` · ${section}` : ""}`, refs: d ? [{ ticker: t, accn: d.accn, doc: d.doc, label: d.form }] : undefined };
+    }
+    case "get_plant_hazards": {
+      const t = args.ticker ? String(args.ticker).toUpperCase() : null;
+      const r = await getPlantHazards({ data: { ticker: t } });
+      const head = `Checked ${r.asOf} against ${r.plants} EPA TRI plants (${r.plantYear} list) of covered companies.${r.errors.length ? ` Feeds not reachable: ${r.errors.join(", ")}.` : ""} Warnings are not reported outages.`;
+      if (!r.companies.length) return { output: `${head}\n${t ? `No live NWS warning or recent M4.5+ quake at ${t}'s listed plants.` : "No covered plant is under an active warning or near a recent quake."}`, summary: "no plants under warnings" };
+      const kinds = r.kinds.map((k) => `${k.kind}: ${k.plants} plants / ${k.companies} companies`).join("; ");
+      const lines = r.companies.slice(0, t ? 1 : 40).map((c) => {
+        const ps = c.plants.slice(0, t ? 40 : 6).map((p) => `  - ${p.n} (${p.c}, ${p.s}): ${p.hazards.map((h) => `${h.event}${h.distanceKm != null ? ` ${h.distanceKm} km away` : ""}${h.ends ? ` until ${h.ends}` : ""} [${h.by}] ${hazardLink(h, p)}`).join("; ")}`);
+        return `${c.ticker} — ${c.plants.length} plant(s): ${c.kinds.join(", ")}\n${ps.join("\n")}${c.plants.length > ps.length ? `\n  - …${c.plants.length - ps.length} more` : ""}`;
+      });
+      const n = r.companies.reduce((a, c) => a + c.plants.length, 0);
+      return { output: `${head}\n${t ? "" : `By hazard: ${kinds}\n${r.companies.length} companies affected${r.companies.length > 40 ? " (top 40 shown)" : ""}.\n`}${lines.join("\n")}`, summary: t ? `${n} ${t} plants under warnings` : `${r.companies.length} companies, ${n} plants under warnings` };
     }
     case "get_options": {
       const t = args.ticker ? String(args.ticker).toUpperCase() : "";
