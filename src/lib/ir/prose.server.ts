@@ -73,7 +73,8 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
   const ids = [...new Set([id, ...(siblings ?? []).map((d) => d.id)])];
   const { data: existing } = await supabaseAdmin.from("ir_kpi_facts").select("period_end, months, value, unit").in("document_id", ids).neq("method", "text").limit(50_000);
   const all = reads.flat();
-  const kept = dropTableDuplicates(all, existing ?? []);
+  const printed = (existing ?? []).flatMap((e) => (e.period_end && e.months != null ? [{ period_end: e.period_end, months: e.months, value: e.value, unit: e.unit }] : []));
+  const kept = dropTableDuplicates(all, printed);
   const records = kept.map(({ tol: _tol, ...f }) => ({
     document_id: id,
     ticker: doc.ticker,

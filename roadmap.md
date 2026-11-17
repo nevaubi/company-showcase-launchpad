@@ -9,6 +9,13 @@
 - [x] Docling runaway files: 20-minute per-file timeout restarts the converter; memory now sized from the 32 GB limit
 - [x] IR datasets: per-table empty columns trimmed, stray period columns dropped, complementary/duplicate tables and lines merged with value-conflict and other-split guards (CVS 3,701→2,965 lines, 0 cells lost), totals re-checked after merges, bare "TOTAL" renamed, sharper titles
 - [x] Declutter IR tab: one "Source documents" panel (library/tables/search), compact how-to-read, complete tables ranked first, empty check rows hidden
+- [x] Text reader: figures stated in release sentences (store counts by country, memberships, comps, liquidity, charge-offs) read as number-token pointers, re-read from the token, vague/forecast/boilerplate figures dropped, figures already in a same-day table skipped; each cites its sentence and the source panel highlights the figure in it (COST 88 releases → 9 warehouse lines × 40 quarters)
+- [x] Text stage in every company build + background sweep over finished companies (newest releases first); goes live on the worker with the next deploy
+- [x] Removed 23,183 figures from an earlier, unsaved text reader (no sentence locator, not auditable) for 13 companies; their releases are being re-read by the audited reader
+- [x] Counts stated "as of the release date" sit under the quarter the release reports; text-read dates join the printed quarter column (printed dates unchanged: 0 cells moved on AAPL/WMT/KR/COST/JPM)
+- [ ] Text reader on earnings-call transcripts (spoken KPIs: "we ended the quarter with …"); needs speaker-aware chunking and stricter guidance filtering
+- [ ] Words-as-numbers in text ("seven in China", "one each in Iceland") — today those lines show as "Not itemized in the release"
+- [ ] Table reader: 12-week columns sometimes dated to the calendar month-end (COST 2025-11-30 next to 2025-11-23); fix the date from the column header weeks + filing date
 - [ ] Merge fragmented segment lines that only differ by table wording ("Adjusted operating income · Health Services" across 6 tables) into per-segment matrices; needs reader-side segment names
 - [ ] Re-read companies whose tables fail most checks (CVS medical membership, operating costs) with the stronger model
 

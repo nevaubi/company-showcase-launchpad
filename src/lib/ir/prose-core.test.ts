@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dropTableDuplicates, proseBlocks, proseFacts, proseTokens, quoteOf, renderProse, type ProseOutput } from "./prose-core";
+import { dropTableDuplicates, proseBlocks, proseFacts, proseTokens, quoteOf, renderProse, type ProseOutput, type ProseRow } from "./prose-core";
 
 const RELEASE = `<html><body>
 <p>ISSAQUAH, Wash., Sept. 24, 2026 -- Costco Wholesale Corporation today announced its results for the fourth quarter (16 weeks) ended August 31, 2026.</p>
@@ -77,9 +77,9 @@ describe("reading figures in running text", () => {
     expect(dropTableDuplicates([rounded, count], [{ period_end: "2026-08-31", months: 3, value: 2.149e9, unit: "usd" }, { period_end: "2026-08-31", months: 3, value: 938, unit: "count" }])).toEqual([rounded, count]);
   });
   it("skips vague figures, keeps one figure per line and period, and keeps the period out of the line name", () => {
-    const more = { label: "Employees", parent: "", breakdown: "", category: "kpi", metric: "headcount", unit: "count", scale: 1, is_total: false, values: [{ n: id("300,000"), p: 0, read: "300,000" }] };
+    const more: ProseRow = { label: "Employees", parent: "", breakdown: "", category: "kpi", metric: "headcount", unit: "count", scale: 1, is_total: false, values: [{ n: id("300,000"), p: 0, read: "300,000" }] };
     const cash = tokens.filter((t) => t.text === "$1.7 billion").map((t) => t.n);
-    const flows = cash.map((n) => ({ label: "Operating cash flow (September quarter)", parent: "", breakdown: "", category: "kpi", metric: "other", unit: "usd", scale: 1, is_total: false, values: [{ n, p: 1, read: "1.7" }] }));
+    const flows = cash.map((n): ProseRow => ({ label: "Operating cash flow (September quarter)", parent: "", breakdown: "", category: "kpi", metric: "other", unit: "usd", scale: 1, is_total: false, values: [{ n, p: 1, read: "1.7" }] }));
     const got = proseFacts({ periods: out.periods, rows: [more, ...flows] }, blocks, tokens, "2026-09-24");
     expect(got.rows.map((r) => [r.label, r.value])).toEqual([["Operating cash flow", 1.7e9]]);
   });
@@ -87,7 +87,7 @@ describe("reading figures in running text", () => {
     const b = proseBlocks("<p>Liquidity of $6.9 billion at quarter-end, including $3.1 billion in undrawn revolver capacity. Payments on debt of $1.2 billion. Operating margin was 34.6%, up from 28.2% last year.</p>");
     const t = proseTokens(b);
     const n = (x: string) => t.find((k) => k.text === x)!.n;
-    const row = (label: string, x: string, unit = "usd") => ({ label, parent: "", breakdown: "", category: "balance", metric: "other", unit, scale: 1, is_total: false, values: [{ n: n(x), p: 1, read: x }] });
+    const row = (label: string, x: string, unit: ProseRow["unit"] = "usd"): ProseRow => ({ label, parent: "", breakdown: "", category: "balance", metric: "other", unit, scale: 1, is_total: false, values: [{ n: n(x), p: 1, read: x }] });
     const got = proseFacts({ periods: out.periods, rows: [row("September quarter - Liquidity", "$6.9 billion"), row("Payments on debt", "$1.2 billion"), row("Q4 operating margin forecast", "28.2%", "pct")] }, b, t, "2026-09-24");
     expect(got.rows.map((r) => [r.label, r.months])).toEqual([["Liquidity", 0], ["Payments on debt", 3]]);
   });
