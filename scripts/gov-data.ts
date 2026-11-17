@@ -221,7 +221,7 @@ if (args["medicare-states"] !== undefined) {
       const f = files.get(y)!;
       let text: string | null = null;
       for (let t = 0; t < 4 && !text; t++) {
-        const r = await fetch(f.csv).catch(() => null);
+        const r = await fetch(f.csv, { signal: AbortSignal.timeout(240_000) }).catch(() => null);
         if (r?.ok) text = await r.text();
         else await sleep(3000 * (t + 1));
       }
@@ -270,7 +270,7 @@ if (args.tri !== undefined) {
     for (let y = newest - years + 1; y <= newest; y++) {
       let text: string | null = null;
       for (let t = 0; t < 4 && !text; t++) {
-        const r = await fetch(triFileUrl(y)).catch(() => null);
+        const r = await fetch(triFileUrl(y), { signal: AbortSignal.timeout(240_000) }).catch(() => null);
         if (r?.ok) text = await r.text();
         else await sleep(3000 * (t + 1));
       }

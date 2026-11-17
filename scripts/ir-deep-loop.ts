@@ -156,6 +156,7 @@ async function maybeSod() {
   // CMS publishes Part D drug costs by prescriber state yearly (spring); same weekly check
   void run("scripts/gov-data.ts", ["--sod", "--if-new"], `${OUT}/sod.log`)
     .then(() => run("scripts/gov-data.ts", ["--medicare-states", "--if-new"], `${OUT}/medicare-states.log`))
+    .then(() => run("scripts/gov-data.ts", ["--tri", "--if-new"], `${OUT}/tri.log`))
     .finally(() => {
       sodChecking = false;
     });

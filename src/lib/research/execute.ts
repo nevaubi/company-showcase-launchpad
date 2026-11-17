@@ -43,6 +43,7 @@ import { exposureIndexQuery, filingDetailQuery, namedByQuery } from "@/lib/xbrl/
 import { bankStatesText, companyExposureText, insurersText, lendersText, regionText, stateDepositsText, type InsurerSort } from "@/lib/xbrl/exposure-text";
 import { depositsByStateQuery, medicareStateQuery } from "@/lib/alt/query";
 import { geoCompanyText, geoStateText } from "@/lib/alt/medicare-geo";
+import { triText } from "@/lib/alt/tri";
 import { optionsBoardQuery, optionsHistoryQuery } from "@/lib/options/data";
 import { optionsBoardText, optionsCompanyText, type OptionsSort } from "@/lib/options/text";
 import { earningsIndexQuery } from "@/lib/calendars/data";
@@ -227,7 +228,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       };
     }
     case "get_alt_data": {
-      const LEAD: Record<string, string> = { settlement: "Fails to deliver (avg daily balance)", attention: "Wikipedia pageviews", complaints: "CFPB consumer complaints", bank: "Total deposits", contracts: "Federal contract obligations", regulatory: "Federal Register documents naming the company", medicare: "Medicare Part D spending" };
+      const LEAD: Record<string, string> = { settlement: "Fails to deliver (avg daily balance)", attention: "Wikipedia pageviews", complaints: "CFPB consumer complaints", bank: "Total deposits", contracts: "Federal contract obligations", regulatory: "Federal Register documents naming the company", medicare: "Medicare Part D spending", tri: "Toxic releases (TRI)" };
       if (args.dataset === "medicare_states") {
         if (args.ticker) {
           const tk = String(args.ticker).toUpperCase();
@@ -240,6 +241,12 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         if (!/^[A-Z]{2}$/.test(st)) return { output: "For a cross-company Medicare state ranking pass the two-letter state code in since (e.g. 'TX').", summary: "state needed" };
         const r = await qc.fetchQuery(medicareStateQuery(st));
         return { output: clip(geoStateText(r.rows, st, r.latest)), summary: `${st} Medicare drug makers` };
+      }
+      if (args.dataset === "tri" && args.ticker) {
+        const tk = String(args.ticker).toUpperCase();
+        const { data: rows, error } = await supabase.from("alt_data").select("date,title,value,meta,source_url").eq("ticker", tk).eq("dataset", "tri").order("date").limit(100);
+        if (error) return { output: `Error: ${error.message}`, summary: "TRI failed" };
+        return { output: clip(triText((rows ?? []) as never, tk)), summary: `${tk} plants (EPA TRI)` };
       }
       if (!args.ticker && args.dataset && LEAD[String(args.dataset)]) {
         const d = String(args.dataset);

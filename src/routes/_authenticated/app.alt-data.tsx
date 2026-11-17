@@ -20,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/app/alt-data")({
   head: () => ({
     meta: [
       { title: "Alternative data — Filed Under" },
-      { name: "description", content: "Public alt data for every covered US company: 13D/13G holders, 8-K events, federal contracts, regulation, FDA, recalls, CFPB complaints, FDIC call reports, Medicare drug costs by state, fails to deliver and attention." },
+      { name: "description", content: "Public alt data for every covered US company: 13D/13G holders, 8-K events, federal contracts, regulation, FDA, recalls, CFPB complaints, FDIC call reports, Medicare drug costs by state, EPA plants and releases, fails to deliver and attention." },
       { property: "og:title", content: "Alternative data — Filed Under" },
       { property: "og:description", content: "FactSet-style alt datasets built from public records, every row source-linked." },
       { property: "og:type", content: "website" },
@@ -40,9 +40,10 @@ const LEAD_TITLES: Record<string, string[]> = {
   medicare: ["Medicare Part D spending", "Medicare Part B spending"],
   settlement: [FTD_TITLE],
   deposits: ["Branch deposits"],
+  tri: ["Toxic releases (TRI)", "TRI production index", "TRI facilities"],
 };
 const SERIES_SETS = new Set(Object.keys(LEAD_TITLES));
-const EVENTLESS = new Set(["bank", "attention", "complaints", "settlement", "medicare", "deposits", "medicare_states"]);
+const EVENTLESS = new Set(["bank", "attention", "complaints", "settlement", "medicare", "deposits", "medicare_states", "tri"]);
 
 function AltHub() {
   const { d = "events" } = Route.useSearch();

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normParent, parseTri, TRI_FACILITIES, TRI_PRODUCTION, TRI_RELEASES, triMatcher, triRows } from "./tri";
+import { normParent, parseTri, TRI_FACILITIES, TRI_PRODUCTION, TRI_RELEASES, triMatcher, triRows, triText } from "./tri";
 
 const HEAD = '"1. YEAR","2. TRIFD","3. FRS ID","4. FACILITY NAME","6. CITY","8. ST","12. LATITUDE","13. LONGITUDE","15. PARENT CO NAME","17. STANDARD PARENT CO NAME","23. INDUSTRY SECTOR","30. PRIMARY NAICS","37. CHEMICAL","46. CARCINOGEN","48. PFAS","50. UNIT OF MEASURE","65. ON-SITE RELEASE TOTAL","88. OFF-SITE RELEASE TOTAL","107. TOTAL RELEASES","119. PRODUCTION WSTE (8.1-8.7)","121. PROD_RATIO_OR_ ACTIVITY","122. 8.9 - PRODUCTION RATIO"';
 const line = (trifd: string, name: string, st: string, parent: string, chem: string, total: number, ratio: string, unit = "Pounds", kind = "PRODUCTION") =>
@@ -77,5 +77,16 @@ describe("triRows", () => {
     // facilities with a production ratio: A1 (1.2) and A3 (0.8) → median 1.0; one up, one down
     expect(prod.value).toBeCloseTo(1);
     expect(prod.meta).toMatchObject({ facilities: 2, up: 1, down: 1 });
+  });
+});
+
+describe("triText", () => {
+  it("summarises plants by year, the largest plants with their EPA links and the production index", () => {
+    const match = (p: string) => (p === "ACME CHEMICAL CORP" ? "ACME" : null);
+    const rows = triRows(2024, parseTri(csv), match);
+    const t = triText(rows, "ACME");
+    expect(t).toContain("2024: 3 plants, 1.5K lb released, production 1.000");
+    expect(t).toContain("STATES 2024: TX 2 (1.5K lb), LA 1 (1 lb)");
+    expect(t).toMatch(/PLANT ONE, UNIT 2, TOWN TX · Chemicals · 1\.5K lb · 2 chemicals · production ratio 1\.20 <https:\/\/echo\.epa\.gov/);
   });
 });
