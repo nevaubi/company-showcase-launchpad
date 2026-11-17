@@ -16,7 +16,7 @@ import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { runSandbox } from "@/lib/research/sandbox";
 import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
 import { supabase } from "@/integrations/supabase/client";
-import { fmtAlt } from "@/lib/alt/query";
+import { altLeadersQuery, fmtAlt, leaderStats } from "@/lib/alt/query";
 import { focusGraph, linkDollars, simulateShock, type RiskLink } from "@/lib/supply/core";
 import type { UniverseEntry } from "@/lib/financials/types";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
@@ -219,6 +219,16 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       };
     }
     case "get_alt_data": {
+      const LEAD: Record<string, string> = { settlement: "Fails to deliver (avg daily balance)", attention: "Wikipedia pageviews", complaints: "CFPB consumer complaints", bank: "Total deposits", contracts: "Federal contract obligations", regulatory: "Federal Register documents naming the company", medicare: "Medicare Part D spending" };
+      if (!args.ticker && args.dataset && LEAD[String(args.dataset)]) {
+        const d = String(args.dataset);
+        const rows = await qc.fetchQuery(altLeadersQuery(d, LEAD[d]));
+        const ranked = rows.map((r) => ({ r, ...leaderStats(r) }));
+        const top = (k: "value" | "vsTypical" | "chg") => [...ranked].sort((a, b) => ((k === "value" ? b.r.value : b[k]) ?? -Infinity) - ((k === "value" ? a.r.value : a[k]) ?? -Infinity)).slice(0, 15);
+        const line = (x: (typeof ranked)[number]) => `${x.r.ticker} ${x.r.date} ${fmtAlt(x.r.value, x.r.unit)}${x.vsTypical != null ? ` ${x.vsTypical.toFixed(1)}× its trailing-year median` : ""}${x.chg != null ? ` ${x.chg >= 0 ? "+" : ""}${(x.chg * 100).toFixed(0)}% vs 1y` : ""} <${x.r.source_url}>`;
+        const out = [`${LEAD[d]} — ${rows.length} companies`, "LARGEST:", ...top("value").map(line), "MOST ABOVE THEIR OWN NORMAL:", ...top("vsTypical").map(line), "BIGGEST RISE VS 1Y:", ...top("chg").map(line)];
+        return { output: clip(out.join("\n")), summary: `${rows.length}-company ${d} leaderboard` };
+      }
       let q = supabase.from("alt_data").select("ticker,dataset,kind,date,title,value,unit,meta,source_url").order("date", { ascending: false }).limit(400);
       if (args.ticker) q = q.eq("ticker", String(args.ticker).toUpperCase());
       if (args.dataset) q = q.eq("dataset", String(args.dataset));

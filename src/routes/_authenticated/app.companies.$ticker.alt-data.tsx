@@ -6,7 +6,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/components/app/page-header";
-import { AltEventList, AltSeriesChart } from "@/components/alt/alt-views";
+import { AltEventList, AltSeriesChart, MedicareDrugTable } from "@/components/alt/alt-views";
 import { altCompanyQuery, DATASETS, fmtAlt, seriesByTitle } from "@/lib/alt/query";
 import { cn } from "@/lib/utils";
 
@@ -14,7 +14,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/alt-
   head: ({ params }) => ({
     meta: [
       { title: `${params.ticker.toUpperCase()} alternative data — Filed Under` },
-      { name: "description", content: `Ownership, 8-K events, government contracts, regulation, recalls, complaints and attention data for ${params.ticker.toUpperCase()}, each linked to its public record.` },
+      { name: "description", content: `Ownership, 8-K events, government contracts, regulation, recalls, complaints, Medicare drug spending, fails to deliver and attention data for ${params.ticker.toUpperCase()}, each linked to its public record.` },
       { property: "og:title", content: `${params.ticker.toUpperCase()} alternative data — Filed Under` },
       { property: "og:description", content: "Public alt data with a source link on every row." },
       { property: "og:type", content: "website" },
@@ -24,7 +24,9 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/alt-
   component: AltCompany,
 });
 
-const BAR = new Set(["contracts", "regulatory", "complaints"]);
+const BAR = new Set(["contracts", "regulatory", "complaints", "medicare"]);
+/** Per-drug Medicare rows go in one table instead of a chart each. */
+const isDrugRow = (r: { dataset: string; title: string }) => r.dataset === "medicare" && /^Part [BD] · /.test(r.title);
 
 function AltCompany() {
   const ticker = Route.useParams().ticker.toUpperCase();
@@ -38,9 +40,10 @@ function AltCompany() {
   }, [rows]);
   const series = useMemo(() => {
     const out: { dataset: string; title: string; rows: typeof rows }[] = [];
-    for (const d of Object.keys(DATASETS)) for (const [title, rs] of seriesByTitle(rows.filter((r) => r.dataset === d))) out.push({ dataset: d, title, rows: rs });
+    for (const d of Object.keys(DATASETS)) for (const [title, rs] of seriesByTitle(rows.filter((r) => r.dataset === d && !isDrugRow(r)))) out.push({ dataset: d, title, rows: rs });
     return out;
   }, [rows]);
+  const drugRows = useMemo(() => rows.filter(isDrugRow), [rows]);
   const events = rows.filter((r) => r.kind === "event" && (ds === "all" || r.dataset === ds));
   if (q.isLoading) return <Skeleton className="h-[600px]" />;
   if (q.isError && !q.data) return <Panel title="Alternative data"><p role="alert" className="text-sm text-muted-foreground">Public records are temporarily unavailable.</p><Button variant="outline" size="xs" className="mt-2" onClick={() => q.refetch()}>Retry</Button></Panel>;
@@ -69,6 +72,14 @@ function AltCompany() {
               </Panel>
             );
           })}
+        </div>
+      )}
+
+      {drugRows.length > 0 && (ds === "all" || ds === "medicare") && (
+        <div data-section="Medicare drugs" className="min-w-0">
+          <Panel title="Medicare spending by drug" subtitle="Gross Medicare Part D (pharmacy) and Part B (clinic-administered) spending on the company's largest drugs, before rebates · CMS" bodyClassName="p-0">
+            <MedicareDrugTable ticker={ticker} rows={drugRows} />
+          </Panel>
         </div>
       )}
 

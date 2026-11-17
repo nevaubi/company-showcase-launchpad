@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { DATASETS, fmtAlt, type AltRow } from "@/lib/alt/query";
@@ -76,7 +76,8 @@ export function AltEventList({ rows, showTicker, max = 200 }: { rows: AltRow[]; 
 }
 
 export function AltSeriesChart({ rows, bar }: { rows: AltRow[]; bar?: boolean }) {
-  const data = useMemo(() => rows.flatMap((r) => r.date ? [{ d: r.date.slice(0, bar ? 4 : 7), v: r.value }] : []), [rows, bar]);
+  // Year-to-date readings get their own label and a lighter bar, so a partial year never reads as a drop.
+  const data = useMemo(() => rows.flatMap((r) => r.date ? [{ d: r.meta?.ytd ? `${r.date.slice(0, 4)} ${r.meta?.quarters ? `Q1${r.meta.quarters > 1 ? `–Q${r.meta.quarters}` : ""}` : "YTD"}` : r.date.slice(0, bar ? 4 : 7), v: r.value, ytd: !!r.meta?.ytd }] : []), [rows, bar]);
   const unit = rows[0]?.unit ?? null;
   const Chart = bar ? BarChart : LineChart;
   return (
@@ -86,9 +87,70 @@ export function AltSeriesChart({ rows, bar }: { rows: AltRow[]; bar?: boolean })
         <XAxis dataKey="d" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} minTickGap={24} />
         <YAxis width={56} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => fmtAlt(v, unit)} />
         <Tooltip formatter={(v: number) => fmtAlt(v, unit)} contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", fontSize: 12 }} />
-        {bar ? <Bar dataKey="v" fill="var(--chart-1)" /> : <Line dataKey="v" stroke="var(--chart-1)" dot={false} strokeWidth={1.5} />}
+        {bar ? (
+          <Bar dataKey="v">
+            {data.map((p) => <Cell key={p.d} fill="var(--chart-1)" fillOpacity={p.ytd ? 0.4 : 1} />)}
+          </Bar>
+        ) : <Line dataKey="v" stroke="var(--chart-1)" dot={false} strokeWidth={1.5} />}
       </Chart>
     </ResponsiveContainer>
+  );
+}
+
+/** Per-drug Medicare spending: one row per drug, the last full years plus the latest partial year. */
+export function MedicareDrugTable({ ticker, rows }: { ticker: string; rows: AltRow[] }) {
+  const { cols, drugs } = useMemo(() => {
+    const by = new Map<string, { title: string; part: string; drug: string; generic: string; cells: Map<string, AltRow> }>();
+    const colSet = new Map<string, { key: string; label: string; ytd: boolean; date: string }>();
+    for (const r of rows) {
+      if (!r.date || r.value == null) continue;
+      const key = r.meta?.ytd ? `${r.date.slice(0, 4)}q${r.meta.quarters}` : r.date.slice(0, 4);
+      colSet.set(key, { key, label: r.meta?.ytd ? `${r.date.slice(0, 4)} Q1${r.meta.quarters > 1 ? `–Q${r.meta.quarters}` : ""}` : r.date.slice(0, 4), ytd: !!r.meta?.ytd, date: r.date });
+      const d = by.get(r.title) ?? { title: r.title, part: r.meta?.part === "partB" ? "B" : "D", drug: r.meta?.drug ?? r.title, generic: r.meta?.generic ?? "", cells: new Map() };
+      d.cells.set(key, r);
+      by.set(r.title, d);
+    }
+    const all = [...colSet.values()].sort((a, b) => a.date.localeCompare(b.date));
+    const full = all.filter((c) => !c.ytd).slice(-3);
+    const ytd = all.filter((c) => c.ytd).slice(-1);
+    const cols = [...full, ...ytd];
+    const lastFull = full[full.length - 1]?.key;
+    const drugs = [...by.values()].sort((a, b) => (b.cells.get(lastFull ?? "")?.value ?? 0) - (a.cells.get(lastFull ?? "")?.value ?? 0));
+    return { cols, drugs };
+  }, [rows]);
+  if (!drugs.length) return null;
+  const prevFull = cols.filter((c) => !c.ytd).slice(-2);
+  return (
+    <div className="overflow-x-auto">
+      <table className="research-table">
+        <thead>
+          <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+            <th className="px-4 py-2 font-medium">Drug</th>
+            <th className="px-2 py-2 font-medium">Part</th>
+            {cols.map((c) => <th key={c.key} className={cn("px-2 py-2 text-right font-medium", c.ytd && "text-muted-foreground")}>{c.label}</th>)}
+            <th className="px-2 py-2 text-right font-medium">{prevFull.length === 2 ? `${prevFull[1].label} vs ${prevFull[0].label}` : "Change"}</th>
+            <th className="px-4 py-2" />
+          </tr>
+        </thead>
+        <tbody>
+          {drugs.map((d) => {
+            const a = prevFull[0] && d.cells.get(prevFull[0].key)?.value;
+            const b = prevFull[1] && d.cells.get(prevFull[1].key)?.value;
+            const chg = a && b ? b / a - 1 : null;
+            const latest = [...d.cells.values()].sort((x, y) => (y.date ?? "").localeCompare(x.date ?? ""))[0];
+            return (
+              <tr key={d.title} className="border-b last:border-0">
+                <td className="px-4 py-1.5"><span className="font-medium">{d.drug}</span>{d.generic && <span className="ml-1.5 text-[11px] text-muted-foreground">{d.generic.toLowerCase()}</span>}</td>
+                <td className="px-2 text-[11px] text-muted-foreground">{d.part}</td>
+                {cols.map((c) => <td key={c.key} className={cn("num px-2 text-right", c.ytd && "text-muted-foreground")}>{fmtAlt(d.cells.get(c.key)?.value ?? null, "USD")}</td>)}
+                <td className={cn("num px-2 text-right", chg == null ? "text-muted-foreground" : chg >= 0 ? "text-positive" : "text-negative")}>{chg == null ? "—" : `${chg >= 0 ? "+" : ""}${(chg * 100).toFixed(0)}%`}</td>
+                <td className="px-4 text-right">{latest?.source_url && <EvidenceButton ticker={ticker} title={`Medicare ${d.part === "B" ? "Part B" : "Part D"} spending on ${d.drug}`} url={latest.source_url} date={latest.date ?? undefined} />}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

@@ -27,6 +27,7 @@ export const DATASETS: Record<string, { label: string; blurb: string; source: st
   trials: { label: "Clinical trials", blurb: "Trials the company leads as sponsor: phase, status, enrollment and completion dates", source: "ClinicalTrials.gov" },
   consumer: { label: "Consumer product recalls", blurb: "CPSC recalls naming the company as maker, importer or retailer, with units and hazard", source: "CPSC" },
   attention: { label: "Public attention", blurb: "Monthly Wikipedia pageviews — a free demand/interest proxy", source: "Wikimedia" },
+  medicare: { label: "Medicare drug spending", blurb: "Gross Medicare spending on the company's drugs — Part D (pharmacy) and Part B (given in clinics) — per year and the latest quarter, before rebates", source: "CMS" },
   settlement: { label: "Fails to deliver", blurb: "Shares sold but not delivered on settlement day (NSCC), average daily balance per half-month valued at the day's price; persistent or spiking fails can flag hard-to-borrow stock", source: "SEC" },
 };
 

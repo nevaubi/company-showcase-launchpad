@@ -90,3 +90,30 @@ export function wikiTitle(url: string): string | null {
   if (!m) return null;
   return encodeURIComponent(decodeURIComponent(m[1])).replace(/%2C/g, ",").replace(/%28/g, "(").replace(/%29/g, ")");
 }
+
+/** Names whose registry match belongs to a different business than the listed company (e.g. GE
+ *  appliance recalls predate GE Aerospace and belong to Haier's GE Appliances). */
+const NO_MAKER = new Set(["GE"]);
+
+/**
+ * A source name matched to more than one company is ambiguous (two "First Bancorp"s), so it is
+ * dropped from all of them rather than guessed — unless the tickers are share classes of one
+ * filer (same CIK). Known false makers are removed.
+ */
+export function dedupeRegistry(reg: Record<string, AltRegistryEntry>, cikOf: (ticker: string) => string | undefined): Record<string, AltRegistryEntry> {
+  const out: Record<string, AltRegistryEntry> = {};
+  const keys = ["wiki", "cfpb", "maker", "fdic"] as const;
+  const owners = new Map<string, Set<string>>();
+  const id = (k: string, v: unknown) => `${k}:${String(v).toLowerCase()}`;
+  for (const [t, e] of Object.entries(reg)) for (const k of keys) if (e[k] != null) {
+    const s = owners.get(id(k, e[k])) ?? owners.set(id(k, e[k]), new Set()).get(id(k, e[k]))!;
+    s.add(cikOf(t) ?? t);
+  }
+  for (const [t, e] of Object.entries(reg)) {
+    const c: AltRegistryEntry = { ...e };
+    for (const k of keys) if (c[k] != null && (owners.get(id(k, c[k]))?.size ?? 0) > 1) delete c[k];
+    if (NO_MAKER.has(t)) delete c.maker;
+    out[t] = c;
+  }
+  return out;
+}

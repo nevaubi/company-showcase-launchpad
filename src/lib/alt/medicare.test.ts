@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { drugYears, makerTicker, medicareRows, parseYear } from "./medicare";
+import { displayBrand, drugYears, makerTicker, medicareRows, parseYear } from "./medicare";
 
 const COVERED = [
   { ticker: "BMY", name: "Bristol-Myers Squibb", sector: "Health Care" },
@@ -7,6 +7,11 @@ const COVERED = [
   { ticker: "INCY", name: "Incyte", sector: "Health Care" },
   { ticker: "BMRN", name: "BioMarin Pharmaceutical", sector: "Health Care" },
   { ticker: "BIO", name: "Bio-Rad Laboratories", sector: "Health Care" },
+  { ticker: "AMGN", name: "Amgen", sector: "Health Care" },
+  { ticker: "OGN", name: "Organon", sector: "Health Care" },
+  { ticker: "BIIB", name: "Biogen", sector: "Health Care" },
+  { ticker: "MCK", name: "McKesson", sector: "Health Care" },
+  { ticker: "BMRN", name: "BioMarin Pharmaceutical Inc.", sector: "Health Care" }, // same company, legal name
 ];
 
 describe("Medicare maker matching", () => {
@@ -18,11 +23,26 @@ describe("Medicare maker matching", () => {
     expect(makerTicker("Incyte Corporat", COVERED)).toBe("INCY");
     expect(makerTicker("Biomarin Pharma", COVERED)).toBe("BMRN");
   });
+  it("co-labeled names resolve only when they agree or the hand-checked current owner is known", () => {
+    expect(makerTicker("Horizon/Amgen", COVERED)).toBe("AMGN");
+    expect(makerTicker("Chemocentryx/Am", COVERED)).toBe("AMGN");
+    expect(makerTicker("Celgene/Amgen", COVERED)).toBe("AMGN"); // Otezla moved to Amgen
+    expect(makerTicker("Biogen/Organon", COVERED)).toBeNull();
+  });
+  it("distributors that relabel other makers' drugs are not makers", () => {
+    expect(makerTicker("Mckesson Packag", COVERED)).toBeNull();
+  });
   it("never guesses: uncovered parents, roll-ups and short or ambiguous labels stay unmatched", () => {
     expect(makerTicker("Pfizer US Pharm", COVERED)).toBeNull(); // rule hit, but PFE isn't in this list
     expect(makerTicker("Overall", COVERED)).toBeNull();
     expect(makerTicker("Bio", COVERED)).toBeNull();
     expect(makerTicker("Teva USA", COVERED)).toBeNull();
+  });
+  it("merges CMS spellings of one drug", () => {
+    expect(displayBrand("Stelara (J3357)")).toBe("Stelara");
+    expect(displayBrand("BOTOX COSMETIC*")).toBe("Botox Cosmetic");
+    expect(displayBrand("Comirnaty *")).toBe("Comirnaty");
+    expect(displayBrand("Eylea Hd")).toBe("Eylea Hd");
   });
   it("reads CMS year labels", () => {
     expect(parseYear("2025 (Q1-Q4)")).toEqual({ year: 2025, quarters: null });

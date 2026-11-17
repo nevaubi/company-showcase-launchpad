@@ -5,7 +5,7 @@
 // backfill; CMS publishes the drug files yearly with quarterly updates, so rerun --medicare then.
 import { COVERAGE } from "@/lib/coverage";
 import { ftdRows, ftdUrl, latestLikelyPeriod, parseFtd, periodCode, prevPeriod, unzipText } from "@/lib/alt/ftd";
-import { CMS, drugYears, makerTicker, medicareRows, type CmsRecord, type Part } from "@/lib/alt/medicare";
+import { CMS, displayBrand, drugYears, makerTicker, medicareRows, type CmsRecord, type Part } from "@/lib/alt/medicare";
 import { REGISTRY_PATH, type AltRegistryEntry } from "@/lib/alt/registry";
 import { args, dbGate, log, sb, sleep } from "./lib/supa";
 
@@ -58,19 +58,23 @@ async function cmsAll(id: string): Promise<CmsRecord[]> {
   }
 }
 
-/** Part B files name no manufacturer: find each drug's FDA labelers and keep it only when they all belong to one covered company. */
-async function partBOwners(brands: string[], resolve: (m: string) => string | null) {
+/**
+ * Part B files name no manufacturer: find each drug's FDA labelers and keep it only when they all
+ * belong to one covered company. Keyed by the merged display name (CMS spells a drug differently
+ * across files: "Keytruda" vs "KEYTRUDA"); generics (brand = generic name) are skipped.
+ */
+async function partBOwners(drugs: Map<string, string>, resolve: (m: string) => string | null) {
   const path = "alt/drug-owners.json";
   const { data } = await sb.storage.from("datasets").download(path);
-  const cache = (data ? JSON.parse(await data.text()) : {}) as Record<string, { ticker: string; maker: string } | null>;
+  const old = (data ? JSON.parse(await data.text()) : {}) as Record<string, { ticker: string; maker: string } | null>;
+  const cache: typeof old = {};
   let looked = 0;
-  for (const brand of brands) {
-    if (brand in cache) continue;
-    const clean = brand.replace(/\(.*\)/g, "").trim();
-    if (!clean || /^[A-Z0-9 ,.-]+$/.test(brand)) { cache[brand] = null; continue; } // generic HCPCS descriptions are all caps
+  for (const [key, generic] of drugs) {
+    if (key in old) { cache[key] = old[key]; continue; }
+    if (!key || key === generic) { cache[key] = null; continue; }
     let j: any = null;
     for (let t = 0; t < 3 && j == null; t++) {
-      const r = await fetch(`https://api.fda.gov/drug/ndc.json?search=brand_name:${encodeURIComponent(`"${clean}"`)}&limit=50`).catch(() => null);
+      const r = await fetch(`https://api.fda.gov/drug/ndc.json?search=brand_name:${encodeURIComponent(`"${key}"`)}&limit=50`).catch(() => null);
       if (r?.status === 404) j = { results: [] };
       else if (r?.ok) j = await r.json();
       else await sleep(3000 * (t + 1));
@@ -78,11 +82,11 @@ async function partBOwners(brands: string[], resolve: (m: string) => string | nu
     const labelers = [...new Set(((j?.results ?? []) as { labeler_name?: string }[]).map((x) => x.labeler_name ?? "").filter(Boolean))];
     const tickers = new Set(labelers.map(resolve));
     const owner = tickers.size === 1 && !tickers.has(null) ? [...tickers][0]! : null;
-    cache[brand] = owner ? { ticker: owner, maker: labelers[0] } : null;
-    looked++;
-    await sleep(300);
+    cache[key] = owner ? { ticker: owner, maker: labelers[0] } : null;
+    if (++looked % 100 === 0) log("  Part B owner lookups", looked);
+    await sleep(250);
   }
-  if (looked) await sb.storage.from("datasets").upload(path, JSON.stringify(cache), { upsert: true, contentType: "application/json" });
+  await sb.storage.from("datasets").upload(path, JSON.stringify(cache), { upsert: true, contentType: "application/json" });
   log("Part B owners", Object.values(cache).filter(Boolean).length, "of", Object.keys(cache).length, "drugs;", looked, "looked up");
   return cache;
 }
@@ -103,13 +107,13 @@ if (args.medicare !== undefined) {
     log(part, annual.length, "annual rows,", quarterly.length, "quarterly rows");
     let owner: ((b: string) => { ticker: string; maker: string } | null) | undefined;
     if (part === "partB") {
-      const big = new Set<string>();
+      const big = new Map<string, string>();
       for (const r of [...annual, ...quarterly]) {
         const spend = Math.max(...Object.entries(r).filter(([k]) => k.startsWith("Tot_Spndng")).map(([, v]) => Number(v) || 0));
-        if (spend >= 10e6 && r.Brnd_Name) big.add(r.Brnd_Name.trim());
+        if (spend >= 10e6 && r.Brnd_Name) big.set(displayBrand(r.Brnd_Name).toLowerCase(), displayBrand(r.Gnrc_Name ?? "").toLowerCase());
       }
-      const owners = await partBOwners([...big], resolve);
-      owner = (b) => owners[b] ?? null;
+      const owners = await partBOwners(big, resolve);
+      owner = (b) => owners[displayBrand(b).toLowerCase()] ?? null;
     }
     readings.push(...drugYears(part, "annual", annual, resolve, owner), ...drugYears(part, "quarterly", quarterly, resolve, owner));
   }

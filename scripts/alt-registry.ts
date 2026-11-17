@@ -5,7 +5,7 @@
 //   bun scripts/alt-registry.ts [--only=JPM,HOOD]
 import { COVERAGE } from "@/lib/coverage";
 import { staticRegistry } from "@/lib/alt/collect.server";
-import { legalName, pickCfpb, pickFdic, REGISTRY_PATH, wikiTitle, type AltRegistry } from "@/lib/alt/registry";
+import { dedupeRegistry, legalName, pickCfpb, pickFdic, REGISTRY_PATH, wikiTitle, type AltRegistry } from "@/lib/alt/registry";
 import { args, log, sb, sleep } from "./lib/supa";
 
 const UA = "FiledUnder Research research@filedunder.ai";
@@ -71,9 +71,11 @@ for (const c of cos) {
   reg[c.ticker] = e;
   if (++n % 100 === 0) log(`${n}/${cos.length}`);
 }
+const cik = new Map(COVERAGE.map((c) => [c.ticker, c.cik]));
+const clean = dedupeRegistry(reg, (t) => cik.get(t));
 const counts = { wiki: 0, fdic: 0, cfpb: 0, maker: 0 };
-for (const e of Object.values(reg)) for (const k of Object.keys(counts) as (keyof typeof counts)[]) if (e[k]) counts[k]++;
+for (const e of Object.values(clean)) for (const k of Object.keys(counts) as (keyof typeof counts)[]) if (e[k]) counts[k]++;
 log(`registry: ${Object.keys(reg).length} companies · ${JSON.stringify(counts)}`);
-const { error } = await sb.storage.from("datasets").upload(REGISTRY_PATH, JSON.stringify(reg), { upsert: true, contentType: "application/json" });
+const { error } = await sb.storage.from("datasets").upload(REGISTRY_PATH, JSON.stringify(clean), { upsert: true, contentType: "application/json" });
 if (error) throw error;
 log("saved");

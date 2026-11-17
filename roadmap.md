@@ -215,7 +215,7 @@
 
 ## Platform upgrade (requested Nov 16 21:22 UTC)
 - [x] Setups: FINRA daily short volume (2018+), 8-K 2.02 earnings dates, Form 4 insider purchases (2016+), VIX3M term structure, breadth; new strategies: earnings drift, pre-earnings run-up, insider clusters, short-selling flow, panic-day snap back, customer momentum (supply links), confluence; short borrow cost
-- [ ] Setups follow-ups: SEC fails-to-deliver data; options-implied context (current snapshot only, not backtestable)
+- [ ] Setups follow-ups: use the stored fails-to-deliver series as a strategy feature (data now in alt_data `settlement`); options-implied context (current snapshot only, not backtestable)
 - [x] Setups auto-refresh: nightly `setups` job (4 parallel schedules, 21:00–06:00 UTC) refreshes closing bars, rescans every stock, re-tests every strategy, publishes setups and records live outcomes
 - [x] Auto paper trading: house + personal autopilots (/app/autopilots) with daily fills, exits, equity vs SPY, hit rate, drawdown, Sharpe; personal autopilot limits trial 2 / Research 5 / Pro 25 are a proposal awaiting the owner's confirmation
 - [x] IR tab UX: Key metrics + biggest moves panel, quarterly columns cleaned of month-ends, Monthly view, Q2/Q3 filled from year-to-date columns, current breakdowns first, real gaps marked (payload rebuild running for all stored companies)
@@ -226,7 +226,9 @@
 - [x] Supply chain: end-to-end Chain view (suppliers' suppliers → suppliers → company → customers → their customers, 1–3 tiers) from quoted links + XBRL-tagged customer/supplier shares, edges sized by stated share, single-source and two-sided confirmation marked, every edge opens its sentence or tagged fact; phone list layout; assistant get_supply_chain includes the chain; tagged-name matching improved (Amazon, Lowe's, Costco, Ford… now matched; look-alikes like "Southern Wine" rejected); supply records load in parallel
 - [ ] Supply chain next: flow dollars through the chain (seller revenue × stated share at each tier), filter the chain by product/link type
 - [ ] Filing detail follow-ups: history beyond the latest 10-K/10-Q (stitch prior filings for 5-year segment and geography trends); bank/insurer breakdowns (loan classes, premiums by line) currently filtered as accounting detail
-- [ ] Alt data: more authoritative gov sources (e.g. NHTSA recalls, CFPB complaints, FDA, USPTO, H-1B, lobbying, FINRA/SEC market structure) collected on schedule with source URLs
+- [x] Alt data for all ~1,844 companies: generated name registry (Wikipedia via SEC CIK, FDIC certs, CFPB names, NHTSA makers; ambiguous names dropped), scheduled refresh rotates every applicable company/source pair (3 per run), full-universe backfill running; cross-company leaderboards computed in the database (latest, vs own normal, vs 1y)
+- [x] New gov datasets: SEC fails-to-deliver (2 years, every covered stock, auto-refresh twice a month) and CMS Medicare Part D/Part B drug spending (2020–latest quarter, 60 drug companies, per-drug table)
+- [ ] Alt data next: USPTO patents, H-1B/LCA filings, Senate lobbying (LDA API needs a key), EPA enforcement (ECHO, needs facility matching), CourtListener dockets (needs a key); NHTSA recalls refresh only via the script (their query takes ~6 s, longer than a scheduled call); rerun `bun scripts/gov-data.ts --medicare` when CMS publishes a new quarter
 - [x] Navigation cleanup: sidebar down to 9 entries (Signals merged into Dashboard tabs; Firm and billing moved to the account menu); every page label matches its menu section; setups table fits without sideways scrolling
 - [x] Filing typos: SEC notices whose stated value implies an impossible share price (e.g. Tenable Form 144, $4.1B for 12,000 shares) are flagged on the feed, Insiders tab and assistant, and left out of totals and ranking
 - [ ] Look polish, next: company page header density on phones, consistent empty states across hubs

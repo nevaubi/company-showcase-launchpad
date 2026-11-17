@@ -1,0 +1,3 @@
+# Alt data rules
+
+- `scripts/alt-data.ts` upserts `alt_data` (stable `uid`, `source_url` required) for every covered company, using the name registry built by `scripts/alt-registry.ts` (`datasets/alt/registry.json`; hand-checked maps in `collect.server.ts` win, names matching two filers are dropped); contract recipients match by name prefix; SEC form maps and signals are pure in `src/lib/alt/`. Whole-market gov files (SEC fails-to-deliver, CMS Medicare drug spending) are parsed purely in `src/lib/alt/ftd.ts`/`medicare.ts` and loaded by `scripts/gov-data.ts`; cross-company series leaderboards come from the `alt_series_leaders` database function, never from paging raw rows.

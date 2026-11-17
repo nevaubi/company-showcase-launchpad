@@ -44,7 +44,14 @@ export const MAKER_RULES: [RegExp, string][] = [
   [/^corcept/, "CORT"],
   [/^axsome/, "AXSM"],
   [/^harmony bio/, "HRMY"],
+  [/^cordavis/, "CVS"], // CVS Health's biosimilar co-labeler
+  [/^(embecta|bd diabetes)/, "EMBC"], // BD's diabetes unit, spun off as Embecta in 2022
 ];
+
+/** Co-labeled "former/current" names whose parts resolve to different covered companies. */
+const SLASH_OWNER: Record<string, string> = { "celgene/amgen": "AMGN", "biohaven/pfizer": "PFE", "jazz/axsome": "AXSM", "janssen/vanda": "VNDA" };
+/** Distributors and repackagers label other makers' drugs; spending on those isn't theirs. */
+const NOT_MAKERS = new Set(["MCK", "CAH", "HSIC", "COR", "OMI"]);
 
 export interface CoveredCo {
   ticker: string;
@@ -60,6 +67,16 @@ export function makerTicker(label: string, covered: CoveredCo[]): string | null 
   const l = label.toLowerCase().trim().replace(/\*+$/, "");
   if (!l || l === "overall") return null;
   const have = new Set(covered.map((c) => c.ticker));
+  if (l.includes("/")) {
+    if (SLASH_OWNER[l]) return have.has(SLASH_OWNER[l]) ? SLASH_OWNER[l] : null;
+    const hits = new Set(l.split("/").map((p) => makerTicker(p, covered)).filter(Boolean));
+    return hits.size === 1 ? [...hits][0]! : null;
+  }
+  const t = oneMaker(l, covered, have);
+  return t && !NOT_MAKERS.has(t) ? t : null;
+}
+
+function oneMaker(l: string, covered: CoveredCo[], have: Set<string>): string | null {
   for (const [re, t] of MAKER_RULES) if (re.test(l)) return have.has(t) ? t : null;
   const n = norm(l);
   if (n.length < 6) return null;
@@ -68,7 +85,8 @@ export function makerTicker(label: string, covered: CoveredCo[]): string | null 
     const cn = norm(c.name);
     return cn.length >= 6 && (cn.startsWith(n) || n.startsWith(`${cn} `) || n === cn);
   });
-  return hits.length === 1 ? hits[0].ticker : null;
+  const tickers = new Set(hits.map((h) => h.ticker)); // a company can be listed under several names
+  return tickers.size === 1 ? hits[0].ticker : null;
 }
 
 export interface CmsRecord {
@@ -79,7 +97,10 @@ export interface CmsRecord {
 export interface DrugYear {
   part: Part;
   ticker: string;
+  /** Display name: CMS spellings merged ("Stelara (J3357)", "STELARA*" → "Stelara"). */
   brand: string;
+  /** CMS's own brand string, used to link the exact record. */
+  raw: string;
   generic: string;
   maker: string;
   year: number;
@@ -90,6 +111,13 @@ export interface DrugYear {
   benes: number | null;
   /** Which CMS file the reading came from (the record link points there). */
   file: "annual" | "quarterly";
+}
+
+/** "Stelara (J3357)" / "BOTOX COSMETIC*" / "Comirnaty *" → "Stelara" / "Botox Cosmetic" / "Comirnaty". */
+export function displayBrand(raw: string): string {
+  const b = raw.replace(/\([^)]*\)/g, " ").replace(/\*/g, " ").replace(/\s+/g, " ").trim();
+  if (b && b === b.toUpperCase() && /[A-Z]{3}/.test(b)) return b.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase());
+  return b;
 }
 
 const num = (v: string | undefined) => {
@@ -114,7 +142,8 @@ export function parseYear(label: string): { year: number; quarters: number | nul
 export function drugYears(part: Part, file: "annual" | "quarterly", records: CmsRecord[], resolve: (maker: string) => string | null, owner?: (brand: string) => { ticker: string; maker: string } | null): DrugYear[] {
   const out: DrugYear[] = [];
   for (const r of records) {
-    const brand = (r.Brnd_Name ?? "").trim();
+    const raw = (r.Brnd_Name ?? "").trim();
+    const brand = displayBrand(raw);
     if (!brand) continue;
     let ticker: string | null = null, maker = "";
     if (part === "partD") {
@@ -122,12 +151,12 @@ export function drugYears(part: Part, file: "annual" | "quarterly", records: Cms
       if (!maker || maker === "Overall") continue;
       ticker = resolve(maker);
     } else {
-      const o = owner?.(brand);
+      const o = owner?.(raw);
       ticker = o?.ticker ?? null;
       maker = o?.maker ?? "";
     }
     if (!ticker) continue;
-    const base = { part, ticker, brand, generic: (r.Gnrc_Name ?? "").trim(), maker, file };
+    const base = { part, ticker, brand, raw, generic: (r.Gnrc_Name ?? "").trim(), maker, file };
     if (r.Year) {
       const y = parseYear(r.Year);
       const spend = num(r.Tot_Spndng);
@@ -158,7 +187,7 @@ export function medicareRows(readings: DrugYear[], topN = 6): Row[] {
   // de-duplicate (part, ticker, brand, maker, year, quarters)
   const seen = new Map<string, DrugYear>();
   for (const r of [...readings].sort((a, b) => (a.file === b.file ? 0 : a.file === "annual" ? -1 : 1))) {
-    const k = [r.part, r.ticker, r.brand, r.maker, r.year, r.quarters ?? "fy"].join("|");
+    const k = [r.part, r.ticker, r.raw, r.maker, r.year, r.quarters ?? "fy"].join("|");
     if (!seen.has(k)) seen.set(k, r);
   }
   const uniq = [...seen.values()];
@@ -207,15 +236,17 @@ export function medicareRows(readings: DrugYear[], topN = 6): Row[] {
     for (const r of rs) if (r.year === latestFull && r.quarters == null) rank.set(r.brand, (rank.get(r.brand) ?? 0) + r.spend);
     const top = [...rank.entries()].sort((a, b) => b[1] - a[1]).slice(0, topN).map(([b]) => b);
     for (const brand of top) {
-      const per = new Map<string, DrugYear & { total: number }>();
+      const per = new Map<string, DrugYear & { total: number; top: number }>();
       for (const r of rs) {
         if (r.brand !== brand) continue;
         const pk = `${r.year}|${r.quarters ?? ""}`;
         const cur = per.get(pk);
         if (cur) {
           cur.total += r.spend;
-          cur.claims = (cur.claims ?? 0) + (r.claims ?? 0);
-        } else per.set(pk, { ...r, total: r.spend });
+          cur.claims = cur.claims == null && r.claims == null ? null : (cur.claims ?? 0) + (r.claims ?? 0);
+          cur.benes = null; // beneficiaries can't be added across codes/makers without double counting
+          if (r.spend > cur.top) Object.assign(cur, { raw: r.raw, file: r.file, maker: r.maker, top: r.spend });
+        } else per.set(pk, { ...r, total: r.spend, top: r.spend });
       }
       for (const r of per.values()) {
         out.push({
@@ -229,7 +260,7 @@ export function medicareRows(readings: DrugYear[], topN = 6): Row[] {
           unit: "USD",
           meta: { part, drug: brand, generic: r.generic, maker: r.maker, year: r.year, ytd: r.quarters != null, quarters: r.quarters, claims: r.claims, benes: r.benes },
           source: `CMS Medicare ${label} Spending by Drug`,
-          source_url: drugUrl(part, r.file === "quarterly", brand),
+          source_url: drugUrl(part, r.file === "quarterly", r.raw),
         });
       }
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appliesTo, legalName, pickCfpb, pickFdic, wikiTitle } from "./registry";
+import { appliesTo, dedupeRegistry, legalName, pickCfpb, pickFdic, wikiTitle } from "./registry";
 
 describe("alt-data registry", () => {
   it("expands SEC names into legal names", () => {
@@ -27,3 +27,18 @@ describe("alt-data registry", () => {
     expect(appliesTo("regulatory", bank, undefined)).toBe(true);
   });
 });
+
+describe("dedupeRegistry", () => {
+  it("drops a name two different filers matched, keeps share classes and removes known false makers", () => {
+    const cik: Record<string, string> = { FBP: "1", FBNC: "2", GOOG: "3", GOOGL: "3", GE: "4" };
+    const out = dedupeRegistry(
+      { FBP: { cfpb: "First Bancorp North Carolina" }, FBNC: { cfpb: "First Bancorp North Carolina" }, GOOG: { wiki: "Alphabet_Inc." }, GOOGL: { wiki: "Alphabet_Inc." }, GE: { maker: "GENERAL ELECTRIC", wiki: "GE_Aerospace" } },
+      (t) => cik[t],
+    );
+    expect(out.FBP.cfpb).toBeUndefined();
+    expect(out.FBNC.cfpb).toBeUndefined();
+    expect(out.GOOGL.wiki).toBe("Alphabet_Inc.");
+    expect(out.GE).toEqual({ wiki: "GE_Aerospace" });
+  });
+});
+

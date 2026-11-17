@@ -42,15 +42,13 @@
 - Supply-chain analyst metrics are pure in `src/lib/supply/core.ts`; the analyst note may only cite stored link ids.
 - The end-to-end value chain (`src/lib/supply/chain.ts`) joins quoted supply links with XBRL-tagged customer/supplier shares (`xbrl_concentration`, names matched by `src/lib/xbrl/counterparty.ts`; rerun `scripts/xbrl-rematch.ts` after changing the matcher), so every edge keeps the filing that states it.
 - `scripts/supply-intel.ts` fills `supply_signals` with verbatim-verified quotes; failed stages keep stored rows.
-- `scripts/alt-data.ts` upserts `alt_data` (stable `uid`, `source_url` required); contract recipients match by name prefix; SEC form maps and signals are pure in `src/lib/alt/`.
+- Alt data (registry, gov files, leaderboards): see `src/lib/alt/AGENTS.md`.
 - OFR hedge fund data comes from `bun scripts/hedge-funds.ts` into `public/data/hedge-funds.json`, values as published with source URLs; rerun, never hand-edit.
 - Hedge analytics: `src/lib/hedge/core.ts`.
 - AI briefs/notes cite only browser-built fact ids.
-- Supply-chain country/region/concentration/freshness/basket analytics are pure in `src/lib/supply/analytics.ts`; web cross-checks keep only sentences naming both companies.
 - Promises keep only verbatim-verified quotes (`vetPromises`); alerts are pure diffs in `src/lib/alerts/core.ts` over sourced rows.
 - Analyst estimates: `scripts/estimates.ts` fills `analyst_estimates` (provider throttles Node fetch); `getEstimates` refreshes live after 6h.
 - Company context (Wikipedia description, Commons photos, 10-K/proxy people with headshots) comes from `bun scripts/company-context.ts` into `public/data/context/`; people are kept only if named in the filing text, and photos need a Wikidata link to the company or the company's own page.
-- Region risk: pure in `src/lib/supply/region.ts`; external lookups via authed `supply-region.functions.ts`, cached, sourced.
 - Firm workspaces: permissions live in the database (RLS, checked RPCs, guard triggers); firm tables `REVOKE ALL` then grant exact columns, because this project's default privileges grant everything.
 - Report library: facts are built purely in `src/lib/reports/` and every model sentence is re-checked against them (`vet.ts`, sign-aware); slots are written only through `ensureReport` (`store.server.ts`, single flight + `report_runs` spend limits), shared by the authed server fn and `scripts/reports-pregen.ts`. Report charts and peer comparisons are built purely in `insights.ts`/`peers.ts`; every plotted value points at a fact (peer facts carry `tk`, medians/ranks are `composite` facts listing their members); bump `REPORT_FORMAT` when report data changes so stored reports are rewritten.
 - Filing redlines are pure in `src/lib/redline/` (text blocks → sections → paragraph pairing → word diff → rule-based score); `scripts/redlines.ts` stores standard pairs in `filing_redlines`, other pairs are built and stored on the server by `computeRedline` (`src/lib/redline.functions.ts`), and briefs keep only bullets whose quote is verbatim in a cited change.
