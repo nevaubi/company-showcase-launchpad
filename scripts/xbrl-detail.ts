@@ -143,7 +143,7 @@ async function main() {
   const note = (ticker: string, d: StoredDetail | null) => {
     const e = d ? indexEntry(d) : {};
     touched.add(ticker);
-    if (e.exposure || e.bank) index.companies[ticker] = e;
+    if (e.exposure || e.bank || e.insurer) index.companies[ticker] = e;
     else delete index.companies[ticker];
   };
   let lastSave = Date.now();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DetailPeriod, DetailTable, FilingDetail, StoredDetail } from "./detail";
-import { bankMetricsOf, exposureOf, isLenderIndustry, rankRegion, regionKey } from "./exposure";
+import { bankMetricsOf, exposureOf, insurerMetricsOf, isInsurerIndustry, isLenderIndustry, rankRegion, regionKey } from "./exposure";
 
 const FY = (y: number): DetailPeriod => ({ key: `D${y}`, start: `${y}-01-01`, end: `${y}-12-31`, months: 12 });
 const YE = (y: number): DetailPeriod => ({ key: `I${y}`, end: `${y}-12-31`, months: 0 });
@@ -158,5 +158,63 @@ describe("state deposits text", () => {
     expect(t).toContain("covered banks together 30.0%");
     expect(t).toContain("1-yr 20.0%");
     expect(t).toContain("https://api.fdic.gov/banks/sod?JPM");
+  });
+});
+
+describe("insurer metrics", () => {
+  const cons = (o: Record<string, Record<string, number>>) => Object.fromEntries(Object.entries(o).map(([c, v]) => [`us-gaap:${c}`, vals(v)]));
+  const stored = (c: Record<string, Record<string, number>>, tables: DetailTable[] = []): StoredDetail => ({
+    ticker: "TRV",
+    builtAt: "",
+    format: 6,
+    annual: filing("ins", 2025, { consolidated: cons(c), tables }),
+    quarterly: null,
+  });
+
+  it("reads the latest year's premiums, losses, reserve development and reserves from consolidated tags", () => {
+    const m = insurerMetricsOf(stored({ PremiumsEarnedNet: { D2024: 41e9, D2025: 43.9e9 }, PremiumsWrittenNet: { D2025: 44.4e9 }, PolicyholderBenefitsAndClaimsIncurredNet: { D2025: 27.2e9 }, SupplementalInformationForPropertyCasualtyInsuranceUnderwritersPriorYearClaimsAndClaimsAdjustmentExpense: { D2025: -1.1e9 }, LiabilityForClaimsAndClaimsAdjustmentExpense: { I2025: 58e9 } }))!;
+    expect(m.end).toBe("2025-12-31");
+    expect(m.earned.v).toBe(43.9e9);
+    expect(m.earned.parts[0]).toMatchObject({ accn: "ins", concept: "us-gaap:PremiumsEarnedNet", id: "id-D2025" });
+    expect(m.earnedPrior?.v).toBe(41e9);
+    expect(m.losses!.v / m.earned.v).toBeCloseTo(0.6196, 3);
+    expect(m.priorYear?.v).toBe(-1.1e9);
+    expect(m.reserves?.v).toBe(58e9);
+  });
+
+  it("falls back to a breakdown table's consolidated total (Schedule III)", () => {
+    const t: DetailTable = { id: "i", family: "insurance", title: "Premium revenue by segment", concept: "us-gaap:SupplementaryInsuranceInformationPremiumRevenue", conceptLabel: "Premium revenue", axis: "us-gaap:StatementBusinessSegmentsAxis", axisLabel: "Segment", unit: "USD", periods: ["D2025"], rows: [], total: vals({ D2025: 81.7e9 }) };
+    expect(insurerMetricsOf(stored({}, [t]))?.earned.v).toBe(81.7e9);
+  });
+
+  it("drops a figure out of proportion to premiums and skips companies without premiums", () => {
+    const m = insurerMetricsOf(stored({ PremiumsEarnedNet: { D2025: 10e9 }, PolicyholderBenefitsAndClaimsIncurredNet: { D2025: 40e9 } }))!;
+    expect(m.losses).toBeUndefined();
+    expect(insurerMetricsOf(stored({ PolicyholderBenefitsAndClaimsIncurredNet: { D2025: 4e9 } }))).toBeNull();
+  });
+
+  it("classifies insurers and health plans by industry", () => {
+    expect(isInsurerIndustry("Property & Casualty Insurance")).toBe(true);
+    expect(isInsurerIndustry("Managed Health Care")).toBe(true);
+    expect(isInsurerIndustry("Diversified Banks")).toBe(false);
+  });
+});
+
+describe("insurer text for the assistant", () => {
+  it("sorts by loss ratio and says which way reserves moved", async () => {
+    const { insurersText } = await import("./exposure-text");
+    const ref = (v: number) => ({ v, parts: [{ accn: "a", doc: "d.htm", concept: "us-gaap:PremiumsEarnedNet", end: "2025-12-31", value: v }] });
+    const index = {
+      builtAt: "",
+      companies: {
+        TRV: { insurer: { end: "2025-12-31", earned: ref(100), losses: ref(62), priorYear: ref(-3) } },
+        ALL: { insurer: { end: "2025-12-31", earned: ref(100), losses: ref(71), priorYear: ref(2) } },
+      },
+    };
+    const industries = new Map([["TRV", "Property & Casualty Insurance"], ["ALL", "Property & Casualty Insurance"]]);
+    const t = insurersText(index, new Map(), industries, { sort: "loss_ratio" });
+    const lines = t.split("\n").slice(1);
+    expect(lines[0]).toMatch(/^ALL .*loss & benefit ratio 71\.0%.*adverse: reserves added/);
+    expect(lines[1]).toMatch(/^TRV .*favorable: reserves released/);
   });
 });

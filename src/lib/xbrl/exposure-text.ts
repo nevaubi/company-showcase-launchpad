@@ -1,5 +1,5 @@
 /** Plain-text views of the cross-company exposure index for the research assistant (pure). */
-import { isLenderIndustry, rankRegion, regionCounts, regionKey, regionName, REGION_NAMES, type BankMetrics, type ExpVal, type ExposureIndex } from "./exposure";
+import { isInsurerIndustry, isLenderIndustry, rankRegion, regionCounts, regionKey, regionName, REGION_NAMES, type BankMetrics, type ExpVal, type ExposureIndex, type InsurerMetrics } from "./exposure";
 
 const usd = (v: number) => {
   const a = Math.abs(v);
@@ -50,9 +50,40 @@ export function lendersText(index: ExposureIndex, names: Map<string, string>, in
   return `Lenders from their latest 10-K tags (sorted by ${by}, highest first; ${rows.length} lenders). Ratios use year-end loans; a ratio is n/a when its tags don't describe the same book.\n${rows.slice(0, limit).map((r) => bankLine(r.t, names.get(r.t) ?? "", r.b)).join("\n")}`;
 }
 
+const insLine = (t: string, name: string, i: InsurerMetrics) => {
+  const E = i.earned.v;
+  const g = i.earnedPrior ? ` (${pct(E / i.earnedPrior.v - 1, 1)} vs FY ending ${i.earnedPrior.end})` : "";
+  const parts = [
+    `${t} ${name} · FY ending ${i.end} · premiums earned ${usd(E)}${g}`,
+    i.written ? `written ${usd(i.written.v)}` : null,
+    `loss & benefit ratio ${i.losses ? pct(i.losses.v / E, 1) : "n/a"}`,
+    i.priorYear ? `prior-year reserve development ${usd(i.priorYear.v)} = ${pct(i.priorYear.v / E, 1)} of premiums (${i.priorYear.v > 0 ? "adverse: reserves added" : "favorable: reserves released"})` : null,
+    i.acquisition ? `acquisition costs ${pct(i.acquisition.v / E, 1)} of premiums` : null,
+    i.underwriting ? `underwriting income ${usd(i.underwriting.v)}` : null,
+    i.reserves ? `loss reserves ${usd(i.reserves.v)} = ${(i.reserves.v / E).toFixed(2)}× premiums` : null,
+    cite(t, i.earned),
+  ];
+  return parts.filter(Boolean).join(" · ");
+};
+
+export type InsurerSort = "premiums" | "growth" | "loss_ratio" | "reserve_development";
+export function insurersText(index: ExposureIndex, names: Map<string, string>, industries: Map<string, string>, opts: { sort?: InsurerSort; limit?: number; others?: boolean } = {}): string {
+  const by = opts.sort ?? "premiums";
+  const v = (i: InsurerMetrics) =>
+    by === "premiums" ? i.earned.v : by === "growth" ? (i.earnedPrior ? i.earned.v / i.earnedPrior.v - 1 : NaN) : by === "loss_ratio" ? (i.losses?.v ?? NaN) / i.earned.v : (i.priorYear?.v ?? NaN) / i.earned.v;
+  const rows = Object.entries(index.companies)
+    .filter(([t, c]) => c.insurer && (opts.others || isInsurerIndustry(industries.get(t))))
+    .map(([t, c]) => ({ t, i: c.insurer!, x: v(c.insurer!) }))
+    .filter((r) => Number.isFinite(r.x))
+    .sort((a, b) => b.x - a.x);
+  if (!rows.length) return "No insurer metrics stored yet.";
+  const limit = opts.limit ?? 40;
+  return `Insurers from their latest 10-K tags (sorted by ${by.replace("_", " ")}, highest first; ${rows.length} insurers). Ratios divide by net premiums earned (a health plan's premium revenue); prior-year development > 0 means reserves for earlier years were raised. n/a = not tagged or a different scope.\n${rows.slice(0, limit).map((r) => insLine(r.t, names.get(r.t) ?? "", r.i)).join("\n")}`;
+}
+
 export function companyExposureText(index: ExposureIndex, ticker: string, names: Map<string, string>): string {
   const c = index.companies[ticker];
-  if (!c) return `${ticker} has no region breakdown or loan book in the exposure index (its 10-K may not tag revenue by geography).`;
+  if (!c) return `${ticker} has no region breakdown, loan book or insurance figures in the exposure index (its 10-K may not tag them).`;
   const out: string[] = [];
   if (c.exposure) {
     out.push(`${ticker} revenue by region (${c.exposure.table}, FY ending ${c.exposure.fyEnd}):`);
@@ -63,6 +94,7 @@ export function companyExposureText(index: ExposureIndex, ticker: string, names:
     }
   }
   if (c.bank) out.push(`Loan book: ${bankLine(ticker, names.get(ticker) ?? "", c.bank)}`);
+  if (c.insurer) out.push(`Insurance: ${insLine(ticker, names.get(ticker) ?? "", c.insurer)}`);
   return out.join("\n");
 }
 

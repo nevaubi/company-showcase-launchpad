@@ -49,9 +49,24 @@ export interface BankMetrics {
   allowance?: ExpVal;
   nonaccrual?: ExpVal;
 }
+/** An insurer's fiscal year: premiums, losses and benefits, reserve development, acquisition costs, reserves. */
+export interface InsurerMetrics {
+  end: string;
+  /** premium revenue: net premiums earned (or a health plan's premium revenue) */
+  earned: ExpVal;
+  earnedPrior?: ExpVal & { end: string };
+  written?: ExpVal;
+  losses?: ExpVal;
+  /** prior-year reserve development: positive = reserves strengthened (adverse), negative = released */
+  priorYear?: ExpVal;
+  acquisition?: ExpVal;
+  underwriting?: ExpVal;
+  /** loss and loss-expense reserves at year-end */
+  reserves?: ExpVal;
+}
 export interface ExposureIndex {
   builtAt: string;
-  companies: Record<string, { exposure?: CompanyExposure; bank?: BankMetrics }>;
+  companies: Record<string, { exposure?: CompanyExposure; bank?: BankMetrics; insurer?: InsurerMetrics }>;
 }
 
 export const REGION_NAMES: Record<string, string> = {
@@ -292,12 +307,81 @@ export function bankMetricsOf(stored: StoredDetail): BankMetrics | null {
   };
 }
 
-/** Index entry for one company (empty when it has neither view). */
-export function indexEntry(stored: StoredDetail): { exposure?: CompanyExposure; bank?: BankMetrics } {
+const INS: Record<"earned" | "written" | "losses" | "priorYear" | "acquisition" | "underwriting" | "reserves", readonly string[]> = {
+  earned: ["PremiumsEarnedNet", "HealthCareOrganizationPremiumRevenue", "SupplementaryInsuranceInformationPremiumRevenue"],
+  written: ["PremiumsWrittenNet", "SupplementaryInsuranceInformationPremiumsWritten"],
+  losses: ["PolicyholderBenefitsAndClaimsIncurredNet", "IncurredClaimsPropertyCasualtyAndLiability", "PolicyholderBenefitsAndClaimsIncurredHealthCare", "SupplementaryInsuranceInformationBenefitsClaimsLossesAndSettlementExpense"],
+  priorYear: ["SupplementalInformationForPropertyCasualtyInsuranceUnderwritersPriorYearClaimsAndClaimsAdjustmentExpense"],
+  acquisition: ["DeferredPolicyAcquisitionCostAmortizationExpense", "SupplementaryInsuranceInformationAmortizationOfDeferredPolicyAcquisitionCosts"],
+  underwriting: ["UnderwritingIncomeLoss"],
+  reserves: ["LiabilityForClaimsAndClaimsAdjustmentExpense", "SupplementaryInsuranceInformationLiabilityForFuturePolicyBenefitsLossesClaimsAndLossExpenseReserves"],
+};
+const INS_LABEL: Record<keyof typeof INS, string> = {
+  earned: "Net premiums earned",
+  written: "Net premiums written",
+  losses: "Losses and benefits incurred",
+  priorYear: "Prior-year reserve development",
+  acquisition: "Acquisition cost amortization",
+  underwriting: "Underwriting income",
+  reserves: "Loss and loss-expense reserves",
+};
+
+/** One consolidated insurer figure: the undimensioned tag first, else the total its breakdown table carries. */
+function insFigure(d: FilingDetail, what: keyof typeof INS, end: string): ExpVal | null {
+  const months = what === "reserves" ? 0 : 12;
+  const fits = (k: string) => d.periods[k]?.end === end && d.periods[k].months === months && !d.periods[k].label;
+  for (const local of INS[what]) {
+    const concept = `us-gaap:${local}`;
+    const m = d.consolidated?.[concept];
+    const k = m && Object.keys(m).find(fits);
+    if (m && k) return { v: m[k].v, parts: [refOf(d, { concept } as DetailTable, k, m[k], INS_LABEL[what])] };
+    const t = d.tables.find((x) => x.family === "insurance" && x.concept === concept && x.total && Object.keys(x.total).some(fits));
+    const tk = t && Object.keys(t.total!).find(fits);
+    if (t && tk) return { v: t.total![tk].v, parts: [refOf(d, t, tk, t.total![tk], INS_LABEL[what])] };
+  }
+  return null;
+}
+
+/** Premiums, losses, reserve development, acquisition costs and reserves for an insurer's latest fiscal year. */
+export function insurerMetricsOf(stored: StoredDetail): InsurerMetrics | null {
+  const d = annualWithHistory(stored);
+  if (!d || !stored.annual) return null;
+  const fye = Date.parse(stored.annual.reportDate);
+  // The latest fiscal year only: an older filing's premiums must not stand in for this year's.
+  const ends = [...new Set(Object.values(d.periods).filter((p) => p.months === 12 && !p.label).map((p) => p.end))].sort().reverse();
+  const end = ends.find((e) => Math.abs(Date.parse(e) - fye) <= 7 * 86_400_000);
+  if (!end) return null;
+  const earned = insFigure(d, "earned", end);
+  if (!earned || earned.v <= 0) return null;
+  const prevEnd = ends.find((e) => e < end && Math.round((Date.parse(end) - Date.parse(e)) / (365.25 * 86_400_000)) === 1);
+  const earnedPrior = prevEnd ? insFigure(d, "earned", prevEnd) : null;
+  const get = (w: keyof typeof INS) => insFigure(d, w, end);
+  const written = get("written"), losses = get("losses"), priorYear = get("priorYear"), acquisition = get("acquisition"), underwriting = get("underwriting"), reserves = get("reserves");
+  // Figures far out of proportion to premiums describe another scope (a segment, a run-off book); leave them out.
+  const ok = (x: ExpVal | null, lo: number, hi: number) => !!x && x.v / earned.v >= lo && x.v / earned.v <= hi;
+  return {
+    end,
+    earned,
+    ...(earnedPrior && earnedPrior.v > 0 ? { earnedPrior: { ...earnedPrior, end: prevEnd! } } : {}),
+    ...(written && ok(written, 0.5, 2) ? { written } : {}),
+    ...(losses && ok(losses, 0.2, 1.6) ? { losses } : {}),
+    ...(priorYear && ok(priorYear, -0.5, 0.5) ? { priorYear } : {}),
+    ...(acquisition && ok(acquisition, 0, 0.6) ? { acquisition } : {}),
+    ...(underwriting && ok(underwriting, -1, 1) ? { underwriting } : {}),
+    ...(reserves && ok(reserves, 0.05, 30) ? { reserves } : {}),
+  };
+}
+
+/** Index entry for one company (empty when it has none of the views). */
+export function indexEntry(stored: StoredDetail): { exposure?: CompanyExposure; bank?: BankMetrics; insurer?: InsurerMetrics } {
   const exposure = exposureOf(stored);
   const bank = bankMetricsOf(stored);
-  return { ...(exposure ? { exposure } : {}), ...(bank ? { bank } : {}) };
+  const insurer = insurerMetricsOf(stored);
+  return { ...(exposure ? { exposure } : {}), ...(bank ? { bank } : {}), ...(insurer ? { insurer } : {}) };
 }
+
+/** Insurers and health plans. Other companies with premium revenue (a captive insurer inside a conglomerate) are opt-in. */
+export const isInsurerIndustry = (industry: string | undefined) => !!industry && /insurance|reinsurance|managed health care|insurance brokers/i.test(industry);
 
 /** Companies ranked by their share of revenue from one region (largest first). */
 export function rankRegion(index: ExposureIndex, key: string): { ticker: string; r: RegionExposure; fyEnd: string }[] {

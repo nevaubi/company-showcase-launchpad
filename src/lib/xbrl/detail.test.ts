@@ -295,3 +295,59 @@ describe("annual balance columns", () => {
     expect(t.periods.map((k) => d.periods[k].end)).toEqual(["2024-12-31", "2025-12-31"]);
   });
 });
+
+describe("insurers", () => {
+  const P = "srt:ProductOrServiceAxis";
+  const ins = [
+    `<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>`,
+    ctx("c26", fy(2026)),
+    ctx("bi", fy(2026), [[SEG, "x:BusinessMember"]]),
+    ctx("pi", fy(2026), [[SEG, "x:PersonalMember"]]),
+    ctx("oth", fy(2026), [[SEG, "x:OtherMember"]]),
+    ctx("auto", fy(2026), [[P, "x:AutoMember"]]),
+    ctx("home", fy(2026), [[P, "x:HomeMember"]]),
+    ctx("ay", fy(2026), [[P, "x:AutoMember"], ["us-gaap:ShortdurationInsuranceContractsAccidentYearAxis", "x:Y2024Member"]]),
+    fact("us-gaap:PremiumsEarnedNet", "c26", "40,000"),
+    fact("us-gaap:PremiumsEarnedNet", "bi", "22,000", ' id="pe1"'),
+    fact("us-gaap:PremiumsEarnedNet", "pi", "18,000"),
+    // Schedule III repeats the same figures and lists an empty segment
+    fact("us-gaap:SupplementaryInsuranceInformationPremiumRevenue", "bi", "22,000"),
+    fact("us-gaap:SupplementaryInsuranceInformationPremiumRevenue", "pi", "18,000"),
+    fact("us-gaap:SupplementaryInsuranceInformationPremiumRevenue", "oth", "0"),
+    fact("us-gaap:PolicyholderBenefitsAndClaimsIncurredNet", "bi", "14,300", ' id="ls1"'),
+    fact("us-gaap:PolicyholderBenefitsAndClaimsIncurredNet", "pi", "11,700"),
+    fact("us-gaap:UnderwritingIncomeLoss", "bi", "1,900"),
+    fact("us-gaap:UnderwritingIncomeLoss", "pi", "900"),
+    fact("us-gaap:SupplementalInformationForPropertyCasualtyInsuranceUnderwritersPriorYearClaimsAndClaimsAdjustmentExpense", "auto", "(1,880)", ' sign="-"'),
+    fact("us-gaap:SupplementalInformationForPropertyCasualtyInsuranceUnderwritersPriorYearClaimsAndClaimsAdjustmentExpense", "home", "128"),
+    fact("us-gaap:ShortdurationInsuranceContractsIncurredClaimsAndAllocatedClaimAdjustmentExpenseNet", "ay", "9,000"),
+  ].join("\n");
+  const d = buildDetail({ ticker: "TRV", accn: "a", form: "10-K", filed: "2026-11-01", reportDate: "2026-09-27", doc: "d.htm", facts: parseInlineFacts(ins, parseUnits(ins)), contexts: parseContexts(ins), labels: new Map() });
+  const t = (title: string) => d.tables.find((x) => x.family === "insurance" && x.title === title);
+
+  it("reads premiums, losses and prior-year development by segment and line into Premiums & claims", () => {
+    expect(t("Net premiums earned by segment")?.rows.map((r) => Object.values(r.values)[0].v)).toEqual([22e9, 18e9]);
+    expect(Object.values(t("Losses and benefits incurred by segment")!.rows[0].values)[0].id).toBe("ls1");
+    const dev = t("Prior-year reserve development (+ = adverse) by product / service")!;
+    expect(dev.rows.map((r) => Object.values(r.values)[0].v)).toEqual([-1.88e9, 128e6]);
+  });
+
+  it("keeps one copy of the Schedule III repeat and drops its empty segment", () => {
+    expect(d.tables.filter((x) => x.family === "insurance" && /premium/i.test(x.title) && x.axis === SEG)).toHaveLength(1);
+  });
+
+  it("leaves claim-development triangles out", () => {
+    expect(d.tables.some((x) => /Shortduration/i.test(x.concept))).toBe(false);
+  });
+
+  it("gives the segment P&L premiums as revenue, losses as cost and underwriting income as profit", () => {
+    const kinds = Object.fromEntries(d.segments!.rows.map((r) => [r.concept, r.kind]));
+    expect(kinds["us-gaap:PremiumsEarnedNet"]).toBe("revenue");
+    expect(kinds["us-gaap:PolicyholderBenefitsAndClaimsIncurredNet"]).toBe("cost");
+    expect(kinds["us-gaap:UnderwritingIncomeLoss"]).toBe("profit");
+  });
+
+  it("keeps consolidated premiums for cross-insurer comparisons", () => {
+    expect(Object.values(d.consolidated?.["us-gaap:PremiumsEarnedNet"] ?? {})[0]?.v).toBe(40e9);
+  });
+});

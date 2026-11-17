@@ -40,7 +40,7 @@ import { searchDocuments } from "@/lib/ir/search";
 import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { exposureIndexQuery, filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
-import { bankStatesText, companyExposureText, lendersText, regionText, stateDepositsText } from "@/lib/xbrl/exposure-text";
+import { bankStatesText, companyExposureText, insurersText, lendersText, regionText, stateDepositsText, type InsurerSort } from "@/lib/xbrl/exposure-text";
 import { depositsByStateQuery } from "@/lib/alt/query";
 import { detailText, type DetailSection } from "@/lib/xbrl/text";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
@@ -644,9 +644,15 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         const states = dep ? bankStatesText(dep.rows, t) : null;
         return { output: clip([companyExposureText(index, t, names), states].filter(Boolean).join("\n")), summary: `${t} exposures` };
       }
+      if (args.view === "insurers") {
+        const industries = new Map(uni.companies.map((c) => [c.ticker, c.industry]));
+        const sort = (["premiums", "growth", "loss_ratio", "reserve_development"].includes(String(args.sort)) ? args.sort : "premiums") as InsurerSort;
+        return { output: clip(insurersText(index, names, industries, { sort, limit })), summary: `insurers by ${sort.replace("_", " ")}` };
+      }
       if (args.view === "lenders") {
         const industries = new Map(uni.companies.map((c) => [c.ticker, c.industry]));
-        return { output: clip(lendersText(index, names, industries, { sort: (args.sort as "loans" | null) ?? "loans", limit })), summary: `lenders by ${(args.sort as string | null) ?? "loans"}` };
+        const sort = (["loans", "nco", "allowance", "nonaccrual", "growth"].includes(String(args.sort)) ? args.sort : "loans") as "loans" | "nco" | "allowance" | "nonaccrual" | "growth";
+        return { output: clip(lendersText(index, names, industries, { sort, limit })), summary: `lenders by ${sort}` };
       }
       const region = String(args.region ?? "");
       return { output: clip(regionText(index, region, names, limit)), summary: `${region} revenue exposure` };

@@ -16,6 +16,8 @@ import {
   coverageOf,
   detailPeriodLabel,
   detailUnit,
+  INS_EARNED,
+  INS_LOSS,
   type ConcentrationRow,
   type DetailRow,
   type DetailTable,
@@ -27,13 +29,14 @@ import { filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
 import { annualWithHistory, historySpan } from "@/lib/xbrl/history";
 import { hasMoneyMap, MoneyMap } from "@/components/financials/money-map";
 
-type Section = "map" | "revenue" | "segments" | "lending" | "capital" | "concentration" | "geography" | "costs" | "commitments" | "inventory" | "other";
+type Section = "map" | "revenue" | "segments" | "insurance" | "lending" | "capital" | "concentration" | "geography" | "costs" | "commitments" | "inventory" | "other";
 const SECTION_LABEL: Record<Section, string> = {
   map: "Money map",
   revenue: "Revenue mix",
   segments: "Segment P&L",
   lending: "Loans & deposits",
   capital: "Regulatory capital",
+  insurance: "Premiums & claims",
   concentration: "Concentration",
   geography: "Geography",
   costs: "Costs",
@@ -47,6 +50,7 @@ const SECTION_HINT: Record<Section, string> = {
   segments: "Every line the filing reports per segment: revenue, significant expenses, profit",
   lending: "The loan book by portfolio, class, industry and region, its allowance, charge-offs, nonaccrual loans, and deposits by type",
   capital: "Capital, risk-weighted assets and capital ratios by approach and legal entity, with the requirements the filing states",
+  insurance: "Premiums written and earned, losses and benefits, prior-year reserve development, acquisition costs and underwriting income by segment, product line or region",
   concentration: "Customers, suppliers and regions the filing says make up a large share of revenue, purchases or receivables",
   geography: "Revenue and long-lived assets by country, region or state",
   costs: "Costs split by product or geography",
@@ -77,7 +81,7 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
     if (d.segments) has.add("segments");
     if (d.concentration.length) has.add("concentration");
     if (base && hasMoneyMap(base)) has.add("map");
-    return (["map", "revenue", "segments", "lending", "capital", "concentration", "geography", "costs", "commitments", "inventory", "other"] as Section[]).filter((s) => has.has(s));
+    return (["map", "revenue", "segments", "insurance", "lending", "capital", "concentration", "geography", "costs", "commitments", "inventory", "other"] as Section[]).filter((s) => has.has(s));
   }, [d, base]);
 
   if (q.isLoading) return <Skeleton className="h-[480px]" />;
@@ -318,15 +322,59 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
   );
 }
 
+type MatrixRow = SegmentMatrix["rows"][number];
+
+/** A per-segment ratio of two tagged lines; each cell opens both parts. */
+function RatioRow({ segs, period, d, ticker, num, den, label, note, what, first }: { segs: SegmentMatrix["segments"]; period: string; d: FilingDetail; ticker: string; num: MatrixRow; den: MatrixRow; label: string; note: string; what: string; first: boolean }) {
+  const source = useSource();
+  const line = first ? "border-t-2 border-t-foreground/70" : "border-t";
+  return (
+    <tr className="font-medium">
+      <th scope="row" className={cn("sticky left-0 z-10 bg-card px-3 py-1 text-left", line)} title={`${num.label} ÷ ${den.label}`}>
+        {label} <span className="text-[11px] font-normal text-muted-foreground">· {note}</span>
+      </th>
+      {segs.map((s) => {
+        const dv = den.values[s.member]?.[period];
+        const nv = num.values[s.member]?.[period];
+        if (!dv || !nv || !dv.v) return <td key={s.member} className={cn("num px-3 py-1 text-right text-muted-foreground/40", line)}>—</td>;
+        const p = d.periods[period];
+        const part = (v: DetailValue, concept: string, lbl: string) => ({ accn: v.accn ?? d.accn, doc: v.doc ?? d.doc, concept, start: p?.start, end: p?.end ?? d.reportDate, value: v.v, label: lbl, sign: 1 as const });
+        return (
+          <td key={s.member} className={cn("p-0", line)}>
+            <button
+              type="button"
+              className="num block w-full px-3 py-1 text-right hover:bg-secondary"
+              onClick={() =>
+                source.open({
+                  ticker,
+                  label: `${s.label} — ${what}`,
+                  periodLabel: detailPeriodLabel(p),
+                  unit: "pct",
+                  value: nv.v / dv.v,
+                  derived: { formula: `${num.label} ÷ ${den.label}`, parts: [part(nv, num.concept, num.label), part(dv, den.concept, den.label)] },
+                })
+              }
+            >
+              {fmtCell(nv.v / dv.v, "pct")}
+            </button>
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
+
 const KIND_HEAD: Record<SegmentMatrix["rows"][number]["kind"], string> = { revenue: "Revenue", cost: "Costs and expenses", profit: "Profit", other: "Other" };
 
 function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticker: string }) {
   const [scale] = useUnitScale();
   const open = useOpen(ticker, d);
-  const source = useSource();
   const [pk, setPk] = useState(m.periods[m.periods.length - 1]);
   const period = m.periods.includes(pk) ? pk : m.periods[m.periods.length - 1];
-  const revenue = m.rows.find((r) => r.kind === "revenue");
+  // An insurer's premiums are its revenue line; the loss ratio divides losses and benefits by them.
+  const premiums = m.rows.find((r) => r.kind === "revenue" && INS_EARNED.test(r.concept));
+  const losses = premiums ? m.rows.find((r) => r.kind === "cost" && INS_LOSS.test(r.concept)) : undefined;
+  const revenue = m.rows.find((r) => r.kind === "revenue" && !INS_EARNED.test(r.concept)) ?? premiums;
   const profits = m.rows.filter((r) => r.kind === "profit");
   const profit = profits.find((r) => /OperatingIncomeLoss$/.test(r.concept)) ?? profits.find((r) => /SegmentProfit|OperatingProfit|Ebitda/i.test(r.concept)) ?? profits[0];
   const totalRev = revenue ? m.segments.reduce((n, s) => n + Math.max(0, revenue.values[s.member]?.[period]?.v ?? 0), 0) : 0;
@@ -387,40 +435,8 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
                 </tr>,
               ];
             })}
-            {revenue && profit && (
-              <tr className="font-medium">
-                <th scope="row" className="sticky left-0 z-10 border-t-2 border-t-foreground/70 bg-card px-3 py-1 text-left" title={`${profit.label} ÷ ${revenue.label}`}>
-                  Margin <span className="text-[11px] font-normal text-muted-foreground">· {profit.label.toLowerCase()} ÷ revenue</span>
-                </th>
-                {segs.map((s) => {
-                  const rv = revenue.values[s.member]?.[period];
-                  const pv = profit.values[s.member]?.[period];
-                  if (!rv || !pv || !rv.v) return <td key={s.member} className="num border-t-2 border-t-foreground/70 px-3 py-1 text-right text-muted-foreground/40">—</td>;
-                  const p = d.periods[period];
-                  const part = (v: DetailValue, concept: string, label: string, sign: 1 | -1) => ({ accn: v.accn ?? d.accn, doc: v.doc ?? d.doc, concept, start: p?.start, end: p?.end ?? d.reportDate, value: v.v, label, sign });
-                  return (
-                    <td key={s.member} className="border-t-2 border-t-foreground/70 p-0">
-                      <button
-                        type="button"
-                        className="num block w-full px-3 py-1 text-right hover:bg-secondary"
-                        onClick={() =>
-                          source.open({
-                            ticker,
-                            label: `${s.label} — ${profit.label} margin`,
-                            periodLabel: detailPeriodLabel(p),
-                            unit: "pct",
-                            value: pv.v / rv.v,
-                            derived: { formula: `${profit.label} ÷ ${revenue.label}`, parts: [part(pv, profit.concept, profit.label, 1), part(rv, revenue.concept, revenue.label, 1)] },
-                          })
-                        }
-                      >
-                        {fmtCell(pv.v / rv.v, "pct")}
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
-            )}
+            {revenue && profit && <RatioRow first segs={segs} period={period} d={d} ticker={ticker} num={profit} den={revenue} label="Margin" note={`${profit.label.toLowerCase()} ÷ revenue`} what="margin" />}
+            {premiums && losses && <RatioRow first={!(revenue && profit)} segs={segs} period={period} d={d} ticker={ticker} num={losses} den={premiums} label="Loss & benefit ratio" note={`${losses.label.toLowerCase()} ÷ ${premiums.label.toLowerCase()}`} what="loss ratio" />}
           </tbody>
         </table>
       </div>

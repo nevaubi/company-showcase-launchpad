@@ -4,7 +4,7 @@
 // long-lived assets sit. Pure: built by scripts/xbrl-detail.ts, rendered by the Financials tab.
 import { humanize, type XbrlContext, type XbrlFact } from "@/lib/xbrl/inline";
 
-export const DETAIL_FORMAT = 5;
+export const DETAIL_FORMAT = 6;
 
 export interface DetailValue {
   v: number;
@@ -63,7 +63,7 @@ export interface ConcentrationRow {
   /** share as a fraction (0.22 = 22%) per period key */
   values: Record<string, DetailValue>;
 }
-export type DetailFamily = "revenue" | "costs" | "concentration" | "geography" | "lending" | "capital" | "commitments" | "inventory" | "other";
+export type DetailFamily = "revenue" | "costs" | "concentration" | "geography" | "lending" | "capital" | "insurance" | "commitments" | "inventory" | "other";
 
 export interface FilingDetail {
   format: number;
@@ -136,6 +136,26 @@ const LENDING_AXES = [
 ];
 /** Balance-sheet deposit lines (tagged without dimensions); several include others. */
 const DEPOSITS = /^us-gaap:(NoninterestBearingDepositLiabilities(Domestic|Foreign)?|InterestBearingDepositLiabilities(Domestic|Foreign)?|InterestBearingDomesticDeposit(Demand|Savings|MoneyMarket|Checking|NegotiableOrderOfWithdrawalNOW|SavingsAndMoneyMarket)|DepositsSavingsDeposits|DemandDepositAccounts|DepositsMoneyMarketDeposits|TimeDeposits|TimeDepositsAtOrAboveFDICInsuranceLimit|TimeDeposits(LessThan100000|LessThan250000|100000OrMore)|InterestBearingForeignDeposit\w*|BrokeredDeposits|DepositsDomestic|DepositsForeign|Deposits)$/;
+/**
+ * Insurers: premiums written and earned (net, direct, ceded, assumed), losses and benefits incurred,
+ * prior-year reserve development, acquisition-cost amortization, underwriting income and the Schedule III
+ * balances, by segment, product line or region. Claim-development triangles (accident-year cuts) and the
+ * long-duration liability roll-forwards are left out.
+ */
+export const INSURANCE =
+  /:(Premiums(Written|Earned)(Net|Gross)|(Direct|Ceded|Assumed)Premiums(Written|Earned)|PolicyholderBenefitsAndClaimsIncurred(Net|Gross|HealthCare|LifeAndAnnuity)?|IncurredClaimsPropertyCasualtyAndLiability|BenefitsLossesAndExpenses|SupplementalInformationForPropertyCasualtyInsuranceUnderwritersPriorYearClaimsAndClaimsAdjustmentExpense(Gross)?|DeferredPolicyAcquisitionCost(s)?AmortizationExpense|UnderwritingIncomeLoss|HealthCareOrganizationPremiumRevenue|SupplementaryInsuranceInformation[A-Za-z]+|[A-Za-z]*(?<![Uu]n)[Ee]arned[Pp]remiums[A-Za-z]*)$/;
+/** Premium revenue (what a loss ratio divides by). */
+export const INS_EARNED = /:(PremiumsEarnedNet|HealthCareOrganizationPremiumRevenue|SupplementaryInsuranceInformationPremiumRevenue[A-Za-z]*|[A-Za-z]*(?<![Uu]n)[Ee]arned[Pp]remiums[A-Za-z]*)$/;
+/** Losses and benefits incurred (the loss ratio's numerator); "benefits, losses and expenses" also holds expenses. */
+export const INS_LOSS = /:(PolicyholderBenefitsAndClaimsIncurred(Net|HealthCare|LifeAndAnnuity)?|IncurredClaimsPropertyCasualtyAndLiability|SupplementaryInsuranceInformationBenefitsClaimsLosses[A-Za-z]*)$/;
+const INS_COST = /:(BenefitsLossesAndExpenses|DeferredPolicyAcquisitionCost(s)?AmortizationExpense|SupplementaryInsuranceInformation(Benefits[A-Za-z]*|Amortization[A-Za-z]*|OtherOperatingExpense))$/;
+/** Axes an insurance breakdown may use; triangles, catastrophe events and ratings are not breakdowns. */
+const INS_AXES = /StatementBusinessSegmentsAxis|ProductOrServiceAxis|StatementGeographicalAxis|SubsegmentsAxis|MajorCustomersAxis|Segment/;
+const INS_NOISE_AXES = /AccidentYear|Catastroph|CreditRating|FairValue|Reinsurance|ReserveLine/;
+/** Consolidated insurer lines kept for cross-insurer metrics (premiums, losses, reserve development, reserves). */
+const INS_CONSOLIDATED = /^us-gaap:(PremiumsWrittenNet|PremiumsEarnedNet|PolicyholderBenefitsAndClaimsIncurredNet|IncurredClaimsPropertyCasualtyAndLiability|SupplementalInformationForPropertyCasualtyInsuranceUnderwritersPriorYearClaimsAndClaimsAdjustmentExpense|UnderwritingIncomeLoss|DeferredPolicyAcquisitionCostAmortizationExpense|LiabilityForClaimsAndClaimsAdjustmentExpense|HealthCareOrganizationPremiumRevenue|PolicyholderBenefitsAndClaimsIncurredHealthCare)$/;
+const insuranceOk = (concept: string, dims: [string, string][]) => INSURANCE.test(concept) && !/LiabilityForFuturePolicyBenefit/.test(concept) && dims.every(([a]) => INS_AXES.test(a) && !INS_NOISE_AXES.test(a));
+
 /** Regulatory capital amounts and ratios (and the requirements a bank discloses against them). */
 const CAPITAL = /BankingRegulation|CommonEquityTier|TierOne|Tier1|RiskWeightedAssets|CapitalToRiskWeightedAssets|CapitalRequired|SupplementaryLeverage|LeverageExposure|CapitalConservationBuffer|StressCapitalBuffer/i;
 const CAPITAL_AXES = /RiskWeightedAssetsCalculationMethodologyAxis|dei:LegalEntityAxis|ConsolidatedEntitiesAxis/;
@@ -211,6 +231,33 @@ const SHORT: Record<string, string> = {
   "us-gaap:FinancingReceivableRecordedInvestmentNonaccrualStatus": "Nonaccrual loans",
   "us-gaap:FinancingReceivableExcludingAccruedInterest90DaysOrMorePastDueStillAccruing": "Loans 90+ days past due, still accruing",
   "us-gaap:Deposits": "Total deposits",
+  "us-gaap:PremiumsWrittenNet": "Net premiums written",
+  "us-gaap:PremiumsWrittenGross": "Gross premiums written",
+  "us-gaap:PremiumsEarnedNet": "Net premiums earned",
+  "us-gaap:DirectPremiumsWritten": "Direct premiums written",
+  "us-gaap:DirectPremiumsEarned": "Direct premiums earned",
+  "us-gaap:CededPremiumsWritten": "Ceded premiums written",
+  "us-gaap:CededPremiumsEarned": "Ceded premiums earned",
+  "us-gaap:AssumedPremiumsWritten": "Assumed premiums written",
+  "us-gaap:AssumedPremiumsEarned": "Assumed premiums earned",
+  "us-gaap:PolicyholderBenefitsAndClaimsIncurredNet": "Losses and benefits incurred",
+  "us-gaap:PolicyholderBenefitsAndClaimsIncurredHealthCare": "Medical costs incurred",
+  "us-gaap:IncurredClaimsPropertyCasualtyAndLiability": "Losses and loss expenses incurred",
+  "us-gaap:BenefitsLossesAndExpenses": "Benefits, losses and expenses",
+  "us-gaap:SupplementalInformationForPropertyCasualtyInsuranceUnderwritersPriorYearClaimsAndClaimsAdjustmentExpense": "Prior-year reserve development (+ = adverse)",
+  "us-gaap:DeferredPolicyAcquisitionCostAmortizationExpense": "Acquisition cost amortization",
+  "us-gaap:UnderwritingIncomeLoss": "Underwriting income",
+  "us-gaap:HealthCareOrganizationPremiumRevenue": "Premium revenue",
+  "us-gaap:SupplementaryInsuranceInformationPremiumRevenue": "Premium revenue",
+  "us-gaap:SupplementaryInsuranceInformationPremiumsWritten": "Net premiums written",
+  "us-gaap:SupplementaryInsuranceInformationBenefitsClaimsLossesAndSettlementExpense": "Benefits, claims and losses",
+  "us-gaap:SupplementaryInsuranceInformationAmortizationOfDeferredPolicyAcquisitionCosts": "Acquisition cost amortization",
+  "us-gaap:SupplementaryInsuranceInformationNetInvestmentIncome": "Net investment income",
+  "us-gaap:SupplementaryInsuranceInformationOtherOperatingExpense": "Other operating expenses",
+  "us-gaap:SupplementaryInsuranceInformationDeferredPolicyAcquisitionCosts": "Deferred acquisition costs",
+  "us-gaap:SupplementaryInsuranceInformationUnearnedPremiums": "Unearned premiums",
+  "us-gaap:SupplementaryInsuranceInformationLiabilityForFuturePolicyBenefitsLossesClaimsAndLossExpenseReserves": "Loss and benefit reserves",
+  "us-gaap:LiabilityForClaimsAndClaimsAdjustmentExpense": "Loss and loss-expense reserves",
 };
 
 const SEG = "us-gaap:StatementBusinessSegmentsAxis";
@@ -295,6 +342,7 @@ const TITLE: Record<DetailFamily, string> = {
   geography: "Geography",
   lending: "Loans & deposits",
   capital: "Regulatory capital",
+  insurance: "Premiums & claims",
   commitments: "Commitments & backlog",
   inventory: "Inventory & assets",
   other: "Other",
@@ -418,10 +466,19 @@ export function buildDetail(input: {
       continue;
     }
     // Segment P&L matrix: every monetary flow tagged on the segment axis alone.
-    if (dims.length === 1 && dims[0][0] === SEG && f.unit === "USD" && p.months && !NOISE_CONCEPT.test(f.concept)) {
+    const ins = insuranceOk(f.concept, dims);
+    if (dims.length === 1 && dims[0][0] === SEG && f.unit === "USD" && p.months && (ins || !NOISE_CONCEPT.test(f.concept))) {
       const member = dims[0][1];
       segMembers.set(member, memberLabel(member, labels));
-      const kind = REVENUE.test(f.concept) && !NOT_REVENUE.test(f.concept) ? "revenue" : PROFIT.test(f.concept) ? "profit" : COST.test(f.concept) ? "cost" : "other";
+      const kind = /PriorYearClaims/.test(f.concept)
+        ? "other" // reserve development is already inside losses incurred
+        : INS_EARNED.test(f.concept) || (REVENUE.test(f.concept) && !NOT_REVENUE.test(f.concept))
+          ? "revenue"
+          : /:UnderwritingIncomeLoss$/.test(f.concept) || PROFIT.test(f.concept)
+            ? "profit"
+            : INS_LOSS.test(f.concept) || INS_COST.test(f.concept) || COST.test(f.concept)
+              ? "cost"
+              : "other";
       const row = seg.get(f.concept) ?? { concept: f.concept, label: conceptLabel(f.concept, labels), kind, values: {} };
       (row.values[member] ??= {})[p.key] ??= valOf(f);
       seg.set(f.concept, row);
@@ -430,7 +487,7 @@ export function buildDetail(input: {
     if (dims.length > 2) continue;
     // Nest the second axis under the segment (segment → product), else under the first axis.
     const [outer, inner] = lend ? [lend.outer, lend.inner] : dims.length === 2 ? (dims[1][0] === SEG ? [dims[1], dims[0]] : [dims[0], dims[1]]) : [dims[0], undefined];
-    const family: DetailFamily | null = lend ? "lending" : LENDING.test(f.concept) ? null : familyOf(f.concept, inner && outer[0] === SEG ? inner[0] : outer[0]);
+    const family: DetailFamily | null = lend ? "lending" : LENDING.test(f.concept) ? null : ins ? "insurance" : INSURANCE.test(f.concept) ? null : familyOf(f.concept, inner && outer[0] === SEG ? inner[0] : outer[0]);
     if (!family) continue;
     // Single-axis segment lines are all in the segment P&L; only the revenue mix repeats them.
     if (!inner && outer[0] === SEG && family === "other") continue;
@@ -462,7 +519,7 @@ export function buildDetail(input: {
     const [concept, unit] = k.split("|");
     // Standard loan-book tags, plus a bank's own total-loan and allowance tags (Wells Fargo's loans incl. leases).
     const own = !/^us-gaap:/.test(concept) && /FinancingReceivable|LoansAndLeases/.test(concept) && /BeforeAllowanceForCreditLoss$|AllowanceFor(Loan|Credit)Loss(es)?(ExcludingAccruedInterest)?$|WriteoffAfterRecovery$|Nonaccrual$/.test(concept) && !/AfterAllowance/.test(concept);
-    if (unit !== "USD" || !(own || (/^us-gaap:/.test(concept) && (LENDING.test(concept) || concept === "us-gaap:Deposits")))) continue;
+    if (unit !== "USD" || !(own || (/^us-gaap:/.test(concept) && (LENDING.test(concept) || INS_CONSOLIDATED.test(concept) || concept === "us-gaap:Deposits")))) continue;
     consolidated[concept] = m;
     for (const pk of Object.keys(m)) used.add(pk);
   }
@@ -476,7 +533,8 @@ export function buildDetail(input: {
 
   const out: DetailTable[] = [];
   for (const t of tables.values()) {
-    const rows = mergeTwins([...t._rows.values()]);
+    // Schedule III lists every segment, including ones with nothing in them; empty rows only split look-alike tables.
+    const rows = mergeTwins([...t._rows.values()]).filter((r) => t.family !== "insurance" || Object.values(r.values).some((v) => v.v !== 0) || (r.sub ?? []).some((x) => Object.values(x.values).some((v) => v.v !== 0)));
     const keys = new Set<string>();
     for (const r of rows) {
       for (const k of Object.keys(r.values)) keys.add(k);
@@ -511,12 +569,23 @@ export function buildDetail(input: {
     const { _rows, ...rest } = t;
     out.push({ ...rest, title, periods: ps, rows, ...(okTotal ? { total: Object.fromEntries(ps.flatMap((k) => (tot![k] ? [[k, tot![k]]] : []))) } : {}) });
   }
+  // An insurer tags the same segment figures twice (segment note and Schedule III): keep one before naming look-alikes.
+  {
+    const seen = new Set<string>();
+    for (let i = 0; i < out.length; i++) {
+      const t = out[i];
+      if (t.family !== "insurance") continue;
+      const k = JSON.stringify([t.unit, t.axis, t.rows.map((r) => [r.member, r.values[t.periods[t.periods.length - 1]]?.v, r.sub?.length ?? 0])]);
+      if (seen.has(k)) out.splice(i--, 1);
+      else seen.add(k);
+    }
+  }
   // Two concepts with the same plain name (contract revenue vs total revenue) keep their official labels.
   const titles = new Map<string, number>();
   for (const t of out) titles.set(t.title, (titles.get(t.title) ?? 0) + 1);
   for (const t of out)
     if ((titles.get(t.title) ?? 0) > 1 && t.concept && SHORT[t.concept]) {
-      const official = labels.get(t.concept) ?? humanize(t.concept);
+      const official = (labels.get(t.concept) ?? humanize(t.concept)).replace(/^SEC Schedule,?\s*[\d-]+,?\s*Insurance Companies,?\s*(Supplementary Insurance Information|Reinsurance),?\s*/i, "");
       t.title = t.title.replace(t.conceptLabel, official);
       t.conceptLabel = official;
     }
@@ -590,13 +659,16 @@ export function buildDetail(input: {
       if (extra && !t.title.includes(extra)) t.title = `${t.title} (${extra})`;
     }
 
-  const familyRank: DetailFamily[] = ["revenue", "costs", "geography", "lending", "capital", "concentration", "commitments", "inventory", "other"];
+  const familyRank: DetailFamily[] = ["revenue", "insurance", "costs", "geography", "lending", "capital", "concentration", "commitments", "inventory", "other"];
+  // Insurance reads premiums → losses → reserve development → expenses → underwriting result → balances.
+  const insRank = (t: DetailTable) =>
+    t.family !== "insurance" ? 0 : (([[/Reserves$|UnearnedPremiums$|DeferredPolicyAcquisitionCosts$/, 9], [/PriorYear/, 4], [/PremiumsWritten/, 1], [/(?<![Uu]n)[Ee]arned|PremiumRevenue/, 2], [/Benefits|Incurred|Claims/, 3], [/Amortization|OtherOperatingExpense/, 5], [/Underwriting/, 6], [/NetInvestmentIncome/, 7]] as [RegExp, number][]).find(([re]) => re.test(t.concept))?.[1] ?? 8);
   const axisRank = (a: string) => ["us-gaap:StatementBusinessSegmentsAxis", "srt:ProductOrServiceAxis", "srt:StatementGeographicalAxis", "srt:MajorCustomersAxis"].indexOf(a) + 1 || 9;
   // Loan book reads balance → allowance → losses → problem loans → deposits.
   const lendRank = (t: DetailTable) =>
     t.family !== "lending" ? 0 : !t.concept ? 9 : (([[/WriteoffAfterRecovery|WriteOffsNet/, 3], [/Writeoff|WriteOffs/, 4], [/Recovery/, 5], [/Provision|CreditLossExpense/, 6], [/Nonaccrual/, 7], [/PastDue/, 8], [/Allowance/, 2]] as [RegExp, number][]).find(([re]) => re.test(t.concept))?.[1] ?? 1);
   const lendAxis = (a: string) => (LENDING_AXES.indexOf(a) + 1 || 9);
-  out.sort((a, b) => familyRank.indexOf(a.family) - familyRank.indexOf(b.family) || lendRank(a) - lendRank(b) || (a.family === "lending" ? lendAxis(a.axis) - lendAxis(b.axis) : axisRank(a.axis) - axisRank(b.axis)) || b.rows.length - a.rows.length);
+  out.sort((a, b) => familyRank.indexOf(a.family) - familyRank.indexOf(b.family) || lendRank(a) - lendRank(b) || insRank(a) - insRank(b) || (a.family === "lending" ? lendAxis(a.axis) - lendAxis(b.axis) : axisRank(a.axis) - axisRank(b.axis)) || b.rows.length - a.rows.length);
 
   let segments: SegmentMatrix | null = null;
   if (segMembers.size >= 2 && seg.size >= 2) {
