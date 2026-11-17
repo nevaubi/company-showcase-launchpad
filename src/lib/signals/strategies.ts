@@ -5,7 +5,7 @@ import type { Features } from "./features";
 export type StrategyId =
   | "reversal" | "residual" | "rsi2" | "gap" | "volShock" | "stressRev"
   | "volPremium" | "high52" | "squeeze" | "tsmom"
-  | "pead" | "earnRunup" | "insider" | "shortFlow"
+  | "pead" | "earnRunup" | "insider" | "shortFlow" | "fails"
   | "custMom" | "confluence" | "pairs";
 
 export type Family = "reversal" | "momentum" | "events" | "links" | "multi" | "pairs";
@@ -275,6 +275,24 @@ export const STRATEGIES: StrategyDef[] = [
     },
     strength: (f, i) => Math.abs(f.ev!.shortZ[i]),
     detail: (f, i) => `${pct(f.ev!.shortRatio5[i])} of volume sold short over 5 days (${f.ev!.shortZ[i].toFixed(1)} standard deviations vs normal)`,
+  },
+  {
+    id: "fails",
+    label: "Fails-to-deliver pile-up",
+    family: "events",
+    rule: "A newly published SEC fails-to-deliver reading at least 3× the stock's median of the prior 12 half-months and at least 25% of a day's dollar volume; persistent delivery failures flag hard-to-borrow, overpriced stock → short",
+    source: "Autore, Boulton & Braga-Alves (2015); Stratmann & Welborn (2016)",
+    data: "SEC fails-to-deliver files (published ~2 weeks after each half-month)",
+    dataFrom: "2018",
+    horizons: [10, 20],
+    sides: [-1],
+    fire: (f, i) => {
+      const e = f.ev;
+      if (!e || !e.failsNew[i]) return 0;
+      return e.failsX[i] >= 3 && e.failsDV[i] >= 0.25 ? -1 : 0;
+    },
+    strength: (f, i) => Math.min(f.ev!.failsX[i], 20),
+    detail: (f, i) => `Fails averaged ${pct(f.ev!.failsDV[i])} of a day's dollar volume, ${Number.isFinite(f.ev!.failsX[i]) ? `${f.ev!.failsX[i].toFixed(1)}×` : "far above"} its usual level`,
   },
   {
     id: "custMom",

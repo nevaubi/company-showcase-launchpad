@@ -17,6 +17,7 @@ import { formPairs, PAIRS, spreadZ, tradePairs, type PairLeg } from "../src/lib/
 import { customerZ, LIVE_BARS, scanTicker, type Firing } from "../src/lib/signals/scan";
 import { benchFromBars, BENCH_SYMBOLS, contextFromBench, parseCboeCsv, VIX3M_URL } from "../src/lib/signals/context";
 import { parseShortVolume, FINRA_SHORT_URL } from "../src/lib/signals/finra";
+import { ftdUrl, latestLikelyPeriod, nextPeriod, parseFtd, periodEnd, unzipText } from "../src/lib/alt/ftd";
 import type { TickerEvents } from "../src/lib/signals/events";
 import { pickSetups, variantKey, variantMeta, type LiveFiring, type MarketContext, type PairSetup, type SetupsFile } from "../src/lib/signals/setups";
 
@@ -106,6 +107,31 @@ await Promise.all(Array.from({ length: 8 }, async () => {
     if (++fdone % 500 === 0) log("finra days", fdone);
   }
 }));
+
+// SEC fails-to-deliver half-month files since 2018 (cached locally like FINRA; the job reads the
+// same readings from alt_data). Each reading is used only after its publication lag (events.ts).
+await mkdir(`${CACHE}/ftd`, { recursive: true });
+const ftdPeriods: string[] = [];
+for (let p = "201801a", last = latestLikelyPeriod(new Date()); p <= last; p = nextPeriod(p)) ftdPeriods.push(p);
+const ftdQ = [...ftdPeriods];
+let ftdDone = 0;
+await Promise.all(Array.from({ length: 3 }, async () => {
+  for (let p = ftdQ.shift(); p; p = ftdQ.shift()) {
+    const local = `${CACHE}/ftd/${p}.txt`;
+    let text = existsSync(local) ? await readFile(local, "latin1") : null;
+    if (text == null) {
+      const res = await fetch(ftdUrl(p), { headers: { "user-agent": "FiledUnder Research research@filedunder.ai" } }).catch(() => null);
+      text = res?.ok ? await unzipText(new Uint8Array(await res.arrayBuffer())) : "";
+      if (res && (res.ok || res.status === 404)) await writeFile(local, text, "latin1");
+    }
+    for (const a of parseFtd(text, p, keep)) {
+      const e = ev(a.ticker);
+      (e.fails ??= []).push({ end: periodEnd(p), value: a.value / a.days });
+    }
+    ftdDone++;
+  }
+}));
+log("fails-to-deliver files", ftdDone, "of", ftdPeriods.length);
 
 // ---- pass 1: aligned closes for customer momentum and pairs
 const A = new Map<string, Aligned>();

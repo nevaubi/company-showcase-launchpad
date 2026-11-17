@@ -215,7 +215,8 @@
 
 ## Platform upgrade (requested Nov 16 21:22 UTC)
 - [x] Setups: FINRA daily short volume (2018+), 8-K 2.02 earnings dates, Form 4 insider purchases (2016+), VIX3M term structure, breadth; new strategies: earnings drift, pre-earnings run-up, insider clusters, short-selling flow, panic-day snap back, customer momentum (supply links), confluence; short borrow cost
-- [ ] Setups follow-ups: use the stored fails-to-deliver series as a strategy feature (data now in alt_data `settlement`); options-implied context (current snapshot only, not backtestable)
+- [x] Setups: SEC fails-to-deliver feature (lagged to publication) + published "fails pile-up" short rule; tested 2018+: loses money after costs (−0.8% over 10 days, 287 out-of-sample trades), shown as failing — not loosened
+- [ ] Setups follow-ups: options-implied context (current snapshot only, not backtestable)
 - [x] Setups auto-refresh: nightly `setups` job (4 parallel schedules, 21:00–06:00 UTC) refreshes closing bars, rescans every stock, re-tests every strategy, publishes setups and records live outcomes
 - [x] Auto paper trading: house + personal autopilots (/app/autopilots) with daily fills, exits, equity vs SPY, hit rate, drawdown, Sharpe; personal autopilot limits trial 2 / Research 5 / Pro 25 are a proposal awaiting the owner's confirmation
 - [x] IR tab UX: Key metrics + biggest moves panel, quarterly columns cleaned of month-ends, Monthly view, Q2/Q3 filled from year-to-date columns, current breakdowns first, real gaps marked (payload rebuild running for all stored companies)

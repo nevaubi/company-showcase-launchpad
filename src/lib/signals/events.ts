@@ -1,6 +1,7 @@
 // Point-in-time event features for the setup engine: earnings announcements (SEC 8-K item 2.02),
-// open-market insider purchases (Form 4 code P) and FINRA daily short-sale volume. Every value at
-// bar i uses only events dated on or before dates[i]. Pure; shared by the script and the job.
+// open-market insider purchases (Form 4 code P), FINRA daily short-sale volume and SEC
+// fails-to-deliver. Every value at bar i uses only events public on or before dates[i]. Pure;
+// shared by the script and the job.
 import type { Features } from "./features";
 
 export interface InsiderBuy {
@@ -16,6 +17,8 @@ export interface TickerEvents {
   buys: InsiderBuy[];
   /** Daily short-sale volume ratio (short / total reported volume). */
   short: { date: string; ratio: number }[];
+  /** SEC fails-to-deliver per half-month: period end date and average daily fails balance in USD. */
+  fails?: { end: string; value: number }[];
 }
 
 export interface EventFeatures {
@@ -30,9 +33,22 @@ export interface EventFeatures {
   /** 5-day mean short ratio vs the prior 60 days of 5-day means, in standard deviations. */
   shortZ: Float64Array;
   shortRatio5: Float64Array;
+  /** Latest published fails-to-deliver reading ÷ 20-day average dollar volume. */
+  failsDV: Float64Array;
+  /** Latest published reading ÷ median of the 12 half-months before it (missing half-months count as zero). */
+  failsX: Float64Array;
+  /** 1 on the bar a new fails reading becomes public. */
+  failsNew: Float64Array;
 }
 
-export const EVENT_RULES = { minBuy: 25_000, buyWindowDays: 30, shortBase: 60, aheadBars: 5 };
+/**
+ * `failsLagDays`: the SEC posts each half-month's file about two weeks after it ends; readings are
+ * used only from period end + this many calendar days, so the backtest never sees a file early.
+ */
+export const EVENT_RULES = { minBuy: 25_000, buyWindowDays: 30, shortBase: 60, aheadBars: 5, failsLagDays: 16, failsBase: 12 };
+
+/** Half-month slot number for a period end date (…-15 → first half, otherwise second half). */
+const halfSlot = (end: string) => Number(end.slice(0, 4)) * 24 + (Number(end.slice(5, 7)) - 1) * 2 + (Number(end.slice(8, 10)) <= 15 ? 0 : 1);
 
 const dayMs = 86_400_000;
 const addDays = (d: string, n: number) => new Date(Date.parse(d + "T00:00:00Z") + n * dayMs).toISOString().slice(0, 10);
@@ -71,7 +87,8 @@ export function expectedNext(past: string[]): string | null {
 export function eventFeatures(dates: string[], f: Features, bench: ArrayLike<number>, ev: TickerEvents): EventFeatures {
   const n = dates.length;
   const nan = () => new Float64Array(n).fill(NaN);
-  const earnZ = nan(), earnRet = nan(), earnAhead = nan(), shortZ = nan(), shortRatio5 = nan();
+  const earnZ = nan(), earnRet = nan(), earnAhead = nan(), shortZ = nan(), shortRatio5 = nan(), failsDV = nan(), failsX = nan();
+  const failsNew = new Float64Array(n);
   const buyers30 = new Float64Array(n), buyValue30 = new Float64Array(n);
   const c = f.a.c, s = Math.max(f.a.start, 0);
 
@@ -153,7 +170,36 @@ export function eventFeatures(dates: string[], f: Features, bench: ArrayLike<num
     }
   }
 
-  return { earnZ, earnRet, earnAhead, buyers30, buyValue30, shortZ, shortRatio5 };
+  // ---- fails to deliver (published with a lag; absent half-months had no reportable fails)
+  if (ev.fails?.length) {
+    const bySlot = new Map<number, number>();
+    for (const r of ev.fails) if (r.value >= 0) bySlot.set(halfSlot(r.end), r.value);
+    const readings = [...ev.fails].sort((a, b) => (a.end < b.end ? -1 : 1));
+    const first = halfSlot(readings[0].end);
+    let k = -1; // last reading public by dates[i]
+    for (let i = s; i < n; i++) {
+      let moved = false;
+      while (k + 1 < readings.length && addDays(readings[k + 1].end, EVENT_RULES.failsLagDays) <= dates[i]) (k++, (moved = true));
+      if (k < 0) continue;
+      const r = readings[k];
+      // stale: the latest public file has no row for this stock, so its fails fell below reporting
+      if (addDays(r.end, EVENT_RULES.failsLagDays + 20) < dates[i]) continue;
+      const dv = f.dv20[i];
+      if (dv > 0) failsDV[i] = r.value / dv;
+      const slot = halfSlot(r.end);
+      const B = EVENT_RULES.failsBase;
+      if (slot - B >= first) {
+        const base: number[] = [];
+        for (let j = slot - B; j < slot; j++) base.push(bySlot.get(j) ?? 0);
+        base.sort((a, b) => a - b);
+        const med = (base[B / 2 - 1] + base[B / 2]) / 2;
+        failsX[i] = med > 0 ? r.value / med : r.value > 0 ? Infinity : NaN;
+      }
+      if (moved) failsNew[i] = 1;
+    }
+  }
+
+  return { earnZ, earnRet, earnAhead, buyers30, buyValue30, shortZ, shortRatio5, failsDV, failsX, failsNew };
 }
 
 export interface InsiderBuyRow {

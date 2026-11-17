@@ -374,13 +374,16 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
   const tickers = list.map((x) => x.ticker);
   const tail = ctx.dates[D - SAMPLE_TAIL];
   const shortFrom = ctx.dates[Math.max(0, D - 160)];
-  const [files, recent, earn, buys, shorts, sigs] = await Promise.all([
+  const failsFrom = ctx.dates[Math.max(0, D - 420)];
+  const [files, recent, earn, buys, shorts, sigs, fails] = await Promise.all([
     Promise.all(tickers.map((t) => priceFile(t).catch(() => [] as Bar[]))),
     db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").in("symbol", tickers).gte("date", ctx.dates[Math.max(0, D - 45)]).lte("date", asOf).order("date").limit(5000),
     db().from("earnings_events").select("ticker, filed").in("ticker", tickers).limit(5000),
     db().from("insider_buys").select("ticker, filed, owner, value, plan_10b5").in("ticker", tickers).limit(5000),
     db().from("short_volume").select("symbol, date, short_vol, total_vol").in("symbol", tickers).gte("date", shortFrom).limit(5000),
     db().from("setup_signals").select("ticker, variant, fired_at, first_seen, outcome_net, side, horizon, cost").in("ticker", tickers).gte("fired_at", ctx.dates[Math.max(0, D - 80)]).limit(5000),
+    // SEC fails-to-deliver half-months (kept current by the gov-data job)
+    db().from("alt_data").select("ticker, date, value").eq("dataset", "settlement").in("ticker", tickers).gte("date", failsFrom).limit(5000),
   ]);
   const samples: Record<string, unknown>[] = [];
   const signals: Record<string, unknown>[] = [];
@@ -401,6 +404,7 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
       earnings: (earn.data ?? []).filter((e) => e.ticker === ticker).map((e) => e.filed),
       buys: (buys.data ?? []).filter((b) => b.ticker === ticker).map((b) => ({ filed: b.filed, owner: b.owner, value: Number(b.value ?? 0), plan: b.plan_10b5 })),
       short: (shorts.data ?? []).filter((s) => s.symbol === ticker && Number(s.total_vol) > 0).map((s) => ({ date: s.date, ratio: Number(s.short_vol) / Number(s.total_vol) })),
+      fails: (fails.data ?? []).filter((x) => x.ticker === ticker && x.date && x.value != null).map((x) => ({ end: x.date as string, value: Number(x.value) })),
     };
     let out: ScanOut | null = null;
     try {
