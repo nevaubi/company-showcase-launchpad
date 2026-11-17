@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -41,6 +41,11 @@ function OfficeHub() {
   const create = useServerFn(createOfficeFile);
   const remove = useServerFn(deleteOfficeFile);
   const record = useServerFn(importOfficeFile);
+  const navigate = useNavigate();
+  const open = (r: { id: string; kind: string }) => {
+    if (r.kind === "docx") void navigate({ to: "/app/office/writer/$id", params: { id: r.id } });
+    else toast.info("This editor is coming next — Writer is ready now.");
+  };
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -49,7 +54,7 @@ function OfficeHub() {
 
   const make = useMutation({
     mutationFn: (k: (typeof KINDS)[number]) => create({ data: { kind: k.kind, title: k.blank } }),
-    onSuccess: () => { refresh(); toast.success("File created"); },
+    onSuccess: (r, k) => { refresh(); open({ id: r.id, kind: k.kind }); },
     onError: (e) => toast.error((e as Error).message),
   });
 
@@ -105,7 +110,7 @@ function OfficeHub() {
             return (
               <div key={r.id} className="flex min-w-0 items-center gap-3 px-3 py-2 text-sm">
                 <K.icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate">{r.title}</span>
+                <button onClick={() => open(r)} className="min-w-0 flex-1 truncate text-left hover:underline">{r.title}</button>
                 <span className="hidden text-xs text-muted-foreground sm:inline">{K.label}</span>
                 <span className="text-xs text-muted-foreground">{fmtRelative(r.updated_at)}</span>
                 <Button size="icon" variant="ghost" aria-label="Delete file"

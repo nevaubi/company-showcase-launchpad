@@ -80,6 +80,7 @@ import { Route as AuthenticatedAppCompaniesTickerMemoRouteImport } from './route
 import { Route as AuthenticatedAppCompaniesTickerRedlineRouteImport } from './routes/_authenticated/app.companies.$ticker.redline'
 import { Route as AuthenticatedAppCompaniesTickerReportsRouteImport } from './routes/_authenticated/app.companies.$ticker.reports'
 import { Route as AuthenticatedAppCompaniesTickerValuationRouteImport } from './routes/_authenticated/app.companies.$ticker.valuation'
+import { Route as AuthenticatedAppOfficeWriterIdRouteImport } from './routes/_authenticated/app.office.writer.$id'
 import { Route as AuthenticatedAppSectorsGSlugRouteImport } from './routes/_authenticated/app.sectors_.g.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -474,6 +475,12 @@ const AuthenticatedAppCompaniesTickerValuationRoute =
     path: '/valuation',
     getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
   } as any)
+const AuthenticatedAppOfficeWriterIdRoute =
+  AuthenticatedAppOfficeWriterIdRouteImport.update({
+    id: '/office/writer/$id',
+    path: '/office/writer/$id',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppSectorsGSlugRoute =
   AuthenticatedAppSectorsGSlugRouteImport.update({
     id: '/sectors_/g/$slug',
@@ -551,6 +558,7 @@ export interface FileRoutesByFullPath {
   '/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
@@ -621,6 +629,7 @@ export interface FileRoutesByTo {
   '/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
@@ -696,6 +705,7 @@ export interface FileRoutesById {
   '/_authenticated/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/_authenticated/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/_authenticated/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/_authenticated/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/_authenticated/app/sectors_/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
 }
@@ -771,6 +781,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/redline'
     | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
+    | '/app/office/writer/$id'
     | '/app/sectors/g/$slug'
     | '/app/companies/$ticker/'
   fileRoutesByTo: FileRoutesByTo
@@ -841,6 +852,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/redline'
     | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
+    | '/app/office/writer/$id'
     | '/app/sectors/g/$slug'
     | '/app/companies/$ticker'
   id:
@@ -915,6 +927,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/companies/$ticker/redline'
     | '/_authenticated/app/companies/$ticker/reports'
     | '/_authenticated/app/companies/$ticker/valuation'
+    | '/_authenticated/app/office/writer/$id'
     | '/_authenticated/app/sectors_/g/$slug'
     | '/_authenticated/app/companies/$ticker/'
   fileRoutesById: FileRoutesById
@@ -1434,6 +1447,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCompaniesTickerValuationRouteImport
       parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
     }
+    '/_authenticated/app/office/writer/$id': {
+      id: '/_authenticated/app/office/writer/$id'
+      path: '/office/writer/$id'
+      fullPath: '/app/office/writer/$id'
+      preLoaderRoute: typeof AuthenticatedAppOfficeWriterIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/sectors_/g/$slug': {
       id: '/_authenticated/app/sectors_/g/$slug'
       path: '/sectors/g/$slug'
@@ -1552,6 +1572,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppDocsIndexRoute: typeof AuthenticatedAppDocsIndexRoute
   AuthenticatedAppOfficeIndexRoute: typeof AuthenticatedAppOfficeIndexRoute
   AuthenticatedAppThesesIndexRoute: typeof AuthenticatedAppThesesIndexRoute
+  AuthenticatedAppOfficeWriterIdRoute: typeof AuthenticatedAppOfficeWriterIdRoute
   AuthenticatedAppSectorsGSlugRoute: typeof AuthenticatedAppSectorsGSlugRoute
 }
 
@@ -1598,6 +1619,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppDocsIndexRoute: AuthenticatedAppDocsIndexRoute,
   AuthenticatedAppOfficeIndexRoute: AuthenticatedAppOfficeIndexRoute,
   AuthenticatedAppThesesIndexRoute: AuthenticatedAppThesesIndexRoute,
+  AuthenticatedAppOfficeWriterIdRoute: AuthenticatedAppOfficeWriterIdRoute,
   AuthenticatedAppSectorsGSlugRoute: AuthenticatedAppSectorsGSlugRoute,
 }
 

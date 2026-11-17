@@ -73,3 +73,29 @@ export const importOfficeFile = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { id: data.id };
   });
+
+export const getOfficeFile = createServerFn({ method: "GET" })
+  .middleware([requireAppAccess])
+  .inputValidator((i: unknown) => z.object({ id: z.string().length(26) }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { data: row, error } = await context.supabase.from("office_files")
+      .select("id, kind, title, storage_path, version, updated_at").eq("id", data.id).maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!row) throw new Error("File not found");
+    return { ...row, owner: context.userId };
+  });
+
+/** Mark a save after the browser uploaded the new bytes. */
+export const markOfficeSaved = createServerFn({ method: "POST" })
+  .middleware([requireAppAccess])
+  .inputValidator((i: unknown) => z.object({ id: z.string().length(26), size: z.number().int().min(0), title: z.string().trim().min(1).max(200) }).parse(i))
+  .handler(async ({ data, context }) => {
+    const { data: row } = await context.supabase.from("office_files").select("kind, version").eq("id", data.id).maybeSingle();
+    if (!row) throw new Error("File not found");
+    const { error } = await context.supabase.from("office_files").update({
+      storage_path: `${context.userId}/${data.id}.${row.kind}`, size_bytes: data.size, title: data.title,
+      version: row.version + 1, updated_at: new Date().toISOString(),
+    }).eq("id", data.id);
+    if (error) throw new Error(error.message);
+    return { version: row.version + 1 };
+  });
