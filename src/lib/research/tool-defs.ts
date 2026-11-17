@@ -770,14 +770,14 @@ export const TOOL_DEFS = [
     type: "function",
     name: "browser_task",
     description:
-      "Start real web browsers (Browser Use cloud agents) that click, scroll, log through multi-page sites, fill search boxes, download files and take screenshots. Up to 4 run in parallel, each with its own goal. Use when read_webpage/web_extract can't do it: interactive sites, JS apps, paginated tables, downloading reports/CSVs, visual checks. The user watches them live in the canvas. Returns task ids; then poll browser_status until done.",
+      "Start real web browsers (Browser Use cloud agents) that click, scroll, log through multi-page sites, fill search boxes, download files and take screenshots. Up to 4 run in parallel, each with its own goal. Use when read_webpage/web_extract can't do it: interactive sites, JS apps, paginated tables, downloading reports/CSVs, visual checks. The user watches them live in the chat panel and can take over (e.g. a login). Prefer read_webpage/web_extract first and say why a browser is needed. Any figure you use from a browser must cite the page URLs it came from. Limit: 40 runs per user per day. Returns task ids; then poll browser_status until done.",
     parameters: obj(
       {
         tasks: {
           type: "array",
           items: obj(
-            { goal: str("Concrete goal with what to return, e.g. 'On investor.nvidia.com find the latest 10-Q PDF, download it and report its filing date'"), start_url: nullable(str("Optional URL to start at")), screenshot: { type: "boolean", description: "Save a screenshot of the most relevant page" } },
-            ["goal", "start_url", "screenshot"],
+            { goal: str("Concrete goal with what to return, e.g. 'On investor.nvidia.com find the latest 10-Q PDF, download it and report its filing date'"), start_url: nullable(str("Optional URL to start at")), screenshot: { type: "boolean", description: "Save a screenshot of the most relevant page" }, output_schema: nullable(str("Optional JSON shape for the final answer, e.g. '{\"rows\":[{\"quarter\":\"\",\"revenue\":0}],\"sources\":[\"url\"]}' so results come back as a table")) },
+            ["goal", "start_url", "screenshot", "output_schema"],
           ),
         },
         mode: { type: "string", enum: ["fast", "thorough"], description: "fast for simple lookups; thorough for long, multi-step work" },
@@ -799,6 +799,13 @@ export const TOOL_DEFS = [
     name: "browser_files",
     description: "List files a browser task downloaded or saved (screenshots, PDFs, CSVs) and add them to the canvas as file cards. Text files are returned inline (truncated).",
     parameters: obj({ task_id: str("Browser task id"), why: str("One short line for the user") }, ["task_id", "why"]),
+    strict: true,
+  },
+  {
+    type: "function",
+    name: "browser_import_file",
+    description: "Save a file a browser downloaded (already collected with browser_files) into the user's Office Studio, so it opens in Writer (.docx), Sheets (.xlsx), Slides (.pptx) or PDF Studio (.pdf). Returns the new Office file id.",
+    parameters: obj({ file_id: str("Canvas file id from browser_files"), title: str("Title for the Office file"), why: str("One short line for the user") }, ["file_id", "title", "why"]),
     strict: true,
   },
   {
@@ -884,6 +891,7 @@ export const TOOL_LABELS: Record<string, string> = {
   browser_status: "Checked browser",
   browser_files: "Collected files",
   browser_stop: "Stopped browser",
+  browser_import_file: "Saved to Office Studio",
   reasoning: "Thought",
 };
 
@@ -959,6 +967,7 @@ export const TOOL_RUNNING: Record<string, string> = {
   browser_status: "Browsing",
   browser_files: "Collecting files",
   browser_stop: "Stopping browser",
+  browser_import_file: "Saving to Office Studio",
 };
 
 /** Plural nouns for grouped finished calls: "Read 4 web pages". */

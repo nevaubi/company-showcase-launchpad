@@ -407,6 +407,13 @@
       "when": 1794927759632,
       "tag": "0057_user_onboarding",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1794939186327,
+      "tag": "0058_browser_runs",
+      "breakpoints": true
     }
   ]
 }

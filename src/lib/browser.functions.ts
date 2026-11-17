@@ -44,20 +44,29 @@ export const browserStart = createServerFn({ method: "POST" })
               goal: z.string().min(4).max(2000),
               start_url: z.string().url().max(2000).nullable().optional(),
               screenshot: z.boolean().optional(),
+              output_schema: z.string().max(2000).nullable().optional(),
             }),
           )
           .min(1)
           .max(4),
         mode: z.enum(["fast", "thorough"]).default("fast"),
+        max_steps: z.number().int().min(5).max(100).optional(),
       })
       .parse(d),
   )
   .handler(async ({ data, context }) => {
     const { createRun } = await import("@/lib/browser-use.server");
+    const { allowedRuns, runOptions, DAILY_RUN_CAP } = await import("@/lib/browser/limits");
+    const since = new Date(Date.now() - 86_400_000).toISOString();
+    const { count } = await context.supabase.from("browser_runs").select("run_id", { count: "exact", head: true }).eq("user_id", context.userId).gte("created_at", since);
+    const n = allowedRuns(data.tasks.length, count ?? 0);
+    if (n === 0) throw new Error(`Daily browser limit reached (${DAILY_RUN_CAP} runs in 24 hours). Try again later.`);
+    const model = runOptions(data.mode).model;
     const out = await Promise.all(
-      data.tasks.map(async (t) => {
+      data.tasks.slice(0, n).map(async (t) => {
         try {
-          const r = await createRun({ goal: t.goal, startUrl: t.start_url ?? null, mode: data.mode, screenshot: t.screenshot });
+          const r = await createRun({ goal: t.goal, startUrl: t.start_url ?? null, mode: data.mode, screenshot: t.screenshot, maxSteps: data.max_steps, outputSchema: t.output_schema ?? null });
+          await context.supabase.from("browser_runs").insert({ run_id: r.id, user_id: context.userId, goal: t.goal.slice(0, 500), model });
           return { id: r.id, token: await sign(r.id, context.userId), goal: t.goal, status: r.status, workspaceId: r.workspaceId };
         } catch (e) {
           return { id: "", token: "", goal: t.goal, status: "error", error: (e as Error).message };

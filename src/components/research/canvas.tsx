@@ -76,7 +76,7 @@ function statusTone(r: BrowserRun) {
   return "bg-chart-1/15 text-foreground";
 }
 
-function BrowserCard({ r, single }: { r: BrowserRun; single: boolean }) {
+export function BrowserCard({ r, single }: { r: BrowserRun; single: boolean }) {
   const [control, setControl] = useState(false);
   const live = r.liveUrl && !r.done ? (() => {
     try {
@@ -148,7 +148,7 @@ function BrowserCard({ r, single }: { r: BrowserRun; single: boolean }) {
 }
 
 /** Polls active runs while the canvas is mounted, so the browser tab stays live between agent calls. */
-function useRunPolling(runs: BrowserRun[]) {
+export function useRunPolling(runs: BrowserRun[]) {
   const active = runs.filter((r) => !r.done && r.token);
   const key = active.map((r) => r.id).join(",");
   const busy = useRef(false);

@@ -93,23 +93,30 @@ export interface CreateRunInput {
   maxCostUsd?: number;
   /** Ask the agent to save a full-page screenshot to its workspace. */
   screenshot?: boolean;
+  maxSteps?: number;
+  /** Optional JSON shape the final answer should follow. */
+  outputSchema?: string | null;
 }
 
 export function taskText(t: CreateRunInput) {
   const parts = [t.goal.trim()];
   if (t.startUrl) parts.unshift(`Start at ${t.startUrl}.`);
   if (t.screenshot) parts.push("When done, save a full-page PNG screenshot of the most relevant page to your workspace as screenshot.png.");
+  if (t.outputSchema) parts.push(`Return the final answer as JSON matching this shape: ${t.outputSchema}`);
   parts.push("Save any files you download or create to your workspace. Finish with a concise summary of what you found, including the URLs you used.");
   return parts.join("\n");
 }
 
 export async function createRun(t: CreateRunInput, f: FetchLike = fetch, key = browserUseKey()) {
   if (!key) throw new BrowserUseError("Browser Use is not configured (set BROWSER_USE_API_KEY)", 503);
+  const { runOptions } = await import("@/lib/browser/limits");
+  const o = runOptions(t.mode ?? "fast", t.maxSteps);
   const body: Record<string, unknown> = {
     task: taskText(t),
-    maxCostUsd: Math.min(Math.max(t.maxCostUsd ?? 1, 0.1), 5),
+    model: o.model,
+    browserSettings: o.browserSettings,
+    maxCostUsd: Math.min(Math.max(t.maxCostUsd ?? o.maxCostUsd, 0.1), 5),
   };
-  if (t.mode !== "thorough") body.model = "bu-fast";
   const r = await call<{ id: string; status: string; sessionId: string; workspaceId: string }>(f, key, "/runs", { method: "POST", body: JSON.stringify(body) });
   return { id: r.id, status: r.status, sessionId: r.sessionId, workspaceId: r.workspaceId };
 }

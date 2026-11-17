@@ -12,6 +12,7 @@ import { Timeline } from "@/components/research/timeline";
 import { Button } from "@/components/ui/button";
 import LoadingState, { formatElapsed, type LoadingVariant } from "@/components/ui/loading-state";
 import { Textarea } from "@/components/ui/textarea";
+import { BrowserStrip } from "@/components/research/browser-strip";
 import { supabase } from "@/integrations/supabase/client";
 import { titleSession } from "@/lib/research.functions";
 import { beginTour, clearHighlights, setCurrentStop, showPin, type Pin } from "@/lib/research/dom-agent";
@@ -552,6 +553,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
               )}
             </div>
 
+            <div className="@container shrink-0"><BrowserStrip canOpenCanvas /></div>
             <div className="shrink-0 border-t p-2.5">
               <form
                 className="rounded-xl border bg-card p-1.5 shadow-paper transition-colors focus-within:border-foreground/40"

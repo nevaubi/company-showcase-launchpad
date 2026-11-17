@@ -41,16 +41,17 @@ describe("Browser Use client", () => {
     expect((init!.headers as Record<string, string>)["X-Browser-Use-API-Key"]).toBe(KEY);
     const body = JSON.parse(String(init!.body));
     expect(body.model).toBe("bu-fast");
-    expect(body.maxCostUsd).toBe(1);
+    expect(body.maxCostUsd).toBe(0.5);
+    expect(body.browserSettings).toEqual({ proxyCountryCode: "us", record: false });
     expect(body.task).toMatch(/^Start at https:\/\/news\.ycombinator\.com\./);
     expect(body.task).toMatch(/screenshot\.png/);
   });
 
-  it("thorough mode leaves the model to the API default and caps cost at $5", async () => {
+  it("thorough mode uses bu-4.0 and caps cost at $5", async () => {
     const f = vi.fn(async () => json({ id: "r", status: "queued", sessionId: "s", workspaceId: "w" }));
     await createRun({ goal: "Long research task", mode: "thorough", maxCostUsd: 50 }, f, KEY);
     const body = JSON.parse(String((f.mock.calls[0] as unknown as [string, RequestInit])[1].body));
-    expect(body.model).toBeUndefined();
+    expect(body.model).toBe("bu-4.0");
     expect(body.maxCostUsd).toBe(5);
   });
 

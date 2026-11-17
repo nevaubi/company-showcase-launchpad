@@ -113,6 +113,30 @@ export type Database = {
         }
         Relationships: []
       }
+      browser_runs: {
+        Row: {
+          created_at: string
+          goal: string
+          model: string
+          run_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          goal: string
+          model: string
+          run_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          goal?: string
+          model?: string
+          run_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       company_visits: {
         Row: {
           last_seen_at: string

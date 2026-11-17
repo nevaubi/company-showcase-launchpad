@@ -1110,16 +1110,15 @@ Month-start closes:\n${monthly.join("\n")}`;
       };
     }
     case "browser_task": {
-      const tasks = ((args.tasks as { goal: string; start_url: string | null; screenshot?: boolean }[]) ?? []).slice(0, 4);
+      const tasks = ((args.tasks as { goal: string; start_url: string | null; screenshot?: boolean; output_schema?: string | null }[]) ?? []).slice(0, 4);
       if (!tasks.length) throw new Error("Give at least one task");
       const r = await browserStart({
-        data: { tasks: tasks.map((t) => ({ goal: t.goal, start_url: t.start_url || null, screenshot: !!t.screenshot })), mode: args.mode === "thorough" ? "thorough" : "fast" },
+        data: { tasks: tasks.map((t) => ({ goal: t.goal, start_url: t.start_url || null, screenshot: !!t.screenshot, output_schema: t.output_schema || null })), mode: args.mode === "thorough" ? "thorough" : "fast" },
       });
       const ok = r.runs.filter((x) => x.id);
       const failed = r.runs.filter((x) => !x.id);
       if (!ok.length) throw new Error(failed[0]?.error ?? "Browser Use did not start");
       canvas.upsertRuns(ok.map((x) => ({ id: x.id, token: x.token, goal: x.goal, status: x.status, done: false, startedAt: Date.now() })));
-      canvas.show("browser");
       return {
         output: `Started ${ok.length} browser task(s): ${ok.map((x) => `${x.id} (${x.goal.slice(0, 60)})`).join("; ")}${failed.length ? `. Failed to start: ${failed.map((f) => f.error).join("; ")}` : ""}. Poll browser_status with these ids.`,
         summary: `${ok.length} browser${ok.length === 1 ? "" : "s"} live`,
@@ -1186,6 +1185,23 @@ Month-start closes:\n${monthly.join("\n")}`;
         output: added.length ? `Added ${added.length} file(s) to the canvas: ${added.join("; ")}${inline.length ? `\n\n${clip(inline.join("\n\n"))}` : ""}` : "No files saved by this task yet.",
         summary: `${added.length} file${added.length === 1 ? "" : "s"}`,
       };
+    }
+    case "browser_import_file": {
+      const f = canvas.get().files.find((x) => x.id === String(args.file_id ?? ""));
+      if (!f) throw new Error("Unknown file id; collect it with browser_files first");
+      const ext = (f.name.split(".").pop() ?? "").toLowerCase();
+      if (!["docx", "xlsx", "pptx", "pdf"].includes(ext)) throw new Error(`Office Studio opens .docx, .xlsx, .pptx and .pdf files, not .${ext}`);
+      const blob = await (await fetch(f.url)).blob();
+      const { supabase } = await import("@/integrations/supabase/client");
+      const { ulid } = await import("ulid");
+      const { data: u } = await supabase.auth.getUser();
+      if (!u.user) throw new Error("Sign in again to save files");
+      const id = ulid();
+      const up = await supabase.storage.from("office-files").upload(`${u.user.id}/${id}.${ext}`, blob, { contentType: f.mime });
+      if (up.error) throw new Error(up.error.message);
+      const { importOfficeFile } = await import("@/lib/office/files.functions");
+      await importOfficeFile({ data: { id, kind: ext as "docx" | "xlsx" | "pptx" | "pdf", title: String(args.title || f.name).slice(0, 200), size: blob.size } });
+      return { output: `Saved ${f.name} to Office Studio as Office file ${id} (${ext}).`, summary: f.name };
     }
     case "browser_stop": {
       const h = canvas.run(String(args.task_id ?? ""));

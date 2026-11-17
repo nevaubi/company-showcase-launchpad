@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ArrowUp, FileText, Square } from "lucide-react";
 import { ResearchMarkdown } from "@/components/research/markdown";
 import { Timeline } from "@/components/research/timeline";
+import { BrowserStrip } from "@/components/research/browser-strip";
 import { runAgent, type Turn } from "@/lib/research/loop";
 import type { ToolRun } from "@/lib/research/execute";
 import type { OfficeApp } from "@/lib/office/agent-tools";
@@ -91,6 +92,7 @@ export function OfficeAiPanel({ app, localTool, context }: {
         ))}
         <div ref={end} />
       </div>
+      <div className="@container shrink-0"><BrowserStrip /></div>
       <form className="border-t p-2" onSubmit={(e) => { e.preventDefault(); void send(text); }}>
         <div className="flex items-end gap-1.5 rounded-md border bg-background p-1.5 focus-within:ring-1 focus-within:ring-office">
           <textarea value={text} onChange={(e) => setText(e.target.value)} rows={2} placeholder="Ask OfficeAI to write, edit or research…"
