@@ -13,6 +13,8 @@ export const Route = createFileRoute("/")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { property: "og:url", content: "https://filedunder.ai/" },
+      { property: "og:image", content: "https://filedunder.ai/__l5e/assets-v1/cdc76d01-a297-44a9-a67e-9310db4b0438/nvidia_financials_share.jpg" },
+      { name: "twitter:image", content: "https://filedunder.ai/__l5e/assets-v1/cdc76d01-a297-44a9-a67e-9310db4b0438/nvidia_financials_share.jpg" },
       { name: "google-site-verification", content: "uuQECA0Aaj4rMohTzfjiXySNB61j9pJ6YGCv8gdR43k" },
     ],
     links: [{ rel: "canonical", href: "https://filedunder.ai/" }],
