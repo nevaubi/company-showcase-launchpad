@@ -39,13 +39,24 @@ const log = (s: string) => {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- single flight ----------
-const { data: lease } = await sb.from("job_state").select("lease_until").eq("job", JOB).maybeSingle();
-if (lease?.lease_until && new Date(lease.lease_until) > new Date() && args.force === undefined) {
-  log(`another loop holds the lease until ${lease.lease_until}`);
-  process.exit(0);
+// A new worker deploy starts while the old container still holds the lease; wait for it to lapse
+// (exiting made the host mark the deploy as failed and keep the old container running).
+for (;;) {
+  const { data: lease } = await sb.from("job_state").select("lease_until").eq("job", JOB).maybeSingle();
+  if (!lease?.lease_until || new Date(lease.lease_until) <= new Date() || args.force !== undefined) break;
+  if (args["wait-lease"] === undefined && !process.env.IR_WAIT_LEASE) {
+    log(`another loop holds the lease until ${lease.lease_until}`);
+    process.exit(0);
+  }
+  log(`another loop holds the lease until ${lease.lease_until} — waiting`);
+  await sleep(60_000);
 }
 const renew = () => sb.from("job_state").upsert({ job: JOB, cursor: 0, paused_reason: null, lease_until: new Date(Date.now() + 15 * 60_000).toISOString(), updated_at: new Date().toISOString() });
 await renew();
+for (const sig of ["SIGTERM", "SIGINT"] as const)
+  process.on(sig, () => {
+    void sb.from("job_state").update({ lease_until: new Date().toISOString() }).eq("job", JOB).then(() => process.exit(0), () => process.exit(0));
+  });
 setInterval(() => void renew().then(undefined, () => undefined), 5 * 60_000);
 
 // ---------- remembered state ----------

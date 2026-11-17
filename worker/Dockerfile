@@ -11,4 +11,5 @@ RUN bun install --frozen-lockfile || bun install
 COPY . .
 ENV IR_WORK_DIR=/var/data/ir
 ENV DOCLING_PYTHON=/opt/dvenv/bin/python
+ENV IR_WAIT_LEASE=1
 CMD ["bun", "scripts/ir-deep-loop.ts", "--python=/opt/dvenv/bin/python"]
