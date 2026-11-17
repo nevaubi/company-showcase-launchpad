@@ -17,6 +17,7 @@ export const SOURCES: FreshnessSource[] = [
   { job: "ir-docs", label: "IR documents", everyMin: 5 },
   { job: "estimates", label: "Analyst estimates", everyMin: 60 },
   { job: "alt-data", label: "Alt data", everyMin: 3 },
+  { job: "gov-data", label: "Fails to deliver (SEC)", everyMin: 360 },
   // Script-run (ir-deep-loop, every 12 h): re-reads 10-K/10-Q breakdowns only for companies with a new filing.
   { job: "xbrl-detail", label: "Filing detail (10-K/10-Q breakdowns)", everyMin: 720 },
 ];

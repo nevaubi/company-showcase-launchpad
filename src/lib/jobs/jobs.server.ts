@@ -2,7 +2,7 @@
 // HTTP call is short-lived and Workers allow six concurrent outbound requests),
 // advancing a cursor in job_state so successive runs rotate through everything.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { BENCHMARKS, COVERAGE, MACRO_SERIES, isBundled } from "@/lib/coverage";
+import { BENCHMARKS, COVERAGE, MACRO_SERIES, type CoverageCompany } from "@/lib/coverage";
 import { form4XmlPath, parseForm4 } from "@/lib/financials/form4";
 import { summarize } from "@/lib/macro";
 import { fetchCboeDaily, fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo, isCboeIndex, isTreasurySeries, pool, toBars } from "@/lib/market-data.server";
@@ -11,7 +11,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { insiderBuyRows } from "@/lib/signals/events";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -63,25 +63,72 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     return runSetups(budget(1000));
   },
   /**
-   * Alt data, daily per company: one (company, quick public source) pair per run, rotating through
-   * the 78 core companies only. Slow sources (13D/13G history, federal contracts) stay in
-   * `scripts/alt-data.ts`; 8-K/SEC form rows already refresh in the `sec` job.
+   * Alt data for every covered company: each run refreshes three (company, quick public source)
+   * pairs in parallel, rotating through only the pairs whose source can know about the company
+   * (registry names from `scripts/alt-registry.ts`). Slow sources (13D/13G history, federal
+   * contracts) stay in `scripts/alt-data.ts`; 8-K/SEC form rows already refresh in the `sec` job.
    */
   async "alt-data"() {
     const { ADAPTERS, altFetch, altRowsForDb } = await import("@/lib/alt/collect.server");
-    const sets = ["regulatory", "fda", "recalls", "complaints", "bank", "attention", "consumer", "trials"];
-    const cos = COVERAGE.filter((c) => isBundled(c.ticker));
-    const { start } = await advance("alt-data", cos.length * sets.length, 1);
-    const c = cos[Math.floor(start / sets.length)];
-    const set = sets[start % sets.length];
+    const { appliesTo, REGISTRY_PATH } = await import("@/lib/alt/registry");
+    // NHTSA recall queries take ~6 s, longer than a scheduled call lives, so recalls refresh in the script.
+    const sets = ["regulatory", "fda", "complaints", "bank", "attention", "consumer", "trials"];
+    const { data: file } = await supabaseAdmin.storage.from("datasets").download(REGISTRY_PATH);
+    const reg = (file ? JSON.parse(await file.text()) : {}) as Record<string, import("@/lib/alt/registry").AltRegistryEntry>;
+    const pairs: [CoverageCompany, string][] = [];
+    for (const c of COVERAGE) for (const s of sets) if (appliesTo(s, c, reg[c.ticker])) pairs.push([c, s]);
+    const step = 3;
+    const { start } = await advance("alt-data", pairs.length, step);
     altFetch.timeoutMs = RUN_BUDGET_MS - 300;
     altFetch.tries = 1;
-    const rows = await ADAPTERS[set]({ ticker: c.ticker, name: c.shortName, cik: c.cik, sector: c.sector, industry: c.industry });
+    altFetch.recent = true;
+    const picked = slice(pairs, start, step);
+    const results = await Promise.all(
+      picked.map(async ([c, set]) => {
+        try {
+          const rows = await ADAPTERS[set]({ ticker: c.ticker, name: c.shortName, cik: c.cik, sector: c.sector, industry: c.industry, reg: reg[c.ticker] });
+          if (set === "complaints" && rows.length) {
+            // keep the stored product breakdown the quick count leaves out
+            const { data: old } = await supabaseAdmin.from("alt_data").select("uid, meta").in("uid", rows.map((r) => r.uid));
+            const prev = new Map((old ?? []).map((o) => [o.uid, o.meta as Record<string, unknown> | null]));
+            for (const r of rows) if (r.meta && r.meta.products === undefined) r.meta.products = prev.get(r.uid)?.products ?? [];
+          }
+          if (rows.length) {
+            const { error } = await supabaseAdmin.from("alt_data").upsert(altRowsForDb(rows) as never, { onConflict: "uid" });
+            if (error) throw new Error(error.message);
+          }
+          return { ticker: c.ticker, set, rows: rows.length };
+        } catch (e) {
+          return { ticker: c.ticker, set, rows: 0, error: (e as Error).message.slice(0, 160) };
+        }
+      }),
+    );
+    const items = results.reduce((n, r) => n + r.rows, 0);
+    return { ok: results.some((r) => !r.error), items, detail: { pairs: pairs.length, at: start, results } };
+  },
+  /**
+   * Government data published as whole-market files: the SEC fails-to-deliver file for the next
+   * half-month after the last one stored (twice a month; `scripts/gov-data.ts --ftd` backfills
+   * history). Upserts are idempotent, so a run cut short is simply repeated.
+   */
+  async "gov-data"() {
+    const { ftdRows, ftdUrl, latestLikelyPeriod, nextPeriod, parseFtd, unzipText, periodCode, codePeriod } = await import("@/lib/alt/ftd");
+    const { data: st } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "gov-ftd").maybeSingle();
+    const latest = latestLikelyPeriod(new Date());
+    const last = st?.cursor ? codePeriod(st.cursor) : null;
+    const next = last ? nextPeriod(last) : latest;
+    if (periodCode(next) > periodCode(latest)) return { ok: true, items: 0, detail: { note: `up to date through ${last}` } };
+    const r = await fetch(ftdUrl(next), { headers: { "User-Agent": "FiledUnder Research research@filedunder.ai" }, signal: AbortSignal.timeout(RUN_BUDGET_MS) });
+    if (r.status === 404 || r.status === 403) return { ok: true, items: 0, detail: { note: `${next} not published yet` } };
+    if (!r.ok) throw new Error(`fails-to-deliver ${next}: HTTP ${r.status}`);
+    const text = await unzipText(new Uint8Array(await r.arrayBuffer()));
+    const rows = ftdRows(parseFtd(text, next, new Set(COVERAGE.map((c) => c.ticker))));
     if (rows.length) {
-      const { error } = await supabaseAdmin.from("alt_data").upsert(altRowsForDb(rows) as never, { onConflict: "uid" });
+      const { error } = await supabaseAdmin.from("alt_data").upsert(rows.map((x) => ({ ...x, meta: x.meta ?? {} })) as never, { onConflict: "uid" });
       if (error) throw new Error(error.message);
     }
-    return { ok: true, items: rows.length, detail: { ticker: c.ticker, set } };
+    await supabaseAdmin.from("job_state").upsert({ job: "gov-ftd", cursor: periodCode(next), updated_at: new Date().toISOString() });
+    return { ok: true, items: rows.length, detail: { period: next } };
   },
   /** Analyst estimates: refresh the three stalest companies that already have estimates stored. */
   async estimates() {

@@ -2304,6 +2304,21 @@ export type Database = {
           ticker: string
         }[]
       }
+      alt_series_leaders: {
+        Args: { _dataset: string; _title: string }
+        Returns: {
+          base_median: number
+          base_n: number
+          date: string
+          meta: Json
+          prior_date: string
+          prior_value: number
+          source_url: string
+          ticker: string
+          unit: string
+          value: number
+        }[]
+      }
       alt_source_stats: {
         Args: never
         Returns: {

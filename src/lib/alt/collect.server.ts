@@ -1,12 +1,13 @@
 // Public alt-data collectors shared by `scripts/alt-data.ts` (bulk) and the scheduled `alt-data` job.
 // Every row keeps a link back to the exact public record it came from. Pure fetch, no Node APIs.
 import { CAPITAL, ITEMS } from "@/lib/alt/sec-forms";
+import { appliesTo, type AltRegistryEntry } from "@/lib/alt/registry";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Per-request timeout and retries; the scheduled job lowers both to fit its run budget. */
-export const altFetch = { timeoutMs: 45_000, tries: 4 };
+export const altFetch = { timeoutMs: 45_000, tries: 4, /** Only the latest periods (scheduled refresh; the script backfills history). */ recent: false };
 const UA = "FiledUnder Research research@filedunder.ai";
-export interface Co { ticker: string; name: string; cik: string; sector: string; industry: string }
+export interface Co { ticker: string; name: string; cik: string; sector: string; industry: string; /** Registry names (src/lib/alt/registry.ts). */ reg?: AltRegistryEntry }
 export type Row = { uid: string; ticker: string; dataset: string; kind: "event" | "series"; date: string | null; title: string; value?: number | null; unit?: string | null; meta?: Record<string, unknown>; source: string; source_url?: string | null };
 
 
@@ -20,6 +21,8 @@ const CFPB: Record<string, string> = { JPM: "JPMORGAN CHASE & CO.", BAC: "BANK O
 const VEHICLE: Record<string, string> = { TSLA: "TESLA", CAT: "CATERPILLAR", DE: "DEERE", HON: "HONEYWELL", GE: "GENERAL ELECTRIC" };
 
 const nm = (c: Co) => NAME[c.ticker] ?? c.name.replace(/\s*\/\w+\/?$/, "").replace(/,?\s+(INC|CORP|CO|LTD|PLC)\.?$/i, "");
+/** Name for full-text searches: a one-word short name ("Target") is too ambiguous, so use the legal name. */
+const searchName = (c: Co) => (NAME[c.ticker] || nm(c).includes(" ") || !c.reg?.legal ? nm(c) : c.reg.legal);
 
 async function get(url: string, init: RequestInit = {}, json = true): Promise<any> {
   for (let i = 0; i < altFetch.tries; i++) {
@@ -120,7 +123,7 @@ async function contracts(c: Co): Promise<Row[]> {
 
 // ───────── Federal Register: rules, proposed rules, notices naming the company ─────────
 async function regulatory(c: Co): Promise<Row[]> {
-  const term = encodeURIComponent(`"${nm(c)}"`);
+  const term = encodeURIComponent(`"${searchName(c)}"`);
   const out: Row[] = [];
   const y = await get(`https://www.federalregister.gov/api/v1/documents/facets/yearly?conditions%5Bterm%5D=${term}`);
   for (const [k, v] of Object.entries<any>(y ?? {})) out.push({ uid: `fr:${c.ticker}:y${k.slice(0, 4)}`, ticker: c.ticker, dataset: "regulatory", kind: "series", date: `${k.slice(0, 4)}-12-31`, title: "Federal Register documents naming the company", value: v.count, unit: "docs", source: "Federal Register", source_url: `https://www.federalregister.gov/documents/search?conditions%5Bterm%5D=${term}` });
@@ -133,7 +136,7 @@ async function regulatory(c: Co): Promise<Row[]> {
 
 // ───────── openFDA: drug & device recalls, drug approvals ─────────
 async function fda(c: Co): Promise<Row[]> {
-  if (!/Health|Pharma|Bio|Life Sci/i.test(c.sector + c.industry) && !["PG", "KO", "PEP", "PM", "HON", "GE"].includes(c.ticker)) return [];
+  if (!appliesTo("fda", c, c.reg)) return [];
   const firm = encodeURIComponent(`"${nm(c)}"`);
   const out: Row[] = [];
   for (const [kind, path] of [["drug recall", "drug/enforcement"], ["device recall", "device/recall"], ["food recall", "food/enforcement"]] as const) {
@@ -160,21 +163,23 @@ async function fda(c: Co): Promise<Row[]> {
 
 // ───────── NHTSA vehicle/equipment recalls ─────────
 async function recalls(c: Co): Promise<Row[]> {
-  const m = VEHICLE[c.ticker]; if (!m) return [];
+  const m = VEHICLE[c.ticker] ?? c.reg?.maker; if (!m) return [];
   const j = await get(`https://data.transportation.gov/resource/6axg-epim.json?$where=${encodeURIComponent(`upper(manufacturer) like '%${m}%'`)}&$limit=5000&$order=report_received_date DESC`);
   return (j ?? []).map((r: any) => ({ uid: `nhtsa:${c.ticker}:${r.nhtsa_id}`, ticker: c.ticker, dataset: "recalls", kind: "event" as const, date: iso(r.report_received_date), title: r.subject ?? r.component ?? "Recall", value: r.potentially_affected ? Number(r.potentially_affected) : null, unit: "units", meta: { component: r.component, type: r.recall_type, summary: r.defect_summary?.slice(0, 500), consequence: r.consequence_summary?.slice(0, 300) }, source: "NHTSA", source_url: r.recall_link?.url ?? `https://www.nhtsa.gov/recalls?nhtsaId=${r.nhtsa_id}` }));
 }
 
 // ───────── CFPB consumer complaints (yearly counts + product mix) ─────────
 async function complaints(c: Co): Promise<Row[]> {
-  const co = CFPB[c.ticker]; if (!co) return [];
+  const co = CFPB[c.ticker] ?? c.reg?.cfpb; if (!co) return [];
   const base = `https://www.consumerfinance.gov/data-research/consumer-complaints/search/api/v1/?company=${encodeURIComponent(co)}&size=0`;
   const out: Row[] = [];
   const now = new Date().getFullYear();
-  for (let y = 2012; y <= now; y++) {
-    const j = await get(`${base}&date_received_min=${y}-01-01&date_received_max=${y}-12-31`);
+  // The scheduled refresh counts this year only, without the (slow) product breakdown; the job keeps
+  // the stored breakdown, and the script refreshes it.
+  for (let y = altFetch.recent ? now : 2012; y <= now; y++) {
+    const j = await get(`${base}&date_received_min=${y}-01-01&date_received_max=${y}-12-31${altFetch.recent ? "&no_aggs=true" : ""}`);
     const n = j?.hits?.total?.value; if (!n) continue;
-    const products = (j.aggregations?.product?.product?.buckets ?? []).slice(0, 6).map((b: any) => ({ product: b.key, n: b.doc_count }));
+    const products = j.aggregations ? (j.aggregations.product?.product?.buckets ?? []).slice(0, 6).map((b: any) => ({ product: b.key, n: b.doc_count })) : undefined;
     out.push({ uid: `cfpb:${c.ticker}:${y}`, ticker: c.ticker, dataset: "complaints", kind: "series", date: `${y}-12-31`, title: "CFPB consumer complaints", value: n, unit: "complaints", meta: { year: y, products, ytd: y === now }, source: "CFPB Consumer Complaint Database", source_url: `https://www.consumerfinance.gov/data-research/consumer-complaints/search/?company=${encodeURIComponent(co)}&date_received_min=${y}-01-01&date_received_max=${y}-12-31` });
     await sleep(200);
   }
@@ -184,7 +189,7 @@ async function complaints(c: Co): Promise<Row[]> {
 // ───────── FDIC call reports for the main bank subsidiary ─────────
 const FDIC_FIELDS: Record<string, [string, string]> = { ASSET: ["Total assets", "USD_K"], DEP: ["Total deposits", "USD_K"], DEPUNINA: ["Uninsured deposits (est.)", "USD_K"], LNLSNET: ["Net loans & leases", "USD_K"], NETINC: ["Net income (YTD)", "USD_K"], NIMY: ["Net interest margin", "%"], ROA: ["Return on assets", "%"], NTLNLSR: ["Net charge-off rate", "%"], RBCT1CER: ["CET1 ratio", "%"], NCLNLSR: ["Noncurrent loans / loans", "%"] };
 async function bank(c: Co): Promise<Row[]> {
-  const cert = FDIC[c.ticker]; if (!cert) return [];
+  const cert = FDIC[c.ticker] ?? c.reg?.fdic; if (!cert) return [];
   const j = await get(`https://api.fdic.gov/banks/financials?filters=CERT:${cert}&fields=REPDTE,${Object.keys(FDIC_FIELDS).join(",")}&sort_by=REPDTE&sort_order=DESC&limit=200`);
   const out: Row[] = [];
   for (const { data: d } of j?.data ?? []) for (const [f, [label, unit]] of Object.entries(FDIC_FIELDS)) {
@@ -196,7 +201,7 @@ async function bank(c: Co): Promise<Row[]> {
 
 // ───────── Wikipedia pageviews (public-attention proxy) ─────────
 async function attention(c: Co): Promise<Row[]> {
-  const a = WIKI[c.ticker]; if (!a) return [];
+  const a = WIKI[c.ticker] ?? c.reg?.wiki; if (!a) return [];
   const end = new Date(); const e = `${end.getUTCFullYear()}${String(end.getUTCMonth() + 1).padStart(2, "0")}0100`;
   const j = await get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/${a}/monthly/2015070100/${e}`);
   return (j?.items ?? []).map((r: any) => ({ uid: `wiki:${c.ticker}:${r.timestamp.slice(0, 6)}`, ticker: c.ticker, dataset: "attention", kind: "series" as const, date: `${r.timestamp.slice(0, 4)}-${r.timestamp.slice(4, 6)}-01`, title: "Wikipedia pageviews", value: r.views, unit: "views", meta: { article: decodeURIComponent(a) }, source: "Wikimedia pageviews", source_url: `https://pageviews.wmcloud.org/?pages=${a}&range=all-time` }));
@@ -225,7 +230,7 @@ async function capital(c: Co): Promise<Row[]> {
 
 // ───────── ClinicalTrials.gov: trials the company sponsors (healthcare only) ─────────
 async function trials(c: Co): Promise<Row[]> {
-  if (!/health|pharma|biotech|medical|life sci|drug/i.test(`${c.sector} ${c.industry}`)) return [];
+  if (!appliesTo("trials", c, c.reg)) return [];
   const name = nm(c); const re = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
   const out: Row[] = []; let token = "";
   for (let p = 0; p < 5; p++) {
@@ -243,7 +248,7 @@ async function trials(c: Co): Promise<Row[]> {
 
 // ───────── CPSC consumer-product recalls naming the company ─────────
 async function consumer(c: Co): Promise<Row[]> {
-  const name = nm(c); const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const name = searchName(c); const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
   const j = await get(`https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallTitle=${encodeURIComponent(name)}`).catch(() => null);
   const out: Row[] = [];
   for (const r of j ?? []) {
@@ -258,6 +263,15 @@ async function consumer(c: Co): Promise<Row[]> {
 export const ADAPTERS: Record<string, (c: Co) => Promise<Row[]>> = { ownership, events, contracts, regulatory, fda, recalls, complaints, bank, attention, capital, trials, consumer };
 
 export const ALT_SETS = Object.keys(ADAPTERS);
+/** Hand-checked registry names; the generated registry fills in every other company. */
+export function staticRegistry(ticker: string): AltRegistryEntry {
+  const e: AltRegistryEntry = {};
+  if (WIKI[ticker]) e.wiki = WIKI[ticker];
+  if (FDIC[ticker]) e.fdic = FDIC[ticker];
+  if (CFPB[ticker]) e.cfpb = CFPB[ticker];
+  if (VEHICLE[ticker]) e.maker = VEHICLE[ticker];
+  return e;
+}
 export function altRowsForDb(rows: Row[]) {
   return [...new Map(rows.map((r) => [r.uid, r])).values()].map((r) => ({ ...r, meta: r.meta ?? {} }));
 }
