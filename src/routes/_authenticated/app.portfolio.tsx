@@ -3,7 +3,7 @@ import { useState } from "react";
 import { z } from "zod";
 import { Download, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
-import { PageHeader } from "@/components/app/page-header";
+import { Empty, PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import LoadingState from "@/components/ui/loading-state";
@@ -101,15 +101,12 @@ function PortfolioPage() {
       {list.isLoading ? (
         <LoadingState label="Loading portfolios" variant="Dots" />
       ) : !current ? (
-        <div className="border-y bg-card/40 px-4 py-10 text-center">
-          <p className="font-display text-xl">No portfolio yet</p>
-          <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-            Import a broker CSV or paste tickers with share counts or weights. Holdings are saved to your account only.
-          </p>
+        <Empty title="No portfolio yet" icon={<Upload className="size-6 text-muted-foreground" />}>
+          <p>Import a broker CSV or paste tickers with share counts or weights. Holdings are saved to your account only.</p>
           <Button className="mt-4" onClick={() => setDialog("new")}>
             <Upload /> Import holdings
           </Button>
-        </div>
+        </Empty>
       ) : (
         <PortfolioView key={current.id + current.updated_at} holdings={current.content.holdings} />
       )}

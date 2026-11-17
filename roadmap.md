@@ -232,6 +232,7 @@
 - [ ] Alt data next: USPTO patents, H-1B/LCA filings, Senate lobbying (LDA API needs a key), EPA enforcement (ECHO, needs facility matching), CourtListener dockets (needs a key); NHTSA recalls refresh only via the script (their query takes ~6 s, longer than a scheduled call); rerun `bun scripts/gov-data.ts --medicare` when CMS publishes a new quarter
 - [x] Navigation cleanup: sidebar down to 9 entries (Signals merged into Dashboard tabs; Firm and billing moved to the account menu); every page label matches its menu section; setups table fits without sideways scrolling
 - [x] Filing typos: SEC notices whose stated value implies an impossible share price (e.g. Tenable Form 144, $4.1B for 12,000 shares) are flagged on the feed, Insiders tab and assistant, and left out of totals and ranking
-- [ ] Look polish, next: company page header density on phones, consistent empty states across hubs
+- [x] Look polish: page-level empty states share one style (portfolio, firm coverage now match), alt-data cards tighter on phones, partial-year readings labelled "so far"
+- [ ] Look polish, next: company header on phones (name, exchange badge and meta line take ~5 lines before the price)
 - [x] Assistant reads this site's own deep-read IR figures (quarterly, annual and monthly) through get_kpis, each value linked to the IR page cell that opens its source; picks the fuller of the two corpora like the IR page
 - [x] Assistant: get_setups (tonight's setups + strategy scoreboard with gate checks) and get_autopilots (paper bots vs SPY), with instructions to label watch-only ideas

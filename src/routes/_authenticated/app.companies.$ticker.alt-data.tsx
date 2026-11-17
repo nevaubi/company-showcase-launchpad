@@ -28,6 +28,14 @@ const BAR = new Set(["contracts", "regulatory", "complaints", "medicare"]);
 /** Per-drug Medicare rows go in one table instead of a chart each. */
 const isDrugRow = (r: { dataset: string; title: string }) => r.dataset === "medicare" && /^Part [BD] · /.test(r.title);
 
+/** "2026-03-31" → "2026-03-31", but a year-to-date bucket dated at year end reads "2026 so far". */
+const asOfLabel = (r: { date: string | null; meta: Record<string, any> }) => {
+  if (!r.date) return "—";
+  const today = new Date().toISOString().slice(0, 10);
+  if (r.meta?.ytd && r.meta?.quarters) return `${r.date.slice(0, 4)} Q1${r.meta.quarters > 1 ? `–Q${r.meta.quarters}` : ""}`;
+  return r.meta?.ytd || r.date > today ? `${r.date.slice(0, 4)} so far` : r.date;
+};
+
 function AltCompany() {
   const ticker = Route.useParams().ticker.toUpperCase();
   const q = useQuery(altCompanyQuery(ticker));
@@ -54,10 +62,10 @@ function AltCompany() {
     <div className="grid grid-cols-1 gap-5">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {present.map((d) => (
-          <button key={d} onClick={() => setDs(ds === d ? "all" : d)} className={cn("rounded-lg border bg-card p-3 text-left shadow-paper transition-colors hover:bg-secondary/60", ds === d && "border-foreground")}>
+          <button key={d} onClick={() => setDs(ds === d ? "all" : d)} className={cn("rounded-lg border bg-card px-2.5 py-2 text-left shadow-paper transition-colors hover:bg-secondary/60 sm:p-3", ds === d && "border-foreground")}>
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{DATASETS[d].source}</div>
-            <div className="mt-0.5 text-[13px] font-medium">{DATASETS[d].label}</div>
-            <div className="num mt-1 text-lg">{counts[d].toLocaleString()}</div>
+            <div className="mt-0.5 truncate text-[12px] font-medium sm:text-[13px]">{DATASETS[d].label}</div>
+            <div className="num mt-0.5 text-base sm:mt-1 sm:text-lg">{counts[d].toLocaleString()}</div>
           </button>
         ))}
       </div>
@@ -67,7 +75,7 @@ function AltCompany() {
           {series.filter((s) => ds === "all" || s.dataset === ds).map((s) => {
             const last = s.rows[s.rows.length - 1];
             return (
-              <Panel collapse={false} key={s.dataset + s.title} title={s.title} subtitle={`${DATASETS[s.dataset].source} · latest ${fmtAlt(last.value, last.unit)} (${last.date})`} actions={last.source_url ? <EvidenceButton ticker={ticker} title={last.title} url={last.source_url} date={last.date ?? undefined} /> : undefined}>
+              <Panel collapse={false} key={s.dataset + s.title} title={s.title} subtitle={`${DATASETS[s.dataset].source} · latest ${fmtAlt(last.value, last.unit)} (${asOfLabel(last)})`} actions={last.source_url ? <EvidenceButton ticker={ticker} title={last.title} url={last.source_url} date={last.date ?? undefined} /> : undefined}>
                 <AltSeriesChart rows={s.rows} bar={BAR.has(s.dataset)} />
               </Panel>
             );

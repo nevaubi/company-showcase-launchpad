@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { Download, Lock, MessageSquareText, Plus, Search, Trash2 } from "lucide-react";
-import { Panel } from "@/components/app/page-header";
+import { Empty, Panel } from "@/components/app/page-header";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { CompanyPicker } from "@/components/firm/company-picker";
 import { memberName, useCoverage, useFirm, useFirmMembers, useRemoveCoverage, useSaveCoverage, type CoverageRow } from "@/components/firm/firm-context";
@@ -142,11 +142,10 @@ function CoveragePage() {
         {coverage.isLoading ? <Skeleton className="h-48" /> : coverage.isError ? (
           <p className="text-sm text-negative">Coverage couldn't load. <Button variant="link" size="xs" onClick={() => coverage.refetch()}>Retry</Button></p>
         ) : !rows.length ? (
-          <div className="border border-dashed px-6 py-10 text-center">
-            <p className="font-medium">No companies covered yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">Add the names your team follows. Each one gets an analyst, a rating, a target and an audit trail.</p>
+          <Empty title="No companies covered yet">
+            <p>Add the names your team follows. Each one gets an analyst, a rating, a target and an audit trail.</p>
             {editable && <CompanyPicker onPick={add} exclude={new Set()}><Button className="mt-3" size="sm" variant="outline"><Plus /> Add the first company</Button></CompanyPicker>}
-          </div>
+          </Empty>
         ) : !shown.length ? <p className="py-6 text-center text-sm text-muted-foreground">No coverage matches these filters.</p> : (
           <div className="-mx-3.5 overflow-x-auto">
             <Table className="research-table min-w-[980px]">
