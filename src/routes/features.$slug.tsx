@@ -4,6 +4,20 @@ import { Button } from "@/components/ui/button";
 import { FEATURES, featureBySlug } from "@/lib/features";
 
 const SITE = "https://filedunder.ai";
+import clickShot from "@/assets/features/click-to-source.jpg.asset.json";
+import irShot from "@/assets/features/ir-kpis.jpg.asset.json";
+import supplyShot from "@/assets/features/supply-chain.jpg.asset.json";
+import assistantShot from "@/assets/features/research-assistant.jpg.asset.json";
+import officeShot from "@/assets/features/office-studio.jpg.asset.json";
+
+const SHOTS: Record<string, string> = {
+  "click-to-source": clickShot.url,
+  "ir-kpis": irShot.url,
+  "supply-chain": supplyShot.url,
+  "research-assistant": assistantShot.url,
+  "office-studio": officeShot.url,
+};
+
 
 export const Route = createFileRoute("/features/$slug")({
   loader: async ({ params }) => {
@@ -24,6 +38,10 @@ export const Route = createFileRoute("/features/$slug")({
         { property: "og:type", content: "article" },
         { property: "og:url", content: url },
         { name: "twitter:card", content: "summary_large_image" },
+        ...(SHOTS[params.slug] ? [
+          { property: "og:image", content: `${SITE}${SHOTS[params.slug]}` },
+          { name: "twitter:image", content: `${SITE}${SHOTS[params.slug]}` },
+        ] : []),
       ],
       links: [{ rel: "canonical", href: url }],
     };
@@ -46,6 +64,10 @@ function FeaturePage() {
         <p className="eyebrow">{f.name}</p>
         <h1 className="mt-4 font-display text-5xl leading-tight">{f.title}</h1>
         <p className="mt-5 max-w-2xl text-lg text-muted-foreground">{f.summary}</p>
+        {SHOTS[f.slug] && (
+          <img src={SHOTS[f.slug]} alt={`${f.name} in Filed Under, shown on NVIDIA`} width={1200} height={630}
+            className="mt-10 w-full rounded-xl border shadow-sm" loading="eager" />
+        )}
         <ul className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
           {f.points.map((p) => <li key={p} className="min-w-0 rounded-xl border bg-card p-5 text-sm">{p}</li>)}
         </ul>
