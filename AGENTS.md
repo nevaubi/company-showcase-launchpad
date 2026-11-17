@@ -60,4 +60,3 @@
 - Filing detail (10-K/10-Q dimensional XBRL): see `src/lib/xbrl/AGENTS.md`.
 - Options context: Cboe delayed chains are summarized purely in `src/lib/options/core.ts` (IV30, at-the-money straddle term, 25-delta skew, put/call) into `options_daily`, one row per stock per trading day from the scheduled `options` job (4 stocks a call, Cboe throttles near 20 requests/min) or `scripts/options-snapshot.ts`; IV rank and volume ratios use only recorded days, and report "priced vs past" uses `markets/reactions.json` from `scripts/earnings-reactions.ts`, so options figures stay context until enough history exists to test them.
 
-- The Office document engine (Sheets/Slides sessions, xlsx sidecar) lives in its own private repo `nevaubi/filedunder-office-engine` and runs as the Render web service `filedunder-office-engine`, never shared with JuneDesk; it trusts only tokens verified against this app's `/api/public/office/jwks`, because it holds no data or keys of its own.
