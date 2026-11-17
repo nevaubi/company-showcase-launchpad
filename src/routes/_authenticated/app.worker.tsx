@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { FREE_DAILY_CAP } from "@/lib/ir/free-lane";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo } from "react";
 import { PageHeader, Panel } from "@/components/app/page-header";
@@ -64,6 +66,7 @@ const tok = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `
 function WorkerPage() {
   const fetchFn = useServerFn(getWorkerProgress);
   const q = useQuery({ queryKey: ["admin", "worker"], queryFn: () => fetchFn(), refetchInterval: 20_000 });
+  const fq = useQuery({ queryKey: ["admin", "free-models"], queryFn: async () => (await supabase.rpc("free_model_today")).data?.[0] ?? null, refetchInterval: 20_000 });
   const d = useMemo(() => (q.data ? derive(q.data) : null), [q.data]);
   if (q.isError) return <p className="p-6 text-sm text-muted-foreground">Couldn't load worker progress: {(q.error as Error).message}</p>;
   if (!q.data || !d) return <p className="p-6 text-sm text-muted-foreground">Loading live progress…</p>;
@@ -91,6 +94,7 @@ function WorkerPage() {
             `${tok(p.openai?.mini?.tokens ?? 0)} / ${tok(FREE_TIERS.mini.cap * FREE_SAFETY)}`,
             `small models today · large ${tok(p.openai?.large?.tokens ?? 0)} / ${tok(FREE_TIERS.large.cap * FREE_SAFETY)} · ${n((p.openai?.mini?.calls ?? 0) + (p.openai?.large?.calls ?? 0))} checks`,
           ],
+          ["Free models", `${n(fq.data?.requests ?? 0)} / ${n(FREE_DAILY_CAP)}`, `requests today · ${n(fq.data?.confirms ?? 0)} settled · ${n(fq.data?.failures ?? 0)} failed`],
           ["Office engine", p.engine?.ok ? "online" : "offline", p.engine ? `${n(p.engine.sessions)} open documents · v${p.engine.version}` : "health check failed"],
         ].map(([k, v, s]) => (
           <div key={k} className="min-w-0 rounded-md border border-border p-3">

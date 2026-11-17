@@ -37,7 +37,12 @@ async function arbitrate(input: string, disputes: Dispute[], ends: Set<string>, 
   const { kept, rest } = preferPrinted(disputes, ends, filed);
   if (!rest.length) return kept;
   const r = await laneStructured<{ rulings: { d: number; pick: string }[] }>({ model: ARBITER_MODEL, name: "ir_arbiter", instructions: ARBITER_INSTRUCTIONS, input: `${input}\n\n${renderDisputes(rest)}`, schema: ARBITER_SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: 6000 });
-  return [...kept, ...(r ? applyRulings(rest, r.data.rulings) : [])];
+  if (r) return [...kept, ...applyRulings(rest, r.data.rulings)];
+  // OpenAI allowance spent or failing: a free OpenRouter model may settle it (third opinion only — it
+  // picks between the two readings, never adds a figure). Nothing from it = disputes stay dropped.
+  const { freeStructured } = await import("@/lib/ir/free-lane.server");
+  const f = await freeStructured<{ rulings: { d: number; pick: string }[] }>({ name: "ir_arbiter", instructions: ARBITER_INSTRUCTIONS, input: `${input}\n\n${renderDisputes(rest)}`, schema: ARBITER_SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: 6000 }, (d) => applyRulings(rest, d.rulings).length);
+  return [...kept, ...(f ? applyRulings(rest, f.rulings) : [])];
 }
 
 /**

@@ -548,6 +548,30 @@ export type Database = {
         }
         Relationships: []
       }
+      free_model_usage: {
+        Row: {
+          confirms: number
+          day: string
+          failures: number
+          requests: number
+          updated_at: string
+        }
+        Insert: {
+          confirms?: number
+          day: string
+          failures?: number
+          requests?: number
+          updated_at?: string
+        }
+        Update: {
+          confirms?: number
+          day?: string
+          failures?: number
+          requests?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       insider_buys: {
         Row: {
           accn: string
@@ -2510,6 +2534,22 @@ export type Database = {
       firm_role_rank: {
         Args: { _role: Database["public"]["Enums"]["firm_role"] }
         Returns: number
+      }
+      free_model_note: {
+        Args: { _confirms: number; _day: string; _ok: boolean }
+        Returns: undefined
+      }
+      free_model_take: {
+        Args: { _cap: number; _day: string }
+        Returns: boolean
+      }
+      free_model_today: {
+        Args: never
+        Returns: {
+          confirms: number
+          failures: number
+          requests: number
+        }[]
       }
       get_firm_invite: {
         Args: { _token: string }

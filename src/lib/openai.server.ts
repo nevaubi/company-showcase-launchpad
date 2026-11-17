@@ -281,7 +281,7 @@ export async function openaiStructured<T>(opts: {
   maxOutputTokens?: number;
   signal?: AbortSignal;
 }): Promise<{ data: T; usage: Usage; model: string }> {
-  if (opts.model.startsWith("inclusionai/")) return openRouterStructured<T>(opts);
+  if (opts.model.startsWith("inclusionai/") || opts.model.endsWith(":free")) return openRouterStructured<T>(opts);
   if (opts.model.startsWith("claude-")) return anthropicStructured<T>(opts);
   if (useGateway()) return gatewayStructured<T>(opts);
   return openaiDirectStructured<T>(opts);
@@ -336,7 +336,7 @@ export async function openaiDirectStructured<T>(opts: Parameters<typeof openaiSt
 }
 
 /** OpenRouter connector credentials stay server-side; no fallback to a different provider. */
-async function openRouterStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+export async function openRouterStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
   const key = process.env["UDC_OPENROUTER_API_KEY"];
   const gatewayKey = process.env["LOVABLE_API_KEY"];
   if (!key || !gatewayKey) throw new OpenAIError("OpenRouter connection is not configured", "auth", 0);
