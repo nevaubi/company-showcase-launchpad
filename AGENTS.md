@@ -60,4 +60,4 @@
 - Filing detail (10-K/10-Q dimensional XBRL): see `src/lib/xbrl/AGENTS.md`.
 - Options context: Cboe delayed chains are summarized purely in `src/lib/options/core.ts` (IV30, at-the-money straddle term, 25-delta skew, put/call) into `options_daily`, one row per stock per trading day from the scheduled `options` job (4 stocks a call, Cboe throttles near 20 requests/min) or `scripts/options-snapshot.ts`; IV rank and volume ratios use only recorded days, and report "priced vs past" uses `markets/reactions.json` from `scripts/earnings-reactions.ts`, so options figures stay context until enough history exists to test them.
 
-- First-run onboarding: per-user state in `user_onboarding` (owner RLS); the starter workspace is seeded once by `seedStarterWorkspace` (claim-then-seed, never re-adds deleted items) with FU() formulas only; tour steps target `data-tour` selectors and one `src/lib/shortcuts.ts` list drives both key handling and the shortcuts sheet.
+- First-run onboarding: see `src/lib/onboarding/AGENTS.md`.
