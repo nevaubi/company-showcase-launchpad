@@ -33,6 +33,7 @@ export type AppPath =
   | "/app/reports"
   | "/app/firm"
   | "/app/status"
+  | "/app/worker"
   | "/app/portfolio"
   | "/app/admin" | "/app/freshness";
 
