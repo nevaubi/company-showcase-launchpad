@@ -25,7 +25,11 @@ const SUGGEST: Record<OfficeApp, string[]> = {
     "Build a 6-slide NVDA earnings deck with KPI cards and a revenue chart",
     "Make a peer comparison slide for AAPL, MSFT and GOOGL",
     "Tighten every slide title into an action title",
-  ], pdf: [],
+  ], pdf: [
+    "Highlight every revenue, margin and guidance figure and add notes",
+    "Add a one-page executive summary at the front",
+    "Redact names and stamp every page CONFIDENTIAL",
+  ],
 };
 
 /** OfficeAI: the research agent with the open editor's tools, docked beside the canvas. */

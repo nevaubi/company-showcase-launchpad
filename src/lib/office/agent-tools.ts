@@ -101,7 +101,33 @@ const SLIDES = [
   fn("deck_set_title", "Rename the deck file.", { title: str("new title") }),
 ];
 
-export const OFFICE_TOOLS: Record<OfficeApp, object[]> = { writer: WRITER, sheets: SHEETS, slides: SLIDES, pdf: [] };
+const PAGE = int("1-based page number");
+const PDF = [
+  fn("pdf_read", "Read the PDF: page count and sizes (points, 612×792 = Letter), each page's text, and every annotation with its id. Long documents: pass a page range.", {
+    pages: n(str("page range like 1-5 or 3; null = all (text truncated)")),
+  }),
+  fn("pdf_search", "Search the PDF text; returns every page and snippet where the phrase occurs.", { query: str("phrase to find") }),
+  fn("pdf_mark_text", "Highlight, underline, strike through or redact every occurrence of an exact phrase (optionally on one page), with an optional margin note next to the first hit. Use this to mark evidence in filings.", {
+    phrase: str("exact text as it appears in the PDF"), page: n(PAGE), style: { type: "string", enum: ["highlight", "underline", "strike", "redact"] },
+    color: n(str("hex colour")), note: n(str("margin note text placed beside the first occurrence")), first_only: n({ type: "boolean" }),
+  }),
+  fn("pdf_annotate", "Place an annotation by position: note (sticky note box), text (free text), rect (outline box), redact (black box), stamp (e.g. APPROVED, CONFIDENTIAL), highlight. x/y are points from the page's top-left.", {
+    page: PAGE, type: { type: "string", enum: ["note", "text", "rect", "redact", "stamp", "highlight"] },
+    x: { type: "number" }, y: { type: "number" }, w: { type: "number" }, h: { type: "number" }, text: n(str("text for note/text/stamp")), color: n(str("hex colour")),
+  }),
+  fn("pdf_annotation_update", "Change or delete an annotation by id.", {
+    id: str("annotation id"), delete: n({ type: "boolean" }), text: n(str("")), color: n(str("hex")),
+    x: n({ type: "number" }), y: n({ type: "number" }), w: n({ type: "number" }), h: n({ type: "number" }),
+  }),
+  fn("pdf_add_page", "Insert a new Letter page with text: a title plus a body where lines starting '# ' are headings, '## ' subheadings, '- ' bullets, blank lines separate paragraphs. About 450 words fit on a page — split longer content over several pages.", {
+    position: n(int("1-based position for the new page; null = end")), title: str("page title"), body: str("page body"),
+  }),
+  fn("pdf_page_update", "Rewrite a page you created with pdf_add_page.", { page: PAGE, title: n(str("")), body: n(str("")) }),
+  fn("pdf_pages", "Delete, move or duplicate a page.", { page: PAGE, action: { type: "string", enum: ["delete", "move", "duplicate"] }, to: n(int("target position for move")) }),
+  fn("pdf_set_title", "Rename the PDF file.", { title: str("new title") }),
+];
+
+export const OFFICE_TOOLS: Record<OfficeApp, object[]> = { writer: WRITER, sheets: SHEETS, slides: SLIDES, pdf: PDF };
 
 export const OFFICE_INSTRUCTIONS: Record<OfficeApp, string> = {
   writer: `You are OfficeAI inside Filed Under Writer (a Microsoft Word–style editor). The user's document is open beside you.
@@ -122,5 +148,9 @@ Gather facts first with the research tools (get_financials, get_kpis, get_segmen
 Design like an investment-bank pitch deck: one message per slide stated in the title (an "action title"), at most 5 short bullets, big-number metric cards for headline KPIs, native charts for trends, compact tables for comparisons, consistent margins (0.6in sides, content from y=1.5), no overlapping boxes, nothing outside 13.33×7.5in. Use the title layout for the cover and section layout between parts.
 Every number must come from a tool result; put sources in a small text element at the bottom of the slide (y≈6.9, size 9) or in the speaker notes — filings as filing:TICKER:ACCESSION links, web pages by URL.
 After building, deck_read to check layout and fix overlaps. Reply in chat with 1–3 sentences on what you built.`,
-  pdf: "",
+  pdf: `You are OfficeAI inside Filed Under PDF Studio (an Adobe Acrobat–style PDF editor). The user's PDF is open beside you.
+Work directly in the PDF with the pdf_* tools — never paste the PDF into chat. Start with pdf_read (a page range for long files) or pdf_search to find passages.
+Review like a diligence analyst: mark evidence with pdf_mark_text using the exact wording from pdf_read/pdf_search (highlight for key facts, underline for risks, redact for sensitive data), add short margin notes that say why a passage matters, and stamp pages when asked. Cross-check figures in the PDF against Filed Under data (get_financials, get_kpis, get_segments, read_filing) and note any mismatch with both values and the filing source.
+To write new content (summaries, cover pages, memos) use pdf_add_page with headings and bullets; every number must come from a tool result with its source (filing TICKER ACCESSION or URL) written next to it.
+After editing, pdf_read the touched pages to check. Reply in chat with 1–3 sentences on what you marked or added.`,
 };

@@ -80,6 +80,7 @@ import { Route as AuthenticatedAppCompaniesTickerMemoRouteImport } from './route
 import { Route as AuthenticatedAppCompaniesTickerRedlineRouteImport } from './routes/_authenticated/app.companies.$ticker.redline'
 import { Route as AuthenticatedAppCompaniesTickerReportsRouteImport } from './routes/_authenticated/app.companies.$ticker.reports'
 import { Route as AuthenticatedAppCompaniesTickerValuationRouteImport } from './routes/_authenticated/app.companies.$ticker.valuation'
+import { Route as AuthenticatedAppOfficePdfIdRouteImport } from './routes/_authenticated/app.office.pdf.$id'
 import { Route as AuthenticatedAppOfficeSheetsIdRouteImport } from './routes/_authenticated/app.office.sheets.$id'
 import { Route as AuthenticatedAppOfficeSlidesIdRouteImport } from './routes/_authenticated/app.office.slides.$id'
 import { Route as AuthenticatedAppOfficeWriterIdRouteImport } from './routes/_authenticated/app.office.writer.$id'
@@ -477,6 +478,12 @@ const AuthenticatedAppCompaniesTickerValuationRoute =
     path: '/valuation',
     getParentRoute: () => AuthenticatedAppCompaniesTickerRoute,
   } as any)
+const AuthenticatedAppOfficePdfIdRoute =
+  AuthenticatedAppOfficePdfIdRouteImport.update({
+    id: '/office/pdf/$id',
+    path: '/office/pdf/$id',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppOfficeSheetsIdRoute =
   AuthenticatedAppOfficeSheetsIdRouteImport.update({
     id: '/office/sheets/$id',
@@ -572,6 +579,7 @@ export interface FileRoutesByFullPath {
   '/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/app/office/pdf/$id': typeof AuthenticatedAppOfficePdfIdRoute
   '/app/office/sheets/$id': typeof AuthenticatedAppOfficeSheetsIdRoute
   '/app/office/slides/$id': typeof AuthenticatedAppOfficeSlidesIdRoute
   '/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
@@ -645,6 +653,7 @@ export interface FileRoutesByTo {
   '/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/app/office/pdf/$id': typeof AuthenticatedAppOfficePdfIdRoute
   '/app/office/sheets/$id': typeof AuthenticatedAppOfficeSheetsIdRoute
   '/app/office/slides/$id': typeof AuthenticatedAppOfficeSlidesIdRoute
   '/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
@@ -723,6 +732,7 @@ export interface FileRoutesById {
   '/_authenticated/app/companies/$ticker/redline': typeof AuthenticatedAppCompaniesTickerRedlineRoute
   '/_authenticated/app/companies/$ticker/reports': typeof AuthenticatedAppCompaniesTickerReportsRoute
   '/_authenticated/app/companies/$ticker/valuation': typeof AuthenticatedAppCompaniesTickerValuationRoute
+  '/_authenticated/app/office/pdf/$id': typeof AuthenticatedAppOfficePdfIdRoute
   '/_authenticated/app/office/sheets/$id': typeof AuthenticatedAppOfficeSheetsIdRoute
   '/_authenticated/app/office/slides/$id': typeof AuthenticatedAppOfficeSlidesIdRoute
   '/_authenticated/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
@@ -801,6 +811,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/redline'
     | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
+    | '/app/office/pdf/$id'
     | '/app/office/sheets/$id'
     | '/app/office/slides/$id'
     | '/app/office/writer/$id'
@@ -874,6 +885,7 @@ export interface FileRouteTypes {
     | '/app/companies/$ticker/redline'
     | '/app/companies/$ticker/reports'
     | '/app/companies/$ticker/valuation'
+    | '/app/office/pdf/$id'
     | '/app/office/sheets/$id'
     | '/app/office/slides/$id'
     | '/app/office/writer/$id'
@@ -951,6 +963,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/companies/$ticker/redline'
     | '/_authenticated/app/companies/$ticker/reports'
     | '/_authenticated/app/companies/$ticker/valuation'
+    | '/_authenticated/app/office/pdf/$id'
     | '/_authenticated/app/office/sheets/$id'
     | '/_authenticated/app/office/slides/$id'
     | '/_authenticated/app/office/writer/$id'
@@ -1473,6 +1486,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppCompaniesTickerValuationRouteImport
       parentRoute: typeof AuthenticatedAppCompaniesTickerRoute
     }
+    '/_authenticated/app/office/pdf/$id': {
+      id: '/_authenticated/app/office/pdf/$id'
+      path: '/office/pdf/$id'
+      fullPath: '/app/office/pdf/$id'
+      preLoaderRoute: typeof AuthenticatedAppOfficePdfIdRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/office/sheets/$id': {
       id: '/_authenticated/app/office/sheets/$id'
       path: '/office/sheets/$id'
@@ -1612,6 +1632,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppDocsIndexRoute: typeof AuthenticatedAppDocsIndexRoute
   AuthenticatedAppOfficeIndexRoute: typeof AuthenticatedAppOfficeIndexRoute
   AuthenticatedAppThesesIndexRoute: typeof AuthenticatedAppThesesIndexRoute
+  AuthenticatedAppOfficePdfIdRoute: typeof AuthenticatedAppOfficePdfIdRoute
   AuthenticatedAppOfficeSheetsIdRoute: typeof AuthenticatedAppOfficeSheetsIdRoute
   AuthenticatedAppOfficeSlidesIdRoute: typeof AuthenticatedAppOfficeSlidesIdRoute
   AuthenticatedAppOfficeWriterIdRoute: typeof AuthenticatedAppOfficeWriterIdRoute
@@ -1661,6 +1682,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppDocsIndexRoute: AuthenticatedAppDocsIndexRoute,
   AuthenticatedAppOfficeIndexRoute: AuthenticatedAppOfficeIndexRoute,
   AuthenticatedAppThesesIndexRoute: AuthenticatedAppThesesIndexRoute,
+  AuthenticatedAppOfficePdfIdRoute: AuthenticatedAppOfficePdfIdRoute,
   AuthenticatedAppOfficeSheetsIdRoute: AuthenticatedAppOfficeSheetsIdRoute,
   AuthenticatedAppOfficeSlidesIdRoute: AuthenticatedAppOfficeSlidesIdRoute,
   AuthenticatedAppOfficeWriterIdRoute: AuthenticatedAppOfficeWriterIdRoute,

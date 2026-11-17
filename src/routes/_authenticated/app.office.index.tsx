@@ -46,7 +46,7 @@ function OfficeHub() {
     if (r.kind === "docx") void navigate({ to: "/app/office/writer/$id", params: { id: r.id } });
     else if (r.kind === "xlsx") void navigate({ to: "/app/office/sheets/$id", params: { id: r.id } });
     else if (r.kind === "pptx") void navigate({ to: "/app/office/slides/$id", params: { id: r.id } });
-    else toast.info("The PDF editor is coming next.");
+    else void navigate({ to: "/app/office/pdf/$id", params: { id: r.id } });
   };
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
