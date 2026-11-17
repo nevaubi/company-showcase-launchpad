@@ -151,7 +151,19 @@ export function mergeHistory(latest: FilingDetail, older: FilingDetail[]): Filin
   }
   const concentration = latest.concentration.map((r) => ({ ...r, values: { ...r.values } }));
   for (const o of olds) mergeConcentration(concentration, o.concentration, o, periods);
-  return { ...latest, periods, tables, segments, concentration };
+  // Consolidated loan-book tags: each period from the newest filing that reports it.
+  let consolidated = latest.consolidated;
+  if (olds.some((o) => o.consolidated)) {
+    consolidated = Object.fromEntries(Object.entries(latest.consolidated ?? {}).map(([c, m]) => [c, { ...m }]));
+    for (const o of olds)
+      for (const [c, m] of Object.entries(o.consolidated ?? {}))
+        for (const [k, v] of Object.entries(m))
+          if (annualLike(o.periods[k]) && !(consolidated[c] ??= {})[k]) {
+            consolidated[c][k] = fromFiling(v, o);
+            periods[k] ??= o.periods[k];
+          }
+  }
+  return { ...latest, periods, tables, segments, concentration, ...(consolidated ? { consolidated } : {}) };
 }
 
 /** Annual detail extended with the stored earlier 10-Ks, or null when there is no annual filing. */

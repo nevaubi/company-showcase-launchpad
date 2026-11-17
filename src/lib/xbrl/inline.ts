@@ -17,6 +17,8 @@ export interface XbrlFact {
   context: string;
   /** element id in the document, used to highlight the exact tag in the filing viewer */
   id?: string;
+  /** document of a multi-document filing the tag sits in, when it is not the primary document (annual report exhibits) */
+  doc?: string;
 }
 
 const attrs = (tag: string) => {

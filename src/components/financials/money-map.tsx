@@ -46,7 +46,7 @@ export function MoneyMap({ d, ticker }: { d: FilingDetail; ticker: string }) {
   const p = d.periods[map.periodKey];
 
   const openParts = (label: string, value: number, l: Pick<MoneyLink, "ref" | "derived">) => {
-    const src = (x: FlowPart) => ({ accn: d.accn, doc: d.doc, concept: x.concept, start: d.periods[x.periodKey]?.start, end: d.periods[x.periodKey]?.end ?? d.reportDate, value: x.v });
+    const src = (x: FlowPart) => ({ accn: d.accn, doc: x.doc ?? d.doc, concept: x.concept, start: d.periods[x.periodKey]?.start, end: d.periods[x.periodKey]?.end ?? d.reportDate, value: x.v });
     if (l.ref)
       source.open({ ticker, label, periodLabel: detailPeriodLabel(p), unit: "usd", value, src: src(l.ref), elementId: l.ref.id });
     else if (l.derived)

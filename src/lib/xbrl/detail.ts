@@ -4,7 +4,7 @@
 // long-lived assets sit. Pure: built by scripts/xbrl-detail.ts, rendered by the Financials tab.
 import { humanize, type XbrlContext, type XbrlFact } from "@/lib/xbrl/inline";
 
-export const DETAIL_FORMAT = 4;
+export const DETAIL_FORMAT = 5;
 
 export interface DetailValue {
   v: number;
@@ -78,6 +78,8 @@ export interface FilingDetail {
   segments: SegmentMatrix | null;
   concentration: ConcentrationRow[];
   counts: { facts: number; dimensional: number };
+  /** consolidated (undimensioned) loan-book and deposit tags by concept and period, for cross-bank metrics */
+  consolidated?: Record<string, Record<string, DetailValue>>;
 }
 
 const DAY = 86_400_000;
@@ -121,7 +123,7 @@ const NOISE_CONCEPT = /Cumulative|Liabilit|Reinsurance|HeldForSale|NotSeparately
  * credit-score cuts are left out (they are triangles, not breakdowns).
  */
 const LENDING =
-  /:(FinancingReceivable(ExcludingAccruedInterest)?BeforeAllowanceForCreditLoss(es)?(NetOfDeferredIncome)?|LoansAndLeasesReceivable(GrossCarryingAmount|NetOfDeferredIncome)|FinancingReceivableRecordedInvestment|FinancingReceivableAllowanceForCreditLoss(es|ExcludingAccruedInterest)?|FinancingReceivable(ExcludingAccruedInterest)?AllowanceForCreditLoss(es)?(Writeoff|WriteOffs|WriteoffAfterRecovery|WriteOffsNet|Recovery)|FinancingReceivable(ExcludingAccruedInterest)?CreditLossExpenseReversal|ProvisionForLoanLeaseAndOtherLosses|ProvisionForLoanAndLeaseLosses|FinancingReceivable(ExcludingAccruedInterest)?Nonaccrual|FinancingReceivableRecordedInvestmentNonaccrualStatus|FinancingReceivable(ExcludingAccruedInterest)?90DaysOrMorePastDueStillAccruing|FinancingReceivableRecordedInvestment90DaysPastDueAndStillAccruing)$/;
+  /:(FinancingReceivable(ExcludingAccruedInterest)?BeforeAllowanceForCreditLoss(es)?(NetOfDeferredIncome)?|LoansAndLeasesReceivable(GrossCarryingAmount|NetOfDeferredIncome)|FinancingReceivableRecordedInvestment|FinancingReceivableAllowanceForCreditLoss(es|ExcludingAccruedInterest)?|FinancingReceivable(ExcludingAccruedInterest)?AllowanceForCreditLoss(es)?(Writeoff|WriteOffs|WriteoffAfterRecovery|WriteOffsNet|Recovery)|FinancingReceivable(ExcludingAccruedInterest)?CreditLossExpenseReversal|ProvisionForLoanLeaseAndOtherLosses|ProvisionForLoanAndLeaseLosses|FinancingReceivable(ExcludingAccruedInterest)?Nonaccrual|FinancingReceivableRecordedInvestmentNonaccrualStatus|FinancingReceivable(ExcludingAccruedInterest)?90DaysOrMorePastDueStillAccruing|FinancingReceivableRecordedInvestment90DaysPastDueAndStillAccruing|NotesReceivableGross)$/;
 /** Axes a loan-book breakdown may use; the first matching axis in this order is the row axis. */
 const LENDING_AXES = [
   "us-gaap:FinancingReceivablePortfolioSegmentAxis",
@@ -238,6 +240,9 @@ export function memberLabel(member: string, labels: Map<string, string>): string
 
 /** Filing labels sometimes carry amounts ("Loans (included $70,684 at fair value)"); those notes go. */
 const dropFigures = (s: string) => s.replace(/\s*\([^()]*\d[^()]*\)/g, "").trim() || s;
+/** A fact as a table value: number, element id and (for exhibit-hosted tags) its document. */
+const valOf = (f: XbrlFact): DetailValue => ({ v: f.value, ...(f.id ? { id: f.id } : {}), ...(f.doc ? { doc: f.doc } : {}) });
+
 /** Plain names for every standard loan-book concept, so banks' tables read the same across companies. */
 function lendingLabel(c: string): string | null {
   if (!/^us-gaap:/.test(c) || !LENDING.test(c)) return null;
@@ -356,7 +361,7 @@ export function buildDetail(input: {
     if (!dims.length) {
       const k = `${f.concept}|${f.unit}`;
       const m = total.get(k) ?? {};
-      m[p!.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
+      m[p!.key] ??= valOf(f);
       total.set(k, m);
       if (INVENTORY.test(f.concept) || COMMIT.test(f.concept) || (DEPOSITS.test(f.concept) && p!.months === 0)) cells.push({ f, p: p!, dims: [] });
       continue;
@@ -396,7 +401,7 @@ export function buildDetail(input: {
         label: memberLabel(item[1], labels),
         values: {},
       };
-      row.values[p.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
+      row.values[p.key] ??= valOf(f);
       concentration.set(key, row);
       continue;
     }
@@ -408,7 +413,7 @@ export function buildDetail(input: {
       const t = tables.get(id) ?? { id, family: fam, title, concept: "", conceptLabel: "", axis: "", axisLabel: fam === "lending" ? "Deposit type" : "Line", unit: f.unit, periods: [], rows: [], _rows: new Map(), ...(fam === "lending" ? { overlap: true } : {}) };
       tables.set(id, t);
       const r = t._rows.get(f.concept) ?? { member: f.concept, label: conceptLabel(f.concept, labels), values: {} };
-      r.values[p.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
+      r.values[p.key] ??= valOf(f);
       t._rows.set(f.concept, r);
       continue;
     }
@@ -418,7 +423,7 @@ export function buildDetail(input: {
       segMembers.set(member, memberLabel(member, labels));
       const kind = REVENUE.test(f.concept) && !NOT_REVENUE.test(f.concept) ? "revenue" : PROFIT.test(f.concept) ? "profit" : COST.test(f.concept) ? "cost" : "other";
       const row = seg.get(f.concept) ?? { concept: f.concept, label: conceptLabel(f.concept, labels), kind, values: {} };
-      (row.values[member] ??= {})[p.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
+      (row.values[member] ??= {})[p.key] ??= valOf(f);
       seg.set(f.concept, row);
     }
     const lend = lendingShape(f.concept, dims);
@@ -447,8 +452,19 @@ export function buildDetail(input: {
       row.sub ??= [];
       let s = row.sub.find((x) => x.member === inner[1]);
       if (!s) row.sub.push((s = { member: inner[1], label: memberLabel(inner[1], labels), values: {} }));
-      s.values[p.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
-    } else row.values[p.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
+      s.values[p.key] ??= valOf(f);
+    } else row.values[p.key] ??= valOf(f);
+  }
+
+  // Consolidated loan-book and deposit tags (balance sheet and credit-loss notes), whatever the tables show.
+  const consolidated: Record<string, Record<string, DetailValue>> = {};
+  for (const [k, m] of total) {
+    const [concept, unit] = k.split("|");
+    // Standard loan-book tags, plus a bank's own total-loan and allowance tags (Wells Fargo's loans incl. leases).
+    const own = !/^us-gaap:/.test(concept) && /FinancingReceivable|LoansAndLeases/.test(concept) && /BeforeAllowanceForCreditLoss$|AllowanceFor(Loan|Credit)Loss(es)?(ExcludingAccruedInterest)?$|WriteoffAfterRecovery$|Nonaccrual$/.test(concept) && !/AfterAllowance/.test(concept);
+    if (unit !== "USD" || !(own || (/^us-gaap:/.test(concept) && (LENDING.test(concept) || concept === "us-gaap:Deposits")))) continue;
+    consolidated[concept] = m;
+    for (const pk of Object.keys(m)) used.add(pk);
   }
 
   for (const k of used) {
@@ -618,6 +634,7 @@ export function buildDetail(input: {
     segments,
     concentration: conc,
     counts: { facts: facts.length, dimensional },
+    ...(Object.keys(consolidated).length ? { consolidated } : {}),
   };
 }
 

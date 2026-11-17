@@ -10,6 +10,7 @@
 import { buildDetail, DETAIL_FORMAT, type FilingDetail, type StoredDetail } from "@/lib/xbrl/detail";
 import { parseContexts, parseInlineFacts, parseLabels, parseUnits } from "@/lib/xbrl/inline";
 import { companyMatcher } from "@/lib/xbrl/counterparty";
+import { indexEntry, type ExposureIndex } from "@/lib/xbrl/exposure";
 import { args, dbGate, log, sb, sleep } from "./lib/supa";
 
 const UA = "FiledUnder Research research@filedunder.ai";
@@ -47,9 +48,30 @@ async function filingDetail(ticker: string, cik: string, r: Recent, i: number): 
   const accn = r.accessionNumber[i];
   const doc = r.primaryDocument[i];
   if (!r.isInlineXBRL[i]) return null;
-  const idx = JSON.parse(await sec(archive(cik, accn, "index.json"))) as { directory: { item: { name: string }[] } };
+  const idx = JSON.parse(await sec(archive(cik, accn, "index.json"))) as { directory: { item: { name: string; size?: string | number }[] } };
   const lab = idx.directory.item.find((x) => x.name.endsWith("_lab.xml"));
   const [html, labXml] = await Promise.all([sec(archive(cik, accn, doc)), lab ? sec(archive(cik, accn, lab.name)).catch(() => "") : Promise.resolve("")]);
+  let facts = parseInlineFacts(html, parseUnits(html));
+  let all = html;
+  // Some filers (Wells Fargo, U.S. Bancorp) put the financial statements in an annual-report exhibit of the
+  // inline XBRL document set; read the largest other inline document when the primary one carries few tags.
+  if (facts.length < 400) {
+    const others = idx.directory.item
+      .filter((x) => /\.htm$/i.test(x.name) && x.name !== doc && !/^R\d+\.htm$/i.test(x.name))
+      .sort((a, b) => Number(b.size ?? 0) - Number(a.size ?? 0))
+      .slice(0, 2);
+    for (const o of others) {
+      const extra = await sec(archive(cik, accn, o.name)).catch(() => "");
+      if (!/<ix:nonFraction/i.test(extra)) continue;
+      all += extra;
+      const units = parseUnits(all);
+      const more = parseInlineFacts(extra, units).map((f) => ({ ...f, doc: o.name }));
+      if (more.length > facts.length) {
+        facts = [...parseInlineFacts(html, units), ...more];
+        break;
+      }
+    }
+  }
   return buildDetail({
     ticker,
     accn,
@@ -57,8 +79,8 @@ async function filingDetail(ticker: string, cik: string, r: Recent, i: number): 
     filed: r.filingDate[i],
     reportDate: r.reportDate[i],
     doc,
-    facts: parseInlineFacts(html, parseUnits(html)),
-    contexts: parseContexts(html),
+    facts,
+    contexts: parseContexts(all),
     labels: parseLabels(labXml),
   });
 }
@@ -108,6 +130,28 @@ async function main() {
   const { data: run } = record ? await sb.from("job_runs").insert({ job: "xbrl-detail" }).select("id").single() : { data: null };
   let done = 0;
   let stats = { tables: 0, conc: 0, skipped: 0, failed: 0, history: 0 };
+  // Cross-company index (region exposure, bank metrics) for the Exposures page, refreshed as companies are read.
+  const index: ExposureIndex = (await (async () => {
+    const { data } = await sb.storage.from("datasets").download("detail-index.json");
+    try {
+      return data ? (JSON.parse(await data.text()) as ExposureIndex) : null;
+    } catch {
+      return null;
+    }
+  })()) ?? { builtAt: "", companies: {} };
+  const note = (ticker: string, d: StoredDetail | null) => {
+    const e = d ? indexEntry(d) : {};
+    if (e.exposure || e.bank) index.companies[ticker] = e;
+    else delete index.companies[ticker];
+  };
+  let lastSave = Date.now();
+  const saveIndex = async () => {
+    if (args.dry !== undefined) return;
+    index.builtAt = new Date().toISOString();
+    const up = await sb.storage.from("datasets").upload("detail-index.json", new Blob([JSON.stringify(index)], { type: "application/json" }), { upsert: true, contentType: "application/json" });
+    if (up.error) log(`index upload failed: ${up.error.message}`);
+    lastSave = Date.now();
+  };
   const queue = [...todo];
   const worker = async () => {
     for (;;) {
@@ -120,6 +164,7 @@ async function main() {
         const q = r.form.findIndex((f, i) => f === "10-Q" && (k < 0 || i < k));
         if (k < 0 && q < 0) {
           stats.skipped++;
+          note(c.ticker, null);
           continue;
         }
         const prev = args.force !== undefined ? null : await stored(c.ticker);
@@ -128,6 +173,7 @@ async function main() {
         const hasHistory = !!prev && prev.historyChecked === r.accessionNumber[k];
         if (prev && prev.format === DETAIL_FORMAT && same(prev.annual, k) && (q < 0 ? !prev.quarterly : same(prev.quarterly, q)) && (k < 0 || hasHistory)) {
           stats.skipped++;
+          note(c.ticker, prev);
           continue;
         }
         const annual = k >= 0 ? (same(prev?.annual, k) ? prev!.annual : await filingDetail(c.ticker, c.cik, r, k)) : null;
@@ -184,6 +230,8 @@ async function main() {
           if (error) throw new Error(error.message);
         }
         done++;
+        note(c.ticker, out);
+        if (Date.now() - lastSave > 5 * 60_000) await saveIndex();
         if (done % 25 === 0 || want) log(`${done} stored (${c.ticker}: ${out.annual?.tables.length ?? 0}+${out.quarterly?.tables.length ?? 0} tables, ${rows.length} concentration rows, ${history.length} earlier 10-Ks) · ${queue.length} left`);
       } catch (e) {
         stats.failed++;
@@ -192,6 +240,7 @@ async function main() {
     }
   };
   await Promise.all(Array.from({ length: Number(args.workers ?? 3) }, worker));
+  await saveIndex();
   if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: stats.failed < Math.max(25, todo.length * 0.05), items: done, detail: { ...stats, companies: todo.length } }).eq("id", run.id);
   log(`DONE ${done} stored · ${stats.skipped} unchanged/no filings · ${stats.failed} failed · ${stats.tables} tables · ${stats.conc} concentration rows · ${stats.history} earlier 10-Ks`);
 }

@@ -9,6 +9,8 @@ export interface FlowPart {
   periodKey: string;
   v: number;
   id?: string;
+  /** document holding the tag, when not the filing's primary document */
+  doc?: string;
   sign: 1 | -1;
 }
 export interface MoneyNode {
@@ -39,7 +41,7 @@ export interface MoneyMap {
 
 const REVENUE_CONCEPT = /Revenue|Sales/;
 const near = (a: number, b: number, tol = 0.03) => Math.abs(a - b) <= Math.abs(b) * tol;
-const part = (label: string, concept: string, periodKey: string, v: DetailValue, sign: 1 | -1 = 1): FlowPart => ({ label, concept, periodKey, v: v.v, ...(v.id ? { id: v.id } : {}), sign });
+const part = (label: string, concept: string, periodKey: string, v: DetailValue, sign: 1 | -1 = 1): FlowPart => ({ label, concept, periodKey, v: v.v, ...(v.id ? { id: v.id } : {}), ...(v.doc ? { doc: v.doc } : {}), sign });
 
 interface SourceRow {
   member: string;
