@@ -65,7 +65,7 @@ function WorkerPage() {
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4">
       <PageHeader title="Live worker" description="The always-on cloud worker reading every investor-relations file. Refreshes every 20 seconds from the database." />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
         {[
           ["Worker", d.status, `heartbeat ${ago(p.loop?.heartbeat, p.now)}`],
           ["Companies with figures", `${n(d.withFacts.length)} / ${n(d.withFiles.length)}`, pct(d.withFacts.length, d.withFiles.length)],
@@ -73,10 +73,11 @@ function WorkerPage() {
           ["Files read", `${n(d.read)} / ${n(d.stored)}`, pct(d.read, d.stored)],
           ["Waiting in queue", n(d.queue.length), "stored files, no figures yet"],
           ["Done but empty", n(d.zeroDone.length), "re-queued once automatically"],
+          ["Office engine", p.engine?.ok ? "online" : "offline", p.engine ? `${n(p.engine.sessions)} open documents · v${p.engine.version}` : "health check failed"],
         ].map(([k, v, s]) => (
           <div key={k} className="min-w-0 rounded-md border border-border p-3">
             <p className="text-[11px] text-muted-foreground">{k}</p>
-            <p className={cn("num mt-0.5 text-lg font-medium", k === "Worker" && (d.status === "running" ? "text-positive" : "text-warning"))}>{v}</p>
+            <p className={cn("num mt-0.5 text-lg font-medium", k === "Office engine" ? (p.engine?.ok ? "text-positive" : "text-warning") : k === "Worker" && (d.status === "running" ? "text-positive" : "text-warning"))}>{v}</p>
             <p className="text-[10px] text-muted-foreground">{s}</p>
           </div>
         ))}

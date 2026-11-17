@@ -20,6 +20,8 @@ export interface WorkerProgress {
     log: string[];
   } | null;
   universe: string[];
+  /** Filed Under office engine on Render (/health), null when unreachable */
+  engine: { ok: boolean; version: string; sessions: number; users: number } | null;
 }
 
 /** Admin-only live view of the always-on IR worker: lease, loop state file, live figure counts. */
@@ -56,5 +58,12 @@ export const getWorkerProgress = createServerFn({ method: "GET" })
         .sort((a, b) => (b.revenueTTM ?? b.revenueFY ?? 0) - (a.revenueTTM ?? a.revenueFY ?? 0))
         .map((c) => c.ticker);
     }
-    return { now: new Date().toISOString(), ...live, loop, universe };
+    let engine: WorkerProgress["engine"] = null;
+    try {
+      const r = await fetch("https://filedunder-office-engine.onrender.com/health", { signal: AbortSignal.timeout(4000) });
+      if (r.ok) engine = (await r.json()) as NonNullable<WorkerProgress["engine"]>;
+    } catch {
+      engine = null;
+    }
+    return { now: new Date().toISOString(), ...live, loop, universe, engine };
   });
