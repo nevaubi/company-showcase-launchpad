@@ -61,3 +61,15 @@ export const getEngineToken = createServerFn({ method: "POST" })
     const { mintEngineToken } = await import("@/lib/office/engine-token.server");
     return mintEngineToken(context.userId, email, data.id);
   });
+
+/** Record an uploaded file (bytes already in `office-files/<uid>/<id>.<ext>`). */
+export const importOfficeFile = createServerFn({ method: "POST" })
+  .middleware([requireAppAccess])
+  .inputValidator((i: unknown) => z.object({ id: z.string().length(26), kind: Kind, title: z.string().trim().min(1).max(200), size: z.number().int().min(0) }).parse(i))
+  .handler(async ({ data, context }) => {
+    const path = `${context.userId}/${data.id}.${data.kind}`;
+    const { error } = await context.supabase.from("office_files")
+      .insert({ id: data.id, owner: context.userId, kind: data.kind, title: data.title, storage_path: path, size_bytes: data.size });
+    if (error) throw new Error(error.message);
+    return { id: data.id };
+  });

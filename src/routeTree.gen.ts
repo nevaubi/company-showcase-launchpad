@@ -59,6 +59,7 @@ import { Route as AuthenticatedAppFirmIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedAppFirmBrandingRouteImport } from './routes/_authenticated/app.firm.branding'
 import { Route as AuthenticatedAppFirmCoverageRouteImport } from './routes/_authenticated/app.firm.coverage'
 import { Route as AuthenticatedAppJoinTokenRouteImport } from './routes/_authenticated/app.join.$token'
+import { Route as AuthenticatedAppOfficeIndexRouteImport } from './routes/_authenticated/app.office.index'
 import { Route as AuthenticatedAppSectorsSectorRouteImport } from './routes/_authenticated/app.sectors_.$sector'
 import { Route as AuthenticatedAppThesesIndexRouteImport } from './routes/_authenticated/app.theses.index'
 import { Route as AuthenticatedAppThesesIdRouteImport } from './routes/_authenticated/app.theses.$id'
@@ -350,6 +351,12 @@ const AuthenticatedAppJoinTokenRoute =
     path: '/join/$token',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppOfficeIndexRoute =
+  AuthenticatedAppOfficeIndexRouteImport.update({
+    id: '/office/',
+    path: '/office/',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppSectorsSectorRoute =
   AuthenticatedAppSectorsSectorRouteImport.update({
     id: '/sectors_/$sector',
@@ -530,6 +537,7 @@ export interface FileRoutesByFullPath {
   '/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs/': typeof AuthenticatedAppDocsIndexRoute
   '/app/firm/': typeof AuthenticatedAppFirmIndexRoute
+  '/app/office/': typeof AuthenticatedAppOfficeIndexRoute
   '/app/theses/': typeof AuthenticatedAppThesesIndexRoute
   '/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
@@ -599,6 +607,7 @@ export interface FileRoutesByTo {
   '/app/companies': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs': typeof AuthenticatedAppDocsIndexRoute
   '/app/firm': typeof AuthenticatedAppFirmIndexRoute
+  '/app/office': typeof AuthenticatedAppOfficeIndexRoute
   '/app/theses': typeof AuthenticatedAppThesesIndexRoute
   '/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
@@ -673,6 +682,7 @@ export interface FileRoutesById {
   '/_authenticated/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/_authenticated/app/docs/': typeof AuthenticatedAppDocsIndexRoute
   '/_authenticated/app/firm/': typeof AuthenticatedAppFirmIndexRoute
+  '/_authenticated/app/office/': typeof AuthenticatedAppOfficeIndexRoute
   '/_authenticated/app/theses/': typeof AuthenticatedAppThesesIndexRoute
   '/_authenticated/app/companies/$ticker/alt-data': typeof AuthenticatedAppCompaniesTickerAltDataRoute
   '/_authenticated/app/companies/$ticker/calls': typeof AuthenticatedAppCompaniesTickerCallsRoute
@@ -747,6 +757,7 @@ export interface FileRouteTypes {
     | '/app/companies/'
     | '/app/docs/'
     | '/app/firm/'
+    | '/app/office/'
     | '/app/theses/'
     | '/app/companies/$ticker/alt-data'
     | '/app/companies/$ticker/calls'
@@ -816,6 +827,7 @@ export interface FileRouteTypes {
     | '/app/companies'
     | '/app/docs'
     | '/app/firm'
+    | '/app/office'
     | '/app/theses'
     | '/app/companies/$ticker/alt-data'
     | '/app/companies/$ticker/calls'
@@ -889,6 +901,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/companies/'
     | '/_authenticated/app/docs/'
     | '/_authenticated/app/firm/'
+    | '/_authenticated/app/office/'
     | '/_authenticated/app/theses/'
     | '/_authenticated/app/companies/$ticker/alt-data'
     | '/_authenticated/app/companies/$ticker/calls'
@@ -1274,6 +1287,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppJoinTokenRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/office/': {
+      id: '/_authenticated/app/office/'
+      path: '/office'
+      fullPath: '/app/office/'
+      preLoaderRoute: typeof AuthenticatedAppOfficeIndexRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/sectors_/$sector': {
       id: '/_authenticated/app/sectors_/$sector'
       path: '/sectors/$sector'
@@ -1530,6 +1550,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppAutopilotsIndexRoute: typeof AuthenticatedAppAutopilotsIndexRoute
   AuthenticatedAppCompaniesIndexRoute: typeof AuthenticatedAppCompaniesIndexRoute
   AuthenticatedAppDocsIndexRoute: typeof AuthenticatedAppDocsIndexRoute
+  AuthenticatedAppOfficeIndexRoute: typeof AuthenticatedAppOfficeIndexRoute
   AuthenticatedAppThesesIndexRoute: typeof AuthenticatedAppThesesIndexRoute
   AuthenticatedAppSectorsGSlugRoute: typeof AuthenticatedAppSectorsGSlugRoute
 }
@@ -1575,6 +1596,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppAutopilotsIndexRoute: AuthenticatedAppAutopilotsIndexRoute,
   AuthenticatedAppCompaniesIndexRoute: AuthenticatedAppCompaniesIndexRoute,
   AuthenticatedAppDocsIndexRoute: AuthenticatedAppDocsIndexRoute,
+  AuthenticatedAppOfficeIndexRoute: AuthenticatedAppOfficeIndexRoute,
   AuthenticatedAppThesesIndexRoute: AuthenticatedAppThesesIndexRoute,
   AuthenticatedAppSectorsGSlugRoute: AuthenticatedAppSectorsGSlugRoute,
 }

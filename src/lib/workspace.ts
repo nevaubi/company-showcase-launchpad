@@ -30,6 +30,7 @@ export type AppPath =
   | "/app/theses"
   | "/app/research"
   | "/app/docs"
+  | "/app/office"
   | "/app/reports"
   | "/app/firm"
   | "/app/status"
