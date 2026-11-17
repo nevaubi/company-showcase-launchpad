@@ -4,6 +4,8 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { structured } from "@/lib/ai.server";
 import { EXTRACTABLE_KINDS, pool } from "@/lib/ir/extract.server";
 import { dropTableDuplicates, PROSE_INSTRUCTIONS, PROSE_SCHEMA, proseBlocks, proseChunks, proseFacts, proseTokens, renderProse, type ProseFact, type ProseOutput } from "@/lib/ir/prose-core";
+import { fixRowDates, printedDates } from "@/lib/ir/dates";
+import { decodeHtml } from "@/lib/ir/tables";
 import { estimateCredits, hasOpenAIKey, IR_MODELS, OpenAIError, openaiStructured, type Usage } from "@/lib/openai.server";
 
 const ZERO: Usage = { input_tokens: 0, output_tokens: 0, cached_tokens: 0 };
@@ -35,7 +37,9 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
   }
   const { data: file, error } = await supabaseAdmin.storage.from("ir-documents").download(doc.path);
   if (error || !file) throw new Error(error?.message ?? "Download failed");
-  const blocks = proseBlocks(await file.text());
+  const html = await file.text();
+  const blocks = proseBlocks(html);
+  const ends = printedDates(decodeHtml(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " "), true);
   const tokens = proseTokens(blocks, 1500);
   const chunks = proseChunks(blocks, tokens, opts.chunkChars ?? 14_000);
   if (!chunks.length) {
@@ -78,7 +82,7 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
   const records = kept.map(({ tol: _tol, ...f }) => ({
     document_id: id,
     ticker: doc.ticker,
-    ...f,
+    ...fixRowDates(f, ends),
     accn: doc.accn,
     doc: null,
     document_kind: doc.kind,

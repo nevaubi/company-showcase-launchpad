@@ -4,7 +4,8 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { structured } from "@/lib/ai.server";
 import { chunkTables, EXTRACT_INSTRUCTIONS, EXTRACT_SCHEMA, factsFromModel, leadText, type FactRow, type ModelOutput } from "@/lib/ir/extract-core";
-import { parseNumber, parseTables, type ParsedTable } from "@/lib/ir/tables";
+import { decodeHtml, parseNumber, parseTables, type ParsedTable } from "@/lib/ir/tables";
+import { fixRowDates, printedDates } from "@/lib/ir/dates";
 import { estimateCredits, hasOpenAIKey, IR_MODELS, OpenAIError, openaiStructured, type Effort, type Usage } from "@/lib/openai.server";
 import { EXTRACT_QUALITY_PROMPT, extractFollowUpPrompt, mergeFactRows, missedRows, needsExtractEscalation } from "@/lib/ir/extract-quality";
 
@@ -169,6 +170,9 @@ export async function extractIrDocument(id: string, opts: { model?: string; conc
   const seen = new Set<string>();
   let rejected = 0;
   const doc_ = doc.source_url.split("/").pop() ?? null;
+  // A column dated to a calendar month-end the document never prints ("12 Weeks Ended November 23")
+  // takes the period end the document does print.
+  const ends = printedDates(decodeHtml(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " "), true);
   const records = results.flatMap((r) => {
     rejected += r.rejected;
     return r.rows
@@ -181,7 +185,7 @@ export async function extractIrDocument(id: string, opts: { model?: string; conc
       .map((f) => ({
         document_id: id,
         ticker: doc.ticker,
-        ...f,
+        ...fixRowDates(f, ends),
         accn: doc.accn,
         doc: doc.source === "sec-exhibit" && !doc.rendition_path ? doc_ : null,
         document_kind: doc.kind,
