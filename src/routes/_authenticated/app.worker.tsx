@@ -95,7 +95,7 @@ function WorkerPage() {
         ].map(([k, v, s]) => (
           <div key={k} className="min-w-0 rounded-md border border-border p-3">
             <p className="text-[11px] text-muted-foreground">{k}</p>
-            <p className={cn("num mt-0.5 text-lg font-medium", k === "Office engine" ? (p.engine?.ok ? "text-positive" : "text-warning") : k === "Worker" && (d.status === "running" ? "text-positive" : "text-warning"))}>{v}</p>
+            <p className={cn("num mt-0.5 truncate text-base font-medium", k === "Office engine" ? (p.engine?.ok ? "text-positive" : "text-warning") : k === "Worker" && (d.status === "running" ? "text-positive" : "text-warning"))}>{v}</p>
             <p className="text-[10px] text-muted-foreground">{s}</p>
           </div>
         ))}
