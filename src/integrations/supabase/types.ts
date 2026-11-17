@@ -675,6 +675,9 @@ export type Database = {
           pages: number | null
           path: string | null
           period: string | null
+          prose_at: string | null
+          prose_facts: number | null
+          prose_status: string | null
           rendition_path: string | null
           sha256: string | null
           source: string
@@ -702,6 +705,9 @@ export type Database = {
           pages?: number | null
           path?: string | null
           period?: string | null
+          prose_at?: string | null
+          prose_facts?: number | null
+          prose_status?: string | null
           rendition_path?: string | null
           sha256?: string | null
           source?: string
@@ -729,6 +735,9 @@ export type Database = {
           pages?: number | null
           path?: string | null
           period?: string | null
+          prose_at?: string | null
+          prose_facts?: number | null
+          prose_status?: string | null
           rendition_path?: string | null
           sha256?: string | null
           source?: string
