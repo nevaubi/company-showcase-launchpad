@@ -4,7 +4,7 @@
 // long-lived assets sit. Pure: built by scripts/xbrl-detail.ts, rendered by the Financials tab.
 import { humanize, type XbrlContext, type XbrlFact } from "@/lib/xbrl/inline";
 
-export const DETAIL_FORMAT = 6;
+export const DETAIL_FORMAT = 7;
 
 export interface DetailValue {
   v: number;
@@ -677,7 +677,7 @@ export function buildDetail(input: {
     const ps = [...keys].sort(byEnd).slice(-3);
     const latest = ps[ps.length - 1];
     const rank = { revenue: 0, cost: 1, profit: 2, other: 3 };
-    const rows = [...seg.values()].filter((r) => Object.values(r.values).filter((m) => m[latest]).length >= 2);
+    const rows = dedupeSegmentRows([...seg.values()].filter((r) => Object.values(r.values).filter((m) => m[latest]).length >= 2));
     rows.sort((a, b) => rank[a.kind] - rank[b.kind] || Object.values(b.values).reduce((n, m) => n + Math.abs(m[latest]?.v ?? 0), 0) - Object.values(a.values).reduce((n, m) => n + Math.abs(m[latest]?.v ?? 0), 0));
     const revenueOf = (m: string) => Math.abs(rows.find((r) => r.kind === "revenue")?.values[m]?.[latest]?.v ?? 0);
     const members = [...segMembers.entries()].map(([member, label]) => ({ member, label })).sort((a, b) => revenueOf(b.member) - revenueOf(a.member));
@@ -711,6 +711,39 @@ export function buildDetail(input: {
 }
 
 export const FAMILY_TITLE = TITLE;
+
+/**
+ * Filings often tag one segment line twice (the segment note and Schedule III, or a line and its
+ * own relabelled copy). Two rows are the same line when they agree on every segment and period both
+ * report, on at least two non-zero values; the row reporting more values is kept, then the
+ * segment-note concept over the Schedule III one.
+ */
+export function dedupeSegmentRows<R extends { concept: string; values: Record<string, Record<string, DetailValue>> }>(rows: R[]): R[] {
+  const cells = (r: R) => {
+    const m = new Map<string, number>();
+    for (const [mem, ps] of Object.entries(r.values)) for (const [p, v] of Object.entries(ps)) if (v.v) m.set(`${mem}|${p}`, v.v);
+    return m;
+  };
+  const all = rows.map((r) => ({ r, c: cells(r), sch: /SupplementaryInsuranceInformation/.test(r.concept) }));
+  const better = (a: (typeof all)[number], b: (typeof all)[number]) => a.c.size - b.c.size || Number(b.sch) - Number(a.sch);
+  const drop = new Set<number>();
+  for (let i = 0; i < all.length; i++) {
+    for (let j = i + 1; j < all.length; j++) {
+      if (drop.has(i) || drop.has(j)) continue;
+      let same = 0;
+      let differ = false;
+      for (const [k, v] of all[i].c) {
+        const w = all[j].c.get(k);
+        if (w === undefined) continue;
+        if (Math.abs(v - w) > Math.max(0.5, Math.abs(v) * 1e-9)) { differ = true; break; }
+        same++;
+      }
+      if (differ || same < 2) continue;
+      drop.add(better(all[i], all[j]) >= 0 ? j : i);
+    }
+  }
+  return rows.filter((_, i) => !drop.has(i));
+}
 
 /** What `detail/TICKER.json` holds: the latest 10-K and the latest 10-Q filed after it. */
 export interface StoredDetail {

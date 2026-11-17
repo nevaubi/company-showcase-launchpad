@@ -78,7 +78,7 @@ export function insurersText(index: ExposureIndex, names: Map<string, string>, i
     .sort((a, b) => b.x - a.x);
   if (!rows.length) return "No insurer metrics stored yet.";
   const limit = opts.limit ?? 40;
-  return `Insurers from their latest 10-K tags (sorted by ${by.replace("_", " ")}, highest first; ${rows.length} insurers). Ratios divide by net premiums earned (a health plan's premium revenue); prior-year development > 0 means reserves for earlier years were raised. n/a = not tagged or a different scope.\n${rows.slice(0, limit).map((r) => insLine(r.t, names.get(r.t) ?? "", r.i)).join("\n")}`;
+  return `Insurers from their latest 10-K tags (sorted by ${by.replace("_", " ")}, highest first; ${rows.length} insurers). Ratios divide by net premiums earned (a health plan's premium revenue); prior-year development > 0 means reserves for earlier years were raised. Life and annuity writers (no premiums written or reserve development tagged) also pay benefits from investment income, so their ratio can pass 100% without an underwriting loss. n/a = not tagged or a different scope.\n${rows.slice(0, limit).map((r) => insLine(r.t, names.get(r.t) ?? "", r.i)).join("\n")}`;
 }
 
 export function companyExposureText(index: ExposureIndex, ticker: string, names: Map<string, string>): string {

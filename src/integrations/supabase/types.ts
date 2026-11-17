@@ -1009,6 +1009,57 @@ export type Database = {
         }
         Relationships: []
       }
+      options_daily: {
+        Row: {
+          atm_iv: number | null
+          call_oi: number
+          call_vol: number
+          date: string
+          fetched_at: string
+          iv30: number | null
+          pc_oi: number | null
+          pc_vol: number | null
+          price: number
+          put_oi: number
+          put_vol: number
+          skew25: number | null
+          term: Json
+          ticker: string
+        }
+        Insert: {
+          atm_iv?: number | null
+          call_oi?: number
+          call_vol?: number
+          date: string
+          fetched_at?: string
+          iv30?: number | null
+          pc_oi?: number | null
+          pc_vol?: number | null
+          price: number
+          put_oi?: number
+          put_vol?: number
+          skew25?: number | null
+          term?: Json
+          ticker: string
+        }
+        Update: {
+          atm_iv?: number | null
+          call_oi?: number
+          call_vol?: number
+          date?: string
+          fetched_at?: string
+          iv30?: number | null
+          pc_oi?: number | null
+          pc_vol?: number | null
+          price?: number
+          put_oi?: number
+          put_vol?: number
+          skew25?: number | null
+          term?: Json
+          ticker?: string
+        }
+        Relationships: []
+      }
       paper_bot_equity: {
         Row: {
           bot_id: string
@@ -2391,6 +2442,30 @@ export type Database = {
           firm_name: string
           role: Database["public"]["Enums"]["firm_role"]
           token: string
+        }[]
+      }
+      options_board: {
+        Args: never
+        Returns: {
+          atm_iv: number
+          call_oi: number
+          call_vol: number
+          date: string
+          iv_below: number
+          iv_max: number
+          iv_min: number
+          iv_n: number
+          iv_prev: number
+          iv30: number
+          pc_oi: number
+          pc_vol: number
+          price: number
+          put_oi: number
+          put_vol: number
+          skew25: number
+          term: Json
+          ticker: string
+          vol_avg20: number
         }[]
       }
       paper_bot_limit: { Args: { _user: string }; Returns: number }

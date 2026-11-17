@@ -11,7 +11,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { insiderBuyRows } from "@/lib/signals/events";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data" | "options";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -129,6 +129,40 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     }
     await supabaseAdmin.from("job_state").upsert({ job: "gov-ftd", cursor: periodCode(next), updated_at: new Date().toISOString() });
     return { ok: true, items: rows.length, detail: { period: next } };
+  },
+  /**
+   * Nightly options snapshots from Cboe's delayed chains: four stocks per call, rotating through every
+   * covered company (schedules run every minute through the US evening). Rows are keyed by the quotes'
+   * own trading day, so a re-run the same night overwrites rather than duplicates; stocks without
+   * listed options answer 403 and are skipped.
+   */
+  async options() {
+    const { cboeChainUrl, snapshotRow, summarizeChain } = await import("@/lib/options/core");
+    const tickers = COVERAGE.map((c) => c.ticker);
+    const step = 4;
+    const { start } = await advance("options", tickers.length, step);
+    const picked = slice(tickers, start, step);
+    const results = await Promise.all(
+      picked.map(async (t) => {
+        try {
+          const r = await fetch(cboeChainUrl(t), { headers: { "User-Agent": "Mozilla/5.0 (compatible; FiledUnder/1.0)", Accept: "application/json" }, signal: AbortSignal.timeout(RUN_BUDGET_MS - 600) });
+          if (r.status === 403 || r.status === 404) return { t, none: true as const };
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const j = (await r.json()) as { data?: import("@/lib/options/core").CboeChain };
+          const snap = j.data ? summarizeChain(t, j.data) : null;
+          return snap ? { t, row: snapshotRow(snap) } : { t, none: true as const };
+        } catch (e) {
+          return { t, error: (e as Error).message.slice(0, 120) };
+        }
+      }),
+    );
+    const rows = results.flatMap((r) => ("row" in r && r.row ? [r.row] : []));
+    if (rows.length) {
+      const { error } = await supabaseAdmin.from("options_daily").upsert(rows.map((r) => ({ ...r, term: r.term as unknown as Json, fetched_at: new Date().toISOString() })), { onConflict: "ticker,date" });
+      if (error) throw new Error(error.message);
+    }
+    const failed = results.filter((r) => "error" in r);
+    return { ok: failed.length < picked.length || picked.length === 0, items: rows.length, detail: { at: start, of: tickers.length, stored: rows.map((r) => r.ticker), none: results.filter((r) => "none" in r).map((r) => r.t), failed } };
   },
   /** Analyst estimates: refresh the three stalest companies that already have estimates stored. */
   async estimates() {

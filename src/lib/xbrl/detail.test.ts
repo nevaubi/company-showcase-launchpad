@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDetail, memberLabel } from "./detail";
+import { buildDetail, dedupeSegmentRows, memberLabel } from "./detail";
 import { factValue, parseContexts, parseInlineFacts, parseLabels, parseUnits } from "./inline";
 
 const ctx = (id: string, period: string, dims: [string, string][] = []) =>
@@ -351,3 +351,24 @@ describe("insurers", () => {
     expect(Object.values(d.consolidated?.["us-gaap:PremiumsEarnedNet"] ?? {})[0]?.v).toBe(40e9);
   });
 });
+
+describe("dedupeSegmentRows", () => {
+  const v = (n: number) => ({ v: n, src: {} as never });
+  it("drops a Schedule III copy of a segment line and keeps the segment-note concept", () => {
+    const rows = [
+      { concept: "us-gaap:SupplementaryInsuranceInformationPremiumRevenue", values: { A: { FY25: v(22412) }, B: { FY25: v(17395) }, O: { FY25: v(0) } } },
+      { concept: "us-gaap:PremiumsEarnedNet", values: { A: { FY25: v(22412) }, B: { FY25: v(17395) } } },
+      { concept: "us-gaap:PolicyholderBenefitsAndClaimsIncurredNet", values: { A: { FY25: v(14154) }, B: { FY25: v(11303) } } },
+    ];
+    expect(dedupeSegmentRows(rows).map((r) => r.concept)).toEqual(["us-gaap:PremiumsEarnedNet", "us-gaap:PolicyholderBenefitsAndClaimsIncurredNet"]);
+  });
+  it("keeps the row with more reported segments and never merges lines that differ", () => {
+    const rows = [
+      { concept: "us-gaap:GeneralAndAdministrativeExpense", values: { A: { FY25: v(3482) }, B: { FY25: v(1746) } } },
+      { concept: "us-gaap:OtherCostAndExpenseOperating", values: { A: { FY25: v(3482) }, B: { FY25: v(1746) }, O: { FY25: v(474) } } },
+      { concept: "us-gaap:DepreciationAndAmortization", values: { A: { FY25: v(3482) }, B: { FY25: v(182) } } },
+    ];
+    expect(dedupeSegmentRows(rows).map((r) => r.concept)).toEqual(["us-gaap:OtherCostAndExpenseOperating", "us-gaap:DepreciationAndAmortization"]);
+  });
+});
+

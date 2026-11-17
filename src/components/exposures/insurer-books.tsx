@@ -39,12 +39,17 @@ function metrics(i: InsurerMetrics): Row["m"] {
   };
 }
 
-/** Kind of insurer, from its industry name: health plans apart from every other carrier. */
-const kindOf = (industry: string) => (/managed health/i.test(industry) ? "health" : "carrier");
-type Kind = "all" | "carrier" | "health";
+/**
+ * Kind of insurer. SIC codes lump every carrier into "insurance", so the filing decides: premiums
+ * written or prior-year reserve development are property & casualty disclosures.
+ */
+const kindOf = (r: { industry: string; i: InsurerMetrics }) =>
+  /managed health/i.test(r.industry) ? "health" : r.i.written || r.i.priorYear ? "pc" : "life";
+type Kind = "all" | "pc" | "life" | "health";
 const KINDS: { v: Kind; l: string; title: string }[] = [
   { v: "all", l: "All", title: "Every insurer" },
-  { v: "carrier", l: "Insurance carriers", title: "Property, casualty, life and specialty insurers" },
+  { v: "pc", l: "Property & casualty", title: "Insurers that report premiums written or prior-year reserve development" },
+  { v: "life", l: "Life & other", title: "Life, annuity, title, mortgage and other insurers" },
   { v: "health", l: "Health plans", title: "Managed health care" },
 ];
 
@@ -66,9 +71,9 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
     }
     return out;
   }, [index, byTk, others]);
-  const kinds = useMemo(() => KINDS.filter((k) => k.v === "all" || all.some((r) => kindOf(r.industry) === k.v)), [all]);
+  const kinds = useMemo(() => KINDS.filter((k) => k.v === "all" || all.some((r) => kindOf(r) === k.v)), [all]);
   const rows = useMemo(() => {
-    const out = all.filter((r) => kind === "all" || kindOf(r.industry) === kind);
+    const out = all.filter((r) => kind === "all" || kindOf(r) === kind);
     return out.sort((a, b) => {
       if (sort.c === "t") return a.ticker.localeCompare(b.ticker) * sort.d;
       const va = a.m[sort.c];
@@ -85,19 +90,19 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
   const strengthened = rows.filter((r) => (r.m.dev ?? 0) > 0).length;
 
   const Th = ({ c, children, title }: { c: Metric | "t"; children: React.ReactNode; title?: string }) => (
-    <th aria-sort={sort.c === c ? (sort.d === 1 ? "ascending" : "descending") : "none"} className="sticky top-0 z-20 border-b bg-card px-3 py-2 text-right align-bottom">
+    <th aria-sort={sort.c === c ? (sort.d === 1 ? "ascending" : "descending") : "none"} className="sticky top-0 z-20 border-b bg-card px-2.5 py-2 text-right align-bottom">
       <button type="button" title={title} onClick={() => setSort((s) => ({ c, d: s.c === c ? (-s.d as 1 | -1) : c === "t" ? 1 : -1 }))} className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-muted-foreground hover:text-foreground">
         {children}
         {sort.c === c && (sort.d === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
       </button>
     </th>
   );
-  const none = <td className="border-b px-3 py-1.5 text-right text-muted-foreground group-hover:bg-secondary">—</td>;
+  const none = <td className="border-b px-2.5 py-1.5 text-right text-muted-foreground group-hover:bg-secondary">—</td>;
   const usdCell = (r: Row, label: string, v: ExpVal | undefined, signed = false) =>
     !v ? (
       none
     ) : (
-      <td className="border-b px-3 py-1.5 text-right group-hover:bg-secondary">
+      <td className="border-b px-2.5 py-1.5 text-right group-hover:bg-secondary">
         <button type="button" className={cn("num whitespace-nowrap tabular-nums hover:underline", signed && v.v < 0 && "text-negative")} onClick={() => open(valTarget(r.ticker, label, fy(r.i.end), v))}>
           {fmtCompactUsd(v.v)}
         </button>
@@ -107,7 +112,7 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
     const v = r.m[k];
     if (v == null || !num || !den) return none;
     return (
-      <td className="border-b px-3 py-1.5 text-right group-hover:bg-secondary">
+      <td className="border-b px-2.5 py-1.5 text-right group-hover:bg-secondary">
         <button type="button" className={cn("num whitespace-nowrap tabular-nums hover:underline", opts.tone?.(v))} onClick={() => open(ratioTarget(r.ticker, label, fy(r.i.end), num, den, formula, v))}>
           {fmtPct(v, opts.digits ?? 1, opts.signed)}
         </button>
@@ -137,7 +142,7 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
           <div className="overflow-x-auto scrollbar-thin">
-            <table className="w-full min-w-[960px] border-separate border-spacing-0 text-[13px]">
+            <table className="w-full min-w-[900px] border-separate border-spacing-0 text-[13px]">
               <thead>
                 <tr>
                   <th className="sticky left-0 top-0 z-30 border-b border-r bg-card px-3 py-2 text-left">
@@ -157,13 +162,13 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
                 <tr>
                   <td className="sticky left-0 z-10 border-b border-r bg-secondary/60 px-3 py-1 text-[11px] font-medium text-muted-foreground">Median of {rows.length}</td>
                   <td className="border-b bg-secondary/60" />
-                  <td className="num border-b bg-secondary/60 px-3 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.growth, 1, true)}</td>
+                  <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.growth, 1, true)}</td>
                   <td className="border-b bg-secondary/60" />
-                  <td className="num border-b bg-secondary/60 px-3 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.loss, 1)}</td>
-                  <td className="num border-b bg-secondary/60 px-3 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.dev, 1, true)}</td>
-                  <td className="num border-b bg-secondary/60 px-3 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.acq, 1)}</td>
+                  <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.loss, 1)}</td>
+                  <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.dev, 1, true)}</td>
+                  <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.acq, 1)}</td>
                   <td className="border-b bg-secondary/60" />
-                  <td className="num border-b bg-secondary/60 px-3 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{med.res != null ? `${med.res.toFixed(2)}×` : "—"}</td>
+                  <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{med.res != null ? `${med.res.toFixed(2)}×` : "—"}</td>
                 </tr>
               </thead>
               <tbody>
@@ -186,12 +191,12 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
                       {usdCell(r, "Net premiums earned", i.earned)}
                       {pctCell(r, "growth", i.earned, i.earnedPrior, `Premium growth since FY ending ${since}`, "Premiums earned ÷ prior-year premiums earned − 1", { signed: true, tone: (v) => v < 0 && "text-negative" })}
                       {usdCell(r, "Net premiums written", i.written)}
-                      {pctCell(r, "loss", i.losses, i.earned, "Loss & benefit ratio", "Losses and benefits incurred ÷ premiums earned", { tone: (v) => v > 1 && "text-negative" })}
+                      {pctCell(r, "loss", i.losses, i.earned, "Loss & benefit ratio", "Losses and benefits incurred ÷ premiums earned", { tone: (v) => v > 1 && kindOf(r) !== "life" && "text-negative" })}
                       {pctCell(r, "dev", i.priorYear, i.earned, "Prior-year reserve development ÷ premiums", "Prior-year reserve development ÷ premiums earned", { signed: true, tone: (v) => v > 0 && "text-negative" })}
                       {pctCell(r, "acq", i.acquisition, i.earned, "Acquisition cost ratio", "Acquisition cost amortization ÷ premiums earned")}
                       {usdCell(r, "Underwriting income", i.underwriting, true)}
                       {i.reserves && r.m.res != null ? (
-                        <td className="border-b px-3 py-1.5 text-right group-hover:bg-secondary">
+                        <td className="border-b px-2.5 py-1.5 text-right group-hover:bg-secondary">
                           <button type="button" className="num whitespace-nowrap tabular-nums hover:underline" title={`Reserves ${fmtCompactUsd(i.reserves.v)}`} onClick={() => open({ ...ratioTarget(r.ticker, "Reserves ÷ premiums earned", fy(i.end), i.reserves!, i.earned, "Loss and loss-expense reserves ÷ premiums earned", r.m.res!), unit: "ratio" })}>
                             {r.m.res.toFixed(2)}×
                           </button>
@@ -208,7 +213,7 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
         </div>
       )}
       <p className="mt-2 text-[11px] text-muted-foreground">
-        From each insurer's latest 10-K: the consolidated tags first, else the total of its segment note or Schedule III. Prior-year development is how much the estimate for earlier years' claims changed this year: positive (red) means reserves were added. A figure far out of proportion to premiums is left blank because it describes a different scope.
+        From each insurer's latest 10-K: the consolidated tags first, else the total of its segment note or Schedule III. Prior-year development is how much the estimate for earlier years' claims changed this year: positive (red) means reserves were added. Life and annuity writers also pay benefits out of investment income and reserve build-up, so their ratio can pass 100% without an underwriting loss. A figure far out of proportion to premiums is left blank because it describes a different scope.
       </p>
     </div>
   );
