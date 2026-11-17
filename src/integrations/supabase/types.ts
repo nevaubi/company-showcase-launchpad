@@ -2440,6 +2440,7 @@ export type Database = {
           waiting: number
         }[]
       }
+      ir_live_progress: { Args: never; Returns: Json }
       is_firm_member: {
         Args: { _firm: string; _user: string }
         Returns: boolean

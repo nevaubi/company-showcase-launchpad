@@ -28,7 +28,14 @@ const STATE = "ops/ir-deep-loop.json";
 const OUT = process.env.IR_WORK_DIR ?? "/tmp/ir-deep";
 // Child runs append their logs here; a missing folder made every run exit 1 before starting.
 mkdirSync(OUT, { recursive: true });
-const log = (s: string) => console.log(`${new Date().toISOString().slice(0, 19).replace("T", " ")} [loop] ${s}`);
+/** Recent loop lines, saved with the state so the admin progress view can show them. */
+const recent: string[] = [];
+const log = (s: string) => {
+  const line = `${new Date().toISOString().slice(0, 19).replace("T", " ")} [loop] ${s}`;
+  console.log(line);
+  recent.push(line);
+  if (recent.length > 60) recent.shift();
+};
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- single flight ----------
@@ -53,6 +60,14 @@ interface LoopState {
   resumes?: Record<string, number>;
   /** unread files a company had when it finished; more than a few new ones later = revisit */
   unreadAtDone?: Record<string, number>;
+  /** companies re-queued once because they were marked done with no figures (broken-worker runs) */
+  healed?: string[];
+  /** live view for the admin panel */
+  current?: string[];
+  cycleStartedAt?: string | null;
+  cycle?: number;
+  heartbeat?: string;
+  log?: string[];
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -64,6 +79,8 @@ async function loadState(): Promise<LoopState> {
   }
 }
 async function saveState(s: LoopState) {
+  s.heartbeat = new Date().toISOString();
+  s.log = recent.slice();
   await sb.storage.from("ir-documents").upload(STATE, new Blob([JSON.stringify(s)], { type: "application/json" }), { upsert: true, contentType: "application/json" });
 }
 const state = await loadState();
@@ -198,9 +215,20 @@ for (let cycle = 1; ; cycle++) {
   await maybeDetail();
   await maybeSod();
   await maybeReactions();
+  state.resumes ??= {};
+  // 0. Self-heal: companies marked done with stored files but zero figures (runs that crashed
+  //    before reading anything) go back in the queue once.
+  state.healed ??= [];
+  for (const t of [...state.done]) {
+    if (state.healed.includes(t)) continue;
+    if ((await facts(t)) > 0 || (await files(t)) === 0) continue;
+    state.done = state.done.filter((x) => x !== t);
+    state.resumes[t] = 0;
+    state.healed.push(t);
+    log(`${t}: marked done with no figures — queued again`);
+  }
   // 1. Companies this loop started whose run never reached its final report.
   const resume: string[] = [];
-  state.resumes ??= {};
   for (const t of state.attempted) {
     if (state.done.includes(t)) continue;
     if (await finished(t)) {
@@ -252,6 +280,9 @@ for (let cycle = 1; ; cycle++) {
     continue;
   }
   for (const t of fresh) state.attempted.push(t);
+  state.current = batch;
+  state.cycle = cycle;
+  state.cycleStartedAt = new Date().toISOString();
   await saveState(state);
   log(`cycle ${cycle}: ${batch.join(", ")}${resume.length ? ` (continuing ${resume.slice(0, BATCH).join(", ")})` : ""}`);
   const lastRun = `${OUT}/last-run.json`;
@@ -268,4 +299,6 @@ for (let cycle = 1; ; cycle++) {
     log(`cycle ${cycle}: run stopped (${stopped.slice(0, 160)}) — retrying after a short wait`);
     await sleep(2 * 60_000);
   } else log(`cycle ${cycle}: finished ${batch.join(", ")}`);
+  state.current = [];
+  await saveState(state);
 }

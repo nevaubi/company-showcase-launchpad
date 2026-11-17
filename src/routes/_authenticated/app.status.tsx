@@ -114,21 +114,23 @@ interface IrRow {
 const irQuery = {
   queryKey: ["ir-coverage"],
   queryFn: async (): Promise<IrRow[]> => {
-    const [cov, series] = await Promise.all([supabase.rpc("ir_coverage"), supabase.from("ir_company_series").select("ticker, stats, built_at")]);
+    const [cov, series, live] = await Promise.all([supabase.rpc("ir_coverage"), supabase.from("ir_company_series").select("ticker, stats, built_at"), supabase.rpc("ir_live_progress")]);
     if (cov.error) throw cov.error;
+    // Live figure counts (the stored series stats only update when a company is rebuilt).
+    const liveFacts = ((live.data as { facts?: Record<string, number> } | null)?.facts ?? {}) as Record<string, number>;
     const stats = new Map((series.data ?? []).map((r) => [r.ticker, r]));
     return (cov.data ?? []).map((c) => {
       const s = stats.get(c.ticker);
       const st = (s?.stats ?? {}) as { facts?: number; checksQ?: { ok: number; total: number } };
       return {
         ...c,
-        points: st.facts ?? 0,
+        points: liveFacts[c.ticker] ?? st.facts ?? 0,
         tieQ: st.checksQ?.total ? st.checksQ.ok / st.checksQ.total : null,
         built: s?.built_at ?? null,
       };
     });
   },
-  refetchInterval: 120_000,
+  refetchInterval: 30_000,
 };
 
 const NAMES = new Map(COVERAGE.map((c) => [c.ticker, c.shortName]));

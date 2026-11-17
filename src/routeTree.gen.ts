@@ -48,6 +48,7 @@ import { Route as AuthenticatedAppSetupsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedAppSituationsRouteImport } from './routes/_authenticated/app.situations'
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
 import { Route as AuthenticatedAppSupplyChainRouteImport } from './routes/_authenticated/app.supply-chain'
+import { Route as AuthenticatedAppWorkerRouteImport } from './routes/_authenticated/app.worker'
 import { Route as AuthenticatedAppAutopilotsIndexRouteImport } from './routes/_authenticated/app.autopilots.index'
 import { Route as AuthenticatedAppAutopilotsBotIdRouteImport } from './routes/_authenticated/app.autopilots.$botId'
 import { Route as AuthenticatedAppCompaniesIndexRouteImport } from './routes/_authenticated/app.companies.index'
@@ -284,6 +285,11 @@ const AuthenticatedAppSupplyChainRoute =
     path: '/supply-chain',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppWorkerRoute = AuthenticatedAppWorkerRouteImport.update({
+  id: '/worker',
+  path: '/worker',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
 const AuthenticatedAppAutopilotsIndexRoute =
   AuthenticatedAppAutopilotsIndexRouteImport.update({
     id: '/autopilots/',
@@ -500,6 +506,7 @@ export interface FileRoutesByFullPath {
   '/app/situations': typeof AuthenticatedAppSituationsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
+  '/app/worker': typeof AuthenticatedAppWorkerRoute
   '/app/': typeof AuthenticatedAppIndexRoute
   '/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
@@ -568,6 +575,7 @@ export interface FileRoutesByTo {
   '/app/situations': typeof AuthenticatedAppSituationsRoute
   '/app/status': typeof AuthenticatedAppStatusRoute
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
+  '/app/worker': typeof AuthenticatedAppWorkerRoute
   '/app': typeof AuthenticatedAppIndexRoute
   '/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
@@ -639,6 +647,7 @@ export interface FileRoutesById {
   '/_authenticated/app/situations': typeof AuthenticatedAppSituationsRoute
   '/_authenticated/app/status': typeof AuthenticatedAppStatusRoute
   '/_authenticated/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
+  '/_authenticated/app/worker': typeof AuthenticatedAppWorkerRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
   '/_authenticated/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/_authenticated/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
@@ -711,6 +720,7 @@ export interface FileRouteTypes {
     | '/app/situations'
     | '/app/status'
     | '/app/supply-chain'
+    | '/app/worker'
     | '/app/'
     | '/app/autopilots/$botId'
     | '/app/companies/$ticker'
@@ -779,6 +789,7 @@ export interface FileRouteTypes {
     | '/app/situations'
     | '/app/status'
     | '/app/supply-chain'
+    | '/app/worker'
     | '/app'
     | '/app/autopilots/$botId'
     | '/app/docs/$id'
@@ -849,6 +860,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/situations'
     | '/_authenticated/app/status'
     | '/_authenticated/app/supply-chain'
+    | '/_authenticated/app/worker'
     | '/_authenticated/app/'
     | '/_authenticated/app/autopilots/$botId'
     | '/_authenticated/app/companies/$ticker'
@@ -1172,6 +1184,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppSupplyChainRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/worker': {
+      id: '/_authenticated/app/worker'
+      path: '/worker'
+      fullPath: '/app/worker'
+      preLoaderRoute: typeof AuthenticatedAppWorkerRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/autopilots/': {
       id: '/_authenticated/app/autopilots/'
       path: '/autopilots'
@@ -1480,6 +1499,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppSituationsRoute: typeof AuthenticatedAppSituationsRoute
   AuthenticatedAppStatusRoute: typeof AuthenticatedAppStatusRoute
   AuthenticatedAppSupplyChainRoute: typeof AuthenticatedAppSupplyChainRoute
+  AuthenticatedAppWorkerRoute: typeof AuthenticatedAppWorkerRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
   AuthenticatedAppAutopilotsBotIdRoute: typeof AuthenticatedAppAutopilotsBotIdRoute
   AuthenticatedAppCompaniesTickerRoute: typeof AuthenticatedAppCompaniesTickerRouteWithChildren
@@ -1523,6 +1543,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppSituationsRoute: AuthenticatedAppSituationsRoute,
   AuthenticatedAppStatusRoute: AuthenticatedAppStatusRoute,
   AuthenticatedAppSupplyChainRoute: AuthenticatedAppSupplyChainRoute,
+  AuthenticatedAppWorkerRoute: AuthenticatedAppWorkerRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
   AuthenticatedAppAutopilotsBotIdRoute: AuthenticatedAppAutopilotsBotIdRoute,
   AuthenticatedAppCompaniesTickerRoute:

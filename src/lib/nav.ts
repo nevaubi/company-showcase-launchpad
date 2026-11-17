@@ -103,6 +103,7 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; menu?: false; hubs:
           { to: "/app/admin", label: "Waitlist" },
           { to: "/app/freshness", label: "Freshness" },
           { to: "/app/status", label: "Data status" },
+          { to: "/app/worker", label: "Live worker" },
         ],
       },
     ],
@@ -127,5 +128,5 @@ export function isPageActive(p: { to: string; exact?: boolean }, pathname: strin
 }
 
 /** Admin-only paths: regular users are sent back to the dashboard. */
-export const ADMIN_PATHS = ["/app/admin", "/app/freshness", "/app/status"];
+export const ADMIN_PATHS = ["/app/admin", "/app/freshness", "/app/status", "/app/worker"];
 export const isAdminPath = (pathname: string) => ADMIN_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
