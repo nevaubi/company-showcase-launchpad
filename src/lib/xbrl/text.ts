@@ -1,5 +1,6 @@
 // Plain-text rendering of filing detail for the research assistant (pure).
 import { detailPeriodLabel, detailUnit, type DetailTable, type FilingDetail, type StoredDetail } from "@/lib/xbrl/detail";
+import { annualWithHistory, periodSources } from "@/lib/xbrl/history";
 
 export const DETAIL_SECTIONS = ["revenue", "segments", "concentration", "geography", "costs", "commitments", "inventory", "other"] as const;
 export type DetailSection = (typeof DETAIL_SECTIONS)[number];
@@ -30,10 +31,18 @@ function tableText(t: DetailTable, d: FilingDetail): string[] {
 
 /** One filing's detail as text, optionally one section, with the citation to use. */
 export function detailText(stored: StoredDetail, opts: { section?: DetailSection | null; quarterly?: boolean; maxChars?: number }): string {
-  const d = (opts.quarterly ? stored.quarterly : stored.annual) ?? stored.annual ?? stored.quarterly;
+  // Annual detail spans the latest 10-K plus the stored earlier 10-Ks (about seven fiscal years).
+  const d = (opts.quarterly ? stored.quarterly : annualWithHistory(stored)) ?? annualWithHistory(stored) ?? stored.quarterly;
   if (!d) return `No 10-K or 10-Q detail stored for ${stored.ticker}.`;
   const cite = `filing:${stored.ticker}:${d.accn}:${d.doc}`;
-  const out = [`${stored.ticker} ${d.form} for the period ended ${d.reportDate} (filed ${d.filed}). Cite values as ${cite}.`];
+  const sources = d === stored.annual || d === stored.quarterly ? [] : periodSources(d);
+  const out = [
+    sources.length > 1
+      ? `${stored.ticker} ${d.form} for the period ended ${d.reportDate} (filed ${d.filed}) with earlier years from prior 10-Ks. Each column comes from the newest filing that reports it; cite ${sources
+          .map((x) => `${[...new Set(x.keys.map((k) => detailPeriodLabel(d.periods[k])).filter((l) => /^FY/.test(l)))].sort().join("/") || "balances"} as filing:${stored.ticker}:${x.accn}:${x.doc}`)
+          .join("; ")}.`
+      : `${stored.ticker} ${d.form} for the period ended ${d.reportDate} (filed ${d.filed}). Cite values as ${cite}.`,
+  ];
   const want = (s: DetailSection) => !opts.section || opts.section === s;
   if (want("segments") && d.segments) {
     const m = d.segments;

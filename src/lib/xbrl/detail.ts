@@ -10,6 +10,9 @@ export interface DetailValue {
   v: number;
   /** iXBRL element id for the exact tag */
   id?: string;
+  /** set only on values carried in from an earlier filing (multi-year history): that filing's accession and document */
+  accn?: string;
+  doc?: string;
 }
 export interface DetailPeriod {
   key: string;
@@ -26,6 +29,8 @@ export interface DetailRow {
   values: Record<string, DetailValue>;
   /** second-level split (e.g. product lines inside one segment) */
   sub?: DetailRow[];
+  /** multi-year history: the row appears only in earlier filings (renamed, merged or no longer reported) */
+  former?: boolean;
 }
 export interface DetailTable {
   id: string;
@@ -499,6 +504,10 @@ export interface StoredDetail {
   format: number;
   annual: FilingDetail | null;
   quarterly: FilingDetail | null;
+  /** earlier 10-Ks (about two and four years back, newest first) that extend the annual tables to ~7 fiscal years */
+  history?: FilingDetail[];
+  /** accession of the annual filing whose earlier 10-Ks were already looked up (so reruns skip companies that have none) */
+  historyChecked?: string;
 }
 
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -541,4 +550,19 @@ export function changeOf(t: DetailTable, values: Record<string, DetailValue>, pe
   const x = values[a]?.v;
   const y = values[b]?.v;
   return x && y !== undefined && x > 0 ? y / x - 1 : null;
+}
+
+/**
+ * Compound annual growth from the earliest to the latest fiscal year a row reports (at least three
+ * years apart, both positive), as a fraction; null otherwise.
+ */
+export function cagrOf(t: DetailTable, values: Record<string, DetailValue>, periods: Record<string, DetailPeriod>): { rate: number; years: number; from: string; to: string } | null {
+  const ks = t.periods.filter((k) => periods[k]?.months === 12 && !periods[k].label && values[k] !== undefined);
+  if (ks.length < 2) return null;
+  const [a, b] = [ks[0], ks[ks.length - 1]];
+  const x = values[a].v;
+  const y = values[b].v;
+  const years = Math.round((Date.parse(periods[b].end) - Date.parse(periods[a].end)) / (365.25 * 86_400_000));
+  if (!(x > 0) || !(y > 0) || years < 3) return null;
+  return { rate: (y / x) ** (1 / years) - 1, years, from: a, to: b };
 }

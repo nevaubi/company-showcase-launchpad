@@ -2,7 +2,9 @@
  * Filing detail for every covered company: reads the latest 10-K and the latest 10-Q filed after it
  * (inline XBRL + label linkbase), builds the dimensional tables (`src/lib/xbrl/detail.ts`), stores them
  * as `detail/TICKER.json` in the datasets bucket and the concentration rows in `xbrl_concentration`.
- * Reruns skip filings already stored in the current format.
+ * It also reads the 10-Ks about two and four years back (`history`), so the annual tables extend to
+ * ~7 fiscal years (merged purely in `src/lib/xbrl/history.ts`). Reruns skip filings already stored in
+ * the current format.
  *   bun scripts/xbrl-detail.ts [--tickers=QCOM,DAL] [--dry] [--force] [--workers=3]
  */
 import { buildDetail, DETAIL_FORMAT, type FilingDetail, type StoredDetail } from "@/lib/xbrl/detail";
@@ -61,6 +63,28 @@ async function filingDetail(ticker: string, cik: string, r: Recent, i: number): 
   });
 }
 
+const isAnnual = (f: string) => f === "10-K" || f === "10-KT";
+
+/**
+ * The 10-Ks about two and four years before the latest one (each 10-K reports three fiscal years, so
+ * these extend the latest filing's three to about seven). Large filers' `recent` list can stop short
+ * of them; then the older submissions pages are read too.
+ */
+async function olderAnnuals(sub: Submissions): Promise<{ r: Recent; i: number }[]> {
+  const pages: Recent[] = [sub.filings.recent];
+  const all = () => pages.flatMap((r) => r.form.map((f, i) => ({ r, i, f })).filter((x) => isAnnual(x.f)));
+  for (const f of sub.filings.files ?? []) {
+    if (all().length >= 5) break;
+    pages.push(JSON.parse(await sec(`https://data.sec.gov/submissions/${f.name}`)) as Recent);
+  }
+  const ks = all();
+  return [ks[2], ks[4]].filter(Boolean).map(({ r, i }) => ({ r, i }));
+}
+
+interface Submissions {
+  filings: { recent: Recent; files?: { name: string }[] };
+}
+
 async function stored(ticker: string): Promise<StoredDetail | null> {
   const { data } = await sb.storage.from("datasets").download(`detail/${ticker}.json`);
   if (!data) return null;
@@ -83,16 +107,16 @@ async function main() {
   const record = !want && args.dry === undefined;
   const { data: run } = record ? await sb.from("job_runs").insert({ job: "xbrl-detail" }).select("id").single() : { data: null };
   let done = 0;
-  let stats = { tables: 0, conc: 0, skipped: 0, failed: 0 };
+  let stats = { tables: 0, conc: 0, skipped: 0, failed: 0, history: 0 };
   const queue = [...todo];
   const worker = async () => {
     for (;;) {
       const c = queue.shift();
       if (!c) return;
       try {
-        const sub = JSON.parse(await sec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)) as { filings: { recent: Recent } };
+        const sub = JSON.parse(await sec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)) as Submissions;
         const r = sub.filings.recent;
-        const k = r.form.findIndex((f) => f === "10-K" || f === "10-KT");
+        const k = r.form.findIndex(isAnnual);
         const q = r.form.findIndex((f, i) => f === "10-Q" && (k < 0 || i < k));
         if (k < 0 && q < 0) {
           stats.skipped++;
@@ -100,13 +124,24 @@ async function main() {
         }
         const prev = args.force !== undefined ? null : await stored(c.ticker);
         const same = (d: FilingDetail | null | undefined, i: number) => !!d && i >= 0 && d.accn === r.accessionNumber[i] && d.format === DETAIL_FORMAT;
-        if (prev && prev.format === DETAIL_FORMAT && same(prev.annual, k) && (q < 0 ? !prev.quarterly : same(prev.quarterly, q))) {
+        // `historyChecked` marks a file whose earlier 10-Ks were already looked up (some have none in inline XBRL).
+        const hasHistory = !!prev && prev.historyChecked === r.accessionNumber[k];
+        if (prev && prev.format === DETAIL_FORMAT && same(prev.annual, k) && (q < 0 ? !prev.quarterly : same(prev.quarterly, q)) && (k < 0 || hasHistory)) {
           stats.skipped++;
           continue;
         }
         const annual = k >= 0 ? (same(prev?.annual, k) ? prev!.annual : await filingDetail(c.ticker, c.cik, r, k)) : null;
         const quarterly = q >= 0 ? (same(prev?.quarterly, q) ? prev!.quarterly : await filingDetail(c.ticker, c.cik, r, q)) : null;
-        const out: StoredDetail = { ticker: c.ticker, builtAt: new Date().toISOString(), format: DETAIL_FORMAT, annual, quarterly };
+        const history: FilingDetail[] = [];
+        if (annual && k >= 0) {
+          for (const o of await olderAnnuals(sub)) {
+            const reuse = prev?.history?.find((h) => h.accn === o.r.accessionNumber[o.i] && h.format === DETAIL_FORMAT);
+            const h = reuse ?? (await filingDetail(c.ticker, c.cik, o.r, o.i).catch((e) => (log(`${c.ticker} history ${o.r.accessionNumber[o.i]}: ${(e as Error).message}`), null)));
+            if (h && h.reportDate < annual.reportDate) history.push(h);
+          }
+          stats.history += history.length;
+        }
+        const out: StoredDetail = { ticker: c.ticker, builtAt: new Date().toISOString(), format: DETAIL_FORMAT, annual, quarterly, ...(history.length ? { history } : {}), ...(annual ? { historyChecked: annual.accn } : {}) };
         const rows = [annual, quarterly].flatMap((d) =>
           !d
             ? []
@@ -132,7 +167,7 @@ async function main() {
         stats.tables += (annual?.tables.length ?? 0) + (quarterly?.tables.length ?? 0);
         stats.conc += rows.length;
         if (args.dry !== undefined) {
-          log(`${c.ticker}: ${annual?.form ?? "-"} ${annual?.tables.length ?? 0} tables, segments ${annual?.segments?.segments.length ?? 0}×${annual?.segments?.rows.length ?? 0}, concentration ${annual?.concentration.length ?? 0} · ${quarterly?.form ?? "-"} ${quarterly?.tables.length ?? 0} tables · ${(JSON.stringify(out).length / 1e3).toFixed(0)} KB`);
+          log(`${c.ticker}: earlier 10-Ks ${history.map((h) => h.reportDate).join(", ") || "none"} · ${annual?.form ?? "-"} ${annual?.tables.length ?? 0} tables, segments ${annual?.segments?.segments.length ?? 0}×${annual?.segments?.rows.length ?? 0}, concentration ${annual?.concentration.length ?? 0} · ${quarterly?.form ?? "-"} ${quarterly?.tables.length ?? 0} tables · ${(JSON.stringify(out).length / 1e3).toFixed(0)} KB`);
           for (const t of (annual?.tables ?? []).slice(0, 12)) log(`   [${t.family}] ${t.title} — ${t.rows.length} rows${t.total ? " + total" : ""}`);
           for (const x of (annual?.concentration ?? []).slice(0, 6)) log(`   conc ${x.kind}/${x.benchmark} ${x.label} ${Object.values(x.values).map((v) => (v.v * 100).toFixed(0)).join("/")}%`);
           continue;
@@ -149,7 +184,7 @@ async function main() {
           if (error) throw new Error(error.message);
         }
         done++;
-        if (done % 25 === 0 || want) log(`${done} stored (${c.ticker}: ${out.annual?.tables.length ?? 0}+${out.quarterly?.tables.length ?? 0} tables, ${rows.length} concentration rows) · ${queue.length} left`);
+        if (done % 25 === 0 || want) log(`${done} stored (${c.ticker}: ${out.annual?.tables.length ?? 0}+${out.quarterly?.tables.length ?? 0} tables, ${rows.length} concentration rows, ${history.length} earlier 10-Ks) · ${queue.length} left`);
       } catch (e) {
         stats.failed++;
         log(`${c.ticker} failed: ${(e as Error).message}`);
@@ -158,7 +193,7 @@ async function main() {
   };
   await Promise.all(Array.from({ length: Number(args.workers ?? 3) }, worker));
   if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: stats.failed < Math.max(25, todo.length * 0.05), items: done, detail: { ...stats, companies: todo.length } }).eq("id", run.id);
-  log(`DONE ${done} stored · ${stats.skipped} unchanged/no filings · ${stats.failed} failed · ${stats.tables} tables · ${stats.conc} concentration rows`);
+  log(`DONE ${done} stored · ${stats.skipped} unchanged/no filings · ${stats.failed} failed · ${stats.tables} tables · ${stats.conc} concentration rows · ${stats.history} earlier 10-Ks`);
 }
 
 if (import.meta.main) {

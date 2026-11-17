@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
@@ -11,6 +11,7 @@ import { useUnitScale } from "@/hooks/use-preference";
 import { fmtCell, fmtDate, scaleCaption } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
+  cagrOf,
   changeOf,
   coverageOf,
   detailPeriodLabel,
@@ -23,6 +24,7 @@ import {
   type SegmentMatrix,
 } from "@/lib/xbrl/detail";
 import { filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
+import { annualWithHistory, historySpan } from "@/lib/xbrl/history";
 import { hasMoneyMap, MoneyMap } from "@/components/financials/money-map";
 
 type Section = "map" | "revenue" | "segments" | "concentration" | "geography" | "costs" | "commitments" | "inventory" | "other";
@@ -56,21 +58,27 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
   const q = useQuery(filingDetailQuery(ticker));
   const [which, setWhich] = useState<"annual" | "quarterly">("annual");
   const [section, setSection] = useState<Section | null>(null);
+  const [span, setSpan] = useState<"history" | "filing">("history");
   const source = useSource();
 
-  const d: FilingDetail | null = q.data ? (which === "quarterly" ? q.data.quarterly : q.data.annual) ?? q.data.annual ?? q.data.quarterly : null;
+  // The latest 10-K extended back through the stored earlier 10-Ks (each column from the newest filing that reports it).
+  const merged = useMemo(() => (q.data?.annual && q.data.history?.length ? annualWithHistory(q.data) : null), [q.data]);
+  const base: FilingDetail | null = q.data ? (which === "quarterly" ? q.data.quarterly : q.data.annual) ?? q.data.annual ?? q.data.quarterly : null;
+  const isAnnual = !!base && base === q.data?.annual;
+  const d: FilingDetail | null = isAnnual && merged && span === "history" ? merged : base;
+  const years = merged ? historySpan(merged) : null;
   const sections = useMemo(() => {
     if (!d) return [] as Section[];
     const has = new Set<Section>(d.tables.map((t) => t.family as Section));
     if (d.segments) has.add("segments");
     if (d.concentration.length) has.add("concentration");
-    if (hasMoneyMap(d)) has.add("map");
+    if (base && hasMoneyMap(base)) has.add("map");
     return (["map", "revenue", "segments", "concentration", "geography", "costs", "commitments", "inventory", "other"] as Section[]).filter((s) => has.has(s));
-  }, [d]);
+  }, [d, base]);
 
   if (q.isLoading) return <Skeleton className="h-[480px]" />;
   if (q.isError) return <Empty text="Filing detail could not be loaded. Refresh to try again." />;
-  if (!q.data || !d) return <Empty text={`Filing detail for ${ticker} has not been read yet. It is built from the latest 10-K and 10-Q and refreshes as new filings arrive.`} />;
+  if (!q.data || !d || !base) return <Empty text={`Filing detail for ${ticker} has not been read yet. It is built from the latest 10-K and 10-Q and refreshes as new filings arrive.`} />;
 
   const active: Section = section && sections.includes(section) ? section : (sections[0] ?? "revenue");
   const tables = d.tables.filter((t) => t.family === active);
@@ -82,13 +90,25 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
         {filings.length > 1 && (
           <Segmented
             label="Filing"
-            value={d === q.data.quarterly ? "quarterly" : "annual"}
+            value={isAnnual ? "annual" : "quarterly"}
             onChange={(v) => setWhich(v)}
             options={filings.map((f) => ({ v: f === q.data!.quarterly ? ("quarterly" as const) : ("annual" as const), l: `${f.form} · ${fmtDate(f.reportDate)}`, title: `Filed ${fmtDate(f.filed)}` }))}
           />
         )}
+        {isAnnual && merged && years && (
+          <Segmented
+            label="Years"
+            value={span}
+            onChange={setSpan}
+            options={[
+              { v: "history" as const, l: years, title: `Earlier years from the ${q.data.history!.length} prior 10-K${q.data.history!.length > 1 ? "s" : ""}; each column comes from the newest filing that reports it` },
+              { v: "filing" as const, l: "This 10-K only", title: "Only the years reported in the latest 10-K" },
+            ]}
+          />
+        )}
         <span className="text-[11px] text-muted-foreground">
-          {d.form} for the period ended {fmtDate(d.reportDate)}, filed {fmtDate(d.filed)} · {d.counts.dimensional.toLocaleString()} tagged breakdown values
+          {d.form} for the period ended {fmtDate(d.reportDate)}, filed {fmtDate(d.filed)}
+          {d === merged ? ` · earlier years from ${q.data.history!.map((h) => `the FY${h.reportDate.slice(0, 4)} 10-K`).join(" and ")}` : ` · ${d.counts.dimensional.toLocaleString()} tagged breakdown values`}
         </span>
         <Button
           variant="ghost"
@@ -106,7 +126,7 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
       )}
       <p className="text-[11px] text-muted-foreground">{SECTION_HINT[active]}. Click any number to see it highlighted in the filing.</p>
       {active === "map" ? (
-        <MoneyMap d={d} ticker={ticker} />
+        <MoneyMap d={base} ticker={ticker} />
       ) : active === "segments" && d.segments ? (
         <SegmentPnl m={d.segments} d={d} ticker={ticker} />
       ) : active === "concentration" ? (
@@ -138,7 +158,8 @@ function useOpen(ticker: string, d: FilingDetail) {
       periodLabel: detailPeriodLabel(p),
       unit: detailUnit(unit),
       value: v.v,
-      src: { accn: d.accn, doc: d.doc, concept, start: p?.start, end: p?.end ?? d.reportDate, value: v.v },
+      // values carried in from an earlier 10-K open that filing
+      src: { accn: v.accn ?? d.accn, doc: v.doc ?? d.doc, concept, start: p?.start, end: p?.end ?? d.reportDate, value: v.v },
       elementId: v.id,
     });
   };
@@ -165,8 +186,26 @@ function ValueCell({ v, onOpen, text, className }: { v: DetailValue | undefined;
   );
 }
 
+/** Signed growth rate cell ("+12.4%"), muted dash when it can't be computed. */
+function GrowthCell({ rate, title, className }: { rate: number | null; title?: string; className?: string }) {
+  return (
+    <td className={cn("num border-b px-3 py-1 text-right text-[12px]", rate == null ? "text-muted-foreground/40" : rate >= 0 ? "text-positive" : "text-negative", className)} title={title}>
+      {rate == null ? "—" : `${rate >= 0 ? "+" : "−"}${Math.abs(rate * 100).toFixed(1)}%`}
+    </td>
+  );
+}
+
 function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker: string }) {
   const [scale] = useUnitScale();
+  // A table wider than the screen opens with the latest year next to the pinned labels, followed by its growth and share.
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    const label = el.querySelector<HTMLElement>("thead th");
+    const last = el.querySelector<HTMLElement>("thead th[data-latest]");
+    if (label && last) el.scrollLeft = last.offsetLeft - label.offsetWidth;
+  }, [t.periods.length]);
   const open = useOpen(ticker, d);
   const latest = t.periods[t.periods.length - 1];
   const money = detailUnit(t.unit) === "usd";
@@ -175,28 +214,37 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
   const denom = Math.abs(t.total?.[latest]?.v ?? 0) || sumLatest;
   const showShare = money && t.rows.length >= 2 && denom > 0 && !d.periods[latest]?.label;
   const hasChange = t.periods.filter((k) => !d.periods[k]?.label).length >= 2;
+  // Compound growth only once the table spans more fiscal years than a single 10-K reports.
+  const hasCagr = detailUnit(t.unit) !== "pct" && t.periods.filter((k) => d.periods[k]?.months === 12 && !d.periods[k].label).length >= 4;
+  const extra = (hasChange ? 1 : 0) + (hasCagr ? 1 : 0) + (showShare ? 1 : 0);
   const rowFor = (r: DetailRow, depth: number, parent = "") => {
     const val = r.values[latest]?.v;
     const share = showShare && val !== undefined ? Math.abs(val) / denom : null;
     const ch = hasChange ? changeOf(t, r.values, d.periods) : null;
+    const g = hasCagr ? cagrOf(t, r.values, d.periods) : null;
     // A parent with only nested values is a group heading.
     if (!depth && r.sub?.length && !Object.keys(r.values).length)
       return (
         <tr key={`${parent}/${r.member}`}>
-          <th scope="row" colSpan={t.periods.length + 1 + (hasChange ? 1 : 0) + (showShare ? 1 : 0)} className="border-b px-3 pb-1 pt-2 text-left text-[12px] font-semibold" title={r.member}>
+          <th scope="row" colSpan={t.periods.length + 1 + extra} className="border-b px-3 pb-1 pt-2 text-left text-[12px] font-semibold" title={r.member}>
             {r.label}
           </th>
         </tr>
       );
     return (
       <tr key={`${parent}/${r.member}`} className="group">
-        <th scope="row" className={cn("max-w-72 border-b px-3 py-1 text-left font-normal group-hover:bg-secondary/60", depth ? "pl-7 text-muted-foreground" : "")} title={r.member}>
+        <th
+          scope="row"
+          className={cn("sticky left-0 z-10 min-w-40 max-w-72 border-b bg-card px-3 py-1 text-left font-normal group-hover:bg-secondary", depth || r.former ? "text-muted-foreground" : "", depth ? "pl-7" : "")}
+          title={r.former ? `${r.label} — reported only in earlier filings (renamed, merged or no longer broken out)` : r.member}
+        >
           <span className="line-clamp-2">{r.label}</span>
         </th>
         {t.periods.map((k) => (
           <ValueCell key={k} v={r.values[k]} text={r.values[k] ? fmtValue(r.values[k].v, t.unit, scale) : ""} onOpen={() => open(`${r.label} — ${t.conceptLabel || r.label}`, k, r.values[k], t.concept || r.member, t.unit)} />
         ))}
-        {hasChange && <td className={cn("num border-b px-3 py-1 text-right text-[12px]", ch == null ? "text-muted-foreground/40" : ch >= 0 ? "text-positive" : "text-negative")}>{ch == null ? "—" : `${ch >= 0 ? "+" : "−"}${Math.abs(ch * 100).toFixed(1)}%`}</td>}
+        {hasChange && <GrowthCell rate={ch} />}
+        {hasCagr && <GrowthCell rate={g?.rate ?? null} title={g ? `${detailPeriodLabel(d.periods[g.from])} to ${detailPeriodLabel(d.periods[g.to])}, ${g.years} years compounded` : "Needs a positive value at least three years apart"} />}
         {showShare && (
           <td className="border-b px-3 py-1">
             {share != null && (
@@ -220,17 +268,26 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
       bodyClassName="p-0"
       collapse={520}
     >
-      <div className="overflow-x-auto">
+      <div ref={scroller} className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
-              <th className="border-b px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">{t.axisLabel}</th>
+              <th className="sticky left-0 z-10 border-b bg-card px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">{t.axisLabel}</th>
               {t.periods.map((k) => (
-                <th key={k} className="num whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-semibold">
+                <th key={k} data-latest={k === latest ? "" : undefined} className="num whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-semibold">
                   {detailPeriodLabel(d.periods[k])}
                 </th>
               ))}
-              {hasChange && <th className="whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-normal text-muted-foreground">Change</th>}
+              {hasChange && (
+                <th className="whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-normal text-muted-foreground" title="Latest period against the one before it">
+                  Change
+                </th>
+              )}
+              {hasCagr && (
+                <th className="whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-normal text-muted-foreground" title="Compound annual growth from the first to the latest fiscal year the row reports">
+                  CAGR
+                </th>
+              )}
               {showShare && <th className="whitespace-nowrap border-b px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">Share</th>}
             </tr>
           </thead>
@@ -238,11 +295,15 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
             {t.rows.flatMap((r) => [rowFor(r, 0), ...(r.sub ?? []).map((s) => rowFor(s, 1, r.member))])}
             {t.total && Object.keys(t.total).length > 0 && (
               <tr className="font-medium">
-                <th scope="row" className="border-t-2 border-t-foreground/70 px-3 py-1 text-left">Consolidated total</th>
+                <th scope="row" className="sticky left-0 z-10 border-t-2 border-t-foreground/70 bg-card px-3 py-1 text-left">Consolidated total</th>
                 {t.periods.map((k) => (
                   <ValueCell key={k} className="border-t-2 border-t-foreground/70" v={t.total![k]} text={t.total![k] ? fmtValue(t.total![k].v, t.unit, scale) : ""} onOpen={() => open(`${t.conceptLabel} — total`, k, t.total![k], t.concept, t.unit)} />
                 ))}
-                {hasChange && <td className="border-t-2 border-t-foreground/70" />}
+                {hasChange && <GrowthCell className="border-t-2 border-t-foreground/70" rate={changeOf(t, t.total, d.periods)} />}
+                {hasCagr && (() => {
+                  const g = cagrOf(t, t.total!, d.periods);
+                  return <GrowthCell className="border-t-2 border-t-foreground/70" rate={g?.rate ?? null} title={g ? `${detailPeriodLabel(d.periods[g.from])} to ${detailPeriodLabel(d.periods[g.to])}, ${g.years} years compounded` : undefined} />;
+                })()}
                 {showShare && <td className="border-t-2 border-t-foreground/70" />}
               </tr>
             )}
@@ -332,7 +393,7 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
                   const pv = profit.values[s.member]?.[period];
                   if (!rv || !pv || !rv.v) return <td key={s.member} className="num border-t-2 border-t-foreground/70 px-3 py-1 text-right text-muted-foreground/40">—</td>;
                   const p = d.periods[period];
-                  const part = (v: DetailValue, concept: string, label: string, sign: 1 | -1) => ({ accn: d.accn, doc: d.doc, concept, start: p?.start, end: p?.end ?? d.reportDate, value: v.v, label, sign });
+                  const part = (v: DetailValue, concept: string, label: string, sign: 1 | -1) => ({ accn: v.accn ?? d.accn, doc: v.doc ?? d.doc, concept, start: p?.start, end: p?.end ?? d.reportDate, value: v.v, label, sign });
                   return (
                     <td key={s.member} className="border-t-2 border-t-foreground/70 p-0">
                       <button
@@ -377,7 +438,7 @@ function Concentration({ rows, d, ticker }: { rows: ConcentrationRow[]; d: Filin
   return (
     <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
       {[...groups.entries()].map(([k, rs]) => {
-        const keys = [...new Set(rs.flatMap((r) => Object.keys(r.values)))].sort((a, b) => (d.periods[a]?.end ?? "").localeCompare(d.periods[b]?.end ?? "")).slice(-3);
+        const keys = [...new Set(rs.flatMap((r) => Object.keys(r.values)))].sort((a, b) => (d.periods[a]?.end ?? "").localeCompare(d.periods[b]?.end ?? "")).slice(-7);
         const latest = keys[keys.length - 1];
         const head = `${CONC_HEAD[rs[0].kind]} · ${rs[0].benchmarkLabel && rs[0].benchmark === "other" ? rs[0].benchmarkLabel.toLowerCase() : BENCH[rs[0].benchmark]}`;
         return (
