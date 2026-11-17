@@ -8,6 +8,8 @@ import {
 } from "./landing-sections";
 import styles from "./landing.module.css";
 import { FEATURES } from "@/lib/features";
+import type { LandingStats } from "@/lib/landing-stats.functions";
+import { ClickToSource, LiveCounts, ProductShots } from "./home-refresh";
 import { PUBLIC_COMPANIES } from "@/lib/public-company";
 
 function Product({ id = "product", tone = "plain" as const }: { id?: string; tone?: "plain" | "sunken" }) {
@@ -29,7 +31,7 @@ function Product({ id = "product", tone = "plain" as const }: { id?: string; ton
 /* Version 1: Verification-first. Night aerial hero, method up front.  */
 /* ------------------------------------------------------------------ */
 
-export function LandingVerification() {
+export function LandingVerification({ stats = null }: { stats?: LandingStats | null }) {
   return (
     <div className={styles.page} id="top">
       <SiteNav />
@@ -37,10 +39,13 @@ export function LandingVerification() {
         <div className={styles.heroWrap}>
           <ChicagoNightVideoHero copy={{ ...nightCopyVariants[0].copy, proof: [] }} id="v1-hero-title" />
         </div>
+        <LiveCounts stats={stats} companies={PUBLIC_COMPANIES.length} />
+        <ClickToSource />
         <SourcesStrip />
         <ProvenanceSection />
         <AccuracyPipeline />
         <VerificationLedger />
+        <ProductShots />
         <Product />
         <Platform features={FEATURES} companyCount={PUBLIC_COMPANIES.length} />
         <Faq />

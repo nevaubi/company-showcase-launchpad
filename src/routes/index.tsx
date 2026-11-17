@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import "@/components/fu-landing/components/arc/foundation.css";
+import { getLandingStats } from "@/lib/landing-stats.functions";
 import { LandingVerification } from "@/components/fu-landing/landing/landing-pages";
 
 export const Route = createFileRoute("/")({
@@ -29,13 +30,15 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+  loader: async () => { try { return await getLandingStats(); } catch { return null; } },
+  staleTime: 5 * 60_000,
   component: Home,
 });
 
 function Home() {
   return (
     <div className="fu-landing" data-theme="light">
-      <LandingVerification />
+      <LandingVerification stats={Route.useLoaderData()} />
     </div>
   );
 }

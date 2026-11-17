@@ -1,0 +1,37 @@
+.wrap { box-sizing: border-box; max-width: 1240px; margin: 0 auto; padding: clamp(56px, 8vw, 96px) 20px; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: center; }
+@media (min-width: 960px) { .split { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); } }
+.eyebrow { margin: 0; color: var(--text-muted); font-size: 13px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; }
+.h2 { margin: 12px 0 0; font-family: var(--font-display); font-size: clamp(1.9rem, 1.2rem + 2.4vw, 3rem); font-weight: 500; letter-spacing: -.025em; line-height: 1.08; text-wrap: balance; }
+.body { margin: 14px 0 0; color: var(--text-secondary); font-size: 1.06rem; line-height: 1.6; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 18px; background: var(--surface); overflow: hidden; }
+@media (min-width: 760px) { .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.stat { padding: 22px 24px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); margin: 0 -1px -1px 0; }
+.stat b { display: block; font-family: var(--font-mono, ui-monospace); font-size: clamp(1.4rem, 1rem + 1.4vw, 2rem); font-weight: 500; letter-spacing: -.02em; }
+.stat span { display: block; margin-top: 4px; color: var(--text-secondary); font-size: 13px; }
+.statsNote { margin: 10px 0 0; color: var(--text-muted); font-size: 12px; }
+/* click-to-source demo */
+.demo { position: relative; min-width: 0; min-height: 360px; border: 1px solid var(--border); border-radius: 18px; background: var(--surface); overflow: hidden; box-shadow: 0 24px 60px -32px oklch(0% 0 0 / .25); }
+.table { width: 54%; border-collapse: collapse; font-size: 14px; }
+.table th { padding: 14px 20px; color: var(--text-muted); font-size: 12px; font-weight: 500; text-align: left; border-bottom: 1px solid var(--border); }
+.table th:last-child, .table td:last-child { text-align: right; }
+.table td { padding: 13px 20px; border-bottom: 1px solid var(--border-subtle); }
+.num { font-family: var(--font-mono, ui-monospace); font-variant-numeric: tabular-nums; border-radius: 4px; padding: 2px 4px; transition: background .25s; }
+.num[data-on="true"] { background: oklch(93% .12 95); color: oklch(25% 0 0); }
+.cursor { position: absolute; z-index: 3; width: 20px; height: 20px; pointer-events: none; color: var(--foreground); filter: drop-shadow(0 2px 3px oklch(0% 0 0 / .3)); }
+.panel { position: absolute; z-index: 2; inset: 0 0 0 auto; width: 46%; padding: 18px 20px; border-left: 1px solid var(--border); background: var(--surface-raised); box-shadow: -16px 0 40px -24px oklch(0% 0 0 / .3); font-size: 13px; }
+.panelHead { display: flex; justify-content: space-between; gap: 8px; color: var(--text-muted); font-size: 12px; }
+.panelTitle { margin: 10px 0 0; font-weight: 600; font-size: 14px; }
+.meta { margin: 4px 0 14px; color: var(--text-muted); font-family: var(--font-mono, ui-monospace); font-size: 11px; line-height: 1.6; word-break: break-all; }
+.doc { display: grid; gap: 8px; color: var(--text-secondary); line-height: 1.55; }
+.docLine { height: 8px; border-radius: 4px; background: var(--surface-muted); }
+.mark { display: inline; padding: 1px 3px; border-radius: 3px; background: oklch(93% .12 95); color: oklch(25% 0 0); outline: 2px solid oklch(80% .14 85); }
+/* screenshots */
+.tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 28px 0 20px; }
+.tab { padding: 8px 14px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--text-secondary); font-size: 14px; cursor: pointer; }
+.tab[aria-selected="true"] { background: var(--foreground); color: var(--background); border-color: var(--foreground); }
+.shot { position: relative; min-width: 0; border: 1px solid var(--border); border-radius: 18px; overflow: hidden; background: var(--surface); box-shadow: 0 30px 80px -40px oklch(0% 0 0 / .35); }
+.shot img { display: block; width: 100%; height: auto; }
+.caption { margin: 14px 0 0; color: var(--text-secondary); font-size: 14px; }
+.caption a { color: var(--foreground); }
+@media (max-width: 600px) { .demo { min-height: 440px; } .table { width: 100%; } .panel { inset: auto 0 0 0; width: auto; height: 52%; border-left: 0; border-top: 1px solid var(--border); } }
