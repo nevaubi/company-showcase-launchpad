@@ -115,6 +115,8 @@ interface LoopState {
   unreadAtDone?: Record<string, number>;
   /** companies re-queued once because they were marked done with no figures (broken-worker runs) */
   healed?: string[];
+  /** finished companies re-queued once because files were still waiting */
+  rechecked?: string[];
   /** live view for the admin panel */
   current?: string[];
   cycleStartedAt?: string | null;
@@ -169,13 +171,16 @@ async function count(q: PromiseLike<{ count: number | null }>) {
 const facts = (t: string) => count(sb.from("ir_kpi_facts").select("id", { count: "exact", head: true }).eq("ticker", t));
 const files = (t: string) => count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", t).not("path", "is", null));
 /** ir-deep.ts wrote its final report for the company (private storage copy, else this sandbox's). */
-async function finished(t: string) {
+async function reportStage(t: string): Promise<string | null> {
   let r: { stage?: string } | null = null;
   const { data } = await sb.storage.from("ir-documents").download(`ops/ir-deep/${t}.json`);
   if (data) r = JSON.parse(await data.text()) as { stage?: string };
   else if (existsSync(`${OUT}/${t}/${t}.report.json`)) r = JSON.parse(readFileSync(`${OUT}/${t}/${t}.report.json`, "utf8")) as { stage?: string };
   // Reports from before stages were recorded only exist for companies whose run completed.
-  return !!r && (r.stage === undefined || r.stage === "final");
+  return r ? (r.stage ?? "final") : null;
+}
+async function finished(t: string) {
+  return (await reportStage(t)) === "final";
 }
 const EXTRACTABLE = "(press-release,supplement,presentation,data,other)";
 async function unread(t: string) {
@@ -294,6 +299,16 @@ if (!state.oomReset) {
 // The previous container died mid-company (no clean exit): those companies resume without penalty.
 const interrupted = new Set(state.current ?? []);
 state.current = [];
+// Companies counted finished while files were still waiting (a reader was blocked by a replaced
+// machine's hold) are read again once.
+state.rechecked ??= [];
+for (const t of [...state.done]) {
+  if ((state.unreadAtDone?.[t] ?? 0) < 5 || state.rechecked.includes(t)) continue;
+  state.done = state.done.filter((x) => x !== t);
+  state.rechecked.push(t);
+  interrupted.add(t);
+  log(`${t}: finished with ${state.unreadAtDone![t]} files still waiting — reading them`);
+}
 await saveState(state);
 
 /** Next company: interrupted ones first, then started-but-unfinished, then new (largest revenue), then finished with new files. */
@@ -362,8 +377,9 @@ async function runCompany(t: string) {
     if (state.finishedLog.length > 200) state.finishedLog.shift();
     log(`${t}: finished in ${((Date.now() - t0) / 60000).toFixed(1)} min — ${(await facts(t)).toLocaleString()} figures`);
   } else {
-    // Exit 137 = killed for memory: the machine's fault, not the company's.
-    if (code !== 137) state.resumes![t] = (state.resumes![t] ?? 0) + 1;
+    // Exit 137 = killed for memory, "incomplete" = a reader couldn't start (busy elsewhere): the
+    // machine's fault, not the company's, so neither counts toward setting the company aside.
+    if (code !== 137 && (await reportStage(t)) !== "incomplete") state.resumes![t] = (state.resumes![t] ?? 0) + 1;
     log(`${t}: run ended without finishing (${stopped ?? "no final report"}) — attempt ${state.resumes![t] ?? 0}`);
   }
 }

@@ -115,6 +115,8 @@ async function markUnreadable(ticker: string) {
 const readerArgs = (ticker: string, credits: number) => [`--ticker=${ticker}`, `--model=${MODEL}`, `--escalate=${ESCALATE}`, "--quality", "--resume", ...(Number.isFinite(credits) ? [`--max-credits=${credits.toFixed(2)}`] : [])];
 /** Stops that end the whole run (the next run resumes): spent budget or exhausted/blocked credits. */
 const fatal = (stop: string | null | undefined) => !!stop && /^(budget|auth|quota)/.test(stop);
+/** A reader that never ran (company busy elsewhere, crashed before reporting): the company isn't finished. */
+const didNotRun = (stop: string | null | undefined) => !!stop && /^busy|without a spend report/.test(stop);
 
 async function extract(ticker: string) {
   const logFile = join(OUT, `${ticker}.extract.log`);
@@ -270,7 +272,9 @@ if (!stopped) {
     } catch (e) {
       log(`${t}: rebuild failed: ${(e as Error).message.slice(0, 160)}`);
     }
-    await report(t, { stage: fatal(late?.stop) ? "stopped" : "final", unreadable, ...results.get(t), converted: late });
+    const first = results.get(t) as { tables?: { stop?: string | null }; slides?: { stop?: string | null } } | undefined;
+    const incomplete = [first?.tables?.stop, first?.slides?.stop, late?.stop].some(didNotRun);
+    await report(t, { stage: fatal(late?.stop) ? "stopped" : incomplete ? "incomplete" : "final", unreadable, ...results.get(t), converted: late });
     if (fatal(late?.stop)) {
       stopped = late!.stop;
       break;

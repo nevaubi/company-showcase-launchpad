@@ -5,6 +5,7 @@
 - [x] Memory-sized lanes, host-tagged 3-min lease, per-company runs, fair retries, admin memory/finished view (deployed 6b08748)
 - [x] Verify on Render: 32 GB limit seen (3 lanes), KD/TXT/WRB finished within 8 minutes of takeover
 - [x] Crash resume mid-company: every file keeps its own read/convert status, so a restarted company skips finished files (checked in ir-deep/ir-docling)
+- [x] Restart safety: readers wait out a replaced machine's per-company hold; "finished" needs every reader to have run; 26 companies finished with files waiting (COF 526, EXE 384, ES 324, WDC 266…) re-read once (goes live with the next worker deploy)
 - [x] Docling runaway files: 20-minute per-file timeout restarts the converter; memory now sized from the 32 GB limit
 - [x] IR datasets: per-table empty columns trimmed, stray period columns dropped, complementary/duplicate tables and lines merged with value-conflict and other-split guards (CVS 3,701→2,965 lines, 0 cells lost), totals re-checked after merges, bare "TOTAL" renamed, sharper titles
 - [x] Declutter IR tab: one "Source documents" panel (library/tables/search), compact how-to-read, complete tables ranked first, empty check rows hidden

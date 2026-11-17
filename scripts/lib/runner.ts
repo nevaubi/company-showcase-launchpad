@@ -63,8 +63,21 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
     return;
   }
   if (state?.lease_until && new Date(state.lease_until) > new Date() && args.force === undefined) {
-    log(`${o.job}: another runner holds the lease until ${state.lease_until}`);
-    return;
+    // A per-company lease (job "reader:TICKER") left by a container that was just replaced runs out
+    // within 3 minutes: wait for it, so the company's files are read instead of the run counting as done.
+    let until = new Date(state.lease_until);
+    const deadline = Date.now() + 4 * 60_000;
+    while (o.job.includes(":") && until > new Date() && Date.now() < deadline) {
+      log(`${o.job}: another runner holds the lease until ${until.toISOString()} — waiting`);
+      await new Promise((r) => setTimeout(r, 15_000));
+      const { data } = await sb.from("job_state").select("lease_until").eq("job", o.job).maybeSingle();
+      until = data?.lease_until ? new Date(data.lease_until) : new Date(0);
+    }
+    if (until > new Date()) {
+      log(`${o.job}: another runner holds the lease until ${until.toISOString()}`);
+      if (o.spendFile) writeFileSync(o.spendFile, JSON.stringify({ credits: 0, usd: 0, done: 0, facts: 0, tokensIn: 0, tokensOut: 0, stop: `busy: another runner holds ${o.job}` }));
+      return;
+    }
   }
   const renew = () => sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: null, lease_until: new Date(Date.now() + 3 * 60_000).toISOString(), updated_at: new Date().toISOString() });
   await renew();
