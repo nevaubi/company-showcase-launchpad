@@ -45,7 +45,7 @@ await runBatch({
       followUp: args.loop !== undefined,
       chunkChars: args.chunk ? Number(args.chunk) : undefined,
     });
-    const note = [r.rejected ? `(${r.rejected} rej)` : "", r.escalated ? `${r.escalated} escalated` : "", r.followUps ? `${r.followUps} reviewed` : "", r.credits ? `${r.credits.toFixed(3)} cr` : ""].filter(Boolean).join(" ");
+    const note = [r.rejected ? `(${r.rejected} rej)` : "", r.escalated ? `${r.escalated} escalated` : "", r.followUps ? `${r.followUps} reviewed` : "", r.second?.parts ? `openai ✓${r.second.agreed} ✗${r.second.conflicts}${r.second.rescued ? ` rescued ${r.second.rescued}` : ""}` : "", r.credits ? `${r.credits.toFixed(3)} cr` : ""].filter(Boolean).join(" ");
     return { facts: r.facts, note: note || undefined, usage: r.usage ? { ...r.usage, credits: r.credits } : null };
   },
 });

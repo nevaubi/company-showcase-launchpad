@@ -8,7 +8,7 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { allowanceDay, estimateTokens, FREE_SAFETY, FREE_TIERS, tierOf, usedTokens } from "@/lib/ir/openai-allowance";
-import { OpenAIError, openaiDirectStructured, type Usage } from "@/lib/openai.server";
+import { OpenAIError, openaiDirectStructured, type Effort, type InputPart, type Usage } from "@/lib/openai.server";
 
 /** Default second reader: the small-model tier has ten times the allowance. */
 export const LANE_MODEL = process.env["IR_OPENAI_LANE_MODEL"] || "gpt-5.4-mini";
@@ -18,23 +18,29 @@ let offReason = "";
 export const laneEnabled = () => !!process.env["OPENAI_API_KEY"] && process.env["IR_OPENAI_LANE"] !== "0" && Date.now() >= offUntil;
 export const laneStatus = () => (laneEnabled() ? `on (${LANE_MODEL})` : offReason || (process.env["OPENAI_API_KEY"] ? "off" : "no key"));
 
-export async function laneStructured<T>(opts: { model?: string; name: string; instructions: string; input: string; schema: Record<string, unknown>; maxOutputTokens?: number }): Promise<{ data: T; usage: Usage; model: string } | null> {
+export async function laneStructured<T>(opts: { model?: string; name: string; instructions: string; input: string | InputPart[]; schema: Record<string, unknown>; maxOutputTokens?: number; effort?: Effort }): Promise<{ data: T; usage: Usage; model: string } | null> {
   if (!laneEnabled()) return null;
   const model = opts.model ?? LANE_MODEL;
   const tier = tierOf(model);
   if (!tier) throw new Error(`${model} is not in the free OpenAI allowance`);
   const day = allowanceDay();
   const maxOut = opts.maxOutputTokens ?? 16_000;
-  const est = estimateTokens(opts.instructions.length + opts.input.length, maxOut);
+  // Images: a high-detail page costs at most a few thousand tokens; reserve generously.
+  const inChars = typeof opts.input === "string" ? opts.input.length : opts.input.reduce((n, p) => n + (p.type === "input_text" ? p.text.length : 6_000 * 3.2), 0);
+  const est = estimateTokens(opts.instructions.length + inChars, maxOut);
   const { data: ok, error } = await supabaseAdmin.rpc("openai_allowance_take", { _day: day, _tier: tier, _tokens: est, _cap: Math.floor(FREE_TIERS[tier].cap * FREE_SAFETY) });
-  if (error || !ok) return null;
+  if (error || !ok) {
+    if (process.env["IR_LANE_DEBUG"]) console.warn(`[lane] no allowance: ${error?.message ?? "cap reached"} (est ${est})`);
+    return null;
+  }
   const settle = (actual: number) => supabaseAdmin.rpc("openai_allowance_settle", { _day: day, _tier: tier, _delta: actual - est }).then(undefined, () => undefined);
   try {
-    const r = await openaiDirectStructured<T>({ model, name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, maxOutputTokens: maxOut, effort: /^(o\d|gpt-5)/.test(model) ? "low" : undefined });
+    const r = await openaiDirectStructured<T>({ model, name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, maxOutputTokens: maxOut, effort: /^(o\d|gpt-5)/.test(model) ? (opts.effort ?? "low") : undefined });
     await settle(usedTokens(r.usage));
     return r;
   } catch (e) {
     const err = e as OpenAIError;
+    if (process.env["IR_LANE_DEBUG"]) console.warn(`[lane] ${opts.name} ${model}: ${err.kind ?? ""} ${err.message?.slice(0, 200)}`);
     await settle(err.usage ? usedTokens(err.usage) : 0);
     // A bad or empty key, or a spent balance: rest the lane for an hour instead of failing every call.
     if (err instanceof OpenAIError && (err.kind === "auth" || err.kind === "quota")) {

@@ -7,6 +7,7 @@ import { chunkTables, EXTRACT_INSTRUCTIONS, EXTRACT_SCHEMA, factsFromModel, lead
 import { decodeHtml, parseNumber, parseTables, type ParsedTable } from "@/lib/ir/tables";
 import { fixRowDates, printedDates } from "@/lib/ir/dates";
 import { estimateCredits, hasOpenAIKey, IR_MODELS, OpenAIError, openaiStructured, type Effort, type Usage } from "@/lib/openai.server";
+import { cellKey, crossCheckBy } from "@/lib/ir/second-read";
 import { EXTRACT_QUALITY_PROMPT, extractFollowUpPrompt, mergeFactRows, missedRows, needsExtractEscalation } from "@/lib/ir/extract-quality";
 
 /** Kinds that carry numeric tables worth reading. */
@@ -65,6 +66,8 @@ export interface ReadChunkOpts {
   escalate?: string;
   /** one review turn listing numeric rows the answer left out (missedRows) */
   followUp?: boolean;
+  /** OpenAI second reader on the free allowance (on unless IR_OPENAI_TABLES=0) */
+  secondRead?: boolean;
 }
 
 export interface ChunkRead {
@@ -75,7 +78,32 @@ export interface ChunkRead {
   model: string;
   escalated: boolean;
   followUp: boolean;
+  /** second reader: confirmed / dropped / its own finds left out / it replaced an unusable answer */
+  second?: { agreed: number; conflicts: number; secondOnly: number; rescued: boolean };
 }
+
+/** The OpenAI second reader for one part, or null when the lane is off or spent. */
+async function laneChunk(input: string): Promise<ModelOutput | null> {
+  const { laneEnabled, laneStructured } = await import("@/lib/ir/openai-lane.server");
+  if (!laneEnabled()) return null;
+  const r = await laneStructured<ModelOutput>({
+    name: "ir_tables",
+    instructions: `${EXTRACT_INSTRUCTIONS}\n\n${EXTRACT_QUALITY_PROMPT}\n\n${SECOND_READER_PROMPT}`,
+    input,
+    schema: EXTRACT_SCHEMA as unknown as Record<string, unknown>,
+    effort: "medium",
+    // Reasoning counts against the cap; a cut-off answer is wasted, and these tokens are free.
+    maxOutputTokens: 64_000,
+  });
+  return r?.data ?? null;
+}
+
+const SECOND_READER_PROMPT = `You are the independent second reader. Another analyst has read these tables; your answer is compared cell by cell and any cell you two date differently is thrown out, so precision on dates matters more than anything:
+- Read every column header for the period it covers: the fiscal period end it prints (not the calendar month-end unless printed), and its length (point-in-time balance = 0 months, quarter = 3, six/nine months year-to-date = 6/9, fiscal year = 12, one month = 1).
+- "Three months ended", "Q4", "fourth quarter" are 3 months even in an annual release; "twelve months ended" / "full year" / "fiscal 2025" are 12.
+- Balance sheet lines, headcounts, store/branch counts, assets under management and other balances at a date are 0 months.
+- Name each line exactly as the table does, scoped to its segment or table heading, and keep totals marked as totals.
+- Point only at cells that hold a number printed in the table. Skip a cell rather than guess its period.`;
 
 /**
  * Read one prompt chunk: first answer, optional escalation to a second model, optional review turn
@@ -91,6 +119,8 @@ export async function readChunk(o: { input: string; chunk: string; tables: Parse
   };
   let answer: { out: ModelOutput; model: string } | null = null;
   let failed: string | null = null;
+  // The second reader runs alongside the first; it never delays or fails the part.
+  const secondP = o.secondRead === false || process.env["IR_OPENAI_TABLES"] === "0" ? Promise.resolve(null) : laneChunk(o.input).catch(() => null);
   try {
     const r = await runChunk(o.input, o.model, o);
     bill(o.model, r.usage);
@@ -117,7 +147,13 @@ export async function readChunk(o: { input: string; chunk: string; tables: Parse
       bill(o.escalate, e.usage);
     }
   }
-  if (!answer) throw new Error(failed ?? "unusable answer");
+  const secondOut = await secondP;
+  const secondFacts = secondOut ? factsFromModel(secondOut, o.tables, o.filed) : null;
+  if (!answer) {
+    if (!secondFacts?.rows.length) throw new Error(failed ?? "unusable answer");
+    // Unusable first answer: the second reader's whole reading is the part's only one.
+    return { ...secondFacts, usage, credits, model: `openai:${(await import("@/lib/ir/openai-lane.server")).LANE_MODEL}`, escalated, followUp: false, second: { agreed: 0, conflicts: 0, secondOnly: secondFacts.rows.length, rescued: true } };
+  }
   let followUp = false;
   if (o.followUp) {
     const missed = missedRows(o.chunk, answer.out.tables ?? [], (c) => parseNumber(c) != null);
@@ -135,7 +171,14 @@ export async function readChunk(o: { input: string; chunk: string; tables: Parse
       }
     }
   }
-  return { ...facts, usage, credits, model, escalated, followUp };
+  let second: ChunkRead["second"];
+  if (secondFacts) {
+    const x = crossCheckBy(facts.rows, secondFacts.rows, cellKey);
+    facts = { rows: x.rows, rejected: facts.rejected };
+    second = { agreed: x.agreed, conflicts: x.conflicts, secondOnly: x.secondOnly, rescued: false };
+    if (x.agreed) model = `${model}+openai`;
+  }
+  return { ...facts, usage, credits, model, escalated, followUp, second };
 }
 
 /**
@@ -155,7 +198,7 @@ export async function extractIrDocument(id: string, opts: { model?: string; conc
   const mark = (patch: Record<string, unknown>) => supabaseAdmin.from("ir_documents").update({ extracted_at: new Date().toISOString(), ...patch }).eq("id", id);
   if (!chunks.length) {
     await mark({ extract_status: "no tables", extract_facts: 0 });
-    return { facts: 0, rejected: 0, usage: null, credits: 0, escalated: 0, followUps: 0 };
+    return { facts: 0, rejected: 0, usage: null, credits: 0, escalated: 0, followUps: 0, second: null };
   }
   const model = opts.model ?? IR_MODELS.extract;
   const context = `Company: ${doc.ticker}. Document: ${doc.title} (${doc.kind}${doc.exhibit ? `, ${doc.exhibit}` : ""}, filed ${doc.filed ?? "unknown"}).\nOpening text: ${leadText(html)}`;
@@ -166,6 +209,7 @@ export async function extractIrDocument(id: string, opts: { model?: string; conc
   const credits = results.reduce((n, r) => n + r.credits, 0);
   const escalated = results.filter((r) => r.escalated).length;
   const followUps = results.filter((r) => r.followUp).length;
+  const second = results.reduce((a, r) => (r.second ? { agreed: a.agreed + r.second.agreed, conflicts: a.conflicts + r.second.conflicts, secondOnly: a.secondOnly + r.second.secondOnly, rescued: a.rescued + (r.second.rescued ? 1 : 0), parts: a.parts + 1 } : a), { agreed: 0, conflicts: 0, secondOnly: 0, rescued: 0, parts: 0 });
   // Parts of one split table repeat its header rows: keep each cell once.
   const seen = new Set<string>();
   let rejected = 0;
@@ -209,11 +253,12 @@ export async function extractIrDocument(id: string, opts: { model?: string; conc
       chunks: chunks.length,
       ...(opts.escalate ? { escalated } : {}),
       ...(opts.followUp ? { followUps } : {}),
+      ...(second.parts ? { second } : {}),
       ...(credits ? { credits: +credits.toFixed(4) } : {}),
       ...(opts.quality ? { quality: true, effort: opts.effort ?? "low" } : {}),
     },
   });
-  return { facts: records.length, rejected, usage, credits, escalated, followUps };
+  return { facts: records.length, rejected, usage, credits, escalated, followUps, second };
 }
 
 /** Claim the next document waiting for extraction (newest first). Safe under concurrent runners. */

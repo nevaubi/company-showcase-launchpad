@@ -128,6 +128,10 @@ export async function readPage(o: {
   followUp?: boolean;
   maxOutputTokens?: number;
   quality?: boolean;
+  /** route the OpenAI-shaped call elsewhere (the free-allowance second reader); null = lane spent */
+  structured?: (opts: Parameters<typeof openaiStructured>[0]) => Promise<{ data: VisionOutput; usage: Usage } | null>;
+  /** extra instructions appended to the reader's system prompt */
+  extraInstructions?: string;
 }): Promise<PageRead> {
   const effort = o.effort ?? visionEffort(o.model);
   const text = `${o.context} Page ${o.page} of ${o.pageCount}.\n\nNumber tokens printed on the page (${o.tokens.length}):\n${renderTokens(o.tokens)}`;
@@ -141,12 +145,14 @@ export async function readPage(o: {
   };
   const empty = (failed: string): PageRead => ({ rows: [], rejected: 0, kind: "other", usage, usd, missing: o.tokens.length, missingAfter: o.tokens.length, skipped: 0, followUp: false, failed });
 
-  if (!isClaude(o.model)) {
+  if (o.structured || !isClaude(o.model)) {
     try {
-      const call = (prompt: string) => openaiStructured<VisionOutput>({
+      const run = o.structured ?? ((x: Parameters<typeof openaiStructured>[0]) => openaiStructured<VisionOutput>(x));
+      const call = async (prompt: string) => {
+        const r = await run({
         model: o.model,
         name: "ir_page",
-        instructions: o.quality ? `${VISION_INSTRUCTIONS}\n\n${VISION_QUALITY_PROMPT}` : VISION_INSTRUCTIONS,
+        instructions: [o.quality ? `${VISION_INSTRUCTIONS}\n\n${VISION_QUALITY_PROMPT}` : VISION_INSTRUCTIONS, o.extraInstructions].filter(Boolean).join("\n\n"),
         input: [
           { type: "input_text", text: prompt },
           { type: "input_image", image_url: image, detail: "high" },
@@ -154,7 +160,10 @@ export async function readPage(o: {
         schema: SCHEMA,
         effort,
         maxOutputTokens: o.maxOutputTokens ?? 32_000,
-      });
+        });
+        if (!r) throw new OpenAIError("second reader unavailable", "rejected", 0);
+        return r;
+      };
       const r = await call(text);
       bill(r.usage);
       let out = r.data;

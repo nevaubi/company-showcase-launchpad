@@ -16,6 +16,18 @@ import { join } from "node:path";
 import { estimateCredits, IR_MODELS, type Usage } from "@/lib/openai.server";
 import { numberTokens, parseBboxHtml, type PageWords, type VisionFact } from "@/lib/ir/vision-core";
 import { pool } from "@/lib/ir/extract.server";
+import { LANE_MODEL, laneEnabled, laneStructured } from "@/lib/ir/openai-lane.server";
+import { crossCheckBy, tokenKey } from "@/lib/ir/second-read";
+
+/** OpenAI second reader on every page (free allowance), unless --verify is given or IR_OPENAI_VISION=0. */
+const useLane = !verifierArg() && process.env["IR_OPENAI_VISION"] !== "0";
+function verifierArg() { return !!args.verify; }
+const LANE_VISION_PROMPT = `You are the independent second reader of this page. Another analyst read it too; your answer is compared number by number and any number you two date differently is thrown out, so get each figure's period exactly right:
+- Find the column or chart header each number sits under and the fiscal period end it states; slides often print "Q3 FY26", "3Q25", "FY2025" or a date range — convert to the fiscal period end and length (quarter 3, year-to-date 6/9, year 12, balance at a date 0).
+- Bar and line chart labels belong to the bar/point they sit on; the axis category below gives the period.
+- Percent changes, growth rates and margins are their own metrics (unit %), never the underlying amount.
+- Name each figure exactly as printed, scoped to its segment, region or product heading; mark totals.
+- Account for every number token: store it, or skip it with a reason (page number, footnote marker, year label, forecast, guidance). Skip rather than guess.`;
 import { COVERAGE } from "@/lib/coverage";
 import { args, log, sb } from "./lib/supa";
 import { runBatch } from "./lib/runner";
@@ -134,6 +146,7 @@ async function processDoc(d: Doc) {
     let disagreed = 0;
     let escalated = 0;
     let credits = 0;
+    const laneStats = { agreed: 0, conflicts: 0, secondOnly: 0, rescued: 0 };
     const results = await pool(candidates, 4, async (j) => {
       const tokens = numberTokens(j.words);
       const read = async (m: string) => {
@@ -141,7 +154,22 @@ async function processDoc(d: Doc) {
         credits += estimateCredits(m, res.usage) ?? 0;
         return res;
       };
-      let [r, v] = await Promise.all([read(model), verifier ? read(verifier) : null]);
+      const laneRead = async () => {
+        if (!useLane || !laneEnabled()) return null;
+        try {
+          const res = await readPage({
+            model: LANE_MODEL, context, page: j.page, pageCount, tokens, jpeg: await modelImage(j.image, j.w, j.h, LANE_MODEL), ocr: j.ocr, filed: d.filed, quality: true, followUp: true, effort: "medium", maxOutputTokens: 48_000,
+            extraInstructions: LANE_VISION_PROMPT,
+            structured: async (x) => (await laneStructured<never>({ name: x.name, instructions: x.instructions, input: x.input, schema: x.schema, effort: "medium", maxOutputTokens: x.maxOutputTokens })) ?? null,
+          });
+          if (res.failed && process.env["IR_LANE_DEBUG"]) console.warn(`[lane] page ${j.page}: ${res.failed}`);
+          return res.failed ? null : res;
+        } catch (e) {
+          if (process.env["IR_LANE_DEBUG"]) console.warn(`[lane] page ${j.page}: ${(e as Error).message}`);
+          return null;
+        }
+      };
+      let [r, v, lane] = await Promise.all([read(model), verifier ? read(verifier) : null, laneRead()]);
       let pageModel = model;
       if (escalation && needsVisionEscalation(r, j.ocr)) {
         const reviewed = await read(escalation);
@@ -154,6 +182,21 @@ async function processDoc(d: Doc) {
         if (reviewed.failed) throw new Error(`Escalation failed on page ${j.page}: ${reviewed.failed}`);
         r = reviewed;
         pageModel = escalation;
+      }
+      if (lane) {
+        if (r.failed && lane.rows.length) {
+          // The first reader's answer was unusable: the second reader's page is the only reading.
+          r = { ...lane, usage: r.usage, usd: r.usd };
+          pageModel = `openai:${LANE_MODEL}`;
+          laneStats.rescued++;
+        } else {
+          const x = crossCheckBy(r.rows, lane.rows, tokenKey);
+          laneStats.agreed += x.agreed;
+          laneStats.conflicts += x.conflicts;
+          laneStats.secondOnly += x.secondOnly;
+          r.rows = x.rows;
+          if (x.agreed) pageModel = `${pageModel}+openai`;
+        }
       }
       if (v) {
         const key = (f: VisionFact) => `${f.locator.text}|${f.period_end}|${f.months}|${f.value}`;
@@ -195,9 +238,9 @@ async function processDoc(d: Doc) {
       const { error: e } = await sb.from("ir_kpi_facts").insert(records.slice(i, i + 500) as never);
       if (e) throw new Error(e.message);
     }
-    const extra = [rejected ? `${rejected} rejected` : "", failedPages ? `${failedPages} pages unreadable` : "", disagreed ? `${disagreed} unconfirmed` : ""].filter(Boolean).join(", ");
+    const extra = [rejected ? `${rejected} rejected` : "", failedPages ? `${failedPages} pages unreadable` : "", disagreed ? `${disagreed} unconfirmed` : "", laneStats.conflicts ? `${laneStats.conflicts} dropped by second reader` : ""].filter(Boolean).join(", ");
     await mark(d, facts.length ? `ok (${facts.length} facts, ${pagesWithFacts.length} pages${extra ? `, ${extra}` : ""})` : extra ? `no data (${extra})` : "no data", facts.length);
-    const note = [`${candidates.length}pp`, escalated ? `${escalated} escalated` : "", rejected ? `${rejected} rej` : "", followUps ? `${followUps} 2nd look` : "", failedPages ? `${failedPages} failed` : "", usage.usd ? `$${usage.usd.toFixed(3)}` : "", credits ? `${credits.toFixed(3)} cr` : ""].filter(Boolean).join(" ");
+    const note = [`${candidates.length}pp`, escalated ? `${escalated} escalated` : "", rejected ? `${rejected} rej` : "", followUps ? `${followUps} 2nd look` : "", failedPages ? `${failedPages} failed` : "", laneStats.agreed + laneStats.conflicts + laneStats.rescued ? `openai ✓${laneStats.agreed} ✗${laneStats.conflicts}${laneStats.rescued ? ` rescued ${laneStats.rescued}` : ""}` : "", usage.usd ? `$${usage.usd.toFixed(3)}` : "", credits ? `${credits.toFixed(3)} cr` : ""].filter(Boolean).join(" ");
     return { facts: facts.length, note, usage: { ...usage, credits } };
   } finally {
     rmSync(dir, { recursive: true, force: true });
