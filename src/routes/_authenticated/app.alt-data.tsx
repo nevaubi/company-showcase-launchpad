@@ -29,9 +29,18 @@ export const Route = createFileRoute("/_authenticated/app/alt-data")({
   component: AltHub,
 });
 
-const LEAD_TITLE: Record<string, string> = { contracts: "Federal contract obligations", complaints: "CFPB consumer complaints", bank: "Total deposits", attention: "Wikipedia pageviews", regulatory: "Federal Register documents naming the company", settlement: FTD_TITLE };
-const SERIES_SETS = new Set(Object.keys(LEAD_TITLE));
-const EVENTLESS = new Set(["bank", "attention", "complaints", "settlement"]);
+/** Series each dataset can rank companies by (first is the default). */
+const LEAD_TITLES: Record<string, string[]> = {
+  contracts: ["Federal contract obligations"],
+  complaints: ["CFPB consumer complaints"],
+  bank: ["Total deposits", "Total assets", "Net loans & leases", "Net interest margin", "Net charge-off rate", "Noncurrent loans / loans", "Return on assets", "CET1 ratio"],
+  attention: ["Wikipedia pageviews"],
+  regulatory: ["Federal Register documents naming the company"],
+  medicare: ["Medicare Part D spending", "Medicare Part B spending"],
+  settlement: [FTD_TITLE],
+};
+const SERIES_SETS = new Set(Object.keys(LEAD_TITLES));
+const EVENTLESS = new Set(["bank", "attention", "complaints", "settlement", "medicare"]);
 
 function AltHub() {
   const { d = "events" } = Route.useSearch();
@@ -69,15 +78,25 @@ function Feed({ d }: { d: string }) {
 
 type LeadSort = "latest" | "typical" | "chg";
 
+/** Display caps so a near-zero baseline doesn't print a meaningless 7,000× or +300,000%. */
+const fmtTimes = (x: number) => (x >= 100 ? "≥100×" : `${x.toFixed(1)}×`);
+const fmtChg = (c: number) => (c >= 10 ? "> +999%" : `${c >= 0 ? "+" : ""}${(c * 100).toFixed(0)}%`);
+
 function Leaders({ d }: { d: string }) {
-  const title = LEAD_TITLE[d];
+  const titles = LEAD_TITLES[d];
+  const [title, setTitle] = useState(titles[0]);
   const q = useQuery(altLeadersQuery(d, title));
   const [sort, setSort] = useState<LeadSort>(d === "settlement" ? "typical" : "latest");
   const [find, setFind] = useState("");
   const [all, setAll] = useState(false);
   const rows = useMemo(() => {
     const f = find.trim().toUpperCase();
-    const list = (q.data ?? []).filter((r) => !f || r.ticker.startsWith(f)).map((r) => ({ r, ...leaderStats(r) }));
+    const all = (q.data ?? []).map((r) => ({ r, ...leaderStats(r) }));
+    // Ratio rankings only among companies whose latest reading is at least the median size, so a
+    // tiny company jumping from almost nothing doesn't crowd out meaningful moves.
+    const sizes = all.map((x) => x.r.value).sort((a, b) => a - b);
+    const floor = sort === "latest" || f ? -Infinity : sizes[Math.floor(sizes.length / 2)] ?? -Infinity;
+    const list = all.filter((x) => (!f || x.r.ticker.startsWith(f)) && x.r.value >= floor);
     const key = (x: (typeof list)[number]) => (sort === "latest" ? x.r.value : sort === "typical" ? x.vsTypical : x.chg) ?? -Infinity;
     return list.sort((a, b) => key(b) - key(a));
   }, [q.data, sort, find]);
@@ -85,12 +104,17 @@ function Leaders({ d }: { d: string }) {
   return (
     <Panel
       title={title}
-      subtitle={`Latest reading for ${q.data?.length ?? "…"} companies, vs a year earlier and vs each company's own trailing-year median`}
+      subtitle={`Latest reading for ${q.data?.length ?? "…"} companies, vs a year earlier and vs each company's own trailing-year median${sort !== "latest" && !find ? " · ranked among the larger half" : ""}`}
       bodyClassName="p-0"
       className="min-w-0"
       collapse={false}
       actions={
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {titles.length > 1 && (
+            <select value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Series" className="h-7 rounded-md border bg-background px-2 text-[12px]">
+              {titles.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
           <input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Ticker" aria-label="Filter by ticker" className="h-7 w-20 rounded-md border bg-background px-2 text-[12px]" />
           <div role="tablist" className="flex rounded-md border p-0.5 text-[11px]">
             {(["latest", "typical", "chg"] as const).map((k) => (
@@ -115,8 +139,8 @@ function Leaders({ d }: { d: string }) {
                     <td className="px-4 py-1.5"><Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="font-medium hover:underline">{r.ticker}</Link></td>
                     <td className="num px-2 text-[11px] text-muted-foreground">{r.date}</td>
                     <td className="num px-2 text-right"><span>{fmtAlt(r.value, r.unit)}</span>{r.source_url && <EvidenceButton ticker={r.ticker} title={title} url={r.source_url} date={r.date} />}</td>
-                    <td className={cn("num px-2 text-right", vsTypical == null ? "text-muted-foreground" : vsTypical >= 2 ? "font-medium text-negative" : vsTypical <= 0.5 ? "text-positive" : "")}>{vsTypical == null ? "—" : `${vsTypical.toFixed(1)}×`}</td>
-                    <td className={cn("num px-4 text-right", chg == null ? "text-muted-foreground" : chg >= 0 ? "text-positive" : "text-negative")}>{chg == null ? "—" : `${chg >= 0 ? "+" : ""}${(chg * 100).toFixed(0)}%`}</td>
+                    <td className={cn("num px-2 text-right", vsTypical == null ? "text-muted-foreground" : vsTypical >= 2 ? "font-medium text-negative" : vsTypical <= 0.5 ? "text-positive" : "")}>{vsTypical == null ? "—" : fmtTimes(vsTypical)}</td>
+                    <td className={cn("num px-4 text-right", chg == null ? "text-muted-foreground" : chg >= 0 ? "text-positive" : "text-negative")}>{chg == null ? "—" : fmtChg(chg)}</td>
                   </tr>
                 ))}
               </tbody>
