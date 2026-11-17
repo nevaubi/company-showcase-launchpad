@@ -26,7 +26,7 @@ await runBatch({
   reset: () => resetStaleProse(args.ticker?.split(",")),
   process: async (d) => {
     const r = await readIrProse(d.id, { model: args.model, concurrency: 3, chunkChars: args.chunk ? Number(args.chunk) : undefined });
-    const note = [r.duplicates ? `${r.duplicates} in tables` : "", r.rejected ? `(${r.rejected} rej)` : "", r.credits ? `${r.credits.toFixed(3)} cr` : ""].filter(Boolean).join(" ");
+    const note = [r.check ? `checked ${r.check.agreed}✓ ${r.check.conflicts}✗` : "", r.duplicates ? `${r.duplicates} in tables` : "", r.rejected ? `(${r.rejected} rej)` : "", r.credits ? `${r.credits.toFixed(3)} cr` : ""].filter(Boolean).join(" ");
     return { facts: r.facts, note: note || undefined, usage: r.usage ? { ...r.usage, credits: r.credits } : null };
   },
 });

@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { getWorkerProgress, type WorkerProgress } from "@/lib/worker.functions";
 import { cn } from "@/lib/utils";
+import { FREE_SAFETY, FREE_TIERS } from "@/lib/ir/openai-allowance";
 
 export const Route = createFileRoute("/_authenticated/app/worker")({
   head: () => ({
@@ -57,6 +58,9 @@ function derive(p: WorkerProgress) {
   return { withFiles, withFacts, totalFacts, recentFacts, stored, read, finished, zeroDone, queue, status, finishedHour, uptimeMin };
 }
 
+/** Token counts: 1.2M, 840k. */
+const tok = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${Math.round(v / 1e3)}k` : String(Math.round(v)));
+
 function WorkerPage() {
   const fetchFn = useServerFn(getWorkerProgress);
   const q = useQuery({ queryKey: ["admin", "worker"], queryFn: () => fetchFn(), refetchInterval: 20_000 });
@@ -68,7 +72,7 @@ function WorkerPage() {
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4">
       <PageHeader title="Live worker" description="The always-on cloud worker reading every investor-relations file. Refreshes every 20 seconds from the database." />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {[
           ["Worker", d.status, `heartbeat ${ago(p.loop?.heartbeat, p.now)} · up ${d.uptimeMin == null ? "—" : `${Math.round(d.uptimeMin)} min`}`],
           ["Memory", p.loop?.memLimitGB ? `${(p.loop.memUsedGB ?? 0).toFixed(1)} / ${p.loop.memLimitGB.toFixed(0)} GB` : "—", "machine limit the worker sees"],
@@ -81,6 +85,11 @@ function WorkerPage() {
             "Read from release text",
             n(Object.values(p.text ?? {}).reduce((a, b) => a + b, 0)),
             p.prose ? `${n(p.prose.read)} releases read · ${n(p.prose.waiting)} waiting${p.prose.working ? ` · ${n(p.prose.working)} now` : ""}` : "—",
+          ],
+          [
+            "OpenAI free allowance",
+            `${tok(p.openai?.mini?.tokens ?? 0)} / ${tok(FREE_TIERS.mini.cap * FREE_SAFETY)}`,
+            `small models today · large ${tok(p.openai?.large?.tokens ?? 0)} / ${tok(FREE_TIERS.large.cap * FREE_SAFETY)} · ${n((p.openai?.mini?.calls ?? 0) + (p.openai?.large?.calls ?? 0))} checks`,
           ],
           ["Office engine", p.engine?.ok ? "online" : "offline", p.engine ? `${n(p.engine.sessions)} open documents · v${p.engine.version}` : "health check failed"],
         ].map(([k, v, s]) => (

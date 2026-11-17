@@ -16,7 +16,9 @@
 - [ ] Text reader on earnings-call transcripts (spoken KPIs: "we ended the quarter with …"); needs speaker-aware chunking and stricter guidance filtering
 - [ ] Words-as-numbers in text ("seven in China", "one each in Iceland") — today those lines show as "Not itemized in the release"
 - [ ] Table reader: 12-week columns sometimes dated to the calendar month-end (COST 2025-11-30 next to 2025-11-23); fix the date from the column header weeks + filing date
-- [ ] OpenAI key layer (owner, Nov 17): owner's OpenAI key as an extra reader lane for public IR documents only, kept inside the daily free shared-traffic allowance (1M tokens/day large models, 10M/day mini models) with a ledger; uses: second-opinion verification of text/table reads, parallel per-modality readers; falls back to the built-in models when the allowance is spent
+- [x] OpenAI key layer (owner, Nov 17): second reader + gpt-5.4 arbiter on the free daily allowance (ledger, fallback), cross-check of new text reads, check pass for older reads on the worker, allowance tile on /app/worker
+- [ ] OpenAI lane for table reads: second reader on table chunks (cell coordinates), same dispute rules — measure agreement on a pilot first
+- [ ] OpenAI lane for slide/image pages (vision) as a second opinion on escalated pages
 - [ ] Merge fragmented segment lines that only differ by table wording ("Adjusted operating income · Health Services" across 6 tables) into per-segment matrices; needs reader-side segment names
 - [ ] Re-read companies whose tables fail most checks (CVS medical membership, operating costs) with the stronger model
 

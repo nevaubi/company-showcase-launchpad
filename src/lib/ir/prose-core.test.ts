@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { crossCheck, dropTableDuplicates, proseBlocks, proseFacts, proseTokens, quoteOf, renderProse, type ProseOutput, type ProseRow } from "./prose-core";
+import { applyRulings, crossCheck, preferPrinted, renderDisputes, dropTableDuplicates, proseBlocks, proseFacts, proseTokens, quoteOf, renderProse, type ProseOutput, type ProseRow } from "./prose-core";
 
 const RELEASE = `<html><body>
 <p>ISSAQUAH, Wash., Sept. 24, 2026 -- Costco Wholesale Corporation today announced its results for the fourth quarter (16 weeks) ended August 31, 2026.</p>
@@ -130,8 +130,91 @@ describe("crossCheck (two readers, same numbered text)", () => {
     const a = { ...fact(1, "2026-08-31", 629, 0), label: "US warehouse count", unit: "count" };
     expect(crossCheck([a], [{ ...a, period_end: "2025-08-31" }]).rows).toHaveLength(0);
   });
+  it("treats a balance dated the release day and one dated the period just ended as the same snapshot", () => {
+    const a = { ...fact(1, "2026-09-24", 939, 0), label: "Warehouses", unit: "count" };
+    const b = { ...a, period_end: "2026-08-30" };
+    expect(crossCheck([a], [b], "2026-09-24").agreed).toBe(1);
+    expect(crossCheck([a], [b]).agreed).toBe(0);
+    // a year-old balance is still a different figure
+    expect(crossCheck([a], [{ ...a, period_end: "2025-08-31" }], "2026-09-24").agreed).toBe(0);
+  });
   it("treats a few days apart (52/53-week guess) as the same period", () => {
     expect(crossCheck([fact(1, "2025-11-30", 5)], [fact(1, "2025-11-26", 5)]).agreed).toBe(1);
+  });
+});
+
+describe("arbiter rulings", () => {
+  const f = (end: string, label = "Identical sales without fuel"): import("./prose-core").ProseFact => ({
+    category: "kpi", metric: "same_store", breakdown: null, parent: null, is_total: false, label, period_label: "Q",
+    period_start: null, period_end: end, months: 3, value: 1, unit: "pct", locator: { q: "s", text: "1.0%", n: 7, b: 0 }, tol: 0,
+  });
+  const disputes = [{ f: f("2026-05-23"), other: [f("2026-03-31", "Identical Sales")] }, { f: f("2026-05-23"), other: [f("2026-02-28")] }, { f: f("2026-05-23"), other: [f("2026-04-30")] }];
+  it("keeps a's reading, b's dates under a's label, and drops neither or unanswered disputes", () => {
+    const kept = applyRulings(disputes, [{ d: 1, pick: "a" }, { d: 2, pick: "b" }]);
+    expect(kept.map((k) => k.period_end)).toEqual(["2026-05-23", "2026-02-28"]);
+    expect(kept[1].label).toBe("Identical sales without fuel");
+  });
+  it("numbers disputes from 1 and shows both readings", () => {
+    const text = renderDisputes(disputes.slice(0, 1));
+    expect(text).toContain("Dispute 1 (token [7])");
+    expect(text).toContain("3 months ? to 2026-03-31");
+  });
+});
+
+describe("preferPrinted", () => {
+  const f = (end: string, months = 3): import("./prose-core").ProseFact => ({
+    category: "kpi", metric: "same_store", breakdown: null, parent: null, is_total: false, label: "Identical sales", period_label: "Q",
+    period_start: null, period_end: end, months, value: 1, unit: "pct", locator: { q: "s", text: "1.0%", n: 7, b: 0 }, tol: 0,
+  });
+  it("keeps the reading whose date the document prints; asks about the rest", () => {
+    const ends = new Set(["2026-05-23", "2025-05-24"]);
+    const r = preferPrinted([{ f: f("2026-05-23"), other: [f("2026-04-30")] }, { f: f("2026-03-31"), other: [f("2025-05-24")] }, { f: f("2026-03-31"), other: [f("2026-04-30")] }], ends);
+    expect(r.kept.map((k) => k.period_end)).toEqual(["2026-05-23", "2025-05-24"]);
+    expect(r.rest).toHaveLength(1);
+  });
+  it("counts the release day as printed for a balance ('currently operates')", () => {
+    const r = preferPrinted([{ f: f("2022-03-03", 0), other: [f("2022-02-27", 0)] }], new Set(["2022-02-13"]), "2022-03-03");
+    expect(r.kept[0].period_end).toBe("2022-03-03");
+  });
+});
+
+describe("'currently' balances", () => {
+  it("dates a 'currently operates' count to the release day, whatever period the reader picked", () => {
+    const blocks = proseBlocks("<p>Costco currently operates 828 warehouses, including 572 in the United States.</p>");
+    const tokens = proseTokens(blocks);
+    const n = tokens.find((t) => t.text === "828")!.n;
+    const out: ProseOutput = {
+      periods: [{ p: 1, period_start: "2021-11-22", period_end: "2022-02-27", months: 3 }],
+      rows: [{ label: "Warehouses", parent: "", breakdown: "", category: "kpi", metric: "stores", unit: "count", scale: 1, is_total: true, values: [{ n, p: 1, read: "828" }] }],
+    } as unknown as ProseOutput;
+    const r = proseFacts(out, blocks, tokens, "2022-03-03");
+    expect(r.rows[0].months).toBe(0);
+    expect(r.rows[0].period_end).toBe("2022-03-03");
+  });
+  it("carries 'currently' through the whole sentence, not into the next one", () => {
+    const blocks = proseBlocks("<p>Costco currently operates 828 warehouses, including 572 in the U.S. and Puerto Rico, 105 in Canada, 40 in Mexico and 30 in Japan. The company ended the quarter with 66 million members.</p>");
+    const tokens = proseTokens(blocks);
+    const id = (t: string) => tokens.find((k) => k.text === t)!.n;
+    const out = {
+      periods: [{ p: 1, period_start: "2021-11-22", period_end: "2022-02-13", months: 3 }],
+      rows: [
+        { label: "Japan warehouses", parent: "", breakdown: "Japan", category: "geography", metric: "stores", unit: "count", scale: 1, is_total: false, values: [{ n: id("30"), p: 1, read: "30" }] },
+        { label: "Members", parent: "", breakdown: "", category: "kpi", metric: "members", unit: "count", scale: 1, is_total: true, values: [{ n: id("66 million"), p: 1, read: "66" }] },
+      ],
+    } as unknown as ProseOutput;
+    const r = proseFacts(out, blocks, tokens, "2022-03-03");
+    expect(r.rows.find((f) => f.label.includes("Japan"))!.period_end).toBe("2022-03-03");
+    expect(r.rows.find((f) => f.label === "Members")?.period_end ?? "2022-02-13").toBe("2022-02-13");
+  });
+  it("follows a sentence the page layout split into two blocks", () => {
+    const blocks = proseBlocks("<p>Costco currently operates 828 warehouses, including 572 in the U.S. and Puerto Rico, 105 in Canada,</p><p>40 in Mexico, 30 in Japan, and one in Iceland.</p><p>Net sales were $50.9 billion.</p>");
+    const tokens = proseTokens(blocks);
+    const n = tokens.find((k) => k.text === "40")!.n;
+    const out = {
+      periods: [{ p: 1, period_start: "2021-11-22", period_end: "2022-02-13", months: 3 }],
+      rows: [{ label: "Mexico warehouses", parent: "", breakdown: "Mexico", category: "geography", metric: "stores", unit: "count", scale: 1, is_total: false, values: [{ n, p: 1, read: "40" }] }],
+    } as unknown as ProseOutput;
+    expect(proseFacts(out, blocks, tokens, "2022-03-03").rows[0].period_end).toBe("2022-03-03");
   });
 });
 

@@ -270,6 +270,8 @@ export interface ProseFact {
   tol: number;
 }
 
+/** "currently operates", "today has", "as of today": a balance on the document's own date. */
+const CURRENTLY = /\b(currently|today|as of the date of this (?:release|report))\b/i;
 // Not "expected" (expected credit losses) or "plan" (health plans, plan assets).
 const FORECAST = /\b(forecast(?:ed|s)?|guidance|outlook|projected|projections?)\b/i;
 const AT_END = /^\S*(?:\s+\S+){0,8}?\s+(?:at|as of)\s+(?:the\s+)?(?:quarter[- ]end|year[- ]end|end of the (?:quarter|year|period)|period[- ]end|(?:june|september|december|march)\s+\d{1,2})|^\S*\s+(?:at|as of)\s+(?:the\s+)?(?:quarter|year)[- ]end/i;
@@ -338,6 +340,21 @@ export function proseFacts(out: ProseOutput, blocks: ProseBlock[], tokens: Prose
           // "Liquidity of $6.9 billion at quarter-end": the sentence says it's a balance.
           (row.unit === "usd" && AT_END.test(sentence.slice(tok.at, tok.at + 90)) && !/\b(paid|payments?|repaid|repurchased|returned|spent|invested|generated|raised)\b/i.test(label)));
       const months = point ? 0 : per!.months;
+      // "Costco currently operates 828 warehouses": a balance as of the release itself, whatever
+      // period the reader picked (the period grid files a release-day balance under the quarter just ended).
+      // sentence start: the last full stop after a word ("U.S. and" is not one) before the figure
+      let from = 0;
+      for (const m of sentence.slice(0, tok.at).matchAll(/[a-z0-9)]{2}\.\s+(?=[A-Z])/g)) from = m.index! + m[0].length;
+      // a sentence the page layout split across blocks ("…, including 572 in the U.S." | "40 in Mexico, …")
+      let said = sentence.slice(from, tok.at + 20);
+      if (from === 0 && /^[a-z0-9(]/.test(sentence)) {
+        const prev = text.get(tok.b - 1) ?? "";
+        let p0 = 0;
+        for (const m of prev.matchAll(/[a-z0-9)]{2}\.\s+(?=[A-Z])/g)) p0 = m.index! + m[0].length;
+        if (!/[.!?]\s*$/.test(prev)) said = `${prev.slice(p0)} ${said}`;
+      }
+      const now = months === 0 && !!filed && CURRENTLY.test(said);
+      const end = now ? filed! : per!.period_end;
       rows.push({
         category: row.category,
         metric: row.metric,
@@ -345,9 +362,9 @@ export function proseFacts(out: ProseOutput, blocks: ProseBlock[], tokens: Prose
         parent: cleanLabel(row.parent) || null,
         is_total: row.is_total,
         label,
-        period_label: months ? `${months}M ending ${per!.period_end}` : `As of ${per!.period_end}`,
+        period_label: months ? `${months}M ending ${end}` : `As of ${end}`,
         period_start: months && ISO.test(per!.period_start) ? per!.period_start : null,
-        period_end: per!.period_end,
+        period_end: end,
         months,
         value: tok.v * scale,
         unit: row.unit,
@@ -402,8 +419,17 @@ function settleKind(f: ProseFact, o: ProseFact): ProseFact {
   return pick === f ? f : { ...f, months: pick.months, period_start: pick.period_start, period_label: pick.period_label };
 }
 
-export function crossCheck(primary: ProseFact[], second: ProseFact[]): { rows: ProseFact[]; both: Set<ProseFact>; agreed: number; conflicts: number; added: number; dropped: { f: ProseFact; other: ProseFact[] }[]; secondOnly: ProseFact[] } {
-  const near = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) <= 6 * 86_400_000;
+export function crossCheck(primary: ProseFact[], second: ProseFact[], filed?: string | null): { rows: ProseFact[]; both: Set<ProseFact>; agreed: number; conflicts: number; added: number; dropped: { f: ProseFact; other: ProseFact[] }[]; secondOnly: ProseFact[] } {
+  const DAY = 86_400_000;
+  const gap = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b));
+  // "currently operates 939 warehouses": one reader dates it the release day, the other the period
+  // just ended — the same snapshot, and the period grid files a release-day balance under that quarter.
+  const snapshot = (a: string, b: string) => {
+    if (!filed) return false;
+    const [day, end] = gap(a, filed) <= 3 * DAY ? [a, b] : gap(b, filed) <= 3 * DAY ? [b, a] : [null, null];
+    return !!day && Date.parse(end!) < Date.parse(day) && gap(day, end!) <= 75 * DAY;
+  };
+  const near = (a: string, b: string, months = 1) => gap(a, b) <= 6 * DAY || (months === 0 && snapshot(a, b));
   const byToken = new Map<number, ProseFact[]>();
   for (const f of second) byToken.set(f.locator.n, [...(byToken.get(f.locator.n) ?? []), f]);
   const rows: ProseFact[] = [];
@@ -419,7 +445,7 @@ export function crossCheck(primary: ProseFact[], second: ProseFact[]): { rows: P
       rows.push(f);
       continue;
     }
-    const same = other.filter((o) => near(o.period_end, f.period_end) && Math.abs(o.value - f.value) <= Math.abs(f.value) * 1e-9);
+    const same = other.filter((o) => near(o.period_end, f.period_end, o.months === 0 && f.months === 0 ? 0 : 1) && Math.abs(o.value - f.value) <= Math.abs(f.value) * 1e-9);
     const match = same.find((o) => o.months === f.months);
     // Same date and value, one reader calling it a balance (0 months) and the other a quarter's flow:
     // that is a classification question, settled by the shared stock rules, not a misread.
@@ -436,5 +462,66 @@ export function crossCheck(primary: ProseFact[], second: ProseFact[]): { rows: P
   }
   const secondOnly = second.filter((f) => !seenTokens.has(f.locator.n));
   return { rows, both, agreed, conflicts, added: 0, dropped, secondOnly };
+}
+
+// ---------- arbiter for figures the two readers read differently ----------
+
+export const ARBITER_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["rulings"],
+  properties: {
+    rulings: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["d", "pick"],
+        properties: { d: { type: "integer" }, pick: { type: "string", enum: ["a", "b", "neither"] } },
+      },
+    },
+  },
+} as const;
+
+export const ARBITER_INSTRUCTIONS = `You settle disagreements between two analysts who read the same investor-relations text. For each numbered dispute, a figure printed in the text ([n] marks it) was given two different readings — a different period end, period length (0 months = a balance at a date, 3 = a quarter, 12 = a year) or value. Read the sentence and its surroundings and pick the reading the document supports: "a", "b", or "neither" when neither is right or the text is ambiguous. Fiscal calendars matter: many companies end quarters on a Saturday or Sunday (e.g. "12 weeks ended November 23, 2025"), so trust dates the document prints over calendar month-ends. A count "currently" or "at the end of the quarter" is a balance. Answer every dispute.`;
+
+export type Dispute = { f: ProseFact; other: ProseFact[] };
+
+const reading = (f: ProseFact) => `${f.label} = ${f.locator.text} → ${f.value} ${f.unit}, ${f.months === 0 ? `balance at ${f.period_end}` : `${f.months} months ${f.period_start ?? "?"} to ${f.period_end}`}`;
+
+/** The disputes as the arbiter reads them (the second reader's closest reading is b). */
+export function renderDisputes(disputes: Dispute[]): string {
+  return disputes.map((d, i) => `Dispute ${i + 1} (token [${d.f.locator.n}]):\n  a: ${reading(d.f)}\n  b: ${reading(d.other[0])}`).join("\n");
+}
+
+const asB = (d: Dispute): ProseFact => ({ ...d.other[0], label: d.f.label, category: d.f.category, metric: d.f.metric, breakdown: d.f.breakdown, parent: d.f.parent, is_total: d.f.is_total });
+
+/**
+ * Disputes the document itself settles: when exactly one reading's period end is a date the document
+ * prints as a period end (or, for a balance, the release day — "currently operates"), that reading
+ * wins without asking a model; a reader's unprinted date is a guess. The rest go to the arbiter.
+ */
+export function preferPrinted(disputes: Dispute[], ends: Set<string>, filed?: string | null): { kept: ProseFact[]; rest: Dispute[] } {
+  const DAY = 86_400_000;
+  const printed = (f: ProseFact) => ends.has(f.period_end) || (f.months === 0 && !!filed && Math.abs(Date.parse(f.period_end) - Date.parse(filed)) <= 3 * DAY);
+  const kept: ProseFact[] = [];
+  const rest: Dispute[] = [];
+  for (const d of disputes) {
+    const a = printed(d.f);
+    const b = printed(d.other[0]);
+    if (a && !b) kept.push(d.f);
+    else if (b && !a) kept.push(asB(d));
+    else rest.push(d);
+  }
+  return { kept, rest };
+}
+
+/** Figures the arbiter's rulings keep: a = first reader's, b = second's, neither/missing = dropped. */
+export function applyRulings(disputes: Dispute[], rulings: { d: number; pick: string }[]): ProseFact[] {
+  const by = new Map(rulings.map((r) => [r.d, r.pick]));
+  return disputes.flatMap((d, i) => {
+    const pick = by.get(i + 1);
+    return pick === "a" ? [d.f] : pick === "b" ? [asB(d)] : [];
+  });
 }
 

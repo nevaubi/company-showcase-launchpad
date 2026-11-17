@@ -44,3 +44,10 @@ export async function laneStructured<T>(opts: { model?: string; name: string; in
     return null;
   }
 }
+
+/** Share (0–1) of today's usable allowance a tier has used. */
+export async function laneUsed(tier: "large" | "mini" = "mini") {
+  const { data } = await supabaseAdmin.from("openai_allowance").select("tokens").eq("day", allowanceDay()).eq("tier", tier).maybeSingle();
+  return (data?.tokens ?? 0) / (FREE_TIERS[tier].cap * FREE_SAFETY);
+}
+

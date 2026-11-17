@@ -110,6 +110,7 @@ interface LoopState {
   lastSod?: string | null;
   lastReactions?: string | null;
   lastProse?: string | null;
+  lastVerify?: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
   /** unread files a company had when it finished; more than a few new ones later = revisit */
@@ -290,6 +291,23 @@ async function maybeProse() {
   });
 }
 
+/**
+ * Every 30 minutes, hold text figures stored before the OpenAI second reader existed to its
+ * cross-check (scripts/ir-prose-verify.ts) — free daily allowance only; it exits by itself when
+ * new reads need what is left of the day, or there is no key.
+ */
+let verifying = false;
+async function verifySweep() {
+  if (verifying || !sideReady() || !process.env.OPENAI_API_KEY || process.env.IR_PROSE_VERIFY === "0") return;
+  if (state.lastVerify && Date.now() - Date.parse(state.lastVerify) < 30 * 60_000) return;
+  verifying = true;
+  state.lastVerify = new Date().toISOString();
+  await saveState(state);
+  void run("scripts/ir-prose-verify.ts", ["--resume", "--concurrency=6", "--max=400"], `${OUT}/prose-verify.log`).finally(() => {
+    verifying = false;
+  });
+}
+
 // ---------- main loop ----------
 /** A deep build started by hand (or a previous loop) shares the readers' leases: wait for it. */
 function deepRunning() {
@@ -412,6 +430,7 @@ for (;;) {
   await maybeSod();
   await maybeReactions();
   await maybeProse();
+  await verifySweep();
   // self-heal: done with files but no figures, once (never for companies set aside)
   state.healed ??= [];
   for (const t of [...state.done]) {
