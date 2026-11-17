@@ -83,7 +83,9 @@ function TileCard({ tile, onOpen, scale }: { tile: MapTile; onOpen: () => void; 
       onClick={onOpen}
       className="group flex min-w-0 flex-col gap-1.5 rounded-md border bg-card p-2 text-left transition-colors hover:border-ring focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <span className="line-clamp-1 text-[11px] font-medium">{tile.title}</span>
+      <span className="line-clamp-2 min-h-[2lh] text-[11px] font-medium leading-tight" title={tile.title}>
+        {tile.title}
+      </span>
       <ToneStrip lines={parts.length ? parts : tile.lines} />
       <Bars values={head.values} className="h-9" />
       <span className="num flex min-w-0 items-baseline justify-between gap-1 whitespace-nowrap text-[10px] text-muted-foreground">

@@ -1,5 +1,6 @@
 // Compact, precomputed IR series payload stored per company (ir_company_series) and sent to the
 // IR data page. Pure: built by the pipeline scripts and by the server after new extractions.
+import { tidyPayload } from "@/lib/ir/tidy";
 import { buildIrSeries, childrenOf, neverTies, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
 
 export type PayloadLocator = [number, number, number] | { p: number; b: number[] };
@@ -62,6 +63,10 @@ export interface PayloadGroup {
   root: string | null;
   /** Rows in display order: components first, each total after its parts. */
   rows: { k: string; depth: number }[];
+  /** display title set by `tidyPayload` (tells tables of one subject apart) */
+  t?: string;
+  /** lead-in every line of this loose list shares ("Aetna — …"), dropped from row labels */
+  px?: string;
 }
 export interface PayloadCheck {
   k: string;
@@ -96,6 +101,10 @@ export interface IrPayload {
   groups: PayloadGroup[];
   checks: PayloadCheck[];
   stats: IrStats;
+  /** `TIDY_VERSION` of the merge pass this payload went through */
+  tidy?: number;
+  /** retired line key → the line it was merged into (old workbook links still resolve) */
+  alias?: Record<string, string>;
 }
 export interface IrStats {
   series: number;
@@ -110,6 +119,8 @@ export interface IrStats {
   scaleFlags?: number;
   /** printed totals whose listed lines never add up, shown as plain lines instead of a breakdown */
   unlinked?: number;
+  /** tables and lines before the merge pass (same tables split by era or wording, repeats) */
+  tidied?: { groupsBefore: number; seriesBefore: number };
 }
 
 const locOf = (f: IrFact): PayloadLocator | undefined => {
@@ -234,7 +245,7 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   const allPeriods = out.flatMap((s) => [...Object.keys(s.q), ...Object.keys(s.y), ...Object.keys(s.mo ?? {})]).sort();
   const q = checks.filter((c) => c.kind === "q");
   const fy = checks.filter((c) => c.kind === "fy");
-  return {
+  return tidyPayload({
     v: 2,
     ticker,
     builtAt: new Date().toISOString(),
@@ -258,5 +269,5 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       scaleFlags,
       unlinked: unlink.size,
     },
-  };
+  });
 }

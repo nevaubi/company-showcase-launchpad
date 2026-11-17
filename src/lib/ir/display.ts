@@ -75,6 +75,7 @@ export function groupOrder(a: PayloadGroup, b: PayloadGroup) {
 }
 
 export function groupTitle(g: PayloadGroup, root?: PayloadSeries) {
+  if (g.t) return g.t;
   if (!g.root) {
     const c = CATEGORY_LABEL[g.cat] ?? g.cat;
     return `${METRIC_LABEL[g.met] ?? g.met} — other ${c.endsWith(" line") ? `${c}s` : `${c} lines`}`;
@@ -183,6 +184,22 @@ export function derivedOf(p: IrPayload, c: PayloadCell): { formula: string; part
   return { formula: c.f.formula, parts };
 }
 
+/**
+ * The columns of `cols` a breakdown actually fills, from its oldest to its newest value: empty columns
+ * before the first or after the last value are dropped; a gap in between stays as a column.
+ */
+export function groupColumns(rows: { s: PayloadSeries }[], cols: string[], kind: "q" | "y" | "m") {
+  let first = -1;
+  let last = -1;
+  cols.forEach((e, i) => {
+    if (rows.some((r) => cellsFor(r.s, kind)[e])) {
+      if (first < 0) first = i;
+      last = i;
+    }
+  });
+  return first < 0 ? [] : cols.slice(first, last + 1);
+}
+
 /** CSV of one breakdown (rows × visible periods), values in full units. */
 export function groupCsv(p: IrPayload, g: PayloadGroup, cols: string[], kind: "q" | "y" | "m") {
   const byKey = new Map(p.series.map((s) => [s.k, s]));
@@ -218,8 +235,12 @@ export function secRevenueCheck(p: IrPayload, reported: { end: string; v: number
 const GEO_TAGS = ["U.S.", "International"];
 const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-/** Inside a "U.S." or "International" breakdown, rows don't need to repeat the geography. */
-export function rowLabel(label: string, rootLabel?: string | null) {
+/** Inside a "U.S." or "International" breakdown (or a list titled by the lines' lead-in), rows don't repeat it. */
+export function rowLabel(label: string, rootLabel?: string | null, px?: string) {
+  if (px && label.toLowerCase().startsWith(px.toLowerCase())) {
+    const rest = label.slice(px.length).replace(/^\s*([—–-]|:)\s*/, "");
+    if (rest) return rest[0].toUpperCase() + rest.slice(1);
+  }
   if (!rootLabel) return label;
   for (const tag of GEO_TAGS) {
     const re = new RegExp(`\\s*—\\s*${esc(tag)}$|^${esc(tag)}\\s*—\\s*`);

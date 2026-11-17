@@ -1,6 +1,7 @@
 // The IR page's data, shared by the page and the assistant so both read one cached copy.
 import { getIrData, type IrDocRow } from "@/lib/ir.functions";
 import type { IrPayload } from "@/lib/ir/payload";
+import { tidyPayload } from "@/lib/ir/tidy";
 
 export interface IrPageData {
   payload: IrPayload | null;
@@ -16,7 +17,9 @@ type IrFetch = (opts: { data: { ticker: string } }) => Promise<{ gz: unknown }>;
 export async function loadIrPage(ticker: string, fetchIr: IrFetch = getIrData): Promise<IrPageData> {
   const { gz } = await fetchIr({ data: { ticker } });
   const json = await new Response((gz as ReadableStream<BufferSource>).pipeThrough(new DecompressionStream("gzip"))).text();
-  return JSON.parse(json) as IrPageData;
+  const data = JSON.parse(json) as IrPageData;
+  // Payloads built before the merge pass (or from the partner corpus) get it here: one table per subject.
+  return data.payload ? { ...data, payload: tidyPayload(data.payload) } : data;
 }
 
 export const irPageKey = (ticker: string) => ["ir", ticker] as const;

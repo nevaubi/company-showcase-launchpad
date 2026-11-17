@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { DocTables } from "@/components/ir/doc-tables";
-import { DocSearch } from "@/components/ir/doc-search";
+import { IrDocuments } from "@/components/ir/documents";
 import { storeIndexQuery } from "@/lib/ir/store";
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
@@ -12,7 +11,6 @@ import { Panel } from "@/components/app/page-header";
 import { IrBreakdowns } from "@/components/ir/breakdowns";
 import { IrFinancialMap } from "@/components/ir/financial-map";
 import { IrKeyMetrics } from "@/components/ir/key-metrics";
-import { IrLibrary } from "@/components/ir/library";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -156,9 +154,7 @@ function IrPage() {
           </p>
         </Panel>
       )}
-      <DocSearch ticker={ticker} />
-      <DocTables ticker={ticker} />
-      <IrLibrary ticker={ticker} documents={data.documents} images={data.images} store={store.data?.documents} />
+      <IrDocuments ticker={ticker} documents={data.documents} images={data.images} store={store.data?.documents} />
     </div>
   );
 }

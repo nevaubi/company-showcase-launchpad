@@ -1,5 +1,16 @@
 # Filed Under — roadmap
 
+## IR worker + IR data quality (Nov 17)
+- [x] Audit: 4 GB limit despite Pro Ultra, 15-min lease stalls, batch-of-10 lost "finished" credit, review/requeue ping-pong
+- [x] Memory-sized lanes, host-tagged 3-min lease, per-company runs, fair retries, admin memory/finished view (deployed 6b08748)
+- [x] Verify on Render: 32 GB limit seen (3 lanes), KD/TXT/WRB finished within 8 minutes of takeover
+- [ ] Per-stage checkpoints in ir-deep.ts so a crash resumes mid-company
+- [ ] Per-file memory/time cap for Docling conversion of huge PDFs
+- [x] IR datasets: per-table empty columns trimmed, stray period columns dropped, complementary/duplicate tables and lines merged with value-conflict and other-split guards (CVS 3,701→2,965 lines, 0 cells lost), totals re-checked after merges, bare "TOTAL" renamed, sharper titles
+- [x] Declutter IR tab: one "Source documents" panel (library/tables/search), compact how-to-read, complete tables ranked first, empty check rows hidden
+- [ ] Merge fragmented segment lines that only differ by table wording ("Adjusted operating income · Health Services" across 6 tables) into per-segment matrices; needs reader-side segment names
+- [ ] Re-read companies whose tables fail most checks (CVS medical membership, operating costs) with the stronger model
+
 ## Deep IR build — first 10 companies (Nov 13)
 - [x] Gemini table-reading pilot on 14 already-read documents vs the earlier reader: 40K parts 31–47% agreement → 16K parts ~79–80% (8K no better; review pass +0–7 pts for +80% cost, not used for tables). Real disagreements: missed scale on one EDGAR workbook, year-to-date columns read as full year (rejected once filing dates are known), fiscal vs calendar quarter ends.
 - [x] File preparation (`scripts/ir-docling.ts`): evidence-only dates/accessions, Docling + OCR hybrid copies of PDF releases/supplements, Markdown copies, spreadsheets; DELL test: 105 files dated, 6 PDFs via Docling (63 pages), 0 failures.

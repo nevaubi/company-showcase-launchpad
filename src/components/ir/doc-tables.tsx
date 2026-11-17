@@ -109,7 +109,7 @@ function TableView({ t }: { t: DocTablesFile["tables"][number] }) {
   );
 }
 
-export function DocTables({ ticker }: { ticker: string }) {
+export function DocTables({ ticker, embedded }: { ticker: string; embedded?: boolean }) {
   const idx = useQuery({
     queryKey: ["doctables", ticker],
     queryFn: () => partnerFile<DocTablesIndex>(`doctables/${ticker}/index.json`),
@@ -129,16 +129,19 @@ export function DocTables({ ticker }: { ticker: string }) {
   const [shown, setShown] = useState(6);
 
   if (idx.isLoading) return <Skeleton className="h-40" />;
-  if (!docs.length) return null;
+  if (!docs.length) return embedded ? <p className="p-5 text-sm text-muted-foreground">No document tables have been parsed for this company yet.</p> : null;
   const f = file.data;
 
   return (
     <Panel
       title={
-        <span className="flex items-center gap-1.5">
-          <Table2 className="size-3.5" /> Document tables
-        </span>
+        embedded ? undefined : (
+          <span className="flex items-center gap-1.5">
+            <Table2 className="size-3.5" /> Document tables
+          </span>
+        )
       }
+      className={embedded ? "border-y-0 bg-transparent" : undefined}
       subtitle={`Tables read from ${docs.length.toLocaleString()} stored documents with layout and table-structure parsing on our servers`}
       bodyClassName="p-0"
     >

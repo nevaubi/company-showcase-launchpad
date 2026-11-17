@@ -62,7 +62,7 @@ function Hit({ h, showTicker }: { h: DocHit; showTicker: boolean }) {
 }
 
 /** Search inside stored IR documents (server-side Postgres full-text search; the browser only shows results). */
-export function DocSearch({ ticker }: { ticker: string }) {
+export function DocSearch({ ticker, embedded }: { ticker: string; embedded?: boolean }) {
   const [q, setQ] = useState("");
   const [scope, setScope] = useState<"company" | "all">("company");
   const run = useMutation({
@@ -72,10 +72,14 @@ export function DocSearch({ ticker }: { ticker: string }) {
   return (
     <Panel
       title={
-        <span className="flex items-center gap-1.5">
-          <Search className="size-3.5" /> Search inside documents
-        </span>
+        embedded ? undefined : (
+          <span className="flex items-center gap-1.5">
+            <Search className="size-3.5" /> Search inside documents
+          </span>
+        )
       }
+      className={embedded ? "border-y-0 bg-transparent" : undefined}
+      collapse={embedded ? false : undefined}
       subtitle="Releases, supplements, transcripts and remarks since 2023 · quotes for phrases, OR for either, - to exclude"
       actions={
         <Segmented

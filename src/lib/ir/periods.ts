@@ -50,7 +50,7 @@ export function periodGrids(p: IrPayload): PeriodGrids {
   const flowEnds = new Set<string>();
   for (const s of p.series) if (!s.pit) for (const e of Object.keys(s.q)) flowEnds.add(e);
   const isQ = (e: string) => !qm || flowEnds.has(e) || qm.has(closingMonth(e));
-  const q = p.quarters.filter(isQ);
+  const q = dropStrays(p, p.quarters.filter(isQ), (s) => s.q);
   const monthly = new Set([...(p.months ?? []), ...p.quarters.filter((e) => !isQ(e))]);
   let m: string[] = [];
   if (monthly.size >= 3) {
@@ -62,9 +62,26 @@ export function periodGrids(p: IrPayload): PeriodGrids {
     for (const s of p.series) if (s.pit) for (const e of Object.keys(s.q)) if (e >= lo && e <= hi) pitEnds.add(e);
     m = [...new Set([...sorted, ...q.filter((e) => pitEnds.has(e))])].sort();
   }
-  const out = { q, y: p.years, m };
+  const out = { q, y: dropStrays(p, p.years, (s) => s.y), m };
   gridCache.set(p, out);
   return out;
+}
+
+/**
+ * A column a few weeks from a busy column that only a handful of lines report (a misdated value, an
+ * "as of" date next to the quarter-end) would show as a second, almost empty "Dec ’25"; leave it out.
+ */
+export function dropStrays(p: Pick<IrPayload, "series">, ends: string[], cellsOf: (s: PayloadSeries) => Record<string, PayloadCell>): string[] {
+  if (ends.length < 3) return ends;
+  const n = new Map(ends.map((e) => [e, 0]));
+  for (const s of p.series) for (const e of Object.keys(cellsOf(s))) if (n.has(e)) n.set(e, n.get(e)! + 1);
+  const DAY = 86_400_000;
+  const at = (e: string) => Date.parse(`${e}T00:00:00Z`);
+  return ends.filter((e, i) => {
+    const mine = n.get(e)!;
+    const near = [ends[i - 1], ends[i + 1]].filter((x) => x && Math.abs(at(x) - at(e)) <= 45 * DAY);
+    return !near.some((x) => n.get(x)! >= Math.max(5, mine * 10));
+  });
 }
 
 const monthCache = new WeakMap<PayloadSeries, Record<string, PayloadCell>>();

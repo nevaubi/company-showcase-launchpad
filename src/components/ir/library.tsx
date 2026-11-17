@@ -59,14 +59,28 @@ function KindIcon({ ext }: { ext: string | null }) {
   return <FileText className="size-4 shrink-0 text-muted-foreground" />;
 }
 
-const yearOf = (d: IrDocRow) => (d.filed ?? d.period ?? "").slice(0, 4);
+/** Calendar year a document was filed (or the year its period names: "Q1 FY26" → 2026). */
+const yearOf = (d: IrDocRow) => {
+  for (const x of [d.filed, d.period]) {
+    if (!x) continue;
+    const iso = x.match(/^(19|20)\d{2}/);
+    if (iso) return iso[0];
+    const full = x.match(/\b(19|20)\d{2}\b/);
+    if (full) return full[0];
+    const fy = x.match(/\bFY\s?(\d{2})\b/i);
+    if (fy) return `20${fy[1]}`;
+  }
+  return "";
+};
 
 export function IrLibrary({
   ticker,
   documents: own,
   images = 0,
   store = [],
+  embedded,
 }: {
+  embedded?: boolean;
   ticker: string;
   documents: IrDocRow[];
   images?: number;
@@ -161,7 +175,8 @@ export function IrLibrary({
 
   return (
     <Panel
-      title="IR document library"
+      title={embedded ? undefined : "IR document library"}
+      className={embedded ? "border-y-0 bg-transparent" : undefined}
       subtitle={`${(files.length + images).toLocaleString()} files stored permanently${images ? ` (${images.toLocaleString()} slide images)` : ""}${extra.length ? ` (${extra.length.toLocaleString()} from the Filed Under document store)` : ""} · ${(total / 1e6).toFixed(1)} MB of documents · ${read.toLocaleString()} read for data · earnings releases, supplements, presentations and data files from EDGAR and the IR website`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
