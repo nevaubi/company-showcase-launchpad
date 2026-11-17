@@ -68,7 +68,7 @@ function WorkerPage() {
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4">
       <PageHeader title="Live worker" description="The always-on cloud worker reading every investor-relations file. Refreshes every 20 seconds from the database." />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
           ["Worker", d.status, `heartbeat ${ago(p.loop?.heartbeat, p.now)} · up ${d.uptimeMin == null ? "—" : `${Math.round(d.uptimeMin)} min`}`],
           ["Memory", p.loop?.memLimitGB ? `${(p.loop.memUsedGB ?? 0).toFixed(1)} / ${p.loop.memLimitGB.toFixed(0)} GB` : "—", "machine limit the worker sees"],
@@ -77,6 +77,11 @@ function WorkerPage() {
           ["Figures (live count)", n(d.totalFacts), `+${n(d.recentFacts)} last hour`],
           ["Files read", `${n(d.read)} / ${n(d.stored)}`, pct(d.read, d.stored)],
           ["Waiting in queue", n(d.queue.length), "stored files, no figures yet"],
+          [
+            "Read from release text",
+            n(Object.values(p.text ?? {}).reduce((a, b) => a + b, 0)),
+            p.prose ? `${n(p.prose.read)} releases read · ${n(p.prose.waiting)} waiting${p.prose.working ? ` · ${n(p.prose.working)} now` : ""}` : "—",
+          ],
           ["Office engine", p.engine?.ok ? "online" : "offline", p.engine ? `${n(p.engine.sessions)} open documents · v${p.engine.version}` : "health check failed"],
         ].map(([k, v, s]) => (
           <div key={k} className="min-w-0 rounded-md border border-border p-3">

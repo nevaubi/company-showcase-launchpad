@@ -7,6 +7,10 @@ export interface WorkerProgress {
   facts: Record<string, number>;
   recent: Record<string, number>;
   docs: Record<string, [number, number]>;
+  /** figures read from release text, per company */
+  text?: Record<string, number>;
+  /** releases whose text the text reader has read / still has to read */
+  prose?: { waiting: number; read: number; working: number } | null;
   loop: {
     attempted: string[];
     done: string[];
@@ -38,7 +42,7 @@ export const getWorkerProgress = createServerFn({ method: "GET" })
     // The RPC itself refuses non-admins, so this check happens in the database.
     const { data, error } = await context.supabase.rpc("ir_live_progress");
     if (error) throw new Error(error.message);
-    const live = data as Pick<WorkerProgress, "lease" | "facts" | "recent" | "docs">;
+    const live = data as Pick<WorkerProgress, "lease" | "facts" | "recent" | "docs" | "text" | "prose">;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     let loop: WorkerProgress["loop"] = null;
     const st = await supabaseAdmin.storage.from("ir-documents").download("ops/ir-deep-loop.json");
