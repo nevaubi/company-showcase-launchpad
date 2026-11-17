@@ -31,7 +31,7 @@ const TICKERS = (args.tickers ?? args.ticker ?? "").split(",").map((t) => t.trim
 if (!TICKERS.length) throw new Error("--tickers=CVS,MCK required");
 const WORKERS = Number(args.workers ?? 4);
 const THREADS = Number(args.threads ?? 4);
-const PYTHON = args.python ?? "/tmp/dvenv/bin/python";
+const PYTHON = args.python ?? process.env.DOCLING_PYTHON ?? "/tmp/dvenv/bin/python";
 const PHASE = args.phase ?? "all";
 const USE_DOCLING = PHASE !== "dates" && args["no-docling"] === undefined && existsSync(PYTHON);
 const DOCLING_KINDS = ["press-release", "supplement", "data", "other"];

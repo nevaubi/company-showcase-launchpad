@@ -15,7 +15,7 @@
  *   bun scripts/ir-deep-loop.ts [--batch=10] [--wait-minutes=10] [--mirror-hours=3] [--detail-hours=12] [--seed=CVS,MCK]
  */
 import { execSync, spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { args, dbGate, sb } from "./lib/supa";
 
 const BATCH = Number(args.batch ?? 10);
@@ -25,7 +25,9 @@ const MIRROR_MS = Number(args["mirror-hours"] ?? 3) * 3_600_000;
 const DETAIL_MS = Number(args["detail-hours"] ?? 12) * 3_600_000;
 const JOB = "ir-deep-loop";
 const STATE = "ops/ir-deep-loop.json";
-const OUT = "/tmp/ir-deep";
+const OUT = process.env.IR_WORK_DIR ?? "/tmp/ir-deep";
+// Child runs append their logs here; a missing folder made every run exit 1 before starting.
+mkdirSync(OUT, { recursive: true });
 const log = (s: string) => console.log(`${new Date().toISOString().slice(0, 19).replace("T", " ")} [loop] ${s}`);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

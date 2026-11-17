@@ -25,7 +25,7 @@ const MODEL = args.model ?? "google/gemini-3.1-flash-lite";
 const ESCALATE = args.escalate ?? "openai/gpt-6-luna";
 const CHUNK = args.chunk ?? "16000";
 const LEDGER = "ir-deep-ledger";
-const OUT = args.out ?? "/tmp/ir-deep";
+const OUT = args.out ?? process.env.IR_WORK_DIR ?? "/tmp/ir-deep";
 mkdirSync(OUT, { recursive: true });
 const log = (s: string) => console.log(`${new Date().toISOString().slice(11, 19)} [deep] ${s}`);
 
