@@ -4,7 +4,7 @@
 // long-lived assets sit. Pure: built by scripts/xbrl-detail.ts, rendered by the Financials tab.
 import { humanize, type XbrlContext, type XbrlFact } from "@/lib/xbrl/inline";
 
-export const DETAIL_FORMAT = 3;
+export const DETAIL_FORMAT = 4;
 
 export interface DetailValue {
   v: number;
@@ -45,6 +45,8 @@ export interface DetailTable {
   rows: DetailRow[];
   /** the undimensioned (consolidated) value of the same concept, when tagged */
   total?: Record<string, DetailValue>;
+  /** lines tagged separately that can include one another (deposit types): no shares or add-up claims */
+  overlap?: boolean;
 }
 /** Segment P&L: one row per tagged line, one column per segment. */
 export interface SegmentMatrix {
@@ -61,7 +63,7 @@ export interface ConcentrationRow {
   /** share as a fraction (0.22 = 22%) per period key */
   values: Record<string, DetailValue>;
 }
-export type DetailFamily = "revenue" | "costs" | "concentration" | "geography" | "commitments" | "inventory" | "other";
+export type DetailFamily = "revenue" | "costs" | "concentration" | "geography" | "lending" | "capital" | "commitments" | "inventory" | "other";
 
 export interface FilingDetail {
   format: number;
@@ -92,6 +94,11 @@ export const AXIS_LABEL: Record<string, string> = {
   "us-gaap:UnrecordedUnconditionalPurchaseObligationByCategoryOfItemPurchasedAxis": "Purchase category",
   "us-gaap:ContractWithCustomerDurationAxis": "Contract duration",
   "us-gaap:InventoryByTypeAxis": "Inventory type",
+  "us-gaap:FinancingReceivablePortfolioSegmentAxis": "Loan portfolio",
+  "us-gaap:FinancingReceivableRecordedInvestmentByClassOfFinancingReceivableAxis": "Loan class",
+  "us-gaap:ClassOfFinancingReceivableAxis": "Loan class",
+  "us-gaap:EquitySecuritiesByIndustryAxis": "Industry",
+  "us-gaap:RiskWeightedAssetsCalculationMethodologyAxis": "Approach",
 };
 
 /** Axes whose tables are accounting plumbing rather than business detail. */
@@ -107,6 +114,40 @@ const ASSETS_GEO = /LongLivedAssets|PropertyPlantAndEquipment(Net|Gross)|Noncurr
 const CONC = /ConcentrationRiskPercentage[12]?$/;
 /** Liability roll-forwards and claim-development triangles: real, but not business detail. */
 const NOISE_CONCEPT = /Cumulative|Liabilit|Reinsurance|HeldForSale|NotSeparatelyPresented|ShortDuration|LongDuration|Accretion|Deferred|IncomeTaxExpense|IncomeTaxesPaid|UnrecognizedTaxBenefits|Goodwill|Translation|Acquisition|Intangible|Allowance|Derivative|Notional|ShareBased|StockBased|Compensation|AggregateAvailable|TradingArrangement|AccumulatedDepreciation|AccumulatedAmortization|OtherCommitment|Litigation|LossContingency|IncreaseDecrease|CashAndCashEquivalents/i;
+
+/**
+ * Banks and lenders: the loan book (balances by portfolio, class, industry or region), its allowance,
+ * charge-offs, recoveries, provision, nonaccrual and 90+ days past due. Vintage, modification and
+ * credit-score cuts are left out (they are triangles, not breakdowns).
+ */
+const LENDING =
+  /:(FinancingReceivable(ExcludingAccruedInterest)?BeforeAllowanceForCreditLoss(es)?(NetOfDeferredIncome)?|LoansAndLeasesReceivable(GrossCarryingAmount|NetOfDeferredIncome)|FinancingReceivableRecordedInvestment|FinancingReceivableAllowanceForCreditLoss(es|ExcludingAccruedInterest)?|FinancingReceivable(ExcludingAccruedInterest)?AllowanceForCreditLoss(es)?(Writeoff|WriteOffs|WriteoffAfterRecovery|WriteOffsNet|Recovery)|FinancingReceivable(ExcludingAccruedInterest)?CreditLossExpenseReversal|ProvisionForLoanLeaseAndOtherLosses|ProvisionForLoanAndLeaseLosses|FinancingReceivable(ExcludingAccruedInterest)?Nonaccrual|FinancingReceivableRecordedInvestmentNonaccrualStatus|FinancingReceivable(ExcludingAccruedInterest)?90DaysOrMorePastDueStillAccruing|FinancingReceivableRecordedInvestment90DaysPastDueAndStillAccruing)$/;
+/** Axes a loan-book breakdown may use; the first matching axis in this order is the row axis. */
+const LENDING_AXES = [
+  "us-gaap:FinancingReceivablePortfolioSegmentAxis",
+  "us-gaap:FinancingReceivableRecordedInvestmentByClassOfFinancingReceivableAxis",
+  "us-gaap:ClassOfFinancingReceivableAxis",
+  "us-gaap:EquitySecuritiesByIndustryAxis",
+  "srt:StatementGeographicalAxis",
+  "srt:ProductOrServiceAxis",
+  "us-gaap:StatementBusinessSegmentsAxis",
+];
+/** Balance-sheet deposit lines (tagged without dimensions); several include others. */
+const DEPOSITS = /^us-gaap:(NoninterestBearingDepositLiabilities(Domestic|Foreign)?|InterestBearingDepositLiabilities(Domestic|Foreign)?|InterestBearingDomesticDeposit(Demand|Savings|MoneyMarket|Checking|NegotiableOrderOfWithdrawalNOW|SavingsAndMoneyMarket)|DepositsSavingsDeposits|DemandDepositAccounts|DepositsMoneyMarketDeposits|TimeDeposits|TimeDepositsAtOrAboveFDICInsuranceLimit|TimeDeposits(LessThan100000|LessThan250000|100000OrMore)|InterestBearingForeignDeposit\w*|BrokeredDeposits|DepositsDomestic|DepositsForeign|Deposits)$/;
+/** Regulatory capital amounts and ratios (and the requirements a bank discloses against them). */
+const CAPITAL = /BankingRegulation|CommonEquityTier|TierOne|Tier1|RiskWeightedAssets|CapitalToRiskWeightedAssets|CapitalRequired|SupplementaryLeverage|LeverageExposure|CapitalConservationBuffer|StressCapitalBuffer/i;
+const CAPITAL_AXES = /RiskWeightedAssetsCalculationMethodologyAxis|dei:LegalEntityAxis|ConsolidatedEntitiesAxis/;
+
+/** Row and nested axes for a loan-book fact, or null when it is not a loan-book breakdown. */
+function lendingShape(concept: string, dims: [string, string][]): { outer: [string, string]; inner?: [string, string] } | null {
+  if (!LENDING.test(concept) || !dims.length || dims.length > 2) return null;
+  const rank = dims.map((d) => LENDING_AXES.indexOf(d[0]));
+  if (rank.some((r) => r < 0)) return null;
+  const [a, b] = dims.length === 2 ? (rank[0] <= rank[1] ? [dims[0], dims[1]] : [dims[1], dims[0]]) : [dims[0], undefined];
+  // Portfolio → class nests; with an industry or region the portfolio becomes the nested split.
+  if (b && a[0] === LENDING_AXES[0] && LENDING_AXES.indexOf(b[0]) >= 3) return { outer: b, inner: a };
+  return { outer: a, ...(b ? { inner: b } : {}) };
+}
 
 /** Maturity ladders ("…DueInSecondYear", "…ToBePaidYearThree"): bucket order and heading. */
 const BUCKETS: [RegExp, number, string][] = [
@@ -148,6 +189,26 @@ const SHORT: Record<string, string> = {
   "us-gaap:PropertyPlantAndEquipmentGross": "Property, plant and equipment, gross",
   "us-gaap:UnrecordedUnconditionalPurchaseObligation": "Purchase obligations",
   "us-gaap:RevenueRemainingPerformanceObligation": "Remaining performance obligations (backlog)",
+  "us-gaap:FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss": "Loans",
+  "us-gaap:FinancingReceivableBeforeAllowanceForCreditLoss": "Loans",
+  "us-gaap:LoansAndLeasesReceivableGrossCarryingAmount": "Loans",
+  "us-gaap:LoansAndLeasesReceivableNetOfDeferredIncome": "Loans, net of unearned income",
+  "us-gaap:FinancingReceivableRecordedInvestment": "Loans",
+  "us-gaap:FinancingReceivableAllowanceForCreditLossExcludingAccruedInterest": "Allowance for loan losses",
+  "us-gaap:FinancingReceivableAllowanceForCreditLosses": "Allowance for loan losses",
+  "us-gaap:FinancingReceivableExcludingAccruedInterestAllowanceForCreditLossWriteoff": "Gross charge-offs",
+  "us-gaap:FinancingReceivableAllowanceForCreditLossesWriteOffs": "Gross charge-offs",
+  "us-gaap:FinancingReceivableExcludingAccruedInterestAllowanceForCreditLossRecovery": "Recoveries",
+  "us-gaap:FinancingReceivableAllowanceForCreditLossesRecovery": "Recoveries",
+  "us-gaap:FinancingReceivableExcludingAccruedInterestAllowanceForCreditLossWriteoffAfterRecovery": "Net charge-offs",
+  "us-gaap:FinancingReceivableAllowanceForCreditLossesWriteOffsNet": "Net charge-offs",
+  "us-gaap:FinancingReceivableExcludingAccruedInterestCreditLossExpenseReversal": "Provision for loan losses",
+  "us-gaap:ProvisionForLoanLeaseAndOtherLosses": "Provision for credit losses",
+  "us-gaap:ProvisionForLoanAndLeaseLosses": "Provision for loan losses",
+  "us-gaap:FinancingReceivableExcludingAccruedInterestNonaccrual": "Nonaccrual loans",
+  "us-gaap:FinancingReceivableRecordedInvestmentNonaccrualStatus": "Nonaccrual loans",
+  "us-gaap:FinancingReceivableExcludingAccruedInterest90DaysOrMorePastDueStillAccruing": "Loans 90+ days past due, still accruing",
+  "us-gaap:Deposits": "Total deposits",
 };
 
 const SEG = "us-gaap:StatementBusinessSegmentsAxis";
@@ -172,10 +233,25 @@ export function memberLabel(member: string, labels: Map<string, string>): string
       return own ?? local;
     }
   }
-  return own ?? humanize(member);
+  return own ? dropFigures(own) : humanize(member);
 }
 
-const conceptLabel = (c: string, labels: Map<string, string>) => SHORT[c] ?? labels.get(c) ?? humanize(c);
+/** Filing labels sometimes carry amounts ("Loans (included $70,684 at fair value)"); those notes go. */
+const dropFigures = (s: string) => s.replace(/\s*\([^()]*\d[^()]*\)/g, "").trim() || s;
+/** Plain names for every standard loan-book concept, so banks' tables read the same across companies. */
+function lendingLabel(c: string): string | null {
+  if (!/^us-gaap:/.test(c) || !LENDING.test(c)) return null;
+  if (/WriteoffAfterRecovery|WriteOffsNet/.test(c)) return "Net charge-offs";
+  if (/Writeoff|WriteOffs/.test(c)) return "Gross charge-offs";
+  if (/Recovery$/.test(c)) return "Recoveries";
+  if (/ProvisionForLoanLeaseAndOtherLosses/.test(c)) return "Provision for credit losses";
+  if (/CreditLossExpenseReversal|ProvisionForLoanAndLeaseLosses/.test(c)) return "Provision for loan losses";
+  if (/Nonaccrual/.test(c)) return "Nonaccrual loans";
+  if (/90Days/.test(c)) return "Loans 90+ days past due, still accruing";
+  if (/Allowance/.test(c)) return "Allowance for loan losses";
+  return /NetOfDeferredIncome/.test(c) ? "Loans, net of unearned income" : "Loans";
+}
+const conceptLabel = (c: string, labels: Map<string, string>) => SHORT[c] ?? lendingLabel(c) ?? dropFigures(labels.get(c) ?? humanize(c));
 
 /** Period key and shape for a context; durations other than a year or a quarter are dropped. */
 function periodOf(ctx: XbrlContext): DetailPeriod | null {
@@ -195,6 +271,7 @@ function dimsOf(ctx: XbrlContext): [string, string][] {
 }
 
 const familyOf = (concept: string, axis: string): DetailFamily | null => {
+  if (CAPITAL.test(concept) && CAPITAL_AXES.test(axis)) return "capital";
   if (COMMIT.test(concept)) return "commitments";
   if (INVENTORY.test(concept)) return "inventory";
   if (REVENUE.test(concept) && !NOT_REVENUE.test(concept.split(":")[1] ?? concept)) return axis === "srt:StatementGeographicalAxis" ? "geography" : "revenue";
@@ -211,10 +288,35 @@ const TITLE: Record<DetailFamily, string> = {
   costs: "Costs",
   concentration: "Concentration",
   geography: "Geography",
+  lending: "Loans & deposits",
+  capital: "Regulatory capital",
   commitments: "Commitments & backlog",
   inventory: "Inventory & assets",
   other: "Other",
 };
+
+/**
+ * One item tagged under two members (JPMorgan's credit card book under both a card-receivables and a
+ * card-portfolio member): rows equal in at least two shared periods merge, so a total never counts it twice.
+ */
+export function mergeTwins(rows: DetailRow[]): DetailRow[] {
+  const out: DetailRow[] = [];
+  for (const r of rows) {
+    const twin = out.find((x) => {
+      const shared = Object.keys(r.values).filter((k) => x.values[k]);
+      return shared.length >= 2 && shared.every((k) => x.values[k].v === r.values[k].v && r.values[k].v !== 0);
+    });
+    if (!twin) {
+      out.push(r);
+      continue;
+    }
+    // Keep the member reporting more periods (and its label); fill the other's extra periods in.
+    const [keep, other] = Object.keys(r.values).length > Object.keys(twin.values).length ? [r, twin] : [twin, r];
+    const merged: DetailRow = { ...keep, values: { ...other.values, ...keep.values }, ...(keep.sub || other.sub ? { sub: [...(keep.sub ?? []), ...(other.sub ?? []).filter((s) => !(keep.sub ?? []).some((k) => k.member === s.member))] } : {}) };
+    out[out.indexOf(twin)] = merged;
+  }
+  return out;
+}
 
 /**
  * Build the detail of one filing. `fiscal` keeps only the filing's main period type: fiscal years for a
@@ -234,7 +336,13 @@ export function buildDetail(input: {
   const { facts, contexts, labels } = input;
   const annual = /^10-K/.test(input.form);
   const periods: Record<string, DetailPeriod> = {};
-  const keep = (p: DetailPeriod | null) => !!p && (p.months === 0 || p.months === (annual ? 12 : 3)) && p.end <= input.reportDate.slice(0, 10).padEnd(10, "9");
+  // A 10-K's balances are fiscal year-ends; an acquisition-date or mid-year balance would read as a year column.
+  const md = (d: string) => Date.UTC(2001, Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10)));
+  const yearEnd = (d: string) => {
+    const gap = Math.abs(md(d) - md(input.reportDate)) / DAY;
+    return Math.min(gap, 365 - gap) <= 7;
+  };
+  const keep = (p: DetailPeriod | null) => !!p && (p.months === (annual ? 12 : 3) || (p.months === 0 && (!annual || yearEnd(p.end)))) && p.end <= input.reportDate.slice(0, 10).padEnd(10, "9");
   const total = new Map<string, Record<string, DetailValue>>(); // concept|unit → period → value
   type Cell = { f: XbrlFact; p: DetailPeriod; dims: [string, string][] };
   const cells: Cell[] = [];
@@ -250,7 +358,7 @@ export function buildDetail(input: {
       const m = total.get(k) ?? {};
       m[p!.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
       total.set(k, m);
-      if (INVENTORY.test(f.concept) || COMMIT.test(f.concept)) cells.push({ f, p: p!, dims: [] });
+      if (INVENTORY.test(f.concept) || COMMIT.test(f.concept) || (DEPOSITS.test(f.concept) && p!.months === 0)) cells.push({ f, p: p!, dims: [] });
       continue;
     }
     dimensional++;
@@ -293,10 +401,11 @@ export function buildDetail(input: {
       continue;
     }
     if (!dims.length) {
-      // Undimensioned inventory components and obligations form their own list.
-      const fam: DetailFamily = INVENTORY.test(f.concept) ? "inventory" : "commitments";
+      // Undimensioned inventory components, obligations and deposit types form their own lists.
+      const fam: DetailFamily = INVENTORY.test(f.concept) ? "inventory" : DEPOSITS.test(f.concept) ? "lending" : "commitments";
       const id = `${fam}|lines|${f.unit}`;
-      const t = tables.get(id) ?? { id, family: fam, title: fam === "inventory" ? "Inventory components" : "Obligations and backlog", concept: "", conceptLabel: "", axis: "", axisLabel: "Line", unit: f.unit, periods: [], rows: [], _rows: new Map() };
+      const title = fam === "inventory" ? "Inventory components" : fam === "lending" ? "Deposits by type" : "Obligations and backlog";
+      const t = tables.get(id) ?? { id, family: fam, title, concept: "", conceptLabel: "", axis: "", axisLabel: fam === "lending" ? "Deposit type" : "Line", unit: f.unit, periods: [], rows: [], _rows: new Map(), ...(fam === "lending" ? { overlap: true } : {}) };
       tables.set(id, t);
       const r = t._rows.get(f.concept) ?? { member: f.concept, label: conceptLabel(f.concept, labels), values: {} };
       r.values[p.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
@@ -312,20 +421,24 @@ export function buildDetail(input: {
       (row.values[member] ??= {})[p.key] ??= { v: f.value, ...(f.id ? { id: f.id } : {}) };
       seg.set(f.concept, row);
     }
+    const lend = lendingShape(f.concept, dims);
     if (dims.length > 2) continue;
     // Nest the second axis under the segment (segment → product), else under the first axis.
-    const [outer, inner] = dims.length === 2 ? (dims[1][0] === SEG ? [dims[1], dims[0]] : [dims[0], dims[1]]) : [dims[0], undefined];
-    const family = familyOf(f.concept, inner && outer[0] === SEG ? inner[0] : outer[0]);
+    const [outer, inner] = lend ? [lend.outer, lend.inner] : dims.length === 2 ? (dims[1][0] === SEG ? [dims[1], dims[0]] : [dims[0], dims[1]]) : [dims[0], undefined];
+    const family: DetailFamily | null = lend ? "lending" : LENDING.test(f.concept) ? null : familyOf(f.concept, inner && outer[0] === SEG ? inner[0] : outer[0]);
     if (!family) continue;
     // Single-axis segment lines are all in the segment P&L; only the revenue mix repeats them.
     if (!inner && outer[0] === SEG && family === "other") continue;
-    const id = `${family}|${f.concept}|${f.unit}|${outer[0]}${inner ? `|${inner[0]}` : ""}`;
+    // A loan portfolio's own balance and its classes' balances share one table (portfolio row, classes nested).
+    const id = `${family}|${f.concept}|${f.unit}|${outer[0]}${inner && !(lend && outer[0] === LENDING_AXES[0]) ? `|${inner[0]}` : ""}`;
     let t = tables.get(id);
+    if (t && inner && lend && !t.title.includes(" and ")) t.title = `${t.title} and ${(AXIS_LABEL[inner[0]] ?? memberLabel(inner[0], labels)).toLowerCase()}`;
     if (!t) {
       const axisLabel = AXIS_LABEL[outer[0]] ?? memberLabel(outer[0], labels);
       const innerLabel = inner ? (AXIS_LABEL[inner[0]] ?? memberLabel(inner[0], labels)) : "";
       const cl = conceptLabel(f.concept, labels);
-      t = { id, family, title: `${cl} by ${axisLabel.toLowerCase()}${inner ? ` and ${innerLabel.toLowerCase()}` : ""}`, concept: f.concept, conceptLabel: cl, axis: outer[0], axisLabel, unit: f.unit, periods: [], rows: [], _rows: new Map() };
+      const plain = family === "capital" ? cl.replace(/^Banking Regulation,\s*/i, "") : cl;
+      t = { id, family, title: `${plain} by ${axisLabel.toLowerCase()}${inner ? ` and ${innerLabel.toLowerCase()}` : ""}`, concept: f.concept, conceptLabel: plain, axis: outer[0], axisLabel, unit: f.unit, periods: [], rows: [], _rows: new Map() };
       tables.set(id, t);
     }
     let row = t._rows.get(outer[1]);
@@ -347,7 +460,7 @@ export function buildDetail(input: {
 
   const out: DetailTable[] = [];
   for (const t of tables.values()) {
-    const rows = [...t._rows.values()];
+    const rows = mergeTwins([...t._rows.values()]);
     const keys = new Set<string>();
     for (const r of rows) {
       for (const k of Object.keys(r.values)) keys.add(k);
@@ -364,7 +477,10 @@ export function buildDetail(input: {
     // One inner member under every row (e.g. "aircraft type × purchase commitments"): flatten it.
     const inner = new Set(rows.flatMap((r) => (r.sub ?? []).map((x) => x.member)));
     let title = t.title;
+    let subset = false;
     if (inner.size === 1 && rows.every((r) => r.sub?.length === 1 && !Object.keys(r.values).length)) {
+      // The rows now describe one member's slice (wholesale loans by industry); the consolidated figure is not its total.
+      subset = true;
       const only = rows[0].sub![0].label;
       for (const r of rows) {
         r.values = r.sub![0].values;
@@ -375,7 +491,7 @@ export function buildDetail(input: {
     const tot = t.concept ? total.get(`${t.concept}|${t.unit}`) : undefined;
     // A consolidated figure the items cannot plausibly add up to is a reused tag, not this table's total.
     const sum = rows.reduce((n, r) => n + (r.values[latest]?.v ?? r.sub?.reduce((m, x) => m + (x.values[latest]?.v ?? 0), 0) ?? 0), 0);
-    const okTotal = tot && tot[latest] && tot[latest].v !== 0 && sum / tot[latest].v >= 0.3 && sum / tot[latest].v <= 1.5;
+    const okTotal = !t.overlap && !subset && tot && tot[latest] && tot[latest].v !== 0 && sum / tot[latest].v >= 0.3 && sum / tot[latest].v <= 1.5;
     const { _rows, ...rest } = t;
     out.push({ ...rest, title, periods: ps, rows, ...(okTotal ? { total: Object.fromEntries(ps.flatMap((k) => (tot![k] ? [[k, tot![k]]] : []))) } : {}) });
   }
@@ -388,6 +504,12 @@ export function buildDetail(input: {
       t.title = t.title.replace(t.conceptLabel, official);
       t.conceptLabel = official;
     }
+
+  // A company's own measure next to the standard one with the same plain name (JPMorgan's loans incl. fair-value loans).
+  const std = (c: string) => /^(us-gaap|srt|dei):/.test(c);
+  for (const t of out)
+    if (t.concept && !std(t.concept) && out.some((x) => x !== t && x.family === t.family && std(x.concept) && x.conceptLabel === t.conceptLabel) && !t.title.includes("company measure"))
+      t.title = `${t.title} (company measure)`;
 
   // Maturity ladders: one table per obligation, a column per year bucket, instead of a table per year.
   const ladders = new Map<string, DetailTable>();
@@ -452,9 +574,13 @@ export function buildDetail(input: {
       if (extra && !t.title.includes(extra)) t.title = `${t.title} (${extra})`;
     }
 
-  const familyRank: DetailFamily[] = ["revenue", "costs", "geography", "concentration", "commitments", "inventory", "other"];
+  const familyRank: DetailFamily[] = ["revenue", "costs", "geography", "lending", "capital", "concentration", "commitments", "inventory", "other"];
   const axisRank = (a: string) => ["us-gaap:StatementBusinessSegmentsAxis", "srt:ProductOrServiceAxis", "srt:StatementGeographicalAxis", "srt:MajorCustomersAxis"].indexOf(a) + 1 || 9;
-  out.sort((a, b) => familyRank.indexOf(a.family) - familyRank.indexOf(b.family) || axisRank(a.axis) - axisRank(b.axis) || b.rows.length - a.rows.length);
+  // Loan book reads balance → allowance → losses → problem loans → deposits.
+  const lendRank = (t: DetailTable) =>
+    t.family !== "lending" ? 0 : !t.concept ? 9 : (([[/WriteoffAfterRecovery|WriteOffsNet/, 3], [/Writeoff|WriteOffs/, 4], [/Recovery/, 5], [/Provision|CreditLossExpense/, 6], [/Nonaccrual/, 7], [/PastDue/, 8], [/Allowance/, 2]] as [RegExp, number][]).find(([re]) => re.test(t.concept))?.[1] ?? 1);
+  const lendAxis = (a: string) => (LENDING_AXES.indexOf(a) + 1 || 9);
+  out.sort((a, b) => familyRank.indexOf(a.family) - familyRank.indexOf(b.family) || lendRank(a) - lendRank(b) || (a.family === "lending" ? lendAxis(a.axis) - lendAxis(b.axis) : axisRank(a.axis) - axisRank(b.axis)) || b.rows.length - a.rows.length);
 
   let segments: SegmentMatrix | null = null;
   if (segMembers.size >= 2 && seg.size >= 2) {
@@ -557,7 +683,8 @@ export function changeOf(t: DetailTable, values: Record<string, DetailValue>, pe
  * years apart, both positive), as a fraction; null otherwise.
  */
 export function cagrOf(t: DetailTable, values: Record<string, DetailValue>, periods: Record<string, DetailPeriod>): { rate: number; years: number; from: string; to: string } | null {
-  const ks = t.periods.filter((k) => periods[k]?.months === 12 && !periods[k].label && values[k] !== undefined);
+  // Fiscal-year flows, or year-end balances (loans, deposits, assets).
+  const ks = t.periods.filter((k) => (periods[k]?.months === 12 || periods[k]?.months === 0) && !periods[k].label && values[k] !== undefined);
   if (ks.length < 2) return null;
   const [a, b] = [ks[0], ks[ks.length - 1]];
   const x = values[a].v;

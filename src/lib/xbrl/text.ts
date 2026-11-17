@@ -2,7 +2,7 @@
 import { detailPeriodLabel, detailUnit, type DetailTable, type FilingDetail, type StoredDetail } from "@/lib/xbrl/detail";
 import { annualWithHistory, periodSources } from "@/lib/xbrl/history";
 
-export const DETAIL_SECTIONS = ["revenue", "segments", "concentration", "geography", "costs", "commitments", "inventory", "other"] as const;
+export const DETAIL_SECTIONS = ["revenue", "segments", "lending", "capital", "concentration", "geography", "costs", "commitments", "inventory", "other"] as const;
 export type DetailSection = (typeof DETAIL_SECTIONS)[number];
 
 const fmt = (v: number, unit: string) => {

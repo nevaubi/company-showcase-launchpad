@@ -46,11 +46,11 @@ export const TOOL_DEFS = [
     type: "function",
     name: "get_filing_detail",
     description:
-      "The dimensional detail of a company's latest 10-K or 10-Q, grouped like an analyst reads it: revenue by segment, product, channel and geography (countries and US states); the segment P&L with each segment's significant expenses (ASC 280); customer, supplier and regional concentration percentages; purchase obligations and backlog by year due; inventory components; property by asset type; operating counts (stores, aircraft, properties). Every table carries the filing citation. With ticker null and section 'concentration': the covered companies most dependent on one customer, and who names whom. Prefer this over get_segments for anything beyond revenue by segment.",
+      "The dimensional detail of a company's 10-K or 10-Q, grouped like an analyst reads it: revenue by segment, product, channel and geography (countries and US states); the segment P&L with each segment's significant expenses (ASC 280); for banks and lenders the loan book by portfolio, class, industry and region with allowance, charge-offs, provision, nonaccrual and 90+ days past due, deposits by type, and regulatory capital and ratios; customer, supplier and regional concentration percentages; purchase obligations and backlog by year due; inventory components; property by asset type; operating counts (stores, aircraft, properties). The annual view spans about seven fiscal years (the latest 10-K plus the 10-Ks two and four years back; each column comes from the newest filing reporting it, and the header says which filing to cite for which years). Every table carries the filing citation. With ticker null and section 'concentration': the covered companies most dependent on one customer, and who names whom. Prefer this over get_segments for anything beyond revenue by segment.",
     parameters: obj(
       {
         ticker: nullable(str("Covered ticker, or null for the cross-company concentration ranking")),
-        section: nullable({ type: "string", enum: ["revenue", "segments", "concentration", "geography", "costs", "commitments", "inventory", "other"], description: "One section, or null for all" }),
+        section: nullable({ type: "string", enum: ["revenue", "segments", "lending", "capital", "concentration", "geography", "costs", "commitments", "inventory", "other"], description: "One section ('lending' = loans, credit losses and deposits; 'capital' = regulatory capital), or null for all" }),
         filing: nullable({ type: "string", enum: ["annual", "quarterly"], description: "Latest 10-K (default) or the latest 10-Q filed after it" }),
       },
       ["ticker", "section", "filing"],

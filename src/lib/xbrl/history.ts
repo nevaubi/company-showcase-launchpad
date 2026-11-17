@@ -6,7 +6,7 @@
 import type { ConcentrationRow, DetailPeriod, DetailRow, DetailTable, DetailValue, FilingDetail, SegmentMatrix, StoredDetail } from "@/lib/xbrl/detail";
 
 /** Families whose columns are fiscal years or year-end balances; maturity ladders ("Year 1"…) stay as filed. */
-const HISTORY_FAMILIES = new Set(["revenue", "costs", "geography", "inventory", "other", "concentration"]);
+const HISTORY_FAMILIES = new Set(["revenue", "costs", "geography", "lending", "capital", "inventory", "other", "concentration"]);
 
 const norm = (s: string) => s.toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]/g, "");
 /** A fiscal year or a balance date; quarter and maturity-bucket columns never travel. */

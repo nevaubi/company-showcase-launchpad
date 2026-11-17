@@ -180,3 +180,118 @@ describe("assistant text", () => {
     expect(t).not.toContain("Segment P&L");
   });
 });
+
+describe("banks and lenders", () => {
+  const ye = (y: number) => `<xbrli:instant>${y}-12-31</xbrli:instant>`;
+  const yr = (y: number) => `<xbrli:startDate>${y}-01-01</xbrli:startDate><xbrli:endDate>${y}-12-31</xbrli:endDate>`;
+  const P = "us-gaap:FinancingReceivablePortfolioSegmentAxis";
+  const K = "us-gaap:FinancingReceivableRecordedInvestmentByClassOfFinancingReceivableAxis";
+  const IND = "us-gaap:EquitySecuritiesByIndustryAxis";
+  const FICO = "us-gaap:CreditScoreFicoAxis";
+  const M = "us-gaap:RiskWeightedAssetsCalculationMethodologyAxis";
+  const LOANS = "us-gaap:FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss";
+  const bank = [
+    `<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit><xbrli:unit id="pure"><xbrli:measure>xbrli:pure</xbrli:measure></xbrli:unit>`,
+    ctx("i25", ye(2025)),
+    ctx("i24", ye(2024)),
+    ctx("d25", yr(2025)),
+    ctx("cons", ye(2025), [[P, "us-gaap:ConsumerPortfolioSegmentMember"]]),
+    ctx("whl", ye(2025), [[P, "x:WholesaleMember"]]),
+    ctx("card", ye(2025), [[P, "us-gaap:ConsumerPortfolioSegmentMember"], [K, "us-gaap:CreditCardReceivablesMember"]]),
+    ctx("mort", ye(2025), [[P, "us-gaap:ConsumerPortfolioSegmentMember"], [K, "us-gaap:ResidentialMortgageMember"]]),
+    ctx("re", ye(2025), [[IND, "x:RealEstateMember"], [P, "x:WholesaleMember"]]),
+    ctx("tech", ye(2025), [[IND, "x:TechnologyMember"], [P, "x:WholesaleMember"]]),
+    ctx("hi", ye(2025), [[P, "us-gaap:ConsumerPortfolioSegmentMember"], [FICO, "x:Above660Member"]]),
+    ctx("lo", ye(2025), [[P, "us-gaap:ConsumerPortfolioSegmentMember"], [FICO, "x:Below660Member"]]),
+    ctx("ncoC", yr(2025), [[P, "us-gaap:ConsumerPortfolioSegmentMember"]]),
+    ctx("ncoW", yr(2025), [[P, "x:WholesaleMember"]]),
+    ctx("std", ye(2025), [[M, "x:StandardizedMember"]]),
+    ctx("adv", ye(2025), [[M, "x:AdvancedMember"]]),
+    fact(LOANS, "i25", "1,400"),
+    fact(LOANS, "cons", "600"),
+    fact(LOANS, "whl", "800"),
+    fact(LOANS, "card", "230"),
+    fact(LOANS, "mort", "370"),
+    fact(LOANS, "re", "150"),
+    fact(LOANS, "tech", "90"),
+    fact(LOANS, "hi", "500"),
+    fact(LOANS, "lo", "100"),
+    fact("us-gaap:FinancingReceivableExcludingAccruedInterestYearOneOriginatedCurrentFiscalYear", "card", "50"),
+    fact("us-gaap:FinancingReceivableExcludingAccruedInterestAllowanceForCreditLossWriteoffAfterRecovery", "ncoC", "9"),
+    fact("us-gaap:FinancingReceivableExcludingAccruedInterestAllowanceForCreditLossWriteoffAfterRecovery", "ncoW", "1"),
+    fact("us-gaap:InterestBearingDepositLiabilitiesDomestic", "i25", "1,500"),
+    fact("us-gaap:NoninterestBearingDepositLiabilitiesDomestic", "i25", "500"),
+    fact("us-gaap:Deposits", "i25", "2,100"),
+    fact("us-gaap:Deposits", "i24", "2,000"),
+    fact("us-gaap:Deposits", "d25", "9"),
+    fact("us-gaap:CapitalToRiskWeightedAssets", "std", "15"),
+    fact("us-gaap:CapitalToRiskWeightedAssets", "adv", "16"),
+  ].join("\n");
+  const d = buildDetail({ ticker: "B", accn: "b", form: "10-K", filed: "2026-02-15", reportDate: "2025-12-31", doc: "b.htm", facts: parseInlineFacts(bank), contexts: parseContexts(bank), labels: new Map() });
+  const lending = d.tables.filter((t) => t.family === "lending");
+
+  it("builds the loan book by portfolio with classes nested and the consolidated total", () => {
+    const t = lending.find((x) => x.axis === "us-gaap:FinancingReceivablePortfolioSegmentAxis" && x.concept === "us-gaap:FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss")!;
+    expect(t.title).toBe("Loans by loan portfolio and loan class");
+    expect(t.rows.map((r) => [r.label, r.values[t.periods[0]]?.v])).toEqual([["Wholesale", 8e8], ["Consumer Portfolio Segment", 6e8]]);
+    expect(t.rows[1].sub?.map((s) => s.label)).toEqual(["Residential Mortgage", "Credit Card Receivables"]);
+    expect(t.total?.I2025_12_31 ?? Object.values(t.total ?? {})[0]).toMatchObject({ v: 1.4e9 });
+  });
+
+  it("shows wholesale loans by industry", () => {
+    const t = lending.find((x) => x.axis === IND)!;
+    expect(t.rows.map((r) => r.label)).toEqual(["Real Estate", "Technology"]);
+    expect(t.title).toContain("— Wholesale");
+    // the firm-wide loan total is not the wholesale slice's total
+    expect(t.total).toBeUndefined();
+  });
+
+  it("keeps net charge-offs by portfolio and leaves vintage and credit-score cuts out", () => {
+    expect(lending.find((x) => /Net charge-offs/.test(x.title))?.rows).toHaveLength(2);
+    expect(d.tables.some((x) => x.axis === FICO || /Originated/.test(x.concept))).toBe(false);
+  });
+
+  it("lists deposit types as overlapping lines with the total among them", () => {
+    const t = lending.find((x) => x.title === "Deposits by type")!;
+    expect(t.overlap).toBe(true);
+    expect(t.total).toBeUndefined();
+    expect(t.rows[0]).toMatchObject({ label: "Total deposits" });
+    expect(t.periods).toHaveLength(2);
+  });
+
+  it("files capital ratios under regulatory capital", () => {
+    const t = d.tables.find((x) => x.family === "capital")!;
+    expect(t.rows.map((r) => r.label)).toEqual(["Advanced", "Standardized"]);
+  });
+});
+
+describe("twin members", () => {
+  it("merges one item tagged under two members, never two items that differ", async () => {
+    const { mergeTwins } = await import("./detail");
+    const row = (member: string, vals: Record<string, number>) => ({ member, label: member, values: Object.fromEntries(Object.entries(vals).map(([k, v]) => [k, { v }])) });
+    const out = mergeTwins([row("card", { a: 211, b: 232 }), row("cardSeg", { y: 190, a: 211, b: 232 }), row("auto", { a: 211, b: 99 })]);
+    expect(out.map((r) => r.member)).toEqual(["cardSeg", "auto"]);
+    expect(Object.keys(out[0].values).sort()).toEqual(["a", "b", "y"]);
+    // A single shared period is not enough evidence.
+    expect(mergeTwins([row("x", { a: 5 }), row("y", { a: 5 })])).toHaveLength(2);
+  });
+});
+
+describe("annual balance columns", () => {
+  it("keeps fiscal year-ends and drops an acquisition-date balance", () => {
+    const at = (d: string) => `<xbrli:instant>${d}</xbrli:instant>`;
+    const doc3 = [
+      `<xbrli:unit id="usd"><xbrli:measure>iso4217:USD</xbrli:measure></xbrli:unit>`,
+      ctx("a", at("2025-12-31")),
+      ctx("b", at("2024-12-31")),
+      ctx("acq", at("2025-05-18")),
+      fact("us-gaap:Deposits", "a", "300"),
+      fact("us-gaap:Deposits", "b", "250"),
+      fact("us-gaap:Deposits", "acq", "100"),
+      fact("us-gaap:TimeDeposits", "a", "40"),
+    ].join("\n");
+    const d = buildDetail({ ticker: "C", accn: "c", form: "10-K", filed: "2026-02-20", reportDate: "2025-12-31", doc: "c.htm", facts: parseInlineFacts(doc3), contexts: parseContexts(doc3), labels: new Map() });
+    const t = d.tables.find((x) => x.title === "Deposits by type")!;
+    expect(t.periods.map((k) => d.periods[k].end)).toEqual(["2024-12-31", "2025-12-31"]);
+  });
+});

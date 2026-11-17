@@ -27,11 +27,13 @@ import { filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
 import { annualWithHistory, historySpan } from "@/lib/xbrl/history";
 import { hasMoneyMap, MoneyMap } from "@/components/financials/money-map";
 
-type Section = "map" | "revenue" | "segments" | "concentration" | "geography" | "costs" | "commitments" | "inventory" | "other";
+type Section = "map" | "revenue" | "segments" | "lending" | "capital" | "concentration" | "geography" | "costs" | "commitments" | "inventory" | "other";
 const SECTION_LABEL: Record<Section, string> = {
   map: "Money map",
   revenue: "Revenue mix",
   segments: "Segment P&L",
+  lending: "Loans & deposits",
+  capital: "Regulatory capital",
   concentration: "Concentration",
   geography: "Geography",
   costs: "Costs",
@@ -43,6 +45,8 @@ const SECTION_HINT: Record<Section, string> = {
   map: "Where revenue comes from, which segments earn it and where it goes, built only from values tagged in the filing",
   revenue: "Revenue split by segment, product, channel and timing, as tagged in the filing",
   segments: "Every line the filing reports per segment: revenue, significant expenses, profit",
+  lending: "The loan book by portfolio, class, industry and region, its allowance, charge-offs, nonaccrual loans, and deposits by type",
+  capital: "Capital, risk-weighted assets and capital ratios by approach and legal entity, with the requirements the filing states",
   concentration: "Customers, suppliers and regions the filing says make up a large share of revenue, purchases or receivables",
   geography: "Revenue and long-lived assets by country, region or state",
   costs: "Costs split by product or geography",
@@ -73,7 +77,7 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
     if (d.segments) has.add("segments");
     if (d.concentration.length) has.add("concentration");
     if (base && hasMoneyMap(base)) has.add("map");
-    return (["map", "revenue", "segments", "concentration", "geography", "costs", "commitments", "inventory", "other"] as Section[]).filter((s) => has.has(s));
+    return (["map", "revenue", "segments", "lending", "capital", "concentration", "geography", "costs", "commitments", "inventory", "other"] as Section[]).filter((s) => has.has(s));
   }, [d, base]);
 
   if (q.isLoading) return <Skeleton className="h-[480px]" />;
@@ -212,10 +216,10 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
   const cov = coverageOf(t);
   const sumLatest = t.rows.reduce((n, r) => n + Math.abs(r.values[latest]?.v ?? r.sub?.reduce((m, s) => m + Math.abs(s.values[latest]?.v ?? 0), 0) ?? 0), 0);
   const denom = Math.abs(t.total?.[latest]?.v ?? 0) || sumLatest;
-  const showShare = money && t.rows.length >= 2 && denom > 0 && !d.periods[latest]?.label;
+  const showShare = money && !t.overlap && t.rows.length >= 2 && denom > 0 && !d.periods[latest]?.label;
   const hasChange = t.periods.filter((k) => !d.periods[k]?.label).length >= 2;
   // Compound growth only once the table spans more fiscal years than a single 10-K reports.
-  const hasCagr = detailUnit(t.unit) !== "pct" && t.periods.filter((k) => d.periods[k]?.months === 12 && !d.periods[k].label).length >= 4;
+  const hasCagr = detailUnit(t.unit) !== "pct" && t.periods.filter((k) => (d.periods[k]?.months === 12 || d.periods[k]?.months === 0) && !d.periods[k].label).length >= 4;
   const extra = (hasChange ? 1 : 0) + (hasCagr ? 1 : 0) + (showShare ? 1 : 0);
   const rowFor = (r: DetailRow, depth: number, parent = "") => {
     const val = r.values[latest]?.v;
@@ -264,7 +268,7 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
     <Panel
       className="min-w-0 rounded-lg border"
       title={t.title}
-      subtitle={`${unitCaption(t.unit, scale)}${cov != null && (cov < 0.97 || cov > 1.03) ? ` · listed items explain ${fmtShare(cov)} of the consolidated total` : cov != null ? " · items add up to the consolidated total" : ""}`}
+      subtitle={`${unitCaption(t.unit, scale)}${t.overlap ? " · lines as tagged; some include others" : cov != null && (cov < 0.97 || cov > 1.03) ? ` · listed items explain ${fmtShare(cov)} of the consolidated total` : cov != null ? " · items add up to the consolidated total" : ""}`}
       bodyClassName="p-0"
       collapse={520}
     >
@@ -284,7 +288,7 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
                 </th>
               )}
               {hasCagr && (
-                <th className="whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-normal text-muted-foreground" title="Compound annual growth from the first to the latest fiscal year the row reports">
+                <th className="whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-normal text-muted-foreground" title="Compound annual growth from the first to the latest year the row reports">
                   CAGR
                 </th>
               )}
