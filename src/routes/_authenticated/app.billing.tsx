@@ -1,34 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { LIMITS, PRICES, TIER_LABEL, trialDaysLeft, type Tier } from "@/lib/billing/plans";
-import { useEffect, useState } from "react";
+import { LIMITS, TIER_LABEL, trialDaysLeft, type Tier } from "@/lib/billing/plans";
+import { useEffect } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
-import { getStripe, getStripeEnvironment } from "@/lib/stripe";
-import { createCheckoutSession, createPortalSession } from "@/lib/payments.functions";
-
-function Checkout({ priceId }: { priceId: string }) {
-  const create = useServerFn(createCheckoutSession);
-  const fetchClientSecret = async () => {
-    const r = await create({
-      data: { priceId: priceId as never, returnUrl: `${window.location.origin}/app/billing?checkout=done`, environment: getStripeEnvironment() },
-    });
-    if ("error" in r) throw new Error(r.error);
-    return r.clientSecret;
-  };
-  return (
-    <EmbeddedCheckoutProvider stripe={getStripe()} options={{ fetchClientSecret }}>
-      <EmbeddedCheckout />
-    </EmbeddedCheckoutProvider>
-  );
-}
+import { getStripeEnvironment } from "@/lib/stripe";
+import { createPortalSession } from "@/lib/payments.functions";
 
 export const Route = createFileRoute("/_authenticated/app/billing")({
   head: () => ({
@@ -77,10 +58,7 @@ function BillingPage() {
     window.history.replaceState(null, "", "/app/billing");
     return () => clearInterval(t);
   }, [qc]);
-  const [yearly, setYearly] = useState(false);
-  const [priceId, setPriceId] = useState<string | null>(null);
   const portal = useServerFn(createPortalSession);
-  const testMode = (import.meta.env.VITE_PAYMENTS_CLIENT_TOKEN as string | undefined)?.startsWith("pk_test_");
   const openPortal = async () => {
     try {
       const r = await portal({ data: { returnUrl: window.location.href, environment: getStripeEnvironment() } });
@@ -92,24 +70,12 @@ function BillingPage() {
   };
   return (
     <div className="mx-auto max-w-4xl">
-      {testMode && <p className="mb-3 rounded-md border bg-muted px-3 py-2 text-center text-xs text-muted-foreground">Payments in the preview are in test mode — use card 4242 4242 4242 4242.</p>}
       <PageHeader
         eyebrow="Account"
         title="Billing and plan"
         description="Your plan, trial and AI usage. Reading company data is unlimited on every plan."
-        actions={
-          <>
-            <div className="flex items-center gap-2 text-sm"><span>Monthly</span><Switch checked={yearly} onCheckedChange={setYearly} aria-label="Yearly billing" /><span>Yearly</span></div>
-            {d?.sub && <Button variant="outline" onClick={openPortal}>Manage billing</Button>}
-          </>
-        }
+        actions={d?.sub ? <Button variant="outline" onClick={openPortal}>Manage billing</Button> : undefined}
       />
-      <Dialog open={!!priceId} onOpenChange={(o) => !o && setPriceId(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogTitle>Checkout</DialogTitle>
-          {priceId && <Checkout priceId={priceId} />}
-        </DialogContent>
-      </Dialog>
       {d && (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Panel title="Your plan" className="min-w-0">
@@ -124,7 +90,7 @@ function BillingPage() {
               </p>
             )}
             {d.sub?.status === "past_due" && <p className="mt-2 text-sm text-destructive">Your last payment failed. Use Manage billing to update your card.</p>}
-            {d.tier === "expired" && <p className="mt-2 text-sm text-muted-foreground">Your trial has ended. Your saved work is kept; AI tools and exports are locked until you subscribe.</p>}
+            {d.tier === "expired" && <p className="mt-2 text-sm text-muted-foreground">Your trial has ended. Your saved work is kept; AI tools and exports are locked until your access is renewed.</p>}
           </Panel>
           <Panel title="Usage" className="min-w-0">
             <dl className="space-y-2 text-sm">
@@ -132,21 +98,28 @@ function BillingPage() {
               <div className="flex justify-between"><dt>Custom AI reports this month</dt><dd className="tabular-nums">{d.report} / {LIMITS[d.tier].report}</dd></div>
             </dl>
           </Panel>
-          {(["research", "pro"] as const).map((t) => (
-            <Panel key={t} title={TIER_LABEL[t]} className="min-w-0">
-              <p className="font-display text-2xl">${PRICES[t].monthly}<span className="text-sm text-muted-foreground">/mo</span></p>
-              <p className="text-xs text-muted-foreground">or ${PRICES[t].yearly}/yr (two months free)</p>
-              <ul className="mt-3 space-y-1 text-sm">
-                <li>{LIMITS[t].agent} assistant questions a day</li>
-                <li>{LIMITS[t].report} custom AI reports a month</li>
-                <li>Excel and Word exports</li>
-                {t === "pro" ? <li>Deep mode, web research, cloud browsers, scheduled briefs</li> : <li>Basic alerts</li>}
-              </ul>
-              <Button className="mt-4 w-full" disabled={d.tier === t} onClick={() => setPriceId(`${t}_${yearly ? "yearly" : "monthly"}`)}>
-                {d.tier === t ? "Current plan" : `Subscribe ${yearly ? "yearly" : "monthly"}`}
-              </Button>
-            </Panel>
-          ))}
+          <Panel title="Access & pricing" className="min-w-0 md:col-span-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <p className="font-medium">Approved trial</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Access is granted by approval. Request a trial and we'll review it — your trial starts when you accept.
+                </p>
+                <Button className="mt-3" asChild>
+                  <Link to="/auth">Request a trial</Link>
+                </Button>
+              </div>
+              <div>
+                <p className="font-medium">Custom pricing</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  For teams, wealth managers and institutions we put together custom pricing. Tell us what you need.
+                </p>
+                <Button className="mt-3" variant="outline" asChild>
+                  <a href="mailto:admin@filedunder.ai?subject=Filed%20Under%20pricing">Contact us</a>
+                </Button>
+              </div>
+            </div>
+          </Panel>
         </div>
       )}
     </div>
