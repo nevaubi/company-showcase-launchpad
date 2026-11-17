@@ -41,7 +41,8 @@ import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, 
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { exposureIndexQuery, filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
 import { bankStatesText, companyExposureText, insurersText, lendersText, regionText, stateDepositsText, type InsurerSort } from "@/lib/xbrl/exposure-text";
-import { depositsByStateQuery } from "@/lib/alt/query";
+import { depositsByStateQuery, medicareStateQuery } from "@/lib/alt/query";
+import { geoCompanyText, geoStateText } from "@/lib/alt/medicare-geo";
 import { optionsBoardQuery, optionsHistoryQuery } from "@/lib/options/data";
 import { optionsBoardText, optionsCompanyText, type OptionsSort } from "@/lib/options/text";
 import { earningsIndexQuery } from "@/lib/calendars/data";
@@ -227,6 +228,19 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     }
     case "get_alt_data": {
       const LEAD: Record<string, string> = { settlement: "Fails to deliver (avg daily balance)", attention: "Wikipedia pageviews", complaints: "CFPB consumer complaints", bank: "Total deposits", contracts: "Federal contract obligations", regulatory: "Federal Register documents naming the company", medicare: "Medicare Part D spending" };
+      if (args.dataset === "medicare_states") {
+        if (args.ticker) {
+          const tk = String(args.ticker).toUpperCase();
+          // ≤ ~55 rows a year (states + total), so one page holds every year
+          const { data: rows, error } = await supabase.from("alt_data").select("ticker,date,title,value,meta,source_url").eq("ticker", tk).eq("dataset", "medicare_states").order("uid").limit(1000);
+          if (error) return { output: `Error: ${error.message}`, summary: "Medicare by state failed" };
+          return { output: clip(geoCompanyText((rows ?? []) as never, tk)), summary: `${tk} Medicare drugs by state` };
+        }
+        const st = String(args.since ?? "").toUpperCase().slice(0, 2);
+        if (!/^[A-Z]{2}$/.test(st)) return { output: "For a cross-company Medicare state ranking pass the two-letter state code in since (e.g. 'TX').", summary: "state needed" };
+        const r = await qc.fetchQuery(medicareStateQuery(st));
+        return { output: clip(geoStateText(r.rows, st, r.latest)), summary: `${st} Medicare drug makers` };
+      }
       if (!args.ticker && args.dataset && LEAD[String(args.dataset)]) {
         const d = String(args.dataset);
         const rows = await qc.fetchQuery(altLeadersQuery(d, LEAD[d]));

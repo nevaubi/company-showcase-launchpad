@@ -24,6 +24,8 @@ export const SOURCES: FreshnessSource[] = [
   { job: "xbrl-detail", label: "Filing detail (10-K/10-Q breakdowns)", everyMin: 720 },
   // Script-run weekly by ir-deep-loop: imports the FDIC's yearly June 30 branch survey once it is published.
   { job: "gov-sod", label: "Bank deposits by state (FDIC)", everyMin: 7 * 1440 },
+  // Checked weekly right after the FDIC survey: imports CMS's yearly Part D drug costs by state once published.
+  { job: "gov-medicare-states", label: "Medicare drug costs by state (CMS)", everyMin: 7 * 1440 },
 ];
 
 export interface Run {

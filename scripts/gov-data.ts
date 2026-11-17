@@ -1,6 +1,8 @@
 // Whole-market government files for every covered company.
 //   bun scripts/gov-data.ts --ftd[=24]     SEC fails-to-deliver, the last N months (default 24)
 //   bun scripts/gov-data.ts --medicare     CMS Medicare Part D + Part B drug spending (annual + latest quarters)
+//   bun scripts/gov-data.ts --medicare-states[=5]  CMS Part D drug costs by prescriber state for every covered drug maker, the last N years
+//                                          (add --if-new to do nothing unless CMS has published a newer year; the IR loop runs that weekly)
 //   bun scripts/gov-data.ts --sod[=6]      FDIC Summary of Deposits by state and metro for every covered bank, the last N years
 //                                          (add --if-new to do nothing unless a newer June 30 survey is out; the IR loop runs that weekly)
 // The scheduled `gov-data` job keeps the latest fails-to-deliver half-month current after the
@@ -8,6 +10,7 @@
 import { COVERAGE } from "@/lib/coverage";
 import { ftdRows, ftdUrl, latestLikelyPeriod, parseFtd, periodCode, prevPeriod, unzipText } from "@/lib/alt/ftd";
 import { CMS, displayBrand, drugYears, makerTicker, medicareRows, type CmsRecord, type Part } from "@/lib/alt/medicare";
+import { GEO_DATASET, geoDistributions, geoRows, parseGeoCsv, partDOwners } from "@/lib/alt/medicare-geo";
 import { REGISTRY_PATH, type AltRegistryEntry } from "@/lib/alt/registry";
 import { parseBuckets, SOD_API, sodFilter, sodRows, sodUrl, type SodEntity } from "@/lib/alt/sod";
 import { staticRegistry } from "@/lib/alt/collect.server";
@@ -178,5 +181,58 @@ if (args.sod !== undefined) {
     if (args.dry === undefined && !only) await sb.from("job_state").upsert({ job: "gov-sod", cursor: newest, updated_at: new Date().toISOString() });
     if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: true, items: rows, detail: { banks: done, year: newest } }).eq("id", run.id);
     log(`Summary of Deposits done: ${rows} rows for ${done} banks`);
+  }
+}
+
+if (args["medicare-states"] !== undefined) {
+  const years = Number(args["medicare-states"]) || 5;
+  const catalog = await (await fetch("https://data.cms.gov/data.json")).json();
+  const files = geoDistributions(catalog);
+  const newest = Math.max(...files.keys());
+  if (!Number.isFinite(newest)) throw new Error("no CMS geography files in the catalog");
+  const { data: st } = await sb.from("job_state").select("cursor").eq("job", "gov-medicare-states").maybeSingle();
+  const record = args.dry === undefined && !args.tickers;
+  const { data: run } = record ? await sb.from("job_runs").insert({ job: "gov-medicare-states" }).select("id").single() : { data: null };
+  if (args["if-new"] !== undefined && (st?.cursor ?? 0) >= newest) {
+    log(`Medicare drug costs by state up to date (${newest})`);
+    if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: true, items: 0, detail: { note: `up to date through ${newest}` } }).eq("id", run.id);
+  } else {
+    const { data: regFile } = await sb.storage.from("datasets").download(REGISTRY_PATH);
+    const reg = (regFile ? JSON.parse(await regFile.text()) : {}) as Record<string, AltRegistryEntry>;
+    const coveredCos = COVERAGE.flatMap((c) => [c.shortName, reg[c.ticker]?.legal].filter(Boolean).map((name) => ({ ticker: c.ticker, name: name as string, sector: c.sector })));
+    const memo = new Map<string, string | null>();
+    const resolve = (m: string) => (memo.has(m) ? memo.get(m)! : (memo.set(m, makerTicker(m, coveredCos)), memo.get(m)!));
+    const spending = await cmsAll(CMS.partD.annual);
+    const owners = partDOwners(spending, resolve);
+    const spendBy = new Map<number, Map<string, number>>();
+    for (const r of drugYears("partD", "annual", spending, resolve)) {
+      const m = spendBy.get(r.year) ?? spendBy.set(r.year, new Map()).get(r.year)!;
+      m.set(r.ticker, (m.get(r.ticker) ?? 0) + r.spend);
+    }
+    const only = args.tickers ? new Set(String(args.tickers).toUpperCase().split(",")) : null;
+    const span = [...files.keys()].filter((y) => y > newest - years && owners.has(y)).sort();
+    log(`Medicare Part D by state ${span[0]}–${span.at(-1)} · owners known for ${span.map((y) => `${y}: ${owners.get(y)!.size}`).join(", ")} brands`);
+    let rows = 0;
+    const tickers = new Set<string>();
+    for (const y of span) {
+      const f = files.get(y)!;
+      let text: string | null = null;
+      for (let t = 0; t < 4 && !text; t++) {
+        const r = await fetch(f.csv).catch(() => null);
+        if (r?.ok) text = await r.text();
+        else await sleep(3000 * (t + 1));
+      }
+      if (!text) throw new Error(`CMS ${y} geography file failed`);
+      const recs = parseGeoCsv(text);
+      let out = geoRows(y, recs, owners.get(y)!, f.id, { spend: spendBy.get(y) });
+      if (only) out = out.filter((r) => only.has(r.ticker));
+      for (const r of out) tickers.add(r.ticker);
+      if (args.dry === undefined) await upsert(out);
+      rows += out.length;
+      log(`  ${y}: ${recs.length} CMS rows → ${out.length} rows for ${new Set(out.map((r) => r.ticker)).size} companies`);
+    }
+    if (args.dry === undefined && !only) await sb.from("job_state").upsert({ job: "gov-medicare-states", cursor: newest, updated_at: new Date().toISOString() });
+    if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: true, items: rows, detail: { companies: tickers.size, year: newest } }).eq("id", run.id);
+    log(`Medicare by state done: ${rows} rows for ${tickers.size} companies (${GEO_DATASET})`);
   }
 }

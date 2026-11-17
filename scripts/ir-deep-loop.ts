@@ -153,9 +153,12 @@ async function maybeSod() {
   sodChecking = true;
   state.lastSod = new Date().toISOString();
   await saveState(state);
-  void run("scripts/gov-data.ts", ["--sod", "--if-new"], `${OUT}/sod.log`).finally(() => {
-    sodChecking = false;
-  });
+  // CMS publishes Part D drug costs by prescriber state yearly (spring); same weekly check
+  void run("scripts/gov-data.ts", ["--sod", "--if-new"], `${OUT}/sod.log`)
+    .then(() => run("scripts/gov-data.ts", ["--medicare-states", "--if-new"], `${OUT}/medicare-states.log`))
+    .finally(() => {
+      sodChecking = false;
+    });
 }
 
 // ---------- background earnings reactions ----------

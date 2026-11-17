@@ -6,7 +6,8 @@ import { PageHeader, Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AltEventList } from "@/components/alt/alt-views";
 import { AltSignalsSection, SourceStrip } from "@/components/alt/alt-signals";
-import { altFeedQuery, altLeadersQuery, DATASETS, fmtAlt, leaderStats } from "@/lib/alt/query";
+import { altFeedQuery, altLeadersQuery, DATASETS, fmtAlt, leaderStats, medicareStateQuery } from "@/lib/alt/query";
+import { STATES } from "@/lib/alt/sod";
 import { FTD_TITLE } from "@/lib/alt/ftd";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/app/alt-data")({
   head: () => ({
     meta: [
       { title: "Alternative data — Filed Under" },
-      { name: "description", content: "Public alt data for every covered US company: 13D/13G holders, 8-K events, federal contracts, regulation, FDA, recalls, CFPB complaints, FDIC call reports, fails to deliver and attention." },
+      { name: "description", content: "Public alt data for every covered US company: 13D/13G holders, 8-K events, federal contracts, regulation, FDA, recalls, CFPB complaints, FDIC call reports, Medicare drug costs by state, fails to deliver and attention." },
       { property: "og:title", content: "Alternative data — Filed Under" },
       { property: "og:description", content: "FactSet-style alt datasets built from public records, every row source-linked." },
       { property: "og:type", content: "website" },
@@ -41,7 +42,7 @@ const LEAD_TITLES: Record<string, string[]> = {
   deposits: ["Branch deposits"],
 };
 const SERIES_SETS = new Set(Object.keys(LEAD_TITLES));
-const EVENTLESS = new Set(["bank", "attention", "complaints", "settlement", "medicare", "deposits"]);
+const EVENTLESS = new Set(["bank", "attention", "complaints", "settlement", "medicare", "deposits", "medicare_states"]);
 
 function AltHub() {
   const { d = "events" } = Route.useSearch();
@@ -60,6 +61,7 @@ function AltHub() {
       <p className="mb-4 text-sm text-muted-foreground">{meta.blurb} · <span className="font-medium">{meta.source}</span></p>
       <div className={cn("grid grid-cols-1 gap-5", !EVENTLESS.has(d) && "xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]")}>
         {SERIES_SETS.has(d) && <Leaders key={d} d={d} />}
+        {d === "medicare_states" && <div className="xl:col-span-2"><DrugMakersByState /></div>}
         {!EVENTLESS.has(d) && (
           <Panel title="Latest across coverage" subtitle="Newest 300 records" bodyClassName="p-0" collapse={false} className={cn(!SERIES_SETS.has(d) && "xl:col-span-2")}>
             <Feed key={d} d={d} />
@@ -153,6 +155,50 @@ function Leaders({ d }: { d: string }) {
             </div>
           )}
         </>
+      )}
+    </Panel>
+  );
+}
+
+/** Every covered drug maker in one state: its Part D drug costs there, slice of the state and index vs Medicare overall. */
+function DrugMakersByState() {
+  const [st, setSt] = useState("CA");
+  const q = useQuery(medicareStateQuery(st));
+  const rows = q.data?.rows ?? [];
+  const all = rows[0]?.meta?.state_total as number | undefined;
+  return (
+    <Panel
+      title={`Drug makers in ${STATES[st] ?? st}`}
+      subtitle={`Medicare Part D gross drug costs of each company's own brands prescribed in the state${q.data?.latest ? `, ${q.data.latest.slice(0, 4)}` : ""}${all ? ` · all Part D costs there ${fmtAlt(all, "USD")}` : ""}`}
+      bodyClassName="p-0"
+      className="min-w-0"
+      collapse={false}
+      actions={
+        <select value={st} onChange={(e) => setSt(e.target.value)} aria-label="State" className="h-7 rounded-md border bg-background px-2 text-[12px]">
+          {Object.entries(STATES).slice(0, 52).sort((a, b) => a[1].localeCompare(b[1])).map(([c, n]) => <option key={c} value={c}>{n}</option>)}
+        </select>
+      }
+    >
+      {q.isLoading ? <Skeleton className="m-4 h-64" /> : q.isError && !q.data ? <div role="alert" className="p-4 text-sm">Readings are temporarily unavailable. <Button size="xs" variant="outline" onClick={() => q.refetch()}>Retry</Button></div> : !rows.length ? <p className="px-4 py-6 text-sm text-muted-foreground">No drug-maker readings for this state yet.</p> : (
+        <div className="overflow-x-auto">
+          <table className="research-table w-full">
+            <thead><tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+              <th className="px-4 py-2 font-medium">Company</th><th className="px-2 py-2 text-right font-medium">Part D costs</th><th className="px-2 py-2 text-right font-medium" title="Share of all Part D drug costs prescribed in the state">Of state</th><th className="px-2 py-2 text-right font-medium" title="Share of the company's own Part D costs that are prescribed here">Of company</th><th className="px-2 py-2 text-right font-medium" title="State's share of the company's costs ÷ state's share of all Part D costs; above 1 = its drugs are prescribed more here">Index</th><th className="hidden px-4 py-2 font-medium sm:table-cell">Largest drugs here</th>
+            </tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.uid} className="border-b last:border-0">
+                  <td className="px-4 py-1.5"><Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="font-medium hover:underline">{r.ticker}</Link></td>
+                  <td className="num px-2 text-right"><span>{fmtAlt(r.value, "USD")}</span>{r.source_url && <EvidenceButton ticker={r.ticker} title={`${r.ticker} Part D costs in ${STATES[st] ?? st}`} url={r.source_url} date={r.date ?? undefined} />}</td>
+                  <td className="num px-2 text-right">{r.meta.market_share != null ? `${(r.meta.market_share * 100).toFixed(2)}%` : "—"}</td>
+                  <td className="num px-2 text-right">{r.meta.share != null ? `${(r.meta.share * 100).toFixed(1)}%` : "—"}</td>
+                  <td className={cn("num px-2 text-right", r.meta.index > 1.15 ? "text-chart-1" : r.meta.index < 0.87 ? "text-chart-2" : "")}>{r.meta.index != null ? `${r.meta.index.toFixed(2)}×` : "—"}</td>
+                  <td className="hidden max-w-[18rem] truncate px-4 text-[12px] text-muted-foreground sm:table-cell">{(r.meta.drugs ?? []).map((d: { brand: string }) => d.brand).join(", ")}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </Panel>
   );

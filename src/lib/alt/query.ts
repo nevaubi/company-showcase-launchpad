@@ -28,6 +28,7 @@ export const DATASETS: Record<string, { label: string; blurb: string; source: st
   consumer: { label: "Consumer product recalls", blurb: "CPSC recalls naming the company as maker, importer or retailer, with units and hazard", source: "CPSC" },
   attention: { label: "Public attention", blurb: "Monthly Wikipedia pageviews — a free demand/interest proxy", source: "Wikimedia" },
   medicare: { label: "Medicare drug spending", blurb: "Gross Medicare spending on the company's drugs — Part D (pharmacy) and Part B (given in clinics) — per year and the latest quarter, before rebates", source: "CMS" },
+  medicare_states: { label: "Medicare drugs by state", blurb: "Gross Medicare Part D drug costs for the company's own brands by the prescriber's state, its slice of each state's Part D spending and how far each state over- or under-indexes vs Medicare overall", source: "CMS" },
   deposits: { label: "Deposits by state", blurb: "Branch deposits each June 30 by state and metro area for all the company's insured banks, with its share of each state's deposits", source: "FDIC" },
   settlement: { label: "Fails to deliver", blurb: "Shares sold but not delivered on settlement day (NSCC), average daily balance per half-month valued at the day's price; persistent or spiking fails can flag hard-to-borrow stock", source: "SEC" },
 };
@@ -173,4 +174,19 @@ export const depositsByStateQuery = () => ({
     return { latest, rows };
   },
   staleTime: 60 * 60_000,
+});
+
+/** Every drug maker's Part D drug costs in one state for the latest year (CMS prescribers by geography). */
+export const medicareStateQuery = (state: string) => ({
+  queryKey: ["alt_medicare_state", state],
+  queryFn: async () => {
+    const { data: last, error } = await supabase.from("alt_data").select("date").eq("dataset", "medicare_states").order("date", { ascending: false }).limit(1);
+    if (error) throw error;
+    const latest = last?.[0]?.date as string | undefined;
+    if (!latest) return { latest: null, rows: [] as AltRow[] };
+    const { data, error: e2 } = await supabase.from("alt_data").select("uid, ticker, dataset, kind, date, title, value, unit, meta, source, source_url").eq("dataset", "medicare_states").eq("title", `Part D · ${state}`).eq("date", latest).order("value", { ascending: false }).limit(200);
+    if (e2) throw e2;
+    return { latest, rows: (data ?? []) as AltRow[] };
+  },
+  staleTime: 6 * 60 * 60_000,
 });

@@ -16,15 +16,18 @@ const TILES: Record<string, [number, number]> = {
  * Shades each state by `value` (0–1, relative to the largest); `label` prints under the code.
  * Colors come from the foreground token so the map follows the theme.
  */
-export function UsTileMap({ values, label, title, selected, onSelect, className, scale = "sqrt" }: { values: Record<string, number>; label?: (st: string) => string | null; title?: (st: string) => string; selected?: string | null; onSelect?: (st: string) => void; className?: string; /** sqrt spreads small shares apart; linear (between the smallest and largest value) suits values that are all large */ scale?: "sqrt" | "linear" }) {
+export function UsTileMap({ values, label, title, selected, onSelect, className, scale = "sqrt", diverge }: { values: Record<string, number>; label?: (st: string) => string | null; title?: (st: string) => string; selected?: string | null; onSelect?: (st: string) => void; className?: string; /** sqrt spreads small shares apart; linear (between the smallest and largest value) suits values that are all large */ scale?: "sqrt" | "linear"; /** Ratio values around this center (e.g. 1): above in one hue, below in another, by log distance */ diverge?: number }) {
   const vals = Object.values(values).filter((x) => x > 0);
   const max = Math.max(0, ...vals);
   const min = Math.min(max, ...vals);
+  const maxLog = diverge ? Math.max(1e-9, ...vals.map((v) => Math.abs(Math.log(v / diverge)))) : 0;
   return (
     <div className={cn("grid w-full max-w-[560px] grid-cols-11 gap-[3px]", className)} role="list" aria-label="Map of US states">
       {Object.entries(TILES).map(([st, [r, c]]) => {
         const v = values[st] ?? 0;
-        const t = max <= 0 || v <= 0 ? 0 : scale === "linear" ? (max > min ? 0.1 + (0.9 * (v - min)) / (max - min) : 1) : Math.sqrt(v / max);
+        const below = !!diverge && v > 0 && v < diverge;
+        const t = max <= 0 || v <= 0 ? 0 : diverge ? Math.min(1, Math.abs(Math.log(v / diverge)) / maxLog) : scale === "linear" ? (max > min ? 0.1 + (0.9 * (v - min)) / (max - min) : 1) : Math.sqrt(v / max);
+        const hue = diverge ? (below ? "var(--chart-2)" : "var(--chart-1)") : "var(--foreground)";
         const text = label?.(st);
         const Tag = onSelect ? "button" : "div";
         return (
@@ -34,11 +37,11 @@ export function UsTileMap({ values, label, title, selected, onSelect, className,
             type={onSelect ? "button" : undefined}
             title={title?.(st)}
             onClick={onSelect ? () => onSelect(st) : undefined}
-            style={{ gridRow: r + 1, gridColumn: c + 1, background: v > 0 ? `color-mix(in oklab, var(--foreground) ${Math.round(8 + t * 72)}%, var(--card))` : undefined }}
+            style={{ gridRow: r + 1, gridColumn: c + 1, background: v > 0 ? `color-mix(in oklab, ${hue} ${Math.round(8 + t * (diverge ? 82 : 72))}%, var(--card))` : undefined }}
             className={cn(
               "flex aspect-square min-w-0 flex-col items-center justify-center rounded-[3px] border text-center leading-none",
               v > 0 ? "border-transparent" : "border-border bg-card text-muted-foreground/60",
-              t > 0.45 ? "text-background" : "text-foreground",
+              t > 0.45 && !below ? "text-background" : "text-foreground",
               selected === st && "ring-2 ring-ring ring-offset-1 ring-offset-background",
               onSelect && "hover:opacity-80",
             )}
