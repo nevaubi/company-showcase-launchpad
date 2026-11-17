@@ -15,10 +15,10 @@
  *   bun scripts/ir-deep-loop.ts [--batch=10] [--wait-minutes=10] [--mirror-hours=3] [--detail-hours=12] [--seed=CVS,MCK]
  */
 import { execSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { args, dbGate, sb } from "./lib/supa";
 
-const BATCH = Number(args.batch ?? 10);
+const BATCH_ARG = args.batch === undefined ? null : Number(args.batch);
 const WAIT_MS = Number(args["wait-minutes"] ?? 10) * 60_000;
 const MIRROR_MS = Number(args["mirror-hours"] ?? 3) * 3_600_000;
 /** Filing detail (10-K/10-Q breakdowns) re-check: only companies with a new filing are re-read. */
@@ -39,25 +39,67 @@ const log = (s: string) => {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ---------- single flight ----------
-// A new worker deploy starts while the old container still holds the lease; wait for it to lapse
-// (exiting made the host mark the deploy as failed and keep the old container running).
+// Each start has its own id. The lease is short (3 min, renewed every minute); a lease left by a
+// run that died (out-of-memory kill, redeploy) lapses within minutes instead of idling 15.
+// A lease owned by this same host's previous run is taken over immediately: one container = one loop.
+const INSTANCE = `${process.env.RENDER_INSTANCE_ID ?? process.env.HOSTNAME ?? "local"}:${process.pid}:${Date.now()}`;
+const HOST = INSTANCE.split(":")[0];
+const LEASE_MS = 3 * 60_000;
 for (;;) {
-  const { data: lease } = await sb.from("job_state").select("lease_until").eq("job", JOB).maybeSingle();
-  if (!lease?.lease_until || new Date(lease.lease_until) <= new Date() || args.force !== undefined) break;
+  const { data: lease } = await sb.from("job_state").select("lease_until, paused_reason").eq("job", JOB).maybeSingle();
+  const owner = lease?.paused_reason?.startsWith("owner:") ? lease.paused_reason.slice(6) : "";
+  if (!lease?.lease_until || new Date(lease.lease_until) <= new Date() || args.force !== undefined || (owner && owner.split(":")[0] === HOST)) break;
   if (args["wait-lease"] === undefined && !process.env.IR_WAIT_LEASE) {
     log(`another loop holds the lease until ${lease.lease_until}`);
     process.exit(0);
   }
-  log(`another loop holds the lease until ${lease.lease_until} — waiting`);
-  await sleep(60_000);
+  log(`another live loop (${owner || "unknown"}) holds the lease until ${lease.lease_until} — waiting`);
+  await sleep(30_000);
 }
-const renew = () => sb.from("job_state").upsert({ job: JOB, cursor: 0, paused_reason: null, lease_until: new Date(Date.now() + 15 * 60_000).toISOString(), updated_at: new Date().toISOString() });
+const renew = () => sb.from("job_state").upsert({ job: JOB, cursor: 0, paused_reason: `owner:${INSTANCE}`, lease_until: new Date(Date.now() + LEASE_MS).toISOString(), updated_at: new Date().toISOString() });
 await renew();
 for (const sig of ["SIGTERM", "SIGINT"] as const)
   process.on(sig, () => {
     void sb.from("job_state").update({ lease_until: new Date().toISOString() }).eq("job", JOB).then(() => process.exit(0), () => process.exit(0));
   });
-setInterval(() => void renew().then(undefined, () => undefined), 5 * 60_000);
+setInterval(() => void renew().then(undefined, () => undefined), 60_000);
+const STARTED = Date.now();
+
+// ---------- memory-aware sizing ----------
+function memLimitGB() {
+  for (const f of ["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]) {
+    try {
+      const v = readFileSync(f, "utf8").trim();
+      if (v && v !== "max" && Number(v) < 1e15) return Number(v) / 2 ** 30;
+    } catch {
+      /* not a cgroup host */
+    }
+  }
+  return 8;
+}
+function memUsedGB() {
+  for (const f of ["/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"]) {
+    try {
+      return Number(readFileSync(f, "utf8").trim()) / 2 ** 30;
+    } catch {
+      /* ignore */
+    }
+  }
+  return 0;
+}
+const MEM_GB = memLimitGB();
+/** Parallel companies and per-company reader settings scale with the real memory limit. */
+const LANES = Number(process.env.IR_LANES ?? Math.max(1, Math.min(3, Math.floor(MEM_GB / 10))));
+const lanePerGB = MEM_GB / LANES;
+const childEnv = {
+  ...process.env,
+  IR_DOCLING_WORKERS: process.env.IR_DOCLING_WORKERS_FIXED ?? String(Math.max(1, Math.min(4, Math.floor(lanePerGB / 3)))),
+  IR_DOCLING_THREADS: process.env.IR_DOCLING_THREADS_FIXED ?? "2",
+  IR_EXTRACT_CONCURRENCY: process.env.IR_EXTRACT_CONCURRENCY_FIXED ?? String(Math.max(4, Math.min(20, Math.floor(lanePerGB * 2)))),
+  IR_VISION_CONCURRENCY: process.env.IR_VISION_CONCURRENCY_FIXED ?? String(Math.max(2, Math.min(8, Math.floor(lanePerGB)))),
+  NODE_OPTIONS: `--max-old-space-size=${Math.max(1024, Math.min(6144, Math.floor(lanePerGB * 1024 * 0.35)))}`,
+};
+log(`instance ${INSTANCE}: memory limit ${MEM_GB.toFixed(1)} GB → ${LANES} parallel companies, docling ${childEnv.IR_DOCLING_WORKERS}, readers ${childEnv.IR_EXTRACT_CONCURRENCY}, vision ${childEnv.IR_VISION_CONCURRENCY}`);
 
 // ---------- remembered state ----------
 interface LoopState {
@@ -79,6 +121,17 @@ interface LoopState {
   cycle?: number;
   heartbeat?: string;
   log?: string[];
+  /** companies set aside with a reason; never re-queued except when new files arrive */
+  review?: Record<string, string>;
+  /** per-company stage while running */
+  stage?: Record<string, string>;
+  memLimitGB?: number;
+  memUsedGB?: number;
+  instance?: string;
+  startedAt?: string;
+  finishedLog?: { t: string; at: string }[];
+  /** one-time reset of attempt counts inflated by out-of-memory restarts */
+  oomReset?: boolean;
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -91,6 +144,10 @@ async function loadState(): Promise<LoopState> {
 }
 async function saveState(s: LoopState) {
   s.heartbeat = new Date().toISOString();
+  s.memLimitGB = +MEM_GB.toFixed(2);
+  s.memUsedGB = +memUsedGB().toFixed(2);
+  s.instance = INSTANCE;
+  s.startedAt = new Date(STARTED).toISOString();
   s.log = recent.slice();
   await sb.storage.from("ir-documents").upload(STATE, new Blob([JSON.stringify(s)], { type: "application/json" }), { upsert: true, contentType: "application/json" });
 }
@@ -99,9 +156,9 @@ for (const t of (args.seed ?? "").split(",").filter(Boolean)) if (!state.attempt
 await saveState(state);
 
 // ---------- helpers ----------
-function run(script: string, argv: string[], logFile: string) {
+function run(script: string, argv: string[], logFile: string, env: NodeJS.ProcessEnv = process.env) {
   return new Promise<number>((resolve) => {
-    const p = spawn("sh", ["-c", `bun ${script} ${argv.map((a) => `'${a}'`).join(" ")} >> ${logFile} 2>&1`], { stdio: "ignore" });
+    const p = spawn("sh", ["-c", `bun ${script} ${argv.map((a) => `'${a}'`).join(" ")} >> ${logFile} 2>&1`], { stdio: "ignore", env });
     p.on("exit", (code) => resolve(code ?? 1));
   });
 }
@@ -116,7 +173,7 @@ async function finished(t: string) {
   let r: { stage?: string } | null = null;
   const { data } = await sb.storage.from("ir-documents").download(`ops/ir-deep/${t}.json`);
   if (data) r = JSON.parse(await data.text()) as { stage?: string };
-  else if (existsSync(`${OUT}/${t}.report.json`)) r = JSON.parse(readFileSync(`${OUT}/${t}.report.json`, "utf8")) as { stage?: string };
+  else if (existsSync(`${OUT}/${t}/${t}.report.json`)) r = JSON.parse(readFileSync(`${OUT}/${t}/${t}.report.json`, "utf8")) as { stage?: string };
   // Reports from before stages were recorded only exist for companies whose run completed.
   return !!r && (r.stage === undefined || r.stage === "final");
 }
@@ -139,8 +196,11 @@ async function universe(): Promise<{ ticker: string; revenue: number }[]> {
 let mirroring = false;
 /** New files may have been registered since finished companies were last checked. */
 let importedSince = true;
+/** Side jobs share this machine's memory: hold them until the main loop has run stably for a while. */
+const sideReady = () => Date.now() - STARTED > 20 * 60_000 && memUsedGB() < MEM_GB * 0.6;
+let sideBusy = () => mirroring || detailing || sodChecking || reacting;
 async function maybeMirror() {
-  if (mirroring) return;
+  if (mirroring || !sideReady() || sideBusy()) return;
   if (state.lastMirror && Date.now() - Date.parse(state.lastMirror) < MIRROR_MS) return;
   mirroring = true;
   state.lastMirror = new Date().toISOString();
@@ -162,7 +222,7 @@ async function maybeMirror() {
 // ---------- background filing detail ----------
 let detailing = false;
 async function maybeDetail() {
-  if (detailing) return;
+  if (detailing || !sideReady() || sideBusy()) return;
   if (state.lastDetail && Date.now() - Date.parse(state.lastDetail) < DETAIL_MS) return;
   detailing = true;
   state.lastDetail = new Date().toISOString();
@@ -178,7 +238,7 @@ async function maybeDetail() {
 /** The FDIC publishes each June 30 Summary of Deposits once a year (autumn); check weekly, import only when a new year is out. */
 let sodChecking = false;
 async function maybeSod() {
-  if (sodChecking) return;
+  if (sodChecking || !sideReady() || sideBusy()) return;
   if (state.lastSod && Date.now() - Date.parse(state.lastSod) < 7 * 86_400_000) return;
   sodChecking = true;
   state.lastSod = new Date().toISOString();
@@ -196,7 +256,7 @@ async function maybeSod() {
 /** Past report reactions for the Options page's priced-vs-past comparison; daily, since new reports land every day in season. */
 let reacting = false;
 async function maybeReactions() {
-  if (reacting) return;
+  if (reacting || !sideReady() || sideBusy()) return;
   if (state.lastReactions && Date.now() - Date.parse(state.lastReactions) < 86_400_000) return;
   reacting = true;
   state.lastReactions = new Date().toISOString();
@@ -210,7 +270,7 @@ async function maybeReactions() {
 /** A deep build started by hand (or a previous loop) shares the readers' leases: wait for it. */
 function deepRunning() {
   try {
-    return execSync("pgrep -f '^bun scripts/ir-deep.ts'").toString().trim().length > 0;
+    return execSync("ps -eo args").toString().split("\n").some((l) => l.startsWith("bun scripts/ir-deep.ts"));
   } catch {
     return false;
   }
@@ -221,95 +281,134 @@ while (deepRunning()) {
 }
 
 let creditStop = false;
-for (let cycle = 1; ; cycle++) {
+state.review ??= {};
+state.resumes ??= {};
+state.stage = {};
+if (!state.oomReset) {
+  // Attempts counted while the machine was being out-of-memory killed say nothing about the company.
+  for (const t of Object.keys(state.resumes)) state.resumes[t] = 0;
+  state.done = state.done.filter((t) => !state.attempted.includes(t) || state.unreadAtDone?.[t] !== undefined);
+  state.oomReset = true;
+  log("reset attempt counts inflated by out-of-memory restarts");
+}
+// The previous container died mid-company (no clean exit): those companies resume without penalty.
+const interrupted = new Set(state.current ?? []);
+state.current = [];
+await saveState(state);
+
+/** Next company: interrupted ones first, then started-but-unfinished, then new (largest revenue), then finished with new files. */
+async function pickNext(busy: Set<string>): Promise<string | null> {
+  const free = (t: string) => !busy.has(t) && !state.review![t];
+  for (const t of interrupted) if (free(t) && !state.done.includes(t)) return (interrupted.delete(t), t);
+  for (const t of state.attempted) {
+    if (!free(t) || state.done.includes(t)) continue;
+    if (await finished(t)) {
+      state.done.push(t);
+      (state.unreadAtDone ??= {})[t] = await unread(t);
+      continue;
+    }
+    if ((state.resumes![t] ?? 0) >= 3) {
+      state.review![t] = "failed 3 runs with company-specific errors";
+      log(`${t}: failed 3 runs — set aside for review`);
+      continue;
+    }
+    return t;
+  }
+  for (const minFiles of [10, 1])
+    for (const c of await universe()) {
+      if (state.attempted.includes(c.ticker) || !free(c.ticker)) continue;
+      if ((await files(c.ticker)) < minFiles) continue;
+      if ((await facts(c.ticker)) > 0) continue;
+      state.attempted.push(c.ticker);
+      return c.ticker;
+    }
+  if (importedSince) {
+    state.unreadAtDone ??= {};
+    for (const t of state.done) {
+      if (busy.has(t)) continue;
+      const n = await unread(t);
+      if (n >= (state.unreadAtDone[t] ?? 0) + 5) {
+        log(`${t}: ${n} unread files since it finished — reading the new ones`);
+        state.done = state.done.filter((x) => x !== t);
+        delete state.review![t];
+        state.unreadAtDone[t] = n;
+        return t;
+      }
+    }
+    importedSince = false;
+  }
+  return null;
+}
+
+async function runCompany(t: string) {
+  const t0 = Date.now();
+  state.stage![t] = "running";
+  log(`${t}: starting`);
+  const lastRun = `${OUT}/${t}/last-run.json`;
+  rmSync(lastRun, { force: true });
+  const code = await run("scripts/ir-deep.ts", [`--tickers=${t}`, `--continue=${t}`, `--out=${OUT}/${t}`, "--reset-ledger"], `${OUT}/${t}.run.log`, childEnv);
+  let stopped: string | null = code === 0 ? null : `exit ${code}`;
+  if (existsSync(lastRun)) stopped = (JSON.parse(readFileSync(lastRun, "utf8")) as { stopped: string | null }).stopped ?? stopped;
+  delete state.stage![t];
+  if (stopped && /quota|auth|credit|payment|402/i.test(stopped)) {
+    creditStop = true;
+    log(`${t}: stopped on credits (${stopped.slice(0, 160)})`);
+    return;
+  }
+  if (await finished(t)) {
+    state.done.push(t);
+    (state.unreadAtDone ??= {})[t] = await unread(t);
+    (state.finishedLog ??= []).push({ t, at: new Date().toISOString() });
+    if (state.finishedLog.length > 200) state.finishedLog.shift();
+    log(`${t}: finished in ${((Date.now() - t0) / 60000).toFixed(1)} min — ${(await facts(t)).toLocaleString()} figures`);
+  } else {
+    // Exit 137 = killed for memory: the machine's fault, not the company's.
+    if (code !== 137) state.resumes![t] = (state.resumes![t] ?? 0) + 1;
+    log(`${t}: run ended without finishing (${stopped ?? "no final report"}) — attempt ${state.resumes![t] ?? 0}`);
+  }
+}
+
+// ---------- lanes ----------
+const busy = new Set<string>();
+let idleLogged = false;
+for (;;) {
   await maybeMirror();
   await maybeDetail();
   await maybeSod();
   await maybeReactions();
-  state.resumes ??= {};
-  // 0. Self-heal: companies marked done with stored files but zero figures (runs that crashed
-  //    before reading anything) go back in the queue once.
+  // self-heal: done with files but no figures, once (never for companies set aside)
   state.healed ??= [];
   for (const t of [...state.done]) {
-    if (state.healed.includes(t)) continue;
+    if (state.healed.includes(t) || state.review[t]) continue;
     if ((await facts(t)) > 0 || (await files(t)) === 0) continue;
     state.done = state.done.filter((x) => x !== t);
     state.resumes[t] = 0;
     state.healed.push(t);
     log(`${t}: marked done with no figures — queued again`);
   }
-  // 1. Companies this loop started whose run never reached its final report.
-  const resume: string[] = [];
-  for (const t of state.attempted) {
-    if (state.done.includes(t)) continue;
-    if (await finished(t)) {
-      const n = await unread(t);
-      if (n) log(`${t}: finished with ${n} files no reader could take — left for review`);
-      state.done.push(t);
-      (state.unreadAtDone ??= {})[t] = n;
-      continue;
-    }
-    if (!creditStop) state.resumes[t] = (state.resumes[t] ?? 0) + 1;
-    if (state.resumes[t] > 3) {
-      log(`${t}: didn't finish after 3 resumes — left for review`);
-      state.done.push(t);
-    } else resume.push(t);
+  const lanes = BATCH_ARG ?? LANES;
+  const memOk = memUsedGB() < MEM_GB * 0.8;
+  while (!creditStop && memOk && busy.size < lanes) {
+    const t = await pickNext(busy);
+    if (!t) break;
+    idleLogged = false;
+    busy.add(t);
+    state.current = [...busy];
+    await saveState(state);
+    void runCompany(t).finally(() => {
+      busy.delete(t);
+      state.current = [...busy];
+      void saveState(state);
+    });
   }
-  // 1b. Finished companies that gained new files since (the mirror copies more each day): read those.
-  if (importedSince && resume.length < BATCH) {
-    importedSince = false;
-    state.unreadAtDone ??= {};
-    for (const t of state.done) {
-      if (resume.length >= BATCH) break;
-      const n = await unread(t);
-      if (n >= (state.unreadAtDone[t] ?? 0) + 5) {
-        log(`${t}: ${n} unread files since it finished — reading the new ones`);
-        state.done = state.done.filter((x) => x !== t);
-        state.unreadAtDone[t] = n;
-        resume.push(t);
-      }
-    }
+  if (!busy.size && !creditStop && !idleLogged) {
+    log("nothing readable left — waiting for the mirror to bring more files");
+    idleLogged = true;
   }
-  // 2. New companies: stored files, no figures, largest first. Companies with a handful of files
-  //    wait (the mirror is still copying theirs) unless nothing bigger is left.
-  const fresh: string[] = [];
-  for (const minFiles of [10, 1]) {
-    if (fresh.length + resume.length >= BATCH) break;
-    for (const c of await universe()) {
-      if (fresh.length + resume.length >= BATCH) break;
-      if (state.attempted.includes(c.ticker) || fresh.includes(c.ticker)) continue;
-      if ((await files(c.ticker)) < minFiles) continue;
-      if ((await facts(c.ticker)) > 0) continue;
-      fresh.push(c.ticker);
-    }
-  }
-  const batch = [...resume.slice(0, BATCH), ...fresh];
   await saveState(state);
-  if (!batch.length) {
-    log(`cycle ${cycle}: nothing readable left — waiting for the mirror to bring more files`);
-    await sleep(60 * 60_000);
-    continue;
-  }
-  for (const t of fresh) state.attempted.push(t);
-  state.current = batch;
-  state.cycle = cycle;
-  state.cycleStartedAt = new Date().toISOString();
-  await saveState(state);
-  log(`cycle ${cycle}: ${batch.join(", ")}${resume.length ? ` (continuing ${resume.slice(0, BATCH).join(", ")})` : ""}`);
-  const lastRun = `${OUT}/last-run.json`;
-  const before = existsSync(lastRun) ? readFileSync(lastRun, "utf8") : "";
-  const code = await run("scripts/ir-deep.ts", [`--tickers=${batch.join(",")}`, `--continue=${state.attempted.join(",")}`, "--reset-ledger"], `${OUT}/run.log`);
-  const after = existsSync(lastRun) ? readFileSync(lastRun, "utf8") : "";
-  let stopped: string | null = code === 0 ? null : `exit ${code}`;
-  if (after && after !== before) stopped = (JSON.parse(after) as { stopped: string | null }).stopped ?? stopped;
-  creditStop = !!stopped && /quota|auth|credit|payment|402/i.test(stopped);
-  if (creditStop) {
-    log(`cycle ${cycle}: stopped on credits (${stopped.slice(0, 160)}) — waiting ${WAIT_MS / 60000} min, then probing again`);
+  if (creditStop && !busy.size) {
+    log(`waiting ${WAIT_MS / 60000} min for credits, then probing again`);
     await sleep(WAIT_MS);
-  } else if (stopped) {
-    log(`cycle ${cycle}: run stopped (${stopped.slice(0, 160)}) — retrying after a short wait`);
-    await sleep(2 * 60_000);
-  } else log(`cycle ${cycle}: finished ${batch.join(", ")}`);
-  state.current = [];
-  await saveState(state);
+    creditStop = false;
+  } else await sleep(busy.size ? 30_000 : 10 * 60_000);
 }

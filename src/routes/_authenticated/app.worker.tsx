@@ -50,8 +50,11 @@ function derive(p: WorkerProgress) {
   );
   const leaseOk = !!p.lease?.lease_until && Date.parse(p.lease.lease_until) > Date.parse(p.now);
   const beat = loop?.heartbeat ? (Date.parse(p.now) - Date.parse(loop.heartbeat)) / 60000 : Infinity;
-  const status = !leaseOk ? "stopped" : beat > 30 ? "stalled" : "running";
-  return { withFiles, withFacts, totalFacts, recentFacts, stored, read, finished, zeroDone, queue, status };
+  const status = !leaseOk ? "stopped" : beat > 10 ? "stalled" : "running";
+  const hourAgo = Date.parse(p.now) - 3_600_000;
+  const finishedHour = (loop?.finishedLog ?? []).filter((f) => Date.parse(f.at) > hourAgo).length;
+  const uptimeMin = loop?.startedAt ? (Date.parse(p.now) - Date.parse(loop.startedAt)) / 60000 : null;
+  return { withFiles, withFacts, totalFacts, recentFacts, stored, read, finished, zeroDone, queue, status, finishedHour, uptimeMin };
 }
 
 function WorkerPage() {
@@ -65,14 +68,15 @@ function WorkerPage() {
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4">
       <PageHeader title="Live worker" description="The always-on cloud worker reading every investor-relations file. Refreshes every 20 seconds from the database." />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-7">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
         {[
-          ["Worker", d.status, `heartbeat ${ago(p.loop?.heartbeat, p.now)}`],
+          ["Worker", d.status, `heartbeat ${ago(p.loop?.heartbeat, p.now)} · up ${d.uptimeMin == null ? "—" : `${Math.round(d.uptimeMin)} min`}`],
+          ["Memory", p.loop?.memLimitGB ? `${(p.loop.memUsedGB ?? 0).toFixed(1)} / ${p.loop.memLimitGB.toFixed(0)} GB` : "—", "machine limit the worker sees"],
+          ["Finished last hour", n(d.finishedHour), `${n(Object.keys(p.loop?.review ?? {}).length)} set aside for review`],
           ["Companies with figures", `${n(d.withFacts.length)} / ${n(d.withFiles.length)}`, pct(d.withFacts.length, d.withFiles.length)],
           ["Figures (live count)", n(d.totalFacts), `+${n(d.recentFacts)} last hour`],
           ["Files read", `${n(d.read)} / ${n(d.stored)}`, pct(d.read, d.stored)],
           ["Waiting in queue", n(d.queue.length), "stored files, no figures yet"],
-          ["Done but empty", n(d.zeroDone.length), "re-queued once automatically"],
           ["Office engine", p.engine?.ok ? "online" : "offline", p.engine ? `${n(p.engine.sessions)} open documents · v${p.engine.version}` : "health check failed"],
         ].map(([k, v, s]) => (
           <div key={k} className="min-w-0 rounded-md border border-border p-3">
@@ -92,7 +96,7 @@ function WorkerPage() {
             <p className="text-sm text-muted-foreground">Between batches.</p>
           ) : (
             <table className="w-full text-[12px]">
-              <thead className="text-[10px] uppercase text-muted-foreground"><tr><th className="text-left">Company</th><th className="text-right">Files read</th><th className="text-right">Figures</th><th className="text-right">Last hour</th><th className="text-right">Tries</th></tr></thead>
+              <thead className="text-[10px] uppercase text-muted-foreground"><tr><th className="text-left">Company</th><th className="text-right">Files read</th><th className="text-right">Figures</th><th className="text-right">Last hour</th><th className="text-right">Stage</th><th className="text-right">Tries</th></tr></thead>
               <tbody>
                 {p.loop!.current.map((t) => (
                   <tr key={t} className="border-t border-border/60">
@@ -100,6 +104,7 @@ function WorkerPage() {
                     <td className="num text-right">{n(p.docs[t]?.[1] ?? 0)} / {n(p.docs[t]?.[0] ?? 0)}</td>
                     <td className="num text-right">{n(p.facts[t] ?? 0)}</td>
                     <td className="num text-right">{p.recent[t] ? `+${n(p.recent[t])}` : "—"}</td>
+                    <td className="text-right text-muted-foreground">{p.loop!.stage[t] ?? "—"}</td>
                     <td className="num text-right">{p.loop!.resumes[t] ?? 0}</td>
                   </tr>
                 ))}
@@ -120,6 +125,20 @@ function WorkerPage() {
           ))}
         </p>
       </Panel>
+      {d.status !== "running" && (
+        <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-[12px] text-warning">
+          The worker hasn't checked in for over 10 minutes — it may be restarting or out of memory.
+        </p>
+      )}
+      {Object.keys(p.loop?.review ?? {}).length > 0 && (
+        <Panel title={`Set aside for review (${Object.keys(p.loop!.review).length})`} className="min-w-0">
+          <ul className="grid grid-cols-1 gap-1 text-[12px] sm:grid-cols-2">
+            {Object.entries(p.loop!.review).map(([t, why]) => (
+              <li key={t}><span className="font-medium">{t}</span> <span className="text-muted-foreground">— {why}</span></li>
+            ))}
+          </ul>
+        </Panel>
+      )}
       {d.zeroDone.length > 0 && (
         <Panel title={`Marked done with no figures (${d.zeroDone.length})`} className="min-w-0">
           <p className="text-[12px] text-muted-foreground">{d.zeroDone.join(", ")}</p>

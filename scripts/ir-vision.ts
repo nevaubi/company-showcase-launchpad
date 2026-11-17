@@ -263,7 +263,7 @@ async function mark(d: Doc, status: string, facts: number) {
 
 log(`ir-vision: model ${model}, effort ${visionEffort(model)}${args["max-usd"] ? `, spend cap $${args["max-usd"]}` : ""}`);
 await runBatch<Doc>({
-  job: "ir-vision-runner",
+  job: args.ticker ? `ir-vision-runner:${args.ticker}` : "ir-vision-runner",
   max: Number(args.max ?? 2000),
   concurrency: Number(args.concurrency ?? 8),
   idleMinutes: args.watch !== undefined ? Number(args.idle ?? 30) : undefined,

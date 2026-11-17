@@ -18,6 +18,13 @@ export interface WorkerProgress {
     resumes: Record<string, number>;
     healed: string[];
     log: string[];
+    memLimitGB: number | null;
+    memUsedGB: number | null;
+    instance: string | null;
+    startedAt: string | null;
+    review: Record<string, string>;
+    stage: Record<string, string>;
+    finishedLog: { t: string; at: string }[];
   } | null;
   universe: string[];
   /** Filed Under office engine on Render (/health), null when unreachable */
@@ -48,6 +55,13 @@ export const getWorkerProgress = createServerFn({ method: "GET" })
         resumes: j.resumes ?? {},
         healed: j.healed ?? [],
         log: j.log ?? [],
+        memLimitGB: j.memLimitGB ?? null,
+        memUsedGB: j.memUsedGB ?? null,
+        instance: j.instance ?? null,
+        startedAt: j.startedAt ?? null,
+        review: j.review ?? {},
+        stage: j.stage ?? {},
+        finishedLog: j.finishedLog ?? [],
       };
     }
     let universe: string[] = [];

@@ -18,7 +18,8 @@ import { runBatch } from "./lib/runner";
 
 const model = args.model;
 await runBatch({
-  job: "ir-extract-runner",
+  // Per-company lease so the worker can read several companies at once.
+  job: args.ticker ? `ir-extract-runner:${args.ticker}` : "ir-extract-runner",
   max: Number(args.max ?? 5000),
   concurrency: Number(args.concurrency ?? 16),
   idleMinutes: args.watch !== undefined ? Number(args.idle ?? 30) : undefined,
@@ -29,7 +30,10 @@ await runBatch({
     return d ? { ...d, label: `${d.filed ?? ""} ${d.title}` } : null;
   },
   release: (d, status) => sb.from("ir_documents").update({ extract_status: status, extracted_at: status ? new Date().toISOString() : null }).eq("id", d.id),
-  reset: () => sb.from("ir_documents").update({ extract_status: null }).eq("extract_status", "working"),
+  reset: () => {
+    const q = sb.from("ir_documents").update({ extract_status: null }).eq("extract_status", "working");
+    return args.ticker ? q.in("ticker", args.ticker.split(",")) : q;
+  },
   process: async (d) => {
     // Parts of one file read in parallel: long 2010s releases have 10+ table chunks.
     const r = await extractIrDocument(d.id, {
