@@ -1,12 +1,16 @@
 // Whole-market government files for every covered company.
 //   bun scripts/gov-data.ts --ftd[=24]     SEC fails-to-deliver, the last N months (default 24)
 //   bun scripts/gov-data.ts --medicare     CMS Medicare Part D + Part B drug spending (annual + latest quarters)
+//   bun scripts/gov-data.ts --sod[=6]      FDIC Summary of Deposits by state and metro for every covered bank, the last N years
+//                                          (add --if-new to do nothing unless a newer June 30 survey is out; the IR loop runs that weekly)
 // The scheduled `gov-data` job keeps the latest fails-to-deliver half-month current after the
 // backfill; CMS publishes the drug files yearly with quarterly updates, so rerun --medicare then.
 import { COVERAGE } from "@/lib/coverage";
 import { ftdRows, ftdUrl, latestLikelyPeriod, parseFtd, periodCode, prevPeriod, unzipText } from "@/lib/alt/ftd";
 import { CMS, displayBrand, drugYears, makerTicker, medicareRows, type CmsRecord, type Part } from "@/lib/alt/medicare";
 import { REGISTRY_PATH, type AltRegistryEntry } from "@/lib/alt/registry";
+import { parseBuckets, SOD_API, sodFilter, sodRows, sodUrl, type SodEntity } from "@/lib/alt/sod";
+import { staticRegistry } from "@/lib/alt/collect.server";
 import { args, dbGate, log, sb, sleep } from "./lib/supa";
 
 const UA = "FiledUnder Research research@filedunder.ai";
@@ -123,4 +127,51 @@ if (args.medicare !== undefined) {
   for (const [m, t] of memo) if (t) log("  maker", JSON.stringify(m), "→", t);
   if (args.dry === undefined) await upsert(rows);
   log(args.dry !== undefined ? "medicare dry run (nothing written)" : "medicare done");
+}
+
+async function fdicJson(url: string): Promise<any> {
+  for (let t = 0; t < 4; t++) {
+    const r = await fetch(url, { signal: AbortSignal.timeout(45_000) }).catch(() => null);
+    if (r?.ok) return r.json();
+    await sleep(2000 * (t + 1));
+  }
+  throw new Error(`FDIC ${url} failed`);
+}
+
+if (args.sod !== undefined) {
+  const years = Number(args.sod) || 6;
+  const newest = Number((await fdicJson(`${SOD_API}?filters=CERT:3511&fields=YEAR&sort_by=YEAR&sort_order=DESC&limit=1`)).data?.[0]?.data?.YEAR);
+  if (!newest) throw new Error("could not read the latest Summary of Deposits year");
+  const { data: st } = await sb.from("job_state").select("cursor").eq("job", "gov-sod").maybeSingle();
+  if (args["if-new"] !== undefined && (st?.cursor ?? 0) >= newest) {
+    log(`Summary of Deposits up to date (${newest})`);
+  } else {
+    const { data: regFile } = await sb.storage.from("datasets").download(REGISTRY_PATH);
+    const reg = (regFile ? JSON.parse(await regFile.text()) : {}) as Record<string, AltRegistryEntry>;
+    const banks = COVERAGE.map((c) => ({ ticker: c.ticker, cert: staticRegistry(c.ticker).fdic ?? reg[c.ticker]?.fdic })).filter((b): b is { ticker: string; cert: number } => !!b.cert);
+    const only = args.tickers ? new Set(String(args.tickers).toUpperCase().split(",")) : null;
+    const list = only ? banks.filter((b) => only.has(b.ticker)) : banks;
+    const span = Array.from({ length: years }, (_, i) => newest - i);
+    log(`Summary of Deposits ${span.at(-1)}–${newest} for ${list.length} banks`);
+    const totals = new Map<number, Map<string, number>>();
+    for (const y of span) totals.set(y, new Map(parseBuckets(await fdicJson(sodUrl(`YEAR:${y}`, "STALPBR")), "STALPBR").map((b) => [b.key, b.depositsK])));
+    let rows = 0, done = 0;
+    for (const b of list) {
+      await dbGate();
+      const inst = (await fdicJson(`https://api.fdic.gov/banks/institutions?filters=CERT:${b.cert}&fields=CERT,NAME,RSSDHCR,NAMEHCR`)).data?.[0]?.data;
+      const e: SodEntity = { ticker: b.ticker, cert: b.cert, rssd: inst?.RSSDHCR ? String(inst.RSSDHCR) : null, name: inst?.NAMEHCR || inst?.NAME || b.ticker };
+      const out = [];
+      for (const y of span) {
+        const states = parseBuckets(await fdicJson(sodUrl(sodFilter(e, y), "STALPBR")), "STALPBR");
+        const metros = y === newest ? parseBuckets(await fdicJson(sodUrl(sodFilter(e, y), "MSANAMB", 500)), "MSANAMB") : [];
+        out.push(...sodRows(e, y, states, totals.get(y)!, metros));
+        await sleep(150);
+      }
+      if (args.dry === undefined) await upsert(out);
+      rows += out.length;
+      if (++done % 10 === 0 || only) log(`  ${done}/${list.length} ${b.ticker} (${e.name}) ${out.length} rows`);
+    }
+    if (args.dry === undefined && !only) await sb.from("job_state").upsert({ job: "gov-sod", cursor: newest, updated_at: new Date().toISOString() });
+    log(`Summary of Deposits done: ${rows} rows for ${done} banks`);
+  }
 }

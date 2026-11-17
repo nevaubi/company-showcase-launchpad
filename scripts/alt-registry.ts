@@ -5,7 +5,7 @@
 //   bun scripts/alt-registry.ts [--only=JPM,HOOD]
 import { COVERAGE } from "@/lib/coverage";
 import { staticRegistry } from "@/lib/alt/collect.server";
-import { dedupeRegistry, legalName, pickCfpb, pickFdic, REGISTRY_PATH, wikiTitle, type AltRegistry } from "@/lib/alt/registry";
+import { bankCore, dedupeRegistry, legalName, pickCfpb, pickFdic, pickFdicFuzzy, REGISTRY_PATH, wikiTitle, type AltRegistry } from "@/lib/alt/registry";
 import { args, log, sb, sleep } from "./lib/supa";
 
 const UA = "FiledUnder Research research@filedunder.ai";
@@ -52,7 +52,18 @@ for (const c of cos) {
   if (!e.wiki && w) e.wiki = w;
   if (!e.fdic && FIN.test(c.industry)) {
     const j = await json(`https://api.fdic.gov/banks/institutions?filters=${encodeURIComponent(`NAMEHCR:"${sec.replace(/[.,]/g, " ").replace(/\s+/g, " ").trim()}" AND ACTIVE:1`)}&fields=CERT,NAME,ASSET,NAMEHCR&sort_by=ASSET&sort_order=DESC&limit=20`);
-    const cert = pickFdic((j?.data ?? []).map((d: any) => d.data), sec);
+    let cert = pickFdic((j?.data ?? []).map((d: any) => d.data), sec);
+    // FDIC abbreviates holding names ("U S BCORP", "PNC FINL SERVICES GROUP"): fall back to a fuzzy
+    // search on the bank's and the holding company's names, accepted only on the same core name.
+    if (!cert && bankCore(sec)) {
+      const rows: any[] = [];
+      for (const field of ["NAMEHCR", "NAME"]) {
+        const f = await json(`https://api.fdic.gov/banks/institutions?search=${encodeURIComponent(`${field}:${bankCore(sec)}`)}&filters=ACTIVE:1&fields=CERT,NAME,ASSET,NAMEHCR&sort_by=ASSET&sort_order=DESC&limit=50`);
+        rows.push(...(f?.data ?? []).map((d: any) => d.data));
+        await sleep(150);
+      }
+      cert = pickFdicFuzzy(rows, sec);
+    }
     if (cert) e.fdic = cert;
     await sleep(150);
   }

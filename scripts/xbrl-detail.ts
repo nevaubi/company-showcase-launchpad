@@ -139,14 +139,20 @@ async function main() {
       return null;
     }
   })()) ?? { builtAt: "", companies: {} };
+  const touched = new Set<string>();
   const note = (ticker: string, d: StoredDetail | null) => {
     const e = d ? indexEntry(d) : {};
+    touched.add(ticker);
     if (e.exposure || e.bank) index.companies[ticker] = e;
     else delete index.companies[ticker];
   };
   let lastSave = Date.now();
   const saveIndex = async () => {
     if (args.dry !== undefined) return;
+    // Another run (the loop's 12-hourly check) may have saved meanwhile: keep its companies, ours win.
+    const { data: cur } = await sb.storage.from("datasets").download("detail-index.json");
+    const latest = cur ? ((JSON.parse(await cur.text()) as ExposureIndex).companies ?? {}) : {};
+    for (const [t, e] of Object.entries(latest)) if (!touched.has(t)) index.companies[t] = e;
     index.builtAt = new Date().toISOString();
     const up = await sb.storage.from("datasets").upload("detail-index.json", new Blob([JSON.stringify(index)], { type: "application/json" }), { upsert: true, contentType: "application/json" });
     if (up.error) log(`index upload failed: ${up.error.message}`);

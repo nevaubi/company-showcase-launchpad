@@ -38,9 +38,10 @@ const LEAD_TITLES: Record<string, string[]> = {
   regulatory: ["Federal Register documents naming the company"],
   medicare: ["Medicare Part D spending", "Medicare Part B spending"],
   settlement: [FTD_TITLE],
+  deposits: ["Branch deposits"],
 };
 const SERIES_SETS = new Set(Object.keys(LEAD_TITLES));
-const EVENTLESS = new Set(["bank", "attention", "complaints", "settlement", "medicare"]);
+const EVENTLESS = new Set(["bank", "attention", "complaints", "settlement", "medicare", "deposits"]);
 
 function AltHub() {
   const { d = "events" } = Route.useSearch();

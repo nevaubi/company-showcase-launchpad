@@ -28,6 +28,7 @@ export const DATASETS: Record<string, { label: string; blurb: string; source: st
   consumer: { label: "Consumer product recalls", blurb: "CPSC recalls naming the company as maker, importer or retailer, with units and hazard", source: "CPSC" },
   attention: { label: "Public attention", blurb: "Monthly Wikipedia pageviews — a free demand/interest proxy", source: "Wikimedia" },
   medicare: { label: "Medicare drug spending", blurb: "Gross Medicare spending on the company's drugs — Part D (pharmacy) and Part B (given in clinics) — per year and the latest quarter, before rebates", source: "CMS" },
+  deposits: { label: "Deposits by state", blurb: "Branch deposits each June 30 by state and metro area for all the company's insured banks, with its share of each state's deposits", source: "FDIC" },
   settlement: { label: "Fails to deliver", blurb: "Shares sold but not delivered on settlement day (NSCC), average daily balance per half-month valued at the day's price; persistent or spiking fails can flag hard-to-borrow stock", source: "SEC" },
 };
 
@@ -157,4 +158,19 @@ export const altRedFlagsQuery = (items: string[]) => ({
     return [...(own.data ?? []), ...(ev.data ?? [])] as AltRow[];
   },
   staleTime: 10 * 60_000,
+});
+
+/** Every covered bank's deposits by state for the latest two June 30 surveys (FDIC Summary of Deposits). */
+export const depositsByStateQuery = () => ({
+  queryKey: ["alt_deposits_states"],
+  queryFn: async () => {
+    const { data: last, error } = await supabase.from("alt_data").select("date").eq("dataset", "deposits").order("date", { ascending: false }).limit(1);
+    if (error) throw error;
+    const latest = last?.[0]?.date as string | undefined;
+    if (!latest) return { latest: null as string | null, rows: [] as AltRow[] };
+    const prior = `${Number(latest.slice(0, 4)) - 1}${latest.slice(4)}`;
+    const rows = await pageAll(() => supabase.from("alt_data").select("uid, ticker, dataset, kind, date, title, value, unit, meta, source, source_url").eq("dataset", "deposits").in("date", [latest, prior]).order("uid"));
+    return { latest, rows };
+  },
+  staleTime: 60 * 60_000,
 });

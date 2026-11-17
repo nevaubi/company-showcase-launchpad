@@ -84,6 +84,40 @@ export function pickFdic(rows: { NAMEHCR?: string | null; ASSET?: number | null;
   return hit.sort((a, b) => (b.ASSET ?? 0) - (a.ASSET ?? 0))[0]?.CERT ?? null;
 }
 
+const BANK_WORDS = /\b(bancorp(oration)?|bcorp|bancshares|bankshares|banc|bank|banking|financial|finl|services?|svcs?|national|association|na|trust|of|and|corp)\b/g;
+
+/** A bank or holding-company name without the words every bank shares: "U S BCORP" and "US BANCORP \DE\" → "us". */
+export function bankCore(name: string): string {
+  const words = normCompany(name.replace(/[\\/][a-z]{2}(?:[\\/]|$)/gi, " ")).replace(BANK_WORDS, " ").split(/\s+/).filter(Boolean);
+  // "u s" → "us": FDIC spells initials apart
+  const out: string[] = [];
+  let initials = false;
+  for (const w of words) {
+    if (w.length === 1 && initials) out[out.length - 1] += w;
+    else out.push(w);
+    initials = w.length === 1;
+  }
+  return out.join(" ");
+}
+
+/**
+ * The FDIC certificate of the company's largest bank, from a fuzzy name search: the holding
+ * company's name (or, for a bank without one, its own) must reduce to the same core name, and a namesake under a
+ * different holding company at least a tenth its size makes the name ambiguous (no match).
+ */
+export function pickFdicFuzzy(rows: { NAME?: string | null; NAMEHCR?: string | null; ASSET?: number | null; CERT: number }[], secName: string): number | null {
+  const core = bankCore(secName);
+  if (core.replace(/\s/g, "").length < 2) return null;
+  // A bank with a holding company matches only through that holding company (Hilltop Holdings is not
+  // the owner of "Hilltop National Bank"); a bank without one (Zions, Flagstar) through its own name.
+  const hit = rows.filter((r) => (r.NAMEHCR ? bankCore(r.NAMEHCR) === core : !!r.NAME && bankCore(r.NAME) === core)).sort((a, b) => (b.ASSET ?? 0) - (a.ASSET ?? 0));
+  const top = hit[0];
+  if (!top || !(top.ASSET ?? 0)) return null;
+  const owner = (r: (typeof hit)[number]) => (r.NAMEHCR || r.NAME || "").toUpperCase();
+  if (hit.some((r) => owner(r) !== owner(top) && (r.ASSET ?? 0) >= (top.ASSET ?? 0) * 0.1)) return null;
+  return top.CERT;
+}
+
 /** "https://en.wikipedia.org/wiki/Johnson_%26_Johnson" → "Johnson_%26_Johnson". */
 export function wikiTitle(url: string): string | null {
   const m = url.match(/\/wiki\/(.+)$/);
