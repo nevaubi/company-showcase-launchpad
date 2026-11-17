@@ -855,3 +855,43 @@ html[data-density="dense"] main h1.font-display {
 .office-doc .selectedCell { background: var(--office-soft); }
 .office-doc hr { border: 0; border-top: 1px dashed var(--border); margin: 18pt 0; }
 .office-doc p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted-foreground); float: left; height: 0; pointer-events: none; }
+
+/* ---- First-run tour motion ---- */
+:root { --tour-ease: cubic-bezier(0.22, 1, 0.36, 1); --tour-dim: color-mix(in oklab, var(--foreground) 50%, transparent); }
+.tour-root { animation: tour-fade 240ms ease-out; }
+.tour-spot { border-radius: 10px; box-shadow: 0 0 0 9999px var(--tour-dim), 0 0 0 2px var(--foreground), 0 0 24px 4px color-mix(in oklab, var(--foreground) 25%, transparent);
+  transition: transform 420ms var(--tour-ease), width 420ms var(--tour-ease), height 420ms var(--tour-ease), border-radius 300ms; will-change: transform; }
+.tour-spot[data-on="0"] { box-shadow: 0 0 0 9999px var(--tour-dim); border-radius: 50%; }
+.tour-card { transition: transform 420ms var(--tour-ease); will-change: transform; animation: tour-pop 320ms var(--tour-ease); }
+.tour-step { animation: tour-in 320ms var(--tour-ease); }
+.tour-preview { height: 128px; background: radial-gradient(circle at 30% 20%, var(--accent), var(--muted)); border-bottom: 1px solid var(--border); overflow: hidden; }
+.tour-bar { display: block; height: 5px; border-radius: 3px; background: var(--border); }
+.tour-folder { width: 44px; height: 32px; border: 2px solid var(--foreground); border-radius: 3px 6px 6px 6px; position: relative; animation: tour-float 3s ease-in-out infinite; }
+.tour-folder::before { content: ""; position: absolute; left: -2px; top: -9px; width: 18px; height: 8px; border: 2px solid var(--foreground); border-bottom: 0; border-radius: 3px 3px 0 0; }
+.tour-type { display: inline-block; overflow: hidden; white-space: nowrap; width: 0; animation: tour-type 4.5s steps(4) infinite; }
+.tour-caret { width: 1px; height: 12px; background: var(--foreground); animation: tour-blink 0.9s steps(1) infinite; }
+.tour-drop { animation: tour-drop 4.5s var(--tour-ease) infinite; }
+.tour-rise { animation: tour-in 500ms var(--tour-ease) both; }
+.tour-cell { animation: tour-cell 4.8s ease-out infinite both; }
+.tour-grow { transform-origin: bottom; animation: tour-grow 4.8s var(--tour-ease) infinite both; }
+.tour-click { animation: tour-click 4s ease-in-out infinite; }
+.tour-doc { animation: tour-doc 4s var(--tour-ease) infinite; }
+.tour-mark { animation: tour-mark 4s ease-in-out infinite; }
+.tour-dots::after { content: "…"; animation: tour-blink 1.2s steps(1) infinite; margin-left: 2px; }
+@keyframes tour-fade { from { opacity: 0; } }
+@keyframes tour-pop { from { opacity: 0; scale: 0.97; } }
+@keyframes tour-in { from { opacity: 0; translate: 0 6px; } }
+@keyframes tour-float { 50% { translate: 0 -3px; } }
+@keyframes tour-type { 0%, 10% { width: 0; } 45%, 100% { width: 4ch; } }
+@keyframes tour-blink { 50% { opacity: 0; } }
+@keyframes tour-drop { 0%, 45% { opacity: 0; translate: 0 -4px; } 55%, 92% { opacity: 1; translate: 0 0; } 100% { opacity: 0; } }
+@keyframes tour-cell { 0% { opacity: 0; } 12%, 88% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes tour-grow { 0%, 10% { scale: 1 0; } 30%, 90% { scale: 1 1; } 100% { scale: 1 0; } }
+@keyframes tour-click { 0%, 15% { background: transparent; } 25%, 85% { background: var(--accent); box-shadow: 0 0 0 1px var(--foreground); } 100% { background: transparent; } }
+@keyframes tour-doc { 0%, 25% { opacity: 0.25; translate: 8px 0; } 40%, 92% { opacity: 1; translate: 0 0; } 100% { opacity: 0.25; } }
+@keyframes tour-mark { 0%, 45% { background: transparent; } 55%, 90% { background: color-mix(in oklab, var(--warning, var(--accent)) 55%, transparent); } 100% { background: transparent; } }
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot, .tour-card { transition: opacity 200ms; }
+  .tour-preview *, .tour-preview *::before, .tour-preview *::after { animation: none !important; opacity: 1; width: auto; scale: none; translate: none; }
+  .tour-step, .tour-card { animation: tour-fade 200ms; }
+}
