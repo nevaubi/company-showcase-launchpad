@@ -31,7 +31,7 @@ import { adjustedSummary, suspectNotices, type CommentsFile, type Form144File } 
 import { irPageKey, loadIrPage } from "@/lib/ir/client";
 import { irSearch, type IrFreq } from "@/lib/research/ir-search";
 import { botsText, setupsText, type BotView } from "@/lib/research/trading-text";
-import { buildChain, chainText } from "@/lib/supply/chain";
+import { buildChain, chainText, type ChainFlow } from "@/lib/supply/chain";
 import { botsQuery, setupsQuery } from "@/lib/signals/queries";
 import { botStats } from "@/lib/signals/bots";
 import type { Family } from "@/lib/signals/strategies";
@@ -504,7 +504,9 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       });
       // End-to-end chain (suppliers' suppliers → … → customers' customers) incl. XBRL-tagged shares.
       const tagged = await qc.fetchQuery(taggedSharesQuery).catch(() => []);
-      const chain = args.relation === "partner" || args.relation === "competitor" ? null : buildChain(t, links, tagged, names, revenue, { depth: 2 });
+      const flow = (["making", "selling", "tech"].includes(String(args.flow)) ? args.flow : "all") as ChainFlow;
+      const product = typeof args.product === "string" ? args.product : "";
+      const chain = args.relation === "partner" || args.relation === "competitor" ? null : buildChain(t, links, tagged, names, revenue, { depth: args.depth === 3 ? 3 : args.depth === 1 ? 1 : 2, flow, product });
       const body = [lines.join("\n") || `No named links for ${t}.`, chain && chain.edges.length ? chainText(chain) : ""].filter(Boolean).join("\n\n");
       return { output: clip(body), summary: `${g.length} links for ${t}${chain ? ` · ${chain.nodes.length - 1} in the chain` : ""}`, refs: g.slice(0, 5).map((n) => ({ ticker: n.links[0].ticker, accn: n.links[0].accn, label: n.name })) };
     }

@@ -1,17 +1,20 @@
 // End-to-end value chain view: tiers of suppliers → company → tiers of customers, every edge sized by
 // the share or dollars a filing states. Wide screens draw columns; phones get the same tiers as a list.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { FileText, Lock, ShieldCheck, Tag, X } from "lucide-react";
+import { ArrowDown, FileText, Lock, Search, ShieldCheck, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
-import { TIER_LABEL, type Chain, type ChainEdge, type ChainNode, type TaggedShare } from "@/lib/supply/chain";
+import { CHAIN_FLOWS, LINK_TYPE_LABEL, TIER_LABEL, type Chain, type ChainEdge, type ChainFlow, type ChainNode, type TaggedShare } from "@/lib/supply/chain";
 import type { RiskLink } from "@/lib/supply/core";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const BOX_H = 30;
 const GAP = 10;
+
+export type ChainSize = "share" | "dollars";
 
 const shareText = (e: ChainEdge) => (e.share != null ? `${e.share}% of ${e.basis === "purchases" ? "purchases" : e.basis === "receivables" ? "receivables" : "revenue"}` : null);
 
@@ -32,6 +35,12 @@ export function ValueChain({
   chain,
   depth,
   onDepth,
+  flow,
+  onFlow,
+  product,
+  onProduct,
+  size,
+  onSize,
   selected,
   onSelect,
   evidence,
@@ -40,6 +49,12 @@ export function ValueChain({
   chain: Chain;
   depth: number;
   onDepth: (d: number) => void;
+  flow: ChainFlow;
+  onFlow: (f: ChainFlow) => void;
+  product: string;
+  onProduct: (p: string) => void;
+  size: ChainSize;
+  onSize: (s: ChainSize) => void;
   selected: string | null;
   onSelect: (key: string | null) => void;
   /** Evidence card for the selected company, shown over the chart's right edge on wide screens. */
@@ -80,23 +95,58 @@ export function ValueChain({
         <div className="min-w-0">
           <p className="text-sm font-medium">Value chain, end to end</p>
           <p className="text-[11px] text-muted-foreground">
-            {up} upstream · {down} downstream · goods flow left to right · line width = stated share · dashed = named without a share
+            {up} upstream · {down} downstream · goods flow left to right · line width = {size === "dollars" ? "dollars" : "stated share"} · dashed = named without {size === "dollars" ? "a dollar figure" : "a share"}
           </p>
         </div>
-        <div className="inline-flex rounded-md border p-0.5 text-xs" role="group" aria-label="Chain depth">
-          {[1, 2, 3].map((d) => (
-            <button key={d} type="button" onClick={() => onDepth(d)} className={cn("rounded px-2.5 py-1", depth === d ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
-              {d === 1 ? "1 tier" : `${d} tiers`}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-md border p-0.5 text-xs" role="group" aria-label="Size lines by">
+            {(["share", "dollars"] as const).map((v) => (
+              <button key={v} type="button" onClick={() => onSize(v)} className={cn("rounded px-2.5 py-1", size === v ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+                {v === "share" ? "Share" : "Dollars"}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex rounded-md border p-0.5 text-xs" role="group" aria-label="Chain depth">
+            {[1, 2, 3].map((d) => (
+              <button key={d} type="button" onClick={() => onDepth(d)} className={cn("rounded px-2.5 py-1", depth === d ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+                {d === 1 ? "1 tier" : `${d} tiers`}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
+        <div className="inline-flex flex-wrap rounded-md border p-0.5 text-xs" role="group" aria-label="What flows">
+          {CHAIN_FLOWS.map((f) => (
+            <button key={f.v} type="button" title={f.hint} onClick={() => onFlow(f.v)} className={cn("rounded px-2.5 py-1", flow === f.v ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+              {f.label}
             </button>
           ))}
         </div>
+        <label className="relative min-w-0 flex-1 sm:max-w-64">
+          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input value={product} onChange={(ev) => onProduct(ev.target.value)} placeholder="Product, e.g. wafers, GPUs, lithium" aria-label="Filter by product" className="h-8 pl-7 pr-7 text-xs" />
+          {product && (
+            <button type="button" onClick={() => onProduct("")} className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground" aria-label="Clear product filter">
+              <X className="size-3.5" />
+            </button>
+          )}
+        </label>
+        {(flow !== "all" || product) && <span className="text-[11px] text-muted-foreground">{CHAIN_FLOWS.find((f) => f.v === flow)?.hint}{product ? ` · products matching “${product.trim()}”` : ""}</span>}
       </div>
       <div ref={ref} className="relative min-h-[420px]">
-        {width === 0 ? null : width < 640 ? (
-          <ChainList chain={chain} byKey={byKey} selected={selected} onSelect={onSelect} />
+        {chain.nodes.length <= 1 ? (
+          <div className="grid min-h-[420px] place-content-center gap-2 p-6 text-center text-sm text-muted-foreground">
+            No filing states a link of this kind{product.trim() ? ` for “${product.trim()}”` : ""} around {chain.nodes[0]?.name ?? chain.focus}.
+            <Button size="sm" variant="outline" className="mx-auto" onClick={() => { onFlow("all"); onProduct(""); }}>
+              Show every link
+            </Button>
+          </div>
+        ) : width === 0 ? null : width < 640 ? (
+          <ChainList chain={chain} byKey={byKey} selected={selected} onSelect={onSelect} size={size} />
         ) : (
           <>
-            <ChainColumns chain={chain} byKey={byKey} width={width} lit={lit} selected={selected} onHover={setHover} onSelect={onSelect} />
+            <ChainColumns chain={chain} byKey={byKey} width={width} lit={lit} selected={selected} size={size} onHover={setHover} onSelect={onSelect} />
             {selected && evidence && (
               <div className="absolute inset-y-2 right-2 flex w-[340px] max-w-[45%] flex-col rounded-lg border bg-card shadow-lg" data-section="Chain evidence">
                 <div className="flex items-center justify-between border-b px-3 py-1.5">
@@ -139,6 +189,7 @@ function ChainColumns({
   width,
   lit,
   selected,
+  size,
   onHover,
   onSelect,
 }: {
@@ -147,6 +198,7 @@ function ChainColumns({
   width: number;
   lit: Set<string> | null;
   selected: string | null;
+  size: ChainSize;
   onHover: (k: string | null) => void;
   onSelect: (k: string) => void;
 }) {
@@ -154,6 +206,12 @@ function ChainColumns({
   const height = Math.max(420, maxRows * (BOX_H + GAP + 8) + 60);
   const { pos, boxW, colW, cols } = useMemo(() => layout(chain, width, height), [chain, width, height]);
   const boxH = BOX_H;
+  const maxD = Math.max(0, ...chain.edges.map((e) => e.dollars ?? 0));
+  const outDeg = new Map<string, number>(), inDeg = new Map<string, number>();
+  for (const e of chain.edges) {
+    outDeg.set(e.from, (outDeg.get(e.from) ?? 0) + 1);
+    inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1);
+  }
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Value chain for ${chain.focus}`} className="block">
       {cols.map((t, i) => (
@@ -167,14 +225,20 @@ function ChainColumns({
         const x1 = a.x + boxW, y1 = a.y + boxH / 2, x2 = b.x, y2 = b.y + boxH / 2;
         const mx = (x1 + x2) / 2;
         const upstream = (byKey.get(e.to)?.tier ?? 0) <= 0;
-        const w = e.share != null ? Math.max(1.5, Math.min(9, 1 + e.share / 6)) : 1.25;
+        const sized = size === "dollars" ? e.dollars != null && maxD > 0 : e.share != null;
+        // dollars: square-root scale so a $20B flow does not dwarf a $500M one into a hairline
+        const w = !sized ? 1.25 : size === "dollars" ? 1.5 + 7.5 * Math.sqrt((e.dollars as number) / maxD) : Math.max(1.5, Math.min(9, 1 + (e.share as number) / 6));
+        const tag = size === "dollars" ? (e.dollars != null ? fmtCompactUsd(e.dollars) : null) : e.share != null ? `${e.share}%` : null;
         const on = !lit || (lit.has(e.from) && lit.has(e.to));
         return (
           <g key={e.key} opacity={on ? 1 : 0.12} style={{ transition: "opacity 150ms" }}>
-            <path d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`} fill="none" stroke={upstream ? RELATION_COLOR.supplier : RELATION_COLOR.customer} strokeOpacity={0.55} strokeWidth={w} strokeDasharray={e.share == null ? "4 4" : undefined} />
-            {e.share != null && on && (
-              <text x={mx} y={(y1 + y2) / 2 - 4} textAnchor="middle" className="num fill-foreground" style={{ fontSize: 10, paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}>
-                {e.share}%
+            <path d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`} fill="none" stroke={upstream ? RELATION_COLOR.supplier : RELATION_COLOR.customer} strokeOpacity={0.55} strokeWidth={w} strokeDasharray={!sized ? "4 4" : undefined}>
+              <title>{[shareText(e), e.dollars != null ? `≈ ${fmtCompactUsd(e.dollars)}` : null, ...e.types.map(LINK_TYPE_LABEL), ...e.products].filter(Boolean).join(" · ")}</title>
+            </path>
+            {tag && on && (
+              // label at the end where the lines fan out, so labels of edges sharing a node never stack
+              <text x={(outDeg.get(e.from) ?? 0) > (inDeg.get(e.to) ?? 0) ? x2 - 6 : x1 + 6} y={((outDeg.get(e.from) ?? 0) > (inDeg.get(e.to) ?? 0) ? y2 : y1) - 5} textAnchor={(outDeg.get(e.from) ?? 0) > (inDeg.get(e.to) ?? 0) ? "end" : "start"} className="num fill-foreground" style={{ fontSize: 10, paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}>
+                {tag}
               </text>
             )}
           </g>
@@ -220,7 +284,7 @@ function ChainColumns({
   );
 }
 
-function ChainList({ chain, byKey, selected, onSelect }: { chain: Chain; byKey: Map<string, ChainNode>; selected: string | null; onSelect: (k: string | null) => void }) {
+function ChainList({ chain, byKey, selected, onSelect, size }: { chain: Chain; byKey: Map<string, ChainNode>; selected: string | null; onSelect: (k: string | null) => void; size: ChainSize }) {
   return (
     <div className="space-y-3 p-3">
       {chain.tiers.map((t) => (
@@ -237,7 +301,7 @@ function ChainList({ chain, byKey, selected, onSelect }: { chain: Chain; byKey: 
                     <button type="button" onClick={() => onSelect(n.key)} className={cn("flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-xs", t === 0 && "bg-ink text-ink-foreground", selected === n.key && "ring-2 ring-highlight")}>
                       <span className="min-w-0 flex-1 truncate font-medium">{n.name}</span>
                       {via && t !== 0 && <span className="shrink-0 text-[10.5px] opacity-70">{t < 0 ? "→" : "←"} {via.ticker ?? via.name.slice(0, 12)}</span>}
-                      {e?.share != null && <span className="num shrink-0">{e.share}%</span>}
+                      {size === "dollars" ? e?.dollars != null && <span className="num shrink-0">{fmtCompactUsd(e.dollars)}</span> : e?.share != null && <span className="num shrink-0">{e.share}%</span>}
                       {n.ticker && <span className="num shrink-0 opacity-70">{n.ticker}</span>}
                     </button>
                   </li>
@@ -329,6 +393,139 @@ export function ChainEvidence({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+type EdgeSort = "dollars" | "share" | "evidence";
+
+/**
+ * Every link drawn in the chain as a table: who sells what to whom, the stated share and the dollars it
+ * implies (with how they were worked out), and the filings that state it. A row opens its first source.
+ */
+export function ChainTable({
+  chain,
+  names,
+  revenue,
+  onOpenText,
+  onOpenTag,
+  onSelect,
+}: {
+  chain: Chain;
+  names: Record<string, string>;
+  revenue: Record<string, number | undefined>;
+  onOpenText: (l: RiskLink, label: string) => void;
+  onOpenTag: (f: TaggedShare) => void;
+  onSelect: (key: string) => void;
+}) {
+  const [sort, setSort] = useState<EdgeSort>("dollars");
+  const [all, setAll] = useState(false);
+  const byKey = useMemo(() => new Map(chain.nodes.map((n) => [n.key, n])), [chain]);
+  const rows = useMemo(() => {
+    const v = (e: ChainEdge) => (sort === "dollars" ? (e.dollars ?? -1) : sort === "share" ? (e.share ?? -1) : e.evidence.length);
+    return [...chain.edges].sort((a, b) => v(b) - v(a) || (b.share ?? 0) - (a.share ?? 0) || b.evidence.length - a.evidence.length);
+  }, [chain.edges, sort]);
+  if (!rows.length) return null;
+  const shown = all ? rows : rows.slice(0, 25);
+  const quantified = rows.filter((e) => e.dollars != null).length;
+  const nm = (k: string) => byKey.get(k)?.name ?? k;
+  const tk = (k: string) => byKey.get(k)?.ticker ?? null;
+  const formula = (e: ChainEdge) => {
+    if (e.dollars == null) return undefined;
+    if (e.dollarsFrom === "stated") return "Dollar amount stated in the filing";
+    const seller = tk(e.from);
+    const rev = seller ? revenue[seller] : undefined;
+    return rev && e.share != null ? `${e.share}% of revenue × ${fmtCompactUsd(rev)} ${names[seller!] ?? seller} revenue (last 12 months)` : "Stated share × the seller's revenue (last 12 months)";
+  };
+  const openFirst = (e: ChainEdge) => {
+    const ev = e.evidence.find((x) => x.kind === "text") ?? e.evidence[0];
+    if (!ev) return;
+    if (ev.kind === "text") onOpenText(ev.link, `${nm(e.from)} → ${nm(e.to)}`);
+    else onOpenTag(ev.fact);
+  };
+  const head = (k: EdgeSort, label: string) => (
+    <th className="sticky top-0 z-10 border-b bg-card px-3 py-2 text-right font-medium">
+      <button type="button" onClick={() => setSort(k)} className={cn("inline-flex items-center gap-1", sort === k ? "text-foreground" : "hover:text-foreground")}>
+        {label}
+        {sort === k && <ArrowDown className="size-3" />}
+      </button>
+    </th>
+  );
+  return (
+    <div className="min-w-0 rounded-xl border bg-card" data-section="Chain links">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-4 py-2.5">
+        <div>
+          <p className="text-sm font-medium">Every link in the chain</p>
+          <p className="text-[11px] text-muted-foreground">
+            {rows.length} links · {quantified} with a dollar figure (stated, or a stated share of the seller's revenue) · click a row for its source
+          </p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-xs">
+          <thead className="text-[11px] text-muted-foreground">
+            <tr>
+              <th className="sticky top-0 z-10 border-b bg-card px-3 py-2 text-left font-medium">Seller → buyer</th>
+              <th className="sticky top-0 z-10 border-b bg-card px-3 py-2 text-left font-medium">What changes hands</th>
+              {head("share", "Stated share")}
+              {head("dollars", "≈ Dollars")}
+              {head("evidence", "Filings")}
+              <th className="sticky top-0 z-10 border-b bg-card px-3 py-2 text-left font-medium">Flags</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((e) => {
+              const t = byKey.get(e.from)?.tier ?? 0;
+              return (
+                <tr key={e.key} className="group cursor-pointer" onClick={() => openFirst(e)}>
+                  <td className="max-w-72 border-b px-3 py-1.5 group-hover:bg-secondary">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <button type="button" title={nm(e.from)} onClick={(ev) => { ev.stopPropagation(); onSelect(e.from); }} className="min-w-0 truncate font-medium hover:underline">
+                        {tk(e.from) ?? nm(e.from)}
+                      </button>
+                      <span className="shrink-0 text-muted-foreground">→</span>
+                      <button type="button" title={nm(e.to)} onClick={(ev) => { ev.stopPropagation(); onSelect(e.to); }} className="min-w-0 truncate font-medium hover:underline">
+                        {tk(e.to) ?? nm(e.to)}
+                      </button>
+                    </span>
+                    <span className="block text-[10.5px] text-muted-foreground">{TIER_LABEL(t)} → {TIER_LABEL(t + 1).toLowerCase()}</span>
+                  </td>
+                  <td className="max-w-64 border-b px-3 py-1.5 group-hover:bg-secondary">
+                    <span className="flex flex-wrap gap-1">
+                      {e.types.map((x) => (
+                        <span key={x} className="rounded bg-muted px-1.5 py-0.5 text-[10.5px]">{LINK_TYPE_LABEL(x)}</span>
+                      ))}
+                      {e.products.map((x) => (
+                        <span key={x} className="max-w-40 truncate text-[11px] text-muted-foreground" title={x}>{x}</span>
+                      ))}
+                      {!e.types.length && !e.products.length && <span className="text-muted-foreground">{e.evidence.some((x) => x.kind === "tag") ? "tagged share" : "—"}</span>}
+                    </span>
+                  </td>
+                  <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary">{e.share != null ? `${e.share}%` : "—"}<span className="block text-[10px] text-muted-foreground">{e.share != null ? `of ${e.basis}` : ""}</span></td>
+                  <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary" title={formula(e)}>
+                    {e.dollars != null ? fmtCompactUsd(e.dollars) : "—"}
+                    {e.dollars != null && <span className="block text-[10px] text-muted-foreground">{e.dollarsFrom === "stated" ? "stated" : "share × revenue"}</span>}
+                  </td>
+                  <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary">{e.evidence.length}</td>
+                  <td className="border-b px-3 py-1.5 group-hover:bg-secondary">
+                    <span className="flex flex-wrap gap-1 text-[10.5px]">
+                      {e.confirmed && <span className="inline-flex items-center gap-1 rounded bg-positive/10 px-1.5 py-0.5 text-positive"><ShieldCheck className="size-3" /> both filings</span>}
+                      {e.sole && <span className="inline-flex items-center gap-1 rounded bg-negative/10 px-1.5 py-0.5 text-negative"><Lock className="size-3" /> single source</span>}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {rows.length > 25 && (
+        <div className="border-t px-4 py-2">
+          <Button size="xs" variant="ghost" onClick={() => setAll((x) => !x)}>
+            {all ? "Show the top 25" : `Show all ${rows.length} links`}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

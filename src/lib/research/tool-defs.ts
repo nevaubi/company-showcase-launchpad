@@ -447,8 +447,17 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_supply_chain",
-    description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession.",
-    parameters: obj({ ticker: str("Covered ticker"), relation: nullable({ type: "string", enum: ["customer", "supplier", "partner", "competitor"] }) }, ["ticker", "relation"]),
+    description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession — plus the end-to-end value chain (suppliers' suppliers → … → customers' customers, each edge with its relationship type, products, share, dollars and filings). flow narrows the chain: making = supply base upstream + buyers using the goods as parts; selling = route to market; tech = cloud/licensing/co-development. product keeps only links whose stated product contains that text (e.g. 'wafers', 'lithium').",
+    parameters: obj(
+      {
+        ticker: str("Covered ticker"),
+        relation: nullable({ type: "string", enum: ["customer", "supplier", "partner", "competitor"] }),
+        flow: nullable({ type: "string", enum: ["all", "making", "selling", "tech"] }),
+        product: nullable(str("Product text to filter the chain by")),
+        depth: nullable({ type: "integer", enum: [1, 2, 3] }),
+      },
+      ["ticker", "relation", "flow", "product", "depth"],
+    ),
     strict: true,
   },
   {

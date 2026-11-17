@@ -2,7 +2,7 @@
 // Built from every quoted supply link (either company's filing) plus XBRL-tagged customer/supplier
 // concentration facts, so each edge carries the evidence that states it. Goods flow left to right
 // (seller → buyer). Pure: no React, no fetching.
-import { entityKey, linkDollars, type RiskLink } from "./core";
+import { entityKey, linkDollars, type ProLink, type RiskLink } from "./core";
 
 /** One tagged concentration fact (xbrl_concentration row) naming a covered counterparty. */
 export interface TaggedShare {
@@ -34,11 +34,53 @@ export interface ChainEdge {
   basis: "revenue" | "receivables" | "purchases" | null;
   /** Largest dollar figure stated or implied (share of the seller's revenue × that revenue). */
   dollars: number | null;
+  /** Where the dollar figure comes from: an amount the quote states, or a stated share × the seller's revenue. */
+  dollarsFrom: "stated" | "share" | null;
   sole: boolean;
   /** Both companies' own filings state the relationship. */
   confirmed: boolean;
+  /** Kinds of relationship the quotes describe (component, foundry, distributor…), most cited first. */
+  types: string[];
+  /** What changes hands, as the quotes name it, most cited first. */
+  products: string[];
   evidence: ChainEvidence[];
 }
+
+/** What kind of flow to draw: everything, or one family of stated relationship types. */
+export type ChainFlow = "all" | "making" | "selling" | "tech";
+export const CHAIN_FLOWS: { v: ChainFlow; label: string; hint: string }[] = [
+  { v: "all", label: "Everything", hint: "every stated customer and supplier link" },
+  { v: "making", label: "Making it", hint: "the supply base behind the company's products, and buyers that build them into their own" },
+  { v: "selling", label: "Selling it", hint: "the route to market: customers, distributors, resellers, logistics and governments" },
+  { v: "tech", label: "Tech & IP", hint: "cloud, licensing and co-development, both ways" },
+];
+const TECH = ["cloud", "licensor", "licensee", "co_development"];
+const PARTS = ["component", "contract_manufacturer", "foundry", "materials"];
+const CHANNEL = ["distributor", "reseller", "logistics"];
+export const LINK_TYPE_LABEL = (t: string) => t.replace(/_/g, " ");
+
+/** Which side of the company a link sits on: upstream (its supply base) or downstream (its buyers). */
+export type ChainSide = "up" | "down";
+
+/**
+ * Whether a quoted link belongs to the flow on this side of the company, and matches the product search.
+ * Making = everything physical upstream, plus downstream buyers that use the goods as parts. Selling =
+ * everything physical downstream, plus channel partners upstream. Tech & IP = the tech types on either side.
+ */
+export function inFlow(l: Pick<ProLink, "link_type" | "product" | "detail">, flow: ChainFlow, product: string, side: ChainSide = "down"): boolean {
+  const t = l.link_type ?? "";
+  const ok =
+    flow === "all" ||
+    (flow === "tech" && TECH.includes(t)) ||
+    (flow === "making" && (side === "up" ? !TECH.includes(t) : PARTS.includes(t))) ||
+    (flow === "selling" && (side === "down" ? !TECH.includes(t) : CHANNEL.includes(t)));
+  if (!ok) return false;
+  const q = product.trim().toLowerCase();
+  return !q || `${l.product ?? ""} ${l.detail ?? ""}`.toLowerCase().includes(q);
+}
+/** Tagged XBRL shares carry no type or product: they count as physical trade, and never under a product search. */
+const tagInFlow = (f: TaggedShare, flow: ChainFlow, product: string, side: ChainSide) =>
+  !product.trim() && (flow === "all" || (flow === "making" && (side === "up" || f.kind === "supplier")) || (flow === "selling" && side === "down"));
 
 export interface ChainNode {
   key: string;
@@ -65,6 +107,9 @@ export interface ChainOptions {
   perNode?: number;
   /** Most parties in any one tier beyond the first. */
   perTier?: number;
+  flow?: ChainFlow;
+  /** Keep only links whose stated product or detail contains this text. */
+  product?: string;
 }
 
 const weight = (e: ChainEdge) => [e.dollars ?? 0, e.share ?? 0, e.evidence.length] as const;
@@ -74,7 +119,7 @@ const byWeight = (a: ChainEdge, b: ChainEdge) => {
 };
 
 /** Every seller → buyer edge stated anywhere, merged per pair. */
-export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Record<string, string>, revenue: Record<string, number | undefined>): { edges: Map<string, ChainEdge>; label: Map<string, { name: string; ticker: string | null }> } {
+export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Record<string, string>, revenue: Record<string, number | undefined>, flow: ChainFlow = "all", product = "", side: ChainSide = "down"): { edges: Map<string, ChainEdge>; label: Map<string, { name: string; ticker: string | null }> } {
   const edges = new Map<string, ChainEdge>();
   const label = new Map<string, { name: string; ticker: string | null }>();
   const node = (name: string, ticker: string | null) => {
@@ -90,7 +135,7 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
     const k = `${from}>${to}`;
     let e = edges.get(k);
     if (!e) {
-      e = { key: k, from, to, share: null, basis: null, dollars: null, sole: false, confirmed: false, evidence: [] };
+      e = { key: k, from, to, share: null, basis: null, dollars: null, dollarsFrom: null, sole: false, confirmed: false, types: [], products: [], evidence: [] };
       edges.set(k, e);
     }
     return e;
@@ -101,24 +146,39 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
     s.add(reporter);
     reporters.set(e.key, s);
   };
+  const tally = new Map<string, { types: Map<string, number>; products: Map<string, number> }>();
+  const bump = (m: Map<string, number>, k: string | null | undefined) => {
+    const v = k?.trim();
+    if (v) m.set(v, (m.get(v) ?? 0) + 1);
+  };
   for (const l of links) {
     if (l.relation !== "customer" && l.relation !== "supplier") continue;
+    if (!inFlow(l as ProLink, flow, product, side)) continue;
     const me = node(names[l.ticker] ?? l.ticker, l.ticker);
     const cp = node(l.counterparty, l.counterparty_ticker);
     if (me === cp) continue;
     const e = l.relation === "customer" ? edge(me, cp) : edge(cp, me);
     e.evidence.push({ kind: "text", link: l });
     saw(e, l.ticker);
+    const t = tally.get(e.key) ?? { types: new Map(), products: new Map() };
+    tally.set(e.key, t);
+    const pl = l as ProLink;
+    if (pl.link_type && pl.link_type !== "other") bump(t.types, pl.link_type);
+    bump(t.products, pl.product);
     if (l.single_source) e.sole = true;
     if (l.share_pct != null && l.share_pct > (e.share ?? 0)) {
       e.share = l.share_pct;
       e.basis = l.relation === "customer" ? "revenue" : "purchases";
     }
     const d = linkDollars(l, revenue);
-    if (d != null && d > (e.dollars ?? 0)) e.dollars = d;
+    if (d != null && d > (e.dollars ?? 0)) {
+      e.dollars = d;
+      e.dollarsFrom = l.amount_usd != null && l.amount_usd > 0 ? "stated" : "share";
+    }
   }
   for (const f of tagged) {
     if (f.kind !== "customer" && f.kind !== "supplier") continue;
+    if (!tagInFlow(f, flow, product, side)) continue;
     const me = node(names[f.ticker] ?? f.ticker, f.ticker);
     const cp = node(names[f.counterparty] ?? f.counterparty, f.counterparty);
     if (me === cp) continue;
@@ -135,10 +195,19 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
     const rev = revenue[f.ticker];
     if (f.kind === "customer" && f.benchmark === "revenue" && rev) {
       const d = f.pct * rev;
-      if (d > (e.dollars ?? 0)) e.dollars = d;
+      if (d > (e.dollars ?? 0)) {
+        e.dollars = d;
+        e.dollarsFrom = "share";
+      }
     }
   }
+  const ranked = (m: Map<string, number> | undefined, n: number) => [...(m ?? new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([k]) => k);
   for (const e of edges.values()) {
+    const t = tally.get(e.key);
+    e.types = ranked(t?.types, 3);
+    // the same product named with different capitalisation is one product
+    const seen = new Set<string>();
+    e.products = ranked(t?.products, 8).filter((p) => (seen.has(p.toLowerCase()) ? false : (seen.add(p.toLowerCase()), true))).slice(0, 3);
     const who = reporters.get(e.key) ?? new Set();
     const seller = label.get(e.from)?.ticker, buyer = label.get(e.to)?.ticker;
     e.confirmed = !!seller && !!buyer && who.has(seller) && who.has(buyer);
@@ -151,13 +220,15 @@ export function buildChain(focus: string, links: RiskLink[], tagged: TaggedShare
   const depth = Math.max(1, Math.min(opts.depth ?? 2, 3));
   const first = opts.first ?? 8, perNode = opts.perNode ?? 3, perTier = opts.perTier ?? 10;
   const f = focus.toUpperCase();
-  const { edges, label } = chainEdges(links, tagged, names, revenue);
+  const flow = opts.flow ?? "all", product = opts.product ?? "";
+  const down = chainEdges(links, tagged, names, revenue, flow, product, "down");
+  // unfiltered, both sides see the same edges: build them once
+  const upE = flow === "all" && !product.trim() ? down : chainEdges(links, tagged, names, revenue, flow, product, "up");
+  const label = new Map([...upE.label, ...down.label]);
   const out = new Map<string, ChainEdge[]>();
   const into = new Map<string, ChainEdge[]>();
-  for (const e of edges.values()) {
-    out.set(e.from, [...(out.get(e.from) ?? []), e]);
-    into.set(e.to, [...(into.get(e.to) ?? []), e]);
-  }
+  for (const e of down.edges.values()) out.set(e.from, [...(out.get(e.from) ?? []), e]);
+  for (const e of upE.edges.values()) into.set(e.to, [...(into.get(e.to) ?? []), e]);
   const placed = new Map<string, ChainNode>();
   placed.set(f, { key: f, name: label.get(f)?.name ?? names[f] ?? f, ticker: f, tier: 0, via: null });
   const kept: ChainEdge[] = [];
@@ -183,9 +254,13 @@ export function buildChain(focus: string, links: RiskLink[], tagged: TaggedShare
     }
   }
   // Every stated edge between neighbouring tiers, not only the ones that placed a node.
-  for (const e of edges.values()) {
+  for (const e of down.edges.values()) {
     const a = placed.get(e.from), b = placed.get(e.to);
-    if (a && b && b.tier === a.tier + 1) kept.push(e);
+    if (a && b && b.tier === a.tier + 1 && a.tier >= 0) kept.push(e);
+  }
+  for (const e of upE.edges.values()) {
+    const a = placed.get(e.from), b = placed.get(e.to);
+    if (a && b && b.tier === a.tier + 1 && b.tier <= 0) kept.push(e);
   }
   const nodes = [...placed.values()];
   return { focus: f, nodes, edges: kept.sort(byWeight), tiers: [...new Set(nodes.map((n) => n.tier))].sort((a, b) => a - b) };
@@ -206,7 +281,8 @@ export function chainText(c: Chain, max = 40): string {
       .slice(0, 3)
       .map((ev) => (ev.kind === "text" ? `${ev.link.ticker} ${ev.link.form} ${ev.link.accn}` : `${ev.fact.ticker} ${ev.fact.form} ${ev.fact.accn} XBRL-tagged "${ev.fact.label}" ${(ev.fact.pct * 100).toFixed(1)}% of ${ev.fact.benchmark}`))
       .join("; ");
-    return `[${TIER_LABEL(t)} → ${TIER_LABEL(t + 1)}] ${nm(e.from)} sells to ${nm(e.to)}${e.share != null ? ` | ${e.share}% of ${e.basis}` : ""}${e.dollars != null ? ` | ≈$${(e.dollars / 1e6).toFixed(0)}M` : ""}${e.sole ? " | SINGLE SOURCE" : ""}${e.confirmed ? " | both filings state it" : ""} | per ${src}`;
+    const what = [...e.types.map(LINK_TYPE_LABEL), ...e.products].join(", ");
+    return `[${TIER_LABEL(t)} → ${TIER_LABEL(t + 1)}] ${nm(e.from)} sells to ${nm(e.to)}${what ? ` (${what})` : ""}${e.share != null ? ` | ${e.share}% of ${e.basis}` : ""}${e.dollars != null ? ` | ≈$${(e.dollars / 1e6).toFixed(0)}M` : ""}${e.sole ? " | SINGLE SOURCE" : ""}${e.confirmed ? " | both filings state it" : ""} | per ${src}`;
   });
   return `VALUE CHAIN (goods flow left to right; tiers ${c.tiers.join(", ")}; ${c.nodes.length - 1} companies):\n${lines.join("\n")}${c.edges.length > max ? `\n…${c.edges.length - max} more edges` : ""}`;
 }

@@ -67,3 +67,43 @@ describe("chain text for the assistant", () => {
     expect(t).toContain('XBRL-tagged "NVIDIA" 60.0% of purchases');
   });
 });
+
+describe("chain filters", () => {
+  const typed: RiskLink[] = [
+    L("t1", "NVDA", "Taiwan Semiconductor Manufacturing Company Limited", null, "supplier", { link_type: "foundry", product: "wafers" } as Partial<RiskLink>),
+    L("t2", "NVDA", "Microsoft", "MSFT", "customer", { share_pct: 19, link_type: "end_customer", product: "data center GPUs" } as Partial<RiskLink>),
+    L("t3", "NVDA", "Dell", "DELL", "customer", { link_type: "distributor", product: "Data Center GPUs" } as Partial<RiskLink>),
+    L("t4", "NVDA", "Microsoft", "MSFT", "customer", { link_type: "cloud", product: "Azure capacity" } as Partial<RiskLink>),
+  ];
+  const keys = (c: ReturnType<typeof buildChain>) => c.edges.map((e) => e.key).sort();
+
+  it("making = the supply base upstream plus buyers that use the goods as parts; selling = the route to market", () => {
+    const making = buildChain("NVDA", typed, tagged, names, {}, { flow: "making", depth: 1 });
+    // SMCI tags NVDA as a supplier (a share of SMCI's purchases): NVDA's parts go into what SMCI makes
+    expect(keys(making)).toEqual(["NVDA>SMCI", "TSM>NVDA"]);
+    const selling = buildChain("NVDA", typed, tagged, names, {}, { flow: "selling", depth: 1 });
+    expect(keys(selling)).toEqual(["NVDA>DELL", "NVDA>MSFT", "NVDA>SMCI"]);
+    const tech = buildChain("NVDA", typed, tagged, names, {}, { flow: "tech", depth: 1 });
+    expect(keys(tech)).toEqual(["NVDA>MSFT"]);
+    expect(tech.edges[0].share).toBeNull(); // the cloud quote carries no share; the end-customer one is filtered out
+  });
+
+  it("keeps a supplier's own customers upstream under making, whatever type their quote carries", () => {
+    const deep: RiskLink[] = [...typed, L("t5", "AMAT", "TSMC", null, "customer", { share_pct: 17, link_type: "end_customer", product: "wafer fab equipment" } as Partial<RiskLink>)];
+    const c = buildChain("NVDA", deep, [], names, { AMAT: 27e9 }, { flow: "making", depth: 2 });
+    expect(c.nodes.find((n) => n.key === "AMAT")?.tier).toBe(-2);
+    expect(buildChain("NVDA", deep, [], names, {}, { flow: "selling", depth: 2 }).nodes.some((n) => n.key === "AMAT")).toBe(false);
+  });
+
+  it("filters by product text and drops tagged shares, which name no product", () => {
+    const c = buildChain("NVDA", typed, tagged, names, {}, { product: "data center", depth: 1 });
+    expect(keys(c)).toEqual(["NVDA>DELL", "NVDA>MSFT"]);
+  });
+
+  it("records the stated types and products on each edge, one spelling per product", () => {
+    const c = buildChain("NVDA", typed, [], names, {}, { depth: 1 });
+    const ms = c.edges.find((e) => e.key === "NVDA>MSFT")!;
+    expect(ms.types.sort()).toEqual(["cloud", "end_customer"]);
+    expect(ms.products.sort()).toEqual(["Azure capacity", "data center GPUs"]);
+  });
+});

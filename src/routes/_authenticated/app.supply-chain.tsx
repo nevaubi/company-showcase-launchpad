@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { useSessionState } from "@/lib/use-session-state";
 import { requestResearch } from "@/lib/research/request";
 import { ClientOnly } from "@tanstack/react-router";
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useDeferredValue, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowRight, FileText, Globe2, Lock, Network, Zap } from "lucide-react";
@@ -17,8 +17,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useSource } from "@/components/source/source-context";
 import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
-import { buildChain } from "@/lib/supply/chain";
-import { ChainEvidence, ValueChain } from "@/components/supply/value-chain";
+import { buildChain, type ChainFlow, type TaggedShare } from "@/lib/supply/chain";
+import { ChainEvidence, ChainTable, ValueChain, type ChainSize } from "@/components/supply/value-chain";
 import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
 import { SupplyIntel, CounterpartyEvidence } from "@/components/supply/supply-intel";
 import { ConfidenceBadge, DependencyCard, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
@@ -76,6 +76,10 @@ function SupplyChainPage() {
   const [chainDepth, setChainDepth] = useSessionState<number>("fu:supply:chain-depth", 2);
   const [chainSel, setChainSel] = useState<string | null>(null);
   const [chainWide, setChainWide] = useState(true);
+  const [chainFlow, setChainFlow] = useSessionState<ChainFlow>("fu:supply:chain-flow", "all");
+  const [chainSize, setChainSize] = useSessionState<ChainSize>("fu:supply:chain-size", "share");
+  const [chainProduct, setChainProduct] = useState("");
+  const product = useDeferredValue(chainProduct);
   const { data: tagged } = useQuery({ ...taggedSharesQuery, enabled: view === "chain" });
   const { open } = useSource();
   const { data: signals } = useQuery(allSignalsQuery);
@@ -87,7 +91,12 @@ function SupplyChainPage() {
   const revenue = useMemo(() => Object.fromEntries((universe?.companies ?? []).map((c) => [c.ticker, c.revenueTTM ?? undefined])), [universe]);
   const all = links ?? [];
   const graph = useMemo(() => focusGraph(ticker, all, names), [ticker, all, names]);
-  const chain = useMemo(() => (view === "chain" ? buildChain(ticker, all as RiskLink[], tagged ?? [], names, revenue, { depth: chainDepth }) : null), [view, ticker, all, tagged, names, revenue, chainDepth]);
+  // the unfiltered chain decides whether there is anything to draw; filters narrow what is drawn
+  const fullChain = useMemo(() => (view === "chain" ? buildChain(ticker, all as RiskLink[], tagged ?? [], names, revenue, { depth: chainDepth }) : null), [view, ticker, all, tagged, names, revenue, chainDepth]);
+  const chain = useMemo(
+    () => (fullChain && (chainFlow !== "all" || product.trim()) ? buildChain(ticker, all as RiskLink[], tagged ?? [], names, revenue, { depth: chainDepth, flow: chainFlow, product }) : fullChain),
+    [fullChain, chainFlow, product, ticker, all, tagged, names, revenue, chainDepth],
+  );
   const hop2 = useMemo(() => (depth === 2 ? secondOrder(ticker, graph, all, names) : []), [depth, ticker, graph, all, names]);
   const risks = useMemo(() => Object.fromEntries([...graph, ...hop2].map((n) => [n.key, nodeRisk(n.links as RiskLink[], revenue)])), [graph, hop2, revenue]);
   const focus: GraphNode = { key: "focus", name: names[ticker] ?? ticker, ticker, domain: null, relation: "focus", links: [] };
@@ -135,6 +144,8 @@ function SupplyChainPage() {
     });
   const openLink = (l: RiskLink, label: string) =>
     open({ ticker: l.ticker, label, unit: "usd", value: 0, doc: { accn: l.accn, doc: l.doc, form: l.form, filed: l.filed, title: `${l.ticker} ${l.form}`, search: l.quote } });
+  const openTag = (f: TaggedShare) =>
+    open({ ticker: f.ticker, label: `${names[f.ticker] ?? f.ticker}: ${f.label} as a ${f.kind}`, periodLabel: fmtDate(f.period_end), unit: "pct", value: f.pct, src: { accn: f.accn, concept: "us-gaap:ConcentrationRiskPercentage1", end: f.period_end, value: f.pct }, elementId: f.element_id ?? undefined });
   const chainEvidence =
     chain && chainSel ? (
       <ChainEvidence
@@ -143,7 +154,7 @@ function SupplyChainPage() {
         names={names}
         onFocus={go}
         onOpenText={openLink}
-        onOpenTag={(f) => open({ ticker: f.ticker, label: `${names[f.ticker] ?? f.ticker}: ${f.label} as a ${f.kind}`, periodLabel: fmtDate(f.period_end), unit: "pct", value: f.pct, src: { accn: f.accn, concept: "us-gaap:ConcentrationRiskPercentage1", end: f.period_end, value: f.pct }, elementId: f.element_id ?? undefined })}
+        onOpenTag={openTag}
       />
     ) : null;
 
@@ -234,8 +245,8 @@ function SupplyChainPage() {
           {linksQuery.isError && !links ? <div role="alert" className="grid h-full place-content-center gap-3 p-6 text-sm text-muted-foreground">Supply-chain records are temporarily unavailable.<Button variant="outline" size="sm" onClick={() => linksQuery.refetch()}>Retry</Button></div> : isLoading ? (
             <Skeleton className="h-full w-full" />
           ) : view === "chain" && chain ? (
-            chain.nodes.length > 1 ? (
-              <ValueChain chain={chain} depth={chainDepth} onDepth={setChainDepth} selected={chainSel} onSelect={(k) => {
+            (fullChain?.nodes.length ?? 0) > 1 ? (
+              <ValueChain chain={chain} depth={chainDepth} onDepth={setChainDepth} flow={chainFlow} onFlow={(f) => { setChainFlow(f); setChainSel(null); }} product={chainProduct} onProduct={(p) => { setChainProduct(p); setChainSel(null); }} size={chainSize} onSize={setChainSize} selected={chainSel} onSelect={(k) => {
                   setChainSel(k);
                   setTab("evidence");
                   // On phones the evidence sits under the list: bring it into view.
@@ -265,6 +276,22 @@ function SupplyChainPage() {
           )}
           {view !== "chain" && !(view === "flow" && hasSupplyFlow(graph, revenue)) && (<p className="pointer-events-none absolute bottom-2 left-14 text-[10.5px] text-muted-foreground">Line thickness = stated share of revenue or purchases · dashed = second-order link</p>)}
         </div>
+
+        {view === "chain" && chain && chain.nodes.length > 1 && (
+          <ChainTable
+            chain={chain}
+            names={names}
+            revenue={revenue}
+            onOpenText={openLink}
+            onOpenTag={openTag}
+            onSelect={(k) => {
+              setChainSel(k);
+              setTab("evidence");
+              if (!chainWide) requestAnimationFrame(() => document.getElementById("supply-analysis")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+              else window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
+        )}
 
         <Panel title="Analysis" className="min-w-0 scroll-mt-16" id="supply-analysis">
           <Tabs value={tab} onValueChange={setTab}>
