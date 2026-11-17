@@ -180,7 +180,7 @@ function SupplyChainPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+      <div data-tour="supply-stats" className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
         <Stat loading={isLoading} label="Disclosed $ exposure" value={summary.exposure.length ? fmtCompactUsd(summary.exposure.reduce((s, x) => s + x.d!, 0)) : "—"} hint={`${summary.exposure.length} quantified links`} />
         <Stat loading={isLoading} label="Concentrated (≥10%)" value={String(summary.conc)} hint="counterparties" />
         <Stat loading={isLoading} label="Single-source" value={String(summary.single)} hint="stated dependencies" icon={<Lock className="size-3.5" />} />
@@ -299,7 +299,7 @@ function SupplyChainPage() {
               <TabsTrigger value="evidence" className="px-1 text-xs">Evidence</TabsTrigger>
               <TabsTrigger value="reactions" className="px-1 text-xs">Moves</TabsTrigger>
               <TabsTrigger value="changes" className="px-1 text-xs">Changes</TabsTrigger>
-              <TabsTrigger value="shock" className="px-1 text-xs">Shock</TabsTrigger>
+              <TabsTrigger data-tour="supply-shock" value="shock" className="px-1 text-xs">Shock</TabsTrigger>
               <TabsTrigger value="exposure" className="px-1 text-xs">Exposure</TabsTrigger>
             </TabsList>
             <TabsContent value="reactions">

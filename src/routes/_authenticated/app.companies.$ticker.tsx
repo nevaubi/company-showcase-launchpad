@@ -377,7 +377,7 @@ function CompanyLayout() {
           </Button>
         </div>
       ) : (
-        <Outlet />
+        <div data-tour="company-body" className="min-w-0"><Outlet /></div>
       )}
     </div>
   );

@@ -60,7 +60,7 @@ export function SourcePanel() {
   const cik = target?.doc?.cik ?? company.data?.profile.cik ?? "";
 
   return (
-    <aside
+    <aside data-tour="source-panel"
       aria-hidden={!open}
       aria-label="Source evidence"
       style={{ width: PANEL_WIDTH }}

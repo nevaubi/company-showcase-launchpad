@@ -198,6 +198,7 @@ export function StatementTable({
                         <Tooltip delayDuration={350}>
                           <TooltipTrigger asChild>
                             <button
+                              data-tour="fin-cell"
                               onClick={() => onCell(row, i, cell)}
                               className={cn(
                                 "num relative block w-full px-3 py-1.5 text-right tabular-nums transition-colors hover:bg-highlight-soft focus-visible:bg-highlight-soft focus-visible:outline-none",

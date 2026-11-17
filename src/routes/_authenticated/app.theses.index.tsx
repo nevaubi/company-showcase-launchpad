@@ -49,7 +49,7 @@ function Theses() {
         title="Theses"
         description="Write down why you own (or short) something, then let the price, the filings and an AI reviewer keep you honest."
         actions={
-          <Button variant="ink" onClick={() => setOpen(true)}>
+          <Button data-tour="thesis-new" variant="ink" onClick={() => setOpen(true)}>
             <Plus /> New thesis
           </Button>
         }

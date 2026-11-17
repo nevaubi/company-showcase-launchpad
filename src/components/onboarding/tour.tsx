@@ -3,6 +3,7 @@ import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { TOUR_STEPS } from "@/lib/onboarding/steps";
 import { Preview } from "./tour-previews";
+import { useSource } from "@/components/source/source-context";
 
 type Box = { x: number; y: number; w: number; h: number } | null;
 const PAD = 6;
@@ -11,14 +12,36 @@ function findEl(sel?: string): HTMLElement | null {
   if (!sel) return null;
   return Array.from(document.querySelectorAll<HTMLElement>(sel)).find((e) => e.getClientRects().length > 0) ?? null;
 }
+/** Real press sequence: some controls (tabs) act on pointer/mouse down, not click. */
+function press(el: HTMLElement) {
+  const o = { bubbles: true, cancelable: true, button: 0 };
+  el.dispatchEvent(new PointerEvent("pointerdown", o)); el.dispatchEvent(new MouseEvent("mousedown", o));
+  el.dispatchEvent(new PointerEvent("pointerup", o)); el.dispatchEvent(new MouseEvent("mouseup", o));
+  el.click();
+}
+const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Resolves with the first visible match, or null after `ms` (pages may still be loading data). */
+async function waitFor(sel: string, dead: () => boolean, ms = 12000): Promise<HTMLElement | null> {
+  const t0 = Date.now();
+  while (!dead() && Date.now() - t0 < ms) {
+    const el = findEl(sel);
+    if (el) return el;
+    await pause(120);
+  }
+  return null;
+}
 function measure(el: HTMLElement | null): Box {
   if (!el) return null;
   const r = el.getBoundingClientRect();
   if (!r.width || !r.height) return null;
-  return { x: r.left - PAD, y: r.top - PAD, w: r.width + PAD * 2, h: r.height + PAD * 2 };
+  // Clamp to the viewport so large page regions still read as a frame.
+  const top = Math.max(r.top - PAD, 4), bottom = Math.min(r.bottom + PAD, window.innerHeight - 8);
+  const left = Math.max(r.left - PAD, 4), right = Math.min(r.right + PAD, window.innerWidth - 4);
+  if (bottom - top < 8 || right - left < 8) return null;
+  return { x: left, y: top, w: right - left, h: bottom - top };
 }
 
-/** Spotlight tour on the dashboard: a gliding highlight, a sliding card and a looping preview per step. */
+/** Spotlight tour across the real pages: it navigates, clicks to demonstrate, and glides the highlight to each feature. */
 export function Tour({ open, onClose }: { open: boolean; onClose: (finished: boolean) => void }) {
   const [i, setI] = useState(0);
   const [box, setBox] = useState<Box>(null);
@@ -27,41 +50,44 @@ export function Tour({ open, onClose }: { open: boolean; onClose: (finished: boo
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const step = TOUR_STEPS[i];
   const elRef = useRef<HTMLElement | null>(null);
+  const source = useSource();
 
   useEffect(() => {
-    if (!open) return;
-    setI(0);
-    if (pathname !== "/app") void navigate({ to: "/app" as never });
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (open) setI(0);
+  }, [open]);
 
-  // Find the target without polling; keep the previous box until the new one exists so nothing flickers.
+  // Open the step's page, perform its demo click, then glide the spotlight to the target.
+  // The previous box stays until the new target exists, so nothing flickers between pages.
   useLayoutEffect(() => {
     if (!open || !step) return;
-    let raf = 0;
-    const sync = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { setVp({ w: window.innerWidth, h: window.innerHeight }); setBox(measure(elRef.current)); }); };
-    const attach = () => {
-      const el = findEl(step.target);
-      if (!el) return false;
-      elRef.current = el;
-      const r = el.getBoundingClientRect();
-      if (r.top < 64 || r.bottom > window.innerHeight - 220) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      ro.observe(el);
-      sync();
-      return true;
-    };
-    const ro = new ResizeObserver(sync);
-    const mo = new MutationObserver(() => { if (attach()) mo.disconnect(); });
+    let dead = false, raf = 0;
+    const ro = new ResizeObserver(() => sync());
+    const sync = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { if (dead) return; setVp({ w: window.innerWidth, h: window.innerHeight }); setBox(measure(elRef.current)); }); };
+    // Only the source step keeps the evidence panel open; it would cover the next pages.
+    if (!step.target?.includes("source-panel")) source.close();
+    const want = step.path?.split("?")[0];
+    if (want && pathname !== want) void navigate({ href: step.path } as never);
     elRef.current = null;
     if (!step.target) setBox(null);
-    else if (!attach()) {
-      mo.observe(document.body, { childList: true, subtree: true });
-      const t = setTimeout(() => { mo.disconnect(); if (!elRef.current) setBox(null); }, 4000);
-      window.addEventListener("scroll", sync, true); window.addEventListener("resize", sync);
-      return () => { clearTimeout(t); mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); window.removeEventListener("scroll", sync, true); window.removeEventListener("resize", sync); };
-    }
+    void (async () => {
+      if (step.click && !findEl(step.done ?? step.target)) {
+        const c = await waitFor(step.click, () => dead);
+        if (dead) return;
+        if (c) { c.scrollIntoView({ block: "center" }); await pause(350); if (!dead) press(c); }
+      }
+      if (!step.target) return;
+      const el = await waitFor(step.target, () => dead);
+      if (dead) return;
+      if (!el) { setBox(null); return; }
+      elRef.current = el;
+      const r = el.getBoundingClientRect();
+      if (r.top < 64 || r.top > window.innerHeight * 0.55) el.scrollIntoView({ behavior: "smooth", block: r.height > window.innerHeight * 0.6 ? "start" : "center" });
+      ro.observe(el);
+      sync();
+    })();
     window.addEventListener("scroll", sync, true); window.addEventListener("resize", sync);
     sync();
-    return () => { mo.disconnect(); ro.disconnect(); cancelAnimationFrame(raf); window.removeEventListener("scroll", sync, true); window.removeEventListener("resize", sync); };
+    return () => { dead = true; ro.disconnect(); cancelAnimationFrame(raf); window.removeEventListener("scroll", sync, true); window.removeEventListener("resize", sync); };
   }, [open, i]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const close = useCallback((done: boolean) => onClose(done), [onClose]);
@@ -79,11 +105,18 @@ export function Tour({ open, onClose }: { open: boolean; onClose: (finished: boo
   if (!open || !step) return null;
   const narrow = vp.w < 640;
   const spot = narrow ? null : box;
-  const cardW = narrow ? vp.w - 24 : 340, cardH = 290;
+  const cardW = narrow ? vp.w - 24 : 340, cardH = step.preview ? 300 : 175;
   let left = (vp.w - cardW) / 2, top = Math.max(12, (vp.h - cardH) / 2);
   if (spot) {
-    left = Math.min(Math.max(12, spot.x), vp.w - cardW - 12);
-    top = spot.y + spot.h + 14 + cardH < vp.h ? spot.y + spot.h + 14 : Math.max(12, spot.y - cardH - 14);
+    const below = spot.y + spot.h + 14, above = spot.y - cardH - 14;
+    if (below + cardH < vp.h) { left = Math.min(Math.max(12, spot.x), vp.w - cardW - 12); top = below; }
+    else if (above > 12) { left = Math.min(Math.max(12, spot.x), vp.w - cardW - 12); top = above; }
+    else {
+      // Big region: dock the card beside it (left of a right-hand panel, else bottom-right corner).
+      const rightSide = spot.x > vp.w / 2;
+      left = rightSide ? Math.max(12, spot.x - cardW - 14) : vp.w - cardW - 20;
+      top = vp.h - cardH - 20;
+    }
   }
   const last = i === TOUR_STEPS.length - 1;
   const hole = spot ?? { x: vp.w / 2, y: vp.h / 2, w: 0, h: 0 };
@@ -95,8 +128,9 @@ export function Tour({ open, onClose }: { open: boolean; onClose: (finished: boo
       <div className="tour-card absolute left-0 top-0 overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-lift"
         style={{ width: cardW, transform: `translate3d(${narrow ? 12 : left}px, ${top}px, 0)` }}>
         <div key={i} className="tour-step">
-          <Preview kind={step.preview} />
+          {step.preview && <Preview kind={step.preview} />}
           <div className="p-4">
+            {step.area && <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">{step.area} · {i + 1}/{TOUR_STEPS.length}</p>}
             <p className="text-sm font-semibold tracking-tight">{step.title}</p>
             <p className="mt-1 text-[13px] leading-snug text-muted-foreground">{step.body}</p>
           </div>

@@ -82,6 +82,38 @@ const BODY: Record<TourPreview, React.ReactNode> = {
       </div>
     </div>
   ),
+  supply: (
+    <div className="relative h-full text-[10px]">
+      <span className="tour-rise absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-md bg-foreground px-2 py-1 font-mono text-background">NVDA</span>
+      {[["TSM", "12%", "18%"], ["MSFT", "19%", "70%"], ["SK hynix", "68%", "14%"], ["Foxconn", "70%", "72%"]].map(([n, l, t], k) => (
+        <span key={n} className="tour-rise absolute rounded border bg-background px-1.5 py-0.5" style={{ left: l, top: t, animationDelay: `${300 + k * 200}ms` }}>{n}</span>
+      ))}
+      <p className="absolute bottom-1.5 left-3 text-muted-foreground">“…a single foundry partner” · 10-K</p>
+    </div>
+  ),
+  thesis: (
+    <div className="flex h-full flex-col justify-center gap-1.5 px-5 text-[11px]">
+      <div className="tour-rise rounded-md border bg-background px-2.5 py-1.5"><b>Long COST</b> · membership renewals stay above 90%</div>
+      <div className="tour-rise flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5" style={{ animationDelay: "500ms" }}>
+        <span className="size-1.5 rounded-full bg-positive" /> Renewal rate 92.9% · 10-Q ↗
+      </div>
+      <div className="tour-rise flex items-center gap-1.5 rounded-md border bg-background px-2.5 py-1.5" style={{ animationDelay: "900ms" }}>
+        <span className="size-1.5 rounded-full bg-negative" /> Kill criterion not hit
+      </div>
+    </div>
+  ),
+  redline: (
+    <div className="flex h-full flex-col justify-center gap-1 px-5 font-mono text-[10px]">
+      <p className="text-muted-foreground">Risk factors · 10-K FY25 → FY26</p>
+      <p className="tour-rise">demand <span className="rounded bg-negative/20 line-through">may fluctuate</span> <span className="rounded bg-positive/20">depends on a limited number of customers</span></p>
+      <Bar w="85%" cls="mt-1" /><Bar w="60%" cls="mt-1" />
+    </div>
+  ),
+  valuation: (
+    <div className="flex h-full items-end gap-1 px-5 pb-5 pt-6">
+      {[40, 55, 48, 70, 62, 85, 74, 66, 90, 78].map((h, k) => <span key={k} className="tour-grow w-full rounded-sm bg-foreground/80" style={{ height: `${h}%`, animationDelay: `${k * 90}ms` }} />)}
+    </div>
+  ),
   finish: (
     <div className="flex h-full items-center justify-center gap-3">
       {["?", "⌘K", "⌘J"].map((k, n) => <kbd key={k} className="tour-rise rounded-md border bg-background px-3 py-2 font-mono text-sm shadow-sm" style={{ animationDelay: `${n * 180}ms` }}>{k}</kbd>)}

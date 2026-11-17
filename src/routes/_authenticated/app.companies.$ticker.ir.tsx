@@ -138,6 +138,7 @@ function IrPage() {
       {data.payload && data.payload.series.length > 0 && (
         <IrFinancialMap ticker={ticker} payload={data.payload} />
       )}
+      <div data-tour="ir-breakdowns" className="min-w-0">
       {data.payload && data.payload.series.length > 0 ? (
         <IrBreakdowns
           ticker={ticker}
@@ -154,6 +155,7 @@ function IrPage() {
           </p>
         </Panel>
       )}
+      </div>
       <IrDocuments ticker={ticker} documents={data.documents} images={data.images} store={store.data?.documents} />
     </div>
   );
