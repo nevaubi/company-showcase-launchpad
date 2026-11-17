@@ -27,7 +27,44 @@ export const DATASETS: Record<string, { label: string; blurb: string; source: st
   trials: { label: "Clinical trials", blurb: "Trials the company leads as sponsor: phase, status, enrollment and completion dates", source: "ClinicalTrials.gov" },
   consumer: { label: "Consumer product recalls", blurb: "CPSC recalls naming the company as maker, importer or retailer, with units and hazard", source: "CPSC" },
   attention: { label: "Public attention", blurb: "Monthly Wikipedia pageviews — a free demand/interest proxy", source: "Wikimedia" },
+  settlement: { label: "Fails to deliver", blurb: "Shares sold but not delivered on settlement day (NSCC), average daily balance per half-month valued at the day's price; persistent or spiking fails can flag hard-to-borrow stock", source: "SEC" },
 };
+
+export interface AltLeader {
+  ticker: string;
+  date: string;
+  value: number;
+  unit: string | null;
+  meta: Record<string, any> | null;
+  source_url: string | null;
+  prior_value: number | null;
+  prior_date: string | null;
+  base_median: number | null;
+  base_n: number | null;
+}
+
+/** Latest reading per company for one series, with the reading a year earlier and its trailing-year median (computed in the database). */
+export const altLeadersQuery = (dataset: string, title: string) => ({
+  queryKey: ["alt_leaders", dataset, title],
+  queryFn: async () => {
+    const out: AltLeader[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.rpc("alt_series_leaders", { _dataset: dataset, _title: title }).range(from, from + 999);
+      if (error) throw error;
+      out.push(...((data ?? []) as AltLeader[]));
+      if (!data || data.length < 1000) break;
+    }
+    return out;
+  },
+  staleTime: 10 * 60_000,
+});
+
+/** Change vs a year earlier and the multiple of the company's own trailing-year median. */
+export function leaderStats(r: AltLeader) {
+  const chg = r.prior_value ? r.value / r.prior_value - 1 : null;
+  const vsTypical = r.base_median && r.base_median > 0 && (r.base_n ?? 0) >= 4 ? r.value / r.base_median : null;
+  return { chg, vsTypical };
+}
 
 async function pageAll(build: () => any): Promise<AltRow[]> {
   const out: AltRow[] = [];
@@ -57,16 +94,6 @@ export const altFeedQuery = (dataset: string) => ({
   staleTime: 10 * 60_000,
 });
 
-/** Recent series rows across companies (last ~3 years) for leaderboards. */
-export const altSeriesQuery = (dataset: string) => ({
-  queryKey: ["alt_series", dataset],
-  queryFn: () => {
-    const since = `${new Date().getFullYear() - 3}-01-01`;
-    return pageAll(() => supabase.from("alt_data").select("ticker,dataset,kind,date,title,value,unit,meta,source,source_url,uid").eq("dataset", dataset).eq("kind", "series").gte("date", since).order("date", { ascending: false }));
-  },
-  staleTime: 10 * 60_000,
-});
-
 /** Group series rows by title, ascending by date. */
 export function seriesByTitle(rows: AltRow[]) {
   const m = new Map<string, AltRow[]>();
@@ -75,22 +102,9 @@ export function seriesByTitle(rows: AltRow[]) {
   return m;
 }
 
-/** Latest value per ticker and its change vs one year earlier (same title). */
-export function leaderboard(rows: AltRow[], title: string) {
-  const by = new Map<string, AltRow[]>();
-  const full = rows.filter((r) => !r.meta?.ytd);
-  for (const r of full) if (r.title === title && r.value != null && r.date) (by.get(r.ticker) ?? by.set(r.ticker, []).get(r.ticker)!).push(r);
-  return [...by.entries()].map(([ticker, rs]) => {
-    rs.sort((a, b) => b.date!.localeCompare(a.date!));
-    const last = rs[0];
-    const yearAgo = rs.find((r) => r.date! <= `${Number(last.date!.slice(0, 4)) - 1}${last.date!.slice(4)}`);
-    return { ticker, last, prior: yearAgo ?? null, chg: yearAgo?.value ? last.value! / yearAgo.value - 1 : null };
-  }).sort((a, b) => (b.last.value ?? 0) - (a.last.value ?? 0));
-}
-
 export function fmtAlt(v: number | null, unit: string | null) {
   if (v == null) return "—";
-  if (unit === "USD") { const a = Math.abs(v); return a >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : a >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${(v / 1e3).toFixed(0)}K`; }
+  if (unit === "USD") { const a = Math.abs(v); return a >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : a >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${(v / 1e3).toFixed(0)}K` : `$${v.toFixed(0)}`; }
   if (unit === "%") return `${v.toFixed(2)}%`;
   return v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${(v / 1e3).toFixed(0)}K` : v.toLocaleString();
 }

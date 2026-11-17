@@ -1,5 +1,5 @@
 // SEC fails-to-deliver data (twice-monthly files from NSCC's CNS system): parsed into one row per
-// covered stock per half-month with the total and peak-day fails, valued at the file's prices.
+// covered stock per half-month with the average and peak-day fails balance, valued at the file's prices.
 // Pure apart from `unzipText` (Web Streams, available in Workers and Bun).
 import type { Row } from "./collect.server";
 
@@ -85,6 +85,8 @@ export function periodEnd(period: string): string {
   return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
 }
 
+export const FTD_TITLE = "Fails to deliver (avg daily balance)";
+
 export function ftdRows(aggs: FtdAgg[]): Row[] {
   return aggs.map((a) => ({
     uid: `ftd:${a.ticker}:${a.period}`,
@@ -92,10 +94,12 @@ export function ftdRows(aggs: FtdAgg[]): Row[] {
     dataset: "settlement",
     kind: "series",
     date: periodEnd(a.period),
-    title: "Fails to deliver (value, half-month)",
-    value: Math.round(a.value),
+    // Each day's figure is the outstanding fails balance, not new fails, so the half-month reading is
+    // the average daily balance (summing days would count the same unsettled shares repeatedly).
+    title: FTD_TITLE,
+    value: Math.round(a.value / a.days),
     unit: "USD",
-    meta: { period: a.period, days: a.days, shares: a.shares, peak_shares: a.peakShares, peak_value: Math.round(a.peakValue), peak_date: a.peakDate, first: a.first, last: a.last },
+    meta: { period: a.period, days: a.days, avg_shares: Math.round(a.shares / a.days), peak_shares: a.peakShares, peak_value: Math.round(a.peakValue), peak_date: a.peakDate, first: a.first, last: a.last },
     source: "SEC fails-to-deliver data",
     source_url: ftdUrl(a.period),
   }));

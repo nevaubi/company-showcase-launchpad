@@ -15,7 +15,8 @@ describe("fails to deliver", () => {
     expect(a).toMatchObject({ ticker: "AAPL", days: 2, shares: 4000, value: 1000 * 250 + 3000 * 252, peakShares: 3000, peakDate: "2026-10-02" });
     expect(b.ticker).toBe("BRK-B");
     const [row] = ftdRows([a]);
-    expect(row).toMatchObject({ uid: "ftd:AAPL:202610a", date: "2026-10-15", value: 1006000, dataset: "settlement" });
+    // daily figures are balances: the reading is the average day, not the sum
+    expect(row).toMatchObject({ uid: "ftd:AAPL:202610a", date: "2026-10-15", value: 503000, dataset: "settlement", meta: { avg_shares: 2000, peak_shares: 3000 } });
   });
   it("steps half-months across year ends", () => {
     expect(nextPeriod("202612b")).toBe("202701a");

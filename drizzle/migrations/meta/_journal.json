@@ -330,6 +330,13 @@
       "when": 1794874370916,
       "tag": "0046_alt_series_leaders",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1794874463940,
+      "tag": "0047_alt_series_leaders_fast",
+      "breakpoints": true
     }
   ]
 }

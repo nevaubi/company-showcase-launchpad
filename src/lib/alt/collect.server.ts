@@ -204,7 +204,8 @@ async function attention(c: Co): Promise<Row[]> {
   const a = WIKI[c.ticker] ?? c.reg?.wiki; if (!a) return [];
   const end = new Date(); const e = `${end.getUTCFullYear()}${String(end.getUTCMonth() + 1).padStart(2, "0")}0100`;
   const j = await get(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/${a}/monthly/2015070100/${e}`);
-  return (j?.items ?? []).map((r: any) => ({ uid: `wiki:${c.ticker}:${r.timestamp.slice(0, 6)}`, ticker: c.ticker, dataset: "attention", kind: "series" as const, date: `${r.timestamp.slice(0, 4)}-${r.timestamp.slice(4, 6)}-01`, title: "Wikipedia pageviews", value: r.views, unit: "views", meta: { article: decodeURIComponent(a) }, source: "Wikimedia pageviews", source_url: `https://pageviews.wmcloud.org/?pages=${a}&range=all-time` }));
+  // the API also returns the month in progress (a few days of views) — keep finished months only
+  return (j?.items ?? []).filter((r: any) => r.timestamp.slice(0, 6) < e.slice(0, 6)).map((r: any) => ({ uid: `wiki:${c.ticker}:${r.timestamp.slice(0, 6)}`, ticker: c.ticker, dataset: "attention", kind: "series" as const, date: `${r.timestamp.slice(0, 4)}-${r.timestamp.slice(4, 6)}-01`, title: "Wikipedia pageviews", value: r.views, unit: "views", meta: { article: decodeURIComponent(a) }, source: "Wikimedia pageviews", source_url: `https://pageviews.wmcloud.org/?pages=${a}&range=all-time` }));
 }
 
 // ───────── SEC: capital-markets activity (shelf registrations, takedowns, tender offers, buyback/exchange) ─────────
