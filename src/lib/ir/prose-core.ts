@@ -389,16 +389,27 @@ export function dropTableDuplicates<T extends { period_end: string; months: numb
 
 /**
  * Two readers' answers for the same text (same numbered tokens). A figure both point at must agree
- * on its period and value, or it is dropped (a wrong period is the commonest misread); a figure only
- * one reader found is kept, since it already passed every check against the printed token.
+ * on its period, length and value, or it is dropped (a wrong period is the commonest misread). The
+ * second reader only verifies: figures it alone found are counted, not stored, because a pilot
+ * (COST deck, Nov 17) showed its solo picks shifting labels one value along ("Comparable Sales"
+ * given net sales growth) — passing every token check while wrong.
  */
-export function crossCheck(primary: ProseFact[], second: ProseFact[]): { rows: ProseFact[]; both: Set<ProseFact>; agreed: number; conflicts: number; added: number } {
+function settleKind(f: ProseFact, o: ProseFact): ProseFact {
+  const point = f.months === 0 ? f : o;
+  const flow = f.months === 0 ? o : f;
+  const kind = stockKind({ category: f.category, metric: f.metric, label: f.label, parent: f.parent, breakdown: f.breakdown });
+  const pick = kind === "point" ? point : kind === null && /\b(end of (the )?(quarter|period|year)|at (quarter|year)[- ]end|count|outstanding|balance)\b/i.test(f.label) ? point : flow;
+  return pick === f ? f : { ...f, months: pick.months, period_start: pick.period_start, period_label: pick.period_label };
+}
+
+export function crossCheck(primary: ProseFact[], second: ProseFact[]): { rows: ProseFact[]; both: Set<ProseFact>; agreed: number; conflicts: number; added: number; dropped: { f: ProseFact; other: ProseFact[] }[]; secondOnly: ProseFact[] } {
   const near = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) <= 6 * 86_400_000;
   const byToken = new Map<number, ProseFact[]>();
   for (const f of second) byToken.set(f.locator.n, [...(byToken.get(f.locator.n) ?? []), f]);
   const rows: ProseFact[] = [];
   const seenTokens = new Set<number>();
   const both = new Set<ProseFact>();
+  const dropped: { f: ProseFact; other: ProseFact[] }[] = [];
   let agreed = 0;
   let conflicts = 0;
   for (const f of primary) {
@@ -408,19 +419,22 @@ export function crossCheck(primary: ProseFact[], second: ProseFact[]): { rows: P
       rows.push(f);
       continue;
     }
-    if (other.some((o) => o.months === f.months && near(o.period_end, f.period_end) && Math.abs(o.value - f.value) <= Math.abs(f.value) * 1e-9)) {
+    const same = other.filter((o) => near(o.period_end, f.period_end) && Math.abs(o.value - f.value) <= Math.abs(f.value) * 1e-9);
+    const match = same.find((o) => o.months === f.months);
+    // Same date and value, one reader calling it a balance (0 months) and the other a quarter's flow:
+    // that is a classification question, settled by the shared stock rules, not a misread.
+    const pit = same.find((o) => (o.months === 0) !== (f.months === 0));
+    if (match || pit) {
       agreed++;
-      both.add(f);
-      rows.push(f);
-    } else conflicts++;
+      const kept = !match && pit ? settleKind(f, pit) : f;
+      both.add(kept);
+      rows.push(kept);
+    } else {
+      conflicts++;
+      dropped.push({ f, other });
+    }
   }
-  let added = 0;
-  for (const f of second) {
-    if (seenTokens.has(f.locator.n)) continue;
-    seenTokens.add(f.locator.n);
-    rows.push(f);
-    added++;
-  }
-  return { rows, both, agreed, conflicts, added };
+  const secondOnly = second.filter((f) => !seenTokens.has(f.locator.n));
+  return { rows, both, agreed, conflicts, added: 0, dropped, secondOnly };
 }
 

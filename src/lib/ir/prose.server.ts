@@ -57,6 +57,7 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
   let conflicts = 0;
   let added = 0;
   let checked = 0;
+  const droppedLog: string[] = [];
   const reads = await pool(chunks, opts.concurrency ?? 3, async (c, i) => {
     try {
       const input = `${context}\n\nText (part ${i + 1} of ${chunks.length}):\n\n${renderProse(c.blocks, c.tokens)}`;
@@ -75,9 +76,9 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
       const x = crossCheck(got.rows, other.rows);
       agreed += x.agreed;
       conflicts += x.conflicts;
-      added += x.added;
-      const fromSecond = new Set(other.rows);
-      return x.rows.map((f) => ({ ...f, model: x.both.has(f) ? `${r.model}+${second.model}` : fromSecond.has(f) ? second.model : r.model }));
+      added += x.secondOnly.length;
+      if (opts.dry) for (const d of x.dropped) droppedLog.push(`${d.f.label} = ${d.f.value} (${d.f.months}m ${d.f.period_end}) vs ${d.other.map((o) => `${o.label} (${o.months}m ${o.period_end})`).join(" / ")}`);
+      return x.rows.map((f) => ({ ...f, model: x.both.has(f) ? `${r.model}+${second.model}` : r.model }));
     } catch (e) {
       // An unusable answer for one part loses that part only.
       if (e instanceof OpenAIError && e.kind === "rejected") {
@@ -91,9 +92,12 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
   // Every part came back unusable: nothing was read, so the document isn't done (the runner retries it).
   if (unreadable && unreadable === chunks.length) throw new Error(`no usable answer for any of ${chunks.length} parts`);
   // Same-day documents (the release, its supplement and deck) print the same figures in their tables.
-  const { data: siblings } = doc.filed ? await supabaseAdmin.from("ir_documents").select("id").eq("ticker", doc.ticker).eq("filed", doc.filed).limit(50) : { data: [] };
-  const ids = [...new Set([id, ...(siblings ?? []).map((d) => d.id)])];
-  const { data: existing } = await supabaseAdmin.from("ir_kpi_facts").select("period_end, months, value, unit").in("document_id", ids).neq("method", "text").limit(50_000);
+  // A failed lookup must not pass for "no tables": the document would store figures its tables already hold.
+  const sib = doc.filed ? await supabaseAdmin.from("ir_documents").select("id").eq("ticker", doc.ticker).eq("filed", doc.filed).limit(50) : { data: [], error: null };
+  if (sib.error) throw new Error(`sibling lookup failed: ${sib.error.message}`);
+  const ids = [...new Set([id, ...(sib.data ?? []).map((d) => d.id)])];
+  const { data: existing, error: exErr } = await supabaseAdmin.from("ir_kpi_facts").select("period_end, months, value, unit").in("document_id", ids).neq("method", "text").limit(50_000);
+  if (exErr) throw new Error(`table figures lookup failed: ${exErr.message}`);
   const all = reads.flat();
   const printed = (existing ?? []).flatMap((e) => (e.period_end && e.months != null ? [{ period_end: e.period_end, months: e.months, value: e.value, unit: e.unit }] : []));
   const kept = dropTableDuplicates(all, printed);
@@ -107,14 +111,14 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
     filed: doc.filed,
     method: "text",
   }));
-  const check = checked ? { checked, agreed, conflicts, added } : null;
+  const check = checked ? { checked, parts: chunks.length, agreed, conflicts, secondOnly: added, dropped: droppedLog } : null;
   if (opts.dry) return { facts: records.length, rejected, duplicates: all.length - kept.length, usage, credits, records, check };
   await supabaseAdmin.from("ir_kpi_facts").delete().eq("document_id", id).eq("method", "text");
   for (let i = 0; i < records.length; i += 500) {
     const { error: e } = await supabaseAdmin.from("ir_kpi_facts").insert(records.slice(i, i + 500) as never);
     if (e) throw new Error(e.message);
   }
-  const checkNote = check ? `, cross-checked: ${agreed} agreed, ${conflicts} dropped, ${added} added` : "";
+  const checkNote = check ? `, cross-checked ${checked}/${chunks.length} parts: ${agreed} agreed, ${conflicts} dropped` : "";
   await mark({ prose_status: `${unreadable ? `partial (${unreadable} of ${chunks.length} parts unreadable)` : rejected ? `ok (${rejected} rejected)` : "ok"}${checkNote}`, prose_facts: records.length });
   return { facts: records.length, rejected, duplicates: all.length - kept.length, usage, credits, records: [] as unknown[], check };
 }

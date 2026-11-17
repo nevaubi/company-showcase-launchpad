@@ -111,11 +111,24 @@ describe("crossCheck (two readers, same numbered text)", () => {
     expect(x.conflicts).toBe(1);
     expect(x.both.size).toBe(1);
   });
-  it("drops a figure the readers give different lengths, keeps what only one found", () => {
+  it("drops a figure the readers give different lengths; keeps the first reader's solo finds, never the second's", () => {
     const x = crossCheck([fact(1, "2025-12-31", 5, 3), fact(3, "2025-12-31", 9)], [fact(1, "2025-12-31", 5, 12), fact(4, "2025-12-31", 11)]);
-    expect(x.rows.map((f) => f.locator.n).sort()).toEqual([3, 4]);
-    expect(x.added).toBe(1);
+    expect(x.rows.map((f) => f.locator.n)).toEqual([3]);
+    expect(x.secondOnly.map((f) => f.locator.n)).toEqual([4]);
     expect(x.conflicts).toBe(1);
+    expect(x.dropped[0].other[0].months).toBe(12);
+  });
+  it("settles balance-vs-quarter disagreements on the same date with the stock rules instead of dropping", () => {
+    const a = { ...fact(1, "2026-09-30", 133720, 3), label: "Total end of quarter operating lease count", unit: "count" };
+    const b = { ...a, months: 0 };
+    const x = crossCheck([a], [b]);
+    expect(x.rows).toHaveLength(1);
+    expect(x.rows[0].months).toBe(0);
+    expect(x.conflicts).toBe(0);
+  });
+  it("still drops a balance the readers date a year apart (FY'25 end vs FY'26)", () => {
+    const a = { ...fact(1, "2026-08-31", 629, 0), label: "US warehouse count", unit: "count" };
+    expect(crossCheck([a], [{ ...a, period_end: "2025-08-31" }]).rows).toHaveLength(0);
   });
   it("treats a few days apart (52/53-week guess) as the same period", () => {
     expect(crossCheck([fact(1, "2025-11-30", 5)], [fact(1, "2025-11-26", 5)]).agreed).toBe(1);
