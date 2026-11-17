@@ -82,7 +82,6 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; menu?: false; hubs:
         pages: [
           { to: "/app/theses", label: "Theses" },
           { to: "/app/reports", label: "Reports" },
-          { to: "/app/docs", label: "Docs & sheets" },
           { to: "/app/office", label: "Office Studio" },
         ],
       },

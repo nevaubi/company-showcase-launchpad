@@ -26,7 +26,7 @@ const NOTES: Record<string, string> = {
   "/app/research": "Research agent history",
   "/app/theses": "Saved investment theses",
   "/app/reports": "Generated primers, earnings previews and recaps, memos",
-  "/app/docs": "Documents and sheets",
+  "/app/office": "Office Studio: Writer, Sheets, Slides and PDF with the OfficeAI assistant",
 };
 
 /** Company tabs, as paths under /app/companies/TICKER. */

@@ -2,6 +2,7 @@ import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { TOOL_DEFS } from "@/lib/research/tool-defs";
+import { OFFICE_INSTRUCTIONS, OFFICE_TOOLS } from "@/lib/office/agent-tools";
 import { COVERAGE } from "@/lib/coverage";
 
 export interface AgentOutputItem {
@@ -87,6 +88,7 @@ export const agentStep = createServerFn({ method: "POST" })
       .object({
         items: z.array(z.record(z.string(), z.unknown())).min(1).max(240),
         effort: z.enum(["low", "medium", "high"]).default("medium"),
+        office: z.enum(["writer", "sheets", "slides", "pdf"]).optional(),
       })
       .refine((x) => JSON.stringify(x.items).length < 900_000, "Conversation is too long — start a new session.")
       .parse(d),
@@ -108,9 +110,9 @@ export const agentStep = createServerFn({ method: "POST" })
     try {
       const res = await generateResponse({
         model: MODEL,
-        instructions: INSTRUCTIONS(new Date().toISOString().slice(0, 10)),
+        instructions: INSTRUCTIONS(new Date().toISOString().slice(0, 10)) + (data.office ? `\n\n${OFFICE_INSTRUCTIONS[data.office]}` : ""),
         input: data.items as never,
-        tools: [...(TOOL_DEFS as unknown as object[]), { type: "web_search" }] as never,
+        tools: [...(TOOL_DEFS as unknown as object[]), ...(data.office ? (OFFICE_TOOLS[data.office] as unknown as object[]) : []), { type: "web_search" }] as never,
         reasoning: { effort: data.effort, summary: "auto" },
         store: false,
         include: ["reasoning.encrypted_content", "web_search_call.action.sources"],

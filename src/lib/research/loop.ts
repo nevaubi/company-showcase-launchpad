@@ -4,7 +4,8 @@
 // self-review pass in deep mode.
 import type { QueryClient } from "@tanstack/react-query";
 import { agentStep, type AgentOutputItem } from "@/lib/research.functions";
-import { runTool, type AgentCtx } from "@/lib/research/execute";
+import { runTool, type AgentCtx, type ToolRun } from "@/lib/research/execute";
+import type { OfficeApp } from "@/lib/office/agent-tools";
 import type { Pin } from "@/lib/research/dom-agent";
 
 export interface Step {
@@ -93,12 +94,12 @@ function untilStopped<T>(work: Promise<T>, stopped: () => boolean): Promise<T> {
   });
 }
 
-async function stepWithRetry(items: Record<string, unknown>[], effort: "medium" | "high", stopped: () => boolean) {
+async function stepWithRetry(items: Record<string, unknown>[], effort: "medium" | "high", stopped: () => boolean, office?: OfficeApp) {
   let last: unknown;
   for (let a = 0; a < 3; a++) {
     if (stopped()) throw new Error("Stopped");
     try {
-      return await untilStopped(agentStep({ data: { items, effort } }), stopped);
+      return await untilStopped(agentStep({ data: { items, effort, office } }), stopped);
     } catch (e) {
       last = e;
       const m = (e as Error).message ?? "";
@@ -120,8 +121,11 @@ export async function runAgent(opts: {
   onUpdate: (t: Turn) => void;
   /** Resolve with the user's answer to a clarifying question */
   onAsk?: (q: Question) => Promise<string>;
+  /** Office Studio: which editor's tools the model gets, and the browser executor for them. */
+  office?: OfficeApp;
+  localTool?: (name: string, args: Record<string, unknown>) => Promise<ToolRun> | null;
 }): Promise<Turn> {
-  const { qc, items, deep, ctx, stopped, onUpdate, onAsk } = opts;
+  const { qc, items, deep, ctx, stopped, onUpdate, onAsk, office, localTool } = opts;
   const turn: Turn = { content: "", steps: [], phase: "Thinking" };
   const emit = () => onUpdate({ ...turn, steps: [...turn.steps] });
   const maxSteps = deep ? 32 : 14;
@@ -135,7 +139,7 @@ export async function runAgent(opts: {
       turn.phase = step === 0 ? "Thinking" : "Reasoning over results";
       turn.activity = "thinking";
       emit();
-      const res = await stepWithRetry(items, deep ? "high" : "medium", stopped);
+      const res = await stepWithRetry(items, deep ? "high" : "medium", stopped, office);
       const out = JSON.parse(res.outputJson) as AgentOutputItem[];
       const calls = out.filter((o) => o.type === "function_call");
       let text = "";
@@ -221,7 +225,7 @@ export async function runAgent(opts: {
           emit();
           const t0 = performance.now();
           try {
-            const r = await runTool(qc, name, args, { ...ctx, stopped });
+            const r = await (localTool?.(name, args) ?? runTool(qc, name, args, { ...ctx, stopped }));
             st.summary = r.summary;
             st.output = r.output.slice(0, 4000);
             st.status = "done";

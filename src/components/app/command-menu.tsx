@@ -115,7 +115,7 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     icon: FileText,
     keywords: "primer earnings preview recap ic memo pdf word download branded",
   },
-  { to: "/app/docs", label: "Docs & sheets", icon: FileSpreadsheet, keywords: "excel word editor" },
+  { to: "/app/office", label: "Office Studio", icon: FileSpreadsheet, keywords: "excel word powerpoint pdf editor docs sheets officeai" },
   {
     to: "/app/firm",
     label: "Firm workspace",

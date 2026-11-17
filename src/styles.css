@@ -29,6 +29,9 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-office: var(--office);
+  --color-office-foreground: var(--office-foreground);
+  --color-office-soft: var(--office-soft);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -99,6 +102,9 @@
   --popover-foreground: oklch(0.19 0.012 260);
 
   --primary: oklch(0.2 0.012 260);
+  --office: oklch(0.47 0.14 256);
+  --office-foreground: oklch(0.99 0 0);
+  --office-soft: oklch(0.95 0.02 256);
   --primary-foreground: oklch(0.982 0.007 85);
   --secondary: oklch(0.945 0.01 85);
   --secondary-foreground: oklch(0.22 0.012 260);
@@ -825,3 +831,27 @@ html[data-density="dense"] main section > header {
 html[data-density="dense"] main h1.font-display {
   font-size: 1.25rem;
 }
+
+/* Office Studio app colours (Word blue default; editors set data-office) */
+[data-office="sheets"] { --office: oklch(0.47 0.12 152); --office-soft: oklch(0.95 0.03 152); }
+[data-office="slides"] { --office: oklch(0.55 0.17 38); --office-soft: oklch(0.96 0.03 38); }
+[data-office="pdf"] { --office: oklch(0.52 0.19 27); --office-soft: oklch(0.96 0.03 27); }
+
+/* Writer page typography (Word-like defaults) */
+.office-doc { font-size: 11pt; line-height: 1.45; color: var(--foreground); }
+.office-doc p { margin: 0 0 6pt; }
+.office-doc h1 { font-size: 16pt; font-weight: 600; color: var(--office); margin: 12pt 0 4pt; }
+.office-doc h2 { font-size: 13pt; font-weight: 600; color: var(--office); margin: 10pt 0 3pt; }
+.office-doc h3 { font-size: 12pt; font-weight: 600; color: var(--office); margin: 8pt 0 2pt; }
+.office-doc h4 { font-size: 22pt; font-weight: 400; margin: 0 0 8pt; letter-spacing: -0.01em; }
+.office-doc ul { list-style: disc; padding-left: 18pt; margin: 0 0 6pt; }
+.office-doc ol { list-style: decimal; padding-left: 18pt; margin: 0 0 6pt; }
+.office-doc a { color: var(--office); text-decoration: underline; }
+.office-doc mark { background: oklch(0.93 0.14 100); }
+.office-doc table { border-collapse: collapse; width: 100%; margin: 6pt 0 10pt; font-size: 10pt; table-layout: fixed; }
+.office-doc th, .office-doc td { border: 1px solid var(--border); padding: 3pt 6pt; vertical-align: top; }
+.office-doc th { background: var(--office-soft); font-weight: 600; text-align: left; }
+.office-doc td p, .office-doc th p { margin: 0; }
+.office-doc .selectedCell { background: var(--office-soft); }
+.office-doc hr { border: 0; border-top: 1px dashed var(--border); margin: 18pt 0; }
+.office-doc p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--muted-foreground); float: left; height: 0; pointer-events: none; }

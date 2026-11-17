@@ -1,10 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEditorState } from "@tiptap/react";
+import { OfficeAiPanel } from "@/components/office/office-ai-panel";
+import { writerTool } from "@/lib/office/writer-agent";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Download, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { WriterPage, WriterRibbon, useWriter } from "@/components/office/writer-editor";
@@ -95,36 +97,62 @@ function WriterRoute() {
 
   if (file.error) return <div className="p-6 text-sm text-muted-foreground">This file could not be opened.</div>;
   return (
-    <div className="flex min-w-0 flex-col">
-      <div className="flex min-w-0 items-center gap-2 border-b px-3 py-2">
-        <Button asChild size="icon" variant="ghost" aria-label="Back to Office Studio"><Link to="/app/office"><ArrowLeft className="h-4 w-4" /></Link></Button>
+    <div data-office="writer" className="-m-4 flex h-[calc(100dvh-7.5rem)] min-w-0 flex-col overflow-hidden border bg-background md:-m-6">
+      <div className="flex h-9 min-w-0 shrink-0 items-center gap-2 bg-office px-2 text-office-foreground">
+        <Link to="/app/office" aria-label="Back to Office Studio" className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-office-foreground/15"><ArrowLeft className="h-4 w-4" /></Link>
+        <span className="text-xs font-semibold">Writer</span>
+        <span className="h-4 w-px bg-office-foreground/30" />
         <input aria-label="Title" value={title} onChange={(e) => { setTitle(e.target.value); dirty(); }}
-          className="min-w-0 flex-1 bg-transparent text-sm font-medium outline-none" />
-        <span className="text-xs text-muted-foreground">
-          {state === "saving" ? <Loader2 className="inline h-3 w-3 animate-spin" /> : state === "dirty" ? "Unsaved" : "Saved"}
+          className="min-w-0 max-w-sm flex-1 rounded-sm bg-transparent px-1.5 py-0.5 text-xs outline-none hover:bg-office-foreground/10 focus:bg-office-foreground/15" />
+        <span className="text-[11px] opacity-80">
+          {state === "saving" ? <Loader2 className="inline h-3 w-3 animate-spin" /> : state === "dirty" ? "Saving soon…" : "Saved"}
         </span>
-        <Button size="sm" variant="outline" onClick={() => void save()}>Save</Button>
-        <Button size="sm" variant="outline" onClick={() => void download()}><Download className="mr-1 h-3.5 w-3.5" />.docx</Button>
+        <div className="ml-auto flex items-center gap-1">
+          <button onClick={() => void save()} className="h-6 rounded-sm px-2 text-[11px] hover:bg-office-foreground/15">Save</button>
+          <button onClick={() => void download()} className="flex h-6 items-center gap-1 rounded-sm bg-office-foreground/15 px-2 text-[11px] hover:bg-office-foreground/25"><Download className="h-3 w-3" /> Download .docx</button>
+        </div>
       </div>
       {!content.data ? <Skeleton className="m-6 h-[600px]" /> : (
         <WriterBody initial={content.data.doc ?? ""} onChange={dirty} settings={settings} setSettings={setSettings}
+          setTitle={(t) => { setTitle(t); dirty(); }} title={title}
           onReady={(e) => { editorRef.current = e; editorReady((n) => n + 1); }} />
       )}
     </div>
   );
 }
 
-function WriterBody({ initial, onChange, settings, setSettings, onReady }: {
+function WriterBody({ initial, onChange, settings, setSettings, onReady, setTitle, title }: {
   initial: JNode | string; onChange: () => void; settings: WriterSettings; setSettings: (s: WriterSettings) => void;
-  onReady: (e: NonNullable<ReturnType<typeof useWriter>>) => void;
+  onReady: (e: NonNullable<ReturnType<typeof useWriter>>) => void; setTitle: (t: string) => void; title: string;
 }) {
   const change = useRef(onChange); change.current = onChange;
   const [init] = useState(initial);
   const editor = useWriter(init, () => change.current());
   useEffect(() => { if (editor) onReady(editor); }, [editor]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pageRef = useRef({ settings, setSettings, setTitle }); pageRef.current = { settings, setSettings, setTitle };
+  const tool = useMemo(() => editor ? writerTool(editor, {
+    get settings() { return pageRef.current.settings; },
+    setSettings: (s) => pageRef.current.setSettings(s),
+    setTitle: (t) => pageRef.current.setTitle(t),
+  }) : () => null, [editor]);
+  const stats = useEditorState({ editor, selector: ({ editor: e }) => {
+    const t = e?.state.doc.textContent ?? "";
+    return { words: t.trim() ? t.trim().split(/\s+/).length : 0, chars: t.length };
+  } });
   if (!editor) return <Skeleton className="m-6 h-[600px]" />;
-  return (<>
-    <WriterRibbon editor={editor} settings={settings} setSettings={setSettings} />
-    <WriterPage editor={editor} settings={settings} setSettings={setSettings} />
-  </>);
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="flex min-h-0 min-w-0 flex-col">
+        <WriterRibbon editor={editor} settings={settings} setSettings={setSettings} />
+        <WriterPage editor={editor} settings={settings} setSettings={setSettings} />
+        <div className="flex h-6 shrink-0 items-center gap-4 border-t bg-card px-3 text-[10.5px] text-muted-foreground">
+          <span>{stats?.words ?? 0} words</span><span>{stats?.chars ?? 0} characters</span>
+          <span className="ml-auto">English (US)</span>
+        </div>
+      </div>
+      <div className="hidden min-h-0 lg:block">
+        <OfficeAiPanel app="writer" localTool={tool} context={() => `Writer document "${title}", ${editor.state.doc.childCount} blocks. Call doc_read to see it.`} />
+      </div>
+    </div>
+  );
 }
