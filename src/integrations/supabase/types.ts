@@ -1018,6 +1018,42 @@ export type Database = {
         }
         Relationships: []
       }
+      office_files: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          owner: string
+          size_bytes: number
+          storage_path: string | null
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          kind: string
+          owner: string
+          size_bytes?: number
+          storage_path?: string | null
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          owner?: string
+          size_bytes?: number
+          storage_path?: string | null
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: []
+      }
       options_daily: {
         Row: {
           atm_iv: number | null
