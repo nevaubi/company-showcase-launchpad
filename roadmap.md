@@ -4,8 +4,8 @@
 - [x] Audit: 4 GB limit despite Pro Ultra, 15-min lease stalls, batch-of-10 lost "finished" credit, review/requeue ping-pong
 - [x] Memory-sized lanes, host-tagged 3-min lease, per-company runs, fair retries, admin memory/finished view (deployed 6b08748)
 - [x] Verify on Render: 32 GB limit seen (3 lanes), KD/TXT/WRB finished within 8 minutes of takeover
-- [ ] Per-stage checkpoints in ir-deep.ts so a crash resumes mid-company
-- [ ] Per-file memory/time cap for Docling conversion of huge PDFs
+- [x] Crash resume mid-company: every file keeps its own read/convert status, so a restarted company skips finished files (checked in ir-deep/ir-docling)
+- [x] Docling runaway files: 20-minute per-file timeout restarts the converter; memory now sized from the 32 GB limit
 - [x] IR datasets: per-table empty columns trimmed, stray period columns dropped, complementary/duplicate tables and lines merged with value-conflict and other-split guards (CVS 3,701→2,965 lines, 0 cells lost), totals re-checked after merges, bare "TOTAL" renamed, sharper titles
 - [x] Declutter IR tab: one "Source documents" panel (library/tables/search), compact how-to-read, complete tables ranked first, empty check rows hidden
 - [ ] Merge fragmented segment lines that only differ by table wording ("Adjusted operating income · Health Services" across 6 tables) into per-segment matrices; needs reader-side segment names
