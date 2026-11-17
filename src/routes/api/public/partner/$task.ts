@@ -52,6 +52,8 @@ export const Route = createFileRoute("/api/public/partner/$task")({
         }
 
         if (params.task === "report") {
+          // Automatic (pregen) report writing is paused to save AI spend; on-demand reports still work.
+          if (process.env.REPORTS_PREGEN_ENABLED !== "true") return Response.json({ error: "Automatic report generation is paused", paused: true, limit: true }, { status: 429 });
           const b = reportBody.safeParse(body);
           if (!b.success || !coverageOf(b.data.ticker)) return Response.json({ error: "Bad ticker or kind" }, { status: 400 });
           const { ensureReport } = await import("@/lib/reports/store.server");
