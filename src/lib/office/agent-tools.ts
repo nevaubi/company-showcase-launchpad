@@ -63,7 +63,45 @@ const SHEETS = [
   fn("sheet_set_title", "Rename the workbook file.", { title: str("new title") }),
 ];
 
-export const OFFICE_TOOLS: Record<OfficeApp, object[]> = { writer: WRITER, sheets: SHEETS, slides: [], pdf: [] };
+const num = (d: string) => ({ type: "number", description: d });
+const EL_PROPS = {
+  text: n(str("text for text/shape elements (\\n for new lines)")),
+  bullets: n({ type: "array", items: { type: "string" }, description: "bullet lines" }),
+  rows: n({ type: "array", items: { type: "array", items: { type: "string" } }, description: "table rows; first row is the header" }),
+  chart: n({ type: "object", additionalProperties: false, required: ["type", "labels", "series"], properties: {
+    type: { type: "string", enum: ["bar", "line", "area", "pie"] }, labels: { type: "array", items: { type: "string" } },
+    series: { type: "array", items: { type: "object", additionalProperties: false, required: ["name", "values"], properties: { name: { type: "string" }, values: { type: "array", items: { type: "number" } } } } },
+  } }),
+  metric: n({ type: "object", additionalProperties: false, required: ["value", "label", "delta"], properties: { value: { type: "string" }, label: { type: "string" }, delta: n({ type: "string" }) } }),
+  shape: n({ type: "string", enum: ["rect", "rounded", "ellipse", "line"] }),
+  style: n({ type: "object", additionalProperties: false, required: ["size", "bold", "italic", "color", "fill", "align", "valign"], properties: {
+    size: n(num("font pt")), bold: n({ type: "boolean" }), italic: n({ type: "boolean" }), color: n(str("hex")), fill: n(str("hex")),
+    align: n({ type: "string", enum: ["left", "center", "right"] }), valign: n({ type: "string", enum: ["top", "middle", "bottom"] }),
+  } }),
+};
+const SLIDES = [
+  fn("deck_read", "Read the deck: theme and every slide's elements with ids, boxes (inches on a 13.33×7.5 slide) and content. Call before editing.", {}),
+  fn("slide_add", "Add a slide from a layout (title, title_content = title + bullets, two_content, section, title_only, blank). Returns its number and element ids.", {
+    layout: { type: "string", enum: ["title", "title_content", "two_content", "section", "title_only", "blank"] },
+    position: n(int("1-based position; null = end")), title: str("title text"), subtitle: n(str("subtitle, or first bullet for title_content")),
+  }),
+  fn("slide_manage", "Delete, duplicate or move a slide, set its background, or set its speaker notes.", {
+    slide: int("1-based slide"), action: { type: "string", enum: ["delete", "duplicate", "move", "background", "notes"] },
+    to: n(int("target position for move")), value: n(str("hex colour for background, text for notes")),
+  }),
+  fn("element_add", "Add an element to a slide: text, bullets, table, chart (native, editable in PowerPoint), metric (big-number KPI card), or shape. Position in inches; keep 0.5in margins and avoid overlaps.", {
+    slide: int("1-based slide"), type: { type: "string", enum: ["text", "bullets", "table", "chart", "metric", "shape"] },
+    x: num("left in"), y: num("top in"), w: num("width in"), h: num("height in"), ...EL_PROPS,
+  }),
+  fn("element_update", "Change an element's content, box or style. null leaves a field unchanged.", {
+    slide: int("1-based slide"), id: str("element id"), x: n(num("in")), y: n(num("in")), w: n(num("in")), h: n(num("in")), ...EL_PROPS,
+  }),
+  fn("element_delete", "Delete an element.", { slide: int("1-based slide"), id: str("element id") }),
+  fn("deck_theme", "Set the deck theme. null leaves unchanged.", { accent: n(str("hex accent colour")), font: n({ type: "string", enum: ["Aptos", "Calibri", "Georgia", "Arial"] }), dark: n({ type: "boolean" }) }),
+  fn("deck_set_title", "Rename the deck file.", { title: str("new title") }),
+];
+
+export const OFFICE_TOOLS: Record<OfficeApp, object[]> = { writer: WRITER, sheets: SHEETS, slides: SLIDES, pdf: [] };
 
 export const OFFICE_INSTRUCTIONS: Record<OfficeApp, string> = {
   writer: `You are OfficeAI inside Filed Under Writer (a Microsoft Word–style editor). The user's document is open beside you.
@@ -78,5 +116,11 @@ Gather data first with the research tools (get_financials, get_kpis, get_segment
 Model like an analyst: a bold title row, header row with fill and border, periods across columns, line items down, units in labels, number formats (usdM for $ millions, pct for margins/growth, x for multiples), derived rows as formulas (growth =C3/B3-1, margins =C4/C3), freeze the header, sensible column widths, totals with SUM. Add a chart when it helps.
 Write blocks with one sheet_write per table, then format, then sheet_read to check computed values (fix any #N/A, #REF!, #VALUE!).
 Reply in chat with 1–3 sentences on what you built or changed.`,
-  slides: "", pdf: "",
+  slides: `You are OfficeAI inside Filed Under Slides (a Microsoft PowerPoint–style editor). The user's deck is open beside you.
+Build and edit it directly with the slide_*/element_* tools — never paste slides into chat. Start with deck_read.
+Gather facts first with the research tools (get_financials, get_kpis, get_segments, read_filing, web_research…) in parallel, then build slides.
+Design like an investment-bank pitch deck: one message per slide stated in the title (an "action title"), at most 5 short bullets, big-number metric cards for headline KPIs, native charts for trends, compact tables for comparisons, consistent margins (0.6in sides, content from y=1.5), no overlapping boxes, nothing outside 13.33×7.5in. Use the title layout for the cover and section layout between parts.
+Every number must come from a tool result; put sources in a small text element at the bottom of the slide (y≈6.9, size 9) or in the speaker notes — filings as filing:TICKER:ACCESSION links, web pages by URL.
+After building, deck_read to check layout and fix overlaps. Reply in chat with 1–3 sentences on what you built.`,
+  pdf: "",
 };

@@ -21,7 +21,11 @@ const SUGGEST: Record<OfficeApp, string[]> = {
     "Compare revenue and net income for AAPL, MSFT, GOOGL with a chart",
     "Format this sheet like a banker model and add totals",
   ],
-  slides: [], pdf: [],
+  slides: [
+    "Build a 6-slide NVDA earnings deck with KPI cards and a revenue chart",
+    "Make a peer comparison slide for AAPL, MSFT and GOOGL",
+    "Tighten every slide title into an action title",
+  ], pdf: [],
 };
 
 /** OfficeAI: the research agent with the open editor's tools, docked beside the canvas. */
