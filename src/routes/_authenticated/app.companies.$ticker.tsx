@@ -137,7 +137,7 @@ function CompanyLayout() {
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h1
-              className="truncate text-2xl font-semibold leading-tight tracking-tight"
+              className="truncate text-xl font-semibold leading-tight tracking-tight sm:text-2xl"
               title={p?.name ? `SEC registrant: ${p.name}` : undefined}
             >
               {coverageOf(ticker)?.shortName ?? p?.name}
@@ -150,9 +150,10 @@ function CompanyLayout() {
             {p?.name &&
               p.name.toLowerCase().replace(/[^a-z]/g, "") !==
                 (coverageOf(ticker)?.shortName ?? "").toLowerCase().replace(/[^a-z]/g, "") && (
+                // registrant name and HQ are desktop-only: on phones the header stays two lines above the price
                 <>
-                  <span className="num text-[11px] uppercase">{p.name}</span>
-                  <span aria-hidden>·</span>
+                  <span className="num hidden text-[11px] uppercase sm:inline">{p.name}</span>
+                  <span aria-hidden className="hidden sm:inline">·</span>
                 </>
               )}
             <span>{p?.sector}</span>
@@ -160,8 +161,8 @@ function CompanyLayout() {
             <span>{p?.industry}</span>
             {p && (
               <>
-                <span aria-hidden>·</span>
-                <span className="inline-flex items-center gap-1">
+                <span aria-hidden className="hidden sm:inline">·</span>
+                <span className="hidden items-center gap-1 sm:inline-flex">
                   <Building className="size-3.5" />
                   {p.address.city.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())},{" "}
                   {p.address.state}
