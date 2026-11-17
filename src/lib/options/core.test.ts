@@ -105,5 +105,13 @@ describe("earningsPricing", () => {
     const p = earningsPricing(term, "2026-11-24", "2026-11-16", [0.02, -0.08, 0.05, -0.1])!;
     expect(p.point.e).toBe("2026-11-27");
     expect(p.past).toEqual({ n: 4, median: 0.065, mean: 0.0625, exceeded: 2 });
+    expect(p.lag).toBe(3);
+  });
+  it("skips the comparison when the first expiry closes long after the report", async () => {
+    const { earningsPricing } = await import("./core");
+    const far = [{ e: "2027-02-19", d: 95, m: 0.107, iv: 0.26, k: 350 }];
+    const p = earningsPricing(far, "2027-01-28", "2026-11-16", [0.02, 0.05])!;
+    expect(p.lag).toBe(22);
+    expect(p.past).toBeNull();
   });
 });

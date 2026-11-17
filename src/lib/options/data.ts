@@ -110,3 +110,44 @@ export function volumeRatio(r: OptionsBoardRow): number | null {
   if (!r.vol_avg20 || !r.iv_n || r.iv_n < 5) return null;
   return (r.call_vol + r.put_vol) / r.vol_avg20;
 }
+
+/** How each covered stock moved after its recent reports (`scripts/earnings-reactions.ts`). */
+export interface ReactionsFile {
+  generated: string;
+  basis: string;
+  companies: Record<string, { n: number; median: number; mean: number; moves: { d: string; m: number; a: string; doc: string }[] }>;
+}
+export const reactionsQuery = queryOptions({
+  queryKey: ["earnings-reactions"],
+  queryFn: async (): Promise<ReactionsFile | null> => {
+    const { data, error } = await supabase.storage.from("datasets").download("markets/reactions.json");
+    if (error || !data) return null;
+    return JSON.parse(await data.text()) as ReactionsFile;
+  },
+  staleTime: 6 * 3600_000,
+  retry: 1,
+});
+
+/** The latest snapshot (within a week) for a handful of tickers, e.g. today's setups. */
+export const optionsLatestQuery = (tickers: string[]) =>
+  queryOptions({
+    queryKey: ["options-latest", [...tickers].sort().join(",")],
+    queryFn: async (): Promise<Map<string, OptionsRow>> => {
+      const out = new Map<string, OptionsRow>();
+      if (!tickers.length) return out;
+      const since = new Date(Date.now() - 8 * 86400000).toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from("options_daily")
+        .select("ticker, date, price, iv30, atm_iv, skew25, pc_oi, pc_vol, call_oi, put_oi, call_vol, put_vol, term")
+        .in("ticker", tickers.slice(0, 200))
+        .gte("date", since)
+        .order("date", { ascending: false });
+      if (error) throw new Error(error.message);
+      for (const r of data ?? [])
+        if (!out.has(r.ticker))
+          out.set(r.ticker, { ...r, price: Number(r.price), iv30: num(r.iv30), atm_iv: num(r.atm_iv), skew25: num(r.skew25), pc_oi: num(r.pc_oi), pc_vol: num(r.pc_vol), term: (r.term ?? []) as unknown as TermPoint[] });
+      return out;
+    },
+    staleTime: 30 * 60_000,
+    retry: 1,
+  });

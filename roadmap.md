@@ -216,7 +216,8 @@
 ## Platform upgrade (requested Nov 16 21:22 UTC)
 - [x] Setups: FINRA daily short volume (2018+), 8-K 2.02 earnings dates, Form 4 insider purchases (2016+), VIX3M term structure, breadth; new strategies: earnings drift, pre-earnings run-up, insider clusters, short-selling flow, panic-day snap back, customer momentum (supply links), confluence; short borrow cost
 - [x] Setups: SEC fails-to-deliver feature (lagged to publication) + published "fails pile-up" short rule; tested 2018+: loses money after costs (−0.8% over 10 days, 287 out-of-sample trades), shown as failing — not loosened
-- [ ] Setups follow-ups: options-implied context (current snapshot only, not backtestable)
+- [x] Options market: nightly Cboe snapshots for every stock with listed options (IV30, priced move per expiry, skew, put/call, volume), Options page under Markets (report moves vs past reactions, volatility, positioning, skew), company Earnings-tab panel, setups "options price" column, assistant get_options
+- [ ] Options follow-ups: once 60+ trading days are recorded, test IV-rank / priced-vs-past report rules through the strict setups gate (point-in-time, after costs)
 - [x] Setups auto-refresh: nightly `setups` job (4 parallel schedules, 21:00–06:00 UTC) refreshes closing bars, rescans every stock, re-tests every strategy, publishes setups and records live outcomes
 - [x] Auto paper trading: house + personal autopilots (/app/autopilots) with daily fills, exits, equity vs SPY, hit rate, drawdown, Sharpe; personal autopilot limits trial 2 / Research 5 / Pro 25 are a proposal awaiting the owner's confirmation
 - [x] IR tab UX: Key metrics + biggest moves panel, quarterly columns cleaned of month-ends, Monthly view, Q2/Q3 filled from year-to-date columns, current breakdowns first, real gaps marked (payload rebuild running for all stored companies)

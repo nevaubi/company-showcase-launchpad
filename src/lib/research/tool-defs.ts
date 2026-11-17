@@ -76,6 +76,21 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_options",
+    description:
+      "Options-market context from nightly Cboe delayed-quote snapshots. With a ticker: 30-day implied volatility (with IV rank/percentile once 20+ days are recorded), 20-day realized volatility and implied ÷ realized, 25-delta skew, put/call open interest and volume, the move priced to each upcoming expiry (at-the-money straddle ÷ price), and for the next earnings report the priced move against the stock's past report reactions (how many past reports moved more). Without a ticker: every stock ranked by sort (iv, iv_rank, iv_change, put_call, volume = option volume vs its 20-day average, skew, earnings = biggest priced report moves). Use for 'what does the market expect for earnings', vol/positioning screens and to size a setup's expected move; it is market pricing, not a forecast.",
+    parameters: obj(
+      {
+        ticker: nullable(str("Ticker for one company; null for the cross-stock ranking")),
+        sort: nullable({ type: "string", enum: ["iv", "iv_rank", "iv_change", "put_call", "volume", "skew", "earnings"], description: "Ranking for the cross-stock view (default iv)" }),
+        limit: nullable({ type: "number", description: "Rows for the ranking (default 30)" }),
+      },
+      ["ticker", "sort", "limit"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "list_filings",
     description: "Recent SEC filings for a company with accession numbers, form types, periods and filing dates.",
     parameters: obj(
@@ -794,6 +809,7 @@ export const TOOL_LABELS: Record<string, string> = {
   get_segments: "Pulled segments",
   get_filing_detail: "Read filing detail",
   get_exposures: "Compared exposures",
+  get_options: "Read options market",
   list_filings: "Listed filings",
   read_filing: "Read filing",
   search_filings: "Searched EDGAR",
@@ -867,6 +883,7 @@ export const TOOL_RUNNING: Record<string, string> = {
   get_segments: "Pulling segments",
   get_filing_detail: "Reading filing detail",
   get_exposures: "Comparing exposures",
+  get_options: "Reading options market",
   list_filings: "Listing filings",
   read_filing: "Reading filing",
   search_filings: "Searching EDGAR",

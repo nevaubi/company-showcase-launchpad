@@ -38,6 +38,7 @@ import { Route as AuthenticatedAppInsightsRouteImport } from './routes/_authenti
 import { Route as AuthenticatedAppKpisRouteImport } from './routes/_authenticated/app.kpis'
 import { Route as AuthenticatedAppMacroRouteImport } from './routes/_authenticated/app.macro'
 import { Route as AuthenticatedAppMarketsRouteImport } from './routes/_authenticated/app.markets'
+import { Route as AuthenticatedAppOptionsRouteImport } from './routes/_authenticated/app.options'
 import { Route as AuthenticatedAppPortfolioRouteImport } from './routes/_authenticated/app.portfolio'
 import { Route as AuthenticatedAppReportsRouteImport } from './routes/_authenticated/app.reports'
 import { Route as AuthenticatedAppResearchRouteImport } from './routes/_authenticated/app.research'
@@ -226,6 +227,11 @@ const AuthenticatedAppMacroRoute = AuthenticatedAppMacroRouteImport.update({
 const AuthenticatedAppMarketsRoute = AuthenticatedAppMarketsRouteImport.update({
   id: '/markets',
   path: '/markets',
+  getParentRoute: () => AuthenticatedAppRoute,
+} as any)
+const AuthenticatedAppOptionsRoute = AuthenticatedAppOptionsRouteImport.update({
+  id: '/options',
+  path: '/options',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
 const AuthenticatedAppPortfolioRoute =
@@ -484,6 +490,7 @@ export interface FileRoutesByFullPath {
   '/app/kpis': typeof AuthenticatedAppKpisRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/options': typeof AuthenticatedAppOptionsRoute
   '/app/portfolio': typeof AuthenticatedAppPortfolioRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
@@ -551,6 +558,7 @@ export interface FileRoutesByTo {
   '/app/kpis': typeof AuthenticatedAppKpisRoute
   '/app/macro': typeof AuthenticatedAppMacroRoute
   '/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/app/options': typeof AuthenticatedAppOptionsRoute
   '/app/portfolio': typeof AuthenticatedAppPortfolioRoute
   '/app/reports': typeof AuthenticatedAppReportsRoute
   '/app/research': typeof AuthenticatedAppResearchRoute
@@ -621,6 +629,7 @@ export interface FileRoutesById {
   '/_authenticated/app/kpis': typeof AuthenticatedAppKpisRoute
   '/_authenticated/app/macro': typeof AuthenticatedAppMacroRoute
   '/_authenticated/app/markets': typeof AuthenticatedAppMarketsRoute
+  '/_authenticated/app/options': typeof AuthenticatedAppOptionsRoute
   '/_authenticated/app/portfolio': typeof AuthenticatedAppPortfolioRoute
   '/_authenticated/app/reports': typeof AuthenticatedAppReportsRoute
   '/_authenticated/app/research': typeof AuthenticatedAppResearchRoute
@@ -692,6 +701,7 @@ export interface FileRouteTypes {
     | '/app/kpis'
     | '/app/macro'
     | '/app/markets'
+    | '/app/options'
     | '/app/portfolio'
     | '/app/reports'
     | '/app/research'
@@ -759,6 +769,7 @@ export interface FileRouteTypes {
     | '/app/kpis'
     | '/app/macro'
     | '/app/markets'
+    | '/app/options'
     | '/app/portfolio'
     | '/app/reports'
     | '/app/research'
@@ -828,6 +839,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/kpis'
     | '/_authenticated/app/macro'
     | '/_authenticated/app/markets'
+    | '/_authenticated/app/options'
     | '/_authenticated/app/portfolio'
     | '/_authenticated/app/reports'
     | '/_authenticated/app/research'
@@ -1088,6 +1100,13 @@ declare module '@tanstack/react-router' {
       path: '/markets'
       fullPath: '/app/markets'
       preLoaderRoute: typeof AuthenticatedAppMarketsRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
+    '/_authenticated/app/options': {
+      id: '/_authenticated/app/options'
+      path: '/options'
+      fullPath: '/app/options'
+      preLoaderRoute: typeof AuthenticatedAppOptionsRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
     '/_authenticated/app/portfolio': {
@@ -1451,6 +1470,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppKpisRoute: typeof AuthenticatedAppKpisRoute
   AuthenticatedAppMacroRoute: typeof AuthenticatedAppMacroRoute
   AuthenticatedAppMarketsRoute: typeof AuthenticatedAppMarketsRoute
+  AuthenticatedAppOptionsRoute: typeof AuthenticatedAppOptionsRoute
   AuthenticatedAppPortfolioRoute: typeof AuthenticatedAppPortfolioRoute
   AuthenticatedAppReportsRoute: typeof AuthenticatedAppReportsRoute
   AuthenticatedAppResearchRoute: typeof AuthenticatedAppResearchRoute
@@ -1493,6 +1513,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppKpisRoute: AuthenticatedAppKpisRoute,
   AuthenticatedAppMacroRoute: AuthenticatedAppMacroRoute,
   AuthenticatedAppMarketsRoute: AuthenticatedAppMarketsRoute,
+  AuthenticatedAppOptionsRoute: AuthenticatedAppOptionsRoute,
   AuthenticatedAppPortfolioRoute: AuthenticatedAppPortfolioRoute,
   AuthenticatedAppReportsRoute: AuthenticatedAppReportsRoute,
   AuthenticatedAppResearchRoute: AuthenticatedAppResearchRoute,

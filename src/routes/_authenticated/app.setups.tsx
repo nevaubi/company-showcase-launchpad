@@ -15,6 +15,8 @@ import { REGIMES } from "@/lib/signals/backtest";
 import { FAMILY_LABEL, STRATEGY, type Family } from "@/lib/signals/strategies";
 import { gateChecks, type PairSetup, type Setup, type SetupsFile, type VariantMeta } from "@/lib/signals/setups";
 import { setupsQuery } from "@/lib/signals/queries";
+import { optionsLatestQuery } from "@/lib/options/data";
+import { impliedMoveBy } from "@/lib/options/core";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/setups")({
@@ -126,6 +128,7 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
     return c;
   }, [data, watch]);
 
+  const opts = useQuery(optionsLatestQuery(rows.map((s) => s.ticker)));
   const track = useMutation({
     mutationFn: async (s: Setup) => {
       const { error } = await supabase.from("paper_trades").insert({ ticker: s.ticker, direction: s.side > 0 ? "long" : "short", entry_price: s.price, stop: s.stop, target: s.target, signals: [s.key] });
@@ -172,7 +175,7 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-sm">
+            <table className="w-full min-w-[840px] text-sm">
               <thead className="text-left text-[11px] text-muted-foreground">
                 <tr>
                   <th className="py-2 pr-3 font-normal">Stock</th>
@@ -181,6 +184,7 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
                   <th className="pr-3 font-normal">Last 60 days</th>
                   <th className="pr-3 text-right font-normal">Price · stop / target</th>
                   <th className="pr-3 text-right font-normal">Edge*</th>
+                  <th className="pr-3 text-right font-normal" title="The move the options market prices over the holding period: at-the-money straddle to the first expiry after it ÷ price (Cboe, last close)">Options price</th>
                   <th />
                 </tr>
               </thead>
@@ -216,6 +220,20 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
                       <div className="text-[11px] text-muted-foreground">{fmtPrice(s.stop)} / {fmtPrice(s.target)}</div>
                     </td>
                     <td className={cn("pr-3 text-right tabular-nums", toneClass[toneOf(s.edge)])}>{fmtPct(s.edge, 2, true)}</td>
+                    <td className="whitespace-nowrap pr-3 text-right tabular-nums">
+                      {(() => {
+                        const o = opts.data?.get(s.ticker);
+                        const p = o ? impliedMoveBy(o.term, Math.ceil((s.horizon * 7) / 5)) : null;
+                        if (!o || !p) return <span className="text-muted-foreground">—</span>;
+                        const toTarget = Math.abs(s.target - s.price) / s.price;
+                        return (
+                          <span title={`±${fmtPct(p.m, 1)} priced through the ${fmtDate(p.e)} expiry; the target is ${fmtPct(toTarget, 1)} away (${(toTarget / p.m).toFixed(1)}× the priced move). IV30 ${fmtPct(o.iv30, 1)}.`}>
+                            <span className="block">±{fmtPct(p.m, 1)}</span>
+                            <span className="block text-[11px] text-muted-foreground">target {(toTarget / p.m).toFixed(1)}×</span>
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="text-right">
                       <Button size="sm" variant="ghost" className="h-7" onClick={() => track.mutate(s)} disabled={track.isPending}>
                         <Plus className="mr-1 h-3.5 w-3.5" /> Paper trade
@@ -225,7 +243,7 @@ function SetupsPanel({ data, passed }: { data: SetupsFile; passed: number }) {
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-[11px] text-muted-foreground">*Average return per trade against the sector after costs, out of sample and in today's market regime, scaled down for small samples. Stop is 2× the 14-day average daily range (2.5× for momentum, event and supply-chain trades); target is 1.5× (2×) that risk.</p>
+            <p className="mt-2 text-[11px] text-muted-foreground">*Average return per trade against the sector after costs, out of sample and in today's market regime, scaled down for small samples. Options price: the move the options market expects over the hold (context only — options history is too short to test yet). Stop is 2× the 14-day average daily range (2.5× for momentum, event and supply-chain trades); target is 1.5× (2×) that risk.</p>
           </div>
         )}
       </div>

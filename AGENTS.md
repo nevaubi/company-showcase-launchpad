@@ -58,3 +58,5 @@
 - Partner mirror/import and IR-store/intel rules: see `scripts/AGENTS.md`.
 - Trade ideas, short-term setups and paper autopilots: see `src/lib/signals/AGENTS.md`.
 - Filing detail (10-K/10-Q dimensional XBRL): see `src/lib/xbrl/AGENTS.md`.
+- Options context: Cboe delayed chains are summarized purely in `src/lib/options/core.ts` (IV30, at-the-money straddle term, 25-delta skew, put/call) into `options_daily`, one row per stock per trading day from the scheduled `options` job (4 stocks a call, Cboe throttles near 20 requests/min) or `scripts/options-snapshot.ts`; IV rank and volume ratios use only recorded days, and report "priced vs past" uses `markets/reactions.json` from `scripts/earnings-reactions.ts`, so options figures stay context until enough history exists to test them.
+

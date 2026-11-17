@@ -52,6 +52,7 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; menu?: false; hubs:
         label: "Markets",
         pages: [
           { to: "/app/markets", label: "Technicals" },
+          { to: "/app/options", label: "Options" },
           { to: "/app/sectors", label: "Sectors" },
           { to: "/app/macro", label: "Macro" },
           { to: "/app/hedge-funds", label: "Hedge funds" },

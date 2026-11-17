@@ -23,6 +23,7 @@ export type AppPath =
   | "/app/sectors"
   | "/app/alt-data"
   | "/app/hedge-funds"
+  | "/app/options"
   | "/app/supply-chain"
   | "/app/ideas"
   | "/app/macro"

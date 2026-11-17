@@ -46,6 +46,7 @@ interface LoopState {
   lastMirror: string | null;
   lastDetail?: string | null;
   lastSod?: string | null;
+  lastReactions?: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
   /** unread files a company had when it finished; more than a few new ones later = revisit */
@@ -157,6 +158,20 @@ async function maybeSod() {
   });
 }
 
+// ---------- background earnings reactions ----------
+/** Past report reactions for the Options page's priced-vs-past comparison; daily, since new reports land every day in season. */
+let reacting = false;
+async function maybeReactions() {
+  if (reacting) return;
+  if (state.lastReactions && Date.now() - Date.parse(state.lastReactions) < 86_400_000) return;
+  reacting = true;
+  state.lastReactions = new Date().toISOString();
+  await saveState(state);
+  void run("scripts/earnings-reactions.ts", [], `${OUT}/reactions.log`).finally(() => {
+    reacting = false;
+  });
+}
+
 // ---------- main loop ----------
 /** A deep build started by hand (or a previous loop) shares the readers' leases: wait for it. */
 function deepRunning() {
@@ -176,6 +191,7 @@ for (let cycle = 1; ; cycle++) {
   await maybeMirror();
   await maybeDetail();
   await maybeSod();
+  await maybeReactions();
   // 1. Companies this loop started whose run never reached its final report.
   const resume: string[] = [];
   state.resumes ??= {};

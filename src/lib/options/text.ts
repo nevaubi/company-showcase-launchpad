@@ -32,6 +32,7 @@ export function optionsCompanyText(
     if (p)
       out.push(
         `- next report ${ctx.report.date}${ctx.report.estimated ? " (projected date)" : ""}: the ${p.point.e} expiry prices ±${pct(p.point.m)} (±$${(p.point.m * s.price).toFixed(2)})` +
+          (p.lag > 10 ? ` — that expiry is ${p.lag} days after the report, so it also prices ordinary movement` : "") +
           (p.past ? `; the last ${p.past.n} reports moved a median ±${pct(p.past.median)} (mean ±${pct(p.past.mean)}), ${p.past.exceeded} of ${p.past.n} more than today's priced move` : ""),
       );
   }

@@ -42,6 +42,11 @@ import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/
 import { exposureIndexQuery, filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
 import { bankStatesText, companyExposureText, insurersText, lendersText, regionText, stateDepositsText, type InsurerSort } from "@/lib/xbrl/exposure-text";
 import { depositsByStateQuery } from "@/lib/alt/query";
+import { optionsBoardQuery, optionsHistoryQuery } from "@/lib/options/data";
+import { optionsBoardText, optionsCompanyText, type OptionsSort } from "@/lib/options/text";
+import { earningsIndexQuery } from "@/lib/calendars/data";
+import { earningsReactions } from "@/lib/markets/core";
+import { nextEarnings } from "@/lib/company/catalysts";
 import { detailText, type DetailSection } from "@/lib/xbrl/text";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -625,6 +630,30 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       }
       const d = (args.filing === "quarterly" ? stored.quarterly : stored.annual) ?? stored.annual ?? stored.quarterly;
       return { output: clip(text), summary: `${t} filing detail${section ? ` · ${section}` : ""}`, refs: d ? [{ ticker: t, accn: d.accn, doc: d.doc, label: d.form }] : undefined };
+    }
+    case "get_options": {
+      const t = args.ticker ? String(args.ticker).toUpperCase() : "";
+      if (t) {
+        const [rows, ds, px, cal] = await Promise.all([
+          qc.fetchQuery(optionsHistoryQuery(t)),
+          qc.fetchQuery(companyQuery(t)).catch(() => null),
+          qc.fetchQuery(pricesQuery(t, "5y")).catch(() => null),
+          qc.fetchQuery(earningsIndexQuery).catch(() => null),
+        ]);
+        const releases = ds?.earningsReleases ?? [];
+        const bars = px?.bars ?? [];
+        const calDate = cal?.companies.find((c) => c.ticker === t)?.next_earnings ?? null;
+        const ne = releases.length ? nextEarnings(calDate, releases.map((r) => r.filed), new Date().toISOString().slice(0, 10)) : null;
+        const asc = [...releases].sort((a, b) => a.filed.localeCompare(b.filed));
+        const past = bars.length && asc.length ? earningsReactions(bars, asc).sort((a, b) => a.date.localeCompare(b.date)).slice(-12).map((r) => r.move) : [];
+        const text = optionsCompanyText(t, rows, { report: ne ? { date: ne.date, estimated: ne.estimated } : null, pastMoves: past, closes: bars.map((b) => b[5] || b[4]) });
+        return { output: clip(text), summary: `${t} options market` };
+      }
+      const [board, uni, cal] = await Promise.all([qc.fetchQuery(optionsBoardQuery), qc.fetchQuery(universeQuery), qc.fetchQuery(earningsIndexQuery).catch(() => null)]);
+      const sort = (["iv", "iv_rank", "iv_change", "put_call", "volume", "skew", "earnings"].includes(String(args.sort)) ? args.sort : "iv") as OptionsSort;
+      const earnings = new Map((cal?.companies ?? []).filter((c) => c.next_earnings).map((c) => [c.ticker, c.next_earnings!]));
+      const text = optionsBoardText(board, { sort, limit: Math.min(100, Number(args.limit) || 30), names: new Map(uni.companies.map((c) => [c.ticker, c.name])), earnings });
+      return { output: clip(text), summary: `options ranked by ${sort.replace("_", " ")}` };
     }
     case "get_exposures": {
       const uni = await qc.fetchQuery(universeQuery);

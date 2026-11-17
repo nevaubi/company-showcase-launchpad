@@ -75,8 +75,14 @@ const mid = (o: CboeOption) => (o.bid + o.ask) / 2;
 const quoted = (o: CboeOption | undefined): o is CboeOption =>
   !!o && o.bid > 0 && o.ask >= o.bid && (o.ask - o.bid) / mid(o) <= 0.6;
 
-const MAX_TERM = 10;
+const MAX_TERM = 24;
 const MAX_DAYS = 400;
+/** Every expiry in the next ~10 weeks, then only the standard monthly (third-week) expiries. */
+const WEEKLY_DAYS = 75;
+const isMonthly = (e: string) => {
+  const day = Number(e.slice(8, 10));
+  return day >= 15 && day <= 21;
+};
 
 export function summarizeChain(ticker: string, chain: CboeChain): OptionsSnapshot | null {
   const price = chain.current_price || chain.close || 0;
@@ -133,7 +139,8 @@ export function summarizeChain(ticker: string, chain: CboeChain): OptionsSnapsho
       k = k0;
       iv = ivOf(p0);
     }
-    if (term.length < MAX_TERM) term.push({ e, d, m: round(straddle / price, 5), iv: iv != null ? round(iv, 4) : null, k });
+    if (term.length < MAX_TERM && (d <= WEEKLY_DAYS || (isMonthly(e) && !term.some((t) => t.e.slice(0, 7) === e.slice(0, 7) && t.d > WEEKLY_DAYS))))
+      term.push({ e, d, m: round(straddle / price, 5), iv: iv != null ? round(iv, 4) : null, k });
     // skew and at-the-money IV at the expiry nearest 30 days (at least a week out)
     if (d >= 7 && Math.abs(d - 30) < best30) {
       const near = (want: number, side: "c" | "p") => {
@@ -223,9 +230,14 @@ export function snapshotRow(s: OptionsSnapshot) {
 }
 
 /** Today's priced move for the next report next to how far the stock actually moved after past reports. */
+/** Past reactions are compared only when the expiry closes within this many days of the report. */
+export const REPORT_EXPIRY_LAG = 10;
+
 export interface EarningsPricing {
   report: string;
   point: TermPoint;
+  /** calendar days between the report and the expiry; a long gap also prices ordinary movement */
+  lag: number;
   /** past reports: absolute moves (close before the release → close the session after) */
   past: { n: number; median: number; mean: number; /** how many moved more than today's priced move */ exceeded: number } | null;
 }
@@ -233,7 +245,8 @@ export interface EarningsPricing {
 export function earningsPricing(term: TermPoint[], report: string, asOf: string, pastMoves: number[]): EarningsPricing | null {
   const point = earningsImpliedMove(term, report, asOf);
   if (!point) return null;
-  const abs = pastMoves.filter((x) => Number.isFinite(x)).map(Math.abs).sort((a, b) => a - b);
+  const lag = days(report, point.e);
+  const abs = lag > REPORT_EXPIRY_LAG ? [] : pastMoves.filter((x) => Number.isFinite(x)).map(Math.abs).sort((a, b) => a - b);
   const past = abs.length
     ? {
         n: abs.length,
@@ -242,5 +255,5 @@ export function earningsPricing(term: TermPoint[], report: string, asOf: string,
         exceeded: abs.filter((x) => x > point.m).length,
       }
     : null;
-  return { report, point, past };
+  return { report, point, lag, past };
 }

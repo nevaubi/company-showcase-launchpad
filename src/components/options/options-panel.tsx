@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useSource, type SourceTarget } from "@/components/source/source-context";
 import { usePrices } from "@/lib/data";
 import { earningsReactions } from "@/lib/markets/core";
-import { cboeQuotePage, earningsPricing, ivRank, realizedVol, type TermPoint } from "@/lib/options/core";
+import { cboeQuotePage, earningsPricing, ivRank, realizedVol, REPORT_EXPIRY_LAG, type TermPoint } from "@/lib/options/core";
 import { optionsHistoryQuery, type OptionsRow } from "@/lib/options/data";
 import type { NextEarnings } from "@/lib/company/catalysts";
 import type { EarningsRelease } from "@/lib/financials/types";
@@ -28,7 +28,8 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
   const reactions = useMemo(() => {
     const bars = prices.data?.bars;
     if (!bars?.length || !releases?.length) return [];
-    return earningsReactions(bars, releases.map((r) => ({ filed: r.filed, accn: r.accn, doc: r.doc }))).slice(-12);
+    const asc = [...releases].sort((a, b) => a.filed.localeCompare(b.filed));
+    return earningsReactions(bars, asc.map((r) => ({ filed: r.filed, accn: r.accn, doc: r.doc }))).sort((a, b) => a.date.localeCompare(b.date)).slice(-12);
   }, [prices.data, releases]);
   const closes = useMemo(() => (prices.data?.bars ?? []).map((b) => b[5] || b[4]), [prices.data]);
 
@@ -37,7 +38,7 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
   if (!s)
     return (
       <Panel title="Options market" subtitle="Cboe delayed quotes" collapse={false}>
-        <p className="px-3.5 py-4 text-sm text-muted-foreground">No options snapshot yet. Stocks with listed options are read every weekday evening from Cboe; this one either has no listed options or hasn't been read.</p>
+        <p data-section="Options market" className="px-3.5 py-4 text-sm text-muted-foreground">No options snapshot yet. Stocks with listed options are read every weekday evening from Cboe; this one either has no listed options or hasn't been read.</p>
       </Panel>
     );
 
@@ -73,7 +74,7 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
               {next ? `No listed expiry covers the ${fmtDate(next.date)} report yet.` : "No upcoming report date known."}
             </p>
           )}
-          <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-px border-b bg-border">
             <Tile
               label="Implied vol · 30d"
               value={fmtPct(s.iv30, 1)}
@@ -152,7 +153,8 @@ function ReportPricing({
         <button type="button" className="num font-semibold tabular-nums hover:underline" onClick={() => open(ext(`Move priced through ${fmtDate(p.point.e)}`, m, "pct", `At-the-money straddle for the ${p.point.e} expiry ÷ stock price (${s.price.toFixed(2)})`))}>
           ±{fmtPct(m, 1)}
         </button>{" "}
-        move (±${(m * s.price).toFixed(2)}) through the {fmtDate(p.point.e, { month: "short", day: "numeric" })} expiry, the first after the report.
+        move (±${(m * s.price).toFixed(2)}) through the {fmtDate(p.point.e, { month: "short", day: "numeric" })} expiry, the first after the report
+        {p.lag > REPORT_EXPIRY_LAG ? `, ${p.lag} days later, so it also prices ordinary movement and isn't compared with past reactions.` : "."}
         {p.past && (
           <>
             {" "}After the last {p.past.n} reports the stock moved a median <span className="num font-semibold tabular-nums">±{fmtPct(p.past.median, 1)}</span>;{" "}
@@ -163,7 +165,7 @@ function ReportPricing({
           </>
         )}
       </p>
-      {reactions.length > 0 && (
+      {reactions.length > 0 && p.past && (
         <div className="mt-3">
           <div className="relative h-9" role="img" aria-label={`Past report moves against the ±${fmtPct(m, 1)} priced move`}>
             <div className="absolute inset-x-0 top-1/2 h-px bg-border" />
@@ -215,7 +217,9 @@ function IvHistory({ rows }: { rows: OptionsRow[] }) {
 }
 
 function TermTable({ s, report, open, ext }: { s: OptionsRow; report: string | null; open: (t: SourceTarget) => void; ext: Ext }) {
-  const term: TermPoint[] = s.term;
+  const all: TermPoint[] = s.term;
+  // the next six weeks expiry by expiry, then one a month; the report's expiry always shows
+  const term = all.filter((t, i) => t.e === report || t.d <= 45 || !all.slice(0, i).some((u) => u.d > 45 && u.e.slice(0, 7) === t.e.slice(0, 7))).slice(0, 14);
   if (!term.length) return <p className="px-3.5 py-4 text-sm text-muted-foreground">No two-sided at-the-money quotes to price a move.</p>;
   const max = Math.max(...term.map((t) => t.m));
   return (
