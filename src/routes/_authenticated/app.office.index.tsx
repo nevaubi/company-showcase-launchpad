@@ -44,7 +44,8 @@ function OfficeHub() {
   const navigate = useNavigate();
   const open = (r: { id: string; kind: string }) => {
     if (r.kind === "docx") void navigate({ to: "/app/office/writer/$id", params: { id: r.id } });
-    else toast.info("This editor is coming next — Writer is ready now.");
+    else if (r.kind === "xlsx") void navigate({ to: "/app/office/sheets/$id", params: { id: r.id } });
+    else toast.info("This editor is coming next — Writer and Sheets are ready now.");
   };
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);

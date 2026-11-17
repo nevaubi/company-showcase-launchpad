@@ -27,7 +27,7 @@ export function useWriter(initial: JNode | string | null, onChange: () => void) 
   });
 }
 
-function B({ on, title, active, children, disabled, label }: { on: () => void; title: string; active?: boolean; children: ReactNode; disabled?: boolean; label?: string }) {
+export function B({ on, title, active, children, disabled, label }: { on: () => void; title: string; active?: boolean; children: ReactNode; disabled?: boolean; label?: string }) {
   return (
     <button type="button" title={title} aria-label={title} onClick={on} disabled={disabled}
       className={cn("inline-flex h-6 min-w-6 items-center justify-center gap-1 rounded-sm px-1 text-[11px] text-foreground/80 hover:bg-office-soft disabled:opacity-40",
@@ -36,7 +36,7 @@ function B({ on, title, active, children, disabled, label }: { on: () => void; t
     </button>
   );
 }
-function Group({ name, children }: { name: string; children: ReactNode }) {
+export function Group({ name, children }: { name: string; children: ReactNode }) {
   return (
     <div className="flex h-full flex-col justify-between border-r px-2 last:border-r-0">
       <div className="flex flex-1 flex-wrap content-center items-center gap-0.5">{children}</div>
