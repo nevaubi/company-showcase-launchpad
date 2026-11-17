@@ -284,6 +284,11 @@ export async function openaiStructured<T>(opts: {
   if (opts.model.startsWith("inclusionai/")) return openRouterStructured<T>(opts);
   if (opts.model.startsWith("claude-")) return anthropicStructured<T>(opts);
   if (useGateway()) return gatewayStructured<T>(opts);
+  return openaiDirectStructured<T>(opts);
+}
+
+/** The owner's own OpenAI key (Responses API, strict JSON schema), whatever IR_AI_PROVIDER says. */
+export async function openaiDirectStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
   const key = process.env["OPENAI_API_KEY"];
   if (!key) throw new OpenAIError("OPENAI_API_KEY is not configured", "auth", 0);
   const content: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;

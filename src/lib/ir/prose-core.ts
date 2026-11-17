@@ -386,3 +386,41 @@ export function dropTableDuplicates<T extends { period_end: string; months: numb
       ),
   );
 }
+
+/**
+ * Two readers' answers for the same text (same numbered tokens). A figure both point at must agree
+ * on its period and value, or it is dropped (a wrong period is the commonest misread); a figure only
+ * one reader found is kept, since it already passed every check against the printed token.
+ */
+export function crossCheck(primary: ProseFact[], second: ProseFact[]): { rows: ProseFact[]; both: Set<ProseFact>; agreed: number; conflicts: number; added: number } {
+  const near = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) <= 6 * 86_400_000;
+  const byToken = new Map<number, ProseFact[]>();
+  for (const f of second) byToken.set(f.locator.n, [...(byToken.get(f.locator.n) ?? []), f]);
+  const rows: ProseFact[] = [];
+  const seenTokens = new Set<number>();
+  const both = new Set<ProseFact>();
+  let agreed = 0;
+  let conflicts = 0;
+  for (const f of primary) {
+    seenTokens.add(f.locator.n);
+    const other = byToken.get(f.locator.n);
+    if (!other) {
+      rows.push(f);
+      continue;
+    }
+    if (other.some((o) => o.months === f.months && near(o.period_end, f.period_end) && Math.abs(o.value - f.value) <= Math.abs(f.value) * 1e-9)) {
+      agreed++;
+      both.add(f);
+      rows.push(f);
+    } else conflicts++;
+  }
+  let added = 0;
+  for (const f of second) {
+    if (seenTokens.has(f.locator.n)) continue;
+    seenTokens.add(f.locator.n);
+    rows.push(f);
+    added++;
+  }
+  return { rows, both, agreed, conflicts, added };
+}
+

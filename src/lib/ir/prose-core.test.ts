@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dropTableDuplicates, proseBlocks, proseFacts, proseTokens, quoteOf, renderProse, type ProseOutput, type ProseRow } from "./prose-core";
+import { crossCheck, dropTableDuplicates, proseBlocks, proseFacts, proseTokens, quoteOf, renderProse, type ProseOutput, type ProseRow } from "./prose-core";
 
 const RELEASE = `<html><body>
 <p>ISSAQUAH, Wash., Sept. 24, 2026 -- Costco Wholesale Corporation today announced its results for the fourth quarter (16 weeks) ended August 31, 2026.</p>
@@ -98,3 +98,27 @@ describe("reading figures in running text", () => {
     expect(q).toContain("4,321 branches");
   });
 });
+
+describe("crossCheck (two readers, same numbered text)", () => {
+  const fact = (n: number, period_end: string, value: number, months = 3): import("./prose-core").ProseFact => ({
+    category: "segment", metric: "revenue", breakdown: null, parent: null, is_total: false, label: `line ${n}`, period_label: "Q",
+    period_start: null, period_end, months, value, unit: "usd", locator: { q: "s", text: String(value), n, b: 0 }, tol: 0,
+  });
+  it("keeps figures both readers date the same, drops figures they date differently", () => {
+    const x = crossCheck([fact(1, "2025-11-23", 5), fact(2, "2025-11-23", 7)], [fact(1, "2025-11-23", 5), fact(2, "2025-08-31", 7)]);
+    expect(x.rows.map((f) => f.locator.n)).toEqual([1]);
+    expect(x.agreed).toBe(1);
+    expect(x.conflicts).toBe(1);
+    expect(x.both.size).toBe(1);
+  });
+  it("drops a figure the readers give different lengths, keeps what only one found", () => {
+    const x = crossCheck([fact(1, "2025-12-31", 5, 3), fact(3, "2025-12-31", 9)], [fact(1, "2025-12-31", 5, 12), fact(4, "2025-12-31", 11)]);
+    expect(x.rows.map((f) => f.locator.n).sort()).toEqual([3, 4]);
+    expect(x.added).toBe(1);
+    expect(x.conflicts).toBe(1);
+  });
+  it("treats a few days apart (52/53-week guess) as the same period", () => {
+    expect(crossCheck([fact(1, "2025-11-30", 5)], [fact(1, "2025-11-26", 5)]).agreed).toBe(1);
+  });
+});
+

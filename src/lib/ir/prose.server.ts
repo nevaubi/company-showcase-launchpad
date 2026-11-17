@@ -3,9 +3,10 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { structured } from "@/lib/ai.server";
 import { EXTRACTABLE_KINDS, pool } from "@/lib/ir/extract.server";
-import { dropTableDuplicates, PROSE_INSTRUCTIONS, PROSE_SCHEMA, proseBlocks, proseChunks, proseFacts, proseTokens, renderProse, type ProseFact, type ProseOutput } from "@/lib/ir/prose-core";
+import { crossCheck, dropTableDuplicates, PROSE_INSTRUCTIONS, PROSE_SCHEMA, proseBlocks, proseChunks, proseFacts, proseTokens, renderProse, type ProseFact, type ProseOutput } from "@/lib/ir/prose-core";
 import { fixRowDates, printedDates } from "@/lib/ir/dates";
 import { decodeHtml } from "@/lib/ir/tables";
+import { laneStructured } from "@/lib/ir/openai-lane.server";
 import { estimateCredits, hasOpenAIKey, IR_MODELS, OpenAIError, openaiStructured, type Usage } from "@/lib/openai.server";
 
 const ZERO: Usage = { input_tokens: 0, output_tokens: 0, cached_tokens: 0 };
@@ -27,7 +28,7 @@ const proseDoc = (d: { ext: string | null }) => ["htm", "html"].includes(d.ext ?
  * Read one document's text. Facts the document also prints in a table (same period and value) are
  * left to the table reader; the rest are stored with method "text" and cite their sentence.
  */
-export async function readIrProse(id: string, opts: { model?: string; concurrency?: number; chunkChars?: number; /** read and return, store nothing (pilots) */ dry?: boolean } = {}) {
+export async function readIrProse(id: string, opts: { model?: string; concurrency?: number; chunkChars?: number; /** read and return, store nothing (pilots) */ dry?: boolean; /** false = skip the OpenAI second reader */ second?: boolean } = {}) {
   const { data: doc } = await supabaseAdmin.from("ir_documents").select("*").eq("id", id).maybeSingle();
   if (!doc?.path) throw new Error("Document not stored");
   const mark = (patch: Record<string, unknown>) => (opts.dry ? Promise.resolve() : supabaseAdmin.from("ir_documents").update({ prose_at: new Date().toISOString(), ...patch }).eq("id", id));
@@ -52,14 +53,31 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
   let credits = 0;
   let rejected = 0;
   let unreadable = 0;
+  let agreed = 0;
+  let conflicts = 0;
+  let added = 0;
+  let checked = 0;
   const reads = await pool(chunks, opts.concurrency ?? 3, async (c, i) => {
     try {
-      const r = await ask(`${context}\n\nText (part ${i + 1} of ${chunks.length}):\n\n${renderProse(c.blocks, c.tokens)}`, model);
+      const input = `${context}\n\nText (part ${i + 1} of ${chunks.length}):\n\n${renderProse(c.blocks, c.tokens)}`;
+      // The second reader (owner's free OpenAI allowance) reads the same numbered text in parallel.
+      const [r, second] = await Promise.all([
+        ask(input, model),
+        opts.second === false ? null : laneStructured<ProseOutput>({ name: "ir_prose", instructions: PROSE_INSTRUCTIONS, input, schema: PROSE_SCHEMA as unknown as Record<string, unknown> }),
+      ]);
       usage = addUsage(usage, r.usage);
       credits += estimateCredits(model, r.usage) ?? 0;
       const got = proseFacts(r.out, c.blocks, c.tokens, doc.filed);
       rejected += got.rejected;
-      return got.rows.map((f) => ({ ...f, model: r.model }));
+      if (!second) return got.rows.map((f) => ({ ...f, model: r.model }));
+      checked++;
+      const other = proseFacts(second.data, c.blocks, c.tokens, doc.filed);
+      const x = crossCheck(got.rows, other.rows);
+      agreed += x.agreed;
+      conflicts += x.conflicts;
+      added += x.added;
+      const fromSecond = new Set(other.rows);
+      return x.rows.map((f) => ({ ...f, model: x.both.has(f) ? `${r.model}+${second.model}` : fromSecond.has(f) ? second.model : r.model }));
     } catch (e) {
       // An unusable answer for one part loses that part only.
       if (e instanceof OpenAIError && e.kind === "rejected") {
@@ -89,14 +107,16 @@ export async function readIrProse(id: string, opts: { model?: string; concurrenc
     filed: doc.filed,
     method: "text",
   }));
-  if (opts.dry) return { facts: records.length, rejected, duplicates: all.length - kept.length, usage, credits, records };
+  const check = checked ? { checked, agreed, conflicts, added } : null;
+  if (opts.dry) return { facts: records.length, rejected, duplicates: all.length - kept.length, usage, credits, records, check };
   await supabaseAdmin.from("ir_kpi_facts").delete().eq("document_id", id).eq("method", "text");
   for (let i = 0; i < records.length; i += 500) {
     const { error: e } = await supabaseAdmin.from("ir_kpi_facts").insert(records.slice(i, i + 500) as never);
     if (e) throw new Error(e.message);
   }
-  await mark({ prose_status: unreadable ? `partial (${unreadable} of ${chunks.length} parts unreadable)` : rejected ? `ok (${rejected} rejected)` : "ok", prose_facts: records.length });
-  return { facts: records.length, rejected, duplicates: all.length - kept.length, usage, credits, records: [] as unknown[] };
+  const checkNote = check ? `, cross-checked: ${agreed} agreed, ${conflicts} dropped, ${added} added` : "";
+  await mark({ prose_status: `${unreadable ? `partial (${unreadable} of ${chunks.length} parts unreadable)` : rejected ? `ok (${rejected} rejected)` : "ok"}${checkNote}`, prose_facts: records.length });
+  return { facts: records.length, rejected, duplicates: all.length - kept.length, usage, credits, records: [] as unknown[], check };
 }
 
 /** Claim the next document whose text hasn't been read (newest first). Safe under concurrent runners. */

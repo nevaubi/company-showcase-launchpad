@@ -386,6 +386,13 @@
       "when": 1794919244874,
       "tag": "0054_ir_prose_progress",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1794921974234,
+      "tag": "0055_openai_free_allowance",
+      "breakpoints": true
     }
   ]
 }

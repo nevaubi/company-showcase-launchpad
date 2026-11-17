@@ -1054,6 +1054,30 @@ export type Database = {
         }
         Relationships: []
       }
+      openai_allowance: {
+        Row: {
+          calls: number
+          day: string
+          tier: string
+          tokens: number
+          updated_at: string
+        }
+        Insert: {
+          calls?: number
+          day: string
+          tier: string
+          tokens?: number
+          updated_at?: string
+        }
+        Update: {
+          calls?: number
+          day?: string
+          tier?: string
+          tokens?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       options_daily: {
         Row: {
           atm_iv: number | null
@@ -2489,6 +2513,14 @@ export type Database = {
           role: Database["public"]["Enums"]["firm_role"]
           token: string
         }[]
+      }
+      openai_allowance_settle: {
+        Args: { _day: string; _delta: number; _tier: string }
+        Returns: undefined
+      }
+      openai_allowance_take: {
+        Args: { _cap: number; _day: string; _tier: string; _tokens: number }
+        Returns: boolean
       }
       options_board: {
         Args: never
