@@ -324,3 +324,6 @@ export const regionName = (key: string) => {
     return key.toUpperCase();
   }
 };
+
+/** Banks, card issuers, consumer and mortgage lenders. Other companies with a loan book (a captive finance arm, an insurer's mortgage loans) are opt-in on the lender table. */
+export const isLenderIndustry = (industry: string | undefined) => !!industry && /bank|consumer finance|thrift|mortgage|specialized finance|commercial lending|transaction & payment/i.test(industry);

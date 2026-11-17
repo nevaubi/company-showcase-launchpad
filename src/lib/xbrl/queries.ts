@@ -53,3 +53,15 @@ export const namedByQuery = (ticker: string) =>
     },
     staleTime: 6 * hour,
   });
+
+/** Cross-company index of revenue by region and bank credit metrics (written by scripts/xbrl-detail.ts). */
+export const exposureIndexQuery = queryOptions({
+  queryKey: ["xbrl-exposure-index"],
+  queryFn: async (): Promise<import("@/lib/xbrl/exposure").ExposureIndex | null> => {
+    const { data, error } = await supabase.storage.from("datasets").download("detail-index.json");
+    if (error || !data) return null;
+    return JSON.parse(await data.text());
+  },
+  staleTime: 6 * hour,
+  retry: 1,
+});

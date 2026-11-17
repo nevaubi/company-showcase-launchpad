@@ -59,6 +59,23 @@ export const TOOL_DEFS = [
   },
   {
     type: "function",
+    name: "get_exposures",
+    description:
+      "Cross-company comparisons from every covered company's latest 10-K tags. view 'region': which companies earn the most from one country or region (e.g. China, Taiwan, Europe, United States), with revenue there, its share of revenue, the change in share vs about three years earlier, and the filing citation; companies name their own regions, so each line shows the name as filed. view 'lenders': every bank and lender's loans, loan growth, deposits, loans/deposits, net charge-off rate, allowance and nonaccrual ratios, sortable. view 'company': one company's region shares (with its rank among peers breaking out the same region) and loan book. Use for 'who is most exposed to X', tariff/geopolitical screens and bank credit comparisons; then get_filing_detail for one company's full tables.",
+    parameters: obj(
+      {
+        view: { type: "string", enum: ["region", "lenders", "company"] },
+        region: nullable(str("Region or country for view 'region' (name, ISO code or key such as china, taiwan, europe, apac, us)")),
+        ticker: nullable(str("Ticker for view 'company'")),
+        sort: nullable({ type: "string", enum: ["loans", "nco", "allowance", "nonaccrual", "growth"], description: "Lender sort (default loans)" }),
+        limit: nullable({ type: "number", description: "Rows to return (default 40)" }),
+      },
+      ["view", "region", "ticker", "sort", "limit"],
+    ),
+    strict: true,
+  },
+  {
+    type: "function",
     name: "list_filings",
     description: "Recent SEC filings for a company with accession numbers, form types, periods and filing dates.",
     parameters: obj(
@@ -767,6 +784,7 @@ export const TOOL_LABELS: Record<string, string> = {
   get_financials: "Pulled financials",
   get_segments: "Pulled segments",
   get_filing_detail: "Read filing detail",
+  get_exposures: "Compared exposures",
   list_filings: "Listed filings",
   read_filing: "Read filing",
   search_filings: "Searched EDGAR",
@@ -839,6 +857,7 @@ export const TOOL_RUNNING: Record<string, string> = {
   get_financials: "Pulling financials",
   get_segments: "Pulling segments",
   get_filing_detail: "Reading filing detail",
+  get_exposures: "Comparing exposures",
   list_filings: "Listing filings",
   read_filing: "Reading filing",
   search_filings: "Searching EDGAR",

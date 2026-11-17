@@ -10,6 +10,7 @@ const NOTES: Record<string, string> = {
   "/app/screener": "Filter companies on fundamentals",
   "/app/compare": "Side-by-side comparison of companies",
   "/app/kpis": "Company-reported KPIs across companies",
+  "/app/exposures": "Revenue by country/region and lender credit metrics compared across companies (10-K tags)",
   "/app/filings": "Recent SEC filings across coverage",
   "/app/earnings": "Recent and upcoming earnings",
   "/app/calendars": "Earnings, economic and Treasury calendars",

@@ -73,6 +73,12 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     icon: Grid3x3,
     keywords: "kpi operating metrics comps backlog nim occupancy subscribers",
   },
+  {
+    to: "/app/exposures",
+    label: "Exposures",
+    icon: Globe2,
+    keywords: "geography region country china taiwan europe tariff revenue exposure banks lenders loans deposits charge-offs allowance nonaccrual credit",
+  },
   { to: "/app/markets", label: "Technicals", icon: LineChart, keywords: "chart price rsi macd" },
   {
     to: "/app/feed",

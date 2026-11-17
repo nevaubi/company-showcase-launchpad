@@ -35,6 +35,7 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; menu?: false; hubs:
           { to: "/app/screener", label: "Screener" },
           { to: "/app/compare", label: "Compare" },
           { to: "/app/kpis", label: "KPI matrix" },
+          { to: "/app/exposures", label: "Exposures" },
         ],
       },
       {

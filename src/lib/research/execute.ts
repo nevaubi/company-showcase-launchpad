@@ -39,7 +39,8 @@ import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { searchDocuments } from "@/lib/ir/search";
 import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
-import { filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
+import { exposureIndexQuery, filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
+import { companyExposureText, lendersText, regionText } from "@/lib/xbrl/exposure-text";
 import { detailText, type DetailSection } from "@/lib/xbrl/text";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
 
@@ -621,6 +622,23 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       }
       const d = (args.filing === "quarterly" ? stored.quarterly : stored.annual) ?? stored.annual ?? stored.quarterly;
       return { output: clip(text), summary: `${t} filing detail${section ? ` · ${section}` : ""}`, refs: d ? [{ ticker: t, accn: d.accn, doc: d.doc, label: d.form }] : undefined };
+    }
+    case "get_exposures": {
+      const index = await qc.fetchQuery(exposureIndexQuery);
+      if (!index) return { output: "The exposure index has not been built yet.", summary: "no exposure index" };
+      const uni = await qc.fetchQuery(universeQuery);
+      const names = new Map(uni.companies.map((c) => [c.ticker, c.name]));
+      const limit = Math.min(120, Number(args.limit) || 40);
+      if (args.view === "company") {
+        const t = String(args.ticker ?? "").toUpperCase();
+        return { output: clip(companyExposureText(index, t, names)), summary: `${t} exposures` };
+      }
+      if (args.view === "lenders") {
+        const industries = new Map(uni.companies.map((c) => [c.ticker, c.industry]));
+        return { output: clip(lendersText(index, names, industries, { sort: (args.sort as "loans" | null) ?? "loans", limit })), summary: `lenders by ${(args.sort as string | null) ?? "loans"}` };
+      }
+      const region = String(args.region ?? "");
+      return { output: clip(regionText(index, region, names, limit)), summary: `${region} revenue exposure` };
     }
     case "list_filings": {
       const d = await dataset(qc, String(args.ticker));

@@ -238,3 +238,6 @@
 - [ ] Look polish, next: company header on phones (name, exchange badge and meta line take ~5 lines before the price)
 - [x] Assistant reads this site's own deep-read IR figures (quarterly, annual and monthly) through get_kpis, each value linked to the IR page cell that opens its source; picks the fuller of the two corpora like the IR page
 - [x] Assistant: get_setups (tonight's setups + strategy scoreboard with gate checks) and get_autopilots (paper bots vs SPY), with instructions to label watch-only ideas
+- [x] Cross-company Exposures page: revenue by country/region (share, ~3-year change) and every lender's loans, deposits, charge-offs, allowance and nonaccrual from 10-K tags, click-to-source; assistant `get_exposures`
+- [ ] Exposures: insurer view (premiums by line and state, reserves) once insurer tables are read
+- [ ] Exposures: US-state revenue/loan exposure view (state-axis tables are already stored)

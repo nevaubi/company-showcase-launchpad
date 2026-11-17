@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DetailPeriod, DetailTable, FilingDetail, StoredDetail } from "./detail";
-import { bankMetricsOf, exposureOf, rankRegion, regionKey } from "./exposure";
+import { bankMetricsOf, exposureOf, isLenderIndustry, rankRegion, regionKey } from "./exposure";
 
 const FY = (y: number): DetailPeriod => ({ key: `D${y}`, start: `${y}-01-01`, end: `${y}-12-31`, months: 12 });
 const YE = (y: number): DetailPeriod => ({ key: `I${y}`, end: `${y}-12-31`, months: 0 });
@@ -114,5 +114,36 @@ describe("bank metrics", () => {
   it("uses only the latest fiscal year-end and needs more than a notes-receivable line", () => {
     expect(bankMetricsOf(bank({ "us-gaap:FinancingReceivableExcludingAccruedInterestBeforeAllowanceForCreditLoss": { I2023: 100 }, "us-gaap:Deposits": { I2023: 150 } }))).toBeNull();
     expect(bankMetricsOf(bank({ "us-gaap:NotesReceivableGross": { I2025: 40 } }))).toBeNull();
+  });
+});
+
+describe("lender table membership", () => {
+  it("lists banks and lenders, not insurers or industrials with a finance arm", () => {
+    for (const i of ["Diversified Banks", "Regional Banks", "Consumer Finance", "Asset Management & Custody Banks", "Investment Banking & Brokerage"]) expect(isLenderIndustry(i)).toBe(true);
+    for (const i of ["Life & Health Insurance", "Construction Machinery & Heavy Transportation Equipment", "Independent Power Producers & Energy Traders", undefined]) expect(isLenderIndustry(i)).toBe(false);
+  });
+});
+
+import { lendersText, regionText, resolveRegion } from "./exposure-text";
+describe("assistant exposure text", () => {
+  it("resolves region names and country codes", () => {
+    expect(resolveRegion("Greater China")).toBe("china");
+    expect(resolveRegion("CN")).toBe("china");
+    expect(resolveRegion("emea")).toBe("europe");
+    expect(resolveRegion("japan")).toBe("japan");
+  });
+  it("cites the filing behind every ranked company and bank", () => {
+    const ref = { accn: "0001-25-1", doc: "x.htm", concept: "us-gaap:Revenues", end: "2025-12-31", value: 20 };
+    const idx = {
+      builtAt: "",
+      companies: {
+        A: { exposure: { fyEnd: "2025-12-31", table: "t", regions: [{ key: "china", label: "China", share: 0.2, period: "FY2025", value: { v: 20, parts: [ref] }, total: { v: 100, parts: [ref] } }] } },
+        B: { bank: { end: "2025-12-31", loans: { v: 1000, parts: [{ ...ref, accn: "0002-26-1" }] }, nco: { v: 7, period: "FY2025", parts: [ref] } } },
+      },
+    };
+    expect(regionText(idx, "China", new Map())).toContain("filing:A:0001-25-1:x.htm");
+    const l = lendersText(idx, new Map(), new Map([["B", "Regional Banks"]]));
+    expect(l).toContain("net charge-offs $7 = 0.70%");
+    expect(l).toContain("filing:B:0002-26-1:x.htm");
   });
 });
