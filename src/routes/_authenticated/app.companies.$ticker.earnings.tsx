@@ -1,4 +1,5 @@
 import { EarningsWorkflowPanel } from "@/components/earnings/earnings-views";
+import { OptionsPanel } from "@/components/options/options-panel";
 import { createFileRoute } from "@tanstack/react-router";
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
@@ -96,6 +97,7 @@ function Earnings() {
         ready={!!company.data && !!m.data && !promises.isLoading}
         next={next}
       />
+      <OptionsPanel ticker={ticker} next={next} releases={company.data?.earningsReleases} />
       <PromisePanel
         loading={promises.isLoading}
         data={promises.data}

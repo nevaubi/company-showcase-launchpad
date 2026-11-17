@@ -221,3 +221,26 @@ export function snapshotRow(s: OptionsSnapshot) {
     term: s.term,
   };
 }
+
+/** Today's priced move for the next report next to how far the stock actually moved after past reports. */
+export interface EarningsPricing {
+  report: string;
+  point: TermPoint;
+  /** past reports: absolute moves (close before the release → close the session after) */
+  past: { n: number; median: number; mean: number; /** how many moved more than today's priced move */ exceeded: number } | null;
+}
+
+export function earningsPricing(term: TermPoint[], report: string, asOf: string, pastMoves: number[]): EarningsPricing | null {
+  const point = earningsImpliedMove(term, report, asOf);
+  if (!point) return null;
+  const abs = pastMoves.filter((x) => Number.isFinite(x)).map(Math.abs).sort((a, b) => a - b);
+  const past = abs.length
+    ? {
+        n: abs.length,
+        median: abs.length % 2 ? abs[(abs.length - 1) / 2] : (abs[abs.length / 2 - 1] + abs[abs.length / 2]) / 2,
+        mean: abs.reduce((a, b) => a + b, 0) / abs.length,
+        exceeded: abs.filter((x) => x > point.m).length,
+      }
+    : null;
+  return { report, point, past };
+}

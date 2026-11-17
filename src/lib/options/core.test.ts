@@ -94,3 +94,16 @@ describe("volatility history", () => {
     expect(ivRank(h, 0.2)!.rank).toBe(0);
   });
 });
+
+describe("earningsPricing", () => {
+  const term = [
+    { e: "2026-11-20", d: 4, m: 0.03, iv: 0.5, k: 100 },
+    { e: "2026-11-27", d: 11, m: 0.06, iv: 0.5, k: 100 },
+  ];
+  it("compares the priced move with the median past reaction and counts bigger past moves", async () => {
+    const { earningsPricing } = await import("./core");
+    const p = earningsPricing(term, "2026-11-24", "2026-11-16", [0.02, -0.08, 0.05, -0.1])!;
+    expect(p.point.e).toBe("2026-11-27");
+    expect(p.past).toEqual({ n: 4, median: 0.065, mean: 0.0625, exceeded: 2 });
+  });
+});
