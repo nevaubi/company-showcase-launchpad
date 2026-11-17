@@ -559,6 +559,14 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       ctx.navigate(href);
       return { output: `Opened ${href} for the user. Opening a page is not the answer: wait for it, call get_page_context, then point at what the user asked for with guide or highlight before you reply.`, summary: href };
     }
+    case "start_tour": {
+      window.dispatchEvent(new CustomEvent("fu:tour"));
+      return { output: "The guided tour is now open for the user. Tell them in one line they can press Next to step through it.", summary: "Started the tour" };
+    }
+    case "open_shortcuts": {
+      window.dispatchEvent(new CustomEvent("fu:shortcuts"));
+      return { output: "The keyboard shortcuts sheet is open. Mention ⌘K search, ⌘J assistant, G then D/C/O/R, and ? for this sheet.", summary: "Opened shortcuts" };
+    }
     case "get_page_context": {
       const main = agentRoot();
       const text = (main?.innerText ?? "").replace(/\n{2,}/g, "\n").slice(0, 6000);

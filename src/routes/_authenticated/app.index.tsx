@@ -20,6 +20,7 @@ import { ThesisList } from "@/components/app/thesis-list";
 import { DailyBrief } from "@/components/app/daily-brief";
 import { MarketMoves } from "@/components/app/market-moves";
 import { cn } from "@/lib/utils";
+import { QuickStart } from "@/components/onboarding/quick-start";
 
 export const Route = createFileRoute("/_authenticated/app/")({
   head: () => ({
@@ -130,6 +131,8 @@ function Dashboard() {
         })}
       </div>
 
+      <QuickStart />
+
       <MarketMoves />
 
       {watch.isSuccess && <DailyBrief tickers={tickers} />}
@@ -137,6 +140,7 @@ function Dashboard() {
       {watch.isSuccess && <TodayDigest tickers={tickers} />}
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <div data-tour="watchlist" className="min-w-0">
         <Panel
           title="Watchlist"
           subtitle={`${tickers.length} companies you follow`}
@@ -214,6 +218,7 @@ function Dashboard() {
             </table>
           )}
         </Panel>
+        </div>
 
         <Panel
           title="Theses"

@@ -53,7 +53,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { HUB_GROUPS, hubFor, isPageActive } from "@/lib/nav";
-import { CreditCard, ShieldCheck } from "lucide-react";
+import { CreditCard, ShieldCheck, CircleHelp, Keyboard, Compass, MessageCircleQuestion } from "lucide-react";
+import { isTypingTarget, sequenceTarget } from "@/lib/shortcuts";
+import { ShortcutsSheet } from "@/components/onboarding/shortcuts-sheet";
+import { Tour } from "@/components/onboarding/tour";
+import { useOnboarding, useStarterSeed } from "@/lib/onboarding/use-onboarding";
 
 const HUB_ICON: Record<string, typeof LayoutDashboard> = {
   dashboard: LayoutDashboard,
@@ -113,20 +117,64 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
     window.addEventListener("fu:research-request", openResearch);
     return () => window.removeEventListener("fu:research-request", openResearch);
   }, []);
+  const navigate = useNavigate();
+  const [keysOpen, setKeysOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+  const onb = useOnboarding();
+  useStarterSeed(onb.data);
+  // First sign-in: start the tour once, after the starter workspace exists.
   useEffect(() => {
+    if (onb.data?.seeded_at && !onb.data.tour_done_at && pathname === "/app" && !sessionStorage.getItem("fu:tour-shown")) {
+      sessionStorage.setItem("fu:tour-shown", "1");
+      const t = setTimeout(() => setTourOpen(true), 900);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [onb.data?.seeded_at, onb.data?.tour_done_at, pathname]);
+  useEffect(() => {
+    const t = () => setTourOpen(true);
+    const k = () => setKeysOpen(true);
+    window.addEventListener("fu:tour", t);
+    window.addEventListener("fu:shortcuts", k);
+    return () => { window.removeEventListener("fu:tour", t); window.removeEventListener("fu:shortcuts", k); };
+  }, []);
+  // Quick-start checklist ticks itself off as the user does each thing.
+  const { tick } = onb;
+  useEffect(() => { if (/^\/app\/companies\/[^/]+/.test(pathname)) tick("search"); if (pathname.startsWith("/app/office/")) tick("office"); }, [pathname, tick]);
+  useEffect(() => { if (target) tick("source"); }, [target, tick]);
+  useEffect(() => { if (aiOpen) tick("assistant"); }, [aiOpen, tick]);
+  useEffect(() => {
+    let pendingG = 0;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCmdOpen((o) => !o);
+        return;
       }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "j") {
         e.preventDefault();
         setAiOpen((o) => !o);
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey || isTypingTarget(e.target)) return;
+      if (pendingG && Date.now() - pendingG < 1200) {
+        pendingG = 0;
+        const to = sequenceTarget("G", e.key);
+        if (to) { e.preventDefault(); void navigate({ to: to as never }); }
+        return;
+      }
+      if (e.key === "g" || e.key === "G") { pendingG = Date.now(); return; }
+      if (e.key === "?") { e.preventDefault(); setKeysOpen(true); return; }
+      if (e.key === "/") { e.preventDefault(); setCmdOpen(true); return; }
+      if (e.key === "[" || e.key === "]") {
+        const tabs = Array.from(document.querySelectorAll<HTMLAnchorElement>("a[data-tour^='tab-']"));
+        const cur = tabs.findIndex((a) => a.getAttribute("aria-current") === "page" || a.dataset.status === "active");
+        if (tabs.length && cur >= 0) tabs[(cur + (e.key === "]" ? 1 : -1) + tabs.length) % tabs.length]?.click();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -175,6 +223,7 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
             <Button
               variant="outline"
               onClick={() => setCmdOpen(true)}
+              data-tour="search"
               aria-label="Search companies, pages, filings"
               className="h-8 min-w-0 w-full max-w-sm justify-start gap-2 bg-card px-2.5 text-sm text-muted-foreground"
             >
@@ -186,7 +235,19 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
             <div className="ml-auto md:ml-0">
               <AlertsBell />
             </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon-sm" aria-label="Help and guide" title="Help and guide"><CircleHelp /></Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>Help</DropdownMenuLabel>
+                <DropdownMenuItem onSelect={() => setTourOpen(true)}><Compass /> Take the tour</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setKeysOpen(true)}><Keyboard /> Keyboard shortcuts <kbd className="num ml-auto text-[10px] opacity-70">?</kbd></DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => window.dispatchEvent(new CustomEvent("fu:research-request", { detail: "Show me around: what can I do in Filed Under, and where should I start? Point at things on the page as you explain." }))}><MessageCircleQuestion /> Ask the guide</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button
+              data-tour="assistant"
               variant={aiOpen ? "ink" : "outline"}
               size="sm"
               className="shrink-0"
@@ -214,6 +275,8 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
       />
       <SourcePanel />
       <CommandMenu open={cmdOpen} onOpenChange={setCmdOpen} />
+      <ShortcutsSheet open={keysOpen} onOpenChange={setKeysOpen} />
+      <Tour open={tourOpen} onClose={() => { setTourOpen(false); if (!onb.data?.tour_done_at) void onb.patch({ tour_done_at: new Date().toISOString() }); }} />
     </div>
   );
 }
@@ -277,6 +340,7 @@ function SidebarContent({
                   <li key={hub.id}>
                     <Link
                       to={hub.pages[0].to}
+                      data-tour={`hub-${hub.id}`}
                       aria-current={active ? "page" : undefined}
                       className={cn(
                         "relative grid h-8 grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2.5 rounded-md px-2 text-[13px] text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",

@@ -2279,6 +2279,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_onboarding: {
+        Row: {
+          checklist: Json
+          dismissed: boolean
+          seeded_at: string | null
+          tour_done_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checklist?: Json
+          dismissed?: boolean
+          seeded_at?: string | null
+          tour_done_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          checklist?: Json
+          dismissed?: boolean
+          seeded_at?: string | null
+          tour_done_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
