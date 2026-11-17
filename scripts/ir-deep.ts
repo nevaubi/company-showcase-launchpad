@@ -127,7 +127,7 @@ async function extract(ticker: string) {
     }
     const c = await cap();
     if (c < 0.5) return { ...res, stop: "budget spent" };
-    const r = await run(`${ticker}-extract-${pass}`, "scripts/ir-extract.ts", [...readerArgs(ticker, c), `--chunk=${CHUNK}`, "--concurrency=20", "--chunk-concurrency=4", "--max=5000"], logFile);
+    const r = await run(`${ticker}-extract-${pass}`, "scripts/ir-extract.ts", [...readerArgs(ticker, c), `--chunk=${CHUNK}`, `--concurrency=${process.env.IR_EXTRACT_CONCURRENCY ?? "20"}`, "--chunk-concurrency=4", "--max=5000"], logFile);
     if (r.spend) {
       await addSpend(r.spend.credits);
       res.credits += r.spend.credits;
@@ -151,7 +151,7 @@ async function vision(ticker: string) {
     }
     const c = await cap();
     if (c < 0.5) return { ...res, stop: "budget spent" };
-    const r = await run(`${ticker}-vision-${pass}`, "scripts/ir-vision.ts", [...readerArgs(ticker, c), "--loop", "--concurrency=8", "--max=2000"], logFile);
+    const r = await run(`${ticker}-vision-${pass}`, "scripts/ir-vision.ts", [...readerArgs(ticker, c), "--loop", `--concurrency=${process.env.IR_VISION_CONCURRENCY ?? "8"}`, "--max=2000"], logFile);
     if (r.spend) {
       await addSpend(r.spend.credits);
       res.credits += r.spend.credits;
@@ -209,7 +209,7 @@ for (const t of queue) {
   files = files.then(async () => {
     if (args["skip-prepare"] !== undefined) return;
     log(`${t}: converting files`);
-    const r = await run(`${t}-files`, "scripts/ir-docling.ts", [`--tickers=${t}`, "--phase=files", "--workers=4", "--threads=4"], join(OUT, `${t}.prepare.log`));
+    const r = await run(`${t}-files`, "scripts/ir-docling.ts", [`--tickers=${t}`, "--phase=files", `--workers=${process.env.IR_DOCLING_WORKERS ?? "4"}`, `--threads=${process.env.IR_DOCLING_THREADS ?? "4"}`], join(OUT, `${t}.prepare.log`));
     log(r.code === 0 ? `${t}: files converted` : `${t}: conversion exited ${r.code} (see ${OUT}/${t}.prepare.log)`);
   });
 }
