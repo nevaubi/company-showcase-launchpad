@@ -166,20 +166,35 @@ async function vision(ticker: string) {
   return res;
 }
 
+/** Figures stated in the releases' running text (after their tables, so repeats are recognised). */
+async function prose(ticker: string) {
+  const logFile = join(OUT, `${ticker}.prose.log`);
+  const c = await cap();
+  if (c < 0.5) return { credits: 0, done: 0, facts: 0, stop: "budget spent" as string | null };
+  // One more try per build for documents whose read failed last time.
+  await sb.from("ir_documents").update({ prose_status: null, prose_at: null }).eq("ticker", ticker).like("prose_status", "error:%");
+  const r = await run(`${ticker}-prose`, "scripts/ir-prose.ts", [`--ticker=${ticker}`, "--resume", `--concurrency=${process.env.IR_PROSE_CONCURRENCY ?? "8"}`, "--max=5000", ...(Number.isFinite(c) ? [`--max-credits=${c.toFixed(2)}`] : [])], logFile);
+  if (!r.spend) return { credits: 0, done: 0, facts: 0, stop: `prose exited ${r.code} without a spend report (see ${logFile})` as string | null };
+  await addSpend(r.spend.credits);
+  return { credits: r.spend.credits, done: r.spend.done, facts: r.spend.facts, stop: r.spend.stop };
+}
+
 async function report(ticker: string, parts: Record<string, unknown>) {
   const docs = sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker);
   const facts = (method: string) => sb.from("ir_kpi_facts").select("id", { count: "exact", head: true }).eq("ticker", ticker).eq("method", method);
-  const [total, table, vis, waitingT, waitingV, errT, errV] = await Promise.all([
+  const [total, table, vis, text, waitingP, waitingT, waitingV, errT, errV] = await Promise.all([
     count(docs),
     count(facts("table")),
     count(facts("vision")),
+    count(facts("text")),
+    count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).is("prose_status", null).in("ext", ["htm", "html"]).not("path", "is", null).in("kind", EXTRACTABLE)),
     count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).is("extract_status", null).is("extracted_at", null).or("ext.in.(htm,html),rendition_path.like.%html").in("kind", EXTRACTABLE)),
     count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).is("vision_status", null).not("path", "is", null).or(`and(kind.eq.image,bytes.gt.40000),and(kind.eq.presentation,ext.eq.pdf),and(ext.eq.pdf,kind.in.(${VISION_PDF.join(",")}))`)),
     count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).like("extract_status", "error:%")),
     count(sb.from("ir_documents").select("id", { count: "exact", head: true }).eq("ticker", ticker).like("vision_status", "error:%")),
   ]);
   const { data: series } = await sb.from("ir_company_series").select("stats, built_at").eq("ticker", ticker).maybeSingle();
-  const r = { ticker, files: total, tableFacts: table, visionFacts: vis, waitingTables: waitingT, waitingSlides: waitingV, failedTables: errT, failedSlides: errV, series: series?.stats ?? null, builtAt: series?.built_at ?? null, ...parts, ledgerCredits: +(await spent()).toFixed(2) };
+  const r = { ticker, files: total, tableFacts: table, visionFacts: vis, textFacts: text, waitingText: waitingP, waitingTables: waitingT, waitingSlides: waitingV, failedTables: errT, failedSlides: errV, series: series?.stats ?? null, builtAt: series?.built_at ?? null, ...parts, ledgerCredits: +(await spent()).toFixed(2) };
   writeFileSync(join(OUT, `${ticker}.report.json`), JSON.stringify(r, null, 1));
   // Durable copy next to the files (the sandbox's /tmp doesn't survive restarts).
   await sb.storage.from("ir-documents").upload(`ops/ir-deep/${ticker}.json`, new Blob([JSON.stringify(r)], { type: "application/json" }), { upsert: true, contentType: "application/json" }).then(undefined, () => undefined);
@@ -233,10 +248,13 @@ for (const t of queue) {
   const prev = slides;
   slides = (async () => {
     await prev;
+    log(`${t}: reading figures stated in the releases' text`);
+    const txt = fatal(tables.stop) ? { credits: 0, done: 0, facts: 0, stop: tables.stop } : await prose(t);
+    log(`${t}: text done — ${txt.done} files, ${txt.facts} figures, ${txt.credits.toFixed(2)} credits${txt.stop ? ` (stopped: ${txt.stop})` : ""}`);
     log(`${t}: reading slides and scanned pages`);
     const vis = await vision(t);
     log(`${t}: slides done — ${vis.done} files, ${vis.facts} figures, ${vis.credits.toFixed(2)} credits${vis.stop ? ` (stopped: ${vis.stop})` : ""}`);
-    results.set(t, { tables, slides: vis, minutes: +((Date.now() - t0) / 60000).toFixed(1) });
+    results.set(t, { tables, text: txt, slides: vis, minutes: +((Date.now() - t0) / 60000).toFixed(1) });
     try {
       await dbGate("ir-deep");
       await rebuildCompany(t);
@@ -272,8 +290,8 @@ if (!stopped) {
     } catch (e) {
       log(`${t}: rebuild failed: ${(e as Error).message.slice(0, 160)}`);
     }
-    const first = results.get(t) as { tables?: { stop?: string | null }; slides?: { stop?: string | null } } | undefined;
-    const incomplete = [first?.tables?.stop, first?.slides?.stop, late?.stop].some(didNotRun);
+    const first = results.get(t) as { tables?: { stop?: string | null }; text?: { stop?: string | null }; slides?: { stop?: string | null } } | undefined;
+    const incomplete = [first?.tables?.stop, first?.text?.stop, first?.slides?.stop, late?.stop].some(didNotRun);
     await report(t, { stage: fatal(late?.stop) ? "stopped" : incomplete ? "incomplete" : "final", unreadable, ...results.get(t), converted: late });
     if (fatal(late?.stop)) {
       stopped = late!.stop;

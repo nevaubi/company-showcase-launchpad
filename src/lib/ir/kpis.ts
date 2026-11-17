@@ -29,7 +29,8 @@ export interface IrFact {
   doc: string | null;
   filed: string | null;
   method?: string;
-  locator: { t: number; r: number; c: number; text?: string } | { page: number; box: number[]; text?: string } | Record<string, never>;
+  /** table cell, region on a page image, or (text reader) the sentence `q` that states the figure */
+  locator: { t: number; r: number; c: number; text?: string } | { page: number; box: number[]; text?: string } | { q: string; text?: string; n?: number; b?: number } | Record<string, never>;
 }
 
 export interface IrPart {
@@ -122,6 +123,21 @@ const docOf = (f: IrFact) => f.document_id ?? f.accn ?? "doc";
 const FLOW_UNITS = new Set(["usd", "count", "other"]);
 /** Lines that can't be negative: a negative derived value means mismatched vintages, not data. */
 const NONNEG_METRICS = new Set(["revenue", "units", "users", "volume", "backlog", "assets", "deposits", "loans", "aum", "headcount", "stores"]);
+
+/** A balance stated as of the document's own date ("currently operates ..."). */
+const asOfRelease = (f: IrFact) => !!f.filed && Math.abs(Date.parse(f.filed) - Date.parse(f.period_end)) <= 2 * 86_400_000;
+/** Releases come out within ~10 weeks of the quarter they report; the next quarter ends later than that. */
+const AS_OF_DAYS = 75;
+/** The latest quarter end before a date, within `days`. */
+function quarterBefore(ends: string[], d: string, days: number) {
+  const t = Date.parse(d);
+  let best: string | undefined;
+  for (const e of ends) {
+    const gap = t - Date.parse(e);
+    if (gap > 0 && gap <= days * 86_400_000 && (!best || e > best)) best = e;
+  }
+  return best;
+}
 
 /** Snap a period end to an existing grid date within a few days (52/53-week filers). */
 function snap(ends: string[], d: string) {
@@ -477,6 +493,7 @@ export function buildIrSeries(
   const months: string[] = [];
   for (const f of facts.filter((x) => x.months === 0)) {
     if (quarters.some((e) => near(e, f.period_end, 20))) continue;
+    if (asOfRelease(f) && quarterBefore(quarters, f.period_end, AS_OF_DAYS)) continue;
     if (closesQuarter(f.period_end)) quarters.push(f.period_end);
     else if (!months.some((e) => near(e, f.period_end, 3))) months.push(f.period_end);
   }
@@ -528,7 +545,9 @@ export function buildIrSeries(
     if (f.months === 3) push(qv, key, snap(quarters, f.period_end), vin);
     else if (f.months === 0) {
       s.pit = true;
-      const qEnd = quarters.find((e) => near(e, f.period_end, 20));
+      // "Costco currently operates 939 warehouses" is stated as of the release date: it belongs to
+      // the quarter the release reports (the cell keeps its own as-of date).
+      const qEnd = quarters.find((e) => near(e, f.period_end, 20)) ?? (asOfRelease(f) ? quarterBefore(quarters, f.period_end, AS_OF_DAYS) : undefined);
       if (qEnd) push(qv, key, qEnd, vin);
       else push(mv, key, months.find((e) => near(e, f.period_end, 3)) ?? f.period_end, vin);
     } else if (f.months === 1) push(mv, key, months.find((e) => near(e, f.period_end, 3)) ?? snap(quarters, f.period_end), vin);

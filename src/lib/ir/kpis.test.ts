@@ -525,3 +525,21 @@ describe("balances vs flows", () => {
     expect(stockKind({ category: "kpi", metric: "loans", label: "Average loans" })).toBe("average");
   });
 });
+
+describe("counts stated as of the release date", () => {
+  it("sit under the quarter the release reports, not in a stray date column", () => {
+    const facts = [
+      f("Net sales", "2026-08-31", 3, 93_900, { filed: "2026-09-24" }),
+      f("Net sales", "2026-05-10", 3, 63_200, { filed: "2026-05-28" }),
+      f("Warehouses", "2026-09-24", 0, 939, { category: "kpi", metric: "stores", unit: "count", parent: null, filed: "2026-09-24", locator: { q: "Costco currently operates 939 warehouses" } }),
+      // a balance at an unrelated date, not the document's own: stays where it was stated
+      f("Warehouses", "2026-07-31", 0, 930, { category: "kpi", metric: "stores", unit: "count", parent: null, filed: "2026-09-24", locator: { q: "As of July 31 we operated 930 warehouses" } }),
+    ];
+    const { series, quarters, months } = buildIrSeries(facts);
+    const w = series.find((s) => s.label === "Warehouses")!;
+    expect(quarters).toEqual(["2026-05-10", "2026-08-31"]);
+    expect(w.cells["2026-08-31"]?.v).toBe(939);
+    expect(months).toContain("2026-07-31");
+    expect(months).not.toContain("2026-09-24");
+  });
+});

@@ -167,13 +167,15 @@ export function refOf(p: IrPayload, c: { v: number; d?: number; l?: PayloadCell[
   const l = c.l;
   return {
     accn: doc.accn ?? "",
-    concept: `${l && !Array.isArray(l) ? "Slide" : "Release table"} · ${label}`,
+    concept: `${l && !Array.isArray(l) ? "Slide" : !l && c.x && /[a-z]{3}/i.test(c.x) && !doc.id.startsWith("x:") ? "Release text" : "Release table"} · ${label}`,
     start: c.s,
     end: c.e ?? "",
     value: c.v,
     irDoc: doc.id,
     // Partner-corpus values cite a printed line: the viewer goes to its page, finds the line, then the figure in it.
     ...(doc.id.startsWith("x:") && c.x ? { search: printedToken(c.x, c.v), quote: c.x, ...(c.p ? { page: c.p } : {}), ...(c.sh ? { sheet: c.sh } : {}) } : {}),
+    // A figure stated in the release's text cites its sentence: the viewer finds it, then the figure in it.
+    ...(!doc.id.startsWith("x:") && !l && c.x && /[a-z]{3}/i.test(c.x) ? { search: printedToken(c.x, c.v), quote: c.x } : {}),
     ...(Array.isArray(l) ? { cell: { t: l[0], r: l[1], c: l[2] } } : l ? { box: l } : {}),
   } as SourceRef;
 }

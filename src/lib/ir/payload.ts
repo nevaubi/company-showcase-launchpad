@@ -169,7 +169,8 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
     }
     return i;
   };
-  const factCell = (f: IrFact) => ({ d: di(f), l: locOf(f), x: (f.locator as { text?: string }).text, s: f.period_start ?? undefined, e: f.period_end, m: f.months });
+  // A figure read from running text cites its sentence; table and slide figures their printed cell text.
+  const factCell = (f: IrFact) => ({ d: di(f), l: locOf(f), x: (f.locator as { q?: string; text?: string }).q ?? (f.locator as { text?: string }).text, s: f.period_start ?? undefined, e: f.period_end, m: f.months });
   const cellOf = (c: IrCell): PayloadCell => {
     if (c.derived)
       return {

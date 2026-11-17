@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, ExternalLink, Loader2, Minus, Plus, ScanSearch,
 import { getFilingDocument } from "@/lib/sec.functions";
 import { getIrHtml } from "@/lib/ir.functions";
 import { storeHtml, type StoreRef } from "@/lib/ir/store";
-import { clearMarks, MARK_ATTR, markFigure, quotedRow } from "@/lib/source/locate";
+import { clearMarks, MARK_ATTR, markFigure, quotedBlock, quotedRow } from "@/lib/source/locate";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -292,6 +292,14 @@ export function FilingViewer({
         const page = table?.getAttribute("data-page");
         const sheet = table?.getAttribute("data-sheet");
         how = page ? `page ${page}, line ${line}` : sheet ? `sheet “${sheet}”, row ${line}` : "the quoted line";
+      } else if (!cited) {
+        // A figure stated in running text: find its sentence, then the figure in it.
+        const block = quotedBlock(d.body, locator.quote);
+        if (block) {
+          const figure = locator.search && locator.search !== locator.quote ? markFigure(d, block, locator.search) : null;
+          found = [figure ?? block];
+          how = "the quoted sentence";
+        }
       }
     }
     // The line itself was not found on the cited page (the text was re-read since): the figure on that page still is.

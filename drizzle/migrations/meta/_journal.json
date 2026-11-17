@@ -372,6 +372,20 @@
       "when": 1794909830281,
       "tag": "0052_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1794918609184,
+      "tag": "0053_ir_documents_prose_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1794919244874,
+      "tag": "0054_ir_prose_progress",
+      "breakpoints": true
     }
   ]
 }

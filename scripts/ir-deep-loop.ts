@@ -109,6 +109,7 @@ interface LoopState {
   lastDetail?: string | null;
   lastSod?: string | null;
   lastReactions?: string | null;
+  lastProse?: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
   /** unread files a company had when it finished; more than a few new ones later = revisit */
@@ -271,6 +272,24 @@ async function maybeReactions() {
   });
 }
 
+// ---------- background text reading ----------
+/**
+ * Companies finished before the text reader existed: read the figures stated in their releases'
+ * running text, newest releases first across all companies (the reader rebuilds companies that gain
+ * figures). Network-bound and light on memory, so it runs beside the other side jobs.
+ */
+let prosing = false;
+async function maybeProse() {
+  if (prosing || !sideReady() || process.env.IR_PROSE_SWEEP === "0") return;
+  if (state.lastProse && Date.now() - Date.parse(state.lastProse) < 10 * 60_000) return;
+  prosing = true;
+  state.lastProse = new Date().toISOString();
+  await saveState(state);
+  void run("scripts/ir-prose.ts", ["--resume", `--concurrency=${process.env.IR_PROSE_SWEEP_CONCURRENCY ?? "8"}`, "--max=1500"], `${OUT}/prose.log`).finally(() => {
+    prosing = false;
+  });
+}
+
 // ---------- main loop ----------
 /** A deep build started by hand (or a previous loop) shares the readers' leases: wait for it. */
 function deepRunning() {
@@ -392,6 +411,7 @@ for (;;) {
   await maybeDetail();
   await maybeSod();
   await maybeReactions();
+  await maybeProse();
   // self-heal: done with files but no figures, once (never for companies set aside)
   state.healed ??= [];
   for (const t of [...state.done]) {

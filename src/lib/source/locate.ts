@@ -44,6 +44,24 @@ export function quotedRow(root: ParentNode, quote: string): HTMLTableRowElement 
   return head.length >= 12 ? rowWith(root, head) : null;
 }
 
+/**
+ * The smallest text block (paragraph, list item, cell) that holds a quoted sentence, for figures read
+ * from running text. A long quote is found by its first eight words.
+ */
+export function quotedBlock(root: ParentNode, quote: string): HTMLElement | null {
+  const q = normText(quote);
+  if (q.length < 8) return null;
+  const words = q.split(" ");
+  const tries = words.length > 8 ? [q, words.slice(0, 8).join(" ")] : [q];
+  const blocks = Array.from(root.querySelectorAll<HTMLElement>("p, li, td, th, div, span, font, h1, h2, h3, h4, h5, h6, b, strong"));
+  for (const want of tries) {
+    const hits = blocks.filter((el) => normText(el.textContent ?? "").includes(want));
+    const smallest = hits.filter((el) => !hits.some((o) => o !== el && el.contains(o)));
+    if (smallest.length) return smallest[0];
+  }
+  return null;
+}
+
 const bare = (s: string) => s.replace(/[\s$()]/g, "");
 const isFigure = (s: string) => /^[\d,.\s]+$/.test(s);
 

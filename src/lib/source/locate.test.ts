@@ -85,3 +85,16 @@ describe("locating a quoted line", () => {
     expect(doc.querySelector("mark")).toBeNull();
   });
 });
+
+describe("locating a figure stated in running text", () => {
+  const RELEASE = `<p>Highlights</p><p>Costco currently operates <b>939</b> warehouses, including 647 in the United States and Puerto Rico, 115 in Canada.</p><p>Net sales rose 8%.</p>`;
+  it("finds the paragraph that holds the quoted sentence, then the figure in it", async () => {
+    const { quotedBlock } = await import("./locate");
+    const doc = page(RELEASE);
+    const block = quotedBlock(doc.body, "Costco currently operates 939 warehouses, including 647 in the United States and Puerto Rico, 115 in Canada.")!;
+    expect(block.tagName).toBe("P");
+    const mark = markFigure(doc, block, "647")!;
+    expect(mark.textContent).toBe("647");
+    expect(mark.closest("p")).toBe(block);
+  });
+});

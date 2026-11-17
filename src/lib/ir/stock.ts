@@ -5,7 +5,7 @@
 const AVERAGE_WORDS = /\b(average|avg)\b/i;
 const STOCK_WORDS = /\b(period[- ]end|end of (the )?(period|quarter|year)|ending|balances?|outstanding|as of|backlog|headcount|employees|book value)\b/i;
 /** Lines that move money or units during the period even when their metric is a balance ("net new assets"). */
-const FLOW_WORDS = /\b(new|net adds?|additions?|inflows?|outflows?|flows?|originations?|charge-?offs?|sold|delivered|shipped|added)\b/i;
+const FLOW_WORDS = /\b(new|net adds?|additions?|inflows?|outflows?|flows?|originations?|charge-?offs?|sold|delivered|shipped|added|openings?|opened|closings?|closures?|closed|relocations?|remodels?)\b/i;
 const STOCK_METRICS = new Set(["backlog", "assets", "deposits", "loans", "aum", "headcount", "stores", "users"]);
 
 /** Formulas that only hold for flows (a year as four quarters, a quarter as year minus quarters or YTD). */
