@@ -29,6 +29,7 @@ export const DATASETS: Record<string, { label: string; blurb: string; source: st
   attention: { label: "Public attention", blurb: "Monthly Wikipedia pageviews — a free demand/interest proxy", source: "Wikimedia" },
   medicare: { label: "Medicare drug spending", blurb: "Gross Medicare spending on the company's drugs — Part D (pharmacy) and Part B (given in clinics) — per year and the latest quarter, before rebates", source: "CMS" },
   medicare_states: { label: "Medicare drugs by state", blurb: "Gross Medicare Part D drug costs for the company's own brands by the prescriber's state, its slice of each state's Part D spending and how far each state over- or under-indexes vs Medicare overall", source: "CMS" },
+  tri: { label: "Plants & releases", blurb: "EPA Toxics Release Inventory: the company's US plants that handle listed chemicals, by state, with yearly releases and a production index (each plant's reported production this year ÷ last year)", source: "EPA" },
   deposits: { label: "Deposits by state", blurb: "Branch deposits each June 30 by state and metro area for all the company's insured banks, with its share of each state's deposits", source: "FDIC" },
   settlement: { label: "Fails to deliver", blurb: "Shares sold but not delivered on settlement day (NSCC), average daily balance per half-month valued at the day's price; persistent or spiking fails can flag hard-to-borrow stock", source: "SEC" },
 };
@@ -109,6 +110,8 @@ export function fmtAlt(v: number | null, unit: string | null) {
   if (v == null) return "—";
   if (unit === "USD") { const a = Math.abs(v); return a >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : a >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${(v / 1e3).toFixed(0)}K` : `$${v.toFixed(0)}`; }
   if (unit === "%") return `${v.toFixed(2)}%`;
+  if (unit === "ratio") return `${v.toFixed(2)}×`;
+  if (unit === "lbs") return `${v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${(v / 1e3).toFixed(0)}K` : Math.round(v).toLocaleString()} lb`;
   return v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${(v / 1e3).toFixed(0)}K` : v.toLocaleString();
 }
 

@@ -3,6 +3,8 @@
 //   bun scripts/gov-data.ts --medicare     CMS Medicare Part D + Part B drug spending (annual + latest quarters)
 //   bun scripts/gov-data.ts --medicare-states[=5]  CMS Part D drug costs by prescriber state for every covered drug maker, the last N years
 //                                          (add --if-new to do nothing unless CMS has published a newer year; the IR loop runs that weekly)
+//   bun scripts/gov-data.ts --tri[=6]      EPA Toxics Release Inventory plants, releases and production index for every covered company, the last N years
+//                                          (add --if-new to do nothing unless EPA has published a newer year; the IR loop runs that weekly)
 //   bun scripts/gov-data.ts --sod[=6]      FDIC Summary of Deposits by state and metro for every covered bank, the last N years
 //                                          (add --if-new to do nothing unless a newer June 30 survey is out; the IR loop runs that weekly)
 // The scheduled `gov-data` job keeps the latest fails-to-deliver half-month current after the
@@ -11,6 +13,7 @@ import { COVERAGE } from "@/lib/coverage";
 import { ftdRows, ftdUrl, latestLikelyPeriod, parseFtd, periodCode, prevPeriod, unzipText } from "@/lib/alt/ftd";
 import { CMS, displayBrand, drugYears, makerTicker, medicareRows, type CmsRecord, type Part } from "@/lib/alt/medicare";
 import { GEO_DATASET, geoDistributions, geoRows, parseGeoCsv, partDOwners } from "@/lib/alt/medicare-geo";
+import { normParent, parseTri, TRI_DATASET, triFileUrl, triMatcher, triRows } from "@/lib/alt/tri";
 import { REGISTRY_PATH, type AltRegistryEntry } from "@/lib/alt/registry";
 import { parseBuckets, SOD_API, sodFilter, sodRows, sodUrl, type SodEntity } from "@/lib/alt/sod";
 import { staticRegistry } from "@/lib/alt/collect.server";
@@ -234,5 +237,59 @@ if (args["medicare-states"] !== undefined) {
     if (args.dry === undefined && !only) await sb.from("job_state").upsert({ job: "gov-medicare-states", cursor: newest, updated_at: new Date().toISOString() });
     if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: true, items: rows, detail: { companies: tickers.size, year: newest } }).eq("id", run.id);
     log(`Medicare by state done: ${rows} rows for ${tickers.size} companies (${GEO_DATASET})`);
+  }
+}
+
+/** Hand-checked TRI parent names (normalized) whose company name doesn't carry over. */
+const TRI_ALIASES: Record<string, string> = {
+  "crh americas": "CRH",
+  wabtec: "WAB",
+};
+
+if (args.tri !== undefined) {
+  const years = Number(args.tri) || 6;
+  let newest = 0;
+  for (let y = new Date().getUTCFullYear(); y >= 2020 && !newest; y--) {
+    const r = await fetch(triFileUrl(y), { headers: { Range: "bytes=0-2000" } }).catch(() => null);
+    if (r?.ok && (await r.text()).includes("TRIFD")) newest = y;
+  }
+  if (!newest) throw new Error("no TRI basic data file found");
+  const { data: st } = await sb.from("job_state").select("cursor").eq("job", "gov-tri").maybeSingle();
+  const record = args.dry === undefined && !args.tickers;
+  const { data: run } = record ? await sb.from("job_runs").insert({ job: "gov-tri" }).select("id").single() : { data: null };
+  if (args["if-new"] !== undefined && (st?.cursor ?? 0) >= newest) {
+    log(`TRI up to date (${newest})`);
+    if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: true, items: 0, detail: { note: `up to date through ${newest}` } }).eq("id", run.id);
+  } else {
+    const { data: regFile } = await sb.storage.from("datasets").download(REGISTRY_PATH);
+    const reg = (regFile ? JSON.parse(await regFile.text()) : {}) as Record<string, AltRegistryEntry>;
+    const match = triMatcher(COVERAGE.map((c) => ({ ticker: c.ticker, shortName: c.shortName, legal: reg[c.ticker]?.legal, industry: c.industry })), TRI_ALIASES);
+    const only = args.tickers ? new Set(String(args.tickers).toUpperCase().split(",")) : null;
+    let rows = 0;
+    const tickers = new Set<string>();
+    for (let y = newest - years + 1; y <= newest; y++) {
+      let text: string | null = null;
+      for (let t = 0; t < 4 && !text; t++) {
+        const r = await fetch(triFileUrl(y)).catch(() => null);
+        if (r?.ok) text = await r.text();
+        else await sleep(3000 * (t + 1));
+      }
+      if (!text) throw new Error(`TRI ${y} file failed`);
+      const recs = parseTri(text);
+      let out = triRows(y, recs, match);
+      if (only) out = out.filter((r) => only.has(r.ticker));
+      for (const r of out) tickers.add(r.ticker);
+      if (args.dry === undefined) await upsert(out);
+      rows += out.length;
+      if (args.unmatched !== undefined && y === newest) {
+        const fac = new Map<string, Set<string>>();
+        for (const r of recs) if (r.parent && !match(r.parent)) (fac.get(r.parent) ?? fac.set(r.parent, new Set()).get(r.parent)!).add(r.trifd);
+        log("largest unmatched parents:", [...fac].sort((a, b) => b[1].size - a[1].size).slice(0, 60).map(([p, f]) => `${p} (${normParent(p)}): ${f.size}`).join(" | "));
+      }
+      log(`  ${y}: ${recs.length} forms → ${out.length} rows for ${new Set(out.map((r) => r.ticker)).size} companies`);
+    }
+    if (args.dry === undefined && !only) await sb.from("job_state").upsert({ job: "gov-tri", cursor: newest, updated_at: new Date().toISOString() });
+    if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: true, items: rows, detail: { companies: tickers.size, year: newest } }).eq("id", run.id);
+    log(`TRI done: ${rows} rows for ${tickers.size} companies (${TRI_DATASET})`);
   }
 }

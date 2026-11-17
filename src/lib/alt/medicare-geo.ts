@@ -4,6 +4,7 @@
 // company's labelers for (nearly) all of the brand's spending that year, so multi-source generics
 // are never attributed. Pure: the script downloads the files.
 import { displayBrand, type CmsRecord } from "./medicare";
+import { parseCsv } from "./csv";
 import { STATES } from "./sod";
 
 export const GEO_PAGE = "https://data.cms.gov/provider-summary-by-type-of-service/medicare-part-d-prescribers/medicare-part-d-prescribers-by-geography-and-drug";
@@ -21,39 +22,7 @@ NAME_TO_CODE["virgin islands"] = "VI";
 export const geoRecordUrl = (datasetId: string, stateName: string, brand: string) =>
   `https://data.cms.gov/data-api/v1/dataset/${datasetId}/data?filter%5BPrscrbr_Geo_Desc%5D=${encodeURIComponent(stateName)}&filter%5BBrnd_Name%5D=${encodeURIComponent(brand)}`;
 
-/** RFC 4180 CSV → rows of strings (quoted fields may hold commas, quotes and newlines). */
-export function parseCsv(text: string): string[][] {
-  const out: string[][] = [];
-  let row: string[] = [];
-  let f = "";
-  let q = false;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (q) {
-      if (c === '"') {
-        if (text[i + 1] === '"') {
-          f += '"';
-          i++;
-        } else q = false;
-      } else f += c;
-    } else if (c === '"') q = true;
-    else if (c === ",") {
-      row.push(f);
-      f = "";
-    } else if (c === "\n" || c === "\r") {
-      if (c === "\r" && text[i + 1] === "\n") i++;
-      row.push(f);
-      f = "";
-      if (row.length > 1 || row[0] !== "") out.push(row);
-      row = [];
-    } else f += c;
-  }
-  if (f !== "" || row.length) {
-    row.push(f);
-    out.push(row);
-  }
-  return out;
-}
+export { parseCsv } from "./csv";
 
 /** One brand in one state (or the nation) for one year. */
 export interface GeoRec {
