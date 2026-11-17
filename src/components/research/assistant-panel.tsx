@@ -50,6 +50,7 @@ function suggestionsFor(path: string): string[] {
       `Open ${t}'s IR site in a browser, download the latest earnings deck and summarize it`,
     ];
   if (path.includes("supply-chain")) return ["Explain the biggest risks on this map", "Which covered companies are most exposed to TSMC?", "Simulate a 25% drop in Apple demand"];
+  if (path === "/app") return ["Show me around and point at what matters on this page", "Where do I find insider buys and supply-chain links?", "Build me a cited one-page note on NVIDIA in Office Studio"];
   return [
     "Screen for >20% revenue growth and >25% FCF margins and put it in a dashboard",
     "Which semis have the highest R&D intensity? Chart it and give me a CSV",

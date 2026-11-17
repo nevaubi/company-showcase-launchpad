@@ -321,6 +321,7 @@ function CompanyLayout() {
               {TAB_GROUPS.map((g) => (
                 <Link
                   key={g.label}
+                  data-tour={`tab-${g.label}`}
                   to={g.subs[0].to as "/app/companies/$ticker"}
                   params={{ ticker }}
                   aria-current={g === activeGroup ? "page" : undefined}
