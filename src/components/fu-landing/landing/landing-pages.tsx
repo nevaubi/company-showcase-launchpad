@@ -9,7 +9,7 @@ import {
 import styles from "./landing.module.css";
 import { FEATURES } from "@/lib/features";
 import type { LandingStats } from "@/lib/landing-stats.functions";
-import { ClickToSource, LiveCounts, ProductShots } from "./home-refresh";
+import { AiFactory, ClickToSource, LiveCounts, ProductShots } from "./home-refresh";
 import { PUBLIC_COMPANIES } from "@/lib/public-company";
 
 function Product({ id = "product", tone = "plain" as const }: { id?: string; tone?: "plain" | "sunken" }) {
@@ -43,6 +43,7 @@ export function LandingVerification({ stats = null }: { stats?: LandingStats | n
         <ClickToSource />
         <SourcesStrip />
         <ProvenanceSection />
+        <AiFactory />
         <AccuracyPipeline />
         <VerificationLedger />
         <ProductShots />

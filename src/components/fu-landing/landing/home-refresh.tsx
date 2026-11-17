@@ -145,3 +145,52 @@ export function ProductShots() {
     </section>
   );
 }
+
+/* ---------- The AI factory: agents, loops and evals (describes the real pipeline) ---------- */
+
+const STAGES = [
+  { t: "Collect", b: "Crawlers pull every filing, earnings release, deck, supplement and transcript into permanent storage.", a: ["sec-sync", "ir-crawler", "browser agents"] },
+  { t: "Parse", b: "Documents become tables and text: layout models, OCR and page images for scanned slides.", a: ["docling", "ocr", "vision"] },
+  { t: "Read twice", b: "Two independent model readers extract every figure in parallel, each pointing at its exact cell or sentence.", a: ["reader A", "reader B"] },
+  { t: "Arbitrate", b: "Agreement is kept. Disagreement goes to the printed dates, then a larger arbiter model. Unresolved figures are dropped.", a: ["arbiter", "date check"] },
+  { t: "Verify", b: "Segments must sum to totals, release revenue must match SEC revenue, and every quote must appear verbatim.", a: ["tie-outs", "SEC match", "quote check"] },
+];
+const LOOPS = [
+  { t: "Agent loop", b: "The research agent plans, calls tools in parallel, retries failures, compacts its context and self-reviews before answering." },
+  { t: "Always-on worker loop", b: "A cloud worker runs nonstop, leases one company at a time, saves progress and heals stuck work after restarts." },
+  { t: "Evals and guards", b: "Automated tests and checks re-check AI report sentences against sourced facts; anything that fails is rejected, never shown." },
+];
+
+export function AiFactory() {
+  const reduce = useReducedMotion();
+  const [on, setOn] = useState(0);
+  useEffect(() => {
+    if (reduce) return;
+    const t = setInterval(() => setOn((x) => (x + 1) % STAGES.length), 1800);
+    return () => clearInterval(t);
+  }, [reduce]);
+  return (
+    <section className={s.wrap} id="ai-factory" aria-labelledby="factory-title">
+      <p className={s.eyebrow}><span className={s.pulse} aria-hidden="true" />Always on</p>
+      <h2 id="factory-title" className={s.h2}>A multi-agent data factory, checked at every step</h2>
+      <p className={s.body} style={{ maxWidth: 720 }}>
+        Filed Under isn't one chatbot. It's an automated pipeline of specialized agents that collect, read, cross-check and
+        verify financial documents around the clock, with evaluation gates between every stage.
+      </p>
+      <ol className={s.factory} style={{ listStyle: "none", padding: 0 }}>
+        {STAGES.map((x, k) => (
+          <motion.li key={x.t} className={s.stage} data-on={!reduce && k === on}
+            initial={{ opacity: 0, y: 14 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.3 }} transition={{ delay: k * 0.07 }}>
+            <span className={s.stageN}>0{k + 1}</span>
+            <b>{x.t}</b>
+            <p>{x.b}</p>
+            <div className={s.agents}>{x.a.map((a) => <span key={a} className={s.agent}>{a}</span>)}</div>
+          </motion.li>
+        ))}
+      </ol>
+      <div className={s.loops}>
+        {LOOPS.map((l) => <div key={l.t} className={s.loop}><b>{l.t}</b><p>{l.b}</p></div>)}
+      </div>
+    </section>
+  );
+}
