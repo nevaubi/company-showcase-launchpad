@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion, useInView } from "motion/react";
 import {
-  ArrowRight, BookOpenCheck, Briefcase, Check, ChevronDown, Database, FileSearch, FileText, FolderOpen,
+  ArrowRight, BookOpenCheck, Briefcase, Check, ChevronDown, Database, FileSearch, FileText,
   CalendarDays, GitCompareArrows, History, LineChart, Link2, Loader2, Mail, Mic, Presentation, ScrollText, ShieldCheck, Users,
 } from "lucide-react";
 import { VideoBackdrop, type VideoClip } from "./video-backdrop";
+import wordmark from "@/assets/brand/wordmark.png.asset.json";
 import styles from "./landing.module.css";
 
 /* ------------------------------------------------------------------ */
@@ -13,9 +14,15 @@ import styles from "./landing.module.css";
 
 export function Wordmark() {
   return (
-    <a href="#top" className={styles.wordmark} aria-label="FiledUnder home">
-      <span className={styles.wordmarkIcon}><FolderOpen size={18} strokeWidth={1.9} aria-hidden="true" /></span>
-      FiledUnder
+    <a href="#top" className={styles.wordmark} aria-label="Filed Under home">
+      <img
+        src={wordmark.url}
+        alt="Filed Under"
+        width={1143}
+        height={216}
+        className={styles.wordmarkImg}
+        draggable={false}
+      />
     </a>
   );
 }

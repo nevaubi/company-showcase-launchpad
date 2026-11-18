@@ -1,8 +1,9 @@
+import monogram from "@/assets/brand/monogram.png.asset.json";
 import wordmark from "@/assets/brand/wordmark.png.asset.json";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-/** The Filed Under mark: a document tilted onto a baseline. Drawn in currentColor. */
+/** The Filed Under mark: the serif "F" with its orange dot and baseline. */
 export function BrandMark({
   className,
   title = "Filed Under",
@@ -11,21 +12,14 @@ export function BrandMark({
   title?: string;
 }) {
   return (
-    <svg
-      viewBox="0 0 327 161"
-      className={cn("h-6 w-auto", className)}
-      role="img"
-      aria-label={title}
-      fill="none"
-    >
-      <path
-        d="M77 149 L45 52 L241 11 L268 149"
-        stroke="currentColor"
-        strokeWidth="15"
-        strokeLinejoin="miter"
-      />
-      <rect x="0" y="143" width="327" height="15" fill="currentColor" />
-    </svg>
+    <img
+      src={monogram.url}
+      alt={title}
+      width={579}
+      height={716}
+      className={cn("h-6 w-auto object-contain select-none", className)}
+      draggable={false}
+    />
   );
 }
 
@@ -51,7 +45,6 @@ export function Logo({
   }, []);
   return (
     <span className={cn("inline-flex items-end gap-2.5", className)}>
-      <BrandMark className={cn(h, inverted ? "text-ink-foreground" : "text-foreground")} />
       {failed ? (
         <span
           className={cn(
@@ -67,7 +60,7 @@ export function Logo({
           ref={img}
           src={wordmark.url}
           alt="Filed Under"
-          width={size === "sm" ? 115 : size === "lg" ? 204 : 140}
+          width={size === "sm" ? 95 : size === "lg" ? 169 : 116}
           height={size === "sm" ? 18 : size === "lg" ? 32 : 22}
           onError={() => setFailed(true)}
           className={cn(h, "w-auto object-contain select-none", inverted && "brand-invert")}
