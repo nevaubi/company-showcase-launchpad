@@ -36,12 +36,15 @@ async function arbitrate(input: string, disputes: Dispute[], ends: Set<string>, 
   if (!disputes.length) return [];
   const { kept, rest } = preferPrinted(disputes, ends, filed);
   if (!rest.length) return kept;
-  const r = await laneStructured<{ rulings: { d: number; pick: string }[] }>({ model: ARBITER_MODEL, name: "ir_arbiter", instructions: ARBITER_INSTRUCTIONS, input: `${input}\n\n${renderDisputes(rest)}`, schema: ARBITER_SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: 6000 });
-  if (r) return [...kept, ...applyRulings(rest, r.data.rulings)];
-  // OpenAI allowance spent or failing: a free OpenRouter model may settle it (third opinion only — it
-  // picks between the two readings, never adds a figure). Nothing from it = disputes stay dropped.
+  const req = { name: "ir_arbiter", instructions: ARBITER_INSTRUCTIONS, input: `${input}\n\n${renderDisputes(rest)}`, schema: ARBITER_SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: 6000 };
+  // Free OpenRouter models settle disputes first (third opinion only — they pick between the two
+  // readings, never add a figure); the OpenAI arbiter takes over when they are capped or failing.
+  // IR_ARBITER_ORDER=openai-first restores the old order. Nothing from either = disputes stay dropped.
   const { freeStructured } = await import("@/lib/ir/free-lane.server");
-  const f = await freeStructured<{ rulings: { d: number; pick: string }[] }>({ name: "ir_arbiter", instructions: ARBITER_INSTRUCTIONS, input: `${input}\n\n${renderDisputes(rest)}`, schema: ARBITER_SCHEMA as unknown as Record<string, unknown>, maxOutputTokens: 6000 }, (d) => applyRulings(rest, d.rulings).length);
+  const free = () => freeStructured<{ rulings: { d: number; pick: string }[] }>(req, (d) => applyRulings(rest, d.rulings).length);
+  const openai = async () => (await laneStructured<{ rulings: { d: number; pick: string }[] }>({ model: ARBITER_MODEL, ...req }))?.data ?? null;
+  const [first, second] = process.env["IR_ARBITER_ORDER"] === "openai-first" ? [openai, free] : [free, openai];
+  const f = (await first()) ?? (await second());
   return [...kept, ...(f ? applyRulings(rest, f.rulings) : [])];
 }
 
