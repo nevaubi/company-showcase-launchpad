@@ -205,6 +205,14 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   useEffect(() => {
     if (!open) clearHighlights();
   }, [open]);
+  // While a walkthrough stop is showing, the panel steps out of the way so nothing covers what it points at.
+  const [guiding, setGuiding] = useState(false);
+  useEffect(() => {
+    const on = (e: Event) => setGuiding((e as CustomEvent<{ n: number | null }>).detail?.n != null);
+    window.addEventListener("fu:tour-current", on);
+    return () => window.removeEventListener("fu:tour-current", on);
+  }, []);
+  const shown = open && !guiding;
   // The page agent asks the floating panel to step aside when it would cover what it is pointing at.
   useEffect(() => {
     const avoid = (e: Event) => {
@@ -449,8 +457,20 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
   const showCanvas = wide && (!mobile || mobilePane === "canvas");
 
   return (
+    <>
+    {open && guiding && (
+      <button
+        type="button"
+        data-agent-ignore=""
+        onClick={() => setGuiding(false)}
+        className="fixed bottom-4 right-4 z-50 flex items-center gap-1.5 rounded-full border border-rule bg-background px-3 py-1.5 text-xs text-foreground shadow-lift transition-colors hover:bg-secondary"
+      >
+        <Sparkles className="size-3.5" />
+        Show assistant
+      </button>
+    )}
     <aside
-      aria-hidden={!open}
+      aria-hidden={!shown}
       aria-label="AI assistant"
       data-agent-ignore=""
       data-docked={docked ? "1" : "0"}
@@ -461,7 +481,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
         docked
           ? "inset-y-0 right-0 w-full border-l border-rule transition-[transform,width] duration-300 max-sm:!w-full"
           : "overflow-hidden rounded-lg border border-rule shadow-lift transition-[opacity,width,height,left] duration-200",
-        open ? (docked ? "translate-x-0 shadow-panel" : "opacity-100") : docked ? "pointer-events-none invisible translate-x-full" : "pointer-events-none invisible opacity-0",
+        shown ? (docked ? "translate-x-0 shadow-panel" : "opacity-100") : docked ? "pointer-events-none invisible translate-x-full" : "pointer-events-none invisible opacity-0",
       )}
     >
       <div onPointerDown={(e) => drag(e, "move")} className={cn("flex h-11 shrink-0 items-center gap-2 border-b px-3", !docked && "cursor-grab select-none active:cursor-grabbing")}>
@@ -624,6 +644,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
         </div>
       )}
     </aside>
+    </>
   );
 }
 

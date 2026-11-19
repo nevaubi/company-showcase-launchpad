@@ -279,7 +279,12 @@ function place() {
   const vp = viewport();
   const panel = panelInfo();
   const free = freeRegion(vp, panel?.rect ?? null);
-  for (const m of marks.values()) {
+  for (const m of [...marks.values()]) {
+    // The element left the page (navigation, re-render): drop its mark instead of leaving it stranded.
+    if (!m.el.isConnected) {
+      clearHighlight(m.id);
+      continue;
+    }
     const r = m.el.getBoundingClientRect();
     Object.assign(m.box.style, { left: `${r.left - 4}px`, top: `${r.top - 4}px`, width: `${r.width + 8}px`, height: `${r.height + 8}px` });
     const lw = m.tag.offsetWidth || Math.min(360, 8 * (m.tag.textContent?.length ?? 10) + 16);
@@ -362,6 +367,14 @@ export function clearHighlights() {
   for (const id of [...marks.keys()]) clearHighlight(id);
   card?.remove();
   card = null;
+  // Sweep anything a fade-out left behind, so no outline lingers after the guide is done.
+  if (typeof document !== "undefined") {
+    const l = document.getElementById("agent-highlights");
+    if (l) setTimeout(() => {
+      if (marks.size) return;
+      for (const c of [...l.children]) if (c !== card) c.remove();
+    }, 300);
+  }
   if (currentN != null) {
     currentN = null;
     if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("fu:tour-current", { detail: { n: null } }));
@@ -441,7 +454,7 @@ export function setCurrentStop(n: number | null) {
     const close = el("button", "agent-tour-x", "×") as HTMLButtonElement;
     close.type = "button";
     close.setAttribute("aria-label", "Close this stop");
-    close.addEventListener("click", () => setCurrentStop(null));
+    close.addEventListener("click", () => clearHighlights());
     head.append(close);
     card.append(head, el("p", "agent-tour-title", pin.label));
     if (pin.explain) card.append(el("p", "agent-tour-text", pin.explain));
@@ -459,7 +472,7 @@ export function setCurrentStop(n: number | null) {
       const next = go(last ? "Done" : "Next", tour[idx + 1], true);
       if (last) {
         next.disabled = false;
-        next.addEventListener("click", () => setCurrentStop(null));
+        next.addEventListener("click", () => clearHighlights());
       }
       foot.append(go("Back", tour[idx - 1], false), next);
       card.append(foot);
