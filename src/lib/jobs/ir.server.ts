@@ -105,7 +105,8 @@ export async function secExhibitCandidates(c: CoverageCompany, since = new Date(
 
 /** Expand one 8-K into its exhibit files using the filing index table (type + description columns). */
 export async function exhibitsOf(c: CoverageCompany, f: Candidate): Promise<Candidate[]> {
-  const idx = await (await fetchSec(archiveUrl(c.cik, f.accn!, `${f.accn}-index.htm`))).text();
+  if (!f.accn) throw new Error("Exhibit discovery requires an accession");
+  const idx = await (await fetchSec(archiveUrl(c.cik, f.accn, `${f.accn}-index.htm`))).text();
   const out: Candidate[] = [];
   for (const row of idx.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
     const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) => m[1]);
@@ -114,11 +115,12 @@ export async function exhibitsOf(c: CoverageCompany, f: Candidate): Promise<Cand
     const strip = (s: string) => s.replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").trim();
     const description = strip(cells[1]);
     const type = strip(cells[3]);
-    const name = href.split("/").pop()!;
+    const name = href.split("/").pop();
+    if (!name) continue;
     const isExhibit = /^EX-99/i.test(type);
     const isDataFile = /\.(xlsx?|pdf|pptx?|docx?|jpe?g|png|gif)$/i.test(name) && !/^R\d+\.htm/i.test(name);
     if (!isExhibit && !isDataFile) continue;
-    out.push({ ...f, url: archiveUrl(c.cik, f.accn!, name), exhibit: type || undefined, description: description || undefined, sec: true });
+    out.push({ ...f, url: archiveUrl(c.cik, f.accn, name), exhibit: type || undefined, description: description || undefined, sec: true });
   }
   return out;
 }
@@ -220,25 +222,52 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
     .select("accn, ticker, filed, report, items, form")
     .like("form", "8-K%")
     .gte("filed", since)
+    .or("items.like.%2.02%,items.like.%7.01%")
     .order("filed", { ascending: false })
-    .limit(80);
+    .limit(500);
   if (error) throw new Error(error.message);
   const wanted = (recent ?? []).filter((f) => /2\.02|7\.01/.test(f.items ?? "") && companies.some((c) => c.ticker === f.ticker));
   if (!wanted.length) return null;
   const accns = wanted.map((f) => f.accn);
-  const [{ data: scans }, { data: stored }] = await Promise.all([
-    supabaseAdmin.from("ir_release_scan").select("accn, status").in("accn", accns),
-    // Images outnumber documents ~10:1; checking documents only keeps this under the row cap.
-    supabaseAdmin.from("ir_documents").select("accn").in("accn", accns).neq("kind", "image").limit(1000),
+  const [{ data: scans, error: scanError }, { data: retries, error: retryError }] = await Promise.all([
+    supabaseAdmin.from("ir_release_scan").select("accn, status, scanned_at").in("accn", accns),
+    supabaseAdmin.from("job_state").select("job, cursor").in("job", accns.map(a => `ir-release-retry:${a}`)),
   ]);
-  const scan = new Map((scans ?? []).map((r) => [r.accn, r.status]));
-  const have = new Set((stored ?? []).map((d) => d.accn));
-  const next = wanted.find((f) => scan.get(f.accn) === "partial") ?? wanted.find((f) => !scan.has(f.accn) && !have.has(f.accn));
+  if (scanError || retryError) throw new Error(scanError?.message ?? retryError?.message);
+  const scan = new Map((scans ?? []).map(r => [r.accn, r]));
+  const attempts = new Map((retries ?? []).map(r => [r.job, r.cursor]));
+  const next = wanted.find(f => {
+    const s = scan.get(f.accn);
+    if (!s) return true; // A stored exhibit is not proof that every file was collected.
+    return s.status === "partial" || (s.status === "retry" && Date.now() - Date.parse(s.scanned_at) >= 6 * 3600000);
+  });
   if (!next) return null;
-  const c = companies.find((x) => x.ticker === next.ticker)!;
-  const { data: known } = await supabaseAdmin.from("ir_documents").select("source_url").eq("accn", next.accn);
+  const c = companies.find((x) => x.ticker === next.ticker);
+  if (!c) return null;
+  const { data: known, error: knownError } = await supabaseAdmin.from("ir_documents").select("source_url").eq("accn", next.accn);
+  if (knownError) throw new Error(knownError.message);
   const done = new Set((known ?? []).map((d) => d.source_url));
-  const all = await exhibitsOf(c, { url: next.accn, source: "sec-exhibit", accn: next.accn, filed: next.filed, period: next.report ?? undefined });
+  const retryKey = `ir-release-retry:${next.accn}`;
+  const selectedAccn = next.accn;
+  const selectedTicker = c.ticker;
+  async function recordFailure(message: string, files = 0, stored = done.size) {
+    const attempt = (attempts.get(retryKey) ?? 0) + 1;
+    const status = attempt >= 3 ? "error" : "retry";
+    const now = new Date().toISOString();
+    const { error } = await supabaseAdmin.from("job_state").upsert({ job: retryKey, cursor: attempt, paused_reason: message.slice(0, 500), updated_at: now });
+    if (error) throw new Error(error.message);
+    const { error: scanWriteError } = await supabaseAdmin.from("ir_release_scan").upsert({ accn: selectedAccn, ticker: selectedTicker, files, stored, status, scanned_at: now });
+    if (scanWriteError) throw new Error(scanWriteError.message);
+    return status;
+  }
+  let all: Candidate[];
+  try {
+    all = await exhibitsOf(c, { url: next.accn, source: "sec-exhibit", accn: next.accn, filed: next.filed, period: next.report ?? undefined });
+  } catch (e) {
+    const reason = (e as Error).message;
+    const status = await recordFailure(`index: ${reason}`);
+    return { ticker: c.ticker, accn: next.accn, mode: "recent", status, stored: 0, left: 0, results: [{ url: next.accn, stored: false, reason }] };
+  }
   const files = all.filter((k) => !done.has(k.url));
   const results: { url: string; stored: boolean; reason?: string }[] = [];
   let i = 0;
@@ -255,9 +284,16 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
       }
     }),
   );
-  const left = files.length - results.length;
-  const status = all.length === 0 ? "empty" : left > 0 ? "partial" : "done";
-  await supabaseAdmin.from("ir_release_scan").upsert({ accn: next.accn, ticker: c.ticker, files: all.length, stored: done.size + results.filter((r) => r.stored).length, status, scanned_at: new Date().toISOString() });
+  const successes = results.filter(r => r.stored).length;
+  const left = files.length - successes;
+  const failures = results.filter(r => !r.stored);
+  const status = failures.length
+    ? await recordFailure(failures.map(r => `${r.url}: ${r.reason}`).join("; "), all.length, done.size + successes)
+    : all.length === 0 ? "empty" : left > 0 ? "partial" : "done";
+  if (!failures.length) {
+    const { error: scanWriteError } = await supabaseAdmin.from("ir_release_scan").upsert({ accn: next.accn, ticker: c.ticker, files: all.length, stored: done.size + successes, status, scanned_at: new Date().toISOString() });
+    if (scanWriteError) throw new Error(scanWriteError.message);
+  }
   return { ticker: c.ticker, accn: next.accn, mode: "recent", status, stored: results.filter((r) => r.stored).length, left, results: results.slice(0, 6) };
 }
 

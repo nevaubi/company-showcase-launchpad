@@ -5,7 +5,8 @@
 - [x] G14: include 4/A, durable job_state receipts for empty ownership filings (no fabricated trades), per-filing retries; six tests and TypeScript passed; live SEC slices stored three real trades.
 - [x] G10: fill unused stale-estimate slots from missing covered tickers, success-only cursor, serial deadline-bound requests and 30-minute persisted error backoff; 17 tests and TypeScript passed; real refresh NOW/CMG/ULTA, newest ULTA 08:03:23Z (was ADBE 07:20:20Z); managed estimates schedule changed hourly → every ten minutes.
 - [x] G4: daily FINRA writer on managed 00:05/22:05/23:05 UTC schedule, SPY session calendar, success-only date cursor, unpublished-file retries; 14 tests and TypeScript passed; caught up Nov 16/17/18 with 5,515 rows (prior newest Nov 13), now idle through Nov 18.
-- [ ] G7 IR collection retries; G8 recent-file re-read; G6 IR-site schedule; G9 stale cache fallback; G3 market-wide SEC discovery. Finish in order, separate commits, no paid reads or UI changes.
+- [x] G7: earnings/Reg FD filtered before 500-row limit, three-attempt recorded retry/error receipts, six-hour cooldown, failed downloads remain incomplete, stored-one-file no longer implies complete; four tests and TypeScript passed; live AON accession 0001193125-26-463733 stored all three files at 08:06:54Z (prior newest ZM 05:12:55Z).
+- [ ] G8 recent-file re-read; G6 IR-site schedule; G9 stale cache fallback; G3 market-wide SEC discovery. Finish in order, separate commits, no paid reads or UI changes.
 
 ## Combined source reconciliation (Nov 19)
 - [ ] Verify and import new FROG/COST/TSMC archives additively; preserve all cited originals, report duplicates and uncertain dates.
