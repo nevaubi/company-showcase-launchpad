@@ -8,9 +8,9 @@ const CONTACT = "mailto:admin@filedunder.ai?subject=Filed%20Under%20pricing";
 export const Route = createFileRoute("/pricing")({
   head: () => ({
     meta: [
-      { title: "Access & pricing — Filed Under" },
+      { title: "Access & pricing · FiledUnder" },
       { name: "description", content: "Filed Under is available by approved trial. Contact us for custom pricing for individuals, teams and institutions." },
-      { property: "og:title", content: "Access & pricing — Filed Under" },
+      { property: "og:title", content: "Access & pricing · FiledUnder" },
       { property: "og:description", content: "Approved trials and custom pricing. Every number links to its SEC source." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

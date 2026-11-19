@@ -23,7 +23,7 @@ import { cellsFor, periodGrids } from "@/lib/ir/periods";
 import { fmtCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const PALETTE = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-6)", "var(--chart-5)", "var(--ink-muted)", "var(--link)"];
+const PALETTE = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-6)", "var(--chart-5)", "var(--muted-foreground)", "var(--link)"];
 type Freq = "q" | "y" | "m";
 const SPANS: Record<Freq, { v: string; l: string }[]> = {
   m: [

@@ -13,7 +13,7 @@ const TIER_BAR: Record<ChangeTier, string> = {
 };
 const TIER_TEXT: Record<ChangeTier, string> = {
   high: "text-foreground",
-  medium: "text-highlight-foreground",
+  medium: "text-foreground",
   low: "text-muted-foreground",
 };
 
@@ -80,7 +80,7 @@ export function EventRow({
             {e.tier} · {TYPE_SHORT[e.type]}
           </span>
           {isNew && (
-            <span className="rounded bg-highlight-soft px-1 text-[10px] font-medium text-highlight-foreground">
+            <span className="rounded bg-highlight-soft px-1 text-[10px] font-medium text-foreground">
               New
             </span>
           )}

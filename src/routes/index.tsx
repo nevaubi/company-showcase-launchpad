@@ -6,9 +6,9 @@ import { LandingVerification } from "@/components/fu-landing/landing/landing-pag
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Filed Under — research where every number is sourced" },
+      { title: "FiledUnder · research where every number is sourced" },
       { name: "description", content: "AI research for financial markets, built on a fully backfilled filing history where every figure is reconciled and cited to its source." },
-      { property: "og:title", content: "Filed Under — research where every number is sourced" },
+      { property: "og:title", content: "FiledUnder · research where every number is sourced" },
       { property: "og:description", content: "Every figure backfilled, reconciled and cited before it reaches you." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

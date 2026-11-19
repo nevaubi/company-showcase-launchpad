@@ -21,12 +21,15 @@ export function CompanyLogo({
   src,
   className,
   size = "md",
+  decorative = false,
 }: {
   ticker: string;
   /** Fallback for tickers outside coverage */
   src?: string;
   className?: string;
   size?: "xs" | "sm" | "md" | "lg" | "xl";
+  /** Set when the ticker is written next to the logo: the mark is then hidden from screen readers */
+  decorative?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   const url = logoUrl(ticker) ?? src;
@@ -40,12 +43,13 @@ export function CompanyLogo({
   return (
     <span
       className={cn("inline-flex shrink-0 items-center justify-center overflow-hidden border bg-logo-plate shadow-paper", dims, className)}
-      title={ticker}
+      title={decorative ? undefined : ticker}
+      aria-hidden={decorative || undefined}
     >
       {url && !failed ? (
-        <img src={url} alt={`${ticker} logo`} className="h-full w-full object-contain" loading="lazy" decoding="async" onError={() => setFailed(true)} />
+        <img src={url} alt={decorative ? "" : `${ticker} logo`} className="h-full w-full object-contain" loading="lazy" decoding="async" onError={() => setFailed(true)} />
       ) : (
-        <span className={cn("num font-semibold leading-none", size === "xs" ? "text-[7px]" : size === "sm" ? "text-[8px]" : "text-[10px]")}>{ticker.slice(0, 4)}</span>
+        <span className={cn("num font-semibold leading-none text-logo-plate-foreground", size === "xs" ? "text-[7px]" : size === "sm" ? "text-[8px]" : "text-[10px]")}>{ticker.slice(0, 4)}</span>
       )}
     </span>
   );

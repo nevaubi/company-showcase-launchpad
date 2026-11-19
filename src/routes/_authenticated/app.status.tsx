@@ -15,9 +15,9 @@ export const Route = createFileRoute("/_authenticated/app/status")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Data status — Filed Under" },
+      { title: "Data status · FiledUnder" },
       { name: "description", content: "Where every number comes from, how often it refreshes, and when each scheduled refresh last ran." },
-      { property: "og:title", content: "Data status — Filed Under" },
+      { property: "og:title", content: "Data status · FiledUnder" },
       { property: "og:description", content: "Sources, refresh schedules and the latest run of every data job." },
     ],
   }),

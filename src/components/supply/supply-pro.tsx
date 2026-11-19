@@ -20,7 +20,7 @@ export const CONF_LABEL: Record<Confidence, string> = {
 export function ConfidenceBadge({ c }: { c: Confidence }) {
   return (
     <span className={cn("inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10.5px] font-medium",
-      c === "corroborated" ? "bg-positive/15 text-positive" : c === "stated" ? "bg-highlight-soft text-highlight-foreground" : "bg-muted text-muted-foreground")}>
+      c === "corroborated" ? "bg-positive/15 text-positive" : c === "stated" ? "bg-highlight-soft text-foreground" : "bg-muted text-muted-foreground")}>
       {c === "corroborated" && <CheckCheck className="size-3" />}
       {CONF_LABEL[c]}
     </span>
@@ -49,7 +49,7 @@ export function SupplyNotePanel({ ticker, byId, onOpen }: { ticker: string; byId
                   {p.linkIds.map((id, j) => {
                     const l = byId.get(id);
                     return l ? (
-                      <button key={id} type="button" onClick={() => onOpen(l)} title={l.quote} className="ml-0.5 inline-flex items-center gap-0.5 rounded bg-highlight-soft px-1 text-[10.5px] font-medium text-highlight-foreground hover:bg-highlight">
+                      <button key={id} type="button" onClick={() => onOpen(l)} title={l.quote} className="ml-0.5 inline-flex items-center gap-0.5 rounded bg-highlight-soft px-1 text-[10.5px] font-medium text-foreground hover:bg-highlight hover:text-highlight-foreground">
                         <FileText className="size-2.5" />{j + 1}
                       </button>
                     ) : null;
@@ -75,7 +75,7 @@ export function DependencyCard({ ticker, all }: { ticker: string; all: ProLink[]
   const d = useMemo(() => dependencyScore(ticker, all), [ticker, all]);
   const { data: sig } = useQuery(signalsQuery(ticker));
   const unnamed = (sig ?? []).filter((s) => s.kind === "concentration" && s.pct != null && concentrationBasis(s.quote) === "revenue").sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
-  const tone = d.score >= 50 ? "text-negative" : d.score >= 25 ? "text-highlight-foreground" : "text-positive";
+  const tone = d.score >= 50 ? "text-negative" : d.score >= 25 ? "text-foreground" : "text-positive";
   return (
     <Panel title="Dependency score" className="min-w-0">
       <div className="flex items-baseline gap-2">

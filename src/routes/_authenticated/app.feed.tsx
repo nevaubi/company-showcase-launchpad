@@ -29,13 +29,13 @@ export const Route = createFileRoute("/_authenticated/app/feed")({
   validateSearch: (s) => search.parse(s),
   head: () => ({
     meta: [
-      { title: "What changed — Filed Under" },
+      { title: "What changed · FiledUnder" },
       {
         name: "description",
         content:
           "One ranked stream of what changed across covered companies: filing changes, 8-K events, insider trades, analyst actions, earnings, contracts, dividends and IR documents, each with its source.",
       },
-      { property: "og:title", content: "What changed — Filed Under" },
+      { property: "og:title", content: "What changed · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -110,7 +110,7 @@ function Feed() {
   return (
     <div className="grid grid-cols-1 gap-4">
       <PageHeader
-        eyebrow="Dashboard"
+        eyebrow="Signals"
         title="What changed"
         description="Filing changes, 8-K events, insider trades, analyst actions, earnings, federal contracts, dividends, IPOs, IR documents and technical events in one stream. Each event shows the rule that ranked it and links to its source."
         actions={

@@ -29,9 +29,9 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/repo
     const name = coverageOf(params.ticker)?.shortName ?? params.ticker;
     return {
       meta: [
-        { title: `${params.ticker.toUpperCase()} reports — primer, earnings preview & recap, IC memo — Filed Under` },
+        { title: `${params.ticker.toUpperCase()} reports · primer, earnings preview & recap, IC memo · FiledUnder` },
         { name: "description", content: `Always-ready ${name} research reports where every figure links to its SEC filing or market source; customize, brand and download as PDF or Word.` },
-        { property: "og:title", content: `${name} research reports — Filed Under` },
+        { property: "og:title", content: `${name} research reports · FiledUnder` },
         { property: "og:description", content: "Sourced company primer, earnings preview, earnings recap and IC memo." },
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary" },

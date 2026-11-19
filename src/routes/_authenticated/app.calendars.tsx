@@ -43,13 +43,13 @@ export const Route = createFileRoute("/_authenticated/app/calendars")({
   validateSearch: (s) => search.parse(s),
   head: () => ({
     meta: [
-      { title: "Calendars — Filed Under" },
+      { title: "Calendars · FiledUnder" },
       {
         name: "description",
         content:
           "Earnings, economic releases, dividends and IPOs on one calendar, each entry linked to the schedule or SEC filing it came from.",
       },
-      { property: "og:title", content: "Calendars — Filed Under" },
+      { property: "og:title", content: "Calendars · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

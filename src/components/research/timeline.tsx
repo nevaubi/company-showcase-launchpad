@@ -71,7 +71,7 @@ function Sources({ s }: { s: Step }) {
     <div className="mt-1 flex flex-wrap gap-1 pl-5">
       {s.sources.slice(0, 6).map((x) => (
         <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.title ?? x.url} className="inline-flex max-w-[150px] items-center gap-1 rounded border bg-card px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground">
-          <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt="" className="size-3 rounded-sm" loading="lazy" />
+          <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt="" className="size-3 rounded-sm bg-logo-plate" loading="lazy" />
           <span className="truncate">{host(x.url)}</span>
         </a>
       ))}

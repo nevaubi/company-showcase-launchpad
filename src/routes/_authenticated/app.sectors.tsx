@@ -28,13 +28,13 @@ export const Route = createFileRoute("/_authenticated/app/sectors")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Sectors — Filed Under" },
+      { title: "Sectors · FiledUnder" },
       {
         name: "description",
         content:
           "Sector performance, fundamentals rolled up from SEC filings, government industry drivers and correlations.",
       },
-      { property: "og:title", content: "Sectors — Filed Under" },
+      { property: "og:title", content: "Sectors · FiledUnder" },
       {
         property: "og:description",
         content:
@@ -311,8 +311,8 @@ function Sectors() {
                         key={j}
                         className="num size-10 text-center"
                         style={{
-                          background: `color-mix(in oklab, var(--chart-1) ${Math.max(0, v * 70).toFixed(0)}%, transparent)`,
-                          color: v > 0.7 ? "var(--ink-foreground)" : undefined,
+                          background: `color-mix(in oklab, var(--chart-1) calc(var(--heat-max) * ${Math.max(0, v).toFixed(3)}), transparent)`,
+                          color: v > 0.7 ? "var(--heat-strong-fg)" : undefined,
                         }}
                         title={`${x} / ${corr.list[j]}: ${v.toFixed(2)}`}
                       >

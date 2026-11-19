@@ -29,9 +29,9 @@ export const Route = createFileRoute("/_authenticated/app/autopilots/")({
   validateSearch: z.object({ variant: z.string().max(40).optional() }),
   head: () => ({
     meta: [
-      { title: "Paper autopilots — Filed Under" },
+      { title: "Paper autopilots · FiledUnder" },
       { name: "description", content: "Automatic paper trading of short-term strategies: signals queued after each close, filled at the next open, tracked against the S&P 500." },
-      { property: "og:title", content: "Paper autopilots — Filed Under" },
+      { property: "og:title", content: "Paper autopilots · FiledUnder" },
       { property: "og:description", content: "Rule-based paper trading bots with daily equity curves, hit rates and drawdowns versus the S&P 500." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -64,7 +64,7 @@ function AutopilotsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Paper trading"
+        eyebrow="Signals"
         title="Paper autopilots"
         description="Automatic paper trading of the strategies on the Setups page. After each close an autopilot queues that day's signals, fills them at the next open and closes them after the tested holding period — or at a stop or target if you choose — tracked against the S&P 500. Paper only; no real orders."
         actions={

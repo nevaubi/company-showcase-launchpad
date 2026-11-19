@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
   },
   head: ({ params }) => {
     const c = coverageOf(params.ticker);
-    const t = `${params.ticker.toUpperCase()} · ${c?.shortName ?? "Company"} — Filed Under`;
+    const t = `${params.ticker.toUpperCase()} · ${c?.shortName ?? "Company"} · FiledUnder`;
     return {
       meta: [
         { title: t },

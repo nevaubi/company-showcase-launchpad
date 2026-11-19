@@ -18,9 +18,9 @@ import type { Json } from "@/integrations/supabase/types";
 export const Route = createFileRoute("/_authenticated/app/firm/branding")({
   head: () => ({
     meta: [
-      { title: "Branding — Firm workspace — Filed Under" },
+      { title: "Branding · Firm workspace · FiledUnder" },
       { name: "description", content: "Logo, colors, typeface and disclaimer used on every report your firm exports." },
-      { property: "og:title", content: "Branding — Firm workspace — Filed Under" },
+      { property: "og:title", content: "Branding · Firm workspace · FiledUnder" },
       { property: "og:description", content: "Logo, colors, typeface and disclaimer used on every report your firm exports." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

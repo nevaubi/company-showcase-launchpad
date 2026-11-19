@@ -12,9 +12,9 @@ import { useProfile } from "@/lib/workspace";
 export const Route = createFileRoute("/_authenticated/app/join/$token")({
   head: () => ({
     meta: [
-      { title: "Join a firm — Filed Under" },
+      { title: "Join a firm · FiledUnder" },
       { name: "description", content: "Accept an invitation to a Filed Under firm workspace." },
-      { property: "og:title", content: "Join a firm — Filed Under" },
+      { property: "og:title", content: "Join a firm · FiledUnder" },
       { property: "og:description", content: "Accept an invitation to a Filed Under firm workspace." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

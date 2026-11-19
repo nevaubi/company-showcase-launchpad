@@ -12,9 +12,9 @@ import { FREE_SAFETY, FREE_TIERS } from "@/lib/ir/openai-allowance";
 export const Route = createFileRoute("/_authenticated/app/worker")({
   head: () => ({
     meta: [
-      { title: "Admin · Live worker — Filed Under" },
+      { title: "Admin · Live worker · FiledUnder" },
       { name: "description", content: "Live progress of the always-on investor-relations build worker." },
-      { property: "og:title", content: "Admin · Live worker — Filed Under" },
+      { property: "og:title", content: "Admin · Live worker · FiledUnder" },
       { property: "og:description", content: "Live progress of the always-on investor-relations build worker." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

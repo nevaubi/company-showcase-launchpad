@@ -32,13 +32,13 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/filings")({
   head: () => ({
     meta: [
-      { title: "Filings — Filed Under" },
+      { title: "Filings · FiledUnder" },
       {
         name: "description",
         content:
           "Recent 10-K and 10-Q filings across coverage: the largest disclosure changes against the prior-year filing and the top verified insights, each opening the filing at the passage.",
       },
-      { property: "og:title", content: "Filings — Filed Under" },
+      { property: "og:title", content: "Filings · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

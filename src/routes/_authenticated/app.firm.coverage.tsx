@@ -23,9 +23,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/firm/coverage")({
   head: () => ({
     meta: [
-      { title: "Coverage — Firm workspace — Filed Under" },
+      { title: "Coverage · Firm workspace · FiledUnder" },
       { name: "description", content: "Your firm's shared coverage list with analysts, ratings, targets and the restricted list." },
-      { property: "og:title", content: "Coverage — Firm workspace — Filed Under" },
+      { property: "og:title", content: "Coverage · Firm workspace · FiledUnder" },
       { property: "og:description", content: "Your firm's shared coverage list with analysts, ratings, targets and the restricted list." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

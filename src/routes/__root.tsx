@@ -4,6 +4,7 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
   type ErrorComponentProps,
@@ -16,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrandMark } from "@/components/brand/logo";
+import { applyThemeClass, isAppPath, THEME_BOOT_SCRIPT } from "@/lib/theme";
 
 function NotFoundComponent() {
   return (
@@ -23,7 +25,9 @@ function NotFoundComponent() {
       <div className="max-w-md text-center">
         <BrandMark className="mx-auto h-10 w-auto text-foreground" />
         <p className="eyebrow mt-8">Error 404 · Not filed</p>
-        <h1 className="mt-3 font-display text-5xl text-foreground">Nothing filed under this address.</h1>
+        <h1 className="mt-3 font-display text-5xl text-foreground">
+          Nothing filed under this address.
+        </h1>
         <p className="mt-3 text-sm text-muted-foreground">
           The page you're looking for doesn't exist or has been moved.
         </p>
@@ -82,14 +86,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Filed Under — source-linked equity research" },
+      { title: "FiledUnder · source-linked equity research" },
       {
         name: "description",
         content:
           "Every number in US equity research, filed under its source. Financials, filings, prices and macro with one-click attribution.",
       },
       { name: "author", content: "Filed Under" },
-      { property: "og:site_name", content: "Filed Under" },
+      { property: "og:site_name", content: "FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "theme-color", content: "#f8f6f1" },
@@ -104,6 +108,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/png", href: "/favicon.png" },
     ],
+    // Sets the dark class on /app pages before first paint, so a dark-theme user never sees a light flash.
+    scripts: [{ children: THEME_BOOT_SCRIPT }],
   }),
   shellComponent: RootShell,
   component: RootComponent,
@@ -113,7 +119,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
@@ -128,6 +134,12 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+
+  // Public pages stay light even if the head script set dark before a redirect away from /app.
+  useEffect(() => {
+    if (!isAppPath(pathname)) applyThemeClass(null);
+  }, [pathname]);
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange((event) => {

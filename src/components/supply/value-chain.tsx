@@ -376,13 +376,13 @@ export function ChainEvidence({
                 ev.kind === "text" ? (
                   <li key={`t${ev.link.id}`}>
                     <blockquote className="border-l-2 border-highlight pl-2 text-xs italic text-muted-foreground">“{ev.link.quote.length > 220 ? `${ev.link.quote.slice(0, 219)}…` : ev.link.quote}”</blockquote>
-                    <button type="button" onClick={() => onOpenText(ev.link, `${a?.name ?? e.from} → ${b?.name ?? e.to}`)} className="mt-1 inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-0.5 text-[11px] font-medium text-highlight-foreground hover:bg-highlight">
+                    <button type="button" onClick={() => onOpenText(ev.link, `${a?.name ?? e.from} → ${b?.name ?? e.to}`)} className="mt-1 inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-highlight hover:text-highlight-foreground">
                       <FileText className="size-3" /> {names[ev.link.ticker] ?? ev.link.ticker} {ev.link.form}, {fmtDate(ev.link.filed)}
                     </button>
                   </li>
                 ) : (
                   <li key={`x${i}`} className="text-xs">
-                    <button type="button" onClick={() => onOpenTag(ev.fact)} className="inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-0.5 text-[11px] font-medium text-highlight-foreground hover:bg-highlight">
+                    <button type="button" onClick={() => onOpenTag(ev.fact)} className="inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-0.5 text-[11px] font-medium text-foreground hover:bg-highlight hover:text-highlight-foreground">
                       <Tag className="size-3" /> Tagged in {names[ev.fact.ticker] ?? ev.fact.ticker}'s {ev.fact.form}: “{ev.fact.label}” {(ev.fact.pct * 100).toFixed(1)}% of {ev.fact.benchmark}, {fmtDate(ev.fact.period_end)}
                     </button>
                   </li>

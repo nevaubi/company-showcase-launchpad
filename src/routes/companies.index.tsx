@@ -8,7 +8,7 @@ const URL = "https://filedunder.ai/companies";
 export const Route = createFileRoute("/companies/")({
   head: () => ({
     meta: [
-      { title: "Company financials sourced to SEC filings — Filed Under" },
+      { title: "Company financials sourced to SEC filings · FiledUnder" },
       { name: "description", content: "Revenue, earnings and cash flow for every covered US public company, every number linked to the SEC filing it came from." },
       { property: "og:title", content: "US company financials, every number linked to its SEC filing" },
       { property: "og:description", content: "Five years of revenue, earnings and cash flow, sourced to SEC filings." },

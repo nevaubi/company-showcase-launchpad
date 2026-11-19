@@ -42,7 +42,7 @@ export function ChangesTab({ ticker, name, onOpen }: { ticker: string; name: str
               <div className="flex items-center gap-2">
                 <span className="size-2 shrink-0 rounded-full" style={{ background: RELATION_COLOR[c.relation] }} />
                 <span className="truncate font-medium">{c.name}</span>
-                <span className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-medium", c.kind === "added" ? "bg-positive-soft text-positive" : c.kind === "dropped" ? "bg-negative-soft text-negative" : "bg-highlight-soft text-highlight-foreground")}>
+                <span className={cn("ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10.5px] font-medium", c.kind === "added" ? "bg-positive-soft text-positive" : c.kind === "dropped" ? "bg-negative-soft text-negative" : "bg-highlight-soft text-foreground")}>
                   {c.kind === "share" ? `${c.from}% → ${c.to}%` : c.kind}
                 </span>
               </div>

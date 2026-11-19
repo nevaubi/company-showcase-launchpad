@@ -12,6 +12,7 @@
 
 @theme inline {
   --color-logo-plate: var(--logo-plate);
+  --color-logo-plate-foreground: var(--logo-plate-foreground);
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -97,6 +98,8 @@
   --card: oklch(0.993 0.004 85);
   /* Logos always sit on a light plate so dark brand marks stay legible */
   --logo-plate: oklch(0.996 0.003 85);
+  /* Text on the logo plate; like the plate it never follows the theme */
+  --logo-plate-foreground: oklch(0.19 0.012 260);
   --card-foreground: oklch(0.19 0.012 260);
   --popover: oklch(0.995 0.003 85);
   --popover-foreground: oklch(0.19 0.012 260);
@@ -155,6 +158,216 @@
   --shadow-paper: 0 1px 0 oklch(0.2 0.01 260 / 4%), 0 1px 2px oklch(0.2 0.01 260 / 6%);
   --shadow-lift: 0 1px 0 oklch(0.2 0.01 260 / 4%), 0 12px 32px -12px oklch(0.2 0.02 260 / 22%);
   --shadow-panel: -24px 0 48px -24px oklch(0.2 0.02 260 / 28%);
+  /* Floating assistant layers (walkthrough card, mark labels) */
+  --shadow-tour: 0 12px 32px rgb(0 0 0 / 0.16);
+  --shadow-tag: 0 4px 14px rgb(0 0 0 / 0.14);
+  /* Text and chips that sit on a chart-1 fill (assistant marks and walkthrough) */
+  --on-chart: white;
+  /* Correlation heatmap (sectors): strongest fill and the text set on cells above 0.7 */
+  --heat-max: 70%;
+  --heat-strong-fg: var(--foreground);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.18 0 0 0 0 0.12 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Dark theme: set only inside the signed-in app (lib/theme.ts); public pages always stay light. */
+.dark {
+  color-scheme: dark;
+
+  --paper: oklch(0.19 0.01 260);
+  --background: oklch(0.19 0.01 260);
+  --foreground: oklch(0.95 0.008 85);
+  --card: oklch(0.225 0.011 260);
+  /* Stays light so company logos keep their contrast */
+  --logo-plate: oklch(0.996 0.003 85);
+  --card-foreground: oklch(0.95 0.008 85);
+  --popover: oklch(0.25 0.012 260);
+  --popover-foreground: oklch(0.95 0.008 85);
+
+  --primary: oklch(0.95 0.008 85);
+  --office: oklch(0.72 0.12 256);
+  --office-foreground: oklch(0.17 0.012 260);
+  --office-soft: oklch(0.3 0.05 256);
+  --primary-foreground: oklch(0.17 0.012 260);
+  --secondary: oklch(0.26 0.012 260);
+  --secondary-foreground: oklch(0.95 0.008 85);
+  --muted: oklch(0.26 0.012 260);
+  --muted-foreground: oklch(0.76 0.012 260);
+  --accent: oklch(0.255 0.012 260);
+  --accent-foreground: oklch(0.95 0.008 85);
+
+  --highlight: oklch(0.9 0.16 98);
+  --highlight-soft: oklch(0.42 0.08 98);
+  --highlight-foreground: oklch(0.2 0.03 85);
+
+  --positive: oklch(0.74 0.14 155);
+  --positive-soft: oklch(0.3 0.05 155);
+  --negative: oklch(0.72 0.15 27);
+  --negative-soft: oklch(0.3 0.06 27);
+  --warning: oklch(0.8 0.13 80);
+  --warning-soft: oklch(0.32 0.05 80);
+  --destructive: oklch(0.68 0.17 27);
+  --destructive-foreground: oklch(0.17 0.012 260);
+  --link: oklch(0.76 0.1 255);
+
+  /* Ink flips with the theme: inverted chips and ink buttons stay high contrast against the dark surfaces */
+  --ink: oklch(0.95 0.008 85);
+  --ink-foreground: oklch(0.17 0.012 260);
+  --ink-muted: oklch(0.45 0.014 260);
+
+  --border: oklch(0.31 0.012 260);
+  --rule: oklch(0.36 0.012 260);
+  --input: oklch(0.36 0.012 260);
+  --ring: oklch(0.95 0.008 85);
+
+  --chart-1: oklch(0.72 0.12 258);
+  --chart-2: oklch(0.8 0.15 78);
+  --chart-3: oklch(0.74 0.12 160);
+  --chart-4: oklch(0.72 0.16 30);
+  --chart-5: oklch(0.72 0.03 260);
+  --chart-6: oklch(0.75 0.1 210);
+
+  --sidebar: oklch(0.165 0.01 260);
+  --sidebar-foreground: oklch(0.95 0.008 85);
+  --sidebar-primary: oklch(0.95 0.008 85);
+  --sidebar-primary-foreground: oklch(0.17 0.012 260);
+  --sidebar-accent: oklch(0.255 0.012 260);
+  --sidebar-accent-foreground: oklch(0.95 0.008 85);
+  --sidebar-border: oklch(0.31 0.012 260);
+  --sidebar-ring: oklch(0.95 0.008 85);
+
+  --shadow-paper: 0 1px 0 oklch(0 0 0 / 30%), 0 1px 2px oklch(0 0 0 / 40%);
+  --shadow-lift: 0 1px 0 oklch(0 0 0 / 30%), 0 12px 32px -12px oklch(0 0 0 / 65%);
+  --shadow-panel: -24px 0 48px -24px oklch(0 0 0 / 65%);
+  --shadow-tour: 0 12px 32px rgb(0 0 0 / 0.5);
+  --shadow-tag: 0 4px 14px rgb(0 0 0 / 0.45);
+  --on-chart: oklch(0.17 0.012 260);
+  /* Capped so light text keeps 5:1 or better on the strongest cell */
+  --heat-max: 55%;
+  --heat-strong-fg: var(--foreground);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 0.98 0 0 0 0 0.94 0 0 0 0.035 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Reports (and their print output) stay on paper colours whatever the app theme: re-declare the light tokens. */
+.dark .report-doc {
+  color-scheme: light;
+  --paper: oklch(0.982 0.007 85);
+  --background: oklch(0.982 0.007 85);
+  --foreground: oklch(0.19 0.012 260);
+  --card: oklch(0.993 0.004 85);
+  --logo-plate: oklch(0.996 0.003 85);
+  --logo-plate-foreground: oklch(0.19 0.012 260);
+  --card-foreground: oklch(0.19 0.012 260);
+  --popover: oklch(0.995 0.003 85);
+  --popover-foreground: oklch(0.19 0.012 260);
+  --primary: oklch(0.2 0.012 260);
+  --office: oklch(0.47 0.14 256);
+  --office-foreground: oklch(0.99 0 0);
+  --office-soft: oklch(0.95 0.02 256);
+  --primary-foreground: oklch(0.982 0.007 85);
+  --secondary: oklch(0.945 0.01 85);
+  --secondary-foreground: oklch(0.22 0.012 260);
+  --muted: oklch(0.955 0.009 85);
+  --muted-foreground: oklch(0.45 0.014 260);
+  --accent: oklch(0.94 0.012 85);
+  --accent-foreground: oklch(0.19 0.012 260);
+  --highlight: oklch(0.9 0.16 98);
+  --highlight-soft: oklch(0.955 0.085 100);
+  --highlight-foreground: oklch(0.2 0.03 85);
+  --positive: oklch(0.52 0.12 155);
+  --positive-soft: oklch(0.94 0.04 155);
+  --negative: oklch(0.55 0.17 27);
+  --negative-soft: oklch(0.95 0.035 27);
+  --warning: oklch(0.6 0.13 70);
+  --warning-soft: oklch(0.95 0.05 85);
+  --destructive: oklch(0.55 0.19 27);
+  --destructive-foreground: oklch(0.985 0.005 85);
+  --link: oklch(0.42 0.13 255);
+  --ink: oklch(0.17 0.012 260);
+  --ink-foreground: oklch(0.96 0.008 85);
+  --ink-muted: oklch(0.68 0.012 260);
+  --border: oklch(0.885 0.012 85);
+  --rule: oklch(0.83 0.014 85);
+  --input: oklch(0.86 0.012 85);
+  --ring: oklch(0.2 0.012 260);
+  --chart-1: oklch(0.42 0.12 258);
+  --chart-2: oklch(0.76 0.15 78);
+  --chart-3: oklch(0.58 0.12 160);
+  --chart-4: oklch(0.6 0.17 30);
+  --chart-5: oklch(0.6 0.03 260);
+  --chart-6: oklch(0.62 0.1 210);
+  --sidebar: oklch(0.966 0.009 85);
+  --sidebar-foreground: oklch(0.22 0.012 260);
+  --sidebar-primary: oklch(0.2 0.012 260);
+  --sidebar-primary-foreground: oklch(0.982 0.007 85);
+  --sidebar-accent: oklch(0.93 0.012 85);
+  --sidebar-accent-foreground: oklch(0.19 0.012 260);
+  --sidebar-border: oklch(0.885 0.012 85);
+  --sidebar-ring: oklch(0.2 0.012 260);
+  --shadow-paper: 0 1px 0 oklch(0.2 0.01 260 / 4%), 0 1px 2px oklch(0.2 0.01 260 / 6%);
+  --shadow-lift: 0 1px 0 oklch(0.2 0.01 260 / 4%), 0 12px 32px -12px oklch(0.2 0.02 260 / 22%);
+  --shadow-panel: -24px 0 48px -24px oklch(0.2 0.02 260 / 28%);
+  --shadow-tour: 0 12px 32px rgb(0 0 0 / 0.16);
+  --shadow-tag: 0 4px 14px rgb(0 0 0 / 0.14);
+  --on-chart: white;
+  /* Correlation heatmap (sectors): strongest fill and the text set on cells above 0.7 */
+  --heat-max: 70%;
+  --heat-strong-fg: var(--foreground);
+  --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.18 0 0 0 0 0.12 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  /* Theme aliases resolve where they are declared (the root), so point them at the light tokens here too */
+  --color-logo-plate: var(--logo-plate);
+  --color-logo-plate-foreground: var(--logo-plate-foreground);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-office: var(--office);
+  --color-office-foreground: var(--office-foreground);
+  --color-office-soft: var(--office-soft);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-ring-offset-background: var(--background);
+  --color-highlight: var(--highlight);
+  --color-highlight-soft: var(--highlight-soft);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-positive: var(--positive);
+  --color-positive-soft: var(--positive-soft);
+  --color-negative: var(--negative);
+  --color-negative-soft: var(--negative-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
+  --color-ink-muted: var(--ink-muted);
+  --color-paper: var(--paper);
+  --color-rule: var(--rule);
+  --color-link: var(--link);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
 }
 
 @layer base {
@@ -204,6 +417,7 @@
     background-repeat: no-repeat;
     padding: 0 0.12em;
     border-radius: 0.15em;
+    color: var(--highlight-foreground);
   }
 
   .hl-sweep {
@@ -213,10 +427,11 @@
     background-repeat: no-repeat;
     animation: var(--animate-hl-sweep);
     animation-delay: 400ms;
+    color: var(--highlight-foreground);
   }
 
   .paper-grain {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.18 0 0 0 0 0.12 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-image: var(--grain);
   }
 
   .ruled {
@@ -285,6 +500,11 @@
 
   .brand-invert {
     filter: invert(1) brightness(1.05);
+  }
+  /* Dark wordmark set on an app surface: invert it only when that surface is dark */
+  .dark .brand-on-surface img {
+    /* hue-rotate puts the orange dot back after the inversion turns it blue */
+    filter: invert(1) hue-rotate(180deg) brightness(1.05);
   }
 
   .prose-filing {
@@ -527,12 +747,12 @@
   animation: agent-mark-in 360ms ease-out;
   border-radius: 6px;
   background: var(--chart-1);
-  color: white;
+  color: var(--on-chart);
   padding: 3px 8px;
   font-size: 11.5px;
   font-weight: 500;
   line-height: 1.35;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 0.14);
+  box-shadow: var(--shadow-tag);
 }
 /* The stop being read gets a card on the page; the others shrink to their number. */
 .agent-mark-label[data-state="min"] .agent-mark-text,
@@ -555,7 +775,7 @@
   background: var(--card);
   color: var(--card-foreground);
   padding: 12px 14px;
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.16);
+  box-shadow: var(--shadow-tour);
   font-size: 12.5px;
   line-height: 1.5;
   transition:
@@ -624,7 +844,7 @@
 .agent-tour-next {
   border-color: var(--chart-1);
   background: var(--chart-1);
-  color: white;
+  color: var(--on-chart);
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-tour {
@@ -641,7 +861,7 @@
   margin-right: 6px;
   padding: 0 4px;
   border-radius: 999px;
-  background: white;
+  background: var(--on-chart);
   color: var(--chart-1);
   font-size: 10px;
   font-weight: 700;
@@ -657,7 +877,7 @@
   padding: 0 4px;
   border-radius: 999px;
   background: var(--chart-1);
-  color: white;
+  color: var(--on-chart);
   font-size: 9.5px;
   font-weight: 700;
   line-height: 1;
@@ -766,6 +986,13 @@
   html.printing-report body * {
     visibility: hidden;
   }
+  /* The report itself is pinned to light tokens; keep the page behind it from printing dark */
+  html.printing-report.dark {
+    color-scheme: light;
+  }
+  html.printing-report.dark body {
+    background: none;
+  }
   html.printing-report .report-doc,
   html.printing-report .report-doc * {
     visibility: visible;
@@ -836,6 +1063,9 @@ html[data-density="dense"] main h1.font-display {
 [data-office="sheets"] { --office: oklch(0.47 0.12 152); --office-soft: oklch(0.95 0.03 152); }
 [data-office="slides"] { --office: oklch(0.55 0.17 38); --office-soft: oklch(0.96 0.03 38); }
 [data-office="pdf"] { --office: oklch(0.52 0.19 27); --office-soft: oklch(0.96 0.03 27); }
+.dark [data-office="sheets"] { --office: oklch(0.74 0.12 152); --office-soft: oklch(0.3 0.04 152); }
+.dark [data-office="slides"] { --office: oklch(0.74 0.14 38); --office-soft: oklch(0.3 0.05 38); }
+.dark [data-office="pdf"] { --office: oklch(0.72 0.15 27); --office-soft: oklch(0.3 0.06 27); }
 
 /* Writer page typography (Word-like defaults) */
 .office-doc { font-size: 11pt; line-height: 1.45; color: var(--foreground); }
@@ -847,7 +1077,7 @@ html[data-density="dense"] main h1.font-display {
 .office-doc ul { list-style: disc; padding-left: 18pt; margin: 0 0 6pt; }
 .office-doc ol { list-style: decimal; padding-left: 18pt; margin: 0 0 6pt; }
 .office-doc a { color: var(--office); text-decoration: underline; }
-.office-doc mark { background: oklch(0.93 0.14 100); }
+.office-doc mark { background: oklch(0.93 0.14 100); color: oklch(0.2 0.03 85); }
 .office-doc table { border-collapse: collapse; width: 100%; margin: 6pt 0 10pt; font-size: 10pt; table-layout: fixed; }
 .office-doc th, .office-doc td { border: 1px solid var(--border); padding: 3pt 6pt; vertical-align: top; }
 .office-doc th { background: var(--office-soft); font-weight: 600; text-align: left; }
@@ -858,6 +1088,8 @@ html[data-density="dense"] main h1.font-display {
 
 /* ---- First-run tour motion ---- */
 :root { --tour-ease: cubic-bezier(0.22, 1, 0.36, 1); --tour-dim: color-mix(in oklab, var(--foreground) 50%, transparent); }
+/* In dark the foreground is light, so the tour scrim dims with black instead */
+.dark { --tour-dim: color-mix(in oklab, black 60%, transparent); }
 .tour-root { animation: tour-fade 240ms ease-out; }
 .tour-spot { border-radius: 10px; box-shadow: 0 0 0 9999px var(--tour-dim), 0 0 0 2px var(--foreground), 0 0 24px 4px color-mix(in oklab, var(--foreground) 25%, transparent);
   transition: transform 420ms var(--tour-ease), width 420ms var(--tour-ease), height 420ms var(--tour-ease), border-radius 300ms; will-change: transform; }

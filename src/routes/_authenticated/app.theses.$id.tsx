@@ -28,9 +28,9 @@ export const Route = createFileRoute("/_authenticated/app/theses/$id")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Thesis — Filed Under" },
+      { title: "Thesis · FiledUnder" },
       { name: "description", content: "Thesis detail, price tracking and AI review." },
-      { property: "og:title", content: "Thesis — Filed Under" },
+      { property: "og:title", content: "Thesis · FiledUnder" },
       { property: "og:description", content: "Thesis detail, price tracking and AI review." },
     ],
   }),

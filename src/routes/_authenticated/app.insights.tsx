@@ -26,13 +26,13 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/insights")({
   head: () => ({
     meta: [
-      { title: "Insights — Filed Under" },
+      { title: "Insights · FiledUnder" },
       {
         name: "description",
         content:
           "What companies' reported KPIs, guidance, federal contracts, lobbying and trading records say together: verified insights and detected signals across coverage, each with its sources.",
       },
-      { property: "og:title", content: "Insights — Filed Under" },
+      { property: "og:title", content: "Insights · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

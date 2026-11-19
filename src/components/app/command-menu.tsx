@@ -18,6 +18,7 @@ import {
   Star,
   Users,
   Radar,
+  Settings,
   BellRing,
   CalendarCheck,
 } from "lucide-react";
@@ -32,11 +33,12 @@ import {
 } from "@/components/ui/command";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { useUniverse } from "@/lib/data";
-import { useToggleFollow, type AppPath } from "@/lib/workspace";
+import { useToggleFollow } from "@/lib/workspace";
 import { BENCHMARKS } from "@/lib/coverage";
+import { groupByHub, type NavPath } from "@/lib/nav";
 
-const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: string }[] = [
-  { to: "/app", label: "Dashboard", icon: LayoutDashboard, keywords: "home overview" },
+const PAGES: { to: NavPath; label: string; icon: typeof Building2; keywords: string }[] = [
+  { to: "/app", label: "Overview", icon: LayoutDashboard, keywords: "home overview dashboard" },
   {
     to: "/app/companies",
     label: "Companies",
@@ -89,13 +91,13 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
   },
   {
     to: "/app/earnings",
-    label: "Earnings season",
+    label: "Earnings",
     icon: CalendarCheck,
     keywords: "earnings season calendar beats misses surprise reaction preview scorecard",
   },
   {
     to: "/app/agents",
-    label: "Agents",
+    label: "Alerts",
     icon: BellRing,
     keywords: "agents scheduled tasks monitors alerts inbox reports morning brief earnings preview insights for you",
   },
@@ -111,9 +113,9 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
   { to: "/app/research", label: "Research agent", icon: Bot, keywords: "ai chat ask" },
   {
     to: "/app/reports",
-    label: "Report library",
+    label: "Reports",
     icon: FileText,
-    keywords: "primer earnings preview recap ic memo pdf word download branded",
+    keywords: "report library primer earnings preview recap ic memo pdf word download branded",
   },
   { to: "/app/office", label: "Office Studio", icon: FileSpreadsheet, keywords: "excel word powerpoint pdf editor docs sheets officeai" },
   {
@@ -122,7 +124,16 @@ const PAGES: { to: AppPath; label: string; icon: typeof Building2; keywords: str
     icon: Users,
     keywords: "team coverage roles invite branding restricted list",
   },
+  {
+    to: "/app/settings",
+    label: "Settings",
+    icon: Settings,
+    keywords: "profile preferences appearance theme dark light mode account",
+  },
 ];
+
+/** Pages grouped under the sidebar entry (or the account menu) that holds them. */
+const PAGE_GROUPS = groupByHub(PAGES);
 
 export function CommandMenu({
   open,
@@ -173,17 +184,19 @@ export function CommandMenu({
           ))}
         </CommandGroup>
         <CommandSeparator />
-        <CommandGroup heading="Pages">
-          {PAGES.map((p) => (
-            <CommandItem
-              key={p.to}
-              value={`${p.label} ${p.keywords}`}
-              onSelect={() => run(() => navigate({ to: p.to }))}
-            >
-              <p.icon /> {p.label}
-            </CommandItem>
-          ))}
-        </CommandGroup>
+        {PAGE_GROUPS.map((g) => (
+          <CommandGroup key={g.hub.id} heading={g.hub.label}>
+            {g.items.map((p) => (
+              <CommandItem
+                key={p.to}
+                value={`${p.label} ${p.keywords}`}
+                onSelect={() => run(() => navigate({ to: p.to }))}
+              >
+                <p.icon /> {p.label}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ))}
         <CommandGroup heading="Charts">
           {BENCHMARKS.filter((b) => b.group !== "sector").map((b) => (
             <CommandItem

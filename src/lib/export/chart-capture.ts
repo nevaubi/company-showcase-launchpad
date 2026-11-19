@@ -1,5 +1,7 @@
 // Rasterises the report charts currently on screen (SVG) into PNGs for the Word export. Browser-only:
-// computed styles are inlined so theme variables survive outside the page.
+// computed styles are inlined so theme variables survive outside the page. They are read with the light tokens in
+// effect, so a Word export is on paper colours even when the app is in the dark theme.
+import { withLightTheme } from "@/lib/theme";
 
 export interface ChartImage { png: Uint8Array; w: number; h: number }
 
@@ -20,7 +22,7 @@ async function rasterise(svg: SVGSVGElement, background: string, scale = 2): Pro
   const w = Math.round(vb?.width || svg.clientWidth), h = Math.round(vb?.height || svg.clientHeight);
   if (!w || !h) return null;
   const clone = svg.cloneNode(true) as SVGSVGElement;
-  inline(svg, clone);
+  withLightTheme(() => inline(svg, clone));
   clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
   clone.setAttribute("width", String(w));
   clone.setAttribute("height", String(h));
@@ -48,7 +50,9 @@ async function rasterise(svg: SVGSVGElement, background: string, scale = 2): Pro
 export async function captureCharts(root: ParentNode = document): Promise<Map<string, ChartImage>> {
   const out = new Map<string, ChartImage>();
   const doc = root instanceof Element ? root : document.querySelector(".report-doc");
-  const background = doc ? getComputedStyle(doc).backgroundColor || "#ffffff" : "#ffffff";
+  const background = withLightTheme(() =>
+    doc ? getComputedStyle(doc).backgroundColor || "#ffffff" : "#ffffff",
+  );
   for (const svg of root.querySelectorAll<SVGSVGElement>("svg[data-report-chart]")) {
     const id = svg.dataset["reportChart"];
     if (!id || out.has(id)) continue;

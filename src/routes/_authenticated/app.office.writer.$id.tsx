@@ -16,9 +16,9 @@ import { writerToDocx, type JNode, type WriterSettings } from "@/lib/office/writ
 export const Route = createFileRoute("/_authenticated/app/office/writer/$id")({
   head: () => ({
     meta: [
-      { title: "Writer — Filed Under" },
+      { title: "Writer · FiledUnder" },
       { name: "description", content: "Edit Word documents in Filed Under." },
-      { property: "og:title", content: "Writer — Filed Under" },
+      { property: "og:title", content: "Writer · FiledUnder" },
       { property: "og:description", content: "Edit Word documents in Filed Under." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

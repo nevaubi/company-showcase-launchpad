@@ -19,9 +19,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/firm")({
   head: () => ({
     meta: [
-      { title: "Firm workspace — Filed Under" },
+      { title: "Firm workspace · FiledUnder" },
       { name: "description", content: "Shared coverage, roles, notes and branding for your research team." },
-      { property: "og:title", content: "Firm workspace — Filed Under" },
+      { property: "og:title", content: "Firm workspace · FiledUnder" },
       { property: "og:description", content: "Shared coverage, roles, notes and branding for your research team." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

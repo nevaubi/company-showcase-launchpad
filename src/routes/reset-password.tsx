@@ -13,9 +13,9 @@ export const Route = createFileRoute("/reset-password")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Reset password — Filed Under" },
+      { title: "Reset password · FiledUnder" },
       { name: "description", content: "Choose a new password for your Filed Under account." },
-      { property: "og:title", content: "Reset password — Filed Under" },
+      { property: "og:title", content: "Reset password · FiledUnder" },
       { property: "og:description", content: "Choose a new password for your Filed Under account." },
       { name: "robots", content: "noindex" },
     ],

@@ -11,9 +11,9 @@ import { fmtDate } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/app/admin")({
   head: () => ({
     meta: [
-      { title: "Admin · Waitlist — Filed Under" },
+      { title: "Admin · Waitlist · FiledUnder" },
       { name: "description", content: "Approve or decline people waiting for Filed Under access." },
-      { property: "og:title", content: "Admin · Waitlist — Filed Under" },
+      { property: "og:title", content: "Admin · Waitlist · FiledUnder" },
       { property: "og:description", content: "Approve or decline people waiting for Filed Under access." },
       { name: "robots", content: "noindex" },
     ],

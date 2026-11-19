@@ -4,7 +4,7 @@ export type Shortcut = { keys: string[]; label: string; group: "Navigation" | "C
 export const SHORTCUTS: Shortcut[] = [
   { keys: ["⌘", "K"], label: "Search companies, pages and filings", group: "Navigation", action: "search" },
   { keys: ["/"], label: "Search", group: "Navigation", action: "search" },
-  { keys: ["G", "D"], label: "Go to dashboard", group: "Navigation", to: "/app" },
+  { keys: ["G", "D"], label: "Go to overview", group: "Navigation", to: "/app" },
   { keys: ["G", "C"], label: "Go to companies", group: "Navigation", to: "/app/companies" },
   { keys: ["G", "O"], label: "Go to Office Studio", group: "Navigation", to: "/app/office" },
   { keys: ["G", "R"], label: "Go to reports", group: "Navigation", to: "/app/reports" },

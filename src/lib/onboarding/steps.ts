@@ -37,6 +37,6 @@ export const TOUR_STEPS: TourStep[] = [
   { path: `/app/supply-chain?t=${T}`, area: "Supply chain", title: "Simulate a shock", body: "We've opened the shock simulator: knock out a supplier or region and see who is exposed, first and second order, sized from stated revenue shares.", click: "[data-tour='supply-shock']", done: "[data-tour='supply-shock'][data-state='active']", target: "#supply-analysis" },
   { preview: "thesis", path: "/app/theses", area: "Theses", title: "Write down your thesis", body: "State why you own or short something and what would prove you wrong. Prices, new filings and an AI reviewer keep checking it against the evidence.", target: "[data-tour='thesis-new']" },
   { preview: "assistant", area: "Assistant", title: "Your research assistant", body: "Press ⌘J to ask anything. It reads filings, cites them, opens pages and points at the numbers. Ask it “show me around” any time.", target: "[data-tour='assistant']" },
-  { preview: "office", area: "Office Studio", title: "Office Studio", body: "Word, Excel, PowerPoint and PDF editors where OfficeAI builds cited memos, models and decks. Your starter model is waiting.", target: "[data-tour='hub-library']" },
+  { preview: "office", area: "Office Studio", title: "Office Studio", body: "Word, Excel, PowerPoint and PDF editors where OfficeAI builds cited memos, models and decks. Your starter model is waiting.", target: "[data-tour='hub-research']" },
   { preview: "finish", title: "You're set", body: "Press ? any time for shortcuts, or reopen this tour from the help menu." },
 ];

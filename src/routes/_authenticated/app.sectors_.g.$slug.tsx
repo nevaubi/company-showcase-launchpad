@@ -30,12 +30,12 @@ export const Route = createFileRoute("/_authenticated/app/sectors_/g/$slug")({
       .replace(/\b\w/g, (c) => c.toUpperCase());
     return {
       meta: [
-        { title: `${name} — sector analysis — Filed Under` },
+        { title: `${name} · sector analysis · FiledUnder` },
         {
           name: "description",
           content: `${name}: revenue and earnings growth, margins, returns on capital and valuation aggregated from each company's filings, with the companies behind every figure.`,
         },
-        { property: "og:title", content: `${name} — Filed Under` },
+        { property: "og:title", content: `${name} · FiledUnder` },
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary" },
       ],

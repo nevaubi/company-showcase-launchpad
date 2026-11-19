@@ -17,19 +17,19 @@ export const Route = createFileRoute("/companies/$ticker")({
   head: ({ params, loaderData }) => {
     const t = params.ticker.toUpperCase();
     const name = loaderData?.name ?? t;
-    const title = `${name} (${t}) revenue, earnings and cash flow by year — Filed Under`;
+    const title = `${name} (${t}) revenue, earnings and cash flow by year · FiledUnder`;
     const desc = `${name}'s revenue, earnings and cash flow for the last five years, with every number linked to the SEC filing it came from.`;
     const url = `${SITE}/companies/${t}`;
     return {
       meta: [
-        { title: loaderData ? title : "Company — Filed Under" },
+        { title: loaderData ? title : "Company · FiledUnder" },
         { name: "description", content: desc },
-        { property: "og:title", content: `${name} (${t}) — every number linked to its SEC filing` },
+        { property: "og:title", content: `${name} (${t}) · every number linked to its SEC filing` },
         { property: "og:description", content: desc },
         { property: "og:type", content: "article" },
         { property: "og:url", content: url },
         { name: "twitter:card", content: "summary_large_image" },
-        { name: "twitter:title", content: `${name} (${t}) — sourced to the SEC` },
+        { name: "twitter:title", content: `${name} (${t}) · sourced to the SEC` },
         { name: "twitter:description", content: desc },
       ],
       links: [{ rel: "canonical", href: url }],

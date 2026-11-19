@@ -53,7 +53,7 @@ export function ResearchMarkdown({ children, className, onPin }: { children: str
                     })
                   }
                   title={title ? `“${title}”` : undefined}
-                  className="inline-flex h-auto items-baseline gap-0.5 rounded bg-highlight-soft px-1 py-0 text-[0.85em] font-medium text-highlight-foreground no-underline hover:bg-highlight"
+                  className="inline-flex h-auto items-baseline gap-0.5 rounded bg-highlight-soft px-1 py-0 text-[0.85em] font-medium text-foreground no-underline hover:bg-highlight hover:text-highlight-foreground"
                 >
                   <FileText className="size-3 self-center" />
                   {label}

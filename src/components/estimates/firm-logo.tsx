@@ -41,7 +41,7 @@ export function FirmLogo({ firm, className }: { firm: string; className?: string
   const [failed, setFailed] = useState(false);
   const initials = firm.replace(/[^A-Za-z ]/g, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   return (
-    <span className={cn("inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded border border-border bg-card", className)}>
+    <span className={cn("inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded border border-border", domain && !failed ? "bg-logo-plate" : "bg-card", className)}>
       {domain && !failed ? (
         <img src={`https://www.google.com/s2/favicons?domain=${domain}&sz=64`} alt="" loading="lazy" className="size-full object-contain p-0.5" onError={() => setFailed(true)} />
       ) : (

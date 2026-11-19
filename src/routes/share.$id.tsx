@@ -7,7 +7,7 @@ import { getSharedView } from "@/lib/share.functions";
 export const Route = createFileRoute("/share/$id")({
   loader: ({ params }) => getSharedView({ data: { id: params.id } }).catch(() => null),
   head: ({ loaderData }) => {
-    const t = loaderData?.title ? `${loaderData.title} · Filed Under` : "Shared chart · Filed Under";
+    const t = loaderData?.title ? `${loaderData.title} · FiledUnder` : "Shared chart · FiledUnder";
     return {
       meta: [
         { title: t },

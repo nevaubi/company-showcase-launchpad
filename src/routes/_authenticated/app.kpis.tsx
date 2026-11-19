@@ -27,13 +27,13 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/kpis")({
   head: () => ({
     meta: [
-      { title: "KPI matrix — Filed Under" },
+      { title: "KPI matrix · FiledUnder" },
       {
         name: "description",
         content:
           "Operating KPIs standardized across companies (comparable sales, backlog, NIM, occupancy, subscribers and more), each value linked to the release it was read from.",
       },
-      { property: "og:title", content: "KPI matrix — Filed Under" },
+      { property: "og:title", content: "KPI matrix · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

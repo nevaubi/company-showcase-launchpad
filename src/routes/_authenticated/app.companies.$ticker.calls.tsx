@@ -44,12 +44,12 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/call
       meta: [
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary" },
-        { title: `${name} (${t}) earnings call transcripts — Filed Under` },
+        { title: `${name} (${t}) earnings call transcripts · FiledUnder` },
         {
           name: "description",
           content: `Read ${name}'s recent earnings calls by speaker: prepared remarks, every analyst question, talk time and key terms.`,
         },
-        { property: "og:title", content: `${name} earnings call transcripts — Filed Under` },
+        { property: "og:title", content: `${name} earnings call transcripts · FiledUnder` },
         {
           property: "og:description",
           content: `Searchable ${name} earnings call transcripts with speaker turns and an analyst question index.`,

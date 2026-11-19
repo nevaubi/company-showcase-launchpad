@@ -21,9 +21,9 @@ export const Route = createFileRoute("/auth")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Sign in — Filed Under" },
+      { title: "Sign in · FiledUnder" },
       { name: "description", content: "Sign in to Filed Under or join the waitlist for source-linked equity research." },
-      { property: "og:title", content: "Sign in — Filed Under" },
+      { property: "og:title", content: "Sign in · FiledUnder" },
       { property: "og:description", content: "Source-linked equity research. Sign in or join the waitlist." },
       { name: "robots", content: "noindex" },
     ],

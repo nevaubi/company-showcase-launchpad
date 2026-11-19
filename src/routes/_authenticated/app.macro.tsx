@@ -32,9 +32,9 @@ export const Route = createFileRoute("/_authenticated/app/macro")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Macro — Filed Under" },
+      { title: "Macro · FiledUnder" },
       { name: "description", content: "120 U.S. government economic series — rates, inflation, labor, growth, fiscal, energy — with percentiles, comparisons and an AI macro brief." },
-      { property: "og:title", content: "Macro — Filed Under" },
+      { property: "og:title", content: "Macro · FiledUnder" },
       { property: "og:description", content: "120 U.S. government economic series with percentiles, comparisons and an AI macro brief." },
     ],
   }),

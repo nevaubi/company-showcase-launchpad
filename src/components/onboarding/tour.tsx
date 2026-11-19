@@ -94,8 +94,10 @@ export function Tour({ open, onClose }: { open: boolean; onClose: (finished: boo
   useEffect(() => {
     if (!open) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close(false);
-      else if (e.key === "ArrowRight") setI((n) => Math.min(TOUR_STEPS.length - 1, n + 1));
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close(false);
+      } else if (e.key === "ArrowRight") setI((n) => Math.min(TOUR_STEPS.length - 1, n + 1));
       else if (e.key === "ArrowLeft") setI((n) => Math.max(0, n - 1));
     };
     window.addEventListener("keydown", k);

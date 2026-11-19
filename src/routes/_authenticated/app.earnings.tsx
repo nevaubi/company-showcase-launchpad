@@ -5,7 +5,7 @@ import { EarningsSeason } from "@/components/earnings/earnings-views";
 export const Route = createFileRoute("/_authenticated/app/earnings")({
   head: () => ({
     meta: [
-      { title: "Earnings season — Filed Under" },
+      { title: "Earnings season · FiledUnder" },
       { name: "description", content: "Upcoming reports, results against consensus and the market's reaction, by sector." },
     ],
   }),

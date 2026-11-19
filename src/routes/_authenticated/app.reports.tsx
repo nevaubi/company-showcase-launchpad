@@ -24,9 +24,9 @@ export const Route = createFileRoute("/_authenticated/app/reports")({
   validateSearch: z.object({ kind: z.enum(["all", "primer", "preview", "recap", "memo"]).optional() }),
   head: () => ({
     meta: [
-      { title: "Report library — primers, earnings previews & recaps, IC memos — Filed Under" },
+      { title: "Report library · primers, earnings previews & recaps, IC memos · FiledUnder" },
       { name: "description", content: "Always-ready, fully sourced company reports for your coverage and watchlist: primers, earnings previews, recaps and IC memos you can customize, brand and download." },
-      { property: "og:title", content: "Report library — Filed Under" },
+      { property: "og:title", content: "Report library · FiledUnder" },
       { property: "og:description", content: "Sourced company primers, earnings previews, recaps and IC memos." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -88,7 +88,7 @@ function ReportLibrary() {
   return (
     <div className="space-y-4">
       <PageHeader
-        eyebrow="Library"
+        eyebrow="Research"
         title="Report library"
         description="Primers, earnings previews, recaps and IC memos written from SEC filings and market data, with every figure cited. Standard versions are shared and refresh when new filings land; customize your own and download them in your firm's branding."
         actions={

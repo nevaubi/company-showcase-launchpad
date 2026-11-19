@@ -8,6 +8,7 @@ export const PREFS_KIND = "ui_prefs";
 const LS_KEY = "fu:prefs";
 
 export type Density = "reading" | "dense";
+export type ThemePref = "light" | "dark" | "system";
 
 export interface CompanyTab {
   ticker: string;
@@ -18,10 +19,12 @@ export interface CompanyTab {
 
 export interface Prefs {
   density: Density;
+  /** "light" by default so existing users see no change until they choose */
+  theme: ThemePref;
   companyTabs: CompanyTab[];
 }
 
-const DEFAULTS: Prefs = { density: "reading", companyTabs: [] };
+const DEFAULTS: Prefs = { density: "reading", theme: "light", companyTabs: [] };
 const MAX_TABS = 8;
 
 let state: Prefs = DEFAULTS;
@@ -30,16 +33,22 @@ let loaded = false;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 const listeners = new Set<() => void>();
 
-function sanitize(raw: unknown): Prefs {
+/** Normalizes stored prefs; unknown or missing values fall back to the defaults. */
+export function sanitizePrefs(raw: unknown): Prefs {
   const r = (raw ?? {}) as Partial<Prefs>;
   const density: Density = r.density === "dense" ? "dense" : "reading";
+  const theme: ThemePref = r.theme === "dark" || r.theme === "system" ? r.theme : "light";
   const tabs = Array.isArray(r.companyTabs)
     ? r.companyTabs
         .filter((t): t is CompanyTab => !!t && typeof t.ticker === "string")
-        .map((t) => ({ ticker: t.ticker.toUpperCase(), path: typeof t.path === "string" ? t.path.replace(/[^a-z0-9-]/gi, "") : "", at: Number(t.at) || 0 }))
+        .map((t) => ({
+          ticker: t.ticker.toUpperCase(),
+          path: typeof t.path === "string" ? t.path.replace(/[^a-z0-9-]/gi, "") : "",
+          at: Number(t.at) || 0,
+        }))
         .slice(0, MAX_TABS)
     : [];
-  return { density, companyTabs: tabs };
+  return { density, theme, companyTabs: tabs };
 }
 
 function emit() {
@@ -53,7 +62,7 @@ function applyDensity(d: Density) {
 function readLocal() {
   try {
     const s = localStorage.getItem(LS_KEY);
-    if (s) state = sanitize(JSON.parse(s));
+    if (s) state = sanitizePrefs(JSON.parse(s));
   } catch {
     /* storage unavailable */
   }
@@ -76,7 +85,7 @@ async function loadRemote() {
       .maybeSingle();
     if (data) {
       rowId = data.id;
-      state = sanitize(data.content);
+      state = sanitizePrefs(data.content);
       try {
         localStorage.setItem(LS_KEY, JSON.stringify(state));
       } catch {
@@ -103,11 +112,19 @@ function scheduleSave() {
       if (!auth.user) return;
       const content = state as unknown as Json;
       if (rowId) {
-        await supabase.from("documents").update({ content, updated_at: new Date().toISOString() }).eq("id", rowId);
+        await supabase
+          .from("documents")
+          .update({ content, updated_at: new Date().toISOString() })
+          .eq("id", rowId);
       } else {
         const { data } = await supabase
           .from("documents")
-          .insert({ user_id: auth.user.id, kind: PREFS_KIND, title: "Interface preferences", content })
+          .insert({
+            user_id: auth.user.id,
+            kind: PREFS_KIND,
+            title: "Interface preferences",
+            content,
+          })
           .select("id")
           .single();
         rowId = data?.id ?? null;
@@ -120,7 +137,7 @@ function scheduleSave() {
 
 export function setPrefs(patch: Partial<Prefs> | ((p: Prefs) => Partial<Prefs>)) {
   const next = typeof patch === "function" ? patch(state) : patch;
-  state = sanitize({ ...state, ...next });
+  state = sanitizePrefs({ ...state, ...next });
   applyDensity(state.density);
   emit();
   scheduleSave();
@@ -148,6 +165,10 @@ export function toggleDensity() {
   setPrefs((p) => ({ density: p.density === "dense" ? "reading" : "dense" }));
 }
 
+export function setTheme(theme: ThemePref) {
+  setPrefs({ theme });
+}
+
 /** Record a visit to a company page; keeps the most recent MAX_TABS companies. */
 export function touchCompanyTab(ticker: string, path: string) {
   const t = ticker.toUpperCase();
@@ -170,7 +191,9 @@ export function touchCompanyTab(ticker: string, path: string) {
 }
 
 export function closeCompanyTab(ticker: string) {
-  setPrefs((p) => ({ companyTabs: p.companyTabs.filter((x) => x.ticker !== ticker.toUpperCase()) }));
+  setPrefs((p) => ({
+    companyTabs: p.companyTabs.filter((x) => x.ticker !== ticker.toUpperCase()),
+  }));
 }
 
 /** One-key density toggle ("D"), ignored while typing. */
@@ -178,7 +201,13 @@ export function useDensityHotkey() {
   const onKey = useCallback((e: KeyboardEvent) => {
     if (e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== "d" || e.repeat) return;
     const el = e.target as HTMLElement | null;
-    if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest("[role=dialog] input, [contenteditable=true]"))) return;
+    if (
+      el &&
+      (el.isContentEditable ||
+        /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) ||
+        el.closest("[role=dialog] input, [contenteditable=true]"))
+    )
+      return;
     e.preventDefault();
     toggleDensity();
   }, []);

@@ -22,9 +22,9 @@ export const Route = createFileRoute("/_authenticated/app/research")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Research agent — Filed Under" },
+      { title: "Research agent · FiledUnder" },
       { name: "description", content: "An AI analyst that reads SEC filings, prices, FRED data and the web, and cites every source." },
-      { property: "og:title", content: "Research agent — Filed Under" },
+      { property: "og:title", content: "Research agent · FiledUnder" },
       { property: "og:description", content: "An AI analyst that reads SEC filings, prices, FRED data and the web, and cites every source." },
     ],
   }),

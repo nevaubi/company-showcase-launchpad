@@ -49,11 +49,17 @@ export function SourcePanel() {
     }
   }, [target]);
 
+  // Escape closes the open panel and marks the key handled, so layers below it (the phone drawer) stay open.
+  const hasTarget = !!target;
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && close();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !hasTarget) return;
+      e.preventDefault();
+      close();
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
+  }, [close, hasTarget]);
 
   const open = !!target;
   const filing = active ? byAccn.get(active.accn) : undefined;

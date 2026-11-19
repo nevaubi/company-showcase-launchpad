@@ -27,8 +27,8 @@ export const Route = createFileRoute("/features/$slug")({
   },
   head: ({ params, loaderData }) => {
     const url = `${SITE}/features/${params.slug}`;
-    if (!loaderData) return { meta: [{ title: "Feature — Filed Under" }, { name: "robots", content: "noindex" }] };
-    const title = `${loaderData.title} — Filed Under`;
+    if (!loaderData) return { meta: [{ title: "Feature · FiledUnder" }, { name: "robots", content: "noindex" }] };
+    const title = `${loaderData.title} · FiledUnder`;
     return {
       meta: [
         { title },

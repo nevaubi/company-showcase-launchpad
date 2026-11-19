@@ -23,13 +23,13 @@ export const Route = createFileRoute("/_authenticated/app/compare")({
   validateSearch: (s) => search.parse(s),
   head: () => ({
     meta: [
-      { title: "Compare companies — Filed Under" },
+      { title: "Compare companies · FiledUnder" },
       {
         name: "description",
         content:
           "Side-by-side valuation, growth, margins and returns for up to eight companies, with reported figures traced to SEC filings.",
       },
-      { property: "og:title", content: "Compare companies — Filed Under" },
+      { property: "og:title", content: "Compare companies · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

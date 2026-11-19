@@ -14,9 +14,9 @@ import { createPortalSession } from "@/lib/payments.functions";
 export const Route = createFileRoute("/_authenticated/app/billing")({
   head: () => ({
     meta: [
-      { title: "Billing and plan — Filed Under" },
+      { title: "Billing and plan · FiledUnder" },
       { name: "description", content: "Your Filed Under plan, trial and AI usage." },
-      { property: "og:title", content: "Billing and plan — Filed Under" },
+      { property: "og:title", content: "Billing and plan · FiledUnder" },
       { property: "og:description", content: "Your Filed Under plan, trial and AI usage." },
       { name: "robots", content: "noindex" },
     ],

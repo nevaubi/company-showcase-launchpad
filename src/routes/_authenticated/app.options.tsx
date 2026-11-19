@@ -22,9 +22,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/options")({
   head: () => ({
     meta: [
-      { title: "Options — Filed Under" },
+      { title: "Options · FiledUnder" },
       { name: "description", content: "What the options market prices for every covered stock: moves into the next earnings report against past reactions, implied volatility and its rank, put/call positioning, unusual volume and skew." },
-      { property: "og:title", content: "Options — Filed Under" },
+      { property: "og:title", content: "Options · FiledUnder" },
       { property: "og:description", content: "Priced earnings moves vs history, implied volatility, put/call and skew across every stock with listed options, from Cboe quotes." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

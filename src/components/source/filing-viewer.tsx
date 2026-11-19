@@ -36,16 +36,15 @@ export type LocateStatus =
 const secBase = (cik: string, accn: string) =>
   `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accn.replace(/-/g, "")}/`;
 
-function cssVar(name: string, fallback: string) {
-  if (typeof window === "undefined") return fallback;
-  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return v || fallback;
-}
+// The filing document is always rendered on white, so its marks use the light-theme tokens whatever the app theme.
+const DOC_HIGHLIGHT = "oklch(0.9 0.16 98)";
+const DOC_HIGHLIGHT_SOFT = "oklch(0.955 0.085 100)";
+const DOC_INK = "oklch(0.19 0.012 260)";
 
 function buildSrcDoc(raw: string, base: string, contentType: string) {
-  const hl = cssVar("--highlight", "oklch(0.9 0.16 98)");
-  const soft = cssVar("--highlight-soft", "oklch(0.955 0.085 100)");
-  const ink = cssVar("--foreground", "oklch(0.19 0.012 260)");
+  const hl = DOC_HIGHLIGHT;
+  const soft = DOC_HIGHLIGHT_SOFT;
+  const ink = DOC_INK;
   const style = `<style>
     html{background:#fff}
     body{margin:0 auto!important;padding:28px 32px 120px!important;max-width:100%!important;box-sizing:border-box;color:#111;scroll-behavior:smooth}

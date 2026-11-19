@@ -46,12 +46,12 @@ import { insiderWindow, insiderWindowLabel } from "@/lib/insiders/window";
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   head: ({ params }) => ({
     meta: [
-      { title: `${params.ticker} overview — Filed Under` },
+      { title: `${params.ticker} overview · FiledUnder` },
       {
         name: "description",
         content: `${coverageOf(params.ticker)?.shortName ?? params.ticker} price research, SEC fundamentals, management and catalysts.`,
       },
-      { property: "og:title", content: `${params.ticker} research overview — Filed Under` },
+      { property: "og:title", content: `${params.ticker} research overview · FiledUnder` },
       {
         property: "og:description",
         content: "Price analysis, sourced fundamentals and company intelligence.",

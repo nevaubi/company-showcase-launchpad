@@ -27,14 +27,14 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/earn
     const name = coverageOf(t)?.shortName ?? t;
     return {
       meta: [
-        { title: `${name} (${t}) earnings preview, recap & promise tracker — Filed Under` },
+        { title: `${name} (${t}) earnings preview, recap & promise tracker · FiledUnder` },
         {
           name: "description",
           content: `What changed in ${name}'s latest quarter, what to watch next, and whether management kept its promises — every line sourced.`,
         },
         {
           property: "og:title",
-          content: `${name} earnings preview & promise tracker — Filed Under`,
+          content: `${name} earnings preview & promise tracker · FiledUnder`,
         },
         {
           property: "og:description",

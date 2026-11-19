@@ -125,7 +125,7 @@ export function SinceVisitBadges({ ticker }: { ticker: string }) {
         </a>
       ))}
       {high > 0 && (
-        <span className="rounded bg-highlight-soft px-1.5 py-px font-medium text-highlight-foreground">
+        <span className="rounded bg-highlight-soft px-1.5 py-px font-medium text-foreground">
           {high} high
         </span>
       )}

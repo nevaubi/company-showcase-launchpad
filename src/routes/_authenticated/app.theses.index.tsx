@@ -17,9 +17,9 @@ export const Route = createFileRoute("/_authenticated/app/theses/")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Theses — Filed Under" },
+      { title: "Theses · FiledUnder" },
       { name: "description", content: "Investment theses tracked against live prices and new filings." },
-      { property: "og:title", content: "Theses — Filed Under" },
+      { property: "og:title", content: "Theses · FiledUnder" },
       { property: "og:description", content: "Investment theses tracked against live prices and new filings." },
     ],
   }),
@@ -45,7 +45,7 @@ function Theses() {
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
-        eyebrow="Library"
+        eyebrow="Research"
         title="Theses"
         description="Write down why you own (or short) something, then let the price, the filings and an AI reviewer keep you honest."
         actions={

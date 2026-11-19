@@ -71,12 +71,12 @@ export const Route = createFileRoute("/_authenticated/app/markets")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Technicals — Filed Under" },
+      { title: "Technicals · FiledUnder" },
       {
         name: "description",
         content: "Candlestick charts, moving averages, RSI, MACD and AI chart reads.",
       },
-      { property: "og:title", content: "Technicals — Filed Under" },
+      { property: "og:title", content: "Technicals · FiledUnder" },
       {
         property: "og:description",
         content: "Candlestick charts, moving averages, RSI, MACD and AI chart reads.",

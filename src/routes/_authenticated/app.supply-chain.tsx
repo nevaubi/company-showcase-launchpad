@@ -39,9 +39,9 @@ export const Route = createFileRoute("/_authenticated/app/supply-chain")({
   validateSearch: z.object({ t: z.string().max(10).optional() }),
   head: () => ({
     meta: [
-      { title: "Supply chain map — Filed Under" },
+      { title: "Supply chain map · FiledUnder" },
       { name: "description", content: "Interactive map of named customers, suppliers, partners and competitors with dollar exposure, risk flags and a shock simulator, every link quoted from a 10-K." },
-      { property: "og:title", content: "Supply chain map — Filed Under" },
+      { property: "og:title", content: "Supply chain map · FiledUnder" },
       { property: "og:description", content: "Customers, suppliers, partners and competitors with dollar exposure and shock simulation, every link quoted from the 10-K." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -353,7 +353,7 @@ function SupplyChainPage() {
                       ))}
                       {l.risk && <p className="mt-1 text-xs text-negative">Risk: {l.risk}</p>}
                       <blockquote className="mt-2 border-l-2 border-highlight pl-2 text-xs italic text-muted-foreground">“{l.quote}”</blockquote>
-                      <button type="button" onClick={() => openLink(l, `${sel.name} · ${l.relation}`)} className="mt-2 inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-1 text-xs font-medium text-highlight-foreground hover:bg-highlight">
+                      <button type="button" onClick={() => openLink(l, `${sel.name} · ${l.relation}`)} className="mt-2 inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-1 text-xs font-medium text-foreground hover:bg-highlight hover:text-highlight-foreground">
                         <FileText className="size-3" /> Open in {l.form}
                       </button>
                       <div className="mt-2"><DeepVerify key={l.id} linkId={l.id} /></div>

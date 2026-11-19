@@ -19,9 +19,9 @@ export const Route = createFileRoute("/_authenticated/app/portfolio")({
   validateSearch: (s) => search.parse(s),
   head: () => ({
     meta: [
-      { title: "Portfolio — Filed Under" },
+      { title: "Portfolio · FiledUnder" },
       { name: "description", content: "Exposure, hidden supply-chain overlap, factor and macro sensitivity, supply-shock impact and liquidity for your holdings, each measure with its source." },
-      { property: "og:title", content: "Portfolio — Filed Under" },
+      { property: "og:title", content: "Portfolio · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -53,7 +53,7 @@ function PortfolioPage() {
   return (
     <div className="grid gap-4">
       <PageHeader
-        eyebrow="Paper trading"
+        eyebrow="Signals"
         title="Portfolio"
         description="What your holdings have in common: sector and factor exposure, suppliers and customers they share, revenue at risk when one company stumbles, and how long positions take to exit."
         actions={

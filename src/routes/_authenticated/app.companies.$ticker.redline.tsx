@@ -33,9 +33,9 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/redl
     const name = coverageOf(params.ticker)?.shortName ?? params.ticker.toUpperCase();
     return {
       meta: [
-        { title: `${params.ticker.toUpperCase()} filing changes — 10-K and 10-Q redlines — Filed Under` },
+        { title: `${params.ticker.toUpperCase()} filing changes · 10-K and 10-Q redlines · FiledUnder` },
         { name: "description", content: `What ${name} changed in its latest 10-K and 10-Q: new and removed risk factors, rewritten MD&A, legal and controls language, ranked by materiality with links to both filings.` },
-        { property: "og:title", content: `${name} filing changes — Filed Under` },
+        { property: "og:title", content: `${name} filing changes · FiledUnder` },
         { property: "og:description", content: "Paragraph-level SEC filing redlines ranked by materiality." },
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary" },

@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/alt-data")({
   head: ({ params }) => ({
     meta: [
-      { title: `${params.ticker.toUpperCase()} alternative data — Filed Under` },
+      { title: `${params.ticker.toUpperCase()} alternative data · FiledUnder` },
       { name: "description", content: `Ownership, 8-K events, government contracts, regulation, recalls, complaints, Medicare drug spending and its spread by state, bank deposits by state, EPA plant releases, fails to deliver and attention data for ${params.ticker.toUpperCase()}, each linked to its public record.` },
-      { property: "og:title", content: `${params.ticker.toUpperCase()} alternative data — Filed Under` },
+      { property: "og:title", content: `${params.ticker.toUpperCase()} alternative data · FiledUnder` },
       { property: "og:description", content: "Public alt data with a source link on every row." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

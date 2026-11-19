@@ -14,9 +14,9 @@ import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery, type HfPay
 export const Route = createFileRoute("/_authenticated/app/hedge-funds")({
   head: () => ({
     meta: [
-      { title: "Hedge funds & funding — Filed Under" },
+      { title: "Hedge funds & funding · FiledUnder" },
       { name: "description", content: "Hedge fund leverage, crowding and the Treasury basis trade from OFR, SEC Form PF, CFTC and Fed data, plus every Treasury auction graded for demand." },
-      { property: "og:title", content: "Hedge funds & funding — Filed Under" },
+      { property: "og:title", content: "Hedge funds & funding · FiledUnder" },
       { property: "og:description", content: "Leverage, positioning and Treasury auction demand from U.S. government data." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

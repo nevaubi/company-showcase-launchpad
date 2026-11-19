@@ -815,7 +815,7 @@ function AssistantTurn({ m, canvasOpen, latest, onReply }: { m: Msg; canvasOpen:
           </Button>
           {sources.slice(0, 5).map((x) => (
             <a key={x.url} href={x.url} target="_blank" rel="noreferrer" title={x.title ?? x.url}>
-              <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt={host(x.url)} className="size-4 rounded-sm border" loading="lazy" />
+              <img src={`https://www.google.com/s2/favicons?domain=${host(x.url)}&sz=32`} alt={host(x.url)} className="size-4 rounded-sm border bg-logo-plate" loading="lazy" />
             </a>
           ))}
           {sources.length > 0 && (

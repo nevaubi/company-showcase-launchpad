@@ -34,9 +34,9 @@ const pageSearch = z.object({
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/valuation")({
   head: ({ params }) => ({ meta: [
-    { title: `${params.ticker.toUpperCase()} Valuation research — Filed Under` },
+    { title: `${params.ticker.toUpperCase()} Valuation research · FiledUnder` },
     { name: "description", content: `Point-in-time valuation multiples, financial history and capital allocation. Company: ${params.ticker.toUpperCase()}.` },
-    { property: "og:title", content: `${params.ticker.toUpperCase()} Valuation research — Filed Under` },
+    { property: "og:title", content: `${params.ticker.toUpperCase()} Valuation research · FiledUnder` },
     { property: "og:description", content: "Point-in-time valuation multiples, financial history and capital allocation." },
     { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
   ] }),

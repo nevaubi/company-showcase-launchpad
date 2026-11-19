@@ -21,9 +21,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/autopilots/$botId")({
   head: () => ({
     meta: [
-      { title: "Autopilot positions and trades — Filed Under" },
+      { title: "Autopilot positions and trades · FiledUnder" },
       { name: "description", content: "Open paper positions, queued orders, closed trades and the equity curve of one paper autopilot against the S&P 500." },
-      { property: "og:title", content: "Autopilot positions and trades — Filed Under" },
+      { property: "og:title", content: "Autopilot positions and trades · FiledUnder" },
       { property: "og:description", content: "Daily-updated paper trading results for a rule-based short-term autopilot." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

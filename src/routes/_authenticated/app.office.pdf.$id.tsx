@@ -16,9 +16,9 @@ import { blankPdf, buildPdf, fromBase, type PdfDoc } from "@/lib/office/pdfdoc";
 export const Route = createFileRoute("/_authenticated/app/office/pdf/$id")({
   head: () => ({
     meta: [
-      { title: "PDF Studio — Filed Under" },
+      { title: "PDF Studio · FiledUnder" },
       { name: "description", content: "Review, mark up and write PDFs with OfficeAI and SEC-sourced data." },
-      { property: "og:title", content: "PDF Studio — Filed Under" },
+      { property: "og:title", content: "PDF Studio · FiledUnder" },
       { property: "og:description", content: "Review, mark up and write PDFs with OfficeAI and SEC-sourced data." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

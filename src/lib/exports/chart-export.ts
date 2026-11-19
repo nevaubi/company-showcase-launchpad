@@ -1,5 +1,7 @@
 // Export any on-screen house chart (an <svg>) as a standalone SVG or PNG with its title block, units and source
 // line drawn into the image, so the file stands on its own when pasted into a deck or shared. Browser-only.
+// Styles are read with the light tokens in effect, so exports are on paper colours even in the dark theme.
+import { withLightTheme } from "@/lib/theme";
 
 const PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "stroke-linecap", "stroke-linejoin", "opacity", "fill-opacity", "stroke-opacity", "font-size", "font-weight", "font-family", "text-anchor", "dominant-baseline", "letter-spacing"] as const;
 
@@ -40,6 +42,13 @@ function wrap(text: string, chars: number): string[] {
 
 /** Standalone SVG markup: title block, the chart, then units and source. */
 export function framedSvg(svg: SVGSVGElement, frame: ChartFrame): { markup: string; width: number; height: number } {
+  return withLightTheme(() => buildFramedSvg(svg, frame));
+}
+
+function buildFramedSvg(
+  svg: SVGSVGElement,
+  frame: ChartFrame,
+): { markup: string; width: number; height: number } {
   const vb = svg.viewBox?.baseVal;
   const w = Math.round(vb?.width || svg.clientWidth || svg.getBoundingClientRect().width || 640);
   const h = Math.round(vb?.height || svg.clientHeight || svg.getBoundingClientRect().height || 360);

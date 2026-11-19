@@ -22,9 +22,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/setups")({
   head: () => ({
     meta: [
-      { title: "Short-term setups — Filed Under" },
+      { title: "Short-term setups · FiledUnder" },
       { name: "description", content: "Published short-term strategies — overreaction, momentum, earnings drift, insider buying, short-selling flow, supply-chain links and pairs — re-tested nightly across 1,800+ US stocks after costs." },
-      { property: "og:title", content: "Short-term setups — Filed Under" },
+      { property: "og:title", content: "Short-term setups · FiledUnder" },
       { property: "og:description", content: "Short-term strategies re-tested every night with strict out-of-sample proof, plus paper autopilots that trade them." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

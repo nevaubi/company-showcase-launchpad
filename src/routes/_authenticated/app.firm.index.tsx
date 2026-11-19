@@ -20,9 +20,9 @@ import { fmtDate, fmtRelative } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/app/firm/")({
   head: () => ({
     meta: [
-      { title: "Team — Firm workspace — Filed Under" },
+      { title: "Team · Firm workspace · FiledUnder" },
       { name: "description", content: "Members, roles, invites and the activity log for your firm." },
-      { property: "og:title", content: "Team — Firm workspace — Filed Under" },
+      { property: "og:title", content: "Team · Firm workspace · FiledUnder" },
       { property: "og:description", content: "Members, roles, invites and the activity log for your firm." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

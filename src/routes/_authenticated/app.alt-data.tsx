@@ -20,9 +20,9 @@ export const Route = createFileRoute("/_authenticated/app/alt-data")({
   validateSearch: pageSearch,
   head: () => ({
     meta: [
-      { title: "Alternative data — Filed Under" },
+      { title: "Alternative data · FiledUnder" },
       { name: "description", content: "Public alt data for every covered US company: 13D/13G holders, 8-K events, federal contracts, regulation, FDA, recalls, CFPB complaints, FDIC call reports, Medicare drug costs by state, EPA plants and releases, fails to deliver and attention." },
-      { property: "og:title", content: "Alternative data — Filed Under" },
+      { property: "og:title", content: "Alternative data · FiledUnder" },
       { property: "og:description", content: "FactSet-style alt datasets built from public records, every row source-linked." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

@@ -16,9 +16,9 @@ import { createOfficeFile, deleteOfficeFile, importOfficeFile, listOfficeFiles, 
 export const Route = createFileRoute("/_authenticated/app/office/")({
   head: () => ({
     meta: [
-      { title: "Office Studio — Filed Under" },
+      { title: "Office Studio · FiledUnder" },
       { name: "description", content: "Word, Excel, PowerPoint and PDF files with sourced Filed Under data." },
-      { property: "og:title", content: "Office Studio — Filed Under" },
+      { property: "og:title", content: "Office Studio · FiledUnder" },
       { property: "og:description", content: "Word, Excel, PowerPoint and PDF files with sourced Filed Under data." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

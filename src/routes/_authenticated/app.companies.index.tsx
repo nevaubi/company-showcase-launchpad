@@ -17,9 +17,9 @@ import { useSessionState } from "@/lib/use-session-state";
 export const Route = createFileRoute("/_authenticated/app/companies/")({
   head: () => ({
     meta: [
-      { title: "Companies — Filed Under" },
+      { title: "Companies · FiledUnder" },
       { name: "description", content: "Covered companies with SEC-sourced fundamentals and live prices." },
-      { property: "og:title", content: "Companies — Filed Under" },
+      { property: "og:title", content: "Companies · FiledUnder" },
       { property: "og:description", content: "Covered companies with SEC-sourced fundamentals and live prices." },
       { property: "og:type", content: "website" }, { name: "twitter:card", content: "summary" },
     ],

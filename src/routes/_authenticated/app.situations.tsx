@@ -12,13 +12,13 @@ export const Route = createFileRoute("/_authenticated/app/situations")({
   validateSearch: (s) => search.parse(s),
   head: () => ({
     meta: [
-      { title: "Situations — Filed Under" },
+      { title: "Situations · FiledUnder" },
       {
         name: "description",
         content:
           "Insider conviction, federal contract shifts, distress and financing events, concentration changes, mean-reversion setups and quality deterioration, each with its sources.",
       },
-      { property: "og:title", content: "Situations — Filed Under" },
+      { property: "og:title", content: "Situations · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

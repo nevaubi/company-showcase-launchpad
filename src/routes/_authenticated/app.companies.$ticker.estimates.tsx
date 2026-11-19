@@ -46,12 +46,12 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/esti
     const name = coverageOf(t)?.shortName ?? t;
     return {
       meta: [
-        { title: `${name} (${t}) analyst estimates, revisions & price targets — Filed Under` },
+        { title: `${name} (${t}) analyst estimates, revisions & price targets · FiledUnder` },
         {
           name: "description",
           content: `Consensus EPS and revenue for ${name}, estimate revisions, earnings surprises, analyst ratings, price targets and every upgrade and downgrade.`,
         },
-        { property: "og:title", content: `${name} analyst estimates & revisions — Filed Under` },
+        { property: "og:title", content: `${name} analyst estimates & revisions · FiledUnder` },
         {
           property: "og:description",
           content: `Consensus, revisions, surprises, ratings and price targets for ${name}.`,

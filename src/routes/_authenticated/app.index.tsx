@@ -27,9 +27,9 @@ export const Route = createFileRoute("/_authenticated/app/")({
     meta: [
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { title: "Dashboard — Filed Under" },
+      { title: "Dashboard · FiledUnder" },
       { name: "description", content: "Your watchlist, theses, filings and macro at a glance." },
-      { property: "og:title", content: "Dashboard — Filed Under" },
+      { property: "og:title", content: "Dashboard · FiledUnder" },
       { property: "og:description", content: "Your watchlist, theses, filings and macro at a glance." },
     ],
   }),
@@ -192,7 +192,7 @@ function Dashboard() {
                                 <span
                                   className={cn(
                                     "rounded px-1 text-[10px] font-medium",
-                                    fresh[t].high ? "bg-highlight-soft text-highlight-foreground" : "bg-secondary text-muted-foreground",
+                                    fresh[t].high ? "bg-highlight-soft text-foreground" : "bg-secondary text-muted-foreground",
                                   )}
                                   title={`${fresh[t].n} new event${fresh[t].n > 1 ? "s" : ""} since your last visit${fresh[t].high ? `, ${fresh[t].high} high tier` : ""}`}
                                 >

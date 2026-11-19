@@ -125,7 +125,7 @@ export function MoneyMap({ d, ticker }: { d: FilingDetail; ticker: string }) {
               const max = compact ? 13 : small ? 20 : 28;
               return (
                 <g key={n.id} onMouseEnter={() => setHover(n.id)} onMouseLeave={() => setHover(null)} onClick={() => openNode(n)} className="cursor-pointer">
-                  <rect x={n.x} y={n.y} width={L.nodeW} height={n.h} rx={2} className={cn(n.kind === "profit" ? "fill-positive" : n.kind === "other" ? "fill-muted-foreground/50" : "fill-foreground", hover === n.id && "fill-highlight-foreground")} />
+                  <rect x={n.x} y={n.y} width={L.nodeW} height={n.h} rx={2} className={cn(n.kind === "profit" ? "fill-positive" : n.kind === "other" ? "fill-muted-foreground/50" : "fill-foreground", hover === n.id && "fill-highlight-foreground dark:fill-highlight")} />
                   <text x={n.x + tx} y={n.y + n.h / 2} dy={small ? "0.32em" : "-0.15em"} textAnchor={anchor} style={HALO} className="pointer-events-none fill-foreground text-[11px] font-medium">
                     {n.label.length > max ? `${n.label.slice(0, max - 1)}…` : n.label}
                     {small && !compact && <tspan className="fill-muted-foreground font-normal">{`  ${fmtB(n.value)}`}</tspan>}

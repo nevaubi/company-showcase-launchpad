@@ -39,14 +39,14 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/insi
   validateSearch: (s) => search.parse(s),
   head: ({ params }) => ({
     meta: [
-      { title: `${params.ticker.toUpperCase()} Insiders and influence — Filed Under` },
+      { title: `${params.ticker.toUpperCase()} Insiders and influence · FiledUnder` },
       {
         name: "description",
         content: `Insider and congressional trades, large holders, lobbying, PAC giving, federal contracts, rules and hearings for ${params.ticker.toUpperCase()}, each linked to its source document.`,
       },
       {
         property: "og:title",
-        content: `${params.ticker.toUpperCase()} Insiders and influence — Filed Under`,
+        content: `${params.ticker.toUpperCase()} Insiders and influence · FiledUnder`,
       },
       {
         property: "og:description",

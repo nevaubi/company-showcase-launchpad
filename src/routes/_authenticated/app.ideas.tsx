@@ -17,9 +17,9 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/_authenticated/app/ideas")({
   head: () => ({
     meta: [
-      { title: "Trade ideas — Filed Under" },
+      { title: "Trade ideas · FiledUnder" },
       { name: "description", content: "Long and short setups from filed fundamentals, valuation, insider buying and price trends, each with its historical hit rate and SEC sources." },
-      { property: "og:title", content: "Trade ideas — Filed Under" },
+      { property: "og:title", content: "Trade ideas · FiledUnder" },
       { property: "og:description", content: "Source-backed trade setups with point-in-time hit rates and paper tracking." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

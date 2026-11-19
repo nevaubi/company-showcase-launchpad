@@ -15,9 +15,9 @@ import { fmtDate } from "@/lib/format";
 export const Route = createFileRoute("/_authenticated/app/exposures")({
   head: () => ({
     meta: [
-      { title: "Exposures — Filed Under" },
+      { title: "Exposures · FiledUnder" },
       { name: "description", content: "Revenue by country and region, every lender's loans, deposits and credit losses, insurers' premiums and loss ratios, and bank deposit market share by state, compared across companies." },
-      { property: "og:title", content: "Exposures — Filed Under" },
+      { property: "og:title", content: "Exposures · FiledUnder" },
       { property: "og:description", content: "Who earns what where, and how each lender's book is holding up — from 10-K tables, every number linked to its tag." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

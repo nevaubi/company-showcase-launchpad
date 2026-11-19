@@ -43,13 +43,13 @@ import {
 export const Route = createFileRoute("/_authenticated/app/screener")({
   head: () => ({
     meta: [
-      { title: "Screener — Filed Under" },
+      { title: "Screener · FiledUnder" },
       {
         name: "description",
         content:
           "Screen tracked companies in plain English or with filters over SEC-sourced fundamentals, valuation, growth, technicals, correlations and insider activity.",
       },
-      { property: "og:title", content: "Screener — Filed Under" },
+      { property: "og:title", content: "Screener · FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

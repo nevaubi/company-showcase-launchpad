@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Bar } from "@/lib/financials/types";
 import { bollinger, ema, sma } from "@/lib/indicators";
+import { useResolvedTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
 export type Overlay = "sma20" | "sma50" | "sma200" | "ema21" | "bb";
@@ -53,6 +54,8 @@ export function PriceChart({
   className?: string;
 }) {
   const el = useRef<HTMLDivElement>(null);
+  // Colours are read from CSS variables when the chart is built, so rebuild it when the theme changes.
+  const theme = useResolvedTheme();
 
   useEffect(() => {
     let disposed = false;
@@ -304,6 +307,7 @@ export function PriceChart({
     compare?.bars,
     JSON.stringify(levels),
     JSON.stringify(bands),
+    theme,
   ]);
 
   return (

@@ -8,9 +8,9 @@ import { freshnessReport, type FreshStatus } from "@/lib/jobs/freshness";
 export const Route = createFileRoute("/_authenticated/app/freshness")({
   head: () => ({
     meta: [
-      { title: "Admin · Data freshness — Filed Under" },
+      { title: "Admin · Data freshness · FiledUnder" },
       { name: "description", content: "Which data sources are on time, late or failing." },
-      { property: "og:title", content: "Admin · Data freshness — Filed Under" },
+      { property: "og:title", content: "Admin · Data freshness · FiledUnder" },
       { property: "og:description", content: "Which data sources are on time, late or failing." },
       { name: "robots", content: "noindex" },
     ],

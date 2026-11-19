@@ -16,9 +16,9 @@ import { blankWorkbook, rangeOf, usedRect, type Workbook } from "@/lib/office/wo
 export const Route = createFileRoute("/_authenticated/app/office/sheets/$id")({
   head: () => ({
     meta: [
-      { title: "Sheets — Filed Under" },
+      { title: "Sheets · FiledUnder" },
       { name: "description", content: "Build Excel workbooks with OfficeAI and SEC-sourced formulas." },
-      { property: "og:title", content: "Sheets — Filed Under" },
+      { property: "og:title", content: "Sheets · FiledUnder" },
       { property: "og:description", content: "Build Excel workbooks with OfficeAI and SEC-sourced formulas." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

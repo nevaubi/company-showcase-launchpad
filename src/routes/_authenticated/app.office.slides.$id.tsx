@@ -16,9 +16,9 @@ import { blankDeck, type Deck } from "@/lib/office/deck";
 export const Route = createFileRoute("/_authenticated/app/office/slides/$id")({
   head: () => ({
     meta: [
-      { title: "Slides — Filed Under" },
+      { title: "Slides · FiledUnder" },
       { name: "description", content: "Build PowerPoint decks with OfficeAI from SEC-sourced data." },
-      { property: "og:title", content: "Slides — Filed Under" },
+      { property: "og:title", content: "Slides · FiledUnder" },
       { property: "og:description", content: "Build PowerPoint decks with OfficeAI from SEC-sourced data." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
