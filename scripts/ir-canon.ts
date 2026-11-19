@@ -3,12 +3,17 @@
  * For each company: summarize every distinct extracted line, ask the model to merge renames, fix
  * dimensions/parents and drop junk, then verify by rebuilding the series. A proposal is kept only if
  * it reduces (or doesn't increase) reconciliation failures; a second round targets what still fails.
- *   bun scripts/ir-canon.ts [--tickers=AAPL,MSFT] [--concurrency=4] [--rounds=2]
+ *   bun scripts/ir-canon.ts [--tickers=AAPL,MSFT] [--concurrency=4] [--rounds=2] [--resume --max=40]
+ * --resume continues the full-coverage pass from the cursor in job_state `ir-canon` (the worker loop
+ * runs it daily) and --max caps companies with figures per run.
  */
 import { COVERAGE } from "@/lib/coverage";
 import { CANON_INSTRUCTIONS, CANON_SCHEMA, failureNotes, mapFromModel, rawLines, renderLines, type RawLine } from "@/lib/ir/canon";
 import { buildIrSeries, normLabel, rawKey, type IrFact, type LabelMapEntry } from "@/lib/ir/kpis";
 import { IR_MODELS, OpenAIError, openaiStructured } from "@/lib/openai.server";
+import { paidOrLane } from "@/lib/ir/credit-fallback";
+import { laneStructured } from "@/lib/ir/openai-lane.server";
+import { FREE_TIERS } from "@/lib/ir/openai-allowance";
 import { loadLabelMap } from "@/lib/ir/rebuild.server";
 import { buildCompany, loadFacts } from "./ir-build";
 import { args, log, sb } from "./lib/supa";
@@ -93,21 +98,21 @@ function batches(lines: RawLine[], max = 380): RawLine[][] {
 }
 
 async function ask(ticker: string, name: string, lines: RawLine[], notes: string[]) {
-  const r = await openaiStructured<CanonOut>({
-    model: args.model ?? IR_MODELS.reason,
+  const req = {
     name: "ir_canonical_lines",
     instructions: CANON_INSTRUCTIONS,
     input: `Company: ${ticker} (${name}). ${lines.length} extracted lines:\n\n${renderLines(lines, notes)}`,
     schema: CANON_SCHEMA as unknown as Record<string, unknown>,
-    effort: "high",
+    effort: "high" as const,
     maxOutputTokens: 100_000,
-  });
-  return r;
+  };
+  // An empty paid balance moves the call to the owner's free large-model lane instead of pausing.
+  return paidOrLane(() => openaiStructured<CanonOut>({ model: args.model ?? IR_MODELS.reason, ...req }), () => laneStructured<CanonOut>({ ...req, model: FREE_TIERS.large.models[0] }));
 }
 
 async function canonCompany(ticker: string, name: string) {
   const facts: IrFact[] = await loadFacts(ticker);
-  if (!facts.length) return;
+  if (!facts.length) return false;
   const lines = rawLines(facts);
   const base = failureNotes(facts, undefined, 0);
   const baseValues = shownValues(facts).values;
@@ -170,26 +175,37 @@ async function canonCompany(ticker: string, name: string) {
   }
   const p = await buildCompany(ticker);
   log(`${ticker.padEnd(5)} ${lines.length} lines · failures ${base.failed}/${base.total} → ${best.failed}/${best.total}${best.map ? "" : " (kept original)"} · Q ${p?.stats.checksQ.ok}/${p?.stats.checksQ.total} FY ${p?.stats.checksFY.ok}/${p?.stats.checksFY.total} · ${(tokens / 1e3).toFixed(0)}k tokens`);
+  return true;
 }
 
 const want = args.tickers?.split(",");
-const list = COVERAGE.filter((c) => !want || want.includes(c.ticker));
+const resume = args.resume !== undefined && !want;
+const all = COVERAGE.filter((c) => !want || want.includes(c.ticker));
+const { data: st } = resume ? await sb.from("job_state").select("cursor").eq("job", "ir-canon").maybeSingle() : { data: null };
+const start = resume ? (st?.cursor ?? 0) % Math.max(1, all.length) : 0;
+const list = resume ? [...all.slice(start), ...all.slice(0, start)] : all;
+const cap = Number(args.max ?? (resume ? 40 : Infinity));
 let next = 0;
+let processed = 0;
 let stop = false;
+const saveCursor = () => resume ? sb.from("job_state").upsert({ job: "ir-canon", cursor: (start + next) % all.length, paused_reason: null, updated_at: new Date().toISOString() }) : null;
 await Promise.all(
   Array.from({ length: Number(args.concurrency ?? 4) }, async () => {
-    while (!stop && next < list.length) {
+    while (!stop && next < list.length && processed < cap) {
       const c = list[next++];
       try {
-        await canonCompany(c.ticker, c.name);
+        if (await canonCompany(c.ticker, c.name)) processed++;
+        await saveCursor();
       } catch (e) {
         if (e instanceof OpenAIError && (e.kind === "auth" || e.kind === "quota")) {
           stop = true;
-          await sb.from("job_state").upsert({ job: "ir-canon", cursor: 0, paused_reason: e.message.slice(0, 200), updated_at: new Date().toISOString() });
+          next--; // retry this company on the next run
+          await sb.from("job_state").upsert({ job: "ir-canon", cursor: resume ? (start + next) % all.length : 0, paused_reason: e.message.slice(0, 200), updated_at: new Date().toISOString() });
         }
         log(`${c.ticker} canon failed: ${(e as Error).message.slice(0, 200)}`);
       }
     }
   }),
 );
+log(`ir-canon: ${processed} companies with figures processed${resume ? `, cursor ${(start + next) % all.length}/${all.length}` : ""}`);
 process.exit(0);

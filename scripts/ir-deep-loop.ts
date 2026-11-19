@@ -112,6 +112,7 @@ interface LoopState {
   lastReactions?: string | null;
   lastProse?: string | null;
   lastIrSite?: string | null;
+  lastCanon?: string | null;
   lastVerify?: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
@@ -209,7 +210,7 @@ let mirroring = false;
 let importedSince = true;
 /** Side jobs share this machine's memory: hold them until the main loop has run stably for a while. */
 const sideReady = () => Date.now() - STARTED > 20 * 60_000 && memUsedGB() < MEM_GB * 0.6;
-let sideBusy = () => mirroring || detailing || sodChecking || reacting || irSiting;
+let sideBusy = () => mirroring || detailing || sodChecking || reacting || irSiting || canoning;
 async function maybeMirror() {
   if (mirroring || !sideReady() || sideBusy()) return;
   if (state.lastMirror && Date.now() - Date.parse(state.lastMirror) < MIRROR_MS) return;
@@ -244,6 +245,22 @@ async function maybeIrSite() {
     irSiting = false;
     importedSince = true;
     log("IR-website collection ended");
+  });
+}
+
+// ---------- daily label canon ----------
+/** Once a day: cross-document label canon for the next 40 companies with figures (resumes from its cursor). */
+let canoning = false;
+async function maybeCanon() {
+  if (canoning || !sideReady() || sideBusy()) return;
+  if (state.lastCanon && Date.now() - Date.parse(state.lastCanon) < 24 * 3_600_000) return;
+  canoning = true;
+  state.lastCanon = new Date().toISOString();
+  await saveState(state);
+  log("daily label canon pass in the background");
+  void run("scripts/ir-canon.ts", ["--resume", "--max=40", "--concurrency=2"], `${OUT}/canon.log`).finally(() => {
+    canoning = false;
+    log("label canon pass ended");
   });
 }
 
@@ -473,6 +490,7 @@ for (;;) {
   await maybeDetail();
   await maybeIrSite();
   maybeReports();
+  await maybeCanon();
   await maybeSod();
   await maybeReactions();
   await maybeProse();

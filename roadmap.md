@@ -297,3 +297,4 @@
 - [x] G6: worker runs IR-website collection every 2h (recent reporters first, 300 Firecrawl credits/day cap in job_state, clean hourly-probe pause on 402) — currently paused: Firecrawl balance is 0
 - [x] G1a: scheduled partner-mirror job (1 file/min, cursor in job_state) refreshes local company/price/universe copies; readers mark copies servedFrom=copy (as of generatedAt). Copies were 6–14 days old
 - [x] G2: worker writes one due standard report every 10 min (recaps for 2.02 8-Ks in 3 days keyed on that accession, previews for reports due in 7 days), daily limit respected, AI 402 pauses with hourly probe; 36 stale primer locks released
+- [x] G5: text reader and label canon fall back to the free OpenAI lane on credit_balance_exhausted (paid path rested 30 min); worker runs label canon daily (40 companies/run, resumes from job_state cursor)

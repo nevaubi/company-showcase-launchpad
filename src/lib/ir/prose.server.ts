@@ -7,6 +7,8 @@ import { applyRulings, ARBITER_INSTRUCTIONS, ARBITER_SCHEMA, crossCheck, type Di
 import { fixRowDates, printedDates } from "@/lib/ir/dates";
 import { decodeHtml } from "@/lib/ir/tables";
 import { laneStructured } from "@/lib/ir/openai-lane.server";
+import { paidOrLane } from "@/lib/ir/credit-fallback";
+import { FREE_TIERS } from "@/lib/ir/openai-allowance";
 import { estimateCredits, hasOpenAIKey, IR_MODELS, OpenAIError, openaiStructured, type Usage } from "@/lib/openai.server";
 
 const ZERO: Usage = { input_tokens: 0, output_tokens: 0, cached_tokens: 0 };
@@ -14,7 +16,9 @@ const addUsage = (a: Usage, b: Usage): Usage => ({ input_tokens: a.input_tokens 
 
 async function ask(input: string, model: string): Promise<{ out: ProseOutput; usage: Usage; model: string }> {
   if (hasOpenAIKey()) {
-    const r = await openaiStructured<ProseOutput>({ model, name: "ir_prose", instructions: PROSE_INSTRUCTIONS, input, schema: PROSE_SCHEMA as unknown as Record<string, unknown>, effort: "low" });
+    const req = { name: "ir_prose", instructions: PROSE_INSTRUCTIONS, input, schema: PROSE_SCHEMA as unknown as Record<string, unknown>, effort: "low" as const };
+    // An empty paid OpenAI balance moves the primary read to the free lane instead of pausing.
+    const r = await paidOrLane(() => openaiStructured<ProseOutput>({ model, ...req }), () => laneStructured<ProseOutput>({ ...req, model: FREE_TIERS.mini.models[0] }));
     return { out: r.data, usage: r.usage, model: r.model };
   }
   const out = await structured<ProseOutput>({ name: "ir_prose", instructions: PROSE_INSTRUCTIONS, input, schema: PROSE_SCHEMA as unknown as Record<string, unknown>, effort: "low" });
