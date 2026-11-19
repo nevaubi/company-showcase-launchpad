@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { CUT_FISCAL_CAPABILITIES, HourlyBudget, MAX_CREDITS_PER_HOUR, hourlyCreditLimit } from '../../scripts/vendor/core';
 import { compactEarningsFile, earningsBatches, earningsRecords, earningsNext, phaseACanCall, PHASE_A_FISCAL_CAPABILITIES, storageLedger } from '../../scripts/vendor/core';
 import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, primaryDomain, pageRecords, assertOptions, exhausted, fileKey, nextOptions, pruneWithdrawn, requestId } from '../../scripts/vendor/core';
 describe('owner vendor collection rules', () => {
@@ -24,8 +26,7 @@ describe('owner vendor collection rules', () => {
   });
   it('Phase A never collects vendor daily prices (the app keeps its own price history)', () => {
     expect(PHASE_A_FISCAL_CAPABILITIES).not.toContain('prices/daily');
-    expect(PHASE_A_FISCAL_CAPABILITIES).toContain('prices/splits');
-    expect(PHASE_A_FISCAL_CAPABILITIES).toHaveLength(16);
+    expect(PHASE_A_FISCAL_CAPABILITIES).toHaveLength(13);
   });
   it('batches at most ten symbols across full history through today plus ninety days', () => {
     const batches=earningsBatches(Array.from({length:11},(_,i)=>`T${i}`),new Set(),new Date('2026-11-19T00:00:00Z'));
@@ -40,7 +41,30 @@ describe('owner vendor collection rules', () => {
   it('stops before a call would exceed 1500 Phase A credits',()=>{expect(phaseACanCall(1490,10)).toBe(true);expect(phaseACanCall(1491,10)).toBe(false);expect(phaseACanCall(1500,1)).toBe(false);});
   it('waits up to ten minutes for an in-progress provider', () => { expect(PROVIDER_PENDING_MS).toBe(600000); expect(providerPending({error:{message:'This provider request is still running. Retry with the same x-request-id once it has finished'}})).toBe(true); expect(providerPending({error:{message:'invalid option'}})).toBe(false); });
   it('reports progress every fifty companies', () => expect(PROGRESS_COMPANIES).toBe(50));
-  it('allows no more than four calls in flight', () => expect(MAX_IN_FLIGHT).toBe(4));
+  it('runs one call at a time', () => expect(MAX_IN_FLIGHT).toBe(1));
+  it('never calls the four cut duplicate fiscal-ai capabilities', () => {
+    for (const cap of ['prices/daily','prices/splits','filings/list','ownership/insider-transactions']) {
+      expect(PHASE_A_FISCAL_CAPABILITIES as readonly string[]).not.toContain(cap);
+      expect(CUT_FISCAL_CAPABILITIES as readonly string[]).toContain(cap);
+    }
+    const src = readFileSync('scripts/vendor-backfill.ts','utf8') + readFileSync('scripts/vendor/phases.ts','utf8');
+    for (const cap of ['prices/splits','filings/list','ownership/insider-transactions','prices/daily']) expect(src.includes(`'${cap}'`)).toBe(false);
+  });
+  it('hourly budget: 12000 by default, env override', () => {
+    expect(MAX_CREDITS_PER_HOUR).toBe(12000);
+    expect(hourlyCreditLimit({})).toBe(12000);
+    expect(hourlyCreditLimit({VENDOR_MAX_CREDITS_PER_HOUR:'500'})).toBe(500);
+  });
+  it('hourly budget: under budget calls, over budget waits, seeded window counts and expires', () => {
+    let t = 10_000_000;
+    const b = new HourlyBudget(12000, () => t);
+    b.add(11000, t - 30 * 60000); // seeded from the ledger, 30 minutes ago
+    expect(b.spent()).toBe(11000);
+    expect(b.canCall(500)).toBe(true);
+    expect(b.canCall(1500)).toBe(false);
+    t += 31 * 60000; // seeded call leaves the window
+    expect(b.canCall(1500)).toBe(true);
+  });
   it('retries a failed call twice', () => expect(MAX_ATTEMPTS).toBe(3));
   it('probes exhausted credits every thirty minutes', () => expect(CREDIT_PROBE_MS).toBe(1800000));
   it('limits each market provider to 2000 calls', () => expect(PHASE_B_CALL_LIMIT).toBe(2000));

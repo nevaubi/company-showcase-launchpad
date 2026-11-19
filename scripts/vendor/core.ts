@@ -1,7 +1,11 @@
 import { createHash } from 'node:crypto';
 
 export type Json = Record<string, any>;
-export const MAX_IN_FLIGHT = 4;
+export const MAX_IN_FLIGHT = 1;
+/** Owner, Nov 19: no rush. Firecrawl credits allowed in any trailing 60 minutes (env VENDOR_MAX_CREDITS_PER_HOUR overrides). */
+export const MAX_CREDITS_PER_HOUR = 12000;
+export const PACING_REASON = 'pacing: hourly credit budget reached';
+export const INTERRUPTED_REASON = 'collector interrupted; resume from existing files';
 export const MAX_ATTEMPTS = 3;
 export const PHASE_B_CALL_LIMIT = 2000;
 export const CREDIT_PROBE_MS = 30 * 60 * 1000;
@@ -11,8 +15,11 @@ export const PHASE_A_CREDIT_LIMIT = 1500;
 /**
  * Fiscal.ai capabilities collected per company in Phase A, in order. prices/daily is deliberately absent
  * (owner, Nov 19): the app already keeps its own price history, so vendor daily prices are not collected.
+ * Also cut (owner, Nov 19) as duplicates: prices/splits (EODHD splits is kept), filings/list (app keeps the SEC index)
+ * and ownership/insider-transactions (app parses Form 4 from the SEC).
  */
-export const PHASE_A_FISCAL_CAPABILITIES = ['company/segments-and-kpis','financials/income-statement','financials/balance-sheet','financials/cash-flow-statement','financials/income-statement-as-reported','financials/balance-sheet-as-reported','financials/cash-flow-statement-as-reported','financials/adjusted-metrics','company/shares-outstanding','ratios/series','ownership/institutional-holders','ownership/insider-holders','ownership/insider-transactions','filings/list','events/ir-events','prices/splits'] as const;
+export const CUT_FISCAL_CAPABILITIES = ['prices/daily','prices/splits','filings/list','ownership/insider-transactions'] as const;
+export const PHASE_A_FISCAL_CAPABILITIES = ['company/segments-and-kpis','financials/income-statement','financials/balance-sheet','financials/cash-flow-statement','financials/income-statement-as-reported','financials/balance-sheet-as-reported','financials/cash-flow-statement-as-reported','financials/adjusted-metrics','company/shares-outstanding','ratios/series','ownership/institutional-holders','ownership/insider-holders','events/ir-events'] as const;
 export function phaseACanCall(spent: number, reserved: number) {
   return spent + reserved <= PHASE_A_CREDIT_LIMIT;
 }
@@ -154,4 +161,24 @@ export function compactEarningsFile(v: Json): { value: Json; changed: boolean; r
   const changed = pages.some((p) => 'sharedResponse' in p);
   const next = { ...v, pages: pages.map(({ sharedResponse: _drop, ...p }) => p) };
   return { value: next, changed, recordsBefore: count(pages), recordsAfter: count(next.pages) };
+}
+
+export function hourlyCreditLimit(env: Record<string, string | undefined> = process.env) {
+  const v = Number(env.VENDOR_MAX_CREDITS_PER_HOUR);
+  return Number.isFinite(v) && v > 0 ? v : MAX_CREDITS_PER_HOUR;
+}
+/** Trailing-60-minute credit window; seeded from the ledger so restarts and handovers keep counting. */
+export class HourlyBudget {
+  private entries: { at: number; credits: number }[] = [];
+  constructor(public limit = hourlyCreditLimit(), private clock: () => number = Date.now) {}
+  add(credits: number, at = this.clock()) { if (credits > 0) this.entries.push({ at, credits }); }
+  spent(at = this.clock()) {
+    this.entries = this.entries.filter((e) => e.at > at - 3600000);
+    return this.entries.reduce((n, e) => n + e.credits, 0);
+  }
+  /** A call larger than the whole budget may still run once the window is empty, so it never waits forever. */
+  canCall(next: number, at = this.clock()) {
+    const spent = this.spent(at);
+    return spent + next <= this.limit || spent === 0;
+  }
 }

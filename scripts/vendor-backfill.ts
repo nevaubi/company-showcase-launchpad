@@ -8,7 +8,7 @@ import { dbGate, sb, sleep, selectAll } from './lib/supa';
 import contracts from './vendor/contracts.json';
 import { phaseB, phaseC } from './vendor/phases';
 import { staticRegistry } from '../src/lib/alt/collect.server';
-import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, PHASE_A_FISCAL_CAPABILITIES, pageRecords, primaryDomain, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, type Json } from './vendor/core';
+import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, PHASE_A_FISCAL_CAPABILITIES, pageRecords, primaryDomain, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, HourlyBudget, PACING_REASON, INTERRUPTED_REASON, type Json } from './vendor/core';
 
 const JOB = 'vendor-backfill';
 const root = process.env.VENDOR_WORK_DIR ?? '/tmp/vendor-backfill';
@@ -35,6 +35,21 @@ const tickerContext = new AsyncLocalStorage<string[]>();
 const tickerCredits = new Map<string,number>();
 const billedRequests = new Map<string,number>();
 class TickerCreditLimit extends Error {}
+const budget = new HourlyBudget();
+let pacing = false;
+async function loadHourWindow() {
+  const since=new Date(Date.now()-3600000).toISOString();
+  const rows = await selectAll<{started_at:string,detail:Json}>((from,to) => sb.from('job_runs').select('started_at,detail').eq('job',JOB).gte('started_at',since).not('detail->>request_id','is',null).order('id').range(from,to));
+  for (const r of rows) budget.add(Number(r.detail.credits ?? 0), Date.parse(r.started_at));
+  console.log(now(),'hourly window seeded',budget.spent(),'of',budget.limit);
+}
+async function paceHourly(next: number) {
+  while (!stopped && !budget.canCall(next)) {
+    if (!pacing && !credit.paused) { pacing = true; await state({paused_reason:PACING_REASON}).catch(()=>{}); }
+    await sleep(60000);
+  }
+  if (pacing) { pacing = false; if (!credit.paused) await state({paused_reason:null}).catch(()=>{}); }
+}
 
 async function loadTickerCredits() {
   const rows = await selectAll<{detail:Json}>((from,to) => {
@@ -65,7 +80,7 @@ async function acquire() {
     const r = await sb.from('job_state').insert({ job: JOB, cursor: 0, updated_at: now(), lease_until: lease, paused_reason: null });
     if (r.error) return false;
   } else {
-    const r = await sb.from('job_state').update({ lease_until: lease, paused_reason: existing.data.paused_reason, updated_at: now() }).eq('job', JOB).or(`lease_until.is.null,lease_until.lt.${now()}`).select('job');
+    const r = await sb.from('job_state').update({ lease_until: lease, paused_reason: existing.data.paused_reason===INTERRUPTED_REASON || existing.data.paused_reason===PACING_REASON ? null : existing.data.paused_reason, updated_at: now() }).eq('job', JOB).or(`lease_until.is.null,lease_until.lt.${now()}`).select('job');
     if (r.error) throw r.error;
     if (!r.data?.length) return false;
   }
@@ -122,6 +137,8 @@ async function call(provider: string, capability: string, name: string, options:
       await ledger({phase:'B',provider,capability,name,skipped:'2000-call provider budget reached'},false);
       throw new Error('Phase B provider budget reached');
     }
+    await paceHourly(Number(contract.billing?.maxCredits ?? contract.creditsCost ?? 0));
+    if (stopped) break;
     await dbGate(JOB);
     const started_at = now();
     let status = 0;
@@ -138,6 +155,7 @@ async function call(provider: string, capability: string, name: string, options:
       const previous=billedRequests.get(id) ?? 0;
       const charged=Math.max(0,credits-previous);
       billedRequests.set(id,Math.max(previous,credits));
+      budget.add(charged);
       for(const ticker of tickers) tickerCredits.set(ticker,(tickerCredits.get(ticker) ?? 0)+charged/tickers.length);
       summary.calls++; if(summary.phase==='B') phaseCalls[provider]=(phaseCalls[provider]??0)+1; summary.credits[provider] = (summary.credits[provider] ?? 0) + charged;
       await ledger({ provider, capability, name, tickers, options, request_id:id, attempt, status, credits:charged, records:result && !result.error ? records(result,contract).length : 0, started_at, phase:summary.phase, pending:providerPending(body), error:result?.error ?? body.error ?? null }, (r.ok && !!result && !result.error) || providerPending(body));
@@ -336,6 +354,7 @@ async function main() {
   };
   await dbGate(JOB);
   await loadTickerCredits();
+  await loadHourWindow();
   await collectEarnings(companies);
   await runCompanies('A',company);
   if(!stopped) await runCompanies('A-news',async c=>{await news(c);await cleanup([c]);});
@@ -361,5 +380,5 @@ async function main() {
 }
 try { await main(); } finally {
   if (leaseTimer) clearInterval(leaseTimer);
-  if(leaseUntil) await state({lease_until:null,paused_reason:stopped?'collector interrupted; resume from existing files':credit.paused?CREDIT_PAUSE_REASON:null});
+  if(leaseUntil) await state({lease_until:null,paused_reason:stopped?INTERRUPTED_REASON:credit.paused?CREDIT_PAUSE_REASON:null});
 }
