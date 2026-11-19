@@ -48,7 +48,7 @@ describe('owner vendor collection rules', () => {
       expect(CUT_FISCAL_CAPABILITIES as readonly string[]).toContain(cap);
     }
     const src = readFileSync('scripts/vendor-backfill.ts','utf8') + readFileSync('scripts/vendor/phases.ts','utf8');
-    for (const cap of ['prices/splits','filings/list','ownership/insider-transactions','prices/daily']) expect(src.includes(`'${cap}'`)).toBe(false);
+    for (const cap of ['prices/splits','filings/list','ownership/insider-transactions','prices/daily','news/press-releases','news/search','news/wiims','news/removed']) expect(src.includes(`'${cap}'`)).toBe(false);
   });
   it('hourly budget: 12000 by default, env override', () => {
     expect(MAX_CREDITS_PER_HOUR).toBe(12000);

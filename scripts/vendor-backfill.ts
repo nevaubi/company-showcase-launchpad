@@ -299,31 +299,27 @@ async function company(c: (typeof COVERAGE)[number]) {
   // Optional passes run only after the working Phase A capabilities cover the entire universe.
   await ledger({ticker:c.ticker,stage:'company',completed:true,phase:'A'});
 }
-async function news(c: (typeof COVERAGE)[number]) {
-  for(const cap of ['news/press-releases','news/search']) await collect('benzinga',cap,c.ticker,{tickers:c.ticker,dateFrom:'1996-01-01',dateTo:now().slice(0,10),displayOutput:'full',page:0,pageSize:100,sort:'created:asc'});
-}
+// Owner, Nov 19: Benzinga news and press releases are never collected; the withdrawal clean-up covers ratings only.
 async function cleanup(companies: (typeof COVERAGE)) {
-  const ids={news:new Set<string>(),ratings:new Set<string>()};
+  const ratings=new Set<string>();
   const stamp=now().slice(0,10);
-  for(const [cap,kind,options] of [['news/removed','news',{page:0,pageSize:1000}],['calendar/removed','ratings',{page:0,pageSize:1000,type:'ratings'}]] as const) {
-    const v=await collect('benzinga',cap,`withdrawals-${stamp}`,options);
-    if (!v) throw new Error('Benzinga withdrawal feed unavailable; retained news cannot be reconciled');
-    for(const p of v.pages) for(const r of records(p.response,catalog.get(`benzinga/${cap}`) ?? {})) ids[kind].add(String(r.id));
-  }
-  for(const c of companies) for(const cap of ['news/press-releases','news/search','calendar/ratings']) {
-    const path=fileKey('benzinga',cap,c.ticker); const v=await remote(path); if(!v) continue;
-    const clean=pruneWithdrawn(v,cap.startsWith('news/')?ids.news:ids.ratings);
+  const v0=await collect('benzinga','calendar/removed',`withdrawals-${stamp}`,{page:0,pageSize:1000,type:'ratings'});
+  if (!v0) throw new Error('Benzinga withdrawal feed unavailable; retained ratings cannot be reconciled');
+  for(const p of v0.pages) for(const r of records(p.response,catalog.get('benzinga/calendar/removed') ?? {})) ratings.add(String(r.id));
+  for(const c of companies) {
+    const path=fileKey('benzinga','calendar/ratings',c.ticker); const v=await remote(path); if(!v) continue;
+    const clean=pruneWithdrawn(v,ratings);
     if(JSON.stringify(clean)!==JSON.stringify(v)) await save(path,clean,true);
   }
   // Cached raw pages are kept copies too: remove withdrawn items there before any retry can reuse them.
   const {readdirSync}=await import('node:fs');
   for(const f of readdirSync(root).filter(f=>/^[a-f0-9]{64}\.json$/.test(f))) {
     const path=join(root,f);const value=JSON.parse(readFileSync(path,'utf8'));
-    if(value.provider!=='benzinga') continue;
-    const clean=pruneWithdrawn(value,value.capability==='calendar/ratings'?ids.ratings:ids.news);
+    if(value.provider!=='benzinga' || value.capability!=='calendar/ratings') continue;
+    const clean=pruneWithdrawn(value,ratings);
     if(JSON.stringify(value)!==JSON.stringify(clean)) writeFileSync(path,JSON.stringify(clean));
   }
-  await ledger({stage:'withdrawals-cleaned',news:ids.news.size,ratings:ids.ratings.size});
+  await ledger({stage:'withdrawals-cleaned',ratings:ratings.size});
 }
 async function main() {
   while (!stopped && !await acquire()) await sleep(30000);
@@ -357,7 +353,6 @@ async function main() {
   await loadHourWindow();
   await collectEarnings(companies);
   await runCompanies('A',company);
-  if(!stopped) await runCompanies('A-news',async c=>{await news(c);await cleanup([c]);});
   if(!stopped) await cleanup(companies);
   if(!stopped) {
     summary.phase='B';
