@@ -113,6 +113,7 @@ interface LoopState {
   lastProse?: string | null;
   lastIrSite?: string | null;
   lastCanon?: string | null;
+  lastAltSlow?: string | null;
   lastVerify?: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
@@ -210,7 +211,7 @@ let mirroring = false;
 let importedSince = true;
 /** Side jobs share this machine's memory: hold them until the main loop has run stably for a while. */
 const sideReady = () => Date.now() - STARTED > 20 * 60_000 && memUsedGB() < MEM_GB * 0.6;
-let sideBusy = () => mirroring || detailing || sodChecking || reacting || irSiting || canoning;
+let sideBusy = () => mirroring || detailing || sodChecking || reacting || irSiting || canoning || altSlowing;
 async function maybeMirror() {
   if (mirroring || !sideReady() || sideBusy()) return;
   if (state.lastMirror && Date.now() - Date.parse(state.lastMirror) < MIRROR_MS) return;
@@ -313,6 +314,18 @@ async function maybeAnalytics() {
   lastPublish[set] = Date.now();
   log(`publishing analytics: ${set}`);
   void run("scripts/analytics-publish.ts", [`--set=${set}`], `${OUT}/analytics.log`).finally(() => { publishing = false; });
+}
+
+// ---------- slow alt data (daily: registry upkeep, 1/7 of ownership/contracts/recalls, monthly Medicare) ----------
+let altSlowing = false;
+async function maybeAltSlow() {
+  if (altSlowing || !sideReady() || sideBusy()) return;
+  if (state.lastAltSlow && Date.now() - Date.parse(state.lastAltSlow) < 24 * 3_600_000) return;
+  altSlowing = true;
+  state.lastAltSlow = new Date().toISOString();
+  await saveState(state);
+  log("slow alt-data pass in the background");
+  void run("scripts/alt-slow.ts", [], `${OUT}/alt-slow.log`).finally(() => { altSlowing = false; log("slow alt-data pass ended"); });
 }
 
 // ---------- background filing detail ----------
@@ -533,6 +546,7 @@ for (;;) {
   maybeFilingSteps();
   await maybeAnalytics().catch((e) => log(`analytics check failed: ${(e as Error).message}`));
   await maybeCanon();
+  await maybeAltSlow();
   await maybeSod();
   await maybeReactions();
   await maybeProse();

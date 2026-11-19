@@ -24,3 +24,15 @@ describe("company context rolling refresh", () => {
     expect(last.next).toBe(15);
   });
 });
+
+import { missingFromRegistry, weekSlice } from "../../scripts/lib/alt-slow";
+describe("slow alt-data rotation", () => {
+  it("covers every company exactly once across seven days", () => {
+    const all = Array.from({ length: 50 }, (_, i) => `T${String(i).padStart(2, "0")}`);
+    const seen = Array.from({ length: 7 }, (_, d) => weekSlice(all, new Date(d * 86_400_000))).flat();
+    expect(seen.sort()).toEqual([...all].sort());
+  });
+  it("finds newly covered companies missing from the registry", () => {
+    expect(missingFromRegistry(["A", "B", "NEW"], { A: {}, B: {} })).toEqual(["NEW"]);
+  });
+});
