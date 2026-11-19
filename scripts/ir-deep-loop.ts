@@ -17,6 +17,7 @@
 import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { args, dbGate, sb } from "./lib/supa";
+import { REREAD_WINDOW_DAYS, rereadTickers } from "./lib/ir-requeue";
 
 const BATCH_ARG = args.batch === undefined ? null : Number(args.batch);
 const WAIT_MS = Number(args["wait-minutes"] ?? 10) * 60_000;
@@ -134,6 +135,8 @@ interface LoopState {
   instance?: string;
   startedAt?: string;
   finishedLog?: { t: string; at: string }[];
+  /** high-water mark of ir_documents.fetched_at already checked for finished-company re-reads */
+  docsCheckedThrough?: string;
   /** one-time reset of attempt counts inflated by out-of-memory restarts */
   oomReset?: boolean;
 }
@@ -348,6 +351,8 @@ for (const t of [...state.done]) {
 }
 await saveState(state);
 
+let lastDocCheck = 0;
+const pendingReread: string[] = [];
 /** Next company: interrupted ones first, then started-but-unfinished, then new (largest revenue), then finished with new files. */
 async function pickNext(busy: Set<string>): Promise<string | null> {
   const free = (t: string) => !busy.has(t) && !state.review![t];
@@ -366,6 +371,30 @@ async function pickNext(busy: Set<string>): Promise<string | null> {
     }
     return t;
   }
+  // Finished companies with a newly filed file come before untouched ones, so fresh releases are read promptly.
+  // Any new readable file filed in the last 30 days (from any source, not only the mirror import)
+  // re-queues its finished company: one is enough.
+  if (Date.now() - lastDocCheck > 60_000) {
+    lastDocCheck = Date.now();
+    const since = state.docsCheckedThrough ?? new Date(Date.now() - 86400000).toISOString();
+    await dbGate(JOB);
+    const { data, error } = await sb.from("ir_documents").select("ticker, fetched_at, filed, kind").gt("fetched_at", since).gte("filed", new Date(Date.now() - REREAD_WINDOW_DAYS * 86400000).toISOString().slice(0, 10)).order("fetched_at").limit(1000);
+    if (!error) {
+      const r = rereadTickers(state.done, data ?? [], since);
+      state.docsCheckedThrough = r.last;
+      for (const t of r.tickers) if (!pendingReread.includes(t)) pendingReread.push(t);
+    }
+  }
+  for (const t of [...pendingReread]) {
+    if (busy.has(t)) continue;
+    pendingReread.splice(pendingReread.indexOf(t), 1);
+    if (!state.done.includes(t)) continue;
+    log(`${t}: new file since it finished — reading the new ones`);
+    state.done = state.done.filter((x) => x !== t);
+    delete state.review![t];
+    (state.unreadAtDone ??= {})[t] = await unread(t);
+    return t;
+  }
   for (const minFiles of [10, 1])
     for (const c of await universe()) {
       if (state.attempted.includes(c.ticker) || !free(c.ticker)) continue;
@@ -374,21 +403,7 @@ async function pickNext(busy: Set<string>): Promise<string | null> {
       state.attempted.push(c.ticker);
       return c.ticker;
     }
-  if (importedSince) {
-    state.unreadAtDone ??= {};
-    for (const t of state.done) {
-      if (busy.has(t)) continue;
-      const n = await unread(t);
-      if (n >= (state.unreadAtDone[t] ?? 0) + 5) {
-        log(`${t}: ${n} unread files since it finished — reading the new ones`);
-        state.done = state.done.filter((x) => x !== t);
-        delete state.review![t];
-        state.unreadAtDone[t] = n;
-        return t;
-      }
-    }
-    importedSince = false;
-  }
+  importedSince = false;
   return null;
 }
 

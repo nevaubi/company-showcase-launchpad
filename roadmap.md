@@ -293,3 +293,4 @@
 - [x] Data refresh wave 2 / corrections: job_runs keeps 14-day retention except the vendor-backfill ledger; vendor collector always records its credit pause (concurrent successes can't clear it)
 - [x] G3: market-wide SEC discovery every 2 min (feed + daily index); 7-day catch-up stored 1,379 of 1,385 missing filings across 542 companies; walk now 4 companies/run
 - [x] G9: AI cache serves the last stored value marked stale (with as-of time) when a recompute fails
+- [x] G8: worker re-reads a finished company after one new readable file filed in the last 30 days, from any source, before untouched companies
