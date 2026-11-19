@@ -300,10 +300,11 @@
 - [x] G5: text reader and label canon fall back to the free OpenAI lane on credit_balance_exhausted (paid path rested 30 min); worker runs label canon daily (40 companies/run, resumes from job_state cursor)
 - [x] Sidebar (Nov 19): 20px icons picked per page, 64px collapsed rail with only the F mark and right-side labels on hover, collapse toggle in the top bar beside the sidebar; Insights, Situations, Trade ideas and Setups grouped as Signals and Autopilots + Portfolio as Paper trading under "Ideas" (Dashboard keeps Overview, What changed, Alerts)
 - [x] Worker free-only lane: a spent daily allowance pauses scheduled reports until 00:05 UTC instead of failing a slot every 10 minutes
-- [ ] Worker redeploy of the reports pause fix (needs the commit on GitHub first; Render's auto-deploy has never fired, every deploy so far was started through the API)
+- [ ] Worker redeploy of the reports pause fix (same deploy as 2480843; Render's auto-deploy has never fired, every deploy so far was started through the API)
 
 ## Next steps after the Nov 19 credit refill (proposed, owner to confirm)
-- [ ] Owner (Nov 19 09:47): when the free OpenAI allowance runs out, the worker keeps reading on the owner's paid OpenAI key (never Lovable AI credits); paid usage visible on /app/worker
+- [x] Owner (Nov 19 09:47): worker reads on the owner's own OpenAI key after the free tokens run out — live now via IR_FREE_ONLY=0 (IR_AI_PROVIDER=openai, gpt-5.4-mini); IR reads never use Lovable AI credits
+- [ ] Deploy 2480843 once it is on GitHub, then set IR_FREE_ONLY=1 back (with IR_OPENAI_PAID=1 already set): free tokens first, paid key after, paid tokens on /app/worker, and scheduled reports also on the OpenAI key instead of Lovable AI credits
 - [ ] Owner decision: vendor collector is the main Firecrawl spender (~9K credits in the first 20 minutes after the refill); confirm the pace or set a daily cap
 - [ ] Owner decision: Tavily is past its monthly plan and on uncapped pay-as-you-go; set a cap or keep it
 - [ ] Add the web-search key to the worker only after the Tavily decision, so IR-website discovery can search as well as scrape
