@@ -225,7 +225,8 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     });
     if (wrapped) {
       await supabaseAdmin.from("market_bars").delete().lt("date", daysAgo(400));
-      await supabaseAdmin.from("job_runs").delete().lt("started_at", new Date(Date.now() - 14 * 86400000).toISOString());
+      // job_runs includes the vendor collector's lifetime credit/call ledger. Never prune it
+      // from a refresh job: retention must not reset spending ceilings after a restart.
     }
     const failed = batch.flatMap((sym, i) => (results[i].status === "rejected" ? [`${sym}: ${String((results[i] as PromiseRejectedResult).reason?.message ?? results[i])}`] : []));
     const items = results.reduce((n, r) => n + (r.status === "fulfilled" ? r.value : 0), 0);
