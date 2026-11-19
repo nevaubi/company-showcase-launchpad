@@ -11,7 +11,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { insiderBuyRows } from "@/lib/signals/events";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -293,106 +293,35 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     return { ok: failed.length < batch.length, items, detail: { series: batch.map((d) => d.id), failed } };
   },
 
-  /** New filings and Form 4 insider trades for four companies per run. */
+  /**
+   * New filings and Form 4 insider trades for four companies per run (two at a time). Latency for
+   * new filings comes from `sec-discover`; this walk fills Form 4 detail and alt rows everywhere.
+   */
   async sec() {
-    const { start } = await advance("sec", COVERAGE.length, 2);
-    const batch = slice(COVERAGE, start, 2);
+    const left = budget();
+    const step = 4;
+    const { start } = await advance("sec", COVERAGE.length, step);
+    const batch = slice(COVERAGE, start, step);
     const since = daysAgo(45);
     let filings = 0;
     let trades = 0;
     const errors: string[] = [];
-    for (const c of batch) {
-      try {
-        const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)).json()) as {
-          filings: { recent: Record<string, (string | number)[]> };
-        };
-        const r = sub.filings.recent;
-        // Keep the alt-data hub current: 8-K items and capital-markets filings from the last 45 days.
-        const alt = secAltRows(c.ticker, c.cik, r as unknown as SubmissionBlock).filter((x) => x.date >= since);
-        if (alt.length) await supabaseAdmin.from("alt_data").upsert(alt as never, { onConflict: "uid" });
-        const rows = (r.accessionNumber as string[])
-          .map((accn, i) => ({
-            accn,
-            ticker: c.ticker,
-            cik: c.cik,
-            form: String(r.form[i]),
-            filed: String(r.filingDate[i]),
-            report: (r.reportDate[i] as string) || null,
-            doc: String(r.primaryDocument[i]),
-            description: (r.primaryDocDescription[i] as string) || null,
-            items: (r.items[i] as string) || null,
-            ixbrl: !!r.isInlineXBRL[i],
-            size: Number(r.size[i]) || null,
-          }))
-          .filter((f) => f.filed >= since && !/^(424B|FWP|SC 13|S-3)/.test(f.form));
-        if (!rows.length) continue;
-        const { data: known } = await supabaseAdmin.from("sec_filings").select("accn").in("accn", rows.map((f) => f.accn));
-        const have = new Set((known ?? []).map((k) => k.accn));
-        const fresh = rows.filter((f) => !have.has(f.accn));
-        if (fresh.length) {
-          const { error } = await supabaseAdmin.from("sec_filings").upsert(fresh);
-          if (error) throw new Error(error.message);
-          filings += fresh.length;
-          // Earnings announcement dates for the setups engine (8-K item 2.02).
-          const earn = fresh.filter((f) => /^8-K/.test(f.form) && /(^|,)\s*2\.02/.test(f.items ?? "")).map((f) => ({ ticker: c.ticker, accn: f.accn, filed: f.filed, source: "sec-8k-2.02" }));
-          if (earn.length) await supabaseAdmin.from("earnings_events").upsert(earn, { onConflict: "ticker,accn", ignoreDuplicates: true });
-        }
-        // Parse up to two new Form 4s per company per run; the rest are picked up on later passes.
-        const { data: parsedAlready } = await supabaseAdmin.from("insider_trades").select("accn").eq("ticker", c.ticker).gte("filed", since);
-        const done = new Set((parsedAlready ?? []).map((x) => x.accn));
-        const candidates = rows.filter((x) => /^(4|4\/A)$/.test(x.form) && !done.has(x.accn));
-        // Empty ownership filings need a durable receipt, not a fabricated zero-share trade.
-        const { data: receipts, error: receiptError } = candidates.length
-          ? await supabaseAdmin.from("job_state").select("job").in("job", candidates.map((f) => `form4-seen:${f.accn}`))
-          : { data: [], error: null };
-        if (receiptError) throw new Error(receiptError.message);
-        const seen = new Set((receipts ?? []).map((x) => x.job));
-        for (const f of candidates.filter((x) => !seen.has(`form4-seen:${x.accn}`)).slice(0, 2)) {
-          try {
-          const path = form4XmlPath(f.doc);
-          const xml = await (await fetchSec(archiveUrl(c.cik, f.accn, path))).text();
-          // Do not receipt a malformed response as an empty/derivative-only filing.
-          if (!/<ownershipDocument\b/i.test(xml) || !/<\/ownershipDocument>/i.test(xml)) throw new Error("Invalid ownership XML");
-          const parsed = parseForm4(xml, { accn: f.accn, filed: f.filed, report: f.report ?? undefined }, path);
-          if (!parsed.length) {
-            const { error } = await supabaseAdmin.from("job_state").upsert({ job: `form4-seen:${f.accn}`, cursor: 0, updated_at: new Date().toISOString() });
-            if (error) throw new Error(error.message);
-            continue;
-          }
-          const { error } = await supabaseAdmin.from("insider_trades").upsert(
-            parsed.map((t, seq) => ({
-              accn: t.accn,
-              seq,
-              ticker: c.ticker,
-              filed: t.filed,
-              owner: t.owner,
-              role: t.role,
-              trade_date: t.date,
-              code: t.code,
-              security: t.security,
-              shares: t.shares,
-              price: t.price,
-              acquired: t.acquired,
-              owned_after: t.ownedAfter,
-              direct: t.direct,
-              plan_10b5: t.plan10b5,
-              doc: t.doc,
-            })),
-          );
-          if (error) throw new Error(error.message);
-          trades += parsed.length;
-          // Open-market purchases by officers/directors feed the insider-cluster strategy.
-          const buys = insiderBuyRows(c.ticker, parsed.map((t) => ({ ...t, date: t.date })), "sec-form4");
-          if (buys.length) await supabaseAdmin.from("insider_buys").upsert(buys, { onConflict: "accn,owner", ignoreDuplicates: true });
-          } catch (e) {
-            errors.push(`${c.ticker} ${f.accn}: ${(e as Error).message}`);
-          }
-        }
-      } catch (e) {
-        errors.push(`${c.ticker}: ${(e as Error).message}`);
+    const done: string[] = [];
+    let next = 0;
+    await Promise.all([0, 1].map(async () => {
+      while (next < batch.length && left()) {
+        const c = batch[next++];
+        const r = await syncCompany(c, since, { form4: true });
+        filings += r.filings; trades += r.trades; errors.push(...r.errors); done.push(c.ticker);
       }
-    }
-    return { ok: errors.length < batch.length, items: filings + trades, detail: { companies: batch.map((c) => c.ticker), filings, trades, errors } };
+    }));
+    return { ok: errors.length < Math.max(1, done.length), items: filings + trades, detail: { companies: done, skipped: batch.map((c) => c.ticker).filter((t) => !done.includes(t)), filings, trades, errors } };
+  },
+
+  /** Market-wide new-filing discovery (EDGAR current feed + daily master index) for every covered company. */
+  async "sec-discover"() {
+    const { runDiscovery } = await import("@/lib/jobs/sec-discover.server");
+    return runDiscovery(budget());
   },
 
   /** Store the exhibits of new earnings / Reg FD 8-Ks found by the SEC scan, a few files per run. */
@@ -447,6 +376,106 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     return { ok: true, items: cached.stored ? 1 : 0, detail: { ticker: c.ticker, form, accn, doc, ...cached } };
   },
 };
+
+
+/**
+ * One company's recent submissions: upserts every recent filing (fills rows discovery found with
+ * full details), earnings 8-K (item 2.02) events and alt rows; optionally parses two new Form 4s.
+ */
+export async function syncCompany(c: CoverageCompany, since: string, opts: { form4: boolean }): Promise<{ filings: number; trades: number; errors: string[] }> {
+  const out = { filings: 0, trades: 0, errors: [] as string[] };
+  try {
+    const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)).json()) as {
+      filings: { recent: Record<string, (string | number)[]> };
+    };
+    const r = sub.filings.recent;
+    // Keep the alt-data hub current: 8-K items and capital-markets filings from the last 45 days.
+    const alt = secAltRows(c.ticker, c.cik, r as unknown as SubmissionBlock).filter((x) => x.date >= since);
+    if (alt.length) await supabaseAdmin.from("alt_data").upsert(alt as never, { onConflict: "uid" });
+    const rows = (r.accessionNumber as string[])
+      .map((accn, i) => ({
+        accn,
+        ticker: c.ticker,
+        cik: c.cik,
+        form: String(r.form[i]),
+        filed: String(r.filingDate[i]),
+        report: (r.reportDate[i] as string) || null,
+        doc: String(r.primaryDocument[i]),
+        description: (r.primaryDocDescription[i] as string) || null,
+        items: (r.items[i] as string) || null,
+        ixbrl: !!r.isInlineXBRL[i],
+        size: Number(r.size[i]) || null,
+      }))
+      .filter((f) => f.filed >= since && !/^(424B|FWP|SC 13|S-3)/.test(f.form));
+    if (!rows.length) return out;
+    const { data: known } = await supabaseAdmin.from("sec_filings").select("accn").in("accn", rows.map((f) => f.accn));
+    const have = new Set((known ?? []).map((k) => k.accn));
+    const fresh = rows.filter((f) => !have.has(f.accn));
+    if (fresh.length) {
+      const { error } = await supabaseAdmin.from("sec_filings").upsert(fresh);
+      if (error) throw new Error(error.message);
+      out.filings += fresh.length;
+      // Earnings announcement dates for the setups engine (8-K item 2.02).
+      const earn = fresh.filter((f) => /^8-K/.test(f.form) && /(^|,)\s*2\.02/.test(f.items ?? "")).map((f) => ({ ticker: c.ticker, accn: f.accn, filed: f.filed, source: "sec-8k-2.02" }));
+      if (earn.length) await supabaseAdmin.from("earnings_events").upsert(earn, { onConflict: "ticker,accn", ignoreDuplicates: true });
+    }
+    if (!opts.form4) return out;
+    // Parse up to two new Form 4s per company per run; the rest are picked up on later passes.
+    const { data: parsedAlready } = await supabaseAdmin.from("insider_trades").select("accn").eq("ticker", c.ticker).gte("filed", since);
+    const done = new Set((parsedAlready ?? []).map((x) => x.accn));
+    const candidates = rows.filter((x) => /^(4|4\/A)$/.test(x.form) && !done.has(x.accn));
+    // Empty ownership filings need a durable receipt, not a fabricated zero-share trade.
+    const { data: receipts, error: receiptError } = candidates.length
+      ? await supabaseAdmin.from("job_state").select("job").in("job", candidates.map((f) => `form4-seen:${f.accn}`))
+      : { data: [], error: null };
+    if (receiptError) throw new Error(receiptError.message);
+    const seen = new Set((receipts ?? []).map((x) => x.job));
+    for (const f of candidates.filter((x) => !seen.has(`form4-seen:${x.accn}`)).slice(0, 2)) {
+      try {
+      const path = form4XmlPath(f.doc);
+      const xml = await (await fetchSec(archiveUrl(c.cik, f.accn, path))).text();
+      // Do not receipt a malformed response as an empty/derivative-only filing.
+      if (!/<ownershipDocument\b/i.test(xml) || !/<\/ownershipDocument>/i.test(xml)) throw new Error("Invalid ownership XML");
+      const parsed = parseForm4(xml, { accn: f.accn, filed: f.filed, report: f.report ?? undefined }, path);
+      if (!parsed.length) {
+        const { error } = await supabaseAdmin.from("job_state").upsert({ job: `form4-seen:${f.accn}`, cursor: 0, updated_at: new Date().toISOString() });
+        if (error) throw new Error(error.message);
+        continue;
+      }
+      const { error } = await supabaseAdmin.from("insider_trades").upsert(
+        parsed.map((t, seq) => ({
+          accn: t.accn,
+          seq,
+          ticker: c.ticker,
+          filed: t.filed,
+          owner: t.owner,
+          role: t.role,
+          trade_date: t.date,
+          code: t.code,
+          security: t.security,
+          shares: t.shares,
+          price: t.price,
+          acquired: t.acquired,
+          owned_after: t.ownedAfter,
+          direct: t.direct,
+          plan_10b5: t.plan10b5,
+          doc: t.doc,
+        })),
+      );
+      if (error) throw new Error(error.message);
+      out.trades += parsed.length;
+      // Open-market purchases by officers/directors feed the insider-cluster strategy.
+      const buys = insiderBuyRows(c.ticker, parsed.map((t) => ({ ...t, date: t.date })), "sec-form4");
+      if (buys.length) await supabaseAdmin.from("insider_buys").upsert(buys, { onConflict: "accn,owner", ignoreDuplicates: true });
+      } catch (e) {
+        out.errors.push(`${c.ticker} ${f.accn}: ${(e as Error).message}`);
+      }
+    }
+  } catch (e) {
+    out.errors.push(`${c.ticker}: ${(e as Error).message}`);
+  }
+  return out;
+}
 
 const BUCKET = "sec-filings";
 const MAX_BYTES = 20 * 1024 * 1024;

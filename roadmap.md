@@ -290,3 +290,5 @@
 - [ ] Plants follow-ups: show plant warnings on the supply-chain map (supplier plants) and the Exposures page
 - [x] Wrap up, commit and publish all recent work (owner request Nov 17)
 - [ ] Exposures: state-level revenue for non-banks is rarely tagged in 10-Ks (~8% of filings carry any state rows, mostly properties/PP&E); revisit with utilities (EIA, needs key) and insurers (premiums by state)
+- [x] Data refresh wave 2 / corrections: job_runs keeps 14-day retention except the vendor-backfill ledger; vendor collector always records its credit pause (concurrent successes can't clear it)
+- [x] G3: market-wide SEC discovery every 2 min (feed + daily index); 7-day catch-up stored 1,379 of 1,385 missing filings across 542 companies; walk now 4 companies/run
