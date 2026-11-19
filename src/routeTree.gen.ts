@@ -68,6 +68,7 @@ import { Route as ApiPublicJobsJobRouteImport } from './routes/api/public/jobs/$
 import { Route as ApiPublicOfficeJwksRouteImport } from './routes/api/public/office/jwks'
 import { Route as ApiPublicPartnerTaskRouteImport } from './routes/api/public/partner/$task'
 import { Route as ApiPublicPaymentsWebhookRouteImport } from './routes/api/public/payments/webhook'
+import { Route as LovableEmailTransactionalPreviewRouteImport } from './routes/lovable/email/transactional/preview'
 import { Route as AuthenticatedAppCompaniesTickerIndexRouteImport } from './routes/_authenticated/app.companies.$ticker.index'
 import { Route as AuthenticatedAppCompaniesTickerAltDataRouteImport } from './routes/_authenticated/app.companies.$ticker.alt-data'
 import { Route as AuthenticatedAppCompaniesTickerCallsRouteImport } from './routes/_authenticated/app.companies.$ticker.calls'
@@ -406,6 +407,12 @@ const ApiPublicPaymentsWebhookRoute =
     path: '/api/public/payments/webhook',
     getParentRoute: () => rootRouteImport,
   } as any)
+const LovableEmailTransactionalPreviewRoute =
+  LovableEmailTransactionalPreviewRouteImport.update({
+    id: '/lovable/email/transactional/preview',
+    path: '/lovable/email/transactional/preview',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedAppCompaniesTickerIndexRoute =
   AuthenticatedAppCompaniesTickerIndexRouteImport.update({
     id: '/',
@@ -568,6 +575,7 @@ export interface FileRoutesByFullPath {
   '/api/public/office/jwks': typeof ApiPublicOfficeJwksRoute
   '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
   '/app/autopilots/': typeof AuthenticatedAppAutopilotsIndexRoute
   '/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs/': typeof AuthenticatedAppDocsIndexRoute
@@ -643,6 +651,7 @@ export interface FileRoutesByTo {
   '/api/public/office/jwks': typeof ApiPublicOfficeJwksRoute
   '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
   '/app/autopilots': typeof AuthenticatedAppAutopilotsIndexRoute
   '/app/companies': typeof AuthenticatedAppCompaniesIndexRoute
   '/app/docs': typeof AuthenticatedAppDocsIndexRoute
@@ -723,6 +732,7 @@ export interface FileRoutesById {
   '/api/public/office/jwks': typeof ApiPublicOfficeJwksRoute
   '/api/public/partner/$task': typeof ApiPublicPartnerTaskRoute
   '/api/public/payments/webhook': typeof ApiPublicPaymentsWebhookRoute
+  '/lovable/email/transactional/preview': typeof LovableEmailTransactionalPreviewRoute
   '/_authenticated/app/autopilots/': typeof AuthenticatedAppAutopilotsIndexRoute
   '/_authenticated/app/companies/': typeof AuthenticatedAppCompaniesIndexRoute
   '/_authenticated/app/docs/': typeof AuthenticatedAppDocsIndexRoute
@@ -803,6 +813,7 @@ export interface FileRouteTypes {
     | '/api/public/office/jwks'
     | '/api/public/partner/$task'
     | '/api/public/payments/webhook'
+    | '/lovable/email/transactional/preview'
     | '/app/autopilots/'
     | '/app/companies/'
     | '/app/docs/'
@@ -878,6 +889,7 @@ export interface FileRouteTypes {
     | '/api/public/office/jwks'
     | '/api/public/partner/$task'
     | '/api/public/payments/webhook'
+    | '/lovable/email/transactional/preview'
     | '/app/autopilots'
     | '/app/companies'
     | '/app/docs'
@@ -957,6 +969,7 @@ export interface FileRouteTypes {
     | '/api/public/office/jwks'
     | '/api/public/partner/$task'
     | '/api/public/payments/webhook'
+    | '/lovable/email/transactional/preview'
     | '/_authenticated/app/autopilots/'
     | '/_authenticated/app/companies/'
     | '/_authenticated/app/docs/'
@@ -998,6 +1011,7 @@ export interface RootRouteChildren {
   ApiPublicOfficeJwksRoute: typeof ApiPublicOfficeJwksRoute
   ApiPublicPartnerTaskRoute: typeof ApiPublicPartnerTaskRoute
   ApiPublicPaymentsWebhookRoute: typeof ApiPublicPaymentsWebhookRoute
+  LovableEmailTransactionalPreviewRoute: typeof LovableEmailTransactionalPreviewRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -1415,6 +1429,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicPaymentsWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lovable/email/transactional/preview': {
+      id: '/lovable/email/transactional/preview'
+      path: '/lovable/email/transactional/preview'
+      fullPath: '/lovable/email/transactional/preview'
+      preLoaderRoute: typeof LovableEmailTransactionalPreviewRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authenticated/app/companies/$ticker/': {
       id: '/_authenticated/app/companies/$ticker/'
       path: '/'
@@ -1738,6 +1759,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiPublicOfficeJwksRoute: ApiPublicOfficeJwksRoute,
   ApiPublicPartnerTaskRoute: ApiPublicPartnerTaskRoute,
   ApiPublicPaymentsWebhookRoute: ApiPublicPaymentsWebhookRoute,
+  LovableEmailTransactionalPreviewRoute: LovableEmailTransactionalPreviewRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
