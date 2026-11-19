@@ -59,13 +59,21 @@ export async function cached<T>(
   compute: () => Promise<T>,
   /** Only store results that pass (e.g. skip caching failures so the next request retries). */
   keep: (value: T) => boolean = () => true,
-): Promise<T & { cachedAt: string }> {
+): Promise<T & { cachedAt: string; stale?: true; staleReason?: string }> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data } = await supabaseAdmin.from("ai_cache").select("payload, created_at").eq("key", key).maybeSingle();
   if (data && Date.now() - new Date(data.created_at).getTime() < maxAgeMs) {
     return { ...(data.payload as T), cachedAt: data.created_at };
   }
-  const fresh = await compute();
+  let fresh: T;
+  try {
+    fresh = await compute();
+  } catch (e) {
+    // A failed recompute (e.g. 402 out of credits) serves the last stored value, marked stale with
+    // its as-of time, so panels keep the last good text instead of erroring. Nothing stored: rethrow.
+    if (!data) throw e;
+    return { ...(data.payload as T), cachedAt: data.created_at, stale: true, staleReason: (e as Error).message.slice(0, 200) };
+  }
   const now = new Date().toISOString();
   if (keep(fresh)) await supabaseAdmin.from("ai_cache").upsert({ key, payload: fresh as never, created_at: now });
   return { ...fresh, cachedAt: now };
