@@ -79,7 +79,7 @@ function SetupsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Ideas"
+        eyebrow="Signals"
         title="Short-term setups"
         description={`${data.variants.length} versions of published strategies, re-tested every night over ${fmtInt(data.companies)} stocks. Each is judged only on trades after ${fmtDate(data.oosStart)} it was never tuned on, after trading and borrowing costs. Only strategies that pass all eight checks produce setups. Not investment advice.`}
         actions={

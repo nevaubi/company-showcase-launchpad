@@ -64,7 +64,7 @@ function AutopilotsPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow="Ideas"
+        eyebrow="Paper trading"
         title="Paper autopilots"
         description="Automatic paper trading of the strategies on the Setups page. After each close an autopilot queues that day's signals, fills them at the next open and closes them after the tested holding period — or at a stop or target if you choose — tracked against the S&P 500. Paper only; no real orders."
         actions={

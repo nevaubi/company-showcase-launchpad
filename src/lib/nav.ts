@@ -17,8 +17,6 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; menu?: false; hubs:
         pages: [
           { to: "/app", label: "Overview", exact: true },
           { to: "/app/feed", label: "What changed" },
-          { to: "/app/situations", label: "Situations" },
-          { to: "/app/insights", label: "Insights" },
           { to: "/app/agents", label: "Alerts" },
         ],
       },
@@ -60,14 +58,28 @@ export const HUB_GROUPS: { heading: string; admin?: boolean; menu?: false; hubs:
       },
       { id: "supply", label: "Supply chain", pages: [{ to: "/app/supply-chain", label: "Supply chain" }] },
       { id: "alt", label: "Alt data", pages: [{ to: "/app/alt-data", label: "Alt data" }] },
+    ],
+  },
+  {
+    // Everything that surfaces something to act on sits together: sourced signal screens, then paper trading of them.
+    heading: "Ideas",
+    hubs: [
       {
-        id: "ideas",
-        label: "Ideas",
+        id: "signals",
+        label: "Signals",
         pages: [
-          { to: "/app/setups", label: "Short-term setups" },
-          { to: "/app/autopilots", label: "Autopilots" },
+          { to: "/app/insights", label: "Insights" },
+          { to: "/app/situations", label: "Situations" },
           { to: "/app/ideas", label: "Trade ideas" },
-          { to: "/app/portfolio", label: "Paper portfolio" },
+          { to: "/app/setups", label: "Short-term setups" },
+        ],
+      },
+      {
+        id: "paper",
+        label: "Paper trading",
+        pages: [
+          { to: "/app/autopilots", label: "Autopilots" },
+          { to: "/app/portfolio", label: "Portfolio" },
         ],
       },
     ],

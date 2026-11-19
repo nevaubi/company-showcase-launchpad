@@ -5,38 +5,34 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useProfile, useWatchlist, type AppPath } from "@/lib/workspace";
 import {
   Activity,
-  BookOpenText,
-  FileText,
-  Bot,
+  BrainCircuit,
+  BriefcaseBusiness,
   Building2,
+  ChartCandlestick,
+  Check,
   ChevronsUpDown,
-  PanelLeftClose,
-  PanelLeftOpen,
-  DatabaseZap,
-  FileSpreadsheet,
-  Globe2,
-  Landmark,
+  FileStack,
   LayoutDashboard,
-  LineChart,
+  LibraryBig,
   LogOut,
   Menu,
-  Network,
-  Crosshair,
-  PieChart,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Radar,
+  Satellite,
   Search,
+  Truck,
   Users,
-  Check,
   X,
-  BellRing,
-  CalendarCheck,
 } from "lucide-react";
 import { FirmProvider, useFirm } from "@/components/firm/firm-context";
 import { supabase } from "@/integrations/supabase/client";
-import { Logo } from "@/components/brand/logo";
+import { BrandMark, Logo } from "@/components/brand/logo";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SourceProvider, useSource } from "@/components/source/source-context";
 import { PANEL_WIDTH, SourcePanel } from "@/components/source/source-panel";
 import { AssistantPanel } from "@/components/research/assistant-panel";
-import { CalendarDays, Columns3, FileSearch, Grid3x3, Lightbulb, SlidersHorizontal, Sparkles } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { CommandMenu } from "@/components/app/command-menu";
 import { AlertsBell } from "@/components/app/alerts-bell";
 import { CompanyLogo } from "@/components/app/company-logo";
@@ -59,16 +55,18 @@ import { ShortcutsSheet } from "@/components/onboarding/shortcuts-sheet";
 import { Tour } from "@/components/onboarding/tour";
 import { useOnboarding, useStarterSeed } from "@/lib/onboarding/use-onboarding";
 
+/** One glyph per sidebar entry, picked to read at a glance at 20px. */
 const HUB_ICON: Record<string, typeof LayoutDashboard> = {
   dashboard: LayoutDashboard,
   companies: Building2,
-  filings: FileSearch,
-  markets: LineChart,
-  supply: Network,
-  alt: Activity,
-  ideas: Crosshair,
-  agent: Bot,
-  library: BookOpenText,
+  filings: FileStack,
+  markets: ChartCandlestick,
+  supply: Truck,
+  alt: Satellite,
+  signals: Radar,
+  paper: BriefcaseBusiness,
+  agent: BrainCircuit,
+  library: LibraryBig,
   firm: Users,
   admin: ShieldCheck,
 };
@@ -180,15 +178,14 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
     <div className="min-h-screen bg-background">
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-sidebar-border bg-sidebar transition-[transform,width] lg:translate-x-0",
-          collapsed && "lg:w-14",
+          "fixed inset-y-0 left-0 z-30 flex w-60 flex-col border-r border-sidebar-border bg-sidebar transition-[transform,width] duration-200 ease-out motion-reduce:transition-none lg:translate-x-0",
+          collapsed && "lg:w-16",
           mobileOpen ? "translate-x-0 shadow-lift" : "-translate-x-full",
         )}
       >
         <SidebarContent
           onSearch={() => setCmdOpen(true)}
           collapsed={collapsed}
-          onToggle={toggleCollapsed}
           isAdmin={isAdmin}
         />
       </aside>
@@ -200,7 +197,7 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
       )}
 
       <div
-        className={cn("transition-[padding] duration-300", collapsed ? "lg:pl-14" : "lg:pl-60")}
+        className={cn("transition-[padding] duration-200 ease-out motion-reduce:transition-none", collapsed ? "lg:pl-16" : "lg:pl-60")}
         style={target ? ({ "--panel": PANEL_WIDTH } as React.CSSProperties) : undefined}
       >
         <div
@@ -220,6 +217,18 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
             >
               {mobileOpen ? <X /> : <Menu />}
             </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-expanded={!collapsed}
+              className="-ml-2 hidden size-8 shrink-0 text-muted-foreground hover:text-foreground lg:inline-flex [&_svg]:size-[18px]"
+            >
+              {collapsed ? <PanelLeftOpen strokeWidth={1.8} /> : <PanelLeftClose strokeWidth={1.8} />}
+            </Button>
+            <span aria-hidden className="-ml-1 hidden h-5 w-px shrink-0 bg-border lg:block" />
             <Button
               variant="outline"
               onClick={() => setCmdOpen(true)}
@@ -284,12 +293,10 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
 function SidebarContent({
   onSearch,
   collapsed,
-  onToggle,
   isAdmin,
 }: {
   onSearch: () => void;
   collapsed: boolean;
-  onToggle: () => void;
   isAdmin: boolean;
 }) {
   // Collapsing only applies on desktop; the phone drawer always shows labels.
@@ -302,64 +309,65 @@ function SidebarContent({
   const byTicker = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, q]));
 
   const activeHub = hubFor(pathname)?.id;
+  const groups = HUB_GROUPS.filter((g) => g.menu !== false && (!g.admin || isAdmin));
+  // A collapsed rail is a column of 40px squares centred in the 64px strip.
+  const rail = collapsed && "lg:mx-auto lg:flex lg:size-10 lg:justify-center lg:gap-0 lg:px-0";
 
   return (
     <>
       <div
         className={cn(
-          "flex h-12 items-center gap-2 border-b border-sidebar-border px-4",
+          "flex h-12 shrink-0 items-center border-b border-sidebar-border px-4",
           collapsed && "lg:justify-center lg:px-0",
         )}
       >
-        <Link to="/app" className={lbl}>
-          <Logo size="sm" />
+        <Link to="/app" aria-label="Filed Under dashboard" className="flex items-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Logo size="md" className={cn(collapsed && "lg:hidden")} />
+          {collapsed && <BrandMark className="hidden h-7 lg:block" />}
         </Link>
-        <button
-          onClick={onToggle}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="ml-auto hidden rounded-md p-1 text-muted-foreground hover:bg-sidebar-accent hover:text-foreground lg:block"
-        >
-          {collapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-        </button>
       </div>
       <nav
-        className={cn(
-          "flex-1 space-y-4 overflow-y-auto px-2.5 py-3 scrollbar-thin",
-          collapsed && "lg:px-1.5",
-        )}
+        aria-label="Main"
+        className={cn("flex-1 overflow-y-auto px-3 py-3 scrollbar-thin", collapsed && "lg:px-0")}
       >
-        {HUB_GROUPS.filter((g) => g.menu !== false && (!g.admin || isAdmin)).map((g) => (
-          <div key={g.heading}>
-            <p className={cn("eyebrow px-2 pb-1.5", lbl, collapsed && "lg:hidden")}>{g.heading}</p>
-            <ul className="space-y-px">
+        {groups.map((g, gi) => (
+          <div key={g.heading} className={cn(gi > 0 && "mt-5", gi > 0 && collapsed && "lg:mt-3")}>
+            <p className={cn("eyebrow px-2.5 pb-2", lbl)}>{g.heading}</p>
+            {gi > 0 && collapsed && <div aria-hidden className="mx-auto mb-3 hidden h-px w-8 bg-sidebar-border lg:block" />}
+            <ul className={cn("space-y-0.5", collapsed && "lg:space-y-1")}>
               {g.hubs.map((hub) => {
                 const Icon = HUB_ICON[hub.id] ?? LayoutDashboard;
                 const active = activeHub === hub.id;
                 return (
                   <li key={hub.id}>
-                    <Link
-                      to={hub.pages[0].to}
-                      data-tour={`hub-${hub.id}`}
-                      aria-current={active ? "page" : undefined}
-                      className={cn(
-                        "relative grid h-8 grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-2.5 rounded-md px-2 text-[13px] text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                        active && "bg-sidebar-accent font-medium text-sidebar-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-foreground",
-                        collapsed && "lg:flex lg:justify-center lg:px-0",
-                      )}
-                      title={collapsed ? hub.label : undefined}
-                    >
-                      <Icon className="size-4 justify-self-center" strokeWidth={1.75} />
-                      <span className={cn("truncate", lbl)}>{hub.label}</span>
-                    </Link>
+                    <RailTip label={hub.label} on={collapsed}>
+                      <Link
+                        to={hub.pages[0].to}
+                        data-tour={`hub-${hub.id}`}
+                        aria-current={active ? "page" : undefined}
+                        aria-label={collapsed ? hub.label : undefined}
+                        className={cn(
+                          "group relative grid h-9 grid-cols-[1.25rem_minmax(0,1fr)] items-center gap-3 rounded-lg px-2.5 text-[13.5px] text-sidebar-foreground/75 outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-ring",
+                          active && "bg-sidebar-accent font-medium text-sidebar-foreground before:absolute before:inset-y-2 before:-left-3 before:w-[3px] before:rounded-r-full before:bg-foreground",
+                          rail,
+                          active && collapsed && "lg:before:-left-3 lg:before:inset-y-2.5",
+                        )}
+                      >
+                        <Icon
+                          className={cn("size-5 justify-self-center transition-colors", active ? "text-sidebar-foreground" : "text-sidebar-foreground/65 group-hover:text-sidebar-foreground")}
+                          strokeWidth={active ? 2 : 1.8}
+                        />
+                        <span className={cn("truncate", lbl)}>{hub.label}</span>
+                      </Link>
+                    </RailTip>
                   </li>
                 );
               })}
             </ul>
           </div>
         ))}
-        <div>
-          <div className={cn("flex items-center justify-between px-2 pb-1.5", lbl)}>
+        <div className={cn("mt-5", collapsed && "lg:mt-3")}>
+          <div className={cn("flex items-center justify-between px-2.5 pb-2", lbl)}>
             <p className="eyebrow">Watchlist</p>
             <button
               onClick={onSearch}
@@ -368,44 +376,47 @@ function SidebarContent({
               + Add
             </button>
           </div>
-          <ul className="space-y-0.5">
+          {collapsed && <div aria-hidden className="mx-auto mb-3 hidden h-px w-8 bg-sidebar-border lg:block" />}
+          <ul className={cn("space-y-0.5", collapsed && "lg:space-y-1")}>
             {tickers.map((t) => {
               const q = byTicker.get(t);
               const u = universe.data?.companies.find((c) => c.ticker === t);
               return (
                 <li key={t}>
-                  <Link
-                    to="/app/companies/$ticker"
-                    params={{ ticker: t }}
-                    className={cn(
-                      "flex h-8 items-center gap-2 rounded-md px-2 text-[13px] transition-colors hover:bg-sidebar-accent",
-                      pathname.startsWith(`/app/companies/${t}`) && "bg-sidebar-accent",
-                      collapsed && "lg:justify-center lg:px-0",
-                    )}
-                    title={collapsed ? t : undefined}
-                  >
-                    <CompanyLogo ticker={t} src={u?.logo} size="xs" />
-                    <span className={cn("num font-medium", lbl)}>{t}</span>
-                    <span className={cn("num ml-auto text-[11px] text-muted-foreground", lbl)}>
-                      {q ? fmtPrice(q.price) : ""}
-                    </span>
-                    {q && (
-                      <span
-                        className={cn(
-                          "num w-12 text-right text-[11px]",
-                          lbl,
-                          q.changePct >= 0 ? "text-positive" : "text-negative",
-                        )}
-                      >
-                        {fmtPct(q.changePct, 1, true)}
+                  <RailTip label={q ? `${t} · ${fmtPrice(q.price)} · ${fmtPct(q.changePct, 1, true)}` : t} on={collapsed}>
+                    <Link
+                      to="/app/companies/$ticker"
+                      params={{ ticker: t }}
+                      aria-label={collapsed ? t : undefined}
+                      className={cn(
+                        "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] outline-none transition-colors hover:bg-sidebar-accent focus-visible:ring-2 focus-visible:ring-ring",
+                        pathname.startsWith(`/app/companies/${t}`) && "bg-sidebar-accent",
+                        rail,
+                      )}
+                    >
+                      <CompanyLogo ticker={t} src={u?.logo} size="xs" />
+                      <span className={cn("num font-medium", lbl)}>{t}</span>
+                      <span className={cn("num ml-auto text-[11px] text-muted-foreground", lbl)}>
+                        {q ? fmtPrice(q.price) : ""}
                       </span>
-                    )}
-                  </Link>
+                      {q && (
+                        <span
+                          className={cn(
+                            "num w-12 text-right text-[11px]",
+                            lbl,
+                            q.changePct >= 0 ? "text-positive" : "text-negative",
+                          )}
+                        >
+                          {fmtPct(q.changePct, 1, true)}
+                        </span>
+                      )}
+                    </Link>
+                  </RailTip>
                 </li>
               );
             })}
             {!tickers.length && !watch.isLoading && (
-              <li className={cn("px-2 text-xs text-muted-foreground", lbl)}>
+              <li className={cn("px-2.5 text-xs text-muted-foreground", lbl)}>
                 Follow a company to see it here.
               </li>
             )}
@@ -414,6 +425,19 @@ function SidebarContent({
       </nav>
       <UserMenu collapsed={collapsed} />
     </>
+  );
+}
+
+/** Labels for the collapsed icon rail: a tooltip to the right instead of the hidden text. */
+function RailTip({ label, on, children }: { label: string; on: boolean; children: ReactNode }) {
+  if (!on) return <>{children}</>;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="right" sideOffset={10} className="hidden lg:block">
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -433,10 +457,16 @@ function UserMenu({ collapsed }: { collapsed: boolean }) {
   };
 
   return (
-    <div className={cn("border-t border-sidebar-border p-2.5", collapsed && "lg:p-1.5")}>
+    <div className={cn("border-t border-sidebar-border p-2.5", collapsed && "lg:px-0 lg:py-2")}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button className="flex w-full items-center gap-2.5 rounded-md p-1.5 text-left transition-colors hover:bg-sidebar-accent">
+          <button
+            aria-label={collapsed ? `Account: ${name}` : undefined}
+            className={cn(
+              "flex w-full items-center gap-2.5 rounded-lg p-1.5 text-left transition-colors hover:bg-sidebar-accent",
+              collapsed && "lg:mx-auto lg:size-11 lg:justify-center lg:p-0",
+            )}
+          >
             <span className="flex size-8 items-center justify-center rounded-full bg-ink text-xs font-semibold text-ink-foreground">
               {name.slice(0, 1).toUpperCase()}
             </span>

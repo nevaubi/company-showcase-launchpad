@@ -53,7 +53,7 @@ function PortfolioPage() {
   return (
     <div className="grid gap-4">
       <PageHeader
-        eyebrow="Ideas"
+        eyebrow="Paper trading"
         title="Portfolio"
         description="What your holdings have in common: sector and factor exposure, suppliers and customers they share, revenue at risk when one company stumbles, and how long positions take to exit."
         actions={
