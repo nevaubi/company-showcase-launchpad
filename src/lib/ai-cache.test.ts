@@ -8,7 +8,7 @@ import { cached } from "./ai.server";
 describe("AI cache stale fallback", () => {
   it("serves the last stored value marked stale with its as-of time when recompute fails", async () => {
     row.value = { payload: { text: "last good" }, created_at: "2026-11-01T00:00:00Z" };
-    const r = await cached("k", 1000, async () => { throw new Error("AI credits are exhausted (402)"); });
+    const r = await cached<{ text: string }>("k", 1000, async () => { throw new Error("AI credits are exhausted (402)"); });
     expect(r).toMatchObject({ text: "last good", cachedAt: "2026-11-01T00:00:00Z", stale: true });
     expect(r.staleReason).toContain("402");
   });
