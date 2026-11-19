@@ -312,4 +312,6 @@
 - [ ] Fix Render auto-deploy (reconnect the repo in Render so pushes start a deploy) or keep deploying through the API after each worker change
 
 ## Owner priority (Nov 19 09:59): stop vendor daily prices
-- [ ] Remove fiscal-ai prices/daily from vendor Phase A (workspace + Render copies), keep pause/credit logic, keep stored prices__daily files, test that Phase A excludes prices/daily, restart workspace collector, deploy main to filedunder-ir-worker
+- [x] fiscal-ai prices/daily removed from vendor Phase A (4aa4b87, test in vendor-backfill.test.ts); stored prices__daily files untouched; last prices/daily call 09:53:56 UTC; workspace collector restarted on the fix and holds the shared lease since 10:02:47 (Render's copy waits on it, makes no calls)
+- [ ] Deploy main to filedunder-ir-worker once 4aa4b87 / 2480843 / 4caab68 are on GitHub (Render builds only from GitHub; auto-deploy has never fired, deploy through the API), then set IR_FREE_ONLY=1
+- [ ] Vendor status label: after a restart job_state keeps "collector interrupted; resume from existing files" while it is collecting again (acquire carries the old reason over) — clear non-credit reasons on acquire, with owner OK since pause logic was frozen
