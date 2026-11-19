@@ -66,6 +66,9 @@ export async function firecrawlScrape(url: string): Promise<{ markdown: string; 
   return { markdown, title: j.data?.metadata?.title ?? j.metadata?.title, url };
 }
 
+/** Firecrawl requests made by this process (one credit each for map and basic scrape); budgets read it. */
+export const firecrawlUsage = { calls: 0 };
+
 /** Discover URLs on a site (Firecrawl map). Supports direct and gateway-backed keys. */
 export async function firecrawlMap(url: string, opts: { search?: string; limit?: number } = {}): Promise<string[]> {
   const key = process.env["FIRECRAWL_API_KEY"];
@@ -77,6 +80,7 @@ export async function firecrawlMap(url: string, opts: { search?: string; limit?:
     headers["Authorization"] = `Bearer ${process.env["LOVABLE_API_KEY"] ?? ""}`;
     headers["X-Connection-Api-Key"] = key;
   } else headers["Authorization"] = `Bearer ${key}`;
+  firecrawlUsage.calls++;
   const res = await fetch(endpoint, {
     method: "POST",
     headers,
@@ -98,6 +102,7 @@ export async function firecrawlLinks(url: string): Promise<string[]> {
     headers["Authorization"] = `Bearer ${process.env["LOVABLE_API_KEY"] ?? ""}`;
     headers["X-Connection-Api-Key"] = key;
   } else headers["Authorization"] = `Bearer ${key}`;
+  firecrawlUsage.calls++;
   const res = await fetch(endpoint, { method: "POST", headers, body: JSON.stringify({ url, formats: ["links"], waitFor: 2500, timeout: 45000 }) });
   if (!res.ok) throw new Error(`Firecrawl scrape failed (${res.status})`);
   const j = (await res.json()) as { data?: { links?: string[] }; links?: string[] };

@@ -111,6 +111,7 @@ interface LoopState {
   lastSod?: string | null;
   lastReactions?: string | null;
   lastProse?: string | null;
+  lastIrSite?: string | null;
   lastVerify?: string | null;
   /** times a company was resumed without finishing (credit outages don't count) */
   resumes?: Record<string, number>;
@@ -208,7 +209,7 @@ let mirroring = false;
 let importedSince = true;
 /** Side jobs share this machine's memory: hold them until the main loop has run stably for a while. */
 const sideReady = () => Date.now() - STARTED > 20 * 60_000 && memUsedGB() < MEM_GB * 0.6;
-let sideBusy = () => mirroring || detailing || sodChecking || reacting;
+let sideBusy = () => mirroring || detailing || sodChecking || reacting || irSiting;
 async function maybeMirror() {
   if (mirroring || !sideReady() || sideBusy()) return;
   if (state.lastMirror && Date.now() - Date.parse(state.lastMirror) < MIRROR_MS) return;
@@ -227,6 +228,23 @@ async function maybeMirror() {
       mirroring = false;
     }
   })();
+}
+
+// ---------- background IR-website collection ----------
+/** Every 2 hours: IR-site files for recent reporters first, under a 300-credit daily Firecrawl cap. */
+let irSiting = false;
+async function maybeIrSite() {
+  if (irSiting || !sideReady() || sideBusy()) return;
+  if (state.lastIrSite && Date.now() - Date.parse(state.lastIrSite) < 2 * 3_600_000) return;
+  irSiting = true;
+  state.lastIrSite = new Date().toISOString();
+  await saveState(state);
+  log("collecting IR-website files in the background");
+  void run("scripts/ir-site-daily.ts", [], `${OUT}/ir-site.log`).finally(() => {
+    irSiting = false;
+    importedSince = true;
+    log("IR-website collection ended");
+  });
 }
 
 // ---------- background filing detail ----------
@@ -442,6 +460,7 @@ let idleLogged = false;
 for (;;) {
   await maybeMirror();
   await maybeDetail();
+  await maybeIrSite();
   await maybeSod();
   await maybeReactions();
   await maybeProse();

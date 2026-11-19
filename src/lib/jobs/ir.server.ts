@@ -140,8 +140,9 @@ export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]>
   for (const page of picked) {
     try {
       for (const l of await firecrawlLinks(page)) if (IR_FILE_RE.test(l.split("?")[0].split("#")[0])) links.add(l);
-    } catch {
-      /* page unavailable; keep going */
+    } catch (e) {
+      // Out of credits must stop the run (callers pause on it); any other page error is skipped.
+      if (/\b402\b/.test((e as Error).message)) throw e;
     }
   }
   // Tavily finds decks and supplements hosted on CDNs the IR pages only link via scripts.

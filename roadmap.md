@@ -294,3 +294,4 @@
 - [x] G3: market-wide SEC discovery every 2 min (feed + daily index); 7-day catch-up stored 1,379 of 1,385 missing filings across 542 companies; walk now 4 companies/run
 - [x] G9: AI cache serves the last stored value marked stale (with as-of time) when a recompute fails
 - [x] G8: worker re-reads a finished company after one new readable file filed in the last 30 days, from any source, before untouched companies
+- [x] G6: worker runs IR-website collection every 2h (recent reporters first, 300 Firecrawl credits/day cap in job_state, clean hourly-probe pause on 402) — currently paused: Firecrawl balance is 0
