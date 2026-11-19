@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { PageHeader, Panel } from "@/components/app/page-header";
@@ -40,7 +40,7 @@ function BillingPage() {
       ]);
       const used = (k: string, p: string) => usage.data?.find((r) => r.kind === k && r.period === p)?.used ?? 0;
       const approved = wl.data?.status === "approved" ? new Date(wl.data.decided_at ?? wl.data.created_at) : null;
-      return { tier: (tier.data ?? "none") as Tier, approved, agent: used("agent", day), report: used("report", month), sub: sub.data };
+      return { tier: (tier.data ?? "none") as Tier, approved, waitlistStatus: (wl.data?.status ?? null) as string | null, agent: used("agent", day), report: used("report", month), sub: sub.data };
     },
   });
   const d = q.data;
@@ -59,6 +59,17 @@ function BillingPage() {
     return () => clearInterval(t);
   }, [qc]);
   const portal = useServerFn(createPortalSession);
+  const requestTrial = async () => {
+    const { data: u } = await supabase.auth.getUser();
+    if (!u.user) return;
+    const { error } = await supabase.from("waitlist").update({ status: "pending" }).eq("user_id", u.user.id);
+    if (error) {
+      toast.error("Couldn't send the request — please use Contact us instead.");
+      return;
+    }
+    toast.success("Request sent — we'll review it and email you when your trial is ready.");
+    qc.invalidateQueries({ queryKey: ["billing"] });
+  };
   const openPortal = async () => {
     try {
       const r = await portal({ data: { returnUrl: window.location.href, environment: getStripeEnvironment() } });
@@ -105,9 +116,13 @@ function BillingPage() {
                 <p className="mt-1 text-sm text-muted-foreground">
                   Access is granted by approval. Request a trial and we'll review it — your trial starts when you accept.
                 </p>
-                <Button className="mt-3" asChild>
-                  <Link to="/auth">Request a trial</Link>
-                </Button>
+                {d.waitlistStatus === "pending" ? (
+                  <p className="mt-3 text-sm font-medium">Request received — we're reviewing it and will email you.</p>
+                ) : (
+                  <Button className="mt-3" onClick={requestTrial}>
+                    {d.tier === "expired" ? "Request renewal" : "Request a trial"}
+                  </Button>
+                )}
               </div>
               <div>
                 <p className="font-medium">Custom pricing</p>

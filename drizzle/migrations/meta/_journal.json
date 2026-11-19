@@ -421,6 +421,13 @@
       "when": 1794959092430,
       "tag": "0059_free_model_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1795053186069,
+      "tag": "0060_waitlist_self_rerequest",
+      "breakpoints": true
     }
   ]
 }
