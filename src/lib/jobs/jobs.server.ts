@@ -164,27 +164,54 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     const failed = results.filter((r) => "error" in r);
     return { ok: failed.length < picked.length || picked.length === 0, items: rows.length, detail: { at: start, of: tickers.length, stored: rows.map((r) => r.ticker), none: results.filter((r) => "none" in r).map((r) => r.t), failed } };
   },
-  /** Analyst estimates: refresh the three stalest companies that already have estimates stored. */
+  /** Refresh stale estimates, then fill unused slots with covered companies not yet stored. */
   async estimates() {
-    const { data: rows } = await supabaseAdmin.from("analyst_estimates").select("ticker, fetched_at").order("fetched_at", { ascending: true }).limit(3);
-    const batch = (rows ?? []).filter((r) => Date.now() - Date.parse(r.fetched_at) > 12 * 3600000).map((r) => r.ticker);
-    if (!batch.length) return { ok: true, items: 0, detail: { note: "all fresh" } };
-    const { fetchEstimates } = await import("@/lib/estimates.server");
     const left = budget();
+    const { data: cooldown, error: cooldownError } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "estimates-backoff").maybeSingle();
+    if (cooldownError) throw new Error(cooldownError.message);
+    if ((cooldown?.cursor ?? 0) > Date.now() / 1000) return { ok: true, items: 0, detail: { retryAt: new Date((cooldown?.cursor ?? 0) * 1000).toISOString() } };
+    const { data: rows, error: staleError } = await supabaseAdmin.from("analyst_estimates").select("ticker, fetched_at").lt("fetched_at", new Date(Date.now() - 12 * 3600000).toISOString()).order("fetched_at", { ascending: true }).limit(3);
+    if (staleError) throw new Error(staleError.message);
+    const batch = (rows ?? []).map((r) => r.ticker);
+    if (batch.length < 3 && left()) {
+      const { data: cursor, error: cursorError } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "estimates-new").maybeSingle();
+      if (cursorError) throw new Error(cursorError.message);
+      const start = (cursor?.cursor ?? 0) % COVERAGE.length;
+      const candidates = Array.from({ length: Math.min(30, COVERAGE.length) }, (_, i) => COVERAGE[(start + i) % COVERAGE.length].ticker);
+      const { data: existing, error } = await supabaseAdmin.from("analyst_estimates").select("ticker").in("ticker", candidates);
+      if (error) throw new Error(error.message);
+      const have = new Set((existing ?? []).map(r => r.ticker));
+      batch.push(...candidates.filter(t => !have.has(t) && !batch.includes(t)).slice(0, 3 - batch.length));
+      // Only advance through a candidate when attempted below. A timeout must not skip new coverage.
+      if (!batch.some(t => candidates.includes(t) && !have.has(t))) {
+        const { error: advanceError } = await supabaseAdmin.from("job_state").upsert({ job: "estimates-new", cursor: (start + candidates.length) % COVERAGE.length, updated_at: new Date().toISOString() });
+        if (advanceError) throw new Error(advanceError.message);
+      }
+    }
+    if (!batch.length) return { ok: true, items: 0, detail: { note: "no stale estimates or missing ticker in this scan" } };
+    const { fetchEstimates } = await import("@/lib/estimates.server");
     const failed: string[] = [];
     let items = 0;
     for (const t of batch) {
       if (!left()) break;
       try {
-        const fresh = await fetchEstimates(t);
+        const fresh = await fetchEstimates(t, AbortSignal.timeout(1200));
         const { error } = await supabaseAdmin.from("analyst_estimates").upsert({ ticker: t, payload: fresh as never, fetched_at: fresh.asOf });
         if (error) throw new Error(error.message);
         items++;
+        if (!(rows ?? []).some(r => r.ticker === t)) {
+          const { error: cursorError } = await supabaseAdmin.from("job_state").upsert({ job: "estimates-new", cursor: (COVERAGE.findIndex(c => c.ticker === t) + 1) % COVERAGE.length, updated_at: new Date().toISOString() });
+          if (cursorError) throw new Error(cursorError.message);
+        }
       } catch (e) {
         failed.push(`${t}: ${(e as Error).message}`);
+        // Serial requests plus a persistent 30-minute cooldown avoid hammering a throttled source.
+        const { error } = await supabaseAdmin.from("job_state").upsert({ job: "estimates-backoff", cursor: Math.ceil(Date.now() / 1000) + 1800, paused_reason: failed[failed.length - 1].slice(0, 200), updated_at: new Date().toISOString() });
+        if (error) throw new Error(error.message);
+        break;
       }
     }
-    return { ok: failed.length < batch.length, items, detail: { tickers: batch, failed } };
+    return { ok: failed.length === 0, items, detail: { tickers: batch, failed } };
   },
 
   /** Daily bars for ten symbols per run. */

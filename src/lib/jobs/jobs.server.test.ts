@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ from: vi.fn(), fetchYahoo: vi.fn(), pool: vi.fn(), fetchSec: vi.fn() }));
+const mocks = vi.hoisted(() => ({ from: vi.fn(), fetchYahoo: vi.fn(), pool: vi.fn(), fetchSec: vi.fn(), fetchEstimates: vi.fn() }));
+vi.mock("@/lib/estimates.server", () => ({ fetchEstimates: mocks.fetchEstimates }));
 vi.mock("@/lib/sec.server", () => ({ fetchSec: mocks.fetchSec, archiveUrl: (_cik: string, accn: string, doc: string) => `${accn}/${doc}` }));
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: { from: mocks.from } }));
 vi.mock("@/lib/market-data.server", () => ({
@@ -27,6 +28,57 @@ describe("scheduled job ledger retention", () => {
     expect((await runJob("prices")).ok).toBe(true);
     expect(deletes).toEqual(["market_bars"]);
     expect(deletes).not.toContain("job_runs");
+  });
+});
+
+describe("estimates coverage and provider backoff", () => {
+  beforeEach(() => vi.clearAllMocks());
+  function database(stale: { ticker: string }[], existing: string[], cooldown = 0) {
+    const writes: { table: string; value: unknown }[] = [];
+    mocks.from.mockImplementation((table: string) => {
+      let job = ""; let staleQuery = false;
+      const q: Record<string, unknown> = {};
+      for (const method of ["insert", "select", "update", "in", "order", "limit"]) q[method] = vi.fn(() => q);
+      q.eq = vi.fn((_field: string, value: string) => { job = value; return q; });
+      q.lt = vi.fn(() => { staleQuery = true; return q; });
+      q.upsert = vi.fn((value: unknown) => { writes.push({ table, value }); return q; });
+      q.single = async () => ({ data: { id: 1 } });
+      q.maybeSingle = async () => ({ data: { cursor: job === "estimates-backoff" ? cooldown : 0 }, error: null });
+      q.then = (resolve: (value: unknown) => unknown) => Promise.resolve({ error: null, data: table === "analyst_estimates" ? (staleQuery ? stale : existing.map(ticker => ({ ticker }))) : [] }).then(resolve);
+      return q;
+    });
+    mocks.fetchEstimates.mockImplementation(async (ticker: string) => ({ ticker, asOf: "2026-11-19T08:00:00Z" }));
+    return writes;
+  }
+  it("fills the three slots with missing covered tickers when only one is stale", async () => {
+    const writes = database([{ ticker: "OLD" }], []);
+    const result = await runJob("estimates");
+    expect(result.items).toBe(3);
+    expect(mocks.fetchEstimates.mock.calls.map(c => c[0])).toEqual(["OLD", "AAPL", "MSFT"]);
+    expect(writes.filter(w => w.table === "analyst_estimates")).toHaveLength(3);
+    expect(writes).toContainEqual({ table: "job_state", value: expect.objectContaining({ job: "estimates-new", cursor: 2 }) });
+  });
+  it("does not fetch covered tickers that already have a row", async () => {
+    database([], ["AAPL", "MSFT"]);
+    await runJob("estimates");
+    expect(mocks.fetchEstimates.mock.calls.map(c => c[0])).not.toContain("AAPL");
+    expect(mocks.fetchEstimates.mock.calls.map(c => c[0])).not.toContain("MSFT");
+    expect(mocks.fetchEstimates).toHaveBeenCalledTimes(3);
+  });
+  it("stops on the first provider error and stores a thirty-minute cooldown", async () => {
+    const writes = database([], []);
+    mocks.fetchEstimates.mockRejectedValue(new Error("HTTP 429"));
+    const before = Math.floor(Date.now() / 1000);
+    expect((await runJob("estimates")).ok).toBe(false);
+    expect(mocks.fetchEstimates).toHaveBeenCalledTimes(1);
+    const state = writes.find(w => (w.value as { job: string }).job === "estimates-backoff")?.value as { cursor: number };
+    expect(state.cursor).toBeGreaterThanOrEqual(before + 1800);
+    expect(writes.some(w => (w.value as { job: string }).job === "estimates-new")).toBe(false);
+  });
+  it("makes no provider call during the persisted cooldown", async () => {
+    database([], [], Math.ceil(Date.now() / 1000) + 1800);
+    expect((await runJob("estimates")).items).toBe(0);
+    expect(mocks.fetchEstimates).not.toHaveBeenCalled();
   });
 });
 

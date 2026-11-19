@@ -10,17 +10,18 @@ let pending: Promise<{ cookie: string; crumb: string }> | null = null;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Cookie + crumb; the crumb endpoint throttles bursts, so alternate hosts with a short backoff. */
-async function getSession() {
+async function getSession(signal?: AbortSignal) {
   if (session) return session;
   pending ??= (async () => {
     let status = 0;
     for (let i = 0; i < 4; i++) {
-      const r = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "manual" });
+      signal?.throwIfAborted();
+      const r = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": UA }, redirect: "manual", signal });
       const raw = typeof r.headers.getSetCookie === "function" ? r.headers.getSetCookie() : (r.headers.get("set-cookie") ?? "").split(/,(?=\s*[A-Za-z0-9_]+=)/);
       const cookie = raw.map((c) => c.split(";")[0].trim()).filter(Boolean).join("; ");
       if (!cookie) console.warn("estimates: provider set no cookie", r.status);
       const host = i % 2 ? "query1" : "query2";
-      const c = await fetch(`https://${host}.finance.yahoo.com/v1/test/getcrumb`, { headers: { "User-Agent": UA, cookie } });
+      const c = await fetch(`https://${host}.finance.yahoo.com/v1/test/getcrumb`, { headers: { "User-Agent": UA, cookie }, signal });
       const crumb = (await c.text()).trim();
       if (c.ok && crumb && !crumb.includes("<")) return (session = { cookie, crumb });
       status = c.status;
@@ -31,12 +32,13 @@ async function getSession() {
   return pending;
 }
 
-export async function fetchEstimates(ticker: string): Promise<Estimates> {
+export async function fetchEstimates(ticker: string, signal?: AbortSignal): Promise<Estimates> {
   for (let attempt = 0; attempt < 2; attempt++) {
-    const s = await getSession();
+    signal?.throwIfAborted();
+    const s = await getSession(signal);
     for (const host of ["https://query2.finance.yahoo.com", "https://query1.finance.yahoo.com"]) {
       const res = await fetch(`${host}/v10/finance/quoteSummary/${encodeURIComponent(ticker.replace(".", "-"))}?modules=${MODULES}&crumb=${encodeURIComponent(s.crumb)}`, {
-        headers: { "User-Agent": UA, cookie: s.cookie, Accept: "application/json" },
+        headers: { "User-Agent": UA, cookie: s.cookie, Accept: "application/json" }, signal,
       });
       if (res.ok) {
         const j = (await res.json()) as { quoteSummary?: { result?: Record<string, unknown>[] } };
