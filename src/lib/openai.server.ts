@@ -291,15 +291,21 @@ export async function openaiStructured<T>(opts: {
 /** IR_FREE_ONLY=1: no paid calls at all. Every non-OpenRouter call goes through the owner's free OpenAI allowance. */
 export const freeOnly = () => process.env["IR_FREE_ONLY"] === "1";
 
-/** Free-only routing: models outside the free tiers read on the mini tier; a spent allowance stops the run (quota) until the UTC day resets. */
+/**
+ * Free-only routing: models outside the free tiers read on the mini tier. When the day's free allowance
+ * is spent the read continues on the owner's paid OpenAI key if IR_OPENAI_PAID=1 (never Lovable AI
+ * credits); otherwise it stops the run (quota) until the UTC day resets. Ordinary call errors keep their
+ * own kind so a bad response is retried as one, not mistaken for an empty allowance.
+ */
 async function freeOnlyStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
   const { tierOf } = await import("@/lib/ir/openai-allowance");
-  const { laneStructured } = await import("@/lib/ir/openai-lane.server");
+  const { laneStructured, paidFallback, paidStructured } = await import("@/lib/ir/openai-lane.server");
   const base = opts.model.replace(/^openai\//, "");
   const model = tierOf(base) ? base : process.env["IR_FREE_MODEL"] || "gpt-5.4-mini";
-  const r = await laneStructured<T>({ ...opts, model });
-  if (!r) throw new OpenAIError("free-only mode: OpenAI free allowance spent or unavailable", "quota", 0);
-  return r;
+  const r = await laneStructured<T>({ ...opts, model, rethrow: true });
+  if (r) return r;
+  if (paidFallback()) return paidStructured<T>({ ...opts, model });
+  throw new OpenAIError("free-only mode: OpenAI free allowance spent or unavailable", "quota", 0);
 }
 
 /** The owner's own OpenAI key (Responses API, strict JSON schema), whatever IR_AI_PROVIDER says. */

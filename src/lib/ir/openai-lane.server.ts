@@ -18,7 +18,7 @@ let offReason = "";
 export const laneEnabled = () => !!process.env["OPENAI_API_KEY"] && process.env["IR_OPENAI_LANE"] !== "0" && Date.now() >= offUntil;
 export const laneStatus = () => (laneEnabled() ? `on (${LANE_MODEL})` : offReason || (process.env["OPENAI_API_KEY"] ? "off" : "no key"));
 
-export async function laneStructured<T>(opts: { model?: string; name: string; instructions: string; input: string | InputPart[]; schema: Record<string, unknown>; maxOutputTokens?: number; effort?: Effort }): Promise<{ data: T; usage: Usage; model: string } | null> {
+export async function laneStructured<T>(opts: { model?: string; name: string; instructions: string; input: string | InputPart[]; schema: Record<string, unknown>; maxOutputTokens?: number; effort?: Effort; /** pass ordinary call errors to the caller; null then only means "no free allowance" */ rethrow?: boolean }): Promise<{ data: T; usage: Usage; model: string } | null> {
   if (!laneEnabled()) return null;
   const model = opts.model ?? LANE_MODEL;
   const tier = tierOf(model);
@@ -46,9 +46,28 @@ export async function laneStructured<T>(opts: { model?: string; name: string; in
     if (err instanceof OpenAIError && (err.kind === "auth" || err.kind === "quota")) {
       offUntil = Date.now() + 3_600_000;
       offReason = `paused: ${err.kind}`;
+      return null;
     }
+    if (opts.rethrow) throw err;
     return null;
   }
+}
+
+/**
+ * The owner's paid OpenAI key once the free allowance is spent (IR_OPENAI_PAID=1, owner Nov 19).
+ * Same model, no Lovable AI credits; tokens are logged per day in the same ledger as `paid_mini` /
+ * `paid_large` so the worker page shows what went on the paid key. No cap by owner choice.
+ */
+export const paidFallback = () => process.env["IR_OPENAI_PAID"] === "1" && !!process.env["OPENAI_API_KEY"];
+export async function paidStructured<T>(opts: { model: string; name: string; instructions: string; input: string | InputPart[]; schema: Record<string, unknown>; maxOutputTokens?: number; effort?: Effort }): Promise<{ data: T; usage: Usage; model: string }> {
+  const tier = `paid_${tierOf(opts.model) ?? "large"}`;
+  const day = allowanceDay();
+  const maxOut = opts.maxOutputTokens ?? 16_000;
+  const r = await openaiDirectStructured<T>({ model: opts.model, name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, maxOutputTokens: maxOut, effort: /^(o\d|gpt-5)/.test(opts.model) ? (opts.effort ?? "low") : undefined });
+  const used = usedTokens(r.usage);
+  // Ledger only (cap = unlimited); a failed write never fails the read.
+  await supabaseAdmin.rpc("openai_allowance_take", { _day: day, _tier: tier, _tokens: used, _cap: Number.MAX_SAFE_INTEGER }).then(undefined, () => undefined);
+  return r;
 }
 
 /** Share (0–1) of today's usable allowance a tier has used. */

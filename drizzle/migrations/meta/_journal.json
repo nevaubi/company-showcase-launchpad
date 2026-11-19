@@ -428,6 +428,13 @@
       "when": 1795053186069,
       "tag": "0060_waitlist_self_rerequest",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1795081733169,
+      "tag": "0061_openai_allowance_paid_tiers",
+      "breakpoints": true
     }
   ]
 }

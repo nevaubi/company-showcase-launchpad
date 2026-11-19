@@ -12,7 +12,7 @@ export interface WorkerProgress {
   /** releases whose text the text reader has read / still has to read */
   prose?: { waiting: number; read: number; working: number } | null;
   /** today's (UTC) use of the owner's free OpenAI allowance by the second reader, per model group */
-  openai?: Partial<Record<"large" | "mini", { tokens: number; calls: number }>>;
+  openai?: Partial<Record<"large" | "mini" | "paid_large" | "paid_mini", { tokens: number; calls: number }>>;
   loop: {
     attempted: string[];
     done: string[];

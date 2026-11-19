@@ -94,6 +94,11 @@ function WorkerPage() {
             `${tok(p.openai?.mini?.tokens ?? 0)} / ${tok(FREE_TIERS.mini.cap * FREE_SAFETY)}`,
             `small models today · large ${tok(p.openai?.large?.tokens ?? 0)} / ${tok(FREE_TIERS.large.cap * FREE_SAFETY)} · ${n((p.openai?.mini?.calls ?? 0) + (p.openai?.large?.calls ?? 0))} checks`,
           ],
+          [
+            "OpenAI paid key",
+            tok((p.openai?.paid_mini?.tokens ?? 0) + (p.openai?.paid_large?.tokens ?? 0)),
+            `tokens today after the free allowance · ${n((p.openai?.paid_mini?.calls ?? 0) + (p.openai?.paid_large?.calls ?? 0))} reads`,
+          ],
           ["Free models", `${n(fq.data?.requests ?? 0)} / ${n(FREE_DAILY_CAP)}`, `requests today · ${n(fq.data?.confirms ?? 0)} settled · ${n(fq.data?.failures ?? 0)} failed`],
           ["Office engine", p.engine?.ok ? "online" : "offline", p.engine ? `${n(p.engine.sessions)} open documents · v${p.engine.version}` : "health check failed"],
         ].map(([k, v, s]) => (

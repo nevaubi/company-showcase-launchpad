@@ -1,0 +1,2 @@
+ALTER TABLE public.openai_allowance DROP CONSTRAINT IF EXISTS openai_allowance_tier_check;
+ALTER TABLE public.openai_allowance ADD CONSTRAINT openai_allowance_tier_check CHECK (tier = ANY (ARRAY['large'::text, 'mini'::text, 'paid_large'::text, 'paid_mini'::text]));

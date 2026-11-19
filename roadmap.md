@@ -6,7 +6,7 @@
 - [x] G10: fill unused stale-estimate slots from missing covered tickers, success-only cursor, serial deadline-bound requests and 30-minute persisted error backoff; 17 tests and TypeScript passed; real refresh NOW/CMG/ULTA, newest ULTA 08:03:23Z (was ADBE 07:20:20Z); managed estimates schedule changed hourly → every ten minutes.
 - [x] G4: daily FINRA writer on managed 00:05/22:05/23:05 UTC schedule, SPY session calendar, success-only date cursor, unpublished-file retries; 14 tests and TypeScript passed; caught up Nov 16/17/18 with 5,515 rows (prior newest Nov 13), now idle through Nov 18.
 - [x] G7: earnings/Reg FD filtered before 500-row limit, three-attempt recorded retry/error receipts, six-hour cooldown, failed downloads remain incomplete, stored-one-file no longer implies complete; four tests and TypeScript passed; live AON accession 0001193125-26-463733 stored all three files at 08:06:54Z (prior newest ZM 05:12:55Z).
-- [ ] G8 recent-file re-read; G6 IR-site schedule; G9 stale cache fallback; G3 market-wide SEC discovery. Finish in order, separate commits, no paid reads or UI changes.
+- [x] G8 recent-file re-read; G6 IR-site schedule; G9 stale cache fallback; G3 market-wide SEC discovery — finished in wave 2 (see below).
 
 ## Combined source reconciliation (Nov 19)
 - [ ] Verify and import new FROG/COST/TSMC archives additively; preserve all cited originals, report duplicates and uncertain dates.
@@ -298,3 +298,14 @@
 - [x] G1a: scheduled partner-mirror job (1 file/min, cursor in job_state) refreshes local company/price/universe copies; readers mark copies servedFrom=copy (as of generatedAt). Copies were 6–14 days old
 - [x] G2: worker writes one due standard report every 10 min (recaps for 2.02 8-Ks in 3 days keyed on that accession, previews for reports due in 7 days), daily limit respected, AI 402 pauses with hourly probe; 36 stale primer locks released
 - [x] G5: text reader and label canon fall back to the free OpenAI lane on credit_balance_exhausted (paid path rested 30 min); worker runs label canon daily (40 companies/run, resumes from job_state cursor)
+- [x] Sidebar (Nov 19): 20px icons picked per page, 64px collapsed rail with only the F mark and right-side labels on hover, collapse toggle in the top bar beside the sidebar; Insights, Situations, Trade ideas and Setups grouped as Signals and Autopilots + Portfolio as Paper trading under "Ideas" (Dashboard keeps Overview, What changed, Alerts)
+- [x] Worker free-only lane: a spent daily allowance pauses scheduled reports until 00:05 UTC instead of failing a slot every 10 minutes
+- [ ] Worker redeploy of the reports pause fix (needs the commit on GitHub first; Render's auto-deploy has never fired, every deploy so far was started through the API)
+
+## Next steps after the Nov 19 credit refill (proposed, owner to confirm)
+- [ ] Owner (Nov 19 09:47): when the free OpenAI allowance runs out, the worker keeps reading on the owner's paid OpenAI key (never Lovable AI credits); paid usage visible on /app/worker
+- [ ] Owner decision: vendor collector is the main Firecrawl spender (~9K credits in the first 20 minutes after the refill); confirm the pace or set a daily cap
+- [ ] Owner decision: Tavily is past its monthly plan and on uncapped pay-as-you-go; set a cap or keep it
+- [ ] Add the web-search key to the worker only after the Tavily decision, so IR-website discovery can search as well as scrape
+- [ ] Wave 3: G12 (redlines + supply links after new 10-K/10-Qs, weekly supply intel), G11 (bundled analytics to scheduled storage files), G16 (weekly alt-data slow sets, monthly Medicare, registry after coverage changes), G13 (freshness checks that data advanced, not only that a job ran)
+- [ ] Fix Render auto-deploy (reconnect the repo in Render so pushes start a deploy) or keep deploying through the API after each worker change
