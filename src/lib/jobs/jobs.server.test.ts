@@ -13,11 +13,13 @@ import { runJob } from "./jobs.server";
 
 describe("scheduled job ledger retention", () => {
   beforeEach(() => vi.clearAllMocks());
-  it("never deletes job_runs when the prices cursor wraps", async () => {
+  it("prunes old job_runs except vendor-backfill when the prices cursor wraps", async () => {
     const deletes: string[] = [];
+    const filters: unknown[][] = [];
     mocks.from.mockImplementation((table: string) => {
       const q: Record<string, unknown> = {};
       for (const method of ["insert", "select", "eq", "update", "upsert", "lt"]) q[method] = vi.fn(() => q);
+      q.neq = vi.fn((...a: unknown[]) => { filters.push([table, ...a]); return q; });
       q.delete = vi.fn(() => { deletes.push(table); return q; });
       q.single = async () => ({ data: { id: 1 } });
       q.maybeSingle = async () => ({ data: { cursor: 1860 } });
@@ -26,8 +28,8 @@ describe("scheduled job ledger retention", () => {
     });
     mocks.pool.mockImplementation(async (batch: unknown[]) => batch.map(() => ({ status: "fulfilled", value: 0 })));
     expect((await runJob("prices")).ok).toBe(true);
-    expect(deletes).toEqual(["market_bars"]);
-    expect(deletes).not.toContain("job_runs");
+    expect(deletes).toEqual(["market_bars", "job_runs"]);
+    expect(filters).toEqual([["job_runs", "job", "vendor-backfill"]]);
   });
 });
 
