@@ -100,7 +100,7 @@ function WaitlistPage() {
                 Join the waitlist
               </Button>
               <p className="text-xs text-muted-foreground">
-                By joining, you agree that FiledUnder may email you about your request. We only use these details to review your access.
+                By joining, you agree that FiledUnder may email you about your request and to our <Link to="/terms" className="underline">terms</Link> and <Link to="/privacy" className="underline">privacy policy</Link>. We only use these details to review your access.
               </p>
             </form>
             <p className="mt-6 text-center text-sm text-muted-foreground">

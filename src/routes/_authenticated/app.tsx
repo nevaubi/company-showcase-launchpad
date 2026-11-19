@@ -78,10 +78,18 @@ function Waitlisted({ declined }: { declined: boolean }) {
 }
 
 /** Approved people accept the terms before their 14-day trial starts. */
+const AGREEMENTS = [
+  { k: "terms", t: <>I accept the <a href="/terms" target="_blank" rel="noreferrer" className="underline">terms of service</a> and <a href="/privacy" target="_blank" rel="noreferrer" className="underline">privacy policy</a>.</> },
+  { k: "advice", t: <>I understand FiledUnder is research software, not investment advice, and I will check figures at their source before relying on them.</> },
+  { k: "confidential", t: <>I will keep how the platform works, its methods, unreleased features and any non-public material confidential, as set out in section 6 of the terms.</> },
+  { k: "use", t: <>I will not scrape, bulk export, reverse engineer or share my account, or use FiledUnder to build or train a competing product.</> },
+] as const;
+
 function AcceptTerms() {
-  const [agree, setAgree] = useState(false);
+  const [agreed, setAgreed] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const all = AGREEMENTS.every((a) => agreed[a.k]);
   const accept = async () => {
     setBusy(true);
     setError(null);
@@ -94,18 +102,22 @@ function AcceptTerms() {
     window.location.reload();
   };
   return (
-    <div className="paper-grain flex min-h-screen flex-col items-center justify-center px-6 text-center">
+    <div className="paper-grain flex min-h-screen flex-col items-center justify-center px-6 py-10 text-center">
       <Logo />
       <h1 className="mt-10 font-display text-xl">Welcome to FiledUnder</h1>
       <p className="mt-3 max-w-md text-sm text-muted-foreground">
-        Your access is approved. Your 14-day trial starts when you accept the terms below; nothing is charged and no card is needed.
+        Your access is approved. Confirm the points below to start your 14-day trial; nothing is charged and no card is needed.
       </p>
-      <label className="mt-6 flex max-w-md items-start gap-3 text-left text-sm">
-        <Checkbox checked={agree} onCheckedChange={(v) => setAgree(v === true)} className="mt-0.5" aria-label="Accept the terms" />
-        <span>I accept the FiledUnder terms of service and privacy policy, and understand FiledUnder is research software, not investment advice.</span>
-      </label>
+      <div className="mt-6 grid w-full max-w-md grid-cols-1 gap-3 rounded-md border bg-card p-4 text-left">
+        {AGREEMENTS.map((a) => (
+          <label key={a.k} className="flex items-start gap-3 text-sm">
+            <Checkbox checked={!!agreed[a.k]} onCheckedChange={(v) => setAgreed((x) => ({ ...x, [a.k]: v === true }))} className="mt-0.5" />
+            <span>{a.t}</span>
+          </label>
+        ))}
+      </div>
       {error && <p role="alert" className="mt-3 text-sm text-negative">{error}</p>}
-      <Button className="mt-6" disabled={!agree || busy} onClick={accept}>
+      <Button className="mt-6" disabled={!all || busy} onClick={accept}>
         {busy && <Loader2 className="animate-spin" />}
         Accept and start my trial
       </Button>

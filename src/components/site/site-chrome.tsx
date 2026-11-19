@@ -78,6 +78,8 @@ export function SiteFooter() {
             { label: "Companies", to: "/companies" },
             { label: "Access & pricing", to: "/pricing" },
             { label: "Sign in", to: "/auth" },
+            { label: "Terms", to: "/terms" },
+            { label: "Privacy", to: "/privacy" },
           ]}
         />
         <div>
@@ -114,7 +116,7 @@ export function SiteFooter() {
   );
 }
 
-function FooterCol({ title, links }: { title: string; links: { label: string; to: "/" | "/pricing" | "/auth" | "/companies" }[] }) {
+function FooterCol({ title, links }: { title: string; links: { label: string; to: "/" | "/pricing" | "/auth" | "/companies" | "/terms" | "/privacy" }[] }) {
   return (
     <div>
       <p className="eyebrow">{title}</p>
