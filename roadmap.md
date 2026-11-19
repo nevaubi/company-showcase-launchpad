@@ -4,8 +4,8 @@
 - [ ] Owner follow-up: detached ordered import verification with ir-upload-import ticker ledger, and fresh background workbook comparison to private ops/ir-upload/ storage; preserve vendor collector.
 - [x] Verified additive PDF import: 649 rows stored, 13 duplicates skipped, EVER/SOFI excluded (no bounded coverage-add script), no failures; exact IDs and counts in import-report.json.
 - [x] Read-only workbook comparisons saved in workbook-dry-run.json; exact-label matching leaves unmatched/ambiguous values unproven; no corrections applied.
-- [ ] Collector initial phase-A batch started locally after import; own lease/ledger, four-call concurrency and stable billing IDs. Remaining: Benzinga news/withdrawal reconciliation, full A continuation, B/C; Render missing FIRECRAWL_API_KEY. Not deployed.
-- [ ] Verify first 25 companies and report calls, provider credits, failures and projection; continue phases A/B/C.
+- [ ] Nov 19 continuation: restart full Phase A detached; pending requests wait ten minutes on the same billing ID, Data Legion identifier fallbacks, 50-company ledger, CAS lease; news/removal and catalogue-driven B/C passes added. Render Firecrawl configured; deploy/takeover confirmation pending. B/C sources lacking verified identifiers are explicitly logged as omitted.
+- [x] First 25 confirmed by owner: 634 files, 26 capabilities, 1,009 calls, 18,215 credits. Full-list collection is ongoing, not complete.
 
 ## IR worker + IR data quality (Nov 17)
 - [x] Audit: 4 GB limit despite Pro Ultra, 15-min lease stalls, batch-of-10 lost "finished" credit, review/requeue ping-pong

@@ -5,6 +5,21 @@ export const MAX_IN_FLIGHT = 4;
 export const MAX_ATTEMPTS = 3;
 export const PHASE_B_CALL_LIMIT = 2000;
 export const CREDIT_PROBE_MS = 30 * 60 * 1000;
+export const PROVIDER_PENDING_MS = 10 * 60 * 1000;
+export const PROGRESS_COMPANIES = 50;
+export function providerPending(body: Json) {
+  return /provider request is still running|retry with the same x-request-id once it has finished/i.test(JSON.stringify(body));
+}
+export function providerMiss(body: Json) {
+  return /"(?:code|type)"\s*:\s*"not_found"/i.test(JSON.stringify(body));
+}
+export function legionIdentifiers(domain: string | undefined, legal: string | undefined, linkedin: string | undefined): Json[] {
+  const options: Json[] = [];
+  if (domain) options.push({domain, min_confidence:'high'});
+  if (linkedin && /^https:\/\/(www\.)?linkedin\.com\/company\//i.test(linkedin)) options.push({social_url:linkedin, min_confidence:'high'});
+  if (legal && domain) options.push({name:legal, domain, min_confidence:'high'});
+  return options;
+}
 export function fileKey(provider: string, capability: string, name: string) {
   return `vendor/${provider}/${capability.replaceAll('/', '__')}/${name}.json`;
 }
@@ -31,19 +46,19 @@ export function nextOptions(result: Json, contract: Json, options: Json): Json |
   const meta = result.pagination ?? data.pagination ?? result.meta ?? data.meta ?? {};
   if (meta.hasNextPage === false || meta.hasMore === false) return null;
   const names = new Set((contract.options ?? []).map((o: Json) => o.name));
-  const cursor = meta.nextCursor ?? data.nextCursor ?? result.nextCursor ?? data.continuation ?? result.continuation;
+  const cursor = meta.nextCursor ?? meta.next_cursor ?? data.nextCursor ?? data.next_cursor ?? result.nextCursor ?? result.next_cursor ?? data.continuation ?? result.continuation;
   if (cursor) {
     const field = ['cursor', 'continuation'].find(k => names.has(k));
     if (field && options[field] !== cursor) return { ...options, [field]: cursor };
   }
-  const page = ['pageNumber', 'page', '$offset', 'offset'].find(k => names.has(k));
+  const page = ['pageNumber', 'page', '$offset', 'offset', 'skip'].find(k => names.has(k));
   if (!page) return null;
   const sizeName = ['pageSize', 'pagesize', 'page_size', '$limit', 'limit', 'per_page'].find(k => names.has(k));
   const size = Number(sizeName ? options[sizeName] ?? contract.options.find((o: Json) => o.name === sizeName)?.default : 0);
   const count = records(result, contract).length;
-  const more = meta.hasNextPage === true || meta.hasMore === true || (meta.totalPages && Number(options[page] ?? 1) < meta.totalPages) || (size > 0 && count >= size);
+  const more = meta.hasNextPage === true || meta.hasMore === true || data.next_offset != null || (meta.totalPages && Number(options[page] ?? 1) < meta.totalPages) || (size > 0 && count >= size);
   if (!more || count === 0) return null;
-  return { ...options, [page]: meta.nextPage ?? Number(options[page] ?? (page === 'pageNumber' ? 1 : 0)) + (page.includes('offset') ? size : 1) };
+  return { ...options, [page]: meta.nextPage ?? data.next_offset ?? Number(options[page] ?? (page === 'pageNumber' ? 1 : 0)) + (page.includes('offset') || page === 'skip' ? size : 1) };
 }
 export function assertOptions(contract: Json, options: Json) {
   const names = new Set((contract.options ?? []).map((o: Json) => o.name));

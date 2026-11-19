@@ -12,7 +12,8 @@ COPY . .
 ENV IR_WORK_DIR=/var/data/ir
 ENV DOCLING_PYTHON=/opt/dvenv/bin/python
 ENV IR_WAIT_LEASE=1
-CMD ["bun", "scripts/ir-deep-loop.ts", "--python=/opt/dvenv/bin/python"]
+ENV VENDOR_WORK_DIR=/var/data/vendor-backfill
+CMD ["bun", "scripts/worker-start.ts"]
 # Reader/converter counts and child heap sizes are derived at start from the container's real memory
 # limit (cgroup), so a plan change never leaves the worker over- or under-sized. Override with IR_LANES
 # or IR_*_FIXED only when needed.
