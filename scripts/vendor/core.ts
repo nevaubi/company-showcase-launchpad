@@ -44,12 +44,27 @@ export function providerPending(body: Json) {
 export function providerMiss(body: Json) {
   return /"(?:code|type)"\s*:\s*"not_found"/i.test(JSON.stringify(body));
 }
+/** Registrable domain of a website ("https://about.nike.com" → "nike.com", "www.bp.co.uk" → "bp.co.uk"). */
+export function primaryDomain(url: string | undefined | null): string | undefined {
+  if (!url) return undefined;
+  let host: string;
+  try { host = new URL(/^https?:/i.test(url) ? url : `https://${url}`).hostname.toLowerCase(); } catch { return undefined; }
+  const parts = host.replace(/^www\./, '').split('.').filter(Boolean);
+  if (parts.length < 2) return undefined;
+  const sld = /^(co|com|org|net|ac|gov)$/.test(parts[parts.length-2]) && parts[parts.length-1].length === 2;
+  return parts.slice(sld ? -3 : -2).join('.');
+}
+/** One attempt per identifier, in order: primary domain, legal name + domain, then the LinkedIn page. */
 export function legionIdentifiers(domain: string | undefined, legal: string | undefined, linkedin: string | undefined): Json[] {
   const options: Json[] = [];
   if (domain) options.push({domain, min_confidence:'high'});
-  if (linkedin && /^https:\/\/(www\.)?linkedin\.com\/company\//i.test(linkedin)) options.push({social_url:linkedin, min_confidence:'high'});
   if (legal && domain) options.push({name:legal, domain, min_confidence:'high'});
+  if (linkedin && /^https:\/\/(www\.)?linkedin\.com\/company\//i.test(linkedin)) options.push({social_url:linkedin, min_confidence:'high'});
   return options;
+}
+/** Records a stored or returned page holds (ledger `items`). */
+export function pageRecords(pages: Json[], contract: Json): number {
+  return pages.reduce((n, p) => n + records(p.response ?? {}, contract).length, 0);
 }
 export function fileKey(provider: string, capability: string, name: string) {
   return `vendor/${provider}/${capability.replaceAll('/', '__')}/${name}.json`;
@@ -131,4 +146,12 @@ export class CreditPause {
     this.paused = false;
     await this.setReason(null);
   }
+}
+/** An earnings file without the duplicated batch response; record counts are returned for verification. */
+export function compactEarningsFile(v: Json): { value: Json; changed: boolean; recordsBefore: number; recordsAfter: number } {
+  const count = (pages: Json[]) => pages.reduce((n, p) => n + (Array.isArray(p.response?.data?.earnings) ? p.response.data.earnings.length : 0), 0);
+  const pages: Json[] = v.pages ?? [];
+  const changed = pages.some((p) => 'sharedResponse' in p);
+  const next = { ...v, pages: pages.map(({ sharedResponse: _drop, ...p }) => p) };
+  return { value: next, changed, recordsBefore: count(pages), recordsAfter: count(next.pages) };
 }

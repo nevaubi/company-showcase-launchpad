@@ -323,3 +323,7 @@
 - [ ] Deploy main (aa1023d..55cb140: filing-steps, analytics-publish, alt-slow, freshness-check) to filedunder-ir-worker once pushed; confirm ir-canon clears its Nov 3 pause (pass started 10:36 on 60377e7, no labels yet at 10:45)
 - [ ] UI branch: point /app/freshness at getDataFreshness (current page reads job_runs with a 5,000-row limit)
 - [ ] 132 per-ticker ir-prose-runner pauses still carry the Nov 3 OpenAI 429 text; clear on next successful run (verify)
+- [x] Vendor content audit (`scripts/vendor-audit.ts`, read-only) saved to `datasets/ops/vendor/content-audit-2026-11-19T10-53-20-961Z.json`.
+- [x] Vendor ledger records the number of records on every request and storage row (`items`).
+- [x] EODHD earnings files keep only the company's own records; 1,811 files rewritten, counts unchanged, 270 MB saved.
+- [x] Data Legion: primary domain from EODHD WebURL, attempts domain → legal name + domain → LinkedIn; 130 companies pending (not called).

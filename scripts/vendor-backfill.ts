@@ -8,7 +8,7 @@ import { dbGate, sb, sleep, selectAll } from './lib/supa';
 import contracts from './vendor/contracts.json';
 import { phaseB, phaseC } from './vendor/phases';
 import { staticRegistry } from '../src/lib/alt/collect.server';
-import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, PHASE_A_FISCAL_CAPABILITIES, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, type Json } from './vendor/core';
+import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, PHASE_A_FISCAL_CAPABILITIES, pageRecords, primaryDomain, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, type Json } from './vendor/core';
 
 const JOB = 'vendor-backfill';
 const root = process.env.VENDOR_WORK_DIR ?? '/tmp/vendor-backfill';
@@ -53,7 +53,7 @@ async function loadTickerCredits() {
 async function ledger(detail: Json, ok = true) {
   if (detail.file) detail=storageLedger(detail);
   await dbGate(JOB);
-  const r = await sb.from('job_runs').insert({ job: JOB, started_at: detail.started_at ?? now(), finished_at: now(), ok, items: detail.file ? 1 : 0, detail });
+  const r = await sb.from('job_runs').insert({ job: JOB, started_at: detail.started_at ?? now(), finished_at: now(), ok, items: Number(detail.records ?? (detail.file ? 1 : 0)), detail });
   if (r.error) throw new Error(r.error.message);
 }
 async function acquire() {
@@ -140,7 +140,7 @@ async function call(provider: string, capability: string, name: string, options:
       billedRequests.set(id,Math.max(previous,credits));
       for(const ticker of tickers) tickerCredits.set(ticker,(tickerCredits.get(ticker) ?? 0)+charged/tickers.length);
       summary.calls++; if(summary.phase==='B') phaseCalls[provider]=(phaseCalls[provider]??0)+1; summary.credits[provider] = (summary.credits[provider] ?? 0) + charged;
-      await ledger({ provider, capability, name, tickers, options, request_id:id, attempt, status, credits:charged, started_at, phase:summary.phase, pending:providerPending(body), error:result?.error ?? body.error ?? null }, (r.ok && !!result && !result.error) || providerPending(body));
+      await ledger({ provider, capability, name, tickers, options, request_id:id, attempt, status, credits:charged, records:result && !result.error ? records(result,contract).length : 0, started_at, phase:summary.phase, pending:providerPending(body), error:result?.error ?? body.error ?? null }, (r.ok && !!result && !result.error) || providerPending(body));
       if (exhausted(status, body)) {
         // Retrying the same request every 30 minutes is the credit probe; never incur unrelated calls.
         await credit.exhausted(); attempt--; continue;
@@ -185,7 +185,7 @@ async function collect(provider: string, capability: string, name: string, optio
     if (stopped) return null;
     const value = { provider,capability,options,fetchedAt:now(),creditsCharged:pages.reduce((n,p)=>n+p.creditsCharged,0),pages };
     await save(path,value); summary.files++;
-    await ledger({provider,capability,name,file:path,pages:pages.length,credits:value.creditsCharged});
+    await ledger({provider,capability,name,file:path,pages:pages.length,credits:value.creditsCharged,records:pageRecords(pages,contract)});
     return value;
   } catch(e) { if(e instanceof TickerCreditLimit) throw e; console.error(now(),provider,capability,name,(e as Error).message); return null; }
 }
@@ -213,9 +213,10 @@ async function collectEarnings(companies: typeof COVERAGE) {
         if(stopped) return;
         for(const ticker of eligible) {
           const path=fileKey('eodhd','calendar/earnings',ticker);
-          const split=pages.map(p=>({...p,sharedResponse:p.response,response:{...p.response,data:{...(p.response.data ?? {}),earnings:earningsRecords(p.response,ticker)}},creditsCharged:p.creditsCharged/eligible.length}));
+          // Only this company's records; the batch response is not copied into every file (it was ~290 MB across 1,842 files).
+          const split=pages.map(p=>({...p,response:{...p.response,data:{...(p.response.data ?? {}),earnings:earningsRecords(p.response,ticker)}},creditsCharged:p.creditsCharged/eligible.length}));
           await save(path,{provider:'eodhd',capability:'calendar/earnings',options,fetchedAt:now(),creditsCharged:split.reduce((n,p)=>n+p.creditsCharged,0),pages:split});
-          summary.files++; await ledger({provider:'eodhd',capability:'calendar/earnings',ticker,file:path,pages:split.length});
+          summary.files++; await ledger({provider:'eodhd',capability:'calendar/earnings',ticker,file:path,pages:split.length,records:split.reduce((n,p)=>n+earningsRecords(p.response,ticker).length,0)});
         }
       } catch(e) { await ledger({provider:'eodhd',capability:'calendar/earnings',tickers:eligible,phase:'A',credits:0,error:(e as Error).message},false); }
     });
@@ -246,13 +247,19 @@ async function company(c: (typeof COVERAGE)[number]) {
       }
     }
   }
-  let domain: string | undefined;
-  try { domain = new URL(p?.website ?? c.website).hostname.replace(/^www\./,''); } catch { /* never fuzzy-match */ }
+  // The fiscal-ai profile carries no website and only 78 covered companies have one bundled, so the
+  // EODHD general profile (WebURL) is read first; the primary domain drops corporate subdomains
+  // (about.nike.com → nike.com), which caused the earlier misses.
+  const eodFundamentals = await collect('eodhd','fundamentals/company',c.ticker,{ticker:`${c.ticker}.US`});
+  const general = eodFundamentals?.pages?.[0]?.response?.data?.General;
+  const domain = primaryDomain(p?.website ?? c.website ?? general?.WebURL);
   const legionPath=fileKey('datalegion','companies/enrich-premium',c.ticker);
   if (!await remote(legionPath)) {
-    const legal=registry[c.ticker]?.legal ?? p?.legalName ?? p?.companyName;
-    const linkedin=p?.linkedinUrl ?? p?.linkedinURL ?? p?.socialLinks?.linkedin;
-    for(const identifiers of legionIdentifiers(domain,legal,linkedin)) {
+    const legal=p?.legalNameEnglish ?? registry[c.ticker]?.legal ?? p?.legalName ?? p?.companyName;
+    const linkedin=p?.linkedinUrl ?? p?.linkedinURL ?? p?.socialLinks?.linkedin ?? general?.LinkedIn;
+    const ids=legionIdentifiers(domain,legal,linkedin);
+    if(!ids.length) await ledger({provider:'datalegion',ticker:c.ticker,matched:false,skipped:true,error:'No website, domain or LinkedIn page to match on'},false);
+    for(const identifiers of ids) {
       try {
         const page=await call('datalegion','companies/enrich-premium',c.ticker,identifiers);
         const matches=records(page.response,catalog.get('datalegion/companies/enrich-premium') ?? {});

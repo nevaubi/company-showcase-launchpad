@@ -1,7 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { earningsBatches, earningsRecords, earningsNext, phaseACanCall, PHASE_A_FISCAL_CAPABILITIES, storageLedger } from '../../scripts/vendor/core';
-import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, assertOptions, exhausted, fileKey, nextOptions, pruneWithdrawn, requestId } from '../../scripts/vendor/core';
+import { compactEarningsFile, earningsBatches, earningsRecords, earningsNext, phaseACanCall, PHASE_A_FISCAL_CAPABILITIES, storageLedger } from '../../scripts/vendor/core';
+import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, primaryDomain, pageRecords, assertOptions, exhausted, fileKey, nextOptions, pruneWithdrawn, requestId } from '../../scripts/vendor/core';
 describe('owner vendor collection rules', () => {
+  it('drops the shared batch copy from an earnings file without changing its records', () => {
+    const v = { provider: 'eodhd', options: { symbols: 'A.US' }, pages: [{ requestId: 'x', sharedResponse: { data: { earnings: [1, 2, 3, 4] } }, response: { data: { earnings: [1, 2] } } }] };
+    const r = compactEarningsFile(v);
+    expect(r.changed).toBe(true);
+    expect(r.recordsBefore).toBe(2); expect(r.recordsAfter).toBe(2);
+    expect('sharedResponse' in r.value.pages[0]).toBe(false);
+    expect(r.value.pages[0].requestId).toBe('x');
+  });
+  it('matches Data Legion on the primary domain, then legal name + domain, then LinkedIn', () => {
+    expect(primaryDomain('https://about.nike.com')).toBe('nike.com');
+    expect(primaryDomain('https://corporate.lowes.com')).toBe('lowes.com');
+    expect(primaryDomain('https://www.cvshealth.com')).toBe('cvshealth.com');
+    expect(primaryDomain('https://www.bp.co.uk')).toBe('bp.co.uk');
+    expect(primaryDomain(undefined)).toBeUndefined();
+    const ids = legionIdentifiers('nike.com', 'NIKE, Inc.', 'https://www.linkedin.com/company/nike');
+    expect(ids.map((i: any) => Object.keys(i).filter((k) => k !== 'min_confidence').join('+'))).toEqual(['domain', 'name+domain', 'social_url']);
+  });
+  it('counts the records each page returned for the ledger', () => {
+    expect(pageRecords([{ response: { data: { ratings: [1, 2, 3] } } }, { response: { data: [4] } }], {})).toBe(4);
+  });
   it('Phase A never collects vendor daily prices (the app keeps its own price history)', () => {
     expect(PHASE_A_FISCAL_CAPABILITIES).not.toContain('prices/daily');
     expect(PHASE_A_FISCAL_CAPABILITIES).toContain('prices/splits');
@@ -20,7 +40,6 @@ describe('owner vendor collection rules', () => {
   it('stops before a call would exceed 1500 Phase A credits',()=>{expect(phaseACanCall(1490,10)).toBe(true);expect(phaseACanCall(1491,10)).toBe(false);expect(phaseACanCall(1500,1)).toBe(false);});
   it('waits up to ten minutes for an in-progress provider', () => { expect(PROVIDER_PENDING_MS).toBe(600000); expect(providerPending({error:{message:'This provider request is still running. Retry with the same x-request-id once it has finished'}})).toBe(true); expect(providerPending({error:{message:'invalid option'}})).toBe(false); });
   it('reports progress every fifty companies', () => expect(PROGRESS_COMPANIES).toBe(50));
-  it('retries a company miss with LinkedIn then legal name and domain', () => { expect(providerMiss({error:{code:'not_found'}})).toBe(true); expect(legionIdentifiers('meta.com','Meta Platforms Inc.','https://www.linkedin.com/company/meta')).toEqual([{domain:'meta.com',min_confidence:'high'},{social_url:'https://www.linkedin.com/company/meta',min_confidence:'high'},{name:'Meta Platforms Inc.',domain:'meta.com',min_confidence:'high'}]); expect(legionIdentifiers(undefined,'Meta',undefined)).toEqual([]); });
   it('allows no more than four calls in flight', () => expect(MAX_IN_FLIGHT).toBe(4));
   it('retries a failed call twice', () => expect(MAX_ATTEMPTS).toBe(3));
   it('probes exhausted credits every thirty minutes', () => expect(CREDIT_PROBE_MS).toBe(1800000));
