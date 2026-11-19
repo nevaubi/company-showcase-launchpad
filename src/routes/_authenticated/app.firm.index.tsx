@@ -16,6 +16,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { friendlyError, memberName, useFirm, useFirmMembers, type FirmMember } from "@/components/firm/firm-context";
 import { activityText, assignableRoles, canRemove, isEmail, ROLE_HELP, ROLE_LABEL, type FirmRole } from "@/lib/firm/core";
 import { fmtDate, fmtRelative } from "@/lib/format";
+import { useServerFn } from "@tanstack/react-start";
+import { emailFirmInvite } from "@/lib/waitlist.functions";
 
 export const Route = createFileRoute("/_authenticated/app/firm/")({
   head: () => ({
@@ -232,6 +234,7 @@ function InvitesPanel() {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<FirmRole>("analyst");
   const [last, setLast] = useState<string | null>(null);
+  const sendInvite = useServerFn(emailFirmInvite);
   const invites = useQuery({
     queryKey: ["firm-invites", firm?.id],
     enabled: !!firm && can("admin"),
@@ -245,15 +248,23 @@ function InvitesPanel() {
     mutationFn: async () => {
       const { data, error } = await supabase.from("firm_invites")
         .insert({ firm_id: firm!.id, email: email.trim().toLowerCase(), role, invited_by: userId! })
-        .select("token").single();
+        .select("id,token").single();
       if (error) throw error;
-      return data.token as string;
+      return data as { id: string; token: string };
     },
-    onSuccess: (token) => {
+    onSuccess: async ({ id, token }) => {
       setLast(token);
       setEmail("");
       qc.invalidateQueries({ queryKey: ["firm-invites", firm?.id] });
       copy(inviteLink(token));
+      try {
+        const r = await sendInvite({ data: { inviteId: id } });
+        if (r.status === "sent") toast.success("Invite emailed");
+        else if (r.status === "suppressed") toast.message("This address doesn't accept our emails. Share the copied link instead.");
+        else toast.message("Invite email queued. It will send shortly.");
+      } catch {
+        toast.message("Couldn't email the invite. Share the copied link instead.");
+      }
     },
     onError: (e) => toast.error(friendlyError(e)),
   });
@@ -286,7 +297,7 @@ function InvitesPanel() {
           <Button size="xs" variant="outline" onClick={() => copy(inviteLink(last))}><Copy /> Copy</Button>
         </div>
       )}
-      <p className="mt-2 text-[11px] text-muted-foreground">Send the link by email or chat. Invited people also see the invite on this page after signing in.</p>
+      <p className="mt-2 text-xs text-muted-foreground">We email the invite from FiledUnder; the link is also copied so you can share it. Invited people also see the invite on this page after signing in.</p>
       {pending.length > 0 && (
         <ul className="mt-3 divide-y border-t">
           {pending.map((i) => (

@@ -1,6 +1,8 @@
 import { createFileRoute, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Clock } from "lucide-react";
+import { Clock, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AppShell } from "@/components/app/app-shell";
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
@@ -34,6 +36,7 @@ function AppLayout() {
   const { access } = Route.useRouteContext();
   useApplyTheme();
   if (!access.approved) return <Waitlisted declined={access.status === "declined"} />;
+  if (access.needsTerms) return <AcceptTerms />;
   return (
     <AppShell isAdmin={access.admin}>
       <Outlet />
@@ -70,6 +73,42 @@ function Waitlisted({ declined }: { declined: boolean }) {
           Sign out
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Approved people accept the terms before their 14-day trial starts. */
+function AcceptTerms() {
+  const [agree, setAgree] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const accept = async () => {
+    setBusy(true);
+    setError(null);
+    const { error } = await supabase.rpc("accept_trial_terms");
+    if (error) {
+      setError("Couldn't start your trial. Please try again.");
+      setBusy(false);
+      return;
+    }
+    window.location.reload();
+  };
+  return (
+    <div className="paper-grain flex min-h-screen flex-col items-center justify-center px-6 text-center">
+      <Logo />
+      <h1 className="mt-10 font-display text-xl">Welcome to FiledUnder</h1>
+      <p className="mt-3 max-w-md text-sm text-muted-foreground">
+        Your access is approved. Your 14-day trial starts when you accept the terms below; nothing is charged and no card is needed.
+      </p>
+      <label className="mt-6 flex max-w-md items-start gap-3 text-left text-sm">
+        <Checkbox checked={agree} onCheckedChange={(v) => setAgree(v === true)} className="mt-0.5" aria-label="Accept the terms" />
+        <span>I accept the FiledUnder terms of service and privacy policy, and understand FiledUnder is research software, not investment advice.</span>
+      </label>
+      {error && <p role="alert" className="mt-3 text-sm text-negative">{error}</p>}
+      <Button className="mt-6" disabled={!agree || busy} onClick={accept}>
+        {busy && <Loader2 className="animate-spin" />}
+        Accept and start my trial
+      </Button>
     </div>
   );
 }

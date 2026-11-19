@@ -45,7 +45,7 @@ export function SiteNav() {
         </nav>
         <div className={styles.navActions}>
           <a href="/auth" className={styles.navGhost}>Sign in</a>
-          <a href="/auth" className={styles.navCta}>Join waitlist</a>
+          <a href="/waitlist" className={styles.navCta}>Join waitlist</a>
           <button type="button" className={styles.navToggle} aria-expanded={open} aria-controls="mobile-nav" onClick={() => setOpen((o) => !o)}>
             <span className={styles.srOnly}>Menu</span>
             <ChevronDown size={18} aria-hidden="true" style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .2s" }} />
@@ -497,7 +497,7 @@ export function VideoCta({ clip, title, body }: { clip: VideoClip; title: string
               <h2 id="cta-title" className={styles.ctaTitle}>{title}</h2>
               <p className={styles.ctaBody}>{body}</p>
               <div className={styles.ctaActions}>
-                <a href="/auth" className={styles.ctaPrimary}>Join waitlist <ArrowRight size={16} aria-hidden="true" /></a>
+                <a href="/waitlist" className={styles.ctaPrimary}>Join waitlist <ArrowRight size={16} aria-hidden="true" /></a>
                 <a href="/auth" className={styles.ctaSecondary}>Book a walkthrough</a>
               </div>
             </div>
@@ -516,7 +516,7 @@ export function SiteFooter() {
   const cols = [
     { h: "Product", l: [["Click-to-source", "/features/click-to-source"], ["IR KPIs", "/features/ir-kpis"], ["Supply chain", "/features/supply-chain"], ["Research assistant", "/features/research-assistant"], ["Office Studio", "/features/office-studio"]] },
     { h: "Coverage", l: [["All companies", "/companies"], ["NVIDIA", "/companies/NVDA"], ["Apple", "/companies/AAPL"], ["Microsoft", "/companies/MSFT"]] },
-    { h: "Get started", l: [["Access & pricing", "/pricing"], ["Join the waitlist", "/auth?mode=signup"], ["Sign in", "/auth"]] },
+    { h: "Get started", l: [["Access & pricing", "/pricing"], ["Join the waitlist", "/waitlist"], ["Sign in", "/auth"]] },
   ];
   return (
     <footer className={styles.footer}>

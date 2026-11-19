@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
+import { Route as WaitlistRouteImport } from './routes/waitlist'
 import { Route as AuthenticatedAppRouteImport } from './routes/_authenticated/app'
 import { Route as CompaniesIndexRouteImport } from './routes/companies.index'
 import { Route as CompaniesTickerRouteImport } from './routes/companies.$ticker'
@@ -116,6 +117,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const WaitlistRoute = WaitlistRouteImport.update({
+  id: '/waitlist',
+  path: '/waitlist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedAppRoute = AuthenticatedAppRouteImport.update({
@@ -535,6 +541,7 @@ export interface FileRoutesByFullPath {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/waitlist': typeof WaitlistRoute
   '/app': typeof AuthenticatedAppRouteWithChildren
   '/companies/$ticker': typeof CompaniesTickerRoute
   '/features/$slug': typeof FeaturesSlugRoute
@@ -615,6 +622,7 @@ export interface FileRoutesByTo {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/waitlist': typeof WaitlistRoute
   '/companies/$ticker': typeof CompaniesTickerRoute
   '/features/$slug': typeof FeaturesSlugRoute
   '/share/$id': typeof ShareIdRoute
@@ -694,6 +702,7 @@ export interface FileRoutesById {
   '/pricing': typeof PricingRoute
   '/reset-password': typeof ResetPasswordRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
+  '/waitlist': typeof WaitlistRoute
   '/_authenticated/app': typeof AuthenticatedAppRouteWithChildren
   '/companies/$ticker': typeof CompaniesTickerRoute
   '/features/$slug': typeof FeaturesSlugRoute
@@ -776,6 +785,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/sitemap.xml'
+    | '/waitlist'
     | '/app'
     | '/companies/$ticker'
     | '/features/$slug'
@@ -856,6 +866,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/sitemap.xml'
+    | '/waitlist'
     | '/companies/$ticker'
     | '/features/$slug'
     | '/share/$id'
@@ -934,6 +945,7 @@ export interface FileRouteTypes {
     | '/pricing'
     | '/reset-password'
     | '/sitemap.xml'
+    | '/waitlist'
     | '/_authenticated/app'
     | '/companies/$ticker'
     | '/features/$slug'
@@ -1016,6 +1028,7 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
+  WaitlistRoute: typeof WaitlistRoute
   CompaniesTickerRoute: typeof CompaniesTickerRoute
   FeaturesSlugRoute: typeof FeaturesSlugRoute
   ShareIdRoute: typeof ShareIdRoute
@@ -1069,6 +1082,13 @@ declare module '@tanstack/react-router' {
       path: '/sitemap.xml'
       fullPath: '/sitemap.xml'
       preLoaderRoute: typeof SitemapDotxmlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/waitlist': {
+      id: '/waitlist'
+      path: '/waitlist'
+      fullPath: '/waitlist'
+      preLoaderRoute: typeof WaitlistRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/app': {
@@ -1773,6 +1793,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
+  WaitlistRoute: WaitlistRoute,
   CompaniesTickerRoute: CompaniesTickerRoute,
   FeaturesSlugRoute: FeaturesSlugRoute,
   ShareIdRoute: ShareIdRoute,

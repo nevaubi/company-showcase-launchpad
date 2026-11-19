@@ -142,7 +142,7 @@ export function ProductShots() {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }} />
         </AnimatePresence>
       </div>
-      <p className={s.caption}>{shot.caption} <a href="/auth?mode=signup">Join the waitlist</a></p>
+      <p className={s.caption}>{shot.caption} <a href="/waitlist">Join the waitlist</a></p>
     </section>
   );
 }

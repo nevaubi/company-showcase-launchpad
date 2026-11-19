@@ -1,4 +1,9 @@
 import type { ComponentType } from 'react'
+import { template as receipt } from './waitlist-receipt'
+import { template as ownerNotice } from './waitlist-owner-notice'
+import { template as approved } from './waitlist-approved'
+import { template as reminder } from './waitlist-reminder'
+import { template as firmInvite } from './firm-invite'
 
 export interface TemplateEntry {
   component: ComponentType<any>
@@ -18,6 +23,9 @@ export interface TemplateEntry {
  *   // then add to TEMPLATES: 'welcome': welcomeTemplate
  */
 export const TEMPLATES: Record<string, TemplateEntry> = {
-  // Add templates here as they are created, e.g.:
-  // 'welcome': welcomeTemplate,
+  'waitlist-receipt': receipt,
+  'waitlist-owner-notice': ownerNotice,
+  'waitlist-approved': approved,
+  'waitlist-reminder': reminder,
+  'firm-invite': firmInvite,
 }

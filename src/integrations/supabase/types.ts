@@ -223,6 +223,75 @@ export type Database = {
         }
         Relationships: []
       }
+      email_log: {
+        Row: {
+          attempts: number
+          created_at: string
+          error: string | null
+          id: string
+          idempotency_key: string
+          next_attempt_at: string
+          recipient: string
+          related_id: string | null
+          related_table: string | null
+          sent_at: string | null
+          status: string
+          template: string
+          template_data: Json
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          idempotency_key: string
+          next_attempt_at?: string
+          recipient: string
+          related_id?: string | null
+          related_table?: string | null
+          sent_at?: string | null
+          status?: string
+          template: string
+          template_data?: Json
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          error?: string | null
+          id?: string
+          idempotency_key?: string
+          next_attempt_at?: string
+          recipient?: string
+          related_id?: string | null
+          related_table?: string | null
+          sent_at?: string | null
+          status?: string
+          template?: string
+          template_data?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      email_settings: {
+        Row: {
+          daily_cap: number
+          id: number
+          updated_at: string
+        }
+        Insert: {
+          daily_cap?: number
+          id?: number
+          updated_at?: string
+        }
+        Update: {
+          daily_cap?: number
+          id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       filing_documents: {
         Row: {
           accn: string
@@ -2380,6 +2449,8 @@ export type Database = {
           display_name: string | null
           email: string | null
           status: string
+          terms_accepted_at: string | null
+          trial_started_at: string | null
           user_id: string
         }
         Insert: {
@@ -2389,6 +2460,8 @@ export type Database = {
           display_name?: string | null
           email?: string | null
           status?: string
+          terms_accepted_at?: string | null
+          trial_started_at?: string | null
           user_id: string
         }
         Update: {
@@ -2398,7 +2471,72 @@ export type Database = {
           display_name?: string | null
           email?: string | null
           status?: string
+          terms_accepted_at?: string | null
+          trial_started_at?: string | null
           user_id?: string
+        }
+        Relationships: []
+      }
+      waitlist_attempts: {
+        Row: {
+          created_at: string
+          email: string
+          id: number
+          ip_hash: string
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: number
+          ip_hash: string
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: number
+          ip_hash?: string
+        }
+        Relationships: []
+      }
+      waitlist_requests: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          email: string
+          firm: string | null
+          id: string
+          name: string
+          role: string | null
+          status: string
+          use_case: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          email: string
+          firm?: string | null
+          id?: string
+          name: string
+          role?: string | null
+          status?: string
+          use_case?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          email?: string
+          firm?: string | null
+          id?: string
+          name?: string
+          role?: string | null
+          status?: string
+          use_case?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -2489,6 +2627,7 @@ export type Database = {
     }
     Functions: {
       accept_firm_invite: { Args: { _token: string }; Returns: string }
+      accept_trial_terms: { Args: never; Returns: undefined }
       alt_event_buckets: {
         Args: never
         Returns: {
@@ -2612,6 +2751,7 @@ export type Database = {
           token: string
         }[]
       }
+      needs_trial_terms: { Args: { _user: string }; Returns: boolean }
       openai_allowance_settle: {
         Args: { _day: string; _delta: number; _tier: string }
         Returns: undefined
@@ -2702,6 +2842,15 @@ export type Database = {
       tier_has_feature: {
         Args: { _feature: string; _tier: string }
         Returns: boolean
+      }
+      waitlist_reminder_candidates: {
+        Args: never
+        Returns: {
+          decided_at: string
+          display_name: string
+          email: string
+          user_id: string
+        }[]
       }
     }
     Enums: {

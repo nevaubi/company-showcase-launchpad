@@ -327,3 +327,4 @@
 - [x] Vendor ledger records the number of records on every request and storage row (`items`).
 - [x] EODHD earnings files keep only the company's own records; 1,811 files rewritten, counts unchanged, 270 MB saved.
 - [x] Data Legion: primary domain from EODHD WebURL, attempts domain → legal name + domain → LinkedIn; 130 companies pending (not called).
+- Waitlist emails (Nov 19): /waitlist page, five templates via one outbox with log, daily cap, retry job, admin email status and bulk approve; existing entries await owner decision

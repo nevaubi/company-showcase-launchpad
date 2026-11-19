@@ -36,7 +36,7 @@ function HeroButtons({ primaryAction, secondaryAction }: Required<Actions>) {
   );
 }
 
-const defaultPrimary: VideoHeroAction = { label: "Join waitlist", href: "/auth" };
+const defaultPrimary: VideoHeroAction = { label: "Join waitlist", href: "/waitlist" };
 const defaultSecondary: VideoHeroAction = { label: "See how we verify", href: "#verification" };
 
 /* ------------------------------------------------------------------ */

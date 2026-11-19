@@ -61,3 +61,4 @@
 - Options context: Cboe delayed chains are summarized purely in `src/lib/options/core.ts` (IV30, at-the-money straddle term, 25-delta skew, put/call) into `options_daily`, one row per stock per trading day from the scheduled `options` job (4 stocks a call, Cboe throttles near 20 requests/min) or `scripts/options-snapshot.ts`; IV rank and volume ratios use only recorded days, and report "priced vs past" uses `markets/reactions.json` from `scripts/earnings-reactions.ts`, so options figures stay context until enough history exists to test them.
 
 - First-run onboarding: see `src/lib/onboarding/AGENTS.md`.
+- App emails: every send goes through `queueEmail` (`src/lib/email/outbox.server.ts`), which records `email_log` first (idempotency key = template, recipient, row state), honours the daily cap in `email_settings` and is retried by the `emails` job; rules are pure in `src/lib/email/core.ts`.

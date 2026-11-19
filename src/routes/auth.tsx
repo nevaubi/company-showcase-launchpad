@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 const searchSchema = z.object({
   redirect: z.string().optional(),
   mode: z.enum(["signin", "signup", "forgot"]).optional(),
+  email: z.string().max(255).optional(),
 });
 
 export const Route = createFileRoute("/auth")({
@@ -60,7 +61,7 @@ function AuthPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const [mode, setMode] = useState<"signin" | "signup" | "forgot">(search.mode ?? "signin");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(search.email ?? "");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState<string | null>(null);

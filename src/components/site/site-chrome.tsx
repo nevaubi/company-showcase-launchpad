@@ -51,7 +51,7 @@ export function SiteHeader({ className }: { className?: string }) {
                 <Link to="/auth">Sign in</Link>
               </Button>
               <Button asChild>
-                <Link to="/auth" search={{ mode: "signup" }}>Join the waitlist</Link>
+                <Link to="/waitlist">Join the waitlist</Link>
               </Button>
             </>
           )}
