@@ -1,5 +1,10 @@
 # Filed Under — roadmap
 
+## Combined source reconciliation (Nov 19)
+- [ ] Verify and import new FROG/COST/TSMC archives additively; preserve all cited originals, report duplicates and uncertain dates.
+- [ ] Compare vendor KPI values with stored source facts; retain conflicts and unsupported gaps in private reports, not live figures.
+- [ ] Full extraction and integration of newly uploaded sources; TSMC coverage identity and free-only reader availability must be verified before processing.
+
 ## Owner uploads and Alexandria collector (Nov 19)
 - [ ] Owner follow-up: detached ordered import verification with ir-upload-import ticker ledger, and fresh background workbook comparison to private ops/ir-upload/ storage; preserve vendor collector.
 - [x] Verified additive PDF import: 649 rows stored, 13 duplicates skipped, EVER/SOFI excluded (no bounded coverage-add script), no failures; exact IDs and counts in import-report.json.
