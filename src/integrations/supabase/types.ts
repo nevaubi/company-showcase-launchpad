@@ -2526,6 +2526,13 @@ export type Database = {
       }
       consume_usage: { Args: { _kind: string }; Returns: Json }
       create_firm: { Args: { _name: string }; Returns: string }
+      data_freshness: {
+        Args: never
+        Returns: {
+          key: string
+          newest: string
+        }[]
+      }
       decide_waitlist: {
         Args: { _status: string; _user: string }
         Returns: undefined

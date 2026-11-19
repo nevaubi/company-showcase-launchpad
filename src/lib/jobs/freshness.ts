@@ -28,6 +28,13 @@ export const SOURCES: FreshnessSource[] = [
   { job: "gov-medicare-states", label: "Medicare drug costs by state (CMS)", everyMin: 7 * 1440 },
   // Same weekly check: imports EPA's yearly Toxics Release Inventory once the new year is out.
   { job: "gov-tri", label: "Plants & releases (EPA TRI)", everyMin: 7 * 1440 },
+  { job: "sec-discover", label: "SEC market-wide discovery", everyMin: 10 },
+  { job: "partner-mirror", label: "Partner dataset mirror", everyMin: 30 },
+  { job: "short-volume", label: "Short volume (FINRA)", everyMin: 1440 },
+  { job: "setups", label: "Short-term setups", everyMin: 1440 },
+  { job: "filing-steps", label: "Redlines & supply for new filings (worker)", everyMin: 30 },
+  { job: "alt-slow", label: "Slow alt data (worker)", everyMin: 1440 },
+  { job: "freshness", label: "Daily data-advance check (worker)", everyMin: 1440 },
 ];
 
 export interface Run {

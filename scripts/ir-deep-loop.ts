@@ -328,6 +328,14 @@ async function maybeAltSlow() {
   void run("scripts/alt-slow.ts", [], `${OUT}/alt-slow.log`).finally(() => { altSlowing = false; log("slow alt-data pass ended"); });
 }
 
+// ---------- daily data-advance check ----------
+let lastFreshness = 0;
+function maybeFreshness() {
+  if (Date.now() - lastFreshness < 24 * 3_600_000) return;
+  lastFreshness = Date.now();
+  void run("scripts/freshness-check.ts", [], `${OUT}/freshness.log`);
+}
+
 // ---------- background filing detail ----------
 let detailing = false;
 async function maybeDetail() {
@@ -544,6 +552,7 @@ for (;;) {
   await maybeIrSite();
   maybeReports();
   maybeFilingSteps();
+  maybeFreshness();
   await maybeAnalytics().catch((e) => log(`analytics check failed: ${(e as Error).message}`));
   await maybeCanon();
   await maybeAltSlow();
