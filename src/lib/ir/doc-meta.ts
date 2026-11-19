@@ -19,6 +19,13 @@ export function filedFromTitle(title: string): string | null {
 }
 
 const valid = (iso: string) => !Number.isNaN(Date.parse(`${iso}T00:00:00Z`));
+
+/** A publication date can never be after today (bond titles print maturity dates such as 2056). */
+export function notFuture(date: string | null | undefined, today = new Date().toISOString().slice(0, 10)): string | null {
+  if (!date) return null;
+  const d = date.slice(0, 10);
+  return valid(d) && d <= today ? d : null;
+}
 const iso = (y: number, m: number, d: number) => {
   const dt = new Date(Date.UTC(y, m - 1, d));
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d ? dt.toISOString().slice(0, 10) : null;
@@ -52,8 +59,10 @@ export type FiledBasis = "published" | "sec-title" | "document-date";
  * it is not in the future of `today`.
  */
 export function inferFiled(o: { published?: string | null; title?: string | null; url?: string | null; text?: string | null; periodEnd?: string | null; today?: string; windowDays?: number }): { filed: string | null; basis: FiledBasis | null } {
-  if (o.published && valid(o.published.slice(0, 10))) return { filed: o.published.slice(0, 10), basis: "published" };
-  const fromTitle = o.title ? filedFromTitle(o.title) : null;
+  const todayIso = o.today ?? new Date().toISOString().slice(0, 10);
+  const published = notFuture(o.published, todayIso);
+  if (published) return { filed: published, basis: "published" };
+  const fromTitle = notFuture(o.title ? filedFromTitle(o.title) : null, todayIso);
   if (fromTitle) return { filed: fromTitle, basis: "sec-title" };
   const dates = o.text ? datesInText(o.text.slice(0, 6000)) : [];
   const today = Date.parse(`${o.today ?? new Date().toISOString().slice(0, 10)}T00:00:00Z`);

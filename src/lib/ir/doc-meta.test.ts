@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accnFromSecUrl, datesInText, inferFiled } from "@/lib/ir/doc-meta";
+import { accnFromSecUrl, datesInText, inferFiled, notFuture } from "@/lib/ir/doc-meta";
 import { duplicateOf, figureSet } from "@/lib/ir/dedupe";
 
 describe("filing date inference", () => {
@@ -31,5 +31,14 @@ describe("duplicate copies", () => {
   it("keeps a copy with its own figures", () => {
     const deck = figureSet(Array.from({ length: 50 }, (_, i) => `${(i + 1) * 997}`).join(" "));
     expect(duplicateOf(deck, [sec])).toBeNull();
+  });
+});
+
+describe("future dates", () => {
+  it("never accepts a filed date after today", () => {
+    expect(notFuture("2056-03-04", "2026-11-19")).toBeNull();
+    expect(notFuture("2026-11-19", "2026-11-19")).toBe("2026-11-19");
+    expect(inferFiled({ published: "2056-03-04", today: "2026-11-19" }).filed).toBeNull();
+    expect(inferFiled({ title: "8-K 2031-01-01 x.htm", today: "2026-11-19" }).filed).toBeNull();
   });
 });

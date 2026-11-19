@@ -3,6 +3,7 @@
 // Skips files we already hold (same source URL or sha256) and files not yet copied.
 // Usage: bun scripts/ir-import-partner.ts [--tickers=AAPL,MSFT]
 import { sb, args, log } from "./lib/supa";
+import { notFuture } from "../src/lib/ir/doc-meta";
 
 const KIND: Record<string, string> = {
   release: "press-release", supplement: "supplement", presentation: "presentation",
@@ -40,7 +41,7 @@ for (const t of tickers) {
     const kind = ext === "xlsx" || ext === "xls" ? "data" : KIND[d.doc_type] ?? "other";
     rows.push({
       ticker: t, source: "partner", source_url: d.url, kind, title: d.title ?? d.url,
-      period: d.fiscal_label ?? null, filed: d.published ?? null, content_type: d.content_type ?? null,
+      period: d.fiscal_label ?? null, filed: notFuture(d.published), content_type: d.content_type ?? null,
       ext, bytes: d.bytes ?? null, sha256: d.sha256 ?? null, path: `partner/${d.storage_path}`,
       pages: d.pages ?? null, fetched_at: d.fetched_at ?? new Date().toISOString(),
     });
