@@ -247,6 +247,17 @@ async function maybeIrSite() {
   });
 }
 
+// ---------- scheduled standard reports ----------
+/** Every 10 minutes: one due recap/preview (reports-due.ts pauses itself on AI credit outages). */
+let reporting = false;
+let lastReports = 0;
+function maybeReports() {
+  if (reporting || Date.now() - lastReports < 10 * 60_000 || memUsedGB() > MEM_GB * 0.8) return;
+  reporting = true;
+  lastReports = Date.now();
+  void run("scripts/reports-due.ts", [], `${OUT}/reports.log`).finally(() => { reporting = false; });
+}
+
 // ---------- background filing detail ----------
 let detailing = false;
 async function maybeDetail() {
@@ -461,6 +472,7 @@ for (;;) {
   await maybeMirror();
   await maybeDetail();
   await maybeIrSite();
+  maybeReports();
   await maybeSod();
   await maybeReactions();
   await maybeProse();

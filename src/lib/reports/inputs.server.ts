@@ -1,3 +1,4 @@
+import { withFiledReleases } from "@/lib/financials/releases";
 // Server-side loader for report inputs. Reads the stored copies (company datasets from the partner
 // data service, falling back to the private `datasets` bucket; filings/estimates/caches in tables) so reports are built from
 // trusted data, never from numbers a browser sent.
@@ -109,7 +110,7 @@ export async function loadDataset(ticker: string): Promise<CompanyDataset> {
     }));
     d.filings = [...add, ...d.filings];
   }
-  return d;
+  return withFiledReleases(d);
 }
 
 async function loadPrice(ticker: string, est: Estimates | null, mk: MarketsFile | null): Promise<ReportInputs["price"]> {
