@@ -2,7 +2,8 @@
 
 ## Automatic data refresh — wave 1 (Nov 19)
 - [x] G15: removed job_runs pruning entirely (no stored ledger deletes); 21 tests and TypeScript passed; live prices refresh stored 230 bars, vendor ledger preserved.
-- [ ] G14 Form 4 retries/amendments; G10 estimates coverage; G4 FINRA writer; G7 IR collection retries; G8 recent-file re-read; G6 IR-site schedule; G9 stale cache fallback; G3 market-wide SEC discovery. Finish in order, separate commits, no paid reads or UI changes.
+- [x] G14: include 4/A, durable job_state receipts for empty ownership filings (no fabricated trades), per-filing retries; six tests and TypeScript passed; live SEC slices stored three real trades.
+- [ ] G10 estimates coverage; G4 FINRA writer; G7 IR collection retries; G8 recent-file re-read; G6 IR-site schedule; G9 stale cache fallback; G3 market-wide SEC discovery. Finish in order, separate commits, no paid reads or UI changes.
 
 ## Combined source reconciliation (Nov 19)
 - [ ] Verify and import new FROG/COST/TSMC archives additively; preserve all cited originals, report duplicates and uncertain dates.

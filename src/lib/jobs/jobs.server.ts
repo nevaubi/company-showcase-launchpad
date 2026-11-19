@@ -308,12 +308,23 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
         // Parse up to two new Form 4s per company per run; the rest are picked up on later passes.
         const { data: parsedAlready } = await supabaseAdmin.from("insider_trades").select("accn").eq("ticker", c.ticker).gte("filed", since);
         const done = new Set((parsedAlready ?? []).map((x) => x.accn));
-        for (const f of rows.filter((x) => x.form === "4" && !done.has(x.accn)).slice(0, 2)) {
+        const candidates = rows.filter((x) => /^(4|4\/A)$/.test(x.form) && !done.has(x.accn));
+        // Empty ownership filings need a durable receipt, not a fabricated zero-share trade.
+        const { data: receipts, error: receiptError } = candidates.length
+          ? await supabaseAdmin.from("job_state").select("job").in("job", candidates.map((f) => `form4-seen:${f.accn}`))
+          : { data: [], error: null };
+        if (receiptError) throw new Error(receiptError.message);
+        const seen = new Set((receipts ?? []).map((x) => x.job));
+        for (const f of candidates.filter((x) => !seen.has(`form4-seen:${x.accn}`)).slice(0, 2)) {
+          try {
           const path = form4XmlPath(f.doc);
           const xml = await (await fetchSec(archiveUrl(c.cik, f.accn, path))).text();
+          // Do not receipt a malformed response as an empty/derivative-only filing.
+          if (!/<ownershipDocument\b/i.test(xml) || !/<\/ownershipDocument>/i.test(xml)) throw new Error("Invalid ownership XML");
           const parsed = parseForm4(xml, { accn: f.accn, filed: f.filed, report: f.report ?? undefined }, path);
           if (!parsed.length) {
-            // Derivative-only filings carry no common-stock rows; record a marker so they aren't re-fetched.
+            const { error } = await supabaseAdmin.from("job_state").upsert({ job: `form4-seen:${f.accn}`, cursor: 0, updated_at: new Date().toISOString() });
+            if (error) throw new Error(error.message);
             continue;
           }
           const { error } = await supabaseAdmin.from("insider_trades").upsert(
@@ -341,6 +352,9 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
           // Open-market purchases by officers/directors feed the insider-cluster strategy.
           const buys = insiderBuyRows(c.ticker, parsed.map((t) => ({ ...t, date: t.date })), "sec-form4");
           if (buys.length) await supabaseAdmin.from("insider_buys").upsert(buys, { onConflict: "accn,owner", ignoreDuplicates: true });
+          } catch (e) {
+            errors.push(`${c.ticker} ${f.accn}: ${(e as Error).message}`);
+          }
         }
       } catch (e) {
         errors.push(`${c.ticker}: ${(e as Error).message}`);
