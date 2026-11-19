@@ -3,6 +3,13 @@ export const REPORTS_JOB = "reports-due";
 export const REPORTS_PROBE_MS = 3600_000;
 export const STUCK_LOCK_MS = 2 * 3600_000;
 export const isAiCreditError = (m: string) => /credits are exhausted|\b402\b|payment required|insufficient credits/i.test(m);
+/** The worker's free-only lane: the day's free allowance is spent, so nothing can be written until the UTC day resets. */
+export const isFreeAllowanceSpent = (m: string) => /free allowance spent|free-only mode/i.test(m);
+/** Seconds since epoch just after the next UTC midnight (when the free allowance resets). */
+export const nextUtcDay = (nowMs: number) => {
+  const d = new Date(nowMs);
+  return Math.ceil(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1, 0, 5) / 1000);
+};
 
 export interface DueSlot { ticker: string; kind: "recap" | "preview"; reason: string }
 

@@ -9,7 +9,7 @@ import { args, log, sb } from "./lib/supa";
 import { COVERAGE } from "@/lib/coverage";
 import { ensureReport, ReportLimitError } from "@/lib/reports/store.server";
 import { loadReportInputs } from "@/lib/reports/inputs.server";
-import { dueSlots, isAiCreditError, REPORTS_JOB, REPORTS_PROBE_MS, STUCK_LOCK_MS } from "./lib/reports-due";
+import { dueSlots, isAiCreditError, isFreeAllowanceSpent, nextUtcDay, REPORTS_JOB, REPORTS_PROBE_MS, STUCK_LOCK_MS } from "./lib/reports-due";
 
 const now = () => new Date().toISOString();
 const today = now().slice(0, 10);
@@ -46,10 +46,14 @@ if (dry || !due.length) process.exit(0);
 
 // 4. One slot per call.
 const slot = due[0];
+const FREE_PAUSE = "Free AI allowance spent for today; resumes after 00:00 UTC";
 const pause = async (reason: string | null, retryAt = 0) => sb.from("job_state").upsert({ job: REPORTS_JOB, cursor: retryAt, paused_reason: reason, updated_at: now() });
 try {
   const row = await ensureReport(sb as never, { ticker: slot.ticker, kind: slot.kind, scope: "shared", firmId: null, firmName: null, userId: null, coverage: null, source: "pregen" }, () => loadReportInputs(slot.ticker));
-  if (row.error && isAiCreditError(row.error)) {
+  if (row.error && isFreeAllowanceSpent(row.error)) {
+    if (!st?.paused_reason) log(`${REPORTS_JOB}: free AI allowance spent — paused until the UTC day resets`);
+    await pause(FREE_PAUSE, nextUtcDay(Date.now()));
+  } else if (row.error && isAiCreditError(row.error)) {
     if (!st?.paused_reason) log(`${REPORTS_JOB}: AI credits exhausted — paused, probing hourly`);
     await pause(`AI credits exhausted (402): ${row.error.slice(0, 120)}`, Math.ceil((Date.now() + REPORTS_PROBE_MS) / 1000));
   } else {
@@ -59,6 +63,7 @@ try {
 } catch (e) {
   const m = (e as Error).message;
   if (e instanceof ReportLimitError) log(`${REPORTS_JOB}: daily limit reached — ${m}`);
+  else if (isFreeAllowanceSpent(m)) await pause(FREE_PAUSE, nextUtcDay(Date.now()));
   else if (isAiCreditError(m)) await pause(`AI credits exhausted (402): ${m.slice(0, 120)}`, Math.ceil((Date.now() + REPORTS_PROBE_MS) / 1000));
   else log(`✗ ${slot.ticker}/${slot.kind}: ${m}`);
 }

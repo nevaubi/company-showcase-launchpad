@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueSlots, isAiCreditError } from "../../scripts/lib/reports-due";
+import { dueSlots, isAiCreditError, isFreeAllowanceSpent, nextUtcDay } from "../../scripts/lib/reports-due";
 const covered = new Set(["A", "B", "C", "D"]);
 describe("scheduled standard reports", () => {
   it("writes a recap for an earnings 8-K in the last 3 days unless the recap already uses that accession", () => {
@@ -16,5 +16,11 @@ describe("scheduled standard reports", () => {
   it("recognises an AI 402 so the job pauses instead of looping", () => {
     expect(isAiCreditError("AI credits are exhausted for this workspace. Add credits to continue.")).toBe(true);
     expect(isAiCreditError("The AI service is busy")).toBe(false);
+  });
+  it("on the worker's free-only lane a spent allowance pauses until just after the next UTC midnight", () => {
+    expect(isFreeAllowanceSpent("free-only mode: OpenAI free allowance spent or unavailable")).toBe(true);
+    expect(isFreeAllowanceSpent("AI credits are exhausted for this workspace.")).toBe(false);
+    expect(new Date(nextUtcDay(Date.parse("2026-11-19T09:45:00Z")) * 1000).toISOString()).toBe("2026-11-20T00:05:00.000Z");
+    expect(new Date(nextUtcDay(Date.parse("2026-11-30T23:59:00Z")) * 1000).toISOString()).toBe("2026-12-01T00:05:00.000Z");
   });
 });
