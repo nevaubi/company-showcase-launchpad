@@ -282,9 +282,24 @@ export async function openaiStructured<T>(opts: {
   signal?: AbortSignal;
 }): Promise<{ data: T; usage: Usage; model: string }> {
   if (opts.model.startsWith("inclusionai/") || opts.model.endsWith(":free")) return openRouterStructured<T>(opts);
+  if (freeOnly()) return freeOnlyStructured<T>(opts);
   if (opts.model.startsWith("claude-")) return anthropicStructured<T>(opts);
   if (useGateway()) return gatewayStructured<T>(opts);
   return openaiDirectStructured<T>(opts);
+}
+
+/** IR_FREE_ONLY=1: no paid calls at all. Every non-OpenRouter call goes through the owner's free OpenAI allowance. */
+export const freeOnly = () => process.env["IR_FREE_ONLY"] === "1";
+
+/** Free-only routing: models outside the free tiers read on the mini tier; a spent allowance stops the run (quota) until the UTC day resets. */
+async function freeOnlyStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+  const { tierOf } = await import("@/lib/ir/openai-allowance");
+  const { laneStructured } = await import("@/lib/ir/openai-lane.server");
+  const base = opts.model.replace(/^openai\//, "");
+  const model = tierOf(base) ? base : process.env["IR_FREE_MODEL"] || "gpt-5.4-mini";
+  const r = await laneStructured<T>({ ...opts, model });
+  if (!r) throw new OpenAIError("free-only mode: OpenAI free allowance spent or unavailable", "quota", 0);
+  return r;
 }
 
 /** The owner's own OpenAI key (Responses API, strict JSON schema), whatever IR_AI_PROVIDER says. */

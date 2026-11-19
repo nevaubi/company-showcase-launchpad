@@ -21,6 +21,12 @@ export async function structured<T>(opts: {
   /** Hosted tools, e.g. [{ type: "web_search" }] */
   tools?: object[];
 }): Promise<T> {
+  // IR worker free-only mode: never call the paid gateway; read on the owner's free OpenAI allowance.
+  if (process.env["IR_FREE_ONLY"] === "1") {
+    if (opts.tools) throw new Error("free-only mode: hosted tools are unavailable");
+    const { openaiStructured } = await import("@/lib/openai.server");
+    return (await openaiStructured<T>({ model: "gpt-5.4-mini", name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, effort: opts.effort })).data;
+  }
   try {
     const res = await generateResponse({
       model: MODEL,
