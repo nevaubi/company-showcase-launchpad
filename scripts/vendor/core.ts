@@ -7,6 +7,32 @@ export const PHASE_B_CALL_LIMIT = 2000;
 export const CREDIT_PROBE_MS = 30 * 60 * 1000;
 export const PROVIDER_PENDING_MS = 10 * 60 * 1000;
 export const PROGRESS_COMPANIES = 50;
+export const PHASE_A_CREDIT_LIMIT = 1500;
+export function phaseACanCall(spent: number, reserved: number) {
+  return spent + reserved <= PHASE_A_CREDIT_LIMIT;
+}
+export function earningsBatches(tickers: string[], stored: Set<string>, today: Date) {
+  const to = new Date(today);
+  to.setUTCDate(to.getUTCDate() + 90);
+  const missing = tickers.filter(t => !stored.has(t));
+  return Array.from({length: Math.ceil(missing.length / 10)}, (_, i) => ({
+    tickers: missing.slice(i * 10, i * 10 + 10),
+    options: {symbols: missing.slice(i * 10, i * 10 + 10).map(t => `${t}.US`).join(','), from: '1996-01-01', to: to.toISOString().slice(0, 10)},
+  }));
+}
+export function earningsRecords(result: Json, ticker: string) {
+  return records(result, {response:{key:'earnings'}}).filter(r => String(r.code ?? r.symbol ?? '').toUpperCase() === `${ticker}.US`.toUpperCase());
+}
+export function earningsNext(result: Json, contract: Json, options: Json): Json | null {
+  const data = result.data ?? {};
+  const meta = result.pagination ?? data.pagination ?? result.meta ?? data.meta ?? {};
+  const more = meta.hasNextPage === true || meta.hasMore === true || meta.nextCursor != null || meta.next_cursor != null || meta.nextPage != null || data.next_offset != null || (meta.totalPages && Number(options.page ?? 1) < meta.totalPages);
+  if (!more) return null;
+  const next = nextOptions(result, contract, options);
+  if (!next) throw new Error('Earnings reports more pages but its reviewed contract exposes no continuation option');
+  return next;
+}
+export function storageLedger(detail: Json) { return {...detail, credits:0}; }
 export function providerPending(body: Json) {
   return /provider request is still running|retry with the same x-request-id once it has finished/i.test(JSON.stringify(body));
 }
