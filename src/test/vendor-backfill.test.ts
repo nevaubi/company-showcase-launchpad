@@ -27,3 +27,25 @@ describe('owner vendor collection rules', () => {
   it('rejects unknown options before billing', () => expect(() => assertOptions({id:'test',options:[{name:'cik'}]},{ticker:'ZM'})).toThrow('invalid option ticker'));
   it('removes withdrawn stories from every saved page', () => expect(pruneWithdrawn({pages:[{response:{data:[{id:'1',body:'withdrawn'},{id:'2'}]}}]},new Set(['1']))).toEqual({pages:[{response:{data:[{id:'2'}]}}]}));
 });
+import { CreditPause, CREDIT_PAUSE_REASON } from '../../scripts/vendor/core';
+describe('vendor credit pause', () => {
+  it('a 402 always records the paused reason and waits 30 minutes', async () => {
+    const reasons: (string|null)[] = []; const waits: number[] = [];
+    const p = new CreditPause(async r => { reasons.push(r); }, async ms => { waits.push(ms); });
+    await p.exhausted();
+    expect(reasons).toEqual([CREDIT_PAUSE_REASON]); expect(waits).toEqual([1800000]);
+  });
+  it('a concurrent success during the wait does not clear the reason; the probe success does', async () => {
+    const reasons: (string|null)[] = []; let release!: () => void;
+    const p = new CreditPause(async r => { reasons.push(r); }, () => new Promise<void>(r => { release = r; }));
+    const waiting = p.exhausted(); await Promise.resolve(); await Promise.resolve();
+    await p.success();
+    expect(reasons).toEqual([CREDIT_PAUSE_REASON]);
+    release(); await waiting; await p.success();
+    expect(reasons).toEqual([CREDIT_PAUSE_REASON, null]);
+  });
+  it('two simultaneous 402s share one probe wait', async () => {
+    let waits = 0; const p = new CreditPause(async () => {}, async () => { waits++; });
+    await Promise.all([p.exhausted(), p.exhausted()]); expect(waits).toBe(1);
+  });
+});

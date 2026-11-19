@@ -99,3 +99,31 @@ export function pruneWithdrawn(value: any, ids: Set<string>): any {
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k,v]) => [k, pruneWithdrawn(v, ids)]));
   return value;
 }
+export const CREDIT_PAUSE_REASON = 'Firecrawl credits exhausted; probing every 30 minutes';
+/**
+ * Credit pause shared by concurrent calls: a 402 always records the paused reason and starts one
+ * 30-minute probe wait; a concurrent call that happens to succeed during that wait must not clear
+ * the reason (only a success after the wait — the probe — does), so status stays truthful.
+ */
+export class CreditPause {
+  wait: Promise<void> | null = null;
+  paused = false;
+  constructor(private setReason: (reason: string | null) => Promise<unknown>, private sleep: (ms: number) => Promise<unknown>, private probeMs = CREDIT_PROBE_MS) {}
+  exhausted(): Promise<void> {
+    if (!this.wait) {
+      this.paused = true;
+      this.wait = (async () => {
+        try { await this.setReason(CREDIT_PAUSE_REASON); } catch { /* lease loss stops the collector separately */ }
+        await this.sleep(this.probeMs);
+      })().finally(() => { this.wait = null; });
+    }
+    return this.wait;
+  }
+  /** Resume a collector that was already paused when it took the lease. */
+  resume() { if (!this.wait) { this.paused = true; this.wait = (async () => { await this.sleep(this.probeMs); })().finally(() => { this.wait = null; }); } }
+  async success() {
+    if (this.wait || !this.paused) return;
+    this.paused = false;
+    await this.setReason(null);
+  }
+}

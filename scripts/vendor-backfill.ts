@@ -8,7 +8,7 @@ import { dbGate, sb, sleep, selectAll } from './lib/supa';
 import contracts from './vendor/contracts.json';
 import { phaseB, phaseC } from './vendor/phases';
 import { staticRegistry } from '../src/lib/alt/collect.server';
-import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, type Json } from './vendor/core';
+import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, type Json } from './vendor/core';
 
 const JOB = 'vendor-backfill';
 const root = process.env.VENDOR_WORK_DIR ?? '/tmp/vendor-backfill';
@@ -23,7 +23,7 @@ const url = gateway ? 'https://connector-gateway.lovable.dev/firecrawl/v2/scrape
 const catalog = new Map(contracts.map(c => [c.id, c as Json]));
 const now = () => new Date().toISOString();
 let stopped = false;
-let creditWait: Promise<void> | null = null;
+const credit = new CreditPause((reason) => state({ paused_reason: reason }), sleep);
 let leaseTimer: ReturnType<typeof setInterval> | undefined;
 process.on('SIGTERM', () => { stopped = true; });
 process.on('SIGINT', () => { stopped = true; });
@@ -70,9 +70,7 @@ async function acquire() {
     if (!r.data?.length) return false;
   }
   leaseUntil=lease;
-  if(existing.data?.paused_reason==='Firecrawl credits exhausted; probing every 30 minutes') {
-    creditWait=sleep(CREDIT_PROBE_MS).finally(()=>{creditWait=null;});
-  }
+  if(existing.data?.paused_reason===CREDIT_PAUSE_REASON) credit.resume();
   console.log(now(), 'lease acquired', owner);
   await ledger({stage:'lease-acquired',owner});
   return true;
@@ -112,7 +110,7 @@ async function call(provider: string, capability: string, name: string, options:
   if (existsSync(checkpoint)) return JSON.parse(readFileSync(checkpoint,'utf8'));
   const pendingUntil=Date.now()+PROVIDER_PENDING_MS;
   for (let attempt = 0; attempt < MAX_ATTEMPTS && !stopped; attempt++) {
-    if (creditWait) await creditWait;
+    if (credit.wait) await credit.wait;
     const tickers=tickerContext.getStore() ?? [];
     const reserved=Number(contract.billing?.maxCredits ?? contract.creditsCost ?? 0)/Math.max(1,tickers.length);
     for(const ticker of tickers) if(!phaseACanCall(tickerCredits.get(ticker) ?? 0,reserved)) {
@@ -144,12 +142,8 @@ async function call(provider: string, capability: string, name: string, options:
       summary.calls++; if(summary.phase==='B') phaseCalls[provider]=(phaseCalls[provider]??0)+1; summary.credits[provider] = (summary.credits[provider] ?? 0) + charged;
       await ledger({ provider, capability, name, tickers, options, request_id:id, attempt, status, credits:charged, started_at, phase:summary.phase, pending:providerPending(body), error:result?.error ?? body.error ?? null }, (r.ok && !!result && !result.error) || providerPending(body));
       if (exhausted(status, body)) {
-        if (!creditWait) creditWait = (async () => {
-          await state({paused_reason:'Firecrawl credits exhausted; probing every 30 minutes'});
-          // Retrying the same request every 30 minutes is the credit probe; never incur unrelated calls.
-          await sleep(CREDIT_PROBE_MS);
-        })().finally(() => { creditWait = null; });
-        await creditWait; attempt--; continue;
+        // Retrying the same request every 30 minutes is the credit probe; never incur unrelated calls.
+        await credit.exhausted(); attempt--; continue;
       }
       if(providerPending(body)) {
         if(Date.now()>=pendingUntil) throw new Error('Provider still running after ten minutes: '+JSON.stringify(result?.error ?? body.error));
@@ -157,7 +151,7 @@ async function call(provider: string, capability: string, name: string, options:
       }
       if(providerMiss(result ?? body)) return {options,fetchedAt:started_at,creditsCharged:credits,requestId:id,response:result ?? body,miss:true};
       if (!r.ok || !result || result.error) throw new Error(JSON.stringify(result?.error ?? body.error ?? body));
-      await state({paused_reason:null});
+      await credit.success();
       const page = { provider, capability, options, fetchedAt:started_at, creditsCharged:credits, requestId:id, response:result };
       writeFileSync(checkpoint, JSON.stringify(page));
       return page;
@@ -362,5 +356,5 @@ async function main() {
 }
 try { await main(); } finally {
   if (leaseTimer) clearInterval(leaseTimer);
-  if(leaseUntil) await state({lease_until:null,paused_reason:stopped?'collector interrupted; resume from existing files':null});
+  if(leaseUntil) await state({lease_until:null,paused_reason:stopped?'collector interrupted; resume from existing files':credit.paused?CREDIT_PAUSE_REASON:null});
 }
