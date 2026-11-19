@@ -1,5 +1,11 @@
 # Filed Under — roadmap
 
+## Owner uploads and Alexandria collector (Nov 19)
+- [x] Verified additive PDF import: 649 rows stored, 13 duplicates skipped, EVER/SOFI excluded (no bounded coverage-add script), no failures; exact IDs and counts in import-report.json.
+- [x] Read-only workbook comparisons saved in workbook-dry-run.json; exact-label matching leaves unmatched/ambiguous values unproven; no corrections applied.
+- [ ] Collector initial phase-A batch started locally after import; own lease/ledger, four-call concurrency and stable billing IDs. Remaining: Benzinga news/withdrawal reconciliation, full A continuation, B/C; Render missing FIRECRAWL_API_KEY. Not deployed.
+- [ ] Verify first 25 companies and report calls, provider credits, failures and projection; continue phases A/B/C.
+
 ## IR worker + IR data quality (Nov 17)
 - [x] Audit: 4 GB limit despite Pro Ultra, 15-min lease stalls, batch-of-10 lost "finished" credit, review/requeue ping-pong
 - [x] Memory-sized lanes, host-tagged 3-min lease, per-company runs, fair retries, admin memory/finished view (deployed 6b08748)
