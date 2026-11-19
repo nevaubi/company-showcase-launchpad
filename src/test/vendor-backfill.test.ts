@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { CUT_FISCAL_CAPABILITIES, HourlyBudget, MAX_CREDITS_PER_HOUR, hourlyCreditLimit } from '../../scripts/vendor/core';
+import { CUT_FISCAL_CAPABILITIES, CUT_PHASE_BC_CAPABILITIES, PHASE_C_CREDIT_LIMIT, HourlyBudget, MAX_CREDITS_PER_HOUR, hourlyCreditLimit } from '../../scripts/vendor/core';
 import { compactEarningsFile, earningsBatches, earningsRecords, earningsNext, phaseACanCall, PHASE_A_FISCAL_CAPABILITIES, storageLedger } from '../../scripts/vendor/core';
 import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, primaryDomain, pageRecords, assertOptions, exhausted, fileKey, nextOptions, pruneWithdrawn, requestId } from '../../scripts/vendor/core';
 describe('owner vendor collection rules', () => {
@@ -49,6 +49,17 @@ describe('owner vendor collection rules', () => {
     }
     const src = readFileSync('scripts/vendor-backfill.ts','utf8') + readFileSync('scripts/vendor/phases.ts','utf8');
     for (const cap of ['prices/splits','filings/list','ownership/insider-transactions','prices/daily','news/press-releases','news/search','news/wiims','news/removed']) expect(src.includes(`'${cap}'`)).toBe(false);
+  });
+  it('phases B and C never call cut capabilities; phase C ceiling is 150', () => {
+    const src = readFileSync('scripts/vendor/phases.ts','utf8');
+    for (const id of CUT_PHASE_BC_CAPABILITIES) {
+      const [prov, ...rest] = id.split('/'); const cap = rest.join('/');
+      expect(src.includes(`'${prov}','${cap}'`) || src.includes(`'${prov}',\`${cap}`)).toBe(false);
+    }
+    expect(src).not.toMatch(/'institutions','financials'/);
+    expect(PHASE_C_CREDIT_LIMIT).toBe(150);
+    expect(phaseACanCall(100, 60, PHASE_C_CREDIT_LIMIT)).toBe(false);
+    expect(phaseACanCall(100, 50, PHASE_C_CREDIT_LIMIT)).toBe(true);
   });
   it('hourly budget: 12000 by default, env override', () => {
     expect(MAX_CREDITS_PER_HOUR).toBe(12000);

@@ -8,7 +8,7 @@ import { dbGate, sb, sleep, selectAll } from './lib/supa';
 import contracts from './vendor/contracts.json';
 import { phaseB, phaseC } from './vendor/phases';
 import { staticRegistry } from '../src/lib/alt/collect.server';
-import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, PHASE_A_FISCAL_CAPABILITIES, pageRecords, primaryDomain, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, HourlyBudget, PACING_REASON, INTERRUPTED_REASON, type Json } from './vendor/core';
+import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, PHASE_C_CREDIT_LIMIT, PHASE_A_FISCAL_CAPABILITIES, pageRecords, primaryDomain, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, HourlyBudget, PACING_REASON, INTERRUPTED_REASON, type Json } from './vendor/core';
 
 const JOB = 'vendor-backfill';
 const root = process.env.VENDOR_WORK_DIR ?? '/tmp/vendor-backfill';
@@ -128,8 +128,9 @@ async function call(provider: string, capability: string, name: string, options:
     if (credit.wait) await credit.wait;
     const tickers=tickerContext.getStore() ?? [];
     const reserved=Number(contract.billing?.maxCredits ?? contract.creditsCost ?? 0)/Math.max(1,tickers.length);
-    for(const ticker of tickers) if(!phaseACanCall(tickerCredits.get(ticker) ?? 0,reserved)) {
-      const reason=`Phase A ${PHASE_A_CREDIT_LIMIT}-credit ceiling: next call could exceed limit`;
+    const tickerLimit=summary.phase==='C'?PHASE_C_CREDIT_LIMIT:PHASE_A_CREDIT_LIMIT;
+    for(const ticker of tickers) if(!phaseACanCall(tickerCredits.get(ticker) ?? 0,reserved,tickerLimit)) {
+      const reason=`Phase ${summary.phase} ${tickerLimit}-credit ceiling: next call could exceed limit`;
       await ledger({ticker,phase:summary.phase,provider,capability,credits:0,spent:tickerCredits.get(ticker) ?? 0,reserved,skipped:true,error:reason},false);
       throw new TickerCreditLimit(reason);
     }
@@ -337,7 +338,7 @@ async function main() {
     await Promise.all(Array.from({length:MAX_IN_FLIGHT},async()=>{
       while(!stopped && cursor<companies.length) {
         const c=companies[cursor++];
-        try {await tickerContext.run(phase.startsWith('A')?[c.ticker]:[],()=>fn(c));} catch(e) {await ledger({ticker:c.ticker,phase,error:(e as Error).message},false);}
+        try {await tickerContext.run(phase.startsWith('A')||phase==='C'?[c.ticker]:[],()=>fn(c));} catch(e) {await ledger({ticker:c.ticker,phase,error:(e as Error).message},false);}
         summary.companies++;
         if(summary.companies%PROGRESS_COMPANIES===0) {
           await ledger({stage:'progress',companies_done:summary.companies,...JSON.parse(JSON.stringify(summary))});

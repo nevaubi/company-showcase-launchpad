@@ -20,8 +20,13 @@ export const PHASE_A_CREDIT_LIMIT = 1500;
  */
 export const CUT_FISCAL_CAPABILITIES = ['prices/daily','prices/splits','filings/list','ownership/insider-transactions'] as const;
 export const PHASE_A_FISCAL_CAPABILITIES = ['company/segments-and-kpis','financials/income-statement','financials/balance-sheet','financials/cash-flow-statement','financials/income-statement-as-reported','financials/balance-sheet-as-reported','financials/cash-flow-statement-as-reported','financials/adjusted-metrics','company/shares-outstanding','ratios/series','ownership/institutional-holders','ownership/insider-holders','events/ir-events'] as const;
-export function phaseACanCall(spent: number, reserved: number) {
-  return spent + reserved <= PHASE_A_CREDIT_LIMIT;
+/** Per-company ceiling for Phase C (owner, Nov 19), so one company with many matches can't run away. */
+export const PHASE_C_CREDIT_LIMIT = 150;
+/** Phase B/C capabilities cut (owner, Nov 19): duplicates of data the app already keeps, noisy matches, or news. */
+export const CUT_PHASE_BC_CAPABILITIES = ['fred/series/series','fred/series/observations','bls-gov/economic-statistics/bls_series_detail','bls-gov/economic-statistics/bls_top_picks','bls-gov/economic-statistics/bls_surveys','fiscaldata-treasury-gov/fiscal-data/data','fiscaldata-treasury-gov/fiscal-data/datasets','census-gov/census/data','census-gov/census/variables','census-gov/census/datasets','nasdaq-com/news/latest_headlines','govinfo-gov/legislation/search','nhtsa-gov/recalls/vehicle_recalls','banks-data-fdic-gov/bank-data/institutions','banks-data-fdic-gov/bank-data/financials'] as const;
+export const EIA_CALL_LIMIT = 300;
+export function phaseACanCall(spent: number, reserved: number, limit: number = PHASE_A_CREDIT_LIMIT) {
+  return spent + reserved <= limit;
 }
 export function earningsBatches(tickers: string[], stored: Set<string>, today: Date) {
   const to = new Date(today);
