@@ -310,3 +310,6 @@
 - [ ] Add the web-search key to the worker only after the Tavily decision, so IR-website discovery can search as well as scrape
 - [ ] Wave 3: G12 (redlines + supply links after new 10-K/10-Qs, weekly supply intel), G11 (bundled analytics to scheduled storage files), G16 (weekly alt-data slow sets, monthly Medicare, registry after coverage changes), G13 (freshness checks that data advanced, not only that a job ran)
 - [ ] Fix Render auto-deploy (reconnect the repo in Render so pushes start a deploy) or keep deploying through the API after each worker change
+
+## Owner priority (Nov 19 09:59): stop vendor daily prices
+- [ ] Remove fiscal-ai prices/daily from vendor Phase A (workspace + Render copies), keep pause/credit logic, keep stored prices__daily files, test that Phase A excludes prices/daily, restart workspace collector, deploy main to filedunder-ir-worker

@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { earningsBatches, earningsRecords, earningsNext, phaseACanCall, storageLedger } from '../../scripts/vendor/core';
+import { earningsBatches, earningsRecords, earningsNext, phaseACanCall, PHASE_A_FISCAL_CAPABILITIES, storageLedger } from '../../scripts/vendor/core';
 import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, assertOptions, exhausted, fileKey, nextOptions, pruneWithdrawn, requestId } from '../../scripts/vendor/core';
 describe('owner vendor collection rules', () => {
+  it('Phase A never collects vendor daily prices (the app keeps its own price history)', () => {
+    expect(PHASE_A_FISCAL_CAPABILITIES).not.toContain('prices/daily');
+    expect(PHASE_A_FISCAL_CAPABILITIES).toContain('prices/splits');
+    expect(PHASE_A_FISCAL_CAPABILITIES).toHaveLength(16);
+  });
   it('batches at most ten symbols across full history through today plus ninety days', () => {
     const batches=earningsBatches(Array.from({length:11},(_,i)=>`T${i}`),new Set(),new Date('2026-11-19T00:00:00Z'));
     expect(batches).toHaveLength(2); expect(batches[0].tickers).toHaveLength(10);

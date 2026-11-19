@@ -8,7 +8,7 @@ import { dbGate, sb, sleep, selectAll } from './lib/supa';
 import contracts from './vendor/contracts.json';
 import { phaseB, phaseC } from './vendor/phases';
 import { staticRegistry } from '../src/lib/alt/collect.server';
-import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, type Json } from './vendor/core';
+import { CREDIT_PROBE_MS, MAX_ATTEMPTS, MAX_IN_FLIGHT, assertOptions, exhausted, fileKey, nextOptions, records, requestId, PHASE_B_CALL_LIMIT, PROVIDER_PENDING_MS, PROGRESS_COMPANIES, providerPending, providerMiss, legionIdentifiers, pruneWithdrawn, PHASE_A_CREDIT_LIMIT, PHASE_A_FISCAL_CAPABILITIES, phaseACanCall, earningsBatches, earningsRecords, earningsNext, storageLedger, CreditPause, CREDIT_PAUSE_REASON, type Json } from './vendor/core';
 
 const JOB = 'vendor-backfill';
 const root = process.env.VENDOR_WORK_DIR ?? '/tmp/vendor-backfill';
@@ -228,15 +228,13 @@ async function company(c: (typeof COVERAGE)[number]) {
   const p = profile?.pages?.[0]?.response?.data;
   const fscl = p?.companyFiscalIdentifier;
   if (fscl) {
-    const capabilities = ['company/segments-and-kpis','financials/income-statement','financials/balance-sheet','financials/cash-flow-statement','financials/income-statement-as-reported','financials/balance-sheet-as-reported','financials/cash-flow-statement-as-reported','financials/adjusted-metrics','company/shares-outstanding','ratios/series','ownership/institutional-holders','ownership/insider-holders','ownership/insider-transactions','filings/list','events/ir-events','prices/daily','prices/splits'];
-    for (const cap of capabilities) {
+    for (const cap of PHASE_A_FISCAL_CAPABILITIES) {
       if (stopped) return;
       const contract = catalog.get(`fiscal-ai/${cap}`);
       const names = new Set((contract?.options ?? []).map((o:Json)=>o.name));
       const options: Json = {fscl};
       if (names.has('periodType')) options.periodType = 'annual,quarterly';
       if (names.has('pageNumber')) { options.pageNumber=1; options.pageSize=250; }
-      if (cap==='prices/daily') options.startDate='1996-01-01';
       const result = await collect('fiscal-ai',cap,c.ticker,options);
       if (cap==='events/ir-events' && result) {
         const events = result.pages.flatMap((page:Json)=>records(page.response,contract ?? {}));

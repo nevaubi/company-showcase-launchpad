@@ -8,6 +8,11 @@ export const CREDIT_PROBE_MS = 30 * 60 * 1000;
 export const PROVIDER_PENDING_MS = 10 * 60 * 1000;
 export const PROGRESS_COMPANIES = 50;
 export const PHASE_A_CREDIT_LIMIT = 1500;
+/**
+ * Fiscal.ai capabilities collected per company in Phase A, in order. prices/daily is deliberately absent
+ * (owner, Nov 19): the app already keeps its own price history, so vendor daily prices are not collected.
+ */
+export const PHASE_A_FISCAL_CAPABILITIES = ['company/segments-and-kpis','financials/income-statement','financials/balance-sheet','financials/cash-flow-statement','financials/income-statement-as-reported','financials/balance-sheet-as-reported','financials/cash-flow-statement-as-reported','financials/adjusted-metrics','company/shares-outstanding','ratios/series','ownership/institutional-holders','ownership/insider-holders','ownership/insider-transactions','filings/list','events/ir-events','prices/splits'] as const;
 export function phaseACanCall(spent: number, reserved: number) {
   return spent + reserved <= PHASE_A_CREDIT_LIMIT;
 }
