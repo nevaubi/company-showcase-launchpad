@@ -11,7 +11,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { insiderBuyRows } from "@/lib/signals/events";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data" | "options";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -54,6 +54,10 @@ export async function runJob(job: JobName): Promise<{ ok: boolean; items: number
 }
 
 const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }>> = {
+  async "short-volume"() {
+    const { refreshShortVolume } = await import("@/lib/jobs/short-volume.server");
+    return refreshShortVolume();
+  },
   /**
    * Nightly short-term setups: closing bars, full rescan, strategy re-tests, today's setups and the
    * paper autopilots, one small slice per call (several schedules call it in parallel after the close).
