@@ -3,14 +3,16 @@ import { readFileSync, appendFileSync, existsSync, writeFileSync } from 'node:fs
 import { createHash } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { args, sb, dbGate, sleep } from './lib/supa';
+import { OWNER_IMPORT_ORDER, parseOwnerCsv } from './lib/owner-manifest';
 
 const root = String(args.root ?? '/tmp/ir-owner-import');
-const rows = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8')) as Record<string, string>[];
+const rows = parseOwnerCsv(readFileSync(join(root, 'ir-upload-manifest.csv'), 'utf8'));
 const allowed = new Set(['CME', 'EFC', 'OWL', 'SPCX', 'ZM', 'WDC']);
 const ledger = join(root, 'import-ledger.jsonl');
 if (!existsSync(ledger)) writeFileSync(ledger, '');
 const prior = readFileSync(ledger, 'utf8').trim().split('\n').filter(Boolean).map(s => JSON.parse(s));
-const done = new Set(prior.filter(r => r.status !== 'failed').map(r => r.sha256));
+const runId = new Date().toISOString();
+const addedIds = new Set<string>(prior.filter(r => r.status === 'stored' && r.id).map(r => r.id));
 const fiscal: Record<string, number> = { CME: 12, EFC: 12, OWL: 12, SPCX: 12, ZM: 1 };
 function period(r: Record<string, string>): string | null {
   const match = /^Q([1-4]) FY(\d{2}|\d{4})$/.exec(r.fiscal_period);
@@ -24,8 +26,10 @@ for (const r of rows) {
   const b = readFileSync(join(root, r.file));
   if (b.length !== Number(r.bytes) || createHash('sha256').update(b).digest('hex') !== r.sha256) throw new Error(`Invalid staged PDF: ${r.file}`);
 }
-for (const r of rows) {
-  if (done.has(r.sha256)) continue;
+for (const ticker of OWNER_IMPORT_ORDER) {
+ const started_at = new Date().toISOString();
+ const results: Record<string, any>[] = [];
+ for (const r of rows.filter(r => r.ticker === ticker)) {
   const source_url = `upload://ir/${r.ticker}/${r.vendor_id}/${basename(r.file)}`;
   const path = `${r.ticker}/site/${r.sha256.slice(0, 12)}.pdf`;
   let result: Record<string, unknown> = { ticker: r.ticker, file: r.file, sha256: r.sha256, source_url, path, kind: r.kind, bytes: Number(r.bytes) };
@@ -48,12 +52,25 @@ for (const r of rows) {
         await dbGate('owner-row');
         const insert = await sb.from('ir_documents').upsert({ ticker: r.ticker, source: 'ir-site', source_url, kind: r.kind, title: r.title, filed: r.filed || null, period: period(r), content_type: 'application/pdf', ext: 'pdf', bytes: Number(r.bytes), sha256: r.sha256, pages: Number(r.pages), path, fetched_at: new Date().toISOString() }, { onConflict: 'source_url', ignoreDuplicates: true }).select('id');
         if (insert.error) throw insert.error;
+        if (insert.data?.[0]?.id) addedIds.add(insert.data[0].id);
         result = { ...result, status: insert.data?.length ? 'stored' : 'skipped', id: insert.data?.[0]?.id, storage_bytes_added: up.error ? 0 : buf.length, period: period(r) };
       }
     }
   } catch (e) { result = { ...result, status: 'failed', reason: (e as Error).message }; }
   appendFileSync(ledger, JSON.stringify(result) + '\n');
+  results.push(result);
   console.log(r.ticker, result.status, r.file, result.reason ?? '');
   await sleep(20);
+ }
+ await dbGate('owner-import-progress');
+ const detail = { run_id: runId, ticker, files_seen: results.length, skipped: results.filter(r => r.status === 'skipped').length, stored: results.filter(r => r.status === 'stored').length, excluded: results.filter(r => r.status === 'excluded').length, failed: results.filter(r => r.status === 'failed').map(r => ({ file: r.file, reason: r.reason })), added_ids: results.filter(r => r.status === 'stored').map(r => r.id), bytes_added: results.reduce((n,r) => n + Number(r.storage_bytes_added ?? 0),0) };
+ const progress = await sb.from('job_runs').insert({job:'ir-upload-import',started_at,finished_at:new Date().toISOString(),ok:detail.failed.length===0,items:detail.stored,detail});
+ if (progress.error) throw new Error(progress.error.message);
+ console.log('TICKER COMPLETE',JSON.stringify(detail));
 }
+const filter = `id IN (${[...addedIds].map(id => `'${id}'`).join(',')})`;
+writeFileSync(join(root, 'added-row-filter.sql'), filter);
+await dbGate('owner-import-audit');
+const audit = await sb.storage.from('datasets').upload('ops/ir-upload/added-row-filter.json', JSON.stringify({runId,ids:[...addedIds],filter}), {contentType:'application/json',upsert:true});
+if (audit.error) throw audit.error;
 console.log('Import finished; exact added IDs and counts are in', ledger);

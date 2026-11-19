@@ -1,6 +1,7 @@
 # Filed Under — roadmap
 
 ## Owner uploads and Alexandria collector (Nov 19)
+- [ ] Owner follow-up: detached ordered import verification with ir-upload-import ticker ledger, and fresh background workbook comparison to private ops/ir-upload/ storage; preserve vendor collector.
 - [x] Verified additive PDF import: 649 rows stored, 13 duplicates skipped, EVER/SOFI excluded (no bounded coverage-add script), no failures; exact IDs and counts in import-report.json.
 - [x] Read-only workbook comparisons saved in workbook-dry-run.json; exact-label matching leaves unmatched/ambiguous values unproven; no corrections applied.
 - [ ] Collector initial phase-A batch started locally after import; own lease/ledger, four-call concurrency and stable billing IDs. Remaining: Benzinga news/withdrawal reconciliation, full A continuation, B/C; Render missing FIRECRAWL_API_KEY. Not deployed.
