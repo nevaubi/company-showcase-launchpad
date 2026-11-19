@@ -149,6 +149,8 @@ export interface CompanyProfile {
 
 export interface CompanyDataset {
   generatedAt: string;
+  /** Set when the partner service was unreachable and this is the local copy (as of `generatedAt`). */
+  servedFrom?: "copy";
   profile: CompanyProfile;
   filings: Filing[];
   statements: {

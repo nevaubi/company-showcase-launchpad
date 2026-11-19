@@ -295,3 +295,4 @@
 - [x] G9: AI cache serves the last stored value marked stale (with as-of time) when a recompute fails
 - [x] G8: worker re-reads a finished company after one new readable file filed in the last 30 days, from any source, before untouched companies
 - [x] G6: worker runs IR-website collection every 2h (recent reporters first, 300 Firecrawl credits/day cap in job_state, clean hourly-probe pause on 402) — currently paused: Firecrawl balance is 0
+- [x] G1a: scheduled partner-mirror job (1 file/min, cursor in job_state) refreshes local company/price/universe copies; readers mark copies servedFrom=copy (as of generatedAt). Copies were 6–14 days old

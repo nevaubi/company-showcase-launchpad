@@ -170,7 +170,10 @@ async function getDataset<T>(
     throw new Error(
       `No ${kind === "companies" ? "SEC dataset" : "price history"} built yet for ${file}`,
     );
-  return JSON.parse(await data.text()) as T;
+  // Local copy (refreshed by the scheduled partner-mirror job); its own generatedAt is the as-of date.
+  const copy = JSON.parse(await data.text()) as T;
+  if (copy && typeof copy === "object") (copy as { servedFrom?: "copy" }).servedFrom = "copy";
+  return copy;
 }
 
 export const symbolFile = (s: string) => s.replace(/\^/g, "IDX_").replace(/[^A-Za-z0-9_.-]/g, "_");

@@ -11,7 +11,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { insiderBuyRows } from "@/lib/signals/events";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 
@@ -316,6 +316,12 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
       }
     }));
     return { ok: errors.length < Math.max(1, done.length), items: filings + trades, detail: { companies: done, skipped: batch.map((c) => c.ticker).filter((t) => !done.includes(t)), filings, trades, errors } };
+  },
+
+  /** Refresh the local copy of partner company/price files and universe.json, one file per call. */
+  async "partner-mirror"() {
+    const { runPartnerMirror } = await import("@/lib/jobs/partner-mirror.server");
+    return runPartnerMirror(RUN_BUDGET_MS - 200);
   },
 
   /** Market-wide new-filing discovery (EDGAR current feed + daily master index) for every covered company. */
