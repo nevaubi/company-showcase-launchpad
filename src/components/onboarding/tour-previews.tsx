@@ -13,8 +13,8 @@ const BODY: Record<TourPreview, React.ReactNode> = {
   welcome: (
     <div className="flex h-full flex-col items-center justify-center gap-2">
       <div className="tour-folder" />
-      <p className="font-display text-lg tracking-tight">Filed Under</p>
-      <p className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">Every number, sourced</p>
+      <p className="font-display text-lg tracking-tight">FiledUnder</p>
+      <p className="text-xs text-muted-foreground">Every number, sourced</p>
     </div>
   ),
   search: (

@@ -71,7 +71,7 @@ function drawGen(p: PDFPage, title: string, body: string, f: PDFFont, b: PDFFont
 
 export async function buildPdf(base: ArrayBuffer | null, doc: PdfDoc, title: string): Promise<Uint8Array> {
   const out = await PDFDocument.create();
-  out.setTitle(title || "Untitled"); out.setProducer("Filed Under PDF Studio");
+  out.setTitle(title || "Untitled"); out.setProducer("FiledUnder PDF Studio");
   const src = base && doc.hasBase ? await PDFDocument.load(base, { ignoreEncryption: true }) : null;
   const f = await out.embedFont(StandardFonts.Helvetica), b = await out.embedFont(StandardFonts.HelveticaBold);
   const baseIdx = doc.pages.filter((p) => p.src === "base").map((p) => (p as { index: number }).index);

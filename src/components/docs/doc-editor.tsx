@@ -93,7 +93,7 @@ export function DocEditor({ initialHtml, title, ticker, onChange, readOnly = fal
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {!readOnly && <div className="sticky top-12 z-10 flex flex-wrap items-center gap-0.5 border-b bg-card/95 px-3 py-1.5 backdrop-blur">
+      {!readOnly && <div className="sticky top-14 z-10 flex flex-wrap items-center gap-0.5 border-b bg-card/95 px-3 py-1.5 backdrop-blur">
         <Tool editor={editor} label="Heading" icon={<Heading2 />} active={editor?.isActive("heading", { level: 2 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} />
         <Tool editor={editor} label="Subheading" icon={<Heading3 />} active={editor?.isActive("heading", { level: 3 })} onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} />
         <Tool editor={editor} label="Bold" icon={<Bold />} active={editor?.isActive("bold")} onClick={() => editor?.chain().focus().toggleBold().run()} />

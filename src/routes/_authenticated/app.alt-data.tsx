@@ -51,7 +51,7 @@ function AltHub() {
   const meta = DATASETS[d] ?? DATASETS.events;
   return (
     <div>
-      <PageHeader eyebrow="Research" title="Alternative data" description="What changed across public registries (SEC, federal contracts, regulators, FDA, NHTSA, CFPB, FDIC), scored against each company's own history. Every row links to its record." />
+      <PageHeader eyebrow="Filings and data" title="Alternative data" description="What changed across public registries (SEC, federal contracts, regulators, FDA, NHTSA, CFPB, FDIC), scored against each company's own history. Every row links to its record." />
       <SourceStrip />
       <AltSignalsSection />
       <PlantHazardsPanel className="mb-5" />

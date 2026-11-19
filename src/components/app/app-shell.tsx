@@ -565,6 +565,7 @@ function UserMenu({ collapsed, isAdmin }: { collapsed: boolean; isAdmin: boolean
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
+            data-tour="account"
             aria-label={`Account menu, ${name}`}
             title={collapsed ? "Account" : undefined}
             className={cn(

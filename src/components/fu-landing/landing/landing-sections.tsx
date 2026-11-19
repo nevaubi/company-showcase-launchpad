@@ -14,10 +14,10 @@ import styles from "./landing.module.css";
 
 export function Wordmark() {
   return (
-    <a href="#top" className={styles.wordmark} aria-label="Filed Under home">
+    <a href="#top" className={styles.wordmark} aria-label="FiledUnder home">
       <img
         src={wordmark.url}
-        alt="Filed Under"
+        alt="FiledUnder"
         width={1143}
         height={216}
         className={styles.wordmarkImg}

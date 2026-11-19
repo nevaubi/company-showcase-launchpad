@@ -9,7 +9,7 @@ export async function deckToPptx(d: Deck, title: string) {
   const pres = new P();
   pres.layout = "LAYOUT_WIDE";
   pres.title = title;
-  pres.author = "Filed Under";
+  pres.author = "FiledUnder";
   const ink = d.theme.dark ? "F5F5F5" : "1F2328";
   for (const s of d.slides) {
     const sl = pres.addSlide();

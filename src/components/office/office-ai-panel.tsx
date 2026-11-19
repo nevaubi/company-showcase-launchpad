@@ -51,7 +51,7 @@ export function OfficeAiPanel({ app, localTool, context }: {
   async function send(q: string) {
     if (!q.trim() || busy) return;
     setText(""); setBusy(true); stop.current = false;
-    items.current.push({ role: "user", content: `${q}\n\n[Editor context — not from the user]\n${context()}` });
+    items.current.push({ role: "user", content: `${q}\n\n[Editor context, not from the user]\n${context()}` });
     setMsgs((m) => [...m, { role: "user", text: q }, { role: "assistant", turn: { content: "", steps: [], phase: "Thinking" } }]);
     const update = (t: Turn) => {
       setMsgs((m) => [...m.slice(0, -1), { role: "assistant", turn: t }]);

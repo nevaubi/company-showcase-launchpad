@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 /** The Filed Under mark: the serif "F" with its orange dot and baseline. */
 export function BrandMark({
   className,
-  title = "Filed Under",
+  title = "FiledUnder",
 }: {
   className?: string;
   title?: string;
@@ -53,13 +53,13 @@ export function Logo({
             inverted ? "text-ink-foreground" : "text-foreground",
           )}
         >
-          Filed Under
+          FiledUnder
         </span>
       ) : (
         <img
           ref={img}
           src={wordmark.url}
-          alt="Filed Under"
+          alt="FiledUnder"
           width={size === "sm" ? 95 : size === "lg" ? 169 : 116}
           height={size === "sm" ? 18 : size === "lg" ? 32 : 22}
           onError={() => setFailed(true)}

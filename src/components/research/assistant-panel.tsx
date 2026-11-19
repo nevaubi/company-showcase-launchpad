@@ -312,7 +312,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
       })),
       {
         role: "user",
-        content: `[Context — user is viewing ${window.location.pathname}${window.location.search} ("${document.title}"); mode: ${deep ? "deep research" : "fast"}; screen ${window.innerWidth}px wide; canvas ${cs.open ? "open" : "closed"}.${canvasNote} Local time ${new Date().toLocaleString()}. Call get_page_context if the question refers to the page.]\n${q}`,
+        content: `[Context: user is viewing ${window.location.pathname}${window.location.search} ("${document.title}"); mode: ${deep ? "deep research" : "fast"}; screen ${window.innerWidth}px wide; canvas ${cs.open ? "open" : "closed"}.${canvasNote} Local time ${new Date().toLocaleString()}. Call get_page_context if the question refers to the page.]\n${q}`,
       },
     ];
     const turn = await runAgent({
@@ -470,7 +470,7 @@ export function AssistantPanel({ open, onClose, docked, onDockedChange }: { open
           <Sparkles className="size-3.5" />
         </span>
         <p className="text-[13px] font-medium">Assistant</p>
-        <span className="hidden truncate rounded border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground min-[400px]:inline">{path.replace("/app", "") || "/dashboard"}</span>
+        <span className="hidden truncate rounded border bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground min-[400px]:inline">{path.replace("/app", "") || "/overview"}</span>
         <div className="ml-auto flex items-center">
           {mobile && wide && (
             <div className="mr-1 flex rounded-md border p-0.5" role="tablist" aria-label="Assistant view">

@@ -223,7 +223,7 @@ export function SlideView({ slide, theme, width, edit }: { slide: Slide; theme: 
               <textarea autoFocus aria-label="Edit text" defaultValue={el.type === "bullets" ? (el.bullets ?? []).join("\n") : el.text ?? ""}
                 onBlur={(e) => { const v = e.target.value; if (el.type === "bullets") el.bullets = v.split("\n").filter((x) => x.trim()); else el.text = v; setEditing(null); edit.api.commit(); }}
                 onKeyDown={(e) => e.key === "Escape" && (e.target as HTMLTextAreaElement).blur()}
-                className="h-full w-full resize-none bg-background/80 p-0 outline-none" style={{ font: "inherit", color: "inherit", textAlign: "inherit" }} />
+                className="h-full w-full resize-none p-0 outline-none" style={{ font: "inherit", color: "inherit", textAlign: "inherit", background: theme.dark ? "rgba(20,24,33,0.8)" : "rgba(255,255,255,0.8)" }} />
             ) : <ElBody el={el} theme={theme} pt={pt} k={k} ink={ink} empty={!!edit} />}
             {isSel && editing !== el.id && (
               <span onPointerDown={(e) => onDown(e, el, "size")} className="absolute -bottom-1 -right-1 h-2.5 w-2.5 cursor-se-resize border border-office bg-background" />

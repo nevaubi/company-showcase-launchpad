@@ -71,6 +71,24 @@ export function agentRoot(doc: Document = document): HTMLElement {
   return (doc.querySelector("main") as HTMLElement | null) ?? doc.body;
 }
 
+/**
+ * App chrome outside <main> that the assistant may point at (never press): the sidebar rows and the account menu
+ * button. Only these exact selectors reach outside the page, and only while the element is on screen.
+ */
+const CHROME_SELECTOR = /^\[data-tour=(['"]?)(hub-[\w-]+|account)\1\]$/;
+const CHROME = "[data-tour^='hub-'],[data-tour='account']";
+
+function onViewport(el: HTMLElement) {
+  if (!visible(el)) return false;
+  const r = el.getBoundingClientRect();
+  const w = (typeof window !== "undefined" && window.innerWidth) || 0;
+  const h = (typeof window !== "undefined" && window.innerHeight) || 0;
+  return r.width > 0 && r.height > 0 && r.right > 0 && r.bottom > 0 && r.left < w && r.top < h;
+}
+
+/** True when the element sits outside the page content (sidebar, header, menus). */
+const outsidePage = (el: HTMLElement) => !agentRoot(el.ownerDocument).contains(el);
+
 export function locate(target: string, kind: LocateKind = "auto", root: HTMLElement = agentRoot()): Located | null {
   const t = target.trim();
   if (!t) return null;
@@ -81,6 +99,15 @@ export function locate(target: string, kind: LocateKind = "auto", root: HTMLElem
       if (el && !ignored(el)) return { el, how: "selector", label: labelOf(el) || sel, score: 100 };
     } catch {
       /* invalid selector */
+    }
+    if (CHROME_SELECTOR.test(sel)) {
+      const el = root.ownerDocument.querySelector<HTMLElement>(sel);
+      if (el && !ignored(el) && onViewport(el)) {
+        const label = (el.getAttribute("aria-label") || el.textContent || sel)
+          .replace(/\s+/g, " ")
+          .trim();
+        return { el, how: "selector", label, score: 100 };
+      }
     }
     if (kind === "selector") return null;
   }
@@ -131,6 +158,7 @@ export function locate(target: string, kind: LocateKind = "auto", root: HTMLElem
 
 /** The region a heading or label introduces: its card/section, else the heading's parent. */
 export function regionOf(el: HTMLElement): HTMLElement {
+  if (el.matches(CHROME)) return el;
   if (el.matches("[data-section],section,article,table,figure,form,li,tr")) return el;
   const box = el.closest<HTMLElement>("[data-section],section,article,[data-slot=card],figure");
   if (box && box !== agentRoot(el.ownerDocument)) return box;
@@ -192,6 +220,13 @@ export async function bringIntoView(el: HTMLElement): Promise<string | null> {
   }
   panel = panelInfo(el.ownerDocument);
   free = freeRegion(viewport(), panel?.rect ?? null);
+  // The sidebar and account button do not move with the page, so scrolling would only shift the content.
+  if (outsidePage(el)) return action;
+  // Keep targets clear of the sticky app header.
+  const headerBottom =
+    el.ownerDocument.querySelector("header.sticky")?.getBoundingClientRect().bottom ?? 0;
+  if (headerBottom > free.top)
+    free = { ...free, top: Math.max(free.top, Math.min(headerBottom, free.bottom - 120)) };
   const dy = scrollOffset(toRect(el.getBoundingClientRect()), free);
   if (Math.abs(dy) > 2) window.scrollBy?.({ top: dy, behavior });
   return action;
@@ -500,6 +535,10 @@ const DESTRUCTIVE = /\b(delete|remove|discard|erase|clear all|reset|sign ?out|lo
 export function clickRefusal(el: HTMLElement): string | null {
   const control = el.closest<HTMLElement>("button,[role=tab],[role=radio],[role=switch],[role=checkbox],[role=menuitemradio],[role=option],a,[data-agent-click],summary") ?? el;
   if (ignored(control)) return "that control belongs to the assistant itself";
+  if (control.closest("[data-agent-noclick]"))
+    return "it changes a saved setting; tell the user where it is instead";
+  if (outsidePage(control))
+    return "it is outside the page content; point at it or tell the user where it is instead";
   const text = `${control.getAttribute("aria-label") ?? ""} ${control.textContent ?? ""}`.trim();
   if (control.closest("form") && (control.matches("[type=submit]") || (control.tagName === "BUTTON" && !control.getAttribute("type")))) return "it would submit a form";
   if (control.matches("input,textarea,select,[contenteditable=true]")) return "typing into fields is not allowed";

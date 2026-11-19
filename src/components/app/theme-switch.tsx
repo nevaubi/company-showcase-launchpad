@@ -50,6 +50,7 @@ export function PressedSegmented<T extends string>({
   return (
     <div
       role="group"
+      data-agent-noclick=""
       aria-label={labelledBy ? undefined : label}
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}

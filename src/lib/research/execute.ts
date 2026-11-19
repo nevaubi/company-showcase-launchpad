@@ -409,7 +409,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         partnerFile<CommentsFile>(`comments/${t}.json`).catch(() => null),
         computedDigest(qc, t).catch(() => [] as string[]),
       ]);
-      const out: string[] = [`DOSSIER ${t} — everything Filed Under knows, last 12 months`];
+      const out: string[] = [`DOSSIER ${t}: everything FiledUnder knows, last 12 months`];
       const u = (await qc.fetchQuery(universeQuery)).companies.find((c) => c.ticker === t);
       if (u) out.push(`SNAPSHOT: ${JSON.stringify(flatUniverse([u])[0]).slice(0, 600)}`);
       out.push("FILINGS:", ...d.filings.filter((f) => f.filed >= since).slice(0, 15).map((f) => `${f.filed} ${f.form} ${f.desc ?? ""} ${f.items ? `items ${f.items}` : ""} accn ${f.accn}`));
@@ -566,7 +566,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     }
     case "open_shortcuts": {
       window.dispatchEvent(new CustomEvent("fu:shortcuts"));
-      return { output: "The keyboard shortcuts sheet is open. Mention ⌘K search, ⌘J assistant, G then D/C/O/R, and ? for this sheet.", summary: "Opened shortcuts" };
+      return { output: "The keyboard shortcuts sheet is open. Mention ⌘K search, ⌘J assistant, G then D, C, O, R, F or M, and ? for this sheet.", summary: "Opened shortcuts" };
     }
     case "get_page_context": {
       const main = agentRoot();
@@ -769,7 +769,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       }`;
       return {
         output: clip(out),
-        summary: `${d.profile.ticker} ${filing?.form ?? ""} — "${q}" (${windows.length} passages)`,
+        summary: `${d.profile.ticker} ${filing?.form ?? ""}: "${q}" (${windows.length} passages)`,
         refs: [{ ticker: d.profile.ticker, accn, doc: args.document ? docName : undefined, label: `${filing?.form ?? "Filing"} ${filing?.filed ?? ""}` }],
       };
     }
@@ -778,7 +778,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const r = await searchFilings({ data: { q: String(args.query).slice(0, 200), ciks: t ? [t.cik] : undefined } });
       return {
         output: `${r.total} documents match.\n` + r.hits.map((h) => `${h.company} | ${h.form} | filed ${h.filed} | accession ${h.accn} | doc ${h.doc} | ${h.description ?? ""}`).join("\n"),
-        summary: `"${args.query}" — ${r.total.toLocaleString()} hits`,
+        summary: `"${args.query}": ${r.total.toLocaleString()} hits`,
       };
     }
     case "get_price_history": {
@@ -842,7 +842,7 @@ Month-start closes:\n${monthly.join("\n")}`;
       if (!r || !r.items.length)
         return {
           output: "The headline feed is unavailable or returned nothing right now. Use web_search for recent news coverage instead.",
-          summary: `No feed headlines for "${args.query}" — switching to web search`,
+          summary: `No feed headlines for "${args.query}". Switching to web search`,
         };
       return {
         output: r.items.map((n) => `${n.publishedAt.slice(0, 10)} | ${n.publisher} | ${n.title} | ${n.link}`).join("\n"),

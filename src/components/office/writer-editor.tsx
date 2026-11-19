@@ -136,7 +136,7 @@ export function WriterRibbon({ editor, settings, setSettings }: { editor: Editor
 export function WriterPage({ editor, settings, setSettings }: { editor: Editor; settings: WriterSettings; setSettings: (s: WriterSettings) => void }) {
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-auto bg-muted py-6">
-      <div className="mx-auto w-[816px] max-w-full bg-background shadow-md ring-1 ring-border" style={{ minHeight: 1056 }}>
+      <div className="office-paper mx-auto w-[816px] max-w-full bg-background text-foreground shadow-md ring-1 ring-border" style={{ minHeight: 1056 }}>
         <input aria-label="Header" placeholder="Header" value={settings.header} onChange={(e) => setSettings({ ...settings, header: e.target.value })}
           className="w-full border-b border-dashed border-transparent bg-transparent px-24 pt-8 pb-2 text-right text-xs text-muted-foreground outline-none hover:border-border focus:border-border" />
         <div className={cn("px-24 py-6 [&_hr]:my-8 [&_hr]:border-dashed", settings.columns === 2 && "[&_.ProseMirror]:columns-2 [&_.ProseMirror]:gap-8")}>

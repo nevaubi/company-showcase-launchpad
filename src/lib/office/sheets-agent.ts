@@ -21,7 +21,7 @@ export function sheetsTool(h: SheetsHost) {
     const pick = (): { sh: SheetData; si: number } => {
       const nm = a.sheet as string | null;
       const si = nm ? wb.sheets.findIndex((s) => s.name.toLowerCase() === nm.toLowerCase()) : wb.active;
-      if (si < 0) throw new Error(`No sheet "${nm}" — sheets: ${wb.sheets.map((s) => s.name).join(", ")}`);
+      if (si < 0) throw new Error(`No sheet "${nm}". Sheets: ${wb.sheets.map((s) => s.name).join(", ")}`);
       return { sh: wb.sheets[si], si };
     };
     switch (name) {

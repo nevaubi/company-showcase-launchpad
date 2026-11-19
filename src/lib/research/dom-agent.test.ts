@@ -294,3 +294,61 @@ describe("tour card and page reading", () => {
     expect(info).toContain("Annual (on), Quarterly");
   });
 });
+
+describe("app chrome", () => {
+  const box = (el: Element, r: { left: number; top: number; width: number; height: number }) => {
+    el.getBoundingClientRect = () =>
+      ({
+        ...r,
+        x: r.left,
+        y: r.top,
+        right: r.left + r.width,
+        bottom: r.top + r.height,
+        toJSON: () => ({}),
+      }) as DOMRect;
+  };
+  beforeEach(() => {
+    document.body.innerHTML = `
+      <nav aria-label="Pages"><ul><li><a href="/app/feed" data-tour="hub-signals">Signals</a></li><li><a href="/app/research" data-tour="hub-research">Research</a></li></ul></nav>
+      <button data-tour="account" aria-label="Account menu, Ana">A</button>
+      <main><div role="group" data-agent-noclick=""><button id="dark" aria-pressed="false">Dark</button></div><div role="tablist"><button role="tab" id="tab">Quarterly</button></div></main>`;
+    box(document.querySelector("[data-tour='hub-signals']")!, {
+      left: 8,
+      top: 120,
+      width: 220,
+      height: 40,
+    });
+    box(document.querySelector("[data-tour='account']")!, {
+      left: 8,
+      top: 700,
+      width: 220,
+      height: 48,
+    });
+  });
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("points at sidebar rows and the account button by their data-tour selector", () => {
+    const row = locate("[data-tour='hub-signals']");
+    expect(row?.el.textContent).toBe("Signals");
+    expect(regionOf(row!.el)).toBe(row!.el);
+    expect(locate("[data-tour='account']")?.label).toBe("Account menu, Ana");
+  });
+
+  it("does not reach outside the page for other selectors or off-screen rows", () => {
+    expect(locate("[data-tour='hub-research']")).toBeNull();
+    expect(locate("Signals", "text")).toBeNull();
+  });
+
+  it("refuses to press chrome or saved-setting controls", () => {
+    expect(clickRefusal(document.querySelector<HTMLElement>("[data-tour='hub-signals']")!)).toMatch(
+      /outside the page/,
+    );
+    expect(clickRefusal(document.querySelector<HTMLElement>("[data-tour='account']")!)).toMatch(
+      /outside the page/,
+    );
+    expect(clickRefusal(document.getElementById("dark")!)).toMatch(/saved setting/);
+    expect(clickRefusal(document.getElementById("tab")!)).toBeNull();
+  });
+});

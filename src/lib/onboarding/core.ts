@@ -20,7 +20,7 @@ export function seedPlan(row: Pick<OnboardingRow, "seeded_at"> | null, watchCoun
 export function starterCells(): Record<string, string> {
   const yrs = ["FY2024", "FY2025", "FY2026"];
   const cols = ["B", "C", "D"];
-  const c: Record<string, string> = { A1: "NVIDIA — starter model (SEC-sourced)", A3: "Metric" };
+  const c: Record<string, string> = { A1: "NVIDIA starter model (SEC-sourced)", A3: "Metric" };
   yrs.forEach((y, i) => (c[`${cols[i]}3`] = y));
   const rows: [string, string][] = [["Revenue", "revenue"], ["Gross profit", "grossProfit"], ["Operating income", "operatingIncome"], ["Net income", "netIncome"]];
   rows.forEach(([label, key], r) => {
@@ -30,6 +30,6 @@ export function starterCells(): Record<string, string> {
   c.A9 = "Gross margin";
   c.A10 = "Net margin";
   cols.forEach((k) => { c[`${k}9`] = `=${k}5/${k}4`; c[`${k}10`] = `=${k}7/${k}4`; });
-  c.A12 = "Source: NVIDIA 10-K filings via Filed Under. Ask OfficeAI to extend this model.";
+  c.A12 = "Source: NVIDIA 10-K filings via FiledUnder. Ask OfficeAI to extend this model.";
   return c;
 }

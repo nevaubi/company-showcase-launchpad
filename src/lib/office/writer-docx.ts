@@ -89,7 +89,7 @@ export async function writerToDocx(doc: JNode, s: WriterSettings, title: string)
     ...(s.pageNumbers ? [new TextRun({ children: ["Page ", PageNumber.CURRENT, " of ", PageNumber.TOTAL_PAGES] })] : []),
   ];
   const d = new Document({
-    title, creator: "Filed Under",
+    title, creator: "FiledUnder",
     styles: { default: { document: { run: { font: "Calibri", size: 22 } } } },
     numbering: { config: [
       { reference: "bullets", levels: levels(LevelFormat.BULLET, (i) => ["•", "◦", "▪", "•", "◦"][i]) },

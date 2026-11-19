@@ -83,7 +83,7 @@ function Pricing() {
             {[
               ["How do I get access?", "Request access with your email. We review requests and let you know when your trial is ready."],
               ["Where does the data come from?", "SEC EDGAR (XBRL company facts, inline-XBRL filings, Form 4, 8-K), Yahoo Finance for prices and FRED for macro. Every financial value carries its accession number."],
-              ["Is this investment advice?", "No. Filed Under is a research tool. Verify anything important in the source document — that's what the panel is for."],
+              ["Is this investment advice?", "No. FiledUnder is a research tool. Verify anything important in the source document; that's what the panel is for."],
             ].map(([q, a]) => (
               <div key={q} className="py-5">
                 <dt className="font-medium">{q}</dt>

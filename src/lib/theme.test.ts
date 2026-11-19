@@ -260,9 +260,9 @@ describe("styles.css theme blocks", () => {
     expect(block(".dark")).toContain("--logo-plate: oklch(0.996 0.003 85);");
   });
 
-  it("pins reports to every light token", () => {
+  it("pins reports and Office document pages to every light token", () => {
     const root = block(":root");
-    const report = block(".dark .report-doc");
+    const report = block(".dark .report-doc,\n.dark .office-paper");
     const tokens = root.split("\n").filter((l) => /^\s+--(?!radius)/.test(l));
     expect(tokens.length).toBeGreaterThan(40);
     for (const line of tokens) expect(report).toContain(line.trim());

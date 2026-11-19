@@ -153,7 +153,7 @@ function Filings() {
   return (
     <div className="grid gap-4">
       <PageHeader
-        eyebrow="Filings"
+        eyebrow="Filings and data"
         title="Filings"
         description={
           idx.data

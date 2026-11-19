@@ -24,7 +24,7 @@ export function LiveCounts({ stats, companies }: { stats: LandingStats | null; c
       <div className={s.stats}>
         {items.map((x) => <div key={x.l} className={s.stat}><b>{fmt(x.v)}</b><span>{x.l}</span></div>)}
       </div>
-      <p className={s.statsNote}>Live totals from the Filed Under database.</p>
+      <p className={s.statsNote}>Live totals from the FiledUnder database.</p>
     </section>
   );
 }
@@ -119,9 +119,9 @@ export function ClickToSource() {
 /* ---------- Real product screenshots ---------- */
 
 const SHOTS = [
-  { id: "financials", label: "Financials", src: financialsShot.url, alt: "NVIDIA ten-year income statement and chart in Filed Under", caption: "Ten years of statements built from SEC XBRL data. Every cell opens its filing." },
-  { id: "ir", label: "IR KPIs", src: irShot.url, alt: "NVIDIA investor-relations KPIs and segment revenue in Filed Under", caption: "Segment and KPI data read from earnings releases and decks, with tie-out checks against SEC revenue." },
-  { id: "valuation", label: "Valuation", src: valuationShot.url, alt: "NVIDIA point-in-time valuation multiples in Filed Under", caption: "Point-in-time multiples: each week uses only fundamentals already filed by that date." },
+  { id: "financials", label: "Financials", src: financialsShot.url, alt: "NVIDIA ten-year income statement and chart in FiledUnder", caption: "Ten years of statements built from SEC XBRL data. Every cell opens its filing." },
+  { id: "ir", label: "IR KPIs", src: irShot.url, alt: "NVIDIA investor-relations KPIs and segment revenue in FiledUnder", caption: "Segment and KPI data read from earnings releases and decks, with tie-out checks against SEC revenue." },
+  { id: "valuation", label: "Valuation", src: valuationShot.url, alt: "NVIDIA point-in-time valuation multiples in FiledUnder", caption: "Point-in-time multiples: each week uses only fundamentals already filed by that date." },
 ];
 
 export function ProductShots() {
@@ -175,7 +175,7 @@ export function AiFactory() {
       <p className={s.eyebrow}><span className={s.pulse} aria-hidden="true" />Always on</p>
       <h2 id="factory-title" className={s.h2}>A multi-agent data factory, checked at every step</h2>
       <p className={s.body} style={{ maxWidth: 720 }}>
-        Filed Under isn't one chatbot. It's an automated pipeline of specialized agents that collect, read, cross-check and
+        FiledUnder isn't one chatbot. It's an automated pipeline of specialized agents that collect, read, cross-check and
         verify financial documents around the clock, with evaluation gates between every stage.
       </p>
       <FactoryDiagram />

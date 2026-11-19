@@ -15,6 +15,7 @@ import {
   chartData, clearRange, eachRef, fillRange, parseRange, rangeOf, shiftRows, sortRange, styleRange,
   type Rect, type SheetChart, type SheetData, type Workbook,
 } from "@/lib/office/workbook";
+import { inkOnFill } from "@/lib/office/cell-ink";
 import { cn } from "@/lib/utils";
 
 const RH = 22, HW = 44, DW = 96;
@@ -215,7 +216,7 @@ export function SheetsEditor({ api }: { api: WorkbookApi }) {
               <B title="AutoSum" on={autosum} label="AutoSum"><Sigma className={ic} /></B>
               {["AVERAGE", "MIN", "MAX", "COUNT", "IF", "ROUND"].map((f) => <B key={f} title={f} on={() => setEdit(`=${f}(`)} label={f}>{null}</B>)}
             </Group>
-            <Group name="Filed Under data">
+            <Group name="FiledUnder data">
               <B title="SEC-sourced value" on={() => setEdit('=FU("AAPL","revenue","FY2025")')} label="FU()">{null}</B>
               <B title="Live price" on={() => setEdit('=PRICE("AAPL")')} label="PRICE()">{null}</B>
             </Group>
@@ -304,7 +305,7 @@ export function SheetsEditor({ api }: { api: WorkbookApi }) {
                           s?.border && "border-foreground/40")}
                         style={{
                           top: frozenR ? RH * (r + 1) : undefined, left: frozenC ? left[c] : undefined,
-                          background: s?.fill && !inRect(c, r) ? s.fill : undefined, color: s?.color,
+                          background: s?.fill && !inRect(c, r) ? s.fill : undefined, color: s?.color ?? (s?.fill && !inRect(c, r) ? inkOnFill(s.fill) : undefined),
                           fontWeight: s?.b ? 600 : undefined, fontStyle: s?.i ? "italic" : undefined, textDecoration: s?.u ? "underline" : undefined,
                           textAlign: s?.align ?? (num ? "right" : "left"),
                         }}>{content}</td>

@@ -23,7 +23,7 @@ export const seedStarterWorkspace = createServerFn({ method: "POST" })
     if (plan.tickers.length) await sb.from("watchlist").insert(plan.tickers.map((ticker) => ({ ticker, user_id: uid })));
     if (plan.workbook) {
       const id = ulid();
-      const { error } = await sb.from("office_files").insert({ id, owner: uid, kind: "xlsx", title: "NVIDIA — starter model" });
+      const { error } = await sb.from("office_files").insert({ id, owner: uid, kind: "xlsx", title: "NVIDIA starter model" });
       if (!error) {
         const sh = { ...blankSheet("Model"), cells: starterCells(), style: { A1: { b: true }, A3: { b: true }, B3: { b: true }, C3: { b: true }, D3: { b: true } }, widths: { 0: 200 } };
         const wb = { sheets: [sh], active: 0 };

@@ -119,7 +119,7 @@ function DocPage() {
   const readOnly = !!userId && d.user_id !== userId;
 
   return (
-    <div className={d.kind === "sheet" ? "-mx-4 -mb-16 -mt-6 flex h-[calc(100dvh-3rem)] flex-col lg:-mx-8" : "-mx-4 -mb-16 -mt-6 flex flex-col lg:-mx-8"}>
+    <div className={d.kind === "sheet" ? "-mx-4 -mb-16 -mt-6 flex h-[calc(100dvh-3.5rem)] flex-col lg:-mx-8" : "-mx-4 -mb-16 -mt-6 flex flex-col lg:-mx-8"}>
       <div className="flex flex-wrap items-center gap-3 border-b bg-background px-4 py-2 lg:px-6">
         <Link to="/app/docs" className="text-muted-foreground hover:text-foreground" aria-label="Back to docs">
           <ArrowLeft className="size-4" />

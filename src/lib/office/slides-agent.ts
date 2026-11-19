@@ -22,7 +22,7 @@ export function slidesTool(h: SlidesHost) {
     if (!/^(deck_|slide_|element_)/.test(name)) return null;
     const d = h.deck();
     const ok = (summary: string, output = summary) => { h.commit(); return Promise.resolve({ summary, output }); };
-    const slideAt = (n: unknown) => { const i = Number(n) - 1; const s = d.slides[i]; if (!s) throw new Error(`No slide ${n} — deck has ${d.slides.length}`); return { s, i }; };
+    const slideAt = (n: unknown) => { const i = Number(n) - 1; const s = d.slides[i]; if (!s) throw new Error(`No slide ${n}: the deck has ${d.slides.length} slides`); return { s, i }; };
     switch (name) {
       case "deck_read":
         return ok(`Read ${d.slides.length} slides`, `Theme ${JSON.stringify(d.theme)}; slide 13.33×7.5in\n${d.slides.map(describeSlide).join("\n")}`.slice(0, 24000));

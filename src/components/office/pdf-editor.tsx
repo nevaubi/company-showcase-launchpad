@@ -149,7 +149,7 @@ export function PdfEditor({ pdf, doc, commit, page, setPage, find }: PdfEditorPr
       </div>
       <div className="flex h-6 shrink-0 items-center gap-3 border-t bg-card px-3 text-[11px] text-muted-foreground">
         <span>Page {page} of {doc.pages.length}</span><span>{doc.annots.length} annotations</span>
-        {a && <span className="text-foreground">Selected: {a.type}{a.text ? ` — ${a.text.slice(0, 40)}` : ""} <span className="inline-block h-2 w-2 align-middle" style={{ background: annotColor(a) }} /></span>}
+        {a && <span className="text-foreground">Selected: {a.type}{a.text ? `: ${a.text.slice(0, 40)}` : ""} <span className="inline-block h-2 w-2 align-middle" style={{ background: annotColor(a) }} /></span>}
       </div>
     </div>
   );

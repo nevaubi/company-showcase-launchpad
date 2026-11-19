@@ -11,7 +11,7 @@ export const Route = createFileRoute("/_authenticated/app/earnings")({
   }),
   component: () => (
     <div className="grid grid-cols-1 gap-4">
-      <PageHeader eyebrow="Filings" title="Earnings season" description="Who reports next, who beat or missed, and how the stock reacted relative to the market." />
+      <PageHeader eyebrow="Filings and data" title="Earnings season" description="Who reports next, who beat or missed, and how the stock reacted relative to the market." />
       <EarningsSeason />
     </div>
   ),

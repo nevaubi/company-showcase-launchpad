@@ -24,7 +24,7 @@ export const Route = createFileRoute("/")({
         children: JSON.stringify({
           "@context": "https://schema.org",
           "@type": "Organization",
-          name: "Filed Under",
+          name: "FiledUnder",
           url: "https://filedunder.ai/",
           logo: "https://filedunder.ai/favicon.png",
           description: "US equity research where every number links to its SEC source.",

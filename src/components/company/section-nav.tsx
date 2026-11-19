@@ -24,7 +24,7 @@ export function SectionNav({ sections }: { sections: { id: string; label: string
   return (
     <nav
       aria-label="On this page"
-      className="no-scrollbar sticky top-12 z-10 -mx-4 flex gap-1 overflow-x-auto border-b bg-background/95 px-4 py-1.5 backdrop-blur"
+      className="no-scrollbar sticky top-14 z-10 -mx-4 flex gap-1 overflow-x-auto border-b bg-background/95 px-4 py-1.5 backdrop-blur"
     >
       {sections.map((s) => (
         <a

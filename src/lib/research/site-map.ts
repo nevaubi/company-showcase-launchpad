@@ -91,9 +91,26 @@ export const COMPANY_TABS: { sub: string; label: string; note: string }[] = [
 const pages = () =>
   HUB_GROUPS.filter((g) => !g.admin).flatMap((g) =>
     g.hubs.flatMap((h) =>
-      h.pages.map((p) => ({ hub: h.label, path: p.to as string, label: p.label })),
+      h.pages.map((p) => ({
+        hub: h.label,
+        hubId: h.id,
+        inMenu: g.menu === false,
+        path: p.to as string,
+        label: p.label,
+      })),
     ),
   );
+
+/** Where the app's own navigation sits, so the assistant can say where a page is and point at its entry. */
+export const LAYOUT_NOTE = [
+  'Each "Sidebar:" heading below is an entry in the left sidebar, and its pages are the tabs across the top of that page; the sidebar has no other entries.',
+  'Pages under "Account menu" are not in the sidebar: they open from the account menu, the avatar at the bottom of the sidebar. Admin pages (admins only) are also in that menu and are not listed here.',
+  "The theme switch (Light, Dark, System) is in the account menu and on the Settings page under Appearance.",
+  "To point at a sidebar entry or the account menu button, use highlight or guide with the selector shown after its heading. They can be pointed at but not pressed, and only while the sidebar is on screen; on phones, name them in words.",
+].join(" ");
+
+export const ACCOUNT_SELECTOR = "[data-tour='account']";
+const hubSelector = (id: string) => `[data-tour='hub-${id}']`;
 
 /** True for a path the assistant may open: a sidebar page, or a company tab for a ticker-shaped symbol. */
 export function isAppPath(path: string): boolean {
@@ -106,12 +123,16 @@ export function isAppPath(path: string): boolean {
 /** The map as text. With a ticker, company tab paths are filled in for it. */
 export function siteMapText(ticker?: string | null): string {
   const t = ticker?.toUpperCase() || "TICKER";
-  const lines: string[] = ["App pages (open with go_to_path):"];
+  const lines: string[] = [`App pages (open with go_to_path). ${LAYOUT_NOTE}`];
   let hub = "";
   for (const p of pages()) {
     if (p.hub !== hub) {
       hub = p.hub;
-      lines.push(hub);
+      lines.push(
+        p.inMenu
+          ? `Account menu (avatar at the bottom of the sidebar) · point with ${ACCOUNT_SELECTOR}`
+          : `Sidebar: ${hub} · point with ${hubSelector(p.hubId)}`,
+      );
     }
     lines.push(`- ${p.label} · ${p.path}${NOTES[p.path] ? ` · ${NOTES[p.path]}` : ""}`);
   }

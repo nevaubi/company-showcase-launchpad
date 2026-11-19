@@ -57,7 +57,7 @@ export const getEngineToken = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     const { data: row } = await context.supabase.from("office_files").select("id").eq("id", data.id).maybeSingle();
     if (!row) throw new Error("File not found");
-    const email = (context.claims as { email?: string }).email ?? "Filed Under user";
+    const email = (context.claims as { email?: string }).email ?? "FiledUnder user";
     const { mintEngineToken } = await import("@/lib/office/engine-token.server");
     return mintEngineToken(context.userId, email, data.id);
   });

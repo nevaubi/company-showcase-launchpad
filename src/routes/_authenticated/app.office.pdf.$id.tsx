@@ -165,7 +165,7 @@ function PdfBody({ id, owner, initialTitle, initial }: { id: string; owner: stri
   }), [commit, text]);
 
   return (
-    <div data-office="pdf" className="-m-4 flex h-[calc(100dvh-7.5rem)] min-w-0 flex-col overflow-hidden border bg-background md:-m-6">
+    <div data-office="pdf" className="-m-4 flex h-[calc(100dvh-8rem)] min-w-0 flex-col overflow-hidden border bg-background md:-m-6">
       <div className="flex h-9 min-w-0 shrink-0 items-center gap-2 bg-office px-2 text-office-foreground">
         <Link to="/app/office" aria-label="Back to Office Studio" className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-office-foreground/15"><ArrowLeft className="h-4 w-4" /></Link>
         <span className="text-xs font-semibold">PDF Studio</span>

@@ -55,7 +55,7 @@ export function TrialBanner() {
     const left = trialDaysLeft(data.approvedAt, new Date());
     if (left <= 5) text = `Your free trial ends in ${left} day${left === 1 ? "" : "s"}.`;
   } else if (data.tier === "expired") {
-    text = "Your free trial has ended — you can still browse, but AI tools and exports are locked.";
+    text = "Your free trial has ended. You can still browse, but AI tools and exports are locked.";
   } else if (data.sub?.status === "past_due") {
     text = "Your last payment failed. Update your card to keep your plan.";
   }

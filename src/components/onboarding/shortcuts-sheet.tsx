@@ -14,7 +14,7 @@ export function ShortcutsSheet({ open, onOpenChange }: { open: boolean; onOpenCh
         <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
           {GROUPS.map((g) => (
             <div key={g} className="min-w-0">
-              <p className="eyebrow mb-1.5">{g}</p>
+              <p className="mb-1.5 text-xs text-muted-foreground">{g}</p>
               <ul className="space-y-1">
                 {SHORTCUTS.filter((s) => s.group === g).map((s) => (
                   <li key={s.keys.join("+")} className="flex items-center justify-between gap-3 text-sm">

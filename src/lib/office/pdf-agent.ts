@@ -19,7 +19,7 @@ function range(spec: unknown, n: number): number[] {
 export function pdfTool(h: PdfHost) {
   const run = async (name: string, a: Record<string, unknown>): Promise<ToolRun> => {
     const d = h.doc();
-    const pageAt = (n: unknown) => { const i = Number(n) - 1; const p = d.pages[i]; if (!p) throw new Error(`No page ${n} — PDF has ${d.pages.length}`); return { p, i }; };
+    const pageAt = (n: unknown) => { const i = Number(n) - 1; const p = d.pages[i]; if (!p) throw new Error(`No page ${n}: the PDF has ${d.pages.length} pages`); return { p, i }; };
     const done = async (summary: string, output = summary) => { await h.commit(); return { summary, output }; };
     switch (name) {
       case "pdf_read": {
@@ -53,7 +53,7 @@ export function pdfTool(h: PdfHost) {
           }
           if (a.first_only && count) break;
         }
-        if (!count) return { summary: `“${String(a.phrase).slice(0, 40)}” not found`, output: "Phrase not found — use pdf_search or pdf_read to copy the exact wording (pages without a text layer can't be marked by phrase; use pdf_annotate)." };
+        if (!count) return { summary: `“${String(a.phrase).slice(0, 40)}” not found`, output: "Phrase not found. Use pdf_search or pdf_read to copy the exact wording (pages without a text layer can't be marked by phrase; use pdf_annotate)." };
         if (a.note && first) {
           const nx = Math.max(4, t[first.i].w - 186);
           d.annots.push({ id: uid(), page: d.pages[first.i].id, type: "note", x: nx, y: Math.max(4, first.box.y - 4), w: 180, h: 60, text: String(a.note) });

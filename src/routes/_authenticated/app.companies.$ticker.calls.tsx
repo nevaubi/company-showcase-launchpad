@@ -401,7 +401,7 @@ function Reader({
       </aside>
 
       <section className="min-w-0 rounded-lg border bg-card shadow-paper">
-        <div className="sticky top-12 z-10 flex flex-wrap items-center gap-2 rounded-t-lg border-b bg-card/95 px-4 py-2 backdrop-blur">
+        <div className="sticky top-14 z-10 flex flex-wrap items-center gap-2 rounded-t-lg border-b bg-card/95 px-4 py-2 backdrop-blur">
           <Segmented
             label="Section"
             value={section}

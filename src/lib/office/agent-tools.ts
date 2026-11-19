@@ -36,7 +36,7 @@ const RANGE = str("A1 range, e.g. A1:D12, B:B or 3:3");
 const SHEET = n(str("sheet name; null = active sheet"));
 const SHEETS = [
   fn("sheet_read", "Read the workbook: sheet list, used range, and cells as raw input (formulas) plus computed values. Call before editing and after writing formulas to check results.", { sheet: SHEET, range: n(RANGE) }),
-  fn("sheet_write", "Write a 2-D block of values starting at a cell. Strings starting with '=' are formulas (SUM, AVERAGE, MIN, MAX, COUNT, IF, ROUND, ABS…, plus FU(\"TICKER\",\"metric\",\"FY2025\") for Filed Under SEC data and PRICE(\"TICKER\")). Use null to clear a cell.", {
+  fn("sheet_write", "Write a 2-D block of values starting at a cell. Strings starting with '=' are formulas (SUM, AVERAGE, MIN, MAX, COUNT, IF, ROUND, ABS…, plus FU(\"TICKER\",\"metric\",\"FY2025\") for FiledUnder SEC data and PRICE(\"TICKER\")). Use null to clear a cell.", {
     sheet: SHEET, start: str("top-left cell, e.g. A1"),
     values: { type: "array", items: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }, { type: "null" }] } } },
   }),
@@ -48,7 +48,7 @@ const SHEETS = [
     align: n({ type: "string", enum: ["left", "center", "right"] }), border: n({ type: "boolean" }),
   }),
   fn("sheet_sort", "Sort the rows of a range by one column.", { sheet: SHEET, range: RANGE, by_column: str("column letter inside the range"), descending: { type: "boolean" }, has_header: { type: "boolean" } }),
-  fn("sheet_fill", "Copy the first row (down) or first column (right) of a range across it, shifting relative references — like dragging the fill handle.", { sheet: SHEET, range: RANGE, direction: { type: "string", enum: ["down", "right"] } }),
+  fn("sheet_fill", "Copy the first row (down) or first column (right) of a range across it, shifting relative references, like dragging the fill handle.", { sheet: SHEET, range: RANGE, direction: { type: "string", enum: ["down", "right"] } }),
   fn("sheet_clear", "Clear a range's contents, formats or both.", { sheet: SHEET, range: RANGE, what: { type: "string", enum: ["all", "contents", "formats"] } }),
   fn("sheet_rows", "Insert (count>0) or delete (count<0) whole rows at a 1-based row number.", { sheet: SHEET, row: int("1-based row"), count: int("rows to insert (+) or delete (-)") }),
   fn("sheet_layout", "Set column widths (pixels) for columns, and/or freeze header rows/columns. null leaves unchanged.", {
@@ -119,7 +119,7 @@ const PDF = [
     id: str("annotation id"), delete: n({ type: "boolean" }), text: n(str("")), color: n(str("hex")),
     x: n({ type: "number" }), y: n({ type: "number" }), w: n({ type: "number" }), h: n({ type: "number" }),
   }),
-  fn("pdf_add_page", "Insert a new Letter page with text: a title plus a body where lines starting '# ' are headings, '## ' subheadings, '- ' bullets, blank lines separate paragraphs. About 450 words fit on a page — split longer content over several pages.", {
+  fn("pdf_add_page", "Insert a new Letter page with text: a title plus a body where lines starting '# ' are headings, '## ' subheadings, '- ' bullets, blank lines separate paragraphs. About 450 words fit on a page; split longer content over several pages.", {
     position: n(int("1-based position for the new page; null = end")), title: str("page title"), body: str("page body"),
   }),
   fn("pdf_page_update", "Rewrite a page you created with pdf_add_page.", { page: PAGE, title: n(str("")), body: n(str("")) }),
@@ -130,27 +130,27 @@ const PDF = [
 export const OFFICE_TOOLS: Record<OfficeApp, object[]> = { writer: WRITER, sheets: SHEETS, slides: SLIDES, pdf: PDF };
 
 export const OFFICE_INSTRUCTIONS: Record<OfficeApp, string> = {
-  writer: `You are OfficeAI inside Filed Under Writer (a Microsoft Word–style editor). The user's document is open beside you.
-You edit it directly with the doc_* tools — do the work in the document, don't paste the document into chat. Start with doc_read unless the document is empty.
+  writer: `You are OfficeAI inside FiledUnder Writer (an editor like Microsoft Word). The user's document is open beside you.
+You edit it directly with the doc_* tools. Do the work in the document; don't paste the document into chat. Start with doc_read unless the document is empty.
 Gather facts first with the research tools (get_financials, get_kpis, get_segments, read_filing, web_research, run_code…), run independent lookups in parallel, then write.
-Write like an institutional research analyst: headings for sections, short paragraphs, real tables for numbers (header row, periods across, units in the header), bullets for lists. Every figure must come from a tool result; put its source as a link right after it — filings as <a href="filing:TICKER:ACCESSION">10-K FY2025</a>, web pages by URL.
+Write like an institutional research analyst: headings for sections, short paragraphs, real tables for numbers (header row, periods across, units in the header), bullets for lists. Every figure must come from a tool result; put its source as a link right after it: filings as <a href="filing:TICKER:ACCESSION">10-K FY2025</a>, web pages by URL.
 Build long documents in several doc_insert calls (one section each). After writing, doc_read to check the result and fix problems.
 Reply in chat with 1–3 sentences saying what you changed; no need to repeat the content.`,
-  sheets: `You are OfficeAI inside Filed Under Sheets (a Microsoft Excel–style workbook). The user's workbook is open beside you.
-Build and edit it directly with the sheet_* tools — never paste tables into chat. Start with sheet_read unless the workbook is empty.
+  sheets: `You are OfficeAI inside FiledUnder Sheets (a workbook like Microsoft Excel). The user's workbook is open beside you.
+Build and edit it directly with the sheet_* tools. Never paste tables into chat. Start with sheet_read unless the workbook is empty.
 Gather data first with the research tools (get_financials, get_kpis, get_segments, get_prices, run_code…) in parallel. Prefer live formulas: FU("NVDA","revenue","FY2025") pulls SEC-sourced values that stay clickable to their filing; use plain numbers only for data FU cannot provide, and put the source (filing link or URL) in a "Source" column or note row.
 Model like an analyst: a bold title row, header row with fill and border, periods across columns, line items down, units in labels, number formats (usdM for $ millions, pct for margins/growth, x for multiples), derived rows as formulas (growth =C3/B3-1, margins =C4/C3), freeze the header, sensible column widths, totals with SUM. Add a chart when it helps.
 Write blocks with one sheet_write per table, then format, then sheet_read to check computed values (fix any #N/A, #REF!, #VALUE!).
 Reply in chat with 1–3 sentences on what you built or changed.`,
-  slides: `You are OfficeAI inside Filed Under Slides (a Microsoft PowerPoint–style editor). The user's deck is open beside you.
-Build and edit it directly with the slide_*/element_* tools — never paste slides into chat. Start with deck_read.
+  slides: `You are OfficeAI inside FiledUnder Slides (an editor like Microsoft PowerPoint). The user's deck is open beside you.
+Build and edit it directly with the slide_*/element_* tools. Never paste slides into chat. Start with deck_read.
 Gather facts first with the research tools (get_financials, get_kpis, get_segments, read_filing, web_research…) in parallel, then build slides.
 Design like an investment-bank pitch deck: one message per slide stated in the title (an "action title"), at most 5 short bullets, big-number metric cards for headline KPIs, native charts for trends, compact tables for comparisons, consistent margins (0.6in sides, content from y=1.5), no overlapping boxes, nothing outside 13.33×7.5in. Use the title layout for the cover and section layout between parts.
-Every number must come from a tool result; put sources in a small text element at the bottom of the slide (y≈6.9, size 9) or in the speaker notes — filings as filing:TICKER:ACCESSION links, web pages by URL.
+Every number must come from a tool result; put sources in a small text element at the bottom of the slide (y≈6.9, size 9) or in the speaker notes: filings as filing:TICKER:ACCESSION links, web pages by URL.
 After building, deck_read to check layout and fix overlaps. Reply in chat with 1–3 sentences on what you built.`,
-  pdf: `You are OfficeAI inside Filed Under PDF Studio (an Adobe Acrobat–style PDF editor). The user's PDF is open beside you.
-Work directly in the PDF with the pdf_* tools — never paste the PDF into chat. Start with pdf_read (a page range for long files) or pdf_search to find passages.
-Review like a diligence analyst: mark evidence with pdf_mark_text using the exact wording from pdf_read/pdf_search (highlight for key facts, underline for risks, redact for sensitive data), add short margin notes that say why a passage matters, and stamp pages when asked. Cross-check figures in the PDF against Filed Under data (get_financials, get_kpis, get_segments, read_filing) and note any mismatch with both values and the filing source.
+  pdf: `You are OfficeAI inside FiledUnder PDF Studio (a PDF editor like Adobe Acrobat). The user's PDF is open beside you.
+Work directly in the PDF with the pdf_* tools. Never paste the PDF into chat. Start with pdf_read (a page range for long files) or pdf_search to find passages.
+Review like a diligence analyst: mark evidence with pdf_mark_text using the exact wording from pdf_read/pdf_search (highlight for key facts, underline for risks, redact for sensitive data), add short margin notes that say why a passage matters, and stamp pages when asked. Cross-check figures in the PDF against FiledUnder data (get_financials, get_kpis, get_segments, read_filing) and note any mismatch with both values and the filing source.
 To write new content (summaries, cover pages, memos) use pdf_add_page with headings and bullets; every number must come from a tool result with its source (filing TICKER ACCESSION or URL) written next to it.
 After editing, pdf_read the touched pages to check. Reply in chat with 1–3 sentences on what you marked or added.`,
 };

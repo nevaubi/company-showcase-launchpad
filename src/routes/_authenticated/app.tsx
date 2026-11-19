@@ -59,8 +59,8 @@ function Waitlisted({ declined }: { declined: boolean }) {
       </h1>
       <p className="mt-3 max-w-md text-sm text-muted-foreground">
         {declined
-          ? "We aren't able to open Filed Under to your account right now. We'll be in touch if that changes."
-          : "Thanks for signing up. Filed Under is opening to new analysts in waves — we'll email you as soon as your account is approved."}
+          ? "We aren't able to open FiledUnder to your account right now. We'll be in touch if that changes."
+          : "Thanks for signing up. FiledUnder is opening to new analysts in waves. We'll email you as soon as your account is approved."}
       </p>
       <div className="mt-8 flex gap-2">
         <Button variant="outline" onClick={() => window.location.reload()}>

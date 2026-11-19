@@ -161,7 +161,7 @@ function SupplyChainPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Research"
+        eyebrow="Filings and data"
         title="Supply chain map"
         description="Who each company sells to, buys from, works with and competes against, as named in its latest 10-K and 10-Q — with disclosed dollar exposure, risk flags, year-over-year changes, earnings sympathy moves and a shock simulator. Every link opens the sentence it comes from."
         actions={

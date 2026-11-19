@@ -14,7 +14,7 @@ const CUSTOM = /\b(FU|PRICE)\s*\(/i;
 export async function workbookToXlsx(wb: Workbook, value: (sheet: number, ref: string) => Scalar) {
   const X = await loadExcel();
   const book = new X.Workbook();
-  book.creator = "Filed Under";
+  book.creator = "FiledUnder";
   wb.sheets.forEach((sh, si) => {
     const ws = book.addWorksheet(sh.name.slice(0, 31) || `Sheet${si + 1}`, {
       views: sh.freeze.r || sh.freeze.c ? [{ state: "frozen", xSplit: sh.freeze.c, ySplit: sh.freeze.r }] : undefined,
@@ -28,7 +28,7 @@ export async function workbookToXlsx(wb: Workbook, value: (sheet: number, ref: s
         const v = value(si, ref);
         const res = typeof v === "number" || typeof v === "string" || typeof v === "boolean" ? v : undefined;
         if (raw.startsWith("=") && !CUSTOM.test(raw)) cell.value = { formula: raw.slice(1), result: res } as never;
-        else if (raw.startsWith("=")) { cell.value = (res ?? null) as never; cell.note = `Filed Under: ${raw}`; }
+        else if (raw.startsWith("=")) { cell.value = (res ?? null) as never; cell.note = `FiledUnder: ${raw}`; }
         else cell.value = (res ?? raw) as never;
       }
       const f = sh.fmt[ref];

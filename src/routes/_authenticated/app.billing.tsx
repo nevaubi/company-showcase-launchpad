@@ -83,7 +83,7 @@ function BillingPage() {
     <div className="mx-auto max-w-4xl">
       <PageHeader
         eyebrow="Account"
-        title="Billing and plan"
+        title="Plan and billing"
         description="Your plan, trial and AI usage. Reading company data is unlimited on every plan."
         actions={d?.sub ? <Button variant="outline" onClick={openPortal}>Manage billing</Button> : undefined}
       />

@@ -26,7 +26,7 @@ export function requireFeature(feature: Feature) {
     .middleware([requireAppAccess])
     .server(async ({ next, context }) => {
       const { data } = await context.supabase.rpc("require_feature", { _feature: feature });
-      if (!data) throw new Error(`${FEATURE_NAME[feature]} ${feature === "exports" || feature === "alerts" ? "needs the Research or Pro plan" : "needs the Pro plan"} — upgrade on the Billing page.`);
+      if (!data) throw new Error(`${FEATURE_NAME[feature]} ${feature === "exports" || feature === "alerts" ? "needs the Research or Pro plan" : "needs the Pro plan"}. Upgrade in Plan and billing, from the account menu.`);
       return next();
     });
 }

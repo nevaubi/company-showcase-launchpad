@@ -10,10 +10,10 @@ export const SHORTCUTS: Shortcut[] = [
   { keys: ["G", "R"], label: "Go to reports", group: "Navigation", to: "/app/reports" },
   { keys: ["G", "F"], label: "Go to filings", group: "Navigation", to: "/app/filings" },
   { keys: ["G", "M"], label: "Go to markets", group: "Navigation", to: "/app/markets" },
+  { keys: ["Esc"], label: "Close dialogs, menus and the source panel", group: "Navigation" },
   { keys: ["["], label: "Previous tab", group: "Company pages", action: "prev-tab" },
   { keys: ["]"], label: "Next tab", group: "Company pages", action: "next-tab" },
   { keys: ["⌘", "J"], label: "Open or close the assistant", group: "Assistant", action: "assistant" },
-  { keys: ["Esc"], label: "Close panels and dialogs", group: "Assistant" },
   { keys: ["?"], label: "Show keyboard shortcuts", group: "Help", action: "shortcuts" },
 ];
 

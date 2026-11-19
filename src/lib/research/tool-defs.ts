@@ -197,7 +197,7 @@ export const TOOL_DEFS = [
     type: "function",
     name: "read_webpage",
     description:
-      "Read the full text of a web page (Firecrawl) as markdown — earnings call transcripts, IR press releases, investor presentations, articles. Give an optional search phrase to return only the passages around it.",
+      "Read the full text of a web page (Firecrawl) as markdown: earnings call transcripts, IR press releases, investor presentations, articles. Give an optional search phrase to return only the passages around it.",
     parameters: obj({ url: str("Full https URL"), query: nullable(str("Optional phrase to focus on")) }, ["url", "query"]),
     strict: true,
   },
@@ -239,14 +239,14 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_alt_data",
-    description: "Public alternative data for a covered company (or the newest records across all companies when ticker is null): ownership (13D/13G holders), events (8-K items: deals, M&A, debt, restructuring, impairments, exec changes, restatements, cyber), contracts (USAspending federal obligations by FY + largest awards), regulatory (Federal Register), fda (approvals, recalls), recalls (NHTSA), complaints (CFPB per year), bank (FDIC call-report quarterlies), attention (monthly Wikipedia pageviews), medicare (CMS gross Medicare Part D/Part B spending on the company's drugs per year and latest quarter, plus its largest drugs; before rebates; meta.ytd marks partial years), settlement (SEC fails-to-deliver: average daily fails balance in USD per half-month, with peak day), medicare_states (CMS Part D gross drug costs of the company's own brands by prescriber state, ~5 years: share, slice of each state's Part D spending, over/under-index vs Medicare overall, top drugs per state; with ticker=null pass the two-letter state in since, e.g. since='TX', to rank every drug maker in that state), tri (EPA Toxics Release Inventory: the company's US plants by state with releases, chemicals and a production index = median of plants' reported production ratio this year ÷ last year, 6 years). With ticker=null and a series dataset (settlement, attention, complaints, bank, contracts, regulatory, medicare, tri) it returns the cross-company leaderboard: latest reading, vs a year earlier and vs the company's own trailing-year median (spikes). Every row has a source URL — cite it.",
+    description: "Public alternative data for a covered company (or the newest records across all companies when ticker is null): ownership (13D/13G holders), events (8-K items: deals, M&A, debt, restructuring, impairments, exec changes, restatements, cyber), contracts (USAspending federal obligations by FY + largest awards), regulatory (Federal Register), fda (approvals, recalls), recalls (NHTSA), complaints (CFPB per year), bank (FDIC call-report quarterlies), attention (monthly Wikipedia pageviews), medicare (CMS gross Medicare Part D/Part B spending on the company's drugs per year and latest quarter, plus its largest drugs; before rebates; meta.ytd marks partial years), settlement (SEC fails-to-deliver: average daily fails balance in USD per half-month, with peak day), medicare_states (CMS Part D gross drug costs of the company's own brands by prescriber state, ~5 years: share, slice of each state's Part D spending, over/under-index vs Medicare overall, top drugs per state; with ticker=null pass the two-letter state in since, e.g. since='TX', to rank every drug maker in that state), tri (EPA Toxics Release Inventory: the company's US plants by state with releases, chemicals and a production index = median of plants' reported production ratio this year ÷ last year, 6 years). With ticker=null and a series dataset (settlement, attention, complaints, bank, contracts, regulatory, medicare, tri) it returns the cross-company leaderboard: latest reading, vs a year earlier and vs the company's own trailing-year median (spikes). Every row has a source URL; cite it.",
     parameters: obj({ ticker: nullable(str("Covered ticker")), dataset: nullable({ type: "string", enum: ["ownership", "events", "capital", "contracts", "regulatory", "fda", "trials", "recalls", "consumer", "complaints", "bank", "attention", "medicare", "medicare_states", "tri", "settlement"] }), since: nullable(str("Earliest date YYYY-MM-DD (for medicare_states with ticker=null: a two-letter state code)")) }, ["ticker", "dataset", "since"]),
     strict: true,
   },
   {
     type: "function",
     name: "get_plant_hazards",
-    description: "Live operational hazards at covered companies' US plants (EPA Toxics Release Inventory plant list with coordinates and counties): active National Weather Service warnings (hurricane, tropical storm, storm surge, tornado, severe storm, flood, winter storm, ice, extreme cold/heat, high wind, red flag/fire, tsunami) and USGS M4.5+ earthquakes in the past week within a magnitude-scaled distance. Storm-drawn warnings count a plant only inside the storm outline; area warnings only when they list the plant's own NWS forecast/county/fire zone. With a ticker: that company's affected plants and their warnings; without: every affected company, most severe first. A warning is not a reported outage — say so. Cite forecast.weather.gov / USGS links.",
+    description: "Live operational hazards at covered companies' US plants (EPA Toxics Release Inventory plant list with coordinates and counties): active National Weather Service warnings (hurricane, tropical storm, storm surge, tornado, severe storm, flood, winter storm, ice, extreme cold/heat, high wind, red flag/fire, tsunami) and USGS M4.5+ earthquakes in the past week within a magnitude-scaled distance. Storm-drawn warnings count a plant only inside the storm outline; area warnings only when they list the plant's own NWS forecast/county/fire zone. With a ticker: that company's affected plants and their warnings; without: every affected company, most severe first. A warning is not a reported outage; say so. Cite forecast.weather.gov / USGS links.",
     parameters: obj({ ticker: nullable(str("Covered ticker; null for every affected company")) }, ["ticker"]),
     strict: true,
   },
@@ -310,7 +310,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "list_ir_documents",
-    description: "The Filed Under IR document store for a covered company (releases, presentations, financial supplements, transcripts, prepared remarks, annual reports collected from 8-K exhibits and the IR website, about 90 per company). Returns id, type, fiscal label, period end, publish date, pages and source URL, newest first. Use before read_ir_document.",
+    description: "The FiledUnder IR document store for a covered company (releases, presentations, financial supplements, transcripts, prepared remarks, annual reports collected from 8-K exhibits and the IR website, about 90 per company). Returns id, type, fiscal label, period end, publish date, pages and source URL, newest first. Use before read_ir_document.",
     parameters: obj(
       {
         ticker: str("Covered ticker"),
@@ -354,7 +354,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_setups",
-    description: "The short-term setups engine (refreshed nightly over every covered stock): today's setups (stock, long/short, strategy, hold, signal reason, price, stop, target, edge after costs) and the strategy scoreboard — each published strategy's out-of-sample trades, hit rate, t-stat, deflated Sharpe, drawdown, live record and which strict checks it fails. Use for trade-idea, 'is anything setting up on X', or 'which strategies work' questions. Watch-only setups are unproven; say so.",
+    description: "The short-term setups engine (refreshed nightly over every covered stock): today's setups (stock, long/short, strategy, hold, signal reason, price, stop, target, edge after costs) and the strategy scoreboard: each published strategy's out-of-sample trades, hit rate, t-stat, deflated Sharpe, drawdown, live record and which strict checks it fails. Use for trade-idea, 'is anything setting up on X', or 'which strategies work' questions. Watch-only setups are unproven; say so.",
     parameters: obj(
       {
         ticker: nullable(str("Only setups on this ticker; null for all")),
@@ -469,7 +469,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_supply_chain",
-    description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession — plus the end-to-end value chain (suppliers' suppliers → … → customers' customers, each edge with its relationship type, products, share, dollars and filings). flow narrows the chain: making = supply base upstream + buyers using the goods as parts; selling = route to market; tech = cloud/licensing/co-development. product keeps only links whose stated product contains that text (e.g. 'wafers', 'lithium').",
+    description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession, plus the end-to-end value chain (suppliers' suppliers → … → customers' customers, each edge with its relationship type, products, share, dollars and filings). flow narrows the chain: making = supply base upstream + buyers using the goods as parts; selling = route to market; tech = cloud/licensing/co-development. product keeps only links whose stated product contains that text (e.g. 'wafers', 'lithium').",
     parameters: obj(
       {
         ticker: str("Covered ticker"),
@@ -493,7 +493,7 @@ export const TOOL_DEFS = [
     type: "function",
     name: "navigate_to",
     description:
-      "Open a page in the user's Filed Under app (only works in the side-panel assistant). Use when the user asks to show/open/go to something, or when a page would help them see your answer.",
+      "Open a page in the user's FiledUnder app (only works in the side-panel assistant). Use when the user asks to show, open or go to something, or when a page would help them see your answer. dashboard opens Overview (/app), docs opens Office Studio (/app/office), ideas opens Trade ideas. Call pages by their sidebar and tab names, never 'dashboard' or 'docs'. For other pages (Signals tabs, Settings, Plan and billing) use go_to_path.",
     parameters: obj(
       {
         page: { type: "string", enum: ["dashboard", "company", "financials", "segments", "valuation", "filings", "filing_changes", "reports", "insiders", "calls", "ir", "supply_chain", "ideas", "markets", "macro", "sectors", "research", "theses", "docs", "companies", "hedge_funds", "alt_data"] },
@@ -506,7 +506,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "start_tour",
-    description: "Start the interactive guided tour of Filed Under (search, watchlist, click-to-source, IR KPIs, assistant, Office Studio). Use when the user asks to be shown around, is new, or asks how the app works in general.",
+    description: "Start the interactive guided tour of FiledUnder (search, watchlist, click-to-source, IR KPIs, assistant, Office Studio). Use when the user asks to be shown around, is new, or asks how the app works in general.",
     parameters: obj({}, []),
     strict: true,
   },
@@ -550,7 +550,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "web_map",
-    description: "List URLs on a website (sitemap discovery), optionally filtered by a keyword — e.g. find a company's IR press-release or presentation pages before reading them.",
+    description: "List URLs on a website (sitemap discovery), optionally filtered by a keyword, e.g. to find a company's IR press-release or presentation pages before reading them.",
     parameters: obj({ url: str("Site root, e.g. https://investor.nvidia.com"), search: nullable(str("Keyword to rank/filter URLs")) }, ["url", "search"]),
     strict: true,
   },
@@ -571,7 +571,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "fetch_url",
-    description: "Raw HTTP GET of a public URL — JSON/CSV APIs (e.g. data.sec.gov, api.stlouisfed.org, government open-data endpoints), robots, plain text. No JavaScript rendering; use read_webpage for normal pages and PDFs. Pipe large results into run_code by pasting the relevant part.",
+    description: "Raw HTTP GET of a public URL: JSON/CSV APIs (e.g. data.sec.gov, api.stlouisfed.org, government open-data endpoints), robots, plain text. No JavaScript rendering; use read_webpage for normal pages and PDFs. Pipe large results into run_code by pasting the relevant part.",
     parameters: obj({ url: str("Full https URL") }, ["url"]),
     strict: true,
   },

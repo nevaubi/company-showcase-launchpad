@@ -24,7 +24,7 @@ export function parseRange(s: string, sh?: Pick<SheetData, "rows" | "cols">): Re
   if (row) return norm({ c0: 0, c1: (sh?.cols ?? 26) - 1, r0: Number(row[1]) - 1, r1: Number(row[2]) - 1 });
   const [a, b = a] = t.split(":");
   const pa = parseRef(a), pb = parseRef(b);
-  if (!pa || !pb) throw new Error(`Bad range "${s}" — use A1 or A1:C5`);
+  if (!pa || !pb) throw new Error(`Bad range "${s}". Use A1 or A1:C5`);
   return norm({ c0: pa.c, r0: pa.r, c1: pb.c, r1: pb.r });
 }
 const norm = (r: Rect): Rect => ({ c0: Math.min(r.c0, r.c1), c1: Math.max(r.c0, r.c1), r0: Math.min(r.r0, r.r1), r1: Math.max(r.r0, r.r1) });
