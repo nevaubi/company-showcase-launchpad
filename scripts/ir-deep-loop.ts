@@ -275,6 +275,17 @@ function maybeReports() {
   void run("scripts/reports-due.ts", [], `${OUT}/reports.log`).finally(() => { reporting = false; });
 }
 
+// ---------- new-filing steps (redlines, supply links, weekly supply intel) ----------
+/** Every 30 minutes: filings discovered since the last run (filing-steps.ts keeps its own cursor and retry receipts). */
+let filingStepping = false;
+let lastFilingSteps = 0;
+function maybeFilingSteps() {
+  if (filingStepping || Date.now() - lastFilingSteps < 30 * 60_000 || memUsedGB() > MEM_GB * 0.8) return;
+  filingStepping = true;
+  lastFilingSteps = Date.now();
+  void run("scripts/filing-steps.ts", [], `${OUT}/filing-steps.log`).finally(() => { filingStepping = false; });
+}
+
 // ---------- background filing detail ----------
 let detailing = false;
 async function maybeDetail() {
@@ -490,6 +501,7 @@ for (;;) {
   await maybeDetail();
   await maybeIrSite();
   maybeReports();
+  maybeFilingSteps();
   await maybeCanon();
   await maybeSod();
   await maybeReactions();
