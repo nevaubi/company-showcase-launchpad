@@ -286,6 +286,35 @@ function maybeFilingSteps() {
   void run("scripts/filing-steps.ts", [], `${OUT}/filing-steps.log`).finally(() => { filingStepping = false; });
 }
 
+// ---------- analytics files (analytics-publish.ts → datasets/analytics/) ----------
+/** markets+returns daily after the nightly setups cycle finishes, auctions daily, hedge funds weekly, company context 20/day. */
+let publishing = false;
+const lastPublish: Record<string, number> = {};
+async function setupsFinishedAt(): Promise<number> {
+  const { data } = await sb.from("setup_cycles").select("finished_at").not("finished_at", "is", null).order("finished_at", { ascending: false }).limit(1).maybeSingle();
+  return data?.finished_at ? Date.parse(data.finished_at) : 0;
+}
+async function maybeAnalytics() {
+  if (publishing || memUsedGB() > MEM_GB * 0.7) return;
+  const due = async (set: string, everyMs: number) => {
+    if (!lastPublish[set]) {
+      const { data } = await sb.from("job_state").select("updated_at").eq("job", `analytics-${set}`).maybeSingle();
+      lastPublish[set] = data ? Date.parse(data.updated_at) : 0;
+    }
+    return Date.now() - lastPublish[set] >= everyMs;
+  };
+  let set: string | null = null;
+  if ((await setupsFinishedAt()) > (lastPublish.markets ?? 0) && (await due("markets", 20 * 3_600_000))) set = "markets";
+  else if (await due("auctions", 24 * 3_600_000)) set = "auctions";
+  else if (await due("hedge", 7 * 86_400_000)) set = "hedge";
+  else if (await due("context", 24 * 3_600_000)) set = "context";
+  if (!set) return;
+  publishing = true;
+  lastPublish[set] = Date.now();
+  log(`publishing analytics: ${set}`);
+  void run("scripts/analytics-publish.ts", [`--set=${set}`], `${OUT}/analytics.log`).finally(() => { publishing = false; });
+}
+
 // ---------- background filing detail ----------
 let detailing = false;
 async function maybeDetail() {
@@ -502,6 +531,7 @@ for (;;) {
   await maybeIrSite();
   maybeReports();
   maybeFilingSteps();
+  await maybeAnalytics().catch((e) => log(`analytics check failed: ${(e as Error).message}`));
   await maybeCanon();
   await maybeSod();
   await maybeReactions();

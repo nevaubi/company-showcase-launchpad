@@ -13,3 +13,14 @@ describe("filing steps", () => {
     expect(oldestSignals(["A", "B", "C"], new Map([["A", "2026-11-01"], ["B", "2026-10-01"]]), 2)).toEqual(["C", "B"]);
   });
 });
+
+import { contextSlice } from "../../scripts/lib/analytics-publish";
+describe("company context rolling refresh", () => {
+  it("takes 20 a run and wraps around after the whole list", () => {
+    const all = Array.from({ length: 45 }, (_, i) => `T${i}`);
+    expect(contextSlice(all, 0)).toEqual({ tickers: all.slice(0, 20), next: 20 });
+    const last = contextSlice(all, 40);
+    expect(last.tickers).toEqual([...all.slice(40), ...all.slice(0, 15)]);
+    expect(last.next).toBe(15);
+  });
+});

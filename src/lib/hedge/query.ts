@@ -1,3 +1,4 @@
+import { analyticsFile } from "@/lib/analytics-files";
 import type { Auction, Point } from "./core";
 import { composite, ratioSeries, seriesStats, sumSeries } from "./core";
 
@@ -5,8 +6,8 @@ export type HfSeries = { m: string; name: string; notes: string; unit: string; f
 export type HfPayload = { updated: string; datasets: Record<string, { name: string; series: HfSeries[] }> };
 export type AuctionPayload = { updated: string; source: string; sourceUrl: string; auctions: (Auction & { printedTerm: string })[] };
 
-export const hedgeFundsQuery = { queryKey: ["hedge-funds"], queryFn: async () => (await fetch("/data/hedge-funds.json")).json() as Promise<HfPayload>, staleTime: Infinity };
-export const auctionsQuery = { queryKey: ["treasury-auctions"], queryFn: async () => (await fetch("/data/treasury-auctions.json")).json() as Promise<AuctionPayload>, staleTime: Infinity };
+export const hedgeFundsQuery = { queryKey: ["hedge-funds"], queryFn: async () => { const f = await analyticsFile<HfPayload>("hedge-funds.json"); if (!f) throw new Error("Hedge fund data unavailable"); return f; }, staleTime: Infinity };
+export const auctionsQuery = { queryKey: ["treasury-auctions"], queryFn: async () => { const f = await analyticsFile<AuctionPayload>("treasury-auctions.json"); if (!f) throw new Error("Treasury auction data unavailable"); return f; }, staleTime: Infinity };
 
 export const allSeries = (p: HfPayload) => Object.values(p.datasets).flatMap((d) => d.series);
 

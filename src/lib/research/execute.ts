@@ -404,7 +404,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         qc.fetchQuery(supplyLinksQuery),
         supabase.from("alt_data").select("dataset,kind,date,title,value,unit,source_url").eq("ticker", t).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(60),
         supabase.from("supply_signals").select("kind,title,detail,impact,quote,filed,form,accn,url").eq("ticker", t).order("filed", { ascending: false }).limit(40),
-        fetch("/data/signals.json").then((r) => r.json()).catch(() => null),
+        qc.fetchQuery(setupsQuery).catch(() => null),
         partnerFile<Form144File>(`form144/${t}.json`).catch(() => null),
         partnerFile<CommentsFile>(`comments/${t}.json`).catch(() => null),
         computedDigest(qc, t).catch(() => [] as string[]),
@@ -430,8 +430,9 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       out.push("SUPPLY-CHAIN INTEL (verbatim-verified):", ...(sig.data ?? []).map((r: any) => `${r.filed ?? ""} [${r.kind}/${r.impact}] ${r.title}: "${String(r.quote).slice(0, 220)}" ${r.accn ? `accn ${r.accn}` : r.url ?? ""}`));
       const g = focusGraph(t, links, Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName])));
       out.push(`SUPPLY LINKS: ${g.slice(0, 25).map((n) => `${n.relation}:${n.name}${n.links[0].share_pct != null ? `(${n.links[0].share_pct}%)` : ""}${(n.links[0] as RiskLink).single_source ? "[single-source]" : ""}`).join("; ")}`);
-      const myIdeas = (ideas?.ideas ?? []).filter((i: any) => i.ticker === t);
-      if (myIdeas.length) out.push("RULE-BASED TRADE IDEAS:", ...myIdeas.map((i: any) => JSON.stringify(i).slice(0, 400)));
+      // Nightly setups (setup_results) replace the retired bundled signals.json.
+      const myIdeas = (ideas?.setups ?? []).filter((i) => i.ticker === t);
+      if (myIdeas.length) out.push(`RULE-BASED SETUPS (as of ${ideas!.asOf}):`, ...myIdeas.map((i) => JSON.stringify(i).slice(0, 400)));
       // Computed layer first in the output so truncation never drops it.
       if (computed.length) out.splice(1, 0, ...computed);
       return { output: clip(out.join("\n")), summary: `dossier for ${t}`, refs: d.filings.slice(0, 3).map((f) => ({ ticker: t, accn: f.accn, doc: f.doc, label: f.form })) };

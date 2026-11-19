@@ -48,7 +48,7 @@ async function storageJson<T>(path: string): Promise<T | null> {
 let marketsCache: { at: number; file: MarketsFile | null } | null = null;
 async function markets(): Promise<MarketsFile | null> {
   if (marketsCache && Date.now() - marketsCache.at < 3600_000) return marketsCache.file;
-  const file = await storageJson<MarketsFile>("markets.json");
+  const file = (await bucketJson<MarketsFile>("analytics/markets.json")) ?? (await storageJson<MarketsFile>("markets.json"));
   marketsCache = { at: Date.now(), file };
   return file;
 }

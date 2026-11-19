@@ -5,6 +5,7 @@
 //   bun scripts/company-context.ts [--only=AAPL,MSFT] [--no-people] [--no-press]
 import { mkdirSync, readFileSync, existsSync, writeFileSync } from "node:fs";
 import { COVERAGE, coverageOf } from "@/lib/coverage";
+import { readDataset } from "./lib/datasets";
 import { structured } from "@/lib/ai.server";
 import { firecrawlMap, firecrawlScrape } from "@/lib/web.server";
 import {
@@ -43,10 +44,8 @@ async function getJson<T>(url: string, headers: Record<string, string> = WUA): P
 // ---------- Wikidata: company item by SEC CIK ----------
 type WD = { item: string; article?: string; employees?: number; employeesAsOf?: string; founders: string[]; hq?: string };
 async function wikidataByCik(): Promise<Map<string, WD>> {
-  const ciks = COVERAGE.map((c) => {
-    const d = JSON.parse(readFileSync(`public/data/companies/${c.ticker}.json`, "utf8"));
-    return [c.ticker, String(d.profile.cik)] as const;
-  });
+  // Wikidata is asked only about this run's companies (the full list exceeds its query size).
+  const ciks = COVERAGE.filter((c) => tickers.includes(c.ticker)).map((c) => [c.ticker, String(c.cik)] as const);
   const values = ciks.flatMap(([, c]) => [`"${c}"`, `"${String(Number(c))}"`]).join(" ");
   const q = `SELECT ?cik ?item ?article ?emp ?empDate ?founderLabel ?hqLabel WHERE {
     VALUES ?cik { ${values} } ?item wdt:P5531 ?cik.
@@ -343,7 +342,7 @@ const wd = await wikidataByCik().catch((e) => {
 let ok = 0;
 for (const t of tickers) {
   try {
-    const d = JSON.parse(readFileSync(`public/data/companies/${t}.json`, "utf8"));
+    const d = await readDataset<any>("companies", t);
     const prevPath = `${OUT}/${t}.json`;
     const prev: CompanyContext | null = existsSync(prevPath) ? JSON.parse(readFileSync(prevPath, "utf8")) : null;
     const w = wd.get(t);
