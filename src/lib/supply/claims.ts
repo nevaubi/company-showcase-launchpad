@@ -217,6 +217,9 @@ export function namesParty(text: string, name: string | null | undefined): boole
   const whole = normText(name).replace(/&/g, "and").replace(/[.,]/g, "").replace(/\b(?:inc|corp|corporation|co|company|ltd|llc|lp|plc|the)\b/g, " ").replace(/\s+/g, " ").trim();
   if (whole.length >= 2 && new RegExp(`[^a-z0-9]${whole.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^a-z0-9]`).test(t)) return true;
   if (nameWords(name).some((w) => new RegExp(`[^a-z0-9]${w}`).test(t))) return true;
+  // the end of a long name as a filing shortens it ("Centre 1 Capital Trust I" as "Trust I")
+  const words = normText(name).replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  if (words.length >= 3 && new RegExp(`[^a-z0-9]${words.slice(-2).join(" ")}[^a-z0-9]`).test(t)) return true;
   const all = normText(name).replace(/[^a-z ]/g, " ").split(/\s+/).filter(Boolean);
   const initials = [all, all.filter((w) => !NAME_STOP.has(w))].map((ws) => ws.map((w) => w[0]).join(""));
   for (const m of text.match(/\b[A-Z][A-Z&]{2,7}\b/g) ?? []) if (initials.some((i) => i.includes(m.toLowerCase().replace(/&/g, "")))) return true;
@@ -232,7 +235,7 @@ const FILER_WORDS = /^(?:we|us|our|the company|company|the registrant|registrant
 /** Wording that makes the figure the filer's own total, or the base of a percentage ("12% of our $2.5 billion revenue"). */
 const BASE_BEFORE = [
   /\b(?:of|out of)\s+(?:our|its|the company's|total|consolidated|the total|the consolidated)\b[^$%;]{0,40}?$/i,
-  /\b(?:our|its|the company's)?\s*(?:total|consolidated|aggregate)\s+(?:net\s+)?(?:operating\s+)?(?:revenues?|sales|net sales|purchases)\s*(?:of|was|were|totaled|totalled|totaling|totalling|amounted to|:)?\s*$/i,
+  /\b(?:(?:our|its|the company's)\s+(?:total|consolidated|aggregate)|consolidated)\s+(?:net\s+)?(?:operating\s+)?(?:revenues?|sales|net sales|purchases)\s*(?:of|was|were|totaled|totalled|totaling|totalling|amounted to|:)?\s*$/i,
 ];
 
 export type PartyCheck =
@@ -255,10 +258,17 @@ function listPlaceOk(quote: string, toks: MoneyToken[], tok: MoneyToken, lo: num
   if (own.every(Boolean)) return Number(own[idx]) === Math.max(...own.map(Number));
   const last = list[list.length - 1];
   const tail = quote.slice(last.at + last.len, hi);
+  const head = quote.slice(lo, list[0].at);
   const resp = /\brespectively\b/i.test(tail);
-  const years = (tail.slice(0, resp ? tail.search(/\brespectively\b/i) : 60).match(/\b(?:19|20)\d{2}\b/g) ?? []).map(Number);
-  if (years.length === list.length) return years[idx] === Math.max(...years);
+  const yearsIn = (t: string) => (t.match(/\b(?:19|20)\d{2}\b/g) ?? []).map(Number);
+  const tailYears = yearsIn(tail.slice(0, resp ? tail.search(/\brespectively\b/i) : 60));
+  if (tailYears.length === list.length) return tailYears[idx] === Math.max(...tailYears);
   if (!resp) return true;
+  // "for the nine month periods ended July 31, 2026 and August 1, 2025 were $2,107.6 million and $2,019.9 million, respectively"
+  const headYears = yearsIn(head);
+  if (headYears.length === list.length) return headYears[idx] === Math.max(...headYears);
+  // "the three and nine months ended ...": periods of one party's figure, any of them is the party's own
+  if (/\b(?:three|six|nine|twelve)\b[^.;]{0,20}\bmonths?\b|\bquarters?\b|\bperiods?\b/i.test(head + tail)) return true;
   // names listed in the same order as the figures, before them or after them: each list item's last capitalised run
   // ("... agreements with Caesars", "MGM", "they are obligated ..." gives Caesars, MGM)
   const split = (t: string) => t.split(/,\s*(?:and\s+)?|\s+and\s+/).map((x) => x.trim()).filter(Boolean);
@@ -323,7 +333,7 @@ export const FLOW_KINDS: ReadonlySet<AmountKind> = new Set<AmountKind>(["revenue
 export const isFlowKind = (k: AmountKind | null | undefined): boolean => !!k && FLOW_KINDS.has(k);
 
 /** An asset or business changing hands: "purchased a group of ... assets from", "bought the Mobile refinery", "acquired a 20% interest". */
-const ASSET_DEAL = /\b(?:purchased?|purchasing|bought|buy|acquired?|acquiring|acquisition of)\b[^.;$]{0,60}?\b(?:assets|plants?|facilit(?:y|ies)|refiner(?:y|ies)|business(?:es)?|operations|portfolios?|propert(?:y|ies)|interests?|stakes?|pipelines?|terminals?|mines?|fleet|spectrum|stations?|hospitals?|stores|brands?|divisions?|segments?|subsidiar(?:y|ies)|shares|joint ventures?|(?:\d+(?:\.\d+)?\s?%|percent)\s+(?:of|interest|stake|ownership))\b/;
+const ASSET_DEAL = /\b(?:purchased?|purchasing|bought|buy|acquired?|acquiring|acquisition of)\b[^.;$]{0,60}?\b(?:assets|plants?|facilit(?:y|ies)|refiner(?:y|ies)|(?<!course of )business(?:es)?|operations|portfolios?|propert(?:y|ies)|interests?|stakes?|pipelines?|terminals?|mines?|fleet|spectrum|stations?|hospitals?|stores|brands?|divisions?|segments?|subsidiar(?:y|ies)|shares|joint ventures?|(?:\d+(?:\.\d+)?\s?%|percent)\s+(?:of|interest|stake|ownership))\b/;
 
 /** Ordered: the first family whose wording sits near the figure decides. Non-flow families come first, so a doubt never becomes a flow. */
 const KIND_RULES: [Exclude<AmountKind, "revenue" | "purchases" | "contract">, RegExp][] = [
@@ -459,7 +469,7 @@ export function maskOrgNames(quote: string, counterparty?: string | null): strin
 }
 
 /** Governments, agencies and places: their name is where they are, so it is not masked. */
-const PUBLIC_BODY = /\b(?:government|federal|state|states|commonwealth|republic|kingdom|ministry|department|agency|centers? for|administration|city|county|village|town|municipal\w*|province|provincial|army|navy|air force|authority|local)\b/i;
+const PUBLIC_BODY = /\b(?:government|federal|state|states|commonwealth|republic|kingdom|ministry|department|agency|centers? for|administration|city|county|village|town|municipal\w*|province|provincial|army|navy|air force|space force|command|authority|local|board|commission|council|tribe|nation)\b|^u\.s\.\s/i;
 
 /**
  * Regions the sentence itself names, in stored order. Uses `statedCountries` (the globe's own test, so a kept region is a
@@ -486,8 +496,8 @@ export function regionsInQuote(quote: string, regions: string[] | null | undefin
 
 export type LinkNature = "trade" | "financial" | "corporate" | "regulatory" | "unknown";
 
-const CORPORATE = /\b((?:acquired|acquire|acquires)(?! (?:an? |the |exclusive |global |worldwide |certain )*(?:rights|licen[cs]e agreements?))|acquisition (?:of|from)(?![^.;]{0,60}\bby\b)|(?:completed|announced|closed) (?:the|its|our) (?:acquisition|sale|divestiture|merger)|merger|merge with|divest\w*|spin-?off|(?:sold|sell|sale of|agreement to sell) (?:our|its|the|all|certain|a|an)\b[^.;]{0,60}\b(?:business|division|segment|subsidiar\w*|interest|stake|unit|assets|operations|portfolio)|purchase agreement to (?:sell|acquire)|equity and asset purchase|asset purchase agreement|(?:purchased?|bought|acquired?)\b[^.;$]{0,60}?\b(?:assets|plants?|refiner(?:y|ies)|business(?:es)?|portfolios?|pipelines?|terminals?|mines?|hospitals?|divisions?|subsidiar(?:y|ies))\b(?![^.;]{0,30}\b(?:services|products|supplies|equipment)\b))\b/i;
-const FINANCIAL = /\b(lenders?|administrative agent|collateral agent|credit (?:facilit\w*|agreements?)|line of credit|(?:term|bridge|revolving) loans?|loan agreements?|borrow\w*|indentures?|trustee|underwrit\w*|senior notes|notes due|discount window|preferred stock|equity (?:interest|investment|stake)|purchase of (?:shares|common stock|preferred stock)|invest(?:ed|ment)s? in (?:the company\b|us\b|our (?:company|common|preferred|stock|shares)\b|(?:the )?(?:shares|stock|equity|preferred|common|notes|units|bonds|debentures|warrants|partnership|fund|limited partnership)\b|an? (?:\d+(?:\.\d+)?\s?%|minority|majority|equity|preferred)\b)|\b(?:lent|lend(?:s|ing)?|loaned)\b|stock purchase agreement|limited partner\w*|general partner|warrants?|financing capacity|rate relief bonds|bonds?|(?:sale|sell|sold|factor\w*|securitiz\w*)\b[^.;]{0,30}?\b(?:of )?(?:certain )?(?:accounts )?receivables?|accounts receivable (?:purchase|sale|facilit\w*))\b/i;
+const CORPORATE = /\b((?:acquired|acquire|acquires)(?! (?:an? |the |exclusive |global |worldwide |certain )*(?:rights|licen[cs]e agreements?))|acquisition (?:of|from)(?![^.;]{0,60}\bby\b)|(?:completed|announced|closed) (?:the|its|our) (?:acquisition|sale|divestiture|merger)|merger|merge with|divest\w*|spin-?off|(?:sold|sell|sale of|agreement to sell) (?:our|its|the|all|certain|a|an)\b[^.;]{0,60}\b(?:business|division|segment|subsidiar\w*|interest|stake|unit|assets|operations|portfolio)|purchase agreement to (?:sell|acquire)|equity and asset purchase|asset purchase agreement|(?:purchased?|bought|acquired?)\b[^.;$]{0,60}?\b(?:assets|plants?|refiner(?:y|ies)|(?<!course of )business(?:es)?|portfolios?|pipelines?|terminals?|mines?|hospitals?|divisions?|subsidiar(?:y|ies))\b(?![^.;]{0,30}\b(?:services|products|supplies|equipment)\b))\b/i;
+const FINANCIAL = /\b(lenders?|administrative agent|collateral agent|credit (?:facilit\w*|agreements?)|line of credit|(?:term|bridge|revolving) loans?|loan agreements?|borrow\w*|indentures?|trustee|underwrit\w*|senior notes|notes due|discount window|preferred stock|equity (?:interest|investment|stake)|purchase of (?:shares|common stock|preferred stock)|invest(?:ed|ment)s? in (?:the company\b|us\b|our (?:company|common|preferred|stock|shares)\b|(?:the )?(?:shares|stock|equity|preferred|common|notes|units|bonds|debentures|warrants|partnership|fund|limited partnership)\b|an? (?:\d+(?:\.\d+)?\s?%|minority|majority|equity|preferred)\b)|\b(?:lent|lends|loaned)\b|(?:minority|equity method|equity-method|strategic) investments?|convertible notes?|stock purchase agreement|limited partner\w*|general partner|warrants?|financing capacity|rate relief bonds|bonds?|(?:sale|sell|sold|factor\w*|securitiz\w*)\b[^.;]{0,30}?\b(?:of )?(?:certain )?(?:accounts )?receivables?|accounts receivable (?:purchase|sale|facilit\w*))\b/i;
 const REG_ACTION = /\b(regulat\w*|approv\w*|permits?|licen[sc]es? (?:issued|granted) by|issued by the|rate (?:case|order|base)|tariffs?|orders? of the|oversight|supervis\w*|inspect\w*|warning letters?|consent decree|subject to expiration|recognized as a regulatory|regulatory (?:asset|liability))\b/i;
 const REGULATOR = /\b(commission|fda|food and drug administration|regulators?|regulatory authorit\w*|fcc|ferc|nrc|epa|sec\b|securities and exchange|federal reserve|fdic|occ|comptroller|cfpb|finra|bpu|psc|puc|public (?:utilit\w*|service) commission|ministry|nhtsa|faa|ema\b|medicines agency|cms\b)\b/i;
 const TRADE = /\b(suppl\w*|purchas\w*|customers?|sales?|sells?|sold|manufactur\w*|distribut\w*|licens\w*|collaborat\w*|partner\w*|joint venture|contracts?|vendors?|provid\w*|services?|products?|revenues?|orders?|agreements?|programs?|deliver\w*|outsourc\w*|foundry|wafers?|leases?|royalt\w*|develop\w*|commerciali[sz]\w*|tenants?|alliances?|joint ventures?|jvs?|joint business|rel(?:y|ies|ied)|depend\w*|operat\w*|audit\w*|brokers?|brokerage|premiums|fabrication|clearing|accounted for|marketing|channels?|carriers?|co-?brand\w*|platforms?|co-?engineer\w*|engineered with)\b/i;
@@ -503,7 +513,7 @@ export function linkNature(quote: string, detail: string, relation: Relation | s
   if (CORPORATE.test(q)) return "corporate";
   // a regulator is a counterparty that is itself an agency; a manufacturer "approved by the FDA" is still a supplier
   if (REGULATOR.test(cp) && REG_ACTION.test(q) && !/\b(sales to|revenues? from|purchases? from|contracts? with|manufactur\w* (?:for|of)|suppl(?:y|ies|ied) (?:us|our)|for us)\b/.test(q)) return "regulatory";
-  if (FINANCIAL.test(q) && !/\b(joint venture|collaborat\w*|supply agreement|license agreement)\b/.test(q)) return "financial";
+  if (FINANCIAL.test(q) && !/\b(joint venture|collaborat\w*|supply agreement|license agreement|alliance)\b/.test(q)) return "financial";
   if (FINANCIAL.test(cp) || /\b(bank|lending|capital partners|credit)\b/.test(cp) && /\b(loan|credit|borrow|financ)\w*/.test(q)) return "financial";
   if (TRADE.test(q)) return "trade";
   if (relation === "competitor" && /\bcompet\w*/.test(q)) return "trade";
