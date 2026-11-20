@@ -17,7 +17,7 @@ export const DATA_CADENCE: DataCadence[] = [
   { key: "filing_documents", label: "Filing document cache", maxAgeHours: 2 * D },
   { key: "alt_events", label: "Alt data: 8-K events (sec walk ok)", maxAgeHours: 1 * H },
   { key: "alt_ownership", label: "Alt data: 13D/13G ownership (slow pass ok)", maxAgeHours: 2 * D },
-  { key: "alt_contracts", label: "Alt data: federal contracts (slow pass ok)", maxAgeHours: 2 * D },
+  { key: "alt_contracts", label: "Alt data: federal contracts (rows stored or re-checked)", maxAgeHours: 2 * D },
   { key: "alt_recalls", label: "Alt data: recalls (slow pass ok)", maxAgeHours: 2 * D },
   { key: "alt_settlement", label: "Alt data: fails to deliver", maxAgeHours: 35 * D },
   { key: "alt_medicare", label: "Alt data: Medicare spending", maxAgeHours: 40 * D },
@@ -73,7 +73,7 @@ export function dataFreshness(rows: { key: string; newest: string | null }[], no
  * circuits (shown on their own), alert episodes, remedy receipts, loop requests and the
  * filing-steps accession marker.
  */
-export const BOOKKEEPING_JOB_RE = /^(filing-steps-fail:|form4-seen:|reports-due-fail:|provider:|alert:|alert-digest$|remedy:|loop-request:|estimates-none:|filing-steps-accn$|earnings-repair$|options-night$|[a-z-]+-slice$)/;
+export const BOOKKEEPING_JOB_RE = /^(filing-steps-fail:|config-strike:|form4-fail:|form4-repair$|form4-seen:|reports-due-fail:|provider:|alert:|alert-digest$|remedy:|loop-request:|estimates-none:|filing-steps-accn$|earnings-repair$|options-night$|[a-z-]+-slice$)/;
 /** Reasons that are normal operation (owner choices, vendor pacing). */
 export const ROUTINE_REASON_RE = /^(owner|pacing):/;
 

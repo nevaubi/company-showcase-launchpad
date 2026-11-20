@@ -34,9 +34,21 @@ const CONFIG_RE =
 export const TRANSIENT_INFRA_RE =
   /statement timeout|fetch failed|ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|network|connection (reset|terminated|closed)|\b50[234]\b|Bad Gateway|Service Unavailable|Gateway Time-?out|<!DOCTYPE html>|upstream/i;
 
+/**
+ * A reply cut off by the output limit or a content filter: the same request gets the same cut, so
+ * re-reading it at full price cannot help (review F3). Stream interruptions stay transient.
+ */
+const DETERMINISTIC_RE = /incomplete \((max_output_tokens|max_tokens|content_filter)\)|^OpenRouter response incomplete$/i;
+
 const TRANSIENT_RE = /Response incomplete|response stream (incomplete|interrupted)|timed? ?out|aborted|AbortError|overloaded|temporarily unavailable/i;
 
 const RATE_RE = /\b429\b|rate.?limit|too many requests|throttl/i;
+
+/**
+ * A 403 from an AI provider is a key or access problem only when it says so; a content-policy or
+ * other request-specific 403 must not close every lane (review F5).
+ */
+const AUTH_403_RE = /permission|not allowed|unauthori[sz]ed|api.?key|access denied|no access|forbidden: key|unsupported_country|region|organization|account/i;
 
 /** Messages and codes that name an AI provider, so a 401/403 is a key or access problem, not a block. */
 const AI_SOURCE_RE = /openai|anthropic|openrouter|\bAI\b|gateway|claude|gpt-|gemini/i;
@@ -55,12 +67,16 @@ export function classify(e: FailureInput): FailureClass {
   if (
     kind === "auth" ||
     code === "model_not_found" ||
-    (code === "invalid_value" && /model/i.test(e.message)) ||
+    // Only a wrong model id: "invalid_value … image too large for this model" is one request's fault.
+    (code === "invalid_value" && /invalid model id/i.test(e.message)) ||
     CONFIG_RE.test(text) ||
     status === 401 ||
-    (status === 403 && aiSource)
+    (status === 403 && aiSource && AUTH_403_RE.test(text))
   )
     return "config";
+  // An AI 403 without an access marker (content policy, …): this request is bad, not the provider.
+  if (status === 403 && aiSource) return "permanent";
+  if (DETERMINISTIC_RE.test(e.message)) return "permanent";
   // A 403 from a data host (SEC, Cboe) is a throttling block, not a bad key.
   if (status === 429 || status === 403 || kind === "rate" || RATE_RE.test(e.message)) return "rate";
   if (status >= 500 || kind === "transient" || TRANSIENT_INFRA_RE.test(e.message) || TRANSIENT_RE.test(e.message)) return "transient";

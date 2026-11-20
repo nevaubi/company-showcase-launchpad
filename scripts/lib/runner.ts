@@ -19,9 +19,9 @@
 import { writeFileSync } from "node:fs";
 import { rebuildCompany } from "@/lib/ir/rebuild.server";
 import { isTransientInfra as infraPattern, maxAttempts } from "@/lib/jobs/failure";
-import { failureAction } from "./runner-failure";
+import { configStrike, configStrikeKey, failureAction, noteAttempt, type Attempt } from "./runner-failure";
 export { failureAction, type FailureAction } from "./runner-failure";
-import { closedMessage, providerStates, providerTripError } from "@/lib/jobs/provider-health.server";
+import { closedMessage, providerStates, providerTrip, providerTripError } from "@/lib/jobs/provider-health.server";
 import { routeDecision, type ProviderId } from "@/lib/jobs/provider-health";
 import { args, dbGate, dbLatency, log, sb, sleep } from "./supa";
 
@@ -68,9 +68,12 @@ export interface RunnerOpts<T extends RunnerItem> {
 export const isTransientInfra = infraPattern;
 
 export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
+  /** the route is due a probe: one worker reads until the first item succeeds (review F2) */
+  let probing = false;
   if (o.route?.length) {
     try {
       const d = routeDecision(await providerStates(o.route), o.route, Date.now());
+      probing = d.state === "probe";
       if (d.state === "open") {
         const stop = `${d.cls === "config" ? "auth" : "quota"}: ${closedMessage(d.provider ?? o.route[0], d)}`;
         log(`${o.job}: ${stop} — not starting`);
@@ -125,8 +128,19 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   const infraFails = new Map<string, number>();
   let rateHits = 0;
   let active = 0;
-  let concurrency = o.concurrency;
+  // While probing, the other workers would only meet the claimed probe and read it as a stop.
+  let concurrency = probing ? 1 : o.concurrency;
   let lastWork = Date.now();
+  /** last attempts (ok or transient failure) for the outage detector */
+  let attempts: Attempt[] = [];
+  const strikeKey = configStrikeKey(o.job);
+  let strike: { cursor: number | null; paused_reason: string | null } | null = null;
+  try {
+    const { data } = await sb.from("job_state").select("cursor, paused_reason").eq("job", strikeKey).maybeSingle();
+    strike = (data as typeof strike) ?? null;
+  } catch {
+    strike = null;
+  }
   // ticker → when it first gained facts since its last rebuild
   const dirty = new Map<string, number>();
   const cost = new Map<string, { at: number; ms: number }>();
@@ -199,6 +213,16 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
         credits += r.usage?.credits ?? 0;
         rateHits = Math.max(0, rateHits - 1);
         infraFails.delete(item.id);
+        attempts = noteAttempt(attempts, { id: item.id, ok: true }).window;
+        if (probing) {
+          probing = false;
+          concurrency = o.concurrency;
+          log(`${o.job}: probe succeeded — concurrency ${concurrency}`);
+        }
+        if (strike) {
+          strike = null;
+          await sb.from("job_state").delete().eq("job", strikeKey).then(undefined, () => undefined);
+        }
         log(`${item.ticker.padEnd(5)} ${String(r.facts).padStart(4)} facts ${r.note ? `${r.note} ` : ""}${((Date.now() - t0) / 1000).toFixed(0)}s  ${item.label.slice(0, 60)}`);
         if (o.maxCredits != null && credits > o.maxCredits && !stop) {
           stop = `budget: this run used about ${credits.toFixed(1)} credits (cap ${o.maxCredits}) — rerun with --resume to continue`;
@@ -211,15 +235,44 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
       } catch (e) {
         const err = e as Error & { provider?: string; kind?: string };
         const a = failureAction(err, infraFails.get(item.id) ?? 0, Math.random, o.maxSleepMs);
+        // Transient failures feed the outage detector; a permanent rejection means the provider answered.
+        let outage = false;
+        if (a.act === "retry" && a.cls === "transient") ({ window: attempts, outage } = noteAttempt(attempts, { id: item.id, ok: false }));
+        else if (a.act === "fail" && a.cls === "permanent") attempts = noteAttempt(attempts, { id: item.id, ok: true }).window;
         if (a.act === "stop") {
-          // Never charge the item: no money or a wrong setting says nothing about the document.
+          // Never charge the item: no money or a wrong setting says nothing about the document,
+          // unless the same item stopped the run on configuration twice in a row (review F5).
           if (!stop) {
             stop = a.stop;
             providerStop = true;
           }
-          await o.release(item, null).then(undefined, () => undefined);
+          const s2 = a.cls === "config" ? configStrike(strike, item.id) : null;
+          if (s2?.charge) {
+            await o.release(item, `error: config: ${err.message.slice(0, 185)}`).then(undefined, () => undefined);
+            await sb.from("job_state").delete().eq("job", strikeKey).then(undefined, () => undefined);
+            strike = null;
+            log(`${item.ticker} config stop on the same item twice — item charged so the provider can heal`);
+          } else {
+            if (s2?.row) {
+              strike = s2.row;
+              await sb.from("job_state").upsert({ job: strikeKey, ...s2.row, updated_at: new Date().toISOString() }).then(undefined, () => undefined);
+            }
+            await o.release(item, null).then(undefined, () => undefined);
+          }
           if (!err.provider && o.provider) await providerTripError(o.provider, err).catch((x: Error) => log(`${o.job}: provider trip failed: ${x.message}`));
           log(`${item.ticker} ${a.cls} stop: ${err.message.slice(0, 160)} — item released untouched`);
+        } else if (outage) {
+          // Most recent attempts across several items failed transiently: the provider is down.
+          // Trip it for 2 minutes and stop; the item is released untouched.
+          reserved--;
+          if (!stop) {
+            stop = `outage: ${err.message.slice(0, 190)}`;
+            providerStop = true;
+          }
+          await o.release(item, null).then(undefined, () => undefined);
+          const pid = (err.provider as ProviderId | undefined) ?? o.provider;
+          if (pid) await providerTrip(pid, "transient", err.message).catch((x: Error) => log(`${o.job}: provider trip failed: ${x.message}`));
+          log(`${o.job}: provider outage (${attempts.filter((x) => !x.ok).length} of the last ${attempts.length} attempts failed) — stopping: ${err.message.slice(0, 120)}`);
         } else if (a.act === "retry") {
           infraFails.set(item.id, a.tries);
           reserved--;
@@ -251,7 +304,7 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
     if (ms > 800 && concurrency > 2) {
       concurrency = Math.max(2, Math.floor(concurrency * 0.75));
       log(`database slow (${ms}ms) — concurrency now ${concurrency}`);
-    } else if (ms && ms < 300 && concurrency < o.concurrency) concurrency++;
+    } else if (ms && ms < 300 && concurrency < o.concurrency && !probing) concurrency++;
   }, 20_000);
   const stats = setInterval(
     () =>

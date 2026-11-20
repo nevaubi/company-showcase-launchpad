@@ -485,10 +485,12 @@ export async function parseOpenRouterStream(res: Response): Promise<OpenRouterRe
  */
 export function classifyOpenAIError(status: number, code: string, type: string, message: string): OpenAIErrorKind {
   const all = `${code} ${type}`;
-  if (status === 401 || status === 403 || code === "model_not_found") return "auth";
+  // A 403 is a key or access problem only when it says so; a content-policy 403 rejects one request.
+  if (status === 401 || code === "model_not_found" || (status === 403 && /permission|not allowed|unauthori[sz]ed|api.?key|access denied|no access|unsupported_country|region|organization|account/i.test(`${all} ${message}`))) return "auth";
   // A wrong model id is configuration, not a bad document (19 Nov: 12,287 documents were failed by
-  // "400 invalid_value: Invalid model ID."). "auth" is the bucket runners stop on.
-  if (/invalid model id|does not exist or you do not have access/i.test(message) || (code === "invalid_value" && /model/i.test(message))) return "auth";
+  // "400 invalid_value: Invalid model ID."). "auth" is the bucket runners stop on. Other invalid_value
+  // errors that mention a model ("image too large for this model") are the request's fault.
+  if (/invalid model id|does not exist or you do not have access/i.test(message)) return "auth";
   if (/insufficient_quota|credit|billing|quota/i.test(all) || /no credits|exceeded your current quota|billing/i.test(message)) return "quota";
   if (status === 429) return "rate";
   if (status >= 500) return "transient";

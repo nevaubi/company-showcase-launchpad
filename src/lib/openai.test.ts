@@ -44,5 +44,9 @@ describe("classifyOpenAIError", () => {
   it("stops on bad keys and unknown models", () => {
     expect(classifyOpenAIError(401, "invalid_api_key", "", "Incorrect API key")).toBe("auth");
     expect(classifyOpenAIError(404, "model_not_found", "", "")).toBe("auth");
+    // review F5: request-specific errors are not configuration
+    expect(classifyOpenAIError(400, "invalid_value", "", "image too large for this model")).toBe("rejected");
+    expect(classifyOpenAIError(403, "", "", "content policy violation")).toBe("rejected");
+    expect(classifyOpenAIError(403, "unsupported_country_region_territory", "", "Country not supported")).toBe("auth");
   });
 });

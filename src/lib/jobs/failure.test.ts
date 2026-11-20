@@ -28,11 +28,23 @@ describe("failure classes", () => {
   });
   it("keeps 5xx, cut-off replies and network errors transient, other rejects permanent", () => {
     expect(classify({ status: 503, message: "Service Unavailable" })).toBe("transient");
-    expect(classify({ status: 200, kind: "rejected", message: "Response incomplete (max_output_tokens)" })).toBe("transient");
     expect(classify({ kind: "transient", message: "OpenRouter response stream incomplete" })).toBe("transient");
     expect(classify({ message: "fetch failed" })).toBe("transient");
     expect(classify({ status: 400, kind: "rejected", message: "OpenAI 400 invalid_request_error: context too long" })).toBe("permanent");
     expect(classify({ message: "pdftoppm exited with code 1" })).toBe("permanent");
+  });
+  it("charges a reply cut off by its output limit once instead of re-reading it at full price (F3)", () => {
+    expect(classify({ status: 200, kind: "rejected", message: "Response incomplete (max_output_tokens)" })).toBe("permanent");
+    expect(classify({ status: 200, kind: "rejected", message: "Response incomplete (max_tokens)" })).toBe("permanent");
+    expect(classify({ status: 200, kind: "rejected", message: "OpenRouter response incomplete" })).toBe("permanent");
+    expect(classify({ status: 200, kind: "transient", message: "OpenRouter response stream incomplete" })).toBe("transient");
+    expect(classify({ message: "Response incomplete (unknown)" })).toBe("transient");
+  });
+  it("does not read one request's rejection as a configuration error that closes every lane (F5)", () => {
+    expect(classify({ status: 400, code: "invalid_value", kind: "rejected", message: "OpenAI 400 invalid_value: image too large for this model" })).toBe("permanent");
+    expect(classify({ status: 403, kind: "rejected", message: "AI 403: request blocked by content policy" })).toBe("permanent");
+    expect(classify({ status: 403, message: "AI gateway 403: your account does not have permission to use this model" })).toBe("config");
+    expect(classify({ status: 403, message: "Cboe responded 403" })).toBe("rate");
   });
   it("classifies thrown objects by their fields", () => {
     const e = Object.assign(new Error("OpenAI 400 invalid_value: Invalid model ID."), { kind: "rejected", status: 400 });

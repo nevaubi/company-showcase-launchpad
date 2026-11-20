@@ -114,7 +114,8 @@ async function markUnreadable(ticker: string) {
 
 const readerArgs = (ticker: string, credits: number) => [`--ticker=${ticker}`, `--model=${MODEL}`, `--escalate=${ESCALATE}`, "--quality", "--resume", ...(Number.isFinite(credits) ? [`--max-credits=${credits.toFixed(2)}`] : [])];
 /** Stops that end the whole run (the next run resumes): spent budget or exhausted/blocked credits. */
-const fatal = (stop: string | null | undefined) => !!stop && /^(budget|auth|quota)/.test(stop);
+// "outage:" = the runner tripped a provider after a run of transient failures (review F3): stop the company, do not charge it.
+const fatal = (stop: string | null | undefined) => !!stop && /^(budget|auth|quota|outage)/.test(stop);
 /** A reader that never ran (company busy elsewhere, crashed before reporting): the company isn't finished. */
 const didNotRun = (stop: string | null | undefined) => !!stop && /^busy|without a spend report/.test(stop);
 
