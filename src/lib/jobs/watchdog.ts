@@ -260,3 +260,14 @@ export function planAlerts(active: Alert[], rows: StateRow[], nowMs: number): Al
 
 /** Subject line for a digest. */
 export const digestSubject = (n: number, first: string) => (n === 1 ? `FiledUnder ops: ${first}` : `FiledUnder ops: ${n} problems need a look`);
+
+// ---------- the database itself unreachable (review R7) ----------
+/**
+ * The watchdog's reads failed. Whether that is the database API being down (worth a direct email
+ * that bypasses the outbox, which lives in the same database) or the watchdog's own time limit
+ * (a slow read; the next run tries again).
+ */
+export const dbReadFailure = (message: string) => !/took over \d+ ms/.test(message);
+
+/** Idempotency key for the direct email: at most one per UTC day, deduplicated by the email provider across isolates. */
+export const dbDownKey = (nowMs: number) => `ops-db-unreachable:${new Date(nowMs).toISOString().slice(0, 10)}`;

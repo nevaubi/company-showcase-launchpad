@@ -122,8 +122,8 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
     const started = Date.now();
     let watchdog: Record<string, unknown> = { skipped: "WATCHDOG=0" };
     if (process.env["WATCHDOG"] !== "0") {
-      const { runWatchdog } = await import("@/lib/jobs/watchdog.server");
-      watchdog = await runWatchdog(1500).catch((e: Error) => ({ error: e.message.slice(0, 200) }));
+      const { alertIfDatabaseDown, runWatchdog } = await import("@/lib/jobs/watchdog.server");
+      watchdog = await runWatchdog(1500).catch(async (e: Error) => ({ error: e.message.slice(0, 200), ...(await alertIfDatabaseDown(e).catch((x: Error) => ({ direct: `check failed: ${x.message.slice(0, 120)}` }))) }));
     }
     const { runOutbox } = await import("@/lib/email/outbox.server");
     const out = await runOutbox(Math.max(1000, RUN_BUDGET_MS - (Date.now() - started)));

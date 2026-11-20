@@ -71,3 +71,34 @@ describe("watchdog run", () => {
     expect(mocks.db.state("alert:worker-heartbeat")!.paused_reason).toMatch(/^sent: /);
   });
 });
+
+// Review R7: a database outage used to end silently (the outbox lives in the same database).
+describe("database unreachable", () => {
+  const send = vi.hoisted(() => vi.fn(async () => ({ sent: true })));
+  vi.mock("@/lib/email-templates/send-email", () => ({ sendTemplateEmail: send }));
+  const down = () => {
+    mocks.db = fakeSupabase();
+    mocks.db.client.from = (() => ({ select: () => ({ limit: async () => ({ data: null, error: { message: "upstream connect error 503" } }) }) })) as never;
+  };
+  it("sends one direct email to OPS_ALERT_EMAIL when a second read also fails, keyed once per UTC day", async () => {
+    vi.stubEnv("OPS_ALERT_EMAIL", "ops@example.com");
+    down();
+    const { alertIfDatabaseDown } = await import("./watchdog.server");
+    const r = await alertIfDatabaseDown(new Error("data_freshness: upstream connect error 503"), Date.parse("2026-11-20T10:00:00Z"));
+    expect(r.direct).toBe("sent to ops@example.com");
+    expect(send).toHaveBeenCalledWith("ops-alert", "ops@example.com", expect.objectContaining({ idempotencyKey: "ops-db-unreachable:2026-11-20" }));
+    vi.unstubAllEnvs();
+  });
+  it("sends nothing for a slow read, when the database answers the probe, or without a recipient", async () => {
+    const { alertIfDatabaseDown } = await import("./watchdog.server");
+    send.mockClear();
+    mocks.db = fakeSupabase();
+    expect((await alertIfDatabaseDown(new Error("watchdog reads took over 1200 ms"))).direct).toMatch(/slow/);
+    expect((await alertIfDatabaseDown(new Error("job_health: boom"))).direct).toMatch(/answered a second read/);
+    vi.stubEnv("OPS_ALERT_EMAIL", "");
+    down();
+    expect((await alertIfDatabaseDown(new Error("x"))).direct).toMatch(/OPS_ALERT_EMAIL is not set/);
+    expect(send).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
+  });
+});

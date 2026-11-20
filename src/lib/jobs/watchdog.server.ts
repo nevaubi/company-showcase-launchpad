@@ -6,7 +6,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dataFreshness } from "@/lib/jobs/data-freshness";
 import { REMEDY_KEYS } from "@/lib/jobs/remediation";
-import { alerts, digestSubject, planAlerts, DIGEST_KEY, type JobHealthRow, type StateRow } from "@/lib/jobs/watchdog";
+import { alerts, dbDownKey, dbReadFailure, digestSubject, planAlerts, DIGEST_KEY, type JobHealthRow, type StateRow } from "@/lib/jobs/watchdog";
 
 const withTimeout = <T,>(p: PromiseLike<T>, ms: number, what: string) =>
   Promise.race([Promise.resolve(p), new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`${what} took over ${ms} ms`)), ms))]);
@@ -62,4 +62,46 @@ export async function runWatchdog(budgetMs = 1500): Promise<Record<string, unkno
     if (error) throw new Error(error.message);
   }
   return { active: active.map((a) => a.key), opened: rowsToWrite.filter((r) => r.job.startsWith("alert:") && /^open:/.test(r.paused_reason ?? "")).map((r) => r.job), closed: plan.close, emailed: delivered ? plan.send.map((a) => a.key) : [], ...(plan.send.length && !delivered ? { held: plan.send.map((a) => a.key) } : {}), sent, ms: Date.now() - started };
+}
+
+/**
+ * Called when runWatchdog threw (review R7). If a second, minimal read also fails, the database API
+ * is taken as unreachable and one email goes straight to the email provider, to OPS_ALERT_EMAIL (the
+ * admin list lives in the database, so it cannot be read now). At most one a UTC day: the provider
+ * deduplicates the idempotency key across isolates. What this cannot see: a Postgres outage stops
+ * pg_cron, which is what calls this job, so then nothing in the app runs at all; only an outside
+ * uptime check covers that.
+ */
+export async function alertIfDatabaseDown(err: Error, nowMs = Date.now()): Promise<Record<string, unknown>> {
+  if (!dbReadFailure(err.message)) return { direct: "not sent: the watchdog's reads were slow, not refused" };
+  const probe = await withTimeout(supabaseAdmin.from("job_state").select("job").limit(1), 800, "database probe").then(
+    (r) => (r.error ? r.error.message : null),
+    (e: Error) => e.message,
+  );
+  if (probe == null) return { direct: "not sent: the database answered a second read" };
+  const to = (process.env["OPS_ALERT_EMAIL"] ?? "").trim();
+  if (!to) return { direct: "not sent: OPS_ALERT_EMAIL is not set", probe };
+  try {
+    const { sendTemplateEmail } = await import("@/lib/email-templates/send-email");
+    const since = new Date(nowMs).toISOString();
+    await sendTemplateEmail("ops-alert", to, {
+      idempotencyKey: dbDownKey(nowMs),
+      templateData: {
+        subject: "FiledUnder ops: the database is not answering",
+        link: "https://filedunder.ai/app/freshness",
+        alerts: [
+          {
+            key: "database",
+            title: `The database API refused the watchdog's reads: ${probe.slice(0, 160)}`,
+            since,
+            tried: "nothing can be retried while the database is down; jobs repeat their slices once it answers",
+            action: "Check the Lovable Cloud project status (database and API) and its logs.",
+          },
+        ],
+      },
+    });
+    return { direct: `sent to ${to}`, probe };
+  } catch (e) {
+    return { direct: `send failed: ${(e as Error).message.slice(0, 160)}`, probe };
+  }
 }
