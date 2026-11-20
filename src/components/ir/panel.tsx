@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Panel } from "@/components/app/page-header";
 import { IR } from "@/components/ir/typography";
 import { cn } from "@/lib/utils";
@@ -48,18 +48,21 @@ export function IrPanel({
  * sideways inside its own wrapper and keeps its first column in view instead.
  */
 export function useFits<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
+  // A callback ref, so a table that mounts after a loading state is still observed.
+  const [el, setEl] = useState<T | null>(null);
+  const ref = useCallback((node: T | null) => setEl(node), []);
   const [fits, setFits] = useState(true);
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
-    const table = el.firstElementChild as HTMLElement | null;
-    const check = () => setFits(!table || table.scrollWidth <= el.clientWidth + 1);
+    const check = () => {
+      const table = el.firstElementChild as HTMLElement | null;
+      setFits(!table || table.scrollWidth <= el.clientWidth + 1);
+    };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
-    if (table) ro.observe(table);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
     return () => ro.disconnect();
-  }, []);
+  }, [el]);
   return [ref, fits] as const;
 }

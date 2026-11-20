@@ -1,5 +1,5 @@
 import { useFeatureGate } from "@/hooks/use-plan";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronDown, ChevronsDown, Download, FileSpreadsheet, FileText, Info, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import wordmark from "@/assets/brand/wordmark.png.asset.json";
@@ -122,9 +122,15 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
   const partialInView = new Set(inViewAll.filter((c) => c.partial).map((c) => c.k)).size;
   const okInView = inView.filter((c) => c.ok).length;
 
+  // A new period grid lays the tables out again from the top, a batch at a time (banks hold over a thousand).
   const changeFreq = (f: Freq) => {
     setFreq(f);
     setSpan(DEFAULT_SPAN[f]);
+    setShown(PAGE);
+  };
+  const changeSpan = (v: string) => {
+    setSpan(v);
+    setShown(PAGE);
   };
 
   // Arriving from a workbook link: show that line's breakdown and open the source at that period.
@@ -160,6 +166,10 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
   }, [focus, byKey, payload, open, ticker, onFocusDone]);
 
   const exportGate = useFeatureGate();
+  // Cards are memoized: they get a stable export callback and the source opener as props, so opening
+  // a source (which changes the source context) or exporting doesn't re-render every table.
+  const exportRef = useRef<(what: ExportKind) => Promise<void>>(async () => undefined);
+  const exportGroup = useCallback((group: PayloadGroup) => void exportRef.current({ kind: "group", group }), []);
   const runExport = async (what: ExportKind) => {
     if (!exportGate("exports")) return;
     const key = what.kind === "group" ? what.group.id : what.kind;
@@ -227,6 +237,8 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
     }
   };
 
+  exportRef.current = runExport;
+
   const range = (f: Freq) => {
     const p = grids[f];
     return p.length ? `${periodLabel(p[0], f)} – ${periodLabel(p[p.length - 1], f)}` : "";
@@ -250,7 +262,7 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
               ...(grids.m.length >= 3 ? [{ v: "m" as const, l: "Monthly", title: "Month-end balances and counts from monthly operating reports" }] : []),
             ]}
           />
-          <Segmented label="Periods shown" value={span} onChange={setSpan} options={SPANS[freq]} />
+          <Segmented label="Periods shown" value={span} onChange={changeSpan} options={SPANS[freq]} />
           <ScaleToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -349,7 +361,8 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
               scale={scale}
               highlight={q}
               exporting={exporting === g.id}
-              onExcel={() => runExport({ kind: "group", group: g })}
+              onExcel={exportGroup}
+              open={open}
             />,
           ])}
           {growing || shown < groups.length ? (
@@ -381,7 +394,8 @@ function hasData(s: PayloadSeries | undefined, cols: string[], freq: Freq) {
   return cols.some((c) => cells[c]);
 }
 
-function BreakdownCard({
+const BreakdownCard = memo(function BreakdownCard({
+  open,
   ticker,
   payload,
   group,
@@ -406,9 +420,9 @@ function BreakdownCard({
   scale: ReturnType<typeof useUnitScale>[0];
   highlight: string;
   exporting: boolean;
-  onExcel: () => void;
+  onExcel: (group: PayloadGroup) => void;
+  open: (t: SourceTarget) => void;
 }) {
-  const { open } = useSource();
   const [view, setView] = useState<"table" | "chart">("table");
   const [wrap, fits] = useFits<HTMLDivElement>();
   const root = group.root ? byKey.get(group.root) : undefined;
@@ -532,7 +546,7 @@ function BreakdownCard({
               <TooltipContent>Download this breakdown</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-64">
-              <DropdownMenuItem onSelect={onExcel} disabled={exporting} className="items-start gap-2.5 py-2">
+              <DropdownMenuItem onSelect={() => onExcel(group)} disabled={exporting} className="items-start gap-2.5 py-2">
                 <FileSpreadsheet className="mt-0.5" />
                 <span>
                   <span className="block text-sm font-medium">Excel workbook</span>
@@ -630,7 +644,7 @@ function BreakdownCard({
                         "sticky left-0 z-[1] max-w-[22rem] border-b bg-card py-1 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary",
                         s.total && IR.total,
                         rule,
-                        match && "bg-highlight-soft",
+                        match && "bg-highlight-soft [&_span]:text-foreground",
                       )}
                       style={indentStyle(d)}
                       title={s.sc ? `${s.label} · ${s.sc}` : undefined}
@@ -656,22 +670,17 @@ function BreakdownCard({
                       const off = chk && !chk.ok && !chk.partial;
                       return (
                         <td key={e} className={cn("border-b p-0 transition-colors duration-150 group-hover:bg-secondary/60", rule)}>
-                          <Tooltip delayDuration={350}>
-                            <TooltipTrigger asChild>
-                              <button type="button" onClick={() => openCell(s, e, c)} className={cn(IR.cellButton, IR.num, s.total && IR.total, c.w === "scale" && "bg-warning-soft")}>
-                                <span className={cn(c.f && IR.derived)}>{fmtIr(c.v, s.unit, scale, opts)}</span>
-                                {off && <CheckDot className="ml-1" />}
-                                {off && <span className="sr-only"> (parts do not add up)</span>}
-                              </button>
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs text-xs">
-                              <p className="font-medium">{periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m)}</p>
-                              <p>{c.f ? `Calculated: ${c.f.formula}` : c.x ? `Printed as “${c.x}”` : "Click to open the source"}</p>
-                              {c.d != null && payload.docs[c.d]?.filed && <p className="opacity-75">From the {payload.docs[c.d].kind?.replace("-", " ") ?? "document"} filed {payload.docs[c.d].filed}</p>}
-                              {c.w === "scale" && <p className="font-medium">About 1,000× off the neighbouring periods: a different unit or measure may have been read here. Check the source.</p>}
-                              {chk && <CheckLine chk={chk} unit={s.unit} scale={scale} />}
-                            </TooltipContent>
-                          </Tooltip>
+                          {/* A native title instead of a tooltip component per cell: bank-sized pages hold tens of thousands of cells. */}
+                          <button
+                            type="button"
+                            onClick={() => openCell(s, e, c)}
+                            title={cellTitle(payload, c, e, freq, s.unit, scale, chk)}
+                            className={cn(IR.cellButton, IR.num, s.total && IR.total, c.w === "scale" && "bg-warning-soft")}
+                          >
+                            <span className={cn(c.f && IR.derived)}>{fmtIr(c.v, s.unit, scale, opts)}</span>
+                            {off && <CheckDot className="ml-1" />}
+                            {off && <span className="sr-only"> (parts do not add up)</span>}
+                          </button>
                         </td>
                       );
                     })}
@@ -684,29 +693,28 @@ function BreakdownCard({
       )}
     </section>
   );
+});
+
+/** Hover text of a value: its period, how it was printed or calculated, its document and its check. */
+function cellTitle(payload: IrPayload, c: PayloadCell, e: string, freq: Freq, unit: string, scale: ReturnType<typeof useUnitScale>[0], chk?: PayloadCheck) {
+  const doc = c.d != null ? payload.docs[c.d] : undefined;
+  return [
+    periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m),
+    c.f ? `Calculated: ${c.f.formula}` : c.x ? `Printed as “${c.x}”` : null,
+    doc?.filed ? `From the ${doc.kind?.replace("-", " ") ?? "document"} filed ${doc.filed}` : null,
+    c.w === "scale" ? "About 1,000× off the neighbouring periods: a different unit or measure may have been read here. Check the source." : null,
+    chk ? checkText(chk, unit, scale) : null,
+    "Click to open the source",
+  ].filter(Boolean).join("\n");
+}
+
+function checkText(chk: PayloadCheck, unit: string, scale: ReturnType<typeof useUnitScale>[0]) {
+  if (chk.partial) return `Selected lines only: they add to ${fmtIr(chk.sum, unit, scale)} of the printed ${fmtIr(chk.total, unit, scale)} total (${Math.round((chk.sum / chk.total) * 100)}%).`;
+  if (chk.ok) return chk.sub?.length ? `${chk.n} parts net to ${fmtIr(chk.sum, unit, scale)} = printed total, with ${chk.sub.join(", ")} subtracted` : `${chk.n} parts sum to ${fmtIr(chk.sum, unit, scale)} = printed total`;
+  return `Parts sum to ${fmtIr(chk.sum, unit, scale)} vs printed total ${fmtIr(chk.total, unit, scale)} (difference ${fmtIr(chk.sum - chk.total, unit, scale)})`;
 }
 
 /** Quiet marker for a total whose parts don't add up (the numbers are in its tooltip). */
 function CheckDot({ className }: { className?: string }) {
   return <span aria-hidden className={cn("inline-block size-1.5 shrink-0 rounded-full bg-warning align-middle", className)} />;
-}
-
-function CheckLine({ chk, unit, scale }: { chk: PayloadCheck; unit: string; scale: ReturnType<typeof useUnitScale>[0] }) {
-  if (chk.partial)
-    return (
-      <p>
-        The release lists selected lines only: they add to {fmtIr(chk.sum, unit, scale)} of the printed {fmtIr(chk.total, unit, scale)} total ({Math.round((chk.sum / chk.total) * 100)}%). The remainder is shown as “Not itemized”.
-      </p>
-    );
-  return chk.ok ? (
-    <p>
-      {chk.sub?.length
-        ? `${chk.n} parts net to ${fmtIr(chk.sum, unit, scale)} = printed total, with ${chk.sub.join(", ")} subtracted`
-        : `${chk.n} parts sum to ${fmtIr(chk.sum, unit, scale)} = printed total`}
-    </p>
-  ) : (
-    <p>
-      Parts sum to {fmtIr(chk.sum, unit, scale)} vs printed total {fmtIr(chk.total, unit, scale)} (difference {fmtIr(chk.sum - chk.total, unit, scale)})
-    </p>
-  );
 }
