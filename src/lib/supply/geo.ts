@@ -2,6 +2,8 @@
 // and on what basis. No browser/Node APIs. Coordinates come from the generated head-office file
 // (scripts/company-hq.ts); nothing here invents a location.
 import { canonCountry } from "./analytics";
+import { knownHomeCountry } from "./home-country";
+export { knownHomeCountry } from "./home-country";
 import { normText, type GraphNode, type HopNode, type Relation, type RiskLink } from "./core";
 
 /** How exact a head-office position is: the city itself, or only the country. */
@@ -61,34 +63,6 @@ export const SOURCE_LABEL: Record<HqSource, string> = {
   verified: "checked against the filing cover page",
   directory: "company directory",
 };
-
-/**
- * Home countries of large foreign companies that U.S. filings name constantly but that carry no U.S. ticker in the link.
- * Deliberately short and strict: every pattern is a whole, distinctive company name (never a fragment such as "acer" or "shell"),
- * so an unrelated name cannot land abroad. Country level only; anything not listed stays unplaced.
- */
-const KNOWN_HOME: [RegExp, string][] = [
-  [/\b(taiwan semiconductor|tsmc|hon hai precision|foxconn|wistron|quanta computer|pegatron|compal electronics|inventec|mediatek|united microelectronics|ase technology|advanced semiconductor engineering|largan precision|delta electronics|unimicron|nanya technology|realtek|asustek)\b/, "Taiwan"],
-  [/\b(samsung|sk hynix|lg electronics|lg display|lg energy solution|lg chem|hyundai motor|kia corporation|posco)\b/, "South Korea"],
-  [/\b(sony|toyota|panasonic|murata manufacturing|kioxia|tokyo electron|hitachi|toshiba|nidec|kyocera|renesas|shin-etsu|sumco|tdk corporation|fujitsu|nintendo|honda motor|nissan motor|softbank|takeda|denso)\b/, "Japan"],
-  [/\b(huawei|byd company|contemporary amperex|catl|alibaba|tencent|baidu|xiaomi|lenovo|zte corporation|semiconductor manufacturing international|smic|bytedance|luxshare|goertek|boe technology|sinopec|petrochina|cnooc)\b/, "China"],
-  [/\b(asml|nxp semiconductors|philips)\b/, "Netherlands"],
-  [/\b(infineon|siemens|basf|sap se|robert bosch|carl zeiss|volkswagen|bmw|mercedes-benz|bayer ag|deutsche telekom)\b/, "Germany"],
-  [/\b(novo nordisk|maersk|vestas)\b/, "Denmark"],
-  [/\b(nestle|nestlé|novartis|roche holding|stmicroelectronics|logitech|glencore)\b/, "Switzerland"],
-  [/\b(teva pharmaceutical|check point software|mobileye|tower semiconductor|elbit systems)\b/, "Israel"],
-  [/\b(tata consultancy|tata motors|tata steel|infosys|wipro|reliance industries|hcl technologies)\b/, "India"],
-  [/\b(nokia)\b/, "Finland"], [/\b(ericsson|spotify)\b/, "Sweden"],
-  [/\b(astrazeneca|glaxosmithkline|gsk plc|unilever|arm holdings|rolls-royce|bae systems|vodafone|hsbc|barclays|diageo|rio tinto)\b/, "United Kingdom"],
-  [/\b(sanofi|lvmh|totalenergies|schneider electric|safran|thales|capgemini|danone|dassault)\b/, "France"],
-  [/\b(bhp group)\b/, "Australia"], [/\b(petrobras|embraer)\b/, "Brazil"], [/\b(saudi aramco)\b/, "Saudi Arabia"],
-];
-/** Home country of a well-known foreign company by its full name; null for anything else. */
-export function knownHomeCountry(name: string): string | null {
-  const n = name.toLowerCase();
-  for (const [re, country] of KNOWN_HOME) if (re.test(n)) return country;
-  return null;
-}
 
 export interface Placed {
   key: string;

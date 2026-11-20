@@ -1,5 +1,6 @@
 // Pure analytics for the supply-chain page: country exposure, region shocks, concentration history,
 // link freshness and ecosystem baskets. No browser/Node APIs — shared by app and tests.
+import { knownHomeCountry } from "./home-country";
 import { entityKey, HOTSPOTS, linkDollars, type ProLink, type SupplyLink } from "./core";
 
 const ALIAS: Record<string, string> = {
@@ -17,28 +18,13 @@ export function canonCountry(raw: string | null | undefined): string | null {
   if (!t) return null;
   return ALIAS[t.toLowerCase()] ?? (t === t.toLowerCase() ? t.replace(/\b\w/g, (c) => c.toUpperCase()) : t);
 }
-/** Headquarters country of well-known non-U.S. counterparties (public facts), so a link to TSMC counts as a Taiwan tie even when the filing sentence names no country. */
-const HQ: [RegExp, string][] = [
-  [/taiwan semiconductor|\btsmc\b|hon hai|foxconn|wistron|quanta|pegatron|compal|inventec|mediatek|united microelectronics|\bumc\b|\base\b technology|advanced semiconductor engineering|largan|delta electronics|unimicron|nanya|realtek|asustek|acer\b/, "Taiwan"],
-  [/samsung|sk hynix|hynix|\blg\b|lg (energy|display|electronics|chem)|hyundai|\bkia\b|sk on\b|posco/, "South Korea"],
-  [/\bsony\b|toyota|panasonic|murata|kioxia|tokyo electron|mitsubishi|hitachi|toshiba|nidec|kyocera|renesas|shin-etsu|sumco|\btdk\b|fujitsu|nintendo|honda|nissan|softbank|takeda|astellas|daiichi|olympus|canon\b|keyence|denso/, "Japan"],
-  [/huawei|\bbyd\b|catl|contemporary amperex|alibaba|tencent|baidu|xiaomi|lenovo|\bzte\b|smic|semiconductor manufacturing international|jd\.com|pdd|bytedance|luxshare|goertek|boe technology|haier|midea|cosco|sinopec|petrochina|cnooc/, "China"],
-  [/\basml\b|nxp|philips|stellantis|shell\b|heineken|prosus/, "Netherlands"],
-  [/infineon|siemens|\bbasf\b|\bsap\b|bosch|zeiss|volkswagen|bmw|mercedes|bayer|merck kgaa|deutsche telekom|continental ag|allianz/, "Germany"],
-  [/novo nordisk|maersk|vestas|genmab/, "Denmark"],
-  [/nestl|novartis|roche|stmicro|abb\b|ubs\b|logitech|glencore|te connectivity/, "Switzerland"],
-  [/teva|check point|mobileye|tower semiconductor|elbit/, "Israel"],
-  [/tata\b|infosys|wipro|reliance|hcl tech|dr\. reddy|sun pharma/, "India"],
-  [/nokia/, "Finland"], [/ericsson|volvo|spotify/, "Sweden"],
-  [/astrazeneca|glaxo|\bgsk\b|unilever|\bbp\b|arm holdings|\barm\b ltd|rolls-royce|bae systems|vodafone|hsbc|barclays|diageo|rio tinto/, "United Kingdom"],
-  [/airbus|sanofi|lvmh|totalenergies|schneider|safran|thales|capgemini|danone|kering|l'or[eé]al|dassault/, "France"],
-  [/bhp|\bcsl\b/, "Australia"], [/shopify|nutrien|enbridge|\bcn rail|canadian (national|pacific)|celestica|magna\b|teck/, "Canada"],
-  [/vale\b|petrobras|embraer/, "Brazil"], [/aramco/, "Saudi Arabia"], [/femsa|cemex|grupo bimbo|walmex/, "Mexico"],
-];
+/**
+ * Home country of a counterparty, so a link to TSMC counts as a Taiwan tie even when the filing sentence names no country.
+ * Only whole, distinctive company names count (the same strict table the globe uses to place a name), so "Corteva" is not
+ * Israeli because it contains "teva" and "Village of Midvale" is not Brazilian because it contains "vale".
+ */
 export function counterpartyCountry(name: string): string | null {
-  const n = name.toLowerCase();
-  for (const [re, c] of HQ) if (re.test(n)) return c;
-  return null;
+  return knownHomeCountry(name);
 }
 
 export const isHotspot = (country: string) => HOTSPOTS.some((h) => country.toLowerCase().includes(h));
