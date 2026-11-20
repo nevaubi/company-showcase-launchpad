@@ -19,7 +19,7 @@ import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { fmtAlt, screenAlt } from "@/lib/alt/query";
+import { fmtAlt, readAlt } from "@/lib/alt/query";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -269,15 +269,11 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
     staleTime: 10 * 60_000,
     queryFn: async ({ client }) => {
       const [alt, sig] = await Promise.all([
-        supabase
-          .from("alt_data")
-          .select("ticker,dataset,kind,date,title,value,unit,meta,source_url")
-          .eq("ticker", ticker)
-          .eq("kind", "event")
-          .in("dataset", Object.keys(ALT_LABEL))
-          .not("date", "is", null)
-          .order("date", { ascending: false })
-          .limit(80),
+        readAlt<{ ticker: string; dataset: string; kind: string; date: string | null; title: string; value: number | null; unit: string | null; meta: Record<string, any>; source_url: string | null }>(
+          "ticker,dataset,kind,date,title,value,unit,meta,source_url",
+          (q) => q.eq("ticker", ticker).eq("kind", "event").in("dataset", Object.keys(ALT_LABEL)).not("date", "is", null).order("date", { ascending: false }).limit(80),
+          client,
+        ),
         supabase
           .from("supply_signals")
           .select("kind,title,detail,impact,filed,accn,doc,url")
@@ -286,8 +282,8 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
           .order("filed", { ascending: false })
           .limit(60),
       ]);
-      // Contract awards only when this company received them (src/lib/alt/contracts.ts).
-      return { alt: await screenAlt(alt.data ?? [], client), sig: sig.data ?? [] };
+      // readAlt screens out rows filed under the wrong company (src/lib/alt/screen.ts).
+      return { alt, sig: sig.data ?? [] };
     },
   });
 

@@ -1,7 +1,7 @@
 // Everything a company deliverable (tear sheet, IC memo, model) needs, gathered once, plus a numbered source
 // register so every printed figure carries a reference to the filing or dataset it came from.
 import type { QueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { readAlt } from "@/lib/alt/query";
 import { companyQuery, pricesQuery, quotesQuery } from "@/lib/data";
 import { earningsIndexQuery, type EstimatesIndexRow } from "@/lib/calendars/data";
 import { screenerFileQuery } from "@/lib/screener/use-rows";
@@ -93,15 +93,8 @@ export async function gatherDossier(qc: QueryClient, ticker: string): Promise<Do
     qc.fetchQuery(earningsIndexQuery).catch(() => null),
     qc.fetchQuery(pricesQuery(t, "1y", "1d")).catch(() => null),
     qc.fetchQuery(supplyLinksQuery).catch(() => [] as RiskLink[]),
-    supabase
-      .from("alt_data")
-      .select("dataset,date,title,value,unit,source,source_url")
-      .eq("ticker", t)
-      .eq("kind", "event")
-      .gte("date", since)
-      .order("date", { ascending: false })
-      .limit(40)
-      .then((r) => (r.data ?? []) as AltEvent[], () => [] as AltEvent[]),
+    // screened: no rows filed under the wrong company (src/lib/alt/screen.ts)
+    readAlt<AltEvent>("dataset,date,title,value,unit,source,source_url", (q) => q.eq("ticker", t).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(40), qc).catch(() => [] as AltEvent[]),
   ]);
   const q = quotes?.quotes?.find((x) => x.symbol === t) ?? null;
   const bars = (prices?.bars ?? []) as Bar[];
