@@ -2,6 +2,9 @@
 // Every row keeps a link back to the exact public record it came from. Pure fetch, no Node APIs.
 import { CAPITAL, ITEMS } from "@/lib/alt/sec-forms";
 import { appliesTo, type AltRegistryEntry } from "@/lib/alt/registry";
+import { ALT_NAMES, awardTie, ignoredFilter, pickParents, tickerKeys, type ParentFamily, type UsaRecipient } from "@/lib/alt/contracts";
+import { calendarYearPeriod, fiscalYearPeriod } from "@/lib/alt/periods";
+import { FDIC_ZERO_IS_MISSING } from "@/lib/alt/bank";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Per-request timeout and retries; the scheduled job lowers both to fit its run budget. */
@@ -11,8 +14,8 @@ export interface Co { ticker: string; name: string; cik: string; sector: string;
 export type Row = { uid: string; ticker: string; dataset: string; kind: "event" | "series"; date: string | null; title: string; value?: number | null; unit?: string | null; meta?: Record<string, unknown>; source: string; source_url?: string | null };
 
 
-// Names as they appear in each public registry (defaults to a cleaned SEC name).
-const NAME: Record<string, string> = { AAPL: "Apple", MSFT: "Microsoft", NVDA: "NVIDIA", AMZN: "Amazon", GOOGL: "Google", META: "Meta Platforms", AVGO: "Broadcom", AMD: "Advanced Micro Devices", JPM: "JPMorgan Chase", BAC: "Bank of America", GS: "Goldman Sachs", V: "Visa", MA: "Mastercard", LLY: "Eli Lilly", UNH: "UnitedHealth", JNJ: "Johnson & Johnson", MRK: "Merck", WMT: "Walmart", COST: "Costco", XOM: "Exxon Mobil", CVX: "Chevron", CAT: "Caterpillar", HD: "Home Depot", CRM: "Salesforce", NOW: "ServiceNow", CSCO: "Cisco", IBM: "International Business Machines", INTC: "Intel", QCOM: "Qualcomm", TXN: "Texas Instruments", MU: "Micron Technology", NFLX: "Netflix", DIS: "Walt Disney", CMCSA: "Comcast", T: "AT&T", VZ: "Verizon", LOW: "Lowe's", MCD: "McDonald's", SBUX: "Starbucks", NKE: "Nike", BKNG: "Booking Holdings", PG: "Procter & Gamble", KO: "Coca-Cola", PEP: "PepsiCo", PM: "Philip Morris", WFC: "Wells Fargo", C: "Citigroup", MS: "Morgan Stanley", SCHW: "Charles Schwab", AXP: "American Express", SPGI: "S&P Global", ABBV: "AbbVie", PFE: "Pfizer", AMGN: "Amgen", TMO: "Thermo Fisher", ABT: "Abbott Laboratories", ISRG: "Intuitive Surgical", GE: "General Electric", RTX: "Raytheon", BA: "Boeing", LMT: "Lockheed Martin", HON: "Honeywell", DE: "Deere", UNP: "Union Pacific", UPS: "United Parcel Service", COP: "ConocoPhillips", SLB: "Schlumberger", LIN: "Linde", FCX: "Freeport-McMoRan", NEE: "NextEra Energy", DUK: "Duke Energy", SO: "Southern Company", PLD: "Prologis", AMT: "American Tower", EQIX: "Equinix", TSLA: "Tesla", ORCL: "Oracle", ADBE: "Adobe" };
+// Names as they appear in each public registry (defaults to a cleaned SEC name); hand-checked list in src/lib/alt/contracts.ts.
+const NAME = ALT_NAMES;
 const WIKI: Record<string, string> = { AAPL: "Apple_Inc.", MSFT: "Microsoft", NVDA: "Nvidia", AMZN: "Amazon_(company)", GOOGL: "Alphabet_Inc.", TSLA: "Tesla,_Inc.", META: "Meta_Platforms", AVGO: "Broadcom", AMD: "AMD", ORCL: "Oracle_Corporation", JPM: "JPMorgan_Chase", BAC: "Bank_of_America", GS: "Goldman_Sachs", V: "Visa_Inc.", MA: "Mastercard", LLY: "Eli_Lilly_and_Company", UNH: "UnitedHealth_Group", JNJ: "Johnson_%26_Johnson", MRK: "Merck_%26_Co.", WMT: "Walmart", COST: "Costco", XOM: "ExxonMobil", CVX: "Chevron_Corporation", CAT: "Caterpillar_Inc.", HD: "The_Home_Depot", CRM: "Salesforce", ADBE: "Adobe_Inc.", NOW: "ServiceNow", CSCO: "Cisco", IBM: "IBM", INTC: "Intel", QCOM: "Qualcomm", TXN: "Texas_Instruments", MU: "Micron_Technology", NFLX: "Netflix", DIS: "The_Walt_Disney_Company", CMCSA: "Comcast", T: "AT%26T", VZ: "Verizon", LOW: "Lowe%27s", MCD: "McDonald%27s", SBUX: "Starbucks", NKE: "Nike,_Inc.", BKNG: "Booking_Holdings", PG: "Procter_%26_Gamble", KO: "The_Coca-Cola_Company", PEP: "PepsiCo", PM: "Philip_Morris_International", WFC: "Wells_Fargo", C: "Citigroup", MS: "Morgan_Stanley", SCHW: "Charles_Schwab_Corporation", AXP: "American_Express", SPGI: "S%26P_Global", ABBV: "AbbVie", PFE: "Pfizer", AMGN: "Amgen", TMO: "Thermo_Fisher_Scientific", ABT: "Abbott_Laboratories", ISRG: "Intuitive_Surgical", GE: "GE_Aerospace", RTX: "RTX_Corporation", BA: "Boeing", LMT: "Lockheed_Martin", HON: "Honeywell", DE: "John_Deere", UNP: "Union_Pacific_Railroad", UPS: "United_Parcel_Service", COP: "ConocoPhillips", SLB: "SLB_(company)", LIN: "Linde_plc", FCX: "Freeport-McMoRan", NEE: "NextEra_Energy", DUK: "Duke_Energy", SO: "Southern_Company", PLD: "Prologis", AMT: "American_Tower", EQIX: "Equinix" };
 // FDIC certificate of each company's main insured bank.
 const FDIC: Record<string, number> = { JPM: 628, BAC: 3510, WFC: 3511, C: 7213, GS: 33124, MS: 32992, SCHW: 57450, AXP: 27471 };
@@ -83,41 +86,66 @@ async function events(c: Co): Promise<Row[]> {
 }
 
 // ───────── USAspending: federal contract awards ─────────
-// Recipients are resolved to parent-level ids whose name starts with the company name, so
-// substring look-alikes ("COSTCONTROL", "PASSPORT VISA") never leak in.
+// Parents are recipients whose whole name is the company (src/lib/alt/contracts.ts), never a prefix
+// look-alike ("ROGERS, WICKER, RYKMAN AND SPEDALE LLC" is not Rogers Corporation). Every award and
+// transaction is kept only when its recipient is the company by name or a child the source lists
+// under one of those parents, and a response that says it ignored the company filter is dropped:
+// `spending_by_award` ignores `recipient_id` and returned the government-wide top awards.
 const post = (url: string, body: unknown) => get(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 async function contracts(c: Co): Promise<Row[]> {
+  const keys = tickerKeys(c.ticker, c.name, c.reg?.legal);
   const name = nm(c).toUpperCase().replace(/[’']/g, "'");
-  const re = new RegExp(`^(THE )?${name.replace(/[.*+?^${}()|[\]\\&]/g, (m) => (m === "&" ? "(&|AND)" : `\\${m}`))}\\b`, "i");
   const list = await post("https://api.usaspending.gov/api/v2/recipient/", { keyword: name, limit: 100, award_type: "contracts" });
-  const ids = (list?.results ?? []).filter((r: any) => r.recipient_level === "P" && re.test(r.name) && r.amount > 0).sort((a: any, b: any) => b.amount - a.amount).slice(0, 4);
-  if (!ids.length) return [];
+  const parents = pickParents((list?.results ?? []) as UsaRecipient[], keys);
+  if (!parents.length) return [];
+  const families: ParentFamily[] = [];
+  for (const p of parents) {
+    const code = p.uei ?? p.duns;
+    const kids = code ? await get(`https://api.usaspending.gov/api/v2/recipient/children/${encodeURIComponent(code)}/?year=all`) : null;
+    families.push({ parent: p, children: Array.isArray(kids) ? kids : [] });
+  }
   const out: Row[] = [];
   const fy = new Map<number, number>();
-  const today = new Date().toISOString().slice(0, 10);
-  for (const rec of ids) {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const asOf = now.toISOString();
+  const tieMeta = (r: { recipient_id?: string | null; "Recipient UEI"?: string | null }, t: NonNullable<ReturnType<typeof awardTie>>, f: ParentFamily) => ({ tie: t.tie, parent: (t.parent ?? f.parent).name, parent_id: (t.parent ?? f.parent).id, recipient_id: r.recipient_id ?? null, recipient_uei: r["Recipient UEI"] ?? null, as_of: asOf });
+  for (const f of families) {
+    const rec = f.parent;
     const filters = { recipient_id: rec.id, award_type_codes: ["A", "B", "C", "D"], time_period: [{ start_date: "2007-10-01", end_date: today }] };
     const t = await post("https://api.usaspending.gov/api/v2/search/spending_over_time/", { group: "fiscal_year", filters });
-    for (const r of t?.results ?? []) if (r.aggregated_amount) fy.set(Number(r.time_period.fiscal_year), (fy.get(Number(r.time_period.fiscal_year)) ?? 0) + r.aggregated_amount);
-    const recent = { ...filters, time_period: [{ start_date: `${new Date().getFullYear() - 5}-01-01`, end_date: today }] };
-    const a = await post("https://api.usaspending.gov/api/v2/search/spending_by_award/", { filters: recent, fields: ["Award ID", "Recipient Name", "Award Amount", "Awarding Agency", "Awarding Sub Agency", "Start Date", "End Date", "Description", "generated_internal_id"], limit: 40, sort: "Award Amount", order: "desc" });
+    if (t && !ignoredFilter(t.messages, "recipient_id")) for (const r of t.results ?? []) if (r.aggregated_amount) fy.set(Number(r.time_period.fiscal_year), (fy.get(Number(r.time_period.fiscal_year)) ?? 0) + r.aggregated_amount);
+    // Largest awards of the last five years to the parent's family (the award search filters by UEI text, not recipient id).
+    if (rec.uei) {
+      const recent = { recipient_search_text: [rec.uei], award_type_codes: ["A", "B", "C", "D"], time_period: [{ start_date: `${now.getUTCFullYear() - 5}-01-01`, end_date: today }] };
+      const a = await post("https://api.usaspending.gov/api/v2/search/spending_by_award/", { filters: recent, fields: ["Award ID", "Recipient Name", "Recipient UEI", "recipient_id", "Award Amount", "Awarding Agency", "Awarding Sub Agency", "Start Date", "End Date", "Description", "generated_internal_id"], limit: 40, sort: "Award Amount", order: "desc" });
+      if (a && !ignoredFilter(a.messages, "recipient_search_text")) for (const r of a.results ?? []) {
+        const tie = awardTie({ recipient: r["Recipient Name"], recipientId: r.recipient_id, uei: r["Recipient UEI"] }, families, keys);
+        if (!tie) continue;
+        out.push({ uid: `usa:${c.ticker}:${r.generated_internal_id}`, ticker: c.ticker, dataset: "contracts", kind: "event", date: iso(r["Start Date"]), title: `${r["Awarding Agency"]}: ${(r.Description ?? "Contract award").slice(0, 140)}`, value: r["Award Amount"], unit: "USD", meta: { award_id: r["Award ID"], recipient: r["Recipient Name"], agency: r["Awarding Agency"], sub_agency: r["Awarding Sub Agency"], end: r["End Date"], ...tieMeta(r, tie, f) }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/award/${r.generated_internal_id}` });
+      }
+    }
     // Newest obligations (new awards, task orders, modifications ≥ $1M) in the last 18 months, so the
-    // feed reflects what was actually awarded recently — not just the biggest historic contracts.
+    // feed reflects what was actually awarded recently, not just the biggest historic contracts.
     const since = new Date(Date.now() - 548 * 864e5).toISOString().slice(0, 10);
     for (let page = 1; page <= 3; page++) {
-      const tx = await post("https://api.usaspending.gov/api/v2/search/spending_by_transaction/", { filters: { ...filters, time_period: [{ start_date: since, end_date: today }] }, fields: ["Award ID", "Mod", "Recipient Name", "Action Date", "Transaction Amount", "Awarding Agency", "Awarding Sub Agency", "Transaction Description", "generated_internal_id", "internal_id"], limit: 100, page, sort: "Action Date", order: "desc" });
-      const res = tx?.results ?? [];
-      for (const r of res) {
+      const tx = await post("https://api.usaspending.gov/api/v2/search/spending_by_transaction/", { filters: { ...filters, time_period: [{ start_date: since, end_date: today }] }, fields: ["Award ID", "Mod", "Recipient Name", "Recipient UEI", "recipient_id", "Action Date", "Transaction Amount", "Awarding Agency", "Awarding Sub Agency", "Transaction Description", "generated_internal_id", "internal_id"], limit: 100, page, sort: "Action Date", order: "desc" });
+      if (!tx || ignoredFilter(tx.messages, "recipient_id")) break;
+      for (const r of tx.results ?? []) {
         if (!(r["Transaction Amount"] >= 1e6)) continue;
+        const tie = awardTie({ recipient: r["Recipient Name"], recipientId: r.recipient_id, uei: r["Recipient UEI"] }, families, keys);
+        if (!tie) continue;
         const mod = String(r.Mod ?? "0");
-        out.push({ uid: `usatx:${c.ticker}:${r.internal_id}`, ticker: c.ticker, dataset: "contracts", kind: "event", date: iso(r["Action Date"]), title: `${r["Awarding Sub Agency"] ?? r["Awarding Agency"]}: ${(r["Transaction Description"] ?? "Contract action").slice(0, 140)}`, value: r["Transaction Amount"], unit: "USD", meta: { award_id: r["Award ID"], mod, action: mod === "0" ? "new award" : "modification", recipient: r["Recipient Name"], agency: r["Awarding Agency"], sub_agency: r["Awarding Sub Agency"] }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/award/${r.generated_internal_id}` });
+        out.push({ uid: `usatx:${c.ticker}:${r.internal_id}`, ticker: c.ticker, dataset: "contracts", kind: "event", date: iso(r["Action Date"]), title: `${r["Awarding Sub Agency"] ?? r["Awarding Agency"]}: ${(r["Transaction Description"] ?? "Contract action").slice(0, 140)}`, value: r["Transaction Amount"], unit: "USD", meta: { award_id: r["Award ID"], mod, action: mod === "0" ? "new award" : "modification", recipient: r["Recipient Name"], agency: r["Awarding Agency"], sub_agency: r["Awarding Sub Agency"], ...tieMeta(r, tie, f) }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/award/${r.generated_internal_id}` });
       }
-      if (!tx?.page_metadata?.hasNext) break;
+      if (!tx.page_metadata?.hasNext) break;
     }
-    for (const r of a?.results ?? []) out.push({ uid: `usa:${c.ticker}:${r.generated_internal_id}`, ticker: c.ticker, dataset: "contracts", kind: "event", date: r["Start Date"], title: `${r["Awarding Agency"]}: ${(r.Description ?? "Contract award").slice(0, 140)}`, value: r["Award Amount"], unit: "USD", meta: { award_id: r["Award ID"], recipient: r["Recipient Name"], agency: r["Awarding Agency"], sub_agency: r["Awarding Sub Agency"], end: r["End Date"] }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/award/${r.generated_internal_id}` });
   }
-  const curFy = new Date().getMonth() >= 9 ? new Date().getFullYear() + 1 : new Date().getFullYear();
-  for (const [y, v] of fy) out.push({ uid: `usa:${c.ticker}:fy${y}`, ticker: c.ticker, dataset: "contracts", kind: "series", date: `${y}-09-30`, title: "Federal contract obligations", value: v, unit: "USD", meta: { fiscal_year: y, ytd: y >= curFy, recipients: ids.map((r: any) => r.name) }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/recipient/${ids[0].id}/latest` });
+  // A fiscal year still running is dated the day it was read, never its future September 30.
+  for (const [y, v] of fy) {
+    const p = fiscalYearPeriod(y, now);
+    out.push({ uid: `usa:${c.ticker}:fy${y}`, ticker: c.ticker, dataset: "contracts", kind: "series", date: p.date, title: "Federal contract obligations", value: v, unit: "USD", meta: { fiscal_year: y, ytd: p.ytd, period_start: p.period_start, period_end: p.period_end, as_of: asOf, recipients: parents.map((r) => r.name) }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/recipient/${parents[0].id}/latest` });
+  }
   return out;
 }
 
@@ -126,7 +154,12 @@ async function regulatory(c: Co): Promise<Row[]> {
   const term = encodeURIComponent(`"${searchName(c)}"`);
   const out: Row[] = [];
   const y = await get(`https://www.federalregister.gov/api/v1/documents/facets/yearly?conditions%5Bterm%5D=${term}`);
-  for (const [k, v] of Object.entries<any>(y ?? {})) out.push({ uid: `fr:${c.ticker}:y${k.slice(0, 4)}`, ticker: c.ticker, dataset: "regulatory", kind: "series", date: `${k.slice(0, 4)}-12-31`, title: "Federal Register documents naming the company", value: v.count, unit: "docs", source: "Federal Register", source_url: `https://www.federalregister.gov/documents/search?conditions%5Bterm%5D=${term}` });
+  const now = new Date();
+  for (const [k, v] of Object.entries<any>(y ?? {})) {
+    const year = Number(k.slice(0, 4));
+    const p = calendarYearPeriod(year, now);
+    out.push({ uid: `fr:${c.ticker}:y${year}`, ticker: c.ticker, dataset: "regulatory", kind: "series", date: p.date, title: "Federal Register documents naming the company", value: v.count, unit: "docs", meta: { year, ytd: p.ytd, period_start: p.period_start, period_end: p.period_end, as_of: now.toISOString() }, source: "Federal Register", source_url: `https://www.federalregister.gov/documents/search?conditions%5Bterm%5D=${term}` });
+  }
   for (const type of ["RULE", "PRORULE", "NOTICE"]) {
     const j = await get(`https://www.federalregister.gov/api/v1/documents.json?per_page=40&order=newest&conditions%5Bterm%5D=${term}&conditions%5Btype%5D%5B%5D=${type}&fields%5B%5D=title&fields%5B%5D=publication_date&fields%5B%5D=html_url&fields%5B%5D=document_number&fields%5B%5D=agencies&fields%5B%5D=type&fields%5B%5D=abstract`);
     for (const d of j?.results ?? []) out.push({ uid: `fr:${c.ticker}:${d.document_number}`, ticker: c.ticker, dataset: "regulatory", kind: "event", date: d.publication_date, title: d.title.slice(0, 300), meta: { type: d.type, agencies: (d.agencies ?? []).map((a: any) => a.name).filter(Boolean), abstract: d.abstract?.slice(0, 600) }, source: "Federal Register", source_url: d.html_url });
@@ -180,7 +213,8 @@ async function complaints(c: Co): Promise<Row[]> {
     const j = await get(`${base}&date_received_min=${y}-01-01&date_received_max=${y}-12-31${altFetch.recent ? "&no_aggs=true" : ""}`);
     const n = j?.hits?.total?.value; if (!n) continue;
     const products = j.aggregations ? (j.aggregations.product?.product?.buckets ?? []).slice(0, 6).map((b: any) => ({ product: b.key, n: b.doc_count })) : undefined;
-    out.push({ uid: `cfpb:${c.ticker}:${y}`, ticker: c.ticker, dataset: "complaints", kind: "series", date: `${y}-12-31`, title: "CFPB consumer complaints", value: n, unit: "complaints", meta: { year: y, products, ytd: y === now }, source: "CFPB Consumer Complaint Database", source_url: `https://www.consumerfinance.gov/data-research/consumer-complaints/search/?company=${encodeURIComponent(co)}&date_received_min=${y}-01-01&date_received_max=${y}-12-31` });
+    const p = calendarYearPeriod(y, new Date());
+    out.push({ uid: `cfpb:${c.ticker}:${y}`, ticker: c.ticker, dataset: "complaints", kind: "series", date: p.date, title: "CFPB consumer complaints", value: n, unit: "complaints", meta: { year: y, products, ytd: p.ytd, period_start: p.period_start, period_end: p.period_end, as_of: new Date().toISOString() }, source: "CFPB Consumer Complaint Database", source_url: `https://www.consumerfinance.gov/data-research/consumer-complaints/search/?company=${encodeURIComponent(co)}&date_received_min=${y}-01-01&date_received_max=${y}-12-31` });
     await sleep(200);
   }
   return out;
@@ -193,7 +227,7 @@ async function bank(c: Co): Promise<Row[]> {
   const j = await get(`https://api.fdic.gov/banks/financials?filters=CERT:${cert}&fields=REPDTE,${Object.keys(FDIC_FIELDS).join(",")}&sort_by=REPDTE&sort_order=DESC&limit=200`);
   const out: Row[] = [];
   for (const { data: d } of j?.data ?? []) for (const [f, [label, unit]] of Object.entries(FDIC_FIELDS)) {
-    if (d[f] == null) continue;
+    if (d[f] == null || (d[f] === 0 && FDIC_ZERO_IS_MISSING.has(f))) continue;
     out.push({ uid: `fdic:${c.ticker}:${f}:${d.REPDTE}`, ticker: c.ticker, dataset: "bank", kind: "series", date: iso(d.REPDTE), title: label, value: unit === "USD_K" ? d[f] * 1000 : d[f], unit: unit === "USD_K" ? "USD" : unit, meta: { field: f, cert }, source: "FDIC call reports", source_url: `https://banks.data.fdic.gov/bankfind-suite/bankfind/details/${cert}` });
   }
   return out;
