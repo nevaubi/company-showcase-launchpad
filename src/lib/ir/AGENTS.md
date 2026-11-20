@@ -23,3 +23,13 @@
 - OpenRouter free models (`free-lane.ts` pure, `free-lane.server.ts`, via the existing OpenRouter connection) are a third opinion only: they settle reader disputes first and the OpenAI arbiter is the fallback (`IR_ARBITER_ORDER=openai-first` reverses it), choosing a or b or neither and never adding a figure; one account within its free daily cap (`free_model_usage`), failing models rest an hour, 429s rest the lane, never key or account rotation.
 
 - Worker reading on the owner's own OpenAI key: `IR_FREE_ONLY=1` reads within the free daily allowance and, with `IR_OPENAI_PAID=1`, continues on the paid key with the same model once it is spent (`paidStructured`, tokens logged as `paid_mini`/`paid_large` in `openai_allowance`); neither path ever spends Lovable AI credits, because the owner pays OpenAI directly for worker reads.
+
+- IR scale: `parseNumber` never reads a cell holding two numbers; `factsFromModel` takes the money scale from the table's own evidence (full-unit cells, printed scale words) and `screenRows` (`scale-check.ts`) marks contradicted figures in `locator.suspect` instead of storing them as confident values.
+
+- Stored figures the documents contradict are held by `suspect.ts` at the end of `tidyPayload` (`series.held`): never plotted, summed, checked, compared or exported; shown as a flag with the reason and click-to-source. Never correct a value by multiplying or dividing it.
+
+- Conflicting vintages are ordered by `orderVintages` in `kpis.ts` (suspect last, newest filing, undated at period end + 45 days, document kind, documents printing it, method, ids); the shown cell keeps the other value as `alt` (restated or conflict).
+
+- IR tidy folds lines only on evidence: identical printed values (never "close"), the line that stays keeps its own cells and sources, and a cousin fold must make its total add up without breaking any period. Checks are recomputed from the parts shown; a period that can't be read off the page is unchecked, never "adds up". Passes look lines up by key or value (no pairwise scans); the page runs the tidy in `ir-page.worker.ts`.
+
+- Period heads (`periods.ts` `fiscalLabel`/`uniqueHeads`): a fiscal year number only for December year-ends; otherwise "FY ending <month>" and "Q<n>" over the month, per era, off-grid periods by month, never two identical heads.

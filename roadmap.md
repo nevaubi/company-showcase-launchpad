@@ -330,3 +330,17 @@
 - [x] Data Legion: primary domain from EODHD WebURL, attempts domain → legal name + domain → LinkedIn; 130 companies pending (not called).
 - Waitlist emails (Nov 19): /waitlist page, five templates via one outbox with log, daily cap, retry job, admin email status and bulk approve; existing entries await owner decision
 - Vendor collector: fiscal-ai splits, filings list and insider transactions cut; one call at a time; 12,000 credits/hour budget (commit e7d1859). Render deploy waits until this commit reaches GitHub.
+
+## Round 2 (requested Nov 20): verified claims, IR presentation, self-healing jobs
+
+- [x] SEC EDGAR cross-check of the stored feed for all 1,844 companies (filings filed Sep 25 to Nov 17): Form 4 9,752 of 9,789, 8-K 3,618 of 3,632, 10-Q 1,620 of 1,621, 10-K 53 of 54; Form 4 parsing exact on 150 filings (2,880 fields); 60 of 60 sampled supply quotes verbatim in the cited filing.
+- [x] Supply links: model-read amounts, single-source flags and regions are verified against the quoted sentence at read time (`src/lib/supply/read.ts`, `claims.ts`); 10-K/10-Q copies count once; Network and Globe polished; shareable URL state; head offices from SEC's submissions index (58 hand-checked, 1,783 SEC, 3 directory).
+- [x] IR: one presentation system (`src/components/ir/typography.ts`); figures the documents contradict are held, not corrected; deterministic conflict order; number parsing and spreadsheet scale fixes; tidy in a worker.
+- [x] Alt data: awards, recalls and trials tied to the company by the source's own fields; one screened read path; two-part dry-run repair.
+- [x] Jobs: provider circuits and failure classes, cursors that commit after stored work, rotation by dollar-volume rank, options block handling, Form 4 repair pass, registrant drift check (XOM), watchdog digest, migration 0066, status surface on `/app/freshness`.
+- [ ] Owner: add OpenAI credit and top up the Lovable AI Gateway (402 since Nov 18). Then set `IR_REQUEUE_CONFIG=1` on the worker to re-read the documents and vision pages failed by the invalid model ID on Nov 19 (off by default because it spends AI budget).
+- [ ] Owner: publish the app (applies 0065 and 0066) with or before deploying the Render worker (auto-deploy is off); set `OPS_ALERT_EMAIL`.
+- [ ] Owner: after deploy run `bun scripts/ir-build.ts` (no AI spend) and `bun scripts/alt-contracts-repair.ts --part=copies` (dry run first, then `--apply`); `--part=refreshed` per company only after the fixed collector has refreshed it.
+- [ ] Owner: the partner pipeline must merge XOM's two SEC registrants (2115436 and 34088) before its statements show Q3 2026.
+- [ ] Owner decision: the scheduler's HTTP timeout (pg_cron, 5 s today); an outside uptime check for the app host.
+- [ ] Open: US states still map to countries on the globe; "Group"/"Holdings" name merge; `supply_signals` amounts are not verified; the IR segment matrix shows "Center" for "Data Center"; a real bank-sized IR payload was not timed; none of this was exercised on the signed-in app.

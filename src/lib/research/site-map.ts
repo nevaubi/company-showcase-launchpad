@@ -14,7 +14,7 @@ const NOTES: Record<string, string> = {
   "/app/companies": "Every covered company, searchable",
   "/app/screener": "Filter companies on fundamentals",
   "/app/compare": "Side-by-side comparison of companies",
-  "/app/kpis": "Company-reported KPIs across companies",
+  "/app/kpis": "Company-reported KPIs across companies (sections KPI matrix controls and KPI matrix); click a value for the release it was read from",
   "/app/exposures":
     "Revenue by country/region and lender credit metrics compared across companies (10-K tags)",
   "/app/filings": "Recent SEC filings across coverage",
@@ -65,7 +65,7 @@ export const COMPANY_TABS: { sub: string; label: string; note: string }[] = [
   {
     sub: "/ir",
     label: "IR data",
-    note: "Segments and KPIs from releases, supplements and presentations",
+    note: "Segments and KPIs from releases, supplements and presentations. Sections: Investor-relations summary, Key metrics, Financial map, Segment and KPI breakdowns (Quarterly, Annual or Monthly; period span; $ scale; Excel), Source documents (Library, Tables, Search). Every value opens its stored source cell; a dotted underline marks a calculated value; an amber dot marks a total whose parts do not add up, and failed tie-outs are listed under each table; a hollow amber ring marks a figure held back because the documents contradict its unit or period; a hollow grey ring marks a value another document prints differently, listed under the table with both sources. Count tables may scale per row.",
   },
   {
     sub: "/earnings",
