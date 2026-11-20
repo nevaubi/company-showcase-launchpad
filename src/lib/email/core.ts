@@ -9,7 +9,7 @@ export const EMAIL_LIMIT_PER_DAY = 3;
 export const REMINDER_AFTER_DAYS = 3;
 
 export type EmailStatus = "queued" | "waiting_sender" | "sent" | "suppressed" | "failed";
-export type TemplateName = "waitlist-receipt" | "waitlist-owner-notice" | "waitlist-approved" | "waitlist-reminder" | "firm-invite";
+export type TemplateName = "waitlist-receipt" | "waitlist-owner-notice" | "waitlist-approved" | "waitlist-reminder" | "firm-invite" | "ops-alert";
 
 const opt = (max: number) =>
   z.string().trim().max(max).optional().transform((v) => (v ? v : undefined));

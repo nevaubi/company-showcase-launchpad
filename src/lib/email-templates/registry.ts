@@ -4,6 +4,7 @@ import { template as ownerNotice } from './waitlist-owner-notice'
 import { template as approved } from './waitlist-approved'
 import { template as reminder } from './waitlist-reminder'
 import { template as firmInvite } from './firm-invite'
+import { template as opsAlert } from './ops-alert'
 
 export interface TemplateEntry {
   component: ComponentType<any>
@@ -28,4 +29,5 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'waitlist-approved': approved,
   'waitlist-reminder': reminder,
   'firm-invite': firmInvite,
+  'ops-alert': opsAlert,
 }

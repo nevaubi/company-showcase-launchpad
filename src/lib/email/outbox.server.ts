@@ -98,8 +98,11 @@ export async function adminEmails(): Promise<string[]> {
 
 const RUN_BUDGET_MS = 4_000;
 
-/** Scheduled: retries due sends, then queues the one-time reminder for approvals not yet used. */
-export async function runOutbox(): Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }> {
+/**
+ * Scheduled: retries due sends, then queues the one-time reminder for approvals not yet used.
+ * `budgetMs` is what the `emails` job has left after the watchdog (default 4 s).
+ */
+export async function runOutbox(budgetMs = RUN_BUDGET_MS): Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }> {
   const started = Date.now();
   const tally: Record<string, number> = {};
   const { data: due } = await supabaseAdmin
@@ -111,18 +114,18 @@ export async function runOutbox(): Promise<{ ok: boolean; items: number; detail:
     .order("next_attempt_at")
     .limit(10);
   for (const row of (due ?? []) as Row[]) {
-    if (Date.now() - started > RUN_BUDGET_MS) break;
+    if (Date.now() - started > budgetMs) break;
     const s = await deliver(row);
     tally[s] = (tally[s] ?? 0) + 1;
   }
   let reminders = 0;
-  if (Date.now() - started < RUN_BUDGET_MS) reminders = await queueReminders(started);
+  if (Date.now() - started < budgetMs) reminders = await queueReminders(started, budgetMs);
   const items = Object.values(tally).reduce((a, b) => a + b, 0) + reminders;
   return { ok: true, items, detail: { retried: tally, reminders } };
 }
 
 /** One reminder per approval, only for people whose approval email was actually sent. */
-async function queueReminders(started: number): Promise<number> {
+async function queueReminders(started: number, budgetMs: number): Promise<number> {
   const cutoff = new Date(Date.now() - REMINDER_AFTER_DAYS * 86_400_000).toISOString();
   const { data: approvals } = await supabaseAdmin
     .from("email_log")
@@ -136,7 +139,7 @@ async function queueReminders(started: number): Promise<number> {
   const noAccount = new Set((requests ?? []).map((r) => r.email));
   let n = 0;
   for (const a of approvals) {
-    if (Date.now() - started > RUN_BUDGET_MS) break;
+    if (Date.now() - started > budgetMs) break;
     if (!idleEmails.has(a.recipient) && !noAccount.has(a.recipient)) continue;
     const d = (a.template_data ?? {}) as Record<string, unknown>;
     const s = await queueEmail({
