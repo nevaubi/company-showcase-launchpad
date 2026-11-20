@@ -1,24 +1,25 @@
-// Re-checks stored supply links against their own quoted sentence (src/lib/supply/claims.ts) and clears the claims the
-// sentence does not state: amount_usd when the quote does not state that dollar figure, single_source when the quote
-// has no sole/single/only/exclusive source wording, regions the quote does not name. It never writes a new value.
-// Dry run by default (prints what would change); --apply writes.
-//   bun scripts/supply-revalidate.ts [--apply] [--current] [--ticker=NVDA] [--samples=20]
-import { planRepairs, trustLink, type RepairRow } from "@/lib/supply/claims";
+// Reports what read-time verification (src/lib/supply/claims.ts, `trustLink`) does to stored supply links: which stated
+// amounts are kept as the counterparty's figure (and which of those are flows), which single-source flags carry sole-source
+// wording (the rest are shown as stated dependencies), which regions the sentence names, and each link's nature.
+// It only reads. Stored rows keep what the model returned, because the app verifies every row when it loads it
+// (src/lib/supply/read.ts) and a cleared amount or flag could not be restored while the extraction lanes cannot re-read
+// filings. There is no write mode.
+//   bun scripts/supply-revalidate.ts [--current] [--ticker=NVDA] [--samples=5]
+import { auditClaims, type AuditRow } from "@/lib/supply/claims";
 import { args, dbGate, log, sb } from "./lib/supa";
 
 const PAGE = 1000;
-const WRITE_BATCH = 200;
 
-interface Row extends RepairRow {
+interface Row extends AuditRow {
   ticker: string;
   counterparty: string;
-  is_current: boolean;
 }
 
 async function readRows(): Promise<Row[]> {
   const rows: Row[] = [];
   for (let from = 0; ; from += PAGE) {
     await dbGate("supply-revalidate");
+    // raw stored rows on purpose: this script measures the read-time checks, so it must see what they start from
     let q = sb
       .from("supply_links")
       .select("id, ticker, counterparty, relation, detail, quote, amount_usd, single_source, regions, is_current")
@@ -34,50 +35,34 @@ async function readRows(): Promise<Row[]> {
   return rows;
 }
 
+const list = (m: Record<string, number>) =>
+  Object.entries(m)
+    .sort((a, b) => b[1] - a[1])
+    .map(([k, n]) => `${k} ${n}`)
+    .join(", ") || "none";
+
 async function main() {
+  if (args.apply !== undefined) {
+    console.error("supply-revalidate only reports: stored rows keep what the model returned and are verified when read.");
+    process.exit(2);
+  }
   const rows = await readRows();
-  const plan = planRepairs(rows);
-  const current = rows.filter((r) => r.is_current);
-  const currentPlan = planRepairs(current);
-  log(`${plan.rows} links read (${current.length} current) · ${plan.changed} would change`);
-  log(`  amount_usd cleared: ${plan.amountsCleared} of ${rows.filter((r) => r.amount_usd != null).length} (current: ${currentPlan.amountsCleared})`);
-  log(`  single_source cleared: ${plan.soleSourceCleared} of ${rows.filter((r) => r.single_source).length} (current: ${currentPlan.soleSourceCleared})`);
-  log(`  regions pruned: ${plan.regionsPruned} of ${rows.filter((r) => (r.regions ?? []).length).length} (current: ${currentPlan.regionsPruned})`);
-  // what the display would draw from the kept amounts
-  const kinds = new Map<string, number>();
-  let flows = 0;
-  for (const r of current) {
-    const t = trustLink(r);
-    if (t.amount_kind) kinds.set(t.amount_kind, (kinds.get(t.amount_kind) ?? 0) + 1);
-    if (t.flow_usd != null) flows++;
-  }
-  log(`  current kept amounts by kind: ${[...kinds].sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(", ") || "none"} · flows ${flows}`);
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const samples = Number(args.samples ?? 20);
-  let shown = 0;
-  for (const u of plan.updates) {
-    for (const id of u.ids) {
-      if (shown++ >= samples) break;
-      const r = byId.get(id)!;
-      log(`  ${r.ticker} ${r.relation} ${r.counterparty}: ${JSON.stringify(u.set)} (was amount ${r.amount_usd ?? "-"}, single ${r.single_source}, regions ${(r.regions ?? []).join(";") || "-"}): "${r.quote.slice(0, 120)}"`);
-    }
-    if (shown >= samples) break;
+  for (const [label, set] of [["all", rows], ["current", rows.filter((r) => r.is_current)]] as const) {
+    const a = auditClaims(set, Number(args.samples ?? 5));
+    log(`${label}: ${a.rows} links`);
+    log(`  amounts: ${a.amounts.kept} of ${a.amounts.stored} kept as the counterparty's stated figure · ${a.amounts.flows} flows · kept by kind: ${list(a.amounts.byKind)}`);
+    log(`  amounts not shown: ${list(a.amounts.dropped)}`);
+    log(`  single_source: ${a.soleSource.kept} of ${a.soleSource.flagged} with sole-source wording · ${a.soleSource.dependency} shown as stated dependencies`);
+    log(`  regions: ${a.regions.pruned} of ${a.regions.links} links pruned · ${a.regions.entriesKept} of ${a.regions.entriesStored} entries named in the sentence`);
+    log(`  nature: ${list(a.nature)}`);
+    if (label === "current")
+      for (const s of a.samples) {
+        const r = byId.get(s.id)!;
+        log(`  ${r.ticker} ${r.relation} ${r.counterparty}: ${s.change}: "${(r.quote ?? "").slice(0, 120)}"`);
+      }
   }
-  if (args.apply === undefined) {
-    log("dry run: nothing written (pass --apply to write)");
-    return;
-  }
-  let written = 0;
-  for (const u of plan.updates) {
-    for (let i = 0; i < u.ids.length; i += WRITE_BATCH) {
-      await dbGate("supply-revalidate");
-      const ids = u.ids.slice(i, i + WRITE_BATCH);
-      const { error } = await sb.from("supply_links").update(u.set as never).in("id", ids);
-      if (error) throw new Error(`update failed after ${written} rows: ${error.message}`);
-      written += ids.length;
-    }
-  }
-  log(`done: ${written} rows updated`);
+  log("report only: nothing written");
 }
 
 main().catch((e) => {

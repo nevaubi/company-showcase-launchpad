@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { amountInQuote, amountKind, checkAmount, isFlowKind, linkNature, planRepairs, regionsInQuote, repairPatch, soleSourceInQuote, trustLink } from "./claims";
+import { amountInQuote, amountKind, checkAmount, checkPartyAmount, isFlowKind, linkNature, regionsInQuote, soleSourceInQuote, trustLink } from "./claims";
 import { CLAIM_CASES } from "./claims.fixture";
 
 describe("amountInQuote", () => {
@@ -121,13 +121,17 @@ describe("linkNature", () => {
 });
 
 describe("trustLink", () => {
-  const base = { quote: "Sales to Boeing were $310 million in 2025 and Boeing is our sole supplier of airframes in the U.S.", detail: "", relation: "customer", counterparty: "Boeing" };
+  const base = { quote: "Purchases from Boeing were $310 million in 2025 and Boeing is our sole supplier of airframes in the U.S.", detail: "", relation: "supplier", counterparty: "Boeing" };
   it("keeps verified claims and marks the flow", () => {
     const t = trustLink({ ...base, amount_usd: 3.1e8, single_source: true, regions: ["United States", "China"] });
-    expect(t).toMatchObject({ amount_usd: 3.1e8, flow_usd: 3.1e8, amount_kind: "revenue", sole_source: true, single_source: true, dependency: false, regions: ["United States"], nature: "trade", dropped: ["regions"] });
+    expect(t).toMatchObject({ amount_usd: 3.1e8, flow_usd: 3.1e8, amount_kind: "purchases", sole_source: true, single_source: true, dependency: false, regions: ["United States"], nature: "trade", dropped: ["regions"] });
+  });
+  it("a customer is never the filer's sole source: the flag becomes a stated dependency", () => {
+    const t = trustLink({ ...base, quote: "Sales to Boeing were $310 million and Boeing is our sole customer for airframes", relation: "customer", amount_usd: 3.1e8, single_source: true });
+    expect(t).toMatchObject({ amount_kind: "revenue", sole_source: false, single_source: false, dependency: true });
   });
   it("removes what the sentence does not state and labels a weaker dependency", () => {
-    const t = trustLink({ quote: "Acme is a key supplier of resin to our plants", detail: "", relation: "supplier", amount_usd: 9e8, single_source: true, regions: ["Germany"] });
+    const t = trustLink({ quote: "Acme is a key supplier of resin to our plants", detail: "", relation: "supplier", counterparty: "Acme", amount_usd: 9e8, single_source: true, regions: ["Germany"] });
     expect(t).toMatchObject({ amount_usd: null, flow_usd: null, amount_kind: null, sole_source: false, single_source: false, dependency: true, regions: [], dropped: ["amount_usd", "single_source", "regions"] });
   });
   it("never adds a value the stored link did not have", () => {
@@ -135,21 +139,16 @@ describe("trustLink", () => {
     expect(t).toMatchObject({ amount_usd: null, flow_usd: null, sole_source: false, dependency: false, regions: [], dropped: [] });
   });
   it("a stated amount that is not a flow keeps its value but no flow", () => {
-    const t = trustLink({ quote: "Omega acquired a 9.9 % equity interest in Saber for $ 92.8 million in cash", relation: "partner", amount_usd: 92.8e6 });
+    const t = trustLink({ quote: "Omega acquired a 9.9 % equity interest in Saber for $ 92.8 million in cash", relation: "partner", counterparty: "Saber Healthcare", amount_usd: 92.8e6 });
     expect(t).toMatchObject({ amount_usd: 92.8e6, flow_usd: null, amount_kind: "investment", nature: "corporate" });
+  });
+  it("an amount needs a counterparty to belong to", () => {
+    expect(trustLink({ quote: "Sales to Boeing were $310 million", relation: "customer", amount_usd: 3.1e8 }).amount_usd).toBeNull();
   });
   it("keeps other fields untouched", () => {
     const t = trustLink({ ...base, id: "x1", share_pct: 12.8, amount_usd: null });
     expect(t.id).toBe("x1");
     expect(t.share_pct).toBe(12.8);
-  });
-});
-
-describe("repairPatch", () => {
-  it("lists only the columns that change", () => {
-    expect(repairPatch({ quote: "Acme is a key supplier", relation: "supplier", amount_usd: 5e7, single_source: true, regions: ["China"] })).toEqual({ amount_usd: null, single_source: false, regions: [] });
-    expect(repairPatch({ quote: "Acme, our sole supplier in China, received $50 million", relation: "supplier", amount_usd: 5e7, single_source: true, regions: ["China"] })).toEqual({});
-    expect(repairPatch({ quote: "no figure", relation: "supplier", amount_usd: null, single_source: false, regions: null })).toEqual({});
   });
 });
 
@@ -160,7 +159,7 @@ describe("adjudicated judged links", () => {
     expect(amounts.length).toBeGreaterThanOrEqual(40);
   });
   it.each(amounts.map((c) => [c.id, c] as const))("amount %s", (_, c) => {
-    expect(amountInQuote(c.quote, c.amount_usd)).toBe(c.expect.amount_stated);
+    expect(checkPartyAmount(c.quote, c.amount_usd, c.counterparty).ok).toBe(c.expect.amount_stated);
   });
   it("every amount treated as a flow is a flow", () => {
     const flows = amounts.filter((c) => trustLink(c).flow_usd != null);
@@ -168,10 +167,10 @@ describe("adjudicated judged links", () => {
     for (const c of flows) expect([c.id, c.expect.flow]).toEqual([c.id, true]);
   });
   it.each(CLAIM_CASES.filter((c) => c.single_source).map((c) => [c.id, c] as const))("sole source %s", (_, c) => {
-    expect(soleSourceInQuote(c.quote)).toBe(c.expect.sole_source);
+    expect(soleSourceInQuote(c.quote, c.counterparty)).toBe(c.expect.sole_source);
   });
   it.each(CLAIM_CASES.map((c) => [c.id, c] as const))("regions and nature %s", (_, c) => {
-    const kept = regionsInQuote(c.quote, c.regions);
+    const kept = regionsInQuote(c.quote, c.regions, c.counterparty);
     expect(kept).toEqual(c.expect.regions);
     expect(kept.length === c.regions.length).toBe(c.expect.regions_all_named);
     expect(linkNature(c.quote, c.detail, c.relation, c.counterparty)).toBe(c.expect.nature);
@@ -180,21 +179,5 @@ describe("adjudicated judged links", () => {
     const wrong = CLAIM_CASES.filter((c) => c.expect.relation_wrong);
     const flagged = wrong.filter((c) => linkNature(c.quote, c.detail, c.relation, c.counterparty) !== "trade");
     expect(flagged.length / wrong.length).toBeGreaterThanOrEqual(0.6);
-  });
-});
-
-describe("planRepairs", () => {
-  it("counts changes and groups identical writes", () => {
-    const plan = planRepairs([
-      { id: "a", quote: "Acme is a key supplier", relation: "supplier", amount_usd: 5e7, single_source: false, regions: [] },
-      { id: "b", quote: "Beta is a key supplier", relation: "supplier", amount_usd: 9e7, single_source: false, regions: [] },
-      { id: "c", quote: "Gamma, our sole supplier in China", relation: "supplier", amount_usd: null, single_source: true, regions: ["China", "Japan"] },
-      { id: "d", quote: "Delta bought $5 million of chips", relation: "customer", amount_usd: 5e6, single_source: false, regions: [] },
-    ]);
-    expect(plan).toMatchObject({ rows: 4, changed: 3, amountsCleared: 2, soleSourceCleared: 0, regionsPruned: 1 });
-    expect(plan.updates).toEqual([
-      { set: { amount_usd: null }, ids: ["a", "b"] },
-      { set: { regions: ["China"] }, ids: ["c"] },
-    ]);
   });
 });
