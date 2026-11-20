@@ -695,7 +695,10 @@ function planMerge(c: Ctx, m: PayloadGroup, g: PayloadGroup, ctx: Set<string>): 
       if (v === "clash") return null; // same name, different numbers: a different measure (adjusted vs GAAP, restated)
       if (v !== "same") continue;
       const score = compare(a, b).agree + (a.k === mRoot && b.k === gRoot ? 100 : 0);
-      if (score > bestScore) (best = a), (bestScore = score);
+      if (score > bestScore) {
+        best = a;
+        bestScore = score;
+      }
     }
     if (best) {
       // A table's total only folds into the other table's total, and a part never into a total.
@@ -1040,7 +1043,7 @@ const cleanMember = (piece: string) => {
   const isOwn = (w: string) => labelTokens(w).some((t) => own.has(t));
   const first = words.findIndex(isOwn);
   let last = -1;
-  for (let i = words.length - 1; i >= 0; i--) if (isOwn(words[i])) (last = i), (i = -1);
+  for (let i = words.length - 1; i >= 0 && last < 0; i--) if (isOwn(words[i])) last = i;
   if (first < 0) return "";
   return words
     .slice(first, last + 1)
@@ -1338,7 +1341,10 @@ function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[])
       const inRows = new Set(rows.map((x) => x.k));
       const others = own.rows.some((r) => r.k !== root!.k && c.byKey.get(r.k)?.parent === root!.k && !inRows.has(r.k));
       if (others) root = { ...copyOf(root, "seg"), parent: null, total: true };
-      if (others) c.byKey.set(root.k, root), (c.p.series[c.p.series.length - 1] = root);
+      if (others) {
+        c.byKey.set(root.k, root);
+        c.p.series[c.p.series.length - 1] = root;
+      }
     }
     // Periods the consolidated line misses: another printed total that the segments add up to fills them.
     if (root)
