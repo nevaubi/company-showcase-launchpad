@@ -24,3 +24,33 @@ describe("scheduled standard reports", () => {
     expect(new Date(nextUtcDay(Date.parse("2026-11-30T23:59:00Z")) * 1000).toISOString()).toBe("2026-12-01T00:05:00.000Z");
   });
 });
+
+import { failedSlots, failReceipt, reportOutcome, slotKey } from "../../scripts/lib/reports-due";
+describe("reports-due failure classes and head-of-line skip", () => {
+  it("maps OpenAI credit exhaustion and config errors to a pause, not a slot failure", () => {
+    expect(isAiCreditError("OpenAI 429 credit_balance_exhausted: You have no credits remaining.")).toBe(true);
+    expect(reportOutcome("OpenAI 429 credit_balance_exhausted: You have no credits remaining.")).toBe("credit");
+    expect(reportOutcome("AI 402 payment_required: out of credits")).toBe("credit");
+    expect(reportOutcome("free-only mode: OpenAI free allowance spent or unavailable")).toBe("allowance");
+    expect(reportOutcome("OpenAI 400 invalid_value: Invalid model ID.")).toBe("config");
+    expect(reportOutcome("vet failed: 3 sentences not supported")).toBe("fail");
+    expect(reportOutcome(null)).toBe("ok");
+  });
+  it("skips a slot after 3 failures so the next due slot gets its turn", () => {
+    const a = { ticker: "A", kind: "recap" as const, reason: "8-K 2.02 a1 filed 2026-11-18" };
+    let r = failReceipt(a, null, "bad inputs");
+    r = failReceipt(a, r, "bad inputs");
+    expect(failedSlots([r]).size).toBe(0);
+    r = failReceipt(a, r, "bad inputs");
+    expect(r.cursor).toBe(3);
+    const skip = failedSlots([r]);
+    expect(skip.has(slotKey(a))).toBe(true);
+    const due = dueSlots([{ ticker: "A", accn: "a1", filed: "2026-11-18" }, { ticker: "B", accn: "b1", filed: "2026-11-17" }], [], [], covered, "2026-11-19", skip);
+    expect(due.map((d) => d.ticker)).toEqual(["B"]);
+  });
+  it("a new accession for the same company is a new slot", () => {
+    const old = failReceipt({ ticker: "A", kind: "recap", reason: "8-K 2.02 a0 filed 2026-08-01" }, { cursor: 5, paused_reason: "8-K 2.02 a0 filed 2026-08-01|x" }, "x");
+    const next = failReceipt({ ticker: "A", kind: "recap", reason: "8-K 2.02 a1 filed 2026-11-18" }, old, "y");
+    expect(next.cursor).toBe(1);
+  });
+});
