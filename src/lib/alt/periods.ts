@@ -26,11 +26,26 @@ export function calendarYearPeriod(year: number, today: Date): YearPeriod {
   return { date: ytd ? isoDay(today) : end, ytd, period_start: `${year}-01-01`, period_end: end };
 }
 
-/** A US federal fiscal year as of `today`. */
+/**
+ * Days after a federal fiscal year ends before its totals are treated as final. Agencies report
+ * contract actions late (the Department of Defense publishes with a 90-day delay), so a year's total
+ * keeps growing for months after September 30.
+ */
+export const FY_SETTLE_DAYS = 120;
+
+const addDays = (iso: string, n: number) => isoDay(new Date(Date.parse(`${iso}T00:00:00Z`) + n * 864e5));
+
+/** A US federal fiscal year as of `today`; partial until FY_SETTLE_DAYS after it ends. */
 export function fiscalYearPeriod(fy: number, today: Date): YearPeriod {
   const end = `${fy}-09-30`;
-  const ytd = end >= isoDay(today);
-  return { date: ytd ? isoDay(today) : end, ytd, period_start: `${fy - 1}-10-01`, period_end: end };
+  const ytd = addDays(end, FY_SETTLE_DAYS) > isoDay(today);
+  return { date: ytd ? (end >= isoDay(today) ? isoDay(today) : end) : end, ytd, period_start: `${fy - 1}-10-01`, period_end: end };
+}
+
+/** Whether a fiscal year that has ended is still within its reporting lag on `today`. */
+export function fiscalYearUnsettled(fy: number | string, today: string): boolean {
+  const end = `${fy}-09-30`;
+  return end < today && addDays(end, FY_SETTLE_DAYS) > today;
 }
 
 export interface SeriesRowLike { date: string | null; meta?: PeriodMeta | null }
@@ -38,7 +53,7 @@ export interface PeriodMeta { ytd?: boolean; fiscal_year?: number | string; year
 
 /** Whether a stored reading covers only part of its period (flagged, or dated after `today`). */
 export function isPartial(r: SeriesRowLike, today: string): boolean {
-  return !!r.meta?.ytd || (!!r.date && r.date > today);
+  return !!r.meta?.ytd || (!!r.date && r.date > today) || (!!r.meta?.fiscal_year && fiscalYearUnsettled(r.meta.fiscal_year, today));
 }
 
 /**
@@ -49,7 +64,7 @@ export function periodLabel(r: SeriesRowLike, today: string, yearly = true): str
   if (!r.date) return "";
   const m = r.meta ?? {};
   const partial = isPartial(r, today);
-  if (m.fiscal_year) return `FY${m.fiscal_year}${partial ? " YTD" : ""}`;
+  if (m.fiscal_year) return `FY${m.fiscal_year}${!partial ? "" : `${m.fiscal_year}-09-30` < today ? " prelim." : " YTD"}`;
   const year = String(m.year ?? (typeof m.period_end === "string" ? m.period_end.slice(0, 4) : r.date.slice(0, 4)));
   if (partial && m.quarters) return `${year} Q1${Number(m.quarters) > 1 ? `–Q${m.quarters}` : ""}`;
   if (partial) return `${year} YTD`;
@@ -60,6 +75,7 @@ export function periodLabel(r: SeriesRowLike, today: string, yearly = true): str
 export function asOfLabel(r: SeriesRowLike, today: string): string {
   if (!r.date) return "—";
   if (!isPartial(r, today)) return r.meta?.fiscal_year ? `FY${r.meta.fiscal_year}` : r.date;
-  const asOf = typeof r.meta?.as_of === "string" ? r.meta.as_of.slice(0, 10) : r.date <= today ? r.date : null;
+  const ended = typeof r.meta?.period_end === "string" ? r.meta.period_end < today : r.meta?.fiscal_year ? `${r.meta.fiscal_year}-09-30` < today : false;
+  const asOf = typeof r.meta?.as_of === "string" ? r.meta.as_of.slice(0, 10) : r.date <= today && !ended ? r.date : null;
   return `${periodLabel(r, today)}${asOf ? `, as of ${asOf}` : ""}`;
 }
