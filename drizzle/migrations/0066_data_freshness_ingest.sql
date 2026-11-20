@@ -6,7 +6,10 @@
 --   market_bars, macro       updated_at of the reference series (SPY, DGS10)
 --   sec_filings, insider_trades  discovered_at
 --   alt_events               last ok run of the sec walk (it writes the 8-K event rows)
---   alt_ownership/contracts/recalls  last ok run of the worker's slow alt pass
+--   alt_ownership/recalls    last ok run of the worker's slow alt pass
+--   alt_contracts            when contract rows were last stored: the newest created_at or the
+--                            collector's as_of stamp (written on every collection from round 2,
+--                            unaffected by upserts), never later than now and never the award date
 --   alt_settlement           newest fails-to-deliver period, never a future date
 --   options_daily            the newest session's fetch time only when it holds at least 80% of the
 --                            previous session's rows, else the previous session's: one stored row no
@@ -31,7 +34,7 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public, storage AS $$
   UNION ALL SELECT 'filing_documents', (SELECT max(cached_at) FROM filing_documents)
   UNION ALL SELECT 'alt_events', (SELECT max(started_at) FROM job_runs WHERE job = 'sec' AND ok AND started_at > now() - interval '30 days')
   UNION ALL SELECT 'alt_ownership', (SELECT max(started_at) FROM job_runs WHERE job = 'alt-slow' AND ok AND started_at > now() - interval '30 days')
-  UNION ALL SELECT 'alt_contracts', (SELECT max(started_at) FROM job_runs WHERE job = 'alt-slow' AND ok AND started_at > now() - interval '30 days')
+  UNION ALL SELECT 'alt_contracts', (SELECT least(now(), greatest(max(created_at), max(CASE WHEN meta->>'as_of' ~ '^\d{4}-\d{2}-\d{2}' THEN (meta->>'as_of')::timestamptz END))) FROM alt_data WHERE dataset = 'contracts')
   UNION ALL SELECT 'alt_recalls', (SELECT max(started_at) FROM job_runs WHERE job = 'alt-slow' AND ok AND started_at > now() - interval '30 days')
   UNION ALL SELECT 'alt_settlement', (SELECT max(date)::timestamptz FROM alt_data WHERE dataset = 'settlement' AND date <= current_date)
   UNION ALL SELECT 'alt_medicare', (SELECT max(created_at) FROM alt_data WHERE dataset = 'medicare' AND date > current_date - 800)
