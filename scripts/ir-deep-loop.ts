@@ -294,7 +294,7 @@ let mirroring = false;
 let importedSince = true;
 /** Side jobs share this machine's memory: hold them until the main loop has run stably for a while. */
 const sideReady = () => Date.now() - STARTED > 20 * 60_000 && memUsedGB() < MEM_GB * 0.6;
-let sideBusy = () => mirroring || detailing || sodChecking || reacting || irSiting || canoning || altSlowing;
+const sideBusy = () => mirroring || detailing || sodChecking || reacting || irSiting || canoning || altSlowing;
 async function maybeMirror() {
   if (mirroring || !sideReady() || sideBusy()) return;
   if (state.lastMirror && Date.now() - Date.parse(state.lastMirror) < MIRROR_MS) return;
@@ -585,9 +585,20 @@ async function maybeHealConfigFailures() {
     for (const field of ["extract_status", "vision_status"] as const) {
       const left = limit - out.extract - out.vision;
       if (left <= 0) break;
-      const { data, error } = await sb.from("ir_documents").select(`id, ticker, ${field}`).like(field, CONFIG_STATUS_LIKE).limit(20_000);
-      if (error) throw new Error(error.message);
-      const rows: FailedDoc[] = ((data ?? []) as unknown as Record<string, string | null>[]).map((r) => ({ id: r.id!, ticker: r.ticker!, status: r[field] }));
+      // Responses are capped at 1,000 rows: read ranked companies in rank order (100 per query) until
+      // the pass is full, then any company, so the top 1,000 really go first.
+      const rows: FailedDoc[] = [];
+      const read = async (tickers: string[] | null) => {
+        let q = sb.from("ir_documents").select(`id, ticker, ${field}`).like(field, CONFIG_STATUS_LIKE);
+        if (tickers) q = q.in("ticker", tickers);
+        const { data, error } = await q.limit(1000);
+        if (error) throw new Error(error.message);
+        const seen = new Set(rows.map((r) => r.id));
+        for (const r of (data ?? []) as unknown as Record<string, string | null>[]) if (!seen.has(r.id!)) rows.push({ id: r.id!, ticker: r.ticker!, status: r[field] });
+      };
+      const ranked = [...rank].sort((x, y) => x[1] - y[1]).map(([t]) => t);
+      for (let i = 0; i < ranked.length && rows.length < left; i += 100) await read(ranked.slice(i, i + 100));
+      if (rows.length < left) await read(null);
       const plan = requeuePlan(rows, rank, left);
       const patch = field === "extract_status" ? { extract_status: null, extracted_at: null } : { vision_status: null };
       for (let i = 0; i < plan.ids.length; i += 200) {
