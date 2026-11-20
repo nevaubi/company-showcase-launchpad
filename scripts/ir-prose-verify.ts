@@ -25,6 +25,7 @@ await runBatch<{ id: string; ticker: string; label: string; old: string }>({
   job: args.ticker ? `ir-prose-verify:${args.ticker}` : "ir-prose-verify",
   max: Number(args.max ?? 500),
   concurrency: Number(args.concurrency ?? 6),
+  route: ["openai-free-mini"],
   claim: async () => {
     const d = await nextForVerify(args.ticker ? { ticker: args.ticker } : {});
     return d ? { id: d.id, ticker: d.ticker, old: d.old, label: `${d.filed ?? ""} ${d.title}` } : null;

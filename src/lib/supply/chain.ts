@@ -2,7 +2,7 @@
 // Built from every quoted supply link (either company's filing) plus XBRL-tagged customer/supplier
 // concentration facts, so each edge carries the evidence that states it. Goods flow left to right
 // (seller → buyer). Pure: no React, no fetching.
-import { entityKey, linkDollars, type ProLink, type RiskLink } from "./core";
+import { copies, entityKey, isTradeLink, linkDollarsFrom, type ProLink, type RiskLink } from "./core";
 
 /** One tagged concentration fact (xbrl_concentration row) naming a covered counterparty. */
 export interface TaggedShare {
@@ -34,7 +34,7 @@ export interface ChainEdge {
   basis: "revenue" | "receivables" | "purchases" | null;
   /** Largest dollar figure stated or implied (share of the seller's revenue × that revenue). */
   dollars: number | null;
-  /** Where the dollar figure comes from: an amount the quote states, or a stated share × the seller's revenue. */
+  /** Where the dollar figure comes from: a flow the quote states (revenue, purchases, contract value), or a stated share × the seller's revenue. */
   dollarsFrom: "stated" | "share" | null;
   sole: boolean;
   /** Both companies' own filings state the relationship. */
@@ -153,6 +153,8 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
   };
   for (const l of links) {
     if (l.relation !== "customer" && l.relation !== "supplier") continue;
+    // financing, acquisitions and regulators are not a seller and a buyer
+    if (!isTradeLink(l)) continue;
     if (!inFlow(l as ProLink, flow, product, side)) continue;
     const me = node(names[l.ticker] ?? l.ticker, l.ticker);
     const cp = node(l.counterparty, l.counterparty_ticker);
@@ -165,15 +167,17 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
     const pl = l as ProLink;
     if (pl.link_type && pl.link_type !== "other") bump(t.types, pl.link_type);
     bump(t.products, pl.product);
-    if (l.single_source) e.sole = true;
-    if (l.share_pct != null && l.share_pct > (e.share ?? 0)) {
-      e.share = l.share_pct;
-      e.basis = l.relation === "customer" ? "revenue" : "purchases";
+    for (const c of copies(l)) {
+      if (c.single_source) e.sole = true;
+      if (c.share_pct != null && c.share_pct > (e.share ?? 0)) {
+        e.share = c.share_pct;
+        e.basis = l.relation === "customer" ? "revenue" : "purchases";
+      }
     }
-    const d = linkDollars(l, revenue);
-    if (d != null && d > (e.dollars ?? 0)) {
-      e.dollars = d;
-      e.dollarsFrom = l.amount_usd != null && l.amount_usd > 0 ? "stated" : "share";
+    const d = linkDollarsFrom(l, revenue);
+    if (d != null && d.dollars > (e.dollars ?? 0)) {
+      e.dollars = d.dollars;
+      e.dollarsFrom = d.from === "flow" ? "stated" : "share";
     }
   }
   for (const f of tagged) {

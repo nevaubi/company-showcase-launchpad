@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonCountry, concentrationHistory, countryExposure, ecosystemBasket, freshness, lastConfirmed, regionShock } from "./analytics";
+import { canonCountry, concentrationHistory, counterpartyCountry, countryExposure, ecosystemBasket, freshness, lastConfirmed, regionShock } from "./analytics";
 import type { ProLink } from "./core";
 
 const L = (p: Partial<ProLink>): ProLink => ({
@@ -75,5 +75,39 @@ describe("headquarters ties", () => {
     const h = regionShock("Taiwan", [L({ counterparty: "TSMC" })], [], {});
     expect(h[0].hq).toBe(1);
     expect(h[0].score).toBe(6);
+  });
+});
+
+describe("counterparty home country (anchored)", () => {
+  // Real counterparty names from current supply_links (20 Nov 2026) that the old fragment patterns placed abroad.
+  it.each([
+    ["Corteva, Inc.", "teva"], ["Prismic Life Reinsurance, Ltd.", "smic"], ["Shanghai Fosun Pharmaceutical (Group) Co., Ltd.", "sun pharma"],
+    ["Blue Racer Midstream", "acer"], ["Boys & Girls Clubs of America", "ubs"], ["EQUATE Petrochemical Company K.S.C.C.", "roche"],
+    ["Village of Midvale", "vale"], ["Steckman Ridge", "teck"], ["Olympus BidCo L.P.", "olympus"], ["Mitsubishi Electric Trane HVAC US LLC", "mitsubishi"],
+    ["Tata Chemicals (Soda Ash) Partners", "tata"], ["BP Bunge Bioenergia", "bp"],
+  ])("does not give %s a country from the fragment %s", (name) => {
+    expect(counterpartyCountry(name)).toBeNull();
+  });
+  it.each([
+    ["Airbus S.A.S.", "France"], ["Stellantis N.V.", "Netherlands"], ["Merck KGaA", "Germany"], ["Daiichi Sankyo Company, Limited", "Japan"],
+    ["F. Hoffmann-La Roche Ltd.", "Switzerland"], ["Enbridge Inc.", "Canada"], ["Coca-Cola FEMSA, S.A.B. de C.V.", "Mexico"], ["Genmab A/S", "Denmark"],
+    ["Taiwan Semiconductor Manufacturing Company Limited", "Taiwan"],
+  ])("keeps the home country of %s", (name, country) => {
+    expect(counterpartyCountry(name)).toBe(country);
+  });
+  it("no longer counts a Corteva link as an Israel tie in the exposure tallies", () => {
+    const rows = countryExposure([L({ counterparty: "Corteva, Inc.", relation: "customer" })], [], {});
+    expect(rows.find((r) => r.country === "Israel")).toBeUndefined();
+  });
+});
+
+describe("whole-name home countries", () => {
+  it("counts a bare brand only when it is the whole name", () => {
+    expect(counterpartyCountry("SAP")).toBe("Germany");
+    expect(counterpartyCountry("Roche Group")).toBe("Switzerland");
+    expect(counterpartyCountry("Nestlé S.A.")).toBe("Switzerland");
+    expect(counterpartyCountry("SAP America, Inc.")).toBeNull();
+    expect(counterpartyCountry("UBS Securities LLC")).toBeNull();
+    expect(counterpartyCountry("Shell Energy North America")).toBeNull();
   });
 });

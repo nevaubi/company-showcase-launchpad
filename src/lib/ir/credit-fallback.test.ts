@@ -24,3 +24,11 @@ describe("reader credit fallback", () => {
     await expect(paidOrLane(() => Promise.reject(new OpenAIError("bad", "rejected", 400)), async () => "lane")).rejects.toThrow("bad");
   });
 });
+describe("reader credit fallback with the provider circuit", () => {
+  beforeEach(resetPaidRest);
+  it("moves to the free lane when the paid circuit is open (no paid call was made)", async () => {
+    const closed = new OpenAIError("provider openai-paid closed until 2026-11-20 11:00 UTC (quota: x)", "quota", 0);
+    closed.provider = "openai-paid";
+    expect(await paidOrLane(() => Promise.reject(closed), async () => "lane")).toBe("lane");
+  });
+});

@@ -23,6 +23,8 @@ import { kpiFileQuery, kpiItems, type KpiValue } from "@/lib/statements/filed";
 import { useSessionState } from "@/lib/use-session-state";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useFits } from "@/components/ir/panel";
+import { DASH, IR } from "@/components/ir/typography";
 
 export const Route = createFileRoute("/_authenticated/app/kpis")({
   head: () => ({
@@ -65,10 +67,10 @@ const STALE_DAYS = 548;
 const MAX_COLS = 10;
 
 function fmtK(v: number | null | undefined, k: TaxKpi) {
-  if (v == null || !Number.isFinite(v)) return "–";
-  if (k.uclass === "pct") return `${v.toFixed(Math.abs(v) < 10 ? 1 : 0)}%`;
-  if (k.uclass === "x") return `${v.toFixed(2)}×`;
-  if (k.uclass === "usd_ps" || k.uclass === "usd_pu") return `$${v.toFixed(2)}`;
+  if (v == null || !Number.isFinite(v)) return DASH;
+  if (k.uclass === "pct") return `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(Math.abs(v) < 10 ? 1 : 0)}%`;
+  if (k.uclass === "x") return `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}×`;
+  if (k.uclass === "usd_ps" || k.uclass === "usd_pu") return `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`;
   if (k.uclass === "usd") {
     const a = Math.abs(v),
       s = v < 0 ? "−" : "";
@@ -80,15 +82,15 @@ function fmtK(v: number | null | undefined, k: TaxKpi) {
   }
   const a = Math.abs(v);
   const tail = k.unit && !["count", "%", "USD", "x"].includes(k.unit) ? ` ${k.unit}` : "";
-  return (
-    (a >= 1e9
-      ? `${(v / 1e9).toFixed(1)}B`
+  const body =
+    a >= 1e9
+      ? `${(a / 1e9).toFixed(1)}B`
       : a >= 1e6
-        ? `${(v / 1e6).toFixed(1)}M`
+        ? `${(a / 1e6).toFixed(1)}M`
         : a >= 1e4
-          ? `${(v / 1e3).toFixed(0)}K`
-          : v.toLocaleString("en-US", { maximumFractionDigits: 2 })) + tail
-  );
+          ? `${(a / 1e3).toFixed(0)}K`
+          : a.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  return `${v < 0 ? "−" : ""}${body}${tail}`;
 }
 function fmtChg(c: number | null | undefined, k: TaxKpi) {
   if (c == null || !Number.isFinite(c)) return "";
@@ -118,6 +120,7 @@ function KpiMatrix() {
   const [sort, setSort] = useState<{ c: string; d: 1 | -1 }>({ c: "mcap", d: -1 });
   const { open } = useSource();
   const qc = useQueryClient();
+  const [wrap, fits] = useFits<HTMLDivElement>();
 
   const byTk = useMemo(
     () => new Map((uni.data?.companies ?? []).map((c) => [c.ticker, c])),
@@ -347,7 +350,8 @@ function KpiMatrix() {
     <th
       aria-sort={sort.c === c ? (sort.d === 1 ? "ascending" : "descending") : "none"}
       className={cn(
-        "sticky top-0 z-20 border-b bg-card px-3 py-2 text-right align-bottom",
+        "border-b bg-card px-3 py-2 text-right align-bottom",
+        fits && "sticky top-14 z-20",
         className,
       )}
     >
@@ -357,7 +361,7 @@ function KpiMatrix() {
         onClick={() =>
           setSort((s) => ({ c, d: s.c === c ? (-s.d as 1 | -1) : c === "t" ? 1 : -1 }))
         }
-        className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground"
+        className="inline-flex items-center gap-1 rounded-sm text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         {children}
         {sort.c === c &&
@@ -391,7 +395,7 @@ function KpiMatrix() {
             : undefined
         }
       />
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+      <div data-section="KPI matrix controls" data-agent-controls className="mb-2 flex flex-wrap items-center gap-2">
         <Select
           value={scope}
           onValueChange={(v) => {
@@ -436,7 +440,7 @@ function KpiMatrix() {
             { v: "change", l: "Change YoY" },
           ]}
         />
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <label className={cn("flex items-center gap-1.5", IR.caption)}>
           <Switch
             checked={hideStale}
             onCheckedChange={setHideStale}
@@ -444,7 +448,7 @@ function KpiMatrix() {
           />{" "}
           Hide values older than 18 months
         </label>
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <label className={cn("flex items-center gap-1.5", IR.caption)}>
           <Switch checked={heat} onCheckedChange={setHeat} aria-label="Shade by rank" /> Shade by
           rank
         </label>
@@ -458,7 +462,7 @@ function KpiMatrix() {
           <Download /> CSV
         </Button>
       </div>
-      <div className="mb-3 flex flex-wrap gap-1.5">
+      <div role="group" aria-label="KPIs shown as columns" data-agent-controls className="mb-3 flex flex-wrap gap-1.5">
         {ranked.slice(0, 24).map(({ k, n }) => {
           const on = cols.some((c) => c.k.id === k.id);
           return (
@@ -466,9 +470,10 @@ function KpiMatrix() {
               key={k.id}
               type="button"
               onClick={() => togglePick(k.id)}
+              aria-pressed={on}
               title={k.definition}
               className={cn(
-                "rounded-full border px-2.5 py-0.5 text-xs",
+                "rounded-md border px-2 py-0.5 text-[11px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
                 on
                   ? "border-foreground bg-foreground text-background"
                   : "text-muted-foreground hover:bg-secondary hover:text-foreground",
@@ -483,22 +488,22 @@ function KpiMatrix() {
       {!tax.data || !latest.data ? (
         <Skeleton className="h-[480px]" />
       ) : !cols.length ? (
-        <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">
+        <p className="rounded-md border bg-card p-4 text-[13px] text-muted-foreground shadow-paper">
           No standardized KPIs for this selection{hideStale ? " in the last 18 months" : ""}.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
-          <div className="max-h-[72vh] overflow-auto scrollbar-thin">
-            <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
+        <div data-section="KPI matrix" className="rounded-md border bg-card shadow-paper">
+          <div ref={wrap} className={cn("relative rounded-t-md", !fits && "overflow-x-auto scrollbar-thin")}>
+            <table className={cn("min-w-full border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max")}>
               <thead>
                 <tr>
-                  <th className="sticky left-0 top-0 z-30 min-w-60 border-b border-r bg-card px-3 py-2 text-left">
+                  <th className={cn("sticky left-0 z-30 min-w-60 border-b border-r bg-card px-3 py-2 text-left", fits && "top-14")}>
                     <button
                       type="button"
                       onClick={() =>
                         setSort((s) => ({ c: "t", d: s.c === "t" ? (-s.d as 1 | -1) : 1 }))
                       }
-                      className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                      className={cn(IR.eyebrow, "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
                     >
                       Company
                     </button>
@@ -526,7 +531,7 @@ function KpiMatrix() {
               </thead>
               <tbody>
                 {sorted.map((r) => (
-                  <tr key={r.t} className="group">
+                  <tr key={r.t} className="group [&>*]:transition-colors [&>*]:duration-150">
                     <td className="sticky left-0 z-10 max-w-72 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary">
                       <span className="flex items-center gap-2">
                         <CompanyLogo ticker={r.t} className="size-5" />
@@ -538,7 +543,7 @@ function KpiMatrix() {
                           {r.t}
                         </Link>
                         <span
-                          className="truncate text-xs text-muted-foreground"
+                          className={cn("truncate", IR.caption)}
                           title={`${r.name} · ${r.ind}`}
                         >
                           {r.name}
@@ -550,7 +555,7 @@ function KpiMatrix() {
                         ? r.mcap >= 1e12
                           ? `$${(r.mcap / 1e12).toFixed(2)}T`
                           : `$${(r.mcap / 1e9).toFixed(1)}B`
-                        : "–"}
+                        : DASH}
                     </td>
                     <td
                       className={cn(
@@ -558,7 +563,7 @@ function KpiMatrix() {
                         (r.revg ?? 0) < 0 && "text-negative",
                       )}
                     >
-                      {r.revg == null ? "–" : `${(r.revg * 100).toFixed(1)}%`}
+                      {r.revg == null ? DASH : `${r.revg < 0 ? "−" : ""}${Math.abs(r.revg * 100).toFixed(1)}%`}
                     </td>
                     {cols.map(({ k }) => {
                       const c = r.cells[k.id];
@@ -566,9 +571,9 @@ function KpiMatrix() {
                         return (
                           <td
                             key={k.id}
-                            className="border-b px-3 py-1.5 text-right text-muted-foreground/50 group-hover:bg-secondary"
+                            className="num border-b px-3 py-1.5 text-right text-muted-foreground group-hover:bg-secondary"
                           >
-                            –
+                            {DASH}
                           </td>
                         );
                       const h = heat ? heatOf.get(k.id)?.get(r.t) : undefined;
@@ -579,7 +584,7 @@ function KpiMatrix() {
                             type="button"
                             onClick={() => void openCell(r.t, k, c.kpiId, c.p)}
                             title={`${c.p[2]} (period ending ${fmtDate(c.p[0])}) · ${fmtChg(c.p[3], k) || "no prior-year value"}\nClick for the release it was read from`}
-                            className="num block w-full px-3 py-1.5 text-right tabular-nums hover:underline"
+                            className="num block w-full px-3 py-1.5 text-right tabular-nums hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                             style={
                               h != null
                                 ? {
@@ -588,10 +593,10 @@ function KpiMatrix() {
                                 : undefined
                             }
                           >
-                            {view === "change" ? fmtChg(c.p[3], k) || "–" : fmtK(c.p[1], k)}
+                            {view === "change" ? fmtChg(c.p[3], k) || DASH : fmtK(c.p[1], k)}
                             <span
                               className={cn(
-                                "block text-[10px] text-muted-foreground",
+                                "block text-[11px] text-muted-foreground",
                                 stale && "text-negative",
                               )}
                             >
@@ -606,7 +611,7 @@ function KpiMatrix() {
               </tbody>
             </table>
           </div>
-          <p className="border-t px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          <p className={cn("border-t px-3 py-2", IR.caption)}>
             Each column is one standardized KPI; each company's value is its own reported series
             mapped to that definition (series on a different reporting basis are never joined).
             Periods are the company's fiscal periods; red period labels are older than about six

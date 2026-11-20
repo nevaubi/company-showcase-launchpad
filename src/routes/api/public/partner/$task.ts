@@ -40,11 +40,11 @@ export const Route = createFileRoute("/api/public/partner/$task")({
             if (!data || data.length < 1000) break;
           }
           const supply = new Map<string, number>();
-          for (let from = 0; ; from += 1000) {
-            const { data, error } = await supabaseAdmin.from("supply_links").select("ticker").eq("is_current", true).range(from, from + 999);
-            if (error) return Response.json({ error: error.message }, { status: 500 });
-            for (const r of data ?? []) supply.set(r.ticker, (supply.get(r.ticker) ?? 0) + 1);
-            if (!data || data.length < 1000) break;
+          try {
+            const { pageSupplyLinks } = await import("@/lib/supply/read");
+            for (const r of await pageSupplyLinks<{ ticker: string }>(supabaseAdmin, "ticker", (q) => q.eq("is_current", true))) supply.set(r.ticker, (supply.get(r.ticker) ?? 0) + 1);
+          } catch (e) {
+            return Response.json({ error: (e as Error).message }, { status: 500 });
           }
           const since = new Date(Date.now() - 86400_000).toISOString();
           const { count } = await supabaseAdmin.from("report_runs").select("id", { count: "exact", head: true }).gte("created_at", since);
@@ -78,7 +78,9 @@ export const Route = createFileRoute("/api/public/partner/$task")({
           const { extractSupply } = await import("@/lib/supply/extract.server");
           try {
             const [d, uni] = await Promise.all([loadDataset(b.data.ticker), universe()]);
-            const r = await extractSupply(supabaseAdmin, { ticker: co.ticker, name: d.profile.name, cik: co.cik }, d.filings, uni.map((u) => ({ ticker: u.ticker, name: u.name })), { years: b.data.years });
+            // The dataset's filings are listed under the CIK it was built from (for a company that
+            // changed registrant, the history CIK): their archive URLs resolve only there.
+            const r = await extractSupply(supabaseAdmin, { ticker: co.ticker, name: d.profile.name, cik: d.profile.cik || co.cik }, d.filings, uni.map((u) => ({ ticker: u.ticker, name: u.name })), { years: b.data.years });
             return Response.json(r, { status: r.status === "failed" ? 502 : 200 });
           } catch (e) {
             return Response.json({ error: (e as Error).message }, { status: 500 });

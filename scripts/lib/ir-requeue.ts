@@ -1,3 +1,6 @@
+import { classify } from "@/lib/jobs/failure";
+import { byRank } from "@/lib/jobs/priority";
+
 /** Files that make a finished company worth re-reading (same kinds the readers handle). */
 export const REREAD_KINDS = ["press-release", "supplement", "presentation", "data", "other", "image"];
 export const REREAD_WINDOW_DAYS = 30;
@@ -18,4 +21,44 @@ export function rereadTickers(done: Iterable<string>, rows: { ticker: string; fe
     if (finished.has(r.ticker)) tickers.add(r.ticker);
   }
   return { tickers: [...tickers], last };
+}
+
+// ---------- configuration-failed documents (P0-4) ----------
+
+/** IR_REQUEUE_CONFIG=1 turns the re-queue on (off by default: every re-queued document spends an AI read). */
+export const requeueEnabled = (env: Record<string, string | undefined>) => env["IR_REQUEUE_CONFIG"] === "1";
+/** Documents reset per pass (env IR_REQUEUE_CONFIG_MAX, default 2,000, hard cap 5,000). */
+export const requeueLimit = (env: Record<string, string | undefined>) => Math.max(0, Math.min(5000, Number(env["IR_REQUEUE_CONFIG_MAX"] ?? 2000) || 0));
+
+/** SQL prefilter for stored statuses (the pure `isConfigFailure` decides). Only the message seen in production. */
+export const CONFIG_STATUS_LIKE = "error:%Invalid model ID%";
+
+/**
+ * A stored reader status that records a configuration failure (wrong model id, missing key), not a
+ * bad document. Only `error:` statuses qualify; "rendition failed: Invalid row number in model" and
+ * ordinary rejects do not.
+ */
+export function isConfigFailure(status: string | null | undefined): boolean {
+  if (!status || !status.startsWith("error:")) return false;
+  return classify({ message: status.slice("error:".length).trim() }) === "config";
+}
+
+export interface FailedDoc {
+  id: string;
+  ticker: string;
+  status: string | null;
+}
+
+/**
+ * Which configuration-failed documents to reset this pass: only rows whose stored error is a config
+ * failure, top-ranked companies first (rank = dv20), input order among equals, at most `limit`.
+ * Returns the ids and the companies touched.
+ */
+export function requeuePlan(rows: readonly FailedDoc[], rank: Map<string, number>, limit: number): { ids: string[]; tickers: string[] } {
+  const picked = byRank(
+    rows.filter((r) => isConfigFailure(r.status)),
+    (r) => r.ticker,
+    rank,
+  ).slice(0, Math.max(0, limit));
+  return { ids: picked.map((r) => r.id), tickers: [...new Set(picked.map((r) => r.ticker))] };
 }

@@ -14,7 +14,7 @@ const NOTES: Record<string, string> = {
   "/app/companies": "Every covered company, searchable",
   "/app/screener": "Filter companies on fundamentals",
   "/app/compare": "Side-by-side comparison of companies",
-  "/app/kpis": "Company-reported KPIs across companies",
+  "/app/kpis": "Company-reported KPIs across companies (sections KPI matrix controls and KPI matrix); click a value for the release it was read from",
   "/app/exposures":
     "Revenue by country/region and lender credit metrics compared across companies (10-K tags)",
   "/app/filings": "Recent SEC filings across coverage",
@@ -27,7 +27,7 @@ const NOTES: Record<string, string> = {
   "/app/macro": "FRED economic series",
   "/app/hedge-funds": "Hedge fund leverage, positioning and crowding",
   "/app/supply-chain":
-    "Named customers and suppliers in Network (flows by stated dollars), Globe (where they are based) and Chain views, shock simulation (add ?t=TICKER)",
+    "Named customers, suppliers, partners and competitors in Network (bands sized by stated revenue, purchase or contract figures or shares), Globe (where they are based; shapes mark the relation) and Chain views, plus stats, link evidence, shock simulation and stated exposure. Figures, single-source flags and regions appear only when the quoted sentence states them for that counterparty (never the filer's own total or another party's figure); guarantees, investments, asset purchases and financing are listed apart, never added; a figure only an older 10-K or 10-Q states is shown with that filing. The dollars overlay marks names with a stated flow or a stated share × SEC revenue. Address params: t=TICKER, view=network|globe|chain, sel=relation:TICKER or relation:Name (opens that name's evidence, e.g. sel=supplier:TSM), overlay=single|concentration|geo|dollars, depth=2 (second-order names), tab=evidence|reactions|changes|shock|exposure. Example: /app/supply-chain?t=NVDA&view=globe&sel=supplier:TSM",
   "/app/alt-data": "Public alternative data: contracts, FDA, recalls, complaints",
   "/app/setups":
     "Published short-term strategies re-tested nightly, judged on out-of-sample trades",
@@ -65,7 +65,7 @@ export const COMPANY_TABS: { sub: string; label: string; note: string }[] = [
   {
     sub: "/ir",
     label: "IR data",
-    note: "Segments and KPIs from releases, supplements and presentations",
+    note: "Segments and KPIs from releases, supplements and presentations. Sections: Investor-relations summary, Key metrics, Financial map, Segment and KPI breakdowns (Quarterly, Annual or Monthly; period span; $ scale; Excel), Source documents (Library, Tables, Search). Every value opens its stored source cell; a dotted underline marks a calculated value; an amber dot marks a total whose parts do not add up, and failed tie-outs are listed under each table; a hollow amber ring marks a figure held back because the documents contradict its unit or period; a hollow grey ring marks a value another document prints differently, listed under the table with both sources. Count tables may scale per row.",
   },
   {
     sub: "/earnings",

@@ -1,7 +1,7 @@
 // One panel for a company's stored IR documents: the library, the tables parsed out of them and
 // full-text search inside them (three sections used to stack under the breakdowns).
 import { useState } from "react";
-import { Panel } from "@/components/app/page-header";
+import { IrPanel } from "@/components/ir/panel";
 import { Segmented } from "@/components/app/segmented";
 import { DocSearch } from "@/components/ir/doc-search";
 import { DocTables } from "@/components/ir/doc-tables";
@@ -15,16 +15,10 @@ export function IrDocuments({ ticker, documents, images, store }: { ticker: stri
   const [tab, setTab] = useState<Tab>("library");
   const files = documents.length + (images ?? 0);
   return (
-    <Panel
-      collapse={false}
+    <IrPanel
+      section="Source documents"
       title="Source documents"
-      subtitle={
-        tab === "library"
-          ? `${files.toLocaleString()} stored files — earnings releases, supplements, presentations and data files`
-          : tab === "tables"
-            ? "Tables parsed out of the stored documents, as printed"
-            : "Full-text search inside the stored documents"
-      }
+      subtitle={tab === "library" ? "Earnings releases, supplements, presentations and data files from EDGAR and company IR sites" : tab === "tables" ? "Tables parsed out of the stored documents, as printed" : "Full-text search inside the stored documents"}
       actions={
         <Segmented
           label="Documents view"
@@ -32,7 +26,7 @@ export function IrDocuments({ ticker, documents, images, store }: { ticker: stri
           value={tab}
           onChange={setTab}
           options={[
-            { v: "library", l: "Library" },
+            { v: "library", l: `Library · ${files.toLocaleString()}` },
             { v: "tables", l: "Tables" },
             { v: "search", l: "Search" },
           ]}
@@ -43,6 +37,6 @@ export function IrDocuments({ ticker, documents, images, store }: { ticker: stri
       {tab === "library" && <IrLibrary ticker={ticker} documents={documents} images={images} store={store} embedded />}
       {tab === "tables" && <DocTables ticker={ticker} embedded />}
       {tab === "search" && <DocSearch ticker={ticker} embedded />}
-    </Panel>
+    </IrPanel>
   );
 }

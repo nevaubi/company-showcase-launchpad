@@ -44,6 +44,13 @@ export interface IrCell {
   v: number;
   fact?: IrFact;
   derived?: { formula: string; parts: IrPart[] };
+  /**
+   * Another document prints a different value for this period: "restated" when it is an earlier
+   * filing (the shown value is the newer one), "conflict" when it ranks the same or newer.
+   */
+  alt?: { v: number; fact: IrFact; kind: "conflict" | "restated" };
+  /** why the shown figure's scale is doubtful (marked at storage, see scale-check.ts) */
+  suspect?: string;
 }
 
 export interface IrSeries {
@@ -159,11 +166,55 @@ export function applyLabelMap(facts: IrFact[], map: Record<string, LabelMapEntry
   return out;
 }
 
+/**
+ * The document kinds a company itself treats as its record, most authoritative first: the earnings
+ * release it files, then its financial supplement, other filed documents, slides, and data files
+ * (spreadsheets, whose display formats hide the unit).
+ */
+export const KIND_RANK: Record<string, number> = { "press-release": 0, supplement: 1, other: 2, presentation: 3, data: 4 };
+const METHOD_RANK: Record<string, number> = { table: 0, vision: 1, text: 2 };
+const suspectOf = (f?: IrFact) => (f?.locator as { suspect?: string } | undefined)?.suspect;
+/** Sort date of a fact: its filing date, else (undated documents) its period end plus 45 days. */
+export function sortDate(f: Pick<IrFact, "filed" | "period_end">): string {
+  if (f.filed) return f.filed;
+  return new Date(Date.parse(`${f.period_end}T00:00:00Z`) + 45 * 86_400_000).toISOString().slice(0, 10);
+}
+/** Two printed values of one period that differ by more than rounding. */
+export const differs = (a: number, b: number) => Math.abs(a - b) > Math.max(Math.abs(a) * 0.001, 1);
+
+/**
+ * Order the vintages of one cell, chosen value first, never by row order:
+ *   1. a value not marked suspect at storage;
+ *   2. the newest filing (an undated document sorts at its period end + 45 days, after a dated one of the same day);
+ *   3. the document kind the company treats as its record (KIND_RANK);
+ *   4. the value printed by more documents;
+ *   5. table, then slide, then sentence reads; then document id and fact id, so the choice is reproducible.
+ */
+export function orderVintages<V extends Pick<Vintage, "v" | "fact" | "doc" | "filed">>(list: V[]): V[] {
+  const docsFor = (v: V) => new Set(list.filter((x) => x.fact && !differs(x.v, v.v)).map((x) => x.doc)).size;
+  const meta = new Map(list.map((v) => [v, { sus: suspectOf(v.fact) ? 1 : 0, undated: v.fact && !v.fact.filed ? 1 : 0, kind: KIND_RANK[v.fact?.document_kind ?? ""] ?? 5, docs: docsFor(v), method: METHOD_RANK[v.fact?.method ?? "table"] ?? 3 }]));
+  return [...list].sort((a, b) => {
+    const x = meta.get(a)!;
+    const y = meta.get(b)!;
+    return (
+      x.sus - y.sus ||
+      b.filed.localeCompare(a.filed) ||
+      x.undated - y.undated ||
+      x.kind - y.kind ||
+      y.docs - x.docs ||
+      x.method - y.method ||
+      a.doc.localeCompare(b.doc) ||
+      (a.fact?.id ?? "").localeCompare(b.fact?.id ?? "")
+    );
+  });
+}
+
 interface Vintage {
   v: number;
   fact?: IrFact;
   derived?: IrCell["derived"];
   doc: string;
+  /** sort date: the filing date, or for an undated document its period end + 45 days (never shown) */
   filed: string;
   /** subtotal rebuilt from its printed parts — never counted as a reconciliation check */
   synthetic?: boolean;
@@ -553,7 +604,7 @@ export function buildIrSeries(
     if (f.is_total) vt.total++;
     if (f.breakdown) vt.breakdown.set(f.breakdown, (vt.breakdown.get(f.breakdown) ?? 0) + 1);
     vt.parent.set(f.parent ?? "", (vt.parent.get(f.parent ?? "") ?? 0) + 1);
-    const vin: Vintage = { v: f.value, fact: f, doc: docOf(f), filed: f.filed ?? "" };
+    const vin: Vintage = { v: f.value, fact: f, doc: docOf(f), filed: sortDate(f) };
     if (f.months === 3) push(qv, key, snap(quarters, f.period_end, slack(f)), vin);
     else if (f.months === 0) {
       s.pit = true;
@@ -575,7 +626,7 @@ export function buildIrSeries(
     s.parent = top(vt.parent) || null;
   }
   mergeFlattened(bySeries, qv, fv, nine);
-  for (const m of [qv, fv, mv]) for (const per of m.values()) for (const list of per.values()) list.sort((a, b) => b.filed.localeCompare(a.filed));
+  for (const m of [qv, fv, mv]) for (const per of m.values()) for (const [end, list] of per) per.set(end, orderVintages(list));
 
   // Latest vintage per cell.
   for (const s of bySeries.values()) {
@@ -779,6 +830,23 @@ export function buildIrSeries(
     }
   }
   markPartialLists(checks, series);
+
+  // The shown value keeps its suspect mark, and a different value printed for the same period stays
+  // visible: a restatement when it comes from an earlier filing, else a conflict.
+  for (const s of series)
+    for (const [cells, store] of [[s.cells, qv], [s.annual, fv], [s.monthly ?? {}, mv]] as const)
+      for (const [end, cell] of Object.entries(cells)) {
+        if (!cell.fact) continue;
+        const sus = suspectOf(cell.fact);
+        if (sus) cell.suspect = sus;
+        const list = store.get(s.key)?.get(end) ?? [];
+        const mine = list.find((x) => x.fact === cell.fact);
+        const other = list.find((x) => x.fact && x.fact !== cell.fact && differs(x.v, cell.v));
+        if (!other?.fact) continue;
+        // Only filing dates both documents print can make an earlier value a restatement.
+        const restated = !!mine && !!mine.fact?.filed && !!other.fact.filed && other.fact.filed < mine.fact.filed;
+        cell.alt = { v: other.v, fact: other.fact, kind: restated ? "restated" : "conflict" };
+      }
   return { series, quarters, years, months, checks };
 }
 
@@ -855,7 +923,11 @@ function mergeFlattened(bySeries: Map<string, IrSeries>, qv: Map<string, Map<str
         const docs = new Set(kids.flatMap((k) => (m.get(k.key)?.get(end) ?? []).map((v) => v.doc)));
         for (const doc of docs) {
           if (have.has(doc) || doc.startsWith("derived")) continue;
-          const parts = kids.flatMap((k) => (m.get(k.key)?.get(end) ?? []).filter((v) => v.doc === doc && v.fact).map((v) => ({ k, v })));
+          // One value per part: a release that prints a line in two tables must not count it twice.
+          const parts = kids.flatMap((k) => {
+            const v = (m.get(k.key)?.get(end) ?? []).find((x) => x.doc === doc && x.fact);
+            return v ? [{ k, v }] : [];
+          });
           if (parts.length < 2) continue;
           const v = parts.reduce((n, p) => n + p.v.v, 0);
           let per = m.get(sub.key);

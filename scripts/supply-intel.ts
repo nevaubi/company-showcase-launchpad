@@ -2,9 +2,17 @@
 // actions, customer concentration, facility locations and region/policy factors (tariffs, export
 // controls, laws, local politics). Every signal carries a verbatim quote re-checked against its
 // source (filing, exhibit, transcript or web article); unverified signals are dropped.
-//   IR_AI_PROVIDER=openai bun scripts/supply-intel.ts [--only=AAPL] [--concurrency=6] [--skip=news,calls]
+//   IR_AI_PROVIDER=openai bun scripts/supply-intel.ts [--only=AAPL] [--concurrency=6] [--skip=news,calls] [--result-file=/tmp/x.json]
+// Exit 0 when signals were stored (or every stage ran clean and found nothing), 2 when nothing was
+// stored, 3 when a quota/config error stopped the run. --result-file gets {stored, companies,
+// failedStages, emptyStages, stop} so the caller advances its weekly marker only after stored work.
+import { selectSupplyLinks } from "../src/lib/supply/read";
 import { readFile } from "node:fs/promises";
+import { writeFileSync } from "node:fs";
+import { classifyError } from "../src/lib/jobs/failure";
 import { args, log, sb } from "./lib/supa";
+import { saveSignals } from "./lib/supply-save";
+import { readDataset } from "./lib/datasets";
 import { IR_MODELS, openaiStructured } from "../src/lib/openai.server";
 import { quoteInText } from "../src/lib/supply/core";
 import { tavilySearch, firecrawlScrape } from "../src/lib/web.server";
@@ -69,6 +77,10 @@ const SCHEMA = { type: "object", additionalProperties: false, required: ["items"
 type Item = { kind: string; src: number; title: string; detail: string; quote: string; counterparty: string; country: string; amount_usd: number | null; pct: number | null; period: string; impact: string; speaker: string };
 type Src = { text: string; meta: Record<string, unknown> };
 
+const tally = { stored: 0, companies: 0, failedStages: 0, emptyStages: 0, stop: null as string | null };
+/** A stage error that stops the whole run (no money, wrong setting): never swallowed as "kept existing". */
+class StopRun extends Error {}
+
 const RULES = `Rules: only facts stated in the sources — never general knowledge. quote must be copied character-for-character from the numbered source (no ellipses, no edits) and must support the item. Numbers only when stated. Skip boilerplate that names no specific country, counterparty, facility, figure or action. Be specific and complete; prefer material items.
 kind: contract = terms of a named agreement (counterparty, duration, value, minimum purchase/take-or-pay, exclusivity, prepayment, termination); call = a management statement on an earnings call about customers, suppliers, capacity, inventory, pricing, tariffs or regions; mgmt_action = a concrete action taken or planned (new plant, reshoring, dual-sourcing, capacity expansion, long-term supply deal, exit of a region, inventory build); concentration = a named or unnamed customer/supplier share of revenue or purchases with its period; facility = a named site/location of manufacturing, data centers, R&D, distribution (country = where); policy = a tariff, export control, sanction, law, regulation, government action or local political/conflict factor tied to a country.`;
 
@@ -97,13 +109,19 @@ function rows(co: Co, items: Item[], srcs: Src[], source_kind: string) {
     }));
 }
 
+/**
+ * Replace one company's signals of one source kind in one database transaction
+ * (replace_supply_signals, scripts/lib/supply-save.ts). A refused save throws (the stage fails) and the
+ * stored signals stay exactly as they were; an empty result keeps them too.
+ */
 async function save(co: Co, source_kind: string, r: Record<string, unknown>[]) {
   if (args.dry) return console.log(source_kind, r.slice(0, 3));
-  await sb.from("supply_signals").delete().eq("ticker", co.ticker).eq("source_kind", source_kind);
-  if (r.length) {
-    const { error } = await sb.from("supply_signals").insert(r);
-    if (error) log(co.ticker, "insert", error.message);
+  if (!r.length) {
+    tally.emptyStages++;
+    return;
   }
+  const out = await saveSignals(sb, co.ticker, source_kind, r);
+  tally.stored += out.stored;
 }
 
 const docUrl = (co: Co, accn: string, doc: string) => `https://www.sec.gov/Archives/edgar/data/${Number(co.cik)}/${accn.replace(/-/g, "")}/${doc}`;
@@ -182,7 +200,8 @@ async function fromCalls(co: Co, short: string) {
 /** Recent news on tariffs/laws/local politics for the company's key countries. */
 async function fromNews(co: Co, short: string) {
   const { data } = await sb.from("supply_signals").select("country").eq("ticker", co.ticker).not("country", "is", null);
-  const { data: l } = await sb.from("supply_links").select("regions").eq("ticker", co.ticker).eq("is_current", true);
+  // regions only as far as each link's sentence names them (read.ts verifies them)
+  const { data: l } = await selectSupplyLinks<{ regions: string[] | null }>(sb, "regions", (q) => q.eq("ticker", co.ticker).eq("is_current", true));
   const freq = new Map<string, number>();
   for (const c of [...(data ?? []).map((d) => d.country as string), ...(l ?? []).flatMap((x) => (x.regions as string[] | null) ?? [])]) freq.set(c, (freq.get(c) ?? 0) + 1);
   const top = [...freq].sort((a, b) => b[1] - a[1]).map((x) => x[0]).filter((c) => !/^(united states|us|u\.s\.|global|worldwide)$/i.test(c)).slice(0, 3);
@@ -203,7 +222,12 @@ const { COVERAGE } = await import("../src/lib/coverage");
 const shortOf = Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName]));
 
 async function run(co: Co) {
-  const d = JSON.parse(await readFile(`public/data/companies/${co.ticker}.json`, "utf8")) as { filings: Filing[] };
+  // Covered companies' datasets are not bundled any more: read through the partner data service.
+  const ds = await readDataset<{ filings: Filing[]; profile?: { cik?: string } }>("companies", co.ticker);
+  const d = ds;
+  // The dataset's filings are listed under the CIK it was built from (the history CIK when the
+  // company changed registrant): archive URLs for them resolve only under that CIK.
+  if (ds.profile?.cik) co = { ...co, cik: ds.profile.cik };
   const short = shortOf[co.ticker] ?? co.name;
   const stages: [string, () => Promise<void>][] = [
     ["filing", () => fromTenK(co, d.filings)],
@@ -212,14 +236,43 @@ async function run(co: Co) {
     ["news", () => fromNews(co, short)],
   ];
   for (const [name, fn] of stages) {
-    if (skip.has(name)) continue;
-    try { await fn(); } catch (e) { log(co.ticker, name, "failed — kept existing", (e as Error).message.slice(0, 160)); }
+    if (skip.has(name) || tally.stop) continue;
+    try {
+      await fn();
+    } catch (e) {
+      const cls = classifyError(e);
+      // Only the model provider stops the run; a missing web-search key fails just that stage.
+      const fromModel = typeof (e as { kind?: unknown }).kind === "string";
+      if (fromModel && (cls === "quota" || cls === "config")) throw new StopRun(`${cls === "config" ? "auth" : "quota"}: ${(e as Error).message.slice(0, 180)}`);
+      tally.failedStages++;
+      log(co.ticker, name, "failed — kept existing", (e as Error).message.slice(0, 160));
+    }
   }
   log(co.ticker, "done");
 }
 
-const queue = universe.companies.filter((c) => !only || only.includes(c.ticker));
+// The bundled universe file lists only the 78 curated companies; every other covered company comes
+// from COVERAGE (ticker, CIK, short name), so a weekly pick outside the 78 is no longer silently dropped.
+const byTicker = new Map<string, Co>(COVERAGE.map((c) => [c.ticker, { ticker: c.ticker, name: c.shortName, cik: c.cik }]));
+for (const c of universe.companies) byTicker.set(c.ticker, c);
+const queue = [...byTicker.values()].filter((c) => !only || only.includes(c.ticker));
 await Promise.all(Array.from({ length: Number(args.concurrency ?? 6) }, async () => {
-  for (let c = queue.shift(); c; c = queue.shift()) await run(c);
+  for (let c = queue.shift(); c && !tally.stop; c = queue.shift()) {
+    tally.companies++;
+    // One company cannot end the batch; a quota/config stop ends it for every worker.
+    try {
+      await run(c);
+    } catch (e) {
+      if (e instanceof StopRun) {
+        tally.stop ??= e.message;
+        log(c.ticker, "stopping the run:", e.message);
+      } else {
+        tally.failedStages++;
+        log(c.ticker, "failed — kept existing", (e as Error).message.slice(0, 160));
+      }
+    }
+  }
 }));
-log("all done");
+if (args["result-file"]) writeFileSync(args["result-file"], JSON.stringify(tally));
+log(`all done — ${tally.stored} signals stored for ${tally.companies} companies, ${tally.failedStages} failed stages${tally.stop ? `, stopped: ${tally.stop}` : ""}`);
+process.exit(tally.stop ? 3 : tally.stored > 0 || (tally.failedStages === 0 && tally.companies > 0) ? 0 : 2);

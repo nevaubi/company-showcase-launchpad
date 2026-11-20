@@ -3,10 +3,10 @@ import * as React from "react";
 import { render } from "@react-email/render";
 import { TEMPLATES } from "./registry";
 
-const NAMES = ["waitlist-receipt", "waitlist-owner-notice", "waitlist-approved", "waitlist-reminder", "firm-invite"];
+const NAMES = ["waitlist-receipt", "waitlist-owner-notice", "waitlist-approved", "waitlist-reminder", "firm-invite", "ops-alert"];
 
 describe("email templates", () => {
-  it("registers all five", () => {
+  it("registers all six", () => {
     expect(Object.keys(TEMPLATES).sort()).toEqual([...NAMES].sort());
   });
   for (const name of NAMES) {

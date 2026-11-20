@@ -1,4 +1,6 @@
 import { GatewayError, generateChatCompletion, generateResponse } from "@lovable.dev/ai-gateway";
+import { closedMessage, withProvider } from "@/lib/jobs/provider-health.server";
+import type { CircuitDecision, ProviderId } from "@/lib/jobs/provider-health";
 
 // Server-only client for high-volume IR analysis (Lovable AI Gateway by default, or the owner's OPENAI_API_KEY), used for the
 // high-volume investor-relations analysis (table extraction, slide vision, reconciliation repair,
@@ -36,6 +38,23 @@ export class OpenAIError extends Error {
     super(message);
     this.name = "OpenAIError";
   }
+  /** the provider circuit this error came from (set by `guarded`), so runners know it was already tripped */
+  provider?: string;
+}
+
+/**
+ * Every provider call runs through its health circuit (`job_state` row `provider:<id>`): while the
+ * provider is out of money or misconfigured the call fails fast as quota/auth without an HTTP request,
+ * and one probe decides when it is back. PROVIDER_CIRCUIT=0 turns this off.
+ */
+export function guarded<T>(id: ProviderId, fn: () => Promise<T>): Promise<T> {
+  return withProvider(id, fn, {
+    closedError: (p: ProviderId, d: CircuitDecision) => {
+      const e = new OpenAIError(closedMessage(p, d), d.cls === "config" ? "auth" : "quota", 0);
+      e.provider = p;
+      return e;
+    },
+  });
 }
 
 /** IR reading runs on the Lovable AI Gateway by default; set IR_AI_PROVIDER=openai to use the owner's key. */
@@ -121,6 +140,10 @@ export async function claudeStructured<T>(opts: {
   maxOutputTokens?: number;
   signal?: AbortSignal;
 }): Promise<{ data: T; usage: Usage; model: string; content: unknown[] }> {
+  return guarded("anthropic", () => claudeCall<T>(opts));
+}
+
+async function claudeCall<T>(opts: Parameters<typeof claudeStructured>[0]): Promise<{ data: T; usage: Usage; model: string; content: unknown[] }> {
   const key = process.env["ANTHROPIC_API_KEY"];
   if (!key) throw new OpenAIError("ANTHROPIC_API_KEY is not configured", "auth", 0);
   const effort = opts.effort === "minimal" || opts.effort === "none" ? "low" : opts.effort;
@@ -191,7 +214,11 @@ async function anthropicStructured<T>(opts: Parameters<typeof openaiStructured>[
   return { data: r.data, usage: r.usage, model: r.model };
 }
 
-async function gatewayStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+function gatewayStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+  return guarded("gateway", () => gatewayCall<T>(opts));
+}
+
+async function gatewayCall<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
   const content: InputPart[] = typeof opts.input === "string" ? [{ type: "input_text", text: opts.input }] : opts.input;
   const model = opts.model.includes("/") ? opts.model : `openai/${opts.model}`;
   let j: unknown;
@@ -285,7 +312,7 @@ export async function openaiStructured<T>(opts: {
   if (freeOnly()) return freeOnlyStructured<T>(opts);
   if (opts.model.startsWith("claude-")) return anthropicStructured<T>(opts);
   if (useGateway()) return gatewayStructured<T>(opts);
-  return openaiDirectStructured<T>(opts);
+  return guarded("openai-paid", () => openaiDirectStructured<T>(opts));
 }
 
 /** IR_FREE_ONLY=1: no paid calls at all. Every non-OpenRouter call goes through the owner's free OpenAI allowance. */
@@ -305,7 +332,9 @@ async function freeOnlyStructured<T>(opts: Parameters<typeof openaiStructured>[0
   const r = await laneStructured<T>({ ...opts, model, rethrow: true });
   if (r) return r;
   if (paidFallback()) return paidStructured<T>({ ...opts, model });
-  throw new OpenAIError("free-only mode: OpenAI free allowance spent or unavailable", "quota", 0);
+  const e = new OpenAIError("free-only mode: OpenAI free allowance spent or unavailable", "quota", 0);
+  e.provider = tierOf(model) === "large" ? "openai-free-large" : "openai-free-mini";
+  throw e;
 }
 
 /** The owner's own OpenAI key (Responses API, strict JSON schema), whatever IR_AI_PROVIDER says. */
@@ -357,7 +386,11 @@ export async function openaiDirectStructured<T>(opts: Parameters<typeof openaiSt
 }
 
 /** OpenRouter connector credentials stay server-side; no fallback to a different provider. */
-export async function openRouterStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+export function openRouterStructured<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
+  return guarded("openrouter-free", () => openRouterCall<T>(opts));
+}
+
+async function openRouterCall<T>(opts: Parameters<typeof openaiStructured>[0]): Promise<{ data: T; usage: Usage; model: string }> {
   const key = process.env["UDC_OPENROUTER_API_KEY"];
   const gatewayKey = process.env["LOVABLE_API_KEY"];
   if (!key || !gatewayKey) throw new OpenAIError("OpenRouter connection is not configured", "auth", 0);
@@ -452,7 +485,12 @@ export async function parseOpenRouterStream(res: Response): Promise<OpenRouterRe
  */
 export function classifyOpenAIError(status: number, code: string, type: string, message: string): OpenAIErrorKind {
   const all = `${code} ${type}`;
-  if (status === 401 || status === 403 || code === "model_not_found") return "auth";
+  // A 403 is a key or access problem only when it says so; a content-policy 403 rejects one request.
+  if (status === 401 || code === "model_not_found" || (status === 403 && /permission|not allowed|unauthori[sz]ed|api.?key|access denied|no access|unsupported_country|region|organization|account/i.test(`${all} ${message}`))) return "auth";
+  // A wrong model id is configuration, not a bad document (19 Nov: 12,287 documents were failed by
+  // "400 invalid_value: Invalid model ID."). "auth" is the bucket runners stop on. Other invalid_value
+  // errors that mention a model ("image too large for this model") are the request's fault.
+  if (/invalid model id|does not exist or you do not have access/i.test(message)) return "auth";
   if (/insufficient_quota|credit|billing|quota/i.test(all) || /no credits|exceeded your current quota|billing/i.test(message)) return "quota";
   if (status === 429) return "rate";
   if (status >= 500) return "transient";

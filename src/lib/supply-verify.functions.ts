@@ -32,7 +32,8 @@ export const verifySupplyLink = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
   .handler(async ({ data, context }): Promise<VerifyResult & { cachedAt?: string }> => {
     const empty = (error: string): VerifyResult => ({ verdict: "unconfirmed", summary: "", facts: [], evidence: [], searched: 0, read: 0, error });
-    const { data: l } = await context.supabase.from("supply_links").select("*").eq("id", data.id).maybeSingle();
+    const { supplyLinkById } = await import("@/lib/supply/read");
+    const { data: l } = await supplyLinkById<import("@/lib/supply/read").SupplyLinkRow>(context.supabase, data.id);
     if (!l) return empty("Link not found");
     const { coverageOf } = await import("@/lib/coverage");
     const filer = coverageOf(l.ticker);

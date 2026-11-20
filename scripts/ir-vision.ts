@@ -31,6 +31,7 @@ const LANE_VISION_PROMPT = `You are the independent second reader of this page. 
 import { COVERAGE } from "@/lib/coverage";
 import { args, log, sb } from "./lib/supa";
 import { runBatch } from "./lib/runner";
+import { routeOf } from "@/lib/jobs/provider-health";
 import { imageSize, modelImage, ocrImage as ocr, readPage, renderDpi, run, visionEffort } from "./lib/vision-page";
 import { needsVisionEscalation } from "@/lib/ir/vision-quality";
 
@@ -313,6 +314,8 @@ await runBatch<Doc>({
   maxUsd: args["max-usd"] ? Number(args["max-usd"]) : undefined,
   maxCredits: args["max-credits"] ? Number(args["max-credits"]) : undefined,
   spendFile: args["spend-file"],
+  // Claude pages go straight to the Anthropic key (vision-page.ts), whatever the free-only routing says.
+  route: model.startsWith("claude-") ? ["anthropic"] : routeOf(model, process.env),
   claim,
   release: (d, status) => sb.from("ir_documents").update({ vision_status: status, vision_at: status ? new Date().toISOString() : null }).eq("id", d.id),
   reset: () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coveredOnly, isEarnings, masterUrl, parseCurrentAtom, parseMasterIndex } from "./sec-discover";
+import { coveredOnly, dayProgress, formatDayState, isEarnings, masterUrl, missingEarnings, parseCurrentAtom, parseDayState, parseMasterIndex, repairWindow, rotate } from "./sec-discover";
 
 const atom = `<feed><entry>
 <title>8-K - Apple Inc. (0000320193) (Filer)</title>
@@ -38,5 +38,69 @@ describe("market-wide SEC discovery", () => {
   });
   it("builds the quarter path of a daily index", () => {
     expect(masterUrl("2026-11-18")).toBe("https://www.sec.gov/Archives/edgar/daily-index/2026/QTR4/master.20261118.idx");
+  });
+});
+
+
+describe("day pass progress", () => {
+  const day = "2026-11-19";
+  it("works through a busy day: runs that shrink the missing list never count as tries", () => {
+    let prev = parseDayState(null);
+    for (const left of [165, 160, 152, 140]) {
+      const d = dayProgress(prev, day, left, 4);
+      expect(d.kind).toBe("stay");
+      if (d.kind !== "stay") return;
+      expect(d.state.tries).toBe(0);
+      prev = parseDayState(formatDayState(d.state));
+    }
+    expect(prev).toMatchObject({ day, left: 140, run: 4 });
+  });
+  it("gives up only after 20 runs without progress", () => {
+    let prev = parseDayState(formatDayState({ day, tries: 0, left: 3, run: 9 }));
+    for (let i = 1; i < 20; i++) {
+      const d = dayProgress(prev, day, 3, 1);
+      if (d.kind !== "stay") throw new Error("gave up early");
+      expect(d.state.tries).toBe(i);
+      prev = d.state;
+    }
+    const last = dayProgress(prev, day, 3, 1);
+    expect(last).toMatchObject({ kind: "next", complete: false });
+    expect(last.kind === "next" && last.reason).toMatch(/^gave up on 2026-11-19: 2 companies unresolved after 20 runs without progress$/);
+  });
+  it("completes when nothing is missing or every missing company synced this run", () => {
+    expect(dayProgress(parseDayState(null), day, 0, 0)).toEqual({ kind: "next", reason: null, complete: true });
+    expect(dayProgress(parseDayState(null), day, 3, 3)).toMatchObject({ kind: "next", complete: true });
+  });
+  it("reads the old reason format and a new day starts fresh", () => {
+    expect(parseDayState("tries 7 on 2026-11-18")).toEqual({ day: "2026-11-18", tries: 7, left: null, run: 0 });
+    const d = dayProgress(parseDayState("tries 7 on 2026-11-18"), day, 50, 2);
+    expect(d.kind === "stay" && d.state).toMatchObject({ tries: 0, run: 1 });
+  });
+  it("rotates the resolve order", () => {
+    expect(rotate(["A", "B", "C"], 4)).toEqual(["B", "C", "A"]);
+    expect(rotate([], 3)).toEqual([]);
+  });
+});
+
+describe("earnings repair", () => {
+  it("lists 8-K 2.02 filings without an event (CSCO and AMAT examples)", () => {
+    const filings = [
+      { accn: "0000858877-26-000170", ticker: "CSCO", form: "8-K", filed: "2026-11-12", items: "2.02,9.01" },
+      { accn: "0001628280-26-073360", ticker: "AMAT", form: "8-K", filed: "2026-11-12", items: "2.02,9.01" },
+      { accn: "x-1", ticker: "MSFT", form: "8-K", filed: "2026-11-12", items: "2.02" },
+      { accn: "x-2", ticker: "KO", form: "8-K", filed: "2026-11-12", items: "5.02" },
+    ];
+    const out = missingEarnings(filings, [{ ticker: "MSFT", accn: "x-1" }]);
+    expect(out).toEqual([
+      { ticker: "CSCO", accn: "0000858877-26-000170", filed: "2026-11-12", source: "sec-8k-2.02" },
+      { ticker: "AMAT", accn: "0001628280-26-073360", filed: "2026-11-12", source: "sec-8k-2.02" },
+    ]);
+  });
+  it("walks five-day windows back over 60 days and wraps", () => {
+    expect(repairWindow(0, "2026-11-20")).toEqual({ from: "2026-11-14", to: "2026-11-18", next: 1 });
+    expect(repairWindow(1, "2026-11-20")).toEqual({ from: "2026-11-09", to: "2026-11-13", next: 2 });
+    const last = repairWindow(11, "2026-11-20");
+    expect(last.next).toBe(0);
+    expect(last.from <= "2026-09-21").toBe(true);
   });
 });

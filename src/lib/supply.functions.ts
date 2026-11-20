@@ -36,19 +36,23 @@ export const getSupplyNote = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<SupplyNote & { cachedAt?: string }> => {
     const co = coverageOf(data.ticker);
     if (!co) return { headline: "", points: [], watch: [], error: "Not a covered company" };
-    const { data: rows, error } = await context.supabase
-      .from("supply_links")
-      .select("id,ticker,counterparty,counterparty_ticker,relation,detail,share_pct,amount_usd,single_source,regions,risk,product,filed,form,is_current")
-      .or(`ticker.eq.${co.ticker},counterparty_ticker.eq.${co.ticker}`)
-      .limit(600);
+    // claims arrive verified: an amount only as the counterparty's stated figure (with its kind), single source only with sole-source wording
+    const { selectSupplyLinks } = await import("@/lib/supply/read");
+    type NoteRow = { id: string; ticker: string; counterparty: string; counterparty_ticker: string | null; relation: string; detail: string; share_pct: number | null; amount_usd: number | null; amount_kind?: string | null; flow_usd?: number | null; single_source: boolean; dependency?: boolean; nature?: string; regions: string[] | null; risk: string | null; product: string | null; filed: string; form: string; is_current: boolean };
+    const { data: rows, error } = await selectSupplyLinks<NoteRow>(
+      context.supabase,
+      "id,ticker,counterparty,counterparty_ticker,relation,detail,share_pct,amount_usd,single_source,regions,risk,product,filed,form,is_current",
+      (q) => q.or(`ticker.eq.${co.ticker},counterparty_ticker.eq.${co.ticker}`).limit(600),
+    );
     if (error || !rows?.length) return { headline: "", points: [], watch: [], error: error?.message ?? "No links yet" };
     const latest = rows.reduce((m, r) => (r.filed > m ? r.filed : m), "");
     const { cached, structured } = await import("@/lib/ai.server");
-    return cached(`supply-note:v2:${co.ticker}:${latest}:${rows.length}`, 30 * 86400_000, async () => {
+    return cached(`supply-note:v3:${co.ticker}:${latest}:${rows.length}`, 30 * 86400_000, async () => {
       const lines = rows.map((r) =>
         [r.id, r.is_current ? "now" : `prior ${r.form} ${r.filed}`, r.ticker === co.ticker ? `${co.ticker} names` : `${r.ticker} names ${co.ticker} as its`,
           r.ticker === co.ticker ? `${r.relation}: ${r.counterparty}` : r.relation, r.detail, r.product ?? "",
-          r.share_pct != null ? `${r.share_pct}%` : "", r.amount_usd ? `$${r.amount_usd}` : "", r.single_source ? "SINGLE-SOURCE" : "",
+          r.share_pct != null ? `${r.share_pct}%` : "", r.amount_usd ? `$${r.amount_usd} ${r.amount_kind ?? "figure"}${r.flow_usd != null ? "" : " (not a flow)"}` : "",
+          r.single_source ? "SINGLE-SOURCE" : r.dependency ? "stated dependency" : "", r.nature && r.nature !== "trade" ? `${r.nature} tie, not trade` : "",
           (r.regions ?? []).join("/"), r.risk ?? ""].filter(Boolean).join(" | "));
       try {
         const out = await structured<SupplyNote>({

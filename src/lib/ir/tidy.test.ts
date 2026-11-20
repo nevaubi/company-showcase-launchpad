@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { groupColumns, groupTitle } from "./display";
 import type { IrPayload, PayloadCheck, PayloadGroup, PayloadSeries } from "./payload";
 import { dropStrays } from "./periods";
-import { labelTokens, tidyPayload } from "./tidy";
+import { alikeLabels, labelTokens, tidyPayload } from "./tidy";
 
 type Vals = Record<string, number>;
 const line = (k: string, label: string, q: Vals, extra: Partial<PayloadSeries> = {}): PayloadSeries => ({
@@ -240,5 +240,249 @@ describe("figures printed two ways", () => {
       line("b", "Premiums written", { "2025-03-31": 1200 * M }, { cat: "kpi", met: "other" }),
     ];
     expect(tidyPayload(payload(s, [loose(["a", "b"])])).series).toHaveLength(2);
+  });
+});
+
+describe("a line repeated one level down after two eras of a table merge", () => {
+  // NVIDIA revenue by market platform, $ millions: the old table lists Auto and "OEM & Other" under the
+  // total; the new one nests Automotive and "OEM and Other" under Edge Computing. Same numbers, so the
+  // old lines fold into the nested ones instead of being counted twice (546 and 696 over the total).
+  const Q = (a: number, b: number) => ({ "2024-10-27": a * 1e6, "2025-01-26": b * 1e6 });
+  const series = [
+    line("dc", "Data Center", Q(30771, 35580), { parent: "rev" }),
+    line("edge", "Edge Computing", Q(4311, 3751), { parent: "rev", total: true }),
+    line("gam", "Gaming", Q(3279, 2544), { parent: "edge" }),
+    line("pv", "Professional Visualization", Q(486, 511), { parent: "edge" }),
+    line("auto2", "Automotive", Q(449, 570), { parent: "edge" }),
+    line("oem2", "OEM and Other", Q(97, 126), { parent: "edge" }),
+    line("auto1", "Auto", Q(449, 570), { parent: "rev" }),
+    line("oem1", "OEM & Other", Q(97, 126), { parent: "rev" }),
+    line("rev", "Revenue", Q(35082, 39331), { total: true }),
+  ];
+  const g: PayloadGroup = { id: "rev", cat: "product", met: "revenue", unit: "usd", label: "Revenue", root: "rev", rows: [
+    { k: "dc", depth: 1 }, { k: "gam", depth: 2 }, { k: "pv", depth: 2 }, { k: "auto2", depth: 2 }, { k: "oem2", depth: 2 }, { k: "edge", depth: 1 }, { k: "auto1", depth: 1 }, { k: "oem1", depth: 1 }, { k: "rev", depth: 0 },
+  ] };
+  const checks: PayloadCheck[] = [
+    { k: "rev", e: "2024-10-27", kind: "q", total: 35082e6, sum: 35628e6, ok: false, n: 4 },
+    { k: "rev", e: "2025-01-26", kind: "q", total: 39331e6, sum: 40027e6, ok: false, n: 4 },
+  ];
+  const p = tidyPayload(payload(series, [g], checks));
+  it("keeps one Automotive and one OEM line, nested under Edge Computing", () => {
+    const labels = p.series.map((s) => s.label);
+    expect(labels.filter((l) => /^auto/i.test(l))).toEqual(["Automotive"]);
+    expect(labels.filter((l) => /^oem/i.test(l))).toHaveLength(1);
+    expect(p.alias?.auto1).toBe("auto2");
+    expect(cellsOf(p, "auto1")).toEqual({ "2024-10-27": 449e6, "2025-01-26": 570e6 });
+  });
+  it("re-checks the total, which now adds up", () => {
+    expect(p.checks.filter((c) => c.k === "rev").every((c) => c.ok)).toBe(true);
+  });
+  it("never folds lines whose names differ or whose numbers conflict", () => {
+    const other = tidyPayload(payload([...series.slice(0, 6), line("auto1", "Auto", Q(300, 570), { parent: "rev" }), series[8]], [{ ...g, rows: g.rows.filter((r) => r.k !== "oem1") }], checks));
+    expect(other.series.some((s) => s.k === "auto1")).toBe(true);
+  });
+});
+
+describe("the same figures shown twice under two tables", () => {
+  // PNC 8-K of 15 Jul 2026, $ millions: Jun '25, Mar '26, Jun '26.
+  const Q = (a: number, b: number, c: number) => ({ "2025-06-30": a * 1e6, "2026-03-31": b * 1e6, "2026-06-30": c * 1e6 });
+  it("folds a loose income-statement line into the breakdown total it repeats", () => {
+    const series = [
+      line("pers", "Personnel", Q(1889, 2106, 2273), { cat: "cost", met: "expense", parent: "tne" }),
+      line("occ", "Occupancy", Q(235, 262, 252), { cat: "cost", met: "expense", parent: "tne" }),
+      line("tne", "Total noninterest expense", Q(3383, 3768, 4098), { cat: "cost", met: "expense", total: true }),
+      line("ne", "Noninterest expense", Q(3383, 3768, 4098), { cat: "cost", met: "expense" }),
+    ];
+    const g = table("tne", "tne", ["pers", "occ"], { cat: "cost", met: "expense" });
+    const loose: PayloadGroup = { id: "cost|expense|usd", cat: "cost", met: "expense", unit: "usd", label: "", root: null, rows: [{ k: "ne", depth: 0 }] };
+    const p = tidyPayload(payload(series, [g, loose]));
+    expect(p.alias?.ne).toBe("tne");
+    expect(p.groups.some((x) => x.rows.some((r) => r.k === "ne"))).toBe(false);
+  });
+  it("drops a table printed again inside a bigger one", () => {
+    const fee = [
+      line("f:amb", "Asset management and brokerage", Q(391, 420, 440), { cat: "product", parent: "f:t" }),
+      line("f:cmd", "Capital markets and advisory", Q(321, 463, 577), { cat: "product", parent: "f:t" }),
+      line("f:t", "Fee income (non-GAAP)", Q(1894, 2079, 2279), { cat: "product", total: true }),
+    ];
+    const nii = [
+      line("n:amb", "Asset management and brokerage", Q(391, 420, 440), { parent: "n:fee" }),
+      line("n:cmd", "Capital markets and advisory", Q(321, 463, 577), { parent: "n:fee" }),
+      line("n:fee", "Fee income (non-GAAP)", Q(1894, 2079, 2279), { parent: "n:t", total: true }),
+      line("n:oth", "Other", Q(212, 125, 489), { parent: "n:t" }),
+      line("n:t", "Total noninterest income", Q(2106, 2204, 2768), { total: true }),
+    ];
+    const groups = [table("f:t", "f:t", ["f:amb", "f:cmd"], { cat: "product" }), table("n:t", "n:t", ["n:amb", "n:cmd", "n:fee", "n:oth"])];
+    const p = tidyPayload(payload([...fee, ...nii], groups));
+    expect(p.groups.map((x) => x.id)).toEqual(["n:t"]);
+    expect(p.alias?.["f:amb"]).toBe("n:amb");
+  });
+});
+
+describe("a line whose only part prints the same numbers", () => {
+  // PNC business segment income, $ millions: "Retail Banking" and the "Earnings" closing the Retail Banking table.
+  const Q = (a: number, b: number, c: number) => ({ "2025-06-30": a * 1e6, "2026-03-31": b * 1e6, "2026-06-30": c * 1e6 });
+  it("shows the figure once, under the segment's name", () => {
+    const series = [
+      line("rb:e", "Earnings", Q(1386, 1349, 1747), { met: "segment_profit", parent: "rb", total: true }),
+      line("rb", "Retail Banking", Q(1386, 1349, 1747), { met: "segment_profit", parent: "t" }),
+      line("oth", "Other", Q(-1209, -1190, -1430), { met: "segment_profit", parent: "t" }),
+      line("t", "Net income excluding noncontrolling interests", Q(177, 159, 317), { met: "segment_profit", total: true }),
+    ];
+    const g: PayloadGroup = { id: "t", cat: "segment", met: "segment_profit", unit: "usd", label: "", root: "t", rows: [{ k: "rb:e", depth: 2 }, { k: "rb", depth: 1 }, { k: "oth", depth: 1 }, { k: "t", depth: 0 }] };
+    const p = tidyPayload(payload(series, [g]));
+    expect(p.series.map((s) => s.label)).not.toContain("Earnings");
+    expect(p.alias?.["rb:e"]).toBe("rb");
+    expect(cellsOf(p, "rb")).toEqual({ "2025-06-30": 1386e6, "2026-03-31": 1349e6, "2026-06-30": 1747e6 });
+  });
+});
+
+describe("a printed total is never replaced (review C1)", () => {
+  // Total revenue printed as round figures; its only part sits 0.4% below it in three quarters.
+  const s = [
+    line("t", "Total revenue", { "2025-03-31": 10000e6, "2025-06-30": 10000e6, "2025-09-30": 10200e6, "2025-12-31": 10500e6 }, { total: true }),
+    line("p", "Products", { "2025-03-31": 9960e6, "2025-06-30": 10000e6, "2025-09-30": 10160e6, "2025-12-31": 10460e6 }, { parent: "t" }),
+  ];
+  const p = tidyPayload(payload(s, [table("t", "t", ["p"])]));
+  it("keeps the total's own printed values and sources", () => {
+    expect(cellsOf(p, "t")).toEqual({ "2025-03-31": 10000e6, "2025-06-30": 10000e6, "2025-09-30": 10200e6, "2025-12-31": 10500e6 });
+    expect(p.series.find((x) => x.k === "t")!.q["2025-03-31"]).toEqual({ v: 10000e6, d: 0, e: "2025-03-31" });
+  });
+  it("keeps a near-equal part as its own line", () => {
+    expect(p.alias?.p).toBeUndefined();
+    expect(cellsOf(p, "p")?.["2025-03-31"]).toBe(9960e6);
+    expect(p.groups[0].rows.map((r) => r.k)).toContain("p");
+  });
+});
+
+describe("one coincidental match never merges two lines (review C2)", () => {
+  // Revenue = Software + Hardware (Devices + Other) + Other; the root's Other prints 12 only in Jun,
+  // the same as Hardware's Other.
+  const series = [
+    line("a", "Software", { "2025-03-31": 500e6, "2025-06-30": 520e6 }, { parent: "rev" }),
+    line("hw", "Hardware", { "2025-03-31": 300e6, "2025-06-30": 310e6 }, { parent: "rev", total: true }),
+    line("h1", "Devices", { "2025-03-31": 288e6, "2025-06-30": 298e6 }, { parent: "hw" }),
+    line("ho", "Other", { "2025-03-31": 12e6, "2025-06-30": 12e6 }, { parent: "hw" }),
+    line("ro", "Other", { "2025-06-30": 12e6 }, { parent: "rev" }),
+    line("rev", "Revenue", { "2025-03-31": 800e6, "2025-06-30": 842e6 }, { total: true }),
+  ];
+  const g: PayloadGroup = { id: "rev", cat: "product", met: "revenue", unit: "usd", label: "Revenue", root: "rev", rows: [{ k: "a", depth: 1 }, { k: "h1", depth: 2 }, { k: "ho", depth: 2 }, { k: "hw", depth: 1 }, { k: "ro", depth: 1 }, { k: "rev", depth: 0 }] };
+  const checks: PayloadCheck[] = [
+    { k: "rev", e: "2025-03-31", kind: "q", total: 800e6, sum: 800e6, ok: true, n: 2 },
+    { k: "rev", e: "2025-06-30", kind: "q", total: 842e6, sum: 842e6, ok: true, n: 3 },
+  ];
+  const p = tidyPayload(payload(series, [g], checks));
+  it("keeps the root's Other in the table", () => {
+    expect(p.alias?.ro).toBeUndefined();
+    expect(p.groups[0].rows.map((r) => r.k)).toContain("ro");
+  });
+  it("every check marked as adding up adds up from the parts shown", () => {
+    for (const x of p.checks.filter((c) => c.ok && c.k === "rev")) {
+      const parts = p.series.filter((s) => s.parent === "rev" && s.q[x.e]);
+      expect(parts.reduce((n, s) => n + s.q[x.e].v, 0)).toBe(x.total);
+    }
+  });
+  it("never folds a line when the total then stops adding up", () => {
+    // Same names and two identical periods, but the root's Other is a real part: removing it breaks the total.
+    const s2 = series.map((x) => (x.k === "ro" ? line("ro", "Other", { "2025-03-31": 12e6, "2025-06-30": 12e6 }, { parent: "rev" }) : x.k === "rev" ? line("rev", "Revenue", { "2025-03-31": 812e6, "2025-06-30": 842e6 }, { total: true }) : x));
+    const q = tidyPayload(payload(s2, [g]));
+    expect(q.alias?.ro).toBeUndefined();
+  });
+});
+
+describe("names that only look alike (review M2)", () => {
+  it("are told apart, while known short forms still match", () => {
+    expect(alikeLabels("Net revenue", "Network revenue")).toBe(false);
+    expect(alikeLabels("Other (Americas)", "Other (Europe)")).toBe(false);
+    expect(alikeLabels("Data", "Database")).toBe(false);
+    expect(alikeLabels("Car", "Cargo")).toBe(false);
+    expect(alikeLabels("Auto", "Automotive")).toBe(true);
+    expect(alikeLabels("Int'l", "International")).toBe(true);
+    expect(alikeLabels("OEM & Other", "OEM and Other")).toBe(true);
+  });
+  it("a loose line never folds into a breakdown line with a look-alike name", () => {
+    const Q = { "2025-06-30": 2106e6, "2026-03-31": 2204e6 };
+    const series = [
+      line("x", "Network revenue", Q, { parent: "t" }),
+      line("y", "Other", { "2025-06-30": 1e6, "2026-03-31": 2e6 }, { parent: "t" }),
+      line("t", "Total revenue", { "2025-06-30": 2107e6, "2026-03-31": 2206e6 }, { total: true }),
+      line("l", "Net revenue", Q),
+    ];
+    const loose: PayloadGroup = { id: "segment|revenue|usd", cat: "segment", met: "revenue", unit: "usd", label: "", root: null, rows: [{ k: "l", depth: 0 }] };
+    expect(tidyPayload(payload(series, [table("t", "t", ["x", "y"]), loose])).alias?.l).toBeUndefined();
+  });
+});
+
+describe("the same line in two loose lists (review M4)", () => {
+  // PNC: "Provision for credit losses" 254 / 210 / 191 printed in two lists.
+  const Q = { "2025-06-30": 254e6, "2026-03-31": 210e6, "2026-06-30": 191e6 };
+  const a: PayloadGroup = { id: "segment|expense|usd", cat: "segment", met: "expense", unit: "usd", label: "", root: null, rows: [{ k: "p1", depth: 0 }, { k: "o1", depth: 0 }] };
+  const b: PayloadGroup = { id: "cost|expense|usd", cat: "cost", met: "expense", unit: "usd", label: "", root: null, rows: [{ k: "p2", depth: 0 }, { k: "o2", depth: 0 }] };
+  const series = [
+    line("p1", "Provision for credit losses", Q, { cat: "segment", met: "expense" }),
+    line("o1", "Occupancy", { "2025-06-30": 235e6 }, { cat: "segment", met: "expense" }),
+    line("p2", "Provision for credit losses", Q, { cat: "cost", met: "expense" }),
+    line("o2", "Equipment", { "2025-06-30": 400e6 }, { cat: "cost", met: "expense" }),
+  ];
+  it("shows it once, in the first list", () => {
+    const p = tidyPayload(payload(series, [a, b]));
+    const where = p.groups.filter((g) => g.rows.some((r) => r.k === "p1"));
+    expect(where).toHaveLength(1);
+    expect(p.alias?.p2).toBe("p1");
+  });
+  it("keeps both when one period differs", () => {
+    const s2 = series.map((x) => (x.k === "p2" ? line("p2", "Provision for credit losses", { ...Q, "2026-06-30": 192e6 }, { cat: "cost", met: "expense" }) : x));
+    const p = tidyPayload(payload(s2, [a, b]));
+    expect(p.alias?.p2).toBeUndefined();
+  });
+});
+
+describe("speed on a bank-sized payload (review H3)", () => {
+  it("tidies 14,000+ lines in well under the time a quadratic pass needs", () => {
+    const words = ["loans", "deposits", "fees", "income", "expense", "assets", "securities", "card", "mortgage", "commercial", "consumer", "wealth", "trading", "advisory", "custody", "treasury", "leasing", "auto", "student", "home", "equity", "capital", "markets", "retail", "corporate", "investment", "banking", "services", "interest", "noninterest"];
+    const name = (i: number) => `${words[i % 30]} ${words[Math.floor(i / 30) % 30]} item${i.toString(36).replace(/[0-9]/g, (d) => "abcdefghij"[+d])}`;
+    const ends = ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30"];
+    let n = 0;
+    const val = () => Object.fromEntries(ends.map((e, j) => [e, (1000 + ((n * 2654435761 + j * 97) % 900000) / 7) * 1e6]));
+    const series: PayloadSeries[] = [];
+    const groups: PayloadGroup[] = [];
+    for (let g = 0; g < 1200; g++) {
+      const rows: string[] = [];
+      for (let i = 0; i < 11; i++) {
+        n++;
+        series.push(line(`g${g}_${i}`, name(n), val(), { parent: `r${g}` }));
+        rows.push(`g${g}_${i}`);
+      }
+      n++;
+      series.push(line(`r${g}`, `Total ${name(n)}`, val(), { total: true }));
+      groups.push(table(`r${g}`, `r${g}`, rows));
+    }
+    const loose: PayloadGroup = { id: "segment|revenue|usd", cat: "segment", met: "revenue", unit: "usd", label: "", root: null, rows: [] };
+    for (let i = 0; i < 1000; i++) {
+      n++;
+      series.push(line(`l${i}`, name(n), val()));
+      loose.rows.push({ k: `l${i}`, depth: 0 });
+    }
+    groups.push(loose);
+    expect(series.length).toBeGreaterThanOrEqual(14_000);
+    const t = performance.now();
+    tidyPayload(payload(series, groups));
+    // Measured at ~1 s on a loaded 2-core box; the quadratic passes took 38–67 s on this shape.
+    expect(performance.now() - t).toBeLessThan(10_000);
+  });
+});
+
+describe("checks are read off the page (review C2)", () => {
+  it("drops a check of a total none of whose parts is shown under it", () => {
+    const Q = { "2026-01-25": 62314e6 };
+    const series = [
+      line("dc", "Data Center", Q, { met: "revenue", cat: "product" }),
+      line("hy", "Hyperscale", { "2026-01-25": 33814e6 }, { parent: "dc" }),
+      line("t", "Total revenue", { "2026-01-25": 68127e6 }, { total: true }),
+      line("gm", "Gaming", { "2026-01-25": 5813e6 }, { parent: "t" }),
+    ];
+    const groups = [table("t", "t", ["dc", "gm"]), { id: "loose", cat: "segment", met: "revenue", unit: "usd", label: "", root: null, rows: [{ k: "hy", depth: 0 }] } as PayloadGroup];
+    const checks: PayloadCheck[] = [{ k: "dc", e: "2026-01-25", kind: "q", total: 62314e6, sum: 124628e6, ok: false, n: 4 }];
+    expect(tidyPayload(payload(series, groups, checks)).checks.filter((c) => c.k === "dc")).toEqual([]);
   });
 });

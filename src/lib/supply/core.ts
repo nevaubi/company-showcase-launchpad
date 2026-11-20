@@ -1,4 +1,9 @@
 // Pure helpers for the supply-chain map (shared by scripts/supply-chain.ts, the app and tests).
+import { entityKey, normText } from "./entity";
+import { nameTickers, counterpartyKey, type NameTickers } from "./identity";
+import type { AmountKind, LinkNature } from "./claims";
+
+export { entityKey, normText };
 
 export type Relation = "customer" | "supplier" | "partner" | "competitor";
 export const RELATIONS: Relation[] = ["customer", "supplier", "partner", "competitor"];
@@ -19,18 +24,6 @@ export interface SupplyLink {
   doc: string;
   form: string;
   filed: string;
-}
-
-/** Collapse whitespace, unify quotes/dashes, lowercase — for verbatim checks. */
-export function normText(s: string): string {
-  return s
-    .replace(/[\u2018\u2019\u201b]/g, "'")
-    .replace(/[\u201c\u201d]/g, '"')
-    .replace(/[\u2010-\u2015]/g, "-")
-    .replace(/\u00a0/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .toLowerCase();
 }
 
 /** A quote counts only if it appears verbatim (after normalisation) in the filing text and is long enough to mean something. */
@@ -54,22 +47,45 @@ export interface GraphNode {
   links: SupplyLink[];
 }
 
-/** Links that mention `focus` (either side), grouped into one node per counterparty as seen from `focus`. */
+/** One name-to-ticker index per link array, so focusGraph can be called per company without rebuilding it. */
+const indexCache = new WeakMap<object, NameTickers>();
+export function tickerIndex(all: Parameters<typeof nameTickers>[0]): NameTickers {
+  let i = indexCache.get(all);
+  if (!i) {
+    i = nameTickers(all);
+    indexCache.set(all, i);
+  }
+  return i;
+}
+
+/**
+ * Links that mention `focus` (either side), grouped into one node per counterparty as seen from `focus`. Spelling variants
+ * of one counterparty ("Kioxia", "Kioxia Corporation", "Volkswagen [VWAGY]") share a node: names are keyed by
+ * `counterpartyKey`, which strips corporate suffixes and borrows the ticker another row gives the same name.
+ */
 export function focusGraph(focus: string, all: SupplyLink[], names: Record<string, string>): GraphNode[] {
   const f = focus.toUpperCase();
+  const index = tickerIndex(all);
   const byKey = new Map<string, GraphNode>();
   const add = (key: string, name: string, ticker: string | null, domain: string | null, relation: Relation, link: SupplyLink) => {
     const k = `${relation}:${key}`;
     const n = byKey.get(k) ?? { key: k, name, ticker, domain, relation, links: [] };
     if (!n.domain && domain) n.domain = domain;
+    if (!n.ticker && ticker) {
+      n.ticker = ticker;
+      n.name = name;
+    }
     n.links.push(link);
     byKey.set(k, n);
   };
   for (const l of all) {
     if (l.ticker === f) {
-      const key = l.counterparty_ticker ?? normText(l.counterparty);
       if (l.counterparty_ticker === f) continue;
-      add(key, l.counterparty_ticker ? (names[l.counterparty_ticker] ?? l.counterparty) : l.counterparty, l.counterparty_ticker, l.counterparty_domain, l.relation, l);
+      const key = counterpartyKey(l, index);
+      // a ticker borrowed from another row is a ticker only when it is ticker-shaped (resolved keys are; name keys are lower case)
+      const ticker = l.counterparty_ticker ?? (/^[A-Z][A-Z0-9.-]{0,9}$/.test(key) ? key : null);
+      if (ticker === f) continue;
+      add(key, ticker ? (names[ticker] ?? l.counterparty) : l.counterparty, ticker, l.counterparty_domain, l.relation, l);
     } else if (l.counterparty_ticker === f) {
       add(l.ticker, names[l.ticker] ?? l.ticker, l.ticker, null, inverse(l.relation), l);
     }
@@ -86,36 +102,134 @@ export interface RiskLink extends SupplyLink {
   single_source?: boolean;
   regions?: string[];
   risk?: string | null;
+  /* set by `trustLink` (claims.ts) on every row the app loads */
+  /** the stated amount when it is money passing between the two parties for goods or services */
+  flow_usd?: number | null;
+  /** what a stated amount is (revenue, guarantee, investment...) */
+  amount_kind?: AmountKind | null;
+  /** sole, single, only or exclusive source wording in the sentence (same as `single_source` once trusted) */
+  sole_source?: boolean;
+  /** flagged as a dependency by the model, but the sentence does not say sole source */
+  dependency?: boolean;
+  /** what the sentence says the tie is: trade, financing, a corporate transaction, a regulator */
+  nature?: LinkNature;
+  dropped?: string[];
+  /* set by `dedupeCurrent` (identity.ts) */
+  /** the same link as stated in the filer's other current filings: counted once, shown as corroboration */
+  corroboration?: RiskLink[];
+  /** figures the kept row's own filing does not state, carried from the newest copy that does (with that copy's filing) */
+  figure_from?: Partial<Record<"share" | "amount" | "single" | "regions", { id: string; form: string; filed: string; accn: string; doc?: string; quote?: string }>>;
+  /** the kept row exactly as its own filing states it, before figures were carried onto it */
+  own?: RiskLink;
 }
 
-/** Dollar value a link represents: the stated amount, else share × the filer's revenue (only for customer shares, which are % of revenue). */
-export function linkDollars(l: RiskLink, revenue: Record<string, number | undefined>): number | null {
-  if (l.amount_usd != null && l.amount_usd > 0) return l.amount_usd;
+/** Each filing's row once, as that filing states it: the kept row (without carried figures) and its copies. */
+export const copies = <T extends RiskLink>(l: T): T[] => [(l.own ?? l) as T, ...((l.corroboration ?? []) as T[])];
+
+/** Ties that are not trade (financing, acquisitions, regulators): shown and labelled, never a flow or a shock path. */
+export const NOT_TRADE: ReadonlySet<string> = new Set(["financial", "corporate", "regulatory"]);
+export const isTradeLink = (l: Pick<RiskLink, "nature">): boolean => !l.nature || !NOT_TRADE.has(l.nature);
+
+/** Where a link's dollar value comes from: a stated flow (revenue, purchases, contract value) or a stated share × SEC revenue. */
+export interface LinkDollars {
+  dollars: number;
+  from: "flow" | "share";
+  /** the row whose sentence states it (the link itself or one of its copies) */
+  link: RiskLink;
+}
+
+/**
+ * Dollar value a link represents, counted once across its 10-K and 10-Q copies: the largest stated flow, else the largest
+ * stated customer share × the filer's revenue. A stated amount that is not a flow (guarantee, investment, financing,
+ * commitment, settlement, balance) and an amount the sentence does not state never count, and ties that are not trade have none.
+ */
+export function linkDollarsFrom(l: RiskLink, revenue: Record<string, number | undefined>): LinkDollars | null {
+  if (!isTradeLink(l)) return null;
+  let best: LinkDollars | null = null;
+  for (const c of copies(l)) if (c.flow_usd != null && c.flow_usd > 0 && (!best || c.flow_usd > best.dollars)) best = { dollars: c.flow_usd, from: "flow", link: c };
+  if (best) return best;
   const rev = revenue[l.ticker];
-  if (l.share_pct != null && l.relation === "customer" && rev) return (l.share_pct / 100) * rev;
-  return null;
+  if (l.relation !== "customer" || !rev) return null;
+  for (const c of copies(l)) if (c.share_pct != null && c.share_pct > 0) {
+    const d = (c.share_pct / 100) * rev;
+    if (!best || d > best.dollars) best = { dollars: d, from: "share", link: c };
+  }
+  return best;
+}
+
+/** Dollar value a link represents (see `linkDollarsFrom`); null when the filings give neither a flow nor a customer share. */
+export function linkDollars(l: RiskLink, revenue: Record<string, number | undefined>): number | null {
+  return linkDollarsFrom(l, revenue)?.dollars ?? null;
+}
+
+/** A dollar figure a sentence states, with what it is. Flows widen bands and count as exposure; the rest are only shown. */
+export interface StatedAmount {
+  value: number;
+  kind: AmountKind;
+  flow: boolean;
+  link: RiskLink;
+}
+/** Every verified amount behind these links (copies included, one per row), largest first. */
+export function statedAmounts(links: RiskLink[]): StatedAmount[] {
+  const out: StatedAmount[] = [];
+  const seen = new Set<string>();
+  for (const l of links) for (const c of copies(l)) {
+    if (seen.has(c.id) || c.amount_usd == null || !(c.amount_usd > 0)) continue;
+    seen.add(c.id);
+    const flow = c.flow_usd != null && c.flow_usd > 0 && isTradeLink(c);
+    out.push({ value: c.amount_usd, kind: (c.amount_kind ?? "other") as AmountKind, flow, link: c });
+  }
+  return out.sort((a, b) => b.value - a.value);
 }
 
 export const HOTSPOTS = ["china", "taiwan", "hong kong", "russia", "ukraine", "israel", "korea", "middle east"];
+/** "Worldwide excluding China", "Outside mainland China": the region the entry names is the one it leaves out. */
+const NEGATED = /\b(exclud\w*|outside|except|other than|ex-|non-)/i;
+/** A region entry that ties the link to a geopolitical hotspot (negated entries do not). */
+export const isNegatedRegion = (r: string): boolean => NEGATED.test(r);
+export const isHotspotRegion = (r: string): boolean => !NEGATED.test(r) && HOTSPOTS.some((h) => r.toLowerCase().includes(h));
+/** Regions the sentences behind a link name (its 10-K and 10-Q copies together), without "excluding X" entries. */
+export const statedRegions = (l: RiskLink): string[] => [...new Set(copies(l).flatMap((c) => c.regions ?? []).filter((r) => r && !NEGATED.test(r)))];
 
 export interface NodeRisk {
+  /** sole-source wording in a quoted sentence */
   singleSource: boolean;
+  /** a dependency the model flagged that the sentence does not call sole source */
+  dependency: boolean;
   concentrated: boolean;
   hotspots: string[];
+  /** regions the sentences name */
   regions: string[];
+  /** largest stated flow or share × revenue; null when none */
   dollars: number | null;
+  /** trade, or the kind of non-trade tie when every link behind the name is one */
+  nature: LinkNature;
 }
 
 export function nodeRisk(links: RiskLink[], revenue: Record<string, number | undefined>): NodeRisk {
-  const regions = [...new Set(links.flatMap((l) => l.regions ?? []))];
+  const rows = links.flatMap((l) => copies(l));
+  const regions = [...new Set(links.flatMap(statedRegions))];
   const dollars = links.map((l) => linkDollars(l, revenue)).filter((d): d is number => d != null);
+  const singleSource = rows.some((l) => !!l.single_source);
   return {
-    singleSource: links.some((l) => !!l.single_source),
-    concentrated: links.some((l) => (l.share_pct ?? 0) >= 10),
-    hotspots: regions.filter((r) => HOTSPOTS.some((h) => r.toLowerCase().includes(h))),
+    singleSource,
+    dependency: !singleSource && rows.some((l) => !!l.dependency),
+    concentrated: rows.some((l) => (l.share_pct ?? 0) >= 10),
+    hotspots: regions.filter(isHotspotRegion),
     regions,
     dollars: dollars.length ? Math.max(...dollars) : null,
+    nature: nodeNature(links),
   };
+}
+
+/** A name is a non-trade tie only when every link behind it is one; the most frequent kind names it. */
+export function nodeNature(links: Pick<RiskLink, "nature">[]): LinkNature {
+  const trade = links.filter(isTradeLink);
+  if (!links.length || trade.some((l) => l.nature !== "unknown")) return "trade";
+  if (trade.length) return "unknown";
+  const tally = new Map<LinkNature, number>();
+  for (const l of links) tally.set(l.nature as LinkNature, (tally.get(l.nature as LinkNature) ?? 0) + 1);
+  return [...tally].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0]))[0][0];
 }
 
 export interface HopNode extends GraphNode {
@@ -129,14 +243,18 @@ export interface HopNode extends GraphNode {
  */
 export function secondOrder(focus: string, first: GraphNode[], all: SupplyLink[], names: Record<string, string>, perParent = 4): HopNode[] {
   const f = focus.toUpperCase();
-  const seen = new Set(first.map((n) => n.ticker ?? n.name.toLowerCase()));
+  /* financing, acquisitions and regulators are not hops in a supply chain */
+  const trade = (all as RiskLink[]).filter(isTradeLink);
+  const id = (n: GraphNode) => n.ticker ?? entityKey(n.name, null);
+  const seen = new Set(first.map(id));
   seen.add(f);
   const out: HopNode[] = [];
   for (const p of first) {
     if (!p.ticker || (p.relation !== "supplier" && p.relation !== "customer")) continue;
-    const kids = focusGraph(p.ticker, all, names).filter((k) => k.relation === p.relation && !seen.has(k.ticker ?? k.name.toLowerCase()));
+    if (!(p.links as RiskLink[]).some(isTradeLink)) continue;
+    const kids = focusGraph(p.ticker, trade, names).filter((k) => k.relation === p.relation && !seen.has(id(k)));
     for (const k of kids.slice(0, perParent)) {
-      seen.add(k.ticker ?? k.name.toLowerCase());
+      seen.add(id(k));
       out.push({ ...k, key: `h2:${p.key}:${k.key}`, hop: 2, parent: p.key });
     }
   }
@@ -173,6 +291,8 @@ export function simulateShock(source: string, shock: number, all: RiskLink[], na
   const walk = (s: string, size: number, hop: number, path: string[], dir: "up" | "down" | "both") => {
     if (hop > maxHop || size < 0.002) return;
     for (const l of all) {
+      // financing, acquisitions and regulators do not carry a demand or supply shock
+      if (!isTradeLink(l)) continue;
       // upstream: U says S is its customer, or S says U is its supplier
       const up = l.relation === "customer" && l.counterparty_ticker === s ? { t: l.ticker, name: nm(l.ticker), share: l.share_pct } : l.relation === "supplier" && l.ticker === s ? { t: l.counterparty_ticker, name: l.counterparty_ticker ? nm(l.counterparty_ticker) : l.counterparty, share: null } : null;
       if (up && dir !== "down" && up.t !== source) {
@@ -210,7 +330,6 @@ export interface LinkChange {
   link: SupplyLink;
 }
 
-const linkKey = (l: SupplyLink) => `${l.relation}:${l.counterparty_ticker ?? normText(l.counterparty)}`;
 
 /** 10-K filings (newest first) that `ticker` itself filed, among the links. */
 export function annualFilings(ticker: string, all: SupplyLink[]): { accn: string; filed: string }[] {
@@ -221,6 +340,9 @@ export function annualFilings(ticker: string, all: SupplyLink[]): { accn: string
 
 /** Counterparties named in `newer` but not `older` (added), the reverse (dropped), and stated-share moves ≥ 1pt. */
 export function linkChanges(ticker: string, all: SupplyLink[], newerAccn: string, olderAccn: string): LinkChange[] {
+  // spelling variants across years ("Kioxia" then "Kioxia Corporation") are the same counterparty, not one dropped and one added
+  const index = tickerIndex(all);
+  const linkKey = (l: SupplyLink) => `${l.relation}:${counterpartyKey(l, index)}`;
   const pick = (accn: string) => {
     const m = new Map<string, SupplyLink>();
     for (const l of all) if (l.ticker === ticker && l.accn === accn && !m.has(linkKey(l))) m.set(linkKey(l), l);
@@ -293,25 +415,6 @@ export interface ProLink extends RiskLink {
   link_type?: string | null;
 }
 
-/** Known alias spellings → one canonical counterparty key, so "TSMC" and "Taiwan Semiconductor" merge. */
-const ALIASES: [RegExp, string][] = [
-  [/taiwan semiconductor|\btsmc\b/, "TSM"],
-  [/samsung/, "SSNLF"],
-  [/sk hynix|hynix/, "HXSCL"],
-  [/foxconn|hon hai/, "HNHPF"],
-  [/amazon web services|\baws\b/, "AMZN"],
-  [/google cloud|\bgoogle\b/, "GOOGL"],
-  [/microsoft azure|\bazure\b/, "MSFT"],
-];
-
-/** Stable identity for a counterparty: its ticker, a known alias, or its normalised name minus corporate suffixes. */
-export function entityKey(name: string, ticker: string | null): string {
-  if (ticker) return ticker.toUpperCase();
-  const n = normText(name);
-  for (const [re, k] of ALIASES) if (re.test(n)) return k;
-  return n.replace(/[.,]/g, "").replace(/\b(inc|corp|corporation|co|ltd|limited|plc|llc|lp|ag|sa|nv|holdings?|group|company)\b/g, "").replace(/\s+/g, " ").trim();
-}
-
 export type Confidence = "corroborated" | "stated" | "mentioned";
 
 /**
@@ -348,6 +451,8 @@ export interface Dependency {
   topCustomerPct: number;
   statedCustomerPct: number;
   singleSource: number;
+  /** dependencies the model flagged whose sentence does not say sole source: shown, not scored */
+  statedDependencies: number;
   hotspotLinks: number;
   hotspots: string[];
   parts: { label: string; points: number; max: number; why: string }[];
@@ -367,19 +472,23 @@ export function dependencyScore(ticker: string, all: ProLink[]): Dependency {
   const s = [...shares.values()];
   const hhi = s.reduce((a, x) => a + x * x, 0);
   const top = Math.max(0, ...s);
-  const stated = Math.min(100, s.reduce((a, x) => a + x, 0));
-  const single = new Set(own.filter((l) => l.single_source && l.relation !== "customer").map((l) => entityKey(l.counterparty, l.counterparty_ticker))).size;
-  const hotLinks = own.filter((l) => (l.regions ?? []).some((r) => HOTSPOTS.some((h) => r.toLowerCase().includes(h))));
-  const hotspots = [...new Set(hotLinks.flatMap((l) => (l.regions ?? []).filter((r) => HOTSPOTS.some((h) => r.toLowerCase().includes(h)))))];
+  const statedPct = Math.min(100, s.reduce((a, x) => a + x, 0));
+  // a flag stated in either of a link's 10-K and 10-Q copies counts, once
+  const flag = (l: ProLink, k: "single_source" | "dependency") => copies(l).some((c) => !!c[k]);
+  const singleKeys = new Set(own.filter((l) => flag(l, "single_source") && l.relation !== "customer").map((l) => entityKey(l.counterparty, l.counterparty_ticker)));
+  const single = singleKeys.size;
+  const stated = new Set(own.filter((l) => flag(l, "dependency") && l.relation !== "customer").map((l) => entityKey(l.counterparty, l.counterparty_ticker)).filter((k) => !singleKeys.has(k))).size;
+  const hotLinks = own.filter((l) => statedRegions(l).some(isHotspotRegion));
+  const hotspots = [...new Set(hotLinks.flatMap((l) => statedRegions(l).filter(isHotspotRegion)))];
   const cPts = Math.round(Math.min(40, top * 0.8 + Math.min(10, hhi / 250)));
   const sPts = Math.min(30, single * 10);
   const gPts = Math.min(30, hotLinks.length * 6);
   return {
-    score: cPts + sPts + gPts, customerHhi: Math.round(hhi), topCustomerPct: top, statedCustomerPct: stated,
-    singleSource: single, hotspotLinks: hotLinks.length, hotspots,
+    score: cPts + sPts + gPts, customerHhi: Math.round(hhi), topCustomerPct: top, statedCustomerPct: statedPct,
+    singleSource: single, statedDependencies: stated, hotspotLinks: hotLinks.length, hotspots,
     parts: [
       { label: "Customer concentration", points: cPts, max: 40, why: top ? `largest named customer ${top}% of revenue; ${s.length} customers with stated shares` : "no customer shares stated" },
-      { label: "Single-source inputs", points: sPts, max: 30, why: `${single} supplier/partner dependencies stated as sole, single or limited source` },
+      { label: "Single-source inputs", points: sPts, max: 30, why: `${single} supplier/partner ${single === 1 ? "tie" : "ties"} the filing calls sole, single or exclusive source${stated ? `; ${stated} other stated ${stated === 1 ? "dependency" : "dependencies"} not counted` : ""}` },
       { label: "Geopolitical exposure", points: gPts, max: 30, why: hotspots.length ? `${hotLinks.length} links tied to ${hotspots.join(", ")}` : "no hotspot regions tied to links" },
     ],
   };
@@ -389,10 +498,10 @@ export function dependencyScore(ticker: string, all: ProLink[]): Dependency {
 export function regionExposure(nodes: { links: ProLink[]; relation: string }[]): { region: string; hotspot: boolean; suppliers: number; customers: number; other: number }[] {
   const m = new Map<string, { region: string; hotspot: boolean; suppliers: number; customers: number; other: number }>();
   for (const n of nodes) {
-    const regions = new Set(n.links.flatMap((l) => (l.regions ?? []).map((r) => r.trim())).filter(Boolean));
+    const regions = new Set(n.links.flatMap((l) => statedRegions(l).map((r) => r.trim())).filter(Boolean));
     for (const r of regions) {
       const key = r.toLowerCase();
-      const e = m.get(key) ?? { region: r, hotspot: HOTSPOTS.some((h) => key.includes(h)), suppliers: 0, customers: 0, other: 0 };
+      const e = m.get(key) ?? { region: r, hotspot: isHotspotRegion(r), suppliers: 0, customers: 0, other: 0 };
       if (n.relation === "supplier") e.suppliers++; else if (n.relation === "customer") e.customers++; else e.other++;
       m.set(key, e);
     }

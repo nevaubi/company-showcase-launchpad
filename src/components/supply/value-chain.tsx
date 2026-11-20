@@ -432,7 +432,7 @@ export function ChainTable({
   const tk = (k: string) => byKey.get(k)?.ticker ?? null;
   const formula = (e: ChainEdge) => {
     if (e.dollars == null) return undefined;
-    if (e.dollarsFrom === "stated") return "Dollar amount stated in the filing";
+    if (e.dollarsFrom === "stated") return "Revenue, purchase or contract figure stated in the filing sentence";
     const seller = tk(e.from);
     const rev = seller ? revenue[seller] : undefined;
     return rev && e.share != null ? `${e.share}% of revenue × ${fmtCompactUsd(rev)} ${names[seller!] ?? seller} revenue (last 12 months)` : "Stated share × the seller's revenue (last 12 months)";
@@ -504,7 +504,7 @@ export function ChainTable({
                   <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary">{e.share != null ? `${e.share}%` : "—"}<span className="block text-[10px] text-muted-foreground">{e.share != null ? `of ${e.basis}` : ""}</span></td>
                   <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary" title={formula(e)}>
                     {e.dollars != null ? fmtCompactUsd(e.dollars) : "—"}
-                    {e.dollars != null && <span className="block text-[10px] text-muted-foreground">{e.dollarsFrom === "stated" ? "stated" : "share × revenue"}</span>}
+                    {e.dollars != null && <span className="block text-[10px] text-muted-foreground">{e.dollarsFrom === "stated" ? "stated flow" : "share × revenue"}</span>}
                   </td>
                   <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary">{e.evidence.length}</td>
                   <td className="border-b px-3 py-1.5 group-hover:bg-secondary">
