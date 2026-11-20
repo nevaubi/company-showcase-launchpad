@@ -18,11 +18,11 @@ import { execSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { args, dbGate, sb } from "./lib/supa";
 import { CONFIG_STATUS_LIKE, REREAD_WINDOW_DAYS, requeueEnabled, requeueLimit, requeuePlan, rereadTickers, type FailedDoc } from "./lib/ir-requeue";
-import { catchupDue, laneBudget, loopRunRow, loopSleepMs, nextDue, stepLimit } from "./lib/loop-schedule";
+import { canonResetAllowed, catchupDueAfter, clearStalePausesNow, countsAgainstCompany, creditStopAfter, exitCode, healConfigDue, healedSince, laneBudget, LOOP_REQUEST_MAX, LOOP_REQUEST_PREFIX, loopRunRow, loopSleepMs, nextDue, planLoopRequests, proseMode, stepLimit } from "./lib/loop-schedule";
 import { loadRank } from "./lib/rank";
 import { fairOrder } from "@/lib/jobs/priority";
-import { routeDecision, routeOf, type CircuitDecision, type CircuitRow, type ProviderId } from "@/lib/jobs/provider-health";
-import { providerStates, resetProviderCache } from "@/lib/jobs/provider-health.server";
+import { providerKey, routeDecision, routeOf, type CircuitDecision, type CircuitRow, type ProviderId } from "@/lib/jobs/provider-health";
+import { circuitEnabled, clearStaleReaderPauses, providerStates, resetProviderCache } from "@/lib/jobs/provider-health.server";
 import { expiredLeases, reapPatch, reapSummary, staleReportRuns, staleRuns } from "@/lib/jobs/reaper";
 
 const BATCH_ARG = args.batch === undefined ? null : Number(args.batch);
@@ -153,6 +153,12 @@ interface LoopState {
   lastCatchup?: string | null;
   lastReap?: string | null;
   lastHealConfig?: string | null;
+  /** day-pass reason the last catch-up ran for (a give-up repeats the catch-up only when it changes) */
+  lastCatchupReason?: string | null;
+  /** when a heal last cleared the canon timer (at most once a UTC day) */
+  lastCanonReset?: string | null;
+  /** finished companies waiting to be re-read (new files, config re-queue); kept across restarts */
+  pendingReread?: string[];
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -203,9 +209,10 @@ function run(step: string, script: string, argv: string[], logFile: string, env:
       setTimeout(() => kill("SIGKILL"), 30_000).unref();
     }, limit);
     timer.unref();
-    p.on("exit", (code) => {
+    p.on("exit", (code, signal) => {
       clearTimeout(timer);
-      const c = timedOut ? 124 : (code ?? 1);
+      // `exec` makes bun the direct child: a kernel OOM kill is (null, SIGKILL), recorded as 137.
+      const c = exitCode(code, signal, timedOut);
       void sb.from("job_runs").insert(loopRunRow(step, t0, Date.now(), c, timedOut) as never).then(undefined, () => undefined);
       resolve(c);
     });
@@ -231,13 +238,17 @@ const CANON_ROUTE: ProviderId[] = [...new Set<ProviderId>([...routeOf(process.en
 const ALL_ROUTES = [...new Set<ProviderId>([...PROSE_ROUTE, ...CANON_ROUTE])];
 let circuits = new Map<string, CircuitRow>();
 let circuitsAt = 0;
+/** false when the last read of the circuit rows failed (an empty map then only means "unknown") */
+let circuitsReadable = true;
 async function refreshCircuits(force = false) {
   if (!force && Date.now() - circuitsAt < 30_000) return;
   try {
     if (force) resetProviderCache();
     circuits = await providerStates(ALL_ROUTES);
     circuitsAt = Date.now();
+    circuitsReadable = true;
   } catch (e) {
+    circuitsReadable = false;
     // Unreadable: fail open (an empty map reads as closed), as before circuits existed.
     log(`provider state unreadable: ${(e as Error).message.slice(0, 120)}`);
     circuits = new Map();
@@ -375,6 +386,8 @@ function maybeFilingSteps() {
 /** markets+returns daily after the nightly setups cycle finishes, auctions daily, hedge funds weekly, head offices weekly, company context 20/day. */
 let publishing = false;
 const lastPublish: Record<string, number> = {};
+/** analytics sets a freshness remedy asked for (`loop-request:analytics:<set>`): published next, whatever their interval */
+const forcedPublish = new Set<string>();
 async function setupsFinishedAt(): Promise<number> {
   const { data } = await sb.from("setup_cycles").select("finished_at").not("finished_at", "is", null).order("finished_at", { ascending: false }).limit(1).maybeSingle();
   return data?.finished_at ? Date.parse(data.finished_at) : 0;
@@ -388,8 +401,10 @@ async function maybeAnalytics() {
     }
     return Date.now() - lastPublish[set] >= everyMs;
   };
-  let set: string | null = null;
-  if ((await setupsFinishedAt()) > (lastPublish.markets ?? 0) && (await due("markets", 20 * 3_600_000))) set = "markets";
+  // A set a freshness remedy asked for goes first (planLoopRequests admits only known sets).
+  let set: string | null = forcedPublish.values().next().value ?? null;
+  if (set) forcedPublish.delete(set);
+  else if ((await setupsFinishedAt()) > (lastPublish.markets ?? 0) && (await due("markets", 20 * 3_600_000))) set = "markets";
   else if (await due("auctions", 24 * 3_600_000)) set = "auctions";
   else if (await due("hedge", 7 * 86_400_000)) set = "hedge";
   else if (await due("hq", 7 * 86_400_000)) set = "hq";
@@ -480,13 +495,17 @@ async function maybeReactions() {
  * figures). Network-bound and light on memory, so it runs beside the other side jobs.
  */
 let prosing = false;
-async function maybeProse() {
+async function maybeProse(laneStarted = false) {
   if (prosing || !sideReady() || process.env.IR_PROSE_SWEEP === "0") return;
-  if (state.lastProse && Date.now() - Date.parse(state.lastProse) < 10 * 60_000) return;
-  // While the reader route is open nothing could be read; while it probes, the probe is a company lane's.
-  if (decision(PROSE_ROUTE).state !== "closed") return;
+  // While the route is open nothing could be read. While it probes, a company lane takes the probe;
+  // with no lane (deep builds idle) the sweep itself probes with one worker and one item (review F4).
+  const mode = proseMode(decision(PROSE_ROUTE).state, busy.size, laneStarted);
+  if (!mode) return;
+  if (mode === "run" && state.lastProse && Date.now() - Date.parse(state.lastProse) < 10 * 60_000) return;
   prosing = true;
-  void run("prose", "scripts/ir-prose.ts", ["--resume", `--concurrency=${process.env.IR_PROSE_SWEEP_CONCURRENCY ?? "8"}`, "--max=1500"], `${OUT}/prose.log`).then((code) => {
+  if (mode === "probe") log("reader route due a probe with no company lane — the text sweep probes with one item");
+  const argv = mode === "probe" ? ["--resume", "--concurrency=1", "--max=1"] : ["--resume", `--concurrency=${process.env.IR_PROSE_SWEEP_CONCURRENCY ?? "8"}`, "--max=1500"];
+  void run("prose", "scripts/ir-prose.ts", argv, `${OUT}/prose.log`).then((code) => {
     prosing = false;
     settle("prose", "lastProse", 10 * 60_000, code);
   });
@@ -525,7 +544,8 @@ async function maybeDiscoverCatchup() {
   } catch {
     /* due by the clock only */
   }
-  if (!catchupDue(state.lastCatchup, Date.now(), reason)) return;
+  if (!catchupDueAfter(state.lastCatchup, Date.now(), reason, state.lastCatchupReason)) return;
+  state.lastCatchupReason = reason;
   catchingUp = true;
   log(`SEC catch-up for the last 2 days${reason ? ` (day pass: ${reason.slice(0, 80)})` : ""}`);
   void run("sec-catchup", "scripts/sec-discover-catchup.ts", ["2", "--max-minutes=40"], `${OUT}/sec-catchup.log`).then((code) => {
@@ -571,10 +591,10 @@ async function maybeReap() {
  * IR_REQUEUE_CONFIG=1. Idempotent: it touches only rows whose stored error is still a configuration
  * error, and a reset row no longer matches.
  */
+/** After a pass that found nothing the re-queue stops scanning; a configuration trip re-arms it (review F19). */
+let healConfigIdle = false;
 async function maybeHealConfigFailures() {
-  if (!requeueEnabled(process.env)) return;
-  if (state.lastHealConfig && Date.now() - Date.parse(state.lastHealConfig) < 30 * 60_000) return;
-  if (decision(READER_ROUTE).state !== "closed") return;
+  if (!healConfigDue({ enabled: requeueEnabled(process.env), last: state.lastHealConfig, nowMs: Date.now(), idle: healConfigIdle, readerState: decision(READER_ROUTE).state })) return;
   state.lastHealConfig = new Date().toISOString();
   const limit = requeueLimit(process.env);
   try {
@@ -582,6 +602,7 @@ async function maybeHealConfigFailures() {
     const rank = await loadRank();
     const started = new Date().toISOString();
     const out = { extract: 0, vision: 0, tickers: [] as string[] };
+    let plan0Found = false;
     for (const field of ["extract_status", "vision_status"] as const) {
       const left = limit - out.extract - out.vision;
       if (left <= 0) break;
@@ -600,6 +621,7 @@ async function maybeHealConfigFailures() {
       for (let i = 0; i < ranked.length && rows.length < left; i += 100) await read(ranked.slice(i, i + 100));
       if (rows.length < left) await read(null);
       const plan = requeuePlan(rows, rank, left);
+      if (rows.length) plan0Found = true;
       const patch = field === "extract_status" ? { extract_status: null, extracted_at: null } : { vision_status: null };
       for (let i = 0; i < plan.ids.length; i += 200) {
         await dbGate(JOB);
@@ -612,6 +634,10 @@ async function maybeHealConfigFailures() {
     const tickers = [...new Set(out.tickers)];
     // Finished companies are rebuilt through the normal re-read path.
     for (const t of tickers) if (state.done.includes(t) && !pendingReread.includes(t)) pendingReread.push(t);
+    if (!out.extract && !out.vision && !plan0Found) {
+      healConfigIdle = true;
+      log("config re-queue: nothing left to re-queue — idle until a configuration trip");
+    }
     if (out.extract || out.vision) {
       await sb.from("job_runs").insert({ job: "ir-heal-config", started_at: started, finished_at: new Date().toISOString(), ok: true, items: out.extract + out.vision, detail: { extract: out.extract, vision: out.vision, companies: tickers.length, first: tickers.slice(0, 20) } as never });
       log(`re-queued ${out.extract} table and ${out.vision} vision reads failed on a configuration error (${tickers.length} companies, top-ranked first)`);
@@ -662,7 +688,8 @@ for (const t of [...state.done]) {
 await saveState(state);
 
 let lastDocCheck = 0;
-const pendingReread: string[] = [];
+// Persisted with the state (review F8): a restart no longer drops companies whose documents were reset.
+const pendingReread: string[] = (state.pendingReread ??= []);
 /** Next company: interrupted ones first, then started-but-unfinished, then new (largest revenue), then finished with new files. */
 async function pickNext(busy: Set<string>): Promise<string | null> {
   const free = (t: string) => !busy.has(t) && !state.review![t];
@@ -723,15 +750,24 @@ async function runCompany(t: string) {
   log(`${t}: starting`);
   const lastRun = `${OUT}/${t}/last-run.json`;
   rmSync(lastRun, { force: true });
+  // Unread files before the run: a deadline kill counts against the company only without progress.
+  const unreadBefore = await unread(t).catch(() => null);
   const code = await run("company", "scripts/ir-deep.ts", [`--tickers=${t}`, `--continue=${t}`, `--out=${OUT}/${t}`, "--reset-ledger"], `${OUT}/${t}.run.log`, childEnv);
   let stopped: string | null = code === 0 ? null : `exit ${code}`;
   if (existsSync(lastRun)) stopped = (JSON.parse(readFileSync(lastRun, "utf8")) as { stopped: string | null }).stopped ?? stopped;
   delete state.stage![t];
-  if (stopped && /quota|auth|credit|payment|402/i.test(stopped)) {
+  if (stopped && /quota|auth|credit|payment|402|outage/i.test(stopped)) {
     // The circuit row now says when to probe; re-read it at once so no other lane starts meanwhile.
     await refreshCircuits(true);
-    creditStop = decision(READER_ROUTE).state === "closed"; // circuit not tripped (disabled or unwritable): old wait
-    log(`${t}: stopped on credits (${stopped.slice(0, 160)})`);
+    // The old fixed wait only when the circuit cannot hold the lanes itself: a route a probe healed
+    // during this run releases them at once (review F2).
+    creditStop = creditStopAfter({
+      circuitOn: circuitEnabled(),
+      readable: circuitsReadable,
+      state: decision(READER_ROUTE).state,
+      healedDuringRun: healedSince(READER_ROUTE.flatMap((id) => (circuits.get(providerKey(id)) ? [circuits.get(providerKey(id))!] : [])), t0),
+    });
+    log(`${t}: stopped on credits (${stopped.slice(0, 160)})${creditStop ? " — waiting the fixed interval" : ""}`);
     return;
   }
   if (await finished(t)) {
@@ -742,9 +778,41 @@ async function runCompany(t: string) {
     log(`${t}: finished in ${((Date.now() - t0) / 60000).toFixed(1)} min — ${(await facts(t)).toLocaleString()} figures`);
   } else {
     // Exit 137 = killed for memory, "incomplete" = a reader couldn't start (busy elsewhere): the
-    // machine's fault, not the company's, so neither counts toward setting the company aside.
-    if (code !== 137 && (await reportStage(t)) !== "incomplete") state.resumes![t] = (state.resumes![t] ?? 0) + 1;
+    // machine's fault, not the company's. A deadline kill (124) counts only when no file was read.
+    const unreadAfter = code === 124 ? await unread(t).catch(() => null) : null;
+    if (countsAgainstCompany(code, await reportStage(t), unreadBefore, unreadAfter)) state.resumes![t] = (state.resumes![t] ?? 0) + 1;
     log(`${t}: run ended without finishing (${stopped ?? "no final report"}) — attempt ${state.resumes![t] ?? 0}`);
+  }
+}
+
+// ---------- freshness remedies and stale pauses ----------
+/**
+ * `loop-request:<step>` rows written by the freshness check's remedies: each clears its step's timer
+ * (or the analytics set's last publish), so the step runs at its next check under its usual guards.
+ * Bounded (20 per pass) and idempotent: the row is deleted after it is applied.
+ */
+async function takeLoopRequests() {
+  const { data, error } = await sb.from("job_state").select("job").like("job", `${LOOP_REQUEST_PREFIX}%`).order("job").limit(LOOP_REQUEST_MAX);
+  if (error) throw new Error(error.message);
+  for (const a of planLoopRequests(data ?? [])) {
+    if (a.kind === "timer") state[a.key] = null;
+    else if (a.kind === "analytics") forcedPublish.add(a.set);
+    log(a.kind === "unknown" ? `loop request for an unknown step "${a.step}" — dropped` : `freshness remedy: ${a.step} is due now`);
+    const { error: e2 } = await sb.from("job_state").delete().eq("job", a.job);
+    if (e2) throw new Error(e2.message);
+  }
+}
+
+/** Reader pauses written before the circuits existed clear once per start while the route is healthy (review F12). */
+let stalePausesCleared = false;
+async function clearStalePauses() {
+  if (!clearStalePausesNow({ done: stalePausesCleared, circuitOn: circuitEnabled(), readable: circuitsReadable, readerState: decision(READER_ROUTE).state })) return;
+  stalePausesCleared = true;
+  try {
+    const n = await clearStaleReaderPauses();
+    if (n) log(`cleared ${n} reader pauses left from before the provider circuits`);
+  } catch (e) {
+    log(`clearing stale reader pauses failed: ${(e as Error).message.slice(0, 120)}`);
   }
 }
 
@@ -760,8 +828,12 @@ for (;;) {
   if (reader.state === "closed" && lastReader !== "closed") {
     healedAt = Date.now();
     creditStop = false;
-    // Steps the outage held back run at once instead of waiting out their interval.
-    state.lastCanon = null;
+    // Steps the outage held back run at once instead of waiting out their interval (canon at most
+    // once a UTC day, so a flapping route cannot repeat its 40-company pass, review F14).
+    if (canonResetAllowed(state.lastCanonReset, Date.now())) {
+      state.lastCanon = null;
+      state.lastCanonReset = new Date().toISOString();
+    }
     state.lastProse = null;
     state.lastVerify = null;
     log("AI providers are back — resuming lanes one at a time");
@@ -769,6 +841,10 @@ for (;;) {
   if (healedAt && Date.now() - healedAt > LANES * 5 * 60_000) healedAt = null;
   if (reader.state !== lastReader) log(`reader route ${READER_ROUTE.join(" → ")}: ${reader.state}${reader.retryAt ? ` (probe at ${new Date(reader.retryAt * 1000).toISOString().slice(11, 16)} UTC)` : ""}`);
   lastReader = reader.state;
+  // A configuration trip on the reader route re-arms the config re-queue scan.
+  if (reader.cls === "config") healConfigIdle = false;
+  await clearStalePauses();
+  await takeLoopRequests().catch((e) => log(`loop requests: ${(e as Error).message.slice(0, 160)}`));
   await maybeMirror();
   await maybeDetail();
   await maybeIrSite();
@@ -780,7 +856,6 @@ for (;;) {
   await maybeAltSlow();
   await maybeSod();
   await maybeReactions();
-  await maybeProse();
   await verifySweep();
   await maybeDiscoverCatchup();
   await maybeReap();
@@ -799,11 +874,13 @@ for (;;) {
   // One decision for every lane: none while the route is open, one probe lane when it is due, and
   // after a heal one more lane every 5 minutes. The memory guard stays in force on top of it.
   let allowed = laneBudget(decision(READER_ROUTE), lanes, busy.size, healedAt, Date.now());
+  let laneStarted = false;
   while (!creditStop && allowed > 0 && memUsedGB() < MEM_GB * 0.8 && busy.size < lanes) {
     allowed--;
     const t = await pickNext(busy);
     if (!t) break;
     idleLogged = false;
+    laneStarted = true;
     busy.add(t);
     state.current = [...busy];
     await saveState(state);
@@ -813,6 +890,8 @@ for (;;) {
       void saveState(state);
     });
   }
+  // After the lanes: with no lane to take a due probe, the text sweep may be the probe (review F4).
+  await maybeProse(laneStarted);
   if (!busy.size && !creditStop && !idleLogged) {
     log("nothing readable left — waiting for the mirror to bring more files");
     idleLogged = true;

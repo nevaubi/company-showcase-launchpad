@@ -77,6 +77,20 @@ describe("provider circuit store", () => {
     expect(decide(f.rows.get("provider:openai-paid")!, now).state).toBe("closed");
     expect(pauses[0].paused_reason).toBeNull();
   });
+  it("healing a data host (Cboe) clears only its own row, never the AI reader or report pauses (W1b)", async () => {
+    const cboe = tripRow("cboe", "rate", "Cboe refused option chains (403 x4)", null, T0);
+    const pauses = [{ job: "ir-prose-runner:AAPL", paused_reason: "quota: credit" }];
+    const f = fakeStore([cboe], pauses);
+    const h = createProviderHealth(f.store, { env: {}, log: () => undefined });
+    expect(await h.providerHeal("cboe", T0 + 600_000)).toEqual({ healed: true, cleared: 0 });
+    expect(f.rows.get("provider:cboe")!.paused_reason).toBeNull();
+    expect(pauses[0].paused_reason).toBe("quota: credit");
+    expect(f.calls.cleared).toBe(0);
+    const ai = tripRow("gateway", "quota", "AI 402 payment_required", null, T0);
+    f.rows.set(ai.job, ai);
+    expect(await h.providerHeal("gateway", T0 + 600_000)).toEqual({ healed: true, cleared: 1 });
+    expect(pauses[0].paused_reason).toBeNull();
+  });
   it("a failed probe re-trips with a longer backoff", async () => {
     const f = fakeStore([tripRow("openai-paid", "quota", "x", null, T0)]);
     const now = T0 + 31 * 60_000;

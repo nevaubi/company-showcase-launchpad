@@ -6,8 +6,9 @@
  *
  *  - providerState / providerStates: cached 30 s per process to keep round trips low
  *  - providerTrip / providerTripError: write the open row (backoff grows with the failure streak)
- *  - providerHeal: close the row; when it was tripped, also clear the reader pauses it caused and
- *    the reports-due pause (P0-3), so quota-paused work resumes by itself
+ *  - providerHeal: close the row; when an AI provider's row was tripped, also clear the reader pauses
+ *    it caused and the reports-due pause (P0-3), so quota-paused work resumes by itself. A data host
+ *    (cboe, sec, …) healing touches only its own row.
  *  - withProvider: while open, fail fast without a call; when a probe is due, exactly one caller
  *    claims it (compare-and-swap on updated_at) and its result heals or re-trips the row
  *
@@ -15,7 +16,7 @@
  * PROVIDER_CIRCUIT=0 makes every helper a pass-through.
  */
 import { classifyError, stopsProvider, type FailureClass } from "./failure";
-import { decide, healRow, pausedToClear, providerKey, tripClassOf, tripRow, type CircuitDecision, type CircuitRow, type ProviderId, type TripClass } from "./provider-health";
+import { AI_PROVIDERS, decide, healRow, pausedToClear, providerKey, tripClassOf, tripRow, type CircuitDecision, type CircuitRow, type ProviderId, type TripClass } from "./provider-health";
 
 export interface CircuitStore {
   read(jobs: string[]): Promise<CircuitRow[]>;
@@ -134,6 +135,11 @@ export function createProviderHealth(store: CircuitStore, opts: { env?: Record<s
     cache.set(row.job, { row, at: now });
     await store.write(row);
     if (!prev?.paused_reason) return { healed: false, cleared: 0 };
+    // Reader and report pauses belong to the AI providers: Cboe coming back says nothing about credits.
+    if (!AI_PROVIDERS.includes(id)) {
+      log(`${id} healed after ${prev.paused_reason}`);
+      return { healed: true, cleared: 0 };
+    }
     let cleared = 0;
     try {
       cleared = await store.clearReaderPauses();
@@ -197,7 +203,10 @@ export function createProviderHealth(store: CircuitStore, opts: { env?: Record<s
 
   const resetCache = () => cache.clear();
 
-  return { providerStates, providerState, providerDecision, providerTrip, providerTripError, providerHeal, withProvider, resetCache };
+  /** Clear reader pauses written before the circuits existed (the loop calls it once while the route is healthy). */
+  const clearStaleReaderPauses = () => store.clearReaderPauses();
+
+  return { providerStates, providerState, providerDecision, providerTrip, providerTripError, providerHeal, withProvider, resetCache, clearStaleReaderPauses };
 }
 
 type SbLike = {
@@ -246,5 +255,5 @@ const defaultHealth = createProviderHealth(
   supabaseCircuitStore(async () => (await import("@/integrations/supabase/client.server")).supabaseAdmin as unknown as SbLike),
 );
 
-export const { providerStates, providerState, providerDecision, providerTrip, providerTripError, providerHeal, withProvider } = defaultHealth;
+export const { providerStates, providerState, providerDecision, providerTrip, providerTripError, providerHeal, withProvider, clearStaleReaderPauses } = defaultHealth;
 export const resetProviderCache = defaultHealth.resetCache;
