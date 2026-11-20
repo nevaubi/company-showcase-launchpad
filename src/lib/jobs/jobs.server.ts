@@ -14,7 +14,7 @@ import { claimSlice, commitSlice, outcomeOf, runBudgetMs, sliceKey, unitTimeoutM
 import { fairOrder } from "@/lib/jobs/priority";
 import { loadJobRank } from "@/lib/jobs/priority.server";
 import { backoffRow, blockStreak, chainStatus, judgeSlice, OPTIONS_BACKOFF_KEY, OPTIONS_PROBE, optionsNight, type ChainResult } from "@/lib/jobs/options-run";
-import { pickEstimates, ESTIMATE_NONE_PREFIX, ESTIMATE_SCAN } from "@/lib/jobs/estimates-order";
+import { backoffTicker, chargeFailure, estimateErrorClass, pickEstimates, scanCursorAfter, ESTIMATE_FAIL_PREFIX, ESTIMATE_NONE_PREFIX, ESTIMATE_SCAN, type FailReceipt } from "@/lib/jobs/estimates-order";
 import { barProblem } from "@/lib/jobs/bar-check";
 import { healRow, providerKey, tripRow, type CircuitRow } from "@/lib/jobs/provider-health";
 import { isEarnings } from "@/lib/jobs/sec-discover";
@@ -311,29 +311,42 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
    */
   async estimates() {
     const left = budget();
-    const { data: cooldown, error: cooldownError } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "estimates-backoff").maybeSingle();
+    const { data: cooldown, error: cooldownError } = await supabaseAdmin.from("job_state").select("cursor, paused_reason").eq("job", "estimates-backoff").maybeSingle();
     if (cooldownError) throw new Error(cooldownError.message);
-    if ((cooldown?.cursor ?? 0) > Date.now() / 1000) return { ok: true, items: 0, detail: { retryAt: new Date((cooldown?.cursor ?? 0) * 1000).toISOString() } };
+    if ((cooldown?.cursor ?? 0) > Date.now() / 1000) return { ok: true, items: 0, detail: { retryAt: new Date((cooldown?.cursor ?? 0) * 1000).toISOString(), reason: cooldown?.paused_reason ?? null } };
     const ranked = (await rankedCoverage()).map((c) => c.ticker);
     const { data: cursor, error: cursorError } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "estimates-new").maybeSingle();
     if (cursorError) throw new Error(cursorError.message);
     const start = (cursor?.cursor ?? 0) % ranked.length;
     const candidates = Array.from({ length: Math.min(ESTIMATE_SCAN, ranked.length) }, (_, i) => ranked[(start + i) % ranked.length]);
-    const [{ data: existing, error }, { data: receipts, error: receiptError }, { data: stale, error: staleError }] = await Promise.all([
+    const [{ data: existing, error }, { data: stale, error: staleError }] = await Promise.all([
       supabaseAdmin.from("analyst_estimates").select("ticker").in("ticker", candidates),
-      supabaseAdmin.from("job_state").select("job, updated_at").in("job", candidates.map((t) => `${ESTIMATE_NONE_PREFIX}${t}`)),
-      supabaseAdmin.from("analyst_estimates").select("ticker, fetched_at").lt("fetched_at", new Date(Date.now() - 12 * 3600000).toISOString()).order("fetched_at", { ascending: true }).limit(3),
+      // More than the three slots: rows held by a failure receipt are dropped below.
+      supabaseAdmin.from("analyst_estimates").select("ticker, fetched_at").lt("fetched_at", new Date(Date.now() - 12 * 3600000).toISOString()).order("fetched_at", { ascending: true }).limit(12),
     ]);
     if (error) throw new Error(error.message);
-    if (receiptError) throw new Error(receiptError.message);
     if (staleError) throw new Error(staleError.message);
+    const looked = [...new Set([...candidates, ...(stale ?? []).map((r) => r.ticker)])];
+    const { data: receipts, error: receiptError } = await supabaseAdmin
+      .from("job_state")
+      .select("job, cursor, updated_at")
+      .in("job", [...candidates.map((t) => `${ESTIMATE_NONE_PREFIX}${t}`), ...looked.map((t) => `${ESTIMATE_FAIL_PREFIX}${t}`)]);
+    if (receiptError) throw new Error(receiptError.message);
+    const none = new Map<string, string | null>();
+    const failedBefore = new Map<string, FailReceipt>();
+    for (const r of receipts ?? []) {
+      if (r.job.startsWith(ESTIMATE_NONE_PREFIX)) none.set(r.job.slice(ESTIMATE_NONE_PREFIX.length), r.updated_at);
+      else failedBefore.set(r.job.slice(ESTIMATE_FAIL_PREFIX.length), { tries: Number(r.cursor ?? 0), at: r.updated_at });
+    }
     const plan = pickEstimates({
       candidates,
       start,
       total: ranked.length,
       have: new Set((existing ?? []).map((r) => r.ticker)),
-      none: new Map((receipts ?? []).map((r) => [r.job.slice(ESTIMATE_NONE_PREFIX.length), r.updated_at])),
+      none,
       stale: (stale ?? []).map((r) => ({ ticker: r.ticker, fetchedAt: r.fetched_at })),
+      failed: failedBefore,
+      deferred: backoffTicker(cooldown?.paused_reason),
       nowMs: Date.now(),
     });
     // Nothing missing in the scanned window: move the scan on so the next run looks further.
@@ -341,34 +354,71 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
     if (!plan.batch.length) return { ok: true, items: 0, detail: { note: "no stale estimates or missing ticker in this scan", scannedFrom: start } };
     const { fetchEstimates } = await import("@/lib/estimates.server");
     const failed: string[] = [];
-    const none: string[] = [];
+    const noneNow: string[] = [];
+    const skipped: string[] = [];
+    const gaveUp: string[] = [];
+    const attempted = new Set<string>();
+    let answered = 0;
     let items = 0;
+    let lastCursor: number | null = null;
+    const moveScan = async () => {
+      const c = scanCursorAfter(plan.batch, attempted);
+      if (c != null && c !== lastCursor) await putCursors([{ job: "estimates-new", cursor: c }]);
+      lastCursor = c;
+    };
     for (const p of plan.batch) {
       if (!left()) break;
+      let fresh: Awaited<ReturnType<typeof fetchEstimates>> | null = null;
+      let err: unknown = null;
       try {
-        const fresh = await fetchEstimates(p.ticker, AbortSignal.timeout(Math.min(1200, unitTimeoutMs(left.end, Date.now()))));
+        fresh = await fetchEstimates(p.ticker, AbortSignal.timeout(Math.min(1200, unitTimeoutMs(left.end, Date.now()))));
+      } catch (e) {
+        err = e;
+      }
+      if (fresh) {
+        // A database error is the run's failure, never the ticker's (it throws out of the job).
         const { error } = await supabaseAdmin.from("analyst_estimates").upsert({ ticker: p.ticker, payload: fresh as never, fetched_at: fresh.asOf });
         if (error) throw new Error(error.message);
+        if (failedBefore.has(p.ticker)) {
+          const { error: delError } = await supabaseAdmin.from("job_state").delete().eq("job", `${ESTIMATE_FAIL_PREFIX}${p.ticker}`);
+          if (delError) throw new Error(delError.message);
+        }
         items++;
-      } catch (e) {
-        const msg = (e as Error).message;
-        if (/^No estimates for /.test(msg)) {
+        answered++;
+      } else {
+        const msg = ((err as Error | null)?.message ?? String(err)).slice(0, 160);
+        let cls = estimateErrorClass(err);
+        // The provider answered other tickers in this run: a "provider" failure on this one is about this one.
+        if (cls === "provider" && answered > 0) cls = "ticker";
+        if (cls === "none") {
           // The provider has no coverage for this company: a receipt, not a provider failure.
-          none.push(p.ticker);
+          noneNow.push(p.ticker);
+          answered++;
           const { error } = await supabaseAdmin.from("job_state").upsert({ job: `${ESTIMATE_NONE_PREFIX}${p.ticker}`, cursor: Math.floor(Date.now() / 1000), updated_at: new Date().toISOString() });
+          if (error) throw new Error(error.message);
+        } else if (cls === "ticker") {
+          // One bad symbol: charge it (bounded tries, then a 7-day rest) and go on with the rest.
+          const ch = chargeFailure(p.ticker, failedBefore.get(p.ticker), msg, Date.now());
+          (ch.gaveUp ? gaveUp : skipped).push(`${p.ticker}: ${ch.row.paused_reason}`);
+          const { error } = await supabaseAdmin.from("job_state").upsert(ch.row);
           if (error) throw new Error(error.message);
         } else {
           failed.push(`${p.ticker}: ${msg}`);
           // Serial requests plus a persistent 30-minute cooldown avoid hammering a throttled source.
+          // The reason names the ticker: it is fetched last next time (see pickEstimates).
           const { error } = await supabaseAdmin.from("job_state").upsert({ job: "estimates-backoff", cursor: Math.ceil(Date.now() / 1000) + 1800, paused_reason: failed[failed.length - 1].slice(0, 200), updated_at: new Date().toISOString() });
           if (error) throw new Error(error.message);
           break;
         }
       }
       // A missing ticker was attempted: the scan moves past it, never past one not yet tried.
-      if (p.kind === "missing") await putCursors([{ job: "estimates-new", cursor: p.nextCursor }]);
+      if (p.kind === "missing") {
+        attempted.add(p.ticker);
+        await moveScan();
+      }
     }
-    return { ok: failed.length === 0, items, detail: { tickers: plan.batch.map((p) => `${p.ticker} (${p.kind})`), none, failed } };
+    const ok = failed.length === 0 && (answered > 0 || (skipped.length === 0 && gaveUp.length === 0));
+    return { ok, items, detail: { tickers: plan.batch.map((p) => `${p.ticker} (${p.kind})`), none: noneNow, failed, skipped, gaveUp } };
   },
 
   /** Daily bars for ten symbols per run (top 1,000 first, then the tail and the benchmarks). */

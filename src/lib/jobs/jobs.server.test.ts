@@ -267,12 +267,87 @@ describe("estimates: missing coverage first, then the stalest", () => {
   });
   it("stops on the first provider error and stores a thirty-minute cooldown without moving the scan", async () => {
     mocks.db = fakeSupabase();
-    mocks.fetchEstimates.mockRejectedValue(new Error("HTTP 429"));
+    mocks.fetchEstimates.mockRejectedValue(new Error("Estimates provider unavailable"));
     const before = Math.floor(Date.now() / 1000);
     expect((await runJob("estimates")).ok).toBe(false);
     expect(mocks.fetchEstimates).toHaveBeenCalledTimes(1);
     expect(mocks.db.state("estimates-backoff")!.cursor).toBeGreaterThanOrEqual(before + 1800);
     expect(mocks.db.state("estimates-new")).toBeUndefined();
+  });
+  // Review R1: before this, one ticker with a deterministic error held the fill forever.
+  it("a ticker the provider always refuses (404) is charged, skipped after three tries, and never holds the others", async () => {
+    mocks.db = fakeSupabase();
+    const bad = COVERAGE[0].ticker;
+    mocks.fetchEstimates.mockImplementation(async (t: string) => {
+      if (t === bad) throw new Error("Estimates provider responded 404");
+      return { ticker: t, asOf: nowIso() };
+    });
+    const asked: string[] = [];
+    let stored = 0;
+    for (let i = 0; i < 6; i++) {
+      const b = mocks.db.state("estimates-backoff");
+      if (b) b.cursor = 0;
+      const r = await runJob("estimates");
+      stored += r.items;
+      asked.push(...mocks.fetchEstimates.mock.calls.map((c) => c[0]));
+      mocks.fetchEstimates.mockClear();
+      if (i === 0) {
+        expect(r.ok).toBe(true);
+        expect(r.detail.skipped).toEqual([`${bad}: try 1 of 3: Estimates provider responded 404`]);
+      }
+    }
+    expect(new Set(asked).size).toBeGreaterThan(10);
+    expect(stored).toBe(asked.filter((t) => t !== bad).length);
+    expect(mocks.db.state("estimates-backoff")).toBeUndefined();
+    expect(mocks.db.state(`estimates-fail:${bad}`)!.cursor).toBe(1);
+  });
+  it("gives a failing ticker up for seven days after the third try, with the reason in the run record", async () => {
+    const bad = COVERAGE[0].ticker;
+    const longAgo = new Date(Date.now() - 7 * 3600_000).toISOString();
+    mocks.db = fakeSupabase({ job_state: [{ job: `estimates-fail:${bad}`, cursor: 2, paused_reason: "try 2 of 3: x", updated_at: longAgo }] });
+    mocks.fetchEstimates.mockImplementation(async (t: string) => {
+      if (t === bad) throw new SyntaxError("Unexpected token < in JSON");
+      return { ticker: t, asOf: nowIso() };
+    });
+    const r = await runJob("estimates");
+    expect(r.detail.gaveUp).toEqual([`${bad}: gave up for 7 days after 3 tries: Unexpected token < in JSON`]);
+    expect(r.items).toBe(2);
+    // next lap: the given-up ticker is not asked again
+    mocks.db.state("estimates-new")!.cursor = 0;
+    mocks.fetchEstimates.mockClear();
+    await runJob("estimates");
+    expect(mocks.fetchEstimates.mock.calls.map((c) => c[0])).not.toContain(bad);
+  });
+  it("a ticker that keeps hitting a provider-wide error goes last next time and is charged once the others answer", async () => {
+    mocks.db = fakeSupabase();
+    const bad = COVERAGE[0].ticker;
+    mocks.fetchEstimates.mockImplementation(async (t: string) => {
+      if (t === bad) throw new Error("Estimates provider unavailable");
+      return { ticker: t, asOf: nowIso() };
+    });
+    const r1 = await runJob("estimates");
+    expect(r1.ok).toBe(false);
+    expect(mocks.db.state("estimates-backoff")!.paused_reason).toMatch(new RegExp(`^${bad}: `));
+    mocks.db.state("estimates-backoff")!.cursor = 0;
+    mocks.fetchEstimates.mockClear();
+    const r2 = await runJob("estimates");
+    expect(mocks.fetchEstimates.mock.calls.map((c) => c[0])).toEqual([COVERAGE[1].ticker, COVERAGE[2].ticker, bad]);
+    expect(r2.items).toBe(2);
+    expect(r2.detail.skipped).toEqual([`${bad}: try 1 of 3: Estimates provider unavailable`]);
+    expect(mocks.db.state("estimates-backoff")!.cursor).toBe(0);
+    expect(mocks.db.state("estimates-new")!.cursor).toBe(3);
+  });
+  it("a stored row that keeps failing does not take a slot again within six hours", async () => {
+    const old = new Date(Date.now() - 2 * 86400_000).toISOString();
+    mocks.db = fakeSupabase({
+      analyst_estimates: COVERAGE.slice(0, 200).map((c) => ({ ticker: c.ticker, payload: {}, fetched_at: nowIso() })).concat([{ ticker: "AAA", payload: {}, fetched_at: old }, { ticker: "BBB", payload: {}, fetched_at: old }]),
+      job_state: [st("estimates-new", 0), { job: "estimates-fail:AAA", cursor: 1, paused_reason: "try 1 of 3: x", updated_at: nowIso() }],
+    });
+    mocks.fetchEstimates.mockImplementation(async (t: string) => ({ ticker: t, asOf: nowIso() }));
+    await runJob("estimates");
+    const called = mocks.fetchEstimates.mock.calls.map((c) => c[0]);
+    expect(called).toContain("BBB");
+    expect(called).not.toContain("AAA");
   });
   it("makes no provider call during the persisted cooldown", async () => {
     mocks.db = fakeSupabase({ job_state: [st("estimates-backoff", Math.ceil(Date.now() / 1000) + 1800)] });
