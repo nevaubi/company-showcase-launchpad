@@ -1,41 +1,42 @@
 /**
- * Removes stored alt-data rows that are not the company's own (round 2 audit F1 and its follow-up).
- * Every check is the one the app's read screen applies (src/lib/alt/screen.ts), so after this runs
- * the database functions that count raw rows (alt_event_buckets, alt_source_stats) agree with pages.
+ * Removes stored alt-data rows that are not the company's own (round 2 audit F1 and its follow-ups),
+ * in two parts with separate switches so nothing a refresh cannot restore is deleted. The rules are
+ * pure in src/lib/alt/repair.ts and use the same checks as the app's read screen (screen.ts).
  *
- *   contracts  `spending_by_award` ignored `recipient_id`, so the government-wide top awards were
- *              stored under every company; recipients were also picked by name prefix. Kept when
- *              `contractRowBelongs` (contracts.ts) accepts the row.
- *   fda        openFDA's recalling-firm search is a phrase match (independent Coca-Cola bottlers under
- *              KO, "Boston Scientific Target" under TGT). Kept when `firmRowBelongs` (firms.ts) accepts
- *              the stored firm (sponsor for approvals).
- *   trials     lead-sponsor prefix match (Merck KGaA under MRK). Same check on the stored sponsor.
- *   recalls    NHTSA `manufacturer like '%ITT%'` (LITTELFUSE, Pitts Enterprises under ITT). Rows
- *              written before the manufacturer was stored are looked up by campaign number at NHTSA.
- *   consumer   CPSC title word match ("Caterpillar Pull Toys" under CAT). Rows written before the
- *              firms were stored are looked up by recall number at CPSC and judged by `cpscRole`.
- *   bank       FDIC CET1 ratios of 0 (field not reported before 2015).
+ *   --part=copies     Rows wrong under every company; can run at once:
+ *                     contract award rows the old collector copied from the government-wide list
+ *                     onto every company (`usa:` awards without a tie stored under 25+ companies),
+ *                     except a copy whose recipient is that company by name or hand-checked alias;
+ *                     FDA firms, trial sponsors, NHTSA campaigns and CPSC recalls hand-checked as
+ *                     another business (KNOWN_OTHER); FDIC CET1 zero placeholders.
+ *   --part=refreshed  Other contract rows the screen hides, per company, only when the fixed
+ *                     collector has refreshed that company (a `contracts_refresh` record of the current
+ *                     rule written at or after --since, default the rule's date), and only rows that
+ *                     refresh did not reproduce: legacy rows (no `as_of`) whose recipient is neither the
+ *                     company by name or alias nor a recipient the source lists in the company's family.
+ *                     Companies without such a record are listed and left alone.
  *
- *   bun scripts/alt-contracts-repair.ts [--sets=contracts,fda,trials,recalls,consumer,bank] [--tickers=AAPL,ROG] [--apply]
+ *   bun scripts/alt-contracts-repair.ts --part=copies|refreshed [--since=2026-11-21] [--tickers=AMZN,ROG] [--apply]
  *
- * Dry run by default: prints what would be deleted per set and ticker. `--apply` deletes those rows by
- * uid. Run the contracts set after the fixed collector has refreshed every company once
- * (scripts/alt-slow.ts covers the list in seven days), so subsidiary rows it re-stores with their tie
- * are kept; the other sets can run any time.
+ * Dry run by default: prints what each part would delete per dataset and ticker. `--apply` deletes
+ * those rows by uid. Firm rows the rule refuses that are not hand-checked as another business are
+ * hidden by the screen and never deleted here.
  */
 import { COVERAGE } from "@/lib/coverage";
-import { ALT_NAMES, companyKeys, contractRowBelongs, type CompanyKeys } from "@/lib/alt/contracts";
-import { cpscRole, firmCheck, firmRowBelongs, type CpscRecord } from "@/lib/alt/firms";
-import { isBankPlaceholder } from "@/lib/alt/bank";
+import { ALT_NAMES, REFRESH_DATASET, sharedCores, tickerKeys, type CompanyKeys } from "@/lib/alt/contracts";
+import { planRepair, type RepairRow } from "@/lib/alt/repair";
 import { REGISTRY_PATH, type AltRegistry } from "@/lib/alt/registry";
-import { args, dbGate, log, sb, sleep } from "./lib/supa";
+import { args, dbGate, log, sb } from "./lib/supa";
 
-const SETS = ["contracts", "fda", "trials", "recalls", "consumer", "bank"] as const;
-type Set_ = (typeof SETS)[number];
+/** The fixed contracts collector (rule 2) was written on this day; no refresh record can be older. */
+const RULE_DATE = "2026-11-20";
+const part = args.part;
+if (part !== "copies" && part !== "refreshed") throw new Error("--part=copies or --part=refreshed is required");
+const since = args.since ?? RULE_DATE;
+if (!/^\d{4}-\d{2}-\d{2}/.test(since) || since < RULE_DATE) throw new Error(`--since must be a date on or after ${RULE_DATE}`);
 const apply = args.apply !== undefined;
 const only = args.tickers ? new Set(args.tickers.toUpperCase().split(",")) : null;
-const sets = (args.sets ? args.sets.split(",") : [...SETS]).filter((s): s is Set_ => (SETS as readonly string[]).includes(s));
-const UA = "FiledUnder Research research@filedunder.ai";
+const SETS = part === "copies" ? ["contracts", "fda", "trials", "recalls", "consumer", "bank"] : ["contracts"];
 
 async function jsonFile<T>(path: string): Promise<T | null> {
   const { data } = await sb.storage.from("datasets").download(path);
@@ -46,118 +47,54 @@ const registry = (await jsonFile<AltRegistry>(REGISTRY_PATH)) ?? {};
 const universe = await jsonFile<{ companies: { ticker: string; name: string }[] }>("universe.json");
 if (!universe?.companies?.length) throw new Error("datasets/universe.json is missing; company legal names are needed to judge rows");
 const legal = new Map(universe.companies.map((c) => [c.ticker, c.name]));
+const shared = sharedCores(COVERAGE.map((c) => ({ cik: c.cik, names: [ALT_NAMES[c.ticker], c.shortName, registry[c.ticker]?.legal, legal.get(c.ticker)] })));
 const keys = new Map<string, CompanyKeys>();
-const shortName = new Map<string, string>();
-for (const c of COVERAGE) {
-  keys.set(c.ticker, companyKeys([ALT_NAMES[c.ticker], c.shortName], [registry[c.ticker]?.legal, legal.get(c.ticker)]));
-  shortName.set(c.ticker, ALT_NAMES[c.ticker] ?? c.shortName);
-}
+for (const c of COVERAGE) keys.set(c.ticker, tickerKeys(c.ticker, c.shortName, [registry[c.ticker]?.legal, legal.get(c.ticker)], shared));
 
-type Stored = { uid: string; ticker: string; dataset: string; kind: string; title: string | null; value: number | null; meta: Record<string, unknown> | null };
-
-async function readSet(dataset: Set_): Promise<Stored[]> {
-  const rows: Stored[] = [];
+async function readSet(dataset: string, cols = "uid, ticker, dataset, kind, title, value, meta"): Promise<RepairRow[]> {
+  const rows: RepairRow[] = [];
   for (let from = 0; ; from += 1000) {
     await dbGate("alt-contracts-repair");
-    let q = sb.from("alt_data").select("uid, ticker, dataset, kind, title, value, meta").eq("dataset", dataset).order("uid").range(from, from + 999);
-    if (only) q = q.in("ticker", [...only]);
+    // every contracts row is read: copy counts are across companies
+    let q = sb.from("alt_data").select(cols).eq("dataset", dataset).order("uid").range(from, from + 999);
+    if (only && dataset !== "contracts") q = q.in("ticker", [...only]);
     const { data, error } = await q;
     if (error) throw new Error(error.message);
-    rows.push(...((data ?? []) as Stored[]));
+    rows.push(...((data ?? []) as unknown as RepairRow[]));
     if (!data || data.length < 1000) break;
   }
   return rows;
 }
 
-async function getJson(url: string): Promise<unknown> {
-  for (let i = 0; i < 4; i++) {
-    try {
-      const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(60_000) });
-      if (r.ok) return await r.json();
-      if (r.status !== 429 && r.status < 500) throw new Error(`${r.status} ${url.slice(0, 120)}`);
-    } catch (e) {
-      if (i === 3) throw e;
-    }
-    await sleep(2000 * (i + 1));
-  }
-  throw new Error(`no answer from ${url.slice(0, 120)}`);
-}
+const rows: RepairRow[] = [];
+for (const s of SETS) rows.push(...(await readSet(s)));
+const records = await readSet(REFRESH_DATASET);
+const plan = planRepair(rows, records, (t) => keys.get(t) ?? null, since);
+const drop = (part === "copies" ? plan.copies : plan.refreshed).filter((r) => !only || only.has(r.ticker));
 
-/** NHTSA manufacturer per campaign number, 100 campaigns a request. */
-async function nhtsaMakers(ids: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  for (let i = 0; i < ids.length; i += 100) {
-    const list = ids.slice(i, i + 100).map((x) => `'${x.replace(/'/g, "")}'`).join(",");
-    const j = (await getJson(`https://data.transportation.gov/resource/6axg-epim.json?$select=nhtsa_id,manufacturer&$where=${encodeURIComponent(`nhtsa_id in(${list})`)}&$limit=1000`)) as { nhtsa_id: string; manufacturer: string }[];
-    for (const r of j) out.set(r.nhtsa_id, r.manufacturer);
-    await sleep(300);
-  }
-  return out;
-}
-
-/** CPSC recall record by recall number. */
-async function cpscRecord(no: string): Promise<CpscRecord | null> {
-  const j = (await getJson(`https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallNumber=${encodeURIComponent(no)}`)) as CpscRecord[];
-  await sleep(250);
-  return j?.[0] ?? null;
-}
-
-const drop: Stored[] = [];
-const unknown: Stored[] = [];
-for (const set of sets) {
-  const rows = await readSet(set);
-  let judged = rows;
-  const verdict = new Map<string, boolean>();
-  if (set === "recalls") {
-    const legacy = rows.filter((r) => !r.meta || !("manufacturer" in r.meta));
-    const makers = await nhtsaMakers([...new Set(legacy.map((r) => r.uid.split(":")[2]))]);
-    for (const r of legacy) {
-      const m = makers.get(r.uid.split(":")[2]);
-      if (m === undefined) unknown.push(r);
-      else verdict.set(r.uid, !!keys.get(r.ticker) && firmCheck(r.ticker, keys.get(r.ticker)!)(m));
-    }
-  }
-  if (set === "consumer") {
-    judged = rows.filter((r) => !r.meta || !("firms" in r.meta));
-    for (const r of judged) {
-      const rec = await cpscRecord(r.uid.split(":")[2]);
-      const k = keys.get(r.ticker);
-      if (!rec) unknown.push(r);
-      else verdict.set(r.uid, !!k && cpscRole(rec, firmCheck(r.ticker, k), shortName.get(r.ticker) ?? r.ticker) !== null);
-    }
-  }
+for (const s of SETS) {
+  const d = drop.filter((r) => r.dataset === s);
   const tally = new Map<string, number>();
-  let kept = 0;
-  for (const r of judged) {
-    const k = keys.get(r.ticker);
-    const ok =
-      verdict.get(r.uid) ??
-      (set === "bank" ? !isBankPlaceholder(r) : set === "contracts" ? !!k && contractRowBelongs(r, k) : set === "consumer" ? true : !!k && firmRowBelongs(r, r.ticker, k));
-    if (ok) kept++;
-    else {
-      drop.push(r);
-      tally.set(r.ticker, (tally.get(r.ticker) ?? 0) + 1);
-    }
-  }
-  const n = [...tally.values()].reduce((a, b) => a + b, 0);
-  log(`${set.padEnd(9)} ${String(rows.length).padStart(6)} rows read, ${String(judged.length).padStart(6)} judged: keep ${kept}, delete ${n} under ${tally.size} tickers`);
+  for (const r of d) tally.set(r.ticker, (tally.get(r.ticker) ?? 0) + 1);
+  log(`${s.padEnd(9)} ${String(rows.filter((r) => r.dataset === s).length).padStart(6)} rows read: delete ${d.length} under ${tally.size} tickers`);
   if (tally.size) log(`          most: ${[...tally].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([t, c]) => `${t} ${c}`).join(", ")}`);
-  for (const r of drop.filter((x) => x.dataset === set).slice(0, 6)) log(`          e.g. ${r.uid}  ${String(r.meta?.firm ?? r.meta?.sponsor ?? r.meta?.recipient ?? r.title ?? "").slice(0, 90)}`);
+  for (const r of d.slice(0, 5)) log(`          e.g. ${r.uid}  ${String(r.meta?.firm ?? r.meta?.sponsor ?? r.meta?.recipient ?? r.title ?? "").slice(0, 90)}`);
 }
-if (unknown.length) log(`${unknown.length} rows could not be looked up at the source and are left alone (rerun later): ${unknown.slice(0, 8).map((r) => r.uid).join(", ")}`);
+const waiting = [...plan.waiting].filter(([t]) => !only || only.has(t));
+if (part === "refreshed") log(`refreshed companies (record at or after ${since}): ${new Set(records.map((r) => r.ticker)).size}; waiting for a refresh, left alone: ${waiting.length} companies, ${waiting.reduce((a, [, n]) => a + n, 0)} rows${waiting.length ? ` (${waiting.slice(0, 15).map(([t, n]) => `${t} ${n}`).join(", ")}${waiting.length > 15 ? ", ..." : ""})` : ""}`);
 
 if (!apply) {
-  log(`dry run: nothing deleted (add --apply to delete these ${drop.length} rows)`);
+  log(`dry run (${part}): nothing deleted (add --apply to delete these ${drop.length} rows)`);
   process.exit(0);
 }
 let deleted = 0;
-for (const set of sets) {
-  const uids = drop.filter((r) => r.dataset === set).map((r) => r.uid);
+for (const s of SETS) {
+  const uids = drop.filter((r) => r.dataset === s).map((r) => r.uid);
   for (let i = 0; i < uids.length; i += 200) {
     await dbGate("alt-contracts-repair");
-    const { error } = await sb.from("alt_data").delete().eq("dataset", set).in("uid", uids.slice(i, i + 200));
+    const { error } = await sb.from("alt_data").delete().eq("dataset", s).in("uid", uids.slice(i, i + 200));
     if (error) throw new Error(error.message);
     deleted += Math.min(200, uids.length - i);
   }
 }
-log(`deleted ${deleted} rows`);
+log(`deleted ${deleted} rows (${part})`);
