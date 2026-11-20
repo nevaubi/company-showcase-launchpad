@@ -6,6 +6,7 @@
 //   - Cloud tables the daily setups job maintains from then on (samples, series, signals, stats, results)
 //   - datasets/setups/bench.json (calendar + benchmarks the job extends each day)
 // Usage: bun scripts/setups.ts [--cache=/tmp/px] [--no-db]
+import { pageSupplyLinks } from "../src/lib/supply/read";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { sb, args, log, selectAll, dbGate } from "./lib/supa";
@@ -147,8 +148,8 @@ for (const u of universe) {
   vol.set(u.ticker, rollStd(r1, 60, a.start + 1));
 }
 // Supplier ← customer links, valid from the filing that first states them.
-const links = await selectAll<{ ticker: string; counterparty_ticker: string | null; relation: string; filed: string | null }>((a, b) =>
-  sb.from("supply_links").select("ticker, counterparty_ticker, relation, filed").in("relation", ["customer", "supplier"]).not("counterparty_ticker", "is", null).order("id").range(a, b));
+const links = await pageSupplyLinks<{ ticker: string; counterparty_ticker: string | null; relation: string; filed: string | null }>(sb, "ticker, counterparty_ticker, relation, filed", (q) =>
+  q.in("relation", ["customer", "supplier"]).not("counterparty_ticker", "is", null).order("id"));
 const customersOf = new Map<string, Map<string, string>>();
 for (const l of links) {
   const [sup, cus] = l.relation === "customer" ? [l.ticker, l.counterparty_ticker!] : [l.counterparty_ticker!, l.ticker];

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ExternalLink, FileText, Network, ShoppingBag, TrendingUp, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { selectSupplyLinks } from "@/lib/supply/read";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSource } from "@/components/source/source-context";
@@ -23,7 +24,7 @@ export const alertsQuery = (tickers: string[]) => ({
     const [f, i, l, a, ideas, rl] = await Promise.all([
       supabase.from("sec_filings").select("accn,ticker,form,filed,doc,description,items,discovered_at").in("ticker", tickers).gte("filed", since).limit(400),
       supabase.from("insider_trades").select("accn,seq,ticker,owner,role,code,shares,price,plan_10b5,trade_date,doc,filed,discovered_at").in("ticker", tickers).gte("filed", since).in("code", ["P", "S"]).limit(500),
-      supabase.from("supply_links").select("id,ticker,counterparty,relation,detail,accn,doc,form,filed,created_at,is_current").in("ticker", tickers).eq("is_current", true).gte("filed", since).limit(300),
+      selectSupplyLinks(supabase, "id,ticker,counterparty,relation,detail,accn,doc,form,filed,created_at,is_current", (q) => q.in("ticker", tickers).eq("is_current", true).gte("filed", since).limit(300)),
       supabase.from("alt_data").select("uid,ticker,dataset,title,date,source_url,created_at").in("ticker", tickers).eq("kind", "event").gte("date", since).limit(300),
       fetch("/data/signals.json").then((r) => r.json()).catch(() => ({ ideas: [] })),
       supabase.from("filing_redlines").select("ticker,form,to_accn,to_filed,high,medium,stats").in("ticker", tickers).gte("to_filed", since).limit(100),
