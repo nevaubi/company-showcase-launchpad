@@ -17,7 +17,7 @@ import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries 
 import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 import { holdSuspects } from "@/lib/ir/suspect";
 
-export const TIDY_VERSION = 6;
+export const TIDY_VERSION = 7;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -33,7 +33,7 @@ export function labelTokens(label: string, keepParens = false, line = false): st
   const id = `${keepParens ? 1 : 0}${line ? 1 : 0}${label}`;
   const hit = tokenCache.get(id);
   if (hit) return hit;
-  if (tokenCache.size > 50_000) tokenCache.clear();
+  if (tokenCache.size > 400_000) tokenCache.clear();
   const out = tokensOf(label, keepParens, line);
   tokenCache.set(id, out);
   return out;
@@ -109,7 +109,10 @@ function roundStep(v: number) {
 }
 /** "$1.3 billion" on a slide and "$1,308 million" in the release are one figure. */
 function roundedAlike(x: number, y: number) {
-  if (Math.sign(x) !== Math.sign(y)) return false;
+  // Cheap rejections first: this runs for every pair of cells compared.
+  if (x === y) return true;
+  if ((x > 0) !== (y > 0) || (x < 0) !== (y < 0)) return false;
+  if (Math.abs(x - y) > Math.max(Math.abs(x), Math.abs(y)) * 0.05) return false;
   const step = Math.max(roundStep(x), roundStep(y));
   return step > 0 && Math.abs(x - y) <= step / 2 && Math.abs(x - y) <= Math.max(Math.abs(x), Math.abs(y)) * 0.05;
 }
@@ -135,6 +138,38 @@ function compare(a: PayloadSeries, b: PayloadSeries): Agreement {
   return r;
 }
 
+/** Printed cells two lines share, compared exactly: how many, how many distinctive, how many differ. */
+function identical(a: PayloadSeries, b: PayloadSeries) {
+  const r = { shared: 0, distinct: 0, differ: 0 };
+  for (const [kind, ca] of allCells(a)) {
+    const cb = (kind === "q" ? b.q : kind === "y" ? b.y : b.mo ?? {}) as Record<string, PayloadCell>;
+    for (const e in ca) {
+      const x = ca[e];
+      const y = cb[e];
+      if (!y || x.f || y.f || x.w || y.w) continue;
+      r.shared++;
+      if (x.v !== y.v) r.differ++;
+      else if (distinctive(x.v)) r.distinct++;
+    }
+  }
+  return r;
+}
+
+/** Ids of a line's printed distinctive values, by period (what `compare` counts as `exact`). */
+const valueIdCache = new WeakMap<PayloadSeries, string[]>();
+function valueIds(s: PayloadSeries): string[] {
+  const hit = valueIdCache.get(s);
+  if (hit) return hit;
+  const out: string[] = [];
+  for (const [kind, cells] of allCells(s))
+    for (const e in cells) {
+      const x = cells[e];
+      if (!x.f && !x.w && distinctive(x.v)) out.push(`${kind}${e}|${x.v}`);
+    }
+  valueIdCache.set(s, out);
+  return out;
+}
+
 const periodCache = new WeakMap<PayloadSeries, Set<string>>();
 const periodsOf = (s: PayloadSeries) => {
   let p = periodCache.get(s);
@@ -149,7 +184,7 @@ const wordSets = new Map<string, Set<string>>();
 const wordsOf = (k: string) => {
   let w = wordSets.get(k);
   if (!w) {
-    if (wordSets.size > 50_000) wordSets.clear();
+    if (wordSets.size > 400_000) wordSets.clear();
     wordSets.set(k, (w = new Set(k.split(" ").filter(Boolean))));
   }
   return w;
@@ -200,12 +235,20 @@ interface Ctx {
   /** totals whose parts changed (a part merged away, or a part joined from another table) */
   touched: Set<string>;
   log?: string[];
+  /** line key → id of the loose list that keeps it after a loose-to-loose fold */
+  home: Map<string, string>;
+  /** total key → keys of the parts the release printed under it, before any fold */
+  origKids: Map<string, string[]>;
   /** fiscal year-ends of the payload, built on first use */
   yearEnds?: Set<string>;
 }
 
-/** Copy b's cells into a where a has none (a printed cell beats a calculated one), then retire b. */
-function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries) {
+/**
+ * Copy b's cells into a where a has none (a printed cell beats a calculated one), then retire b.
+ * With `keep`, a's own cells are never replaced: b only fills periods a does not print. Folds that rest
+ * on the two lines printing identical numbers use it, so a printed total is never overwritten by a part.
+ */
+function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries, keep = false) {
   // The merged line takes the company's current name, unless that name says nothing on its own.
   const latest = (s: PayloadSeries) => [...periodsOf(s)].sort().at(-1) ?? "";
   const label = latest(b) > latest(a) && labelTokens(b.label).length && labelTokens(b.label).length >= Math.min(2, labelTokens(a.label).length) ? b.label : !labelTokens(a.label).length ? b.label : a.label;
@@ -213,12 +256,13 @@ function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries) {
     if (!Object.keys(cb).length) continue;
     const ca = kind === "q" ? a.q : kind === "y" ? a.y : (a.mo ??= {});
     for (const [e, cell] of Object.entries(cb))
-      if (!ca[e] || (ca[e].f && !cell.f) || (ca[e].w && !cell.w && !cell.f) || (!cell.f && !cell.w && finer(cell.v, ca[e].v))) ca[e] = cell;
+      if (!ca[e] || (!keep && ((ca[e].f && !cell.f) || (ca[e].w && !cell.w && !cell.f) || (!cell.f && !cell.w && finer(cell.v, ca[e].v))))) ca[e] = cell;
   }
   if (b.total) a.total = true;
   for (const k of [a.parent, b.parent, a.k, b.k]) if (k) c.touched.add(k);
   periodCache.delete(a);
   keyCache.delete(a);
+  valueIdCache.delete(a);
   const was = a.label;
   a.label = label;
   if (label !== was) c.renamed.set(was, label);
@@ -232,6 +276,13 @@ function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries) {
   for (const s of moved) s.parent = a.k;
   if (moved.length) c.kids.set(a.k, [...(c.kids.get(a.k) ?? []), ...moved]);
   c.kids.delete(b.k);
+}
+
+/** Add v to the list under k (in place: spreading the list on every add is quadratic). */
+function append<K, V>(m: Map<K, V[]>, k: K, v: V) {
+  const l = m.get(k);
+  if (l) l.push(v);
+  else m.set(k, [v]);
 }
 
 const resolve = (c: Ctx, k: string) => {
@@ -253,33 +304,124 @@ function mergeSiblings(c: Ctx, g: PayloadGroup, ctx: Set<string>) {
   for (const s of rows) {
     if (s.k === g.root) continue;
     const pk = s.parent ?? "";
-    byParent.set(pk, [...(byParent.get(pk) ?? []), s]);
+    const list = byParent.get(pk);
+    if (list) list.push(s);
+    else byParent.set(pk, [s]);
   }
   for (const sibs of byParent.values()) {
     // Fullest history first: the line others fold into keeps its name.
     sibs.sort((x, y) => periodsOf(y).size - periodsOf(x).size);
+    // Only siblings with the same key or an identical printed value can be "same" (see sameLine):
+    // they are looked up, in the order a full scan would meet them.
+    const byId = new Map<string, number[]>();
+    const small = sibs.length <= 12;
+    const idsOf = (x: PayloadSeries) => [`k:${memberKey(x, ctx)}`, ...valueIds(x)];
+    if (!small)
+      sibs.forEach((x, j) => {
+        for (const id of idsOf(x)) (byId.get(id) ?? byId.set(id, []).get(id)!).push(j);
+      });
     for (let i = 0; i < sibs.length; i++) {
       const a = sibs[i];
       if (c.removed.has(a.k)) continue;
       const ka = memberKey(a, ctx);
-      for (let j = i + 1; j < sibs.length; j++) {
+      const cand = new Set<number>();
+      const add = (x: PayloadSeries) => {
+        if (small) for (let j = i + 1; j < sibs.length; j++) cand.add(j);
+        else for (const id of idsOf(x)) for (const j of byId.get(id) ?? []) if (j > i) cand.add(j);
+      };
+      add(a);
+      for (let last = i; ; ) {
+        let j = Infinity;
+        for (const x of cand) if (x > last && x < j) j = x;
+        if (j === Infinity) break;
+        last = j;
         const b = sibs[j];
         if (c.removed.has(b.k)) continue;
         // Siblings both printed in one period are two lines of that table unless they carry the same numbers.
         if (sameLine(a, ka, b, memberKey(b, ctx), { aRoot: false, bRoot: false }) !== "same") continue;
         if (overlaps(periodsOf(a), periodsOf(b)) && compare(a, b).agree === 0) continue;
         absorb(c, a, b);
+        add(a);
       }
     }
   }
 }
 
-/** Two labels name one line: same words, or each word a short form of the other's ("Auto" / "Automotive"). */
+/**
+ * Short forms releases use for a word. Only these count as the same word: a plain prefix test
+ * would take "Net" for "Network", "Car" for "Cargo" and "Data" for "Database".
+ */
+const SHORT_FORMS: Record<string, string[]> = {
+  auto: ["automotive", "automobile"],
+  intl: ["international"],
+  govt: ["government"],
+  mgmt: ["management"],
+  admin: ["administrative", "administration"],
+  ops: ["operation", "operations"],
+  dev: ["development"],
+  tech: ["technology", "technologie"],
+  info: ["information"],
+  svc: ["service"],
+  corp: ["corporate", "corporation"],
+  prof: ["professional"],
+  comm: ["commercial", "communication"],
+  fin: ["financial", "finance"],
+  mfg: ["manufacturing"],
+  dist: ["distribution"],
+  equip: ["equipment"],
+  natl: ["national"],
+  pharma: ["pharmaceutical"],
+  div: ["division"],
+  dept: ["department"],
+  amort: ["amortization"],
+  depr: ["depreciation"],
+};
+const sameWord = (w: string, v: string) => w === v || !!SHORT_FORMS[w]?.includes(v) || !!SHORT_FORMS[v]?.includes(w);
+/**
+ * Two labels name one line: the same words in the same order, words in brackets included ("Other
+ * (Americas)" is not "Other (Europe)"), where a word may be a known short form of the other's
+ * ("Auto" / "Automotive").
+ */
 export function alikeLabels(a: string, b: string) {
-  const x = labelTokens(a);
-  const y = labelTokens(b);
+  const x = labelTokens(a, true);
+  const y = labelTokens(b, true);
   if (!x.length || x.length !== y.length) return false;
-  return x.every((w, i) => w === y[i] || (Math.min(w.length, y[i].length) >= 3 && (w.startsWith(y[i]) || y[i].startsWith(w))));
+  return x.every((w, i) => sameWord(w, y[i]));
+}
+/** Index key that two alike labels always share (word count and each word's canonical form). */
+const LONG_TO_SHORT = new Map(Object.entries(SHORT_FORMS).flatMap(([short, longs]) => longs.map((l) => [l, short] as const)));
+const alikeKey = (label: string) =>
+  labelTokens(label, true)
+    .map((w) => LONG_TO_SHORT.get(w) ?? w)
+    .join(" ");
+
+/** Tolerance of a tie-out check (the build's). */
+const tieTol = (unit: string, v: number) => (unit === "usd" ? Math.max(Math.abs(v) * 0.005, 1.5e6) : Math.max(Math.abs(v) * 0.005, 1.5));
+const cellsByKind = (s: PayloadSeries, kind: string) => (kind === "q" ? s.q : kind === "y" ? s.y : s.mo ?? {});
+
+/**
+ * Whether `total` adds up from `parts` in each period it prints: true, false, or absent when a part
+ * the table prints in other periods is missing (nothing to check against).
+ */
+function tiesBy(total: PayloadSeries, parts: PayloadSeries[], extra?: { s: PayloadSeries; cells: [string, string, PayloadCell][] }) {
+  const out = new Map<string, boolean>();
+  for (const kind of ["q", "y"]) {
+    for (const [e, t] of Object.entries(cellsByKind(total, kind))) {
+      if (t.w) continue;
+      let sum = 0;
+      let missing = false;
+      for (const s of parts) {
+        const cell = cellsByKind(s, kind)[e] ?? (extra && extra.s === s ? extra.cells.find(([k, x]) => k === kind && x === e)?.[2] : undefined);
+        if (!cell) {
+          missing = true;
+          break;
+        }
+        sum += cell.v;
+      }
+      if (!missing && parts.length) out.set(`${kind}${e}`, Math.abs(sum - t.v) <= tieTol(total.unit, t.v));
+    }
+  }
+  return out;
 }
 
 /**
@@ -287,59 +429,135 @@ export function alikeLabels(a: string, b: string) {
  * ("Revenue = Data Center + Edge Computing", "Edge Computing = Gaming + … + Automotive"), a line the
  * old table printed directly under the total can repeat a line the new table nests one level down
  * under another name. Both then count toward the total and its check fails. Such a line folds into
- * its nested twin when their names agree, their printed numbers never conflict and agree at least
- * once, and the twin's own total is printed in every period the line covers.
+ * its nested twin only on evidence that cannot be coincidence:
+ *   - the names agree word for word (short forms allowed),
+ *   - the printed numbers are identical in every period both print, at least two of them, distinctive,
+ *   - the fold repairs the total: some period that did not add up does once the line is gone, and no
+ *     period that added up stops adding up (nor does the twin's own parent, for the periods it gains).
+ * The twin keeps its own cells; the folded line only fills periods the twin does not print.
  */
 function mergeCousins(c: Ctx, g: PayloadGroup) {
   if (!g.root) return;
-  const root = resolve(c, g.root);
+  const root = c.byKey.get(resolve(c, g.root));
+  if (!root) return;
   const rows = g.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
   const inGroup = new Set(rows.map((s) => s.k));
-  const direct = rows.filter((s) => s.parent === root && s.k !== root);
-  const nested = rows.filter((s) => s.parent && s.parent !== root && inGroup.has(s.parent) && c.byKey.get(s.parent)?.parent === root);
+  const direct = rows.filter((s) => s.parent === root.k && s.k !== root.k);
+  const nested = rows.filter((s) => s.parent && s.parent !== root.k && inGroup.has(s.parent) && c.byKey.get(s.parent)?.parent === root.k);
+  if (!direct.length || !nested.length) return;
+  const byName = new Map<string, PayloadSeries[]>();
+  for (const b of nested) append(byName, alikeKey(b.label), b);
+  const pairs: [PayloadSeries, PayloadSeries][] = [];
+  const used = new Set<string>();
   for (const a of direct) {
-    if (c.removed.has(a.k)) continue;
-    for (const b of nested) {
-      if (c.removed.has(b.k) || b.unit !== a.unit || !!b.pit !== !!a.pit || !alikeLabels(a.label, b.label)) continue;
-      const cmp = compare(a, b);
-      if (cmp.conflict || cmp.agree < 1) continue;
+    for (const b of byName.get(alikeKey(a.label)) ?? []) {
+      if (used.has(b.k) || b.unit !== a.unit || !!b.pit !== !!a.pit || !alikeLabels(a.label, b.label)) continue;
+      const id = identical(a, b);
+      if (id.differ || id.shared < 2 || id.distinct < 2) continue;
+      // Periods the twin gains must add up under the twin's own parent.
       const parent = c.byKey.get(b.parent!)!;
-      const covered = periodsOf(parent);
-      if ([...periodsOf(a)].some((e) => !covered.has(e))) continue;
-      absorb(c, b, a);
+      const gains: [string, string, PayloadCell][] = [];
+      for (const [kind, ca] of allCells(a)) for (const [e, cell] of Object.entries(ca)) if (!cellsByKind(b, kind)[e]) gains.push([kind, e, cell]);
+      if (gains.length) {
+        const sibs = rows.filter((s) => s.parent === parent.k);
+        const after = tiesBy(parent, sibs, { s: b, cells: gains });
+        if (gains.some(([kind, e]) => after.get(`${kind}${e}`) !== true)) continue;
+      }
+      used.add(b.k);
+      pairs.push([a, b]);
       break;
     }
   }
+  if (!pairs.length) return;
+  const before = tiesBy(root, direct);
+  const repairs = (fold: [PayloadSeries, PayloadSeries][]) => {
+    const gone = new Set(fold.map(([a]) => a));
+    const after = tiesBy(root, direct.filter((s) => !gone.has(s)));
+    let fixed = 0;
+    for (const [e, ok] of before) {
+      const now = after.get(e);
+      if (ok && now !== true) return false;
+      if (!ok && now === true) fixed++;
+    }
+    return fixed > 0;
+  };
+  const apply = repairs(pairs) ? pairs : pairs.filter((x) => repairs([x])).slice(0, 1);
+  for (const [a, b] of apply) absorb(c, b, a, true);
 }
 
 /**
  * A loose line ("Noninterest expense" in an income-statement list) that prints exactly the numbers
  * of a breakdown's line with the same name ("Total noninterest expense") is the same figure shown
  * twice: it folds into the breakdown's line. A line named only "Total" folds into a breakdown total
- * of the same measure when at least three distinctive numbers match and none conflicts. The line
- * that stays must already cover the loose line's periods, unless it is a table's own total.
+ * of the same measure when at least three distinctive numbers match. The line that stays must already
+ * cover the loose line's periods, unless it is a table's own total, and it keeps its own cells.
+ * Two loose lists that print the same line ("Provision for credit losses" in "Other segment
+ * expenses" and in "Other expenses") keep it once: same name, identical numbers in at least two
+ * periods, none different. Lines are looked up by name, so the pass is linear in the lines.
  */
 function foldLooseRepeats(c: Ctx, groups: PayloadGroup[]) {
-  const rooted: { s: PayloadSeries; g: PayloadGroup }[] = [];
-  for (const g of groups) if (g.root) for (const r of g.rows) {
-    const s = c.byKey.get(resolve(c, r.k));
-    if (s && !c.removed.has(s.k)) rooted.push({ s, g });
-  }
+  const named = new Map<string, PayloadSeries[]>();
+  const roots = new Map<string, PayloadSeries[]>();
+  const push = (m: Map<string, PayloadSeries[]>, k: string, s: PayloadSeries) => {
+    const l = m.get(k);
+    if (!l) m.set(k, [s]);
+    else if (!l.includes(s)) l.push(s);
+  };
+  const base = (s: PayloadSeries) => `${s.unit}|${s.pit ? 1 : 0}|${s.met}`;
+  // A fold needs one identical distinctive value, so lines are filed under each of their values.
+  const enter = (m: Map<string, PayloadSeries[]>, k: string, s: PayloadSeries) => {
+    for (const v of valueIds(s)) push(m, `${k}|${v}`, s);
+  };
+  const lookup = (m: Map<string, PayloadSeries[]>, k: string, a: PayloadSeries) => {
+    const out = new Set<PayloadSeries>();
+    for (const v of valueIds(a)) for (const s of m.get(`${k}|${v}`) ?? []) out.add(s);
+    return [...out];
+  };
+  const order = new Map<PayloadSeries, number>();
+  for (const g of groups)
+    if (g.root) {
+      const root = resolve(c, g.root);
+      for (const r of g.rows) {
+        const s = c.byKey.get(resolve(c, r.k));
+        if (!s || c.removed.has(s.k)) continue;
+        if (!order.has(s)) order.set(s, order.size);
+        enter(named, `${base(s)}|${alikeKey(s.label)}`, s);
+        if (s.k === root) enter(roots, base(s), s);
+      }
+    }
+  const seenLoose = new Map<string, { s: PayloadSeries; g: string; n: number }[]>();
+  let seen = 0;
   for (const g of groups) {
     if (g.root) continue;
     for (const r of g.rows) {
       const a = c.byKey.get(resolve(c, r.k));
       if (!a || c.removed.has(a.k)) continue;
       const bare = !labelTokens(a.label).length;
-      for (const { s: b, g: tg } of rooted) {
-        if (b.unit !== a.unit || !!b.pit !== !!a.pit || b.met !== a.met) continue;
-        if (bare ? b.k !== resolve(c, tg.root!) : !alikeLabels(a.label, b.label)) continue;
-        const cmp = compare(a, b);
-        if (cmp.conflict || cmp.exact < (bare ? 3 : 1)) continue;
+      const cands = (bare ? lookup(roots, base(a), a) : lookup(named, `${base(a)}|${alikeKey(a.label)}`, a)).sort((x, y) => (order.get(x) ?? 0) - (order.get(y) ?? 0));
+      let folded = false;
+      for (const b of cands) {
+        if (b === a || c.removed.has(b.k) || (!bare && !alikeLabels(a.label, b.label))) continue;
+        const id = identical(a, b);
+        if (id.differ || id.distinct < (bare ? 3 : 1)) continue;
         if (b.parent && [...periodsOf(a)].some((e) => !periodsOf(b).has(e))) continue;
-        absorb(c, b, a);
+        absorb(c, b, a, true);
+        enter(named, `${base(b)}|${alikeKey(b.label)}`, b);
+        folded = true;
         break;
       }
+      if (folded || bare) continue;
+      // Loose into loose: the first list that printed the line keeps it.
+      const lk = `${a.unit}|${a.pit ? 1 : 0}|${alikeKey(a.label)}`;
+      const ids = valueIds(a).map((v) => `${lk}|${v}`);
+      const prior = [...new Set(ids.flatMap((id) => seenLoose.get(id) ?? []))].sort((x, y) => x.n - y.n);
+      const twin = prior.find(({ s: b, g: home }) => home !== g.id && b !== a && !c.removed.has(b.k) && alikeLabels(a.label, b.label) && ((id) => !id.differ && id.shared >= 2 && id.distinct >= 2)(identical(a, b)));
+      if (twin) {
+        absorb(c, twin.s, a, true);
+        c.home.set(twin.s.k, twin.g);
+        continue;
+      }
+      const entry = { s: a, g: g.id, n: seen++ };
+      for (const id of ids) (seenLoose.get(id) ?? seenLoose.set(id, []).get(id)!).push(entry);
     }
   }
 }
@@ -347,27 +565,45 @@ function foldLooseRepeats(c: Ctx, groups: PayloadGroup[]) {
 /**
  * A breakdown printed again inside a bigger one (PNC's "Fee income" table is the fee block of its
  * "Noninterest income" table): when every line of the smaller table has a twin in the bigger one,
- * same name, same printed numbers, no conflict, and the twin covers its periods, the smaller table's
- * lines fold into the bigger table and the smaller table disappears.
+ * same name, identical printed numbers, and the twin covers its periods, the smaller table's lines
+ * fold into the bigger table and the smaller table disappears. Candidate tables are found through
+ * an index of line names, so the pass does not compare every pair of tables.
  */
 function dropSubTables(c: Ctx, groups: PayloadGroup[]) {
   const live = (g: PayloadGroup) => g.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
   const rooted = groups.filter((g) => g.root).sort((a, b) => a.rows.length - b.rows.length);
+  const order = new Map(rooted.map((g, i) => [g, i]));
+  const byName = new Map<string, Set<PayloadGroup>>();
+  const nameOf = (s: PayloadSeries) => `${s.unit}|${s.pit ? 1 : 0}|${alikeKey(s.label)}`;
+  for (const g of rooted)
+    for (const s of live(g)) {
+      const k = nameOf(s);
+      const set = byName.get(k);
+      if (set) set.add(g);
+      else byName.set(k, new Set([g]));
+    }
   for (const small of rooted) {
     const mine = live(small);
     if (!mine.length) continue;
-    for (const big of rooted) {
-      if (big === small || big.unit !== small.unit) continue;
+    // Every line needs a twin, so only tables holding all of the small table's names qualify.
+    let cands = [...(byName.get(nameOf(mine[0])) ?? [])].filter((g) => g !== small && g.unit === small.unit && g.rows.length > mine.length);
+    for (const a of mine.slice(1)) {
+      if (!cands.length) break;
+      const has = byName.get(nameOf(a));
+      cands = has ? cands.filter((g) => has.has(g)) : [];
+    }
+    cands.sort((a, b) => order.get(a)! - order.get(b)!);
+    for (const big of cands) {
       const theirs = live(big);
       if (theirs.length <= mine.length) continue;
       const pairs: [PayloadSeries, PayloadSeries][] = [];
       for (const a of mine) {
-        const b = theirs.find((t) => !pairs.some(([x]) => x === t) && t.unit === a.unit && !!t.pit === !!a.pit && alikeLabels(a.label, t.label) && [...periodsOf(a)].every((e) => periodsOf(t).has(e)) && ((cmp) => !cmp.conflict && cmp.exact >= 1)(compare(a, t)));
+        const b = theirs.find((t) => !pairs.some(([x]) => x === t) && t.unit === a.unit && !!t.pit === !!a.pit && alikeLabels(a.label, t.label) && [...periodsOf(a)].every((e) => periodsOf(t).has(e)) && ((id) => !id.differ && id.distinct >= 1)(identical(a, t)));
         if (!b) break;
         pairs.push([b, a]);
       }
       if (pairs.length !== mine.length) continue;
-      for (const [b, a] of pairs) absorb(c, b, a);
+      for (const [b, a] of pairs) absorb(c, b, a, true);
       small.rows = [];
       break;
     }
@@ -377,7 +613,10 @@ function dropSubTables(c: Ctx, groups: PayloadGroup[]) {
 /**
  * A line whose only part prints the same numbers is one figure under two names (PNC's "Retail
  * Banking" net income and the "Earnings" that closes the Retail Banking table): the part folds into
- * the line, and its own parts move up with it.
+ * the line, and its own parts move up with it. "The same numbers" means identical in every period
+ * both print, not close: a part 0.4% below a round total ("Net income attributable to common" under
+ * "Net income") is a different figure and stays. The part must not print a period the line lacks, and
+ * the line keeps every one of its own printed cells and sources.
  */
 function foldSoleChildren(c: Ctx, g: PayloadGroup) {
   const rows = g.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
@@ -388,10 +627,12 @@ function foldSoleChildren(c: Ctx, g: PayloadGroup) {
     if (kids.length !== 1) continue;
     const k = kids[0];
     if (k.unit !== p.unit || !!k.pit !== !!p.pit) continue;
-    const cmp = compare(p, k);
-    if (cmp.conflict || cmp.exact < 1 || [...periodsOf(k)].some((e) => !periodsOf(p).has(e))) continue;
+    const id = identical(p, k);
+    if (id.differ || id.distinct < 1 || [...periodsOf(k)].some((e) => !periodsOf(p).has(e))) continue;
+    // A calculated cell of either line that the other prints differently is a disagreement too.
+    if (allCells(k).some(([kind, cells]) => Object.entries(cells).some(([e, x]) => cellsByKind(p, kind)[e] && cellsByKind(p, kind)[e].v !== x.v))) continue;
     const label = p.label;
-    absorb(c, p, k);
+    absorb(c, p, k, true);
     p.label = label;
   }
 }
@@ -404,19 +645,53 @@ interface Cluster {
 /** Words that describe how a release lays a table out, not what it measures. */
 const TABLE_WORDS = new Set(["type", "types", "plan", "plans", "summary", "result", "results", "highlight", "highlights", "metric", "metrics", "kpi", "kpis", "key", "statistic", "statistics", "selected", "supplemental", "information", "data", "quarterly", "annual", "overview", "trend", "trends", "detail", "details", "schedule", "table"]);
 
+interface MergeSide {
+  ms: PayloadSeries[];
+  mRoot: string | null;
+  pos: Map<PayloadSeries, number>;
+  byKey: Map<string, PayloadSeries[]>;
+  byValue: Map<string, PayloadSeries[]>;
+  mPeriods: Set<string>;
+  kidPeriods: Set<string>;
+}
+/** m's side of planMerge, kept until m changes (applyMerge drops it), so a big cluster is indexed once. */
+const sideCache = new WeakMap<PayloadGroup, MergeSide>();
+function mergeSide(c: Ctx, m: PayloadGroup, ctx: Set<string>): MergeSide {
+  const hit = sideCache.get(m);
+  if (hit) return hit;
+  const ms = m.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
+  const mRoot = m.root ? resolve(c, m.root) : null;
+  const byKey = new Map<string, PayloadSeries[]>();
+  const byValue = new Map<string, PayloadSeries[]>();
+  const mPeriods = new Set<string>();
+  const kidPeriods = new Set<string>();
+  for (const a of ms) {
+    append(byKey, memberKey(a, ctx), a);
+    for (const id of valueIds(a)) append(byValue, id, a);
+    for (const e of periodsOf(a)) mPeriods.add(e);
+    if (a.k !== mRoot) for (const [kind, cells] of allCells(a)) for (const e in cells) kidPeriods.add(kind + e);
+  }
+  const side = { ms, mRoot, pos: new Map(ms.map((a, i) => [a, i])), byKey, byValue, mPeriods, kidPeriods };
+  sideCache.set(m, side);
+  return side;
+}
+
 /** Plan to fold table g into cluster m: the line pairs that are one line, or null when they disagree. */
 function planMerge(c: Ctx, m: PayloadGroup, g: PayloadGroup, ctx: Set<string>): [PayloadSeries, PayloadSeries][] | null {
-  const ms = m.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
+  const { ms, mRoot, pos, byKey, byValue, mPeriods, kidPeriods } = mergeSide(c, m, ctx);
   const gs = g.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
-  const mRoot = m.root ? resolve(c, m.root) : null;
   const gRoot = g.root ? resolve(c, g.root) : null;
   const used = new Set<string>();
   const pairs: [PayloadSeries, PayloadSeries][] = [];
+  // sameLine says "same" or "clash" only for lines with the same key or sharing an identical printed
+  // value in one period, so only those are compared (in m's order, as a full scan would).
   for (const b of gs) {
     const kb = memberKey(b, ctx);
     let best: PayloadSeries | null = null;
     let bestScore = -1;
-    for (const a of ms) {
+    const near = new Set(byKey.get(kb) ?? []);
+    for (const id of valueIds(b)) for (const a of byValue.get(id) ?? []) near.add(a);
+    for (const a of [...near].sort((x, y) => pos.get(x)! - pos.get(y)!)) {
       if (used.has(a.k)) continue;
       const v = sameLine(a, memberKey(a, ctx), b, kb, { aRoot: a.k === mRoot, bRoot: b.k === gRoot });
       if (v === "clash") return null; // same name, different numbers: a different measure (adjusted vs GAAP, restated)
@@ -433,7 +708,6 @@ function planMerge(c: Ctx, m: PayloadGroup, g: PayloadGroup, ctx: Set<string>): 
   }
   if (mRoot && gRoot && !pairs.some(([a, b]) => a.k === mRoot && b.k === gRoot)) return null;
   const kids = pairs.filter(([a]) => a.k !== mRoot).length;
-  const mPeriods = new Set(ms.flatMap((s) => [...periodsOf(s)]));
   const gPeriods = new Set(gs.flatMap((s) => [...periodsOf(s)]));
   // Two different splits of the same total in the same periods (segments vs products) stay apart.
   if (overlaps(mPeriods, gPeriods) && !kids && gs.length > 1 && ms.length > 1) return null;
@@ -441,18 +715,16 @@ function planMerge(c: Ctx, m: PayloadGroup, g: PayloadGroup, ctx: Set<string>): 
   // In a period both tables itemize, every part g prints must be one of m's parts there: otherwise g
   // is another split of the same total (GAAP opex as R&D + SG&A vs as non-GAAP opex + adjustments).
   const matched = new Set(pairs.map(([, b]) => b.k));
-  const mKids = ms.filter((s) => s.k !== mRoot);
   for (const b of gs) {
     if (b.k === gRoot || matched.has(b.k)) continue;
-    for (const [kind, cells] of allCells(b))
-      for (const e of Object.keys(cells))
-        if (mKids.some((a) => (kind === "q" ? a.q : kind === "y" ? a.y : a.mo ?? {})[e])) return null;
+    for (const [kind, cells] of allCells(b)) for (const e in cells) if (kidPeriods.has(kind + e)) return null;
   }
   return pairs;
 }
 
 /** Fold g into m: matched lines merge, g's other lines join m in g's order, next to their matched neighbours. */
 function applyMerge(c: Ctx, m: PayloadGroup, g: PayloadGroup, pairs: [PayloadSeries, PayloadSeries][]) {
+  sideCache.delete(m);
   for (const [a, b] of pairs) if (a.k !== b.k) absorb(c, a, b);
   const rows = m.rows.filter((r) => !c.removed.has(r.k));
   const inM = new Set(rows.map((r) => r.k));
@@ -519,7 +791,7 @@ function splitLoose(c: Ctx, groups: PayloadGroup[]): PayloadGroup[] {
       const px = parts.length > 1 ? parts[0].trim() : "";
       if (!px || px.length < 3 || /^\d/.test(px) || labelTokens(px).length === 0) continue;
       const key = px.toLowerCase();
-      byPrefix.set(key, [...(byPrefix.get(key) ?? []), r]);
+      append(byPrefix, key, r);
     }
     const taken = new Set<string>();
     for (const [, rows] of byPrefix) {
@@ -615,7 +887,7 @@ function orderRows(c: Ctx, g: PayloadGroup): { k: string; depth: number }[] {
     const s = c.byKey.get(k);
     if (!s || k === g.root) continue;
     const parent = s.parent && inGroup.has(s.parent) && s.parent !== k ? s.parent : g.root;
-    kidsOf.set(parent, [...(kidsOf.get(parent) ?? []), s]);
+    append(kidsOf, parent, s);
   }
   const out: { k: string; depth: number }[] = [];
   const seen = new Set<string>();
@@ -677,10 +949,28 @@ function recheck(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): Payloa
     const inGroup = new Set(g.rows.map((r) => r.k));
     for (const r of g.rows) {
       const s = c.byKey.get(r.k);
-      if (s?.parent && inGroup.has(s.parent)) kidsOf.set(s.parent, [...(kidsOf.get(s.parent) ?? []), s]);
+      if (s?.parent && inGroup.has(s.parent)) append(kidsOf, s.parent, s);
     }
   }
   const touched = new Set([...c.touched].map((k) => resolve(c, k)));
+  // Which tables show each line, so a part that left a total can be told apart: moved to another
+  // table (the release's own check stands) or folded away inside this one (the check is redone).
+  const tablesOf = new Map<string, Set<PayloadGroup>>();
+  for (const g of groups)
+    for (const r of g.rows) {
+      const set = tablesOf.get(r.k);
+      if (set) set.add(g);
+      else tablesOf.set(r.k, new Set([g]));
+    }
+  const movedAway = (k: string, kids: PayloadSeries[]) => {
+    const mine = tablesOf.get(k) ?? new Set<PayloadGroup>();
+    const present = new Set(kids.map((s) => s.k));
+    const gone = (c.origKids.get(k) ?? []).map((x) => resolve(c, x)).filter((x) => !present.has(x));
+    return gone.length > 0 && gone.every((x) => {
+      const where = tablesOf.get(x);
+      return !!where && [...where].every((g) => !mine.has(g));
+    });
+  };
   const out: PayloadCheck[] = [];
   for (const x of checks) {
     const total = c.byKey.get(x.k);
@@ -702,7 +992,7 @@ function recheck(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): Payloa
     }
     const ok = Math.abs(sum - t.v) <= tol;
     // Fewer parts than the release printed (one now sits in another table): the release's own check stands.
-    if (!ok && x.ok && present.length <= x.n) {
+    if (!ok && x.ok && present.length <= x.n && movedAway(x.k, kids)) {
       out.push(x);
       continue;
     }
@@ -934,9 +1224,9 @@ function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[])
     const key = `${s.unit}|${measure}`;
     if (who) {
       const byM = parts.get(key) ?? new Map<string, PayloadSeries[]>();
-      byM.set(who.m.key, [...(byM.get(who.m.key) ?? []), s]);
+      append(byM, who.m.key, s);
       parts.set(key, byM);
-    } else if (s.total || isRoot(s) || /\bconsolidated\b/i.test(`${s.sc ?? ""} ${s.label}`)) totals.set(key, [...(totals.get(key) ?? []), s]);
+    } else if (s.total || isRoot(s) || /\bconsolidated\b/i.test(`${s.sc ?? ""} ${s.label}`)) append(totals, key, s);
   }
 
   const taken = new Set<string>();
@@ -976,6 +1266,7 @@ function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[])
         for (const [e, cell] of fix) {
           c.log?.push(`FY ${head.label} ${e}: ${head.y[e]?.v} → ${cell.v} (sum of quarters)`);
           head.y[e] = cell;
+          valueIdCache.delete(head);
         }
         // A line that closes its own breakdown stays there; the segment row gets its printed cells.
         absorb(c, head, foldable(b) ? b : copyOf(b, "x"));
@@ -1067,7 +1358,11 @@ function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[])
           for (const [e, cell] of Object.entries(cells)) {
             if (mine[e] || cell.f) continue;
             const r = sumAt(kind, e);
-            if (r.n >= 2 && tie(r, cell.v).ok) mine[e] = cell;
+            if (r.n >= 2 && tie(r, cell.v).ok) {
+              mine[e] = cell;
+              valueIdCache.delete(root);
+              periodCache.delete(root);
+            }
           }
         }
       }
@@ -1157,8 +1452,15 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   if (p.tidy === TIDY_VERSION && !opts.log) return p;
   const series = p.series.map((s) => ({ ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) }));
   const out: IrPayload = { ...p, series, groups: p.groups.map((g) => ({ ...g, t: undefined, rows: [...g.rows] })), checks: p.checks.map((x) => ({ ...x })) };
-  const c: Ctx = { p: out, byKey: new Map(series.map((s) => [s.k, s])), alias: new Map(Object.entries(p.alias ?? {})), removed: new Set(), kids: new Map(), renamed: new Map(), touched: new Set(), log: opts.log };
-  for (const s of series) if (s.parent) c.kids.set(s.parent, [...(c.kids.get(s.parent) ?? []), s]);
+  const c: Ctx = { p: out, byKey: new Map(series.map((s) => [s.k, s])), alias: new Map(Object.entries(p.alias ?? {})), removed: new Set(), kids: new Map(), renamed: new Map(), touched: new Set(), home: new Map(), origKids: new Map(), log: opts.log };
+  for (const s of series) if (s.parent) {
+    const kids = c.kids.get(s.parent);
+    if (kids) kids.push(s);
+    else c.kids.set(s.parent, [s]);
+    const orig = c.origKids.get(s.parent);
+    if (orig) orig.push(s.k);
+    else c.origKids.set(s.parent, [s.k]);
+  }
   const before = { groups: out.groups.length, series: series.length };
   stocks(c);
 
@@ -1183,7 +1485,7 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
       continue;
     }
     const key = subjectOf(g);
-    subjects.set(key, [...(subjects.get(key) ?? []), g]);
+    append(subjects, key, g);
   }
   const drop = new Set<PayloadGroup>();
   const clustersOf = new Map<string, Cluster[]>();
@@ -1192,20 +1494,44 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
     for (const g of list) for (const w of subjectContext(titleOf(g), g)) ctx.add(w);
     for (const g of list) mergeSiblings(c, g, ctx);
     // Longest-running, most recent table first: the others fold into it.
-    const ordered = [...list].sort((a, b) => span(c, b).n - span(c, a).n || span(c, b).last.localeCompare(span(c, a).last));
+    const sp = new Map(list.map((g) => [g, span(c, g)]));
+    const ordered = [...list].sort((a, b) => sp.get(b)!.n - sp.get(a)!.n || sp.get(b)!.last.localeCompare(sp.get(a)!.last));
     const clusters: Cluster[] = [];
+    // A table can only fold into a cluster holding a line with one of its keys or one of its printed
+    // values (planMerge finds no pair otherwise), so clusters are looked up instead of scanned.
+    const idsOf = (g: PayloadGroup) => {
+      const ids: string[] = [];
+      for (const r of g.rows) {
+        const x = c.byKey.get(resolve(c, r.k));
+        if (!x || c.removed.has(x.k)) continue;
+        ids.push(`k:${memberKey(x, ctx)}`);
+        for (const v of valueIds(x)) ids.push(v);
+      }
+      return ids;
+    };
+    const index = new Map<string, Set<number>>();
+    const enter = (i: number) => {
+      for (const id of idsOf(clusters[i].g)) (index.get(id) ?? index.set(id, new Set()).get(id)!).add(i);
+    };
     for (const g of ordered) {
       let placed = false;
-      for (const cl of clusters) {
+      const near = new Set<number>();
+      for (const id of idsOf(g)) for (const i of index.get(id) ?? []) near.add(i);
+      for (const i of [...near].sort((x, y) => x - y)) {
+        const cl = clusters[i];
         const plan = planMerge(c, cl.g, g, ctx);
         if (!plan) continue;
         applyMerge(c, cl.g, g, plan);
         cl.members.push(g);
         drop.add(g);
+        enter(i);
         placed = true;
         break;
       }
-      if (!placed) clusters.push({ g, members: [g] });
+      if (!placed) {
+        clusters.push({ g, members: [g] });
+        enter(clusters.length - 1);
+      }
     }
     for (const cl of clusters) mergeSiblings(c, cl.g, ctx);
     clustersOf.set(key, clusters);
@@ -1247,7 +1573,11 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   // The segment step can leave a consolidated line in a loose list that another table already closes.
   foldLooseRepeats(c, groups);
   const inTables = new Set(groups.filter((g) => g.root).flatMap((g) => g.rows.map((r) => resolve(c, r.k))));
-  for (const g of groups) if (!g.root) g.rows = g.rows.map((r) => ({ ...r, k: resolve(c, r.k) })).filter((r) => !c.removed.has(r.k) && !inTables.has(r.k));
+  for (const g of groups) {
+    if (g.root) continue;
+    const seen = new Set<string>();
+    g.rows = g.rows.map((r) => ({ ...r, k: resolve(c, r.k) })).filter((r) => !c.removed.has(r.k) && !inTables.has(r.k) && (c.home.get(r.k) ?? g.id) === g.id && !seen.has(r.k) && (seen.add(r.k), true));
+  }
   groups = groups.filter((g) => g.rows.length);
 
   // 4. Titles that tell tables apart: the total's own name, else the unit, else the years covered.
@@ -1257,13 +1587,14 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   const byTitle = new Map<string, PayloadGroup[]>();
   for (const g of groups) {
     const ti = titleOf(g).toLowerCase();
-    byTitle.set(ti, [...(byTitle.get(ti) ?? []), g]);
+    append(byTitle, ti, g);
   }
   for (const same of byTitle.values()) {
     if (same.length < 2) continue;
     const base = titleOf(same[0]);
     const baseWords = new Set(labelTokens(base));
     const used = new Set<string>([base.toLowerCase()]);
+    let next = 2;
     const tagged = (g: PayloadGroup, tag: string) => {
       const t = `${base} · ${tag}`;
       if (!tag || used.has(t.toLowerCase())) return false;
@@ -1273,29 +1604,35 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
     };
     const units = new Set(same.map((g) => g.unit));
     const rootLabel = (g: PayloadGroup) => (g.root ? c.byKey.get(g.root)?.label ?? "" : "");
-    const tagsOf = (g: PayloadGroup) => new Set(MODIFIER_TAGS.filter(([re]) => re.test(rootLabel(g))).map(([, t]) => t));
-    for (const g of [...same].sort((a, b) => span(c, b).last.localeCompare(span(c, a).last))) {
-      const others = same.filter((x) => x !== g);
+    // Tags and words counted once per table, so telling n tables apart costs n, not n².
+    const tagSets = new Map(same.map((g) => [g, new Set(MODIFIER_TAGS.filter(([re]) => re.test(rootLabel(g))).map(([, t]) => t))]));
+    const tagCount = new Map<string, number>();
+    for (const t of tagSets.values()) for (const x of t) tagCount.set(x, (tagCount.get(x) ?? 0) + 1);
+    const wordSetsOf = new Map(same.map((g) => [g, new Set(labelTokens(rootLabel(g), true))]));
+    const wordCount = new Map<string, number>();
+    for (const w of wordSetsOf.values()) for (const x of w) wordCount.set(x, (wordCount.get(x) ?? 0) + 1);
+    const spans = new Map(same.map((g) => [g, span(c, g)]));
+    for (const g of [...same].sort((a, b) => spans.get(b)!.last.localeCompare(spans.get(a)!.last))) {
       // 1. A measure word the others don't have: Adjusted, Non-GAAP, Organic…
-      const mine = [...tagsOf(g)].filter((t) => !base.toLowerCase().includes(t.toLowerCase()) && others.some((o) => !tagsOf(o).has(t)));
+      const mine = [...tagSets.get(g)!].filter((t) => !base.toLowerCase().includes(t.toLowerCase()) && (tagCount.get(t) ?? 0) < same.length);
       if (mine.length && tagged(g, mine.join(", "))) continue;
       // 2. Words of its total that neither the title nor the other totals have.
-      const otherWords = new Set(others.flatMap((o) => labelTokens(rootLabel(o), true)));
-      const phrase = cleanPhrase(rootLabel(g), (w) => baseWords.has(w) || otherWords.has(w));
+      const own = wordSetsOf.get(g)!;
+      const phrase = cleanPhrase(rootLabel(g), (w) => baseWords.has(w) || (wordCount.get(w) ?? 0) - (own.has(w) ? 1 : 0) > 0);
       if (phrase && tagged(g, phrase)) continue;
       if (units.size > 1 && tagged(g, UNIT_TAG[g.unit] ?? g.unit)) continue;
       // 3. The years it covers, 4. the documents it comes from, 5. a number.
-      const sp = span(c, g);
+      const sp = spans.get(g)!;
       const era = sp.first && sp.last ? (sp.first.slice(0, 4) === sp.last.slice(0, 4) ? sp.first.slice(0, 4) : `${sp.first.slice(0, 4)}–${sp.last.slice(0, 4)}`) : "";
       if (tagged(g, era)) continue;
       const kind = sourceKind(c, g);
       if (kind && tagged(g, `from ${kind}`)) continue;
-      for (let n = 2; !tagged(g, `table ${n}`); n++);
+      while (!tagged(g, `table ${next}`)) next++;
     }
     // The newest table keeps the plain title when the others were told apart.
     const plain = same.find((g) => !g.t || g.t === base);
     if (!plain) {
-      const newest = [...same].sort((a, b) => span(c, b).last.localeCompare(span(c, a).last))[0];
+      const newest = [...same].sort((a, b) => spans.get(b)!.last.localeCompare(spans.get(a)!.last))[0];
       if (newest && same.filter((g) => g !== newest).every((g) => g.t !== base)) newest.t = base;
     }
   }

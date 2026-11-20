@@ -153,7 +153,7 @@ export function findSuspects(p: IrPayload): SuspectMap {
 
   // 4. A line against its own printed total, and a total against its lines.
   const kids = new Map<string, PayloadSeries[]>();
-  for (const s of p.series) if (s.parent) kids.set(s.parent, [...(kids.get(s.parent) ?? []), s]);
+  for (const s of p.series) if (s.parent) (kids.get(s.parent) ?? kids.set(s.parent, []).get(s.parent)!).push(s);
   for (const s of p.series) {
     if (!GUARDED.has(s.unit)) continue;
     const parent = s.parent ? byKey.get(s.parent) : undefined;
@@ -174,22 +174,46 @@ export function findSuspects(p: IrPayload): SuspectMap {
   const printed = new Map<string, { s: PayloadSeries; k: Kind; e: string; v: number }[]>();
   for (const s of p.series) {
     if (!GUARDED.has(s.unit)) continue;
+    const name = labelKey(s.label);
     for (const k of ["q", "y"] as Kind[])
       for (const [e, c] of Object.entries(cellsOf(s, k))) {
         if (c.d == null || c.f) continue;
-        const id = `${c.d}|${s.unit}|${k}|${labelKey(s.label)}`;
-        printed.set(id, [...(printed.get(id) ?? []), { s, k, e, v: c.v }]);
+        const id = `${c.d}|${s.unit}|${k}|${name}`;
+        (printed.get(id) ?? printed.set(id, []).get(id)!).push({ s, k, e, v: c.v });
       }
   }
   const same = (a: number, b: number) => Math.abs(a - b) <= Math.max(Math.abs(a), Math.abs(b)) * 5e-4;
   for (const list of printed.values()) {
     if (list.length < 3) continue;
+    // Indexed by period and by value, so a label printed many times in one document stays near linear.
+    const byE = new Map<string, typeof list>();
+    for (const x of list) (byE.get(x.e) ?? byE.set(x.e, []).get(x.e)!).push(x);
+    const sorted = [...list].sort((a, b) => a.v - b.v);
+    const order = new Map(list.map((y, i) => [y, i]));
+    /** Items whose value is the same figure as v (within `same`'s tolerance). */
+    const near = (v: number) => {
+      const tol = Math.abs(v) * 5e-4 / (1 - 5e-4);
+      let lo = 0;
+      let hi = sorted.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (sorted[mid].v < v - tol) lo = mid + 1;
+        else hi = mid;
+      }
+      const out: typeof list = [];
+      for (let i = lo; i < sorted.length && sorted[i].v <= v + tol; i++) if (same(sorted[i].v, v)) out.push(sorted[i]);
+      return out;
+    };
     for (const x of list) {
-      for (const o of list) {
-        if (o.s === x.s || o.e !== x.e || same(o.v, x.v)) continue;
-        const twin = list.find((y) => y.s === o.s && y.e !== x.e && same(y.v, x.v));
-        if (!twin) continue;
-        flag(x.s, x.k, x.e, `The same document prints this figure for the period ending ${twin.e} and ${o.v.toLocaleString("en-US")} for this one (${o.s.label}): the column was probably read under the wrong period`);
+      // Lines that print x's figure for another period, and what they print for x's period.
+      const twins = new Map<PayloadSeries, string>();
+      for (const y of near(x.v).sort((a, b) => order.get(a)! - order.get(b)!)) if (y.s !== x.s && y.e !== x.e && !twins.has(y.s)) twins.set(y.s, y.e);
+      if (!twins.size) continue;
+      for (const o of byE.get(x.e)!) {
+        if (o.s === x.s || same(o.v, x.v)) continue;
+        const twinE = twins.get(o.s);
+        if (!twinE) continue;
+        flag(x.s, x.k, x.e, `The same document prints this figure for the period ending ${twinE} and ${o.v.toLocaleString("en-US")} for this one (${o.s.label}): the column was probably read under the wrong period`);
         break;
       }
     }
@@ -240,7 +264,7 @@ export function holdSuspects(p: IrPayload): IrPayload {
     return out;
   });
   const kidsOf = new Map<string, string[]>();
-  for (const s of series) if (s.parent) kidsOf.set(s.parent, [...(kidsOf.get(s.parent) ?? []), s.k]);
+  for (const s of series) if (s.parent) (kidsOf.get(s.parent) ?? kidsOf.set(s.parent, []).get(s.parent)!).push(s.k);
   const touches = (x: PayloadCheck) => heldAt.has(`${x.k}|${x.kind}|${x.e}`) || (kidsOf.get(x.k) ?? []).some((k) => heldAt.has(`${k}|${x.kind}|${x.e}`));
   const checks = heldAt.size ? p.checks.filter((x) => !touches(x)) : p.checks;
   const q = checks.filter((x) => x.kind === "q");
