@@ -98,6 +98,15 @@ export function cellsFor(s: PayloadSeries, kind: IrPeriodKind): Record<string, P
   return c;
 }
 
+/** Cells held back as suspect (suspect.ts) for one period type: shown as flags, never used in figures. */
+export function heldFor(s: PayloadSeries, kind: IrPeriodKind): Record<string, PayloadCell> {
+  const h = s.held;
+  if (!h) return {};
+  if (kind === "q") return h.q ?? {};
+  if (kind === "y") return h.y ?? {};
+  return s.pit ? { ...(h.q ?? {}), ...(h.mo ?? {}) } : (h.mo ?? {});
+}
+
 /**
  * Calendar month that closes the company's fiscal year: from its fiscal-year columns, else March,
  * June, September, December quarter-ends are read as a calendar fiscal year. Null when the payload

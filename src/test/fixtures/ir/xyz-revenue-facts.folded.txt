@@ -1,0 +1,160 @@
+018a3f3c-cd5e-4c0e-b0eb-2b481bb8f886|28b2a637-8e1b-45e5-a31a-d5d59dd48acf|Revenue by line||Total net revenue|true|2018-07-01|2018-09-30|3|882108000|table|19,9,3|882,108
+01b73f45-39af-456d-82ac-504dc10ef055|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type|Total net revenue|Transaction-based revenue|false|2019-07-01|2019-09-30|3|816622000|table|28,4,3|816,622
+01f6b897-565f-4d92-87f9-134173521dd8|b98f2907-72c0-4399-89cc-9365fe498ba7|Revenue by source|Total net revenue|Bitcoin revenue|false|2020-01-01|2020-03-31|3|306098000|table|33,7,7|306,098
+033f5950-3bc5-4fcf-ada9-f62b622c5271|b98f2907-72c0-4399-89cc-9365fe498ba7|Revenue by source||Total net revenue|true|2020-01-01|2020-03-31|3|1381109000|table|33,9,7|1,381,109
+0429276e-0f88-4f3f-8679-eae3f10aff0d|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type|Total net revenue|Hardware revenue|false|2019-01-01|2019-12-31|12|84505|table|38,7,15|84,505
+05970812-8823-4946-92b5-dc97b90586c1|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue|Total net revenue|Total net revenue excluding Caviar|false|2019-10-01|2019-12-31|3|1298384000|table|34,6,3|1,298,384
+05a87a6d-dde6-4d40-b932-53fc18c088e9|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Adjusted Revenue|Adjusted Revenue|Less: Caviar contribution to Adjusted Revenue|false|2019-07-01|2019-09-30|3|40948000|table|37,9,3|40,948
+07d5057c-033d-4ea1-99c6-b07770746381|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue||Total net revenue|true|2018-01-01|2018-12-31|12|3149915|table|5,11,11|3,149,915
+07dd27ed-81c8-467c-91bc-6100d7e4d3bc|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue|Total net revenue|Total net revenue excluding Caviar|false|2019-01-01|2019-12-31|12|4567588000|table|34,6,11|4,567,588
+0a2a9f1b-43d7-40f0-bd88-c664d273ca4f|c5e9bbf0-66c8-402f-aaaa-320c8353e1cc|Revenue by source|Total net revenue|Transaction-based revenue|false|2018-04-01|2018-06-30|3|625228000|table|15,4,3|625,228
+0aa7c69e-64b0-47b7-8f48-7f478fc1c03d|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type||Total net revenue|true|2019-10-01|2019-12-31|3|1313429000|table|27,9,3|1,313,429
+0bba47f1-428f-4e20-988f-b117b631f546|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Total net revenue|Total net revenue excluding Caviar|true|2019-10-01|2019-12-31|3|1298383000|table|52,6,7|1,298,383
+0de4b32f-333a-4219-89e9-99bd330df68c|05549171-5316-4a0b-8e14-dcf87cc6668d|Revenue by type||Total net revenue|true|2020-04-01|2020-06-30|3|1923625000|table|37,9,7|1,923,625
+0ef8069e-21a0-43bd-8764-b55249515aaf|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue|Total net revenue|Subscription and services-based revenue|false|2019-04-01|2019-06-30|3|43390000|table|0,5,23|43,390
+1046852d-5677-456e-b838-a4f590c40e75|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type|Total net revenue|Hardware revenue|false|2020-01-01|2020-03-31|3|20675|table|41,6,3|20,675
+11667c5f-b438-4aee-a2ad-981b5942a567|05549171-5316-4a0b-8e14-dcf87cc6668d|Revenue by type|Total net revenue|Bitcoin revenue|false|2020-04-01|2020-06-30|3|875456000|table|37,7,7|875,456
+11e75957-17f0-44c7-99e2-759ea3a5f88d|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue|Total net revenue|Total net revenue excluding Caviar|true|2019-07-01|2019-09-30|3|1225526000|table|37,6,3|1,225,526
+12c47f58-670b-4833-8816-8f826720fb41|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2018-07-01|2018-09-30|3|166203000|table|28,5,7|166,203
+12d89fa9-a99f-4b64-b172-3f3e0c363d7c|28b2a637-8e1b-45e5-a31a-d5d59dd48acf|Revenue by line|Total net revenue|Hardware revenue|false|2018-07-01|2018-09-30|3|17558000|table|19,6,3|17,558
+17b2a9cc-da5b-4e62-8d6a-b3007d3a8e42|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue||Total net revenue|true|2018-01-01|2018-12-31|12|3298177000|table|34,3,15|3,298,177
+17b94d48-970b-462b-bdb1-8ff68e33eb09|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type|Total net revenue|Bitcoin revenue|false|2019-01-01|2019-03-31|3|65528|table|41,7,7|65,528
+1e2d5052-1e27-4f4f-9065-8fa3b642fda4|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Subscription and services-based revenue|Subscription and services-based revenue excluding Caviar|true|2019-10-01|2019-12-31|3|266369000|table|52,11,7|266,369
+20df4c76-17c5-4844-a3cb-112c43b34443|c57778a6-6c93-45e3-ae35-6fec92d40a84|Revenue|Total net revenue (GAAP)|Less: Bitcoin contribution to total net revenue|false|2020-01-01|2020-03-31|3|306098000|table|44,6,11|306,098
+2122871c-0ad8-427f-bc6b-e76587c27f52|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue||Total net revenue|true|2019-10-01|2019-12-31|3|15046000|table|0,7,31|15,046
+26507392-c8d8-4fcc-a0d9-8867c8d92daf|c57778a6-6c93-45e3-ae35-6fec92d40a84|Revenue|Cash App revenue (GAAP)|Total Cash App revenue, excluding Bitcoin and Afterpay|true|2020-01-01|2020-03-31|3|221544000|table|44,31,11|221,544
+282155f7-2e31-40f4-b480-647f82336628|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Total net revenue|Subscription and services-based revenue|true|2019-01-01|2019-12-31|12|1031456000|table|52,8,15|1,031,456
+28d55857-dace-4c60-a2aa-5aa6b2b2ee14|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue||Total net revenue|true|2019-07-01|2019-09-30|3|1266474000|table|37,3,3|1,266,474
+29259b07-1d86-40b7-9b58-160b4d3c3847|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Bitcoin revenue|false|2019-10-01|2019-12-31|3|177567000|table|27,7,3|177,567
+2a984e3b-a51e-4c19-9497-92de29a71d0d|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type|Total net revenue|Hardware revenue|false|2019-10-01|2019-12-31|3|22267|table|38,7,7|22,267
+2aa03de3-8ceb-4b39-b8a3-7ff0a60fe272|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type||Total net revenue|true|2018-07-01|2018-09-30|3|882108000|table|28,9,7|882,108
+2b84eae8-284d-48e1-93c1-b3b874bb094a|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type|Total net revenue|Transaction-based revenue|false|2019-01-01|2019-12-31|12|3081074|table|38,5,15|3,081,074
+2c626987-3fab-4315-8e68-2bc970cad650|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue||Total net revenue|true|2019-01-01|2019-12-31|12|4713500000|table|34,3,11|4,713,500
+2ef58e41-4d11-4815-925a-8e773ac4a926|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue|Total net revenue|Subscription and services-based revenue|false|2018-01-01|2018-12-31|12|443444|table|5,7,11|443,444
+31a463ca-ff91-4d03-984a-73bdb5c2c575|c5e9bbf0-66c8-402f-aaaa-320c8353e1cc|Revenue by source|Total net revenue|Subscription and services-based revenue|false|2018-04-01|2018-06-30|3|134332000|table|15,5,3|134,332
+35c54a1b-fb7e-4be8-9c48-e5eb4ef51ce8|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue||Total net revenue|true|2018-10-01|2018-12-31|3|44283000|table|0,7,15|44,283
+37538540-7d89-4767-b697-d2f5318dc3fa|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue|Total net revenue|Hardware revenue|false|2018-01-01|2018-12-31|12|68503|table|5,8,11|68,503
+37630293-694b-489a-8674-c07e786cd72d|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type|Total net revenue|Hardware revenue|false|2018-07-01|2018-09-30|3|17558000|table|28,6,7|17,558
+3804485b-5256-4c11-a9af-22714fe7fca2|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Hardware revenue|false|2018-10-01|2018-12-31|3|18166000|table|27,6,7|18,166
+3b3ea7da-101a-4e9c-bb72-27962d550b2b|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue||Total net revenue|true|2018-10-01|2018-12-31|3|44283000|table|0,6,15|44,283
+3b5260c9-2d27-45fb-b54a-c47e86ac63c9|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue|Total net revenue|Subscription and services-based revenue|false|2018-04-01|2018-06-30|3|36927000|table|0,4,7|36,927
+3d2526e3-bfbf-411b-a5c8-280cd5cd7589|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Total net revenue|Less: Caviar contribution to total net revenue|false|2019-01-01|2019-12-31|12|145913000|table|52,4,15|145,913
+3ef4fe31-9723-4c09-9519-49e015d9e0b9|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type|Total net revenue|Bitcoin revenue|false|2019-07-01|2019-09-30|3|148285000|table|28,7,3|148,285
+3f70f664-4e5e-4d7b-891e-a3c828684dc5|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Transaction-based revenue|false|2019-01-01|2019-12-31|12|3081074000|table|27,4,11|3,081,074
+3f8d5cd7-43fc-4d7f-9b89-92f8130bd707|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type|Total net revenue|Hardware revenue|false|2018-01-01|2018-12-31|12|68503000|table|26,6,11|68,503
+41b6817f-bbd8-429a-abc7-e1af8ae20f10|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue|Total net revenue|Subscription and services-based revenue|false|2019-10-01|2019-12-31|3|15046000|table|0,5,31|15,046
+42ad2520-69da-41a9-a792-5115acca2709|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue||Total net revenue|true|2018-07-01|2018-09-30|3|39583000|table|0,6,11|39,583
+43ec9839-6fc2-4733-977c-b04c7fe7ad2a|b98f2907-72c0-4399-89cc-9365fe498ba7|Revenue by source|Total net revenue|Transaction-based revenue|false|2020-01-01|2020-03-31|3|758101000|table|33,4,7|758,101
+45fc890c-9adb-4149-89d2-0a49324df89d|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Transaction-based revenue|false|2019-10-01|2019-12-31|3|832180000|table|27,4,3|832,180
+46d69ddb-ef40-4220-a885-467c51607926|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue|Total net revenue|Total net revenue excluding Caviar|false|2018-10-01|2018-12-31|3|887900000|table|34,6,7|887,900
+476c2783-70b8-4cf1-846a-51961fd648ad|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2018-01-01|2018-12-31|12|591706000|table|27,5,15|591,706
+49032686-9754-4379-a3fe-e18835def19a|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue|Total net revenue|Bitcoin revenue|false|2018-01-01|2018-12-31|12|166517|table|5,9,3|166,517
+4bf020f5-bccb-4ec9-b1ef-310bf125525a|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2019-01-01|2019-03-31|3|218857|table|41,5,7|218,857
+4c96dbd9-10dc-4b09-965b-e8be539dd61d|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type|Total net revenue|Transaction-based revenue|false|2018-01-01|2018-12-31|12|2471451000|table|26,4,11|2,471,451
+4dc5e422-55c9-4d19-9133-00bca9eb4ed2|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue||Total net revenue|true|2018-04-01|2018-06-30|3|36927000|table|0,6,7|36,927
+4dd0ff1d-f259-4ceb-8093-ed7b81ff8e83|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue|Total net revenue|Subscription and services-based revenue|false|2018-10-01|2018-12-31|3|44283000|table|0,5,15|44,283
+4e4e4131-3470-4915-96af-8cce63b30e38|28b2a637-8e1b-45e5-a31a-d5d59dd48acf|Revenue by line|Total net revenue|Subscription and services-based revenue|false|2018-07-01|2018-09-30|3|166203000|table|19,5,3|166,203
+4e832449-bdff-4d0c-ab4e-21047d3220a9|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue|Total net revenue|Total net revenue excluding Caviar|true|2018-07-01|2018-09-30|3|842525000|table|37,6,7|842,525
+527a5a67-c97d-4280-8557-4e81c3abc59d|b98f2907-72c0-4399-89cc-9365fe498ba7|Revenue by source|Total net revenue|Subscription and services-based revenue|false|2020-01-01|2020-03-31|3|296235000|table|33,5,7|296,235
+55e64f30-072f-44f9-81cb-af72174c285c|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2019-01-01|2019-12-31|12|1031456000|table|27,5,11|1,031,456
+58443d2e-1a1e-4da8-b3f7-6fb3257feb39|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type||Total net revenue|true|2018-01-01|2018-12-31|12|3298177000|table|26,9,11|3,298,177
+5c64ae49-ce4e-4fce-a636-3c06d9f4e9c7|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Adjusted Revenue||Adjusted Revenue|true|2019-07-01|2019-09-30|3|602219000|table|37,8,3|602,219
+5df03a5f-7687-46b2-8a0e-b0e8d7aec9b2|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue|Total net revenue|Subscription and services-based revenue|false|2018-07-01|2018-09-30|3|39583000|table|0,4,11|39,583
+5f8851d1-dae8-42b2-8a3b-c92fb0f062e9|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue|Total net revenue|Subscription and services-based revenue|false|2018-04-01|2018-06-30|3|36927000|table|0,5,7|36,927
+6248cd59-b12c-4222-a5f9-b39074c6886e|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue||Total net revenue|true|2019-04-01|2019-06-30|3|43390000|table|0,6,23|43,390
+6359ed14-6565-4ed0-aaed-4471f248c504|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Transaction-based revenue|false|2018-01-01|2018-12-31|12|2471451000|table|27,4,15|2,471,451
+6396f513-c362-4c74-91a0-4b5c6e954c81|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue||Total net revenue|true|2019-04-01|2019-06-30|3|43390000|table|0,7,23|43,390
+6419f62d-a0d4-4d53-ac5f-a6e6eb2959be|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type|Total net revenue|Hardware revenue|false|2018-10-01|2018-12-31|3|18166000|table|26,6,3|18,166
+646ec201-a407-467a-a5a1-0aeba35480fb|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type||Total net revenue|true|2018-01-01|2018-12-31|12|3298177000|table|27,9,15|3,298,177
+658ff39a-cfd3-4cc4-89b5-30e9d899e396|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue||Total net revenue|true|2019-07-01|2019-09-30|3|40948000|table|0,7,27|40,948
+666a36f4-77dc-4416-b8ed-496ee4d6bdbd|c5e9bbf0-66c8-402f-aaaa-320c8353e1cc|Revenue by source|Total net revenue|Bitcoin revenue|false|2018-04-01|2018-06-30|3|37016000|table|15,7,3|37,016
+675192ce-f860-4de8-9490-7397dfbea7b8|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue|Total net revenue|Hardware revenue|false|2018-01-01|2018-12-31|12|68503|table|5,8,3|68,503
+68bedf44-59d8-4805-95f2-c3913074d37f|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Hardware revenue|false|2019-10-01|2019-12-31|3|22267000|table|27,6,3|22,267
+69bf80e7-e41b-4337-bb2e-5c0826a4ef69|c5e9bbf0-66c8-402f-aaaa-320c8353e1cc|Revenue by source||Total net revenue|true|2018-04-01|2018-06-30|3|814938000|table|15,9,3|814,938
+705c5647-bf0a-439a-ab9b-45e2b2297bcf|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type|Total net revenue|Transaction-based revenue|false|2019-10-01|2019-12-31|3|832180|table|38,5,7|832,180
+7194ad07-a00f-4d45-b5e1-9e539a09526c|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue|Total net revenue|Less: Caviar contribution to total net revenue|false|2018-01-01|2018-12-31|12|148609000|table|34,4,15|148,609
+765213df-2ea6-44cd-b801-14fc040e5553|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue||Total net revenue|true|2018-10-01|2018-12-31|3|932528000|table|34,3,7|932,528
+79a58560-7927-41f8-9f8b-b7c56d323f6e|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type|Total net revenue|Bitcoin revenue|false|2019-10-01|2019-12-31|3|177567|table|38,8,7|177,567
+7b3e0a2c-45ff-497b-87b4-d0c9e78c232f|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Subscription and services-based revenue|Subscription and services-based revenue excluding Caviar|true|2019-01-01|2019-12-31|12|885543000|table|52,11,15|885,543
+7e099abc-6a25-446e-8b78-4acf69851228|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Hardware revenue|false|2018-01-01|2018-12-31|12|68503000|table|27,6,15|68,503
+7ea17a93-ebc2-46d4-acea-225f985d16e2|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue|Total net revenue|Transaction based revenue|false|2018-01-01|2018-12-31|12|2471451|table|5,4,3|2,471,451
+80f4f793-cd54-419c-8c07-1edd7b0227ff|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue|Total net revenue|Subscription and services-based revenue|false|2018-10-01|2018-12-31|3|44283000|table|0,4,15|44,283
+81db0696-3400-42af-8c85-e901bddf3cf9|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type||Total net revenue|true|2019-07-01|2019-09-30|3|1266474000|table|28,9,3|1,266,474
+87b73094-2b2b-42c8-bfe1-95e564f7211e|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Adjusted Revenue|Adjusted Revenue|Adjusted Revenue excluding Caviar|true|2018-07-01|2018-09-30|3|391553000|table|37,11,7|391,553
+87c86174-37b7-49ae-b2da-310e10612da3|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type|Total net revenue|Transaction-based revenue|false|2018-07-01|2018-09-30|3|655384000|table|28,4,7|655,384
+880cc77d-c4db-4dfa-bc16-2c1ded41a4d7|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue|Total net revenue|Subscription and services-based revenue|false|2019-01-01|2019-03-31|3|46530000|table|0,4,19|46,530
+882172dd-efd5-4248-89a6-562687de22d6|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component||Total net revenue|true|2019-10-01|2019-12-31|3|1313429000|table|52,3,7|1,313,429
+88600a4b-c832-4c35-9401-e13134d7a0b0|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue|Total net revenue|Less: Caviar contribution to total net revenue|false|2019-10-01|2019-12-31|3|15045000|table|34,4,3|15,045
+889f69bd-8299-4e7e-8296-758872f2d0fa|28b2a637-8e1b-45e5-a31a-d5d59dd48acf|Financial Performance||Adjusted Revenue|false|2018-07-01|2018-09-30|3|431136000|table|25,5,3|431,136
+89367148-5451-462c-9899-e42451a39ea0|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue|Total net revenue|Subscription and services-based revenue|false|2018-07-01|2018-09-30|3|39583000|table|0,5,11|39,583
+89ef6634-45c1-4cd3-8d18-278346b280dc|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type|Total net revenue|Bitcoin revenue|false|2018-10-01|2018-12-31|3|52443000|table|26,7,3|52,443
+8a47b827-bbe2-4ec2-a570-3f88358db0ef|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type|Total net revenue|Transaction-based revenue|false|2018-10-01|2018-12-31|3|667802000|table|26,4,3|667,802
+8bbffd0f-4d32-42d0-87b1-9c29889e1b7b|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type||Total net revenue|true|2020-01-01|2020-03-31|3|1381109|table|41,9,3|1,381,109
+8d1c496a-6208-4f1a-9b02-a6b8374a2747|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type||Total net revenue|true|2019-01-01|2019-12-31|12|4713500000|table|27,9,11|4,713,500
+8f1f9ca0-a0b5-4c3d-bb08-d6d957f511c4|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Total net revenue|Less: Caviar contribution to total net revenue|false|2019-10-01|2019-12-31|3|15046000|table|52,4,7|15,046
+8f8b9f68-786c-4903-8d73-150274fc4b52|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue|Total net revenue|Subscription and services-based revenue|false|2018-01-01|2018-12-31|12|591706|table|5,7,3|591,706
+91521c93-6980-4578-85c3-d21b9800a527|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Bitcoin revenue|false|2018-10-01|2018-12-31|3|52443000|table|27,7,7|52,443
+921a323c-e169-4997-8418-99165948f0e2|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type||Total net revenue|true|2019-10-01|2019-12-31|3|1313429|table|38,10,7|1,313,429
+93345a7a-86e4-4392-a60d-5d96a55c7af1|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2018-10-01|2018-12-31|3|194117000|table|26,5,3|194,117
+97e3aa71-2b7f-412d-8dd3-194518637805|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2018-10-01|2018-12-31|3|194117000|table|27,5,7|194,117
+9a786df9-f755-44b8-a67e-04424ee194f8|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Subscription and services-based revenue|Less: Caviar contribution to subscription and services-based revenue|false|2019-01-01|2019-12-31|12|145913000|table|52,9,15|145,913
+9b73e175-ac27-4e60-93cc-c6ddfc6b26f8|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Adjusted non-GAAP revenue||Adjusted Revenue|true|2018-07-01|2018-09-30|3|431136000|table|34,5,7|431,136
+9ef07d16-b4be-4c2b-b19c-b11394d19303|28b2a637-8e1b-45e5-a31a-d5d59dd48acf|Revenue by line|Total net revenue|Transaction-based revenue|false|2018-07-01|2018-09-30|3|655384000|table|19,4,3|655,384
+9fe2f9cf-bb51-4ba9-a9fd-f117d791982d|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Adjusted non-GAAP revenue||Adjusted Revenue|true|2019-07-01|2019-09-30|3|602219000|table|34,5,3|602,219
+a2bfa11d-ef2d-4a0f-b5cf-dc2a54a9fd61|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Transaction-based revenue|false|2018-10-01|2018-12-31|3|667802000|table|27,4,7|667,802
+a3b03d84-ba70-4be3-b3d2-325116d3eb05|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Adjusted Revenue||Adjusted Revenue|true|2018-07-01|2018-09-30|3|431136000|table|37,8,7|431,136
+a6411fb6-34be-46ff-869a-bacbb57bcbb6|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type||Total net revenue|true|2019-01-01|2019-03-31|3|959359|table|41,9,7|959,359
+a66e39ea-be80-4b27-b19e-6b5eff48b6ce|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue|Total net revenue|Less: Caviar contribution to total net revenue|false|2019-01-01|2019-12-31|12|145912000|table|34,4,11|145,912
+a8d0baf8-b1f4-4d9f-ad17-3ab481c4c724|b98f2907-72c0-4399-89cc-9365fe498ba7|Revenue by source|Total net revenue|Hardware revenue|false|2020-01-01|2020-03-31|3|20675000|table|33,6,7|20,675
+a8e8d668-b5b8-414f-b83e-ba4c432ecca5|c57778a6-6c93-45e3-ae35-6fec92d40a84|Revenue|Total net revenue (GAAP)|Total net revenue, excluding Bitcoin and Afterpay|true|2020-01-01|2020-03-31|3|1075011000|table|44,10,11|1,075,011
+a9627452-1108-43a1-a176-522bc48c6162|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue|Total net revenue|Less: Caviar contribution to total net revenue|false|2018-10-01|2018-12-31|3|44628000|table|34,4,7|44,628
+a988d999-8da0-4476-90d8-e8cc7ee13f74|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type||Total net revenue|true|2018-10-01|2018-12-31|3|932528000|table|26,9,3|932,528
+ac26a713-4394-4ede-8cd4-96dc3293b627|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type|Total net revenue|Transaction-based revenue|false|2019-01-01|2019-03-31|3|656762|table|41,4,7|656,762
+b73b4921-6ce9-4e8f-8ad6-07d90404a4cd|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2019-10-01|2019-12-31|3|281415|table|38,6,7|281,415
+b87c159b-4079-4397-9cc6-24462c1d313c|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue||Total net revenue|true|2019-10-01|2019-12-31|3|1313429000|table|34,3,3|1,313,429
+bc103cb4-1156-4d31-8918-8b9ca3b159f0|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Subscription and services-based revenue|Less: Caviar contribution to subscription and services-based revenue|false|2019-10-01|2019-12-31|3|15046000|table|52,9,7|15,046
+bc6d729a-ef53-4df2-8cd4-77a2b9d8de75|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue|Total net revenue|Less: Caviar contribution to total net revenue|false|2018-07-01|2018-09-30|3|39583000|table|37,4,7|39,583
+bd811aa1-c18b-4793-8f2c-9831833f7fcc|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue||Total net revenue|true|2018-04-01|2018-06-30|3|36927000|table|0,7,7|36,927
+c3b65195-10aa-48dc-80d2-a3590f6cf8cc|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type|Total net revenue|Bitcoin revenue|false|2019-01-01|2019-12-31|12|516465|table|38,8,15|516,465
+c4a3bc35-fa7e-4c4f-9c74-3c8c5b823d3e|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue||Total net revenue|true|2019-01-01|2019-03-31|3|46530000|table|0,6,19|46,530
+c6093c18-cd92-4606-b6da-24c60aaf0bdf|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type|Total net revenue|Bitcoin revenue|false|2018-01-01|2018-12-31|12|166517000|table|26,7,11|166,517
+c86cff61-8773-44aa-8b68-dc40dfffc082|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Bitcoin revenue|false|2018-01-01|2018-12-31|12|166517000|table|27,7,15|166,517
+caa0381e-18e4-487e-a988-49f6393c828e|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type|Total net revenue|Hardware revenue|false|2019-01-01|2019-03-31|3|18212|table|41,6,7|18,212
+cae9655b-bb8c-4232-9415-f38b36402ff4|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue||Total net revenue|true|2019-01-01|2019-03-31|3|46530000|table|0,7,19|46,530
+caeeb0b8-469f-4fe6-8a1d-4db9489a8c4d|c57778a6-6c93-45e3-ae35-6fec92d40a84|Revenue||Subscription and services-based revenue (GAAP)|true|2020-01-01|2020-03-31|3|296235000|table|44,51,11|296,235
+cb932e71-a6d6-4c2e-82e3-3acd765f7bf1|05549171-5316-4a0b-8e14-dcf87cc6668d|Revenue by type|Total net revenue|Transaction-based revenue|false|2020-04-01|2020-06-30|3|682572000|table|37,4,7|682,572
+cb975158-c89f-43d3-b47b-d2a6268de272|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type|Total net revenue|Bitcoin revenue|false|2018-07-01|2018-09-30|3|42963000|table|28,7,7|42,963
+cd156b85-45ac-46bb-89fa-cee17025edf1|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type||Total net revenue|true|2018-10-01|2018-12-31|3|932528000|table|27,9,7|932,528
+ce0ffc65-479f-45ee-8774-a79f76decb6f|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue|Total net revenue|Transaction based revenue|false|2018-01-01|2018-12-31|12|2471451|table|5,4,11|2,471,451
+cecfa12f-ce4c-4fad-892e-2d838fb8ce2e|05549171-5316-4a0b-8e14-dcf87cc6668d|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2020-04-01|2020-06-30|3|346275000|table|37,5,7|346,275
+d0dab6df-8cb5-4c06-a16f-5a0d6e916e6f|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Hardware revenue|false|2019-01-01|2019-12-31|12|84505000|table|27,6,11|84,505
+d1d5b772-6886-4f0a-a23b-28f2ec4a0f08|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Total net revenue|Total net revenue excluding Caviar|true|2019-01-01|2019-12-31|12|4567587000|table|52,6,15|4,567,587
+d385616e-aaf1-4ead-ab27-11f2129dc927|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type|Total net revenue|Bitcoin revenue|false|2020-01-01|2020-03-31|3|306098|table|41,7,3|306,098
+d48c868f-44a5-47dc-8ec9-3fa6d42ee84a|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue|Total net revenue|Less: Caviar contribution to total net revenue|false|2019-07-01|2019-09-30|3|40948000|table|37,4,3|40,948
+d5214d7e-1940-4c22-8905-b4fd39a09b1c|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue||Total net revenue|true|2018-01-01|2018-12-31|12|3298177|table|5,11,3|3,298,177
+d5980fb9-4646-4c43-a293-9552762ccfd1|079c8dec-56c5-4605-888e-1d9881121c9d|Revenue|Total net revenue|Bitcoin revenue|false|2018-01-01|2018-12-31|12|166517|table|5,9,11|166,517
+d782516f-3611-4535-bbd6-9c96c68d5141|05549171-5316-4a0b-8e14-dcf87cc6668d|Revenue by type|Total net revenue|Hardware revenue|false|2020-04-01|2020-06-30|3|19322000|table|37,6,7|19,322
+da0c52a3-0484-423f-a045-6deabfcb5bed|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component||Total net revenue|true|2019-01-01|2019-12-31|12|4713500000|table|52,3,15|4,713,500
+daaceef9-3015-4b05-8dfc-3cb7ad78e5a8|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type|Total net revenue|Hardware revenue|false|2019-07-01|2019-09-30|3|21766000|table|28,6,3|21,766
+dd2bb1bf-a33c-4756-90f3-685209d32626|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Adjusted Revenue|Adjusted Revenue|Adjusted Revenue excluding Caviar|true|2019-07-01|2019-09-30|3|561271000|table|37,11,3|561,271
+e028afdf-4c67-4ecd-83dd-89ab4c38b49e|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Bitcoin revenue|false|2019-01-01|2019-12-31|12|516465000|table|27,7,11|516,465
+e0507e85-5e61-4e3a-a1d4-614c06900a48|c5e9bbf0-66c8-402f-aaaa-320c8353e1cc|Revenue by source|Total net revenue|Hardware revenue|false|2018-04-01|2018-06-30|3|18362000|table|15,6,3|18,362
+e10339f7-ddf7-472f-9be7-648a2f561207|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Adjusted Revenue|Adjusted Revenue|Less: Caviar contribution to Adjusted Revenue|false|2018-07-01|2018-09-30|3|39583000|table|37,9,7|39,583
+e1c58e0b-d510-4b40-ad54-19c74a89df06|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2020-01-01|2020-03-31|3|296235|table|41,5,3|296,235
+e2ba1946-3b4e-4b13-b0e3-a5eaff05e38d|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue||Total net revenue|true|2018-07-01|2018-09-30|3|39583000|table|0,7,11|39,583
+e364c628-51cc-4775-a8c2-bf306c08f7aa|c2436c1d-6b79-4237-8035-209110fc7d6e|Revenue by type|Total net revenue|Transaction-based revenue|false|2020-01-01|2020-03-31|3|758101|table|41,4,3|758,101
+e674f16f-17f5-4cdb-b768-19154a30d0d6|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue|Total net revenue|Subscription and services-based revenue|false|2019-07-01|2019-09-30|3|40948000|table|0,5,27|40,948
+e679d943-d22e-4c6d-b369-d48e65b8d6ac|c57778a6-6c93-45e3-ae35-6fec92d40a84|Revenue||Total net revenue (GAAP)|true|2020-01-01|2020-03-31|3|1381109000|table|44,4,11|1,381,109
+e9abb85c-b265-4a8c-a405-5df1d92a253b|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue||Total net revenue|true|2018-07-01|2018-09-30|3|882108000|table|37,3,7|882,108
+ecacdb9c-1e61-4a8e-a281-8382246a77e5|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue|Total net revenue|Total net revenue excluding Caviar|false|2018-01-01|2018-12-31|12|3149568000|table|34,6,15|3,149,568
+ecb47f94-bccb-4642-9db6-037f515dc32a|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type||Total net revenue|true|2019-01-01|2019-12-31|12|4713500|table|38,10,15|4,713,500
+ed23353a-885e-4606-ae57-e1c85f2a581c|c57778a6-6c93-45e3-ae35-6fec92d40a84|Revenue|Subscription and services-based revenue (GAAP)|Total subscription and services-based revenue, excluding Afterpay|true|2020-01-01|2020-03-31|3|296235000|table|44,55,11|296,235
+f1884f18-9e89-439e-a62a-1a50ab4d6d99|372a41e3-38b7-40ae-b2e1-82c1b7364102|Revenue|Total net revenue|Subscription and services-based revenue|false|2019-04-01|2019-06-30|3|43390000|table|0,4,23|43,390
+f4aa419e-3fb9-43eb-84da-64389c23ced3|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2019-01-01|2019-12-31|12|1031456|table|38,6,15|1,031,456
+f65f0644-44dd-4e6f-b57b-70434385b45a|28b2a637-8e1b-45e5-a31a-d5d59dd48acf|Revenue by line|Total net revenue|Bitcoin revenue|false|2018-07-01|2018-09-30|3|42963000|table|19,7,3|42,963
+f673b1e8-4a64-498f-990f-b56fd5818ca7|c57778a6-6c93-45e3-ae35-6fec92d40a84|Revenue|Cash App revenue (GAAP)|Less: Bitcoin contribution to Cash App revenue|false|2020-01-01|2020-03-31|3|306098000|table|44,28,11|306,098
+f6a721b0-96ba-4ade-b836-12ca77cf6f28|8a345f06-4d8d-498a-9502-f5aa4223f110|Revenue by component|Total net revenue|Subscription and services-based revenue|true|2019-10-01|2019-12-31|3|281415000|table|52,8,7|281,415
+f87bb5b6-5627-4ffc-862b-a8cbbfcb5c5f|7bfbb838-00d6-43e6-a628-c6b4ed066ee6|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2019-07-01|2019-09-30|3|279801000|table|28,5,3|279,801
+fb071273-71a9-4d0c-8121-725eff4ac3fe|877fbf8a-7d89-4700-bcd9-5e7fcc5ddad2|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2018-01-01|2018-12-31|12|591706000|table|26,5,11|591,706
+fca40514-fec3-4a13-b499-9f2fb34d235b|addcffd1-719e-4aae-b8b2-49aabce2d0a2|Revenue by type|Total net revenue|Subscription and services-based revenue|false|2019-10-01|2019-12-31|3|281415000|table|27,5,3|281,415
+feb5999c-baa7-471c-b836-03850b5c3b7e|24861000-c2d9-4c0a-96ab-fc0f9d4e1e5d|Revenue|Total net revenue|Subscription and services-based revenue|false|2019-01-01|2019-03-31|3|46530000|table|0,5,19|46,530

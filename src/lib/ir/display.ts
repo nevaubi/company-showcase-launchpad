@@ -2,7 +2,7 @@
 import type { Scale } from "@/lib/format";
 import type { IrPayload, PayloadCell, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import type { DerivedPart, SourceRef } from "@/lib/financials/types";
-import { cellsFor } from "@/lib/ir/periods";
+import { cellsFor, heldFor } from "@/lib/ir/periods";
 
 export const CATEGORY_LABEL: Record<string, string> = {
   segment: "segment",
@@ -236,7 +236,7 @@ export function groupColumns(rows: { s: PayloadSeries }[], cols: string[], kind:
   let first = -1;
   let last = -1;
   cols.forEach((e, i) => {
-    if (rows.some((r) => cellsFor(r.s, kind)[e])) {
+    if (rows.some((r) => cellsFor(r.s, kind)[e] || heldFor(r.s, kind)[e])) {
       if (first < 0) first = i;
       last = i;
     }

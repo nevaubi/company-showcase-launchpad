@@ -15,8 +15,9 @@
 import { METRIC_LABEL, groupTitle } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
+import { holdSuspects } from "@/lib/ir/suspect";
 
-export const TIDY_VERSION = 5;
+export const TIDY_VERSION = 6;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -1313,7 +1314,8 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   const rechecked = checkable(c, groups, c.removed.size ? recheck(c, groups, checks) : checks);
   const q = rechecked.filter((x) => x.kind === "q");
   const fy = rechecked.filter((x) => x.kind === "fy");
-  return {
+  // 6. Figures whose unit or period the documents contradict are held back (suspect.ts).
+  return holdSuspects({
     ...out,
     tidy: TIDY_VERSION,
     series: kept,
@@ -1328,5 +1330,5 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
       checksFY: { ok: fy.filter((x) => x.ok).length, total: fy.filter((x) => !x.partial).length, partial: fy.filter((x) => x.partial).length },
       tidied: { groupsBefore: before.groups, seriesBefore: before.series },
     },
-  };
+  });
 }

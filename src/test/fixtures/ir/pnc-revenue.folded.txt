@@ -1,0 +1,22 @@
+pnc-235|segment|revenue|Consolidated Financial Highlights||Total revenue|usd|true|2025-04-01|2025-06-30|3|5661000000|table|18,9,8|5,661
+pnc-236|segment|revenue|Consolidated Financial Highlights||Total revenue|usd|true|2025-01-01|2025-06-30|6|11113000000|table|18,9,16|11,113
+pnc-237|segment|revenue|Consolidated Financial Highlights||Total revenue|usd|true|2026-04-01|2026-06-30|3|6165000000|table|18,9,5|6,165
+pnc-238|segment|revenue|Consolidated Financial Highlights||Total revenue|usd|true|2026-01-01|2026-06-30|6|13040000000|table|18,9,13|13,040
+pnc-239|segment|revenue|Consolidated Financial Highlights|Total revenue|Net interest income|usd|false|2025-04-01|2025-06-30|3|3555000000|table|18,7,11|3,555
+pnc-240|segment|revenue|Consolidated Financial Highlights|Total revenue|Net interest income|usd|false|2025-01-01|2025-06-30|6|7031000000|table|18,7,21|7,031
+pnc-241|segment|revenue|Consolidated Financial Highlights|Total revenue|Net interest income|usd|false|2026-01-01|2026-03-31|3|3961000000|table|18,7,7|3,961
+pnc-242|segment|revenue|Consolidated Financial Highlights|Total revenue|Net interest income|usd|false|2026-04-01|2026-06-30|3|4107000000|table|18,7,3|4,107
+pnc-243|segment|revenue|Consolidated Financial Highlights|Total revenue|Net interest income|usd|false|2026-01-01|2026-06-30|6|8068000000|table|18,7,17|8,068
+pnc-244|segment|revenue|Consolidated Financial Highlights|Total revenue|Noninterest income|usd|false|2025-04-01|2025-06-30|3|2106000000|table|18,8,8|2,106
+pnc-245|segment|revenue|Consolidated Financial Highlights|Total revenue|Noninterest income|usd|false|2025-01-01|2025-06-30|6|4082000000|table|18,8,16|4,082
+pnc-246|segment|revenue|Consolidated Financial Highlights|Total revenue|Noninterest income|usd|false|2026-04-01|2026-06-30|3|2204000000|table|18,8,5|2,204
+pnc-247|segment|revenue|Consolidated Financial Highlights|Total revenue|Noninterest income|usd|false|2026-01-01|2026-06-30|6|4972000000|table|18,8,13|4,972
+pnc-248|segment|revenue|Consolidated Income Statement||Net interest income (NII)|usd|true|2025-04-01|2025-06-30|3|3555000000|table|0,8,6|3,555
+pnc-249|segment|revenue|Consolidated Income Statement||Net interest income (NII)|usd|true|2026-01-01|2026-03-31|3|3961000000|table|0,8,4|3,961
+pnc-250|segment|revenue|Consolidated Income Statement||Net interest income (NII)|usd|true|2026-04-01|2026-06-30|3|4107000000|table|0,8,2|4,107
+pnc-251|segment|revenue|Consolidated Income Statement||Revenue|usd|true|2025-04-01|2025-06-30|3|5661000000|table|0,12,3|5,661
+pnc-252|segment|revenue|Consolidated Income Statement||Revenue|usd|true|2026-01-01|2026-03-31|3|6165000000|table|0,12,2|6,165
+pnc-253|segment|revenue|Consolidated Income Statement||Revenue|usd|true|2026-04-01|2026-06-30|3|6875000000|table|0,12,1|6,875
+pnc-260|segment|revenue|Consolidated Income Statement|Revenue|Noninterest income|usd|true|2025-04-01|2025-06-30|3|2106000000|table|0,11,3|2,106
+pnc-261|segment|revenue|Consolidated Income Statement|Revenue|Noninterest income|usd|true|2026-01-01|2026-03-31|3|2204000000|table|0,11,2|2,204
+pnc-262|segment|revenue|Consolidated Income Statement|Revenue|Noninterest income|usd|true|2026-04-01|2026-06-30|3|2768000000|table|0,11,1|2,768
