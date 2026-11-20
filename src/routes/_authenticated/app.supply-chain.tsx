@@ -9,8 +9,10 @@ import { z } from "zod";
 import { ArrowRight, FileText, Globe2, Lock, Network, Zap } from "lucide-react";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { externalLogo, RELATION_COLOR, RELATION_LABEL, type Overlay } from "@/components/supply/supply-map-meta";
+import { externalLogo, RELATION_LABEL, type Overlay } from "@/components/supply/supply-map-meta";
 import { SupplyNetwork } from "@/components/supply/supply-network";
+import { RelationFilters } from "@/components/supply/supply-toolbar";
+import { RelationMark } from "@/components/supply/supply-marks";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,12 +57,16 @@ export const Route = createFileRoute("/_authenticated/app/supply-chain")({
   component: SupplyChainPage,
 });
 
+/** Segmented control button: 28px tall, quiet until chosen. */
+const segment = (on: boolean) =>
+  cn("inline-flex h-7 items-center rounded-[4px] px-2.5 transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none", on ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:text-foreground");
+
 const OVERLAYS: { v: Overlay; label: string }[] = [
   { v: "none", label: "No overlay" },
   { v: "single", label: "Single-source dependencies" },
   { v: "concentration", label: "Concentration ≥10%" },
   { v: "geo", label: "Geopolitical hotspots" },
-  { v: "dollars", label: "Disclosed $ exposure" },
+  { v: "dollars", label: "Stated dollar figures" },
 ];
 
 function SupplyChainPage() {
@@ -209,36 +215,26 @@ function SupplyChainPage() {
       </div>
 
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {RELATIONS.map((r) => (
-          <button
-            key={r}
-            type="button"
-            onClick={() => toggle(r)}
-            className={cn("inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium transition-opacity", !visible.has(r) && "opacity-40")}
-          >
-            <span className="size-2.5 rounded-full" style={{ background: RELATION_COLOR[r] }} />
-            {RELATION_LABEL[r]} <span className="num text-muted-foreground">{isLoading ? "…" : counts[r]}</span>
-          </button>
-        ))}
+        <RelationFilters counts={counts} visible={visible} onToggle={toggle} loading={isLoading} />
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div role="group" aria-label="View" data-agent-controls data-tour="supply-views" className="inline-flex rounded-md border p-0.5 text-xs">
+          <div role="group" aria-label="View" data-agent-controls data-tour="supply-views" className="inline-flex rounded-md border bg-card p-0.5 text-xs shadow-paper">
             {VIEWS.map((v) => (
-              <button key={v} type="button" aria-pressed={view === v} onClick={() => { setView(v); if (v === "chain") setTab("evidence"); }} className={cn("rounded px-2.5 py-1", view === v ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+              <button key={v} type="button" aria-pressed={view === v} onClick={() => { setView(v); if (v === "chain") setTab("evidence"); }} className={segment(view === v)}>
                 {VIEW_LABEL[v]}
               </button>
             ))}
           </div>
           {view !== "chain" && (
             <>
-          <div role="group" aria-label="Depth" data-agent-controls className="inline-flex rounded-md border p-0.5 text-xs">
+          <div role="group" aria-label="Depth" data-agent-controls className="inline-flex rounded-md border bg-card p-0.5 text-xs shadow-paper">
             {([1, 2] as const).map((d) => (
-              <button key={d} type="button" aria-pressed={depth === d} onClick={() => setDepth(d)} className={cn("rounded px-2.5 py-1", depth === d ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+              <button key={d} type="button" aria-pressed={depth === d} onClick={() => setDepth(d)} className={segment(depth === d)}>
                 {d === 1 ? "Direct" : "+ 2nd order"}
               </button>
             ))}
           </div>
           <Select value={overlay} onValueChange={(v) => setOverlay(v as Overlay)}>
-            <SelectTrigger className="h-8 w-[220px] text-xs">
+            <SelectTrigger aria-label="Risk overlay" className="h-8 w-[220px] text-xs shadow-paper">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -255,7 +251,7 @@ function SupplyChainPage() {
       </div>
 
       <div className={cn("grid grid-cols-1 gap-4", view !== "chain" && "lg:grid-cols-[minmax(0,1fr)_360px]")}>
-        <div className={cn("relative min-w-0 overflow-hidden rounded-xl border bg-card", fixedCanvas && "h-[640px]")}>
+        <div className={cn("relative min-w-0 overflow-hidden rounded-md border bg-card shadow-paper", fixedCanvas && "h-[640px]")}>
           {linksQuery.isError && !links ? <div role="alert" className="grid h-full place-content-center gap-3 p-6 text-sm text-muted-foreground">Supply-chain records are temporarily unavailable.<Button variant="outline" size="sm" onClick={() => linksQuery.refetch()}>Retry</Button></div> : isLoading ? (
             <Skeleton className="h-full w-full" />
           ) : view === "chain" && chain ? (
@@ -391,7 +387,7 @@ function SupplyChainPage() {
                   {graph.slice(0, 16).map((n) => (
                     <li key={n.key}>
                       <button type="button" onClick={() => setSelected(n.key)} className="flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-muted">
-                        <span className="size-2 shrink-0 rounded-full" style={{ background: RELATION_COLOR[n.relation] }} />
+                        <RelationMark relation={n.relation as Relation} size={8} />
                         <span className="truncate">{n.name}</span>
                         {risks[n.key]?.singleSource && <Lock className="size-3 text-negative" />}
                         <span className="ml-auto text-xs text-muted-foreground">{n.relation}</span>
@@ -445,7 +441,7 @@ function SupplyChainPage() {
                   {summary.exposure.slice(0, 20).map(({ n, l, d }) => (
                     <li key={l.id} className="rounded-lg border p-2.5 text-sm">
                       <div className="flex items-center gap-2">
-                        <span className="size-2 shrink-0 rounded-full" style={{ background: RELATION_COLOR[n.relation] }} />
+                        <RelationMark relation={n.relation as Relation} size={8} />
                         <span className="truncate font-medium">{n.name}</span>
                         <span className="num ml-auto font-semibold">{fmtCompactUsd(d)}</span>
                       </div>

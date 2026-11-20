@@ -29,7 +29,7 @@ describe("SupplyNetwork", () => {
     render(<SupplyNetwork {...props} onSelect={onSelect} />);
     const suppliers = screen.getByRole("group", { name: /^Suppliers: 1$/ });
     const tsmc = within(suppliers).getByRole("button", { name: /TSMC, supplier, single source\. Open the filing evidence\./ });
-    expect(within(screen.getByRole("group", { name: /^Customers/ })).getByRole("button", { name: /Microsoft, customer, \$40\.0B stated/ })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: /^Customers/ })).getByRole("button", { name: /Microsoft, customer, 19% share/ })).toBeInTheDocument();
     fireEvent.click(tsmc);
     expect(onSelect).toHaveBeenCalledWith("supplier:TSMC");
   });

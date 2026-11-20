@@ -24,6 +24,8 @@ export interface NetBand {
 }
 export interface NetMore { relation: Relation; x: number; y: number; w: number; h: number; hidden: number }
 export interface NetHeader { relation: Relation; x: number; y: number; w: number; shown: number; total: number }
+/** A flow column with no names (the relation is shown but the filings name none): a quiet placeholder keeps the picture balanced and says so. */
+export interface NetEmpty { relation: "supplier" | "customer"; x: number; y: number; w: number; h: number }
 export interface NetLayout {
   width: number; height: number;
   focus: { x: number; y: number; w: number; h: number };
@@ -31,12 +33,14 @@ export interface NetLayout {
   bands: NetBand[];
   more: NetMore[];
   headers: NetHeader[];
+  empty: NetEmpty[];
   /** what band width stands for on each side, so the caption can say it */
   basis: { supplier: Basis; customer: Basis };
 }
 export type Basis = "dollars" | "share" | "none";
 
-export const NET = { head: 26, card: 34, child: 26, gap: 6, indent: 16, gutter: 84, rowGap: 36, pad: 4, minFocus: 104, maxFocus: 360, tMin: 2, tMax: 18 } as const;
+/** Geometry in px. `card` holds two lines (name, then product); `cell` is a one-line card in the second row; `child` a second-order name. */
+export const NET = { head: 30, card: 44, cell: 32, child: 28, gap: 6, indent: 16, gutter: 72, rowGap: 40, pad: 4, minFocus: 176, maxFocus: 360, focusMin: 168, focusMax: 232, tMin: 2, tMax: 18 } as const;
 
 const isHop2 = (n: GraphNode | HopNode): n is HopNode => (n as HopNode).hop === 2;
 const weight = (c: { dollars: number | null; share: number; node: { links: unknown[] } }) => [c.dollars ?? 0, c.share, c.node.links.length] as const;
@@ -73,7 +77,9 @@ export interface NetworkInput {
 
 export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expanded }: NetworkInput): NetLayout {
   const W = Math.max(560, Math.floor(width));
-  const colW = Math.floor((W - 2 * NET.gutter) / 3);
+  /* the company column is narrower than the two flow columns, so long counterparty names keep their room */
+  const focusW = Math.round(Math.min(NET.focusMax, Math.max(NET.focusMin, W * 0.2)));
+  const colW = Math.floor((W - 2 * NET.gutter - focusW) / 2);
   const xLeft = 0, xMid = colW + NET.gutter, xRight = W - colW;
   const top = NET.head + NET.gap;
 
@@ -87,7 +93,7 @@ export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expan
       .map((node) => ({ key: node.key, node, relation: r, hop: 2 as const, x: 0, y: 0, w: colW - NET.indent, h: NET.child, share: maxShare(node), dollars: risks[node.key]?.dollars ?? null }))
       .sort(byWeight);
 
-  const cards: NetCard[] = [], bands: NetBand[] = [], more: NetMore[] = [], headers: NetHeader[] = [];
+  const cards: NetCard[] = [], bands: NetBand[] = [], more: NetMore[] = [], headers: NetHeader[] = [], empty: NetEmpty[] = [];
 
   /** One outer column: first-order cards with their second-order names indented underneath. Returns the y after the last row. */
   const column = (r: "supplier" | "customer", x: number): { shown: NetCard[]; end: number } => {
@@ -106,6 +112,7 @@ export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expan
     }
     if (all.length > shown.length) { more.push({ relation: r, x, y, w: colW, h: NET.child, hidden: all.length - shown.length }); y += NET.child + NET.gap; }
     if (all.length) headers.push({ relation: r, x, y: 0, w: colW, shown: shown.length, total: all.length });
+    else if (visible.has(r) && graph.length) { empty.push({ relation: r, x, y: top, w: colW, h: NET.card }); y += NET.card + NET.gap; }
     return { shown, end: y };
   };
   const left = column("supplier", xLeft), right = column("customer", xRight);
@@ -128,7 +135,7 @@ export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expan
   /* the company sits level with the middle of the taller side column */
   const sideEnd = Math.max(left.end, right.end, top);
   const focusY = Math.max(top, Math.round(top + (sideEnd - top - focusH) / 2));
-  const focus = { x: xMid, y: focusY, w: colW, h: focusH };
+  const focus = { x: xMid, y: focusY, w: focusW, h: focusH };
 
   /* partners and competitors are not flows: they sit in a second row under the company, side by side */
   const rowY = Math.max(sideEnd, focusY + focusH + NET.gap) + NET.rowGap;
@@ -141,11 +148,12 @@ export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expan
     const cw = Math.floor((gw - (cols - 1) * NET.gap) / cols);
     headers.push({ relation: r, x: x0, y: rowY, w: gw, shown: shown.length, total: all.length });
     const y0 = rowY + NET.head + NET.gap;
-    const cell = (i: number) => ({ x: x0 + (i % cols) * (cw + NET.gap), y: y0 + Math.floor(i / cols) * (NET.child + NET.gap) });
-    shown.forEach((c, i) => { const at = cell(i); c.x = at.x; c.y = at.y; c.w = cw; c.h = NET.child; cards.push(c); });
+    const cell = (i: number) => ({ x: x0 + (i % cols) * (cw + NET.gap), y: y0 + Math.floor(i / cols) * (NET.cell + NET.gap) });
+    shown.forEach((c, i) => { const at = cell(i); c.x = at.x; c.y = at.y; c.w = cw; c.h = NET.cell; cards.push(c); });
     let n = shown.length;
-    if (all.length > shown.length) { const at = cell(n); more.push({ relation: r, x: at.x, y: at.y, w: cw, h: NET.child, hidden: all.length - shown.length }); n++; }
-    return { end: y0 + Math.ceil(n / cols) * (NET.child + NET.gap), cx: x0 + gw / 2 };
+    if (all.length > shown.length) { const at = cell(n); more.push({ relation: r, x: at.x, y: at.y, w: cw, h: NET.cell, hidden: all.length - shown.length }); n++; }
+    /* the connector from the company lands on the group's heading mark */
+    return { end: y0 + Math.ceil(n / cols) * (NET.cell + NET.gap), cx: x0 + 4 };
   };
   const half = Math.floor((W - NET.gutter / 2) / 2);
   const gp = group("partner", partners, 0, both ? half : W);
@@ -167,9 +175,10 @@ export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expan
   attach(right.shown, fR, "customer");
   /* one elbow from the company down to each second-row group */
   const cx = focus.x + focus.w / 2, bend = rowY - NET.rowGap / 2, fb = focus.y + focus.h;
-  if (hasPartners) bands.push({ key: "group:partner", relation: "partner", hop: 1, d: `M${cx - 8} ${fb}V${bend}H${gp.cx}V${rowY}`, t: 1.5 });
-  if (hasCompetitors) bands.push({ key: "group:competitor", relation: "competitor", hop: 1, d: `M${cx + 8} ${fb}V${bend}H${gc.cx}V${rowY}`, t: 1.5 });
+  const land = rowY + 5;
+  if (hasPartners) bands.push({ key: "group:partner", relation: "partner", hop: 1, d: `M${cx - 8} ${fb}V${bend}H${gp.cx}V${land}`, t: 1.25 });
+  if (hasCompetitors) bands.push({ key: "group:competitor", relation: "competitor", hop: 1, d: `M${cx + 8} ${fb}V${bend}H${gc.cx}V${land}`, t: 1.25 });
 
   const height = Math.max(sideEnd, fb + NET.gap, hasPartners ? gp.end : 0, hasCompetitors ? gc.end : 0) + NET.pad;
-  return { width: W, height, focus, cards, bands, more, headers, basis };
+  return { width: W, height, focus, cards, bands, more, headers, empty, basis };
 }

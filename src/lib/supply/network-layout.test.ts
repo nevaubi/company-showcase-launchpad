@@ -118,6 +118,21 @@ describe("layoutNetwork", () => {
     expect(exact.cards).toHaveLength(12);
     expect(exact.more).toEqual([]);
   });
+  it("keeps the company column narrower than the flow columns so long names keep their room", () => {
+    const wide = layoutNetwork({ ...base, width: 1100 });
+    const supplier = wide.cards.find((c) => c.relation === "supplier" && c.hop === 1)!;
+    expect(wide.focus.w).toBeLessThan(supplier.w);
+    expect(wide.focus.w).toBeGreaterThanOrEqual(NET.focusMin);
+    expect(wide.focus.w).toBeLessThanOrEqual(NET.focusMax);
+  });
+  it("marks a shown flow column that the filings leave empty, and nothing for a hidden one", () => {
+    const noCustomers = layoutNetwork({ ...base, graph: graph.filter((n) => n.relation !== "customer") });
+    expect(noCustomers.empty).toEqual([expect.objectContaining({ relation: "customer" })]);
+    const box = noCustomers.empty[0];
+    expect(box.x).toBeGreaterThanOrEqual(noCustomers.focus.x + noCustomers.focus.w);
+    expect(layoutNetwork({ ...base, graph: graph.filter((n) => n.relation !== "customer"), visible: new Set<Relation>(["supplier", "partner", "competitor"]) }).empty).toEqual([]);
+    expect(L.empty).toEqual([]);
+  });
   it("handles an empty graph", () => {
     const empty = layoutNetwork({ ...base, graph: [], hop2: [] });
     expect(empty.cards).toEqual([]);
