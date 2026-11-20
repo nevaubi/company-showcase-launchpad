@@ -4,11 +4,16 @@
  */
 
 /** Scheduled HTTP jobs: the scheduler hangs up after about 5 s, so no run can still be alive after 10 min. */
-export const HTTP_JOBS: readonly string[] = ["prices", "macro", "sec", "filing-cache", "ir-docs", "ir-site", "ir-extract", "estimates", "alt-data", "setups", "gov-data", "options", "short-volume", "sec-discover", "partner-mirror", "emails"];
+export const HTTP_JOBS: readonly string[] = ["prices", "macro", "sec", "filing-cache", "ir-docs", "estimates", "alt-data", "setups", "gov-data", "options", "short-volume", "sec-discover", "partner-mirror", "emails"];
 
 export const HTTP_MAX_RUN_MS = 10 * 60_000;
-export const WORKER_MAX_RUN_MS = 3 * 3600_000;
-/** Longest legitimate worker step (a partner mirror pass may take hours; its deadline is 3 h, P1-7). */
+/**
+ * Longest legitimate worker run: the longest child deadline that writes its own run row (canon 4 h,
+ * P1-7) plus 10 minutes for its SIGKILL follow-up and final write, so a live run is never reaped
+ * (review F15). Company lanes (6 h) write `loop:company` only when they end.
+ */
+export const WORKER_STEP_MAX_MS = 4 * 3600_000;
+export const WORKER_MAX_RUN_MS = WORKER_STEP_MAX_MS + 10 * 60_000;
 export const REAP_LIMIT = 500;
 export const LEASE_GRACE_MS = 10 * 60_000;
 export const REPORT_RUN_MAX_MS = 2 * 3600_000;

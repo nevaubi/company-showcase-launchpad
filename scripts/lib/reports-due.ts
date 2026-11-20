@@ -87,3 +87,21 @@ export function reportOutcome(error: string | null | undefined): ReportOutcome {
   if (isAiConfigError(error)) return "config";
   return "fail";
 }
+
+/**
+ * Failure receipts whose slot is no longer due at all (the recap was written another way, the
+ * accession fell out of the 3-day window, the preview date passed): delete them, at most `max` per
+ * call, so receipts stay far below the 2,000 rows the job reads (review F10).
+ */
+export function staleReceipts(receipts: { job: string; paused_reason: string | null }[], dueUnskipped: DueSlot[], max = 100): string[] {
+  const live = new Set(dueUnskipped.map(slotKey));
+  const out: string[] = [];
+  for (const r of receipts) {
+    if (!r.job.startsWith(FAIL_PREFIX)) continue;
+    const [ticker, kind] = r.job.slice(FAIL_PREFIX.length).split(":");
+    const reason = (r.paused_reason ?? "").split("|")[0];
+    if (!live.has(`${ticker}:${kind}:${reason}`)) out.push(r.job);
+    if (out.length >= max) break;
+  }
+  return out;
+}

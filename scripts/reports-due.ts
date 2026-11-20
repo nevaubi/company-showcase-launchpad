@@ -13,7 +13,7 @@ import { args, log, sb } from "./lib/supa";
 import { COVERAGE } from "@/lib/coverage";
 import { ensureReport, ReportLimitError } from "@/lib/reports/store.server";
 import { loadReportInputs } from "@/lib/reports/inputs.server";
-import { dueSlots, FAIL_PREFIX, failedSlots, failReceipt, failReceiptKey, nextUtcDay, reportOutcome, REPORTS_JOB, REPORTS_PROBE_MS, STUCK_LOCK_MS } from "./lib/reports-due";
+import { dueSlots, FAIL_PREFIX, failedSlots, failReceipt, failReceiptKey, nextUtcDay, staleReceipts, reportOutcome, REPORTS_JOB, REPORTS_PROBE_MS, STUCK_LOCK_MS } from "./lib/reports-due";
 import { routeDecision, routeOf, type ProviderId } from "@/lib/jobs/provider-health";
 import { providerStates } from "@/lib/jobs/provider-health.server";
 
@@ -71,6 +71,9 @@ const upcoming = (est ?? []).flatMap((e) => {
 const { data: receipts } = await sb.from("job_state").select("job, cursor, paused_reason").like("job", `${FAIL_PREFIX}%`).limit(2000);
 const skip = failedSlots(receipts ?? []);
 const due = dueSlots(events ?? [], upcoming, reps ?? [], new Set(COVERAGE.map((c) => c.ticker)), today, skip);
+// Receipts for slots that are no longer due at all are removed (bounded per call).
+const stale = staleReceipts(receipts ?? [], dueSlots(events ?? [], upcoming, reps ?? [], new Set(COVERAGE.map((c) => c.ticker)), today));
+if (stale.length && !dry) await sb.from("job_state").delete().in("job", stale).like("job", `${FAIL_PREFIX}%`);
 log(`${REPORTS_JOB}: ${due.length} due (${due.filter((d) => d.kind === "recap").length} recaps, ${due.filter((d) => d.kind === "preview").length} previews)${dry ? " — dry run" : ""}`);
 if (dry) process.exit(0);
 if (!due.length) await finish(true, { due: 0, skipped: skip.size });

@@ -154,6 +154,10 @@ async function weeklyIntel() {
   const resultFile = `/tmp/supply-intel-${process.pid}.json`;
   rmSync(resultFile, { force: true });
   const started = now();
+  // Retry marker first (review F17): a deadline kill of this step during intel leaves the week due
+  // after the retry backoff instead of at once; the result below overwrites it.
+  const pre = intelMarker(null, wk ? { cursor: wk.cursor, paused_reason: wk.paused_reason } : null, Date.now(), "interrupted before supply intel finished");
+  await sb.from("job_state").upsert({ job: INTEL_KEY, cursor: pre.cursor, paused_reason: pre.paused_reason, updated_at: pre.updated_at });
   const code = script("scripts/supply-intel.ts", [`--only=${pick.join(",")}`, "--concurrency=2", `--result-file=${resultFile}`]);
   let result: IntelResult | null = null;
   try {

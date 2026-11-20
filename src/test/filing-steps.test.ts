@@ -85,3 +85,19 @@ describe("weekly supply intel marker", () => {
     expect(oldest(["A", "B", "C"], new Map(), 2, new Map([["C", 1], ["B", 2]]))).toEqual(["C", "B"]);
   });
 });
+
+describe("weekly intel survives a deadline kill (review F17)", () => {
+  it("writes a retry marker with backoff before spawning supply-intel", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("scripts/filing-steps.ts", "utf8");
+    const pre = src.indexOf('intelMarker(null, wk ? { cursor: wk.cursor, paused_reason: wk.paused_reason } : null, Date.now(), "interrupted');
+    const spawn = src.indexOf('script("scripts/supply-intel.ts"');
+    expect(pre).toBeGreaterThan(0);
+    expect(spawn).toBeGreaterThan(pre);
+    const now = Date.parse("2026-11-20T12:00:00Z");
+    const m = intelMarker(null, null, now, "interrupted before supply intel finished");
+    expect(m.action).toBe("retry");
+    // due again 1 h later, not at once
+    expect(Date.parse(m.updated_at) + INTEL_EVERY_MS - now).toBe(3600_000);
+  });
+});

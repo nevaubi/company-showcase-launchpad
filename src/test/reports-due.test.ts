@@ -54,3 +54,18 @@ describe("reports-due failure classes and head-of-line skip", () => {
     expect(next.cursor).toBe(1);
   });
 });
+
+describe("failure receipts are cleaned up (review F10)", () => {
+  it("lists receipts whose slot is no longer due, bounded", async () => {
+    const { staleReceipts } = await import("../../scripts/lib/reports-due");
+    const due = [{ ticker: "AAPL", kind: "recap" as const, reason: "8-K 2.02 0000320193-26-000100 filed 2026-11-19" }];
+    const receipts = [
+      { job: "reports-due-fail:AAPL:recap", paused_reason: "8-K 2.02 0000320193-26-000100 filed 2026-11-19|boom" },
+      { job: "reports-due-fail:MSFT:recap", paused_reason: "8-K 2.02 0000789019-26-000050 filed 2026-10-28|boom" },
+      { job: "reports-due-fail:AAPL:preview", paused_reason: "expected report 2026-10-30|x" },
+      { job: "reports-due", paused_reason: null },
+    ];
+    expect(staleReceipts(receipts, due)).toEqual(["reports-due-fail:MSFT:recap", "reports-due-fail:AAPL:preview"]);
+    expect(staleReceipts(receipts, due, 1)).toEqual(["reports-due-fail:MSFT:recap"]);
+  });
+});
