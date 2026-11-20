@@ -3,12 +3,12 @@
 // Band width is the stated dollars (or the stated share when no dollars are given), so the picture doubles
 // as the flow view. Every card opens the filing sentences behind it through `onSelect`.
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { AlertTriangle, Flag, Globe2, Lock } from "lucide-react";
+import { AlertTriangle, Flag, Globe2, Link2, Lock } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { externalLogo, impactKey, overlayHit, RELATION_COLOR, RELATION_DASH, RELATION_LABEL, RELATION_ORDER, type Overlay } from "./supply-map-meta";
+import { externalLogo, impactOf, overlayHit, RELATION_COLOR, RELATION_DASH, RELATION_LABEL, RELATION_ORDER, type Overlay } from "./supply-map-meta";
 import { figure, LineSample, NodeHoverCard, RelationMark } from "./supply-marks";
 import type { GraphNode, HopNode, NodeRisk, Relation, ShockImpact } from "@/lib/supply/core";
-import { groupTotals, nodeFacts, type NodeFacts } from "@/lib/supply/describe";
+import { groupTotals, NATURE_WORD, nodeFacts, type NodeFacts } from "@/lib/supply/describe";
 import { layoutNetwork, NET, type Basis, type NetCard } from "@/lib/supply/network-layout";
 import { fmtCompactUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 const LIMIT = 12;
 const COMPACT_BELOW = 620;
 const TIP_W = 288;
-const BASIS_TEXT: Record<Basis, string> = { dollars: "width shows dollars (stated, or stated share × revenue)", share: "width shows the stated share", none: "equal width, no figures stated" };
+const BASIS_TEXT: Record<Basis, string> = { dollars: "width shows stated revenue, purchases or contract value (or stated share × revenue)", share: "width shows the stated share", none: "equal width, no flows stated" };
 const SINGULAR: Record<Relation, string> = { supplier: "supplier", customer: "customer", partner: "partner", competitor: "competitor" };
 const SEVERITY: Record<ShockImpact["severity"], string> = { high: "High impact", medium: "Medium impact", low: "Low impact" };
 
@@ -59,6 +59,8 @@ interface CardProps {
   flagged: boolean;
   /** two lines (name, then product) or one */
   tall: boolean;
+  /** second-row cell: the figure moves to the second line so the name keeps the whole width */
+  stacked: boolean;
   index: number;
   /** placed by the layout (wide view) rather than in the phone list */
   placed: boolean;
@@ -68,19 +70,24 @@ interface CardProps {
 }
 
 /** One counterparty. Memoised: hovering a card re-renders only the cards whose state changed. */
-const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagged, tall, index, placed, style, onSelect, onHover }: CardProps) {
-  const n = c.node, fig = figure(facts);
-  const spoken = [n.name, `${SINGULAR[c.relation]}${c.hop === 2 ? " of a direct link, second order" : ""}`, fig && `${fig.value} ${fig.unit}`, facts.product && `product: ${facts.product}`,
-    risk?.singleSource && "single source", risk?.hotspots.length ? `exposed to ${risk.hotspots.join(", ")}` : "", flagged && "flagged by the overlay",
+const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagged, tall, stacked, index, placed, style, onSelect, onHover }: CardProps) {
+  const n = c.node, fig = figure(facts), nature = NATURE_WORD[facts.nature];
+  const spoken = [n.name, `${SINGULAR[c.relation]}${c.hop === 2 ? " of a direct link, second order" : ""}`, nature && nature.toLowerCase(), fig && `${fig.value} ${fig.unit}${fig.flow ? "" : ", not a flow"}`, facts.product && `product: ${facts.product}`,
+    risk?.singleSource && "single source", facts.dependency && "stated dependency", risk?.hotspots.length ? `exposed to ${risk.hotspots.join(", ")}` : "", flagged && "flagged by the overlay",
     impact ? `shock: ${SEVERITY[impact.severity].toLowerCase()}` : outside ? "not reached by the shock" : ""].filter(Boolean).join(", ");
   const flags = (
     <>
       {flagged && <Flag aria-hidden="true" className="size-3 shrink-0 text-negative" />}
       {risk?.singleSource && <Lock aria-hidden="true" className="size-3 shrink-0 text-negative" />}
+      {facts.dependency && <Link2 aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />}
       {(risk?.hotspots.length ?? 0) > 0 && <Globe2 aria-hidden="true" className="size-3 shrink-0 text-warning" />}
       {impact && <AlertTriangle aria-hidden="true" className="size-3 shrink-0 text-negative" />}
     </>
   );
+  const figText = fig && (
+    <span className="shrink-0 text-xs leading-4"><span className={cn("num", fig.flow ? "font-medium" : "text-muted-foreground")}>{fig.value}</span><span className="ml-1 text-[11px] text-muted-foreground">{fig.unit}</span></span>
+  );
+  const second = impact ? SEVERITY[impact.severity] : nature ? `${nature}${facts.summary ? ` · ${facts.summary}` : ""}` : facts.summary ?? `${facts.statements} filing statement${facts.statements === 1 ? "" : "s"}`;
   return (
     <button
       type="button"
@@ -106,14 +113,23 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
       <span className={cn("shrink-0", outside && "opacity-60")}>
         <CompanyLogo ticker={n.ticker ?? n.name.slice(0, 4).toUpperCase()} src={externalLogo(n.domain, n.ticker)} size="xs" decorative />
       </span>
-      {tall ? (
+      {stacked ? (
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className={cn("min-w-0 truncate text-xs leading-4", picked ? "font-semibold" : "font-medium")}>{n.name}</span>
+          <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
+            {figText}
+            <span className="min-w-0 flex-1 truncate">{second}</span>
+            {flags}
+          </span>
+        </span>
+      ) : tall ? (
         <span className="flex min-w-0 flex-1 flex-col">
           <span className="flex min-w-0 items-baseline gap-2">
             <span className={cn("min-w-0 flex-1 truncate text-xs leading-4", picked ? "font-semibold" : "font-medium")}>{n.name}</span>
-            {fig && <span className="shrink-0 text-xs leading-4"><span className="num font-medium">{fig.value}</span><span className="ml-1 text-[11px] text-muted-foreground">{fig.unit}</span></span>}
+            {figText}
           </span>
           <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
-            <span className="min-w-0 flex-1 truncate">{impact ? SEVERITY[impact.severity] : facts.summary ?? `${facts.statements} filing statement${facts.statements === 1 ? "" : "s"}`}</span>
+            <span className="min-w-0 flex-1 truncate">{second}</span>
             {flags}
           </span>
         </span>
@@ -121,7 +137,7 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
         <>
           <span className={cn("min-w-0 flex-1 truncate text-xs", picked ? "font-semibold" : "font-medium")}>{n.name}</span>
           {flags}
-          {fig && <span className="num shrink-0 text-[11px] font-medium">{fig.value}</span>}
+          {fig && <span className={cn("num shrink-0 text-[11px]", fig.flow ? "font-medium" : "text-muted-foreground")}>{fig.value}</span>}
         </>
       )}
     </button>
@@ -155,15 +171,15 @@ export function SupplyNetwork({ focus, graph, hop2, visible, selected, onSelect,
   }, [layout]);
 
   const active = hover ?? selected;
-  const outside = (n: GraphNode | HopNode) => impacts != null && !impacts.has(impactKey(n));
+  const outside = (n: GraphNode | HopNode) => impacts != null && !impactOf(impacts, n);
   const expand = (r: Relation) => { refocus.current = { relation: r, index: LIMIT }; setExpanded((s) => new Set(s).add(r)); };
   const collapse = (r: Relation) => { refocus.current = { relation: r, index: "more" }; setExpanded((s) => { const n = new Set(s); n.delete(r); return n; }); };
 
   const card = (c: NetCard, index: number, flow: boolean) => {
     const risk = risks[c.key];
     return (
-      <Card key={c.key} c={c} facts={facts.get(c.key)!} risk={risk} impact={impacts?.get(impactKey(c.node))} outside={outside(c.node)} picked={selected === c.key}
-        flagged={overlayHit(overlay, risk)} tall={c.h >= NET.card || !flow} index={index} placed={flow} onSelect={onSelect} onHover={setHover}
+      <Card key={c.key} c={c} facts={facts.get(c.key)!} risk={risk} impact={impactOf(impacts, c.node)} outside={outside(c.node)} picked={selected === c.key}
+        flagged={overlayHit(overlay, risk)} tall={c.h >= NET.card || !flow} stacked={flow && c.h >= NET.card && (c.relation === "partner" || c.relation === "competitor")} index={index} placed={flow} onSelect={onSelect} onHover={setHover}
         style={flow ? { left: c.x, top: c.y, width: c.w, height: c.h } : { minHeight: c.hop === 2 ? NET.child : NET.card }} />
     );
   };
@@ -194,7 +210,7 @@ export function SupplyNetwork({ focus, graph, hop2, visible, selected, onSelect,
 
   const header = (r: Relation, shown: number, total: number) => {
     const t = totals[r];
-    const stated = t.maxShare != null ? `up to ${t.maxShare}% share` : t.stated != null ? `${fmtCompactUsd(t.stated)} stated` : "no figures stated";
+    const stated = t.maxShare != null ? `up to ${t.maxShare}% share` : t.flows != null ? `${fmtCompactUsd(t.flows)} stated flows` : t.others > 0 ? "no flows stated" : "no figures stated";
     return (
       <>
         <span className="flex shrink-0 items-center gap-1.5">
@@ -202,7 +218,7 @@ export function SupplyNetwork({ focus, graph, hop2, visible, selected, onSelect,
           <span className="text-xs font-semibold text-foreground">{RELATION_LABEL[r]}</span>
           <span className="num text-xs text-muted-foreground">{shown < total ? `${shown} of ${total}` : total}</span>
         </span>
-        <span className="min-w-0 truncate text-right text-[11px] tabular-nums text-muted-foreground" title={t.stated != null ? "Sum of the largest amount each name states, as written in the filings: these can be commitments, investments or programme sizes, not sales." : undefined}>
+        <span className="min-w-0 truncate text-right text-[11px] tabular-nums text-muted-foreground" title={t.flows != null ? "Sum of the largest revenue, purchase or contract figure each name's sentence states. Guarantees, investments, financing and other figures are not added." : undefined}>
           {t.quantified > 0 ? `${stated} · ${t.quantified} quantified` : stated}
         </span>
       </>
@@ -240,6 +256,8 @@ export function SupplyNetwork({ focus, graph, hop2, visible, selected, onSelect,
           <li key={r} className="inline-flex items-center gap-1.5"><LineSample relation={r} />{r === "supplier" ? "supplies the company" : r === "customer" ? "buys from the company" : r === "partner" ? "partnership" : "competition"}</li>
         ))}
         <li className="inline-flex items-center gap-1.5"><Lock aria-hidden="true" className="size-3 text-negative" />single source</li>
+        <li className="inline-flex items-center gap-1.5"><Link2 aria-hidden="true" className="size-3 text-muted-foreground" />stated dependency</li>
+        {layout.bands.some((b) => b.muted) && <li className="inline-flex items-center gap-1.5"><svg aria-hidden="true" width={22} height={8}><path d="M1 4H21" stroke="currentColor" strokeWidth={1.5} strokeDasharray="2 4" /></svg>financing, acquisition or regulator: not a flow</li>}
         <li className="inline-flex items-center gap-1.5"><Globe2 aria-hidden="true" className="size-3 text-warning" />hotspot region</li>
       </ul>
       {RELATION_ORDER.some(fewer) && (
@@ -279,7 +297,7 @@ export function SupplyNetwork({ focus, graph, hop2, visible, selected, onSelect,
       ? (low ? { left, bottom: layout.height - tipCard.y + 6 } : { left, top: tipCard.y + tipCard.h + 6 })
       : { left, top: Math.max(0, tipCard.y - 4) };
   }
-  const tipImpact = tipCard ? impacts?.get(impactKey(tipCard.node)) : undefined;
+  const tipImpact = tipCard ? impactOf(impacts, tipCard.node) : undefined;
 
   /* dashes drift along a band only while it is hovered, focused or selected: motion as feedback, never as wallpaper */
   return (
@@ -293,11 +311,11 @@ export function SupplyNetwork({ focus, graph, hop2, visible, selected, onSelect,
               const on = active != null && (active === b.key || (c != null && parentOf(c) === active));
               const faded = (active != null && !on && !isGroup) || (c ? outside(c.node) : false);
               const stroke = c && overlayHit(overlay, risks[b.key]) ? "var(--negative)" : RELATION_COLOR[b.relation];
-              const dash = b.hop === 2 ? "3 4" : RELATION_DASH[b.relation].length ? RELATION_DASH[b.relation].join(" ") : undefined;
+              const dash = b.muted ? "2 4" : b.hop === 2 ? "3 4" : RELATION_DASH[b.relation].length ? RELATION_DASH[b.relation].join(" ") : undefined;
               return (
                 <g key={`${b.hop}-${b.key}`} className="transition-opacity duration-150 motion-reduce:transition-none" style={{ opacity: faded ? 0.12 : 1 }}>
-                  <path d={b.d} fill="none" stroke={stroke} strokeWidth={b.t} strokeLinecap={b.relation === "competitor" ? "round" : "butt"} strokeDasharray={dash} opacity={isGroup || b.hop === 2 ? 0.75 : on ? 0.6 : 0.3} />
-                  {on && b.hop === 1 && (b.relation === "supplier" || b.relation === "customer") && (
+                  <path d={b.d} fill="none" stroke={stroke} strokeWidth={b.t} strokeLinecap={b.relation === "competitor" ? "round" : "butt"} strokeDasharray={dash} opacity={isGroup || b.hop === 2 ? 0.75 : b.muted ? 0.5 : on ? 0.6 : 0.3} />
+                  {on && !b.muted && b.hop === 1 && (b.relation === "supplier" || b.relation === "customer") && (
                     <path d={b.d} fill="none" stroke={stroke} strokeWidth={Math.max(1.4, b.t * 0.3)} strokeDasharray="2 12" strokeLinecap="round" className="supply-flow" />
                   )}
                 </g>

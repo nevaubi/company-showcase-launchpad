@@ -9,13 +9,13 @@ import { Globe2, Map as MapIcon, Minus, Plus, RotateCcw } from "lucide-react";
 import { logoUrl } from "@/components/app/company-logo";
 import { analyticsFile } from "@/lib/analytics-files";
 import { canonCountry, type CountryRow } from "@/lib/supply/analytics";
-import { maxShare, type GraphNode, type HopNode, type NodeRisk, type Relation, type ShockImpact } from "@/lib/supply/core";
+import { maxShare, NOT_TRADE, type GraphNode, type HopNode, type NodeRisk, type Relation, type ShockImpact } from "@/lib/supply/core";
 import { arcEnds, BASIS_LABEL, frameAll, placeGraph, readHq, SOURCE_LABEL, type Centroid, type Hq, type HqFile, type Placed } from "@/lib/supply/geo";
 import { nodeFacts, type NodeFacts } from "@/lib/supply/describe";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { countryPlaces, GlobeEngine, type GlobeArc, type GlobeBadge, type GlobeBox, type GlobeFill, type GlobeHit, type GlobePalette, type GlobePoint } from "./globe/engine";
-import { externalLogo, impactKey, overlayHit, RELATION_COLOR, RELATION_DASH, RELATION_LABEL, RELATION_ORDER, RELATION_SHAPE, type Overlay } from "./supply-map-meta";
+import { externalLogo, impactOf, overlayHit, RELATION_COLOR, RELATION_DASH, RELATION_LABEL, RELATION_ORDER, RELATION_SHAPE, type Overlay } from "./supply-map-meta";
 import { LineSample, NodeHoverCard, RelationMark } from "./supply-marks";
 
 export const hqQuery = { queryKey: ["analytics", "hq"], queryFn: () => analyticsFile<HqFile>("hq.json"), staleTime: 24 * 60 * 60_000 };
@@ -157,7 +157,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
         const o = h.home;
         return { kind: "point", x, y, title: p.name, lines: [p.hub, o ? `${o.precision === "city" ? "Head office" : "Head-office country"} · ${SOURCE_LABEL[o.source]}` : "Head office", "The company this map is about"] };
       }
-      const hit = h.impacts?.get(impactKey(node));
+      const hit = impactOf(h.impacts, node);
       const shock = h.impacts ? (hit ? `${SEVERITY[hit.severity]}${hit.revenuePct != null ? `, ${(hit.revenuePct * 100).toFixed(1)}% of revenue at risk` : ""}` : "Not reached by the shock") : null;
       return { kind: "node", x, y, name: p.name, facts: nodeFacts(node, h.risks[p.key]), place: at.place, basis: `${BASIS_LABEL[at.basis]}${at.source ? `, ${SOURCE_LABEL[at.source]}` : ""}`, picked: h.selected === p.key, shock };
     };
@@ -185,7 +185,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
           if (row.hq) lines.push(`${row.hq} counterpart${row.hq === 1 ? "y" : "ies"} based here`);
           if (row.facilities) lines.push(`${row.facilities} facilit${row.facilities === 1 ? "y" : "ies"} stated`);
           if (row.policy) lines.push(`${row.policy} policy item${row.policy === 1 ? "" : "s"}`);
-          if (row.dollars > 0) lines.push(`${fmtCompactUsd(row.dollars)} stated exposure`);
+          if (row.dollars > 0) lines.push(`${fmtCompactUsd(row.dollars)} stated flows`);
           if (row.hotspot) lines.push("Geopolitical hotspot");
           lines.push("Click for the region detail below");
           setTip({ kind: "country", x, y, title: canon, lines });
@@ -222,7 +222,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
     if (!engine || !theme) return;
     const points: GlobePoint[] = [], arcs: GlobeArc[] = [], badges: GlobeBadge[] = [];
     const flagged = (key: string) => overlayHit(overlay, risks[key]);
-    const dim = (p: Placed) => { const n = nodeByKey.get(p.key); return impacts != null && n != null && !impacts.has(impactKey(n)); };
+    const dim = (p: Placed) => { const n = nodeByKey.get(p.key); return impacts != null && n != null && !impactOf(impacts, n); };
     if (home) {
       points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 4200, active: true, lead: true, hollow: home.precision !== "city", logo: focus.ticker ? logoUrl(focus.ticker) : undefined, shape: "circle" });
     }
@@ -239,11 +239,13 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
       const anchor: [number, number] | null = p.hop === 2 ? (from ? [from.lon, from.lat] : null) : home ? [home.lon, home.lat] : null;
       if (!anchor || p.relation === "focus") continue;
       const ends = arcEnds(p.relation, anchor, [p.lon, p.lat]);
+      /* financing, acquisitions and regulators are ties, not flows: a thin dashed line with no direction marks */
+      const notTrade = NOT_TRADE.has(risks[p.key]?.nature ?? "trade");
       arcs.push({
-        id: p.key, a: ends.a, b: ends.b, twoWay: ends.twoWay, plain: ends.plain,
+        id: p.key, a: ends.a, b: ends.b, twoWay: notTrade ? false : ends.twoWay, plain: notTrade || ends.plain,
         color: flagged(p.key) ? theme.negative : theme.relation[p.relation],
-        dash: p.hop === 2 ? [2, 5] : RELATION_DASH[p.relation],
-        width: p.hop === 2 ? 1 : 1.3 + Math.min(share, 40) / 9,
+        dash: notTrade ? [2, 4] : p.hop === 2 ? [2, 5] : RELATION_DASH[p.relation],
+        width: p.hop === 2 || notTrade ? 1 : 1.3 + Math.min(share, 40) / 9,
         hot, dim: isDim || (selected != null && !hot),
       });
       if (p.hop === 1 && share >= 10) badges.push({ lon: p.lon, lat: p.lat, text: `${Math.round(share)}%`, key: p.key });

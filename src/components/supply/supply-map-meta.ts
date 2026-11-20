@@ -1,5 +1,6 @@
 import { logoUrl } from "@/components/app/company-logo";
-import { normText, type NodeRisk, type Relation } from "@/lib/supply/core";
+import { isTradeLink, normText, type NodeRisk, type Relation, type RiskLink, type ShockImpact } from "@/lib/supply/core";
+import type { SupplyOverlay } from "@/lib/supply/url-state";
 
 export const RELATION_COLOR: Record<Relation | "focus", string> = {
   customer: "var(--chart-1)",
@@ -39,8 +40,8 @@ export function externalLogo(domain: string | null, ticker: string | null) {
   return domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : undefined;
 }
 
-/** Risk overlays shared by the globe and network views. */
-export type Overlay = "none" | "single" | "concentration" | "geo" | "dollars";
+/** Risk overlays shared by the globe and network views (the values the address carries, see url-state.ts). */
+export type Overlay = SupplyOverlay;
 /** True when a name is flagged by the chosen overlay. */
 export function overlayHit(overlay: Overlay, risk: NodeRisk | undefined): boolean {
   if (!risk) return false;
@@ -48,3 +49,12 @@ export function overlayHit(overlay: Overlay, risk: NodeRisk | undefined): boolea
 }
 /** Key a shock impact is stored under: the ticker when there is one, else the normalised name. */
 export const impactKey = (n: { ticker: string | null; name: string }) => n.ticker ?? normText(n.name);
+/**
+ * The shock result for a name on the map. The simulation walks supplier and customer trade links only, and keys its results
+ * by ticker; a partner, a competitor or a financing tie that shares a ticker with a reached supplier is not reached itself.
+ */
+export function impactOf(impacts: Map<string, ShockImpact> | null | undefined, n: { ticker: string | null; name: string; relation: string; links: unknown[] }): ShockImpact | undefined {
+  if (!impacts || (n.relation !== "supplier" && n.relation !== "customer")) return undefined;
+  if (!(n.links as RiskLink[]).some(isTradeLink)) return undefined;
+  return impacts.get(impactKey(n));
+}

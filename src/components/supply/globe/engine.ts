@@ -164,6 +164,36 @@ const mainHub = (members: GlobePoint[]): string => {
   return [...tally].sort((a, b) => b[1] - a[1])[0][0];
 };
 
+/** One relation's share of a cluster's pie, with the shape drawn on it so relations differ without colour. */
+export interface ClusterSlice { color: string; shape: GlobeShape; count: number; a0: number; a1: number }
+/**
+ * Pie slices of a cluster, largest first from 12 o'clock. Every slice gets at least `minAngle` so the shape drawn at its
+ * middle fits; the others give up room in proportion. The counts stay exact (the hover list repeats them).
+ */
+export function clusterSlices(members: Pick<GlobePoint, 'color' | 'shape'>[], minAngle = 0.75): ClusterSlice[] {
+  const tally = new Map<string, { color: string; shape: GlobeShape; count: number }>();
+  for (const m of members) {
+    const shape = m.shape ?? 'circle', k = `${m.color}|${shape}`;
+    const t = tally.get(k) ?? { color: m.color, shape, count: 0 };
+    t.count++;
+    tally.set(k, t);
+  }
+  const groups = [...tally.values()].sort((a, b) => b.count - a.count || a.shape.localeCompare(b.shape));
+  const n = members.length, full = Math.PI * 2;
+  const raw = groups.map((g) => (g.count / n) * full);
+  const floor = Math.min(minAngle, full / Math.max(1, groups.length));
+  const small = raw.map((a) => a < floor);
+  const need = small.reduce((s, x, i) => s + (x ? floor - raw[i] : 0), 0);
+  const spare = raw.reduce((s, a, i) => s + (small[i] ? 0 : a), 0);
+  let a0 = -Math.PI / 2;
+  return groups.map((g, i) => {
+    const span = small[i] ? floor : raw[i] - (spare > 0 ? (need * raw[i]) / spare : 0);
+    const out = { ...g, a0, a1: a0 + span };
+    a0 += span;
+    return out;
+  });
+}
+
 /** Trace a marker of the given shape, centred on (x, y), about as large as a circle of radius r. */
 function shapePath(ctx: CanvasRenderingContext2D, shape: GlobeShape, x: number, y: number, r: number): void {
   ctx.beginPath();
@@ -649,18 +679,22 @@ export class GlobeEngine {
       if (n === 1) continue;
       /* a cluster made only of pale names (outside the shock scenario) is pale too */
       ctx.globalAlpha = c.members.every((m) => m.faded) ? 0.35 : 1;
-      const tally = new Map<string, number>();
-      for (const m of c.members) tally.set(m.color, (tally.get(m.color) ?? 0) + 1);
-      let a0 = -Math.PI / 2;
-      for (const [color, k] of [...tally].sort((x, y) => y[1] - x[1])) {
-        const a1 = a0 + (k / n) * Math.PI * 2;
-        ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.r, a0, a1); ctx.closePath(); ctx.fillStyle = color; ctx.fill();
-        a0 = a1;
+      const slices = clusterSlices(c.members);
+      for (const sl of slices) {
+        ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.r, sl.a0, sl.a1); ctx.closePath(); ctx.fillStyle = sl.color; ctx.fill();
       }
       ctx.beginPath(); ctx.arc(c.x, c.y, c.r + 0.75, 0, Math.PI * 2); ctx.strokeStyle = hot ? pal.ink : pal.panel; ctx.lineWidth = 1.5; ctx.stroke();
       const ring = c.members.find((m) => m.ring)?.ring;
       if (ring) { ctx.beginPath(); ctx.arc(c.x, c.y, c.r + 3.5, 0, Math.PI * 2); ctx.strokeStyle = ring; ctx.lineWidth = 2; ctx.stroke(); }
-      ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(6, c.r - 5.5), 0, Math.PI * 2); ctx.fillStyle = pal.panel; ctx.fill();
+      /* a ring wide enough to carry each relation's shape, cut out of the middle of its slice: clusters tell relations apart without colour */
+      const band = Math.min(9, Math.max(6.5, c.r * 0.36)), inner = Math.max(7, c.r - band);
+      ctx.beginPath(); ctx.arc(c.x, c.y, inner, 0, Math.PI * 2); ctx.fillStyle = pal.panel; ctx.fill();
+      const glyph = Math.max(2.4, (c.r - inner) * 0.34), rr = (inner + c.r) / 2;
+      for (const sl of slices) {
+        const mid = (sl.a0 + sl.a1) / 2;
+        shapePath(ctx, sl.shape, c.x + Math.cos(mid) * rr, c.y + Math.sin(mid) * rr, glyph);
+        ctx.fillStyle = pal.panel; ctx.fill();
+      }
       ctx.fillStyle = pal.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = '500 10.5px "Geist Mono", ui-monospace, monospace';
       ctx.fillText(String(n), c.x, c.y + 0.5);

@@ -3,10 +3,9 @@ import { Button } from "@/components/ui/button";
 import { useSessionState } from "@/lib/use-session-state";
 import { requestResearch } from "@/lib/research/request";
 import { ClientOnly } from "@tanstack/react-router";
-import { lazy, Suspense, useDeferredValue, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { z } from "zod";
-import { ArrowRight, FileText, Globe2, Lock, Network, Zap } from "lucide-react";
+import { ArrowRight, FileText, Globe2, Link2, Lock, Network, Zap } from "lucide-react";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { externalLogo, RELATION_LABEL, type Overlay } from "@/components/supply/supply-map-meta";
@@ -28,22 +27,27 @@ import { allSignalsQuery, ConcentrationHistory, DeepVerify, EcosystemBasket, Fra
 import { canonCountry, countryExposure } from "@/lib/supply/analytics";
 import { AgreementTermsPanel, RegionDossierPanel, RegionRiskRegister } from "@/components/supply/supply-region";
 import { confidence, mirrors, type ProLink } from "@/lib/supply/core";
+import { exposureSummary, KIND_WORD, NATURE_WORD } from "@/lib/supply/describe";
+import { resolveSelection, selectionParam, SUPPLY_TABS, SUPPLY_VIEWS, supplySearch, type SupplySearch, type SupplyTab, type SupplyView } from "@/lib/supply/url-state";
 import { useUniverse } from "@/lib/data";
 import { COVERAGE } from "@/lib/coverage";
-import { focusGraph, linkDollars, nodeRisk, RELATIONS, secondOrder, simulateShock, type GraphNode, type Relation, type RiskLink, type ShockImpact } from "@/lib/supply/core";
+import { focusGraph, nodeRisk, RELATIONS, secondOrder, simulateShock, type GraphNode, type Relation, type RiskLink, type ShockImpact } from "@/lib/supply/core";
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const SupplyGlobe = lazy(() => import("@/components/supply/supply-globe"));
 
 /** The three ways to look at the links. "flow" and the old node map were folded into Network; a stored old value falls back to it. */
-const VIEWS = ["network", "globe", "chain"] as const;
-type View = (typeof VIEWS)[number];
+const VIEWS = SUPPLY_VIEWS;
+type View = SupplyView;
 const VIEW_LABEL: Record<View, string> = { network: "Network", globe: "Globe", chain: "Chain" };
 const isView = (v: unknown): v is View => typeof v === "string" && (VIEWS as readonly string[]).includes(v);
+const isOverlay = (v: unknown): v is Overlay => typeof v === "string" && OVERLAYS.some((o) => o.v === v);
+const isTab = (v: unknown): v is SupplyTab => typeof v === "string" && (SUPPLY_TABS as readonly string[]).includes(v);
 
 export const Route = createFileRoute("/_authenticated/app/supply-chain")({
-  validateSearch: z.object({ t: z.string().max(10).optional() }),
+  // view, selected name, overlay, depth and tab live in the address so a copied link reopens the same picture
+  validateSearch: (s: Record<string, unknown>): SupplySearch => supplySearch.parse(s),
   head: () => ({
     meta: [
       { title: "Supply chain map · FiledUnder" },
@@ -63,27 +67,44 @@ const segment = (on: boolean) =>
 
 const OVERLAYS: { v: Overlay; label: string }[] = [
   { v: "none", label: "No overlay" },
-  { v: "single", label: "Single-source dependencies" },
+  { v: "single", label: "Single source (stated)" },
   { v: "concentration", label: "Concentration ≥10%" },
   { v: "geo", label: "Geopolitical hotspots" },
-  { v: "dollars", label: "Stated dollar figures" },
+  { v: "dollars", label: "Stated flows ($)" },
 ];
 
 function SupplyChainPage() {
-  const { t } = Route.useSearch();
-  const ticker = (t ?? "NVDA").toUpperCase();
+  const search = Route.useSearch();
+  const ticker = (search.t ?? "NVDA").toUpperCase();
   const navigate = useNavigate({ from: Route.fullPath });
   const { data: universe } = useUniverse();
   const linksQuery = useQuery(supplyLinksQuery);
   const { data: links, isLoading } = linksQuery;
   const [visible, setVisible] = useState<Set<Relation>>(new Set(RELATIONS));
-  const [selected, setSelected] = useState<string | null>(null);
-  const [depth, setDepth] = useSessionState<1 | 2>("fu:supply:depth", 1);
-  const [overlay, setOverlay] = useSessionState<Overlay>("fu:supply:overlay", "none");
-  const [tab, setTab] = useSessionState("fu:supply:tab", "evidence");
+  /* The address wins; without it the page falls back to what this session last chose. Changes replace the history entry,
+     so Back still leaves the page (or returns to the previous company) instead of stepping through every click. */
+  const [savedDepth, setSavedDepth] = useSessionState<number>("fu:supply:depth", 1, (v): v is number => v === 1 || v === 2);
+  const [savedOverlay, setSavedOverlay] = useSessionState<Overlay>("fu:supply:overlay", "none", isOverlay);
+  const [savedTab, setSavedTab] = useSessionState<string>("fu:supply:tab", "evidence", isTab);
+  const [savedView, setSavedView] = useSessionState<View>("fu:supply:view", "network", isView);
+  const view: View = search.view ?? savedView;
+  const overlay: Overlay = search.overlay ?? savedOverlay;
+  const depth: 1 | 2 = (search.depth ?? savedDepth) === 2 ? 2 : 1;
+  const tab: string = search.tab ?? savedTab;
+  const patch = useCallback((p: Partial<SupplySearch>) => navigate({ search: (prev: SupplySearch) => ({ ...prev, ...p }), replace: true }), [navigate]);
+  const setOverlay = (o: Overlay) => { setSavedOverlay(o); patch({ overlay: o === "none" ? undefined : o }); };
+  const setDepth = (d: 1 | 2) => { setSavedDepth(d); patch({ depth: d === 2 ? 2 : undefined }); };
+  const setTab = (t: string) => { setSavedTab(t); patch({ tab: isTab(t) && t !== "evidence" ? t : undefined }); };
+  /* a picture restored from the session is written into the address once, so copying the link shares what is on screen */
+  useEffect(() => {
+    const fill: Partial<SupplySearch> = {};
+    if (!search.view && savedView !== "network") fill.view = savedView;
+    if (!search.overlay && savedOverlay !== "none") fill.overlay = savedOverlay;
+    if (!search.depth && savedDepth === 2) fill.depth = 2;
+    if (Object.keys(fill).length) patch(fill);
+  }, [savedView, savedOverlay, savedDepth, search.view, search.overlay, search.depth, patch]);
   const [shockSrc, setShockSrc] = useState<string | null>(null);
   const [shock, setShock] = useState(20);
-  const [view, setView] = useSessionState<View>("fu:supply:view", "network", isView);
   const [chainDepth, setChainDepth] = useSessionState<number>("fu:supply:chain-depth", 2);
   const [chainSel, setChainSel] = useState<string | null>(null);
   const [chainWide, setChainWide] = useState(true);
@@ -112,6 +133,7 @@ function SupplyChainPage() {
   const risks = useMemo(() => Object.fromEntries([...graph, ...hop2].map((n) => [n.key, nodeRisk(n.links as RiskLink[], revenue)])), [graph, hop2, revenue]);
   const focus: GraphNode = { key: "focus", name: names[ticker] ?? ticker, ticker, domain: null, relation: "focus", links: [] };
   const byId = useMemo(() => new Map((all as ProLink[]).map((l) => [l.id, l])), [all]);
+  const selected = useMemo(() => resolveSelection([...graph, ...hop2], search.sel), [graph, hop2, search.sel]);
   const sel = [...graph, ...hop2].find((n) => n.key === selected) ?? null;
   const counts = Object.fromEntries(RELATIONS.map((r) => [r, graph.filter((n) => n.relation === r).length])) as Record<Relation, number>;
 
@@ -120,17 +142,19 @@ function SupplyChainPage() {
   const impacts = useMemo(() => (tab === "shock" ? simulateShock(src, shock / 100, all, names, revenue) : []), [tab, src, shock, all, names, revenue]);
   const impactMap = useMemo(() => (tab === "shock" ? new Map(impacts.map((i) => [i.key, i])) : null), [tab, impacts]);
 
+  /* Exposure counts each name once (its largest stated flow, or stated customer share × SEC revenue). Other stated figures
+     (guarantees, investments, financing, commitments, settlements, balances) are listed apart and never added. */
   const summary = useMemo(() => {
     const vals = Object.values(risks);
-    const exposure = graph
-      .flatMap((n) => n.links.map((l) => ({ n, l: l as RiskLink, d: linkDollars(l as RiskLink, revenue) })))
-      .filter((x) => x.d != null)
-      .sort((a, b) => b.d! - a.d!);
+    const { exposure, others, total } = exposureSummary(graph, revenue);
     return {
       single: vals.filter((r) => r.singleSource).length,
+      dependency: vals.filter((r) => r.dependency).length,
       conc: vals.filter((r) => r.concentrated).length,
       hotspots: [...new Set(vals.flatMap((r) => r.hotspots))],
       exposure,
+      others,
+      total,
     };
   }, [risks, graph, revenue]);
   // What the globe tints: the same per-country rows as the World exposure panel in its company scope.
@@ -139,19 +163,24 @@ function SupplyChainPage() {
       .filter((r) => r.country !== "United States" || r.links + r.facilities > 0),
     [all, signals, ticker, revenue],
   );
-  const pick = (k: string) => { setSelected(k); setTab("evidence"); };
+  /* one address change per click: the selection and the tab it opens move together */
+  const pick = (k: string | null) => {
+    const n = k ? [...graph, ...hop2].find((x) => x.key === k) : null;
+    setSavedTab("evidence");
+    patch({ sel: n ? selectionParam(n) : undefined, tab: undefined });
+  };
   // Loading, error and empty states keep a fixed frame; every view grows with its content (the globe sets its own map height).
   const fixedCanvas = isLoading || (linksQuery.isError && !links) || (view === "chain" ? !(chain && chain.nodes.length > 1) : graph.length === 0);
   // The same hotspot list the region register below shows, so the header and the register never disagree.
   const hotspotRegions = useMemo(() => {
     if (summary.hotspots.length) return summary.hotspots;
     return countryExposure((all as ProLink[]).filter((l) => l.ticker === ticker), (signals ?? []).filter((x) => x.ticker === ticker), revenue)
-      .filter((r) => r.hotspot && r.country !== "United States" && r.country.length < 40)
+      // a country counts only when a filing sentence or a verified signal names it, not because a counterparty is based there
+      .filter((r) => r.hotspot && r.country !== "United States" && r.country.length < 40 && r.links + r.facilities + r.policy + r.risks > 0)
       .map((r) => r.country);
   }, [summary.hotspots, all, signals, ticker, revenue]);
 
   function go(tk: string) {
-    setSelected(null);
     setChainSel(null);
     setShockSrc(null);
     navigate({ search: { t: tk } });
@@ -183,7 +212,7 @@ function SupplyChainPage() {
       <PageHeader
         eyebrow="Filings and data"
         title="Supply chain map"
-        description="Who each company sells to, buys from, works with and competes against, as named in its latest 10-K and 10-Q — with disclosed dollar exposure, risk flags, year-over-year changes, earnings sympathy moves and a shock simulator. Every link opens the sentence it comes from."
+        description="Who each company sells to, buys from, works with and competes against, as named in its latest 10-K and 10-Q, with stated revenue, purchase and contract figures, risk flags, year-over-year changes, earnings sympathy moves and a shock simulator. A figure, flag or region is shown only when its sentence states it, and every link opens that sentence."
         actions={
           <Select value={ticker} onValueChange={go}>
             <SelectTrigger className="w-[240px]">
@@ -200,10 +229,11 @@ function SupplyChainPage() {
         }
       />
 
-      <div data-tour="supply-stats" className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
-        <Stat loading={isLoading} label="Disclosed $ exposure" value={summary.exposure.length ? fmtCompactUsd(summary.exposure.reduce((s, x) => s + x.d!, 0)) : "—"} hint={`${summary.exposure.length} quantified links`} />
+      <div data-tour="supply-stats" data-section="Supply stats" className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-5">
+        <Stat loading={isLoading} label="Disclosed $ exposure" value={summary.exposure.length ? fmtCompactUsd(summary.total) : "—"}
+          hint={`${summary.exposure.length} ${summary.exposure.length === 1 ? "name" : "names"} with stated flows or shares${summary.others.length ? ` · ${summary.others.length} other ${summary.others.length === 1 ? "figure" : "figures"} not added` : ""}`} />
         <Stat loading={isLoading} label="Concentrated (≥10%)" value={String(summary.conc)} hint="counterparties" />
-        <Stat loading={isLoading} label="Single-source" value={String(summary.single)} hint="stated dependencies" icon={<Lock className="size-3.5" />} />
+        <Stat loading={isLoading} label="Single-source" value={String(summary.single)} hint={summary.dependency ? `sole-source wording · ${summary.dependency} more stated ${summary.dependency === 1 ? "dependency" : "dependencies"}` : "sole-source wording in the filing"} icon={<Lock className="size-3.5" />} />
         <Stat
           loading={isLoading}
           label="Hotspot regions"
@@ -219,7 +249,7 @@ function SupplyChainPage() {
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <div role="group" aria-label="View" data-agent-controls data-tour="supply-views" className="inline-flex rounded-md border bg-card p-0.5 text-xs shadow-paper">
             {VIEWS.map((v) => (
-              <button key={v} type="button" aria-pressed={view === v} onClick={() => { setView(v); if (v === "chain") setTab("evidence"); }} className={segment(view === v)}>
+              <button key={v} type="button" aria-pressed={view === v} onClick={() => { setSavedView(v); if (v === "chain") setSavedTab("evidence"); patch({ view: v === "network" ? undefined : v, ...(v === "chain" ? { tab: undefined } : {}) }); }} className={segment(view === v)}>
                 {VIEW_LABEL[v]}
               </button>
             ))}
@@ -310,13 +340,13 @@ function SupplyChainPage() {
               <TabsTrigger value="exposure" className="px-1 text-xs">Exposure</TabsTrigger>
             </TabsList>
             <TabsContent value="reactions">
-              {tab === "reactions" && <ReactionsTab ticker={ticker} name={focus.name} graph={graph} covered={covered} onSelect={(k) => { setSelected(k); setTab("evidence"); }} />}
+              {tab === "reactions" && <ReactionsTab ticker={ticker} name={focus.name} graph={graph} covered={covered} onSelect={pick} />}
             </TabsContent>
             <TabsContent value="changes">
               {tab === "changes" && <ChangesTab ticker={ticker} name={focus.name} onOpen={(l, label) => openLink(l as RiskLink, label)} />}
             </TabsContent>
 
-            <TabsContent value="evidence">
+            <TabsContent value="evidence" data-section="Link evidence">
               {view === "chain" && chain ? (
                 chainSel && !chainWide ? (
                   chainEvidence
@@ -338,14 +368,23 @@ function SupplyChainPage() {
                       </p>
                     </div>
                   </div>
-                  <RiskBadges r={risks[sel.key]} />
+                  <RiskBadges r={risks[sel.key] && sel.relation === "competitor" ? { ...risks[sel.key], nature: "trade" } : risks[sel.key]} />
                   {(sel.links as RiskLink[]).map((l) => (
                     <div key={l.id} className="rounded-lg border p-3 text-sm">
                       <p className="text-xs font-medium text-muted-foreground">
                         From {names[l.ticker] ?? l.ticker}'s {l.form}, filed {fmtDate(l.filed)}
                         {l.share_pct != null && <span className="ml-1 text-foreground">· {l.share_pct}%</span>}
-                        {linkDollars(l, revenue) != null && <span className="ml-1 text-foreground">· {fmtCompactUsd(linkDollars(l, revenue))}</span>}
+                        {l.amount_usd != null && l.amount_usd > 0 && (
+                          <span className="ml-1 text-foreground">· {fmtCompactUsd(l.amount_usd)} {KIND_WORD[l.amount_kind ?? "other"]}{l.flow_usd != null ? "" : <span className="text-muted-foreground"> (not a flow)</span>}</span>
+                        )}
                       </p>
+                      {((l.relation !== "competitor" && NATURE_WORD[l.nature ?? "trade"]) || l.dependency || l.single_source) && (
+                        <p className="mt-1 flex flex-wrap gap-1 text-[10.5px]">
+                          {l.relation !== "competitor" && NATURE_WORD[l.nature ?? "trade"] && <span className="rounded border px-1.5 py-0.5 text-foreground">{NATURE_WORD[l.nature ?? "trade"]}: not a flow</span>}
+                          {l.single_source && <span className="inline-flex items-center gap-1 rounded border border-negative/40 px-1.5 py-0.5 text-negative"><Lock className="size-3" />Single source</span>}
+                          {l.dependency && <span className="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-muted-foreground"><Link2 className="size-3" />Stated dependency (no sole-source wording)</span>}
+                        </p>
+                      )}
                       <div className="mt-1 flex flex-wrap gap-1">
                         <ConfidenceBadge c={confidence(l as ProLink, all)} />
                         <FreshnessBadge filed={l.filed} today={today} />
@@ -363,6 +402,18 @@ function SupplyChainPage() {
                       <button type="button" onClick={() => openLink(l, `${sel.name} · ${l.relation}`)} className="mt-2 inline-flex items-center gap-1 rounded bg-highlight-soft px-2 py-1 text-xs font-medium text-foreground hover:bg-highlight hover:text-highlight-foreground">
                         <FileText className="size-3" /> Open in {l.form}
                       </button>
+                      {(l.corroboration ?? []).length > 0 && (
+                        <div className="mt-2 border-t pt-2">
+                          <p className="text-[11px] text-muted-foreground">Also stated in {names[l.ticker] ?? l.ticker}'s other current {(l.corroboration ?? []).length === 1 ? "filing" : "filings"} (counted once):</p>
+                          {(l.corroboration ?? []).map((c) => (
+                            <button key={c.id} type="button" onClick={() => openLink(c, `${sel.name} · ${c.relation} · ${c.form}`)} className="mt-1 block w-full rounded px-1 py-0.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground">
+                              <span className="inline-flex items-center gap-1 font-medium text-foreground"><FileText className="size-3" />{c.form}, filed {fmtDate(c.filed)}</span>
+                              {c.amount_usd != null && c.amount_usd > 0 && <span className="num"> · {fmtCompactUsd(c.amount_usd)} {KIND_WORD[c.amount_kind ?? "other"]}</span>}
+                              <span className="block italic">“{c.quote.slice(0, 140)}{c.quote.length > 140 ? "…" : ""}”</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       <div className="mt-2"><DeepVerify key={l.id} linkId={l.id} /></div>
                     </div>
                   ))}
@@ -386,7 +437,7 @@ function SupplyChainPage() {
                   <p className="mb-2 text-xs text-muted-foreground">Select a company on the map, or pick one below.</p>
                   {graph.slice(0, 16).map((n) => (
                     <li key={n.key}>
-                      <button type="button" onClick={() => setSelected(n.key)} className="flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-muted">
+                      <button type="button" onClick={() => pick(n.key)} className="flex w-full items-center gap-2 rounded px-1 py-1 text-left hover:bg-muted">
                         <RelationMark relation={n.relation as Relation} size={8} />
                         <span className="truncate">{n.name}</span>
                         {risks[n.key]?.singleSource && <Lock className="size-3 text-negative" />}
@@ -398,7 +449,7 @@ function SupplyChainPage() {
               )}
             </TabsContent>
 
-            <TabsContent value="shock" className="space-y-3">
+            <TabsContent value="shock" data-section="Shock simulation" className="space-y-3">
               <p className="text-xs text-muted-foreground">
                 If <span className="font-medium text-foreground">{names[src] ?? src}</span>'s demand or output drops, its suppliers lose sales (sized by the revenue share they disclose) and its customers face supply disruption. Effects ripple two steps out.
               </p>
@@ -433,13 +484,13 @@ function SupplyChainPage() {
               <p className="text-[10.5px] text-muted-foreground">Mechanical estimate from disclosed shares only; not a forecast.</p>
             </TabsContent>
 
-            <TabsContent value="exposure">
+            <TabsContent value="exposure" data-section="Stated exposure" className="space-y-3">
               {summary.exposure.length === 0 ? (
-                <p className="text-sm text-muted-foreground">{focus.name}'s filings don't put a percentage or dollar figure on any named counterparty.</p>
+                <p className="text-sm text-muted-foreground">{focus.name}'s filings put no revenue, purchase or contract figure, and no customer share, on a named counterparty.</p>
               ) : (
                 <ul className="space-y-2">
-                  {summary.exposure.slice(0, 20).map(({ n, l, d }) => (
-                    <li key={l.id} className="rounded-lg border p-2.5 text-sm">
+                  {summary.exposure.slice(0, 20).map(({ n, l, d, from }) => (
+                    <li key={n.key} className="rounded-lg border p-2.5 text-sm">
                       <div className="flex items-center gap-2">
                         <RelationMark relation={n.relation as Relation} size={8} />
                         <span className="truncate font-medium">{n.name}</span>
@@ -447,7 +498,7 @@ function SupplyChainPage() {
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {n.relation}
-                        {l.share_pct != null && ` · ${l.share_pct}% of ${names[l.ticker] ?? l.ticker}'s ${l.relation === "customer" ? "revenue" : "purchases"}`}
+                        {from === "flow" ? ` · stated ${KIND_WORD[l.amount_kind ?? "other"]}` : l.share_pct != null && ` · ${l.share_pct}% of ${names[l.ticker] ?? l.ticker}'s revenue × SEC revenue`}
                       </p>
                       <button type="button" onClick={() => openLink(l, `${n.name} · exposure`)} className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
                         <FileText className="size-3" /> Source
@@ -455,6 +506,22 @@ function SupplyChainPage() {
                     </li>
                   ))}
                 </ul>
+              )}
+              {summary.others.length > 0 && (
+                <div data-section="Other stated figures">
+                  <p className="mb-1.5 text-xs font-medium">Other stated figures, not added to exposure</p>
+                  <p className="mb-2 text-[11px] text-muted-foreground">Amounts the sentences state that are not money for goods or services between the two companies.</p>
+                  <ul className="space-y-1.5">
+                    {summary.others.slice(0, 12).map(({ n, a }) => (
+                      <li key={a.link.id} className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs">
+                        <RelationMark relation={n.relation as Relation} size={8} />
+                        <span className="min-w-0 flex-1 truncate">{n.name}</span>
+                        <span className="num shrink-0 text-muted-foreground">{fmtCompactUsd(a.value)} {KIND_WORD[a.kind]}</span>
+                        <button type="button" aria-label={`Source for ${n.name}, ${KIND_WORD[a.kind]}`} onClick={() => openLink(a.link, `${n.name} · ${KIND_WORD[a.kind]}`)} className="inline-flex shrink-0 items-center gap-1 text-muted-foreground hover:text-foreground"><FileText className="size-3" />Source</button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </TabsContent>
           </Tabs>
@@ -512,7 +579,9 @@ function Stat({ label, value, hint, icon, loading }: { label: string; value: str
 function RiskBadges({ r }: { r?: ReturnType<typeof nodeRisk> }) {
   if (!r) return null;
   const b = [
+    NATURE_WORD[r.nature] && `${NATURE_WORD[r.nature]}: not a flow`,
     r.singleSource && "Single source",
+    r.dependency && "Stated dependency",
     r.concentrated && "Concentrated ≥10%",
     ...r.regions.map((x) => (r.hotspots.includes(x) ? `⚠ ${x}` : x)),
   ].filter(Boolean) as string[];

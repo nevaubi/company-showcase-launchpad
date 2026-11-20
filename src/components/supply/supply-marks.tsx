@@ -1,9 +1,9 @@
 // Small shared pieces of the supply-chain views: relation marks (shape + colour), line samples for legends,
 // and the hover card both views show for a counterparty.
-import { memo, type CSSProperties } from "react";
-import { AlertTriangle, Globe2, Lock } from "lucide-react";
+import { Fragment, memo, type CSSProperties } from "react";
+import { AlertTriangle, Globe2, Link2, Lock } from "lucide-react";
 import type { Relation } from "@/lib/supply/core";
-import type { NodeFacts } from "@/lib/supply/describe";
+import { KIND_WORD, NATURE_WORD, type NodeFacts } from "@/lib/supply/describe";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { RELATION_COLOR, RELATION_DASH, RELATION_ONE, RELATION_SHAPE, type MarkShape } from "./supply-map-meta";
@@ -38,10 +38,15 @@ export function LineSample({ relation, width = 22 }: { relation: Relation; width
   );
 }
 
-/** "16.3% share" or "$2.0B stated": the figure a card shows, with what kind of figure it is. Amounts are as stated, never called sales. */
-export function figure(f: Pick<NodeFacts, "share" | "amount">): { value: string; unit: string } | null {
-  if (f.share != null) return { value: `${f.share}%`, unit: "share" };
-  if (f.amount != null) return { value: fmtCompactUsd(f.amount), unit: "stated" };
+/**
+ * The figure a card shows, with what kind of figure it is: "16.3% share", "$1.2B revenue", "$4.0B contract value". A stated
+ * figure that is not a flow is shown only when nothing else is, and says what it is ("$105.0B guarantee"); `flow: false` tells
+ * the card to set it quietly, because it is not exposure.
+ */
+export function figure(f: Pick<NodeFacts, "share" | "flow" | "other">): { value: string; unit: string; flow: boolean } | null {
+  if (f.share != null) return { value: `${f.share}%`, unit: "share", flow: true };
+  if (f.flow) return { value: fmtCompactUsd(f.flow.value), unit: KIND_WORD[f.flow.kind], flow: true };
+  if (f.other) return { value: fmtCompactUsd(f.other.value), unit: KIND_WORD[f.other.kind], flow: false };
   return null;
 }
 
@@ -61,8 +66,12 @@ export interface HoverCardProps {
 
 /** The hover card both views show for a counterparty: relation, figures, product, flags, the start of the newest quoted sentence and its filing. */
 export function NodeHoverCard({ name, facts, place, basis, shock, action = "Click for the sentence", className, style }: HoverCardProps) {
-  const fig = figure(facts);
-  const both = facts.share != null && facts.amount != null;
+  const nature = NATURE_WORD[facts.nature];
+  const rows: [string, string][] = [];
+  if (facts.share != null) rows.push(["Stated share", `${facts.share}%`]);
+  if (facts.flow) rows.push([`Stated ${KIND_WORD[facts.flow.kind]}`, fmtCompactUsd(facts.flow.value)]);
+  if (facts.other) rows.push([`Stated ${KIND_WORD[facts.other.kind]}`, `${fmtCompactUsd(facts.other.value)}, not a flow`]);
+  if (facts.product) rows.push(["Product", facts.product]);
   return (
     <div aria-hidden="true" data-supply-tip="" style={style}
       className={cn("pointer-events-none z-20 w-[288px] rounded-md border bg-popover p-3 text-popover-foreground shadow-lift", className)}>
@@ -71,18 +80,20 @@ export function NodeHoverCard({ name, facts, place, basis, shock, action = "Clic
         <span>{RELATION_ONE[facts.relation]}{facts.hop === 2 ? " of a direct link" : ""}</span>
         <span aria-hidden="true">·</span>
         <span className="num">{facts.statements}</span> filing statement{facts.statements === 1 ? "" : "s"}
+        {facts.filings > facts.statements && <span className="whitespace-nowrap">, in {facts.filings} filings</span>}
       </p>
       <p className="mt-1 text-[13px] font-semibold leading-snug">{name}</p>
       {place && <p className="mt-0.5 text-[11px] text-muted-foreground">{place}{basis ? ` · ${basis}` : ""}</p>}
-      {(fig || facts.product) && (
+      {nature && <p className="mt-1 text-[11px] font-medium text-foreground">{nature}: not drawn as a flow</p>}
+      {rows.length > 0 && (
         <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
-          {fig && <><dt className="text-muted-foreground">{fig.unit === "share" ? "Stated share" : "Stated amount"}</dt><dd className="num font-medium">{fig.value}{both ? ` · ${fmtCompactUsd(facts.amount)} stated` : ""}</dd></>}
-          {facts.product && <><dt className="text-muted-foreground">Product</dt><dd className="truncate">{facts.product}</dd></>}
+          {rows.map(([k, v]) => <Fragment key={k}><dt className="text-muted-foreground">{k}</dt><dd className={cn("truncate", k !== "Product" && "num font-medium")}>{v}</dd></Fragment>)}
         </dl>
       )}
-      {(facts.singleSource || facts.hotspots.length > 0 || shock) && (
+      {(facts.singleSource || facts.dependency || facts.hotspots.length > 0 || shock) && (
         <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
           {facts.singleSource && <li className="inline-flex items-center gap-1"><Lock className="size-3 text-negative" aria-hidden="true" />Single source</li>}
+          {facts.dependency && <li className="inline-flex items-center gap-1"><Link2 className="size-3 text-muted-foreground" aria-hidden="true" />Stated dependency</li>}
           {facts.hotspots.length > 0 && <li className="inline-flex items-center gap-1"><Globe2 className="size-3 text-warning" aria-hidden="true" />{facts.hotspots.join(", ")}</li>}
           {shock && <li className="inline-flex items-center gap-1"><AlertTriangle className="size-3 text-negative" aria-hidden="true" />{shock}</li>}
         </ul>
@@ -92,7 +103,6 @@ export function NodeHoverCard({ name, facts, place, basis, shock, action = "Clic
         <span className="num whitespace-nowrap">{facts.form} · {fmtDate(facts.filed)}</span>
         <span className="whitespace-nowrap text-right text-foreground">{action}</span>
       </p>
-      {facts.amount != null && <p className="mt-1 text-[11px] text-muted-foreground">Amount as written in the filing: it may be a commitment, an investment or a programme size.</p>}
     </div>
   );
 }
