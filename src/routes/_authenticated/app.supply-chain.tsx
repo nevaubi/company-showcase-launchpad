@@ -70,7 +70,7 @@ const OVERLAYS: { v: Overlay; label: string }[] = [
   { v: "single", label: "Single source (stated)" },
   { v: "concentration", label: "Concentration ≥10%" },
   { v: "geo", label: "Geopolitical hotspots" },
-  { v: "dollars", label: "Stated flows ($)" },
+  { v: "dollars", label: "Dollar figures (flow or share × revenue)" },
 ];
 
 function SupplyChainPage() {
@@ -373,11 +373,17 @@ function SupplyChainPage() {
                     <div key={l.id} className="rounded-lg border p-3 text-sm">
                       <p className="text-xs font-medium text-muted-foreground">
                         From {names[l.ticker] ?? l.ticker}'s {l.form}, filed {fmtDate(l.filed)}
-                        {l.share_pct != null && <span className="ml-1 text-foreground">· {l.share_pct}%</span>}
-                        {l.amount_usd != null && l.amount_usd > 0 && (
-                          <span className="ml-1 text-foreground">· {fmtCompactUsd(l.amount_usd)} {KIND_WORD[l.amount_kind ?? "other"]}{l.flow_usd != null ? "" : <span className="text-muted-foreground"> (not a flow)</span>}</span>
+                        {/* figures this filing's own sentence states; a figure only an older copy states is listed with that copy below */}
+                        {(l.own ?? l).share_pct != null && <span className="ml-1 text-foreground">· {(l.own ?? l).share_pct}%</span>}
+                        {(l.own ?? l).amount_usd != null && (l.own ?? l).amount_usd! > 0 && (
+                          <span className="ml-1 text-foreground">· {fmtCompactUsd((l.own ?? l).amount_usd!)} {KIND_WORD[(l.own ?? l).amount_kind ?? "other"]}{(l.own ?? l).flow_usd != null ? "" : <span className="text-muted-foreground"> (not a flow)</span>}</span>
                         )}
                       </p>
+                      {l.figure_from && (
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          {[l.figure_from.share && "share", l.figure_from.amount && "amount", l.figure_from.single && "single-source wording", l.figure_from.regions && "regions"].filter(Boolean).join(", ")} stated only in the older filing below, and counted from it
+                        </p>
+                      )}
                       {((l.relation !== "competitor" && NATURE_WORD[l.nature ?? "trade"]) || l.dependency || l.single_source) && (
                         <p className="mt-1 flex flex-wrap gap-1 text-[10.5px]">
                           {l.relation !== "competitor" && NATURE_WORD[l.nature ?? "trade"] && <span className="rounded border px-1.5 py-0.5 text-foreground">{NATURE_WORD[l.nature ?? "trade"]}: not a flow</span>}
@@ -408,6 +414,7 @@ function SupplyChainPage() {
                           {(l.corroboration ?? []).map((c) => (
                             <button key={c.id} type="button" onClick={() => openLink(c, `${sel.name} · ${c.relation} · ${c.form}`)} className="mt-1 block w-full rounded px-1 py-0.5 text-left text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground">
                               <span className="inline-flex items-center gap-1 font-medium text-foreground"><FileText className="size-3" />{c.form}, filed {fmtDate(c.filed)}</span>
+                              {c.share_pct != null && <span className="num"> · {c.share_pct}%</span>}
                               {c.amount_usd != null && c.amount_usd > 0 && <span className="num"> · {fmtCompactUsd(c.amount_usd)} {KIND_WORD[c.amount_kind ?? "other"]}</span>}
                               <span className="block italic">“{c.quote.slice(0, 140)}{c.quote.length > 140 ? "…" : ""}”</span>
                             </button>

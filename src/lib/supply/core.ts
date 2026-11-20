@@ -117,10 +117,14 @@ export interface RiskLink extends SupplyLink {
   /* set by `dedupeCurrent` (identity.ts) */
   /** the same link as stated in the filer's other current filings: counted once, shown as corroboration */
   corroboration?: RiskLink[];
+  /** figures the kept row's own filing does not state, carried from the newest copy that does (with that copy's filing) */
+  figure_from?: Partial<Record<"share" | "amount" | "single" | "regions", { id: string; form: string; filed: string; accn: string; doc?: string; quote?: string }>>;
+  /** the kept row exactly as its own filing states it, before figures were carried onto it */
+  own?: RiskLink;
 }
 
-/** The row and the copies of it in the filer's other current filings. */
-export const copies = <T extends RiskLink>(l: T): T[] => [l, ...((l.corroboration ?? []) as T[])];
+/** Each filing's row once, as that filing states it: the kept row (without carried figures) and its copies. */
+export const copies = <T extends RiskLink>(l: T): T[] => [(l.own ?? l) as T, ...((l.corroboration ?? []) as T[])];
 
 /** Ties that are not trade (financing, acquisitions, regulators): shown and labelled, never a flow or a shock path. */
 export const NOT_TRADE: ReadonlySet<string> = new Set(["financial", "corporate", "regulatory"]);

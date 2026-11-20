@@ -70,3 +70,26 @@ describe("dedupeCurrent", () => {
     expect(dedupeCurrent(rows).map((r) => r.id)).toEqual(rows.map((r) => r.id));
   });
 });
+
+describe("dedupeCurrent carries figures only an older copy states (review C8)", () => {
+  it("keeps the newest row and lends it the 10-K's share, amount and flag with their source", () => {
+    const k = { ...link({ id: "k", accn: "k1", form: "10-K", filed: "2026-02-10", ticker: "MAS", relation: "customer", counterparty: "The Home Depot", counterparty_ticker: "HD", share_pct: 38, quote: "Sales to The Home Depot were $2.9 billion, 38% of net sales" }), amount_usd: 2.9e9, flow_usd: 2.9e9, amount_kind: "revenue" };
+    const q = { ...link({ id: "q", accn: "q1", form: "10-Q", filed: "2026-10-30", ticker: "MAS", relation: "customer", counterparty: "Home Depot", counterparty_ticker: "HD", quote: "Home Depot remains our largest customer" }), amount_usd: null };
+    const [out] = dedupeCurrent([k, q]);
+    expect(out).toMatchObject({ id: "q", share_pct: 38, amount_usd: 2.9e9, flow_usd: 2.9e9, amount_kind: "revenue" });
+    expect(out.figure_from).toEqual({ share: expect.objectContaining({ id: "k", form: "10-K", filed: "2026-02-10" }), amount: expect.objectContaining({ id: "k", quote: k.quote }) });
+    // each filing's row still reads as that filing states it
+    expect(out.own).toMatchObject({ id: "q", share_pct: null, amount_usd: null });
+  });
+  it("changes nothing when the newest row states its own figures", () => {
+    const k = link({ id: "k2", accn: "k1", form: "10-K", filed: "2026-02-10", share_pct: 20 });
+    const q = link({ id: "q2", accn: "q1", form: "10-Q", filed: "2026-10-30", share_pct: 22 });
+    const [out] = dedupeCurrent([k, q]);
+    expect(out.share_pct).toBe(22);
+    expect(out.figure_from).toBeUndefined();
+  });
+  it("does not resolve a name from a single row elsewhere (review C9)", () => {
+    const one = nameTickers([link({ ticker: "AAA", counterparty: "Apex", counterparty_ticker: "APEX" })]);
+    expect(counterpartyKey(link({ ticker: "BBB", counterparty: "Apex" }), one)).toBe("apex");
+  });
+});

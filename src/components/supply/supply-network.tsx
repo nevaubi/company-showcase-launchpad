@@ -137,7 +137,8 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
         <>
           <span className={cn("min-w-0 flex-1 truncate text-xs", picked ? "font-semibold" : "font-medium")}>{n.name}</span>
           {flags}
-          {fig && <span className={cn("num shrink-0 text-[11px]", fig.flow ? "font-medium" : "text-muted-foreground")}>{fig.value}</span>}
+          {/* the figure always carries its kind, so a bare dollar amount never reads as a flow */}
+          {fig && <span className="shrink-0 text-[11px]"><span className={cn("num", fig.flow ? "font-medium" : "text-muted-foreground")}>{fig.value}</span><span className="ml-1 text-muted-foreground">{fig.unit}</span></span>}
         </>
       )}
     </button>

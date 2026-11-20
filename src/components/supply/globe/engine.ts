@@ -109,8 +109,11 @@ const hiDone = (packed: HiPacked | null, by: 'worker' | 'main') => {
 };
 /** Parse on the main thread: only when a worker cannot start. */
 const loadHiHere = () => {
-  import('world-atlas/countries-10m.json')
-    .then((m) => hiDone(packHi((m.default ?? m) as unknown as Topology), 'main'))
+  // the same emitted file the worker fetches (hi-geo.worker.ts), so the 1:10m map ships once
+  import('world-atlas/countries-10m.json?url')
+    .then((m) => fetch(m.default))
+    .then((r) => r.json())
+    .then((t) => hiDone(packHi(t as Topology), 'main'))
     .catch(() => hiDone(null, 'main'));
 };
 /**
