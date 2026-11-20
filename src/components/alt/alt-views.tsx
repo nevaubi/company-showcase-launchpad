@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContaine
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { DATASETS, fmtAlt, type AltRow } from "@/lib/alt/query";
+import { isPartial, periodLabel } from "@/lib/alt/periods";
 import { EvidenceButton } from "@/components/source/evidence-button";
 import { Button } from "@/components/ui/button";
 
@@ -76,8 +77,12 @@ export function AltEventList({ rows, showTicker, max = 200 }: { rows: AltRow[]; 
 }
 
 export function AltSeriesChart({ rows, bar }: { rows: AltRow[]; bar?: boolean }) {
-  // Year-to-date readings get their own label and a lighter bar, so a partial year never reads as a drop.
-  const data = useMemo(() => rows.flatMap((r) => r.date ? [{ d: r.meta?.ytd ? `${r.date.slice(0, 4)} ${r.meta?.quarters ? `Q1${r.meta.quarters > 1 ? `–Q${r.meta.quarters}` : ""}` : "YTD"}` : r.date.slice(0, bar ? 4 : 7), v: r.value, ytd: !!r.meta?.ytd }] : []), [rows, bar]);
+  // Partial periods (flagged, or dated after today) get their own label and a lighter bar, so a
+  // partial year never reads as a drop; fiscal years are labelled FY, not by the calendar year.
+  const data = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    return rows.flatMap((r) => (r.date ? [{ d: periodLabel(r, today, !!bar), v: r.value, ytd: isPartial(r, today) }] : []));
+  }, [rows, bar]);
   const unit = rows[0]?.unit ?? null;
   const Chart = bar ? BarChart : LineChart;
   return (
