@@ -2,7 +2,7 @@
 // daily brief, the research assistant, exports). Rows a collector stored under the wrong company
 // (misattributed contract awards, look-alike FDA firms, trial sponsors and vehicle makers) and
 // missing values stored as zero (FDIC) are removed. Pure.
-import { contractRowBelongs, type CompanyKeys } from "@/lib/alt/contracts";
+import { contractRowBelongs, REFRESH_DATASET, type CompanyKeys } from "@/lib/alt/contracts";
 import { firmRowBelongs, rowFirm } from "@/lib/alt/firms";
 import { isBankPlaceholder } from "@/lib/alt/bank";
 
@@ -33,6 +33,7 @@ export function screenAltRows<T extends ScreenRowLike>(rows: T[], keysOf: (ticke
     return cache.get(t)!;
   };
   return rows.filter((r) => {
+    if (r.dataset === REFRESH_DATASET) return false;
     if (r.dataset === "bank") return !isBankPlaceholder(r);
     if (!needsKeys(r)) return true;
     const k = keys(r.ticker);

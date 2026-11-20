@@ -29,13 +29,18 @@ describe("screenAltRows", () => {
     const byDataset = (d: string, t?: string) => kept.filter((r) => r.dataset === d && (!t || r.ticker === t));
     expect(byDataset("contracts", "AAPL")).toHaveLength(0);
     expect(byDataset("contracts", "BA").map((r) => (r.meta as { recipient: string }).recipient)).toEqual(["THE BOEING COMPANY"]);
-    // 20 distinct firm names stored under KO: 13 bottlers and look-alikes go, 7 spellings of The Coca-Cola Company stay
+    // 20 distinct firm names stored under KO: 12 bottlers and look-alikes go; 7 spellings of The Coca-Cola Company and its museum stay
     expect(FDA_FIRMS.filter((r) => r.ticker === "KO")).toHaveLength(20);
-    expect(byDataset("fda", "KO")).toHaveLength(7);
+    expect(byDataset("fda", "KO")).toHaveLength(8);
     expect(byDataset("bank").map((r) => r.value)).toEqual([15.2]);
     expect(byDataset("ownership")).toHaveLength(1);
     // a company the app does not know: rows that need its identity are dropped, others pass
     expect(kept.filter((r) => r.ticker === "ZZZZ").map((r) => r.dataset)).toEqual(["events"]);
+  });
+
+  it("never shows the contracts collector's refresh records", () => {
+    const run = { ticker: "BA", dataset: "contracts_refresh", kind: "event", meta: { refresh: true, rule: 2, as_of: "2026-11-22T00:00:00Z", parents: [], family: [] } };
+    expect(screenAltRows([run], keysOf)).toEqual([]);
   });
 
   it("adds the columns it needs to a reader's select list", () => {

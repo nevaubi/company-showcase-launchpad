@@ -1,8 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { coverageOf } from "@/lib/coverage";
+import { COVERAGE, coverageOf } from "@/lib/coverage";
 import { universeQuery } from "@/lib/data";
-import { tickerKeys, type CompanyKeys } from "@/lib/alt/contracts";
+import { ALT_NAMES, REFRESH_DATASET, sharedCores, tickerKeys, type CompanyKeys } from "@/lib/alt/contracts";
 import { BUCKET_RECOUNT, eventBuckets, screenAltRows, withScreenColumns, type EventBucket, type ScreenRowLike } from "@/lib/alt/screen";
 
 export interface AltRow {
@@ -21,15 +21,18 @@ export interface AltRow {
 
 /**
  * Who each ticker is, for checking that a stored row is the company's own (coverage short name,
- * hand-checked registry name, universe legal name). Rows of unknown companies are dropped.
+ * hand-checked registry name, universe legal name, hand-checked recipient aliases). Rows of unknown
+ * companies are dropped. A failed universe fetch fails the read rather than judging one-word
+ * companies ("Boeing") without their legal names, which would hide their rows without a word.
  */
 export async function altKeysFor(client: QueryClient | undefined): Promise<(ticker: string) => CompanyKeys | null> {
-  const uni = client ? await client.ensureQueryData(universeQuery).catch(() => null) : null;
+  const uni = client ? await client.ensureQueryData(universeQuery) : null;
   const legal = new Map((uni?.companies ?? []).map((c) => [c.ticker, c.name]));
+  const shared = sharedCores(COVERAGE.map((c) => ({ cik: c.cik, names: [ALT_NAMES[c.ticker], c.shortName, legal.get(c.ticker)] })));
   return (t) => {
     const short = coverageOf(t)?.shortName;
     const name = legal.get(t);
-    return short || name ? tickerKeys(t, short, name) : null;
+    return short || name ? tickerKeys(t, short, name, shared) : null;
   };
 }
 
@@ -50,6 +53,14 @@ export async function screenAlt<T extends ScreenRowLike>(rows: T[], client: Quer
 /** The `alt_data` select builder a reader adds filters, ordering and a limit to. */
 const altSelect = (columns: string) => supabase.from("alt_data").select(columns);
 export type AltQuery = ReturnType<typeof altSelect>;
+
+/**
+ * Leave out stored contract award rows the old collector copied from the government-wide list
+ * (`usa:` award rows without a recorded tie; transactions are `usatx:` and every award the fixed
+ * collector stores carries `meta.tie`). Apply before a limit so they cannot fill it; the repair's
+ * first part deletes them.
+ */
+export const withoutCopiedAwards = (q: AltQuery): AltQuery => q.or("uid.like.usatx:*,meta->>tie.not.is.null");
 
 export async function readAlt<T = AltRow>(columns: string, build: (q: AltQuery) => AltQuery, client?: QueryClient): Promise<T[]> {
   const { data, error } = await build(altSelect(withScreenColumns(columns)));
@@ -141,7 +152,10 @@ export const altCompanyQuery = (ticker: string) => ({
 /** Latest events across all companies for one dataset. */
 export const altFeedQuery = (dataset: string) => ({
   queryKey: ["alt_feed", dataset],
-  queryFn: async ({ client }: { client?: QueryClient }) => readAlt("*", (q) => q.eq("dataset", dataset).eq("kind", "event").not("date", "is", null).order("date", { ascending: false }).limit(300), client),
+  queryFn: async ({ client }: { client?: QueryClient }) => readAlt("*", (q) => {
+      const base = q.eq("dataset", dataset).eq("kind", "event").not("date", "is", null);
+      return (dataset === "contracts" ? withoutCopiedAwards(base) : base).order("date", { ascending: false }).limit(300);
+    }, client),
   staleTime: 10 * 60_000,
 });
 
@@ -193,7 +207,8 @@ export const altSourceStatsQuery = () => ({
   queryFn: async () => {
     const { data, error } = await supabase.rpc("alt_source_stats");
     if (error) throw error;
-    return (data ?? []) as { dataset: string; rows: number; tickers: number; latest: string | null; refreshed: string | null }[];
+    // collection records are bookkeeping for the repair, not data
+    return ((data ?? []) as { dataset: string; rows: number; tickers: number; latest: string | null; refreshed: string | null }[]).filter((r) => r.dataset !== REFRESH_DATASET);
   },
   staleTime: 10 * 60_000,
 });

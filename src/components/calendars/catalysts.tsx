@@ -5,7 +5,7 @@ import { ExternalLink } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import LoadingState from "@/components/ui/loading-state";
-import { readAlt } from "@/lib/alt/query";
+import { readAlt, withoutCopiedAwards } from "@/lib/alt/query";
 import { addDays, weekStart } from "@/lib/calendars/data";
 import type { CalData } from "@/lib/calendars/rows";
 import {
@@ -49,8 +49,9 @@ function useAltCatalystRows(from: string, to: string) {
       // readAlt keeps only rows that are the company's own (src/lib/alt/screen.ts)
       const parts = await Promise.all([
         readAlt<Row>(cols, (q) => q.eq("dataset", "trials").gte("meta->>primary_completion", from.slice(0, 7)).lte("meta->>primary_completion", to).limit(600), client),
-        readAlt<Row>(cols, (q) => q.eq("dataset", "contracts").eq("kind", "event").gte("date", from).lte("date", to).order("value", { ascending: false }).limit(300), client),
-        readAlt<Row>(cols, (q) => q.eq("dataset", "contracts").eq("kind", "event").gte("meta->>end", from).lte("meta->>end", to).order("value", { ascending: false }).limit(300), client),
+        // copied government-wide award rows are left out before the limit, so they cannot crowd out real ones
+        readAlt<Row>(cols, (q) => withoutCopiedAwards(q.eq("dataset", "contracts").eq("kind", "event").gte("date", from).lte("date", to)).order("value", { ascending: false }).limit(300), client),
+        readAlt<Row>(cols, (q) => withoutCopiedAwards(q.eq("dataset", "contracts").eq("kind", "event").gte("meta->>end", from).lte("meta->>end", to)).order("value", { ascending: false }).limit(300), client),
         readAlt<Row>(cols, (q) => q.eq("dataset", "fda").eq("kind", "event").gte("date", from).lte("date", to).limit(300), client),
       ]);
       return parts.flat();
