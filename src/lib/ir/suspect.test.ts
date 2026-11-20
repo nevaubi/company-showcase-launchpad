@@ -100,6 +100,22 @@ describe("rules that must not hold real figures", () => {
     expect([...found.get(nvda.k)!.get("q")!.keys()]).toEqual(["2020-06-30"]);
     expect(found.get(nvda.k)!.get("q")!.get("2020-06-30")).toMatch(/more than \$10 trillion/);
   });
+  it("a line printed in thousands in older releases and in dollars in newer ones: the company's usual size decides (GWW)", () => {
+    // Real Grainger values (ir_kpi_facts, 20 Nov 2026): "Unallocated expenses" as stored, and the company's other lines.
+    const unallocated = series("usd", [11392, 11605, 48009, 14244, 15115, 17358, 69781, 18211, 18332, -130676000, -143571000, -146725000, -146948000], { k: "segment|operating_income|unallocated expenses|usd|" });
+    const us = series("usd", [1308737, 1353795000, 1384282000, 1398576000, 1408141000, 1416138000, 1469355000, 1497424000, 1506446000, 1537686000, 1608058000], { k: "segment|revenue|united states|usd|" });
+    const canada = series("usd", [5954, 3587000, 4894000, 6314000, 8361000, 9387000, 9499000, 9740000, 10156000, 11675000, 12347000, 12407000], { k: "segment|revenue|canada|usd|" });
+    const found = findSuspects(payload([unallocated, us, canada]));
+    // The dollar quarters are not held; the thousands quarters are a unit twin of them, not an outlier.
+    expect(found.get(unallocated.k)).toBeUndefined();
+    expect([...found.get(us.k)!.get("q")!.keys()]).toEqual(["2020-03-31"]);
+    expect([...found.get(canada.k)!.get("q")!.keys()]).toEqual(["2020-03-31"]);
+  });
+  it("a line mixing two measures is left alone; only the stray values above it are held (XOM total worldwide)", () => {
+    const xom = series("usd", [259000, 24157000, 25006000, 11145000000, 14718000000, 8533000000, 8578000000, 12816000000, 53810000000000, 57173000000000], { k: "geography|revenue|total worldwide|usd|" });
+    const found = findSuspects(payload([xom]));
+    expect([...found.get(xom.k)!.get("q")!.keys()].sort()).toEqual(["2022-03-31", "2022-06-30"]);
+  });
   it("is idempotent: holding twice holds nothing more", () => {
     const once = holdSuspects(payload([series("usd", [4.1e9, 4.3e9, 4.4e6, 4.6e9, 4.8e9])]));
     expect(once.stats.held).toBe(1);

@@ -139,6 +139,12 @@ describe("screenRows marks figures the document contradicts", () => {
     expect(rows[0].locator.suspect).toBeUndefined();
     expect(rows[2].locator.suspect).toBeUndefined();
   });
+  it("AUM lines pass $10 trillion without a custody word in the label (BLK 'Long-term' $11.6 trillion)", () => {
+    const rows = screenRows<ScreenRow>([
+      { label: "Long-term", parent: "Total", is_total: false, period_end: "2025-12-31", months: 0, value: 1.1557889e13, unit: "usd", metric: "aum", breakdown: "AUM by client and product type", locator: { t: 3, r: 4, c: 2, text: "11,557,889" } },
+    ]);
+    expect(rows[0].locator.suspect).toBeUndefined();
+  });
   it("leaves consistent documents untouched (same array back)", () => {
     const rows = asRows(group("CNA")).map((r) => ({ ...r, value: r.value / 1e6 }));
     expect(screenRows(rows)).toBe(rows);

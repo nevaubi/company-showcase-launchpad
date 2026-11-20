@@ -5,16 +5,19 @@
 // with the reason and the click-to-source of the cell. A value is never "corrected" by multiplying or
 // dividing it. Rules, for money and count lines only (percentages, ratios, basis points and per-share
 // figures are small by nature):
-//   1. marked suspect when it was stored (scale-check.ts), or flagged ~1,000× off its neighbours by older builds;
-//   2. $10 trillion or more ($1 quadrillion for custody, client-asset and volume lines);
-//   3. a cluster of the line's own values 900× or more away from the cluster most of its values sit in
-//      (yearly flows count a quarter of their value, monthly flows three times theirs): above it always,
-//      below it only when the step is close to a power of 1,000 (a unit slip, not a business winding down);
+//   1. marked suspect when it was stored (scale-check.ts); older builds' neighbour flags ("scale") are
+//      dropped and re-decided here, because that test could hold the one correct quarter;
+//   2. $10 trillion or more ($1 quadrillion for AUM, custody, client-asset and volume lines);
+//   3. a cluster of the line's own values (split at 100× steps) set against the cluster most of its
+//      values sit in (yearly flows count a quarter, one-month flows three times; see baselineOf): held when moving it
+//      by the nearest power of 1,000 puts it among the line's other values (a unit slip), or when one or
+//      two values sit 900× or more above them; anything else (fast growth, a business winding down, a
+//      line near zero, a line that mixes two measures) stays;
 //   4. 900× or more its own printed total, or a total 900× or more the sum of its printed lines;
 //   5. a figure the same document prints for another period of the same line while it prints a
 //      different figure for this one (a column read under the wrong period);
 //   6. a calculated value that uses a held figure.
-import { CUSTODY, MAX_USD, MAX_USD_CUSTODY, SLIP, fmtTimes } from "@/lib/ir/scale-check";
+import { CUSTODY, CUSTODY_METRICS, MAX_USD, MAX_USD_CUSTODY, SLIP, fmtTimes } from "@/lib/ir/scale-check";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadSeries } from "@/lib/ir/payload";
 
 type Kind = "q" | "y" | "mo";
@@ -41,6 +44,35 @@ const labelKey = (s: string) =>
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 
+/** Moved by the nearest power of 1,000, does `c` land among `base`'s values? Returns the shift in decades, or 0. */
+function slipShift<X extends { lg: number }>(c: X[], base: X[]): number {
+  const d = median(base.map((x) => x.lg)) - median(c.map((x) => x.lg));
+  const shift = 3 * Math.round(Math.abs(d) / 3) * Math.sign(d);
+  if (Math.abs(d) < 2.3 || shift === 0) return 0;
+  const lo = base[0].lg - 0.5;
+  const hi = base[base.length - 1].lg + 0.5;
+  return c.every((x) => x.lg + shift >= lo && x.lg + shift <= hi) ? shift : 0;
+}
+
+/**
+ * The cluster a line's values are judged against: the one most of them sit in. When another cluster of
+ * three or more is the same figures in another unit (older releases in thousands, newer in dollars), the
+ * majority is no evidence, so the one nearer the company's usual line size is taken. With no clear
+ * majority, or a majority of two that sits farther from the company's usual size than another cluster,
+ * there is no baseline and nothing is held on this rule.
+ */
+function baselineOf<X extends { lg: number }>(clusters: X[][], company: number | undefined): X[] | null {
+  const sizes = clusters.map((c) => c.length);
+  const top = Math.max(...sizes);
+  if (top < 2 || sizes.filter((n) => n === top).length !== 1) return null;
+  const major = clusters[sizes.indexOf(top)];
+  if (company == null) return top >= 3 ? major : null;
+  const dist = (c: X[]) => Math.abs(median(c.map((x) => x.lg)) - company);
+  if (top < 3) return clusters.some((c) => c !== major && dist(c) < dist(major)) ? null : major;
+  const twin = clusters.find((c) => c !== major && c.length >= 3 && slipShift(c, major) !== 0 && dist(c) + 1 <= dist(major));
+  return twin ?? major;
+}
+
 /** Finds the cells to hold back; see the rules at the top of this file. */
 export function findSuspects(p: IrPayload): SuspectMap {
   const out: SuspectMap = new Map();
@@ -56,9 +88,15 @@ export function findSuspects(p: IrPayload): SuspectMap {
   const bdOf = new Map<string, string>();
   for (const g of p.groups) for (const r of g.rows) if (g.bd) bdOf.set(r.k, g.bd);
 
+  // The company's usual size of a line, per unit: the middle of all its printed values.
+  const companyLg = new Map<string, number>();
+  for (const unit of GUARDED) {
+    const lgs = p.series.filter((s) => s.unit === unit).flatMap((s) => Object.values(s.q).filter((c) => c.v && !c.f).map((c) => Math.log10(Math.abs(c.v))));
+    if (lgs.length >= 20) companyLg.set(unit, median(lgs));
+  }
   for (const s of p.series) {
     if (!GUARDED.has(s.unit)) continue;
-    const custody = CUSTODY.test(`${s.label} ${s.parent ? byKey.get(s.parent)?.label ?? "" : ""} ${s.bd ?? bdOf.get(s.k) ?? ""}`);
+    const custody = CUSTODY_METRICS.has(s.met) || CUSTODY.test(`${s.label} ${s.parent ? byKey.get(s.parent)?.label ?? "" : ""} ${s.bd ?? bdOf.get(s.k) ?? ""}`);
     // 1–2. Marked at storage or by older builds; larger than any company reports.
     for (const k of KINDS)
       for (const [e, c] of Object.entries(cellsOf(s, k))) {
@@ -84,11 +122,8 @@ export function findSuspects(p: IrPayload): SuspectMap {
       else clusters.push([x]);
     }
     if (clusters.length > 1) {
-      const sizes = clusters.map((c) => c.length);
-      const top = Math.max(...sizes);
-      // A tie between two clusters leaves nothing to compare with: nothing is held on this rule.
-      if (top >= 2 && sizes.filter((n) => n === top).length === 1) {
-        const base = clusters[sizes.indexOf(top)];
+      const base = baselineOf(clusters, companyLg.get(s.unit));
+      if (base) {
         const baseMed = median(base.map((x) => x.lg));
         for (const c of clusters) {
           if (c === base) continue;
@@ -96,11 +131,10 @@ export function findSuspects(p: IrPayload): SuspectMap {
           const d = Math.abs(med - baseMed);
           const ratio = 10 ** d;
           // A unit slip: moved by the nearest power of 1,000, the cluster lands among the line's other values.
-          const shift = 3 * Math.round(d / 3) * Math.sign(baseMed - med);
-          const lo = base[0].lg - 0.5;
-          const hi = base[base.length - 1].lg + 0.5;
-          const slip = d >= 2.3 && shift !== 0 && c.every((x) => x.lg + shift >= lo && x.lg + shift <= hi);
-          if (!slip && !(med > baseMed && d >= LOG_SLIP)) continue;
+          const shift = slipShift(c, base);
+          const slip = shift !== 0;
+          // Far above the line and not a unit slip: held only as one or two stray values (glued cells).
+          if (!slip && !(med > baseMed && d >= LOG_SLIP && c.length <= 2)) continue;
           const why = `About ${fmtTimes(slip ? 10 ** Math.abs(shift) : ratio)}× ${med > baseMed ? "larger" : "smaller"} than this line's other periods: a different unit was probably read here`;
           for (const x of c) flag(s, x.k, x.e, why);
         }

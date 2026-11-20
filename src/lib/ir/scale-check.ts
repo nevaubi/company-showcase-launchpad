@@ -13,6 +13,7 @@ export const MAX_USD = 1e13;
 /** Assets under custody/administration and payment volumes can pass $10 trillion; they stop at $1 quadrillion. */
 export const MAX_USD_CUSTODY = 1e15;
 /** Assets held for clients, notional amounts and payment volumes: the lines that can legitimately pass $10 trillion. */
+export const CUSTODY_METRICS = new Set(["aum", "volume"]);
 export const CUSTODY = /\b(custody|custodial|under administration|administered|assets under|aum|auc|aua|client assets|client balances|notional|payments? volume|purchase volume|processed|gross dollar volume|gdv|tpv|total volume|transaction volume|volume)\b/i;
 /** Steps of 900× and more are unit slips (thousands read as millions and the like), not growth. */
 export const SLIP = 900;
@@ -62,6 +63,8 @@ export interface ScreenRow {
   months: number;
   value: number;
   unit: string;
+  metric?: string;
+  breakdown?: string | null;
   locator: { t: number; r: number; c: number; text: string; suspect?: string };
 }
 
@@ -99,7 +102,7 @@ export function screenRows<R extends ScreenRow>(rows: R[]): R[] {
   const usd = rows.filter((r) => r.unit === "usd" && r.value !== 0);
   // 1. Larger than any company reports.
   for (const r of usd) {
-    const custody = CUSTODY.test(`${r.label} ${r.parent ?? ""}`);
+    const custody = CUSTODY_METRICS.has(r.metric ?? "") || CUSTODY.test(`${r.label} ${r.parent ?? ""} ${r.breakdown ?? ""}`);
     if (Math.abs(r.value) >= (custody ? MAX_USD_CUSTODY : MAX_USD)) mark(r, `Reads as ${usdWords(r.value)}, more than any company reports: the table's unit was probably applied twice`);
   }
   // 2. A line 900× or more its own printed total in the same table and period.
