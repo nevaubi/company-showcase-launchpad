@@ -20,7 +20,7 @@ import { downloadBlob, fetchLogo, slug } from "@/lib/export/xlsx-theme";
 import { DIMENSIONS, countScale, derivedOf, fmtIr, groupColumns, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, refOf, rowDecimals, rowLabel, unitCaption } from "@/lib/ir/display";
 import type { IrPayload, PayloadAlt, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { currency } from "@/lib/ir/highlights";
-import { cellsFor, fiscalLabel, fiscalYearEndMonth, heldFor, periodGrids } from "@/lib/ir/periods";
+import { cellsFor, fiscalCalendar, heldFor, periodGrids, uniqueHeads, type FiscalCalendar } from "@/lib/ir/periods";
 import { fmtCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -110,7 +110,7 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
     return { groups: list.map((x) => x.g), older: firstOld };
   }, [payload, dim, byKey, freq, cols, q]);
   const visible = groups.slice(0, shown);
-  const fyEnd = useMemo(() => fiscalYearEndMonth(payload), [payload]);
+  const fyEnd = useMemo(() => fiscalCalendar(payload), [payload]);
   // Render the rest of the breakdowns in the background, a batch per frame, without a "show more" step.
   useEffect(() => {
     if (shown >= groups.length) return;
@@ -417,7 +417,7 @@ const BreakdownCard = memo(function BreakdownCard({
   checks: Map<string, PayloadCheck>;
   cols: string[];
   freq: Freq;
-  fyEnd: number | null;
+  fyEnd: FiscalCalendar;
   scale: ReturnType<typeof useUnitScale>[0];
   highlight: string;
   exporting: boolean;
@@ -495,7 +495,8 @@ const BreakdownCard = memo(function BreakdownCard({
     : [];
 
   if (!rows.length) return null;
-  const head = (e: string) => fiscalLabel(e, freq, fyEnd);
+  const heads = uniqueHeads(cols, freq, fyEnd);
+  const head = (e: string) => heads.get(e)!;
   const stickyHead = fits ? "sticky top-14 z-10" : "";
   return (
     // Off-screen breakdowns skip layout and paint, so long lists (hundreds for big banks) stay smooth.
@@ -508,7 +509,7 @@ const BreakdownCard = memo(function BreakdownCard({
             {cols.length > 0 && (
               <>
                 {" · "}
-                {cols.length === 1 ? head(cols[0]).main : `${head(cols[0]).main} to ${head(cols[cols.length - 1]).main}`}
+                {cols.length === 1 ? head(cols[0]).short : `${head(cols[0]).short} to ${head(cols[cols.length - 1]).short}`}
               </>
             )}
             {partials.length > 0 && (
@@ -580,7 +581,7 @@ const BreakdownCard = memo(function BreakdownCard({
 
       {view === "chart" && chartable ? (
         <div className="px-3 pb-3">
-          <ComboChart categories={cols.map((c) => head(c).main)} series={series} stacked height={240} leftFormat={(v) => fmtCompact(v, 1)} />
+          <ComboChart categories={cols.map((c) => head(c).short)} series={series} stacked height={240} leftFormat={(v) => fmtCompact(v, 1)} />
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground">
             {series.map((s) => (
               <span key={s.id} className="inline-flex items-center gap-1">
@@ -731,7 +732,7 @@ const BreakdownCard = memo(function BreakdownCard({
                 <li key={`${s.k}|${e}`} className="flex min-w-0 items-baseline gap-1.5">
                   <AltMark className="shrink-0" />
                   <span className="min-w-0">
-                    {rowLabel(s.label, root?.label, group.px)}, {head(e).main}: shown {fmtIr(c.v, s.unit, scale, fmtOpts(s))}; {alt.kind === "restated" ? "an earlier" : "another"} {kindName(doc?.kind)} {doc?.filed ? `filed ${doc.filed}` : "with no filing date"} prints {fmtIr(alt.v, s.unit, scale, fmtOpts(s))}
+                    {rowLabel(s.label, root?.label, group.px)}, {head(e).short}: shown {fmtIr(c.v, s.unit, scale, fmtOpts(s))}; {alt.kind === "restated" ? "an earlier" : "another"} {kindName(doc?.kind)} {doc?.filed ? `filed ${doc.filed}` : "with no filing date"} prints {fmtIr(alt.v, s.unit, scale, fmtOpts(s))}
                   </span>
                   <button type="button" onClick={openAlt} className="shrink-0 rounded-sm text-foreground underline decoration-border underline-offset-2 transition-colors duration-150 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     Open

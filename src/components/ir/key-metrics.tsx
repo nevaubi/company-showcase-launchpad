@@ -9,7 +9,7 @@ import { useUnitScale } from "@/hooks/use-preference";
 import { fmtIr, unitCaption } from "@/lib/ir/display";
 import { biggestMoves, keyLines, type KeyLine } from "@/lib/ir/highlights";
 import type { IrPayload } from "@/lib/ir/payload";
-import { fiscalLabel, fiscalYearEndMonth, periodGrids } from "@/lib/ir/periods";
+import { fiscalCalendar, fiscalLabel, periodGrids } from "@/lib/ir/periods";
 import { cn } from "@/lib/utils";
 
 const fmtChange = (v: number | null, unit: string) => {
@@ -52,8 +52,7 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
   const moves = useMemo(() => biggestMoves(payload, quarters, 6), [payload, quarters]);
   if (!lines.length) return null;
   const end = lines[0].end;
-  const fyEnd = fiscalYearEndMonth(payload);
-  const head = fiscalLabel(end, "q", fyEnd);
+  const head = fiscalLabel(end, "q", fiscalCalendar(payload));
   const trendN = Math.max(...lines.map((l) => l.trend.length));
   const openLine = (l: KeyLine) => openIrCell(open, ticker, payload, l.s, l.end, "q", l.cell);
   const unitOf = (l: KeyLine) => (l.s.unit === "usd" ? (scale === "full" ? "$" : `$${scale}`) : l.s.unit === "pct" ? "%" : unitCaption(l.s.unit, scale));
@@ -68,7 +67,7 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
     <IrPanel
       section="Key metrics"
       title="Key metrics"
-      subtitle={`${head.main}${head.sub ? ` (${head.sub})` : ""} · lines with the fullest recent history, largest first · click a value for its source`}
+      subtitle={`${head.short} · lines with the fullest recent history, largest first · click a value for its source`}
       actions={<Segmented label="Key metrics view" size="xs" value={view} onChange={setView} options={[{ v: "key", l: "Key lines" }, { v: "moves", l: "Biggest moves" }]} />}
     >
       <div>
@@ -86,7 +85,8 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
                 <tr className={cn("text-left", IR.caption)}>
                   <th scope="col" className="px-4 py-1.5 font-normal">Line</th>
                   <th scope="col" className="px-2 py-1.5 text-right font-normal" title={`Quarter ended ${end}`}>
-                    <span className="num font-medium text-foreground">{head.main}</span>
+                    <span className="num block font-medium text-foreground">{head.main}</span>
+                    {head.sub && head.sub !== head.main && <span className="num block">{head.sub}</span>}
                   </th>
                   <th scope="col" className="px-2 py-1.5 text-right font-normal">vs prior quarter</th>
                   <th scope="col" className="px-2 py-1.5 text-right font-normal">vs a year ago</th>

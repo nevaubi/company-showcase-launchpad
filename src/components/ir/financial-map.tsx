@@ -7,7 +7,7 @@ import { openIrCell } from "@/components/ir/breakdowns";
 import { useSource } from "@/components/source/source-context";
 import { useUnitScale } from "@/hooks/use-preference";
 import { fmtIr } from "@/lib/ir/display";
-import { fiscalLabel, fiscalYearEndMonth } from "@/lib/ir/periods";
+import { fiscalCalendar, fiscalLabel } from "@/lib/ir/periods";
 import { buildMap, type MapLine, type MapTile, type MapZone, type Tone } from "@/lib/ir/map";
 import type { IrPayload } from "@/lib/ir/payload";
 import { cn } from "@/lib/utils";
@@ -131,8 +131,13 @@ export function IrFinancialMap({ ticker, payload }: { ticker: string; payload: I
 
   if (!map.zones.length) return null;
   const q = map.quarters;
-  const fyEnd = fiscalYearEndMonth(payload);
-  const pl = (e: string) => fiscalLabel(e, "q", fyEnd).main;
+  const fyEnd = fiscalCalendar(payload);
+  const pl = (e: string) => fiscalLabel(e, "q", fyEnd).short;
+  // Under a bar: the fiscal quarter where it names its year (December year-ends), else the month.
+  const barLabel = (e: string) => {
+    const h = fiscalLabel(e, "q", fyEnd);
+    return /FY\d/.test(h.main) || !h.sub ? h.main : h.sub;
+  };
   const sourceOf = (l: MapLine, i: number) => {
     const s = byKey.get(l.key);
     const c = s?.q[q[i]];
@@ -239,7 +244,7 @@ export function IrFinancialMap({ ticker, payload }: { ticker: string; payload: I
                 <div className="mt-1 flex gap-[2px]">
                   {q.map((e) => (
                     <span key={e} className="num min-w-0 flex-1 truncate text-center text-[10px] text-muted-foreground">
-                      {pl(e)}
+                      {barLabel(e)}
                     </span>
                   ))}
                 </div>

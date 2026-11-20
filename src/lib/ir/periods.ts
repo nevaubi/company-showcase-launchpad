@@ -121,19 +121,75 @@ export function fiscalYearEndMonth(p: Pick<IrPayload, "years" | "series">): numb
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** The company's fiscal year-ends (its fiscal-year columns), and the month to assume where it has none. */
+export interface FiscalCalendar {
+  ends: string[];
+  fallback: number | null;
+}
+export function fiscalCalendar(p: Pick<IrPayload, "years" | "series">): FiscalCalendar {
+  const q = quarterMonths(p);
+  return { ends: [...p.years].sort(), fallback: p.years.length ? null : q && q.has(12) && q.has(3) ? 12 : null };
+}
+const DAY = 86_400_000;
 /**
- * Column heads that cannot be misread: "Q3 FY25" over "Oct ’24" for a quarter, "FY25" over "Jan ’25"
- * for a fiscal year, "Oct ’24" alone for a month. The fiscal year is named by the calendar year it ends
- * in (NVIDIA's year to 26 Jan 2025 is FY25). Without a known fiscal year-end the calendar month leads.
+ * The month closing the fiscal year a period belongs to, per era: the first fiscal year-end at or
+ * after the period (within a year), else the last one before it, so a company that moved its year-end
+ * keeps each era's own grid.
  */
-export function fiscalLabel(end: string, kind: IrPeriodKind, fyEnd: number | null): { main: string; sub: string } {
+export function yearEndFor(end: string, cal: FiscalCalendar): number | null {
+  const t = Date.parse(end);
+  const after = cal.ends.find((y) => Date.parse(y) >= t - 7 * DAY && Date.parse(y) - t <= 371 * DAY);
+  if (after) return closingMonth(after);
+  const before = cal.ends.filter((y) => Date.parse(y) < t).at(-1);
+  return before ? closingMonth(before) : cal.fallback;
+}
+
+export interface PeriodHead {
+  /** first line of a column head */
+  main: string;
+  /** second line (the calendar month, or empty) */
+  sub: string;
+  /** one-line form for captions, chart axes and subtitles */
+  short: string;
+}
+
+/**
+ * Column heads that cannot be misread. Companies name fiscal years differently (Home Depot's year to
+ * 2 Feb 2025 is its "fiscal 2024", NVIDIA's year to 26 Jan 2025 its "fiscal 2025"), and the payload
+ * does not carry the names the documents use, so a fiscal year number is printed only where it can't
+ * be wrong: for December year-ends, where fiscal and calendar years are one. Otherwise a year reads
+ * "FY ending" over its closing month and a quarter its number in the fiscal year over its month
+ * ("Q3" over "Oct ’24"). A period off the fiscal grid (a stub or transition period) shows its month
+ * only. Without a known fiscal year-end the calendar month leads. `uniqueHeads` keeps heads apart.
+ */
+export function fiscalLabel(end: string, kind: IrPeriodKind, calendar: FiscalCalendar | number | null): PeriodHead {
+  const cal = typeof calendar === "number" || calendar == null ? { ends: [], fallback: calendar } : calendar;
   const m = closingMonth(end);
   const y = Number(end.slice(0, 4)) - (m === 12 && Number(end.slice(5, 7)) === 1 ? 1 : 0);
-  const cal = `${MONTHS[m - 1]} ’${String(y).slice(2)}`;
-  if (kind === "m" || fyEnd == null) return { main: cal, sub: kind === "y" ? "fiscal year" : "" };
+  const month = `${MONTHS[m - 1]} ’${String(y).slice(2)}`;
+  const plain = { main: month, sub: kind === "y" ? "fiscal year" : "", short: kind === "y" ? `Year to ${month}` : month };
+  const fyEnd = kind === "m" ? null : yearEndFor(end, cal);
+  if (fyEnd == null) return kind === "m" ? { main: month, sub: "", short: month } : plain;
   const ahead = (fyEnd - m + 12) % 12; // months from this period's close to the fiscal year-end
-  const fy = y + (m + ahead > 12 ? 1 : 0);
-  const fyTag = `FY${String(fy).slice(2)}`;
-  if (kind === "y") return { main: fyTag, sub: cal };
-  return { main: `Q${4 - Math.floor(ahead / 3)} ${fyTag}`, sub: cal };
+  if (kind === "y" ? ahead !== 0 : ahead % 3 !== 0) return plain;
+  if (fyEnd === 12) {
+    const tag = `FY${String(y).slice(2)}`;
+    return kind === "y" ? { main: tag, sub: month, short: tag } : { main: `Q${4 - ahead / 3} ${tag}`, sub: month, short: `Q${4 - ahead / 3} ${tag}` };
+  }
+  if (kind === "y") return { main: "FY ending", sub: month, short: `FY ending ${month}` };
+  const qn = `Q${4 - ahead / 3}`;
+  return { main: qn, sub: month, short: `${qn} (${month})` };
+}
+
+/** Heads for a row of columns, never two alike: a repeated head gets its day of the month. */
+export function uniqueHeads(ends: string[], kind: IrPeriodKind, calendar: FiscalCalendar | number | null): Map<string, PeriodHead> {
+  const out = new Map(ends.map((e) => [e, fiscalLabel(e, kind, calendar)]));
+  const count = new Map<string, number>();
+  for (const h of out.values()) count.set(`${h.main}|${h.sub}`, (count.get(`${h.main}|${h.sub}`) ?? 0) + 1);
+  for (const [e, h] of out)
+    if ((count.get(`${h.main}|${h.sub}`) ?? 0) > 1) {
+      const day = `${Number(e.slice(8, 10))} ${MONTHS[Number(e.slice(5, 7)) - 1]} ’${e.slice(2, 4)}`;
+      out.set(e, { main: h.main, sub: day, short: `${h.short} (${day})` });
+    }
+  return out;
 }
