@@ -16,7 +16,7 @@ import { METRIC_LABEL, groupTitle } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 
-export const TIDY_VERSION = 4;
+export const TIDY_VERSION = 5;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -269,6 +269,44 @@ function mergeSiblings(c: Ctx, g: PayloadGroup, ctx: Set<string>) {
         if (overlaps(periodsOf(a), periodsOf(b)) && compare(a, b).agree === 0) continue;
         absorb(c, a, b);
       }
+    }
+  }
+}
+
+/** Two labels name one line: same words, or each word a short form of the other's ("Auto" / "Automotive"). */
+export function alikeLabels(a: string, b: string) {
+  const x = labelTokens(a);
+  const y = labelTokens(b);
+  if (!x.length || x.length !== y.length) return false;
+  return x.every((w, i) => w === y[i] || (Math.min(w.length, y[i].length) >= 3 && (w.startsWith(y[i]) || y[i].startsWith(w))));
+}
+
+/**
+ * After an old table ("Total = Data Center + Gaming + … + Auto") folds into a newer, deeper one
+ * ("Revenue = Data Center + Edge Computing", "Edge Computing = Gaming + … + Automotive"), a line the
+ * old table printed directly under the total can repeat a line the new table nests one level down
+ * under another name. Both then count toward the total and its check fails. Such a line folds into
+ * its nested twin when their names agree, their printed numbers never conflict and agree at least
+ * once, and the twin's own total is printed in every period the line covers.
+ */
+function mergeCousins(c: Ctx, g: PayloadGroup) {
+  if (!g.root) return;
+  const root = resolve(c, g.root);
+  const rows = g.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
+  const inGroup = new Set(rows.map((s) => s.k));
+  const direct = rows.filter((s) => s.parent === root && s.k !== root);
+  const nested = rows.filter((s) => s.parent && s.parent !== root && inGroup.has(s.parent) && c.byKey.get(s.parent)?.parent === root);
+  for (const a of direct) {
+    if (c.removed.has(a.k)) continue;
+    for (const b of nested) {
+      if (c.removed.has(b.k) || b.unit !== a.unit || !!b.pit !== !!a.pit || !alikeLabels(a.label, b.label)) continue;
+      const cmp = compare(a, b);
+      if (cmp.conflict || cmp.agree < 1) continue;
+      const parent = c.byKey.get(b.parent!)!;
+      const covered = periodsOf(parent);
+      if ([...periodsOf(a)].some((e) => !covered.has(e))) continue;
+      absorb(c, b, a);
+      break;
     }
   }
 }
@@ -1087,6 +1125,8 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
     for (const cl of clusters) mergeSiblings(c, cl.g, ctx);
     clustersOf.set(key, clusters);
   }
+
+  for (const clusters of clustersOf.values()) for (const cl of clusters) mergeCousins(c, cl.g);
 
   // Rows and checks follow the merged lines.
   let groups = out.groups.filter((g) => !drop.has(g));

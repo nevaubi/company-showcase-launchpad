@@ -151,6 +151,26 @@ export function scaleOutliers(cells: Record<string, { v: number }>): Set<string>
   return out;
 }
 
+/** Documents that print a line (its cells' facts). */
+const docsOf = (s: IrSeries) => new Set([...Object.values(s.cells), ...Object.values(s.annual)].map((c) => c.fact?.document_id ?? c.fact?.accn).filter(Boolean));
+
+/**
+ * Several lines can carry the label a part names as its parent ("Noninterest income" of one segment
+ * and of the whole bank). The part belongs to the one printed in its own table: same breakdown, then a
+ * printed total, then one printed in the same documents; ties keep the first, as before.
+ */
+export function bestParent(kid: IrSeries, candidates: IrSeries[]): IrSeries {
+  const mine = docsOf(kid);
+  const score = (p: IrSeries) => {
+    let n = 0;
+    if (kid.breakdown && p.breakdown === kid.breakdown) n += 4;
+    if (p.isTotal) n += 2;
+    for (const d of docsOf(p)) if (mine.has(d)) return n + 1;
+    return n;
+  };
+  return candidates.reduce((best, p) => (score(p) > score(best) ? p : best));
+}
+
 export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<string, LabelMapEntry>): IrPayload {
   // Second pass without hierarchies whose parts never add up to their total in any period.
   let built = buildIrSeries(facts, { labelMap });
@@ -184,8 +204,10 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   };
 
   // Parent keys from the (possibly re-parented) hierarchy.
+  const claims = new Map<IrSeries, IrSeries[]>();
+  for (const s of series) for (const k of childrenOf(series, s)) claims.set(k, [...(claims.get(k) ?? []), s]);
   const parentOf = new Map<IrSeries, IrSeries>();
-  for (const s of series) for (const k of childrenOf(series, s)) if (!parentOf.has(k)) parentOf.set(k, s);
+  for (const [k, list] of claims) parentOf.set(k, list.length > 1 ? bestParent(k, list) : list[0]);
   const kids = new Map<IrSeries, IrSeries[]>();
   for (const [k, p] of parentOf) kids.set(p, [...(kids.get(p) ?? []), k]);
 

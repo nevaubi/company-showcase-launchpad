@@ -242,3 +242,43 @@ describe("figures printed two ways", () => {
     expect(tidyPayload(payload(s, [loose(["a", "b"])])).series).toHaveLength(2);
   });
 });
+
+describe("a line repeated one level down after two eras of a table merge", () => {
+  // NVIDIA revenue by market platform, $ millions: the old table lists Auto and "OEM & Other" under the
+  // total; the new one nests Automotive and "OEM and Other" under Edge Computing. Same numbers, so the
+  // old lines fold into the nested ones instead of being counted twice (546 and 696 over the total).
+  const Q = (a: number, b: number) => ({ "2024-10-27": a * 1e6, "2025-01-26": b * 1e6 });
+  const series = [
+    line("dc", "Data Center", Q(30771, 35580), { parent: "rev" }),
+    line("edge", "Edge Computing", Q(4311, 3751), { parent: "rev", total: true }),
+    line("gam", "Gaming", Q(3279, 2544), { parent: "edge" }),
+    line("pv", "Professional Visualization", Q(486, 511), { parent: "edge" }),
+    line("auto2", "Automotive", Q(449, 570), { parent: "edge" }),
+    line("oem2", "OEM and Other", Q(97, 126), { parent: "edge" }),
+    line("auto1", "Auto", Q(449, 570), { parent: "rev" }),
+    line("oem1", "OEM & Other", Q(97, 126), { parent: "rev" }),
+    line("rev", "Revenue", Q(35082, 39331), { total: true }),
+  ];
+  const g: PayloadGroup = { id: "rev", cat: "product", met: "revenue", unit: "usd", label: "Revenue", root: "rev", rows: [
+    { k: "dc", depth: 1 }, { k: "gam", depth: 2 }, { k: "pv", depth: 2 }, { k: "auto2", depth: 2 }, { k: "oem2", depth: 2 }, { k: "edge", depth: 1 }, { k: "auto1", depth: 1 }, { k: "oem1", depth: 1 }, { k: "rev", depth: 0 },
+  ] };
+  const checks: PayloadCheck[] = [
+    { k: "rev", e: "2024-10-27", kind: "q", total: 35082e6, sum: 35628e6, ok: false, n: 4 },
+    { k: "rev", e: "2025-01-26", kind: "q", total: 39331e6, sum: 40027e6, ok: false, n: 4 },
+  ];
+  const p = tidyPayload(payload(series, [g], checks));
+  it("keeps one Automotive and one OEM line, nested under Edge Computing", () => {
+    const labels = p.series.map((s) => s.label);
+    expect(labels.filter((l) => /^auto/i.test(l))).toEqual(["Automotive"]);
+    expect(labels.filter((l) => /^oem/i.test(l))).toHaveLength(1);
+    expect(p.alias?.auto1).toBe("auto2");
+    expect(cellsOf(p, "auto1")).toEqual({ "2024-10-27": 449e6, "2025-01-26": 570e6 });
+  });
+  it("re-checks the total, which now adds up", () => {
+    expect(p.checks.filter((c) => c.k === "rev").every((c) => c.ok)).toBe(true);
+  });
+  it("never folds lines whose names differ or whose numbers conflict", () => {
+    const other = tidyPayload(payload([...series.slice(0, 6), line("auto1", "Auto", Q(300, 570), { parent: "rev" }), series[8]], [{ ...g, rows: g.rows.filter((r) => r.k !== "oem1") }], checks));
+    expect(other.series.some((s) => s.k === "auto1")).toBe(true);
+  });
+});
