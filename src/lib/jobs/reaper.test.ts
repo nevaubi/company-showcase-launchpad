@@ -1,0 +1,45 @@
+import { describe, expect, it } from "vitest";
+import { expiredLeases, maxRunMs, reapPatch, reapSummary, staleReportRuns, staleRuns } from "./reaper";
+
+const now = Date.parse("2026-11-20T12:00:00Z");
+const ago = (min: number) => new Date(now - min * 60_000).toISOString();
+
+describe("reaper", () => {
+  it("reaps HTTP runs after 10 minutes and worker runs after 3 hours", () => {
+    const rows = [
+      { id: 1, job: "sec-discover", started_at: ago(11), finished_at: null },
+      { id: 2, job: "sec-discover", started_at: ago(5), finished_at: null },
+      { id: 3, job: "macro", started_at: ago(60), finished_at: ago(59) },
+      { id: 4, job: "loop:canon", started_at: ago(120), finished_at: null },
+      { id: 5, job: "loop:mirror", started_at: ago(200), finished_at: null },
+      { id: 6, job: "alt-data", started_at: ago(30), finished_at: null },
+    ];
+    expect(staleRuns(rows, now).map((r) => r.id)).toEqual([5, 6, 1]);
+    expect(staleRuns(rows, now, 1).map((r) => r.id)).toEqual([5]);
+    expect(maxRunMs("options")).toBe(600_000);
+    expect(maxRunMs("supply-intel")).toBe(3 * 3600_000);
+  });
+  it("records the reap on the run itself", () => {
+    const p = reapPatch({ id: 1, job: "macro", started_at: ago(30), finished_at: null });
+    expect(p).toMatchObject({ finished_at: ago(30), ok: false, detail: { reaped: true } });
+    expect(p.detail.reason).toMatch(/scheduler hung up/);
+    expect(reapSummary([{ id: 1, job: "macro", started_at: "", finished_at: null }, { id: 2, job: "macro", started_at: "", finished_at: null }])).toEqual({ macro: 2 });
+  });
+  it("clears only runner leases that expired over 10 minutes ago", () => {
+    const rows = [
+      { job: "ir-prose-runner:AAPL", lease_until: ago(11) },
+      { job: "ir-prose-runner:MSFT", lease_until: ago(5) },
+      { job: "ir-deep-loop", lease_until: ago(60) },
+      { job: "ir-extract-runner:NVDA", lease_until: null },
+    ];
+    expect(expiredLeases(rows, now).map((r) => r.job)).toEqual(["ir-prose-runner:AAPL"]);
+  });
+  it("closes report runs abandoned in running", () => {
+    const rows = [
+      { id: "a", status: "running", created_at: ago(180) },
+      { id: "b", status: "running", created_at: ago(30) },
+      { id: "c", status: "ready", created_at: ago(500) },
+    ];
+    expect(staleReportRuns(rows, now).map((r) => r.id)).toEqual(["a"]);
+  });
+});
