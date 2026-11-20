@@ -73,7 +73,7 @@ export function dataFreshness(rows: { key: string; newest: string | null }[], no
  * circuits (shown on their own), alert episodes, remedy receipts, loop requests and the
  * filing-steps accession marker.
  */
-export const BOOKKEEPING_JOB_RE = /^(filing-steps-fail:|config-strike:|registrant-drift:|form4-fail:|form4-repair$|form4-seen:|reports-due-fail:|provider:|alert:|alert-digest$|remedy:|loop-request:|supply-intel-request$|estimates-none:|filing-steps-accn$|earnings-repair$|options-night$|[a-z-]+-slice$)/;
+export const BOOKKEEPING_JOB_RE = /^(filing-steps-fail:|config-strike:|registrant-drift:|form4-fail:|form4-repair$|form4-seen:|reports-due-fail:|provider:|alert:|alert-digest$|remedy:|loop-request:|supply-intel-request$|estimates-none:|filing-steps-accn$|earnings-repair$|options-night$|options-tail$|[a-z-]+-slice$)/;
 /** Reasons that are normal operation (owner choices, vendor pacing). */
 export const ROUTINE_REASON_RE = /^(owner|pacing):/;
 

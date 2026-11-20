@@ -11,7 +11,7 @@ import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { storeForm4 } from "@/lib/jobs/form4.server";
 import { claimSlice, commitSlice, outcomeOf, runBudgetMs, sliceKey, unitTimeoutMs, type Claim, type SliceOutcome } from "@/lib/jobs/slice";
-import { fairOrder } from "@/lib/jobs/priority";
+import { fairOrder, nextTailOffset } from "@/lib/jobs/priority";
 import { loadJobRank } from "@/lib/jobs/priority.server";
 import { backoffRow, blockStreak, chainStatus, judgeSlice, OPTIONS_BACKOFF_KEY, OPTIONS_PROBE, optionsNight, type ChainResult } from "@/lib/jobs/options-run";
 import { backoffTicker, chargeFailure, estimateErrorClass, pickEstimates, scanCursorAfter, ESTIMATE_FAIL_PREFIX, ESTIMATE_NONE_PREFIX, ESTIMATE_SCAN, type FailReceipt } from "@/lib/jobs/estimates-order";
@@ -20,6 +20,9 @@ import { healRow, providerKey, tripRow, type CircuitRow } from "@/lib/jobs/provi
 import { isEarnings } from "@/lib/jobs/sec-discover";
 
 export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror" | "emails";
+
+/** job_state row: where the options tail rotation starts tonight (cursor = offset into the tail). */
+const OPTIONS_TAIL_KEY = "options-tail";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 const slice = <T,>(all: T[], start: number, n: number) => all.slice(start, start + n);
@@ -222,13 +225,20 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
     const left = budget();
     const now = Date.now();
     const night = optionsNight(now);
-    const st0 = await readStates([OPTIONS_BACKOFF_KEY, providerKey("cboe"), "options-night"]);
+    const st0 = await readStates([OPTIONS_BACKOFF_KEY, providerKey("cboe"), "options-night", "options", OPTIONS_TAIL_KEY]);
     const backoff = st0.get(OPTIONS_BACKOFF_KEY);
     if ((backoff?.cursor ?? 0) > now / 1000) return { ok: true, items: 0, detail: { idle: true, retryAt: new Date((backoff?.cursor ?? 0) * 1000).toISOString(), reason: backoff?.paused_reason } };
-    const tickers = (await rankedCoverage(night)).map((c) => c.ticker);
     const step = 4;
-    // A new night starts at the top of the ranked list.
-    if ((st0.get("options-night")?.cursor ?? 0) !== night) await putCursors([{ job: "options", cursor: 0 }, { job: sliceKey("options"), cursor: 0 }, { job: "options-night", cursor: night }]);
+    // The tail rotation resumes where last night's pass ended (review R4); before the first night
+    // with this row it starts at the night number, as it did.
+    let tailOffset = st0.get(OPTIONS_TAIL_KEY)?.cursor ?? night;
+    if ((st0.get("options-night")?.cursor ?? 0) !== night) {
+      // A new night starts at the top of the ranked list; the tail goes on after the names last night reached.
+      const rank = await loadJobRank();
+      if (rank.size) tailOffset = nextTailOffset(COVERAGE.map((c) => c.ticker), rank, tailOffset, Number(st0.get("options")?.cursor ?? 0));
+      await putCursors([{ job: "options", cursor: 0 }, { job: sliceKey("options"), cursor: 0 }, { job: "options-night", cursor: night }, { job: OPTIONS_TAIL_KEY, cursor: tailOffset }]);
+    }
+    const tickers = (await rankedCoverage(tailOffset)).map((c) => c.ticker);
     const { c: cl } = await claim("options", tickers.length, step);
     const picked = slice(tickers, cl.start, step);
     const headers = { "User-Agent": "Mozilla/5.0 (compatible; FiledUnder/1.0)", Accept: "application/json" };
@@ -294,6 +304,7 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
       detail: {
         ...sliceDetail(cl, verdict.outcome, tickers.length),
         night,
+        tailOffset,
         stored: rows.map((r) => r.ticker),
         none: of("none").map((r) => `${r.t}${"status" in r ? ` ${r.status}` : ""}`),
         blocked: of("blocked").map((r) => `${r.t}${"status" in r ? ` ${r.status}` : ""}`),

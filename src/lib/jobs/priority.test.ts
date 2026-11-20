@@ -33,3 +33,29 @@ describe("priority ordering", () => {
     expect(priorityEnabled({})).toBe(true);
   });
 });
+
+import { fairOrder as fo, nextTailOffset } from "./priority";
+describe("options tail across short nights (review R4)", () => {
+  // 1,844 companies, the top 1,000 ranked; a night reaches only 1,500 positions
+  const all = Array.from({ length: 1844 }, (_, i) => `T${String(i).padStart(4, "0")}`);
+  const rank = new Map(all.slice(0, 1000).map((t, i) => [t, i + 1]));
+  const tail = new Set(all.slice(1000));
+  const nights = (next: (offset: number, night: number) => number) => {
+    const seen = new Set<string>();
+    let offset = 0;
+    for (let n = 0; n < 6; n++) {
+      fo(all, rank, { offset }).slice(0, 1500).forEach((t) => tail.has(t) && seen.add(t));
+      offset = next(offset, n);
+    }
+    return tail.size - seen.size;
+  };
+  it("the night-number offset (the old rule) misses the same tail names night after night", () => {
+    expect(nights((_o, n) => 20261120 + n + 1)).toBe(283);
+  });
+  it("resuming where the tail ended serves every tail name within a few nights", () => {
+    expect(nights((o) => nextTailOffset(all, rank, o, 1500))).toBe(0);
+  });
+  it("a night that reached nothing keeps the offset", () => {
+    expect(nextTailOffset(all, rank, 17, 0)).toBe(17);
+  });
+});

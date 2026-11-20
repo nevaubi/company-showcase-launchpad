@@ -74,3 +74,18 @@ export function byRank<R>(rows: readonly R[], tickerOf: (r: R) => string, rank: 
     .sort((a, b) => a.k - b.k || a.i - b.i)
     .map((x) => x.r);
 }
+
+/**
+ * Where the tail rotation starts on the next pass (review R4). A pass that ends at position `pos` of
+ * `fairOrder(..., { offset })` served the tail items before `pos`; the next pass starts the tail right
+ * after them, so a short pass delays the tail instead of starving the same names every time.
+ */
+export function nextTailOffset<T extends string>(tickers: readonly T[], rank: Map<string, number>, offset: number, pos: number, opts: Omit<FairOpts, "offset"> = {}): number {
+  const top = opts.top ?? PRIORITY_TOP;
+  const order = fairOrder(tickers, rank, { ...opts, offset });
+  const isTail = (t: string) => !((rank.get(t) ?? Infinity) <= top);
+  const tailLen = order.filter(isTail).length;
+  if (!tailLen) return 0;
+  const served = order.slice(0, Math.max(0, Math.min(pos, order.length))).filter(isTail).length;
+  return (((offset + served) % tailLen) + tailLen) % tailLen;
+}

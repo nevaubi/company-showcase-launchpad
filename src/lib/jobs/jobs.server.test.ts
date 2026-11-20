@@ -218,6 +218,15 @@ describe("options: blocked is not 'no options'", () => {
     expect(mocks.db.state("provider:cboe")!.paused_reason).toBeNull();
   });
 
+  it("a new night starts the tail after the names last night reached, not at the night number (review R4)", async () => {
+    mocks.rank = new Map(COVERAGE.slice(0, 1000).map((c, i) => [c.ticker, i + 1]));
+    mocks.db = fakeSupabase({ job_state: [st("options", 1500), st("options-night", 20200101), st("options-tail", 5)] });
+    chains(() => 404);
+    const r = await runJob("options");
+    // 1,500 positions of fairOrder = 1,000 head + 250 interleaved + 250 more tail names
+    expect(mocks.db.state("options-tail")!.cursor).toBe(5 + 500);
+    expect(r.detail.tailOffset).toBe(505);
+  });
   it("a new night starts again at the top of the ranked list", async () => {
     mocks.db = fakeSupabase({ job_state: [st("options", 400), st("options-night", 20200101)] });
     chains(() => 404);
