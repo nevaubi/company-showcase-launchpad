@@ -44,7 +44,8 @@ describe("openFDA recalling firms (all 476 stored firm names)", () => {
     expect(ko.dropped).toEqual(expect.arrayContaining(["Heartland Coca-Cola Bottling Company", "COCA COLA Consolidated LLC", "Reyes Coca-Cola Bottling, L.L.C.", "Swire Coca Cola USA", "COCA COLA SOUTHWEST BEVERAGES LLC"]));
     expect(check("KO")("Coca-Cola Company  (The)")).toBe(true);
     expect(check("KO")("THE COCA-COLA COMPANY")).toBe(true);
-    expect(ko).toMatchObject({ keep: 40, drop: 39 });
+    // "World of Coca-Cola" is the museum The Coca-Cola Company owns (FIRM_ALIASES)
+    expect(ko).toMatchObject({ keep: 41, drop: 38 });
     // the bottler that is a covered company keeps its own recalls
     expect(check("COKE")("COCA COLA Consolidated LLC")).toBe(true);
   });
@@ -82,11 +83,35 @@ describe("openFDA recalling firms (all 476 stored firm names)", () => {
   });
 
   it("keeps nearly every real recall of the large filers", () => {
-    expect(total(m)).toEqual({ keep: 6442, drop: 102 });
+    expect(total(m)).toEqual({ keep: 6470, drop: 74 });
     for (const t of ["MDT", "SYK", "GEHC", "BSX", "MDLN", "CAH", "BDX", "ABT", "MCK", "PFE"]) {
       const o = m.get(t)!;
       expect(o.keep / (o.keep + o.drop), t).toBeGreaterThan(0.97);
     }
+  });
+});
+
+describe("real recalls and trials the first firm rule refused (round 2 review follow-up)", () => {
+  // stored firm names (firms.fixture.ts) that are the company's own sites, units or typos of its
+  // name: the repair would have deleted them and no refresh brings them back
+  it("keeps the company's own sites, units and misspellings", () => {
+    for (const [t, f] of [
+      ["MCK", "Mckesson Medical Immaging"], ["STE", "Steris Corporation Hopkins Facility"], ["STE", "Steris Corportion"],
+      ["PEP", "PepsiCo Beverages & Foods"], ["PEP", "Comercializadora Pepsico Mexico,"], ["TFX", "Teleflex Creek Dr"], ["TFX", "TELEFLEX-MORRISVILLE"],
+      ["MDT", "COVIDIEN MEDTRONIC"], ["MDT", "Medtronic,Inc/Rice Creek Facil"], ["BIIB", "Biogen MA Inc."], ["MKC", "McCormick & Co Inc. Spice Mill Plant"],
+      ["KO", "World of Coca-Cola"], ["WST", "West Pharmaceutical Services AZ, Inc."], ["ICUI", "ICU Medical de Mexico, S.A. de C.V."],
+      ["BSX", "Boston Scientific Corporation, Neurovascular, 47900 Bayside Parkway, Fremont, CA 94538"],
+      ["AMRX", "Amneal Pharmaceuticals Co. India Private Limited"], ["DGX", "Quest Diagnostics-Nichols Insitute"],
+      ["WGO", "redundant Winnebago Industries Inc."],
+    ] as const) expect(check(t)(f), `${t} ${f}`).toBe(true);
+  });
+
+  it("still refuses another business with the same opening words", () => {
+    expect(check("NHC")("National Healthcare Group, Singapore")).toBe(false);
+    expect(check("BSX")("Boston Scientific Target, 47900 Bayside Parkway, Fremont, CA")).toBe(true);
+    expect(check("TGT")("Target Medical Supply, 12 Main Street, Dallas, TX")).toBe(false);
+    expect(check("KO")("Heartland Coca-Cola Bottling Company")).toBe(false);
+    expect(check("LEA")("LEAR SIEGLER, INC.")).toBe(false);
   });
 });
 
@@ -103,7 +128,7 @@ describe("ClinicalTrials.gov lead sponsors (all 248 stored sponsor names)", () =
     expect(check("MRK")("Cidara Therapeutics Inc., a subsidiary of Merck & Co., Inc. (Rahway, New Jersey USA)")).toBe(true);
     expect(check("JNJ")("Johnson & Johnson Pharmaceutical Research & Development, L.L.C.")).toBe(true);
     expect(check("ABBV")("AbbVie (prior sponsor, Abbott)")).toBe(true);
-    expect(total(m)).toEqual({ keep: 13582, drop: 119 });
+    expect(total(m)).toEqual({ keep: 13585, drop: 116 });
   });
 });
 

@@ -52,7 +52,7 @@ const ORDINARY = new Set(
  * ClinicalTrials.gov lead sponsors, 2026-11-20).
  */
 export const FIRM_UNITS: Record<string, string[]> = {
-  MDT: ["minimed", "sofamor danek", "xomed", "corevalve", "physio control", "ave", "ats medical", "advanced energy", "emergency response systems", "image guided neurologics", "heart valve", "heart valves", "gastroenterology / urology", "minimally invasive therapies", "cardiac rhythm", "cardiovascular", "international trade", "powered surgical solutions", "vascular galway", "mitg", "spinal and biologics", "endovascular", "cardiac ablation solutions", "neurovascular clinical affairs", "brc", "surgical technologies", "cardiac surgery", "technologies and new ventures", "diabetes", "latin america", "italia", "france", "comercial"],
+  MDT: ["hellas", "minimed", "sofamor danek", "xomed", "corevalve", "physio control", "ave", "ats medical", "advanced energy", "emergency response systems", "image guided neurologics", "heart valve", "heart valves", "gastroenterology / urology", "minimally invasive therapies", "cardiac rhythm", "cardiovascular", "international trade", "powered surgical solutions", "vascular galway", "mitg", "spinal and biologics", "endovascular", "cardiac ablation solutions", "neurovascular clinical affairs", "brc", "surgical technologies", "cardiac surgery", "technologies and new ventures", "diabetes", "latin america", "italia", "france", "comercial"],
   SYK: ["howmedica osteonics", "leibinger", "craniomaxillofacial", "trauma and extremities", "south pacific", "australia", "gi"],
   MRK: ["sharp and dohme"],
   JNJ: ["surgical vision", "vision care", "pharmaceutical research", "consumer", "taiwan", "private", "medical", "enterprise innovation", "health and wellness solutions", "k k medical", "singapore"],
@@ -73,7 +73,17 @@ export const FIRM_UNITS: Record<string, string[]> = {
   BSX: ["target", "scimed", "crm", "cork", "cupertino", "marlbourgh"],
   THO: ["motor coach", "california"],
   ABT: ["hpd", "hpd/add", "mpg", "medisense"],
-  AMRX: ["of new york"],
+  AMRX: ["of new york", "india private"],
+  // checked 2026-11-20 against the stored firms the first version of this rule refused (round 2 X3c):
+  // the company's own sites and units, and typos of its own name
+  STE: ["hopkins", "corportion"],
+  TFX: ["creek dr", "morrisville"],
+  BIIB: ["ma"],
+  MKC: ["and spice mill"],
+  WST: ["az"],
+  MCK: ["medical immaging"],
+  ICUI: ["de mexico"],
+  DGX: ["nichols insitute", "nichols institute"],
   BLCO: ["irb"],
   CAH: ["neurocare"],
   CHD: ["ogi"],
@@ -94,6 +104,12 @@ export const FIRM_UNITS: Record<string, string[]> = {
 /** Other whole names a company files under in these registries (hand-checked, 2026-11-20): matched like its own name. */
 export const FIRM_ALIASES: Record<string, string[]> = {
   DE: ["John Deere"],
+  // Covidien has been Medtronic's since 2015 (Covidien LP is in Medtronic's 10-K Exhibit 21)
+  MDT: ["COVIDIEN MEDTRONIC", "Medtronic,Inc/Rice Creek Facil"],
+  // PepsiCo's own beverage and Mexican units ("beverages" otherwise marks an independent bottler)
+  PEP: ["PepsiCo Beverages & Foods", "Comercializadora Pepsico Mexico"],
+  // the Atlanta museum The Coca-Cola Company owns and runs
+  KO: ["World of Coca-Cola"],
 };
 
 /** The words after a company core, when `core` starts with it as whole words. */
@@ -104,6 +120,8 @@ function tailAfter(core: string, k: string): string | null {
 /** Cut "formerly …", a trailing " - site" and a trailing "(note)" off a firm name before matching. */
 function base(name: string): string {
   return name
+    // NHTSA keeps duplicate maker records named "redundant Winnebago Industries Inc."
+    .replace(/^\s*redundant\s+/i, "")
     .replace(/\(?\s*\bformerly\b.*$/i, "")
     .replace(/\s+-\s+.*$/, "")
     .replace(/\b(inc|llc|corp)\.?\s*-\s*\S.*$/i, "$1")
@@ -151,8 +169,13 @@ export function firmIsCompany(firm: string | null | undefined, keys: CompanyKeys
   // the firm itself, and the part before "dba" ("Cardinal Health 303 Inc DBA Alaris Products")
   const head = s.split(/\s*,?\s*\b(?:dba|d\/b\/a)\b/i)[0];
   if (nameIsCompany(s, keys, units) || (head !== s && nameIsCompany(head, keys, units))) return true;
-  // "Abbott Nutrition, Abbott Laboratories": a later comma segment that is the whole company name
-  if (s.split(/\s*,\s*/).slice(1).some((p) => keys.cores.has(firmCore(p)))) return true;
+  // "Abbott Nutrition, Abbott Laboratories": a later comma segment that is the whole company name;
+  const parts = s.split(/\s*,\s*/);
+  if (parts.slice(1).some((p) => keys.cores.has(firmCore(p)))) return true;
+  // "Boston Scientific Corporation, Neurovascular, 47900 Bayside Parkway, Fremont, CA": the company
+  // followed by a street address (a number in a later segment); never for ordinary-word names
+  const first = firmCore(parts[0]);
+  if (parts.length > 2 && keys.cores.has(first) && !first.split(" ").every((w) => ORDINARY.has(w)) && parts.slice(1).some((p) => /\d/.test(p))) return true;
   return statedOwners(s).some((o) => nameIsCompany(o, keys, units));
 }
 
