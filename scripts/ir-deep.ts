@@ -261,8 +261,10 @@ for (const t of queue) {
     } catch (e) {
       log(`${t}: rebuild failed: ${(e as Error).message.slice(0, 160)}`);
     }
-    await report(t, { stage: fatal(vis.stop) ? "stopped" : "first pass", ...results.get(t) });
-    if (fatal(vis.stop)) stopped ??= vis.stop;
+    // A text reader stopped on credits is a stop too: the company must not reach "final" with its text unread.
+    const halt = fatal(vis.stop) ? vis.stop : fatal(txt.stop) ? txt.stop : null;
+    await report(t, { stage: halt ? "stopped" : "first pass", ...results.get(t) });
+    if (halt) stopped ??= halt;
   })();
   if (fatal(tables.stop)) {
     stopped = tables.stop;

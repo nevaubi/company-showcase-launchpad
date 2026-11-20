@@ -5,8 +5,11 @@
  *  - single-flight: a lease row in job_state; a second runner exits while the lease is live
  *  - idempotent: `claim` marks an item as taken in the database; `reset` re-queues items left
  *    half-done by a crashed runner (only after this runner holds the lease)
- *  - circuit breaker: auth/quota errors pause the job (job_state.paused_reason) and stop all workers;
- *    rate limits shrink concurrency and back off
+ *  - failure classes (src/lib/jobs/failure.ts): quota and config errors release the item untouched,
+ *    trip the provider circuit (job_state `provider:<id>`, not the job key) and stop all workers;
+ *    rate/transient errors back off with jitter and give an item a bounded number of tries;
+ *    only permanent errors charge the item
+ *  - provider circuit: a run whose provider route is open does not start (no lease, no calls)
  *  - paused guard: refuses to start while paused unless --resume is given
  *  - live results: companies that gained facts get their breakdowns rebuilt every few minutes, so
  *    newly read documents show up in the app without a manual rebuild
@@ -15,7 +18,11 @@
  */
 import { writeFileSync } from "node:fs";
 import { rebuildCompany } from "@/lib/ir/rebuild.server";
-import { OpenAIError } from "@/lib/openai.server";
+import { isTransientInfra as infraPattern, maxAttempts } from "@/lib/jobs/failure";
+import { failureAction } from "./runner-failure";
+export { failureAction, type FailureAction } from "./runner-failure";
+import { closedMessage, providerStates, providerTripError } from "@/lib/jobs/provider-health.server";
+import { routeDecision, type ProviderId } from "@/lib/jobs/provider-health";
 import { args, dbGate, dbLatency, log, sb, sleep } from "./supa";
 
 export interface RunnerItem {
@@ -49,14 +56,31 @@ export interface RunnerOpts<T extends RunnerItem> {
   maxCredits?: number;
   /** write {credits, usd, done, facts, stop} here when the run ends (orchestrators keep a ledger) */
   spendFile?: string;
+  /** providers this run's calls go through (`routeOf(model, env)`); the run does not start while all are open */
+  route?: ProviderId[];
+  /** provider to trip when a quota/config error arrives untagged (calls through openai.server tag their own) */
+  provider?: ProviderId;
+  /** longest single backoff sleep of one worker (default 2 min; the item's tries stay bounded either way) */
+  maxSleepMs?: number;
 }
 
 /** Database/network hiccups (statement timeouts, gateway pages) are retried instead of failing the item. */
-export const isTransientInfra = (msg: string) =>
-  /statement timeout|fetch failed|ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|network|connection (reset|terminated|closed)|\b50[234]\b|Bad Gateway|Service Unavailable|Gateway Time-?out|<!DOCTYPE html>|upstream/i.test(msg);
-const MAX_INFRA_RETRIES = 3;
+export const isTransientInfra = infraPattern;
 
 export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
+  if (o.route?.length) {
+    try {
+      const d = routeDecision(await providerStates(o.route), o.route, Date.now());
+      if (d.state === "open") {
+        const stop = `${d.cls === "config" ? "auth" : "quota"}: ${closedMessage(d.provider ?? o.route[0], d)}`;
+        log(`${o.job}: ${stop} — not starting`);
+        if (o.spendFile) writeFileSync(o.spendFile, JSON.stringify({ credits: 0, usd: 0, done: 0, facts: 0, tokensIn: 0, tokensOut: 0, stop }));
+        return;
+      }
+    } catch (e) {
+      log(`${o.job}: provider state unreadable (${(e as Error).message.slice(0, 120)}) — starting anyway`);
+    }
+  }
   const { data: state } = await sb.from("job_state").select("*").eq("job", o.job).maybeSingle();
   if (state?.paused_reason && args.resume === undefined) {
     log(`${o.job} paused: ${state.paused_reason} — rerun with --resume once fixed`);
@@ -95,7 +119,9 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   let usd = 0;
   let credits = 0;
   let stop: string | null = null;
-  // item id → database/network failures in a row (bounded retries)
+  /** set when the stop came from a provider (quota/config): it lives on the provider circuit, not on this job key */
+  let providerStop = false;
+  // item id → rate/transient failures in this run (bounded retries)
   const infraFails = new Map<string, number>();
   let rateHits = 0;
   let active = 0;
@@ -183,34 +209,34 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
           await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
         }
       } catch (e) {
-        const err = e as Error;
-        const infra = !(err instanceof OpenAIError) && isTransientInfra(err.message);
-        const tries = infra ? (infraFails.get(item.id) ?? 0) + 1 : 0;
-        if (err instanceof OpenAIError && (err.kind === "auth" || err.kind === "quota")) {
-          stop = `${err.kind}: ${err.message.slice(0, 200)}`;
-          await o.release(item, null);
-          await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
-        } else if (infra && tries <= MAX_INFRA_RETRIES) {
-          // Busy database / flaky network: put the item back and slow down instead of failing it.
-          infraFails.set(item.id, tries);
-          reserved--;
-          log(`${item.ticker} database/network hiccup (try ${tries}/${MAX_INFRA_RETRIES}): ${err.message.slice(0, 100)}`);
-          await o.release(item, null).then(undefined, () => undefined);
-          await sleep(20_000 + Math.random() * 20_000);
-        } else if (err instanceof OpenAIError && (err.kind === "rate" || err.kind === "transient")) {
-          await o.release(item, null);
-          reserved--;
-          rateHits++;
-          if (rateHits > 3 && concurrency > 2) {
-            concurrency = Math.max(2, Math.floor(concurrency * 0.7));
-            rateHits = 0;
-            log(`rate limited — concurrency now ${concurrency}`);
+        const err = e as Error & { provider?: string; kind?: string };
+        const a = failureAction(err, infraFails.get(item.id) ?? 0, Math.random, o.maxSleepMs);
+        if (a.act === "stop") {
+          // Never charge the item: no money or a wrong setting says nothing about the document.
+          if (!stop) {
+            stop = a.stop;
+            providerStop = true;
           }
-          // Never trust a retry hint blindly: one sleeping worker holds up the whole batch.
-          await sleep(Math.min(err.retryAfterMs ?? 15_000 + Math.random() * 15_000, 90_000));
+          await o.release(item, null).then(undefined, () => undefined);
+          if (!err.provider && o.provider) await providerTripError(o.provider, err).catch((x: Error) => log(`${o.job}: provider trip failed: ${x.message}`));
+          log(`${item.ticker} ${a.cls} stop: ${err.message.slice(0, 160)} — item released untouched`);
+        } else if (a.act === "retry") {
+          infraFails.set(item.id, a.tries);
+          reserved--;
+          await o.release(item, null).then(undefined, () => undefined);
+          if (a.cls === "rate") {
+            rateHits++;
+            if (rateHits > 3 && concurrency > 2) {
+              concurrency = Math.max(2, Math.floor(concurrency * 0.7));
+              rateHits = 0;
+              log(`rate limited — concurrency now ${concurrency}`);
+            }
+          }
+          log(`${item.ticker} ${a.cls} (try ${a.tries}/${maxAttempts(a.cls)}): ${err.message.slice(0, 100)} — retrying in ${Math.round(a.sleepMs / 1000)}s`);
+          await sleep(a.sleepMs);
         } else {
           infraFails.delete(item.id);
-          await o.release(item, `error: ${err.message.slice(0, 200)}`);
+          await o.release(item, a.status);
           log(`${item.ticker} error: ${err.message.slice(0, 160)}`);
         }
       } finally {
@@ -241,7 +267,9 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
   while (flushing) await sleep(1000);
   await flush(true);
   clearInterval(leaseTimer);
-  await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: stop, lease_until: null, updated_at: new Date().toISOString() });
+  // Budget stops pause this job key; provider stops live on the provider circuit (one row per provider,
+  // healed by its probe), so per-company reader keys no longer pile up stale "quota" pauses.
+  await sb.from("job_state").upsert({ job: o.job, cursor: 0, paused_reason: providerStop ? null : stop, lease_until: null, updated_at: new Date().toISOString() });
   log(stop ? `${o.job} STOPPED — ${stop}` : `${o.job} finished — ${done} done, ${facts} facts, ${(tokensIn / 1e6).toFixed(2)}M in / ${(tokensOut / 1e6).toFixed(2)}M out tokens${usd ? `, ~$${usd.toFixed(2)}` : ""}${credits ? `, ~${credits.toFixed(2)} credits` : ""}`);
   if (o.spendFile) writeFileSync(o.spendFile, JSON.stringify({ credits, usd, done, facts, tokensIn, tokensOut, stop }));
 }
