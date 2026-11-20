@@ -302,9 +302,9 @@ export class GlobeEngine {
   private projection(): GeoProjection {
     const cx = this.w / 2, cy = this.h / 2;
     if (!this.flat) {
-      return geoOrthographic().translate([cx, cy]).scale(this.radius).rotate([-this.cam.lon, -this.cam.lat]).clipAngle(90).precision(0.4).clipExtent([[0, 0], [this.w, this.h]]);
+      return geoOrthographic().translate([cx, cy]).scale(this.radius).rotate([-this.cam.lon, -this.cam.lat]).clipAngle(90).precision(this.cam.zoom >= HI_ZOOM ? 1 : 0.5).clipExtent([[0, 0], [this.w, this.h]]);
     }
-    const p = geoNaturalEarth1().scale(this.flatScale).rotate([-this.cam.lon, 0]).translate([cx, cy]).precision(0.4);
+    const p = geoNaturalEarth1().scale(this.flatScale).rotate([-this.cam.lon, 0]).translate([cx, cy]).precision(this.cam.zoom >= HI_ZOOM ? 1 : 0.5);
     const centre = p([this.cam.lon, this.cam.lat]);
     return p.translate([cx, cy + (centre ? cy - centre[1] : 0)]).clipExtent([[0, 0], [this.w, this.h]]);
   }
