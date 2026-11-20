@@ -634,6 +634,21 @@
   }
 }
 
+/* Supply-chain network: dashes drifting along a band show which way supply moves. */
+@keyframes supply-flow {
+  to {
+    stroke-dashoffset: -28;
+  }
+}
+.supply-flow {
+  animation: supply-flow 2.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .supply-flow {
+    animation: none;
+  }
+}
+
 @keyframes hl-sweep {
   from {
     background-size: 0% 72%;

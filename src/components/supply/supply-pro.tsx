@@ -7,8 +7,7 @@ import { Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
 import { getSupplyNote } from "@/lib/supply.functions";
-import { concentrationBasis, dependencyScore, linkDollars, regionExposure, type Confidence, type GraphNode, type ProLink } from "@/lib/supply/core";
-import { fmtCompactUsd } from "@/lib/format";
+import { concentrationBasis, dependencyScore, regionExposure, type Confidence, type GraphNode, type ProLink } from "@/lib/supply/core";
 import { cn } from "@/lib/utils";
 
 export const CONF_LABEL: Record<Confidence, string> = {
@@ -123,58 +122,5 @@ export function RegionPanel({ graph }: { graph: GraphNode[] }) {
         </ul>
       )}
     </Panel>
-  );
-}
-
-/** Suppliers → company → customers, band width = disclosed dollars, else stated share, else equal. */
-export function SupplyFlow({ focusName, graph, revenue, onSelect, selected }: { focusName: string; graph: GraphNode[]; revenue: Record<string, number | undefined>; onSelect: (k: string) => void; selected: string | null }) {
-  const W = 1000, H = 600, NODE_W = 10, GAP = 6;
-  const side = (rel: "supplier" | "customer") => {
-    const nodes = graph.filter((n) => n.relation === rel).map((n) => {
-      const links = n.links as ProLink[];
-      const d = Math.max(0, ...links.map((l) => linkDollars(l, revenue) ?? 0));
-      const s = Math.max(0, ...links.map((l) => l.share_pct ?? 0));
-      return { n, d, s, product: links.find((l) => l.product)?.product ?? links[0]?.detail ?? "" };
-    }).sort((a, b) => b.d - a.d || b.s - a.s).slice(0, 14);
-    const anyD = nodes.some((x) => x.d > 0);
-    const w = nodes.map((x) => (anyD ? (x.d > 0 ? Math.max(0.15, Math.sqrt(x.d / Math.max(...nodes.map((y) => y.d)))) : 0.12) : x.s > 0 ? 0.3 + x.s / 25 : 0.3));
-    const total = w.reduce((a, b) => a + b, 0) || 1;
-    const avail = H - 40 - GAP * Math.max(0, nodes.length - 1);
-    let y = 20;
-    return nodes.map((x, i) => { const h = Math.max(8, (w[i] / total) * avail); const o = { ...x, y, h }; y += h + GAP; return o; });
-  };
-  const sup = side("supplier"), cus = side("customer");
-  const fx = W / 2 - NODE_W / 2;
-  const stack = (arr: { h: number }[]) => { const tot = arr.reduce((a, b) => a + b.h, 0); let y = H / 2 - tot / 2; return arr.map((a) => { const o = y; y += a.h; return o; }); };
-  const supIn = stack(sup), cusOut = stack(cus);
-  const tot = Math.max(sup.reduce((a, b) => a + b.h, 0), cus.reduce((a, b) => a + b.h, 0), 60);
-  const band = (x0: number, y0: number, x1: number, y1: number, h: number) => {
-    const m = (x0 + x1) / 2;
-    return `M${x0},${y0} C${m},${y0} ${m},${y1} ${x1},${y1} L${x1},${y1 + h} C${m},${y1 + h} ${m},${y0 + h} ${x0},${y0 + h} Z`;
-  };
-  const label = (x: { n: GraphNode; d: number; s: number; product: string }) => `${x.n.name}${x.d ? ` · ${fmtCompactUsd(x.d)}` : x.s ? ` · ${x.s}%` : ""}`;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full">
-      {sup.map((x, i) => (
-        <g key={x.n.key} className="cursor-pointer" onClick={() => onSelect(x.n.key)} opacity={selected && selected !== x.n.key ? 0.35 : 1}>
-          <path d={band(270 + NODE_W, x.y, fx, supIn[i], x.h)} fill={RELATION_COLOR.supplier} opacity={0.28} />
-          <rect x={270} y={x.y} width={NODE_W} height={x.h} fill={RELATION_COLOR.supplier} rx={2} />
-          <text x={262} y={x.y + x.h / 2} textAnchor="end" dominantBaseline="middle" className="fill-foreground text-[11px]">{label(x)}</text>
-          <text x={262} y={x.y + x.h / 2 + 12} textAnchor="end" dominantBaseline="middle" className="fill-muted-foreground text-[9px]">{x.product.slice(0, 34)}</text>
-        </g>
-      ))}
-      {cus.map((x, i) => (
-        <g key={x.n.key} className="cursor-pointer" onClick={() => onSelect(x.n.key)} opacity={selected && selected !== x.n.key ? 0.35 : 1}>
-          <path d={band(fx + NODE_W, cusOut[i], W - 280, x.y, x.h)} fill={RELATION_COLOR.customer} opacity={0.28} />
-          <rect x={W - 280} y={x.y} width={NODE_W} height={x.h} fill={RELATION_COLOR.customer} rx={2} />
-          <text x={W - 272} y={x.y + x.h / 2} dominantBaseline="middle" className="fill-foreground text-[11px]">{label(x)}</text>
-          <text x={W - 272} y={x.y + x.h / 2 + 12} dominantBaseline="middle" className="fill-muted-foreground text-[9px]">{x.product.slice(0, 34)}</text>
-        </g>
-      ))}
-      <rect x={fx} y={H / 2 - tot / 2} width={NODE_W} height={tot} fill="var(--foreground)" rx={2} />
-      <text x={W / 2} y={H / 2 - tot / 2 - 8} textAnchor="middle" className="fill-foreground text-[13px] font-semibold">{focusName}</text>
-      <text x={270} y={12} className="fill-muted-foreground text-[10px]">SUPPLIERS</text>
-      <text x={W - 280} y={12} className="fill-muted-foreground text-[10px]">CUSTOMERS</text>
-    </svg>
   );
 }

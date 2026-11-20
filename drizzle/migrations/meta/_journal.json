@@ -456,6 +456,13 @@
       "when": 1795087587513,
       "tag": "0064_waitlist_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1795151098261,
+      "tag": "0065_data_freshness_hq",
+      "breakpoints": true
     }
   ]
 }
