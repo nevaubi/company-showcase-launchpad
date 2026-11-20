@@ -327,10 +327,6 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
             x.value = value;
             x.font = font({ bold: s.total, color: { argb: C.input } });
           }
-          if (c.w === "scale") {
-            x.fill = solid(C.attention);
-            x.note = "About 1,000× off the neighbouring periods — a different unit or measure may have been read here. Check the source.";
-          }
         });
       }
 
@@ -528,7 +524,6 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
       { sample: "1,234.5", style: { italic: true, color: { argb: C.link } }, text: "Calculated with a live formula that uses another sheet — e.g. fourth quarter = full year (annual sheet) − first three quarters." },
       { sample: "1,234.5", style: { italic: true, color: { argb: C.inkSoft } }, text: "Calculated by Filed Under from figures not in this workbook (e.g. nine-month year-to-date); the cell note shows the formula." },
       { sample: "✓", style: { bold: true, color: { argb: C.positive } }, text: "Check row: the listed parts add up to the printed total (within rounding). A number is the difference when they don't." },
-      { sample: "1,234.5", style: { color: { argb: C.input } }, fill: C.attention, text: "About 1,000× off the neighbouring periods — likely read in a different unit. Check the source." },
       { sample: "Not itemized", style: { italic: true, color: { argb: C.muted } }, text: "The release lists selected lines only; this row is the printed total minus the listed lines." },
       { sample: "[ + ]", style: { color: { argb: C.muted } }, text: "Use Excel's outline buttons in the left margin to collapse a breakdown to its totals." },
     ],

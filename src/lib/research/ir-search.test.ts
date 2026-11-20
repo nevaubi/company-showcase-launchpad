@@ -13,7 +13,7 @@ const payload: IrPayload = {
   series: [
     { k: "kpi:net deposits", cat: "kpi", met: "other", label: "Net deposits", parent: null, total: false, unit: "usd", q: { "2026-06-30": { v: 13.8e9, d: 0, x: "13.8", p: 3 }, "2026-09-30": { v: 20.4e9, d: 0, x: "20.4", p: 3 } }, y: {}, mo: { "2026-10-31": { v: 5.1e9, d: 0, x: "5.1", p: 1 } } },
     { k: "kpi:funded customers", cat: "kpi", met: "users", label: "Funded customers", parent: null, total: false, unit: "count", pit: true, q: { "2026-09-30": { v: 26.8e6, d: 0, x: "26.8", p: 2 } }, y: {} },
-    { k: "segment:transaction revenue", cat: "segment", met: "revenue", label: "Transaction-based revenues", parent: null, total: false, unit: "usd", q: { "2026-09-30": { v: 1e15, d: 0, x: "1", w: "scale" } }, y: {} },
+    { k: "segment:transaction revenue", cat: "segment", met: "revenue", label: "Transaction-based revenues", parent: null, total: false, unit: "usd", q: { "2026-06-30": { v: 1.0e9, d: 0, x: "1,000" } }, held: { q: { "2026-09-30": { v: 1e15, d: 0, x: "1", w: "suspect", why: "Reads as more than $10 trillion" } } }, y: {} },
   ],
   groups: [{ id: "g1", cat: "kpi", met: "other", unit: "usd", label: "Net deposits", root: null, rows: [{ k: "kpi:net deposits", depth: 0 }] }],
   checks: [],
@@ -35,8 +35,10 @@ describe("assistant IR search", () => {
     expect(r.output).toContain("2026-10-31: $5.10B");
     expect(r.output).toContain("freq=m");
   });
-  it("warns the model off values flagged as unit mix-ups", () => {
-    expect(irSearch(payload, { ticker: "HOOD", query: "transaction revenues" }).output).toContain("do not cite");
+  it("names held-back figures so the model never cites them", () => {
+    const out = irSearch(payload, { ticker: "HOOD", query: "transaction revenues" }).output;
+    expect(out).toContain("2026-09-30: held back, do not cite (Reads as more than $10 trillion)");
+    expect(out).not.toContain("$1000000");
   });
   it("maps what exists when there is no query", () => {
     const m = irMap(payload);

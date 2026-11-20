@@ -65,15 +65,15 @@ function TableView({ t }: { t: DocTablesFile["tables"][number] }) {
   const body = t.rows.slice(nHeader);
   return (
     <div className="overflow-x-auto rounded-md border scrollbar-thin">
-      <table className="w-full text-[12px]">
+      <table className="w-full text-[13px]">
         <thead>
           {head.map((r, i) => (
-            <tr key={i} className="border-b bg-secondary/40">
+            <tr key={i} className="border-b">
               {r.map((c, j) => (
                 <th
                   key={j}
                   className={cn(
-                    "whitespace-nowrap px-2 py-1.5 font-medium",
+                    "whitespace-nowrap px-3 py-1.5 text-[11px] font-medium text-muted-foreground",
                     j ? "text-right" : "text-left",
                   )}
                 >
@@ -90,7 +90,7 @@ function TableView({ t }: { t: DocTablesFile["tables"][number] }) {
                 <td
                   key={j}
                   className={cn(
-                    "px-2 py-1",
+                    "px-3 py-1",
                     j && NUMERIC.test(c.trim())
                       ? "num whitespace-nowrap text-right"
                       : j
@@ -129,7 +129,7 @@ export function DocTables({ ticker, embedded }: { ticker: string; embedded?: boo
   const [shown, setShown] = useState(6);
 
   if (idx.isLoading) return <Skeleton className="h-40" />;
-  if (!docs.length) return embedded ? <p className="p-5 text-sm text-muted-foreground">No document tables have been parsed for this company yet.</p> : null;
+  if (!docs.length) return embedded ? <p className="px-4 py-4 text-[13px] text-muted-foreground">{idx.isError ? "Parsed tables come from the Filed Under document service, which could not be reached." : "No document tables have been parsed for this company yet."}</p> : null;
   const f = file.data;
 
   return (
@@ -146,17 +146,19 @@ export function DocTables({ ticker, embedded }: { ticker: string; embedded?: boo
       bodyClassName="p-0"
     >
       <div className="grid grid-cols-1 lg:grid-cols-[18rem_minmax(0,1fr)]">
-        <ul className="max-h-[560px] divide-y overflow-y-auto border-b scrollbar-thin lg:border-b-0 lg:border-r">
+        <ul className="divide-y border-b lg:border-b-0 lg:border-r" role="group" aria-label="Documents with tables" data-agent-controls>
           {docs.map((d) => (
             <li key={d.id}>
               <button
+                type="button"
+                aria-pressed={d.id === current}
                 onClick={() => (setSel(d.id), setShown(6))}
                 className={cn(
-                  "block w-full px-3.5 py-2 text-left hover:bg-secondary/60",
+                  "block w-full px-4 py-2 text-left transition-colors duration-150 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none",
                   d.id === current && "bg-secondary",
                 )}
               >
-                <span className="block truncate text-[12.5px]">{cleanTitle(d.title)}</span>
+                <span className="block truncate text-[13px]">{cleanTitle(d.title)}</span>
                 <span className="block text-[11px] text-muted-foreground">
                   {TYPE_LABEL[d.doc_type ?? "other"] ?? "Document"} · {d.n_tables} tables
                   {d.pages ? ` · ${d.pages} pages` : ""}
@@ -165,11 +167,11 @@ export function DocTables({ ticker, embedded }: { ticker: string; embedded?: boo
             </li>
           ))}
         </ul>
-        <div className="min-w-0 space-y-3 p-3.5">
+        <div className="min-w-0 space-y-6 p-4">
           {file.isLoading && <Skeleton className="h-64" />}
           {f && (
             <>
-              <div className="flex items-center gap-2 text-[12.5px]">
+              <div className="flex items-center gap-2 text-[13px]">
                 <span className="min-w-0 flex-1 truncate font-medium">{cleanTitle(f.title)}</span>
                 {f.url && (
                   <a
@@ -194,7 +196,7 @@ export function DocTables({ ticker, embedded }: { ticker: string; embedded?: boo
               {f.tables.length > shown && (
                 <div className="text-center">
                   <button
-                    className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary"
+                    className="rounded px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary"
                     onClick={() => setShown((n) => n + 10)}
                   >
                     Show more tables ({f.tables.length - shown} remaining)
@@ -202,7 +204,7 @@ export function DocTables({ ticker, embedded }: { ticker: string; embedded?: boo
                 </div>
               )}
               {idx.data?.generated && (
-                <p className="text-[10.5px] text-muted-foreground">
+                <p className="text-[11px] text-muted-foreground">
                   Parsed {fmtDate(idx.data.generated)}
                 </p>
               )}
