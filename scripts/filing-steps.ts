@@ -41,15 +41,20 @@ async function redline(f: NewFiling): Promise<string> {
   const form = f.form.replace("/A", "") as "10-K" | "10-Q";
   const have = await sb.from("filing_redlines").select("id").eq("to_accn", f.accn).eq("version", REDLINE_VERSION).limit(1);
   if (have.data?.length) return "already stored";
-  const stored = await selectAll<FilingRef & { report: string | null }>((a, b) => sb.from("sec_filings").select("accn,doc,form,filed,report").eq("ticker", f.ticker).eq("form", form).range(a, b));
+  const stored = await selectAll<FilingRef & { report: string | null; cik: string | null }>((a, b) => sb.from("sec_filings").select("accn,doc,form,filed,report,cik").eq("ticker", f.ticker).eq("form", form).range(a, b));
   const ds = await loadDataset(f.ticker).catch(() => null);
   const pool = new Map<string, FilingRef>();
+  // Each filing's archive CIK: the index that listed it (sec_filings.cik, the dataset's own CIK);
+  // a company that changed registrant has filings under both (XOM 34088 and 2115436).
+  const cikOf = new Map<string, string>();
+  for (const x of ds?.filings ?? []) if (ds?.profile.cik) cikOf.set(x.accn, ds.profile.cik);
+  for (const x of stored) if (x.cik) cikOf.set(x.accn, x.cik);
   for (const x of [...(ds?.filings ?? []), ...stored]) if (x.doc && x.form === form) pool.set(x.accn, { accn: x.accn, doc: x.doc, form: x.form, filed: x.filed, report: (x as { report?: string | null }).report ?? undefined });
   const to: FilingRef = { accn: f.accn, doc: f.doc, form, filed: f.filed, report: f.report ?? undefined };
   const from = defaultBase([...pool.values()], to);
   if (!from) return "no prior comparable filing";
-  const cik = String(Number(cov.cik));
-  const r = compactRedline(buildRedline({ ticker: f.ticker, form, from, to, oldHtml: await html(cik, from), newHtml: await html(cik, to) }));
+  const cikFor = (accn: string) => String(Number(cikOf.get(accn) ?? cov.cik));
+  const r = compactRedline(buildRedline({ ticker: f.ticker, form, from, to, oldHtml: await html(cikFor(from.accn), from), newHtml: await html(cikFor(to.accn), to) }));
   const found = r.sections.filter((s) => s.found === "both").length;
   if (!found) throw new Error("no comparable sections found");
   const high = r.changes.filter((c) => c.level === "high").length, medium = r.changes.filter((c) => c.level === "medium").length;

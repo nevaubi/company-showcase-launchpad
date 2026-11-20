@@ -4,7 +4,7 @@
 // own leadership page. Rerun any time; a failed ticker keeps its previous file.
 //   bun scripts/company-context.ts [--only=AAPL,MSFT] [--no-people] [--no-press]
 import { mkdirSync, readFileSync, existsSync, writeFileSync } from "node:fs";
-import { COVERAGE, coverageOf } from "@/lib/coverage";
+import { companyCiks, COVERAGE, coverageOf } from "@/lib/coverage";
 import { readDataset } from "./lib/datasets";
 import { structured } from "@/lib/ai.server";
 import { firecrawlMap, firecrawlScrape } from "@/lib/web.server";
@@ -45,7 +45,8 @@ async function getJson<T>(url: string, headers: Record<string, string> = WUA): P
 type WD = { item: string; article?: string; employees?: number; employeesAsOf?: string; founders: string[]; hq?: string };
 async function wikidataByCik(): Promise<Map<string, WD>> {
   // Wikidata is asked only about this run's companies (the full list exceeds its query size).
-  const ciks = COVERAGE.filter((c) => tickers.includes(c.ticker)).map((c) => [c.ticker, String(c.cik)] as const);
+  // Every CIK of the company (Wikidata may still list a former registrant, e.g. XOM 34088).
+  const ciks = COVERAGE.filter((c) => tickers.includes(c.ticker)).flatMap((c) => companyCiks(c).map((k) => [c.ticker, k] as const));
   const values = ciks.flatMap(([, c]) => [`"${c}"`, `"${String(Number(c))}"`]).join(" ");
   const q = `SELECT ?cik ?item ?article ?emp ?empDate ?founderLabel ?hqLabel WHERE {
     VALUES ?cik { ${values} } ?item wdt:P5531 ?cik.
@@ -70,7 +71,7 @@ async function wikidataByCik(): Promise<Map<string, WD>> {
   const out = new Map<string, WD>();
   for (const [t, cik] of ciks) {
     const w = byCik.get(String(Number(cik)));
-    if (!w) continue;
+    if (!w || out.has(t)) continue;
     const latest = w._emp.sort((a, b) => (a[1] < b[1] ? 1 : -1))[0];
     out.set(t, { item: w.item, article: w.article, employees: latest?.[0], employeesAsOf: latest?.[1] || undefined, founders: w.founders.slice(0, 6), hq: w.hq });
   }

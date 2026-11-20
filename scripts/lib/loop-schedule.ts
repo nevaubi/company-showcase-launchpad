@@ -25,6 +25,7 @@ export const STEP_LIMITS_MS: Record<string, number> = {
   freshness: 5 * 60_000,
   "sec-catchup": 50 * 60_000,
   "form4-repair": 30 * 60_000,
+  "registrant-drift": 10 * 60_000,
   company: 6 * 3600_000,
 };
 

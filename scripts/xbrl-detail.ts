@@ -12,6 +12,8 @@ import { parseContexts, parseInlineFacts, parseLabels, parseUnits } from "@/lib/
 import { companyMatcher } from "@/lib/xbrl/counterparty";
 import { indexEntry, type ExposureIndex } from "@/lib/xbrl/exposure";
 import { args, dbGate, log, sb, sleep } from "./lib/supa";
+import { pickDetailFilings } from "./lib/detail-pick";
+import { companyCiks, coverageOf } from "@/lib/coverage";
 
 const UA = "FiledUnder Research research@filedunder.ai";
 let last = 0;
@@ -164,31 +166,44 @@ async function main() {
       const c = queue.shift();
       if (!c) return;
       try {
-        const sub = JSON.parse(await sec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)) as Submissions;
-        const r = sub.filings.recent;
-        const k = r.form.findIndex(isAnnual);
-        const q = r.form.findIndex((f, i) => f === "10-Q" && (k < 0 || i < k));
+        // Every CIK of the company (a changed registrant files new reports under its new CIK while its
+        // last annual report stays under the old one); each filing is read under the CIK listing it.
+        const cov = coverageOf(c.ticker);
+        const ciks = [...new Set([...(cov ? companyCiks(cov) : []), String(Number(c.cik))])];
+        const subs: { cik: string; sub: Submissions; r: Recent }[] = [];
+        for (const cik of ciks) {
+          const sub = JSON.parse(await sec(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`)) as Submissions;
+          subs.push({ cik, sub, r: sub.filings.recent });
+        }
+        const pick = pickDetailFilings(subs, isAnnual);
+        const empty: Recent = { accessionNumber: [], form: [], filingDate: [], reportDate: [], primaryDocument: [], isInlineXBRL: [] };
+        const A = pick.annual?.src ?? subs[0] ?? { cik: c.cik, sub: { filings: { recent: empty } } as Submissions, r: empty };
+        const Q = pick.quarterly?.src ?? A;
+        const r = A.r;
+        const sub = A.sub;
+        const k = pick.annual?.i ?? -1;
+        const q = pick.quarterly?.i ?? -1;
         if (k < 0 && q < 0) {
           stats.skipped++;
           note(c.ticker, null);
           continue;
         }
         const prev = args.force !== undefined ? null : await stored(c.ticker);
-        const same = (d: FilingDetail | null | undefined, i: number) => !!d && i >= 0 && d.accn === r.accessionNumber[i] && d.format === DETAIL_FORMAT;
+        const same = (d: FilingDetail | null | undefined, i: number, rr: Recent = r) => !!d && i >= 0 && d.accn === rr.accessionNumber[i] && d.format === DETAIL_FORMAT;
         // `historyChecked` marks a file whose earlier 10-Ks were already looked up (some have none in inline XBRL).
         const hasHistory = !!prev && prev.historyChecked === r.accessionNumber[k];
-        if (prev && prev.format === DETAIL_FORMAT && same(prev.annual, k) && (q < 0 ? !prev.quarterly : same(prev.quarterly, q)) && (k < 0 || hasHistory)) {
+        if (prev && prev.format === DETAIL_FORMAT && same(prev.annual, k) && (q < 0 ? !prev.quarterly : same(prev.quarterly, q, Q.r)) && (k < 0 || hasHistory)) {
           stats.skipped++;
           note(c.ticker, prev);
           continue;
         }
-        const annual = k >= 0 ? (same(prev?.annual, k) ? prev!.annual : await filingDetail(c.ticker, c.cik, r, k)) : null;
-        const quarterly = q >= 0 ? (same(prev?.quarterly, q) ? prev!.quarterly : await filingDetail(c.ticker, c.cik, r, q)) : null;
+        const annual = k >= 0 ? (same(prev?.annual, k) ? prev!.annual : await filingDetail(c.ticker, A.cik, r, k)) : null;
+        const quarterly = q >= 0 ? (same(prev?.quarterly, q, Q.r) ? prev!.quarterly : await filingDetail(c.ticker, Q.cik, Q.r, q)) : null;
         const history: FilingDetail[] = [];
         if (annual && k >= 0) {
           for (const o of await olderAnnuals(sub)) {
             const reuse = prev?.history?.find((h) => h.accn === o.r.accessionNumber[o.i] && h.format === DETAIL_FORMAT);
-            const h = reuse ?? (await filingDetail(c.ticker, c.cik, o.r, o.i).catch((e) => (log(`${c.ticker} history ${o.r.accessionNumber[o.i]}: ${(e as Error).message}`), null)));
+            const h = reuse ?? (await filingDetail(c.ticker, A.cik, o.r, o.i).catch((e) => (log(`${c.ticker} history ${o.r.accessionNumber[o.i]}: ${(e as Error).message}`), null)));
             if (h && h.reportDate < annual.reportDate) history.push(h);
           }
           stats.history += history.length;

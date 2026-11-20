@@ -225,7 +225,11 @@ const shortOf = Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName]))
 
 async function run(co: Co) {
   // Covered companies' datasets are not bundled any more: read through the partner data service.
-  const d = await readDataset<{ filings: Filing[] }>("companies", co.ticker);
+  const ds = await readDataset<{ filings: Filing[]; profile?: { cik?: string } }>("companies", co.ticker);
+  const d = ds;
+  // The dataset's filings are listed under the CIK it was built from (the history CIK when the
+  // company changed registrant): archive URLs for them resolve only under that CIK.
+  if (ds.profile?.cik) co = { ...co, cik: ds.profile.cik };
   const short = shortOf[co.ticker] ?? co.name;
   const stages: [string, () => Promise<void>][] = [
     ["filing", () => fromTenK(co, d.filings)],

@@ -3,7 +3,7 @@
 // their cursor in job_state, do the slice, and move the cursor only after the slice was stored
 // (slice.ts), so a run the scheduler cuts off repeats its slice instead of skipping it.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { BENCHMARKS, COVERAGE, MACRO_SERIES, type CoverageCompany } from "@/lib/coverage";
+import { BENCHMARKS, companyCiks, COVERAGE, MACRO_SERIES, type CoverageCompany } from "@/lib/coverage";
 import { summarize } from "@/lib/macro";
 import { fetchCboeDaily, fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo, isCboeIndex, isTreasurySeries, pool, toBars } from "@/lib/market-data.server";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
@@ -537,19 +537,24 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
     let detail: Record<string, unknown>;
     let items = 0;
     try {
-      const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`, { deadline: left.end })).json()) as {
-        filings: { recent: { accessionNumber: string[]; form: string[]; primaryDocument: string[]; size: number[] } };
-      };
-      const r = sub.filings.recent;
-      const i = r.form.findIndex((f) => f === form);
-      if (i < 0) detail = { ticker: c.ticker, form, skipped: "no filing" };
+      // The newest filing of the form across every CIK of the company (a new registrant's index
+      // may not list the last annual report its predecessor filed), cached under the CIK listing it.
+      let pick: { cik: string; accn: string; doc: string; size: number; filed: string } | null = null;
+      for (const cik of companyCiks(c)) {
+        const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`, { deadline: left.end })).json()) as {
+          filings: { recent: { accessionNumber: string[]; form: string[]; primaryDocument: string[]; size: number[]; filingDate: string[] } };
+        };
+        const r = sub.filings.recent;
+        const i = r.form.findIndex((f) => f === form);
+        if (i >= 0 && (!pick || (r.filingDate?.[i] ?? "") > pick.filed)) pick = { cik, accn: r.accessionNumber[i], doc: r.primaryDocument[i], size: r.size?.[i] ?? 0, filed: r.filingDate?.[i] ?? "" };
+      }
+      if (!pick) detail = { ticker: c.ticker, form, skipped: "no filing" };
       else {
-        const accn = r.accessionNumber[i];
-        const doc = r.primaryDocument[i];
+        const { accn, doc } = pick;
         // Big filings take longer than the scheduler waits; they're mirrored the first time someone opens them.
-        if ((r.size?.[i] ?? 0) > 12 * 1024 * 1024) detail = { ticker: c.ticker, form, accn, doc, skipped: "large, mirrored on first view" };
+        if (pick.size > 12 * 1024 * 1024) detail = { ticker: c.ticker, form, accn, doc, skipped: "large, mirrored on first view" };
         else {
-          const cached = await cacheFilingDocument(c.cik, accn, doc, undefined, "text/html", left.end);
+          const cached = await cacheFilingDocument(pick.cik, accn, doc, undefined, "text/html", left.end);
           items = cached.stored ? 1 : 0;
           detail = { ticker: c.ticker, form, accn, doc, ...cached };
         }
@@ -578,28 +583,38 @@ export async function syncCompany(
   const out = { filings: 0, trades: 0, errors: [] as string[], failed: false };
   const sec = { deadline: opts.deadline };
   try {
-    const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`, sec)).json()) as {
-      filings: { recent: Record<string, (string | number)[]> };
-    };
-    const r = sub.filings.recent;
-    // Keep the alt-data hub current: 8-K items and capital-markets filings from the last 45 days.
-    const alt = secAltRows(c.ticker, c.cik, r as unknown as SubmissionBlock).filter((x) => x.date >= since);
-    if (alt.length) await supabaseAdmin.from("alt_data").upsert(alt as never, { onConflict: "uid" });
-    const rows = (r.accessionNumber as string[])
-      .map((accn, i) => ({
-        accn,
-        ticker: c.ticker,
-        cik: c.cik,
-        form: String(r.form[i]),
-        filed: String(r.filingDate[i]),
-        report: (r.reportDate[i] as string) || null,
-        doc: String(r.primaryDocument[i]),
-        description: (r.primaryDocDescription[i] as string) || null,
-        items: (r.items[i] as string) || null,
-        ixbrl: !!r.isInlineXBRL[i],
-        size: Number(r.size[i]) || null,
-      }))
-      .filter((f) => f.filed >= since && !/^(424B|FWP|SC 13|S-3)/.test(f.form));
+    // Every CIK of the company (current registrant first, then former ones, e.g. XOM 2115436 and
+    // 34088): each filing keeps the CIK whose index lists it, so its archive URLs resolve.
+    const all: { accn: string; ticker: string; cik: string; form: string; filed: string; report: string | null; doc: string; description: string | null; items: string | null; ixbrl: boolean; size: number | null }[] = [];
+    const listed = new Set<string>();
+    for (const cik of companyCiks(c)) {
+      const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`, sec)).json()) as {
+        filings: { recent: Record<string, (string | number)[]> };
+      };
+      const r = sub.filings.recent;
+      // Keep the alt-data hub current: 8-K items and capital-markets filings from the last 45 days.
+      // (A filing an earlier CIK's index also lists keeps the current registrant's link: uid `kind:T:accn…`.)
+      const alt = secAltRows(c.ticker, cik, r as unknown as SubmissionBlock).filter((x) => x.date >= since && !listed.has(x.uid.split(":")[2]));
+      if (alt.length) await supabaseAdmin.from("alt_data").upsert(alt as never, { onConflict: "uid" });
+      for (const [i, accn] of (r.accessionNumber as string[]).entries()) {
+        if (listed.has(accn)) continue;
+        listed.add(accn);
+        all.push({
+          accn,
+          ticker: c.ticker,
+          cik,
+          form: String(r.form[i]),
+          filed: String(r.filingDate[i]),
+          report: (r.reportDate[i] as string) || null,
+          doc: String(r.primaryDocument[i]),
+          description: (r.primaryDocDescription[i] as string) || null,
+          items: (r.items[i] as string) || null,
+          ixbrl: !!r.isInlineXBRL[i],
+          size: Number(r.size[i]) || null,
+        });
+      }
+    }
+    const rows = all.filter((f) => f.filed >= since && !/^(424B|FWP|SC 13|S-3)/.test(f.form));
     if (!rows.length) return out;
     const { data: known, error: knownError } = await supabaseAdmin.from("sec_filings").select("accn").in("accn", rows.map((f) => f.accn));
     if (knownError) throw new Error(knownError.message);

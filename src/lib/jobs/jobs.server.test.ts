@@ -365,3 +365,46 @@ describe("sec walk: Form 4 parsing and earnings events", () => {
     expect(mocks.db.state("sec")!.cursor).toBe(4);
   });
 });
+
+describe("sec walk: a company that changed registrant (XOM)", () => {
+  const block = (rows: [string, string, string, string][]) => ({
+    filings: {
+      recent: {
+        accessionNumber: rows.map((r) => r[0]),
+        form: rows.map((r) => r[1]),
+        filingDate: rows.map((r) => r[2]),
+        items: rows.map((r) => r[3]),
+        reportDate: rows.map(() => ""),
+        primaryDocument: rows.map((r) => `${r[0]}.htm`),
+        primaryDocDescription: rows.map(() => ""),
+        isInlineXBRL: rows.map(() => 0),
+        size: rows.map(() => 0),
+      },
+    },
+  });
+  it("reads every CIK of the company and records each filing under the CIK whose index lists it", async () => {
+    const { syncCompany } = await import("./jobs.server");
+    const { coverageOf } = await import("@/lib/coverage");
+    const xom = coverageOf("XOM")!;
+    const day = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
+    const urls: string[] = [];
+    mocks.fetchSec.mockImplementation(async (url: string) => {
+      urls.push(url);
+      if (url.includes("CIK0002115436"))
+        return { json: async () => block([["0002115436-26-000020", "10-Q", day(18), ""], ["0002115436-26-000018", "8-K", day(21), "2.02,7.01"], ["0000034088-26-000093", "10-Q", day(40), ""]]) };
+      if (url.includes("CIK0000034088")) return { json: async () => block([["0000034088-26-000093", "10-Q", day(40), ""], ["0000034088-26-000088", "8-K", day(44), "7.01"]]) };
+      throw new Error(`unexpected ${url}`);
+    });
+    const r = await syncCompany(xom, day(45), { form4: false });
+    expect(r.errors).toEqual([]);
+    expect(urls.filter((u) => u.includes("submissions"))).toEqual(["https://data.sec.gov/submissions/CIK0002115436.json", "https://data.sec.gov/submissions/CIK0000034088.json"]);
+    const filings = mocks.db.tables.sec_filings as { accn: string; cik: string }[];
+    expect(Object.fromEntries(filings.map((f) => [f.accn, f.cik]))).toEqual({
+      "0002115436-26-000020": "2115436",
+      "0002115436-26-000018": "2115436",
+      "0000034088-26-000093": "2115436",
+      "0000034088-26-000088": "34088",
+    });
+    expect(mocks.db.tables.earnings_events).toMatchObject([{ ticker: "XOM", accn: "0002115436-26-000018" }]);
+  });
+});

@@ -6,7 +6,7 @@ import { hazardLink } from "@/lib/alt/hazards";
 import { PERIOD_LABEL, actionSummary, ratingLabel } from "@/lib/estimates/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { companyQuery, macroQuery, newsQuery, pricesQuery, quotesQuery, universeQuery, type Range } from "@/lib/data";
-import { COVERAGE, coverageOf, MACRO_SERIES } from "@/lib/coverage";
+import { COVERAGE, companyCiks, coverageOf, MACRO_SERIES } from "@/lib/coverage";
 import { getFilingDocument, searchFilings } from "@/lib/sec.functions";
 import { crawlSite, extractFromPage, fetchUrl, mapSite, readWebpage, webSearch } from "@/lib/web.functions";
 import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
@@ -775,7 +775,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     }
     case "search_filings": {
       const t = args.ticker ? coverageOf(String(args.ticker)) : undefined;
-      const r = await searchFilings({ data: { q: String(args.query).slice(0, 200), ciks: t ? [t.cik] : undefined } });
+      const r = await searchFilings({ data: { q: String(args.query).slice(0, 200), ciks: t ? companyCiks(t) : undefined } });
       return {
         output: `${r.total} documents match.\n` + r.hits.map((h) => `${h.company} | ${h.form} | filed ${h.filed} | accession ${h.accn} | doc ${h.doc} | ${h.description ?? ""}`).join("\n"),
         summary: `"${args.query}": ${r.total.toLocaleString()} hits`,

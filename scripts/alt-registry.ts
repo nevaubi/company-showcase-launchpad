@@ -3,7 +3,7 @@
 // holding-company name), CFPB complaint-database name (financials, telecom, consumer retail),
 // NHTSA manufacturer (vehicles and machinery) and the legal name for full-text searches.
 //   bun scripts/alt-registry.ts [--only=JPM,HOOD]
-import { COVERAGE } from "@/lib/coverage";
+import { companyCiks, COVERAGE } from "@/lib/coverage";
 import { staticRegistry } from "@/lib/alt/collect.server";
 import { bankCore, dedupeRegistry, legalName, pickCfpb, pickFdic, pickFdicFuzzy, REGISTRY_PATH, wikiTitle, type AltRegistry } from "@/lib/alt/registry";
 import { args, log, sb, sleep } from "./lib/supa";
@@ -48,7 +48,8 @@ for (const c of cos) {
   const e = { ...(reg[c.ticker] ?? {}), ...staticRegistry(c.ticker) };
   const sec = secName.get(c.ticker) ?? c.shortName;
   e.legal = legalName(sec);
-  const w = wiki.get(String(Number(c.cik)));
+  // Wikidata may list a former registrant's CIK (XOM 34088): any CIK of the company matches.
+  const w = companyCiks(c).map((k) => wiki.get(k)).find(Boolean);
   if (!e.wiki && w) e.wiki = w;
   if (!e.fdic && FIN.test(c.industry)) {
     const j = await json(`https://api.fdic.gov/banks/institutions?filters=${encodeURIComponent(`NAMEHCR:"${sec.replace(/[.,]/g, " ").replace(/\s+/g, " ").trim()}" AND ACTIVE:1`)}&fields=CERT,NAME,ASSET,NAMEHCR&sort_by=ASSET&sort_order=DESC&limit=20`);

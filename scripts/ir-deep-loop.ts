@@ -160,6 +160,7 @@ interface LoopState {
   /** finished companies waiting to be re-read (new files, config re-queue); kept across restarts */
   pendingReread?: string[];
   lastForm4Repair?: string | null;
+  lastRegistrantDrift?: string | null;
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -220,7 +221,7 @@ function run(step: string, script: string, argv: string[], logFile: string, env:
   });
 }
 
-type LastKey = "lastForm4Repair" | "lastMirror" | "lastDetail" | "lastSod" | "lastReactions" | "lastProse" | "lastIrSite" | "lastCanon" | "lastAltSlow" | "lastVerify" | "lastCatchup" | "lastHealConfig";
+type LastKey = "lastRegistrantDrift" | "lastForm4Repair" | "lastMirror" | "lastDetail" | "lastSod" | "lastReactions" | "lastProse" | "lastIrSite" | "lastCanon" | "lastAltSlow" | "lastVerify" | "lastCatchup" | "lastHealConfig";
 /** A periodic step finished: its timer moves only after a zero exit; a failure retries after a backoff. */
 function settle(step: string, key: LastKey, intervalMs: number, code: number) {
   const r = nextDue(Date.now(), code === 0, intervalMs, state.failStreak?.[step] ?? 0);
@@ -575,6 +576,19 @@ function maybeForm4Repair() {
   });
 }
 
+// ---------- registrant drift (weekly) ----------
+/** Weekly: covered CIKs against SEC's ticker file (one request); drifting tickers become watchdog alerts. */
+let driftChecking = false;
+function maybeRegistrantDrift() {
+  if (driftChecking || Date.now() - STARTED < 10 * 60_000 || memUsedGB() > MEM_GB * 0.8) return;
+  if (state.lastRegistrantDrift && Date.now() - Date.parse(state.lastRegistrantDrift) < 7 * 86_400_000) return;
+  driftChecking = true;
+  void run("registrant-drift", "scripts/registrant-drift.ts", [], `${OUT}/registrant-drift.log`).then((code) => {
+    driftChecking = false;
+    settle("registrant-drift", "lastRegistrantDrift", 7 * 86_400_000, code);
+  });
+}
+
 // ---------- reaper (P1-2) ----------
 /** Every 10 minutes: close runs that can no longer finish, clear long-expired runner leases, close abandoned report runs. */
 async function maybeReap() {
@@ -877,6 +891,7 @@ for (;;) {
   await verifySweep();
   await maybeDiscoverCatchup();
   maybeForm4Repair();
+  maybeRegistrantDrift();
   await maybeReap();
   await maybeHealConfigFailures();
   // self-heal: done with files but no figures, once (never for companies set aside)

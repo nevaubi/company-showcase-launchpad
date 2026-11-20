@@ -9,6 +9,7 @@
  *   unfinished:<job>     30% or more of 20+ runs in 24 h never recorded a finish (scheduler cut-off)
  *   provider:<id>        a provider circuit open on quota or configuration for 2 h
  *   options-blocked      Cboe refuses option chains (the options job is backing off)
+ *   registrant:<ticker>  SEC's ticker file maps a covered ticker to another CIK (weekly check)
  *   stale:<key>          a dataset is stale and its automatic remedy did not help within 6 h
  *                        (or it has no remedy)
  *
@@ -54,7 +55,7 @@ export interface Alert {
 export interface WatchdogInput {
   freshness: DataFreshness[];
   jobs: JobHealthRow[];
-  /** `provider:*`, `options-backoff`, `remedy:*` rows */
+  /** `provider:*`, `options-backoff`, `remedy:*`, `registrant-drift:*` rows */
   states: StateRow[];
 }
 
@@ -146,6 +147,16 @@ export function alerts(input: WatchdogInput, nowMs: number, remedies: RemedyKeys
         tried: "calls are held; one probe is sent on a growing backoff and the work resumes by itself once it succeeds",
         action: p.cls === "config" ? "Fix the configuration the message names (key, model id or setting)." : "Add credit with the provider, or switch the readers to the free allowance.",
         graceMin: 120,
+      });
+    }
+    if (r.job.startsWith("registrant-drift:") && r.paused_reason) {
+      const ticker = r.job.slice("registrant-drift:".length);
+      out.push({
+        key: `registrant:${ticker}`,
+        title: `${ticker} changed SEC registrant: ${r.paused_reason}`,
+        tried: "nothing: the SEC feed jobs read only the CIKs coverage lists, so new filings under the other CIK are missed",
+        action: `Set ${ticker}'s cik in src/lib/coverage.ts to SEC's CIK and keep the old one in formerCiks; tell the partner pipeline (statement history stays under the old CIK).`,
+        graceMin: 0,
       });
     }
     if (r.job === "options-backoff" && r.paused_reason && (r.cursor ?? 0) > 0)

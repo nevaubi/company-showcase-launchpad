@@ -3,12 +3,12 @@
 // resolved through the company's submissions (full details, earnings events, alt rows), a few
 // companies per run; 8-K item 2.02 events from the feed are stored immediately.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { COVERAGE } from "@/lib/coverage";
+import { COVERAGE, tickerByCik } from "@/lib/coverage";
 import { fetchSec } from "@/lib/sec.server";
 import { coveredOnly, dayProgress, feedUrl, FEED_TYPES, formatDayState, isEarnings, masterUrl, missingEarnings, nextDay, parseCurrentAtom, parseDayState, parseMasterIndex, repairWindow, rotate, type DiscoveredFiling } from "@/lib/jobs/sec-discover";
 
-const CIKS = new Map<string, string>();
-for (const c of COVERAGE) if (!CIKS.has(String(Number(c.cik)))) CIKS.set(String(Number(c.cik)), c.ticker);
+// Current and former CIKs: a filing by either registrant (XOM 2115436 or 34088) belongs to the company.
+const CIKS = tickerByCik(COVERAGE);
 const BY_TICKER = new Map(COVERAGE.map((c) => [c.ticker, c]));
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
 /** Pause between companies, so SEC sees at most a few requests per second from any caller (limit 10/s). */
