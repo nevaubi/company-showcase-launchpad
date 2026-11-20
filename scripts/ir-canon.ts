@@ -10,13 +10,16 @@
 import { COVERAGE } from "@/lib/coverage";
 import { CANON_INSTRUCTIONS, CANON_SCHEMA, failureNotes, mapFromModel, rawLines, renderLines, type RawLine } from "@/lib/ir/canon";
 import { buildIrSeries, normLabel, rawKey, type IrFact, type LabelMapEntry } from "@/lib/ir/kpis";
-import { IR_MODELS, OpenAIError, openaiStructured } from "@/lib/openai.server";
+import { IR_MODELS, openaiStructured } from "@/lib/openai.server";
+import { classifyError } from "@/lib/jobs/failure";
+import { rankOrder } from "@/lib/jobs/priority";
 import { paidOrLane } from "@/lib/ir/credit-fallback";
 import { laneStructured } from "@/lib/ir/openai-lane.server";
 import { FREE_TIERS } from "@/lib/ir/openai-allowance";
 import { loadLabelMap } from "@/lib/ir/rebuild.server";
 import { buildCompany, loadFacts } from "./ir-build";
 import { args, log, sb } from "./lib/supa";
+import { loadRank } from "./lib/rank";
 
 type CanonOut = { lines: { id: number; category: string; metric: string; label: string; parent: string; is_total: boolean; drop: boolean; reason: string }[] };
 
@@ -107,12 +110,14 @@ async function ask(ticker: string, name: string, lines: RawLine[], notes: string
     maxOutputTokens: 100_000,
   };
   // An empty paid balance moves the call to the owner's free large-model lane instead of pausing.
-  return paidOrLane(() => openaiStructured<CanonOut>({ model: args.model ?? IR_MODELS.reason, ...req }), () => laneStructured<CanonOut>({ ...req, model: FREE_TIERS.large.models[0] }));
+  // rethrow: a lane timeout or a cut-off reply surfaces as itself, never as "the free lane is spent".
+  return paidOrLane(() => openaiStructured<CanonOut>({ model: args.model ?? IR_MODELS.reason, ...req }), () => laneStructured<CanonOut>({ ...req, model: FREE_TIERS.large.models[0], rethrow: true }));
 }
 
-async function canonCompany(ticker: string, name: string) {
+/** none = no figures; kept = the stored/original map stays; replaced = a better map was written. */
+async function canonCompany(ticker: string, name: string): Promise<"none" | "kept" | "replaced"> {
   const facts: IrFact[] = await loadFacts(ticker);
-  if (!facts.length) return false;
+  if (!facts.length) return "none";
   const lines = rawLines(facts);
   const base = failureNotes(facts, undefined, 0);
   const baseValues = shownValues(facts).values;
@@ -165,6 +170,7 @@ async function canonCompany(ticker: string, name: string) {
     map = proposal;
   }
   if (!best.map && existing) await sb.from("ir_label_map").delete().eq("ticker", ticker);
+  const replaced = !!best.map && best.map !== existing;
   if (best.map && best.map !== existing) {
     await sb.from("ir_label_map").delete().eq("ticker", ticker);
     const rows = Object.entries(best.map).map(([raw_key, canonical]) => ({ ticker, raw_key, canonical: canonical as never, model: args.model ?? IR_MODELS.reason }));
@@ -175,37 +181,57 @@ async function canonCompany(ticker: string, name: string) {
   }
   const p = await buildCompany(ticker);
   log(`${ticker.padEnd(5)} ${lines.length} lines · failures ${base.failed}/${base.total} → ${best.failed}/${best.total}${best.map ? "" : " (kept original)"} · Q ${p?.stats.checksQ.ok}/${p?.stats.checksQ.total} FY ${p?.stats.checksFY.ok}/${p?.stats.checksFY.total} · ${(tokens / 1e3).toFixed(0)}k tokens`);
-  return true;
+  return replaced ? "replaced" : "kept";
 }
 
 const want = args.tickers?.split(",");
 const resume = args.resume !== undefined && !want;
-const all = COVERAGE.filter((c) => !want || want.includes(c.ticker));
+// Top 1,000 by 20-day dollar volume first (PRIORITY_ORDER=0 keeps COVERAGE order); the cursor indexes this list.
+const rank = await loadRank();
+const byTicker = new Map(COVERAGE.map((c) => [c.ticker, c]));
+const all = rankOrder(COVERAGE.filter((c) => !want || want.includes(c.ticker)).map((c) => c.ticker), rank).map((t) => byTicker.get(t)!);
+const { data: run } = await sb.from("job_runs").insert({ job: "ir-canon" }).select("id").single();
 const { data: st } = resume ? await sb.from("job_state").select("cursor").eq("job", "ir-canon").maybeSingle() : { data: null };
 const start = resume ? (st?.cursor ?? 0) % Math.max(1, all.length) : 0;
 const list = resume ? [...all.slice(start), ...all.slice(0, start)] : all;
 const cap = Number(args.max ?? (resume ? 40 : Infinity));
 let next = 0;
 let processed = 0;
-let stop = false;
-const saveCursor = () => resume ? sb.from("job_state").upsert({ job: "ir-canon", cursor: (start + next) % all.length, paused_reason: null, updated_at: new Date().toISOString() }) : null;
+let kept = 0;
+let replaced = 0;
+let failed = 0;
+let stop: string | null = null;
+/** list index of the first company a provider stop left unread (two workers: the earliest one wins) */
+let retryFrom = Infinity;
+const cursorAt = () => (start + Math.min(next, retryFrom)) % Math.max(1, all.length);
+// Never move the cursor past a company a provider stop left unread.
+const saveCursor = () => (resume && !stop ? sb.from("job_state").upsert({ job: "ir-canon", cursor: cursorAt(), paused_reason: null, updated_at: new Date().toISOString() }) : null);
 await Promise.all(
   Array.from({ length: Number(args.concurrency ?? 4) }, async () => {
     while (!stop && next < list.length && processed < cap) {
-      const c = list[next++];
+      const idx = next++;
+      const c = list[idx];
       try {
-        if (await canonCompany(c.ticker, c.name)) processed++;
+        const r = await canonCompany(c.ticker, c.name);
+        if (r !== "none") processed++;
+        if (r === "kept") kept++;
+        if (r === "replaced") replaced++;
         await saveCursor();
       } catch (e) {
-        if (e instanceof OpenAIError && (e.kind === "auth" || e.kind === "quota")) {
-          stop = true;
-          next--; // retry this company on the next run
-          await sb.from("job_state").upsert({ job: "ir-canon", cursor: resume ? (start + next) % all.length : 0, paused_reason: e.message.slice(0, 200), updated_at: new Date().toISOString() });
-        }
+        const cls = classifyError(e);
+        if (cls === "quota" || cls === "config") {
+          // This company (not whichever the other worker holds) is retried first on the next run.
+          retryFrom = Math.min(retryFrom, idx);
+          stop ??= `${cls === "config" ? "auth" : "quota"}: ${(e as Error).message.slice(0, 190)}`;
+          await sb.from("job_state").upsert({ job: "ir-canon", cursor: resume ? cursorAt() : 0, paused_reason: stop, updated_at: new Date().toISOString() });
+        } else failed++;
         log(`${c.ticker} canon failed: ${(e as Error).message.slice(0, 200)}`);
       }
     }
   }),
 );
-log(`ir-canon: ${processed} companies with figures processed${resume ? `, cursor ${(start + next) % all.length}/${all.length}` : ""}`);
-process.exit(0);
+log(`ir-canon: ${processed} companies with figures processed${resume ? `, cursor ${cursorAt()}/${all.length}` : ""}`);
+// Run row: freshness of the label canon is measured by successful passes, not by map inserts (a
+// healthy pass that keeps every stored map writes nothing to ir_label_map).
+if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: !stop && (processed > 0 || failed === 0), items: processed, detail: { processed, kept, replaced, failed, stop, cursor: cursorAt(), of: all.length } }).eq("id", run.id);
+process.exit(stop ? 3 : 0);
