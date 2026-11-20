@@ -19,7 +19,7 @@ import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { fmtAlt, readAlt } from "@/lib/alt/query";
+import { fmtAlt, readAlt, type AltRow } from "@/lib/alt/query";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -269,7 +269,7 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
     staleTime: 10 * 60_000,
     queryFn: async ({ client }) => {
       const [alt, sig] = await Promise.all([
-        readAlt<{ ticker: string; dataset: string; kind: string; date: string | null; title: string; value: number | null; unit: string | null; meta: Record<string, any>; source_url: string | null }>(
+        readAlt<Pick<AltRow, "ticker" | "dataset" | "kind" | "date" | "title" | "value" | "unit" | "meta" | "source_url">>(
           "ticker,dataset,kind,date,title,value,unit,meta,source_url",
           (q) => q.eq("ticker", ticker).eq("kind", "event").in("dataset", Object.keys(ALT_LABEL)).not("date", "is", null).order("date", { ascending: false }).limit(80),
           client,
