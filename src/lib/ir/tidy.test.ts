@@ -282,3 +282,39 @@ describe("a line repeated one level down after two eras of a table merge", () =>
     expect(other.series.some((s) => s.k === "auto1")).toBe(true);
   });
 });
+
+describe("the same figures shown twice under two tables", () => {
+  // PNC 8-K of 15 Jul 2026, $ millions: Jun '25, Mar '26, Jun '26.
+  const Q = (a: number, b: number, c: number) => ({ "2025-06-30": a * 1e6, "2026-03-31": b * 1e6, "2026-06-30": c * 1e6 });
+  it("folds a loose income-statement line into the breakdown total it repeats", () => {
+    const series = [
+      line("pers", "Personnel", Q(1889, 2106, 2273), { cat: "cost", met: "expense", parent: "tne" }),
+      line("occ", "Occupancy", Q(235, 262, 252), { cat: "cost", met: "expense", parent: "tne" }),
+      line("tne", "Total noninterest expense", Q(3383, 3768, 4098), { cat: "cost", met: "expense", total: true }),
+      line("ne", "Noninterest expense", Q(3383, 3768, 4098), { cat: "cost", met: "expense" }),
+    ];
+    const g = table("tne", "tne", ["pers", "occ"], { cat: "cost", met: "expense" });
+    const loose: PayloadGroup = { id: "cost|expense|usd", cat: "cost", met: "expense", unit: "usd", label: "", root: null, rows: [{ k: "ne", depth: 0 }] };
+    const p = tidyPayload(payload(series, [g, loose]));
+    expect(p.alias?.ne).toBe("tne");
+    expect(p.groups.some((x) => x.rows.some((r) => r.k === "ne"))).toBe(false);
+  });
+  it("drops a table printed again inside a bigger one", () => {
+    const fee = [
+      line("f:amb", "Asset management and brokerage", Q(391, 420, 440), { cat: "product", parent: "f:t" }),
+      line("f:cmd", "Capital markets and advisory", Q(321, 463, 577), { cat: "product", parent: "f:t" }),
+      line("f:t", "Fee income (non-GAAP)", Q(1894, 2079, 2279), { cat: "product", total: true }),
+    ];
+    const nii = [
+      line("n:amb", "Asset management and brokerage", Q(391, 420, 440), { parent: "n:fee" }),
+      line("n:cmd", "Capital markets and advisory", Q(321, 463, 577), { parent: "n:fee" }),
+      line("n:fee", "Fee income (non-GAAP)", Q(1894, 2079, 2279), { parent: "n:t", total: true }),
+      line("n:oth", "Other", Q(212, 125, 489), { parent: "n:t" }),
+      line("n:t", "Total noninterest income", Q(2106, 2204, 2768), { total: true }),
+    ];
+    const groups = [table("f:t", "f:t", ["f:amb", "f:cmd"], { cat: "product" }), table("n:t", "n:t", ["n:amb", "n:cmd", "n:fee", "n:oth"])];
+    const p = tidyPayload(payload([...fee, ...nii], groups));
+    expect(p.groups.map((x) => x.id)).toEqual(["n:t"]);
+    expect(p.alias?.["f:amb"]).toBe("n:amb");
+  });
+});

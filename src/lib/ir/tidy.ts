@@ -311,6 +311,68 @@ function mergeCousins(c: Ctx, g: PayloadGroup) {
   }
 }
 
+/**
+ * A loose line ("Noninterest expense" in an income-statement list) that prints exactly the numbers
+ * of a breakdown's line with the same name ("Total noninterest expense") is the same figure shown
+ * twice: it folds into the breakdown's line. A line named only "Total" folds into a breakdown total
+ * of the same measure when at least three distinctive numbers match and none conflicts. The line
+ * that stays must already cover the loose line's periods, unless it is a table's own total.
+ */
+function foldLooseRepeats(c: Ctx, groups: PayloadGroup[]) {
+  const rooted: { s: PayloadSeries; g: PayloadGroup }[] = [];
+  for (const g of groups) if (g.root) for (const r of g.rows) {
+    const s = c.byKey.get(resolve(c, r.k));
+    if (s && !c.removed.has(s.k)) rooted.push({ s, g });
+  }
+  for (const g of groups) {
+    if (g.root) continue;
+    for (const r of g.rows) {
+      const a = c.byKey.get(resolve(c, r.k));
+      if (!a || c.removed.has(a.k)) continue;
+      const bare = !labelTokens(a.label).length;
+      for (const { s: b, g: tg } of rooted) {
+        if (b.unit !== a.unit || !!b.pit !== !!a.pit || b.met !== a.met) continue;
+        if (bare ? b.k !== resolve(c, tg.root!) : !alikeLabels(a.label, b.label)) continue;
+        const cmp = compare(a, b);
+        if (cmp.conflict || cmp.exact < (bare ? 3 : 1)) continue;
+        if (b.parent && [...periodsOf(a)].some((e) => !periodsOf(b).has(e))) continue;
+        absorb(c, b, a);
+        break;
+      }
+    }
+  }
+}
+
+/**
+ * A breakdown printed again inside a bigger one (PNC's "Fee income" table is the fee block of its
+ * "Noninterest income" table): when every line of the smaller table has a twin in the bigger one,
+ * same name, same printed numbers, no conflict, and the twin covers its periods, the smaller table's
+ * lines fold into the bigger table and the smaller table disappears.
+ */
+function dropSubTables(c: Ctx, groups: PayloadGroup[]) {
+  const live = (g: PayloadGroup) => g.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
+  const rooted = groups.filter((g) => g.root).sort((a, b) => a.rows.length - b.rows.length);
+  for (const small of rooted) {
+    const mine = live(small);
+    if (!mine.length) continue;
+    for (const big of rooted) {
+      if (big === small || big.unit !== small.unit) continue;
+      const theirs = live(big);
+      if (theirs.length <= mine.length) continue;
+      const pairs: [PayloadSeries, PayloadSeries][] = [];
+      for (const a of mine) {
+        const b = theirs.find((t) => !pairs.some(([x]) => x === t) && t.unit === a.unit && !!t.pit === !!a.pit && alikeLabels(a.label, t.label) && [...periodsOf(a)].every((e) => periodsOf(t).has(e)) && ((cmp) => !cmp.conflict && cmp.exact >= 1)(compare(a, t)));
+        if (!b) break;
+        pairs.push([b, a]);
+      }
+      if (pairs.length !== mine.length) continue;
+      for (const [b, a] of pairs) absorb(c, b, a);
+      small.rows = [];
+      break;
+    }
+  }
+}
+
 interface Cluster {
   g: PayloadGroup;
   members: PayloadGroup[];
@@ -1127,6 +1189,8 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   }
 
   for (const clusters of clustersOf.values()) for (const cl of clusters) mergeCousins(c, cl.g);
+  foldLooseRepeats(c, out.groups.filter((g) => !drop.has(g)));
+  dropSubTables(c, out.groups.filter((g) => !drop.has(g)));
 
   // Rows and checks follow the merged lines.
   let groups = out.groups.filter((g) => !drop.has(g));
