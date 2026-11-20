@@ -318,3 +318,21 @@ describe("the same figures shown twice under two tables", () => {
     expect(p.alias?.["f:amb"]).toBe("n:amb");
   });
 });
+
+describe("a line whose only part prints the same numbers", () => {
+  // PNC business segment income, $ millions: "Retail Banking" and the "Earnings" closing the Retail Banking table.
+  const Q = (a: number, b: number, c: number) => ({ "2025-06-30": a * 1e6, "2026-03-31": b * 1e6, "2026-06-30": c * 1e6 });
+  it("shows the figure once, under the segment's name", () => {
+    const series = [
+      line("rb:e", "Earnings", Q(1386, 1349, 1747), { met: "segment_profit", parent: "rb", total: true }),
+      line("rb", "Retail Banking", Q(1386, 1349, 1747), { met: "segment_profit", parent: "t" }),
+      line("oth", "Other", Q(-1209, -1190, -1430), { met: "segment_profit", parent: "t" }),
+      line("t", "Net income excluding noncontrolling interests", Q(177, 159, 317), { met: "segment_profit", total: true }),
+    ];
+    const g: PayloadGroup = { id: "t", cat: "segment", met: "segment_profit", unit: "usd", label: "", root: "t", rows: [{ k: "rb:e", depth: 2 }, { k: "rb", depth: 1 }, { k: "oth", depth: 1 }, { k: "t", depth: 0 }] };
+    const p = tidyPayload(payload(series, [g]));
+    expect(p.series.map((s) => s.label)).not.toContain("Earnings");
+    expect(p.alias?.["rb:e"]).toBe("rb");
+    expect(cellsOf(p, "rb")).toEqual({ "2025-06-30": 1386e6, "2026-03-31": 1349e6, "2026-06-30": 1747e6 });
+  });
+});

@@ -97,3 +97,34 @@ export function cellsFor(s: PayloadSeries, kind: IrPeriodKind): Record<string, P
   }
   return c;
 }
+
+/**
+ * Calendar month that closes the company's fiscal year: from its fiscal-year columns, else March,
+ * June, September, December quarter-ends are read as a calendar fiscal year. Null when the payload
+ * can't tell (quarters that end in other months and no fiscal-year column).
+ */
+export function fiscalYearEndMonth(p: Pick<IrPayload, "years" | "series">): number | null {
+  const fy = mode(p.years.map(closingMonth));
+  if (fy != null) return fy;
+  const q = quarterMonths(p);
+  return q && q.has(12) && q.has(3) ? 12 : null;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * Column heads that cannot be misread: "Q3 FY25" over "Oct ’24" for a quarter, "FY25" over "Jan ’25"
+ * for a fiscal year, "Oct ’24" alone for a month. The fiscal year is named by the calendar year it ends
+ * in (NVIDIA's year to 26 Jan 2025 is FY25). Without a known fiscal year-end the calendar month leads.
+ */
+export function fiscalLabel(end: string, kind: IrPeriodKind, fyEnd: number | null): { main: string; sub: string } {
+  const m = closingMonth(end);
+  const y = Number(end.slice(0, 4)) - (m === 12 && Number(end.slice(5, 7)) === 1 ? 1 : 0);
+  const cal = `${MONTHS[m - 1]} ’${String(y).slice(2)}`;
+  if (kind === "m" || fyEnd == null) return { main: cal, sub: kind === "y" ? "fiscal year" : "" };
+  const ahead = (fyEnd - m + 12) % 12; // months from this period's close to the fiscal year-end
+  const fy = y + (m + ahead > 12 ? 1 : 0);
+  const fyTag = `FY${String(fy).slice(2)}`;
+  if (kind === "y") return { main: fyTag, sub: cal };
+  return { main: `Q${4 - Math.floor(ahead / 3)} ${fyTag}`, sub: cal };
+}

@@ -1,21 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { IrDocuments } from "@/components/ir/documents";
-import { storeIndexQuery } from "@/lib/ir/store";
+import { storeIndexQuery, type StoreDoc } from "@/lib/ir/store";
 import { friendlyError } from "@/lib/errors";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
-import { CheckCircle2, FileStack, Loader2, RefreshCw, TriangleAlert } from "lucide-react";
+import { Clock3, FileStack, Loader2, TriangleAlert } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
-import { IrBreakdowns } from "@/components/ir/breakdowns";
+import { IrBreakdowns, type IrFocus } from "@/components/ir/breakdowns";
 import { IrFinancialMap } from "@/components/ir/financial-map";
 import { IrKeyMetrics } from "@/components/ir/key-metrics";
+import { IrPanel } from "@/components/ir/panel";
+import { DASH, IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getIrData, type IrDocRow } from "@/lib/ir.functions";
-import { irPageKey, loadIrPage } from "@/lib/ir/client";
+import { irPageKey, loadIrPage, type IrPageData } from "@/lib/ir/client";
 import { secRevenueCheck } from "@/lib/ir/display";
 import type { IrPayload } from "@/lib/ir/payload";
 import { useCompany } from "@/lib/data";
@@ -124,39 +126,32 @@ function IrPage() {
         </div>
       </Panel>
     );
-  const data = q.data!;
+  return <IrPageView ticker={ticker} data={q.data!} store={store.data?.documents} focus={focus} onFocusDone={clearFocus} />;
+}
+
+/** The loaded IR page (summary, key metrics, map, breakdowns, documents); the route only fetches. */
+export function IrPageView({ ticker, data, store, focus, onFocusDone }: { ticker: string; data: IrPageData; store?: StoreDoc[]; focus?: IrFocus; onFocusDone?: () => void }) {
+  const hasSeries = !!data.payload && data.payload.series.length > 0;
   return (
-    <div className="grid grid-cols-1 gap-5">
-      <IrSummary
-        ticker={ticker}
-        payload={data.payload}
-        pending={data.pending}
-        documents={data.documents.length + (data.images ?? 0)}
-        builtAt={data.builtAt}
-      />
-      {data.payload && data.payload.series.length > 0 && <IrKeyMetrics ticker={ticker} payload={data.payload} />}
-      {data.payload && data.payload.series.length > 0 && (
-        <IrFinancialMap ticker={ticker} payload={data.payload} />
-      )}
-      <div data-tour="ir-breakdowns" className="min-w-0">
-      {data.payload && data.payload.series.length > 0 ? (
-        <IrBreakdowns
-          ticker={ticker}
-          payload={data.payload}
-          focus={focus}
-          onFocusDone={clearFocus}
-        />
+    <div className="grid grid-cols-1 gap-6">
+      <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents} images={data.images ?? 0} builtAt={data.builtAt} />
+      {hasSeries && <IrKeyMetrics ticker={ticker} payload={data.payload!} />}
+      {hasSeries && <IrFinancialMap ticker={ticker} payload={data.payload!} />}
+      {hasSeries ? (
+        <IrBreakdowns ticker={ticker} payload={data.payload!} focus={focus} onFocusDone={onFocusDone} />
       ) : (
-        <Panel title="Segment & KPI breakdowns">
-          <p className="p-5 text-sm text-muted-foreground">
-            {data.pending
-              ? `${data.pending} stored documents are waiting to be read — breakdowns appear here once they are processed.`
-              : "No breakdown tables have been read for this company yet."}
-          </p>
-        </Panel>
+        <IrPanel section="Segment and KPI breakdowns" tour="ir-breakdowns" title="Segment and KPI breakdowns">
+          <div className="px-4 py-4 text-[13px]">
+            <p>No figures have been read from this company's documents yet.</p>
+            <p className={cn("mt-1", IR.caption)}>
+              {data.pending
+                ? `Breakdowns appear here once the ${data.pending.toLocaleString()} stored ${data.pending === 1 ? "file that is" : "files that are"} waiting have been read. Reading runs in the background; the stored files below can be opened now.`
+                : "The stored files below can be opened now; this company's releases have no tables the readers use."}
+            </p>
+          </div>
+        </IrPanel>
       )}
-      </div>
-      <IrDocuments ticker={ticker} documents={data.documents} images={data.images} store={store.data?.documents} />
+      <IrDocuments ticker={ticker} documents={data.documents} images={data.images} store={store} />
     </div>
   );
 }
@@ -177,23 +172,25 @@ function IrSummary({
   payload,
   pending,
   documents,
+  images,
   builtAt,
 }: {
   ticker: string;
   payload: IrPayload | null;
   pending: number;
-  documents: number;
+  documents: IrDocRow[];
+  images: number;
   builtAt: string | null;
 }) {
   const company = useCompany(ticker);
+  const files = documents.length + images;
+  const read = documents.filter((d) => d.extract_status?.startsWith("ok")).length;
 
   const sec = useMemo(() => {
     const st = company.data?.statements.quarterly.income;
     const row = st?.rows.find((r) => r.key === "revenue");
     if (!payload || !st || !row) return [];
-    const reported = st.periods.flatMap((p, i) =>
-      row.cells[i] ? [{ end: p.end, v: row.cells[i]!.v }] : [],
-    );
+    const reported = st.periods.flatMap((p, i) => (row.cells[i] ? [{ end: p.end, v: row.cells[i]!.v }] : []));
     return secRevenueCheck(payload, reported);
   }, [company.data, payload]);
   const secBad = sec.filter((c) => !c.ok);
@@ -201,120 +198,83 @@ function IrSummary({
   // Values filled by calculation (fourth quarters, year-to-date differences, summed years).
   const calculated = useMemo(() => (payload ? payload.series.reduce((n, x) => n + Object.values(x.q).filter((c) => c.f).length + Object.values(x.y).filter((c) => c.f).length, 0) : 0), [payload]);
 
+  const tie = (c: { ok: number; total: number }) => (c.total ? { value: `${Math.round((c.ok / c.total) * 100)}%`, hint: `${c.ok.toLocaleString()} of ${c.total.toLocaleString()} checks` } : null);
   const stats: { label: string; value: string; hint?: string }[] = s
     ? [
         {
           label: "Coverage",
-          value:
-            s.firstPeriod && s.lastPeriod
-              ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}`
-              : "—",
-          hint:
-            s.firstPeriod && s.lastPeriod
-              ? `${monthYear(s.firstPeriod)} – ${monthYear(s.lastPeriod)}`
-              : undefined,
+          value: s.firstPeriod && s.lastPeriod ? `${s.firstPeriod.slice(0, 4)}–${s.lastPeriod.slice(0, 4)}` : DASH,
+          hint: s.firstPeriod && s.lastPeriod ? `${monthYear(s.firstPeriod)} to ${monthYear(s.lastPeriod)}` : undefined,
         },
-        {
-          label: "Lines tracked",
-          value: s.series.toLocaleString(),
-          hint: `${s.groups} breakdowns`,
-        },
-        {
-          label: "Data points",
-          value: s.facts.toLocaleString(),
-          hint: `from ${s.documents.toLocaleString()} documents${calculated ? ` · ${calculated.toLocaleString()} calculated` : ""}`,
-        },
-        {
-          label: "Quarterly totals tie out",
-          value: s.checksQ.total ? `${Math.round((s.checksQ.ok / s.checksQ.total) * 100)}%` : "—",
-          hint: `${s.checksQ.ok.toLocaleString()} of ${s.checksQ.total.toLocaleString()}`,
-        },
-        {
-          label: "Annual totals tie out",
-          value: s.checksFY.total
-            ? `${Math.round((s.checksFY.ok / s.checksFY.total) * 100)}%`
-            : "—",
-          hint: `${s.checksFY.ok.toLocaleString()} of ${s.checksFY.total.toLocaleString()}`,
-        },
+        { label: "Lines tracked", value: s.series.toLocaleString(), hint: `in ${s.groups.toLocaleString()} breakdowns` },
+        { label: "Data points", value: s.facts.toLocaleString(), hint: `from ${s.documents.toLocaleString()} documents${calculated ? `, ${calculated.toLocaleString()} calculated` : ""}` },
+        ...(tie(s.checksQ) ? [{ label: "Quarterly totals tie out", ...tie(s.checksQ)! }] : []),
+        ...(tie(s.checksFY) ? [{ label: "Annual totals tie out", ...tie(s.checksFY)! }] : []),
       ]
     : [];
 
+  const filesLine = `${files.toLocaleString()} stored file${files === 1 ? "" : "s"}, ${read.toLocaleString()} read for figures${pending ? `, ${pending.toLocaleString()} waiting to be read` : ""}`;
   return (
-    <Panel
+    <IrPanel
+      section="Investor-relations summary"
       title="Investor-relations data"
-      subtitle={
-        builtAt
-          ? `Updated ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} from ${documents.toLocaleString()} stored files`
-          : `${documents.toLocaleString()} stored files`
-      }
+      subtitle={builtAt ? `Built ${fmtDate(builtAt, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · ${filesLine}` : filesLine}
       actions={
         pending > 0 ? (
           <Tooltip>
-            <TooltipTrigger className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs text-muted-foreground">
-              <RefreshCw className="size-3.5 animate-spin [animation-duration:3s]" />
-              {pending.toLocaleString()} new file{pending > 1 ? "s" : ""} being read automatically
+            <TooltipTrigger className={cn("inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1", IR.caption)}>
+              <Clock3 className="size-3.5" />
+              {pending.toLocaleString()} waiting to be read
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-xs">
-              Newly collected documents are read in the background. Their numbers are added to the
-              tables below automatically; this page refreshes on its own every two minutes.
+              Stored files are read in the background by scheduled readers. Their figures join the tables below when a read finishes; this page checks again every two minutes.
             </TooltipContent>
           </Tooltip>
         ) : undefined
       }
     >
       {s ? (
-        <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-3 lg:grid-cols-5">
+        <dl className={cn("grid grid-cols-2 gap-px bg-border", stats.length >= 5 ? "sm:grid-cols-3 lg:grid-cols-5" : stats.length === 4 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
           {stats.map((x, i) => (
-            // An odd last tile spans the row on phones (2 columns) and tablets (3 columns) so no empty cell shows.
-            <div
-              key={x.label}
-              className={cn(
-                "min-w-0 bg-card px-4 py-3",
-                i === stats.length - 1 && stats.length % 2 === 1 && "col-span-2 sm:col-span-1",
-                i === stats.length - 1 && stats.length % 3 === 2 && "sm:col-span-2 lg:col-span-1",
-              )}
-            >
-              <p className="eyebrow">{x.label}</p>
-              <p className="num mt-0.5 text-lg font-semibold">{x.value}</p>
-              {x.hint && <p className="num truncate text-[11px] text-muted-foreground">{x.hint}</p>}
+            // An odd last tile spans the row on phones (2 columns) so no empty cell shows.
+            <div key={x.label} className={cn("min-w-0 bg-card px-4 py-3", i === stats.length - 1 && stats.length % 2 === 1 && "col-span-2 sm:col-span-1", i === stats.length - 1 && stats.length === 5 && "sm:col-span-2 lg:col-span-1")}>
+              <dt className={IR.eyebrow}>{x.label}</dt>
+              <dd className={cn("mt-1", IR.stat)}>{x.value}</dd>
+              {x.hint && <dd className={cn("num truncate", IR.caption)}>{x.hint}</dd>}
             </div>
           ))}
-        </div>
+        </dl>
       ) : (
-        <div className="flex items-center gap-2 p-5 text-sm text-muted-foreground">
-          <FileStack className="size-4" /> No data has been read from this company's documents yet.
+        <div className="flex items-start gap-2 px-4 py-3 text-[13px]">
+          <FileStack className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+          <p>
+            {files.toLocaleString()} stored file{files === 1 ? " is" : "s are"} listed under Source documents.
+            <span className={cn("block", IR.caption)}>{pending ? "Key metrics, the financial map and breakdowns are built once those files are read." : "None of them has been read for figures yet."}</span>
+          </p>
         </div>
       )}
       {sec.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 border-t px-4 py-2 text-xs">
+        <div className={cn("flex flex-wrap items-center gap-2 border-t px-4 py-2", IR.caption)}>
           {secBad.length ? (
             <Tooltip>
-              <TooltipTrigger className="inline-flex items-center gap-1 text-foreground">
-                <TriangleAlert className="size-3.5 text-warning" />
-                Release top line matches SEC-reported revenue in {sec.length -
-                  secBad.length} of {sec.length} quarters
+              <TooltipTrigger className="inline-flex items-center gap-1.5 text-foreground">
+                <span aria-hidden className="inline-block size-1.5 rounded-full bg-warning" />
+                Release top line matches SEC-reported revenue in {sec.length - secBad.length} of {sec.length} quarters
               </TooltipTrigger>
               <TooltipContent className="max-w-sm text-xs">
                 {secBad.slice(-6).map((b) => (
                   <p key={b.period}>
-                    {fmtDate(b.period)}: release {fmtCompactUsd(b.ir, 2)} vs 10-Q/10-K{" "}
-                    {fmtCompactUsd(b.sec, 2)}
+                    {fmtDate(b.period)}: release {fmtCompactUsd(b.ir, 2)} vs 10-Q/10-K {fmtCompactUsd(b.sec, 2)}
                   </p>
                 ))}
-                <p className="mt-1 opacity-75">
-                  Differences usually come from later recasts (divestitures, reclassifications) in
-                  the SEC statements.
-                </p>
+                <p className="mt-1 opacity-75">Differences usually come from later recasts (divestitures, reclassifications) in the SEC statements.</p>
               </TooltipContent>
             </Tooltip>
           ) : (
-            <span className="inline-flex items-center gap-1 text-positive">
-              <CheckCircle2 className="size-3.5" /> Release top line matches SEC-reported revenue in
-              all {sec.length} overlapping quarters
-            </span>
+            <span>Release top line matches SEC-reported revenue in all {sec.length} overlapping quarters</span>
           )}
         </div>
       )}
-    </Panel>
+    </IrPanel>
   );
 }

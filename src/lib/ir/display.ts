@@ -92,41 +92,83 @@ const n0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const n1 = new Intl.NumberFormat("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const n2 = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const DIV: Record<Scale, number> = { full: 1, K: 1e3, M: 1e6, B: 1e9 };
-const paren = (v: number, s: string) => (v < 0 ? `(${s})` : s);
+/** True minus sign; financial tables print negatives as −1,234 rather than (1,234). */
+const signed = (v: number, s: string) => (v < 0 ? `−${s}` : s);
+const fixed = (d: number) => new Intl.NumberFormat("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const FIXED = [fixed(0), fixed(1), fixed(2)];
 
-/** Table cell text, accounting style; dollars follow the shared Full/$K/$M/$B toggle. */
-export function fmtIr(v: number, unit: string, scale: Scale): string {
+export interface IrFormat {
+  /** decimals for every cell of a row (see `rowDecimals`) */
+  decimals?: number;
+  /** one divisor for a whole table of counts (see `countScale`); the caption states it */
+  countDiv?: number;
+}
+
+/** Table cell text; dollars follow the shared Full/$K/$M/$B toggle. */
+export function fmtIr(v: number, unit: string, scale: Scale, f: IrFormat = {}): string {
   const a = Math.abs(v);
+  const d = f.decimals;
   switch (unit) {
     case "usd": {
       const x = a / DIV[scale];
-      return paren(v, scale === "B" ? n2.format(x) : scale === "full" ? n0.format(x) : x < 10 && x !== 0 ? n1.format(x) : n0.format(x));
+      if (d != null) return signed(v, FIXED[Math.min(2, d)].format(x));
+      return signed(v, scale === "B" ? n2.format(x) : scale === "full" ? n0.format(x) : x < 10 && x !== 0 ? n1.format(x) : n0.format(x));
     }
     case "usdPerShare":
-      return paren(v, n2.format(a));
+      return signed(v, n2.format(a));
     case "pct":
-      return `${n1.format(v)}%`.replace("-", "−");
+      return signed(v, `${(d != null ? FIXED[Math.min(2, d)] : n1).format(a)}%`);
     case "bps":
-      return `${n0.format(v)} bps`.replace("-", "−");
+      return signed(v, `${n0.format(a)} bps`);
     case "ratio":
-      return `${n2.format(v)}×`;
+      return signed(v, `${n2.format(a)}×`);
     case "count": {
-      if (scale === "full" || a < 1e5) return paren(v, a < 100 && !Number.isInteger(v) ? n1.format(a) : n0.format(a));
+      if (f.countDiv) return signed(v, FIXED[Math.min(2, d ?? (f.countDiv > 1 ? 1 : 0))].format(a / f.countDiv));
+      if (scale === "full" || a < 1e5) return signed(v, a < 100 && !Number.isInteger(v) ? n1.format(a) : n0.format(a));
       const x = a / DIV[scale === "B" && a < 1e8 ? "M" : scale];
       const suffix = scale === "B" && a >= 1e8 ? "B" : scale === "K" ? "K" : "M";
-      return paren(v, `${x < 10 ? n2.format(x) : n1.format(x)}${suffix}`);
+      return signed(v, `${x < 10 ? n2.format(x) : n1.format(x)}${suffix}`);
     }
     default:
-      return n2.format(v);
+      return signed(v, (d != null ? FIXED[Math.min(2, d)] : n2).format(a));
   }
 }
 
-export function unitCaption(unit: string, scale: Scale) {
+/**
+ * One decimal convention per row: dollars in the chosen scale get one decimal only when every value
+ * of the row is under 10 (so 9.8 and 12 never sit side by side as "9.8" and "12"); other units keep
+ * their natural precision.
+ */
+export function rowDecimals(values: number[], unit: string, scale: Scale): number | undefined {
+  if (!values.length) return undefined;
+  if (unit === "usd") {
+    if (scale === "full") return 0;
+    if (scale === "B") return 2;
+    const max = Math.max(...values.map((v) => Math.abs(v) / DIV[scale]));
+    return max < 10 && max > 0 ? 1 : 0;
+  }
+  const tenths = (v: number) => Math.abs(v * 10 - Math.round(v * 10)) < 1e-6;
+  if (unit === "pct") return values.every(tenths) ? 1 : 2;
+  if (unit === "other") return values.every((v) => Number.isInteger(v)) ? 0 : values.every(tenths) ? 1 : 2;
+  return undefined;
+}
+
+/** One scale for a whole table of counts, so cells carry no suffix: thousands are written out. */
+export function countScale(values: number[]): { div: number; caption: string } {
+  const max = Math.max(0, ...values.map(Math.abs));
+  if (max >= 1e9) return { div: 1e9, caption: "count, billions" };
+  if (max >= 1e6) return { div: 1e6, caption: "count, millions" };
+  return { div: 1, caption: "count" };
+}
+
+export function unitCaption(unit: string, scale: Scale, countCaption?: string) {
+  if (unit === "count" && countCaption) return countCaption;
   if (unit === "usd") return scale === "full" ? "US dollars" : scale === "K" ? "$ thousands" : scale === "M" ? "$ millions" : "$ billions";
   if (unit === "usdPerShare") return "$ per unit";
   if (unit === "pct") return "percent";
   if (unit === "bps") return "basis points";
   if (unit === "ratio") return "ratio";
+  if (unit === "other") return "as printed";
   return "count";
 }
 
@@ -249,4 +291,29 @@ export function rowLabel(label: string, rootLabel?: string | null, px?: string) 
     if (re.test(rootLabel)) return label.replace(re, "") || label;
   }
   return label;
+}
+
+/** File-name titles: ids, exhibit names, squashed words ("q2fy26pr", "sbeoainvidia portsrelease", "8-K … ex_971310.htm"). */
+const FILE_LIKE = [
+  /\d{5,}/,
+  /^(ex|d)\d/i,
+  /ex[-_ ]?99/i,
+  /\.(html?|pdf|xlsx?|pptx?)\b/i,
+  /^[0-9a-f]{8}[ -][0-9a-f]{4}[ -]/i,
+  /^[a-z0-9]+[_-][a-z0-9_-]+$/i,
+];
+const squashed = (t: string) => t.split(/\s+/).some((w) => w.length >= 11 && /^[a-z0-9]+$/.test(w)) || t.split(/\s+/).some((w) => w.length >= 6 && /\d[a-z]|[a-z]\d/i.test(w) && !/^(q\d|fy\d|\d{1,2}q)/i.test(w));
+
+/**
+ * Library title of a stored document: its own title when it reads as one, else "<kind> · <period>"
+ * ("Earnings release · Nov 2026") from the document's period or filing date.
+ */
+export function libraryTitle(d: { title: string | null; period: string | null; filed: string | null }, kindName: string): string {
+  const t = d.title?.replace(/\s+/g, " ").trim() ?? "";
+  const looksLikeFile = !t || !/\s/.test(t) || FILE_LIKE.some((re) => re.test(t)) || (t === t.toLowerCase() && squashed(t));
+  if (!looksLikeFile) return t;
+  const iso = (x: string | null) => (x && /^\d{4}-\d{2}-\d{2}/.test(x) ? x.slice(0, 10) : null);
+  const at = iso(d.period) ?? iso(d.filed);
+  const when = at ? new Date(`${at}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" }) : d.period ?? "";
+  return [kindName, when].filter(Boolean).join(" · ");
 }

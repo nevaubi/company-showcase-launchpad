@@ -373,6 +373,28 @@ function dropSubTables(c: Ctx, groups: PayloadGroup[]) {
   }
 }
 
+/**
+ * A line whose only part prints the same numbers is one figure under two names (PNC's "Retail
+ * Banking" net income and the "Earnings" that closes the Retail Banking table): the part folds into
+ * the line, and its own parts move up with it.
+ */
+function foldSoleChildren(c: Ctx, g: PayloadGroup) {
+  const rows = g.rows.map((r) => c.byKey.get(resolve(c, r.k))).filter((s): s is PayloadSeries => !!s && !c.removed.has(s.k));
+  const inGroup = new Set(rows.map((s) => s.k));
+  for (const p of rows) {
+    if (c.removed.has(p.k)) continue;
+    const kids = (c.kids.get(p.k) ?? []).filter((k) => inGroup.has(k.k) && !c.removed.has(k.k));
+    if (kids.length !== 1) continue;
+    const k = kids[0];
+    if (k.unit !== p.unit || !!k.pit !== !!p.pit) continue;
+    const cmp = compare(p, k);
+    if (cmp.conflict || cmp.exact < 1 || [...periodsOf(k)].some((e) => !periodsOf(p).has(e))) continue;
+    const label = p.label;
+    absorb(c, p, k);
+    p.label = label;
+  }
+}
+
 interface Cluster {
   g: PayloadGroup;
   members: PayloadGroup[];
@@ -1189,6 +1211,7 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   }
 
   for (const clusters of clustersOf.values()) for (const cl of clusters) mergeCousins(c, cl.g);
+  for (const clusters of clustersOf.values()) for (const cl of clusters) foldSoleChildren(c, cl.g);
   foldLooseRepeats(c, out.groups.filter((g) => !drop.has(g)));
   dropSubTables(c, out.groups.filter((g) => !drop.has(g)));
 
@@ -1220,6 +1243,11 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   const mx = segmentMatrices(c, groups, checks);
   groups = mx.groups;
   checks.splice(0, checks.length, ...mx.checks);
+  // The segment step can leave a consolidated line in a loose list that another table already closes.
+  foldLooseRepeats(c, groups);
+  const inTables = new Set(groups.filter((g) => g.root).flatMap((g) => g.rows.map((r) => resolve(c, r.k))));
+  for (const g of groups) if (!g.root) g.rows = g.rows.map((r) => ({ ...r, k: resolve(c, r.k) })).filter((r) => !c.removed.has(r.k) && !inTables.has(r.k));
+  groups = groups.filter((g) => g.rows.length);
 
   // 4. Titles that tell tables apart: the total's own name, else the unit, else the years covered.
   groups = splitLoose(c, groups);

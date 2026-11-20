@@ -1,9 +1,10 @@
 import { useFeatureGate } from "@/hooks/use-plan";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { CheckCircle2, ChevronDown, ChevronsDown, Download, FileSpreadsheet, FileText, Info, Loader2, Search, TriangleAlert } from "lucide-react";
+import { ChevronDown, ChevronsDown, Download, FileSpreadsheet, FileText, Info, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import wordmark from "@/assets/brand/wordmark.png.asset.json";
-import { Panel } from "@/components/app/page-header";
+import { IrPanel, useFits } from "@/components/ir/panel";
+import { DASH, IR, indentStyle } from "@/components/ir/typography";
 import { Segmented } from "@/components/app/segmented";
 import { ComboChart, type ComboSeries } from "@/components/charts/combo-chart";
 import { ScaleToggle } from "@/components/financials/scale-toggle";
@@ -16,10 +17,10 @@ import { useUnitScale } from "@/hooks/use-preference";
 import { coverageOf } from "@/lib/coverage";
 import { useCompany } from "@/lib/data";
 import { downloadBlob, fetchLogo, slug } from "@/lib/export/xlsx-theme";
-import { DIMENSIONS, derivedOf, fmtIr, groupColumns, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, refOf, rowLabel, unitCaption } from "@/lib/ir/display";
+import { DIMENSIONS, countScale, derivedOf, fmtIr, groupColumns, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, refOf, rowDecimals, rowLabel, unitCaption } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { currency } from "@/lib/ir/highlights";
-import { cellsFor, periodGrids } from "@/lib/ir/periods";
+import { cellsFor, fiscalLabel, fiscalYearEndMonth, periodGrids } from "@/lib/ir/periods";
 import { fmtCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -45,9 +46,9 @@ const SPANS: Record<Freq, { v: string; l: string }[]> = {
 };
 const DEFAULT_SPAN: Record<Freq, string> = { q: "8", y: "5", m: "12" };
 const FREQ_FILE: Record<Freq, string> = { q: "quarterly", y: "annual", m: "monthly" };
-/** Breakdowns rendered on first view; "show more" then adds STEP at a time. */
+/** Breakdowns rendered on first paint; the rest follow in the background, STEP at a time, so nothing waits behind a button. */
 const PAGE = 8;
-const STEP = 50;
+const STEP = 24;
 
 /** A line + period to open on arrival (links from exported workbooks). */
 export interface IrFocus {
@@ -109,7 +110,13 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
     return { groups: list.map((x) => x.g), older: firstOld };
   }, [payload, dim, byKey, freq, cols, q]);
   const visible = groups.slice(0, shown);
-  const remaining = groups.length - shown;
+  const fyEnd = useMemo(() => fiscalYearEndMonth(payload), [payload]);
+  // Render the rest of the breakdowns in the background, a batch per frame, without a "show more" step.
+  useEffect(() => {
+    if (shown >= groups.length) return;
+    const t = setTimeout(() => startGrowing(() => setShown((n) => n + STEP)), 16);
+    return () => clearTimeout(t);
+  }, [shown, groups.length]);
   const inViewAll = payload.checks.filter((c) => (c.kind === "fy" ? "y" : "q") === freq && cols.includes(c.e));
   const inView = inViewAll.filter((c) => !c.partial);
   const partialInView = new Set(inViewAll.filter((c) => c.partial).map((c) => c.k)).size;
@@ -226,12 +233,13 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
   };
 
   return (
-    <Panel
-      collapse={false}
-      title="Segment & KPI breakdowns"
+    <IrPanel
+      section="Segment and KPI breakdowns"
+      tour="ir-breakdowns"
+      title="Segment and KPI breakdowns"
       subtitle="Click any value to open the stored document at that cell"
       actions={
-        <div className="flex flex-wrap items-center gap-2">
+        <>
           <Segmented
             label="Period type"
             value={freq}
@@ -276,26 +284,26 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
+        </>
       }
     >
-      <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
+      <div data-agent-controls className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
         <Segmented label="Breakdown type" size="xs" value={dim} onChange={(v) => (setDim(v), setShown(PAGE))} options={DIMENSIONS.map((d) => ({ v: d.v, l: d.l }))} />
         <div className="relative ml-auto w-full sm:w-60">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input value={query} onChange={(e) => (setQuery(e.target.value), setShown(PAGE))} placeholder="Find a line, e.g. iPhone, cloud" className="h-8 pl-7 text-xs" aria-label="Find a line" />
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-1.5 text-xs text-muted-foreground">
+      <div className={cn("flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-1.5", IR.caption)}>
         <span className="num">
           {groups.length.toLocaleString()} breakdown{groups.length === 1 ? "" : "s"}
         </span>
         {inView.length > 0 && (
-          <span className={cn("inline-flex items-center gap-1", okInView === inView.length ? "text-positive" : "text-foreground")}>
-            {okInView === inView.length ? <CheckCircle2 className="size-3.5" /> : <TriangleAlert className="size-3.5 text-warning" />}
+          <span className={cn("inline-flex items-center gap-1.5", okInView < inView.length && "text-foreground")}>
+            {okInView < inView.length && <CheckDot />}
             <span className="num">
               {okInView.toLocaleString()} of {inView.length.toLocaleString()}
-            </span>{" "}
+            </span>
             totals equal the sum of their parts
           </span>
         )}
@@ -304,28 +312,28 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
             <Info className="size-3.5" /> How to read
           </TooltipTrigger>
           <TooltipContent align="end" className="max-w-sm space-y-1.5 text-xs">
-            <p>Each table starts at its oldest and ends at its newest reported period; a dash marks a period no stored document prints.</p>
+            <p>Columns run from the oldest to the newest period a table reports, headed by fiscal quarter or year with the calendar month under it; a dash marks a period no stored document prints.</p>
             {freq === "m" ? (
               <p>Month-end balances and counts from monthly operating reports, with the quarter-end values in between.</p>
             ) : (
               <p>
-                <em>Italic</em> values are calculated ({freq === "q" ? "fourth quarter = full year − first three quarters; second and third quarters from year-to-date columns" : "full year = sum of four quarters"}); hover one to see the formula.
+                Values with a dotted underline are calculated ({freq === "q" ? "fourth quarter = full year − first three quarters; second and third quarters from year-to-date columns" : "full year = sum of four quarters"}); hover one to see the formula.
               </p>
             )}
-            {partialInView > 0 && <p>{partialInView} breakdown{partialInView === 1 ? " lists" : "s list"} selected lines only — the rest of the total shows as “Not itemized”.</p>}
-            <p>Tables the company printed under different names over the years are combined into one, and repeats of the same table are shown once; every value still opens its own source.</p>
+            {partialInView > 0 && <p>{partialInView} breakdown{partialInView === 1 ? " lists" : "s list"} selected lines only; the rest of the total shows as “Not itemized”.</p>}
+            <p>Tables the company printed under different names over the years are combined into one, and a table or line printed twice is shown once; every value still opens its own source. A small amber dot marks a total whose parts don't add up; hover it for the numbers.</p>
           </TooltipContent>
         </Tooltip>
       </div>
 
       {!visible.length ? (
-        <p className="p-5 text-sm text-muted-foreground">{q ? `No lines match “${query}”.` : "Nothing in this view for the selected periods."}</p>
+        <p className="p-4 text-[13px] text-muted-foreground">{q ? `No lines match “${query}”.` : "Nothing in this view for the selected periods."}</p>
       ) : (
-        <div className="grid grid-cols-1 divide-y">
+        <div className="grid grid-cols-1 pb-4">
           {visible.map((g, i) => [
             i === older && (
-              <div key="__older" className="bg-secondary/40 px-4 py-1.5 text-[11px] text-muted-foreground">
-                Not in the latest {freq === "y" ? "years" : freq === "m" ? "months" : "quarters"} shown — older or discontinued tables
+              <div key="__older" className="mt-6 border-y bg-secondary/40 px-4 py-1.5">
+                <span className={IR.eyebrow}>Not in the latest {freq === "y" ? "years" : freq === "m" ? "months" : "quarters"} shown · older or discontinued tables</span>
               </div>
             ),
             <BreakdownCard
@@ -337,32 +345,22 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
               checks={checks}
               cols={cols}
               freq={freq}
+              fyEnd={fyEnd}
               scale={scale}
               highlight={q}
               exporting={exporting === g.id}
               onExcel={() => runExport({ kind: "group", group: g })}
             />,
           ])}
+          {growing || shown < groups.length ? (
+            <p role="status" className={cn("px-4 pt-4", IR.caption)}>
+              <Loader2 className="mr-1 inline size-3 animate-spin motion-reduce:animate-none" />
+              Laying out {Math.max(0, groups.length - shown).toLocaleString()} more breakdowns
+            </p>
+          ) : null}
         </div>
       )}
-      {remaining > 0 && (
-        <div className="flex flex-wrap items-center justify-center gap-2 border-t px-4 py-3">
-          <span className="num mr-1 text-xs text-muted-foreground">
-            Showing {shown.toLocaleString()} of {groups.length.toLocaleString()}
-          </span>
-          <Button variant="outline" size="sm" disabled={growing} onClick={() => startGrowing(() => setShown((n) => n + STEP))}>
-            {growing ? <Loader2 className="animate-spin" /> : <ChevronDown />}
-            {remaining <= STEP ? `Show the remaining ${remaining} breakdown${remaining > 1 ? "s" : ""}` : `Show ${STEP} more`}
-          </Button>
-          {remaining > STEP && (
-            <Button variant="ghost" size="sm" disabled={growing} onClick={() => startGrowing(() => setShown(groups.length))}>
-              <ChevronsDown />
-              Show all {remaining.toLocaleString()} remaining
-            </Button>
-          )}
-        </div>
-      )}
-    </Panel>
+    </IrPanel>
   );
 }
 
@@ -391,6 +389,7 @@ function BreakdownCard({
   checks,
   cols: viewCols,
   freq,
+  fyEnd,
   scale,
   highlight,
   exporting,
@@ -403,6 +402,7 @@ function BreakdownCard({
   checks: Map<string, PayloadCheck>;
   cols: string[];
   freq: Freq;
+  fyEnd: number | null;
   scale: ReturnType<typeof useUnitScale>[0];
   highlight: string;
   exporting: boolean;
@@ -410,6 +410,7 @@ function BreakdownCard({
 }) {
   const { open } = useSource();
   const [view, setView] = useState<"table" | "chart">("table");
+  const [wrap, fits] = useFits<HTMLDivElement>();
   const root = group.root ? byKey.get(group.root) : undefined;
   const rows = group.rows.map((r) => ({ ...r, s: byKey.get(r.k)! })).filter((r) => r.s && hasData(r.s, viewCols, freq));
   // From this table's oldest to its newest value only: no empty columns before or after its data.
@@ -426,6 +427,15 @@ function BreakdownCard({
     return c?.partial ? [[e, c] as const] : [];
   })) : new Map<string, PayloadCheck>();
   const title = groupTitle(group, root);
+  // A loose list can hold the same label from several tables (each segment's "Net interest income"): name the table.
+  const repeated = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const r of rows) n.set(r.s.label, (n.get(r.s.label) ?? 0) + 1);
+    return n;
+  }, [rows]);
+  // Counts get one scale for the whole table, stated in the caption instead of every cell.
+  const counts = group.unit === "count" ? countScale(rows.flatMap((r) => cols.map((e) => cellsOf(r.s)[e]?.v).filter((v): v is number => v != null))) : null;
+  const fmtOpts = (s: PayloadSeries) => ({ decimals: rowDecimals(cols.map((e) => cellsOf(s)[e]?.v).filter((v): v is number => v != null), s.unit, scale), countDiv: counts?.div });
 
   const openCell = (s: PayloadSeries, end: string, c: PayloadCell) => openIrCell(open, ticker, payload, s, end, freq, c);
 
@@ -464,36 +474,40 @@ function BreakdownCard({
     : [];
 
   if (!rows.length) return null;
+  const head = (e: string) => fiscalLabel(e, freq, fyEnd);
+  const stickyHead = fits ? "sticky top-14 z-10" : "";
   return (
     // Off-screen breakdowns skip layout and paint, so long lists (hundreds for big banks) stay smooth.
-    <section className="min-w-0 scroll-mt-20 [content-visibility:auto] [contain-intrinsic-size:auto_320px]" aria-label={title} data-group={group.id}>
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 pb-1 pt-3">
-        <div className="min-w-0">
-          <h3 className="text-[13px] font-semibold">{title}</h3>
-          <p className="text-[11px] text-muted-foreground">
-            {unitCaption(group.unit, scale)} · {rows.length} line{rows.length === 1 ? "" : "s"}
+    <section className="min-w-0 scroll-mt-24 pt-6 first:pt-4 [content-visibility:auto] [contain-intrinsic-size:auto_320px]" aria-label={title} data-group={group.id}>
+      <header className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 pb-3">
+        <div className="min-w-0 flex-1">
+          <h3 className={IR.group}>{title}</h3>
+          <p className={IR.caption}>
+            {unitCaption(group.unit, scale, counts?.caption)} · {rows.length} line{rows.length === 1 ? "" : "s"}
             {cols.length > 0 && (
-              <span className="num">
-                {" "}
-                · {cols.length === 1 ? periodLabel(cols[0], freq) : `${periodLabel(cols[0], freq)} – ${periodLabel(cols[cols.length - 1], freq)}`}
-              </span>
+              <>
+                {" · "}
+                {cols.length === 1 ? head(cols[0]).main : `${head(cols[0]).main} to ${head(cols[cols.length - 1]).main}`}
+              </>
             )}
             {partials.length > 0 && (
-              <span>
-                {" "}
-                · selected lines only ({Math.round(Math.min(...coverage) * 100)}
-                {Math.round(Math.min(...coverage) * 100) !== Math.round(Math.max(...coverage) * 100) ? `–${Math.round(Math.max(...coverage) * 100)}` : ""}% of the total itemized)
-              </span>
+              <>
+                {" · "}selected lines only, {Math.round(Math.min(...coverage) * 100)}
+                {Math.round(Math.min(...coverage) * 100) !== Math.round(Math.max(...coverage) * 100) ? `–${Math.round(Math.max(...coverage) * 100)}` : ""}% of the total itemized
+              </>
             )}
             {groupChecks.length > partials.length &&
               (failing ? (
-                <span className="text-warning"> · {failing} of {groupChecks.length - partials.length} totals off</span>
+                <span className="text-foreground">
+                  {" · "}
+                  <CheckDot /> {failing} of {groupChecks.length - partials.length} totals don't add up
+                </span>
               ) : (
-                <span className="text-positive"> · every total ties out</span>
+                <> · parts add up in every period</>
               ))}
           </p>
         </div>
-        <div className="ml-auto flex items-center gap-1">
+        <div data-agent-controls className="flex items-center gap-1">
           {chartable && (
             <Segmented
               label="View"
@@ -539,7 +553,7 @@ function BreakdownCard({
 
       {view === "chart" && chartable ? (
         <div className="px-3 pb-3">
-          <ComboChart categories={cols.map((c) => periodLabel(c, freq))} series={series} stacked height={240} leftFormat={(v) => (root!.unit === "usd" ? fmtCompact(v, 1) : fmtCompact(v, 1))} />
+          <ComboChart categories={cols.map((c) => head(c).main)} series={series} stacked height={240} leftFormat={(v) => fmtCompact(v, 1)} />
           <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 px-1 text-[11px] text-muted-foreground">
             {series.map((s) => (
               <span key={s.id} className="inline-flex items-center gap-1">
@@ -550,35 +564,40 @@ function BreakdownCard({
           </div>
         </div>
       ) : (
-        <div className="overflow-x-auto scrollbar-thin pb-2">
-          <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
+        <div ref={wrap} className={cn("relative border-t", !fits && "overflow-x-auto scrollbar-thin")}>
+          <table className={cn("min-w-full border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max")}>
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 min-w-56 max-w-80 border-b bg-card px-4 py-1.5 text-left text-[11px] font-normal text-muted-foreground">Line</th>
-                {cols.map((e) => (
-                  <th key={e} className="num whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-semibold" title={periodLong(e, freq)}>
-                    {periodLabel(e, freq)}
-                  </th>
-                ))}
+                <th scope="col" className={cn("left-0 z-20 min-w-56 border-b bg-card py-1.5 pl-4 pr-3 text-left align-bottom font-normal", !fits && "sticky", stickyHead)}>
+                  <span className="sr-only">Line</span>
+                </th>
+                {cols.map((e) => {
+                  const h = head(e);
+                  return (
+                    <th key={e} scope="col" className={cn("whitespace-nowrap border-b bg-card px-3 py-1.5 text-right align-bottom font-normal", stickyHead)} title={periodLong(e, freq)}>
+                      <span className="num block text-[11px] font-medium text-foreground">{h.main}</span>
+                      {h.sub && <span className="num block text-[11px] text-muted-foreground">{h.sub}</span>}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
               {rows.map(({ k, s, depth }) => {
                 const cells = cellsOf(s);
-                const present = cols.map((e) => !!cells[e]);
-                const extent = { first: present.indexOf(true), last: present.lastIndexOf(true) };
                 const isRoot = root?.k === k;
+                const d = root ? depth : 0;
+                const opts = fmtOpts(s);
+                const rule = isRoot ? "border-t border-t-foreground/40" : s.total ? "border-t border-t-border" : "";
                 const residual = isRoot && partialCols.size > 0 && (
                   <tr key="__residual" className="group">
-                    <th scope="row" className="sticky left-0 z-10 max-w-80 border-b bg-card px-4 py-1 text-left font-normal italic text-muted-foreground group-hover:bg-secondary">
-                      <span className="block truncate" style={{ paddingLeft: 14 }}>
-                        Not itemized in the release
-                      </span>
+                    <th scope="row" className="sticky left-0 z-[1] max-w-[22rem] border-b bg-card py-1 pr-3 text-left font-normal text-muted-foreground transition-colors duration-150 group-hover:bg-secondary" style={indentStyle(1)}>
+                      Not itemized in the release
                     </th>
                     {cols.map((e) => {
                       const c = partialCols.get(e);
                       const tc = cellsOf(s)[e];
-                      if (!c || !tc) return <td key={e} className="num border-b px-3 py-1 text-right text-muted-foreground/40">—</td>;
+                      if (!c || !tc) return <td key={e} className={cn("border-b px-3 py-1", IR.num, IR.missing)}>{DASH}</td>;
                       const kids = directKids.filter((r) => cellsOf(r.s)[e]);
                       const v = c.total - c.sum;
                       const openResidual = () => {
@@ -589,12 +608,12 @@ function BreakdownCard({
                             return { ...(refOf(payload, { ...kc, e: kc.e ?? e }, r.s.label) ?? { accn: "", concept: r.s.label, end: e, value: kc.v }), label: r.s.label, sign: -1 as const };
                           }),
                         ];
-                        open({ ticker, label: `${s.label} — not itemized`, periodLabel: periodLong(e, freq), unit: s.unit, value: v, derived: { formula: "Printed total − listed lines", parts } });
+                        open({ ticker, label: `${s.label}, not itemized`, periodLabel: periodLong(e, freq), unit: s.unit, value: v, derived: { formula: "Printed total − listed lines", parts } });
                       };
                       return (
-                        <td key={e} className="border-b p-0 group-hover:bg-secondary/60">
-                          <button onClick={openResidual} className="num block w-full whitespace-nowrap px-3 py-1 text-right italic text-muted-foreground tabular-nums hover:bg-highlight-soft">
-                            {fmtIr(v, s.unit, scale)}
+                        <td key={e} className="border-b p-0 transition-colors duration-150 group-hover:bg-secondary/60">
+                          <button type="button" onClick={openResidual} title="Printed total − listed lines" className={cn(IR.cellButton, IR.num, "text-muted-foreground")}>
+                            <span className={IR.derived}>{fmtIr(v, s.unit, scale, opts)}</span>
                           </button>
                         </td>
                       );
@@ -608,52 +627,48 @@ function BreakdownCard({
                     <th
                       scope="row"
                       className={cn(
-                        "sticky left-0 z-10 max-w-80 border-b bg-card px-4 py-1 text-left font-normal group-hover:bg-secondary",
-                        s.total && "font-semibold",
-                        isRoot && "border-t-2 border-t-foreground/70",
+                        "sticky left-0 z-[1] max-w-[22rem] border-b bg-card py-1 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary",
+                        s.total && IR.total,
+                        rule,
                         match && "bg-highlight-soft",
                       )}
+                      style={indentStyle(d)}
+                      title={s.sc ? `${s.label} · ${s.sc}` : undefined}
                     >
-                      <span className="block truncate" style={{ paddingLeft: root ? depth * 14 : 0 }} title={s.sc ? `${s.label} · ${s.sc}` : s.label}>
-                        {isRoot ? s.label : rowLabel(s.label, root?.label, group.px)}
-                        {s.sc && !isRoot && root?.sc !== s.sc && <span className="ml-1 text-[11px] font-normal text-muted-foreground">· {s.sc}</span>}
-                        {s.pit && <span className="ml-1 text-[10px] font-normal text-muted-foreground">(period end)</span>}
-                      </span>
+                      {d >= 2 && <span aria-hidden className="absolute inset-y-0 border-l border-border" style={{ left: indentStyle(d - 1).paddingLeft + 4 }} />}
+                      {isRoot ? s.label : rowLabel(s.label, root?.label, group.px)}
+                      {s.sc && !isRoot && root?.sc !== s.sc ? (
+                        <span className={cn("ml-1 font-normal", IR.caption)}>· {s.sc}</span>
+                      ) : !root && s.bd && (repeated.get(s.label) ?? 0) > 1 ? (
+                        <span className={cn("ml-1 font-normal", IR.caption)}>· {s.bd}</span>
+                      ) : null}
+                      {s.pit && <span className={cn("ml-1 font-normal", IR.caption)}>at period end</span>}
                     </th>
-                    {cols.map((e, i) => {
+                    {cols.map((e) => {
                       const c = cells[e];
                       const chk = s.total ? checks.get(`${k}|${freq}|${e}`) : undefined;
-                      if (!c) {
-                        // Before a line's first or after its last value stays blank; a dash marks a real gap.
-                        const gap = i > extent.first && i < extent.last;
+                      if (!c)
                         return (
-                          <td key={e} title={gap ? "Not printed in any stored document for this period" : undefined} className={cn("num border-b px-3 py-1 text-right text-muted-foreground/40", isRoot && "border-t-2 border-t-foreground/70")}>
-                            {gap ? "—" : ""}
+                          <td key={e} title="Not printed in any stored document for this period" className={cn("border-b px-3 py-1 transition-colors duration-150 group-hover:bg-secondary/60", IR.num, IR.missing, rule)}>
+                            {DASH}
                           </td>
                         );
-                      }
+                      const off = chk && !chk.ok && !chk.partial;
                       return (
-                        <td key={e} className={cn("border-b p-0 group-hover:bg-secondary/60", isRoot && "border-t-2 border-t-foreground/70")}>
+                        <td key={e} className={cn("border-b p-0 transition-colors duration-150 group-hover:bg-secondary/60", rule)}>
                           <Tooltip delayDuration={350}>
                             <TooltipTrigger asChild>
-                              <button
-                                onClick={() => openCell(s, e, c)}
-                                className={cn(
-                                  "num block w-full whitespace-nowrap px-3 py-1 text-right tabular-nums hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                                  s.total && "font-medium",
-                                  c.f && "italic text-foreground/85",
-                                  c.v < 0 && "text-negative",
-                                  chk && !chk.ok && "underline decoration-warning decoration-wavy underline-offset-4",
-                                  c.w === "scale" && "bg-warning-soft text-warning",
-                                )}
-                              >
-                                {fmtIr(c.v, s.unit, scale)}
+                              <button type="button" onClick={() => openCell(s, e, c)} className={cn(IR.cellButton, IR.num, s.total && IR.total, c.w === "scale" && "bg-warning-soft")}>
+                                <span className={cn(c.f && IR.derived)}>{fmtIr(c.v, s.unit, scale, opts)}</span>
+                                {off && <CheckDot className="ml-1" />}
+                                {off && <span className="sr-only"> (parts do not add up)</span>}
                               </button>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-xs text-xs">
-                              <p>{c.f ? c.f.formula : c.x ? `Printed as “${c.x}”` : periodLong(e, freq, c.m)}</p>
+                              <p className="font-medium">{periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m)}</p>
+                              <p>{c.f ? `Calculated: ${c.f.formula}` : c.x ? `Printed as “${c.x}”` : "Click to open the source"}</p>
                               {c.d != null && payload.docs[c.d]?.filed && <p className="opacity-75">From the {payload.docs[c.d].kind?.replace("-", " ") ?? "document"} filed {payload.docs[c.d].filed}</p>}
-                              {c.w === "scale" && <p className="font-medium text-warning">About 1,000× off the neighbouring periods — a different unit or measure may have been read here. Check the source.</p>}
+                              {c.w === "scale" && <p className="font-medium">About 1,000× off the neighbouring periods: a different unit or measure may have been read here. Check the source.</p>}
                               {chk && <CheckLine chk={chk} unit={s.unit} scale={scale} />}
                             </TooltipContent>
                           </Tooltip>
@@ -663,55 +678,17 @@ function BreakdownCard({
                   </tr>,
                 ];
               })}
-              {root && root.total && cols.some((e) => checks.has(`${root.k}|${freq}|${e}`)) && (
-                <tr>
-                  <th scope="row" className="sticky left-0 z-10 bg-card px-4 py-1 text-left text-[11px] font-normal text-muted-foreground">
-                    Check: parts = total
-                  </th>
-                  {cols.map((e) => {
-                    const chk = checks.get(`${root.k}|${freq}|${e}`);
-                    return (
-                      <td key={e} className="px-3 py-1 text-right text-[11px]">
-                        {!chk ? (
-                          <span className="text-muted-foreground/40">·</span>
-                        ) : chk.partial ? (
-                          <Tooltip delayDuration={250}>
-                            <TooltipTrigger className="num text-muted-foreground">{Math.round((chk.sum / chk.total) * 100)}% listed</TooltipTrigger>
-                            <TooltipContent className="max-w-xs text-xs">
-                              <CheckLine chk={chk} unit={root.unit} scale={scale} />
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : chk.ok ? (
-                          <Tooltip delayDuration={250}>
-                            <TooltipTrigger className="inline-flex items-center text-positive" aria-label="Parts add up to the total">
-                              <CheckCircle2 className="size-3.5" />
-                            </TooltipTrigger>
-                            <TooltipContent className="text-xs">
-                              <CheckLine chk={chk} unit={root.unit} scale={scale} />
-                            </TooltipContent>
-                          </Tooltip>
-                        ) : (
-                          <Tooltip delayDuration={250}>
-                            <TooltipTrigger className="num inline-flex items-center gap-0.5 text-warning">
-                              <TriangleAlert className="size-3" />
-                              {fmtIr(chk.sum - chk.total, root.unit, scale)}
-                            </TooltipTrigger>
-                            <TooltipContent className="max-w-xs text-xs">
-                              <CheckLine chk={chk} unit={root.unit} scale={scale} />
-                            </TooltipContent>
-                          </Tooltip>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
       )}
     </section>
   );
+}
+
+/** Quiet marker for a total whose parts don't add up (the numbers are in its tooltip). */
+function CheckDot({ className }: { className?: string }) {
+  return <span aria-hidden className={cn("inline-block size-1.5 shrink-0 rounded-full bg-warning align-middle", className)} />;
 }
 
 function CheckLine({ chk, unit, scale }: { chk: PayloadCheck; unit: string; scale: ReturnType<typeof useUnitScale>[0] }) {
@@ -722,14 +699,14 @@ function CheckLine({ chk, unit, scale }: { chk: PayloadCheck; unit: string; scal
       </p>
     );
   return chk.ok ? (
-    <p className="text-positive">
+    <p>
       {chk.sub?.length
         ? `${chk.n} parts net to ${fmtIr(chk.sum, unit, scale)} = printed total, with ${chk.sub.join(", ")} subtracted`
         : `${chk.n} parts sum to ${fmtIr(chk.sum, unit, scale)} = printed total`}
     </p>
   ) : (
     <p>
-      <span className="text-warning">Parts sum to {fmtIr(chk.sum, unit, scale)}</span> vs printed total {fmtIr(chk.total, unit, scale)} (difference {fmtIr(chk.sum - chk.total, unit, scale)})
+      Parts sum to {fmtIr(chk.sum, unit, scale)} vs printed total {fmtIr(chk.total, unit, scale)} (difference {fmtIr(chk.sum - chk.total, unit, scale)})
     </p>
   );
 }

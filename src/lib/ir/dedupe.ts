@@ -34,3 +34,21 @@ export function duplicateOf<T extends { figures: Set<string> }>(candidate: Set<s
   }
   return best?.o ?? null;
 }
+
+/**
+ * The library lists a document once. A stored copy the readers skipped as a duplicate of another
+ * stored document ("skipped:duplicate of <id>", an IR-site PDF of an 8-K exhibit) is folded under the
+ * copy that was read, which says so ("also stored as PDF"). Copies whose original is not in the list
+ * stay listed.
+ */
+export function collapseDocCopies<T extends { id: string; extract_status: string | null }>(docs: T[]): { docs: T[]; copies: Map<string, T[]> } {
+  const ids = new Set(docs.map((d) => d.id));
+  const copies = new Map<string, T[]>();
+  const kept: T[] = [];
+  for (const d of docs) {
+    const of = /^skipped:duplicate of ([\w:-]+)/.exec(d.extract_status ?? "")?.[1];
+    if (of && of !== d.id && ids.has(of)) copies.set(of, [...(copies.get(of) ?? []), d]);
+    else kept.push(d);
+  }
+  return { docs: kept, copies };
+}

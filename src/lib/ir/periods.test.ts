@@ -1,3 +1,4 @@
+import { fiscalLabel, fiscalYearEndMonth } from "./periods";
 import { describe, expect, it } from "vitest";
 import type { IrPayload, PayloadSeries } from "./payload";
 import { cellsFor, closingMonth, periodGrids, quarterMonths } from "./periods";
@@ -42,5 +43,21 @@ describe("IR period grids", () => {
     const p = payload(["2025-12-31", "2026-02-28"], ["2025-12-31"], [series("Revenue", { "2025-12-31": 1, "2026-02-28": 2 }, { unit: "usd" })]);
     expect(periodGrids(p).q).toEqual(["2025-12-31", "2026-02-28"]);
     expect(periodGrids(p).m).toEqual([]);
+  });
+});
+
+describe("fiscal column heads", () => {
+  it("names NVIDIA's quarters by its January fiscal year", () => {
+    expect(fiscalLabel("2024-10-27", "q", 1)).toEqual({ main: "Q3 FY25", sub: "Oct ’24" });
+    expect(fiscalLabel("2025-01-26", "q", 1)).toEqual({ main: "Q4 FY25", sub: "Jan ’25" });
+    expect(fiscalLabel("2025-04-27", "q", 1)).toEqual({ main: "Q1 FY26", sub: "Apr ’25" });
+    expect(fiscalLabel("2026-02-01", "y", 1)).toEqual({ main: "FY26", sub: "Jan ’26" });
+  });
+  it("reads calendar quarters when the payload shows a December year-end", () => {
+    expect(fiscalLabel("2026-06-30", "q", 12)).toEqual({ main: "Q2 FY26", sub: "Jun ’26" });
+    expect(fiscalYearEndMonth({ years: [], series: [{ k: "a", cat: "kpi", met: "other", label: "x", parent: null, total: false, unit: "usd", q: { "2026-03-31": { v: 1, m: 3 }, "2026-06-30": { v: 1, m: 3 } }, y: {} }] })).toBe(12);
+  });
+  it("leads with the calendar month when the fiscal year-end is unknown", () => {
+    expect(fiscalLabel("2024-10-27", "q", null)).toEqual({ main: "Oct ’24", sub: "" });
   });
 });
