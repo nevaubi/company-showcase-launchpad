@@ -237,8 +237,6 @@ interface Ctx {
   log?: string[];
   /** line key → id of the loose list that keeps it after a loose-to-loose fold */
   home: Map<string, string>;
-  /** total key → keys of the parts the release printed under it, before any fold */
-  origKids: Map<string, string[]>;
   /** fiscal year-ends of the payload, built on first use */
   yearEnds?: Set<string>;
 }
@@ -949,28 +947,11 @@ function recheck(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): Payloa
     const inGroup = new Set(g.rows.map((r) => r.k));
     for (const r of g.rows) {
       const s = c.byKey.get(r.k);
-      if (s?.parent && inGroup.has(s.parent)) append(kidsOf, s.parent, s);
+      // A line shown in two tables under the same total is one part, not two.
+      if (s?.parent && inGroup.has(s.parent) && !kidsOf.get(s.parent)?.includes(s)) append(kidsOf, s.parent, s);
     }
   }
   const touched = new Set([...c.touched].map((k) => resolve(c, k)));
-  // Which tables show each line, so a part that left a total can be told apart: moved to another
-  // table (the release's own check stands) or folded away inside this one (the check is redone).
-  const tablesOf = new Map<string, Set<PayloadGroup>>();
-  for (const g of groups)
-    for (const r of g.rows) {
-      const set = tablesOf.get(r.k);
-      if (set) set.add(g);
-      else tablesOf.set(r.k, new Set([g]));
-    }
-  const movedAway = (k: string, kids: PayloadSeries[]) => {
-    const mine = tablesOf.get(k) ?? new Set<PayloadGroup>();
-    const present = new Set(kids.map((s) => s.k));
-    const gone = (c.origKids.get(k) ?? []).map((x) => resolve(c, x)).filter((x) => !present.has(x));
-    return gone.length > 0 && gone.every((x) => {
-      const where = tablesOf.get(x);
-      return !!where && [...where].every((g) => !mine.has(g));
-    });
-  };
   const out: PayloadCheck[] = [];
   for (const x of checks) {
     const total = c.byKey.get(x.k);
@@ -992,10 +973,9 @@ function recheck(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): Payloa
     }
     const ok = Math.abs(sum - t.v) <= tol;
     // Fewer parts than the release printed (one now sits in another table): the release's own check stands.
-    if (!ok && x.ok && present.length <= x.n && movedAway(x.k, kids)) {
-      out.push(x);
-      continue;
-    }
+    // Fewer parts shown than the release printed, and they don't add up: nothing on the page can
+    // confirm or refute the total, so the period is left unchecked (never kept as "adds up").
+    if (!ok && present.length < x.n) continue;
     // A selected-lines list stays one while its parts don't exceed the total.
     const partial = x.partial && !ok && Math.abs(sum) < Math.abs(t.v) ? true : undefined;
     out.push({ ...x, total: t.v, sum, ok, n: present.length, ...(partial ? { partial } : { partial: undefined }) });
@@ -1014,6 +994,17 @@ function checkable(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[]): Payl
     const parts = g.rows.map((r) => c.byKey.get(r.k)).filter((s): s is PayloadSeries => !!s && s.parent === g.root);
     if (parts.length) partsOf.set(g.root, parts);
   }
+  // Totals with at least one part shown under them: a check of a total whose parts all left for
+  // other tables can't be read off the page, so it goes.
+  const shownUnder = new Set<string>();
+  for (const g of groups) {
+    const inGroup = new Set(g.rows.map((r) => r.k));
+    for (const r of g.rows) {
+      const s = c.byKey.get(r.k);
+      if (s?.parent && inGroup.has(s.parent)) shownUnder.add(s.parent);
+    }
+  }
+  checks = checks.filter((x) => shownUnder.has(x.k));
   const most = new Map<string, number>();
   const present = (x: PayloadCheck) => (partsOf.get(x.k) ?? []).filter((s) => (x.kind === "fy" ? s.y : s.q)[x.e]).length;
   for (const x of checks) most.set(`${x.k}|${x.kind}`, Math.max(most.get(`${x.k}|${x.kind}`) ?? 0, present(x)));
@@ -1452,14 +1443,11 @@ export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayl
   if (p.tidy === TIDY_VERSION && !opts.log) return p;
   const series = p.series.map((s) => ({ ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) }));
   const out: IrPayload = { ...p, series, groups: p.groups.map((g) => ({ ...g, t: undefined, rows: [...g.rows] })), checks: p.checks.map((x) => ({ ...x })) };
-  const c: Ctx = { p: out, byKey: new Map(series.map((s) => [s.k, s])), alias: new Map(Object.entries(p.alias ?? {})), removed: new Set(), kids: new Map(), renamed: new Map(), touched: new Set(), home: new Map(), origKids: new Map(), log: opts.log };
+  const c: Ctx = { p: out, byKey: new Map(series.map((s) => [s.k, s])), alias: new Map(Object.entries(p.alias ?? {})), removed: new Set(), kids: new Map(), renamed: new Map(), touched: new Set(), home: new Map(), log: opts.log };
   for (const s of series) if (s.parent) {
     const kids = c.kids.get(s.parent);
     if (kids) kids.push(s);
     else c.kids.set(s.parent, [s]);
-    const orig = c.origKids.get(s.parent);
-    if (orig) orig.push(s.k);
-    else c.origKids.set(s.parent, [s.k]);
   }
   const before = { groups: out.groups.length, series: series.length };
   stocks(c);

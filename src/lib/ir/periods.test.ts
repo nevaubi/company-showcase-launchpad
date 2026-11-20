@@ -61,6 +61,10 @@ describe("fiscal column heads", () => {
     expect(fiscalLabel("2024-11-03", "q", hd)).toMatchObject({ main: "Q3", sub: "Oct ’24" });
     expect(fiscalLabel("2025-02-02", "y", hd).main).not.toMatch(/FY2[45]/);
   });
+  it("is not thrown by a stray calendar-year column among January year-ends", () => {
+    const nv = cal(["2024-01-28", "2024-12-31", "2025-01-26", "2026-01-25"]);
+    expect(fiscalLabel("2024-10-27", "q", nv)).toMatchObject({ main: "Q3", sub: "Oct ’24" });
+  });
   it("follows each era's year-end when a company changes it", () => {
     const ch = cal(["2022-06-30", "2023-06-30", "2024-12-31", "2025-12-31"]);
     expect(fiscalLabel("2025-12-31", "q", ch).main).toBe("Q4 FY25");

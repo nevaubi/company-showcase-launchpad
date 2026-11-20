@@ -471,3 +471,18 @@ describe("speed on a bank-sized payload (review H3)", () => {
     expect(performance.now() - t).toBeLessThan(10_000);
   });
 });
+
+describe("checks are read off the page (review C2)", () => {
+  it("drops a check of a total none of whose parts is shown under it", () => {
+    const Q = { "2026-01-25": 62314e6 };
+    const series = [
+      line("dc", "Data Center", Q, { met: "revenue", cat: "product" }),
+      line("hy", "Hyperscale", { "2026-01-25": 33814e6 }, { parent: "dc" }),
+      line("t", "Total revenue", { "2026-01-25": 68127e6 }, { total: true }),
+      line("gm", "Gaming", { "2026-01-25": 5813e6 }, { parent: "t" }),
+    ];
+    const groups = [table("t", "t", ["dc", "gm"]), { id: "loose", cat: "segment", met: "revenue", unit: "usd", label: "", root: null, rows: [{ k: "hy", depth: 0 }] } as PayloadGroup];
+    const checks: PayloadCheck[] = [{ k: "dc", e: "2026-01-25", kind: "q", total: 62314e6, sum: 124628e6, ok: false, n: 4 }];
+    expect(tidyPayload(payload(series, groups, checks)).checks.filter((c) => c.k === "dc")).toEqual([]);
+  });
+});

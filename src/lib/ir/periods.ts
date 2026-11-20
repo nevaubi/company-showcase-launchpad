@@ -138,9 +138,14 @@ const DAY = 86_400_000;
  */
 export function yearEndFor(end: string, cal: FiscalCalendar): number | null {
   const t = Date.parse(end);
-  const after = cal.ends.find((y) => Date.parse(y) >= t - 7 * DAY && Date.parse(y) - t <= 371 * DAY);
+  // Year columns can include a stray calendar year from one document: among the year-ends that could
+  // close this period, the month the company uses most wins, then the nearest.
+  const weight = new Map<number, number>();
+  for (const y of cal.ends) weight.set(closingMonth(y), (weight.get(closingMonth(y)) ?? 0) + 1);
+  const pick = (list: string[]) => list.reduce<string | undefined>((best, y) => (!best || weight.get(closingMonth(y))! > weight.get(closingMonth(best))! ? y : best), undefined);
+  const after = pick(cal.ends.filter((y) => Date.parse(y) >= t - 7 * DAY && Date.parse(y) - t <= 371 * DAY));
   if (after) return closingMonth(after);
-  const before = cal.ends.filter((y) => Date.parse(y) < t).at(-1);
+  const before = pick(cal.ends.filter((y) => Date.parse(y) < t && t - Date.parse(y) <= 371 * DAY)) ?? cal.ends.filter((y) => Date.parse(y) < t).at(-1);
   return before ? closingMonth(before) : cal.fallback;
 }
 
