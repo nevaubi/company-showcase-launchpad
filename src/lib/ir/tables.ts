@@ -76,9 +76,20 @@ export function parseTables(html: string): ParsedTable[] {
   return tables;
 }
 
-/** "1,234" → 1234, "(1,234)" → −1234, "$ 12.5" → 12.5, "12.5%" → 12.5; null for non-numbers. */
+/**
+ * Two numbers in one cell: digits, then space, then (after an optional currency sign or opening
+ * parenthesis) more digits. A rendition that merges two columns prints "36,500 $35,082" or
+ * "$115,186 68 %"; read as one number that becomes 3,650,035,082. The cell is never read: which of
+ * the two belongs to the column can't be known from the text.
+ */
+const TWO_NUMBERS = /\d[\d,.]*\)?\s*%?\s+[$€£(]*\s*\(?[-−–]?\s*\d/;
+
+/** "1,234" → 1234, "(1,234)" → −1234, "$ 12.5" → 12.5, "12.5%" → 12.5; null for non-numbers and cells holding two numbers. */
 export function parseNumber(text: string): number | null {
-  const t = text.replace(/[$€£\s,]/g, "").replace(/[−–]/g, "-");
+  // A thousands separator followed by a stray space ("2, 386,745") is one number.
+  const one = text.replace(/(\d),\s+(?=\d{3}(?!\d))/g, "$1,");
+  if (TWO_NUMBERS.test(one)) return null;
+  const t = one.replace(/[$€£\s,]/g, "").replace(/[−–]/g, "-");
   if (!t || /^[-—–]+$/.test(t)) return null;
   const m = t.match(/^(\()?(-)?(\d+(?:\.\d+)?)(\))?%?$/);
   if (!m) return null;

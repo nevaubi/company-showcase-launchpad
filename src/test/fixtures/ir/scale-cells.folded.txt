@@ -1,0 +1,123 @@
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|9|1|GAAP net income||true|2026-06-30|3|usd|298600000000000|298600000|segment|net_income|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|9|3|GAAP net income||true|2025-12-31|3|usd|225200000000000|225200000|segment|net_income|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|9|5|GAAP net income||true|2025-09-30|3|usd|265600000000000|265600000|segment|net_income|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|9|7|GAAP net income||true|2025-06-30|3|usd|235300000000000|235300000|segment|net_income|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|9|9|GAAP net income||true|2025-03-31|3|usd|146600000000000|146600000|segment|net_income|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|9|11|GAAP net income||true|2026-06-30|6|usd|572700000000000|572700000|segment|net_income|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|9|13|GAAP net income||true|2025-06-30|6|usd|381900000000000|381900000|segment|net_income|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|12|1|Net realized losses on investments and fair value changes to equity securities|Total adjustments, after-tax|false|2026-06-30|3|usd|10200000000000|10200000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|12|3|Net realized losses on investments and fair value changes to equity securities|Total adjustments, after-tax|false|2025-12-31|3|usd|20500000000000|20500000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|12|5|Net realized losses on investments and fair value changes to equity securities|Total adjustments, after-tax|false|2025-09-30|3|usd|13600000000000|13600000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|12|7|Net realized losses on investments and fair value changes to equity securities|Total adjustments, after-tax|false|2025-06-30|3|usd|21700000000000|21700000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|12|9|Net realized losses on investments and fair value changes to equity securities|Total adjustments, after-tax|false|2025-03-31|3|usd|16000000000000|16000000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|12|11|Net realized losses on investments and fair value changes to equity securities|Total adjustments, after-tax|false|2026-06-30|6|usd|31400000000000|31400000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|12|13|Net realized losses on investments and fair value changes to equity securities|Total adjustments, after-tax|false|2025-06-30|6|usd|37700000000000|37700000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|13|1|Amortization of purchased intangible assets|Total adjustments, after-tax|false|2026-06-30|3|usd|18000000000000|18000000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|13|3|Amortization of purchased intangible assets|Total adjustments, after-tax|false|2025-12-31|3|usd|17400000000000|17400000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|13|5|Amortization of purchased intangible assets|Total adjustments, after-tax|false|2025-09-30|3|usd|16500000000000|16500000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|13|7|Amortization of purchased intangible assets|Total adjustments, after-tax|false|2025-06-30|3|usd|15100000000000|15100000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|13|9|Amortization of purchased intangible assets|Total adjustments, after-tax|false|2025-03-31|3|usd|18400000000000|18400000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|13|11|Amortization of purchased intangible assets|Total adjustments, after-tax|false|2026-06-30|6|usd|35700000000000|35700000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|13|13|Amortization of purchased intangible assets|Total adjustments, after-tax|false|2025-06-30|6|usd|33500000000000|33500000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|15|1|Restructuring costs|Total adjustments, after-tax|false|2026-06-30|3|usd|0|0|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|15|3|Restructuring costs|Total adjustments, after-tax|false|2025-12-31|3|usd|28700000000000|28700000|segment|other|Adjusted earnings reconciliation
+AIZ|36b96e68-f1ae-40e0-8b43-3846042cb946|17|15|5|Restructuring costs|Total adjustments, after-tax|false|2025-09-30|3|usd|0|0|segment|other|Adjusted earnings reconciliation
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|4|25|Corporate and other bonds|Total fixed maturity securities|false|2025-12-31|0|usd|2.5257e+16|25257000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|5|25|States, municipalities and political subdivisions|Total fixed maturity securities|false|2025-12-31|0|usd|8.431e+15|8431000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|7|25|Asset-backed - RMBS|Total asset-backed|false|2025-12-31|0|usd|3.695e+15|3695000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|8|25|Asset-backed - CMBS|Total asset-backed|false|2025-12-31|0|usd|1.483e+15|1483000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|9|25|Asset-backed - Other ABS|Total asset-backed|false|2025-12-31|0|usd|3.543e+15|3543000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|10|25|Total asset-backed|Total fixed maturity securities|true|2025-12-31|0|usd|8.721e+15|8721000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|11|25|U.S. Treasury and obligations of government-sponsored enterprises|Total fixed maturity securities|false|2025-12-31|0|usd|234000000000000|234000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|12|25|Foreign government|Total fixed maturity securities|false|2025-12-31|0|usd|751000000000000|751000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|13|25|Redeemable preferred stock|Total fixed maturity securities|false|2025-12-31|0|usd|8000000000000|8000000|balance|assets|Fixed maturity securities by credit rating
+CNA|2fbe1b0b-6c6e-42ee-8e5e-1455b6b6a08f|14|14|25|Total fixed maturity securities||true|2025-12-31|0|usd|4.3402e+16|43402000000|balance|assets|Fixed maturity securities by credit rating
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|9|2|Gain on sale of loans excluding fair value of originated MSRs, net|Gain on sale of loans, net|false|2023-03-31|3|usd|265000000000000|265000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|10|2|Fair value of originated MSRs|Gain on sale of loans, net|false|2023-03-31|3|usd|205000000000000|205000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|11|2|Gain on sale of loans, net|Total revenue, net|true|2023-03-31|3|usd|470000000000000|470000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|13|2|Servicing fee income|Loan servicing income (loss), net|false|2023-03-31|3|usd|366000000000000|366000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|15|2|Changes in valuation model inputs or assumptions, net hedge|Loan servicing income (loss), net|false|2023-03-31|3|usd|-216000000000000|-216000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|16|2|Collection/realization of cash flows|Loan servicing income (loss), net|false|2023-03-31|3|usd|-182000000000000|-182000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|17|2|Change in fair value of MSRs, net|Loan servicing income (loss), net|false|2023-03-31|3|usd|-398000000000000|-398000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|18|2|Loan servicing income (loss), net|Total revenue, net|true|2023-03-31|3|usd|-32000000000000|-32000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|19|2|Interest income|Total revenue, net|false|2023-03-31|3|usd|146000000000000|146000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|20|2|Other income|Total revenue, net|false|2023-03-31|3|usd|117000000000000|117000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|21|2|Total revenue, net||true|2023-03-31|3|usd|701000000000000|701000000|product|revenue|Revenue
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|23|2|Salaries, commissions, and team member benefits|Total expenses|false|2023-03-31|3|usd|604000000000000|604000000|cost|expense|Expenses
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|24|2|General and administrative expenses|Total expenses|false|2023-03-31|3|usd|195000000000000|195000000|cost|expense|Expenses
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|25|2|Marketing and advertising expenses|Total expenses|false|2023-03-31|3|usd|182000000000000|182000000|cost|expense|Expenses
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|26|2|Interest expense|Total expenses|false|2023-03-31|3|usd|74000000000000|74000000|cost|expense|Expenses
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|27|2|Depreciation and amortization|Total expenses|false|2023-03-31|3|usd|31000000000000|31000000|cost|expense|Expenses
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|28|2|Other expenses|Total expenses|false|2023-03-31|3|usd|32000000000000|32000000|cost|expense|Expenses
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|29|2|Total expenses||true|2023-03-31|3|usd|1.118e+15|1118000000|cost|expense|Expenses
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|30|2|Income before income taxes||false|2023-03-31|3|usd|-417000000000000|-417000000|cost|other|Earnings
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|31|2|(Provision for) benefit from income taxes||false|2023-03-31|3|usd|5000000000000|5000000|cost|other|Earnings
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|32|2|Net income (loss)||true|2023-03-31|3|usd|-412000000000000|-412000000|cost|other|Earnings
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|33|2|Net (income) loss attributable to non-controlling interest|Net income (loss)|false|2023-03-31|3|usd|393000000000000|393000000|cost|other|Earnings
+RKT|6b24fddb-ea11-423a-9190-d241d9988437|10|34|2|Net income (loss) attributable to Rocket Companies|Net income (loss)|false|2023-03-31|3|usd|-19000000000000|-19000000|cost|other|Earnings
+GLUE|5f26e7c8-4250-4db6-92f1-6791014a19e0|1|29|4|Compute & Networking|Total|false|2025-01-26|12|usd|11619367000000|$116,193 67 %|segment|revenue|Revenue by Reportable Segments
+GLUE|5f26e7c8-4250-4db6-92f1-6791014a19e0|1|31|4|Total||true|2025-01-26|12|usd|13049765000000|$130,497 65 %|segment|revenue|Revenue by Reportable Segments
+GLUE|5f26e7c8-4250-4db6-92f1-6791014a19e0|2|2|2|Data Center|Total|true|2025-01-26|12|usd|11518668000000|$115,186 68 %|product|revenue|Revenue by Market Platform
+GLUE|5f26e7c8-4250-4db6-92f1-6791014a19e0|2|3|2|Data Center ? Compute|Data Center|false|2025-01-26|12|usd|10219659000000|102,196 59 %|product|revenue|Revenue by Market Platform
+GLUE|5f26e7c8-4250-4db6-92f1-6791014a19e0|2|4|2|Data Center ? Networking|Data Center|false|2025-01-26|12|usd|12990142000000|12,990 142 %|product|revenue|Revenue by Market Platform
+GLUE|5f26e7c8-4250-4db6-92f1-6791014a19e0|2|9|2|Total||true|2025-01-26|12|usd|13049765000000|$130,497 65 %|product|revenue|Revenue by Market Platform
+GLUE|85a860b1-b710-47a9-92e4-12d05f8c94ba|7|8|4|Total non-GAAP adjustments to costs and expenses||true|2023-12-31|3|usd|11272879000000|1,127 2,879|cost|expense|Non-GAAP adjustments
+GLUE|f3e70048-f48f-4bdd-bdce-cbc892330701|8|5|7|HIV|Product sales|false|2025-06-30|3|usd|45875088000000|4,587 $ 5,088|product|revenue|Product sales
+GLUE|254d638c-cea6-4eac-b4a2-9e5247722047|26|34|1|Research and development|Total operating expenses|false|2026-04-26|3|usd|63213989000000|6,321 $ 3,989 $|cost|expense|Operating expenses by function
+GLUE|254d638c-cea6-4eac-b4a2-9e5247722047|26|35|1|Sales, general and administrative|Total operating expenses|false|2026-04-26|3|usd|13001041000000|1,300 1,041|cost|expense|Operating expenses by function
+GLUE|254d638c-cea6-4eac-b4a2-9e5247722047|26|36|1|Total operating expenses||true|2026-04-26|3|usd|76215030000000|7,621 $ 5,030 $|cost|expense|Operating expenses by function
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|2|3|Net Sales||true|2025-12-31|3|usd|6006000000000|6,006|product|revenue|Revenue
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|2|7|Net Sales||true|2024-12-31|3|usd|3922000000000|3,922|product|revenue|Revenue
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|2|11|Net Sales||true|2025-09-30|3|usd|6222000000000|6,222|product|revenue|Revenue
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|2|15|Net Sales||true|2025-12-31|12|usd|23634000000000|23,634|product|revenue|Revenue
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|2|19|Net Sales||true|2024-12-31|12|usd|15835000000000|15,835|product|revenue|Revenue
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|4|2|Earnings (Loss) from Continuing Operations||true|2025-12-31|3|usd|-2363000000000|(2,363)|product|net_income|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|4|5|Earnings (Loss) from Continuing Operations||true|2024-12-31|3|usd|88000000000|88|product|net_income|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|4|8|Earnings (Loss) from Continuing Operations||true|2025-09-30|3|usd|-426000000000|(426)|product|net_income|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|4|11|Earnings (Loss) from Continuing Operations||true|2025-12-31|12|usd|-2838000000000|(2,838)|product|net_income|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|4|14|Earnings (Loss) from Continuing Operations||true|2024-12-31|12|usd|725000000000|725|product|net_income|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|5|2|Adjusted EBITDA from Continuing Operations||true|2025-12-31|3|usd|758000000000|758|product|segment_profit|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|5|5|Adjusted EBITDA from Continuing Operations||true|2024-12-31|3|usd|443000000000|443|product|segment_profit|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|5|8|Adjusted EBITDA from Continuing Operations||true|2025-09-30|3|usd|859000000000|859|product|segment_profit|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|5|11|Adjusted EBITDA from Continuing Operations||true|2025-12-31|12|usd|2976000000000|2,976|product|segment_profit|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|5|14|Adjusted EBITDA from Continuing Operations||true|2024-12-31|12|usd|1636000000000|1,636|product|segment_profit|Earnings
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|7|2|Cash Provided By (Used For) Operating Activities||true|2025-12-31|3|usd|905000000000|905|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|7|5|Cash Provided By (Used For) Operating Activities||true|2024-12-31|3|usd|397000000000|397|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|7|8|Cash Provided By (Used For) Operating Activities||true|2025-09-30|3|usd|605000000000|605|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|7|11|Cash Provided By (Used For) Operating Activities||true|2025-12-31|12|usd|1698000000000|1,698|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|7|14|Cash Provided By (Used For) Operating Activities||true|2024-12-31|12|usd|1678000000000|1,678|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|8|2|Free Cash Flow||true|2025-12-31|3|usd|255000000000|255|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|8|5|Free Cash Flow||true|2024-12-31|3|usd|137000000000|137|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|8|8|Free Cash Flow||true|2025-09-30|3|usd|150000000000|150|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|8|11|Free Cash Flow||true|2025-12-31|12|usd|-159000000000|(159)|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|0|8|14|Free Cash Flow||true|2024-12-31|12|usd|757000000000|757|kpi|other|Cash Flow
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|3|3|Packaging Solutions North America|Net Sales|false|2025-12-31|3|usd|3715000000|3,715|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|3|7|Packaging Solutions North America|Net Sales|false|2024-12-31|3|usd|3539000000|3,539|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|3|11|Packaging Solutions North America|Net Sales|false|2025-09-30|3|usd|3898000000|3,898|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|3|15|Packaging Solutions North America|Net Sales|false|2025-12-31|12|usd|15175000000|15,175|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|3|19|Packaging Solutions North America|Net Sales|false|2024-12-31|12|usd|14293000000|14,293|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|4|2|Packaging Solutions EMEA|Net Sales|false|2025-12-31|3|usd|2300000000|2,300|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|4|5|Packaging Solutions EMEA|Net Sales|false|2024-12-31|3|usd|357000000|357|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|4|8|Packaging Solutions EMEA|Net Sales|false|2025-09-30|3|usd|2310000000|2,310|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|4|11|Packaging Solutions EMEA|Net Sales|false|2025-12-31|12|usd|8451000000|8,451|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|4|14|Packaging Solutions EMEA|Net Sales|false|2024-12-31|12|usd|1355000000|1,355|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|5|2|Corporate and Inter-segment Sales|Net Sales|false|2025-12-31|3|usd|-9000000|(9)|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|5|5|Corporate and Inter-segment Sales|Net Sales|false|2024-12-31|3|usd|26000000|26|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|5|8|Corporate and Inter-segment Sales|Net Sales|false|2025-09-30|3|usd|14000000|14|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|5|11|Corporate and Inter-segment Sales|Net Sales|false|2025-12-31|12|usd|8000000|8|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|5|14|Corporate and Inter-segment Sales|Net Sales|false|2024-12-31|12|usd|187000000|187|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|6|3|Net Sales||true|2025-12-31|3|usd|6006000000|6,006|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|6|7|Net Sales||true|2024-12-31|3|usd|3922000000|3,922|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|6|11|Net Sales||true|2025-09-30|3|usd|6222000000|6,222|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|6|15|Net Sales||true|2025-12-31|12|usd|23634000000|23,634|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|6|19|Net Sales||true|2024-12-31|12|usd|15835000000|15,835|segment|revenue|Net Sales by Business Segment
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|8|3|Packaging Solutions North America|Business Segment Operating Profit (Loss)|false|2025-12-31|3|usd|319000000|319|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|8|7|Packaging Solutions North America|Business Segment Operating Profit (Loss)|false|2024-12-31|3|usd|228000000|228|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|8|11|Packaging Solutions North America|Business Segment Operating Profit (Loss)|false|2025-09-30|3|usd|-166000000|(166)|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|8|15|Packaging Solutions North America|Business Segment Operating Profit (Loss)|false|2025-12-31|12|usd|572000000|572|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|8|19|Packaging Solutions North America|Business Segment Operating Profit (Loss)|false|2024-12-31|12|usd|891000000|891|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|9|2|Packaging Solutions EMEA|Business Segment Operating Profit (Loss)|false|2025-12-31|3|usd|-223000000|(223)|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|9|5|Packaging Solutions EMEA|Business Segment Operating Profit (Loss)|false|2024-12-31|3|usd|19000000|19|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|9|8|Packaging Solutions EMEA|Business Segment Operating Profit (Loss)|false|2025-09-30|3|usd|-58000000|(58)|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|9|11|Packaging Solutions EMEA|Business Segment Operating Profit (Loss)|false|2025-12-31|12|usd|-236000000|(236)|segment|segment_profit|Business Segment Operating Profit (Loss)
+IP|bc2b9f92-890f-478b-8721-9f94a7be50d2|2|9|14|Packaging Solutions EMEA|Business Segment Operating Profit (Loss)|false|2024-12-31|12|usd|60000000|60|segment|segment_profit|Business Segment Operating Profit (Loss)
