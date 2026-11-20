@@ -5,6 +5,7 @@ import { appliesTo, type AltRegistryEntry } from "@/lib/alt/registry";
 import { ALT_NAMES, awardTie, ignoredFilter, pickParents, tickerKeys, type ParentFamily, type UsaRecipient } from "@/lib/alt/contracts";
 import { calendarYearPeriod, fiscalYearPeriod } from "@/lib/alt/periods";
 import { FDIC_ZERO_IS_MISSING } from "@/lib/alt/bank";
+import { cpscFirmName, cpscRole, firmCheck } from "@/lib/alt/firms";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Per-request timeout and retries; the scheduled job lowers both to fit its run budget. */
@@ -26,6 +27,8 @@ const VEHICLE: Record<string, string> = { TSLA: "TESLA", CAT: "CATERPILLAR", DE:
 const nm = (c: Co) => NAME[c.ticker] ?? c.name.replace(/\s*\/\w+\/?$/, "").replace(/,?\s+(INC|CORP|CO|LTD|PLC)\.?$/i, "");
 /** Name for full-text searches: a one-word short name ("Target") is too ambiguous, so use the legal name. */
 const searchName = (c: Co) => (NAME[c.ticker] || nm(c).includes(" ") || !c.reg?.legal ? nm(c) : c.reg.legal);
+/** Whether a firm a registry names is this company (src/lib/alt/firms.ts): searches match phrases and prefixes, so every result is checked. */
+const isFirm = (c: Co) => firmCheck(c.ticker, tickerKeys(c.ticker, c.name, c.reg?.legal));
 
 async function get(url: string, init: RequestInit = {}, json = true): Promise<any> {
   for (let i = 0; i < altFetch.tries; i++) {
@@ -172,12 +175,14 @@ async function fda(c: Co): Promise<Row[]> {
   if (!appliesTo("fda", c, c.reg)) return [];
   const firm = encodeURIComponent(`"${nm(c)}"`);
   const out: Row[] = [];
+  const ours = isFirm(c);
   for (const [kind, path] of [["drug recall", "drug/enforcement"], ["device recall", "device/recall"], ["food recall", "food/enforcement"]] as const) {
-    const field = path === "device/recall" ? "recalling_firm" : "recalling_firm";
     for (let skip = 0; skip < 3000; skip += 1000) {
-      const j = await get(`https://api.fda.gov/${path}.json?search=${field}:${firm}&limit=1000&skip=${skip}`).catch(() => null);
+      // a phrase search: "Coca-Cola" also returns independent bottlers, "Target" returns Boston Scientific Target
+      const j = await get(`https://api.fda.gov/${path}.json?search=recalling_firm:${firm}&limit=1000&skip=${skip}`).catch(() => null);
       const rs = j?.results ?? [];
       for (const r of rs) {
+        if (!ours(r.recalling_firm)) continue;
         const id = r.recall_number ?? r.res_event_number ?? r.cfres_id;
         out.push({ uid: `fda:${c.ticker}:${path}:${id}`, ticker: c.ticker, dataset: "fda", kind: "event", date: iso(r.recall_initiation_date ?? r.event_date_initiated ?? r.report_date), title: `${kind}: ${(r.product_description ?? r.product_description ?? "").slice(0, 160)}`, meta: { kind, class: r.classification ?? r.root_cause_description, reason: (r.reason_for_recall ?? r.reason_for_recall ?? "").slice(0, 400), status: r.status ?? r.recall_status, firm: r.recalling_firm, quantity: r.product_quantity }, source: "openFDA", source_url: path === "device/recall" && r.cfres_id ? `https://www.accessdata.fda.gov/scripts/cdrh/cfdocs/cfRES/res.cfm?id=${r.cfres_id}` : `https://api.fda.gov/${path}.json?search=recall_number:${id}` });
       }
@@ -187,6 +192,7 @@ async function fda(c: Co): Promise<Row[]> {
   const sponsor = encodeURIComponent(`"${nm(c).toUpperCase()}"`);
   const d = await get(`https://api.fda.gov/drug/drugsfda.json?search=sponsor_name:${sponsor}&limit=500`).catch(() => null);
   for (const app of d?.results ?? []) for (const s of app.submissions ?? []) {
+    if (!ours(app.sponsor_name)) continue;
     if (s.submission_status !== "AP" || !["ORIG", "SUPPL"].includes(s.submission_type) || (s.submission_type === "SUPPL" && s.submission_class_code !== "EFFICACY")) continue;
     const brand = app.products?.[0]?.brand_name ?? app.openfda?.brand_name?.[0] ?? app.application_number;
     out.push({ uid: `fda:${c.ticker}:${app.application_number}:${s.submission_type}${s.submission_number}`, ticker: c.ticker, dataset: "fda", kind: "event", date: iso(s.submission_status_date), title: `${s.submission_type === "ORIG" ? "New approval" : "New indication"}: ${brand}`, meta: { kind: "approval", application: app.application_number, priority: s.review_priority, sponsor: app.sponsor_name }, source: "openFDA Drugs@FDA", source_url: `https://www.accessdata.fda.gov/scripts/cder/daf/index.cfm?event=overview.process&ApplNo=${app.application_number.replace(/\D/g, "")}` });
@@ -198,7 +204,9 @@ async function fda(c: Co): Promise<Row[]> {
 async function recalls(c: Co): Promise<Row[]> {
   const m = VEHICLE[c.ticker] ?? c.reg?.maker; if (!m) return [];
   const j = await get(`https://data.transportation.gov/resource/6axg-epim.json?$where=${encodeURIComponent(`upper(manufacturer) like '%${m}%'`)}&$limit=5000&$order=report_received_date DESC`);
-  return (j ?? []).map((r: any) => ({ uid: `nhtsa:${c.ticker}:${r.nhtsa_id}`, ticker: c.ticker, dataset: "recalls", kind: "event" as const, date: iso(r.report_received_date), title: r.subject ?? r.component ?? "Recall", value: r.potentially_affected ? Number(r.potentially_affected) : null, unit: "units", meta: { component: r.component, type: r.recall_type, summary: r.defect_summary?.slice(0, 500), consequence: r.consequence_summary?.slice(0, 300) }, source: "NHTSA", source_url: r.recall_link?.url ?? `https://www.nhtsa.gov/recalls?nhtsaId=${r.nhtsa_id}` }));
+  // `like '%ITT%'` also returns "Pitts Enterprises" and "LITTELFUSE INC.": keep the company's own campaigns
+  const ours = isFirm(c);
+  return (j ?? []).filter((r: { manufacturer?: string }) => ours(r.manufacturer)).map((r: any) => ({ uid: `nhtsa:${c.ticker}:${r.nhtsa_id}`, ticker: c.ticker, dataset: "recalls", kind: "event" as const, date: iso(r.report_received_date), title: r.subject ?? r.component ?? "Recall", value: r.potentially_affected ? Number(r.potentially_affected) : null, unit: "units", meta: { manufacturer: r.manufacturer, component: r.component, type: r.recall_type, summary: r.defect_summary?.slice(0, 500), consequence: r.consequence_summary?.slice(0, 300) }, source: "NHTSA", source_url: r.recall_link?.url ?? `https://www.nhtsa.gov/recalls?nhtsaId=${r.nhtsa_id}` }));
 }
 
 // ───────── CFPB consumer complaints (yearly counts + product mix) ─────────
@@ -266,13 +274,13 @@ async function capital(c: Co): Promise<Row[]> {
 // ───────── ClinicalTrials.gov: trials the company sponsors (healthcare only) ─────────
 async function trials(c: Co): Promise<Row[]> {
   if (!appliesTo("trials", c, c.reg)) return [];
-  const name = nm(c); const re = new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const name = nm(c); const ours = isFirm(c);
   const out: Row[] = []; let token = "";
   for (let p = 0; p < 5; p++) {
     const j = await get(`https://clinicaltrials.gov/api/v2/studies?query.lead=${encodeURIComponent(name)}&sort=LastUpdatePostDate:desc&pageSize=200&fields=NCTId,BriefTitle,OverallStatus,Phase,LastUpdatePostDate,StartDate,PrimaryCompletionDate,LeadSponsorName,Condition,EnrollmentCount${token ? `&pageToken=${token}` : ""}`).catch(() => null);
     for (const st of j?.studies ?? []) {
       const ps = st.protocolSection; const sponsor = ps.sponsorCollaboratorsModule?.leadSponsor?.name ?? "";
-      if (!re.test(sponsor)) continue; // lead sponsor must be the company itself
+      if (!ours(sponsor)) continue; // lead sponsor must be the company itself ("Merck KGaA" is not Merck & Co.)
       const id = ps.identificationModule.nctId; const s = ps.statusModule;
       out.push({ uid: `ct:${c.ticker}:${id}`, ticker: c.ticker, dataset: "trials", kind: "event", date: iso(s.lastUpdatePostDateStruct?.date), title: ps.identificationModule.briefTitle.slice(0, 240), value: ps.designModule?.enrollmentInfo?.count ?? null, unit: "patients", meta: { nct: id, status: s.overallStatus, phase: (ps.designModule?.phases ?? []).join("/"), start: s.startDateStruct?.date, primary_completion: s.primaryCompletionDateStruct?.date, conditions: (ps.conditionsModule?.conditions ?? []).slice(0, 4), sponsor }, source: "ClinicalTrials.gov", source_url: `https://clinicaltrials.gov/study/${id}` });
     }
@@ -283,14 +291,16 @@ async function trials(c: Co): Promise<Row[]> {
 
 // ───────── CPSC consumer-product recalls naming the company ─────────
 async function consumer(c: Co): Promise<Row[]> {
-  const name = searchName(c); const re = new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const name = searchName(c); const ours = isFirm(c);
   const j = await get(`https://www.saferproducts.gov/RestWebServices/Recall?format=json&RecallTitle=${encodeURIComponent(name)}`).catch(() => null);
   const out: Row[] = [];
   for (const r of j ?? []) {
-    const who = [...(r.Manufacturers ?? []), ...(r.Importers ?? [])].map((x: any) => x.Name).join(" | ");
-    if (!re.test(r.Title ?? "") && !re.test(who)) continue;
+    // the title search is a word match: "Caterpillar Pull Toys" and "Red Apple Fireworks" are not the company's
+    const role = cpscRole(r, ours, nm(c));
+    if (!role) continue;
+    const firms = [...(r.Manufacturers ?? []), ...(r.Importers ?? []), ...(r.Distributors ?? [])].map((x: any) => cpscFirmName(x.Name ?? "")).filter(Boolean).slice(0, 6);
     const units = Number(String(r.Products?.[0]?.NumberOfUnits ?? "").replace(/[^\d]/g, "")) || null;
-    out.push({ uid: `cpsc:${c.ticker}:${r.RecallNumber}`, ticker: c.ticker, dataset: "consumer", kind: "event", date: iso(r.RecallDate), title: r.Title?.slice(0, 240) ?? "Recall", value: units, unit: "units", meta: { role: re.test(String(r.Title ?? "").split(/\b(Recall|Recalls|Recalled|Reannounces)\b/)[0]) || re.test(who) ? "maker" : "retailer", product: r.Products?.[0]?.Name, hazard: r.Hazards?.[0]?.Name?.slice(0, 400), remedy: r.Remedies?.[0]?.Name?.slice(0, 300) }, source: "CPSC", source_url: r.URL });
+    out.push({ uid: `cpsc:${c.ticker}:${r.RecallNumber}`, ticker: c.ticker, dataset: "consumer", kind: "event", date: iso(r.RecallDate), title: r.Title?.slice(0, 240) ?? "Recall", value: units, unit: "units", meta: { role, firms, product: r.Products?.[0]?.Name, hazard: r.Hazards?.[0]?.Name?.slice(0, 400), remedy: r.Remedies?.[0]?.Name?.slice(0, 300) }, source: "CPSC", source_url: r.URL });
   }
   return out;
 }
