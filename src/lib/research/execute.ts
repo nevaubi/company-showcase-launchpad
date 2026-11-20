@@ -19,7 +19,9 @@ import { runSandbox } from "@/lib/research/sandbox";
 import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
 import { supabase } from "@/integrations/supabase/client";
 import { altLeadersQuery, fmtAlt, leaderStats } from "@/lib/alt/query";
-import { focusGraph, linkDollars, simulateShock, type RiskLink } from "@/lib/supply/core";
+import { focusGraph, simulateShock, type RiskLink } from "@/lib/supply/core";
+import { supplyNodeLine } from "@/lib/supply/assistant-text";
+import { supplyHref } from "@/lib/supply/url-state";
 import type { UniverseEntry } from "@/lib/financials/types";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
@@ -124,7 +126,7 @@ const PAGE_PATH: Record<string, (t: string) => string> = {
   insiders: (t) => `/app/companies/${t}/insiders`,
   calls: (t) => `/app/companies/${t}/calls`,
   ir: (t) => `/app/companies/${t}/ir`,
-  supply_chain: (t) => (t ? `/app/supply-chain?t=${t}` : "/app/supply-chain"),
+  supply_chain: (t) => supplyHref({ t: t || undefined }),
   ideas: () => "/app/ideas",
   markets: () => "/app/markets",
   macro: () => "/app/macro",
@@ -526,17 +528,14 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const names = Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName]));
       const revenue = Object.fromEntries(u.companies.map((c) => [c.ticker, c.revenueTTM ?? undefined]));
       const g = focusGraph(t, links, names).filter((n) => !args.relation || n.relation === args.relation);
-      const lines = g.slice(0, 60).map((n) => {
-        const l = n.links[0] as RiskLink;
-        const d = linkDollars(l, revenue);
-        return `${n.relation.toUpperCase()} ${n.name}${n.ticker ? ` (${n.ticker})` : ""}: ${l.detail}${l.share_pct != null ? ` | share ${l.share_pct}%` : ""}${d != null ? ` | ≈$${(d / 1e6).toFixed(0)}M` : ""}${l.single_source ? " | SINGLE SOURCE" : ""}${l.regions?.length ? ` | regions ${l.regions.join(", ")}` : ""}${l.risk ? ` | risk: ${l.risk}` : ""} | per ${l.ticker} ${l.form} ${l.accn}: "${l.quote}"`;
-      });
+      // verified claims only (read.ts): stated flows by kind, other figures marked "not a flow", sole source vs stated dependency
+      const lines = g.slice(0, 60).map((n) => supplyNodeLine(t, n, revenue));
       // End-to-end chain (suppliers' suppliers → … → customers' customers) incl. XBRL-tagged shares.
       const tagged = await qc.fetchQuery(taggedSharesQuery).catch(() => []);
       const flow = (["making", "selling", "tech"].includes(String(args.flow)) ? args.flow : "all") as ChainFlow;
       const product = typeof args.product === "string" ? args.product : "";
       const chain = args.relation === "partner" || args.relation === "competitor" ? null : buildChain(t, links, tagged, names, revenue, { depth: args.depth === 3 ? 3 : args.depth === 1 ? 1 : 2, flow, product });
-      const body = [lines.join("\n") || `No named links for ${t}.`, chain && chain.edges.length ? chainText(chain) : ""].filter(Boolean).join("\n\n");
+      const body = [`Open in the app: ${supplyHref({ t })} (each line ends with the address that selects that name)`, lines.join("\n") || `No named links for ${t}.`, chain && chain.edges.length ? chainText(chain) : ""].filter(Boolean).join("\n\n");
       return { output: clip(body), summary: `${g.length} links for ${t}${chain ? ` · ${chain.nodes.length - 1} in the chain` : ""}`, refs: g.slice(0, 5).map((n) => ({ ticker: n.links[0].ticker, accn: n.links[0].accn, label: n.name })) };
     }
     case "simulate_supply_shock": {
@@ -547,7 +546,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const revenue = Object.fromEntries(u.companies.map((c) => [c.ticker, c.revenueTTM ?? undefined]));
       const r = simulateShock(t, shock, links, names, revenue);
       const lines = r.slice(0, 30).map((i) => `${i.name}${i.ticker ? ` (${i.ticker})` : ""} | ${i.channel} | ${i.severity} | hop ${i.hop}${i.revenuePct != null ? ` | ${(i.revenuePct * 100).toFixed(2)}% of revenue` : ""}${i.dollars != null ? ` ≈$${(i.dollars / 1e6).toFixed(0)}M` : ""} | path ${i.path.join(" → ")} | source ${i.link.ticker} ${i.link.form} ${i.link.accn}`);
-      return { output: `Shock: ${names[t] ?? t} −${shock * 100}%. Mechanical estimate from disclosed shares.\n${lines.join("\n") || "No linked companies."}`, summary: `${r.length} companies affected` };
+      return { output: `Shock: ${names[t] ?? t} −${shock * 100}%. Mechanical estimate from stated shares and stated flows on trade links only (financing, acquisition and regulator ties are left out). Open it: ${supplyHref({ t, tab: "shock" })}\n${lines.join("\n") || "No linked companies."}`, summary: `${r.length} companies affected` };
     }
     case "navigate_to": {
       const page = String(args.page);

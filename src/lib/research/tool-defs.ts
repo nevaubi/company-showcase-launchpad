@@ -469,7 +469,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_supply_chain",
-    description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, dollar amount, single-source flag, regions, risk and accession, plus the end-to-end value chain (suppliers' suppliers → … → customers' customers, each edge with its relationship type, products, share, dollars and filings). flow narrows the chain: making = supply base upstream + buyers using the goods as parts; selling = route to market; tech = cloud/licensing/co-development. product keeps only links whose stated product contains that text (e.g. 'wafers', 'lithium').",
+    description: "Named customers, suppliers, partners and competitors for a covered company from 10-K text (both its own filing and filings that name it), with stated revenue share %, the counterparty's stated dollar figure by kind (revenue, purchases or contract value are flows; guarantees, investments, financing and other figures are marked not a flow), single source only where the sentence says sole source (else stated dependency), financing, acquisition or regulator ties labelled as not trade, only the regions the sentence names, risk and accession, the app address that opens each name selected, plus the end-to-end value chain (suppliers' suppliers → … → customers' customers, each edge with its relationship type, products, share, dollars and filings). flow narrows the chain: making = supply base upstream + buyers using the goods as parts; selling = route to market; tech = cloud/licensing/co-development. product keeps only links whose stated product contains that text (e.g. 'wafers', 'lithium').",
     parameters: obj(
       {
         ticker: str("Covered ticker"),
@@ -485,7 +485,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "simulate_supply_shock",
-    description: "Propagate a demand/output shock at one company through disclosed supply-chain links: suppliers lose sales sized by their disclosed revenue share; customers face supply disruption. Two steps out.",
+    description: "Propagate a demand/output shock at one company through disclosed supply-chain links: suppliers lose sales sized by their stated revenue share or stated flow; customers face supply disruption. Trade links only: financing, acquisition and regulator ties are left out. Two steps out.",
     parameters: obj({ ticker: str("Ticker to shock"), shock_pct: { type: "number", description: "Size of drop, e.g. 20 for -20%" } }, ["ticker", "shock_pct"]),
     strict: true,
   },
