@@ -18,7 +18,8 @@ import { buildRedline, compactRedline, defaultBase, REDLINE_VERSION, type Filing
 import { loadDataset } from "@/lib/reports/inputs.server";
 import { cacheFilingDocument, readCachedFiling } from "@/lib/jobs/jobs.server";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
-import { accnOf, accnReason, ACCN_KEY, afterCursor, BATCH, completeSeconds, failKey, fromCursor, INTEL_EVERY_MS, INTEL_KEY, intelMarker, nextCursor, oldestSignals, retryable, supplyTickers, toCursor, type IntelResult, type NewFiling, type StepCursor } from "./lib/filing-steps";
+import { INTEL_REQUEST_KEY } from "@/lib/jobs/remediation";
+import { accnOf, accnReason, ACCN_KEY, afterCursor, BATCH, completeSeconds, failKey, fromCursor, INTEL_KEY, intelDue, intelMarker, nextCursor, oldestSignals, retryable, supplyTickers, toCursor, type IntelResult, type NewFiling, type StepCursor } from "./lib/filing-steps";
 
 const JOB = "filing-steps";
 const MAX = Number(args.max ?? BATCH);
@@ -143,15 +144,27 @@ async function main() {
 /** Weekly supply intel: the marker moves only after stored work (intelMarker); a run row records each try. */
 async function weeklyIntel() {
   const { data: wk } = await sb.from("job_state").select("cursor, paused_reason, updated_at").eq("job", INTEL_KEY).maybeSingle();
-  if (wk && Date.now() - Date.parse(wk.updated_at) <= INTEL_EVERY_MS) return;
+  const { data: request } = await sb.from("job_state").select("cursor").eq("job", INTEL_REQUEST_KEY).maybeSingle();
+  const { data: lastRun } = request
+    ? await sb.from("job_runs").select("finished_at").eq("job", "supply-intel").eq("ok", true).order("finished_at", { ascending: false }).limit(1).maybeSingle()
+    : { data: null };
+  const due = intelDue(wk ?? null, request ?? null, lastRun?.finished_at ?? null, Date.now());
+  const consume = async () => {
+    if (!due.consume) return;
+    await sb.from("job_state").delete().eq("job", INTEL_REQUEST_KEY);
+    log(`weekly supply intel: ${due.why}`);
+  };
+  if (!due.run) return consume();
   // A provider that is out of money or misconfigured: leave the marker due and try on a later run.
   const route = routeOf(IR_MODELS.reason, INTEL_ENV);
   try {
     const d = routeDecision(await providerStates(route), route, Date.now());
+    // The request (if any) stays for the run that can actually happen.
     if (d.state === "open") return log(`weekly supply intel waits: ${route.join("/")} closed (${d.cls}: ${(d.message ?? "").slice(0, 100)})`);
   } catch {
     /* unreadable circuit: try anyway */
   }
+  await consume();
   const rows = await selectAll<{ ticker: string; created_at: string }>((a, b) => sb.from("supply_signals").select("ticker,created_at").order("created_at", { ascending: false }).range(a, b));
   const newest = new Map<string, string>();
   for (const r of rows) if (!newest.has(r.ticker)) newest.set(r.ticker, r.created_at);

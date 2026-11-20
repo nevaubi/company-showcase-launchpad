@@ -101,3 +101,67 @@ describe("weekly intel survives a deadline kill (review F17)", () => {
     expect(Date.parse(m.updated_at) + INTEL_EVERY_MS - now).toBe(3600_000);
   });
 });
+
+import { intelDue, intelMarker as marker2, INTEL_EVERY_MS as WEEK, type IntelResult } from "../../scripts/lib/filing-steps";
+import { episodeOf, planRemedies, type RemedyReceipt } from "@/lib/jobs/remediation";
+
+describe("freshness requests for supply intel (review R3)", () => {
+  const now = Date.parse("2026-11-20T12:00:00Z");
+  const clean = { cursor: 20, paused_reason: null, updated_at: new Date(now - 86400_000).toISOString() };
+  it("the schedule decides; a request is honoured once, only when the marker advanced without a recorded run", () => {
+    expect(intelDue(clean, null, null, now)).toMatchObject({ run: false, consume: false });
+    expect(intelDue(clean, { cursor: 1 }, null, now)).toMatchObject({ run: true, consume: true });
+    expect(intelDue(clean, { cursor: 1 }, new Date(now - 86400_000 + 30_000).toISOString(), now)).toMatchObject({ run: false, consume: true });
+    expect(intelDue({ ...clean, paused_reason: "retry 3: x" }, { cursor: 1 }, null, now)).toMatchObject({ run: false, consume: true });
+    expect(intelDue({ ...clean, paused_reason: "gave up after 8 tries: x" }, { cursor: 1 }, null, now)).toMatchObject({ run: false, consume: true });
+    expect(intelDue({ ...clean, updated_at: new Date(now - WEEK - 1).toISOString() }, { cursor: 1 }, null, now)).toMatchObject({ run: true, consume: true });
+  });
+
+  /**
+   * Two weeks of the real rules with an hourly freshness check (healthy AI route) and the worker's
+   * intel step every 10 minutes, supply_signals stale throughout. Before R3 the remedy reset the
+   * marker every 6 h: a clean empty run then happened about 4 times a day, and a failing run never
+   * reached its give-up.
+   */
+  function simulate(outcome: IntelResult | null, start: { cursor: number; paused_reason: string | null; updated_at: string }, lastOkRun: string | null) {
+    let wk = { ...start };
+    let request: { cursor: number } | null = null;
+    let lastOk = lastOkRun;
+    const receipts = new Map<string, RemedyReceipt>();
+    const runs: number[] = [];
+    const t0 = Date.parse("2026-11-20T00:00:00Z");
+    for (let t = t0; t < t0 + 14 * 86400_000; t += 10 * 60_000) {
+      if ((t - t0) % 3600_000 === 0) {
+        for (const a of planRemedies([{ key: "supply_signals", newest: "2026-11-05T00:00:00Z" }], receipts, true, t)) {
+          if (a.apply) request = { cursor: Math.floor(t / 1000) };
+          if (a.receipt) receipts.set(a.key, { at: Math.floor(t / 1000), episode: episodeOf("2026-11-05T00:00:00Z") });
+        }
+      }
+      const due = intelDue(wk, request, lastOk, t);
+      if (due.consume) request = null;
+      if (!due.run) continue;
+      runs.push(t);
+      const m = marker2(outcome, wk, t);
+      wk = { cursor: m.cursor, paused_reason: m.paused_reason, updated_at: m.updated_at };
+      if (m.action === "advance") lastOk = new Date(t).toISOString();
+    }
+    return { runs: runs.length, marker: wk };
+  }
+  // 1 + 8 retries in the first cycle (about 3 days), give-up, then the next weekly cycle begins inside the 14 days
+  const RUNS_FAILING = 16;
+  // the production state of 20 Nov: marker advanced 19 Nov 11:03 with no supply-intel run recorded
+  const prod = { cursor: 20, paused_reason: null, updated_at: "2026-11-19T11:03:22Z" };
+  it("clean runs that find nothing: the honoured request replaces the missed run, then the weekly schedule (2 runs in 14 days, as with no request)", () => {
+    const r = simulate({ stored: 0, companies: 20, failedStages: 0, emptyStages: 80, stop: null }, prod, null);
+    expect(r.runs).toBe(2);
+  });
+  it("a marker whose last advance was a recorded clean run: the request adds nothing (2 runs in 14 days, the schedule's)", () => {
+    const r = simulate({ stored: 0, companies: 20, failedStages: 0, emptyStages: 80, stop: null }, prod, "2026-11-19T11:03:30Z");
+    expect(r.runs).toBe(2);
+  });
+  it("failing runs keep their give-up: one try plus 8 retries, then nothing until the next week", () => {
+    const r = simulate({ stored: 0, companies: 20, failedStages: 4, emptyStages: 0, stop: null }, prod, null);
+    expect(r.runs).toBe(RUNS_FAILING);
+    expect(r.marker.paused_reason).toMatch(/^(gave up after 8 tries|retry [1-8]):/);
+  });
+});

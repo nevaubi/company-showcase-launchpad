@@ -105,3 +105,34 @@ export function intelMarker(result: IntelResult | null, prev: { cursor: number; 
   // Due again `delay` from now: backdate the marker so `now - updated_at > INTEL_EVERY_MS` then holds.
   return { action: "retry", cursor: attempts, paused_reason: `retry ${attempts}: ${reason}`.slice(0, 200), updated_at: at(nowMs + delay - INTEL_EVERY_MS) };
 }
+
+// ---------- one-off run requests from the freshness check (review R3) ----------
+export interface IntelMarkerRow { cursor: number; paused_reason: string | null; updated_at: string }
+
+export interface IntelDue {
+  run: boolean;
+  /** delete the `supply-intel-request` row (honoured, or dropped) */
+  consume: boolean;
+  why: string;
+}
+
+/**
+ * Whether the weekly intel runs now. The schedule decides: the marker is due INTEL_EVERY_MS after its
+ * last good run, and its retry backoff and give-up (intelMarker) are its own. A freshness request
+ * (`supply-intel-request`) adds at most one run, and only when it cannot add spend over the schedule:
+ *   - the marker is clean (no retry or give-up pending: those keep their own timing and limit), and
+ *   - its last advance has no clean recorded run behind it (`supply-intel` job_runs row with ok, at or
+ *     after the advance), which is how a marker moved without a run (the 19 Nov state) looks.
+ * A clean run that found nothing is a data fact for the alert, not a job fault: the request is dropped.
+ * Every request is consumed once read, honoured or not.
+ */
+export function intelDue(marker: IntelMarkerRow | null, request: { cursor: number | null } | null, lastOkRunFinishedAt: string | null, nowMs: number): IntelDue {
+  const scheduled = !marker || nowMs - Date.parse(marker.updated_at) > INTEL_EVERY_MS;
+  if (scheduled) return { run: true, consume: !!request, why: "weekly schedule" };
+  if (!request) return { run: false, consume: false, why: "not due" };
+  if (marker.paused_reason) return { run: false, consume: true, why: `request dropped: the marker decides its own retry (${marker.paused_reason.slice(0, 80)})` };
+  const advancedAt = Date.parse(marker.updated_at);
+  // The run row is written right after the marker; allow ten minutes of slack.
+  if (lastOkRunFinishedAt && Date.parse(lastOkRunFinishedAt) >= advancedAt - 10 * 60_000) return { run: false, consume: true, why: "request dropped: the last run advanced cleanly; the schedule runs the next one" };
+  return { run: true, consume: true, why: "request honoured once: the marker advanced without a recorded run" };
+}

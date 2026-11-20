@@ -5,7 +5,7 @@
 // `--force` ignores the gate.
 import { log, sb } from "./lib/supa";
 import { dataFreshness, groupPaused, pausedJobs } from "@/lib/jobs/data-freshness";
-import { checkDue, loopRequestKey, planRemedies, remedyKey } from "@/lib/jobs/remediation";
+import { checkDue, episodeOf, INTEL_REQUEST_KEY, loopRequestKey, planRemedies, readReceipts, remedyKey } from "@/lib/jobs/remediation";
 import { providerKey, routeDecision, routeOf, PROVIDER_IDS, type CircuitRow } from "@/lib/jobs/provider-health";
 
 const nowMs = Date.now();
@@ -31,7 +31,7 @@ const paused = pausedJobs(rows);
 const bad = report.filter((r) => r.status !== "fresh");
 
 // Remedies. AI steps run only while the reasoning route is healthy.
-const receipts = new Map(rows.filter((r) => r.job.startsWith("remedy:")).map((r) => [r.job.slice("remedy:".length), Number(r.cursor ?? 0)]));
+const receipts = readReceipts(rows);
 const circuits = new Map(rows.filter((r) => r.job.startsWith("provider:")).map((r) => [r.job, r as CircuitRow]));
 const aiRoute = routeOf(process.env.IR_REASON_MODEL || "gpt-6.1-sol", process.env).filter((id) => PROVIDER_IDS.includes(id));
 const ai = routeDecision(circuits, aiRoute, nowMs);
@@ -45,15 +45,16 @@ for (const a of actions) {
       if (e) throw new Error(e.message);
     }
     if (a.apply && a.remedy.kind === "intel") {
-      // Due again now: the weekly marker's updated_at is "last good run"; a cleared reason resets its retry count.
-      const { error: e } = await sb.from("job_state").update({ updated_at: new Date(0).toISOString(), paused_reason: null }).eq("job", "supply-intel-weekly");
+      // A request the intel step honours at most once (intelDue); the weekly marker and its retry state are not touched.
+      const newest = bad.find((b) => b.key === a.key)?.newest ?? null;
+      const { error: e } = await sb.from("job_state").upsert({ job: INTEL_REQUEST_KEY, cursor: nowS, paused_reason: `requested: ${a.key} stale since ${newest ?? "never"}`, updated_at: now });
       if (e) throw new Error(e.message);
     }
     if (a.receipt) {
-      const { error: e } = await sb.from("job_state").upsert({ job: remedyKey(a.key), cursor: nowS, updated_at: now });
+      const { error: e } = await sb.from("job_state").upsert({ job: remedyKey(a.key), cursor: nowS, paused_reason: episodeOf(bad.find((b) => b.key === a.key)?.newest), updated_at: now });
       if (e) throw new Error(e.message);
     }
-    if (a.apply) applied.push(`${a.key}: ${a.remedy.kind === "loop" ? `loop ${a.remedy.step}` : "supply intel due"}`);
+    if (a.apply) applied.push(`${a.key}: ${a.remedy.kind === "loop" ? `loop ${a.remedy.step}` : "supply intel requested once"}`);
   } catch (e) {
     failed.push(`${a.key}: ${(e as Error).message.slice(0, 120)}`);
   }
