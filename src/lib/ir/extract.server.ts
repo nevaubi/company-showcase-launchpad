@@ -3,6 +3,7 @@
 // The model only points at cells; values are re-read from the parsed table in factsFromModel().
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { structured } from "@/lib/ai.server";
+import { screenRows } from "@/lib/ir/scale-check";
 import { chunkTables, EXTRACT_INSTRUCTIONS, EXTRACT_SCHEMA, factsFromModel, leadText, type FactRow, type ModelOutput } from "@/lib/ir/extract-core";
 import { decodeHtml, parseNumber, parseTables, type ParsedTable } from "@/lib/ir/tables";
 import { fixRowDates, printedDates } from "@/lib/ir/dates";
@@ -217,7 +218,8 @@ export async function extractIrDocument(id: string, opts: { model?: string; conc
   // A column dated to a calendar month-end the document never prints ("12 Weeks Ended November 23")
   // takes the period end the document does print.
   const ends = printedDates(decodeHtml(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " "), true);
-  const records = results.flatMap((r) => {
+  // Plausibility marks over the whole document, so two tables of different chunks are compared too.
+  const records = screenRows(results.flatMap((r) => {
     rejected += r.rejected;
     return r.rows
       .filter((f) => {
@@ -237,7 +239,7 @@ export async function extractIrDocument(id: string, opts: { model?: string; conc
         method: "table",
         model: r.model,
       }));
-  });
+  }));
   await supabaseAdmin.from("ir_kpi_facts").delete().eq("document_id", id).eq("method", "table");
   for (let i = 0; i < records.length; i += 500) {
     const { error: e } = await supabaseAdmin.from("ir_kpi_facts").insert(records.slice(i, i + 500) as never);

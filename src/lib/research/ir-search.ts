@@ -3,6 +3,7 @@
 // source cell (`/app/companies/T/ir?line=…&period=…&freq=…`). Pure.
 import type { IrPayload, PayloadCell, PayloadSeries } from "@/lib/ir/payload";
 import { CATEGORY_LABEL, METRIC_LABEL, fmtIr } from "@/lib/ir/display";
+import { heldFor } from "@/lib/ir/periods";
 import { expand, matchScore, words } from "@/lib/research/match";
 
 export type IrFreq = "q" | "y" | "m";
@@ -38,8 +39,7 @@ function cellLine(p: IrPayload, s: PayloadSeries, end: string, c: PayloadCell, f
   const src = c.f
     ? `derived: ${c.f.formula}`
     : `${c.x ? `printed "${c.x.slice(0, 60)}"` : "stored cell"}${where}${doc ? `, ${doc.kind ?? "document"} filed ${doc.filed ?? "?"}` : ""}`;
-  const warn = c.w === "scale" ? " [FLAGGED: about 1,000× off the neighbouring periods — likely a unit mix-up; do not cite]" : "";
-  return `  ${end}: ${irValue(c.v, s.unit)} — ${src}${warn} <${irLink(p.ticker, s.k, end, freq)}>`;
+  return `  ${end}: ${irValue(c.v, s.unit)} — ${src} <${irLink(p.ticker, s.k, end, freq)}>`;
 }
 
 /** No query: what exists, so the next call can be precise. */
@@ -110,6 +110,11 @@ export function irSearch(p: IrPayload, a: IrSearchArgs): { output: string; match
     const block = [
       `${s.label}${parent ? ` (part of ${parent})` : ""} [${CATEGORY_LABEL[s.cat] ?? s.cat} / ${METRIC_LABEL[s.met] ?? s.met}${s.bd ? `; ${s.bd}` : ""}${s.pit ? "; point in time" : ""}${s.total ? "; total" : ""}]`,
       ...ends.slice(-periods).reverse().map((e) => cellLine(p, s, e, cellsOf(s, freq)[e], freq)),
+      // Figures held back by the display guard (suspect.ts) are named so they are never cited.
+      ...Object.entries(heldFor(s, freq))
+        .sort(([a], [b]) => b.localeCompare(a))
+        .slice(0, periods)
+        .map(([e, c]) => `  ${e}: held back, do not cite (${c.why ?? "its unit or period is contradicted by the documents"})`),
     ].join("\n");
     if (out.join("\n").length + block.length > MAX) break;
     out.push(block);
