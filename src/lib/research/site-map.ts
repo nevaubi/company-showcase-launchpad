@@ -27,7 +27,7 @@ const NOTES: Record<string, string> = {
   "/app/macro": "FRED economic series",
   "/app/hedge-funds": "Hedge fund leverage, positioning and crowding",
   "/app/supply-chain":
-    "Named customers and suppliers in Network (flows by stated dollars), Globe (where they are based) and Chain views, shock simulation (add ?t=TICKER)",
+    "Named customers, suppliers, partners and competitors in Network (bands sized by stated revenue, purchase or contract figures or shares), Globe (where they are based; shapes mark the relation) and Chain views, plus stats, link evidence, shock simulation and stated exposure. Figures, single-source flags and regions appear only when the quoted sentence states them; guarantees, investments and financing are listed apart, never added. Address params: t=TICKER, view=network|globe|chain, sel=relation:TICKER or relation:Name (opens that name's evidence, e.g. sel=supplier:TSM), overlay=single|concentration|geo|dollars, depth=2 (second-order names), tab=evidence|reactions|changes|shock|exposure. Example: /app/supply-chain?t=NVDA&view=globe&sel=supplier:TSM",
   "/app/alt-data": "Public alternative data: contracts, FDA, recalls, complaints",
   "/app/setups":
     "Published short-term strategies re-tested nightly, judged on out-of-sample trades",
