@@ -1,6 +1,7 @@
 // Scheduled refresh jobs. Each invocation handles one small slice (the scheduler's
-// HTTP call is short-lived and Workers allow six concurrent outbound requests),
-// advancing a cursor in job_state so successive runs rotate through everything.
+// HTTP call is short-lived and Workers allow six concurrent outbound requests). Rotating jobs read
+// their cursor in job_state, do the slice, and move the cursor only after the slice was stored
+// (slice.ts), so a run the scheduler cuts off repeats its slice instead of skipping it.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { BENCHMARKS, COVERAGE, MACRO_SERIES, type CoverageCompany } from "@/lib/coverage";
 import { form4XmlPath, parseForm4 } from "@/lib/financials/form4";
@@ -10,31 +11,89 @@ import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { insiderBuyRows } from "@/lib/signals/events";
+import { claimSlice, commitSlice, outcomeOf, runBudgetMs, sliceKey, unitTimeoutMs, type Claim, type SliceOutcome } from "@/lib/jobs/slice";
+import { fairOrder } from "@/lib/jobs/priority";
+import { loadJobRank } from "@/lib/jobs/priority.server";
+import { backoffRow, blockStreak, chainStatus, judgeSlice, OPTIONS_BACKOFF_KEY, OPTIONS_PROBE, optionsNight, type ChainResult } from "@/lib/jobs/options-run";
+import { pickEstimates, ESTIMATE_NONE_PREFIX, ESTIMATE_SCAN } from "@/lib/jobs/estimates-order";
+import { barProblem } from "@/lib/jobs/bar-check";
+import { healRow, providerKey, tripRow, type CircuitRow } from "@/lib/jobs/provider-health";
+import { isEarnings } from "@/lib/jobs/sec-discover";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "ir-site" | "ir-extract" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror" | "emails";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror" | "emails";
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
-
-async function advance(job: JobName, total: number, step: number): Promise<{ start: number; wrapped: boolean }> {
-  const { data } = await supabaseAdmin.from("job_state").select("cursor").eq("job", job).maybeSingle();
-  const start = (data?.cursor ?? 0) % Math.max(1, total);
-  const next = start + step;
-  await supabaseAdmin.from("job_state").upsert({ job, cursor: next >= total ? 0 : next, updated_at: new Date().toISOString() });
-  return { start, wrapped: next >= total };
-}
-
 const slice = <T,>(all: T[], start: number, n: number) => all.slice(start, start + n);
 
 /**
- * The scheduler's HTTP call gives up after a few seconds and the platform cancels the handler with
- * it, so every job stops starting new work once this budget is spent and leaves the rest to the
- * next run.
+ * The scheduler's HTTP call gives up after about 5 s and the platform cancels the handler with it,
+ * so every job stops starting new work once this budget is spent and leaves the rest to the next
+ * run; every unit also gets a deadline from the same budget. 3.5 s by default (the run plus its
+ * database writes fits under the cut); JOB_RUN_BUDGET_MS raises it after the scheduler timeout is raised.
  */
-export const RUN_BUDGET_MS = 2000;
-const budget = (ms = RUN_BUDGET_MS) => {
+export const RUN_BUDGET_MS = runBudgetMs(process.env);
+
+export interface Budget {
+  (): boolean;
+  /** epoch ms when the budget ends */
+  end: number;
+  /** a per-unit abort signal: the time left in the run, at least 500 ms */
+  signal(): AbortSignal;
+}
+export const budget = (ms = RUN_BUDGET_MS): Budget => {
   const end = Date.now() + ms;
-  return () => Date.now() < end;
+  const f = (() => Date.now() < end) as Budget;
+  f.end = end;
+  f.signal = () => AbortSignal.timeout(unitTimeoutMs(end, Date.now()));
+  return f;
 };
+
+type StateRow = { job: string; cursor: number | null; paused_reason: string | null; updated_at: string | null };
+
+async function readStates(jobs: string[]): Promise<Map<string, StateRow>> {
+  const { data, error } = await supabaseAdmin.from("job_state").select("job, cursor, paused_reason, updated_at").in("job", jobs);
+  if (error) throw new Error(error.message);
+  return new Map(((data ?? []) as StateRow[]).map((r) => [r.job, r]));
+}
+
+/** Upsert cursor rows (same columns in every row, so pause reasons on those rows are kept). */
+async function putCursors(rows: { job: string; cursor: number }[]) {
+  if (!rows.length) return;
+  const at = new Date().toISOString();
+  const { error } = await supabaseAdmin.from("job_state").upsert(rows.map((r) => ({ job: r.job, cursor: r.cursor, updated_at: at })));
+  if (error) throw new Error(error.message);
+}
+
+/** Read the cursor and record this attempt before any work (see slice.ts). */
+async function claim(job: string, total: number, step: number, extra: string[] = []): Promise<{ c: Claim; st: Map<string, StateRow> }> {
+  const st = await readStates([job, sliceKey(job), ...extra]);
+  const c = claimSlice(st.get(job)?.cursor, st.get(sliceKey(job))?.cursor, total, step);
+  await putCursors([{ job: sliceKey(job), cursor: c.triesCursor }, ...(c.cursorNow != null ? [{ job, cursor: c.cursorNow }] : [])]);
+  return { c, st };
+}
+
+/** Move the cursor only for a stored slice; a failed or blocked slice is repeated next run. */
+async function commit(job: string, c: Claim, outcome: SliceOutcome, total: number, step: number, advanceBy?: number) {
+  const p = commitSlice(c, outcome, total, step, advanceBy);
+  await putCursors([{ job: sliceKey(job), cursor: p.triesCursor }, ...(p.cursor != null ? [{ job, cursor: p.cursor }] : [])]);
+  return p;
+}
+
+const sliceDetail = (c: Claim, outcome: SliceOutcome, total: number) => ({
+  at: c.start,
+  of: total,
+  attempt: c.attempt,
+  outcome,
+  ...(c.skipped ? { skipped: `slice at ${c.skipped.start} skipped after ${c.skipped.tries} tries without a stored result` } : {}),
+});
+
+/** COVERAGE in priority order: top 1,000 by dv20 first with one tail company after every four, so the tail still rotates. */
+async function rankedCoverage(offset = 0): Promise<CoverageCompany[]> {
+  const rank = await loadJobRank();
+  if (!rank.size) return COVERAGE;
+  const by = new Map(COVERAGE.map((c) => [c.ticker, c]));
+  return fairOrder(COVERAGE.map((c) => c.ticker), rank, { offset }).map((t) => by.get(t)!);
+}
 
 export async function runJob(job: JobName): Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }> {
   const { data: run } = await supabaseAdmin.from("job_runs").insert({ job }).select("id").single();
@@ -53,10 +112,20 @@ export async function runJob(job: JobName): Promise<{ ok: boolean; items: number
   return result;
 }
 
-const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }>> = {
+type JobResult = { ok: boolean; items: number; detail: Record<string, unknown> };
+
+const JOBS: Record<JobName, () => Promise<JobResult>> = {
+  /** Dead-man watchdog first (bounded), then the email outbox with the time that is left. */
   async emails() {
+    const started = Date.now();
+    let watchdog: Record<string, unknown> = { skipped: "WATCHDOG=0" };
+    if (process.env["WATCHDOG"] !== "0") {
+      const { runWatchdog } = await import("@/lib/jobs/watchdog.server");
+      watchdog = await runWatchdog(1500).catch((e: Error) => ({ error: e.message.slice(0, 200) }));
+    }
     const { runOutbox } = await import("@/lib/email/outbox.server");
-    return runOutbox();
+    const out = await runOutbox(Math.max(1000, RUN_BUDGET_MS - (Date.now() - started)));
+    return { ...out, detail: { ...out.detail, watchdog } };
   },
   async "short-volume"() {
     const { refreshShortVolume } = await import("@/lib/jobs/short-volume.server");
@@ -73,10 +142,11 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
   /**
    * Alt data for every covered company: each run refreshes three (company, quick public source)
    * pairs in parallel, rotating through only the pairs whose source can know about the company
-   * (registry names from `scripts/alt-registry.ts`). Slow sources (13D/13G history, federal
-   * contracts) stay in `scripts/alt-data.ts`; 8-K/SEC form rows already refresh in the `sec` job.
+   * (registry names from `scripts/alt-registry.ts`), top 1,000 companies first. Slow sources (13D/13G
+   * history, federal contracts) stay in `scripts/alt-data.ts`; 8-K/SEC form rows refresh in the `sec` job.
    */
   async "alt-data"() {
+    const left = budget();
     const { ADAPTERS, altFetch, altRowsForDb } = await import("@/lib/alt/collect.server");
     const { appliesTo, REGISTRY_PATH } = await import("@/lib/alt/registry");
     // NHTSA recall queries take ~6 s, longer than a scheduled call lives, so recalls refresh in the script.
@@ -84,13 +154,13 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     const { data: file } = await supabaseAdmin.storage.from("datasets").download(REGISTRY_PATH);
     const reg = (file ? JSON.parse(await file.text()) : {}) as Record<string, import("@/lib/alt/registry").AltRegistryEntry>;
     const pairs: [CoverageCompany, string][] = [];
-    for (const c of COVERAGE) for (const s of sets) if (appliesTo(s, c, reg[c.ticker])) pairs.push([c, s]);
+    for (const c of await rankedCoverage()) for (const s of sets) if (appliesTo(s, c, reg[c.ticker])) pairs.push([c, s]);
     const step = 3;
-    const { start } = await advance("alt-data", pairs.length, step);
-    altFetch.timeoutMs = RUN_BUDGET_MS - 300;
+    const { c: cl } = await claim("alt-data", pairs.length, step);
+    altFetch.timeoutMs = Math.max(500, left.end - Date.now() - 300);
     altFetch.tries = 1;
     altFetch.recent = true;
-    const picked = slice(pairs, start, step);
+    const picked = slice(pairs, cl.start, step);
     const results = await Promise.all(
       picked.map(async ([c, set]) => {
         try {
@@ -111,8 +181,11 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
         }
       }),
     );
+    const failed = results.filter((r) => r.error).length;
+    const outcome = outcomeOf(picked.length, failed);
+    await commit("alt-data", cl, outcome, pairs.length, step);
     const items = results.reduce((n, r) => n + r.rows, 0);
-    return { ok: results.some((r) => !r.error), items, detail: { pairs: pairs.length, at: start, results } };
+    return { ok: outcome === "done", items, detail: { pairs: pairs.length, ...sliceDetail(cl, outcome, pairs.length), results } };
   },
   /**
    * Government data published as whole-market files: the SEC fails-to-deliver file for the next
@@ -139,111 +212,202 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
     return { ok: true, items: rows.length, detail: { period: next } };
   },
   /**
-   * Nightly options snapshots from Cboe's delayed chains: four stocks per call, rotating through every
-   * covered company (schedules run every minute through the US evening). Rows are keyed by the quotes'
-   * own trading day, so a re-run the same night overwrites rather than duplicates; stocks without
-   * listed options answer 403 and are skipped.
+   * Nightly options snapshots from Cboe's delayed chains: four stocks per call, top 1,000 by dv20
+   * first (the list restarts at the top each night, so a short night still covers the biggest names).
+   * Rows are keyed by the quotes' own trading day, so a re-run the same night overwrites rather than
+   * duplicates. A refusal (429, or 403s that SPY confirms) is not "no options": the slice is held,
+   * the job backs off (`options-backoff`), `provider:cboe` records the block and the run is not ok.
    */
   async options() {
     const { cboeChainUrl, snapshotRow, summarizeChain } = await import("@/lib/options/core");
-    const tickers = COVERAGE.map((c) => c.ticker);
+    const left = budget();
+    const now = Date.now();
+    const night = optionsNight(now);
+    const st0 = await readStates([OPTIONS_BACKOFF_KEY, providerKey("cboe"), "options-night"]);
+    const backoff = st0.get(OPTIONS_BACKOFF_KEY);
+    if ((backoff?.cursor ?? 0) > now / 1000) return { ok: true, items: 0, detail: { idle: true, retryAt: new Date((backoff?.cursor ?? 0) * 1000).toISOString(), reason: backoff?.paused_reason } };
+    const tickers = (await rankedCoverage(night)).map((c) => c.ticker);
     const step = 4;
-    const { start } = await advance("options", tickers.length, step);
-    const picked = slice(tickers, start, step);
-    const results = await Promise.all(
-      picked.map(async (t) => {
+    // A new night starts at the top of the ranked list.
+    if ((st0.get("options-night")?.cursor ?? 0) !== night) await putCursors([{ job: "options", cursor: 0 }, { job: sliceKey("options"), cursor: 0 }, { job: "options-night", cursor: night }]);
+    const { c: cl } = await claim("options", tickers.length, step);
+    const picked = slice(tickers, cl.start, step);
+    const headers = { "User-Agent": "Mozilla/5.0 (compatible; FiledUnder/1.0)", Accept: "application/json" };
+    const results: ChainResult[] = await Promise.all(
+      picked.map(async (t): Promise<ChainResult> => {
         try {
-          const r = await fetch(cboeChainUrl(t), { headers: { "User-Agent": "Mozilla/5.0 (compatible; FiledUnder/1.0)", Accept: "application/json" }, signal: AbortSignal.timeout(RUN_BUDGET_MS - 600) });
-          if (r.status === 403 || r.status === 404) return { t, none: true as const };
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          const r = await fetch(cboeChainUrl(t), { headers, signal: AbortSignal.timeout(unitTimeoutMs(left.end - 600, Date.now())) });
+          const kind = chainStatus(r.status);
+          if (kind !== "read") {
+            r.body?.cancel().catch(() => undefined);
+            if (kind === "error") return { t, kind: "error", message: `HTTP ${r.status}` };
+            return { t, kind, status: r.status };
+          }
           const j = (await r.json()) as { data?: import("@/lib/options/core").CboeChain };
           const snap = j.data ? summarizeChain(t, j.data) : null;
-          return snap ? { t, row: snapshotRow(snap) } : { t, none: true as const };
+          return snap ? { t, kind: "stored", row: snapshotRow(snap) } : { t, kind: "none", status: r.status };
         } catch (e) {
-          return { t, error: (e as Error).message.slice(0, 120) };
+          return { t, kind: "error", message: (e as Error).message.slice(0, 120) };
         }
       }),
     );
-    const rows = results.flatMap((r) => ("row" in r && r.row ? [r.row] : []));
+    let verdict = judgeSlice(results);
+    let probe: number | undefined;
+    if (verdict.needsProbe) {
+      probe = await fetch(cboeChainUrl(OPTIONS_PROBE), { headers, signal: AbortSignal.timeout(unitTimeoutMs(left.end - 300, Date.now())) })
+        .then((r) => (r.body?.cancel().catch(() => undefined), r.status))
+        .catch(() => 0);
+      verdict = judgeSlice(results, probe);
+    }
+    const rows = verdict.results.flatMap((r) => (r.kind === "stored" ? [r.row as ReturnType<typeof snapshotRow>] : []));
     if (rows.length) {
       const { error } = await supabaseAdmin.from("options_daily").upsert(rows.map((r) => ({ ...r, term: r.term as unknown as Json, fetched_at: new Date().toISOString() })), { onConflict: "ticker,date" });
       if (error) throw new Error(error.message);
     }
-    const failed = results.filter((r) => "error" in r);
-    return { ok: failed.length < picked.length || picked.length === 0, items: rows.length, detail: { at: start, of: tickers.length, stored: rows.map((r) => r.ticker), none: results.filter((r) => "none" in r).map((r) => r.t), failed } };
+    await commit("options", cl, verdict.outcome, tickers.length, step);
+    const cboe = st0.get(providerKey("cboe")) as CircuitRow | undefined;
+    let retryAt: string | undefined;
+    if (verdict.outcome === "blocked") {
+      const statuses = verdict.results.flatMap((r) => (r.kind === "blocked" ? [r.status] : []));
+      const b = backoffRow(blockStreak(backoff?.paused_reason) + 1, statuses, Date.now());
+      retryAt = new Date(b.cursor * 1000).toISOString();
+      const trip = tripRow("cboe", "rate", b.paused_reason.replace(/^blocked: /, "").replace(/\s\[n=\d+\]$/, ""), cboe ?? null, Date.now());
+      // Same columns in both rows; the circuit's retry time follows the job's own backoff.
+      const { error } = await supabaseAdmin.from("job_state").upsert([
+        { job: b.job, cursor: b.cursor, paused_reason: b.paused_reason, updated_at: b.updated_at },
+        { job: trip.job, cursor: b.cursor, paused_reason: trip.paused_reason, updated_at: trip.updated_at ?? b.updated_at },
+      ]);
+      if (error) throw new Error(error.message);
+    } else if (verdict.stored > 0 && (backoff?.paused_reason || cboe?.paused_reason)) {
+      // Cboe answered again: clear the backoff and close the circuit.
+      const heal = healRow("cboe", Date.now());
+      const at = heal.updated_at ?? new Date().toISOString();
+      const { error } = await supabaseAdmin.from("job_state").upsert([
+        { job: OPTIONS_BACKOFF_KEY, cursor: 0, paused_reason: null, updated_at: at },
+        { job: heal.job, cursor: 0, paused_reason: null, updated_at: at },
+      ]);
+      if (error) throw new Error(error.message);
+    }
+    const of = (k: ChainResult["kind"]) => verdict.results.filter((r) => r.kind === k);
+    return {
+      ok: verdict.outcome === "done",
+      items: rows.length,
+      detail: {
+        ...sliceDetail(cl, verdict.outcome, tickers.length),
+        night,
+        stored: rows.map((r) => r.ticker),
+        none: of("none").map((r) => `${r.t}${"status" in r ? ` ${r.status}` : ""}`),
+        blocked: of("blocked").map((r) => `${r.t}${"status" in r ? ` ${r.status}` : ""}`),
+        failed: of("error").map((r) => `${r.t}: ${"message" in r ? r.message : ""}`),
+        ...(probe !== undefined ? { probe: `${OPTIONS_PROBE} ${probe}` } : {}),
+        ...(retryAt ? { retryAt } : {}),
+      },
+    };
   },
-  /** Refresh stale estimates, then fill unused slots with covered companies not yet stored. */
+  /**
+   * Analyst estimates, three a run: covered companies with no stored estimates first (top 1,000 by
+   * dv20 first), then the stalest stored rows; one slot always goes to a row older than a week, so
+   * stored estimates cannot age without bound while new coverage fills. "No estimates" answers get a
+   * 30-day receipt so they do not take a slot every run.
+   */
   async estimates() {
     const left = budget();
     const { data: cooldown, error: cooldownError } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "estimates-backoff").maybeSingle();
     if (cooldownError) throw new Error(cooldownError.message);
     if ((cooldown?.cursor ?? 0) > Date.now() / 1000) return { ok: true, items: 0, detail: { retryAt: new Date((cooldown?.cursor ?? 0) * 1000).toISOString() } };
-    const { data: rows, error: staleError } = await supabaseAdmin.from("analyst_estimates").select("ticker, fetched_at").lt("fetched_at", new Date(Date.now() - 12 * 3600000).toISOString()).order("fetched_at", { ascending: true }).limit(3);
+    const ranked = (await rankedCoverage()).map((c) => c.ticker);
+    const { data: cursor, error: cursorError } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "estimates-new").maybeSingle();
+    if (cursorError) throw new Error(cursorError.message);
+    const start = (cursor?.cursor ?? 0) % ranked.length;
+    const candidates = Array.from({ length: Math.min(ESTIMATE_SCAN, ranked.length) }, (_, i) => ranked[(start + i) % ranked.length]);
+    const [{ data: existing, error }, { data: receipts, error: receiptError }, { data: stale, error: staleError }] = await Promise.all([
+      supabaseAdmin.from("analyst_estimates").select("ticker").in("ticker", candidates),
+      supabaseAdmin.from("job_state").select("job, updated_at").in("job", candidates.map((t) => `${ESTIMATE_NONE_PREFIX}${t}`)),
+      supabaseAdmin.from("analyst_estimates").select("ticker, fetched_at").lt("fetched_at", new Date(Date.now() - 12 * 3600000).toISOString()).order("fetched_at", { ascending: true }).limit(3),
+    ]);
+    if (error) throw new Error(error.message);
+    if (receiptError) throw new Error(receiptError.message);
     if (staleError) throw new Error(staleError.message);
-    const batch = (rows ?? []).map((r) => r.ticker);
-    if (batch.length < 3 && left()) {
-      const { data: cursor, error: cursorError } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "estimates-new").maybeSingle();
-      if (cursorError) throw new Error(cursorError.message);
-      const start = (cursor?.cursor ?? 0) % COVERAGE.length;
-      const candidates = Array.from({ length: Math.min(30, COVERAGE.length) }, (_, i) => COVERAGE[(start + i) % COVERAGE.length].ticker);
-      const { data: existing, error } = await supabaseAdmin.from("analyst_estimates").select("ticker").in("ticker", candidates);
-      if (error) throw new Error(error.message);
-      const have = new Set((existing ?? []).map(r => r.ticker));
-      batch.push(...candidates.filter(t => !have.has(t) && !batch.includes(t)).slice(0, 3 - batch.length));
-      // Only advance through a candidate when attempted below. A timeout must not skip new coverage.
-      if (!batch.some(t => candidates.includes(t) && !have.has(t))) {
-        const { error: advanceError } = await supabaseAdmin.from("job_state").upsert({ job: "estimates-new", cursor: (start + candidates.length) % COVERAGE.length, updated_at: new Date().toISOString() });
-        if (advanceError) throw new Error(advanceError.message);
-      }
-    }
-    if (!batch.length) return { ok: true, items: 0, detail: { note: "no stale estimates or missing ticker in this scan" } };
+    const plan = pickEstimates({
+      candidates,
+      start,
+      total: ranked.length,
+      have: new Set((existing ?? []).map((r) => r.ticker)),
+      none: new Map((receipts ?? []).map((r) => [r.job.slice(ESTIMATE_NONE_PREFIX.length), r.updated_at])),
+      stale: (stale ?? []).map((r) => ({ ticker: r.ticker, fetchedAt: r.fetched_at })),
+      nowMs: Date.now(),
+    });
+    // Nothing missing in the scanned window: move the scan on so the next run looks further.
+    if (plan.scanCursor != null) await putCursors([{ job: "estimates-new", cursor: plan.scanCursor }]);
+    if (!plan.batch.length) return { ok: true, items: 0, detail: { note: "no stale estimates or missing ticker in this scan", scannedFrom: start } };
     const { fetchEstimates } = await import("@/lib/estimates.server");
     const failed: string[] = [];
+    const none: string[] = [];
     let items = 0;
-    for (const t of batch) {
+    for (const p of plan.batch) {
       if (!left()) break;
       try {
-        const fresh = await fetchEstimates(t, AbortSignal.timeout(1200));
-        const { error } = await supabaseAdmin.from("analyst_estimates").upsert({ ticker: t, payload: fresh as never, fetched_at: fresh.asOf });
+        const fresh = await fetchEstimates(p.ticker, AbortSignal.timeout(Math.min(1200, unitTimeoutMs(left.end, Date.now()))));
+        const { error } = await supabaseAdmin.from("analyst_estimates").upsert({ ticker: p.ticker, payload: fresh as never, fetched_at: fresh.asOf });
         if (error) throw new Error(error.message);
         items++;
-        if (!(rows ?? []).some(r => r.ticker === t)) {
-          const { error: cursorError } = await supabaseAdmin.from("job_state").upsert({ job: "estimates-new", cursor: (COVERAGE.findIndex(c => c.ticker === t) + 1) % COVERAGE.length, updated_at: new Date().toISOString() });
-          if (cursorError) throw new Error(cursorError.message);
-        }
       } catch (e) {
-        failed.push(`${t}: ${(e as Error).message}`);
-        // Serial requests plus a persistent 30-minute cooldown avoid hammering a throttled source.
-        const { error } = await supabaseAdmin.from("job_state").upsert({ job: "estimates-backoff", cursor: Math.ceil(Date.now() / 1000) + 1800, paused_reason: failed[failed.length - 1].slice(0, 200), updated_at: new Date().toISOString() });
-        if (error) throw new Error(error.message);
-        break;
+        const msg = (e as Error).message;
+        if (/^No estimates for /.test(msg)) {
+          // The provider has no coverage for this company: a receipt, not a provider failure.
+          none.push(p.ticker);
+          const { error } = await supabaseAdmin.from("job_state").upsert({ job: `${ESTIMATE_NONE_PREFIX}${p.ticker}`, cursor: Math.floor(Date.now() / 1000), updated_at: new Date().toISOString() });
+          if (error) throw new Error(error.message);
+        } else {
+          failed.push(`${p.ticker}: ${msg}`);
+          // Serial requests plus a persistent 30-minute cooldown avoid hammering a throttled source.
+          const { error } = await supabaseAdmin.from("job_state").upsert({ job: "estimates-backoff", cursor: Math.ceil(Date.now() / 1000) + 1800, paused_reason: failed[failed.length - 1].slice(0, 200), updated_at: new Date().toISOString() });
+          if (error) throw new Error(error.message);
+          break;
+        }
       }
+      // A missing ticker was attempted: the scan moves past it, never past one not yet tried.
+      if (p.kind === "missing") await putCursors([{ job: "estimates-new", cursor: p.nextCursor }]);
     }
-    return { ok: failed.length === 0, items, detail: { tickers: batch, failed } };
+    return { ok: failed.length === 0, items, detail: { tickers: plan.batch.map((p) => `${p.ticker} (${p.kind})`), none, failed } };
   },
 
-  /** Daily bars for ten symbols per run. */
+  /** Daily bars for ten symbols per run (top 1,000 first, then the tail and the benchmarks). */
   async prices() {
-    const symbols = [...COVERAGE.map((c) => c.ticker), ...BENCHMARKS.map((b) => b.symbol)];
-    const { start, wrapped } = await advance("prices", symbols.length, 10);
-    const batch = slice(symbols, start, 10);
+    const left = budget();
+    const symbols = [...(await rankedCoverage()).map((c) => c.ticker), ...BENCHMARKS.map((b) => b.symbol)];
+    const step = 10;
+    const { c: cl } = await claim("prices", symbols.length, step);
+    const batch = slice(symbols, cl.start, step);
     const stocks = new Set(COVERAGE.map((c) => c.ticker));
+    const flagged: string[] = [];
+    let started = 0;
     const results = await pool(batch, 3, async (symbol) => {
+      // Out of budget: leave this symbol (and the rest of the slice) for the next run.
+      if (!left()) return null;
+      started++;
       // Yahoo first (dividend-adjusted closes); Nasdaq (stocks, ETFs) or Cboe (VIX) when Yahoo throttles.
       let bars;
       try {
-        bars = toBars(await fetchYahoo(symbol, "1mo", "1d"), false);
+        bars = toBars(await fetchYahoo(symbol, "1mo", "1d", left.signal()), false);
       } catch (e) {
         const fallback = isCboeIndex(symbol)
-          ? fetchCboeDaily(symbol)
+          ? fetchCboeDaily(symbol, 31, left.signal())
           : symbol.startsWith("^")
             ? Promise.reject(new Error("no fallback for this index"))
-            : fetchNasdaqDaily(symbol, stocks.has(symbol) ? "stocks" : "etf");
+            : fetchNasdaqDaily(symbol, stocks.has(symbol) ? "stocks" : "etf", 31, left.signal());
         bars = await fallback.catch((n: Error) => {
           throw new Error(`${(e as Error).message}; ${n.message}`);
         });
       }
-      const rows = bars.map(([date, open, high, low, close, adj, volume]) => ({
+      // A bar whose open or close lies outside its high-low range is not stored (the next run's
+      // fetch replaces it); it is reported in the run detail, never repaired by guesswork.
+      const good = bars.filter(([date, open, high, low, close]) => {
+        const p = barProblem({ open, high, low, close });
+        if (p) flagged.push(`${symbol} ${date}: ${p}`);
+        return !p;
+      });
+      const rows = good.map(([date, open, high, low, close, adj, volume]) => ({
         symbol,
         date,
         open,
@@ -254,29 +418,37 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
         volume: Math.round(volume),
         updated_at: new Date().toISOString(),
       }));
-      const { error } = await supabaseAdmin.from("market_bars").upsert(rows);
-      if (error) throw new Error(error.message);
+      if (rows.length) {
+        const { error } = await supabaseAdmin.from("market_bars").upsert(rows);
+        if (error) throw new Error(error.message);
+      }
       return rows.length;
     });
-    if (wrapped) {
+    const failed = batch.flatMap((sym, i) => (results[i].status === "rejected" ? [`${sym}: ${String((results[i] as PromiseRejectedResult).reason?.message ?? results[i])}`] : []));
+    // pool starts symbols in order, so the unstarted ones are the end of the slice
+    const outcome: SliceOutcome = started === 0 ? "failed" : outcomeOf(started, failed.length);
+    const p = await commit("prices", cl, outcome, symbols.length, step, started);
+    if (p.wrapped) {
       await supabaseAdmin.from("market_bars").delete().lt("date", daysAgo(400));
       // Bounded 14-day retention for refresh-job runs. vendor-backfill rows are the collector's
       // lifetime credit/call ledger and are never pruned, so spending ceilings survive restarts.
       await supabaseAdmin.from("job_runs").delete().neq("job", "vendor-backfill").lt("started_at", new Date(Date.now() - 14 * 86400000).toISOString());
     }
-    const failed = batch.flatMap((sym, i) => (results[i].status === "rejected" ? [`${sym}: ${String((results[i] as PromiseRejectedResult).reason?.message ?? results[i])}`] : []));
-    const items = results.reduce((n, r) => n + (r.status === "fulfilled" ? r.value : 0), 0);
-    return { ok: failed.length < batch.length, items, detail: { symbols: batch, failed } };
+    const items = results.reduce((n, r) => n + (r.status === "fulfilled" ? (r.value ?? 0) : 0), 0);
+    return { ok: outcome === "done", items, detail: { ...sliceDetail(cl, outcome, symbols.length), symbols: batch.slice(0, started), notStarted: batch.slice(started), failed, ...(flagged.length ? { flagged } : {}) } };
   },
 
   /** Four macro series per run: recent observations plus a fresh dashboard summary. */
   async macro() {
+    const left = budget();
     const defs = MACRO_SERIES;
-    const { start, wrapped } = await advance("macro", defs.length, 4);
-    const batch = slice(defs, start, 4);
+    const step = 4;
+    const { c: cl } = await claim("macro", defs.length, step);
+    const batch = slice(defs, cl.start, step);
     const since = daysAgo(11 * 365);
     const results = await pool(batch, 4, async (def) => {
-      const obs = isTreasurySeries(def.id) ? await fetchTreasury(def.id, since, 1) : await fetchFred(def.id, since);
+      const signal = left.signal();
+      const obs = isTreasurySeries(def.id) ? await fetchTreasury(def.id, since, 1, signal) : await fetchFred(def.id, since, signal);
       if (!obs.length) throw new Error("no observations");
       const cutoff = daysAgo(400);
       const recent = obs.filter(([d]) => d >= cutoff).map(([date, value]) => ({ series_id: def.id, date, value, updated_at: new Date().toISOString() }));
@@ -291,35 +463,46 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
       if (error) throw new Error(error.message);
       return recent.length;
     });
-    if (wrapped) await supabaseAdmin.from("macro_observations").delete().lt("date", daysAgo(420));
     const failed = batch.flatMap((d, i) => (results[i].status === "rejected" ? [`${d.id}: ${String((results[i] as PromiseRejectedResult).reason?.message ?? "")}`] : []));
+    const outcome = outcomeOf(batch.length, failed.length);
+    const p = await commit("macro", cl, outcome, defs.length, step);
+    if (p.wrapped) await supabaseAdmin.from("macro_observations").delete().lt("date", daysAgo(420));
     const items = results.reduce((n, r) => n + (r.status === "fulfilled" ? r.value : 0), 0);
-    return { ok: failed.length < batch.length, items, detail: { series: batch.map((d) => d.id), failed } };
+    return { ok: outcome === "done", items, detail: { ...sliceDetail(cl, outcome, defs.length), series: batch.map((d) => d.id), failed } };
   },
 
   /**
-   * New filings and Form 4 insider trades for four companies per run (two at a time). Latency for
-   * new filings comes from `sec-discover`; this walk fills Form 4 detail and alt rows everywhere.
+   * New filings and Form 4 insider trades for four companies per run (two at a time, top 1,000
+   * first). Latency for new filings comes from `sec-discover`; this walk fills Form 4 detail and alt
+   * rows everywhere. The cursor moves past the companies that were synced, not the whole slice.
    */
   async sec() {
     const left = budget();
+    const ranked = await rankedCoverage();
     const step = 4;
-    const { start } = await advance("sec", COVERAGE.length, step);
-    const batch = slice(COVERAGE, start, step);
+    const { c: cl } = await claim("sec", ranked.length, step);
+    const batch = slice(ranked, cl.start, step);
     const since = daysAgo(45);
     let filings = 0;
     let trades = 0;
     const errors: string[] = [];
     const done: string[] = [];
+    let broken = 0;
     let next = 0;
     await Promise.all([0, 1].map(async () => {
       while (next < batch.length && left()) {
         const c = batch[next++];
-        const r = await syncCompany(c, since, { form4: true });
+        const r = await syncCompany(c, since, { form4: true, deadline: left.end });
         filings += r.filings; trades += r.trades; errors.push(...r.errors); done.push(c.ticker);
+        if (r.failed) broken++;
       }
     }));
-    return { ok: errors.length < Math.max(1, done.length), items: filings + trades, detail: { companies: done, skipped: batch.map((c) => c.ticker).filter((t) => !done.includes(t)), filings, trades, errors } };
+    // `next` companies were started (in order) and all of them finished.
+    const outcome: SliceOutcome = next === 0 ? "failed" : outcomeOf(next, broken);
+    await commit("sec", cl, outcome, ranked.length, step, next);
+    // A lost earnings-event write always fails the run, so the failure shows in job health.
+    const earningsLost = errors.some((e) => e.includes(" earnings events: "));
+    return { ok: outcome === "done" && !earningsLost && errors.length < Math.max(1, done.length), items: filings + trades, detail: { ...sliceDetail(cl, outcome, ranked.length), companies: done, notStarted: batch.slice(next).map((c) => c.ticker), filings, trades, errors } };
   },
 
   /** Refresh the local copy of partner company/price files and universe.json, one file per call. */
@@ -331,71 +514,72 @@ const JOBS: Record<JobName, () => Promise<{ ok: boolean; items: number; detail: 
   /** Market-wide new-filing discovery (EDGAR current feed + daily master index) for every covered company. */
   async "sec-discover"() {
     const { runDiscovery } = await import("@/lib/jobs/sec-discover.server");
-    return runDiscovery(budget());
+    const left = budget();
+    return runDiscovery(left, left.end);
   },
 
   /** Store the exhibits of new earnings / Reg FD 8-Ks found by the SEC scan, a few files per run. */
   async "ir-docs"() {
     // Deep history (2008+) and IR-website files are collected by scripts/ir-backfill.ts and
-    // scripts/ir-site.ts; this run only keeps up with new releases inside the call window.
+    // scripts/ir-site-daily.ts (worker); this run only keeps up with new releases inside the call window.
     const { collectRecentRelease } = await import("@/lib/jobs/ir.server");
     const fresh = await collectRecentRelease(COVERAGE, budget());
     if (!fresh) return { ok: true, items: 0, detail: { idle: true } };
     return { ok: true, items: fresh.stored, detail: fresh as unknown as Record<string, unknown> };
   },
 
-  /** Extract segment/KPI facts from the next stored press release. */
-  async "ir-extract"() {
-    const { extractIrDocument, nextToExtract } = await import("@/lib/ir/extract.server");
-    const next = await nextToExtract();
-    if (!next) return { ok: true, items: 0, detail: { idle: true } };
-    try {
-      const r = await extractIrDocument(next.id);
-      return { ok: true, items: r.facts, detail: { ...next, ...r } };
-    } catch (e) {
-      const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
-      await db.from("ir_documents").update({ extracted_at: new Date().toISOString(), extract_status: `error: ${(e as Error).message.slice(0, 200)}` }).eq("id", next.id);
-      return { ok: false, items: 0, detail: { ...next, error: (e as Error).message } };
-    }
-  },
-
-  /** Store files hosted on one company's IR website per run (found with Firecrawl). */
-  async "ir-site"() {
-    const { start } = await advance("ir-site", COVERAGE.length, 1);
-    const { collectIr } = await import("@/lib/jobs/ir.server");
-    const r = await collectIr(COVERAGE[start], "site", 25);
-    return { ok: true, items: r.stored, detail: r as unknown as Record<string, unknown> };
-  },
-
   /** Mirror one recent 10-K/10-Q primary document into file storage per run. */
   async "filing-cache"() {
-    const { start } = await advance("filing-cache", COVERAGE.length * 2, 1);
-    const c = COVERAGE[Math.floor(start / 2)];
-    const form = start % 2 === 0 ? "10-K" : "10-Q";
-    const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)).json()) as {
-      filings: { recent: { accessionNumber: string[]; form: string[]; primaryDocument: string[]; size: number[] } };
-    };
-    const r = sub.filings.recent;
-    const i = r.form.findIndex((f) => f === form);
-    if (i < 0) return { ok: true, items: 0, detail: { ticker: c.ticker, form, skipped: "no filing" } };
-    const accn = r.accessionNumber[i];
-    const doc = r.primaryDocument[i];
-    // Big filings take longer than the scheduler waits; they're mirrored the first time someone opens them.
-    if ((r.size?.[i] ?? 0) > 12 * 1024 * 1024) return { ok: true, items: 0, detail: { ticker: c.ticker, form, accn, doc, skipped: "large — mirrored on first view" } };
-    const cached = await cacheFilingDocument(c.cik, accn, doc);
-    return { ok: true, items: cached.stored ? 1 : 0, detail: { ticker: c.ticker, form, accn, doc, ...cached } };
+    const left = budget();
+    const total = COVERAGE.length * 2;
+    const { c: cl } = await claim("filing-cache", total, 1);
+    const c = COVERAGE[Math.floor(cl.start / 2)];
+    const form = cl.start % 2 === 0 ? "10-K" : "10-Q";
+    let detail: Record<string, unknown>;
+    let items = 0;
+    try {
+      const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`, { deadline: left.end })).json()) as {
+        filings: { recent: { accessionNumber: string[]; form: string[]; primaryDocument: string[]; size: number[] } };
+      };
+      const r = sub.filings.recent;
+      const i = r.form.findIndex((f) => f === form);
+      if (i < 0) detail = { ticker: c.ticker, form, skipped: "no filing" };
+      else {
+        const accn = r.accessionNumber[i];
+        const doc = r.primaryDocument[i];
+        // Big filings take longer than the scheduler waits; they're mirrored the first time someone opens them.
+        if ((r.size?.[i] ?? 0) > 12 * 1024 * 1024) detail = { ticker: c.ticker, form, accn, doc, skipped: "large, mirrored on first view" };
+        else {
+          const cached = await cacheFilingDocument(c.cik, accn, doc, undefined, "text/html", left.end);
+          items = cached.stored ? 1 : 0;
+          detail = { ticker: c.ticker, form, accn, doc, ...cached };
+        }
+      }
+    } catch (e) {
+      // Hold the slot: the next run retries this company and form (skipped after three tries).
+      await commit("filing-cache", cl, "failed", total, 1);
+      return { ok: false, items: 0, detail: { ...sliceDetail(cl, "failed", total), ticker: c.ticker, form, error: (e as Error).message } };
+    }
+    await commit("filing-cache", cl, "done", total, 1);
+    return { ok: true, items, detail: { ...sliceDetail(cl, "done", total), ...detail } };
   },
 };
+
 
 
 /**
  * One company's recent submissions: upserts every recent filing (fills rows discovery found with
  * full details), earnings 8-K (item 2.02) events and alt rows; optionally parses two new Form 4s.
  */
-export async function syncCompany(c: CoverageCompany, since: string, opts: { form4: boolean }): Promise<{ filings: number; trades: number; errors: string[] }> {
-  const out = { filings: 0, trades: 0, errors: [] as string[] };
+export async function syncCompany(
+  c: CoverageCompany,
+  since: string,
+  opts: { form4: boolean; deadline?: number },
+): Promise<{ filings: number; trades: number; errors: string[]; failed: boolean }> {
+  const out = { filings: 0, trades: 0, errors: [] as string[], failed: false };
+  const sec = { deadline: opts.deadline };
   try {
-    const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`)).json()) as {
+    const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${c.cik.padStart(10, "0")}.json`, sec)).json()) as {
       filings: { recent: Record<string, (string | number)[]> };
     };
     const r = sub.filings.recent;
@@ -418,16 +602,22 @@ export async function syncCompany(c: CoverageCompany, since: string, opts: { for
       }))
       .filter((f) => f.filed >= since && !/^(424B|FWP|SC 13|S-3)/.test(f.form));
     if (!rows.length) return out;
-    const { data: known } = await supabaseAdmin.from("sec_filings").select("accn").in("accn", rows.map((f) => f.accn));
+    const { data: known, error: knownError } = await supabaseAdmin.from("sec_filings").select("accn").in("accn", rows.map((f) => f.accn));
+    if (knownError) throw new Error(knownError.message);
     const have = new Set((known ?? []).map((k) => k.accn));
     const fresh = rows.filter((f) => !have.has(f.accn));
     if (fresh.length) {
       const { error } = await supabaseAdmin.from("sec_filings").upsert(fresh);
       if (error) throw new Error(error.message);
       out.filings += fresh.length;
-      // Earnings announcement dates for the setups engine (8-K item 2.02).
-      const earn = fresh.filter((f) => /^8-K/.test(f.form) && /(^|,)\s*2\.02/.test(f.items ?? "")).map((f) => ({ ticker: c.ticker, accn: f.accn, filed: f.filed, source: "sec-8k-2.02" }));
-      if (earn.length) await supabaseAdmin.from("earnings_events").upsert(earn, { onConflict: "ticker,accn", ignoreDuplicates: true });
+    }
+    // Earnings announcement dates for the setups engine (8-K item 2.02). Every 2.02 filing in the
+    // window is asserted, not only new ones, so an event write that failed once is repaired on the
+    // company's next pass (insert-only, idempotent). A failed write is reported, never ignored.
+    const earn = rows.filter((f) => isEarnings(f.form, f.items)).map((f) => ({ ticker: c.ticker, accn: f.accn, filed: f.filed, source: "sec-8k-2.02" }));
+    if (earn.length) {
+      const { error } = await supabaseAdmin.from("earnings_events").upsert(earn, { onConflict: "ticker,accn", ignoreDuplicates: true });
+      if (error) out.errors.push(`${c.ticker} earnings events: ${error.message}`);
     }
     if (!opts.form4) return out;
     // Parse up to two new Form 4s per company per run; the rest are picked up on later passes.
@@ -443,7 +633,7 @@ export async function syncCompany(c: CoverageCompany, since: string, opts: { for
     for (const f of candidates.filter((x) => !seen.has(`form4-seen:${x.accn}`)).slice(0, 2)) {
       try {
       const path = form4XmlPath(f.doc);
-      const xml = await (await fetchSec(archiveUrl(c.cik, f.accn, path))).text();
+      const xml = await (await fetchSec(archiveUrl(c.cik, f.accn, path), sec)).text();
       // Do not receipt a malformed response as an empty/derivative-only filing.
       if (!/<ownershipDocument\b/i.test(xml) || !/<\/ownershipDocument>/i.test(xml)) throw new Error("Invalid ownership XML");
       const parsed = parseForm4(xml, { accn: f.accn, filed: f.filed, report: f.report ?? undefined }, path);
@@ -483,6 +673,7 @@ export async function syncCompany(c: CoverageCompany, since: string, opts: { for
     }
   } catch (e) {
     out.errors.push(`${c.ticker}: ${(e as Error).message}`);
+    out.failed = true;
   }
   return out;
 }
@@ -502,12 +693,12 @@ async function gunzip(bytes: ArrayBuffer): Promise<string> {
 }
 
 /** Store an SEC document (gzip) in file storage unless it's already there. */
-export async function cacheFilingDocument(cik: string, accn: string, doc: string, text?: string, contentType = "text/html") {
+export async function cacheFilingDocument(cik: string, accn: string, doc: string, text?: string, contentType = "text/html", deadline?: number) {
   const { data: have } = await supabaseAdmin.from("filing_documents").select("bytes").eq("accn", accn).eq("doc", doc).maybeSingle();
   if (have) return { stored: false, bytes: have.bytes, reason: "already cached" };
   let body = text;
   if (body == null) {
-    const res = await fetchSec(archiveUrl(cik, accn, doc));
+    const res = await fetchSec(archiveUrl(cik, accn, doc), { deadline });
     contentType = res.headers.get("content-type") ?? contentType;
     body = await res.text();
   }
