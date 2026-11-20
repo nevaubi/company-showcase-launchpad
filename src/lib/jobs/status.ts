@@ -115,6 +115,13 @@ export interface StalledCursor {
   attempts: number;
 }
 
+/** True inside the options schedule: 22:00-23:59 UTC Monday to Friday and 00:00-05:59 Tuesday to Saturday (review R13: weekend nights are not stalls). */
+export function optionsScheduled(d: Date): boolean {
+  const h = d.getUTCHours();
+  const day = d.getUTCDay();
+  return (h >= 22 && day >= 1 && day <= 5) || (h < 6 && day >= 2 && day <= 6);
+}
+
 /** Cursors that have not moved for three times their job's cadence (not counted while the job is not expected to run). */
 export function stalledCursors(rows: readonly StateRow[], nowMs: number): StalledCursor[] {
   const by = new Map(rows.map((r) => [r.job, r]));
@@ -126,8 +133,8 @@ export function stalledCursors(rows: readonly StateRow[], nowMs: number): Stalle
     const row = by.get(c.job);
     if (!s || !row) continue;
     if (s.marketHours && !inMarketHours(now)) continue;
-    // Options run 22:00 to 05:59 UTC on weekday nights only.
-    if (c.job === "options" && !(now.getUTCHours() >= 22 || now.getUTCHours() < 6)) continue;
+    // Options run 22:00 to 05:59 UTC on weekday nights only (cron: 22-23 Mon-Fri, 0-5 Tue-Sat).
+    if (c.job === "options" && !optionsScheduled(now)) continue;
     const limitMin = c.job === "options" ? 30 : 3 * s.everyMin;
     const moved = row.updated_at ? Date.parse(row.updated_at) : 0;
     if (nowMs - moved <= limitMin * 60_000) continue;

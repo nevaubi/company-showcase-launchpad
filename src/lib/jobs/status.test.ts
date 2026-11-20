@@ -50,4 +50,13 @@ describe("pipeline status", () => {
     expect(c[0].median_age_hours).toBe(5.9);
     expect(c[0].top100).toBe(74);
   });
+  it("weekend nights are not options stalls; weekday nights are (review R13)", () => {
+    const rows = [s("options", 804, null, "2026-11-20T03:50:00Z")];
+    expect(stalledCursors(rows, Date.parse("2026-11-21T23:00:00Z"))).toEqual([]); // Saturday night
+    expect(stalledCursors(rows, Date.parse("2026-11-23T02:00:00Z"))).toEqual([]); // early Monday
+    expect(stalledCursors(rows, Date.parse("2026-11-24T02:00:00Z")).map((x) => x.job)).toEqual(["options"]); // early Tuesday
+  });
+  it("cleared episodes waiting out their recovery hold are not open alerts", () => {
+    expect(openAlerts([s("alert:stale:macro", 1, "cleared sent: x", "y"), s("alert:worker-heartbeat", 2, "sent: y", "z")]).map((a) => a.key)).toEqual(["worker-heartbeat"]);
+  });
 });

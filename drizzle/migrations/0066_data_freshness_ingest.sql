@@ -16,7 +16,8 @@
 --                            longer keeps it fresh
 --   ir_label_map             last ok ir-canon run (the canon keeps most labels, so inserts were rare)
 --   reports                  newest ready report_runs row (a lock release no longer looks like a report)
--- job_health(hours): runs, unfinished, failed, last ok, last run and the current failure streak per job.
+-- job_health(hours): runs, unfinished, failed, last ok, last run and the current failure streak per job
+-- (counted over finished runs only; unfinished runs are reported on their own).
 -- data_coverage(): per dataset, how many of the top 100 / 500 / 1,000 companies (highest 20-day dollar
 -- volume, setup_series.dv20) have a row, and the median and 90th percentile age in hours of each
 -- covered company's newest row, so a slow rotation shows instead of hiding behind a table-wide maximum.
@@ -75,13 +76,15 @@ RETURNS TABLE(job text, runs bigint, unfinished bigint, failed bigint, last_ok t
 LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   WITH r AS (
     SELECT j.job, j.started_at, j.finished_at, j.ok,
-           row_number() OVER (PARTITION BY j.job ORDER BY j.started_at DESC) AS rn
+           row_number() OVER (PARTITION BY j.job ORDER BY j.started_at DESC) AS rn,
+           -- position among finished runs only: a cut-off or running row neither breaks nor extends a streak (review R9)
+           CASE WHEN j.finished_at IS NOT NULL THEN row_number() OVER (PARTITION BY j.job, (j.finished_at IS NOT NULL) ORDER BY j.started_at DESC) END AS frn
     FROM job_runs j
     WHERE j.started_at > now() - make_interval(hours => least(greatest(_hours, 1), 336)) AND j.job <> 'vendor-backfill'
   )
   SELECT r.job, count(*), count(*) FILTER (WHERE r.finished_at IS NULL), count(*) FILTER (WHERE r.ok = false),
          max(r.started_at) FILTER (WHERE r.ok), max(r.started_at),
-         coalesce(min(r.rn) FILTER (WHERE r.ok IS TRUE) - 1, count(*))::int
+         coalesce(min(r.frn) FILTER (WHERE r.ok IS TRUE) - 1, count(*) FILTER (WHERE r.finished_at IS NOT NULL))::int
   FROM r GROUP BY r.job
 $$;
 REVOKE ALL ON FUNCTION public.job_health(int) FROM PUBLIC, anon, authenticated;

@@ -36,4 +36,9 @@ describe("migration 0066", () => {
     expect(grant).toBeGreaterThan(revoke);
     expect(body).not.toMatch(/TO (anon|authenticated)/);
   });
+  it("counts the failure streak over finished runs only (review R9)", () => {
+    const body = sql.slice(sql.indexOf("CREATE OR REPLACE FUNCTION public.job_health"), sql.indexOf("CREATE OR REPLACE FUNCTION public.data_coverage"));
+    expect(body).toMatch(/CASE WHEN j\.finished_at IS NOT NULL THEN row_number\(\) OVER \(PARTITION BY j\.job, \(j\.finished_at IS NOT NULL\) ORDER BY j\.started_at DESC\) END AS frn/);
+    expect(body).toMatch(/coalesce\(min\(r\.frn\) FILTER \(WHERE r\.ok IS TRUE\) - 1, count\(\*\) FILTER \(WHERE r\.finished_at IS NOT NULL\)\)::int/);
+  });
 });
