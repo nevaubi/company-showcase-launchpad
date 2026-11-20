@@ -138,7 +138,7 @@ export function IrPageView({ ticker, data, store, focus, onFocusDone }: { ticker
       {hasSeries && <IrKeyMetrics ticker={ticker} payload={data.payload!} />}
       {hasSeries && <IrFinancialMap ticker={ticker} payload={data.payload!} />}
       {hasSeries ? (
-        <IrBreakdowns ticker={ticker} payload={data.payload!} focus={focus} onFocusDone={onFocusDone} />
+        <IrBreakdowns key={ticker} ticker={ticker} payload={data.payload!} focus={focus} onFocusDone={onFocusDone} />
       ) : (
         <IrPanel section="Segment and KPI breakdowns" tour="ir-breakdowns" title="Segment and KPI breakdowns">
           <div className="px-4 py-4 text-[13px]">

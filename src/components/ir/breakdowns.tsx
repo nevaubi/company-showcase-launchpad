@@ -1,5 +1,5 @@
 import { useFeatureGate } from "@/hooks/use-plan";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { ChevronDown, ChevronsDown, Download, FileSpreadsheet, FileText, Info, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import wordmark from "@/assets/brand/wordmark.png.asset.json";
@@ -17,7 +17,7 @@ import { useUnitScale } from "@/hooks/use-preference";
 import { coverageOf } from "@/lib/coverage";
 import { useCompany } from "@/lib/data";
 import { downloadBlob, fetchLogo, slug } from "@/lib/export/xlsx-theme";
-import { DIMENSIONS, countScale, derivedOf, fmtIr, groupColumns, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, refOf, rowDecimals, rowLabel, unitCaption } from "@/lib/ir/display";
+import { DIMENSIONS, countScales, derivedOf, fmtIr, groupColumns, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, printedUnit, refOf, rowDecimals, rowLabel, unitCaption } from "@/lib/ir/display";
 import type { IrPayload, PayloadAlt, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { currency } from "@/lib/ir/highlights";
 import { cellsFor, fiscalCalendar, heldFor, periodGrids, uniqueHeads, type FiscalCalendar } from "@/lib/ir/periods";
@@ -333,7 +333,7 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
               </p>
             )}
             {partialInView > 0 && <p>{partialInView} breakdown{partialInView === 1 ? " lists" : "s list"} selected lines only; the rest of the total shows as “Not itemized”.</p>}
-            <p>Tables the company printed under different names over the years are combined into one, and a table or line printed twice is shown once; every value still opens its own source. A small amber dot marks a total whose parts don't add up; hover it for the numbers.</p>
+            <p>Tables the company printed under different names over the years are combined into one, and a table or line printed twice is shown once; every value still opens its own source. A small amber dot marks a total whose parts don't add up; the numbers are listed under its table.</p>
           </TooltipContent>
         </Tooltip>
       </div>
@@ -426,6 +426,7 @@ const BreakdownCard = memo(function BreakdownCard({
 }) {
   const [view, setView] = useState<"table" | "chart">("table");
   const [wrap, fits] = useFits<HTMLDivElement>();
+  const titleId = useId();
   const root = group.root ? byKey.get(group.root) : undefined;
   const rows = group.rows.map((r) => ({ ...r, s: byKey.get(r.k)! })).filter((r) => r.s && hasData(r.s, viewCols, freq));
   // From this table's oldest to its newest value only: no empty columns before or after its data.
@@ -437,6 +438,15 @@ const BreakdownCard = memo(function BreakdownCard({
   const failing = groupChecks.filter((c) => !c.ok && !c.partial).length;
   const partials = groupChecks.filter((c) => c.partial);
   const coverage = partials.map((c) => c.sum / c.total);
+  // Periods each total is printed with its parts in view, and how many of those were checked and add up:
+  // an unchecked period never counts as adding up.
+  const tieable = rows.filter((r) => r.s.total && rows.some((x) => x.s.parent === r.k)).reduce((n, r) => n + cols.filter((c) => cellsOf(r.s)[c] && !checks.get(`${r.k}|${freq}|${c}`)?.partial).length, 0);
+  const tiedOk = groupChecks.filter((c) => c.ok && !c.partial).length;
+  // Failed checks listed under the table, so their numbers are readable without a mouse.
+  const failed = rows.flatMap((r) => (r.s.total ? cols.flatMap((e) => {
+    const c = checks.get(`${r.k}|${freq}|${e}`);
+    return c && !c.ok && !c.partial ? [{ s: r.s, e, c }] : [];
+  }) : []));
   const partialCols = root ? new Map(cols.flatMap((e) => {
     const c = checks.get(`${root.k}|${freq}|${e}`);
     return c?.partial ? [[e, c] as const] : [];
@@ -449,14 +459,15 @@ const BreakdownCard = memo(function BreakdownCard({
     return c?.alt ? [{ s: r.s, e, c, alt: c.alt }] : [];
   }));
   // A loose list can hold the same label from several tables (each segment's "Net interest income"): name the table.
-  const repeated = useMemo(() => {
-    const n = new Map<string, number>();
-    for (const r of rows) n.set(r.s.label, (n.get(r.s.label) ?? 0) + 1);
-    return n;
-  }, [rows]);
-  // Counts get one scale for the whole table, stated in the caption instead of every cell.
-  const counts = group.unit === "count" ? countScale(rows.flatMap((r) => cols.map((e) => cellsOf(r.s)[e]?.v).filter((v): v is number => v != null))) : null;
-  const fmtOpts = (s: PayloadSeries) => ({ decimals: rowDecimals(cols.map((e) => cellsOf(s)[e]?.v).filter((v): v is number => v != null), s.unit, scale), countDiv: counts?.div });
+  const repeated = new Map<string, number>();
+  for (const r of rows) repeated.set(r.s.label, (repeated.get(r.s.label) ?? 0) + 1);
+  const valuesOf = (s: PayloadSeries) => cols.map((e) => cellsOf(s)[e]?.v).filter((v): v is number => v != null);
+  // Counts get a scale per row (customers in millions next to branches in full), stated once when shared.
+  const counts = group.unit === "count" ? countScales(rows.map((r) => (r.s.unit === "count" ? valuesOf(r.s) : []))) : null;
+  const countOf = new Map(rows.map((r, i) => [r.k, { div: counts?.divs[i] ?? 1, note: counts?.note[i] ?? "" }]));
+  // Lines printed "as printed" mixing days, units and multiples name their own unit.
+  const unitNote = (s: PayloadSeries) => (s.unit === "count" ? countOf.get(s.k)?.note ?? "" : s.unit === "other" ? printedUnit(cols.map((e) => cellsOf(s)[e]?.x ?? "").filter(Boolean)) : "");
+  const fmtOpts = (s: PayloadSeries) => ({ decimals: rowDecimals(valuesOf(s), s.unit, scale), countDiv: s.unit === "count" ? countOf.get(s.k)?.div ?? 1 : undefined });
 
   const openCell = (s: PayloadSeries, end: string, c: PayloadCell) => openIrCell(open, ticker, payload, s, end, freq, c);
 
@@ -503,7 +514,7 @@ const BreakdownCard = memo(function BreakdownCard({
     <section className="min-w-0 scroll-mt-24 pt-6 first:pt-4 [content-visibility:auto] [contain-intrinsic-size:auto_320px]" aria-label={title} data-group={group.id}>
       <header className="flex flex-wrap items-start gap-x-3 gap-y-1 px-4 pb-3">
         <div className="min-w-0 flex-1">
-          <h3 className={IR.group}>{title}</h3>
+          <h3 id={titleId} className={IR.group}>{title}</h3>
           <p className={IR.caption}>
             {unitCaption(group.unit, scale, counts?.caption)} · {rows.length} line{rows.length === 1 ? "" : "s"}
             {cols.length > 0 && (
@@ -518,15 +529,13 @@ const BreakdownCard = memo(function BreakdownCard({
                 {Math.round(Math.min(...coverage) * 100) !== Math.round(Math.max(...coverage) * 100) ? `–${Math.round(Math.max(...coverage) * 100)}` : ""}% of the total itemized
               </>
             )}
-            {groupChecks.length > partials.length &&
-              (failing ? (
-                <span className="text-foreground">
-                  {" · "}
-                  <CheckDot /> {failing} of {groupChecks.length - partials.length} totals don't add up
-                </span>
-              ) : (
-                <> · parts add up in every period</>
-              ))}
+            {failing > 0 && (
+              <span className="text-foreground">
+                {" · "}
+                <CheckDot /> {failing} of {groupChecks.length - partials.length} checked totals don't add up
+              </span>
+            )}
+            {tieable > 0 && !failing && (tiedOk === tieable ? <> · parts add up in every period</> : tiedOk > 0 ? <> · parts add up in {tiedOk} of {tieable} periods; the rest can't be checked</> : null)}
             {heldN > 0 && (
               <span className="text-foreground">
                 {" · "}
@@ -593,10 +602,10 @@ const BreakdownCard = memo(function BreakdownCard({
         </div>
       ) : (
         <div ref={wrap} className={cn("relative border-t", !fits && "overflow-x-auto scrollbar-thin")}>
-          <table className={cn("min-w-full border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max")}>
+          <table aria-labelledby={titleId} className={cn("min-w-full border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max")}>
             <thead>
               <tr>
-                <th scope="col" className={cn("left-0 z-20 min-w-56 border-b bg-card py-1.5 pl-4 pr-3 text-left align-bottom font-normal", !fits && "sticky", stickyHead)}>
+                <th scope="col" className={cn("left-0 z-20 max-w-[45vw] border-b bg-card sm:min-w-56 sm:max-w-none py-1.5 pl-4 pr-3 text-left align-bottom font-normal", !fits && "sticky", stickyHead)}>
                   <span className="sr-only">Line</span>
                 </th>
                 {cols.map((e) => {
@@ -619,7 +628,7 @@ const BreakdownCard = memo(function BreakdownCard({
                 const rule = isRoot ? "border-t border-t-foreground/40" : s.total ? "border-t border-t-border" : "";
                 const residual = isRoot && partialCols.size > 0 && (
                   <tr key="__residual" className="group">
-                    <th scope="row" className="sticky left-0 z-[1] max-w-[22rem] border-b bg-card py-1 pr-3 text-left font-normal text-muted-foreground transition-colors duration-150 group-hover:bg-secondary" style={indentStyle(1)}>
+                    <th scope="row" className="sticky left-0 z-[1] max-w-[45vw] border-b bg-card sm:max-w-[22rem] py-1 pr-3 text-left font-normal text-muted-foreground transition-colors duration-150 group-hover:bg-secondary" style={indentStyle(1)}>
                       Not itemized in the release
                     </th>
                     {cols.map((e) => {
@@ -655,7 +664,7 @@ const BreakdownCard = memo(function BreakdownCard({
                     <th
                       scope="row"
                       className={cn(
-                        "sticky left-0 z-[1] max-w-[22rem] border-b bg-card py-1 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary",
+                        "sticky left-0 z-[1] max-w-[45vw] border-b bg-card sm:max-w-[22rem] py-1 pr-3 text-left font-normal transition-colors duration-150 group-hover:bg-secondary",
                         s.total && IR.total,
                         rule,
                         match && "bg-highlight-soft [&_span]:text-foreground",
@@ -670,6 +679,7 @@ const BreakdownCard = memo(function BreakdownCard({
                       ) : !root && s.bd && (repeated.get(s.label) ?? 0) > 1 ? (
                         <span className={cn("ml-1 font-normal", IR.caption)}>· {s.bd}</span>
                       ) : null}
+                      {unitNote(s) && <span className={cn("ml-1 font-normal", IR.caption)}>· {unitNote(s)}</span>}
                       {s.pit && <span className={cn("ml-1 font-normal", IR.caption)}>at period end</span>}
                     </th>
                     {cols.map((e) => {
@@ -706,7 +716,7 @@ const BreakdownCard = memo(function BreakdownCard({
                             {c.alt && <AltMark className="ml-1" />}
                             {c.alt && <span className="sr-only"> (printed differently in another document)</span>}
                             {off && <CheckDot className="ml-1" />}
-                            {off && <span className="sr-only"> (parts do not add up)</span>}
+                            {off && <span className="sr-only"> ({checkText(chk, s.unit, scale)})</span>}
                           </button>
                         </td>
                       );
@@ -716,6 +726,21 @@ const BreakdownCard = memo(function BreakdownCard({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {failed.length > 0 && (
+        <div className={cn("border-t px-4 pt-2", IR.caption)}>
+          <p className="text-foreground">Totals whose parts don't add up</p>
+          <ul className="mt-1 grid grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
+            {failed.map(({ s, e, c }) => (
+              <li key={`${s.k}|${e}`} className="flex min-w-0 items-baseline gap-1.5">
+                <CheckDot className="shrink-0" />
+                <span className="min-w-0">
+                  {isRootLabel(s, root) ? s.label : rowLabel(s.label, root?.label, group.px)}, {head(e).short}: {checkText(c, s.unit, scale)}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
       {others.length > 0 && (
@@ -747,6 +772,7 @@ const BreakdownCard = memo(function BreakdownCard({
   );
 });
 
+const isRootLabel = (s: PayloadSeries, root?: PayloadSeries) => root?.k === s.k;
 const KIND_NAME: Record<string, string> = { "press-release": "earnings release", supplement: "supplement", presentation: "presentation", data: "data file", other: "document" };
 const kindName = (k: string | null | undefined) => KIND_NAME[k ?? ""] ?? "document";
 const lowerFirst = (x: string) => (/^[A-Z][a-z]/.test(x) ? x[0].toLowerCase() + x.slice(1) : x);
@@ -798,7 +824,7 @@ function checkText(chk: PayloadCheck, unit: string, scale: ReturnType<typeof use
   return `Parts sum to ${fmtIr(chk.sum, unit, scale)} vs printed total ${fmtIr(chk.total, unit, scale)} (difference ${fmtIr(chk.sum - chk.total, unit, scale)})`;
 }
 
-/** Quiet marker for a total whose parts don't add up (the numbers are in its tooltip). */
+/** Quiet marker for a total whose parts don't add up (the numbers are listed under the table). */
 function CheckDot({ className }: { className?: string }) {
   return <span aria-hidden className={cn("inline-block size-1.5 shrink-0 rounded-full bg-warning align-middle", className)} />;
 }

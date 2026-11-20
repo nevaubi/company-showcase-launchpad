@@ -1,7 +1,7 @@
 // Compact, precomputed IR series payload stored per company (ir_company_series) and sent to the
 // IR data page. Pure: built by the pipeline scripts and by the server after new extractions.
 import { tidyPayload } from "@/lib/ir/tidy";
-import { buildIrSeries, childrenOf, neverTies, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
+import { buildIrSeries, childrenOf, neverTies, scopeName, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
 
 export type PayloadLocator = [number, number, number] | { p: number; b: number[] };
 
@@ -160,15 +160,17 @@ const docsOf = (s: IrSeries) => new Set([...Object.values(s.cells), ...Object.va
 /**
  * Several lines can carry the label a part names as its parent ("Noninterest income" of one segment
  * and of the whole bank). The part belongs to the one printed in its own table: same breakdown, then a
- * printed total, then one printed in the same documents; ties keep the first, as before.
+ * one printed in the same documents, then a printed total; ties keep the first, as before.
  */
 export function bestParent(kid: IrSeries, candidates: IrSeries[]): IrSeries {
   const mine = docsOf(kid);
   const score = (p: IrSeries) => {
     let n = 0;
-    if (kid.breakdown && p.breakdown === kid.breakdown) n += 4;
-    if (p.isTotal) n += 2;
-    for (const d of docsOf(p)) if (mine.has(d)) return n + 1;
+    // Breakdown names drift between releases ("Consolidated Income Statement" / "Income statement"),
+    // so they are compared by their scope name; a shared document outranks a printed total.
+    if (kid.breakdown && scopeName(p.breakdown) === scopeName(kid.breakdown)) n += 4;
+    if (p.isTotal) n += 1;
+    for (const d of docsOf(p)) if (mine.has(d)) return n + 2;
     return n;
   };
   return candidates.reduce((best, p) => (score(p) > score(best) ? p : best));
