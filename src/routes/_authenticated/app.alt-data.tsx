@@ -8,6 +8,7 @@ import { AltEventList } from "@/components/alt/alt-views";
 import { AltSignalsSection, SourceStrip } from "@/components/alt/alt-signals";
 import { PlantHazardsPanel } from "@/components/alt/plant-hazards";
 import { altFeedQuery, altLeadersQuery, DATASETS, fmtAlt, leaderStats, medicareStateQuery } from "@/lib/alt/query";
+import { asOfLabel } from "@/lib/alt/periods";
 import { STATES } from "@/lib/alt/sod";
 import { FTD_TITLE } from "@/lib/alt/ftd";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,7 @@ function Leaders({ d }: { d: string }) {
     return list.sort((a, b) => key(b) - key(a));
   }, [q.data, sort, find]);
   const shown = all ? rows : rows.slice(0, 100);
+  const today = new Date().toISOString().slice(0, 10);
   return (
     <Panel
       title={title}
@@ -143,7 +145,7 @@ function Leaders({ d }: { d: string }) {
                 {shown.map(({ r, chg, vsTypical }) => (
                   <tr key={r.ticker} className="border-b last:border-0">
                     <td className="px-4 py-1.5"><Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="font-medium hover:underline">{r.ticker}</Link></td>
-                    <td className="num px-2 text-[11px] text-muted-foreground">{r.date}</td>
+                    <td className="num px-2 text-[11px] text-muted-foreground">{asOfLabel(r, today)}</td>
                     <td className="num px-2 text-right"><span>{fmtAlt(r.value, r.unit)}</span>{r.source_url && <EvidenceButton ticker={r.ticker} title={title} url={r.source_url} date={r.date} />}</td>
                     <td className={cn("num px-2 text-right", vsTypical == null ? "text-muted-foreground" : vsTypical >= 2 ? "font-medium text-negative" : vsTypical <= 0.5 ? "text-positive" : "")}>{vsTypical == null ? "—" : fmtTimes(vsTypical)}</td>
                     <td className={cn("num px-4 text-right", chg == null ? "text-muted-foreground" : chg >= 0 ? "text-positive" : "text-negative")}>{chg == null ? "—" : fmtChg(chg)}</td>

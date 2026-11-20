@@ -19,7 +19,7 @@ import { fmtCompactUsd, fmtDate, fmtPct, fmtPrice } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { fmtAlt } from "@/lib/alt/query";
+import { fmtAlt, screenAlt } from "@/lib/alt/query";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -267,11 +267,11 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
   const extra = useQuery({
     queryKey: ["timeline-extra", ticker],
     staleTime: 10 * 60_000,
-    queryFn: async () => {
+    queryFn: async ({ client }) => {
       const [alt, sig] = await Promise.all([
         supabase
           .from("alt_data")
-          .select("dataset,date,title,value,unit,source_url")
+          .select("ticker,dataset,kind,date,title,value,unit,meta,source_url")
           .eq("ticker", ticker)
           .eq("kind", "event")
           .in("dataset", Object.keys(ALT_LABEL))
@@ -286,7 +286,8 @@ export function CatalystsTimeline({ ticker, data }: { ticker: string; data: Comp
           .order("filed", { ascending: false })
           .limit(60),
       ]);
-      return { alt: alt.data ?? [], sig: sig.data ?? [] };
+      // Contract awards only when this company received them (src/lib/alt/contracts.ts).
+      return { alt: await screenAlt(alt.data ?? [], client), sig: sig.data ?? [] };
     },
   });
 

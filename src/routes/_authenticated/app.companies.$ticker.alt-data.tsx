@@ -12,6 +12,7 @@ import { MedicareByState } from "@/components/alt/medicare-by-state";
 import { PlantsTri } from "@/components/alt/plants-tri";
 import { CompanyPlantHazards } from "@/components/alt/plant-hazards";
 import { altCompanyQuery, DATASETS, fmtAlt, seriesByTitle } from "@/lib/alt/query";
+import { asOfLabel, type PeriodMeta } from "@/lib/alt/periods";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/alt-data")({
@@ -32,13 +33,8 @@ const BAR = new Set(["contracts", "regulatory", "complaints", "medicare"]);
 /** Per-drug Medicare rows go in one table instead of a chart each. */
 const isDrugRow = (r: { dataset: string; title: string }) => r.dataset === "medicare" && /^Part [BD] · /.test(r.title);
 
-/** "2026-03-31" → "2026-03-31", but a year-to-date bucket dated at year end reads "2026 so far". */
-const asOfLabel = (r: { date: string | null; meta: Record<string, any> }) => {
-  if (!r.date) return "—";
-  const today = new Date().toISOString().slice(0, 10);
-  if (r.meta?.ytd && r.meta?.quarters) return `${r.date.slice(0, 4)} Q1${r.meta.quarters > 1 ? `–Q${r.meta.quarters}` : ""}`;
-  return r.meta?.ytd || r.date > today ? `${r.date.slice(0, 4)} so far` : r.date;
-};
+/** "2026-03-31", "FY2026", or for a partial period "FY2027 YTD, as of 2026-11-20". */
+const asOf = (r: { date: string | null; meta: PeriodMeta | null }) => asOfLabel(r, new Date().toISOString().slice(0, 10));
 
 function AltCompany() {
   const ticker = Route.useParams().ticker.toUpperCase();
@@ -83,7 +79,7 @@ function AltCompany() {
           {series.filter((s) => ds === "all" || s.dataset === ds).map((s) => {
             const last = s.rows[s.rows.length - 1];
             return (
-              <Panel collapse={false} key={s.dataset + s.title} title={s.title} subtitle={`${DATASETS[s.dataset].source} · latest ${fmtAlt(last.value, last.unit)} (${asOfLabel(last)})`} actions={last.source_url ? <EvidenceButton ticker={ticker} title={last.title} url={last.source_url} date={last.date ?? undefined} /> : undefined}>
+              <Panel collapse={false} key={s.dataset + s.title} title={s.title} subtitle={`${DATASETS[s.dataset].source} · latest ${fmtAlt(last.value, last.unit)} (${asOf(last)})`} actions={last.source_url ? <EvidenceButton ticker={ticker} title={last.title} url={last.source_url} date={last.date ?? undefined} /> : undefined}>
                 <AltSeriesChart rows={s.rows} bar={BAR.has(s.dataset)} />
               </Panel>
             );

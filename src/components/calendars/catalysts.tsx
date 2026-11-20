@@ -6,6 +6,7 @@ import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import LoadingState from "@/components/ui/loading-state";
 import { supabase } from "@/integrations/supabase/client";
+import { screenAlt } from "@/lib/alt/query";
 import { addDays, weekStart } from "@/lib/calendars/data";
 import type { CalData } from "@/lib/calendars/rows";
 import {
@@ -43,15 +44,16 @@ function useAltCatalystRows(from: string, to: string) {
   return useQuery({
     queryKey: ["catalyst-alt", from, to],
     staleTime: 30 * 60_000,
-    queryFn: async (): Promise<AltEventRow[]> => {
-      const cols = "uid,ticker,dataset,date,title,value,meta,source,source_url";
+    queryFn: async ({ client }): Promise<AltEventRow[]> => {
+      const cols = "uid,ticker,dataset,kind,date,title,value,meta,source,source_url";
       const [trials, awards, ends, fda] = await Promise.all([
         supabase.from("alt_data").select(cols).eq("dataset", "trials").gte("meta->>primary_completion", from.slice(0, 7)).lte("meta->>primary_completion", to).limit(600),
         supabase.from("alt_data").select(cols).eq("dataset", "contracts").eq("kind", "event").gte("date", from).lte("date", to).order("value", { ascending: false }).limit(300),
         supabase.from("alt_data").select(cols).eq("dataset", "contracts").eq("kind", "event").gte("meta->>end", from).lte("meta->>end", to).order("value", { ascending: false }).limit(300),
         supabase.from("alt_data").select(cols).eq("dataset", "fda").eq("kind", "event").gte("date", from).lte("date", to).limit(300),
       ]);
-      return [trials, awards, ends, fda].flatMap((r) => (r.data ?? []) as unknown as AltEventRow[]);
+      // Contract awards are kept only under the company that received them (src/lib/alt/contracts.ts).
+      return screenAlt([trials, awards, ends, fda].flatMap((r) => (r.data ?? []) as unknown as (AltEventRow & { kind: string })[]), client);
     },
   });
 }

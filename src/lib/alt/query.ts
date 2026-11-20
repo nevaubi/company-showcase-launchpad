@@ -1,4 +1,9 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { coverageOf } from "@/lib/coverage";
+import { universeQuery } from "@/lib/data";
+import { screenContractRows, tickerKeys, type CompanyKeys } from "@/lib/alt/contracts";
+import { isBankPlaceholder } from "@/lib/alt/bank";
 
 export interface AltRow {
   uid: string;
@@ -12,6 +17,27 @@ export interface AltRow {
   meta: Record<string, any>;
   source: string;
   source_url: string | null;
+}
+
+/**
+ * Who each ticker is, for checking that a stored contract row is the company's own (coverage short
+ * name, hand-checked registry name, universe legal name). Rows of unknown companies are dropped.
+ */
+export async function contractKeysFor(client: QueryClient | undefined): Promise<(ticker: string) => CompanyKeys | null> {
+  const uni = client ? await client.ensureQueryData(universeQuery).catch(() => null) : null;
+  const legal = new Map((uni?.companies ?? []).map((c) => [c.ticker, c.name]));
+  return (t) => {
+    const short = coverageOf(t)?.shortName;
+    const name = legal.get(t);
+    return short || name ? tickerKeys(t, short, name) : null;
+  };
+}
+
+/** Stored rows with misattributed federal contract awards (src/lib/alt/contracts.ts) and FDIC zero placeholders (bank.ts) removed. */
+export async function screenAlt<T extends { ticker: string; dataset: string; kind: string; meta?: unknown }>(rows: T[], client: QueryClient | undefined): Promise<T[]> {
+  const kept = rows.some((r) => r.dataset === "bank") ? rows.filter((r) => !isBankPlaceholder(r as never)) : rows;
+  if (!kept.some((r) => r.dataset === "contracts")) return kept;
+  return screenContractRows(kept, await contractKeysFor(client));
 }
 
 export const DATASETS: Record<string, { label: string; blurb: string; source: string }> = {
@@ -50,7 +76,7 @@ export interface AltLeader {
 /** Latest reading per company for one series, with the reading a year earlier and its trailing-year median (computed in the database). */
 export const altLeadersQuery = (dataset: string, title: string) => ({
   queryKey: ["alt_leaders", dataset, title],
-  queryFn: async () => {
+  queryFn: async ({ client }: { client?: QueryClient }) => {
     const out: AltLeader[] = [];
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase.rpc("alt_series_leaders", { _dataset: dataset, _title: title }).range(from, from + 999);
@@ -58,7 +84,7 @@ export const altLeadersQuery = (dataset: string, title: string) => ({
       out.push(...((data ?? []) as AltLeader[]));
       if (!data || data.length < 1000) break;
     }
-    return out;
+    return screenAlt(out.map((r) => ({ ...r, dataset, kind: "series" })), client);
   },
   staleTime: 10 * 60_000,
 });
@@ -83,17 +109,17 @@ async function pageAll(build: () => any): Promise<AltRow[]> {
 
 export const altCompanyQuery = (ticker: string) => ({
   queryKey: ["alt_data", ticker],
-  queryFn: () => pageAll(() => supabase.from("alt_data").select("*").eq("ticker", ticker).order("date", { ascending: false })),
+  queryFn: async ({ client }: { client?: QueryClient }) => screenAlt(await pageAll(() => supabase.from("alt_data").select("*").eq("ticker", ticker).order("date", { ascending: false })), client),
   staleTime: 10 * 60_000,
 });
 
 /** Latest events across all companies for one dataset. */
 export const altFeedQuery = (dataset: string) => ({
   queryKey: ["alt_feed", dataset],
-  queryFn: async () => {
+  queryFn: async ({ client }: { client?: QueryClient }) => {
     const { data, error } = await supabase.from("alt_data").select("*").eq("dataset", dataset).eq("kind", "event").not("date", "is", null).order("date", { ascending: false }).limit(300);
     if (error) throw error;
-    return (data ?? []) as AltRow[];
+    return screenAlt((data ?? []) as AltRow[], client);
   },
   staleTime: 10 * 60_000,
 });
@@ -139,11 +165,11 @@ export const altSourceStatsQuery = () => ({
 /** Events for one company × dataset in the last `days`. */
 export const altCellQuery = (ticker: string, dataset: string, days = 90) => ({
   queryKey: ["alt_cell", ticker, dataset, days],
-  queryFn: async () => {
+  queryFn: async ({ client }: { client?: QueryClient }) => {
     const since = new Date(Date.now() - days * 864e5).toISOString().slice(0, 10);
     const { data, error } = await supabase.from("alt_data").select("*").eq("ticker", ticker).eq("dataset", dataset).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(200);
     if (error) throw error;
-    return (data ?? []) as AltRow[];
+    return screenAlt((data ?? []) as AltRow[], client);
   },
   staleTime: 10 * 60_000,
 });
