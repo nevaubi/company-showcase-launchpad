@@ -2665,6 +2665,17 @@ export type Database = {
       }
       consume_usage: { Args: { _kind: string }; Returns: Json }
       create_firm: { Args: { _name: string }; Returns: string }
+      data_coverage: {
+        Args: never
+        Returns: {
+          dataset: string
+          median_age_hours: number | null
+          p90_age_hours: number | null
+          top100: number
+          top1000: number
+          top500: number
+        }[]
+      }
       data_freshness: {
         Args: never
         Returns: {
@@ -2741,6 +2752,18 @@ export type Database = {
       is_firm_member: {
         Args: { _firm: string; _user: string }
         Returns: boolean
+      }
+      job_health: {
+        Args: { _hours?: number }
+        Returns: {
+          fail_streak: number
+          failed: number
+          job: string
+          last_ok: string | null
+          last_run: string | null
+          runs: number
+          unfinished: number
+        }[]
       }
       my_firm_invites: {
         Args: never
