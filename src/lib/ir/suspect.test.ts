@@ -136,3 +136,40 @@ describe("a subtotal rebuilt from its parts", () => {
     expect(q1).toBeUndefined();
   });
 });
+
+describe("results that cross zero", () => {
+  it("keep a small quarter: XOM downstream US printed (1) million", () => {
+    const vals = [-1000000, -101000000, -101000000, 310000000, 460000000, 536000000, 597000000, 623000000, 673000000, 895000000];
+    const s: PayloadSeries = { k: "segment|segment_profit|downstream united states|usd|", cat: "segment", met: "segment_profit", label: "Downstream — United States", parent: null, total: false, unit: "usd", q: Object.fromEntries(vals.map((v, i) => [`20${20 + Math.floor(i / 4)}-${["03-31", "06-30", "09-30", "12-31"][i % 4]}`, { v, d: 0, m: 3 }])), y: {} };
+    const p: IrPayload = { v: 2, ticker: "XOM", builtAt: "", quarters: [], years: [], docs: [], series: [s], groups: [], checks: [], stats: { series: 1, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } } };
+    expect(findSuspects(p).size).toBe(0);
+  });
+});
+
+describe("count lines printed in two units", () => {
+  it("hold neither side (UHS diluted shares: thousands in older releases, full counts in newer)", () => {
+    const vals = [83692, 85587, 97973, 98275, 79675, 85587, 90967, 94683, 98080, 98453, 70125000, 73832000, 99361000, 100544000, 68108000, 68550000, 69624000];
+    const s: PayloadSeries = { k: "kpi|other|weighted average number of common shares|count|", cat: "kpi", met: "other", label: "Weighted average number of common shares", parent: null, total: false, unit: "count", pit: true, q: Object.fromEntries(vals.map((v, i) => [`20${10 + Math.floor(i / 4)}-${["03-31", "06-30", "09-30", "12-31"][i % 4]}`, { v, d: 0, m: 0 }])), y: {} };
+    const p: IrPayload = { v: 2, ticker: "UHS", builtAt: "", quarters: [], years: [], docs: [], series: [s], groups: [], checks: [], stats: { series: 1, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } } };
+    expect(findSuspects(p).size).toBe(0);
+  });
+});
+
+describe("a run read in the wrong unit outnumbers the right one", () => {
+  // Real stored values (ir_kpi_facts, 20 Nov 2026) with a company context of ordinary lines.
+  const ctx = (n: number) => ({ k: `ctx|${n}`, vals: Array.from({ length: 12 }, (_, i) => (1 + i / 10 + n) * 1e8) });
+  const mk = (k: string, vals: number[]): PayloadSeries => ({ k, cat: "kpi", met: "other", label: k, parent: null, total: false, unit: "usd", q: Object.fromEntries(vals.map((v, i) => [`20${10 + Math.floor(i / 4)}-${["03-31", "06-30", "09-30", "12-31"][i % 4]}`, { v, d: 0, m: 3 }])), y: {} });
+  const pay = (s: PayloadSeries[]): IrPayload => ({ v: 2, ticker: "T", builtAt: "", quarters: [], years: [], docs: [], series: s, groups: [], checks: [], stats: { series: s.length, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } } });
+  const others = [ctx(1), ctx(2)].map((c) => mk(c.k, c.vals));
+  it("LPLA income before taxes: three quarters in thousands, two in dollars; the thousands are held", () => {
+    const lpla = mk("lpla", [368804, 484584, 515504, 330071000, 417253000]);
+    const found = findSuspects(pay([lpla, ...others]));
+    expect([...found.get("lpla")!.get("q")!.keys()].sort()).toEqual(["2010-03-31", "2010-06-30", "2010-09-30"]);
+  });
+  it("JAZZ Xyrem: a run read 1,000x too large; the one quarter in the company's usual size is shown", () => {
+    const xyrem = mk("xyrem", [133742000, 117526000000, 153664000000, 160378000000, 164181000000, 191366000000, 204337000000]);
+    const found = findSuspects(pay([xyrem, ...others]));
+    expect(found.get("xyrem")!.get("q")!.has("2010-03-31")).toBe(false);
+    expect(found.get("xyrem")!.get("q")!.size).toBe(6);
+  });
+});

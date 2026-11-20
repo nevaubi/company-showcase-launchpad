@@ -12,7 +12,7 @@
 //      values sit in (yearly flows count a quarter, one-month flows three times; see baselineOf): held when moving it
 //      by the nearest power of 1,000 puts it among the line's other values (a unit slip), or when one or
 //      two values sit 900× or more above them; anything else (fast growth, a business winding down, a
-//      line near zero, a line that mixes two measures) stays;
+//      small value on a line that crosses zero, a line that mixes two measures) stays;
 //   4. 900× or more its own printed total, or a total 900× or more the sum of its printed lines;
 //   5. a figure the same document prints for another period of the same line while it prints a
 //      different figure for this one (a column read under the wrong period);
@@ -57,19 +57,25 @@ function slipShift<X extends { lg: number }>(c: X[], base: X[]): number {
 /**
  * The cluster a line's values are judged against: the one most of them sit in. When another cluster of
  * three or more is the same figures in another unit (older releases in thousands, newer in dollars), the
- * majority is no evidence, so the one nearer the company's usual line size is taken. With no clear
+ * majority is no evidence, so the one nearer the company's usual line size is taken (for counts,
+ * which have no usual size, neither: nothing is held on this rule). With no clear
  * majority, or a majority of two that sits farther from the company's usual size than another cluster,
  * there is no baseline and nothing is held on this rule.
  */
-function baselineOf<X extends { lg: number }>(clusters: X[][], company: number | undefined): X[] | null {
+function baselineOf<X extends { lg: number }>(clusters: X[][], company: number | undefined, unit: string): X[] | null {
   const sizes = clusters.map((c) => c.length);
   const top = Math.max(...sizes);
   if (top < 2 || sizes.filter((n) => n === top).length !== 1) return null;
   const major = clusters[sizes.indexOf(top)];
+  // Counts (shares, volumes, stores) have no usual company size: two unit twins leave no side to trust.
+  if (unit === "count" && top >= 3 && clusters.some((c) => c !== major && c.length >= 3 && slipShift(c, major) !== 0)) return null;
   if (company == null) return top >= 3 ? major : null;
   const dist = (c: X[]) => Math.abs(median(c.map((x) => x.lg)) - company);
   if (top < 3) return clusters.some((c) => c !== major && dist(c) < dist(major)) ? null : major;
-  const twin = clusters.find((c) => c !== major && c.length >= 3 && slipShift(c, major) !== 0 && dist(c) + 1 <= dist(major));
+  // A twin outvoted by a small majority (2 against 3 or 4), or by a majority sitting ~300× and more above
+  // the company's usual line size (a whole run read in the wrong unit), still decides.
+  const majorTooBig = median(major.map((x) => x.lg)) - company >= 2.5;
+  const twin = clusters.find((c) => c !== major && slipShift(c, major) !== 0 && dist(c) + 1 <= dist(major) && (c.length >= 3 || (c.length >= 2 && top <= 4) || majorTooBig));
   return twin ?? major;
 }
 
@@ -115,6 +121,7 @@ export function findSuspects(p: IrPayload): SuspectMap {
         pts.push({ k, e, lg: Math.log10(norm) });
       }
     pts.sort((a, b) => a.lg - b.lg);
+    const signs = new Set(KINDS.flatMap((k) => Object.values(cellsOf(s, k)).filter((c) => c.v).map((c) => Math.sign(c.v))));
     const clusters: (typeof pts)[] = [];
     for (const x of pts) {
       const last = clusters[clusters.length - 1];
@@ -122,7 +129,7 @@ export function findSuspects(p: IrPayload): SuspectMap {
       else clusters.push([x]);
     }
     if (clusters.length > 1) {
-      const base = baselineOf(clusters, companyLg.get(s.unit));
+      const base = baselineOf(clusters, companyLg.get(s.unit), s.unit);
       if (base) {
         const baseMed = median(base.map((x) => x.lg));
         for (const c of clusters) {
@@ -133,6 +140,8 @@ export function findSuspects(p: IrPayload): SuspectMap {
           // A unit slip: moved by the nearest power of 1,000, the cluster lands among the line's other values.
           const shift = slipShift(c, base);
           const slip = shift !== 0;
+          // A result line that crosses zero can print "(1)" in a quarter: a small value there is not a slip.
+          if (med < baseMed && signs.size > 1) continue;
           // Far above the line and not a unit slip: held only as one or two stray values (glued cells).
           if (!slip && !(med > baseMed && d >= LOG_SLIP && c.length <= 2)) continue;
           const why = `About ${fmtTimes(slip ? 10 ** Math.abs(shift) : ratio)}× ${med > baseMed ? "larger" : "smaller"} than this line's other periods: a different unit was probably read here`;
