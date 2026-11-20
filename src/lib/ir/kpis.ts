@@ -923,7 +923,11 @@ function mergeFlattened(bySeries: Map<string, IrSeries>, qv: Map<string, Map<str
         const docs = new Set(kids.flatMap((k) => (m.get(k.key)?.get(end) ?? []).map((v) => v.doc)));
         for (const doc of docs) {
           if (have.has(doc) || doc.startsWith("derived")) continue;
-          const parts = kids.flatMap((k) => (m.get(k.key)?.get(end) ?? []).filter((v) => v.doc === doc && v.fact).map((v) => ({ k, v })));
+          // One value per part: a release that prints a line in two tables must not count it twice.
+          const parts = kids.flatMap((k) => {
+            const v = (m.get(k.key)?.get(end) ?? []).find((x) => x.doc === doc && x.fact);
+            return v ? [{ k, v }] : [];
+          });
           if (parts.length < 2) continue;
           const v = parts.reduce((n, p) => n + p.v.v, 0);
           let per = m.get(sub.key);

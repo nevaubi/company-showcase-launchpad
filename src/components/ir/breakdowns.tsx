@@ -18,9 +18,9 @@ import { coverageOf } from "@/lib/coverage";
 import { useCompany } from "@/lib/data";
 import { downloadBlob, fetchLogo, slug } from "@/lib/export/xlsx-theme";
 import { DIMENSIONS, countScale, derivedOf, fmtIr, groupColumns, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, refOf, rowDecimals, rowLabel, unitCaption } from "@/lib/ir/display";
-import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
+import type { IrPayload, PayloadAlt, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { currency } from "@/lib/ir/highlights";
-import { cellsFor, fiscalLabel, fiscalYearEndMonth, periodGrids } from "@/lib/ir/periods";
+import { cellsFor, fiscalLabel, fiscalYearEndMonth, heldFor, periodGrids } from "@/lib/ir/periods";
 import { fmtCompact } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -391,7 +391,8 @@ function partsDense(g: PayloadGroup, cellsOf: (k: string) => Record<string, unkn
 function hasData(s: PayloadSeries | undefined, cols: string[], freq: Freq) {
   if (!s) return false;
   const cells = cellsFor(s, freq);
-  return cols.some((c) => cells[c]);
+  const held = heldFor(s, freq);
+  return cols.some((c) => cells[c] || held[c]);
 }
 
 const BreakdownCard = memo(function BreakdownCard({
@@ -441,6 +442,12 @@ const BreakdownCard = memo(function BreakdownCard({
     return c?.partial ? [[e, c] as const] : [];
   })) : new Map<string, PayloadCheck>();
   const title = groupTitle(group, root);
+  // Figures held back as suspect, and shown values another document prints differently, in view.
+  const heldN = rows.reduce((n, r) => n + cols.filter((e) => heldFor(r.s, freq)[e]).length, 0);
+  const others = rows.flatMap((r) => cols.flatMap((e) => {
+    const c = cellsOf(r.s)[e];
+    return c?.alt ? [{ s: r.s, e, c, alt: c.alt }] : [];
+  }));
   // A loose list can hold the same label from several tables (each segment's "Net interest income"): name the table.
   const repeated = useMemo(() => {
     const n = new Map<string, number>();
@@ -519,6 +526,12 @@ const BreakdownCard = memo(function BreakdownCard({
               ) : (
                 <> · parts add up in every period</>
               ))}
+            {heldN > 0 && (
+              <span className="text-foreground">
+                {" · "}
+                <HeldMark /> {heldN} figure{heldN === 1 ? "" : "s"} held back: unit or period contradicted by the documents
+              </span>
+            )}
           </p>
         </div>
         <div data-agent-controls className="flex items-center gap-1">
@@ -661,6 +674,17 @@ const BreakdownCard = memo(function BreakdownCard({
                     {cols.map((e) => {
                       const c = cells[e];
                       const chk = s.total ? checks.get(`${k}|${freq}|${e}`) : undefined;
+                      const h = !c ? heldFor(s, freq)[e] : undefined;
+                      if (h)
+                        return (
+                          <td key={e} className={cn("border-b p-0 transition-colors duration-150 group-hover:bg-secondary/60", rule)}>
+                            <button type="button" onClick={() => openCell(s, e, h)} title={heldTitle(payload, h, e, freq)} className={cn(IR.cellButton, IR.num, "text-muted-foreground")}>
+                              <HeldMark className="mr-1" />
+                              <span className="text-[11px]">held</span>
+                              <span className="sr-only"> (figure held back: {h.why})</span>
+                            </button>
+                          </td>
+                        );
                       if (!c)
                         return (
                           <td key={e} title="Not printed in any stored document for this period" className={cn("border-b px-3 py-1 transition-colors duration-150 group-hover:bg-secondary/60", IR.num, IR.missing, rule)}>
@@ -675,9 +699,11 @@ const BreakdownCard = memo(function BreakdownCard({
                             type="button"
                             onClick={() => openCell(s, e, c)}
                             title={cellTitle(payload, c, e, freq, s.unit, scale, chk)}
-                            className={cn(IR.cellButton, IR.num, s.total && IR.total, c.w === "scale" && "bg-warning-soft")}
+                            className={cn(IR.cellButton, IR.num, s.total && IR.total)}
                           >
                             <span className={cn(c.f && IR.derived)}>{fmtIr(c.v, s.unit, scale, opts)}</span>
+                            {c.alt && <AltMark className="ml-1" />}
+                            {c.alt && <span className="sr-only"> (printed differently in another document)</span>}
                             {off && <CheckDot className="ml-1" />}
                             {off && <span className="sr-only"> (parts do not add up)</span>}
                           </button>
@@ -691,9 +717,66 @@ const BreakdownCard = memo(function BreakdownCard({
           </table>
         </div>
       )}
+      {others.length > 0 && (
+        <div className={cn("border-t px-4 pt-2", IR.caption)} data-section="Printed differently">
+          <p className="text-foreground">Printed differently in another document</p>
+          <ul className="mt-1 grid grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
+            {others.map(({ s, e, c, alt }) => {
+              const doc = alt.d != null ? payload.docs[alt.d] : undefined;
+              const openAlt = () => {
+                const src = refOf(payload, { ...alt, e: alt.e ?? e }, s.label);
+                if (src) open({ ticker, label: s.label, periodLabel: periodLong(alt.m === 0 && alt.e ? alt.e : e, freq, alt.m), unit: s.unit, value: alt.v, src });
+              };
+              return (
+                <li key={`${s.k}|${e}`} className="flex min-w-0 items-baseline gap-1.5">
+                  <AltMark className="shrink-0" />
+                  <span className="min-w-0">
+                    {rowLabel(s.label, root?.label, group.px)}, {head(e).main}: shown {fmtIr(c.v, s.unit, scale, fmtOpts(s))}; {alt.kind === "restated" ? "an earlier" : "another"} {kindName(doc?.kind)} {doc?.filed ? `filed ${doc.filed}` : "with no filing date"} prints {fmtIr(alt.v, s.unit, scale, fmtOpts(s))}
+                  </span>
+                  <button type="button" onClick={openAlt} className="shrink-0 rounded-sm text-foreground underline decoration-border underline-offset-2 transition-colors duration-150 hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    Open
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </section>
   );
 });
+
+const KIND_NAME: Record<string, string> = { "press-release": "earnings release", supplement: "supplement", presentation: "presentation", data: "data file", other: "document" };
+const kindName = (k: string | null | undefined) => KIND_NAME[k ?? ""] ?? "document";
+const lowerFirst = (x: string) => (/^[A-Z][a-z]/.test(x) ? x[0].toLowerCase() + x.slice(1) : x);
+
+/** Hover text of a held figure: why it is held, what the cell prints, its document. */
+function heldTitle(payload: IrPayload, c: PayloadCell, e: string, freq: Freq) {
+  const doc = c.d != null ? payload.docs[c.d] : undefined;
+  return [
+    periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m),
+    `Held back: ${lowerFirst(c.why ?? "its unit is contradicted by the documents")}.`,
+    c.x ? `Printed as “${c.x}”` : null,
+    doc ? `In the ${kindName(doc.kind)}${doc.filed ? ` filed ${doc.filed}` : " (no filing date)"}` : null,
+    c.alt ? altLine(payload, c.alt) : null,
+    "Not used in charts, changes, totals or exports. Click to open the source.",
+  ].filter(Boolean).join("\n");
+}
+
+function altLine(payload: IrPayload, a: PayloadAlt) {
+  const doc = a.d != null ? payload.docs[a.d] : undefined;
+  return `${a.kind === "restated" ? "An earlier" : "Another"} ${kindName(doc?.kind)}${doc?.filed ? ` filed ${doc.filed}` : ""} prints ${a.v.toLocaleString("en-US")} (full units)`;
+}
+
+/** Quiet marker for a figure held back as suspect: a hollow amber ring. */
+function HeldMark({ className }: { className?: string }) {
+  return <span aria-hidden className={cn("inline-block size-2 shrink-0 rounded-full border border-warning align-middle", className)} />;
+}
+
+/** Quiet marker for a value another document prints differently: a hollow ring in the caption colour. */
+function AltMark({ className }: { className?: string }) {
+  return <span aria-hidden className={cn("inline-block size-1.5 shrink-0 rounded-full border border-muted-foreground align-middle", className)} />;
+}
 
 /** Hover text of a value: its period, how it was printed or calculated, its document and its check. */
 function cellTitle(payload: IrPayload, c: PayloadCell, e: string, freq: Freq, unit: string, scale: ReturnType<typeof useUnitScale>[0], chk?: PayloadCheck) {
@@ -702,7 +785,7 @@ function cellTitle(payload: IrPayload, c: PayloadCell, e: string, freq: Freq, un
     periodLong(c.m === 0 && c.e ? c.e : e, freq, c.m),
     c.f ? `Calculated: ${c.f.formula}` : c.x ? `Printed as “${c.x}”` : null,
     doc?.filed ? `From the ${doc.kind?.replace("-", " ") ?? "document"} filed ${doc.filed}` : null,
-    c.w === "scale" ? "About 1,000× off the neighbouring periods: a different unit or measure may have been read here. Check the source." : null,
+    c.alt ? altLine(payload, c.alt) : null,
     chk ? checkText(chk, unit, scale) : null,
     "Click to open the source",
   ].filter(Boolean).join("\n");

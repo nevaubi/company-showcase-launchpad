@@ -108,3 +108,15 @@ describe("rules that must not hold real figures", () => {
     expect(Object.keys(twice.series[0].held!.q!)).toEqual(["2020-09-30"]);
   });
 });
+
+describe("a subtotal rebuilt from its parts", () => {
+  it("counts a line printed in two tables of one release once (PNC Q1 2026 total revenue)", () => {
+    const p = buildPayload("PNC", PNC);
+    const total = p.series.find((s) => s.label === "Total revenue")!;
+    const q1 = total.q["2026-03-31"];
+    // Before: 3,961 + 3,961 = 7,922 (net interest income from the highlights and the income statement).
+    expect(q1?.v ?? null).not.toBe(7_922_000_000);
+    // Only net interest income is printed for Q1 in this table: no subtotal is rebuilt from one part.
+    expect(q1).toBeUndefined();
+  });
+});
