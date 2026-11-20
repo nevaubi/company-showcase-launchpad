@@ -159,6 +159,7 @@ interface LoopState {
   lastCanonReset?: string | null;
   /** finished companies waiting to be re-read (new files, config re-queue); kept across restarts */
   pendingReread?: string[];
+  lastForm4Repair?: string | null;
 }
 async function loadState(): Promise<LoopState> {
   const { data } = await sb.storage.from("ir-documents").download(STATE);
@@ -219,7 +220,7 @@ function run(step: string, script: string, argv: string[], logFile: string, env:
   });
 }
 
-type LastKey = "lastMirror" | "lastDetail" | "lastSod" | "lastReactions" | "lastProse" | "lastIrSite" | "lastCanon" | "lastAltSlow" | "lastVerify" | "lastCatchup" | "lastHealConfig";
+type LastKey = "lastForm4Repair" | "lastMirror" | "lastDetail" | "lastSod" | "lastReactions" | "lastProse" | "lastIrSite" | "lastCanon" | "lastAltSlow" | "lastVerify" | "lastCatchup" | "lastHealConfig";
 /** A periodic step finished: its timer moves only after a zero exit; a failure retries after a backoff. */
 function settle(step: string, key: LastKey, intervalMs: number, code: number) {
   const r = nextDue(Date.now(), code === 0, intervalMs, state.failStreak?.[step] ?? 0);
@@ -557,6 +558,23 @@ async function maybeDiscoverCatchup() {
   });
 }
 
+// ---------- Form 4 repair ----------
+/**
+ * Every 30 minutes: Form 4s already in sec_filings with no trade rows and no receipt are parsed
+ * (scripts/form4-repair.ts, at most 400 filings and 20 min). SEC only, no AI: held only by the 80%
+ * memory guard. A stop (SEC refused) or a failure backs off through `settle`.
+ */
+let form4Repairing = false;
+function maybeForm4Repair() {
+  if (form4Repairing || Date.now() - STARTED < 10 * 60_000 || memUsedGB() > MEM_GB * 0.8) return;
+  if (state.lastForm4Repair && Date.now() - Date.parse(state.lastForm4Repair) < 30 * 60_000) return;
+  form4Repairing = true;
+  void run("form4-repair", "scripts/form4-repair.ts", ["--max=400", "--max-minutes=20"], `${OUT}/form4-repair.log`).then((code) => {
+    form4Repairing = false;
+    settle("form4-repair", "lastForm4Repair", 30 * 60_000, code);
+  });
+}
+
 // ---------- reaper (P1-2) ----------
 /** Every 10 minutes: close runs that can no longer finish, clear long-expired runner leases, close abandoned report runs. */
 async function maybeReap() {
@@ -858,6 +876,7 @@ for (;;) {
   await maybeReactions();
   await verifySweep();
   await maybeDiscoverCatchup();
+  maybeForm4Repair();
   await maybeReap();
   await maybeHealConfigFailures();
   // self-heal: done with files but no figures, once (never for companies set aside)

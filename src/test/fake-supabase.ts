@@ -19,6 +19,8 @@ const KEYS: Record<string, string[]> = {
   macro_summaries: ["series_id"],
   alt_data: ["uid"],
   email_log: ["idempotency_key"],
+  insider_trades: ["accn", "seq"],
+  insider_buys: ["accn", "owner"],
 };
 
 const likeRe = (p: string) => new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/[%*]/g, ".*")}$`);

@@ -4,13 +4,12 @@
 // (slice.ts), so a run the scheduler cuts off repeats its slice instead of skipping it.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { BENCHMARKS, COVERAGE, MACRO_SERIES, type CoverageCompany } from "@/lib/coverage";
-import { form4XmlPath, parseForm4 } from "@/lib/financials/form4";
 import { summarize } from "@/lib/macro";
 import { fetchCboeDaily, fetchFred, fetchNasdaqDaily, fetchTreasury, fetchYahoo, isCboeIndex, isTreasurySeries, pool, toBars } from "@/lib/market-data.server";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
-import { insiderBuyRows } from "@/lib/signals/events";
+import { storeForm4 } from "@/lib/jobs/form4.server";
 import { claimSlice, commitSlice, outcomeOf, runBudgetMs, sliceKey, unitTimeoutMs, type Claim, type SliceOutcome } from "@/lib/jobs/slice";
 import { fairOrder } from "@/lib/jobs/priority";
 import { loadJobRank } from "@/lib/jobs/priority.server";
@@ -630,43 +629,12 @@ export async function syncCompany(
       : { data: [], error: null };
     if (receiptError) throw new Error(receiptError.message);
     const seen = new Set((receipts ?? []).map((x) => x.job));
+    // Everything past these two (same-day bursts, filings discovered late) is read by the worker's
+    // Form 4 repair pass (src/lib/jobs/form4.server.ts `repairForm4`).
     for (const f of candidates.filter((x) => !seen.has(`form4-seen:${x.accn}`)).slice(0, 2)) {
       try {
-      const path = form4XmlPath(f.doc);
-      const xml = await (await fetchSec(archiveUrl(c.cik, f.accn, path), sec)).text();
-      // Do not receipt a malformed response as an empty/derivative-only filing.
-      if (!/<ownershipDocument\b/i.test(xml) || !/<\/ownershipDocument>/i.test(xml)) throw new Error("Invalid ownership XML");
-      const parsed = parseForm4(xml, { accn: f.accn, filed: f.filed, report: f.report ?? undefined }, path);
-      if (!parsed.length) {
-        const { error } = await supabaseAdmin.from("job_state").upsert({ job: `form4-seen:${f.accn}`, cursor: 0, updated_at: new Date().toISOString() });
-        if (error) throw new Error(error.message);
-        continue;
-      }
-      const { error } = await supabaseAdmin.from("insider_trades").upsert(
-        parsed.map((t, seq) => ({
-          accn: t.accn,
-          seq,
-          ticker: c.ticker,
-          filed: t.filed,
-          owner: t.owner,
-          role: t.role,
-          trade_date: t.date,
-          code: t.code,
-          security: t.security,
-          shares: t.shares,
-          price: t.price,
-          acquired: t.acquired,
-          owned_after: t.ownedAfter,
-          direct: t.direct,
-          plan_10b5: t.plan10b5,
-          doc: t.doc,
-        })),
-      );
-      if (error) throw new Error(error.message);
-      out.trades += parsed.length;
-      // Open-market purchases by officers/directors feed the insider-cluster strategy.
-      const buys = insiderBuyRows(c.ticker, parsed.map((t) => ({ ...t, date: t.date })), "sec-form4");
-      if (buys.length) await supabaseAdmin.from("insider_buys").upsert(buys, { onConflict: "accn,owner", ignoreDuplicates: true });
+        const r = await storeForm4(supabaseAdmin, { accn: f.accn, ticker: c.ticker, cik: f.cik, filed: f.filed, report: f.report, doc: f.doc }, sec);
+        out.trades += r.trades;
       } catch (e) {
         out.errors.push(`${c.ticker} ${f.accn}: ${(e as Error).message}`);
       }
