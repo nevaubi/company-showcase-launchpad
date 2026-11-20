@@ -1,5 +1,5 @@
 import { logoUrl } from "@/components/app/company-logo";
-import type { Relation } from "@/lib/supply/core";
+import { normText, type NodeRisk, type Relation } from "@/lib/supply/core";
 
 export const RELATION_COLOR: Record<Relation | "focus", string> = {
   customer: "var(--chart-1)",
@@ -22,3 +22,13 @@ export function externalLogo(domain: string | null, ticker: string | null) {
   }
   return domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=128` : undefined;
 }
+
+/** Risk overlays shared by the globe and network views. */
+export type Overlay = "none" | "single" | "concentration" | "geo" | "dollars";
+/** True when a name is flagged by the chosen overlay. */
+export function overlayHit(overlay: Overlay, risk: NodeRisk | undefined): boolean {
+  if (!risk) return false;
+  return (overlay === "single" && risk.singleSource) || (overlay === "concentration" && risk.concentrated) || (overlay === "geo" && risk.hotspots.length > 0) || (overlay === "dollars" && risk.dollars != null);
+}
+/** Key a shock impact is stored under: the ticker when there is one, else the normalised name. */
+export const impactKey = (n: { ticker: string | null; name: string }) => n.ticker ?? normText(n.name);

@@ -1,6 +1,6 @@
 // Worker step: rebuild a bundled analytics set and publish it to the `datasets` bucket under
 // analytics/ (the app's loaders read that copy first, see src/lib/analytics-files.ts).
-//   bun scripts/analytics-publish.ts --set=markets|auctions|hedge|context
+//   bun scripts/analytics-publish.ts --set=markets|auctions|hedge|context|hq
 // context: next 20 companies per run from a rolling cursor (job_state `analytics-context`) over the
 // whole covered list; a full lap then keeps refreshing the oldest.
 import { spawnSync } from "node:child_process";
@@ -30,13 +30,14 @@ try {
   if (set === "markets") { gen("scripts/markets.ts"); items += +(await upload("public/data/markets.json", "markets.json")) + +(await upload("public/data/returns.json", "returns.json")); }
   else if (set === "auctions") { gen("scripts/treasury-auctions.ts"); items += +(await upload("public/data/treasury-auctions.json", "treasury-auctions.json")); }
   else if (set === "hedge") { gen("scripts/hedge-funds.ts"); items += +(await upload("public/data/hedge-funds.json", "hedge-funds.json")); }
+  else if (set === "hq") { gen("scripts/company-hq.ts"); items += +(await upload("public/data/hq.json", "hq.json")); }
   else if (set === "context") {
     const { data: st } = await sb.from("job_state").select("cursor").eq("job", JOB).maybeSingle();
     const { tickers, next } = contextSlice(COVERAGE.map((c) => c.ticker), st?.cursor ?? 0);
     gen("scripts/company-context.ts", [`--only=${tickers.join(",")}`]);
     for (const t of tickers) items += +(await upload(`public/data/context/${t}.json`, `context/${t}.json`));
     await sb.from("job_state").upsert({ job: JOB, cursor: next, paused_reason: null, updated_at: now() });
-  } else throw new Error("--set must be markets, auctions, hedge or context");
+  } else throw new Error("--set must be markets, auctions, hedge, context or hq");
   if (set !== "context") await sb.from("job_state").upsert({ job: JOB, cursor: items, paused_reason: null, updated_at: now() });
   await sb.from("job_runs").insert({ job: JOB, started_at: now(), finished_at: now(), ok: true, items, detail: { set } });
   log(`${JOB}: published ${items} file(s)`);

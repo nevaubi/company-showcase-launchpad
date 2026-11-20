@@ -9,8 +9,8 @@ import { z } from "zod";
 import { ArrowRight, FileText, Globe2, Lock, Network, Zap } from "lucide-react";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { externalLogo, RELATION_COLOR, RELATION_LABEL } from "@/components/supply/supply-map-meta";
-import type { Overlay } from "@/components/supply/supply-map";
+import { externalLogo, RELATION_COLOR, RELATION_LABEL, type Overlay } from "@/components/supply/supply-map-meta";
+import { SupplyNetwork } from "@/components/supply/supply-network";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,7 +21,7 @@ import { buildChain, type ChainFlow, type TaggedShare } from "@/lib/supply/chain
 import { ChainEvidence, ChainTable, ValueChain, type ChainSize } from "@/components/supply/value-chain";
 import { ChangesTab, ReactionsTab } from "@/components/supply/supply-tabs";
 import { SupplyIntel, CounterpartyEvidence } from "@/components/supply/supply-intel";
-import { ConfidenceBadge, DependencyCard, RegionPanel, SupplyFlow, SupplyNotePanel } from "@/components/supply/supply-pro";
+import { ConfidenceBadge, DependencyCard, RegionPanel, SupplyNotePanel } from "@/components/supply/supply-pro";
 import { allSignalsQuery, ConcentrationHistory, DeepVerify, EcosystemBasket, FragilityTable, FreshnessBadge, FreshnessStrip, RegionShockPanel, WorldExposureMap } from "@/components/supply/supply-plus";
 import { canonCountry, countryExposure } from "@/lib/supply/analytics";
 import { AgreementTermsPanel, RegionDossierPanel, RegionRiskRegister } from "@/components/supply/supply-region";
@@ -32,8 +32,13 @@ import { focusGraph, linkDollars, nodeRisk, RELATIONS, secondOrder, simulateShoc
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import { hasSupplyFlow, SupplySankey } from "@/components/supply/supply-sankey";
-const SupplyMap = lazy(() => import("@/components/supply/supply-map"));
+const SupplyGlobe = lazy(() => import("@/components/supply/supply-globe"));
+
+/** The three ways to look at the links. "flow" and the old node map were folded into Network; a stored old value falls back to it. */
+const VIEWS = ["network", "globe", "chain"] as const;
+type View = (typeof VIEWS)[number];
+const VIEW_LABEL: Record<View, string> = { network: "Network", globe: "Globe", chain: "Chain" };
+const isView = (v: unknown): v is View => typeof v === "string" && (VIEWS as readonly string[]).includes(v);
 
 export const Route = createFileRoute("/_authenticated/app/supply-chain")({
   validateSearch: z.object({ t: z.string().max(10).optional() }),
@@ -72,7 +77,7 @@ function SupplyChainPage() {
   const [tab, setTab] = useSessionState("fu:supply:tab", "evidence");
   const [shockSrc, setShockSrc] = useState<string | null>(null);
   const [shock, setShock] = useState(20);
-  const [view, setView] = useSessionState<"network" | "flow" | "chain">("fu:supply:view", "network");
+  const [view, setView] = useSessionState<View>("fu:supply:view", "network", isView);
   const [chainDepth, setChainDepth] = useSessionState<number>("fu:supply:chain-depth", 2);
   const [chainSel, setChainSel] = useState<string | null>(null);
   const [chainWide, setChainWide] = useState(true);
@@ -122,6 +127,15 @@ function SupplyChainPage() {
       exposure,
     };
   }, [risks, graph, revenue]);
+  // What the globe tints: the same per-country rows as the World exposure panel in its company scope.
+  const exposureRows = useMemo(
+    () => countryExposure((all as ProLink[]).filter((l) => l.ticker === ticker || l.counterparty_ticker === ticker), (signals ?? []).filter((x) => x.ticker === ticker), revenue)
+      .filter((r) => r.country !== "United States" || r.links + r.facilities > 0),
+    [all, signals, ticker, revenue],
+  );
+  const pick = (k: string) => { setSelected(k); setTab("evidence"); };
+  // Loading, error and empty states keep a fixed frame; every view grows with its content (the globe sets its own map height).
+  const fixedCanvas = isLoading || (linksQuery.isError && !links) || (view === "chain" ? !(chain && chain.nodes.length > 1) : graph.length === 0);
   // The same hotspot list the region register below shows, so the header and the register never disagree.
   const hotspotRegions = useMemo(() => {
     if (summary.hotspots.length) return summary.hotspots;
@@ -207,18 +221,18 @@ function SupplyChainPage() {
           </button>
         ))}
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-md border p-0.5 text-xs">
-            {(["network", "flow", "chain"] as const).map((v) => (
-              <button key={v} type="button" onClick={() => { setView(v); if (v === "chain") setTab("evidence"); }} className={cn("rounded px-2.5 py-1", view === v ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
-                {v === "network" ? "Network" : v === "flow" ? "Flow" : "Chain"}
+          <div role="group" aria-label="View" data-agent-controls data-tour="supply-views" className="inline-flex rounded-md border p-0.5 text-xs">
+            {VIEWS.map((v) => (
+              <button key={v} type="button" aria-pressed={view === v} onClick={() => { setView(v); if (v === "chain") setTab("evidence"); }} className={cn("rounded px-2.5 py-1", view === v ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+                {VIEW_LABEL[v]}
               </button>
             ))}
           </div>
           {view !== "chain" && (
             <>
-          <div className="inline-flex rounded-md border p-0.5 text-xs">
+          <div role="group" aria-label="Depth" data-agent-controls className="inline-flex rounded-md border p-0.5 text-xs">
             {([1, 2] as const).map((d) => (
-              <button key={d} type="button" onClick={() => setDepth(d)} className={cn("rounded px-2.5 py-1", depth === d ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
+              <button key={d} type="button" aria-pressed={depth === d} onClick={() => setDepth(d)} className={cn("rounded px-2.5 py-1", depth === d ? "bg-ink text-ink-foreground" : "text-muted-foreground")}>
                 {d === 1 ? "Direct" : "+ 2nd order"}
               </button>
             ))}
@@ -241,7 +255,7 @@ function SupplyChainPage() {
       </div>
 
       <div className={cn("grid grid-cols-1 gap-4", view !== "chain" && "lg:grid-cols-[minmax(0,1fr)_360px]")}>
-        <div className={cn("relative min-w-0 overflow-hidden rounded-xl border bg-card", view === "chain" && chain && chain.nodes.length > 1 ? "" : "h-[640px]")}>
+        <div className={cn("relative min-w-0 overflow-hidden rounded-xl border bg-card", fixedCanvas && "h-[640px]")}>
           {linksQuery.isError && !links ? <div role="alert" className="grid h-full place-content-center gap-3 p-6 text-sm text-muted-foreground">Supply-chain records are temporarily unavailable.<Button variant="outline" size="sm" onClick={() => linksQuery.refetch()}>Retry</Button></div> : isLoading ? (
             <Skeleton className="h-full w-full" />
           ) : view === "chain" && chain ? (
@@ -263,18 +277,15 @@ function SupplyChainPage() {
               <Network className="size-6" />
               No named customers or suppliers found in {focus.name}'s latest 10-K yet.
             </div>
-          ) : view === "flow" && hasSupplyFlow(graph, revenue) ? (
-            <SupplySankey ticker={ticker} focusName={focus.name} graph={graph} revenue={revenue} selected={selected} onSelect={(k) => { setSelected(k); setTab("evidence"); }} />
-          ) : view === "flow" ? (
-            <SupplyFlow focusName={focus.name} graph={graph} revenue={revenue} selected={selected} onSelect={(k) => { setSelected(k); setTab("evidence"); }} />
-          ) : (
-            <ClientOnly fallback={<Skeleton className="h-full w-full" />}>
-              <Suspense fallback={<Skeleton className="h-full w-full" />}>
-                <SupplyMap focus={focus} graph={graph} hop2={hop2} visible={visible} selected={selected} onSelect={(k) => { setSelected(k); setTab("evidence"); }} overlay={overlay} risks={risks} impacts={impactMap} />
+          ) : view === "globe" ? (
+            <ClientOnly fallback={<Skeleton className="h-[640px] w-full" />}>
+              <Suspense fallback={<Skeleton className="h-[640px] w-full" />}>
+                <SupplyGlobe focus={focus} graph={graph} hop2={hop2} visible={visible} selected={selected} onSelect={pick} overlay={overlay} risks={risks} impacts={impactMap} rows={exposureRows} country={country} onCountry={setCountry} />
               </Suspense>
             </ClientOnly>
+          ) : (
+            <SupplyNetwork focus={focus} graph={graph} hop2={hop2} visible={visible} selected={selected} onSelect={pick} overlay={overlay} risks={risks} impacts={impactMap} />
           )}
-          {view !== "chain" && !(view === "flow" && hasSupplyFlow(graph, revenue)) && (<p className="pointer-events-none absolute bottom-2 left-14 text-[10.5px] text-muted-foreground">Line thickness = stated share of revenue or purchases · dashed = second-order link</p>)}
         </div>
 
         {view === "chain" && chain && chain.nodes.length > 1 && (

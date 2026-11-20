@@ -288,7 +288,7 @@ function maybeFilingSteps() {
 }
 
 // ---------- analytics files (analytics-publish.ts → datasets/analytics/) ----------
-/** markets+returns daily after the nightly setups cycle finishes, auctions daily, hedge funds weekly, company context 20/day. */
+/** markets+returns daily after the nightly setups cycle finishes, auctions daily, hedge funds weekly, head offices weekly, company context 20/day. */
 let publishing = false;
 const lastPublish: Record<string, number> = {};
 async function setupsFinishedAt(): Promise<number> {
@@ -308,6 +308,7 @@ async function maybeAnalytics() {
   if ((await setupsFinishedAt()) > (lastPublish.markets ?? 0) && (await due("markets", 20 * 3_600_000))) set = "markets";
   else if (await due("auctions", 24 * 3_600_000)) set = "auctions";
   else if (await due("hedge", 7 * 86_400_000)) set = "hedge";
+  else if (await due("hq", 7 * 86_400_000)) set = "hq";
   else if (await due("context", 24 * 3_600_000)) set = "context";
   if (!set) return;
   publishing = true;

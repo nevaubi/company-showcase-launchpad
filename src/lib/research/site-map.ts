@@ -27,7 +27,7 @@ const NOTES: Record<string, string> = {
   "/app/macro": "FRED economic series",
   "/app/hedge-funds": "Hedge fund leverage, positioning and crowding",
   "/app/supply-chain":
-    "Named customers and suppliers, flow and map views, shock simulation (add ?t=TICKER)",
+    "Named customers and suppliers in Network (flows by stated dollars), Globe (where they are based) and Chain views, shock simulation (add ?t=TICKER)",
   "/app/alt-data": "Public alternative data: contracts, FDA, recalls, complaints",
   "/app/setups":
     "Published short-term strategies re-tested nightly, judged on out-of-sample trades",

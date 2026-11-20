@@ -42,6 +42,7 @@ export const DATA_CADENCE: DataCadence[] = [
   { key: "analytics_auctions", label: "Treasury auctions file", maxAgeHours: 2 * D },
   { key: "analytics_hedge", label: "Hedge funds file", maxAgeHours: 8 * D },
   { key: "analytics_context", label: "Company context files", maxAgeHours: 2 * D },
+  { key: "analytics_hq", label: "Head-office positions (supply globe)", maxAgeHours: 9 * D },
 ];
 
 export type DataStatus = "fresh" | "stale" | "missing";

@@ -79,26 +79,6 @@ export function focusGraph(focus: string, all: SupplyLink[], names: Record<strin
 
 export const maxShare = (n: { links: SupplyLink[] }) => Math.max(0, ...n.links.map((l) => l.share_pct ?? 0));
 
-/**
- * Clean side-by-side layout around the focus: suppliers flow in from the left, customers out to the
- * right, partners above and competitors below. Columns/rows wrap so nodes never overlap.
- */
-export function sidePositions(count: number, side: Relation): { x: number; y: number }[] {
-  const ROW = 64, COL = 230, PER_COL = 9, PER_ROW = 5;
-  return Array.from({ length: count }, (_, i) => {
-    if (side === "supplier" || side === "customer") {
-      const col = Math.floor(i / PER_COL), row = i % PER_COL;
-      const inCol = Math.min(PER_COL, count - col * PER_COL);
-      const dir = side === "supplier" ? -1 : 1;
-      return { x: dir * (380 + col * COL), y: (row - (inCol - 1) / 2) * ROW };
-    }
-    const r = Math.floor(i / PER_ROW), c = i % PER_ROW;
-    const inRow = Math.min(PER_ROW, count - r * PER_ROW);
-    const dir = side === "partner" ? -1 : 1;
-    return { x: (c - (inRow - 1) / 2) * COL, y: dir * (330 + r * ROW) };
-  });
-}
-
 // ---------------------------------------------------------------- richer analysis
 
 export interface RiskLink extends SupplyLink {
