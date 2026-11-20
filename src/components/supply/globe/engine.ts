@@ -2,11 +2,12 @@
 // No React and no app imports, so it can be driven by any scene. Browser-only: it is loaded lazily
 // by supply-globe.tsx and never runs during server rendering or in unit tests.
 import { geoArea, geoCentroid, geoContains, geoDistance, geoGraticule10, geoInterpolate, geoNaturalEarth1, geoOrthographic, geoPath, geoRotation, type GeoPermissibleObjects, type GeoProjection } from 'd3';
-import type { Feature, MultiLineString, Polygon, Position } from 'geojson';
+import type { Feature, MultiLineString, Polygon } from 'geojson';
 import { feature, mesh } from 'topojson-client';
 import type { GeometryCollection, Topology } from 'topojson-specification';
 import world110 from 'world-atlas/countries-110m.json';
 import world50 from 'world-atlas/countries-50m.json';
+import { HiGeo, packHi, type HiPacked } from './hi-geo';
 
 /* ---------- public types ---------- */
 export interface GlobePoint {
@@ -27,13 +28,18 @@ export interface GlobePoint {
   faded?: boolean;
   /** colour of a ring that marks the company as linked to the selection */
   ring?: string;
+  /** marker shape: the host gives each relation its own, so relations differ without colour */
+  shape?: GlobeShape;
 }
+export type GlobeShape = 'circle' | 'square' | 'diamond' | 'triangle';
+/** A screen rectangle (CSS px, relative to the canvas) that labels must keep clear of: controls laid over the map. */
+export interface GlobeBox { x: number; y: number; w: number; h: number }
 export interface GlobeArc { id: string; a: [number, number]; b: [number, number]; color: string; dash: number[]; twoWay: boolean; hot: boolean; dim: boolean; /** line width in px; 1.8 when absent */ width?: number; /** no direction marks: for ties that are not a flow of goods */ plain?: boolean }
 export interface GlobeBadge { lon: number; lat: number; text: string; /** key of the point the badge belongs to, so badges that share a cluster are drawn as one */ key?: string }
 export interface GlobeScene { points: GlobePoint[]; arcs: GlobeArc[]; badges: GlobeBadge[]; selected: string | null }
 /** A country to tint, by its world-atlas name (see countryPlaces). */
 export interface GlobeFill { name: string; color: string; alpha: number }
-export interface GlobePalette { ocean: string; oceanEdge: string; land: string; border: string; coast: string; ink2: string; grid: string; glow: string; shade: string; ink: string; ink3: string; panel: string; accent: string }
+export interface GlobePalette { ocean: string; land: string; border: string; coast: string; ink2: string; grid: string; ink: string; ink3: string; panel: string; accent: string; /** hairline round the globe's disc */ rim: string }
 export type GlobeHit =
   | { kind: 'point'; point: GlobePoint; x: number; y: number }
   | { kind: 'cluster'; points: GlobePoint[]; x: number; y: number; lon: number; lat: number };
@@ -93,52 +99,43 @@ const countryLabels = (): CountryLabel[] => {
   return (labelCache = out.sort((a, b) => b.size - a.size));
 };
 
-/** A spherical cap that contains a shape: lets the renderer skip everything outside the view. */
-interface Cap { c: [number, number]; r: number }
-interface HiGeo { polys: (Cap & { g: Polygon })[]; borders: (Cap & { line: Position[] })[]; coast: (Cap & { line: Position[] })[] }
-const capOf = (pts: Position[]): Cap => {
-  let x = 0, y = 0, z = 0;
-  for (const [lon, lat] of pts) { const cp = Math.cos(lat * RAD); x += cp * Math.cos(lon * RAD); y += cp * Math.sin(lon * RAD); z += Math.sin(lat * RAD); }
-  const c: [number, number] = [Math.atan2(y, x) / RAD, Math.atan2(z, Math.hypot(x, y)) / RAD];
-  let r = 0;
-  for (let i = 0; i < pts.length; i += 3) r = Math.max(r, geoDistance(c, pts[i] as [number, number]));
-  return { c, r: r + 0.002 };
-};
-/** Long lines are cut into short runs so a coastline is not drawn whole when only a bay is in view. */
-const chunks = (lines: Position[][], size = 48): (Cap & { line: Position[] })[] => {
-  const out: (Cap & { line: Position[] })[] = [];
-  for (const line of lines) for (let i = 0; i < line.length - 1; i += size) {
-    const run = line.slice(i, i + size + 1);
-    out.push({ ...capOf(run), line: run });
-  }
-  return out;
-};
-const prepHi = (topo: Topology): HiGeo => {
-  const obj = topo.objects.countries as GeometryCollection;
-  const polys: HiGeo['polys'] = [];
-  for (const f of feature(topo, obj).features) {
-    const g = f.geometry;
-    if (g.type !== 'Polygon' && g.type !== 'MultiPolygon') continue;
-    for (const coordinates of g.type === 'Polygon' ? [g.coordinates] : g.coordinates) polys.push({ ...capOf(coordinates[0]), g: { type: 'Polygon', coordinates } });
-  }
-  return {
-    polys,
-    borders: chunks(mesh(topo, obj, (a, b) => a !== b).coordinates),
-    coast: chunks(mesh(topo, obj, (a, b) => a === b).coordinates),
-  };
-};
 let hi: HiGeo | null = null, hiState: 'idle' | 'loading' | 'ready' | 'failed' = 'idle';
 const hiWaiters = new Set<() => void>();
-/** Fetch the 1:10m borders the first time someone zooms in far enough to see the difference. */
+/** How the last 1:10m load ran, for diagnostics: 'worker', 'main' (fallback) or empty. */
+export let hiLoadedBy: '' | 'worker' | 'main' = '';
+const hiDone = (packed: HiPacked | null, by: 'worker' | 'main') => {
+  if (packed) { hi = new HiGeo(packed); hiState = 'ready'; hiLoadedBy = by; } else hiState = 'failed';
+  hiWaiters.forEach((f) => f()); hiWaiters.clear();
+};
+/** Parse on the main thread: only when a worker cannot start. */
+const loadHiHere = () => {
+  // the same emitted file the worker fetches (hi-geo.worker.ts), so the 1:10m map ships once
+  import('world-atlas/countries-10m.json?url')
+    .then((m) => fetch(m.default))
+    .then((r) => r.json())
+    .then((t) => hiDone(packHi(t as Topology), 'main'))
+    .catch(() => hiDone(null, 'main'));
+};
+/**
+ * Fetch and prepare the 1:10m borders the first time someone zooms in far enough to see the difference.
+ * The parsing runs in a worker so the page does not freeze for most of a second; the packed arrays are transferred, not copied.
+ */
 const loadHi = (onReady: () => void): void => {
   if (hiState === 'ready' || hiState === 'failed') return;
   hiWaiters.add(onReady);
   if (hiState === 'loading') return;
   hiState = 'loading';
-  import('world-atlas/countries-10m.json')
-    .then((m) => { hi = prepHi((m.default ?? m) as unknown as Topology); hiState = 'ready'; })
-    .catch(() => { hiState = 'failed'; })
-    .finally(() => { hiWaiters.forEach((f) => f()); hiWaiters.clear(); });
+  if (typeof Worker === 'undefined') { loadHiHere(); return; }
+  let w: Worker;
+  try {
+    w = new Worker(new URL('./hi-geo.worker.ts', import.meta.url), { type: 'module' });
+  } catch {
+    loadHiHere();
+    return;
+  }
+  w.onmessage = (e: MessageEvent<{ ok: boolean; packed?: HiPacked }>) => { w.terminate(); if (e.data.ok && e.data.packed) hiDone(e.data.packed, 'worker'); else loadHiHere(); };
+  w.onerror = (e) => { e.preventDefault(); w.terminate(); loadHiHere(); };
+  w.postMessage(null);
 };
 const HI_ZOOM = 5;
 /** from this zoom on, a lone company is drawn as its logo */
@@ -169,6 +166,45 @@ const mainHub = (members: GlobePoint[]): string => {
   for (const m of members) tally.set(m.hub, (tally.get(m.hub) ?? 0) + 1);
   return [...tally].sort((a, b) => b[1] - a[1])[0][0];
 };
+
+/** One relation's share of a cluster's pie, with the shape drawn on it so relations differ without colour. */
+export interface ClusterSlice { color: string; shape: GlobeShape; count: number; a0: number; a1: number }
+/**
+ * Pie slices of a cluster, largest first from 12 o'clock. Every slice gets at least `minAngle` so the shape drawn at its
+ * middle fits; the others give up room in proportion. The counts stay exact (the hover list repeats them).
+ */
+export function clusterSlices(members: Pick<GlobePoint, 'color' | 'shape'>[], minAngle = 0.75): ClusterSlice[] {
+  const tally = new Map<string, { color: string; shape: GlobeShape; count: number }>();
+  for (const m of members) {
+    const shape = m.shape ?? 'circle', k = `${m.color}|${shape}`;
+    const t = tally.get(k) ?? { color: m.color, shape, count: 0 };
+    t.count++;
+    tally.set(k, t);
+  }
+  const groups = [...tally.values()].sort((a, b) => b.count - a.count || a.shape.localeCompare(b.shape));
+  const n = members.length, full = Math.PI * 2;
+  const raw = groups.map((g) => (g.count / n) * full);
+  const floor = Math.min(minAngle, full / Math.max(1, groups.length));
+  const small = raw.map((a) => a < floor);
+  const need = small.reduce((s, x, i) => s + (x ? floor - raw[i] : 0), 0);
+  const spare = raw.reduce((s, a, i) => s + (small[i] ? 0 : a), 0);
+  let a0 = -Math.PI / 2;
+  return groups.map((g, i) => {
+    const span = small[i] ? floor : raw[i] - (spare > 0 ? (need * raw[i]) / spare : 0);
+    const out = { ...g, a0, a1: a0 + span };
+    a0 += span;
+    return out;
+  });
+}
+
+/** Trace a marker of the given shape, centred on (x, y), about as large as a circle of radius r. */
+function shapePath(ctx: CanvasRenderingContext2D, shape: GlobeShape, x: number, y: number, r: number): void {
+  ctx.beginPath();
+  if (shape === 'square') { const h = r * 0.88; ctx.rect(x - h, y - h, 2 * h, 2 * h); }
+  else if (shape === 'diamond') { const h = r * 1.2; ctx.moveTo(x, y - h); ctx.lineTo(x + h, y); ctx.lineTo(x, y + h); ctx.lineTo(x - h, y); ctx.closePath(); }
+  else if (shape === 'triangle') { const h = r * 1.2; ctx.moveTo(x, y - h); ctx.lineTo(x + h * 0.95, y + h * 0.7); ctx.lineTo(x - h * 0.95, y + h * 0.7); ctx.closePath(); }
+  else ctx.arc(x, y, r, 0, Math.PI * 2);
+}
 
 interface Camera { lon: number; lat: number; zoom: number }
 interface Projected { x: number; y: number; visible: boolean; /** how squarely the point faces the viewer: 1 at the centre of the disc, 0 on the horizon, negative behind it */ z: number }
@@ -212,6 +248,9 @@ export class GlobeEngine {
   private baseKey = '';
   private version = 0;
   private onScreen = true;
+  private wasMoving = false;
+  /** controls laid over the map, which labels keep clear of */
+  private reserved: GlobeBox[] = [];
 
   constructor(private canvas: HTMLCanvasElement, private cb: GlobeCallbacks) {
     const ctx = canvas.getContext('2d');
@@ -243,6 +282,8 @@ export class GlobeEngine {
   setPalette(p: GlobePalette): void { this.palette = p; this.version++; this.dirty = true; }
   /** Countries to tint under the borders, by world-atlas name. */
   setFills(fills: GlobeFill[]): void { this.fills = fills; this.version++; this.dirty = true; }
+  /** Screen areas covered by the host's controls: names are not written under them. */
+  setReserved(boxes: GlobeBox[]): void { this.reserved = boxes; this.dirty = true; }
   /** Where reset() returns to. */
   setHome(lon: number, lat: number, zoom = 1): void { this.home = { lon, lat, zoom }; }
   private image(url: string): HTMLImageElement | null {
@@ -283,6 +324,8 @@ export class GlobeEngine {
   zoomBy(factor: number): void { this.flyTo(this.cam.lon, this.cam.lat, this.cam.zoom * factor, 320); }
   reset(): void { this.flyTo(this.home.lon, this.home.lat, this.home.zoom); }
   get zoom(): number { return this.cam.zoom; }
+  /** True while the camera is animating, being dragged or coasting: the detailed map waits until it settles. */
+  private moving(): boolean { return this.fly != null || this.drag != null && this.drag.moved > 4 || Math.abs(this.velocity.lon) > 0.002 || Math.abs(this.velocity.lat) > 0.002; }
   destroy(): void { cancelAnimationFrame(this.raf); this.cleanup.forEach((f) => f()); this.cleanup = []; this.base = null; }
 
   /* ---------- projection ---------- */
@@ -292,9 +335,9 @@ export class GlobeEngine {
   private projection(): GeoProjection {
     const cx = this.w / 2, cy = this.h / 2;
     if (!this.flat) {
-      return geoOrthographic().translate([cx, cy]).scale(this.radius).rotate([-this.cam.lon, -this.cam.lat]).clipAngle(90).precision(0.4).clipExtent([[0, 0], [this.w, this.h]]);
+      return geoOrthographic().translate([cx, cy]).scale(this.radius).rotate([-this.cam.lon, -this.cam.lat]).clipAngle(90).precision(this.cam.zoom >= HI_ZOOM ? 1 : 0.5).clipExtent([[0, 0], [this.w, this.h]]);
     }
-    const p = geoNaturalEarth1().scale(this.flatScale).rotate([-this.cam.lon, 0]).translate([cx, cy]).precision(0.4);
+    const p = geoNaturalEarth1().scale(this.flatScale).rotate([-this.cam.lon, 0]).translate([cx, cy]).precision(this.cam.zoom >= HI_ZOOM ? 1 : 0.5);
     const centre = p([this.cam.lon, this.cam.lat]);
     return p.translate([cx, cy + (centre ? cy - centre[1] : 0)]).clipExtent([[0, 0], [this.w, this.h]]);
   }
@@ -333,6 +376,8 @@ export class GlobeEngine {
       this.cam.lon += dt * 0.0045;
       this.dirty = true;
     }
+    const mv = this.moving();
+    if (mv !== this.wasMoving) { this.wasMoving = mv; this.dirty = true; }
     const showing = this.onScreen && !document.hidden;
     /* dots travel only along the selected link, at about 30 frames a second; with no selection the globe is still */
     if (showing && !this.reduced && this.arcs.some((a) => a.arc.hot)) { this.clock += dt; if (now - this.lastDraw >= 32) this.dirty = true; }
@@ -344,7 +389,7 @@ export class GlobeEngine {
   private draw(): void {
     const { ctx } = this, pal = this.palette as GlobePalette;
     /* the map itself is kept on its own canvas and only redrawn when something about it changed */
-    const key = [this.cam.lon.toFixed(4), this.cam.lat.toFixed(4), this.cam.zoom.toFixed(4), this.flat, this.canvas.width, this.canvas.height, this.version, this.overCountry ?? '', hiState].join('|');
+    const key = [this.cam.lon.toFixed(4), this.cam.lat.toFixed(4), this.cam.zoom.toFixed(4), this.flat, this.canvas.width, this.canvas.height, this.version, this.overCountry ?? '', hiState, this.moving()].join('|');
     if (!this.base || key !== this.baseKey) {
       const base = (this.base ??= document.createElement('canvas'));
       if (base.width !== this.canvas.width || base.height !== this.canvas.height) { base.width = this.canvas.width; base.height = this.canvas.height; }
@@ -376,20 +421,15 @@ export class GlobeEngine {
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const proj = this.projection(), path = geoPath(proj, ctx), at = this.makeProjector(proj);
-    const zoom = this.cam.zoom, g = zoom < 1.8 ? geo().low : geo().high;
-    if (zoom >= HI_ZOOM && !hi) loadHi(() => { this.dirty = true; });
-    const fine = zoom >= HI_ZOOM ? hi : null;
+    /* while the camera moves the coarse map is drawn; the detailed one follows as soon as it settles */
+    const zoom = this.cam.zoom, moving = this.moving(), g = zoom < 1.8 || moving ? geo().low : geo().high;
+    if (zoom >= HI_ZOOM && !hi) loadHi(() => { this.version++; this.dirty = true; });
+    const fine = zoom >= HI_ZOOM && !moving ? hi : null;
 
-    if (!this.flat) {
-      const halo = ctx.createRadialGradient(cx, cy, R * 0.97, cx, cy, R * 1.16);
-      halo.addColorStop(0, pal.glow); halo.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, R * 1.16, 0, Math.PI * 2); ctx.fill();
-      const sea = ctx.createRadialGradient(cx - R * 0.35, cy - R * 0.4, R * 0.05, cx, cy, R * 1.05);
-      sea.addColorStop(0, pal.ocean); sea.addColorStop(1, pal.oceanEdge);
-      ctx.fillStyle = sea; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
-    } else {
-      ctx.fillStyle = pal.ocean; ctx.beginPath(); path({ type: 'Sphere' }); ctx.fill();
-    }
+    /* flat sea, no glow or shading: the land and the links carry the picture */
+    ctx.fillStyle = pal.ocean; ctx.beginPath();
+    if (this.flat) path({ type: 'Sphere' }); else ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fill();
     if (zoom < 9) { ctx.beginPath(); path(GRATICULE); ctx.strokeStyle = pal.grid; ctx.lineWidth = 0.6; ctx.stroke(); }
     ctx.lineJoin = 'round';
     if (fine) {
@@ -397,29 +437,26 @@ export class GlobeEngine {
       const centre: [number, number] = [this.cam.lon, this.cam.lat];
       const half = Math.hypot(w, h) / 2;
       const reach = (this.flat ? half / this.flatScale : Math.asin(Math.min(1, half / R))) * 1.15;
-      const near = (c: Cap) => geoDistance(c.c, centre) <= reach + c.r;
       ctx.beginPath();
-      for (const p of fine.polys) if (near(p)) path(p.g);
+      for (let i = 0; i < fine.polyCount; i++) if (fine.near('polys', i, centre, reach)) path(fine.poly(i));
       ctx.fillStyle = pal.land; ctx.fill();
       ctx.strokeStyle = pal.land; ctx.lineWidth = 0.6; ctx.stroke();
       this.drawFills(path, true);
-      const lines = (set: HiGeo['borders']): MultiLineString => ({ type: 'MultiLineString', coordinates: set.filter(near).map((x) => x.line) });
-      ctx.beginPath(); path(lines(fine.coast)); ctx.strokeStyle = pal.coast; ctx.lineWidth = 1; ctx.stroke();
-      ctx.beginPath(); path(lines(fine.borders)); ctx.strokeStyle = pal.border; ctx.lineWidth = 1.2; ctx.stroke();
+      const lines = (set: 'borders' | 'coast'): MultiLineString => {
+        const coordinates = [];
+        for (let i = 0, n = fine.lineCount(set); i < n; i++) if (fine.near(set, i, centre, reach)) coordinates.push(fine.line(set, i));
+        return { type: 'MultiLineString', coordinates };
+      };
+      ctx.beginPath(); path(lines('coast')); ctx.strokeStyle = pal.coast; ctx.lineWidth = 1; ctx.stroke();
+      ctx.beginPath(); path(lines('borders')); ctx.strokeStyle = pal.border; ctx.lineWidth = 1.2; ctx.stroke();
     } else {
       ctx.beginPath(); path(g.land); ctx.fillStyle = pal.land; ctx.fill();
       ctx.strokeStyle = pal.coast; ctx.lineWidth = 0.8; ctx.stroke();
-      this.drawFills(path, zoom >= 1.8);
+      this.drawFills(path, zoom >= 1.8 && !moving);
       ctx.beginPath(); path(g.borders); ctx.strokeStyle = pal.border; ctx.lineWidth = zoom > 3 ? 1 : 0.7; ctx.stroke();
     }
     this.drawCountryNames(at, pal);
-    if (!this.flat) {
-      /* limb shading gives the disc its depth */
-      const shade = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, R);
-      shade.addColorStop(0, 'rgba(0,0,0,0)'); shade.addColorStop(1, pal.shade);
-      ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
-      ctx.fillStyle = shade; ctx.fillRect(0, 0, w, h); ctx.restore();
-    }
+    if (!this.flat) { ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.strokeStyle = pal.rim; ctx.lineWidth = 1; ctx.stroke(); }
   }
 
   /** Tinted countries, drawn over the land and under the borders. */
@@ -451,8 +488,8 @@ export class GlobeEngine {
     const { ctx } = this, zoom = this.cam.zoom;
     if (zoom < 1.5 || zoom > 26) return;
     const scale = this.flat ? this.flatScale : this.radius;
-    ctx.font = '600 10px "Geist", ui-sans-serif, system-ui, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = pal.ink3; ctx.globalAlpha = 0.7;
+    ctx.font = '600 10.5px "Geist", ui-sans-serif, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = pal.ink2; ctx.globalAlpha = 0.9;
     for (const l of countryLabels()) {
       const text = l.name.toUpperCase(), width = text.length * 7.4;
       if (l.size * scale < width * 0.9) continue;
@@ -605,6 +642,10 @@ export class GlobeEngine {
     const singles = this.clusters.filter((c) => c.members.length === 1);
     const logos = singles.length <= 80 && this.cam.zoom >= LOGO_ZOOM;
     const boxes: [number, number, number, number][] = [];
+    /* the host's controls lie over the map: no name goes under them */
+    for (const r of this.reserved) boxes.push([r.x, r.y, r.w, r.h]);
+    /* a marker's box includes the rings drawn round it (hover, selection, overlay), so names keep clear of those too */
+    const mark = (x: number, y: number, r: number) => boxes.push([x - r - 5, y - r - 5, 2 * r + 10, 2 * r + 10]);
     const free = (x: number, y: number, bw: number, bh: number) => {
       if (boxes.some(([a, b, c, d]) => x < a + c && x + bw > a && y < b + d && y + bh > b)) return false;
       boxes.push([x, y, bw, bh]); return true;
@@ -612,11 +653,11 @@ export class GlobeEngine {
     /** Write a name beside a marker: below it if there is room, otherwise above, right or left. Places are set apart from companies by case. */
     const label = (text: string, cx: number, cy: number, r: number, kind: 'hub' | 'company' | 'picked') => {
       const hub = kind === 'hub';
-      ctx.font = hub ? '600 9.5px "Geist", ui-sans-serif, system-ui, sans-serif' : `${kind === 'picked' ? 700 : 600} 11px "Geist", ui-sans-serif, system-ui, sans-serif`;
+      ctx.font = hub ? '600 10.5px "Geist", ui-sans-serif, system-ui, sans-serif' : `${kind === 'picked' ? 600 : 500} ${kind === 'picked' ? 12 : 11}px "Geist", ui-sans-serif, system-ui, sans-serif`;
       (ctx as CanvasRenderingContext2D & { letterSpacing?: string }).letterSpacing = hub ? '0.7px' : '0px';
       const shown = hub ? text.toUpperCase() : text;
-      const tw = ctx.measureText(shown).width, th = 13;
-      const spots: [number, number][] = [[cx - tw / 2, cy + r + 3], [cx - tw / 2, cy - r - 3 - th], [cx + r + 5, cy - th / 2], [cx - r - 5 - tw, cy - th / 2]];
+      const tw = ctx.measureText(shown).width, th = kind === 'picked' ? 15 : 14, g = r + 6;
+      const spots: [number, number][] = [[cx - tw / 2, cy + g], [cx - tw / 2, cy - g - th], [cx + g + 2, cy - th / 2], [cx - g - 2 - tw, cy - th / 2]];
       const spot = spots.find(([x, y]) => x >= 2 && x + tw <= this.w - 2 && y >= 2 && y + th <= this.h - 2 && free(x - 2, y - 1, tw + 4, th + 2));
       if (spot) {
         ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.lineJoin = 'round';
@@ -639,22 +680,29 @@ export class GlobeEngine {
     for (const c of [...this.clusters].sort((a, b) => b.members.length - a.members.length)) {
       const n = c.members.length, hot = this.hover === clusterKey(c);
       if (n === 1) continue;
-      const tally = new Map<string, number>();
-      for (const m of c.members) tally.set(m.color, (tally.get(m.color) ?? 0) + 1);
-      let a0 = -Math.PI / 2;
-      for (const [color, k] of [...tally].sort((x, y) => y[1] - x[1])) {
-        const a1 = a0 + (k / n) * Math.PI * 2;
-        ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.r, a0, a1); ctx.closePath(); ctx.fillStyle = color; ctx.fill();
-        a0 = a1;
+      /* a cluster made only of pale names (outside the shock scenario) is pale too */
+      ctx.globalAlpha = c.members.every((m) => m.faded) ? 0.35 : 1;
+      const slices = clusterSlices(c.members);
+      for (const sl of slices) {
+        ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.arc(c.x, c.y, c.r, sl.a0, sl.a1); ctx.closePath(); ctx.fillStyle = sl.color; ctx.fill();
       }
       ctx.beginPath(); ctx.arc(c.x, c.y, c.r + 0.75, 0, Math.PI * 2); ctx.strokeStyle = hot ? pal.ink : pal.panel; ctx.lineWidth = 1.5; ctx.stroke();
       const ring = c.members.find((m) => m.ring)?.ring;
       if (ring) { ctx.beginPath(); ctx.arc(c.x, c.y, c.r + 3.5, 0, Math.PI * 2); ctx.strokeStyle = ring; ctx.lineWidth = 2; ctx.stroke(); }
-      ctx.beginPath(); ctx.arc(c.x, c.y, Math.max(6, c.r - 5.5), 0, Math.PI * 2); ctx.fillStyle = pal.panel; ctx.fill();
+      /* a ring wide enough to carry each relation's shape, cut out of the middle of its slice: clusters tell relations apart without colour */
+      const band = Math.min(9, Math.max(6.5, c.r * 0.36)), inner = Math.max(7, c.r - band);
+      ctx.beginPath(); ctx.arc(c.x, c.y, inner, 0, Math.PI * 2); ctx.fillStyle = pal.panel; ctx.fill();
+      const glyph = Math.max(2.4, (c.r - inner) * 0.34), rr = (inner + c.r) / 2;
+      for (const sl of slices) {
+        const mid = (sl.a0 + sl.a1) / 2;
+        shapePath(ctx, sl.shape, c.x + Math.cos(mid) * rr, c.y + Math.sin(mid) * rr, glyph);
+        ctx.fillStyle = pal.panel; ctx.fill();
+      }
       ctx.fillStyle = pal.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = '500 10.5px "Geist Mono", ui-monospace, monospace';
       ctx.fillText(String(n), c.x, c.y + 0.5);
-      boxes.push([c.x - c.r, c.y - c.r, c.r * 2, c.r * 2]);
+      ctx.globalAlpha = 1;
+      mark(c.x, c.y, c.r);
     }
     const hubLabels: { text: string; x: number; y: number; r: number; n: number }[] = [];
     const minForLabel = this.cam.zoom >= SPIDER_ZOOM ? 2 : 4;
@@ -670,17 +718,19 @@ export class GlobeEngine {
       const img = logos && p.logo ? this.image(p.logo) : null;
       if (img) {
         const s = 20, x = c.x - s / 2, y = c.y - s / 2;
-        ctx.beginPath(); ctx.roundRect(x - 2, y - 2, s + 4, s + 4, 6); ctx.fillStyle = p.color; ctx.fill();
-        ctx.beginPath(); ctx.roundRect(x, y, s, s, 4); ctx.fillStyle = '#fff'; ctx.fill();
-        ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, s, s, 4); ctx.clip();
+        ctx.beginPath(); ctx.roundRect(x - 2, y - 2, s + 4, s + 4, 5); ctx.fillStyle = p.color; ctx.fill();
+        ctx.beginPath(); ctx.roundRect(x, y, s, s, 3); ctx.fillStyle = '#fff'; ctx.fill();
+        ctx.save(); ctx.beginPath(); ctx.roundRect(x, y, s, s, 3); ctx.clip();
         try { ctx.drawImage(img, x, y, s, s); } catch { this.images.set(p.logo as string, 'failed'); }
         ctx.restore();
+        /* the relation's shape in the corner, so a logo tile still says what the company is to the focus */
+        shapePath(ctx, p.shape ?? 'circle', x + s + 1, y + s + 1, 4.2); ctx.fillStyle = p.color; ctx.fill(); ctx.strokeStyle = pal.panel; ctx.lineWidth = 1.5; ctx.stroke();
         c.r = 13;
       } else if (p.hollow) {
-        ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fillStyle = pal.panel; ctx.fill();
+        shapePath(ctx, p.shape ?? 'circle', c.x, c.y, c.r); ctx.fillStyle = pal.panel; ctx.fill();
         ctx.strokeStyle = p.color; ctx.lineWidth = 2.2; ctx.stroke();
       } else {
-        ctx.beginPath(); ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2); ctx.fillStyle = p.color; ctx.fill();
+        shapePath(ctx, p.shape ?? 'circle', c.x, c.y, c.r); ctx.fillStyle = p.color; ctx.fill();
         ctx.strokeStyle = pal.panel; ctx.lineWidth = 2; ctx.stroke();
       }
       if (hot || picked || p.ring) {
@@ -688,11 +738,14 @@ export class GlobeEngine {
         ctx.strokeStyle = picked ? pal.accent : hot ? pal.ink : (p.ring as string); ctx.lineWidth = picked ? 2.5 : hot ? 1.5 : 2; ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      boxes.push([c.x - c.r, c.y - c.r, c.r * 2, c.r * 2]);
+      mark(c.x, c.y, c.r);
     });
+    const pickedSingle = singles.find((c) => c.members[0].key === this.scene.selected);
+    if (pickedSingle) label(pickedSingle.members[0].name, pickedSingle.x, pickedSingle.y, pickedSingle.r, 'picked');
     for (const h of hubLabels) { if (named.has(h.text)) continue; named.add(h.text); label(h.text, h.x, h.y, h.r, 'hub'); }
     /* names go on last, so no label lands on a marker */
     singles.forEach((c, i) => {
+      if (c === pickedSingle) return;
       const p = c.members[0], picked = this.scene.selected === p.key;
       if (picked || p.ring || this.hover === clusterKey(c) || i < 14 || this.cam.zoom >= 5) label(p.name, c.x, c.y, c.r, picked ? 'picked' : 'company');
     });

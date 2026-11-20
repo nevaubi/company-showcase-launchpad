@@ -1,24 +1,29 @@
 // Head-office positions for every covered company, for the supply-chain globe.
-//   bun scripts/company-hq.ts [--directory=<path or URL>] [--out=public/data/hq.json]
+//   bun scripts/company-hq.ts [--directory=<path or URL>] [--out=public/data/hq.json] [--sec-cache=<path>]
 //
-// Sources, in order:
-//   1. SEC EDGAR business address (city + state), as carried in universe.json: the bundled file, plus the
-//      partner copy when PARTNER_DATA_KEY is set. Used for U.S. states and Canadian provinces.
-//   2. scripts/data/hq-verified.json: head offices checked by hand against a filing cover page, each with its sources.
-//      It covers places the gazetteer does not list (Abbott Park, Tysons) and directory rows found to be wrong.
-//   3. The pipeline's company directory (`headquarters`: "city, region, country").
+// Sources, in order (the rule is chooseHq in src/lib/sec/address.ts):
+//   1. scripts/data/hq-verified.json: head offices checked by hand against a filing cover page, each with its sources.
+//      It covers places the gazetteer does not list (Abbott Park, Tysons) and addresses that are not an operating office.
+//   2. The SEC business address from SEC's own index (data.sec.gov/submissions), read for every covered CIK, one company at
+//      a time at about 4 requests a second. An address care of a registered agent is not placed (see agentAddress).
+//   3. The pipeline's company directory (`headquarters`: "city, region, country"), only where SEC gives no usable city.
 // Each address is matched to a GeoNames city (cities with 1,000+ people, via the `all-the-cities` package).
 // A city that cannot be matched in the right country and state is never guessed: the company is placed at
 // country level (the country's largest city, flagged "n") or listed under `missing`.
+// The run refuses to overwrite the file when SEC answers for fewer than 90% of companies or fewer than 60% place.
+// --sec-cache=<path> keeps SEC's answers in a local file and reuses them for six days (for reruns; the worker does not use it).
 // The file is published to datasets/analytics/hq.json by `bun scripts/analytics-publish.ts --set=hq`.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import cities from "all-the-cities";
 import { COVERAGE } from "@/lib/coverage";
-import { cityLabel, indexCities, isExonym, matchCity, US_STATES, usState, type GazCity, type HqFile, type HqRow } from "@/lib/supply/geo";
+import { fetchSec } from "@/lib/sec.server";
+import { agentAddress, chooseHq, countryIso, countryName, kmApart, readSubmissions, secPlace, type SecProfile } from "@/lib/sec/address";
+import { cityLabel, indexCities, isExonym, matchCity, usState, type GazCity, type HqFile, type HqRow } from "@/lib/supply/geo";
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const [k, ...v] = a.replace(/^--/, "").split("="); return [k, v.length ? v.join("=") : "true"]; })) as Record<string, string | undefined>;
 const OUT = args.out ?? "public/data/hq.json";
 const DIRECTORY = args.directory ?? "https://raw.githubusercontent.com/nevaubi/filedunderai/main/public/data/company-directory.json";
+const SEC_CACHE = args["sec-cache"];
 const log = (m: string) => console.log(`[company-hq] ${m}`);
 
 /* ---------- gazetteer ---------- */
@@ -28,56 +33,66 @@ const index = indexCities(gaz);
 const largest = new Map<string, GazCity>();
 for (const c of gaz) { const b = largest.get(c.country); if (!b || c.pop > b.pop) largest.set(c.country, c); }
 
-/* ---------- countries ---------- */
-const regionNames = new Intl.DisplayNames(["en"], { type: "region" });
-/** Display names that should match the spelling used across the supply-chain page and the base map. */
-const DISPLAY: Record<string, string> = { HK: "Hong Kong", MO: "Macau", TR: "Turkey", CZ: "Czechia", US: "United States", GB: "United Kingdom", KR: "South Korea", TW: "Taiwan", RU: "Russia", VN: "Vietnam" };
-const countryName = (iso: string) => DISPLAY[iso] ?? regionNames.of(iso) ?? iso;
-const ISO_BY_NAME = new Map<string, string>();
-for (let a = 65; a <= 90; a++) for (let b = 65; b <= 90; b++) {
-  const iso = String.fromCharCode(a, b);
-  let name: string | undefined;
-  try { name = regionNames.of(iso); } catch { name = undefined; }
-  if (name && name !== iso) ISO_BY_NAME.set(name.toLowerCase(), iso);
-}
-for (const [iso, name] of Object.entries(DISPLAY)) ISO_BY_NAME.set(name.toLowerCase(), iso);
-for (const [alias, iso] of Object.entries({
-  "united states of america": "US", usa: "US", us: "US", uk: "GB", "great britain": "GB", england: "GB", scotland: "GB", "korea, republic of": "KR", "republic of korea": "KR",
-  "the netherlands": "NL", holland: "NL", "czech republic": "CZ", "russian federation": "RU", "viet nam": "VN", "hong kong sar china": "HK", "macao sar china": "MO",
-  "people's republic of china": "CN", "mainland china": "CN", "cayman islands": "KY", bermuda: "BM", "türkiye": "TR", "u.s.": "US", "u.k.": "GB",
-})) ISO_BY_NAME.set(alias, iso);
-const isoOf = (name: string): string | null => ISO_BY_NAME.get(name.trim().toLowerCase()) ?? null;
-
-/** SEC EDGAR codes for Canadian provinces, mapped to the province codes GeoNames uses. */
-const SEC_CANADA: Record<string, string> = { A0: "01", A1: "02", A2: "03", A3: "04", A4: "05", A5: "07", A6: "08", A7: "09", A8: "10", A9: "11", B0: "12" };
-
 const round = (v: number) => Math.round(v * 1000) / 1000;
 
 /* ---------- inputs ---------- */
-interface SecRow { ticker: string; city?: string; state?: string }
 interface DirRow { ticker: string; headquarters?: string }
-async function readJson<T>(where: string, headers?: Record<string, string>): Promise<T> {
+async function readJson<T>(where: string): Promise<T> {
   if (/^https?:\/\//.test(where)) {
-    const r = await fetch(where, { headers, signal: AbortSignal.timeout(60_000) });
+    const r = await fetch(where, { signal: AbortSignal.timeout(60_000) });
     if (!r.ok) throw new Error(`${where}: HTTP ${r.status}`);
     return (await r.json()) as T;
   }
   return JSON.parse(readFileSync(where, "utf8")) as T;
 }
-async function secRows(): Promise<Map<string, SecRow>> {
-  const out = new Map<string, SecRow>();
-  const take = (rows: SecRow[] | undefined) => {
-    for (const r of Array.isArray(rows) ? rows : []) if (r && typeof r.ticker === "string" && typeof r.city === "string" && typeof r.state === "string" && r.city && r.state) out.set(r.ticker.toUpperCase(), r);
-  };
-  if (existsSync("public/data/universe.json")) take((await readJson<{ companies: SecRow[] }>("public/data/universe.json")).companies);
-  const key = process.env.PARTNER_DATA_KEY;
-  if (key) {
-    const base = process.env.PARTNER_DATA_URL || "https://filedunderai.vercel.app/api/app-data";
-    /* with the key set this run is expected to use SEC addresses for the whole coverage: publishing without them would quietly swap the source */
-    try { take((await readJson<{ companies: SecRow[] }>(`${base}?path=universe.json`, { "x-partner-key": key })).companies); }
-    catch (e) { log(`partner universe not read (${(e as Error).message}); leaving the existing file untouched`); process.exit(1); }
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** SEC allows 10 requests a second; this run starts at most one every 250 ms and backs off when SEC says 429. */
+const GAP_MS = 250;
+let lastStart = 0;
+async function secProfile(cik: string): Promise<SecProfile | "absent" | "failed"> {
+  const url = `https://data.sec.gov/submissions/CIK${cik.padStart(10, "0")}.json`;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const wait = lastStart + GAP_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastStart = Date.now();
+    try {
+      /* fetchSec already retries quickly three times; a failure here is a sustained 429 or an outage */
+      return readSubmissions(await (await fetchSec(url)).json()) ?? "absent";
+    } catch (e) {
+      const m = (e as Error).message;
+      if (/responded 404/.test(m)) return "absent";
+      if (attempt < 3) { log(`CIK ${cik}: ${m}; waiting ${5 * 3 ** attempt} s`); await sleep(5_000 * 3 ** attempt); }
+    }
   }
-  return out;
+  return "failed";
+}
+interface SecCache { fetchedAt: string; profiles: Record<string, SecProfile | null> }
+async function secProfiles(): Promise<{ profiles: Map<string, SecProfile>; asked: number; failed: string[] }> {
+  const want = COVERAGE.filter((c) => /^\d{1,10}$/.test(c.cik ?? "")).map((c) => ({ ticker: c.ticker, cik: c.cik.replace(/^0+/, "") }));
+  if (SEC_CACHE && existsSync(SEC_CACHE) && Date.now() - statSync(SEC_CACHE).mtimeMs < 6 * 86_400_000) {
+    const cached = JSON.parse(readFileSync(SEC_CACHE, "utf8")) as SecCache;
+    if (want.every((w) => w.ticker in cached.profiles)) {
+      log(`SEC answers from ${SEC_CACHE} (fetched ${cached.fetchedAt})`);
+      const profiles = new Map<string, SecProfile>();
+      for (const w of want) { const p = cached.profiles[w.ticker]; if (p) profiles.set(w.ticker, p); }
+      return { profiles, asked: want.length, failed: [] };
+    }
+  }
+  const profiles = new Map<string, SecProfile>(), failed: string[] = [], byCik = new Map<string, SecProfile | "absent" | "failed">();
+  let n = 0;
+  for (const w of want) {
+    /* share classes (GOOG, GOOGL) share a CIK: one request */
+    const got = byCik.get(w.cik) ?? (await secProfile(w.cik));
+    byCik.set(w.cik, got);
+    if (got === "failed") failed.push(w.ticker);
+    else if (got !== "absent") profiles.set(w.ticker, got);
+    if (++n % 200 === 0) log(`SEC index: ${n} of ${want.length}`);
+  }
+  if (SEC_CACHE && !failed.length) {
+    const out: SecCache = { fetchedAt: new Date().toISOString(), profiles: Object.fromEntries(want.map((w) => [w.ticker, profiles.get(w.ticker) ?? null])) };
+    writeFileSync(SEC_CACHE, JSON.stringify(out));
+  }
+  return { profiles, asked: want.length, failed };
 }
 async function directoryRows(): Promise<Map<string, DirRow>> {
   const out = new Map<string, DirRow>();
@@ -112,27 +127,30 @@ function verifiedRows(): Map<string, HqRow> {
 const placeName = (c: GazCity) => c.name.split(",")[0];
 const row = (c: GazCity, place: string, country: string, precision: "c" | "n", source: "s" | "d"): HqRow => [round(c.lat), round(c.lon), place, country, precision, source];
 
-function fromSec(r: SecRow): HqRow | null {
-  const state = (r.state ?? "").toUpperCase(), city = r.city ?? "";
-  if (state === "PR") {
-    const c = matchCity(index, city, "PR");
-    return c ? row(c, `${c.name}, Puerto Rico`, "Puerto Rico", "c", "s") : null;
+/** First candidate spelling the gazetteer knows in this country (and state or province). */
+const firstMatch = (names: string[], iso: string, admin?: string) => { for (const n of names) { const c = matchCity(index, n, iso, admin); if (c) return { c, typed: n }; } return null; };
+/** An SEC business address as a row: to the city when it matches, else to the country for foreign addresses; null when unusable. */
+function fromSec(p: SecProfile): { row: HqRow | null; why?: string } {
+  const at = secPlace(p.business);
+  if (at.kind === "none") return { row: null, why: at.why };
+  if (at.kind === "us") {
+    if (at.state === "PR") { const m = firstMatch(at.cities, "PR"); return m ? { row: row(m.c, `${m.c.name}, Puerto Rico`, "Puerto Rico", "c", "s") } : { row: null, why: "city not in the gazetteer" }; }
+    const m = firstMatch(at.cities, "US", at.state);
+    return m ? { row: row(m.c, `${placeName(m.c)}, ${at.state}`, "United States", "c", "s") } : { row: null, why: "city not in the gazetteer" };
   }
-  if (US_STATES[state]) {
-    const c = matchCity(index, city, "US", state);
-    return c ? row(c, `${placeName(c)}, ${state}`, "United States", "c", "s") : null;
+  if (at.kind === "ca") {
+    const m = firstMatch(at.cities, "CA", at.province);
+    return m ? { row: row(m.c, `${m.c.name}, Canada`, "Canada", "c", "s") } : { row: null, why: "city not in the gazetteer" };
   }
-  const province = SEC_CANADA[state];
-  if (province) {
-    const c = matchCity(index, city, "CA", province);
-    return c ? row(c, `${c.name}, Canada`, "Canada", "c", "s") : null;
-  }
-  return null;
+  const country = countryName(at.iso), m = firstMatch(at.cities, at.iso);
+  if (m) return { row: row(m.c, `${isExonym(m.typed) ? cityLabel(m.typed) : m.c.name}, ${country}`, country, "c", "s") };
+  const big = largest.get(at.iso);
+  return { row: big ? row(big, country, country, "n", "s") : null, why: "city not in the gazetteer" };
 }
 function fromDirectory(r: DirRow): HqRow | null {
   const parts = (r.headquarters ?? "").split(",").map((p) => p.trim()).filter(Boolean);
   if (parts.length < 2) return null;
-  const iso = isoOf(parts[parts.length - 1]);
+  const iso = countryIso(parts[parts.length - 1]);
   if (!iso) return null;
   const country = countryName(iso), city = parts[0];
   if (iso === "US") {
@@ -150,30 +168,29 @@ function fromDirectory(r: DirRow): HqRow | null {
   const big = largest.get(iso);
   return big ? row(big, country, country, "n", "d") : null;
 }
-const km = (a: HqRow, b: HqRow) => {
-  const R = Math.PI / 180, dLat = (b[0] - a[0]) * R, dLon = (b[1] - a[1]) * R;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[0] * R) * Math.cos(b[0] * R) * Math.sin(dLon / 2) ** 2;
-  return 6371 * 2 * Math.asin(Math.sqrt(h));
-};
-
-const [sec, dir] = await Promise.all([secRows(), directoryRows()]);
+const [{ profiles, asked, failed }, dir] = await Promise.all([secProfiles(), directoryRows()]);
 const verified = verifiedRows();
-log(`inputs: ${sec.size} SEC business addresses, ${verified.size} hand-checked head offices, ${dir.size} directory head offices, ${gaz.length} gazetteer cities`);
-if (sec.size + dir.size === 0) { log("no address source could be read; leaving the existing file untouched"); process.exit(1); }
+log(`inputs: ${profiles.size} SEC index answers for ${asked} companies (${failed.length} failed), ${verified.size} hand-checked head offices, ${dir.size} directory head offices, ${gaz.length} gazetteer cities`);
+/* a partial SEC read would quietly swap many companies to the directory: publish only a whole read */
+if (profiles.size < asked * 0.9) { log(`SEC answered for only ${profiles.size} of ${asked} companies; leaving the existing file untouched`); process.exit(1); }
 
 const companies: Record<string, HqRow> = {}, missing: string[] = [];
+const agents: string[] = [];
 let city = 0, countryOnly = 0, apart = 0;
 for (const t of COVERAGE.map((c) => c.ticker).sort()) {
-  const s = sec.get(t), d = dir.get(t);
-  const a = s ? fromSec(s) : null, b = d ? fromDirectory(d) : null;
-  /* the SEC address wins when it resolves to a city; then a hand-checked head office; then the directory */
-  const pick = a ?? verified.get(t) ?? b;
-  if (a && b && b[4] === "c" && km(a, b) > 150) apart++;
+  const p = profiles.get(t), d = dir.get(t), v = verified.get(t) ?? null;
+  const agent = p ? agentAddress(p.business) : null;
+  const s = p && !agent ? fromSec(p) : null;
+  const b = d ? fromDirectory(d) : null;
+  const pick = chooseHq(v, s?.row, b);
+  if (s?.row && b && s.row[4] === "c" && b[4] === "c" && kmApart(s.row, b) > 150) apart++;
+  if (agent && !v) agents.push(`${t} (${agent})`);
   if (!pick) { missing.push(t); continue; }
   companies[t] = pick;
   if (pick[4] === "c") city++; else countryOnly++;
-  if (s && !a && pick[5] === "d") log(`${t}: SEC address "${cityLabel(s.city ?? "")}, ${s.state}" not matched; used the directory (${pick[2]})`);
+  if (p && !v && pick[5] === "d") log(`${t}: SEC address "${cityLabel(p.business?.city ?? "")}, ${p.business?.stateOrCountry ?? p.business?.country ?? ""}" not used (${agent ?? s?.why ?? "no row"}); used the directory (${pick[2]})`);
 }
+if (agents.length) log(`not placed from SEC, care of a registered agent and not hand-checked yet: ${agents.join("; ")}`);
 const total = COVERAGE.length;
 const bySource = { sec: 0, verified: 0, directory: 0 };
 for (const r of Object.values(companies)) bySource[r[5] === "s" ? "sec" : r[5] === "v" ? "verified" : "directory"]++;
@@ -182,9 +199,9 @@ if (city + countryOnly < total * 0.6) { log(`only ${city + countryOnly} of ${tot
 const file: HqFile = {
   generatedAt: new Date().toISOString(),
   sources: {
-    s: "SEC EDGAR business address (city and state) from universe.json",
     v: "Head office checked by hand against the filing cover page (scripts/data/hq-verified.json, with sources)",
-    d: "FiledUnder pipeline company directory (headquarters: city, region, country)",
+    s: "SEC EDGAR business address from SEC's submissions index (data.sec.gov), read for each covered CIK",
+    d: "FiledUnder pipeline company directory (headquarters: city, region, country), used only where SEC gives no usable city",
     gazetteer: "GeoNames cities with 1,000+ inhabitants (all-the-cities 3.1.0); coordinates rounded to 0.001°",
     n: "country-level rows sit at the country's largest city because the city itself could not be matched",
   },
@@ -193,5 +210,5 @@ const file: HqFile = {
   missing,
 };
 writeFileSync(OUT, `${JSON.stringify(file)}\n`);
-log(`sources: ${bySource.sec} SEC business address, ${bySource.verified} hand-checked, ${bySource.directory} directory`);
+log(`sources: ${bySource.verified} hand-checked, ${bySource.sec} SEC business address, ${bySource.directory} directory`);
 log(`wrote ${OUT}: ${city} to the city, ${countryOnly} to the country, ${missing.length} missing of ${total}; ${apart} companies where the SEC and directory cities are more than 150 km apart (SEC kept)`);

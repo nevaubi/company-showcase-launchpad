@@ -1,6 +1,6 @@
 {
- "checked": "2026-11-19",
- "about": "Head offices confirmed by hand where the automatic match fails or the directory is wrong. Each row cites the page that states the address and the page the coordinates came from. Used only when the SEC business address does not resolve to a city.",
+ "checked": "2026-11-20",
+ "about": "Head offices confirmed by hand against a filing cover page. Each row cites the page that states the address and the page the coordinates came from. Used ahead of the SEC business address: for places the gazetteer does not list, directory rows found to be wrong, and companies whose SEC index address is stale, a registered agent's office or otherwise not the principal executive office the cover gives.",
  "rows": [
   {
    "ticker": "ABT",
@@ -27,6 +27,18 @@
    "note": "Principal executive office per 10-Q cover (Pitts Bay Road, Pembroke Parish); coordinates are the parish centre."
   },
   {
+   "ticker": "ADIG",
+   "company": "ADI Global Distribution",
+   "city": "Melville",
+   "region": "NY",
+   "country": "United States",
+   "lat": 40.793,
+   "lon": -73.415,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/2105139/000162828026073496/adig-20261003.htm",
+   "coordSource": "https://www.geonames.org/5126555",
+   "note": "SEC index gives 251 Little Falls Drive, Wilmington DE (Corporation Service Company, registered agent); 10-Q cover gives 275 Broadhollow Rd., Suite 400, Melville NY."
+  },
+  {
    "ticker": "AGO",
    "company": "ASSURED GUARANTY LTD",
    "city": "Hamilton",
@@ -37,6 +49,18 @@
    "addressSource": "https://www.sec.gov/Archives/edgar/data/1273813/000127381326000086/ago-20260930.htm",
    "coordSource": "https://en.wikipedia.org/wiki/Hamilton,_Bermuda",
    "note": "Coordinates converted from Wikipedia infobox 32 17 39 N 64 46 55 W."
+  },
+  {
+   "ticker": "ALV",
+   "company": "Autoliv",
+   "city": "Stockholm",
+   "region": "",
+   "country": "Sweden",
+   "lat": 59.329,
+   "lon": 18.069,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/1034670/000119312526429588/alv-20260930.htm",
+   "coordSource": "https://www.geonames.org/2673730",
+   "note": "SEC index gives Ogden UT (U.S. operations); 10-Q cover gives Klarabergsviadukten 70, Stockholm as principal executive office."
   },
   {
    "ticker": "ARXS",
@@ -243,6 +267,18 @@
    "note": ""
   },
   {
+   "ticker": "FTI",
+   "company": "TechnipFMC",
+   "city": "Houston",
+   "region": "TX",
+   "country": "United States",
+   "lat": 29.763,
+   "lon": -95.363,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/1681459/000168145926000053/fti-20260930.htm",
+   "coordSource": "https://www.geonames.org/4699066",
+   "note": "SEC index still gives Hadrian House, Newcastle upon Tyne; 10-Q cover gives One Subsea Lane, Houston TX as principal executive office."
+  },
+  {
    "ticker": "GILD",
    "company": "Gilead Sciences",
    "city": "Foster City",
@@ -351,6 +387,18 @@
    "note": ""
   },
   {
+   "ticker": "MRP",
+   "company": "Millrose Properties",
+   "city": "Miami",
+   "region": "FL",
+   "country": "United States",
+   "lat": 25.774,
+   "lon": -80.194,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/2017206/000119312526447297/ck0002017206-20260930.htm",
+   "coordSource": "https://www.geonames.org/4164138",
+   "note": "SEC index gives c/o Corporate Creations Network (registered agent), Chevy Chase MD; 10-Q cover gives 600 Brickell Avenue, Suite 1400, Miami FL."
+  },
+  {
    "ticker": "NJR",
    "company": "NEW JERSEY RESOURCES CORP",
    "city": "Wall Township",
@@ -421,6 +469,18 @@
    "addressSource": "https://www.sec.gov/Archives/edgar/data/1070081/000110465926120223/tmb-20260930x10q.htm",
    "coordSource": "https://en.wikipedia.org/wiki/Warren_Township,_New_Jersey",
    "note": ""
+  },
+  {
+   "ticker": "RBA",
+   "company": "RB Global",
+   "city": "Westchester",
+   "region": "IL",
+   "country": "United States",
+   "lat": 41.851,
+   "lon": -87.882,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/1046102/000162828026071895/rba-20260930.htm",
+   "coordSource": "https://www.geonames.org/4916140",
+   "note": "Canada-incorporated; SEC index still gives Burnaby BC; 10-Q cover gives Two Westbrook Corporate Center, Suite 500, Westchester IL."
   },
   {
    "ticker": "RNR",
@@ -531,6 +591,18 @@
    "note": "Directory said Minnesota City; cover gives Eagan MN."
   },
   {
+   "ticker": "SOUN",
+   "company": "SoundHound AI",
+   "city": "Santa Clara",
+   "region": "CA",
+   "country": "United States",
+   "lat": 37.354,
+   "lon": -121.955,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/1840856/000184085626000028/soun-20260930.htm",
+   "coordSource": "https://www.geonames.org/5393015",
+   "note": "SEC index gives a mailbox at 2093 Philadelphia Pike, Claymont DE; 10-Q cover gives 5400 Betsy Ross Drive, Santa Clara CA."
+  },
+  {
    "ticker": "SPCX",
    "company": "SPACE EXPLORATION TECHNOLOGIES CORP",
    "city": "Starbase",
@@ -567,6 +639,18 @@
    "note": "Sylmar is a Los Angeles neighbourhood."
   },
   {
+   "ticker": "TRV",
+   "company": "Travelers",
+   "city": "New York",
+   "region": "NY",
+   "country": "United States",
+   "lat": 40.714,
+   "lon": -74.006,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/86312/000008631226000181/trv-20260930.htm",
+   "coordSource": "https://www.geonames.org/5128581",
+   "note": "SEC index gives 385 Washington St, Saint Paul MN (operations centre); 10-Q cover gives 485 Lexington Avenue, New York NY as principal executive office."
+  },
+  {
    "ticker": "TTD",
    "company": "Trade Desk, Inc.",
    "city": "Ventura",
@@ -589,6 +673,30 @@
    "addressSource": "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000766704&type=10-K",
    "coordSource": "https://en.wikipedia.org/wiki/Toledo,_Ohio",
    "note": ""
+  },
+  {
+   "ticker": "XE",
+   "company": "X-Energy",
+   "city": "Rockville",
+   "region": "MD",
+   "country": "United States",
+   "lat": 39.084,
+   "lon": -77.153,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/2088896/000119312526456659/xe-20260930.htm",
+   "coordSource": "https://www.geonames.org/4367175",
+   "note": "SEC index gives 251 Little Falls Drive, Wilmington DE (Corporation Service Company, registered agent); 10-Q cover gives 530 Gaither Road, Suite 700, Rockville MD."
+  },
+  {
+   "ticker": "XXI",
+   "company": "Twenty One Capital",
+   "city": "Austin",
+   "region": "TX",
+   "country": "United States",
+   "lat": 30.267,
+   "lon": -97.743,
+   "addressSource": "https://www.sec.gov/Archives/edgar/data/2070457/000162828026073570/xxi-20260930.htm",
+   "coordSource": "https://www.geonames.org/4671654",
+   "note": "SEC index gives a Corporation Service Company (registered agent) suite in Austin; 10-Q cover gives 111 Congress Avenue, Suite 500, Austin TX."
   }
  ]
 }

@@ -3,6 +3,7 @@
 // controls, laws, local politics). Every signal carries a verbatim quote re-checked against its
 // source (filing, exhibit, transcript or web article); unverified signals are dropped.
 //   IR_AI_PROVIDER=openai bun scripts/supply-intel.ts [--only=AAPL] [--concurrency=6] [--skip=news,calls]
+import { selectSupplyLinks } from "../src/lib/supply/read";
 import { readFile } from "node:fs/promises";
 import { args, log, sb } from "./lib/supa";
 import { IR_MODELS, openaiStructured } from "../src/lib/openai.server";
@@ -182,7 +183,8 @@ async function fromCalls(co: Co, short: string) {
 /** Recent news on tariffs/laws/local politics for the company's key countries. */
 async function fromNews(co: Co, short: string) {
   const { data } = await sb.from("supply_signals").select("country").eq("ticker", co.ticker).not("country", "is", null);
-  const { data: l } = await sb.from("supply_links").select("regions").eq("ticker", co.ticker).eq("is_current", true);
+  // regions only as far as each link's sentence names them (read.ts verifies them)
+  const { data: l } = await selectSupplyLinks<{ regions: string[] | null }>(sb, "regions", (q) => q.eq("ticker", co.ticker).eq("is_current", true));
   const freq = new Map<string, number>();
   for (const c of [...(data ?? []).map((d) => d.country as string), ...(l ?? []).flatMap((x) => (x.regions as string[] | null) ?? [])]) freq.set(c, (freq.get(c) ?? 0) + 1);
   const top = [...freq].sort((a, b) => b[1] - a[1]).map((x) => x[0]).filter((c) => !/^(united states|us|u\.s\.|global|worldwide)$/i.test(c)).slice(0, 3);

@@ -5,6 +5,7 @@
 // code the full-history script uses (src/lib/signals/*), so the job only maintains what changed.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { COVERAGE } from "@/lib/coverage";
+import { pageSupplyLinks } from "@/lib/supply/read";
 import type { Bar } from "@/lib/financials/types";
 import { fetchCboeDaily, fetchNasdaqDaily, fetchYahoo, isCboeIndex, pool, toBars } from "@/lib/market-data.server";
 import { benchFromBars, BENCH_SYMBOLS, contextFromBench, parseCboeCsv, VIX3M_URL, type BenchFile, type EngineContext } from "@/lib/signals/context";
@@ -505,7 +506,7 @@ async function pairsFor(asOf: string, sector: string): Promise<number> {
 async function customerMomentum(asOf: string, ctx: EngineContext): Promise<number> {
   const D = ctx.dates.length;
   if ((D - 1) % 21 !== 0) return 0; // monthly rule, same bar grid as the full-history scan
-  const links = await selectAll((a, b) => db().from("supply_links").select("ticker, counterparty_ticker, relation, filed").in("relation", ["customer", "supplier"]).not("counterparty_ticker", "is", null).lte("filed", asOf).order("id").range(a, b));
+  const links = await pageSupplyLinks<{ ticker: string; counterparty_ticker: string | null; relation: string; filed: string }>(db(), "ticker, counterparty_ticker, relation, filed", (q) => q.in("relation", ["customer", "supplier"]).not("counterparty_ticker", "is", null).lte("filed", asOf).order("id"));
   const customersOf = new Map<string, Set<string>>();
   for (const l of links) {
     const [sup, cus] = l.relation === "customer" ? [l.ticker, l.counterparty_ticker!] : [l.counterparty_ticker!, l.ticker];

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { GraphNode, HopNode, NodeRisk, Relation, SupplyLink } from "./core";
+import { nodeRisk, type GraphNode, type HopNode, type NodeRisk, type Relation, type RiskLink, type SupplyLink } from "./core";
+import { trustLink } from "./claims";
 import { bandWidths, layoutNetwork, NET, sideBasis } from "./network-layout";
 
 const link = (share: number | null): SupplyLink => ({ id: String(Math.random()), ticker: "NVDA", counterparty: "X", counterparty_ticker: null, counterparty_domain: null, relation: "supplier", detail: "", share_pct: share, quote: "q", accn: "a", doc: "d", form: "10-K", filed: "2026-02-01" });
 const node = (relation: Relation, name: string, share: number | null = null): GraphNode => ({ key: `${relation}:${name}`, name, ticker: null, domain: null, relation, links: [link(share)] });
-const risk = (dollars: number | null): NodeRisk => ({ singleSource: false, concentrated: false, hotspots: [], regions: [], dollars });
+const risk = (dollars: number | null): NodeRisk => ({ singleSource: false, dependency: false, concentrated: false, hotspots: [], regions: [], dollars, nature: "trade" });
 const ALL = new Set<Relation>(["customer", "supplier", "partner", "competitor"]);
 
 const graph: GraphNode[] = [
@@ -118,6 +119,21 @@ describe("layoutNetwork", () => {
     expect(exact.cards).toHaveLength(12);
     expect(exact.more).toEqual([]);
   });
+  it("keeps the company column narrower than the flow columns so long names keep their room", () => {
+    const wide = layoutNetwork({ ...base, width: 1100 });
+    const supplier = wide.cards.find((c) => c.relation === "supplier" && c.hop === 1)!;
+    expect(wide.focus.w).toBeLessThan(supplier.w);
+    expect(wide.focus.w).toBeGreaterThanOrEqual(NET.focusMin);
+    expect(wide.focus.w).toBeLessThanOrEqual(NET.focusMax);
+  });
+  it("marks a shown flow column that the filings leave empty, and nothing for a hidden one", () => {
+    const noCustomers = layoutNetwork({ ...base, graph: graph.filter((n) => n.relation !== "customer") });
+    expect(noCustomers.empty).toEqual([expect.objectContaining({ relation: "customer" })]);
+    const box = noCustomers.empty[0];
+    expect(box.x).toBeGreaterThanOrEqual(noCustomers.focus.x + noCustomers.focus.w);
+    expect(layoutNetwork({ ...base, graph: graph.filter((n) => n.relation !== "customer"), visible: new Set<Relation>(["supplier", "partner", "competitor"]) }).empty).toEqual([]);
+    expect(L.empty).toEqual([]);
+  });
   it("handles an empty graph", () => {
     const empty = layoutNetwork({ ...base, graph: [], hop2: [] });
     expect(empty.cards).toEqual([]);
@@ -138,5 +154,38 @@ describe("band sizing", () => {
     expect(w[1]).toBeCloseTo(NET.tMin + (NET.tMax - NET.tMin) / 2);
     expect(w[2]).toBe(NET.tMin);
     expect(bandWidths([{ dollars: null, share: 0 }], "none")).toEqual([NET.tMin]);
+  });
+});
+
+describe("widths come only from trade flows", () => {
+  const trusted = (p: Partial<RiskLink> & { quote: string }): RiskLink => trustLink({ ...link(null), relation: "customer", ...p } as RiskLink) as RiskLink;
+  it("a stated guarantee neither widens a band nor sets the basis; a financing tie is drawn muted at the thinnest width", () => {
+    const g: GraphNode[] = [
+      { key: "customer:sb", name: "SB Energy", ticker: null, domain: null, relation: "customer", links: [trusted({ amount_usd: 105e9, quote: "In August 2026, we entered into guarantees, capped at a total of $ 105 billion, to provide credit support on a land, power, and shell buildout with affiliates of SB Energy Corp." })] },
+      { key: "customer:lender", name: "Bank", ticker: null, domain: null, relation: "customer", links: [trusted({ quote: "We borrowed $500 million under the credit agreement with the Bank as administrative agent and lenders." })] },
+      { key: "customer:dell", name: "Dell", ticker: null, domain: null, relation: "customer", links: [trusted({ quote: "Sales to Dell accounted for 11% of our revenue in fiscal 2026.", share_pct: 11 })] },
+    ];
+    const rs = Object.fromEntries(g.map((n) => [n.key, nodeRisk(n.links as RiskLink[], { NVDA: 100e9 })]));
+    expect(rs["customer:sb"].dollars).toBeNull();
+    expect(rs["customer:lender"].nature).toBe("financial");
+    const out = layoutNetwork({ graph: g, hop2: [], visible: ALL, risks: rs, width: 900, limit: 12 });
+    expect(out.basis.customer).toBe("dollars");
+    const band = (k: string) => out.bands.find((b) => b.key === k)!;
+    expect(band("customer:dell").t).toBe(NET.tMax);
+    expect(band("customer:sb").t).toBe(NET.tMin);
+    expect(band("customer:lender")).toMatchObject({ t: NET.tMin, muted: true });
+    expect(band("customer:sb").muted).toBeUndefined();
+  });
+  it("sideBasis ignores names that are not trade", () => {
+    expect(sideBasis([{ dollars: 5e9, share: 0, trade: false }, { dollars: null, share: 0 }])).toBe("none");
+    expect(bandWidths([{ dollars: 5e9, share: 0, trade: false }, { dollars: 1e9, share: 0 }], "dollars")).toEqual([NET.tMin, NET.tMax]);
+  });
+  it("second-row cells grow to two lines when a name in the group carries a figure, so the name keeps the full width", () => {
+    const plain = layoutNetwork(base);
+    expect(plain.cards.filter((c) => c.relation === "competitor").every((c) => c.h === NET.cell)).toBe(true);
+    const withFig = layoutNetwork({ ...base, graph: [...graph.filter((n) => n.relation !== "partner"), node("partner", "Arm", 4)] });
+    const arm = withFig.cards.find((c) => c.key === "partner:Arm")!;
+    expect(arm.h).toBe(NET.card);
+    expect(withFig.cards.filter((c) => c.relation === "competitor").every((c) => c.h === NET.cell)).toBe(true);
   });
 });

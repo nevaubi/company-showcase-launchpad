@@ -110,3 +110,23 @@ describe("analyst layer", () => {
     expect(d.score).toBe(44);
   });
 });
+
+describe("one node per counterparty however the filing spells it (F10)", () => {
+  it("merges suffix variants and borrows the ticker another row gives the same name", () => {
+    const rows = [
+      link({ id: "1", ticker: "AN", counterparty: "Volkswagen", relation: "supplier" }),
+      link({ id: "2", ticker: "AN", counterparty: "Volkswagen AG", counterparty_ticker: "VWAGY", relation: "supplier" }),
+      link({ id: "3", ticker: "AN", counterparty: "Toyota", relation: "supplier" }),
+    ];
+    const g = focusGraph("AN", rows, {});
+    expect(g.map((n) => n.key).sort()).toEqual(["supplier:VWAGY", "supplier:toyota"]);
+    expect(g.find((n) => n.key === "supplier:VWAGY")).toMatchObject({ ticker: "VWAGY", links: [expect.anything(), expect.anything()] });
+  });
+  it("a renamed counterparty across two 10-Ks is not reported as dropped and added", () => {
+    const rows = [
+      link({ id: "a", ticker: "SNDK", counterparty: "Kioxia Corporation", accn: "new", filed: "2026-08-01" }),
+      link({ id: "b", ticker: "SNDK", counterparty: "Kioxia", accn: "old", filed: "2025-08-01" }),
+    ];
+    expect(linkChanges("SNDK", rows, "new", "old")).toEqual([]);
+  });
+});
