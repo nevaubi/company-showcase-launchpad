@@ -48,7 +48,8 @@ export interface AlertStatus {
 
 export function openAlerts(rows: readonly StateRow[]): AlertStatus[] {
   return rows
-    .filter((r) => r.job.startsWith("alert:"))
+    // A cleared episode waits out its recovery hold; it is not an open alert.
+    .filter((r) => r.job.startsWith("alert:") && !(r.paused_reason ?? "").startsWith("cleared "))
     .map((r) => ({
       key: r.job.slice("alert:".length),
       title: (r.paused_reason ?? "").replace(/^(open|sent):\s*/, ""),

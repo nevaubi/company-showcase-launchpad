@@ -10,14 +10,18 @@
  *   provider:<id>        a provider circuit open on quota or configuration for 2 h
  *   options-blocked      Cboe refuses option chains (the options job is backing off)
  *   registrant:<ticker>  SEC's ticker file maps a covered ticker to another CIK (weekly check)
- *   stale:<key>          a dataset is stale and its automatic remedy did not help within 6 h
- *                        (or it has no remedy)
+ *   stale:<key>          a dataset is stale: at once when it has no automatic remedy, after 6 h of
+ *                        staleness when it has one (the remedy's own timing does not matter)
  *
  * Each alert is an episode row `alert:<key>` in job_state (cursor = episode start, paused_reason =
- * `open: …` or `sent: …`). An episode is emailed once, after its grace period; when the condition
- * clears the row is deleted, so a later recurrence is a new episode and a new email. New episodes
- * due at the same time go out as one digest; digests are at most one per 30 minutes
- * (`alert-digest` row, cursor = last send).
+ * `open: …` or `sent: …`). An episode is emailed once, after its grace period. When the condition
+ * clears, the row is kept as `cleared open: …` / `cleared sent: …` (updated_at = when it cleared);
+ * if the condition comes back within the recovery hold (6 h; 1 h for the worker heartbeat) the same
+ * episode resumes and nothing is sent again. Only after a real recovery (clear for the whole hold)
+ * is the row deleted, so a later recurrence is a new episode and a new email (review R2: a remedy
+ * re-running every 6 h used to delete and re-send the same problem). New episodes due at the same
+ * time go out as one digest; digests are at most one per 30 minutes (`alert-digest` row, cursor =
+ * last send).
  */
 import { parseReason } from "./provider-health";
 import { SOURCES } from "./freshness";
@@ -175,13 +179,17 @@ export function alerts(input: WatchdogInput, nowMs: number, remedies: RemedyKeys
     const has = remedies.has(f.key);
     const receipt = receipts.get(f.key);
     const triedAt = receipt?.cursor ? receipt.cursor * 1000 : null;
-    if (has && (triedAt == null || nowMs - triedAt < REMEDY_WAIT_H * 3600_000)) continue;
+    // The episode exists for as long as the dataset is stale; a remedy only delays the email (grace).
     out.push({
       key: `stale:${f.key}`,
       title: f.status === "missing" ? `${f.label}: no data recorded` : `${f.label}: newest ${Math.round(f.ageHours ?? 0)} h old (limit ${f.maxAgeHours} h)`,
-      tried: has ? `the automatic remedy ran ${Math.round((nowMs - (triedAt ?? nowMs)) / 3600_000)} h ago without effect` : "no automatic remedy exists for this dataset",
+      tried: !has
+        ? "no automatic remedy exists for this dataset"
+        : triedAt != null
+          ? `the automatic remedy asked for a run ${Math.round((nowMs - triedAt) / 3600_000)} h ago without effect (it asks once per staleness episode)`
+          : "the automatic remedy has not run (its step needs the AI route, which is closed, or the hourly check is not running)",
       action: "Open the freshness page for the source job's latest runs.",
-      graceMin: 0,
+      graceMin: has ? REMEDY_WAIT_H * 60 : 0,
     });
   }
   return out;
@@ -190,6 +198,8 @@ export function alerts(input: WatchdogInput, nowMs: number, remedies: RemedyKeys
 export interface AlertPlan {
   /** episode rows to upsert (new episodes, and episodes marked sent) */
   upsert: StateRow[];
+  /** what to upsert instead when the digest could not be handed to the outbox: nothing marked sent, no digest time */
+  unsent: StateRow[];
   /** episode rows to delete (conditions that cleared) */
   close: string[];
   /** alerts to email now, as one digest (empty: send nothing) */
@@ -198,8 +208,13 @@ export interface AlertPlan {
   digestState: string | null;
 }
 
-/** `open: <title>` or `sent: <title>` */
-const episodeSent = (r: StateRow) => /^sent:/.test(r.paused_reason ?? "");
+/** `open: <title>` or `sent: <title>`, either behind `cleared ` while the recovery hold runs */
+const episodeSent = (r: StateRow) => /^(cleared )?sent:/.test(r.paused_reason ?? "");
+const CLEARED = "cleared ";
+export const episodeCleared = (r: StateRow) => (r.paused_reason ?? "").startsWith(CLEARED);
+
+/** How long a condition must stay clear before its episode ends (a recurrence after that is new). */
+export const recoveryMin = (key: string) => (key === "worker-heartbeat" ? 60 : 6 * 60);
 
 export function planAlerts(active: Alert[], rows: StateRow[], nowMs: number): AlertPlan {
   const nowS = Math.floor(nowMs / 1000);
@@ -208,18 +223,27 @@ export function planAlerts(active: Alert[], rows: StateRow[], nowMs: number): Al
   const lastDigest = Number(rows.find((r) => r.job === DIGEST_KEY)?.cursor ?? 0);
   const activeKeys = new Set(active.map((a) => alertKey(a.key)));
   const upsert: StateRow[] = [];
-  const close = [...episodes.keys()].filter((k) => !activeKeys.has(k));
+  const close: string[] = [];
+  // Cleared conditions: hold the episode through the recovery time, then end it.
+  for (const [k, ep] of episodes) {
+    if (activeKeys.has(k)) continue;
+    if (!episodeCleared(ep)) upsert.push({ job: k, cursor: ep.cursor, paused_reason: `${CLEARED}${ep.paused_reason ?? "open: "}`.slice(0, 300), updated_at: at });
+    else if (nowMs - (ep.updated_at ? Date.parse(ep.updated_at) : 0) >= recoveryMin(k.slice(ALERT_PREFIX.length)) * 60_000) close.push(k);
+  }
   const due: (Alert & { since: string; start: number })[] = [];
   for (const a of active) {
     const k = alertKey(a.key);
     const ep = episodes.get(k);
     const start = ep ? Number(ep.cursor ?? nowS) : nowS;
     if (!ep) upsert.push({ job: k, cursor: start, paused_reason: `open: ${a.title}`.slice(0, 300), updated_at: at });
+    // Back within the hold: the same episode resumes (a sent one stays sent).
+    else if (episodeCleared(ep)) upsert.push({ job: k, cursor: start, paused_reason: `${episodeSent(ep) ? "sent" : "open"}: ${a.title}`.slice(0, 300), updated_at: at });
     const sent = ep ? episodeSent(ep) : false;
     if (!sent && nowS - start >= a.graceMin * 60) due.push({ ...a, since: new Date(start * 1000).toISOString(), start });
   }
   const throttled = lastDigest > 0 && nowS - lastDigest < DIGEST_EVERY_MIN * 60;
-  if (!due.length || throttled) return { upsert, close, send: [], digestState: null };
+  if (!due.length || throttled) return { upsert, unsent: upsert, close, send: [], digestState: null };
+  const unsent = [...upsert];
   for (const d of due) {
     const i = upsert.findIndex((u) => u.job === alertKey(d.key));
     const row = { job: alertKey(d.key), cursor: d.start, paused_reason: `sent: ${d.title}`.slice(0, 300), updated_at: at };
@@ -231,7 +255,7 @@ export function planAlerts(active: Alert[], rows: StateRow[], nowMs: number): Al
     .map((d) => `${d.key}@${d.start}`)
     .sort()
     .join(",");
-  return { upsert, close, send: due.map(({ start: _s, ...rest }) => rest), digestState };
+  return { upsert, unsent, close, send: due.map(({ start: _s, ...rest }) => rest), digestState };
 }
 
 /** Subject line for a digest. */

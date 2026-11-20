@@ -33,28 +33,33 @@ export async function runWatchdog(budgetMs = 1500): Promise<Record<string, unkno
   const active = alerts({ freshness: dataFreshness((fresh.data ?? []) as { key: string; newest: string | null }[], new Date(now)), jobs, states: rows }, now, REMEDY_KEYS);
   const plan = planAlerts(active, rows, now);
 
-  // Send first: if the send fails the episodes stay unsent and the next run tries again.
+  // Send first. Episodes are marked sent only when the digest reached the outbox: an email_log row
+  // exists and is sent or waiting there. Otherwise they stay open (no digest time either), and the
+  // next run asks again under the same idempotency key, so a row the outbox delivers later counts then.
   let sent: string[] = [];
+  let delivered = false;
   if (plan.send.length && plan.digestState) {
-    const { adminEmails, queueEmail } = await import("@/lib/email/outbox.server");
+    const { adminEmails, queueEmailRecorded } = await import("@/lib/email/outbox.server");
     const to = await adminEmails();
     const data = {
       subject: digestSubject(plan.send.length, plan.send[0].title),
       alerts: plan.send.map((a) => ({ key: a.key, title: a.title, since: a.since, tried: a.tried, action: a.action })),
       link: "https://filedunder.ai/app/freshness",
     };
-    const statuses = await Promise.all(to.map((addr) => queueEmail({ template: "ops-alert", to: addr, relatedTable: "job_state", relatedId: DIGEST_KEY, state: plan.digestState!, data })));
-    sent = to.map((addr, i) => `${addr}: ${statuses[i]}`);
+    const results = await Promise.all(to.map((addr) => queueEmailRecorded({ template: "ops-alert", to: addr, relatedTable: "job_state", relatedId: DIGEST_KEY, state: plan.digestState!, data })));
+    delivered = results.some((r) => r.recorded && (r.status === "sent" || r.status === "queued" || r.status === "waiting_sender"));
+    sent = to.map((addr, i) => `${addr}: ${results[i].status}${results[i].recorded ? "" : ` (not recorded: ${results[i].error ?? "no row"})`}`);
     if (!to.length) sent = ["no admin recipients"];
   }
   const at = new Date(now).toISOString();
-  if (plan.upsert.length) {
-    const { error } = await supabaseAdmin.from("job_state").upsert(plan.upsert.map((r) => ({ job: r.job, cursor: Number(r.cursor ?? 0), paused_reason: r.paused_reason, updated_at: r.updated_at ?? at })));
+  const rowsToWrite = plan.send.length && !delivered ? plan.unsent : plan.upsert;
+  if (rowsToWrite.length) {
+    const { error } = await supabaseAdmin.from("job_state").upsert(rowsToWrite.map((r) => ({ job: r.job, cursor: Number(r.cursor ?? 0), paused_reason: r.paused_reason, updated_at: r.updated_at ?? at })));
     if (error) throw new Error(error.message);
   }
   if (plan.close.length) {
     const { error } = await supabaseAdmin.from("job_state").delete().in("job", plan.close);
     if (error) throw new Error(error.message);
   }
-  return { active: active.map((a) => a.key), opened: plan.upsert.filter((r) => r.job.startsWith("alert:") && /^open:/.test(r.paused_reason ?? "")).map((r) => r.job), closed: plan.close, emailed: plan.send.map((a) => a.key), sent, ms: Date.now() - started };
+  return { active: active.map((a) => a.key), opened: rowsToWrite.filter((r) => r.job.startsWith("alert:") && /^open:/.test(r.paused_reason ?? "")).map((r) => r.job), closed: plan.close, emailed: delivered ? plan.send.map((a) => a.key) : [], ...(plan.send.length && !delivered ? { held: plan.send.map((a) => a.key) } : {}), sent, ms: Date.now() - started };
 }

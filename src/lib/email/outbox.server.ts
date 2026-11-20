@@ -63,10 +63,14 @@ async function deliver(row: Row): Promise<EmailStatus> {
   }
 }
 
-/** Records the send (once per idempotency key) and delivers it now. Duplicates return the stored status. */
-export async function queueEmail(a: QueueArgs): Promise<EmailStatus> {
+/**
+ * Records the send (once per idempotency key) and delivers it now. `recorded` is false when no
+ * email_log row exists for the key (the insert failed and no earlier row was found): nothing will
+ * ever deliver it, whatever `status` says.
+ */
+export async function queueEmailRecorded(a: QueueArgs): Promise<{ status: EmailStatus; recorded: boolean; error?: string }> {
   const key = idemKey(a.template, a.to, a.relatedId, a.state);
-  const { data: inserted } = await supabaseAdmin
+  const { data: inserted, error } = await supabaseAdmin
     .from("email_log")
     .upsert(
       { idempotency_key: key, recipient: a.to.trim().toLowerCase(), template: a.template, related_table: a.relatedTable, related_id: a.relatedId, template_data: a.data as never },
@@ -75,15 +79,21 @@ export async function queueEmail(a: QueueArgs): Promise<EmailStatus> {
     .select("id,idempotency_key,recipient,template,template_data,status,attempts");
   const row = inserted?.[0] as Row | undefined;
   if (!row) {
-    const { data: existing } = await supabaseAdmin.from("email_log").select("status").eq("idempotency_key", key).maybeSingle();
-    return (existing?.status as EmailStatus) ?? "queued";
+    const { data: existing, error: readError } = await supabaseAdmin.from("email_log").select("status").eq("idempotency_key", key).maybeSingle();
+    if (existing) return { status: existing.status as EmailStatus, recorded: true };
+    return { status: "queued", recorded: false, error: (error ?? readError)?.message ?? "email_log row missing" };
   }
   try {
-    return await deliver(row);
+    return { status: await deliver(row), recorded: true };
   } catch (e) {
     console.error("email deliver", e);
-    return "queued";
+    return { status: "queued", recorded: true };
   }
+}
+
+/** queueEmailRecorded's status only (callers that cannot act on a missing row). Never throws on the database. */
+export async function queueEmail(a: QueueArgs): Promise<EmailStatus> {
+  return (await queueEmailRecorded(a)).status;
 }
 
 export async function adminEmails(): Promise<string[]> {

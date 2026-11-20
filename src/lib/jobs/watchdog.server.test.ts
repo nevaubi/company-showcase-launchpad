@@ -3,7 +3,7 @@ import { fakeSupabase } from "@/test/fake-supabase";
 
 const mocks = vi.hoisted(() => ({
   db: null as unknown as ReturnType<typeof import("@/test/fake-supabase").fakeSupabase>,
-  queueEmail: vi.fn(async () => "sent"),
+  queueEmailRecorded: vi.fn(async (): Promise<{ status: string; recorded: boolean; error?: string }> => ({ status: "sent", recorded: true })),
   adminEmails: vi.fn(async () => ["owner@example.com"]),
 }));
 vi.mock("@/integrations/supabase/client.server", () => ({
@@ -11,13 +11,15 @@ vi.mock("@/integrations/supabase/client.server", () => ({
     return mocks.db.client;
   },
 }));
-vi.mock("@/lib/email/outbox.server", () => ({ queueEmail: mocks.queueEmail, adminEmails: mocks.adminEmails }));
+vi.mock("@/lib/email/outbox.server", () => ({ queueEmailRecorded: mocks.queueEmailRecorded, adminEmails: mocks.adminEmails }));
 import { runWatchdog } from "./watchdog.server";
 
 const ago = (min: number) => new Date(Date.now() - min * 60_000).toISOString();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.queueEmailRecorded.mockImplementation(async () => ({ status: "sent", recorded: true }));
+  mocks.adminEmails.mockImplementation(async () => ["owner@example.com"]);
 });
 
 describe("watchdog run", () => {
@@ -25,21 +27,47 @@ describe("watchdog run", () => {
     mocks.db = fakeSupabase({}, { rpc: { data_freshness: () => [{ key: "worker_heartbeat", newest: ago(45) }], job_health: () => [] } });
     const first = await runWatchdog(1500);
     expect(first.emailed).toContain("worker-heartbeat");
-    expect(mocks.queueEmail).toHaveBeenCalledTimes(1);
-    expect(mocks.queueEmail.mock.calls[0]).toEqual([expect.objectContaining({ template: "ops-alert", to: "owner@example.com", relatedId: "alert-digest" })]);
+    expect(mocks.queueEmailRecorded).toHaveBeenCalledTimes(1);
+    expect(mocks.queueEmailRecorded.mock.calls[0]).toEqual([expect.objectContaining({ template: "ops-alert", to: "owner@example.com", relatedId: "alert-digest" })]);
     expect(mocks.db.state("alert:worker-heartbeat")!.paused_reason).toMatch(/^sent: Render worker silent/);
-    mocks.queueEmail.mockClear();
+    mocks.queueEmailRecorded.mockClear();
     const second = await runWatchdog(1500);
     expect(second.emailed).toEqual([]);
-    expect(mocks.queueEmail).not.toHaveBeenCalled();
+    expect(mocks.queueEmailRecorded).not.toHaveBeenCalled();
   });
-  it("closes the episode once the heartbeat is back", async () => {
+  it("holds the episode when the heartbeat is back, and ends it after a clear hour", async () => {
     mocks.db = fakeSupabase(
       { job_state: [{ job: "alert:worker-heartbeat", cursor: 1, paused_reason: "sent: x", updated_at: ago(30) }] },
       { rpc: { data_freshness: () => [{ key: "worker_heartbeat", newest: ago(1) }], job_health: () => [] } },
     );
     const r = await runWatchdog(1500);
-    expect(r.closed).toContain("alert:worker-heartbeat");
+    expect(r.closed).toEqual([]);
+    expect(mocks.db.state("alert:worker-heartbeat")!.paused_reason).toBe("cleared sent: x");
+    mocks.db.state("alert:worker-heartbeat")!.updated_at = ago(61);
+    const r2 = await runWatchdog(1500);
+    expect(r2.closed).toContain("alert:worker-heartbeat");
     expect(mocks.db.state("alert:worker-heartbeat")).toBeUndefined();
+  });
+  // Review R5: before this, episodes were marked sent whatever the send returned.
+  it.each([
+    ["no admin recipients", [] as string[], { status: "sent", recorded: true }],
+    ["the email_log insert failed", ["owner@example.com"], { status: "queued", recorded: false, error: "insert failed" }],
+    ["the send failed", ["owner@example.com"], { status: "failed", recorded: true }],
+    ["the recipient is suppressed", ["owner@example.com"], { status: "suppressed", recorded: true }],
+  ])("keeps the episode open and writes no digest time when %s", async (_why, to, result) => {
+    mocks.adminEmails.mockImplementation(async () => to);
+    mocks.queueEmailRecorded.mockImplementation(async () => result);
+    mocks.db = fakeSupabase({}, { rpc: { data_freshness: () => [{ key: "worker_heartbeat", newest: ago(45) }], job_health: () => [] } });
+    const r = await runWatchdog(1500);
+    expect(r.emailed).toEqual([]);
+    expect(r.held).toContain("worker-heartbeat");
+    expect(mocks.db.state("alert:worker-heartbeat")!.paused_reason).toMatch(/^open: /);
+    expect(mocks.db.state("alert-digest")).toBeUndefined();
+    // the next run tries again with the same digest
+    mocks.adminEmails.mockImplementation(async () => ["owner@example.com"]);
+    mocks.queueEmailRecorded.mockImplementation(async () => ({ status: "sent", recorded: true }));
+    const r2 = await runWatchdog(1500);
+    expect(r2.emailed).toContain("worker-heartbeat");
+    expect(mocks.db.state("alert:worker-heartbeat")!.paused_reason).toMatch(/^sent: /);
   });
 });

@@ -55,13 +55,12 @@ describe("watchdog rules", () => {
     const states = [{ job: "options-backoff", cursor: 2_000_000_000, paused_reason: "blocked: Cboe refused option chains (403 x4, 429 x0) [n=2]", updated_at: iso(1) }];
     expect(keys(input({ states }))).toEqual(["options-blocked"]);
   });
-  it("a stale dataset with a remedy alerts only after the remedy had 6 h; without one at once", () => {
+  it("a stale dataset alerts at once without a remedy, and after six hours of staleness with one, whatever the remedy receipt says", () => {
     const stale = [{ key: "supply_signals", newest: iso(60 * 24 * 15) }, { key: "macro", newest: iso(60 * 30) }];
-    expect(keys(input({}, stale))).toEqual(["stale:macro"]);
-    const recent = [{ job: "remedy:supply_signals", cursor: Math.floor((NOW - 3600_000) / 1000), paused_reason: null, updated_at: iso(60) }];
-    expect(keys(input({ states: recent }, stale))).toEqual(["stale:macro"]);
-    const tried = [{ job: "remedy:supply_signals", cursor: Math.floor((NOW - 7 * 3600_000) / 1000), paused_reason: null, updated_at: iso(420) }];
-    expect(keys(input({ states: tried }, stale)).sort()).toEqual(["stale:macro", "stale:supply_signals"]);
+    for (const states of [[], [{ job: "remedy:supply_signals", cursor: Math.floor((NOW - 3600_000) / 1000), paused_reason: null, updated_at: iso(60) }]]) {
+      const a = alerts(input({ states }, stale), NOW, REMEDY_KEYS);
+      expect(a.map((x) => [x.key, x.graceMin]).sort()).toEqual([["stale:macro", 0], ["stale:supply_signals", 360]]);
+    }
   });
 });
 
@@ -81,11 +80,26 @@ describe("alert episodes and the digest", () => {
     expect(p.send).toEqual([]);
     expect(p.upsert).toEqual([]);
   });
-  it("a cleared condition closes its episode; a recurrence is a new episode and a new email", () => {
-    const rows = [{ job: alertKey("worker-heartbeat"), cursor: nowS - 3600, paused_reason: "sent: x", updated_at: iso(60) }];
-    expect(planAlerts([], rows, NOW).close).toEqual([alertKey("worker-heartbeat")]);
-    const again = planAlerts([a("worker-heartbeat")], [], NOW + 60_000);
+  it("a cleared condition is held for the recovery time; it ends only after a real recovery, and a recurrence then is a new email", () => {
+    const rows: StateRow[] = [{ job: alertKey("stale:macro"), cursor: nowS - 3600, paused_reason: "sent: x", updated_at: iso(60) }];
+    const held = planAlerts([], rows, NOW);
+    expect(held.close).toEqual([]);
+    expect(held.upsert).toEqual([{ job: alertKey("stale:macro"), cursor: nowS - 3600, paused_reason: "cleared sent: x", updated_at: new Date(NOW).toISOString() }]);
+    expect(planAlerts([], held.upsert, NOW + 5 * 3600_000).close).toEqual([]);
+    expect(planAlerts([], held.upsert, NOW + 6 * 3600_000).close).toEqual([alertKey("stale:macro")]);
+    const again = planAlerts([a("stale:macro")], [], NOW + 6 * 3600_000 + 60_000);
     expect(again.send).toHaveLength(1);
+  });
+  it("a condition that comes back within the hold resumes its episode and sends nothing", () => {
+    const rows: StateRow[] = [{ job: alertKey("stale:macro"), cursor: nowS - 3600, paused_reason: "cleared sent: x", updated_at: iso(30) }];
+    const p = planAlerts([a("stale:macro")], rows, NOW);
+    expect(p.send).toEqual([]);
+    expect(p.close).toEqual([]);
+    expect(p.upsert).toEqual([{ job: alertKey("stale:macro"), cursor: nowS - 3600, paused_reason: "sent: stale:macro broke", updated_at: new Date(NOW).toISOString() }]);
+  });
+  it("the worker heartbeat ends its episode after one clear hour", () => {
+    const rows: StateRow[] = [{ job: alertKey("worker-heartbeat"), cursor: nowS - 7200, paused_reason: "cleared sent: x", updated_at: iso(61) }];
+    expect(planAlerts([], rows, NOW).close).toEqual([alertKey("worker-heartbeat")]);
   });
   it("grace period: a provider alert waits two hours before an email", () => {
     const first = planAlerts([a("provider:openai-paid", 120)], [], NOW);
