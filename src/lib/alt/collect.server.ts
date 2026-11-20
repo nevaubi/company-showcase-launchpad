@@ -2,7 +2,8 @@
 // Every row keeps a link back to the exact public record it came from. Pure fetch, no Node APIs.
 import { CAPITAL, ITEMS } from "@/lib/alt/sec-forms";
 import { appliesTo, type AltRegistryEntry } from "@/lib/alt/registry";
-import { ALT_NAMES, awardTie, ignoredFilter, pickParents, tickerKeys, type ParentFamily, type UsaRecipient } from "@/lib/alt/contracts";
+import { ALT_NAMES, awardTie, CONTRACTS_RULE, ignoredFilter, nameCore, pickParents, REFRESH_DATASET, tickerKeys, type ParentFamily, type RefreshMeta, type UsaRecipient } from "@/lib/alt/contracts";
+import { CONTRACT_ALIASES } from "@/lib/alt/contract-aliases";
 import { calendarYearPeriod, fiscalYearPeriod } from "@/lib/alt/periods";
 import { FDIC_ZERO_IS_MISSING } from "@/lib/alt/bank";
 import { cpscFirmName, cpscRole, firmCheck } from "@/lib/alt/firms";
@@ -89,39 +90,65 @@ async function events(c: Co): Promise<Row[]> {
 }
 
 // ───────── USAspending: federal contract awards ─────────
-// Parents are recipients whose whole name is the company (src/lib/alt/contracts.ts), never a prefix
-// look-alike ("ROGERS, WICKER, RYKMAN AND SPEDALE LLC" is not Rogers Corporation). Every award and
-// transaction is kept only when its recipient is the company by name or a child the source lists
-// under one of those parents, and a response that says it ignored the company filter is dropped:
-// `spending_by_award` ignores `recipient_id` and returned the government-wide top awards.
+// Parents are recipients that are the company by whole name or a hand-checked alias
+// (src/lib/alt/contracts.ts, contract-aliases.ts), never a prefix look-alike ("ROGERS, WICKER,
+// RYKMAN AND SPEDALE LLC" is not Rogers Corporation). Every award and transaction is kept only when
+// its recipient is the company or a child the source lists under one of those parents, and a
+// response that says it ignored the company filter is dropped: `spending_by_award` ignores
+// `recipient_id` and returned the government-wide top awards. Yearly totals are written only when
+// every parent's call answered and no year exceeds what one company can be paid; a completed
+// collection writes a refresh record (REFRESH_DATASET) the repair relies on.
 const post = (url: string, body: unknown) => get(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+/** No company is obligated more than this in one fiscal year (Lockheed Martin, the largest, is about $70B). */
+export const MAX_COMPANY_FY_USD = 120e9;
+
+/** Keywords for the recipient search: the hand-checked or short name, and the legal name's core (RTX is "RTX CORPORATION", not "RAYTHEON"). */
+export function contractKeywords(c: Co): string[] {
+  const up = (x: string) => x.toUpperCase().replace(/[’']/g, "'").trim();
+  const out = [up(nm(c))];
+  const legal = c.reg?.legal ? up(nameCore(c.reg.legal)) : "";
+  if (legal.length >= 2 && !out.includes(legal)) out.push(legal);
+  return out;
+}
+
 async function contracts(c: Co): Promise<Row[]> {
   const keys = tickerKeys(c.ticker, c.name, c.reg?.legal);
-  const name = nm(c).toUpperCase().replace(/[’']/g, "'");
-  const list = await post("https://api.usaspending.gov/api/v2/recipient/", { keyword: name, limit: 100, award_type: "contracts" });
-  const parents = pickParents((list?.results ?? []) as UsaRecipient[], keys);
-  if (!parents.length) return [];
+  const found: UsaRecipient[] = [];
+  for (const kw of [...contractKeywords(c), ...(CONTRACT_ALIASES[c.ticker] ?? []).flatMap((a) => a.ueis ?? [])]) {
+    const list = await post("https://api.usaspending.gov/api/v2/recipient/", { keyword: kw, limit: 100, award_type: "contracts" });
+    // a search that did not answer leaves the stored rows as they are
+    if (!list) throw new Error(`USAspending recipient search did not answer for ${kw}`);
+    found.push(...((list.results ?? []) as UsaRecipient[]));
+  }
+  const parents = pickParents(found, keys);
   const families: ParentFamily[] = [];
   for (const p of parents) {
     const code = p.uei ?? p.duns;
-    const kids = code ? await get(`https://api.usaspending.gov/api/v2/recipient/children/${encodeURIComponent(code)}/?year=all`) : null;
-    families.push({ parent: p, children: Array.isArray(kids) ? kids : [] });
+    const kids = code ? await get(`https://api.usaspending.gov/api/v2/recipient/children/${encodeURIComponent(code)}/?year=all`) : [];
+    if (!Array.isArray(kids)) throw new Error(`USAspending children list did not answer for ${p.name}`);
+    families.push({ parent: p, children: kids });
   }
   const out: Row[] = [];
   const fy = new Map<number, number>();
+  let complete = true;
+  let totalsOk = true;
   const now = new Date();
   const today = now.toISOString().slice(0, 10);
   const asOf = now.toISOString();
-  const tieMeta = (r: { recipient_id?: string | null; "Recipient UEI"?: string | null }, t: NonNullable<ReturnType<typeof awardTie>>, f: ParentFamily) => ({ tie: t.tie, parent: (t.parent ?? f.parent).name, parent_id: (t.parent ?? f.parent).id, recipient_id: r.recipient_id ?? null, recipient_uei: r["Recipient UEI"] ?? null, as_of: asOf });
+  const tieMeta = (r: { recipient_id?: string | null; "Recipient UEI"?: string | null }, t: NonNullable<ReturnType<typeof awardTie>>, f: ParentFamily) => ({ tie: t.tie, parent: (t.parent ?? f.parent).name, parent_id: (t.parent ?? f.parent).id, parent_uei: (t.parent ?? f.parent).uei ?? null, recipient_id: r.recipient_id ?? null, recipient_uei: r["Recipient UEI"] ?? null, as_of: asOf });
   for (const f of families) {
     const rec = f.parent;
     const filters = { recipient_id: rec.id, award_type_codes: ["A", "B", "C", "D"], time_period: [{ start_date: "2007-10-01", end_date: today }] };
     const t = await post("https://api.usaspending.gov/api/v2/search/spending_over_time/", { group: "fiscal_year", filters });
-    if (t && !ignoredFilter(t.messages, "recipient_id")) for (const r of t.results ?? []) if (r.aggregated_amount) fy.set(Number(r.time_period.fiscal_year), (fy.get(Number(r.time_period.fiscal_year)) ?? 0) + r.aggregated_amount);
+    const years = t && !ignoredFilter(t.messages, "recipient_id") ? ((t.results ?? []) as { aggregated_amount?: number; time_period: { fiscal_year: string | number } }[]) : null;
+    if (!years || years.some((r) => Math.abs(r.aggregated_amount ?? 0) > MAX_COMPANY_FY_USD)) totalsOk = false;
+    else for (const r of years) if (r.aggregated_amount) fy.set(Number(r.time_period.fiscal_year), (fy.get(Number(r.time_period.fiscal_year)) ?? 0) + r.aggregated_amount);
+    if (!years) complete = false;
     // Largest awards of the last five years to the parent's family (the award search filters by UEI text, not recipient id).
     if (rec.uei) {
       const recent = { recipient_search_text: [rec.uei], award_type_codes: ["A", "B", "C", "D"], time_period: [{ start_date: `${now.getUTCFullYear() - 5}-01-01`, end_date: today }] };
       const a = await post("https://api.usaspending.gov/api/v2/search/spending_by_award/", { filters: recent, fields: ["Award ID", "Recipient Name", "Recipient UEI", "recipient_id", "Award Amount", "Awarding Agency", "Awarding Sub Agency", "Start Date", "End Date", "Description", "generated_internal_id"], limit: 40, sort: "Award Amount", order: "desc" });
+      if (!a) complete = false;
       if (a && !ignoredFilter(a.messages, "recipient_search_text")) for (const r of a.results ?? []) {
         const tie = awardTie({ recipient: r["Recipient Name"], recipientId: r.recipient_id, uei: r["Recipient UEI"] }, families, keys);
         if (!tie) continue;
@@ -133,6 +160,7 @@ async function contracts(c: Co): Promise<Row[]> {
     const since = new Date(Date.now() - 548 * 864e5).toISOString().slice(0, 10);
     for (let page = 1; page <= 3; page++) {
       const tx = await post("https://api.usaspending.gov/api/v2/search/spending_by_transaction/", { filters: { ...filters, time_period: [{ start_date: since, end_date: today }] }, fields: ["Award ID", "Mod", "Recipient Name", "Recipient UEI", "recipient_id", "Action Date", "Transaction Amount", "Awarding Agency", "Awarding Sub Agency", "Transaction Description", "generated_internal_id", "internal_id"], limit: 100, page, sort: "Action Date", order: "desc" });
+      if (!tx) complete = false;
       if (!tx || ignoredFilter(tx.messages, "recipient_id")) break;
       for (const r of tx.results ?? []) {
         if (!(r["Transaction Amount"] >= 1e6)) continue;
@@ -144,12 +172,22 @@ async function contracts(c: Co): Promise<Row[]> {
       if (!tx.page_metadata?.hasNext) break;
     }
   }
-  // A fiscal year still running is dated the day it was read, never its future September 30.
-  for (const [y, v] of fy) {
+  // Totals summed over the parents are whole only when every parent answered: a missing parent would
+  // write a partial year over a complete stored one.
+  if (totalsOk) for (const [y, v] of fy) {
     const p = fiscalYearPeriod(y, now);
-    out.push({ uid: `usa:${c.ticker}:fy${y}`, ticker: c.ticker, dataset: "contracts", kind: "series", date: p.date, title: "Federal contract obligations", value: v, unit: "USD", meta: { fiscal_year: y, ytd: p.ytd, period_start: p.period_start, period_end: p.period_end, as_of: asOf, recipients: parents.map((r) => r.name) }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/recipient/${parents[0].id}/latest` });
+    out.push({ uid: `usa:${c.ticker}:fy${y}`, ticker: c.ticker, dataset: "contracts", kind: "series", date: p.date, title: "Federal contract obligations", value: v, unit: "USD", meta: { fiscal_year: y, ytd: p.ytd, period_start: p.period_start, period_end: p.period_end, as_of: asOf, recipients: parents.map((r) => r.name), recipient_ueis: parents.map((r) => r.uei ?? null) }, source: "USAspending.gov", source_url: `https://www.usaspending.gov/recipient/${parents[0].id}/latest` });
   }
+  if (complete) out.push(refreshRow(c.ticker, families, asOf));
   return out;
+}
+
+/** The refresh record of one completed collection (src/lib/alt/contracts.ts `RefreshMeta`). */
+export function refreshRow(ticker: string, families: ParentFamily[], asOf: string): Row {
+  const family = [...new Set(families.flatMap((f) => [f.parent.name, ...f.children.map((k) => k.name ?? "")]).filter(Boolean))].slice(0, 2000);
+  const meta: RefreshMeta = { refresh: true, rule: CONTRACTS_RULE, as_of: asOf, parents: families.map((f) => ({ name: f.parent.name, id: f.parent.id, uei: f.parent.uei ?? null })), family };
+  const first = families[0]?.parent;
+  return { uid: `usarun:${ticker}`, ticker, dataset: REFRESH_DATASET, kind: "event", date: null, title: "Federal contracts collection", value: families.length, unit: "parents", meta: meta as unknown as Record<string, unknown>, source: "USAspending.gov", source_url: first ? `https://www.usaspending.gov/recipient/${first.id}/latest` : "https://www.usaspending.gov/search" };
 }
 
 // ───────── Federal Register: rules, proposed rules, notices naming the company ─────────

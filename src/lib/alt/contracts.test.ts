@@ -115,6 +115,9 @@ describe("stored contract rows (production sample)", () => {
       "LMT LOCKHEED MARTIN CORP",
       "LMT series",
       "PFE PFIZER INC",
+      // Oracle America, Inc. is in Oracle's 10-K Exhibit 21 (CONTRACT_ALIASES)
+      "ORCL ORACLE AMERICA, INC.",
+      "ORCL ORACLE AMERICA, INC",
     ]);
     expect(screenContractRows([{ ticker: "ZZZZ", dataset: "contracts", kind: "event", meta: { recipient: "X" } }], keysOf)).toEqual([]);
     expect(screenContractRows([{ ticker: "ZZZZ", dataset: "fda", kind: "event", meta: {} }], keysOf)).toHaveLength(1);
