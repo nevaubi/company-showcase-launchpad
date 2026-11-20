@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { RiskLink } from "./core";
 import type { TaggedShare } from "./chain";
+import { currentRows, trustRows } from "./trusted";
 
 /** All rows: the first page also returns the total, then the remaining pages load in parallel (a few at a time). */
 async function pageAll(build: (count?: boolean) => any): Promise<RiskLink[]> {
@@ -24,15 +25,16 @@ async function pageAll(build: (count?: boolean) => any): Promise<RiskLink[]> {
 
 /** Links from each company's latest 10-K and any newer 10-Q — what the map shows. */
 export const supplyLinksQuery = {
-  queryKey: ["supply_links"],
-  queryFn: () => pageAll((count) => supabase.from("supply_links").select("*", count ? { count: "exact" } : undefined).eq("is_current", true).order("id")),
+  queryKey: ["supply_links", "trusted"],
+  queryFn: async () => currentRows(await pageAll((count) => supabase.from("supply_links").select("*", count ? { count: "exact" } : undefined).eq("is_current", true).order("id"))),
   staleTime: 10 * 60_000,
 };
 
 /** Every link `ticker` stated, including prior 10-Ks — for "what changed". */
 export const supplyHistoryQuery = (ticker: string) => ({
-  queryKey: ["supply_links_history", ticker],
-  queryFn: () => pageAll((count) => supabase.from("supply_links").select("*", count ? { count: "exact" } : undefined).eq("ticker", ticker).order("id")),
+  queryKey: ["supply_links_history", "trusted", ticker],
+  // every filing is kept (no dedupe): "what changed" compares one filing with another
+  queryFn: async () => trustRows(await pageAll((count) => supabase.from("supply_links").select("*", count ? { count: "exact" } : undefined).eq("ticker", ticker).order("id"))),
   staleTime: 10 * 60_000,
 });
 

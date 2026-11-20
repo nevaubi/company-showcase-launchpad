@@ -1,7 +1,7 @@
 // Pure analytics for the supply-chain page: country exposure, region shocks, concentration history,
 // link freshness and ecosystem baskets. No browser/Node APIs — shared by app and tests.
 import { knownHomeCountry } from "./home-country";
-import { entityKey, HOTSPOTS, linkDollars, type ProLink, type SupplyLink } from "./core";
+import { copies, entityKey, HOTSPOTS, linkDollars, statedRegions, type ProLink, type SupplyLink } from "./core";
 
 const ALIAS: Record<string, string> = {
   "u.s.": "United States", us: "United States", usa: "United States", "united states of america": "United States", "u.s.a.": "United States", america: "United States",
@@ -53,15 +53,17 @@ export function countryExposure(links: ProLink[], signals: SignalLite[], revenue
     if (!r) { r = { country: c, hotspot: isHotspot(c), links: 0, companies: [], singleSource: 0, dollars: 0, facilities: 0, policy: 0, risks: 0, hq: 0, _c: new Set() }; m.set(c, r); }
     return r;
   };
+  // one row per link (10-K and 10-Q copies were merged by dedupeCurrent); regions are only those its sentences name
   for (const l of links) {
-    for (const raw of new Set((l.regions ?? []).map(canonCountry).filter(Boolean) as string[])) {
+    const sole = copies(l).some((c) => !!c.single_source);
+    for (const raw of new Set(statedRegions(l).map(canonCountry).filter(Boolean) as string[])) {
       const r = row(raw);
       r.links++; r._c.add(l.ticker);
-      if (l.single_source) r.singleSource++;
+      if (sole) r.singleSource++;
       r.dollars += linkDollars(l, revenue) ?? 0;
     }
     const hq = l.relation !== "competitor" ? counterpartyCountry(l.counterparty) : null;
-    if (hq) { const r = row(hq); r.hq++; r._c.add(l.ticker); if (l.single_source) r.singleSource++; }
+    if (hq) { const r = row(hq); r.hq++; r._c.add(l.ticker); if (sole) r.singleSource++; }
   }
   for (const s of signals) {
     const c = canonCountry(s.country);
@@ -106,19 +108,20 @@ export function regionShock(country: string, links: ProLink[], signals: SignalLi
     return h;
   };
   for (const l of links) {
-    const stated = (l.regions ?? []).some((r) => canonCountry(r) === c);
+    const stated = statedRegions(l).some((r) => canonCountry(r) === c);
+    const sole = copies(l).some((x) => !!x.single_source);
     if (!stated) {
       if (l.relation === "competitor" || counterpartyCountry(l.counterparty) !== c) continue;
       const h = hit(l.ticker);
       h.hq++;
-      if (l.single_source) h.singleSource++;
+      if (sole) h.singleSource++;
       h.dollars += linkDollars(l, revenue) ?? 0;
       if (h.examples.length < 3) h.examples.push(`${l.relation}: ${l.counterparty}`);
       continue;
     }
     const h = hit(l.ticker);
     h.links++;
-    if (l.single_source) h.singleSource++;
+    if (sole) h.singleSource++;
     h.dollars += linkDollars(l, revenue) ?? 0;
     if (h.examples.length < 3) h.examples.push(`${l.relation}: ${l.counterparty}`);
   }

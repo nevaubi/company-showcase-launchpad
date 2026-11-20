@@ -1,6 +1,7 @@
 // Identity of supply links: one counterparty under one key however a filing spells it, and one link counted once
 // when a filer's 10-K and a later 10-Q both state it. Pure, no browser/Node APIs.
-import { entityKey, type SupplyLink } from "./core";
+import type { SupplyLink } from "./core";
+import { entityKey } from "./entity";
 
 type Keyed = Pick<SupplyLink, "ticker" | "relation" | "counterparty" | "counterparty_ticker">;
 
