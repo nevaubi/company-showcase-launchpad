@@ -12,7 +12,15 @@ export interface DiscoveredFiling {
 
 /** Same exclusions as the per-company walk, so a discovered filing is one the walk would store. */
 export const SKIP_FORMS = /^(424B|FWP|SC 13|S-3)/;
-export const isEarnings = (form: string, items: string | null) => /^8-K/.test(form) && /(^|,)\s*2\.02/.test(items ?? "");
+/** Item 2.02 on an original 8-K. An amendment (8-K/A) restates a release already dated by its original, so it is not a second earnings date (review R11). */
+export const isEarnings = (form: string, items: string | null) => /^8-K$/.test(form.trim()) && /(^|,)\s*2\.02/.test(items ?? "");
+
+/** Split a list into chunks for `.in()` filters, so a request stays far below URL limits (review R6). */
+export function chunks<T>(list: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
 
 /** `master.YYYYMMDD.idx`: CIK|Company|Form|Date|edgar/data/CIK/ACCN.txt */
 export function parseMasterIndex(text: string): DiscoveredFiling[] {

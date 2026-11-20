@@ -45,6 +45,7 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
     let upsertOpts: { onConflict?: string; ignoreDuplicates?: boolean } = {};
     let order: { col: string; asc: boolean } | null = null;
     let limit: number | null = null;
+    let offset = 0;
     let single: "one" | "maybe" | null = null;
     let countHead = false;
     let returning = false;
@@ -57,8 +58,10 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
           const { col, asc } = order;
           out = [...out].sort((a, b) => (String(a[col]) < String(b[col]) ? (asc ? -1 : 1) : String(a[col]) > String(b[col]) ? (asc ? 1 : -1) : 0));
         }
-        if (limit != null) out = out.slice(0, limit);
+        if (limit != null || offset) out = out.slice(offset, limit != null ? offset + limit : undefined);
         if (countHead) return { data: null, count: out.length, error: null };
+        // PostgREST answers at most 1,000 rows per request (review R15: the fake used to hide this).
+        out = out.slice(0, 1000);
         if (single) return out.length ? { data: { ...out[0] }, error: null } : single === "one" ? { data: null, error: { message: "no rows" } } : { data: null, error: null };
         return { data: out.map((r) => ({ ...r })), error: null };
       }
@@ -124,7 +127,12 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
       },
       eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), q),
       neq: (c: string, v: unknown) => (filters.push((r) => r[c] !== v), q),
-      in: (c: string, v: unknown[]) => (filters.push((r) => v.includes(r[c])), q),
+      in: (c: string, v: unknown[]) => {
+        // A GET filter list this long would be refused by the gateway (review R6, R15).
+        if (v.length > 500) throw new Error(`fake-supabase: .in() with ${v.length} values (URL too long)`);
+        filters.push((r) => v.includes(r[c]));
+        return q;
+      },
       lt: (c: string, v: unknown) => (filters.push((r) => r[c] != null && String(r[c]) < String(v)), q),
       lte: (c: string, v: unknown) => (filters.push((r) => r[c] != null && String(r[c]) <= String(v)), q),
       gt: (c: string, v: unknown) => (filters.push((r) => r[c] != null && String(r[c]) > String(v)), q),
@@ -147,7 +155,7 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
       },
       order: (col: string, o: { ascending?: boolean } = {}) => ((order = { col, asc: o.ascending !== false }), q),
       limit: (n: number) => ((limit = n), q),
-      range: (a: number, b: number) => ((limit = b - a + 1), q),
+      range: (a: number, b: number) => ((offset = a), (limit = b - a + 1), q),
       single: () => ((single = "one"), q),
       maybeSingle: () => ((single = "maybe"), q),
       then: (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) => Promise.resolve().then(run).then(resolve, reject),

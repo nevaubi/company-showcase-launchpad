@@ -5,7 +5,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { COVERAGE, tickerByCik } from "@/lib/coverage";
 import { fetchSec } from "@/lib/sec.server";
-import { coveredOnly, dayProgress, feedUrl, FEED_TYPES, formatDayState, isEarnings, masterUrl, missingEarnings, nextDay, parseCurrentAtom, parseDayState, parseMasterIndex, repairWindow, rotate, type DiscoveredFiling } from "@/lib/jobs/sec-discover";
+import { chunks, coveredOnly, dayProgress, feedUrl, FEED_TYPES, formatDayState, isEarnings, masterUrl, missingEarnings, nextDay, parseCurrentAtom, parseDayState, parseMasterIndex, repairWindow, rotate, type DiscoveredFiling } from "@/lib/jobs/sec-discover";
 
 // Current and former CIKs: a filing by either registrant (XOM 2115436 or 34088) belongs to the company.
 const CIKS = tickerByCik(COVERAGE);
@@ -73,18 +73,39 @@ export async function resolve(missing: (DiscoveredFiling & { ticker: string })[]
  * five-day window per call (walking back 60 days, then wrapping), for filings whose event write
  * failed or was never made. Inserts only missing rows (idempotent).
  */
+/** Pages of sec_filings one repair window may read (5,000 filings; the largest 5-day window held 721). */
+const REPAIR_MAX_PAGES = 5;
+
 export async function repairEarningsEvents(today = new Date().toISOString().slice(0, 10)) {
   const { data: st, error: stErr } = await supabaseAdmin.from("job_state").select("cursor").eq("job", "earnings-repair").maybeSingle();
   if (stErr) throw new Error(stErr.message);
   const w = repairWindow(st?.cursor ?? 0, today);
-  const { data: filings, error } = await supabaseAdmin.from("sec_filings").select("accn, ticker, form, filed, items").gte("filed", w.from).lte("filed", w.to).like("form", "8-K%").like("items", "%2.02%").limit(1000);
-  if (error) throw new Error(error.message);
-  const list = (filings ?? []) as { accn: string; ticker: string; form: string; filed: string; items: string | null }[];
+  // Ordered and paged: an earnings-season window can hold more than one 1,000-row response.
+  const list: { accn: string; ticker: string; form: string; filed: string; items: string | null }[] = [];
+  for (let page = 0; page < REPAIR_MAX_PAGES; page++) {
+    const { data, error } = await supabaseAdmin
+      .from("sec_filings")
+      .select("accn, ticker, form, filed, items")
+      .gte("filed", w.from)
+      .lte("filed", w.to)
+      .eq("form", "8-K")
+      .like("items", "%2.02%")
+      .order("accn")
+      .range(page * 1000, page * 1000 + 999);
+    if (error) throw new Error(error.message);
+    list.push(...((data ?? []) as typeof list));
+    if ((data ?? []).length < 1000) break;
+  }
   let inserted: { ticker: string; accn: string; filed: string; source: string }[] = [];
   if (list.length) {
-    const { data: events, error: evErr } = await supabaseAdmin.from("earnings_events").select("ticker, accn").in("accn", list.map((f) => f.accn));
-    if (evErr) throw new Error(evErr.message);
-    inserted = missingEarnings(list, (events ?? []) as { ticker: string; accn: string }[]);
+    // Accession lists in chunks of 150 (about 3 KB of filter each), never one request of hundreds.
+    const events: { ticker: string; accn: string }[] = [];
+    for (const part of chunks(list.map((f) => f.accn), 150)) {
+      const { data, error: evErr } = await supabaseAdmin.from("earnings_events").select("ticker, accn").in("accn", part);
+      if (evErr) throw new Error(evErr.message);
+      events.push(...((data ?? []) as { ticker: string; accn: string }[]));
+    }
+    inserted = missingEarnings(list, events);
     if (inserted.length) {
       const { error: upErr } = await supabaseAdmin.from("earnings_events").upsert(inserted, { onConflict: "ticker,accn", ignoreDuplicates: true });
       if (upErr) throw new Error(upErr.message);

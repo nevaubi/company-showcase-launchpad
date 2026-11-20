@@ -60,4 +60,22 @@ describe("sec-discover day pass", () => {
     expect(mocks.db.tables.earnings_events).toHaveLength(2);
     expect(mocks.db.state("earnings-repair")!.cursor).toBe(1);
   });
+  // Review R6: the whole window's accession list went into one GET filter, and a window above 1,000 rows was cut.
+  it("repairs an earnings-season window of 1,300 filings: paged reads and chunked lookups, every missing event found", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const filed = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);
+    const filings = Array.from({ length: 1300 }, (_, i) => ({ accn: `0000000001-26-${String(i).padStart(6, "0")}`, ticker: `T${i}`, form: "8-K", filed, items: "2.02,9.01" }));
+    mocks.db = fakeSupabase({
+      job_state: [{ job: "sec-discover", cursor: 2, paused_reason: null, updated_at: "x" }, { job: "sec-discover-day", cursor: Number(today.replace(/-/g, "")), paused_reason: null, updated_at: "x" }],
+      sec_filings: [...filings, { accn: "amend-1", ticker: "XA", form: "8-K/A", filed, items: "2.02" }],
+      earnings_events: filings.filter((_, i) => i % 2 === 0).map((f) => ({ ticker: f.ticker, accn: f.accn, filed, source: "sec-8k-2.02" })),
+    });
+    const r = await runDiscovery(() => true);
+    const repair = r.detail.repair as { checked: number; repaired: string[] };
+    expect(repair.checked).toBe(1300);
+    expect(repair.repaired).toHaveLength(650);
+    expect(mocks.db.tables.earnings_events).toHaveLength(1300);
+    // an 8-K/A is not a second earnings date (review R11)
+    expect(mocks.db.tables.earnings_events.some((e) => e.accn === "amend-1")).toBe(false);
+  });
 });
