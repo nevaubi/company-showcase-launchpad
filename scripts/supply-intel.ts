@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { writeFileSync } from "node:fs";
 import { classifyError } from "../src/lib/jobs/failure";
 import { args, log, sb } from "./lib/supa";
+import { saveSignals } from "./lib/supply-save";
 import { readDataset } from "./lib/datasets";
 import { IR_MODELS, openaiStructured } from "../src/lib/openai.server";
 import { quoteInText } from "../src/lib/supply/core";
@@ -108,9 +109,9 @@ function rows(co: Co, items: Item[], srcs: Src[], source_kind: string) {
 }
 
 /**
- * Atomic replace of one company's signals of one source kind: insert the new rows first, then delete
- * the old ones that are not among them. A failed insert throws (the stage fails) and the stored
- * signals stay; an empty result keeps them too (an empty answer is no evidence they are wrong).
+ * Replace one company's signals of one source kind in one database transaction
+ * (replace_supply_signals, scripts/lib/supply-save.ts). A refused save throws (the stage fails) and the
+ * stored signals stay exactly as they were; an empty result keeps them too.
  */
 async function save(co: Co, source_kind: string, r: Record<string, unknown>[]) {
   if (args.dry) return console.log(source_kind, r.slice(0, 3));
@@ -118,13 +119,8 @@ async function save(co: Co, source_kind: string, r: Record<string, unknown>[]) {
     tally.emptyStages++;
     return;
   }
-  const { data, error } = await sb.from("supply_signals").insert(r as never).select("id");
-  if (error) throw new Error(`insert failed: ${error.message}`);
-  const ids = (data ?? []).map((d) => d.id);
-  if (ids.length !== r.length) throw new Error(`insert stored ${ids.length} of ${r.length} rows`);
-  const { error: del } = await sb.from("supply_signals").delete().eq("ticker", co.ticker).eq("source_kind", source_kind).not("id", "in", `(${ids.join(",")})`);
-  if (del) log(co.ticker, source_kind, `old rows not removed: ${del.message}`);
-  tally.stored += ids.length;
+  const out = await saveSignals(sb, co.ticker, source_kind, r);
+  tally.stored += out.stored;
 }
 
 const docUrl = (co: Co, accn: string, doc: string) => `https://www.sec.gov/Archives/edgar/data/${Number(co.cik)}/${accn.replace(/-/g, "")}/${doc}`;

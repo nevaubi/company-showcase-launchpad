@@ -22,4 +22,18 @@ describe("migration 0066", () => {
     const s65 = JSON.parse(readFileSync("drizzle/migrations/meta/0065_snapshot.json", "utf8")) as { id: string };
     expect(s66.prevId).toBe(s65.id);
   });
+  it("replaces supply signals in one transaction, refuses empty or foreign rows, and only the service role may run it (F16)", () => {
+    const body = sql.slice(sql.indexOf("CREATE OR REPLACE FUNCTION public.replace_supply_signals"));
+    expect(body).toMatch(/LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS \$\$/);
+    expect(body).toMatch(/jsonb_array_length\(_rows\) = 0 THEN\s+RAISE EXCEPTION/);
+    expect(body).toMatch(/IS DISTINCT FROM _ticker OR e->>'source_kind' IS DISTINCT FROM _source_kind\) THEN\s+RAISE EXCEPTION/);
+    // delete and insert in the same function body (one transaction), the delete scoped to the pair
+    expect(body.indexOf("DELETE FROM supply_signals WHERE ticker = _ticker AND source_kind = _source_kind;")).toBeLessThan(body.indexOf("INSERT INTO supply_signals"));
+    expect(body).toMatch(/jsonb_populate_recordset\(NULL::supply_signals, _rows\)/);
+    const revoke = body.indexOf("REVOKE ALL ON FUNCTION public.replace_supply_signals(text, text, jsonb) FROM PUBLIC, anon, authenticated;");
+    const grant = body.indexOf("GRANT EXECUTE ON FUNCTION public.replace_supply_signals(text, text, jsonb) TO service_role;");
+    expect(revoke).toBeGreaterThan(0);
+    expect(grant).toBeGreaterThan(revoke);
+    expect(body).not.toMatch(/TO (anon|authenticated)/);
+  });
 });

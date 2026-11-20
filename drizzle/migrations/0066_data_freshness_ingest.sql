@@ -133,3 +133,32 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
 $$;
 REVOKE ALL ON FUNCTION public.data_coverage() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.data_coverage() TO service_role;
+
+-- replace_supply_signals(ticker, source_kind, rows): one company's signals of one source kind are
+-- replaced in one transaction (review F16). The old save inserted the new rows and then deleted the
+-- rest, so a failed delete left duplicates; delete-then-insert outside a transaction could lose the
+-- stored signals. Here both happen or neither does. Every row must carry the same ticker and
+-- source_kind as the arguments, and an empty list is refused (an empty answer is no evidence the
+-- stored signals are wrong). Returns the number of rows stored. Only the worker's service role runs it.
+CREATE OR REPLACE FUNCTION public.replace_supply_signals(_ticker text, _source_kind text, _rows jsonb)
+RETURNS integer
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  n integer;
+BEGIN
+  IF _rows IS NULL OR jsonb_typeof(_rows) <> 'array' OR jsonb_array_length(_rows) = 0 THEN
+    RAISE EXCEPTION 'replace_supply_signals: no rows for % %', _ticker, _source_kind;
+  END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(_rows) e WHERE e->>'ticker' IS DISTINCT FROM _ticker OR e->>'source_kind' IS DISTINCT FROM _source_kind) THEN
+    RAISE EXCEPTION 'replace_supply_signals: every row must have ticker % and source_kind %', _ticker, _source_kind;
+  END IF;
+  DELETE FROM supply_signals WHERE ticker = _ticker AND source_kind = _source_kind;
+  INSERT INTO supply_signals (ticker, kind, title, detail, quote, counterparty, country, amount_usd, pct, period, impact, speaker, source_kind, accn, doc, form, filed, url)
+  SELECT p.ticker, p.kind, p.title, p.detail, p.quote, p.counterparty, p.country, p.amount_usd, p.pct, p.period, coalesce(p.impact, 'neutral'), p.speaker, p.source_kind, p.accn, p.doc, p.form, p.filed, p.url
+  FROM jsonb_populate_recordset(NULL::supply_signals, _rows) p;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  RETURN n;
+END
+$$;
+REVOKE ALL ON FUNCTION public.replace_supply_signals(text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.replace_supply_signals(text, text, jsonb) TO service_role;
