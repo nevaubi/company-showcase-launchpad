@@ -20,6 +20,7 @@ import { loadLabelMap } from "@/lib/ir/rebuild.server";
 import { buildCompany, loadFacts } from "./ir-build";
 import { args, log, sb } from "./lib/supa";
 import { loadRank } from "./lib/rank";
+import { canonLap, staleLabelKeys, type CanonLap } from "./lib/canon-lap";
 
 type CanonOut = { lines: { id: number; category: string; metric: string; label: string; parent: string; is_total: boolean; drop: boolean; reason: string }[] };
 
@@ -172,10 +173,24 @@ async function canonCompany(ticker: string, name: string): Promise<"none" | "kep
   if (!best.map && existing) await sb.from("ir_label_map").delete().eq("ticker", ticker);
   const replaced = !!best.map && best.map !== existing;
   if (best.map && best.map !== existing) {
-    await sb.from("ir_label_map").delete().eq("ticker", ticker);
-    const rows = Object.entries(best.map).map(([raw_key, canonical]) => ({ ticker, raw_key, canonical: canonical as never, model: args.model ?? IR_MODELS.reason }));
+    // Write the new map first, then delete the keys it no longer has: a kill in between (the 4 h
+    // deadline) leaves a complete map instead of none (review F20). created_at marks the new map.
+    const at = new Date().toISOString();
+    const rows = Object.entries(best.map).map(([raw_key, canonical]) => ({ ticker, raw_key, canonical: canonical as never, model: args.model ?? IR_MODELS.reason, created_at: at }));
     for (let i = 0; i < rows.length; i += 500) {
-      const { error } = await sb.from("ir_label_map").insert(rows.slice(i, i + 500));
+      const { error } = await sb.from("ir_label_map").upsert(rows.slice(i, i + 500), { onConflict: "ticker,raw_key" });
+      if (error) throw new Error(error.message);
+    }
+    const old: string[] = [];
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await sb.from("ir_label_map").select("raw_key").eq("ticker", ticker).order("raw_key").range(from, from + 999);
+      if (error) throw new Error(error.message);
+      old.push(...(data ?? []).map((r) => r.raw_key));
+      if ((data ?? []).length < 1000) break;
+    }
+    const stale = staleLabelKeys(old, rows.map((r) => r.raw_key));
+    for (let i = 0; i < stale.length; i += 200) {
+      const { error } = await sb.from("ir_label_map").delete().eq("ticker", ticker).in("raw_key", stale.slice(i, i + 200));
       if (error) throw new Error(error.message);
     }
   }
@@ -192,8 +207,32 @@ const byTicker = new Map(COVERAGE.map((c) => [c.ticker, c]));
 const all = rankOrder(COVERAGE.filter((c) => !want || want.includes(c.ticker)).map((c) => c.ticker), rank).map((t) => byTicker.get(t)!);
 const { data: run } = await sb.from("job_runs").insert({ job: "ir-canon" }).select("id").single();
 const { data: st } = resume ? await sb.from("job_state").select("cursor").eq("job", "ir-canon").maybeSingle() : { data: null };
-const start = resume ? (st?.cursor ?? 0) % Math.max(1, all.length) : 0;
-const list = resume ? [...all.slice(start), ...all.slice(0, start)] : all;
+// --resume walks a stored lap (ranked once when the lap starts); the cursor indexes that lap (review F7).
+const LAP = "ops/ir-canon-lap.json";
+let start = 0;
+let lapOrder = all;
+/** false when a new lap could not be stored: the run reads it but leaves the cursor where it was */
+let lapSaved = true;
+if (resume) {
+  let stored: CanonLap | null = null;
+  try {
+    const { data } = await sb.storage.from("ir-documents").download(LAP);
+    stored = data ? (JSON.parse(await data.text()) as CanonLap) : null;
+  } catch {
+    stored = null;
+  }
+  const r = canonLap(stored, st?.cursor ?? 0, all.map((c) => c.ticker), Date.now());
+  if (r.fresh || r.lap.order.length !== stored?.order.length) {
+    const { error } = await sb.storage.from("ir-documents").upload(LAP, new Blob([JSON.stringify(r.lap)], { type: "application/json" }), { upsert: true, contentType: "application/json" });
+    if (error) {
+      lapSaved = false;
+      log(`ir-canon: could not store the lap order (${error.message}) — this run leaves the cursor unchanged`);
+    } else if (r.fresh) log(`ir-canon: new lap of ${r.lap.order.length} companies`);
+  }
+  lapOrder = r.lap.order.flatMap((t) => (byTicker.has(t) ? [byTicker.get(t)!] : []));
+  start = r.start;
+}
+const list = resume ? lapOrder.slice(start) : all;
 const cap = Number(args.max ?? (resume ? 40 : Infinity));
 let next = 0;
 let processed = 0;
@@ -203,9 +242,10 @@ let failed = 0;
 let stop: string | null = null;
 /** list index of the first company a provider stop left unread (two workers: the earliest one wins) */
 let retryFrom = Infinity;
-const cursorAt = () => (start + Math.min(next, retryFrom)) % Math.max(1, all.length);
+// The end of the lap (cursor = its length) starts a new lap on the next run.
+const cursorAt = () => start + Math.min(next, retryFrom);
 // Never move the cursor past a company a provider stop left unread.
-const saveCursor = () => (resume && !stop ? sb.from("job_state").upsert({ job: "ir-canon", cursor: cursorAt(), paused_reason: null, updated_at: new Date().toISOString() }) : null);
+const saveCursor = () => (resume && lapSaved && !stop ? sb.from("job_state").upsert({ job: "ir-canon", cursor: cursorAt(), paused_reason: null, updated_at: new Date().toISOString() }) : null);
 await Promise.all(
   Array.from({ length: Number(args.concurrency ?? 4) }, async () => {
     while (!stop && next < list.length && processed < cap) {
@@ -223,15 +263,15 @@ await Promise.all(
           // This company (not whichever the other worker holds) is retried first on the next run.
           retryFrom = Math.min(retryFrom, idx);
           stop ??= `${cls === "config" ? "auth" : "quota"}: ${(e as Error).message.slice(0, 190)}`;
-          await sb.from("job_state").upsert({ job: "ir-canon", cursor: resume ? cursorAt() : 0, paused_reason: stop, updated_at: new Date().toISOString() });
+          await sb.from("job_state").upsert({ job: "ir-canon", cursor: resume && lapSaved ? cursorAt() : (st?.cursor ?? 0), paused_reason: stop, updated_at: new Date().toISOString() });
         } else failed++;
         log(`${c.ticker} canon failed: ${(e as Error).message.slice(0, 200)}`);
       }
     }
   }),
 );
-log(`ir-canon: ${processed} companies with figures processed${resume ? `, cursor ${cursorAt()}/${all.length}` : ""}`);
+log(`ir-canon: ${processed} companies with figures processed${resume ? `, cursor ${cursorAt()}/${lapOrder.length}` : ""}`);
 // Run row: freshness of the label canon is measured by successful passes, not by map inserts (a
 // healthy pass that keeps every stored map writes nothing to ir_label_map).
-if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: !stop && (processed > 0 || failed === 0), items: processed, detail: { processed, kept, replaced, failed, stop, cursor: cursorAt(), of: all.length } }).eq("id", run.id);
+if (run) await sb.from("job_runs").update({ finished_at: new Date().toISOString(), ok: !stop && (processed > 0 || failed === 0), items: processed, detail: { processed, kept, replaced, failed, stop, cursor: cursorAt(), of: lapOrder.length } }).eq("id", run.id);
 process.exit(stop ? 3 : 0);
