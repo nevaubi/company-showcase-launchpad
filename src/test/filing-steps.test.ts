@@ -36,3 +36,132 @@ describe("slow alt-data rotation", () => {
     expect(missingFromRegistry(["A", "B", "NEW"], { A: {}, B: {} })).toEqual(["NEW"]);
   });
 });
+
+import { accnOf, afterCursor, completeSeconds, INTEL_EVERY_MS, intelMarker, nextCursor, oldestSignals as oldest } from "../../scripts/lib/filing-steps";
+describe("filing-steps cursor precision", () => {
+  const at = "2026-11-19T08:57:06.123Z";
+  const rows = Array.from({ length: 40 }, (_, i) => ({ accn: `0001-26-${String(i).padStart(6, "0")}`, discovered_at: at }));
+  it("40 filings sharing one second make progress in batches of 30", () => {
+    let c = { sec: toCursor("2026-11-19T08:00:00Z"), accn: "" };
+    const first = afterCursor(rows, c).slice(0, 30);
+    for (const f of first) c = nextCursor(c, f);
+    const second = afterCursor(rows, c).slice(0, 30);
+    expect(second).toHaveLength(10);
+    expect(new Set([...first, ...second].map((r) => r.accn)).size).toBe(40);
+    for (const f of second) c = nextCursor(c, f);
+    expect(afterCursor(rows, c)).toEqual([]);
+  });
+  it("never moves backwards and reads the stored accession", () => {
+    const c = { sec: 100, accn: "b" };
+    expect(nextCursor(c, { accn: "a", discovered_at: new Date(100_000).toISOString() })).toBe(c);
+    expect(accnOf("after:0001-x")).toBe("0001-x");
+    expect(accnOf(null)).toBe("");
+  });
+  it("drops a page's cut-off last second so it is fetched whole", () => {
+    const page = [{ discovered_at: "2026-11-19T08:00:00.100Z" }, { discovered_at: "2026-11-19T08:00:01.100Z" }, { discovered_at: "2026-11-19T08:00:01.500Z" }];
+    expect(completeSeconds(page, 3)).toEqual({ rows: [page[0]], partialSec: toCursor("2026-11-19T08:00:01Z") });
+    expect(completeSeconds(page, 10).partialSec).toBeNull();
+  });
+});
+
+describe("weekly supply intel marker", () => {
+  const now = Date.parse("2026-11-20T12:00:00Z");
+  it("advances only after stored work or a clean empty run", () => {
+    expect(intelMarker({ stored: 12, companies: 20, failedStages: 3, emptyStages: 0, stop: null }, null, now).action).toBe("advance");
+    expect(intelMarker({ stored: 0, companies: 20, failedStages: 0, emptyStages: 80, stop: null }, null, now).action).toBe("advance");
+  });
+  it("retries a failed run after 1 h, doubling, and gives up after 8 tries", () => {
+    const r1 = intelMarker({ stored: 0, companies: 1, failedStages: 1, emptyStages: 0, stop: null }, null, now);
+    expect(r1).toMatchObject({ action: "retry", cursor: 1 });
+    expect(Date.parse(r1.updated_at) + INTEL_EVERY_MS - now).toBe(3600_000);
+    const r2 = intelMarker(null, { cursor: 1, paused_reason: r1.paused_reason }, now, "no result file (exit 1)");
+    expect(r2.cursor).toBe(2);
+    expect(Date.parse(r2.updated_at) + INTEL_EVERY_MS - now).toBe(7200_000);
+    const quota = intelMarker({ stored: 0, companies: 1, failedStages: 0, emptyStages: 0, stop: "quota: credit_balance_exhausted" }, null, now);
+    expect(quota.paused_reason).toMatch(/^retry 1: quota/);
+    expect(intelMarker(null, { cursor: 8, paused_reason: "retry 8: x" }, now).action).toBe("give-up");
+  });
+  it("breaks never-signalled ties by dv20 rank", () => {
+    expect(oldest(["A", "B", "C"], new Map(), 2, new Map([["C", 1], ["B", 2]]))).toEqual(["C", "B"]);
+  });
+});
+
+describe("weekly intel survives a deadline kill (review F17)", () => {
+  it("writes a retry marker with backoff before spawning supply-intel", async () => {
+    const { readFileSync } = await import("node:fs");
+    const src = readFileSync("scripts/filing-steps.ts", "utf8");
+    const pre = src.indexOf('intelMarker(null, wk ? { cursor: wk.cursor, paused_reason: wk.paused_reason } : null, Date.now(), "interrupted');
+    const spawn = src.indexOf('script("scripts/supply-intel.ts"');
+    expect(pre).toBeGreaterThan(0);
+    expect(spawn).toBeGreaterThan(pre);
+    const now = Date.parse("2026-11-20T12:00:00Z");
+    const m = intelMarker(null, null, now, "interrupted before supply intel finished");
+    expect(m.action).toBe("retry");
+    // due again 1 h later, not at once
+    expect(Date.parse(m.updated_at) + INTEL_EVERY_MS - now).toBe(3600_000);
+  });
+});
+
+import { intelDue, intelMarker as marker2, INTEL_EVERY_MS as WEEK, type IntelResult } from "../../scripts/lib/filing-steps";
+import { episodeOf, planRemedies, type RemedyReceipt } from "@/lib/jobs/remediation";
+
+describe("freshness requests for supply intel (review R3)", () => {
+  const now = Date.parse("2026-11-20T12:00:00Z");
+  const clean = { cursor: 20, paused_reason: null, updated_at: new Date(now - 86400_000).toISOString() };
+  it("the schedule decides; a request is honoured once, only when the marker advanced without a recorded run", () => {
+    expect(intelDue(clean, null, null, now)).toMatchObject({ run: false, consume: false });
+    expect(intelDue(clean, { cursor: 1 }, null, now)).toMatchObject({ run: true, consume: true });
+    expect(intelDue(clean, { cursor: 1 }, new Date(now - 86400_000 + 30_000).toISOString(), now)).toMatchObject({ run: false, consume: true });
+    expect(intelDue({ ...clean, paused_reason: "retry 3: x" }, { cursor: 1 }, null, now)).toMatchObject({ run: false, consume: true });
+    expect(intelDue({ ...clean, paused_reason: "gave up after 8 tries: x" }, { cursor: 1 }, null, now)).toMatchObject({ run: false, consume: true });
+    expect(intelDue({ ...clean, updated_at: new Date(now - WEEK - 1).toISOString() }, { cursor: 1 }, null, now)).toMatchObject({ run: true, consume: true });
+  });
+
+  /**
+   * Two weeks of the real rules with an hourly freshness check (healthy AI route) and the worker's
+   * intel step every 10 minutes, supply_signals stale throughout. Before R3 the remedy reset the
+   * marker every 6 h: a clean empty run then happened about 4 times a day, and a failing run never
+   * reached its give-up.
+   */
+  function simulate(outcome: IntelResult | null, start: { cursor: number; paused_reason: string | null; updated_at: string }, lastOkRun: string | null) {
+    let wk = { ...start };
+    let request: { cursor: number } | null = null;
+    let lastOk = lastOkRun;
+    const receipts = new Map<string, RemedyReceipt>();
+    const runs: number[] = [];
+    const t0 = Date.parse("2026-11-20T00:00:00Z");
+    for (let t = t0; t < t0 + 14 * 86400_000; t += 10 * 60_000) {
+      if ((t - t0) % 3600_000 === 0) {
+        for (const a of planRemedies([{ key: "supply_signals", newest: "2026-11-05T00:00:00Z" }], receipts, true, t)) {
+          if (a.apply) request = { cursor: Math.floor(t / 1000) };
+          if (a.receipt) receipts.set(a.key, { at: Math.floor(t / 1000), episode: episodeOf("2026-11-05T00:00:00Z") });
+        }
+      }
+      const due = intelDue(wk, request, lastOk, t);
+      if (due.consume) request = null;
+      if (!due.run) continue;
+      runs.push(t);
+      const m = marker2(outcome, wk, t);
+      wk = { cursor: m.cursor, paused_reason: m.paused_reason, updated_at: m.updated_at };
+      if (m.action === "advance") lastOk = new Date(t).toISOString();
+    }
+    return { runs: runs.length, marker: wk };
+  }
+  // 1 + 8 retries in the first cycle (about 3 days), give-up, then the next weekly cycle begins inside the 14 days
+  const RUNS_FAILING = 16;
+  // the production state of 20 Nov: marker advanced 19 Nov 11:03 with no supply-intel run recorded
+  const prod = { cursor: 20, paused_reason: null, updated_at: "2026-11-19T11:03:22Z" };
+  it("clean runs that find nothing: the honoured request replaces the missed run, then the weekly schedule (2 runs in 14 days, as with no request)", () => {
+    const r = simulate({ stored: 0, companies: 20, failedStages: 0, emptyStages: 80, stop: null }, prod, null);
+    expect(r.runs).toBe(2);
+  });
+  it("a marker whose last advance was a recorded clean run: the request adds nothing (2 runs in 14 days, the schedule's)", () => {
+    const r = simulate({ stored: 0, companies: 20, failedStages: 0, emptyStages: 80, stop: null }, prod, "2026-11-19T11:03:30Z");
+    expect(r.runs).toBe(2);
+  });
+  it("failing runs keep their give-up: one try plus 8 retries, then nothing until the next week", () => {
+    const r = simulate({ stored: 0, companies: 20, failedStages: 4, emptyStages: 0, stop: null }, prod, null);
+    expect(r.runs).toBe(RUNS_FAILING);
+    expect(r.marker.paused_reason).toMatch(/^(gave up after 8 tries|retry [1-8]):/);
+  });
+});

@@ -8,7 +8,7 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { allowanceDay, estimateTokens, FREE_SAFETY, FREE_TIERS, tierOf, usedTokens } from "@/lib/ir/openai-allowance";
-import { OpenAIError, openaiDirectStructured, type Effort, type InputPart, type Usage } from "@/lib/openai.server";
+import { guarded, OpenAIError, openaiDirectStructured, type Effort, type InputPart, type Usage } from "@/lib/openai.server";
 
 /** Default second reader: the small-model tier has ten times the allowance. */
 export const LANE_MODEL = process.env["IR_OPENAI_LANE_MODEL"] || "gpt-5.4-mini";
@@ -28,18 +28,26 @@ export async function laneStructured<T>(opts: { model?: string; name: string; in
   // Images: a high-detail page costs at most a few thousand tokens; reserve generously.
   const inChars = typeof opts.input === "string" ? opts.input.length : opts.input.reduce((n, p) => n + (p.type === "input_text" ? p.text.length : 6_000 * 3.2), 0);
   const est = estimateTokens(opts.instructions.length + inChars, maxOut);
-  const { data: ok, error } = await supabaseAdmin.rpc("openai_allowance_take", { _day: day, _tier: tier, _tokens: est, _cap: Math.floor(FREE_TIERS[tier].cap * FREE_SAFETY) });
-  if (error || !ok) {
-    if (process.env["IR_LANE_DEBUG"]) console.warn(`[lane] no allowance: ${error?.message ?? "cap reached"} (est ${est})`);
-    return null;
-  }
   const settle = (actual: number) => supabaseAdmin.rpc("openai_allowance_settle", { _day: day, _tier: tier, _delta: actual - est }).then(undefined, () => undefined);
+  let reserved = false;
   try {
-    const r = await openaiDirectStructured<T>({ model, name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, maxOutputTokens: maxOut, effort: /^(o\d|gpt-5)/.test(model) ? (opts.effort ?? "low") : undefined });
-    await settle(usedTokens(r.usage));
-    return r;
+    // The tier's circuit (provider:openai-free-<tier>) holds every lane caller back once the day's
+    // allowance is spent, until 00:05 UTC, instead of each call asking the ledger again.
+    return await guarded(tier === "large" ? "openai-free-large" : "openai-free-mini", async () => {
+      const { data: ok, error } = await supabaseAdmin.rpc("openai_allowance_take", { _day: day, _tier: tier, _tokens: est, _cap: Math.floor(FREE_TIERS[tier].cap * FREE_SAFETY) });
+      if (error) throw new OpenAIError(`allowance ledger unavailable: ${error.message}`, "transient", 0);
+      if (!ok) throw new OpenAIError(`free allowance spent (${tier}, est ${est} tokens)`, "quota", 0);
+      reserved = true;
+      const r = await openaiDirectStructured<T>({ model, name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, maxOutputTokens: maxOut, effort: /^(o\d|gpt-5)/.test(model) ? (opts.effort ?? "low") : undefined });
+      await settle(usedTokens(r.usage));
+      return r;
+    });
   } catch (e) {
     const err = e as OpenAIError;
+    if (!reserved) {
+      if (process.env["IR_LANE_DEBUG"]) console.warn(`[lane] no allowance: ${err.message}`);
+      return null;
+    }
     if (process.env["IR_LANE_DEBUG"]) console.warn(`[lane] ${opts.name} ${model}: ${err.kind ?? ""} ${err.message?.slice(0, 200)}`);
     await settle(err.usage ? usedTokens(err.usage) : 0);
     // A bad or empty key, or a spent balance: rest the lane for an hour instead of failing every call.
@@ -63,7 +71,7 @@ export async function paidStructured<T>(opts: { model: string; name: string; ins
   const tier = `paid_${tierOf(opts.model) ?? "large"}`;
   const day = allowanceDay();
   const maxOut = opts.maxOutputTokens ?? 16_000;
-  const r = await openaiDirectStructured<T>({ model: opts.model, name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, maxOutputTokens: maxOut, effort: /^(o\d|gpt-5)/.test(opts.model) ? (opts.effort ?? "low") : undefined });
+  const r = await guarded("openai-paid", () => openaiDirectStructured<T>({ model: opts.model, name: opts.name, instructions: opts.instructions, input: opts.input, schema: opts.schema, maxOutputTokens: maxOut, effort: /^(o\d|gpt-5)/.test(opts.model) ? (opts.effort ?? "low") : undefined }));
   const used = usedTokens(r.usage);
   // Ledger only (cap = unlimited); a failed write never fails the read.
   await supabaseAdmin.rpc("openai_allowance_take", { _day: day, _tier: tier, _tokens: used, _cap: Number.MAX_SAFE_INTEGER }).then(undefined, () => undefined);

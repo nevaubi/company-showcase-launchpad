@@ -63,10 +63,14 @@ async function deliver(row: Row): Promise<EmailStatus> {
   }
 }
 
-/** Records the send (once per idempotency key) and delivers it now. Duplicates return the stored status. */
-export async function queueEmail(a: QueueArgs): Promise<EmailStatus> {
+/**
+ * Records the send (once per idempotency key) and delivers it now. `recorded` is false when no
+ * email_log row exists for the key (the insert failed and no earlier row was found): nothing will
+ * ever deliver it, whatever `status` says.
+ */
+export async function queueEmailRecorded(a: QueueArgs): Promise<{ status: EmailStatus; recorded: boolean; error?: string }> {
   const key = idemKey(a.template, a.to, a.relatedId, a.state);
-  const { data: inserted } = await supabaseAdmin
+  const { data: inserted, error } = await supabaseAdmin
     .from("email_log")
     .upsert(
       { idempotency_key: key, recipient: a.to.trim().toLowerCase(), template: a.template, related_table: a.relatedTable, related_id: a.relatedId, template_data: a.data as never },
@@ -75,15 +79,21 @@ export async function queueEmail(a: QueueArgs): Promise<EmailStatus> {
     .select("id,idempotency_key,recipient,template,template_data,status,attempts");
   const row = inserted?.[0] as Row | undefined;
   if (!row) {
-    const { data: existing } = await supabaseAdmin.from("email_log").select("status").eq("idempotency_key", key).maybeSingle();
-    return (existing?.status as EmailStatus) ?? "queued";
+    const { data: existing, error: readError } = await supabaseAdmin.from("email_log").select("status").eq("idempotency_key", key).maybeSingle();
+    if (existing) return { status: existing.status as EmailStatus, recorded: true };
+    return { status: "queued", recorded: false, error: (error ?? readError)?.message ?? "email_log row missing" };
   }
   try {
-    return await deliver(row);
+    return { status: await deliver(row), recorded: true };
   } catch (e) {
     console.error("email deliver", e);
-    return "queued";
+    return { status: "queued", recorded: true };
   }
+}
+
+/** queueEmailRecorded's status only (callers that cannot act on a missing row). Never throws on the database. */
+export async function queueEmail(a: QueueArgs): Promise<EmailStatus> {
+  return (await queueEmailRecorded(a)).status;
 }
 
 export async function adminEmails(): Promise<string[]> {
@@ -98,8 +108,11 @@ export async function adminEmails(): Promise<string[]> {
 
 const RUN_BUDGET_MS = 4_000;
 
-/** Scheduled: retries due sends, then queues the one-time reminder for approvals not yet used. */
-export async function runOutbox(): Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }> {
+/**
+ * Scheduled: retries due sends, then queues the one-time reminder for approvals not yet used.
+ * `budgetMs` is what the `emails` job has left after the watchdog (default 4 s).
+ */
+export async function runOutbox(budgetMs = RUN_BUDGET_MS): Promise<{ ok: boolean; items: number; detail: Record<string, unknown> }> {
   const started = Date.now();
   const tally: Record<string, number> = {};
   const { data: due } = await supabaseAdmin
@@ -111,18 +124,18 @@ export async function runOutbox(): Promise<{ ok: boolean; items: number; detail:
     .order("next_attempt_at")
     .limit(10);
   for (const row of (due ?? []) as Row[]) {
-    if (Date.now() - started > RUN_BUDGET_MS) break;
+    if (Date.now() - started > budgetMs) break;
     const s = await deliver(row);
     tally[s] = (tally[s] ?? 0) + 1;
   }
   let reminders = 0;
-  if (Date.now() - started < RUN_BUDGET_MS) reminders = await queueReminders(started);
+  if (Date.now() - started < budgetMs) reminders = await queueReminders(started, budgetMs);
   const items = Object.values(tally).reduce((a, b) => a + b, 0) + reminders;
   return { ok: true, items, detail: { retried: tally, reminders } };
 }
 
 /** One reminder per approval, only for people whose approval email was actually sent. */
-async function queueReminders(started: number): Promise<number> {
+async function queueReminders(started: number, budgetMs: number): Promise<number> {
   const cutoff = new Date(Date.now() - REMINDER_AFTER_DAYS * 86_400_000).toISOString();
   const { data: approvals } = await supabaseAdmin
     .from("email_log")
@@ -136,7 +149,7 @@ async function queueReminders(started: number): Promise<number> {
   const noAccount = new Set((requests ?? []).map((r) => r.email));
   let n = 0;
   for (const a of approvals) {
-    if (Date.now() - started > RUN_BUDGET_MS) break;
+    if (Date.now() - started > budgetMs) break;
     if (!idleEmails.has(a.recipient) && !noAccount.has(a.recipient)) continue;
     const d = (a.template_data ?? {}) as Record<string, unknown>;
     const s = await queueEmail({

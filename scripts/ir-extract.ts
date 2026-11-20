@@ -12,7 +12,8 @@
  * --force takes over a lease left by a crashed runner; never use it while another runner is alive.
  */
 import { extractIrDocument, nextToExtract } from "@/lib/ir/extract.server";
-import type { Effort } from "@/lib/openai.server";
+import { IR_MODELS, type Effort } from "@/lib/openai.server";
+import { routeOf } from "@/lib/jobs/provider-health";
 import { args, sb } from "./lib/supa";
 import { runBatch } from "./lib/runner";
 
@@ -25,6 +26,7 @@ await runBatch({
   idleMinutes: args.watch !== undefined ? Number(args.idle ?? 30) : undefined,
   maxCredits: args["max-credits"] ? Number(args["max-credits"]) : undefined,
   spendFile: args["spend-file"],
+  route: routeOf(model ?? IR_MODELS.extract, process.env),
   claim: async () => {
     const d = await nextToExtract(args.ticker ? { ticker: args.ticker } : {});
     return d ? { ...d, label: `${d.filed ?? ""} ${d.title}` } : null;

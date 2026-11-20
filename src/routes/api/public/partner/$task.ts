@@ -78,7 +78,9 @@ export const Route = createFileRoute("/api/public/partner/$task")({
           const { extractSupply } = await import("@/lib/supply/extract.server");
           try {
             const [d, uni] = await Promise.all([loadDataset(b.data.ticker), universe()]);
-            const r = await extractSupply(supabaseAdmin, { ticker: co.ticker, name: d.profile.name, cik: co.cik }, d.filings, uni.map((u) => ({ ticker: u.ticker, name: u.name })), { years: b.data.years });
+            // The dataset's filings are listed under the CIK it was built from (for a company that
+            // changed registrant, the history CIK): their archive URLs resolve only there.
+            const r = await extractSupply(supabaseAdmin, { ticker: co.ticker, name: d.profile.name, cik: d.profile.cik || co.cik }, d.filings, uni.map((u) => ({ ticker: u.ticker, name: u.name })), { years: b.data.years });
             return Response.json(r, { status: r.status === "failed" ? 502 : 200 });
           } catch (e) {
             return Response.json({ error: (e as Error).message }, { status: 500 });

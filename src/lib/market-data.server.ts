@@ -39,10 +39,10 @@ interface YahooChart {
 const YAHOO_HOSTS = ["https://query2.finance.yahoo.com", "https://query1.finance.yahoo.com"];
 
 /** Yahoo rate-limits per host; try the alternate host on 429/5xx before giving up. */
-export async function yahooGet(path: string) {
+export async function yahooGet(path: string, signal?: AbortSignal) {
   let last = "";
   for (const host of YAHOO_HOSTS) {
-    const res = await fetch(`${host}${path}`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } });
+    const res = await fetch(`${host}${path}`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" }, signal });
     if (res.ok) return res;
     last = `Yahoo Finance responded ${res.status}`;
     if (res.status !== 429 && res.status < 500) break;
@@ -50,8 +50,8 @@ export async function yahooGet(path: string) {
   throw new Error(last);
 }
 
-export async function fetchYahoo(symbol: string, range: string, interval: string) {
-  const res = await yahooGet(`/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false&events=div%2Csplits`);
+export async function fetchYahoo(symbol: string, range: string, interval: string, signal?: AbortSignal) {
+  const res = await yahooGet(`/v8/finance/chart/${encodeURIComponent(symbol)}?range=${range}&interval=${interval}&includePrePost=false&events=div%2Csplits`, signal);
   const j = (await res.json()) as YahooChart;
   const r = j.chart.result?.[0];
   if (!r) throw new Error(j.chart.error?.description ?? `No data for ${symbol}`);
@@ -62,12 +62,12 @@ export async function fetchYahoo(symbol: string, range: string, interval: string
  * Daily bars from Nasdaq's public quote API — a fallback when Yahoo throttles. Prices are
  * split-adjusted (not dividend-adjusted), so adjusted close = close for these recent bars.
  */
-export async function fetchNasdaqDaily(symbol: string, kind: "stocks" | "etf", days = 31): Promise<Bar[]> {
+export async function fetchNasdaqDaily(symbol: string, kind: "stocks" | "etf", days = 31, signal?: AbortSignal): Promise<Bar[]> {
   const to = new Date();
   const from = new Date(to.getTime() - days * 86400_000);
   const d = (x: Date) => x.toISOString().slice(0, 10);
   const url = `https://api.nasdaq.com/api/quote/${encodeURIComponent(symbol)}/historical?assetclass=${kind}&fromdate=${d(from)}&todate=${d(to)}&limit=60`;
-  const res = await fetch(url, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" } });
+  const res = await fetch(url, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json, text/plain, */*", Origin: "https://www.nasdaq.com", Referer: "https://www.nasdaq.com/" }, signal });
   if (!res.ok) throw new Error(`Nasdaq responded ${res.status}`);
   const j = (await res.json()) as { data?: { tradesTable?: { rows?: { date: string; close: string; open: string; high: string; low: string; volume: string }[] } } | null };
   const rows = j.data?.tradesTable?.rows ?? [];
@@ -141,8 +141,8 @@ export async function fetchCboeQuote(symbol: string): Promise<{ price: number; p
 }
 
 /** Recent daily bars for a Cboe index. */
-export async function fetchCboeDaily(symbol: string, days = 31): Promise<Bar[]> {
-  const res = await fetch(`${CBOE}/charts/historical/_${encodeURIComponent(symbol.slice(1))}.json`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" } });
+export async function fetchCboeDaily(symbol: string, days = 31, signal?: AbortSignal): Promise<Bar[]> {
+  const res = await fetch(`${CBOE}/charts/historical/_${encodeURIComponent(symbol.slice(1))}.json`, { headers: { "User-Agent": BROWSER_UA, Accept: "application/json" }, signal });
   if (!res.ok) throw new Error(`Cboe responded ${res.status}`);
   const j = (await res.json()) as { data?: { date: string; open: string; high: string; low: string; close: string }[] };
   const cutoff = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10);
@@ -188,9 +188,9 @@ export async function pool<T, R>(items: T[], n: number, fn: (x: T) => Promise<R>
   return out;
 }
 
-export async function fetchFred(id: string, since?: string): Promise<[string, number][]> {
+export async function fetchFred(id: string, since?: string, signal?: AbortSignal): Promise<[string, number][]> {
   const url = `https://fred.stlouisfed.org/graph/fredgraph.csv?id=${encodeURIComponent(id)}${since ? `&cosd=${since}` : ""}`;
-  const res = await fetch(url, { headers: { "User-Agent": RESEARCH_UA } });
+  const res = await fetch(url, { headers: { "User-Agent": RESEARCH_UA }, signal });
   if (!res.ok) throw new Error(`FRED responded ${res.status} for ${id}`);
   const text = await res.text();
   const out: [string, number][] = [];
@@ -212,14 +212,14 @@ const TREASURY: Record<string, { path: string; field: string; filter?: string }>
 export const isTreasurySeries = (id: string) => id in TREASURY;
 
 /** Observations straight from the Treasury's Fiscal Data API (Debt to the Penny, average interest rates). */
-export async function fetchTreasury(id: string, since = "2005-01-01", maxPages = 3): Promise<[string, number][]> {
+export async function fetchTreasury(id: string, since = "2005-01-01", maxPages = 3, signal?: AbortSignal): Promise<[string, number][]> {
   const spec = TREASURY[id];
   if (!spec) throw new Error(`Unknown Treasury series ${id}`);
   const out: [string, number][] = [];
   for (let page = 1; page <= maxPages; page++) {
     const filter = [`record_date:gte:${since}`, spec.filter].filter(Boolean).join(",");
     const url = `${FISCAL_API}${spec.path}?fields=record_date,${spec.field}&filter=${encodeURIComponent(filter)}&sort=record_date&page[number]=${page}&page[size]=10000`;
-    const res = await fetch(url, { headers: { "User-Agent": RESEARCH_UA } });
+    const res = await fetch(url, { headers: { "User-Agent": RESEARCH_UA }, signal });
     if (!res.ok) throw new Error(`Treasury Fiscal Data responded ${res.status} for ${id}`);
     const j = (await res.json()) as { data: Record<string, string>[]; meta: { "total-pages": number } };
     for (const r of j.data) {

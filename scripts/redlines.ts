@@ -47,7 +47,8 @@ async function main() {
       const list = d.filings.filter((f) => f.form === form && f.doc).sort((a, b) => b.filed.localeCompare(a.filed));
       for (const to of list.slice(0, HISTORY)) {
         const from = defaultBase(d.filings.filter((f) => f.doc), to);
-        if (from) work.push({ ticker: t, cik: String(Number(cov.cik)), form, from, to });
+        // The dataset's filings are listed under the CIK it was built from (the history CIK).
+        if (from) work.push({ ticker: t, cik: String(Number(d.profile.cik || cov.cik)), form, from, to });
       }
     }
   }

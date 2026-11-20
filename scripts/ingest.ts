@@ -37,7 +37,7 @@ import type {
   UniverseEntry,
   UniverseFundamentals,
 } from "../src/lib/financials/types";
-import { COVERAGE, isBundled, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
+import { COVERAGE, historyCik, isBundled, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
 import { summarize, type MacroSummary } from "../src/lib/macro";
 
 const UA = "FiledUnder Research research@filedunder.ai";
@@ -588,9 +588,13 @@ function fundamentals(statements: CompanyDataset["statements"]): UniverseFundame
 }
 
 async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEntry> {
+  // Statements, filings and Form 4s come from the registrant that holds the company's history
+  // (historyCik: the oldest CIK for a company that changed registrant, e.g. XOM 34088); for every
+  // other company this is its CIK, so the output is unchanged.
+  const cik = historyCik(cfg);
   const t0 = Date.now();
   const log = (...m: unknown[]) => console.log(`  [${cfg.ticker}]`, ...m);
-  const sub = await secJson<Submissions>(`https://data.sec.gov/submissions/CIK${pad(cfg.cik)}.json`);
+  const sub = await secJson<Submissions>(`https://data.sec.gov/submissions/CIK${pad(cik)}.json`);
   let all = rowsOf(sub.filings.recent);
   for (const file of sub.filings.files) {
     const older = await secJson<RecentFilings>(`https://data.sec.gov/submissions/${file.name}`);
@@ -599,7 +603,7 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
   const filings: Filing[] = all.filter((f) => LIST_FORMS.has(f.form) || f.form === "4");
 
   const cf = await secJson<CompanyFacts & { facts: Record<string, any> }>(
-    `https://data.sec.gov/api/xbrl/companyfacts/CIK${pad(cfg.cik)}.json`,
+    `https://data.sec.gov/api/xbrl/companyfacts/CIK${pad(cik)}.json`,
   );
   const bank = isBankIndustry(cfg.industry);
 
@@ -621,20 +625,20 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
   let failed = 0;
   for (const f of targets) {
     try {
-      raw.push(...(await segmentsFor(cfg.cik, f)));
+      raw.push(...(await segmentsFor(cik, f)));
     } catch (e) {
       failed++;
       console.warn(`  [${cfg.ticker}] segments failed`, f.form, f.accn, (e as Error).message);
     }
   }
   const segments = dedupeSegments(raw);
-  mergeExtensions(cf, cfg.cik);
+  mergeExtensions(cf, cik);
   const statements = buildStatements(cf, { bank });
 
-  const coverFromHtml = coverShares.get(cfg.cik) ?? null;
+  const coverFromHtml = coverShares.get(cik) ?? null;
   if (coverFromHtml && (!sharesOutstanding || cover[0]?.filed < (ixQ[0]?.filed ?? ""))) sharesOutstanding = coverFromHtml;
-  const insiders = await insidersFor(cfg.cik, filings);
-  const earningsReleases = await releasesFor(cfg.cik, filings);
+  const insiders = await insidersFor(cik, filings);
+  const earningsReleases = await releasesFor(cik, filings);
 
   const ceo =
     insiders.find((t) => /^(president( and| &|,)? )?(chief executive officer|ceo)$/i.test(t.role.split(", ")[0]))?.owner ??
@@ -643,7 +647,7 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
   const b = sub.addresses.business;
   const profile: CompanyProfile = {
     ticker: cfg.ticker,
-    cik: pad(cfg.cik),
+    cik: pad(cik),
     name: sub.name,
     exchange: sub.exchanges[0] ?? "",
     sic: sub.sic,
@@ -692,7 +696,7 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
   return {
     ticker: cfg.ticker,
     name: sub.name,
-    cik: pad(cfg.cik),
+    cik: pad(cik),
     sector: cfg.sector,
     industry: cfg.industry,
     exchange: profile.exchange,

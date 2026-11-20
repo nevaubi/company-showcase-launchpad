@@ -463,6 +463,13 @@
       "when": 1795151098261,
       "tag": "0065_data_freshness_hq",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1795237498261,
+      "tag": "0066_data_freshness_ingest",
+      "breakpoints": true
     }
   ]
 }

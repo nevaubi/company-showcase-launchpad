@@ -8,8 +8,25 @@
  * Bounded, single-flight, idempotent, with a circuit breaker — see scripts/lib/runner.ts.
  */
 import { nextForProse, readIrProse, resetStaleProse } from "@/lib/ir/prose.server";
+import { routeOf } from "@/lib/jobs/provider-health";
+import { IR_MODELS } from "@/lib/openai.server";
 import { args, sb } from "./lib/supa";
 import { runBatch } from "./lib/runner";
+import { loadTop } from "./lib/rank";
+
+// The global sweep (no --ticker) serves the top 1,000 by dv20 first; every fifth claim takes the
+// newest document of any company, so the tail is still read while the top has a queue.
+const top = args.ticker ? null : [...(await loadTop())];
+let claims = 0;
+async function claimNext() {
+  if (args.ticker) return nextForProse({ ticker: args.ticker });
+  claims++;
+  if (top?.length && claims % 5 !== 0) {
+    const d = await nextForProse({ ticker: top.join(",") });
+    if (d) return d;
+  }
+  return nextForProse({});
+}
 
 await runBatch({
   job: args.ticker ? `ir-prose-runner:${args.ticker}` : "ir-prose-runner",
@@ -17,8 +34,10 @@ await runBatch({
   concurrency: Number(args.concurrency ?? 12),
   maxCredits: args["max-credits"] ? Number(args["max-credits"]) : undefined,
   spendFile: args["spend-file"],
+  // Text reads fall back to the free mini lane when the main route is out.
+  route: [...routeOf(args.model ?? IR_MODELS.extract, process.env), "openai-free-mini"],
   claim: async () => {
-    const d = await nextForProse(args.ticker ? { ticker: args.ticker } : {});
+    const d = await claimNext();
     return d ? { ...d, label: `${d.filed ?? ""} ${d.title}` } : null;
   },
   release: (d, status) => sb.from("ir_documents").update({ prose_status: status, prose_at: status ? new Date().toISOString() : null }).eq("id", d.id),

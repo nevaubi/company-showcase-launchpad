@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ from: vi.fn(), fetchSec: vi.fn(), upload: vi.fn() }));
 vi.mock("@/integrations/supabase/client.server", () => ({ supabaseAdmin: { from: mocks.from, storage: { from: () => ({ upload: mocks.upload }) } } }));
-vi.mock("@/lib/sec.server", () => ({ fetchSec: mocks.fetchSec, archiveUrl: (_c: string, a: string, d: string) => `https://www.sec.gov/${a}/${d}` }));
+vi.mock("@/lib/sec.server", () => ({ fetchSec: mocks.fetchSec, archiveUrl: (c: string, a: string, d: string) => `https://www.sec.gov/${Number(c)}/${a}/${d}` }));
 import { collectRecentRelease } from "./ir.server";
 import { COVERAGE } from "@/lib/coverage";
 
@@ -45,5 +45,25 @@ describe("release collection retry safety", () => {
     setup();
     mocks.fetchSec.mockResolvedValue({ text: async () => '<tr><td>1</td><td>Release</td><td><a href="release.htm">file</a></td><td>EX-99.1</td></tr>' });
     expect(await collectRecentRelease(COVERAGE, () => false)).toMatchObject({ status: "partial", left: 1 });
+  });
+});
+describe("release exhibits of a company that changed registrant (XOM)", () => {
+  it("lists 2.02/7.01 8-Ks from every CIK and opens each filing's index under the CIK that lists it", async () => {
+    const { secExhibitCandidates, exhibitsOf } = await import("./ir.server");
+    const xom = COVERAGE.find((c) => c.ticker === "XOM")!;
+    const page = (rows: [string, string, string][]) => ({ json: async () => ({ filings: { recent: { accessionNumber: rows.map((r) => r[0]), form: rows.map(() => "8-K"), filingDate: rows.map((r) => r[1]), items: rows.map((r) => r[2]), reportDate: rows.map(() => "") }, files: [] } }) });
+    const urls: string[] = [];
+    mocks.fetchSec.mockImplementation(async (url: string) => {
+      urls.push(url);
+      if (url.includes("CIK0002115436")) return page([["0002115436-26-000018", "2026-10-30", "2.02,7.01"]]);
+      if (url.includes("CIK0000034088")) return page([["0000034088-26-000065", "2026-05-01", "2.02,7.01"]]);
+      return { text: async () => "" };
+    });
+    const c = await secExhibitCandidates(xom, "2026-01-01");
+    expect(c.map((x) => [x.accn, x.cik])).toEqual([["0002115436-26-000018", "2115436"], ["0000034088-26-000065", "34088"]]);
+    await exhibitsOf(xom, c[1]);
+    expect(urls.at(-1)).toBe("https://www.sec.gov/34088/0000034088-26-000065/0000034088-26-000065-index.htm");
+    await exhibitsOf(xom, c[0]);
+    expect(urls.at(-1)).toBe("https://www.sec.gov/2115436/0002115436-26-000018/0002115436-26-000018-index.htm");
   });
 });
