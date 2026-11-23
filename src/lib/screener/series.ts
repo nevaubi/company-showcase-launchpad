@@ -26,7 +26,7 @@ export const SERIES_FIELDS: FieldDef[] = [
     g: "px",
     n: "Dollar volume 20d",
     u: "usd",
-    d: "Average daily traded value (close × shares traded) over the last 20 sessions. A liquidity measure: how much can change hands in a day.",
+    d: "Average daily traded value (close × shares traded) over the last 20 sessions of the setup engine's price feed. A liquidity measure: how much can change hands in a day.",
     src: SRC,
   },
   {
@@ -34,7 +34,7 @@ export const SERIES_FIELDS: FieldDef[] = [
     g: "act",
     n: "Short volume share 5d",
     u: "pct",
-    d: "Share of reported trading volume that was short sales (FINRA daily short-sale volume / total volume), averaged over the last five sessions. Includes market-maker hedging, so read it against the company's own history and its peers.",
+    d: "Short-sale volume as a share of reported volume (FINRA daily short-sale files), five-session average as the setup engine computes it. Includes market-maker hedging, so read it against the company's own history and its peers.",
     src: SRC,
   },
 ];
