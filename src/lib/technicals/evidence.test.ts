@@ -210,14 +210,12 @@ describe("the checks behind a verdict", () => {
     for (const r of E.rows)
       for (const h of EVIDENCE.horizons) {
         const c = r.cells[h];
-        if (!c) {
-          expect(r.cases[h]).toBeUndefined();
-          continue;
-        }
         const list = r.cases[h]!;
-        expect(list).toHaveLength(c.test.nEff);
+        // listed for every condition; where there is a test, the list is exactly what the test counted
+        if (c) expect(list).toHaveLength(c.test.nEff);
+        else expect(list.length).toBeLessThan(EVIDENCE.minReport);
         for (let k = 1; k < list.length; k++) expect(list[k] - list[k - 1]).toBeGreaterThanOrEqual(h);
-        expect(list[list.length - 1] + h).toBeLessThan(B.c.length);
+        if (list.length) expect(list[list.length - 1] + h).toBeLessThan(B.c.length);
       }
   });
 

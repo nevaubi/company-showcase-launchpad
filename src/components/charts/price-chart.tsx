@@ -404,7 +404,6 @@ export function PriceChart({
       const Y = y(t);
       if (Y < rects.price.top - 1 || Y > rects.price.bottom + 1) continue;
       hline(Y, 0, plotW, P["--border"]);
-      text(fmtPriceTick(t, dec), plotW + 8, Y, P["--muted-foreground"]);
     }
 
     /* shaded zones */
@@ -541,6 +540,13 @@ export function PriceChart({
     hline(y(lastB.c), 0, plotW, alpha(lastColor, 0.55), [2, 2]);
     tags.push({ y: y(lastB.c), text: fmtQuote(lastB.c), color: P["--background"], fill: lastColor });
     const tagY = spreadLabels(tags.map((t) => t.y), 15, rects.price.top + 7, rects.price.bottom - 7);
+    // axis values, except where a price tag sits: a tag is the more precise label for that height
+    for (const t of ticks) {
+      const Y = y(t);
+      if (Y < rects.price.top - 1 || Y > rects.price.bottom + 1) continue;
+      if (tagY.some((ty) => Math.abs(ty - Y) < 13)) continue;
+      text(fmtPriceTick(t, dec), plotW + 8, Y, P["--muted-foreground"]);
+    }
     tags.forEach((t, i) => {
       g.font = `500 ${AXIS_FONT}px ${P.mono}`;
       const w = geo.axisW - 3;

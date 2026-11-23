@@ -7,7 +7,7 @@ import { fmtDate, ordinal } from "@/lib/format";
 import { optionsHistoryQuery } from "@/lib/options/data";
 import type { Technicals } from "@/lib/technicals/analysis";
 import { METRICS, peersQuery, rowsOf, type CrossFile, type CrossRow } from "@/lib/technicals/cross";
-import { impliedMove, MEAN_ABS_NORMAL, weekdaysBetween } from "@/lib/technicals/measures";
+import { impliedMove, MEAN_ABS_NORMAL, weekdaysBetween, type LevelRow } from "@/lib/technicals/measures";
 import { fmtUsd } from "@/lib/technicals/read";
 import { cn } from "@/lib/utils";
 import { f2, Note, pc, PercentileBar, pp, signTone, T as S, TableWrap, TechPanel } from "./ui";
@@ -22,7 +22,7 @@ function Facts({ rows }: { rows: [label: ReactNode, value: ReactNode, basis?: Re
       <tbody>
         {rows.map(([l, v, b], i) => (
           <tr key={i} className={S.row}>
-            <td className={cn(S.td, "text-muted-foreground")}>{l}</td>
+            <td className={cn(S.td, "text-muted-foreground sm:whitespace-nowrap")}>{l}</td>
             <td className={cn(S.num, "font-medium")}>{v}</td>
             <td className={cn(S.td, "hidden text-[11px] text-muted-foreground sm:table-cell")}>{b}</td>
           </tr>
@@ -52,6 +52,16 @@ const Split = ({ children, wideLeft, single, className }: { children: ReactNode;
 );
 
 /* ---------- levels and risk ---------- */
+/** Shorter names for the ladder; the full description is the row's tooltip. */
+const LEVEL_LABEL: Record<string, string> = {
+  "VWAP from the last earnings release": "VWAP since earnings",
+  "VWAP from the 52-week low": "VWAP since the 52-week low",
+};
+/** One line of basis for a level: the band its swing points span, or the anchor. */
+const levelBasis = (l: LevelRow) =>
+  l.band
+    ? `${l.touches} swing points, ${f2(l.band[0])} to ${f2(l.band[1])}`
+    : l.detail.replace("Volume-weighted average price since", "Since").replace("; filled at this price", "");
 export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boolean }) {
   const M = T?.measures;
   return (
@@ -64,7 +74,7 @@ export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boo
         )
       ) : (
         <>
-          <Split wideLeft>
+          <Split>
             <div>
               <SubTitle caption="high to low; distance from the close in percent and in average true ranges (ATR)">Price ladder</SubTitle>
               <TableWrap min={440}>
@@ -97,12 +107,12 @@ export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boo
                           placed = true;
                         }
                         out.push(
-                          <tr key={i} className={S.row}>
-                            <td className={S.td}>{l.label}</td>
+                          <tr key={i} className={S.row} title={l.detail}>
+                            <td className={cn(S.td, "whitespace-nowrap")}>{LEVEL_LABEL[l.label] ?? l.label}</td>
                             <td className={S.num}>{f2(l.price)}</td>
                             <td className={S.num}>{pp(l.distance)}</td>
                             <td className={S.num}>{l.atrs == null ? "–" : f2(l.atrs, 1)}</td>
-                            <td className={cn(S.td, "hidden text-[11px] text-muted-foreground md:table-cell")}>{l.detail}</td>
+                            <td className={cn(S.td, "hidden max-w-[13rem] truncate whitespace-nowrap text-[11px] text-muted-foreground md:table-cell")}>{levelBasis(l)}</td>
                           </tr>,
                         );
                       });
@@ -119,7 +129,7 @@ export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boo
                 rows={[
                   ["ATR (14)", f2(M.risk.atr), `${pc(M.volatility.atrPct, 1)} of the close`],
                   [`Stop ${M.risk.stopAtrs} ATR below the close`, f2(M.risk.stopLevel), `${pp(M.risk.stopPct != null ? -M.risk.stopPct : null)} from the close`],
-                  [`Position that risks ${pc(M.risk.riskFraction)} of an account`, pc(M.risk.positionPct, 1), `${pc(M.risk.riskFraction)} ÷ ${pc(M.risk.stopPct, 1)}`],
+                  [`Size for a ${pc(M.risk.riskFraction)} account risk`, pc(M.risk.positionPct, 1), `${pc(M.risk.riskFraction)} ÷ ${pc(M.risk.stopPct, 1)} to the stop`],
                   ["Fall exceeded 1 day in 20", pp(M.risk.var95 != null ? -M.risk.var95 : null), "5th percentile of daily returns"],
                   ["Largest one-day fall", pp(M.risk.worstDay), M.risk.worstDate ? fmtDate(M.risk.worstDate) : ""],
                   ["Drawdown now", pp(M.drawdown.current), M.drawdown.sessionsUnder ? `${M.drawdown.sessionsUnder} sessions below the ${fmtDate(M.drawdown.peakDate, { month: "short", day: "numeric" })} high` : "at a new high"],
@@ -162,7 +172,9 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
   const iv = opt.data?.find((r) => r.iv30 != null);
   // the latest snapshot that carries a term structure (expiry by expiry)
   const snap = opt.data?.find((r) => r.term.length > 0);
-  const term = (snap?.term ?? []).filter((t) => t.d > 0 && t.d <= 200 && t.m > 0).slice(0, 6);
+  // one expiry per horizon: the first at or after 1, 7, 14, 30, 60, 90 and 180 calendar days
+  const priced = (snap?.term ?? []).filter((t) => t.d > 0 && t.m > 0);
+  const term = [...new Set([1, 7, 14, 30, 60, 90, 180].map((d) => priced.find((t) => t.d >= d)).filter((t): t is NonNullable<typeof t> => !!t))];
   const rv = M?.volatility.rv21;
   return (
     <TechPanel

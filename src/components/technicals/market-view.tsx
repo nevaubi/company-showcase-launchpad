@@ -56,7 +56,7 @@ function BreadthPanel({ breadth, loading }: { breadth: BreadthFile | null; loadi
     };
   };
   const cols = [at(0), at(20), at(252)];
-  const xf = (x: string) => fmtDate(x, { month: "short", year: "2-digit" });
+  const xf = (x: string) => fmtDate(x, { month: "short", year: "numeric" });
   return (
     <TechPanel
       section="Market breadth"

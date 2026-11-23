@@ -45,7 +45,9 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
     setCalc({
       title: `${symbol}: ${r.name}`,
       value: c ? `${pp(c.test.excess, 2)} over ${h} days` : undefined,
-      sub: c ? `${c.test.nEff} independent cases (${c.test.n.toLocaleString("en-US")} days), t ${f2(c.test.t)}, p ${f2(c.test.p, 3)}${c.q != null ? `, q ${f2(c.q, 3)}` : ""}` : `${r.days.toLocaleString("en-US")} days since ${fmtDate(E!.sample.from)}`,
+      sub: c
+        ? `${c.test.nEff} independent cases (${c.test.n.toLocaleString("en-US")} days), t ${f2(c.test.t)}, p ${f2(c.test.p, 3)}${c.q != null ? `, q ${f2(c.q, 3)}` : ""}`
+        : `${r.cases[h]?.length ?? 0} independent cases (${r.days.toLocaleString("en-US")} days) since ${fmtDate(E!.sample.from)}: too few to test`,
       formula: `${r.text}. Forward return: total-return index ${h} trading days later divided by its value on the day, minus 1. Excess: the average log return after the condition minus the average over every ${h}-day window in the same sample. The cases listed are at least ${h} sessions apart, so their windows do not overlap.`,
       cols: ["Day", "Close", `After ${h} days`, "Return"],
       rows: bars
@@ -88,7 +90,7 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
             </>
           ) : (
             <>
-              {r.days ? `<${EVIDENCE.minReport}` : "0"}
+              {r.cases[h]?.length ?? 0}
               <span className="text-muted-foreground"> / {r.days.toLocaleString("en-US")}</span>
             </>
           )}
