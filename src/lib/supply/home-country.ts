@@ -1,4 +1,5 @@
-// Home countries of large foreign companies, by whole distinctive name. Pure, no browser/Node APIs.
+// Home countries of large foreign companies, by whole distinctive name, and the reading of a filing's region
+// entries that name a U.S. state. Pure, no browser/Node APIs.
 // Shared by the globe placement (geo.ts) and the country exposure tallies (analytics.ts), so a counterparty
 // lands in the same country on the map and in the World exposure panel.
 
@@ -41,11 +42,59 @@ const WHOLE_NAME: Record<string, string> = {
 /** Lower case, accents dropped ("Nestlé" meets "nestle"), whitespace collapsed. */
 const fold = (name: string) => name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
-/** Home country of a well-known foreign company by its full name; null for anything else. */
+/**
+ * U.S. federal bodies that filings name as customers or regulators ("U.S. government", "U.S. Department of Defense",
+ * "United States Air Force"). They carry no ticker and their sentences write "U.S.", which the region check does not
+ * read as a country name, so they would otherwise stay off the map. Only names that start with the country count.
+ */
+const US_PUBLIC_BODY = /^(the )?(u\.s\.|us|united states) (federal )?(government|department of [a-z ,&]+|air force|army|navy|marine corps|space force|postal service|treasury|congress|food and drug administration|securities and exchange commission|environmental protection agency|federal [a-z ]+|general services administration|centers for [a-z &]+|patent and trademark office|customs and border protection)$/;
+
+/** Home country of a well-known foreign company, or of a U.S. federal body, by its full name; null for anything else. */
 export function knownHomeCountry(name: string): string | null {
   const n = fold(name);
   const whole = WHOLE_NAME[n.replace(/[.,]/g, "").trim()];
   if (whole) return whole;
   for (const [re, country] of KNOWN_HOME) if (re.test(n)) return country;
+  if (US_PUBLIC_BODY.test(n)) return "United States";
   return null;
+}
+
+/* ---------- U.S. states ---------- */
+export const US_STATES: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia",
+  FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine",
+  MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada",
+  NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon",
+  PA: "Pennsylvania", PR: "Puerto Rico", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+  VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+};
+const STATE_BY_NAME: Record<string, string> = Object.fromEntries(Object.entries(US_STATES).map(([code, name]) => [name.toLowerCase(), code]));
+/** Two-letter code of a U.S. state given its code or name; null when it is not one. */
+export function usState(raw: string | null | undefined): string | null {
+  const t = (raw ?? "").trim();
+  if (!t) return null;
+  const up = t.toUpperCase();
+  if (US_STATES[up]) return up;
+  return STATE_BY_NAME[t.toLowerCase()] ?? null;
+}
+
+/** Wording that makes "Georgia" the country in the Caucasus rather than the U.S. state. */
+const GEORGIA_COUNTRY = /\b(republic of georgia|country of georgia|georgia \(country\)|tbilisi|batumi|georgian lari|south caucasus)\b|\bgeorgia\b[^.;]{0,80}\b(armenia|azerbaijan|kazakhstan|uzbekistan|russia|ukraine|turkey|turkiye|moldova|belarus)\b|\b(armenia|azerbaijan|kazakhstan|uzbekistan|russia|ukraine|turkey|turkiye|moldova|belarus)\b[^.;]{0,80}\bgeorgia\b/;
+const DC = /\bwashington,? d\.? ?c\b/;
+
+/**
+ * The U.S. state a region entry of a filing link names, as a two-letter code; null when the entry is not a state.
+ * Only full state names count ("Texas", "New Mexico"): two-letter codes collide with words and with country codes
+ * (IN, OR, ME; CA, DE). U.S. filers write "Georgia" for the state far more often than for the country, so it is read
+ * as the state unless the quoted sentence itself points at the Caucasus (Tbilisi, "Republic of Georgia", a list of
+ * neighbouring countries). "Washington" followed by "D.C." in the sentence is the district.
+ */
+export function usStateOfRegion(raw: string | null | undefined, quote: string | null | undefined): string | null {
+  const name = (raw ?? "").trim().replace(/\s+/g, " ").replace(/^(the )?state of /i, "").toLowerCase();
+  const code = STATE_BY_NAME[name];
+  if (!code) return null;
+  const q = fold(quote ?? "");
+  if (code === "GA" && GEORGIA_COUNTRY.test(q)) return null;
+  if (code === "WA" && DC.test(q) && !/\b(washington state|state of washington)\b/.test(q)) return "DC";
+  return code;
 }
