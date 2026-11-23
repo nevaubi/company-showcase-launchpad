@@ -18,7 +18,7 @@ export const Route = createFileRoute("/_authenticated/app/exposures")({
       { title: "Exposures · FiledUnder" },
       { name: "description", content: "Revenue by country and region, every lender's loans, deposits and credit losses, insurers' premiums and loss ratios, and bank deposit market share by state, compared across companies." },
       { property: "og:title", content: "Exposures · FiledUnder" },
-      { property: "og:description", content: "Who earns what where, and how each lender's book is holding up — from 10-K tables, every number linked to its tag." },
+      { property: "og:description", content: "Who earns what where, and how each lender's book is holding up: from 10-K tables, every number linked to its tag." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -34,13 +34,14 @@ function Exposures() {
   const nGeo = q.data ? Object.values(q.data.companies).filter((c) => c.exposure).length : 0;
 
   return (
-    <div className="mx-auto w-full max-w-7xl min-w-0 px-4 py-6 sm:px-6">
+    <div className="min-w-0">
       <PageHeader
         eyebrow="Companies"
         title="Exposures"
         description="Revenue by country and region, each lender's loan book, each insurer's premiums and claims, and which banks hold each state's deposits, compared across companies. From 10-K tags and the FDIC's branch survey; click any number for its source."
         actions={
           <Segmented
+            size="xs"
             label="Exposure view"
             value={view}
             onChange={setView}
@@ -81,7 +82,7 @@ function Exposures() {
         <Empty title="No lender data yet" icon={<Landmark className="size-6 text-muted-foreground" />} />
       )}
       {q.data && (
-        <p className="mt-3 text-[11px] text-muted-foreground">
+        <p data-section="Exposure coverage" className="mt-3 text-[11px] text-muted-foreground">
           {nGeo} companies report revenue by region · {nBanks} lenders · {nIns} insurers · updated {fmtDate(q.data.builtAt)}
         </p>
       )}

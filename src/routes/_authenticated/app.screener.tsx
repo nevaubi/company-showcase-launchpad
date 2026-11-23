@@ -53,6 +53,7 @@ import {
   type FieldGroup,
 } from "@/lib/screener/present";
 import { SERIES_FIELD_IDS } from "@/lib/screener/series";
+import { ROW_H, useWindowRange } from "@/lib/screener/window";
 
 const search = z.object({ screen: z.string().max(4000).optional() });
 
@@ -440,38 +441,6 @@ function groupRows(rows: Row[], key: (r: Row) => string): [string, Row[]][] {
 }
 
 /* ---------- results table ---------- */
-
-/** Row height in px (28 px row + 1 px rule); rows are windowed against the page scroll, not an inner scroller. */
-const ROW_H = 29;
-const OVERSCAN = 30;
-
-/** Which of `count` fixed-height rows below `el`'s top are near the viewport. */
-function useWindowRange(el: HTMLElement | null, count: number) {
-  const [range, setRange] = useState<[number, number]>([0, Math.min(count, 80)]);
-  useEffect(() => {
-    if (!el) return;
-    let raf = 0;
-    const calc = () => {
-      raf = 0;
-      const top = el.getBoundingClientRect().top;
-      const first = Math.max(0, Math.floor(-top / ROW_H) - OVERSCAN);
-      const last = Math.min(count, Math.ceil((window.innerHeight - top) / ROW_H) + OVERSCAN);
-      setRange((r) => (r[0] === first && r[1] === Math.max(first, last) ? r : [first, Math.max(first, last)]));
-    };
-    const on = () => {
-      if (!raf) raf = requestAnimationFrame(calc);
-    };
-    calc();
-    window.addEventListener("scroll", on, { passive: true });
-    window.addEventListener("resize", on);
-    return () => {
-      window.removeEventListener("scroll", on);
-      window.removeEventListener("resize", on);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, [el, count]);
-  return range;
-}
 
 type Item = { kind: "group"; label: string; rows: Row[] } | { kind: "row"; r: Row };
 

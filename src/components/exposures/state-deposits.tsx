@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
+import { coverageOf } from "@/lib/coverage";
 import { Empty } from "@/components/app/page-header";
 import { useSource } from "@/components/source/source-context";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { Stat } from "./region-exposures";
 
 type Col = "value" | "market" | "branches" | "share" | "change" | "t";
-const pct = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(d)}%`);
+const pct = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "–" : `${(v * 100).toFixed(d)}%`);
 
 /** Which covered banks hold the deposits of one state, from the FDIC's June 30 branch survey. */
 export function StateDeposits() {
@@ -105,13 +106,13 @@ export function StateDeposits() {
         <p className="mt-2 text-[11px] text-muted-foreground">Shaded by the share of each state's deposits held by covered banks. Pick a state.</p>
       </div>
       <div className="min-w-0">
-        <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+        <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-4">
           <Stat label={`All deposits in ${st}`} value={fmtAlt(s?.total || null, "USD")} hint={`June ${year}, every insured branch`} />
           <Stat label="Covered banks there" value={String(s?.n ?? 0)} />
           <Stat label="Their combined share" value={pct(s && s.total ? s.sum / s.total : null)} />
-          <Stat label="Largest covered bank" value={largest?.ticker ?? "—"} hint={largest ? `${pct(largest.meta.market_share)} of the state` : undefined} />
+          <Stat label="Largest covered bank" value={largest?.ticker ?? "–"} hint={largest ? `${pct(largest.meta.market_share)} of the state` : undefined} />
         </div>
-        <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
+        <div className="overflow-hidden rounded-md border bg-card shadow-paper">
           <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full min-w-[520px] border-separate border-spacing-0 text-[13px]">
               <thead>
@@ -131,18 +132,18 @@ export function StateDeposits() {
               <tbody>
                 {rows.map(({ r, change, fresh, prior }) => (
                   <tr key={r.uid} className="group">
-                    <td className="sticky left-0 z-10 max-w-48 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary">
+                    <td className="sticky left-0 z-10 max-w-48 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary">
                       <span className="flex items-center gap-2" title={byTk.get(r.ticker)?.name}>
                         <CompanyLogo ticker={r.ticker} className="size-5" />
                         <Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="num font-medium hover:underline">
                           {r.ticker}
                         </Link>
                         <span className="hidden truncate text-xs text-muted-foreground 2xl:inline" title={byTk.get(r.ticker)?.name}>
-                          {byTk.get(r.ticker)?.name}
+                          {coverageOf(r.ticker)?.shortName ?? byTk.get(r.ticker)?.name}
                         </span>
                       </span>
                     </td>
-                    <td className="border-b px-3 py-1.5 text-right group-hover:bg-secondary">
+                    <td className="border-b px-3 py-1 text-right group-hover:bg-secondary">
                       <button
                         type="button"
                         className="num whitespace-nowrap tabular-nums hover:underline"
@@ -152,7 +153,7 @@ export function StateDeposits() {
                         {fmtAlt(r.value, "USD")}
                       </button>
                     </td>
-                    <td className="border-b px-3 py-1.5 group-hover:bg-secondary">
+                    <td className="border-b px-3 py-1 group-hover:bg-secondary">
                       <span className="flex items-center justify-end gap-2">
                         <span className="hidden h-1.5 w-14 overflow-hidden rounded-full bg-secondary sm:block">
                           <span className="block h-full rounded-full bg-foreground/70" style={{ width: `${Math.min(100, (r.meta.market_share ?? 0) * 100)}%` }} />
@@ -160,10 +161,10 @@ export function StateDeposits() {
                         <span className="num w-12 text-right tabular-nums">{pct(r.meta.market_share)}</span>
                       </span>
                     </td>
-                    <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary">{r.meta.branches?.toLocaleString()}</td>
-                    <td className="num border-b px-3 py-1.5 text-right tabular-nums text-muted-foreground group-hover:bg-secondary">{pct(r.meta.share)}</td>
-                    <td className={cn("num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary", change != null && change < 0 && "text-negative", fresh && "text-muted-foreground")} title={prior != null ? `June ${Number(year) - 1}: ${fmtAlt(prior, "USD")}` : undefined}>
-                      {fresh ? "new" : change == null ? "—" : `${change >= 0 ? "+" : ""}${(change * 100).toFixed(1)}%`}
+                    <td className="num border-b px-3 py-1 text-right tabular-nums group-hover:bg-secondary">{r.meta.branches?.toLocaleString()}</td>
+                    <td className="num border-b px-3 py-1 text-right tabular-nums text-muted-foreground group-hover:bg-secondary">{pct(r.meta.share)}</td>
+                    <td className={cn("num border-b px-3 py-1 text-right tabular-nums group-hover:bg-secondary", change != null && change < 0 && "text-negative", fresh && "text-muted-foreground")} title={prior != null ? `June ${Number(year) - 1}: ${fmtAlt(prior, "USD")}` : undefined}>
+                      {fresh ? "new" : change == null ? "–" : `${change >= 0 ? "+" : ""}${(change * 100).toFixed(1)}%`}
                     </td>
                   </tr>
                 ))}
