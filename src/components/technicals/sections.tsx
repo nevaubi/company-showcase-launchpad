@@ -38,11 +38,12 @@ const SubTitle = ({ children, caption }: { children: ReactNode; caption?: ReactN
   </div>
 );
 /** Two tables side by side on wide screens, stacked on narrow ones, divided by a hairline. */
-const Split = ({ children, wideLeft, className }: { children: ReactNode; wideLeft?: boolean; className?: string }) => (
+const Split = ({ children, wideLeft, single, className }: { children: ReactNode; wideLeft?: boolean; single?: boolean; className?: string }) => (
   <div
     className={cn(
-      "grid grid-cols-1 divide-y xl:divide-x xl:divide-y-0 [&>*]:min-w-0",
-      wideLeft ? "xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : "xl:grid-cols-2",
+      "grid grid-cols-1 divide-y [&>*]:min-w-0",
+      !single && "xl:divide-x xl:divide-y-0",
+      single ? "" : wideLeft ? "xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]" : "xl:grid-cols-2",
       className,
     )}
   >
@@ -374,7 +375,21 @@ function sectorRank(stocks: CrossRow[], me: CrossRow, k: string): [number, numbe
   const better = peers.filter((r) => (LOW_FIRST.has(k) ? (r[k] as number) < v : (r[k] as number) > v)).length;
   return [better + 1, peers.length];
 }
-export function RelativePanel({ symbol, T, loading, cross, onPick }: { symbol: string; T: Technicals | null; loading: boolean; cross: CrossFile | null; onPick: (s: string) => void }) {
+export function RelativePanel({
+  symbol,
+  T,
+  loading,
+  cross,
+  covered,
+  onPick,
+}: {
+  symbol: string;
+  T: Technicals | null;
+  loading: boolean;
+  cross: CrossFile | null;
+  covered: boolean;
+  onPick: (s: string) => void;
+}) {
   const peers = useQuery({ ...peersQuery(symbol), enabled: !!cross });
   const M = T?.measures;
   const rows = cross ? rowsOf(cross) : [];
@@ -385,6 +400,7 @@ export function RelativePanel({ symbol, T, loading, cross, onPick }: { symbol: s
   const num = (r: (typeof rows)[number] | undefined, k: string) => (typeof r?.[k] === "number" ? (r[k] as number) : null);
   const stocks = rows.filter((r) => r.kind === "stock");
   const KEYS = ["r63", "r252", "mom12_1", "rs_sector252", "vol60", "beta"];
+  const hasBench = !!M?.momentum.vs.length;
   return (
     <TechPanel section="Relative strength" id="relative" tour="tech-relative" title="Relative strength" subtitle={me ? "Total returns against the market and the sector, and where it ranks among covered companies" : "Total returns against the market and, for a covered company, its sector"}>
       {!M ? (
@@ -395,9 +411,9 @@ export function RelativePanel({ symbol, T, loading, cross, onPick }: { symbol: s
         )
       ) : (
         <>
-          <Split>
+          <Split single={!hasBench}>
             <div>
-              <SubTitle caption="total return; against a benchmark, (1 + own) ÷ (1 + benchmark) − 1">Returns</SubTitle>
+              <SubTitle caption={hasBench ? "total return; against a benchmark, (1 + own) ÷ (1 + benchmark) − 1" : "total return"}>Returns</SubTitle>
               <TableWrap min={340}>
               <table className="w-full border-collapse">
                 <thead>
@@ -436,9 +452,9 @@ export function RelativePanel({ symbol, T, loading, cross, onPick }: { symbol: s
               </table>
               </TableWrap>
             </div>
+            {hasBench && (
             <div>
               <SubTitle caption="daily total returns, last 252 sessions">Sensitivity</SubTitle>
-              {M.momentum.vs.length ? (
                 <TableWrap min={440}>
                 <table className="w-full border-collapse">
                   <thead>
@@ -474,10 +490,8 @@ export function RelativePanel({ symbol, T, loading, cross, onPick }: { symbol: s
                   </tbody>
                 </table>
                 </TableWrap>
-              ) : (
-                <p className={cn("px-3 py-3", S.caption)}>{symbol} is the market benchmark here, so there is nothing to measure it against.</p>
-              )}
             </div>
+            )}
           </Split>
           {me && (
             <Split>
@@ -575,8 +589,16 @@ export function RelativePanel({ symbol, T, loading, cross, onPick }: { symbol: s
             </Split>
           )}
           <Note>
-            Beta and correlation come from a regression of its daily total returns on the benchmark's; own volatility is what is left after the benchmark's part is removed.{" "}
-            {me ? "Ranks and peers come from the nightly cross-section of covered companies." : cross ? `${symbol} is not in the cross-section of covered companies.` : "The cross-section of covered companies is not available right now, so sector ranks are left out."}
+            {hasBench
+              ? "Beta and correlation come from a regression of its daily total returns on the benchmark's; own volatility is what is left after the benchmark's part is removed. "
+              : `${symbol} is the market benchmark on this page, so there is nothing to measure it against. `}
+            {me
+              ? "Ranks and peers come from the nightly cross-section of covered companies."
+              : !covered
+                ? "Sector ranks and peers are computed for covered companies only."
+                : cross
+                  ? `${symbol} is not in the cross-section of covered companies yet.`
+                  : "The cross-section of covered companies is not available right now, so ranks and peers are left out."}
           </Note>
         </>
       )}
@@ -585,114 +607,140 @@ export function RelativePanel({ symbol, T, loading, cross, onPick }: { symbol: s
 }
 
 /* ---------- events: earnings reactions and the signal log ---------- */
-export function EventsPanel({ symbol, T, loading }: { symbol: string; T: Technicals | null; loading: boolean }) {
+function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNullable<Technicals["reactions"]> }) {
   const { open } = useSource();
-  if (!T) return loading ? null : null;
-  const R = T.reactions;
-  const log = T.events.slice(0, 14);
   return (
-    <TechPanel section="Events" id="events" tour="tech-events" title="Events" subtitle={R ? "How the price moved around earnings releases, and the latest chart events with what followed" : "The latest chart events with what followed"}>
-      <Split>
-        <div>
-          <SubTitle caption={R ? `${R.stats.n} releases since ${fmtDate(T.first)}` : undefined}>Earnings reactions</SubTitle>
-          {R ? (
-            <>
-              <TableWrap min={460}>
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b">
-                      <th className={S.th}>Release</th>
-                      <th className={S.thNum} title="Close before the release to the close of the session after it">
-                        Move
-                      </th>
-                      <th className={S.thNum} title="The same window minus SPY">
-                        vs SPY
-                      </th>
-                      <th className={S.thNum} title="Size of the move in units of its normal two-day volatility: the daily volatility of the 60 sessions before × √2">
-                        σ
-                      </th>
-                      <th className={S.thNum} title="Return over the 20 sessions after the reaction window">
-                        Next 20 days
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {R.rows.slice(0, 12).map((r) => (
-                      <tr key={r.accn} className={S.row}>
-                        <td className={S.td}>
-                          <button
-                            type="button"
-                            data-agent-click
-                            title="Open the release"
-                            onClick={() =>
-                              open({ ticker: symbol, label: "Earnings release", periodLabel: fmtDate(r.date), unit: "pct", value: r.move, doc: { accn: r.accn, doc: r.doc, form: "8-K", filed: r.date, title: `8-K filed ${r.date}` } })
-                            }
-                            className={cn(S.cellButton, "num text-left underline decoration-muted-foreground/50")}
-                          >
-                            {fmtDate(r.date)}
-                          </button>
-                        </td>
-                        <td className={cn(S.num, "font-medium", signTone(r.move))}>{pp(r.move)}</td>
-                        <td className={cn(S.num, signTone(r.excess))}>{pp(r.excess)}</td>
-                        <td className={S.num}>{f2(r.sigma, 1)}</td>
-                        <td className={cn(S.num, signTone(r.drift20))}>{pp(r.drift20)}</td>
-                      </tr>
-                    ))}
-                    <tr className="border-t bg-secondary/40">
-                      <td className={cn(S.td, "font-semibold")}>All {R.stats.n}</td>
-                      <td className={cn(S.num, "font-semibold")} title="Average size of the move, either direction">
-                        ±{pc(R.stats.avgAbsMove, 1)}
-                      </td>
-                      <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgExcess)}</td>
-                      <td className={cn(S.num, "font-semibold")}>{f2(R.stats.avgSigma, 1)}</td>
-                      <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgDrift20)}</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </TableWrap>
-              <p className={cn("px-3 py-2", S.caption)}>
-                Up after {pc(R.stats.upRate)} of releases; the following 20 days continued the reaction's direction {pc(R.stats.continuation)} of the time. The bottom row averages every release:
-                the size of the move, then the signed averages.{R.rows.length > 12 ? ` The latest 12 of ${R.rows.length} are listed.` : ""}
-              </p>
-            </>
-          ) : (
-            <p className={cn("px-3 py-3", S.caption)}>No earnings releases on file for {symbol} (indexes and funds have none).</p>
-          )}
-        </div>
-        <div>
-          <SubTitle caption={`latest ${log.length} of ${T.events.length.toLocaleString("en-US")} since ${fmtDate(T.first)}`}>Chart events</SubTitle>
-          <TableWrap min={420}>
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="border-b">
-                  <th className={S.th}>Day</th>
-                  <th className={S.th}>Event</th>
-                  <th className={S.thNum}>+5 days</th>
-                  <th className={S.thNum}>+20 days</th>
-                  <th className={S.thNum}>+60 days</th>
-                </tr>
-              </thead>
-              <tbody>
-                {log.map((e) => (
-                  <tr key={`${e.type}-${e.i}`} className={S.row}>
-                    <td className={cn(S.td, "num whitespace-nowrap")}>{fmtDate(e.date)}</td>
-                    <td className={S.td}>{e.name}</td>
-                    {[5, 20, 60].map((h) => (
-                      <td key={h} className={cn(S.num, signTone(e.fwd[h]))}>
-                        {e.fwd[h] == null ? <span className="text-muted-foreground">open</span> : pp(e.fwd[h])}
-                      </td>
-                    ))}
-                  </tr>
+    <div>
+      <SubTitle caption={`${R.stats.n} releases since ${fmtDate(T.first)}`}>Earnings reactions</SubTitle>
+      <TableWrap min={460}>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b">
+              <th className={S.th}>Release</th>
+              <th className={S.thNum} title="Close before the release to the close of the session after it">
+                Move
+              </th>
+              <th className={S.thNum} title="The same window minus SPY">
+                vs SPY
+              </th>
+              <th className={S.thNum} title="Size of the move in units of its normal two-day volatility: the daily volatility of the 60 sessions before × √2">
+                σ
+              </th>
+              <th className={S.thNum} title="Return over the 20 sessions after the reaction window">
+                Next 20 days
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {R.rows.slice(0, 12).map((r) => (
+              <tr key={r.accn} className={S.row}>
+                <td className={S.td}>
+                  <button
+                    type="button"
+                    data-agent-click
+                    title="Open the release"
+                    onClick={() => open({ ticker: symbol, label: "Earnings release", periodLabel: fmtDate(r.date), unit: "pct", value: r.move, doc: { accn: r.accn, doc: r.doc, form: "8-K", filed: r.date, title: `8-K filed ${r.date}` } })}
+                    className={cn(S.cellButton, "num text-left underline decoration-muted-foreground/50")}
+                  >
+                    {fmtDate(r.date)}
+                  </button>
+                </td>
+                <td className={cn(S.num, "font-medium", signTone(r.move))}>{pp(r.move)}</td>
+                <td className={cn(S.num, signTone(r.excess))}>{pp(r.excess)}</td>
+                <td className={S.num}>{f2(r.sigma, 1)}</td>
+                <td className={cn(S.num, signTone(r.drift20))}>{pp(r.drift20)}</td>
+              </tr>
+            ))}
+            <tr className="border-t bg-secondary/40">
+              <td className={cn(S.td, "font-semibold")}>All {R.stats.n}</td>
+              <td className={cn(S.num, "font-semibold")} title="Average size of the move, either direction">
+                ±{pc(R.stats.avgAbsMove, 1)}
+              </td>
+              <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgExcess)}</td>
+              <td className={cn(S.num, "font-semibold")}>{f2(R.stats.avgSigma, 1)}</td>
+              <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgDrift20)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </TableWrap>
+      <p className={cn("px-3 py-2", S.caption)}>
+        Up after {pc(R.stats.upRate)} of releases; the following 20 days continued the reaction's direction {pc(R.stats.continuation)} of the time. The bottom row averages every release: the size of
+        the move, then the signed averages.{R.rows.length > 12 ? ` The latest 12 of ${R.rows.length} are listed.` : ""}
+      </p>
+    </div>
+  );
+}
+
+function ChartEvents({ T, count }: { T: Technicals; count: number }) {
+  const log = T.events.slice(0, count);
+  return (
+    <div>
+      <SubTitle caption={`latest ${log.length} of ${T.events.length.toLocaleString("en-US")} since ${fmtDate(T.first)}`}>Chart events</SubTitle>
+      <TableWrap min={420}>
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="border-b">
+              <th className={S.th}>Day</th>
+              <th className={S.th}>Event</th>
+              <th className={S.thNum}>+5 days</th>
+              <th className={S.thNum}>+20 days</th>
+              <th className={S.thNum}>+60 days</th>
+            </tr>
+          </thead>
+          <tbody>
+            {log.map((e) => (
+              <tr key={`${e.type}-${e.i}`} className={S.row}>
+                <td className={cn(S.td, "num whitespace-nowrap")}>{fmtDate(e.date)}</td>
+                <td className={S.td}>{e.name}</td>
+                {[5, 20, 60].map((h) => (
+                  <td key={h} className={cn(S.num, signTone(e.fwd[h]))}>
+                    {e.fwd[h] == null ? <span className="text-muted-foreground">open</span> : pp(e.fwd[h])}
+                  </td>
                 ))}
-              </tbody>
-            </table>
-          </TableWrap>
-          <p className={cn("px-3 py-2", S.caption)}>
-            One event says little. Whether a type of event has been followed by anything unusual is tested in Evidence, over every occurrence and against the base rate. Open: the window has not
-            ended yet.
-          </p>
-        </div>
-      </Split>
+              </tr>
+            ))}
+            {!log.length && (
+              <tr>
+                <td colSpan={5} className={cn("px-3 py-3", S.caption)}>
+                  No chart event has fired in this history.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </TableWrap>
+      <p className={cn("px-3 py-2", S.caption)}>
+        Total return over the sessions after each event. One event says little: whether a type of event has been followed by anything unusual is tested in Evidence, over every occurrence and
+        against the base rate. Open: the window has not ended yet.
+      </p>
+    </div>
+  );
+}
+
+export function EventsPanel({ symbol, T, loading }: { symbol: string; T: Technicals | null; loading: boolean }) {
+  const R = T?.reactions ?? null;
+  return (
+    <TechPanel
+      section="Events"
+      id="events"
+      tour="tech-events"
+      title="Events"
+      subtitle={R ? "How the price moved around earnings releases, and the latest chart events with what followed" : "The latest chart events with what followed"}
+    >
+      {!T ? (
+        loading ? (
+          <Loading />
+        ) : (
+          <p className={cn("px-3 py-4", S.caption)}>No events without a price history.</p>
+        )
+      ) : R ? (
+        <Split>
+          <Reactions symbol={symbol} T={T} R={R} />
+          <ChartEvents T={T} count={14} />
+        </Split>
+      ) : (
+        <ChartEvents T={T} count={16} />
+      )}
     </TechPanel>
   );
 }

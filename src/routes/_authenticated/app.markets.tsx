@@ -170,7 +170,7 @@ function Markets() {
               <EvidencePanel symbol={symbol} T={T} bars={history?.bars ?? null} loading={loading} />
               <LevelsPanel T={T} loading={loading} />
               <VolatilityPanel symbol={symbol} T={T} loading={loading} covered={!!covered} />
-              <RelativePanel symbol={symbol} T={T} loading={loading} cross={tech.cross} onPick={(v) => setSearch({ symbol: v })} />
+              <RelativePanel symbol={symbol} T={T} loading={loading} cross={tech.cross} covered={!!covered} onPick={(v) => setSearch({ symbol: v })} />
               {covered && <ShortAndFlows symbol={symbol} placeholder />}
               <EventsPanel symbol={symbol} T={T} loading={loading} />
             </>
