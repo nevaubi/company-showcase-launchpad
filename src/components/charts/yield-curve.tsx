@@ -47,7 +47,7 @@ export function YieldCurveChart({ lines, height = 260, className }: { lines: Cur
       <svg width={width} height={height} className="overflow-visible">
         {y.ticks(5).map((t) => (
           <g key={t}>
-            <line x1={m.l} x2={width - m.r} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeDasharray="2 3" />
+            <line x1={m.l} x2={width - m.r} y1={y(t)} y2={y(t)} stroke="var(--border)" strokeDasharray="2 3" shapeRendering="crispEdges" />
             <text x={m.l - 8} y={y(t)} dy="0.32em" textAnchor="end" className="fill-muted-foreground font-mono text-[10px]">
               {t.toFixed(1)}%
             </text>
