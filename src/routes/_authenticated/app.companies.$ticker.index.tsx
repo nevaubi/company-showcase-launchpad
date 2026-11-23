@@ -95,6 +95,12 @@ const SECTIONS = {
   news: { id: "ov-news", label: "News" },
 } as const;
 
+/**
+ * Panels owned by other units (the ranked changes, the indicator board, firm notes) are drawn with the older flat
+ * panel; this gives them the same finish as the rest of the page without touching their files.
+ */
+const FRAMED = "min-w-0 [&>section]:rounded-md [&>section]:border [&>section]:bg-card [&>section]:shadow-paper";
+
 /** A section of the page: the nav jumps to its id, and it stacks its panels with the page's one gap. */
 function Section({ id, children, className }: { id: string; children: ReactNode; className?: string }) {
   return (
@@ -156,7 +162,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       <Section id={SECTIONS.changed.id}>
         <BriefPanel ticker={ticker} />
         {ranked ? (
-          <div data-section="What changed" className="min-w-0">
+          <div data-section="What changed" className={FRAMED}>
             <WhatChangedPanel ticker={ticker} />
           </div>
         ) : (
@@ -170,7 +176,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
           <ResearchChart ticker={ticker} data={data} />
         </div>
         <LevelsAndSignals ticker={ticker} />
-        <div id="ov-indicators" data-section="Indicator board" className="min-w-0 scroll-mt-28">
+        <div id="ov-indicators" data-section="Indicator board" className={cn(FRAMED, "scroll-mt-28")}>
           <CompanyIndicators ticker={ticker} />
         </div>
       </Section>
@@ -213,7 +219,9 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <Section id={SECTIONS.news.id}>
         <NarrativesPanel ticker={ticker} name={p.name} />
-        <FirmNotes ticker={ticker} />
+        <div data-section="Firm notes" className={cn(FRAMED, "empty:hidden")}>
+          <FirmNotes ticker={ticker} />
+        </div>
       </Section>
 
       <p className={IR.caption} data-section="As of">

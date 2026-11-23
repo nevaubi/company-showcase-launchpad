@@ -95,7 +95,7 @@ function PriceTiles({ ticker, a, ctx }: { ticker: string; a: FinancialAnalysis; 
   const eps = measureOf(a, "eps");
   const cap = ctx.shares ? ctx.price * ctx.shares : null;
   const pe = eps?.now && eps.now.v > 0 ? ctx.price / eps.now.v : null;
-  const at = `at ${fmtFig(ctx.price, "perShare")}${ctx.asOf ? `, ${fmtDate(ctx.asOf)}` : ""}`;
+  const at = `at ${fmtFig(ctx.price, "perShare")}${ctx.asOf ? ` (${fmtDate(ctx.asOf)})` : ""}`;
   return (
     <>
       <div className="min-w-0 px-4 py-3">
@@ -105,7 +105,7 @@ function PriceTiles({ ticker, a, ctx }: { ticker: string; a: FinancialAnalysis; 
           {ctx.shares && ctx.sharesTarget ? (
             <>
               <FigButton target={ctx.sharesTarget} className="-ml-1">
-                {(ctx.shares / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M
+                {ctx.shares >= 1e9 ? `${(ctx.shares / 1e9).toFixed(2)}B` : `${(ctx.shares / 1e6).toFixed(0)}M`}
               </FigButton>{" "}
               shares {at}
             </>
@@ -196,8 +196,8 @@ function MeasureRow({ ticker, a, m, shared }: { ticker: string; a: FinancialAnal
       <th scope="row" className="py-1 pl-4 pr-2 text-left align-top font-normal">
         <span>{m.label}</span>
         {(!shared || period) && (
-          <span className={cn("ml-1.5 whitespace-nowrap", IR.caption)}>
-            {[!shared ? unitLabel(m.unit, scale) : null, period].filter(Boolean).join(" · ")}
+          <span className={cn("whitespace-nowrap", IR.caption)}>
+            , {[!shared ? unitLabel(m.unit, scale) : null, period].filter(Boolean).join(" · ")}
           </span>
         )}
         {!m.now && m.note && <span className={cn("block", IR.caption)}>Not shown: {m.note}.</span>}
@@ -252,32 +252,32 @@ function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; 
     <table data-group={g.id} className={cn("mb-4 w-full table-fixed break-inside-avoid", IR.row)}>
       <colgroup>
         <col />
-        <col className="w-[4.5rem]" />
-        <col className="w-[4.5rem]" />
-        <col className="w-[4.25rem]" />
-        <col className="hidden w-[4.5rem] sm:table-column" />
-        <col className="hidden w-20 sm:table-column" />
+        <col className="w-16" />
+        <col className="w-16" />
+        <col className="w-16" />
+        <col className="hidden w-16 sm:table-column" />
+        <col className="hidden w-[4.75rem] sm:table-column" />
       </colgroup>
       <thead>
         <tr className={IR.caption}>
           <th scope="col" className="px-4 pb-1 pt-2 text-left font-normal">
             <span className={cn("text-foreground", IR.group)}>{g.title}</span>
-            {shared && <span className="ml-1.5">{unitLabel(shared)}</span>}
+            {shared && <span>, {unitLabel(shared)}</span>}
           </th>
           <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
             Latest
           </th>
           <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
-            Year earlier
+            Year ago
           </th>
           <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
             Change
           </th>
-          <th scope="col" className="hidden pb-1 pr-3 pt-2 text-right font-normal sm:table-cell" title="Median of the last five fiscal years that have a figure (at least three)">
-            {medianYears > 0 && medianYears < 5 ? `${medianYears}-yr median` : "5-yr median"}
+          <th scope="col" className="hidden pb-1 pr-3 pt-2 text-right font-normal sm:table-cell" title={`Median of the last ${medianYears || 5} fiscal years that have a figure (a median needs three)`}>
+            Median
           </th>
-          <th scope="col" className="hidden pb-1 pr-4 pt-2 text-right font-normal sm:table-cell">
-            By fiscal year
+          <th scope="col" className="hidden pb-1 pr-4 pt-2 text-right font-normal sm:table-cell" title="Each fiscal year, then the latest figure as the dot">
+            Fiscal years
           </th>
         </tr>
       </thead>
@@ -297,7 +297,10 @@ export function FinancialAnalysisSection({ ticker, data, price }: { ticker: stri
   const a = useMemo(() => analyze(data), [data]);
   const read = useMemo(() => financialRead(a), [a]);
   const newer = useMemo(() => newerFilings(data, a.quarter?.end ?? a.fiscalYear?.end ?? null), [data, a]);
-  const prior = a.groups.flatMap((g) => g.measures).find((m) => m.prior && m.now && m.now.period === a.current)?.prior?.period;
+  const measures = a.groups.flatMap((g) => g.measures);
+  const prior = measures.find((m) => m.prior && m.now && m.now.period === a.current)?.prior?.period;
+  const widest = measures.reduce<Measure["median"]>((best, m) => (m.median && (!best || m.median.n > best.n) ? m.median : best), null);
+  const medianSpan = widest ? `${widest.from} to ${widest.to}` : null;
   if (!a.current) {
     return (
       <IrPanel section="Financial analysis" title="Financial analysis" subtitle="Computed from the statements">
@@ -350,7 +353,7 @@ export function FinancialAnalysisSection({ ticker, data, price }: { ticker: stri
       <IrPanel
         section="Financial analysis"
         title="Financial analysis"
-        subtitle={`${spanSentence(a)}${prior ? ` Year earlier is ${prior.replace("TTM", "the twelve months")}.` : ""} Change is in the row's unit (points for percentages).`}
+        subtitle={`${spanSentence(a)}${prior ? ` Year ago is ${prior.replace("TTM", "the twelve months")}.` : ""}${medianSpan ? ` Median is over fiscal years ${medianSpan}.` : ""} Change is latest less year ago, in the row's unit (points for percentages).`}
         bodyClassName="p-0"
       >
         <div className="gap-x-0 pt-1 xl:columns-2 xl:[column-rule:1px_solid_var(--border)]">

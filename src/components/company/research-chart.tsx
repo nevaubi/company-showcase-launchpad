@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Activity, TrendingDown, TrendingUp, Minus } from "lucide-react";
+import { TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { PriceChart, type ChartMarker, type Overlay } from "@/components/charts/price-chart";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -136,11 +136,8 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
 
   return (
     <Panel
-      title={
-        <span className="flex items-center gap-1.5">
-          <Activity className="size-3.5" /> Price & technical read
-        </span>
-      }
+      className="rounded-md border bg-card shadow-paper"
+      title={<span className="text-sm">Price and technical read</span>}
       subtitle={
         view.data
           ? `${RANGES.find((r) => r.id === range)?.label} ${chg != null ? fmtPct(chg, 1, true) : ""} · daily closes through ${fmtDate(bars.at(-1)?.[0])}`

@@ -47,7 +47,7 @@ function Head({ title, note }: { title: string; note?: string }) {
 function Fact({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className={cn("truncate", IR.caption)}>{label}</dt>
+      <dt className={IR.caption}>{label}</dt>
       <dd className="num text-[13px] font-medium leading-5 tabular-nums">{value}</dd>
       {sub && <dd className={IR.caption}>{sub}</dd>}
     </div>
@@ -84,7 +84,7 @@ function Insiders({ ticker, data }: { ticker: string; data: CompanyDataset }) {
                 <span className={cn("num shrink-0 tabular-nums", t.code === "P" ? "text-positive" : "text-negative")}>
                   {t.code === "P" ? "bought" : "sold"} {t.price ? fmtFig(t.shares * t.price, "usd") : `${t.shares.toLocaleString("en-US")} sh`}
                 </span>
-                <span className={cn("num w-16 shrink-0 text-right", IR.caption)}>{fmtDate(t.date)}</span>
+                <span className={cn("num w-[5.25rem] shrink-0 whitespace-nowrap text-right", IR.caption)}>{fmtDate(t.date)}</span>
               </button>
             </li>
           ))}
@@ -145,22 +145,22 @@ function Options({ ticker, data }: { ticker: string; data: CompanyDataset }) {
         <>
           <dl className="mt-2 grid grid-cols-3 gap-3">
             <Fact
-              label="30-day implied volatility"
+              label="Implied volatility, 30 days"
               value={c.iv30 != null ? pct(c.iv30) : DASH}
               sub={c.ivChange ? <span className="num">{points(c.ivChange.points)} since {fmtDate(c.ivChange.from)}</span> : undefined}
             />
             <Fact
-              label={c.implied?.through === "earnings" ? "Priced move through the report" : "Priced move"}
+              label={c.implied?.through === "earnings" ? "Priced move, through the report" : "Priced move"}
               value={c.implied ? `±${pct(c.implied.move)}` : DASH}
               sub={c.implied ? `by ${fmtDate(c.implied.expiry)} (${c.implied.days} days), at-the-money straddle` : "no expiry far enough out"}
             />
             <Fact
-              label="Rank in recorded range"
+              label="Rank in its range"
               value={c.rank ? pct(c.rank.rank, 0) : DASH}
               sub={c.rank ? `of ${c.rank.n} earlier days` : `needs ${IV_RANK_MIN_DAYS} recorded days`}
             />
-            <Fact label="Put/call open interest" value={c.putCallOpenInterest != null ? c.putCallOpenInterest.toFixed(2) : DASH} />
-            <Fact label="Put/call volume" value={c.putCallVolume != null ? c.putCallVolume.toFixed(2) : DASH} />
+            <Fact label="Put/call, open interest" value={c.putCallOpenInterest != null ? c.putCallOpenInterest.toFixed(2) : DASH} />
+            <Fact label="Put/call, volume" value={c.putCallVolume != null ? c.putCallVolume.toFixed(2) : DASH} />
             <Fact label="25-delta skew" value={c.skew25 != null ? points(c.skew25) : DASH} sub="put less call volatility" />
           </dl>
         </>

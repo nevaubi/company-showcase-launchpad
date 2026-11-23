@@ -13,7 +13,7 @@ const fmt = (v: number | null, kind: "usd" | "x" | "pct") => (v == null ? "–" 
 /** The most industry members whose prices are requested: enough for a median, never the whole coverage list. */
 const INDUSTRY_CAP = 60;
 /** The universe snapshot divides net income by equity at the period end; the analysis above uses average equity. */
-const LABEL: Partial<Record<(typeof METRICS)[number]["key"], string>> = { roe: "ROE, period-end equity", growth: "Revenue growth, latest quarter" };
+const LABEL: Partial<Record<(typeof METRICS)[number]["key"], string>> = { roe: "ROE, period-end", growth: "Revenue growth, qtr", cagr5: "Revenue, 5Y CAGR", leverage: "Net debt / EBITDA" };
 
 /**
  * The company against its named peers and its industry median, with its rank in the industry. Prices are requested
@@ -44,7 +44,7 @@ export function SectorTable({ ticker }: { ticker: string }) {
       self: of(members.self),
       industry,
       peers: members.peers.map(of),
-      rows: [{ id: "ind", label: "Industry median", sub: `${members.self.industry} · ${industry.length}${members.industrySize > industry.length ? ` largest of ${members.industrySize}` : " companies"}`, m: medians(industry.map((x) => x.m)) }],
+      rows: [{ id: "ind", label: "Industry median", sub: `${members.self.industry} · ${industry.length}${members.industrySize > industry.length ? ` largest of ${members.industrySize}` : industry.length === 1 ? " company" : " companies"}`, m: medians(industry.map((x) => x.m)) }],
       asOf: members.self.f?.asOf,
     };
   }, [members, quotes.data]);
@@ -55,7 +55,7 @@ export function SectorTable({ ticker }: { ticker: string }) {
       title="Peers and industry"
       subtitle={
         model
-          ? `Universe snapshot: trailing twelve months from SEC filings${model.asOf ? ` through ${fmtDate(model.asOf)}` : ""}, at the last price · rank is within the industry · return on equity here uses period-end equity, so it differs from the average-equity figure in the analysis`
+          ? `Universe snapshot: trailing twelve months from SEC filings${model.asOf ? ` through ${fmtDate(model.asOf)}` : ""}, at the last price · revenue growth is the latest quarter on a year earlier · return on equity uses period-end equity, so it differs from the average-equity figure in the analysis · rank is within the industry`
           : "Loading"
       }
       bodyClassName="p-0"
@@ -64,7 +64,7 @@ export function SectorTable({ ticker }: { ticker: string }) {
         <Skeleton className="m-4 h-60" />
       ) : (
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="research-table min-w-[1100px]">
+          <table className="research-table min-w-[1040px]">
             <thead>
               <tr className="border-b bg-secondary/40 text-left text-[10.5px] uppercase tracking-wide text-muted-foreground">
                 <th className="sticky left-0 z-10 bg-secondary/95 px-4 py-2 font-medium">Company</th>

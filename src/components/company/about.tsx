@@ -106,7 +106,7 @@ function Photos({ images }: { images: NonNullable<ReturnType<typeof useCompanyCo
       {images.slice(0, PHOTOS).map((m) => (
         <li key={m.url} className="min-w-0">
           <figure className="relative overflow-hidden rounded-md border bg-secondary">
-            <img src={commonsThumb(m.url, 500)} alt={m.caption} referrerPolicy="no-referrer" loading="lazy" className="aspect-[16/10] w-full object-cover" />
+            <img src={commonsThumb(m.url, 500)} alt="" referrerPolicy="no-referrer" loading="lazy" className="aspect-[16/10] w-full object-cover" />
             <CreditNote credit={m.credit} className="absolute right-1 top-1" />
           </figure>
           <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground" title={m.caption}>
