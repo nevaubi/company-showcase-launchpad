@@ -15,6 +15,8 @@ export interface CompanyAltRow {
   title: string;
   value: number | null;
   unit: string | null;
+  // stored meta differs per dataset (same shape as AltRow.meta in query.ts)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   meta: Record<string, any>;
   source: string;
   source_url: string | null;
@@ -71,7 +73,7 @@ export interface DatasetView {
 
 export interface CompanyAlt {
   views: DatasetView[];
-  themes: { id: AltTheme; label: string; anchor: string; views: DatasetView[] }[];
+  themes: { id: AltTheme; label: string; short: string; anchor: string; views: DatasetView[] }[];
   flags: Flag[];
   /** material records of the last 90 days (activist stakes, red-flag 8-K items, recalls, large awards) */
   notable: CompanyAltRow[];
@@ -206,12 +208,14 @@ const BUILDERS: Record<string, Builder> = {
     const series = seriesOf(rows, "Federal Register documents naming the company");
     const ev = eventsOnly(rows);
     const nonzero = series.some((r) => r.value! > 0);
-    if (!nonzero && !ev.length) return null;
+    // a few mentions over five years and nothing on file to show is not worth a panel
+    const recentDocs = series.filter((r) => !isPartial(r, today)).slice(-5).reduce((a, r) => a + r.value!, 0);
+    if (!ev.length && recentDocs < 3) return null;
     const y = nonzero ? yearOnYear(series, today) : null;
     const figures: Figure[] = [];
     if (y) figures.push({ label: `Federal Register documents, ${periodLabel(y.latest, today)}`, value: fmtAlt(y.latest.value, null), sub: [vs(y.change, periodLabel(y.prior ?? y.latest, today)), y.partial ? `${periodLabel(y.partial, today)}: ${fmtAlt(y.partial.value, null)}` : null].filter(Boolean).join(" · ") || undefined, rows: [y.latest, ...(y.prior ? [y.prior] : [])] });
     const t = trailingYear(ev, today);
-    if (ev.length) figures.push({ label: "Documents on file, 12 months", value: t.count.toLocaleString("en-US"), sub: vs(t.change, "prior 12 months"), rows: t.now });
+    if (ev.length && !y) figures.push({ label: "Documents on file, 12 months", value: t.count.toLocaleString("en-US"), sub: vs(t.change, "prior 12 months"), rows: t.now });
     return {
       figures,
       chart: nonzero ? { kind: "bar", unit: null, title: "Documents per year", points: chartOf(series, today, true, 12) } : undefined,
@@ -259,7 +263,7 @@ const BUILDERS: Record<string, Builder> = {
     const active = ev.filter((r) => ACTIVE_TRIAL.has(r.meta?.status));
     const phases = new Map<string, number>();
     for (const r of active) {
-      const p = String(r.meta?.phase || "N/A").replace(/PHASE/g, "Ph ").replace(/\//g, "/");
+      const p = r.meta?.phase ? String(r.meta.phase).replace(/PHASE/g, "Ph ") : "No phase";
       phases.set(p, (phases.get(p) ?? 0) + 1);
     }
     const late = active.filter((r) => /PHASE3|PHASE4/.test(r.meta?.phase ?? ""));

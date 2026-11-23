@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 /** Section names kept from the previous layout so the assistant's anchors still resolve. */
 const SECTION_NAME: Record<string, string> = { medicare: "Medicare drugs", medicare_states: "Medicare drugs by state", tri: "Plants", deposits: "Deposits by state" };
 /** Datasets whose own component needs the full panel width. */
+/** Datasets whose own component already shows its headline figures. */
+const OWN_STATS = new Set(["medicare_states", "deposits", "tri"]);
 const WIDE = new Set(["medicare_states", "deposits", "tri", "bank", "medicare"]);
 
 /** An in-page link: scrolls smoothly to the section (respecting reduced motion) without touching the route. */
@@ -76,7 +78,7 @@ function Figures({ ticker, figures }: { ticker: string; figures: Figure[] }) {
         const body = (
           <>
             <span className="block truncate text-[11px] text-muted-foreground">{f.label}</span>
-            <span className="num block truncate text-lg font-semibold leading-tight">{f.value}</span>
+            <span className={cn("block truncate font-semibold leading-tight", /^[\d$<>.,%×+\u2212\u2013 KMBT-]+( lb)?$/.test(f.value) ? "num text-lg" : "text-[13px] leading-6")}>{f.value}</span>
             {f.sub && <span className={cn("num block truncate text-[11px]", f.tone === "positive" ? "text-positive" : f.tone === "negative" ? "text-negative" : "text-muted-foreground")} title={f.sub}>{f.sub}</span>}
           </>
         );
@@ -150,11 +152,11 @@ function Spark({ values }: { values: number[] }) {
   return <svg width={120} height={20} aria-hidden className="block"><polyline points={pts} fill="none" stroke="var(--chart-1)" strokeWidth={1.25} /></svg>;
 }
 
-function DatasetPanel({ ticker, view }: { ticker: string; view: DatasetView }) {
+function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetView; span?: boolean }) {
   const name = SECTION_NAME[view.dataset] ?? view.label;
   const series = view.dataset === "settlement" || view.dataset === "attention" || view.dataset === "complaints";
   return (
-    <div data-section={name} id={`alt-${view.dataset}`} className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]", WIDE.has(view.dataset) && "xl:col-span-2")}>
+    <div data-section={name} id={`alt-${view.dataset}`} className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]", (WIDE.has(view.dataset) || span) && "xl:col-span-2")}>
       <Panel
         collapse={false}
         className="h-full rounded-md border bg-card shadow-paper"
@@ -162,12 +164,12 @@ function DatasetPanel({ ticker, view }: { ticker: string; view: DatasetView }) {
         title={<span className="flex items-center gap-2">{view.label}{view.flag && <span className={cn("rounded-[3px] px-1.5 text-[10px] font-medium leading-4", view.flag.direction === "up" ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground")}>{view.flag.direction === "up" ? "Unusually high" : "Unusually low"}</span>}</span>}
         subtitle={`${view.source} · latest ${fmtDay(view.latest)} · ${view.count.toLocaleString("en-US")} records`}
       >
-        <Figures ticker={ticker} figures={view.figures} />
+        {!OWN_STATS.has(view.dataset) && <Figures ticker={ticker} figures={view.figures} />}
         {view.flag && <div className="border-b"><FlagLine flag={view.flag} ticker={ticker} /></div>}
         {view.chart && view.chart.points.length > 1 && (
           <div className="border-b px-3.5 pb-1 pt-2">
             <div className="mb-1 text-[11px] text-muted-foreground">{view.chart.title}</div>
-            <AltChart points={view.chart.points} kind={view.chart.kind} unit={view.chart.unit} label={`${view.label}: ${view.chart.title}`} />
+            <AltChart height={96} points={view.chart.points} kind={view.chart.kind} unit={view.chart.unit} label={`${view.label}: ${view.chart.title}`} />
           </div>
         )}
         {view.dataset === "bank" ? <BankTable ticker={ticker} view={view} />
@@ -175,7 +177,7 @@ function DatasetPanel({ ticker, view }: { ticker: string; view: DatasetView }) {
           : view.dataset === "medicare_states" ? <MedicareByState ticker={ticker} rows={view.table as AltRow[]} />
           : view.dataset === "deposits" ? <DepositsByState ticker={ticker} rows={view.table as AltRow[]} />
           : view.dataset === "tri" ? <><CompanyPlantHazards ticker={ticker} /><PlantsTri ticker={ticker} rows={view.table as AltRow[]} /></>
-          : <AltRecords rows={view.table as AltRow[]} ticker={ticker} series={series} pageSize={series ? 6 : 8} />}
+          : <AltRecords rows={view.table as AltRow[]} ticker={ticker} series={series} pageSize={series ? 4 : 6} />}
       </Panel>
     </div>
   );
@@ -203,7 +205,7 @@ function Summary({ ticker, alt }: { ticker: string; alt: CompanyAlt }) {
           <tbody>
             {alt.themes.flatMap((t) => t.views.map((v, i) => (
               <tr key={v.dataset} className={cn("h-7", i === 0 ? "border-t first:border-t-0" : "")}>
-                <td className="w-[38%] truncate pl-3.5 text-[11px] text-muted-foreground">{i === 0 ? t.label : ""}</td>
+                <td className="w-[34%] truncate pl-3.5 text-[11px] text-muted-foreground" title={t.label}>{i === 0 ? t.short : ""}</td>
                 <td className="truncate"><SectionLink to={`alt-${v.dataset}`} className="hover:underline">{v.label}</SectionLink>{v.flag && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" aria-label="unusual" />}</td>
                 <td className="num pr-3.5 text-right text-[11px] text-muted-foreground">{fmtDay(v.latest)}</td>
               </tr>
@@ -227,7 +229,7 @@ export function AltCompanyTab({ ticker }: { ticker: string }) {
       {alt.themes.length > 1 && (
         <nav aria-label="Alt data sections" data-tour="alt-sections" className="sticky top-[var(--sticky-top,3.5rem)] z-10 -mx-1 flex flex-wrap gap-1 border-b bg-background/95 px-1 py-1.5 backdrop-blur">
           {alt.themes.map((t) => (
-            <SectionLink key={t.id} to={t.anchor} className="inline-flex min-h-7 items-center gap-1 rounded-[4px] px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{t.label} <span className="num text-[11px]">{t.views.length}</span></SectionLink>
+            <SectionLink key={t.id} to={t.anchor} className="inline-flex min-h-7 items-center gap-1 rounded-[4px] px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><span className="sm:hidden">{t.short}</span><span className="max-sm:hidden">{t.label}</span> <span className="num text-[11px]">{t.views.length}</span></SectionLink>
           ))}
         </nav>
       )}
@@ -235,7 +237,12 @@ export function AltCompanyTab({ ticker }: { ticker: string }) {
         <section key={t.id} id={t.anchor} data-section={t.label} className="min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]">
           <h2 className="mb-3 text-[14px] font-semibold">{t.label}</h2>
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {t.views.map((v) => <DatasetPanel key={v.dataset} ticker={ticker} view={v} />)}
+            {t.views.map((v, i) => {
+              // a lone half-width panel at the end of a theme takes the full row instead of leaving a hole
+              const half = t.views.filter((x) => !WIDE.has(x.dataset));
+              const span = !WIDE.has(v.dataset) && half.length % 2 === 1 && half[half.length - 1] === v;
+              return <DatasetPanel key={v.dataset} ticker={ticker} view={v} span={span && i >= 0} />;
+            })}
           </div>
         </section>
       ))}

@@ -41,11 +41,11 @@ export function AltSnapshot({ ticker }: { ticker: string }) {
               className={cn("min-w-0 border-b px-3.5 py-2 text-left transition-colors duration-150 hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:hover:bg-transparent", i % 3 !== 0 && "xl:border-l", i % 2 === 1 && "sm:max-xl:border-l")}
             >
               <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                <span className="truncate">{view.label}</span>
+                <span className="truncate" title={view.label}>{figure.label}</span>
                 {flag && <span className={cn("shrink-0 rounded-[3px] px-1 text-[10px] leading-4", flag.direction === "up" ? "bg-warning/15 text-warning" : "bg-secondary")}>{flag.direction === "up" ? "Unusually high" : "Unusually low"}</span>}
               </span>
               <span className="num block truncate text-lg font-semibold leading-tight">{figure.value}</span>
-              <span className={cn("num block truncate text-[11px]", figure.tone === "positive" ? "text-positive" : figure.tone === "negative" ? "text-negative" : "text-muted-foreground")}>{figure.label}{figure.sub ? ` · ${figure.sub}` : ""}</span>
+              <span className={cn("num block truncate text-[11px]", figure.tone === "positive" ? "text-positive" : figure.tone === "negative" ? "text-negative" : "text-muted-foreground")}>{figure.sub ?? view.label}</span>
             </button>
           );
         })}

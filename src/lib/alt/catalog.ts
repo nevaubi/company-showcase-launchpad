@@ -3,12 +3,12 @@
 
 export type AltTheme = "gov" | "products" | "market" | "banking" | "events";
 
-export const THEMES: { id: AltTheme; label: string; anchor: string }[] = [
-  { id: "gov", label: "Government and regulation", anchor: "alt-gov" },
-  { id: "products", label: "Products and safety", anchor: "alt-products" },
-  { id: "market", label: "Market, ownership and attention", anchor: "alt-market" },
-  { id: "banking", label: "Banking", anchor: "alt-banking" },
-  { id: "events", label: "Corporate events", anchor: "alt-events" },
+export const THEMES: { id: AltTheme; label: string; short: string; anchor: string }[] = [
+  { id: "gov", label: "Government and regulation", short: "Government", anchor: "alt-gov" },
+  { id: "products", label: "Products and safety", short: "Products and safety", anchor: "alt-products" },
+  { id: "market", label: "Market, ownership and attention", short: "Market and attention", anchor: "alt-market" },
+  { id: "banking", label: "Banking", short: "Banking", anchor: "alt-banking" },
+  { id: "events", label: "Corporate events", short: "Events", anchor: "alt-events" },
 ];
 
 export interface DatasetInfo {

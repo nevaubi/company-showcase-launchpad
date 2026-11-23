@@ -9,6 +9,8 @@ export interface DerivedRow {
   value: number | null;
   title?: string;
   unit?: string | null;
+  // stored meta differs per dataset (same shape as AltRow.meta in query.ts)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   meta?: PeriodMeta | Record<string, any> | null;
   source_url?: string | null;
 }

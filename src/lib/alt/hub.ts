@@ -45,8 +45,8 @@ export function unusualFromBuckets(buckets: EventBucket[]): { items: UnusualItem
     const [one, many] = NOUN[e.dataset] ?? ["record", "records"];
     items.push({
       ticker: e.ticker, dataset: e.dataset, direction: v.status === "spike" ? "up" : "down", z: Math.abs(v.z), date: e.last, history: e.h,
-      text: `${v.recent} ${v.recent === 1 ? one : many} in 90 days, ${v.baseline.toFixed(1)} per 90 days over the prior ${v.prior * 3} months`,
-      rule: `Poisson tail p = ${v.p < 0.0001 ? v.p.toExponential(1) : v.p.toFixed(4)}, z = ${v.z.toFixed(1)}`,
+      text: `${v.recent} ${v.recent === 1 ? one : many} in 90 days; normal ${v.baseline.toFixed(1)}`,
+      rule: `Normal = mean per 90 days over the prior ${v.prior * 3} months; Poisson tail p = ${v.p < 0.0001 ? v.p.toExponential(1) : v.p.toFixed(4)}, z = ${v.z.toFixed(1)}`,
     });
   }
   return { items, newCoverage };

@@ -3,6 +3,14 @@ import { fmtAlt } from "@/lib/alt/catalog";
 import type { ChartPoint } from "@/lib/alt/company";
 import { cn } from "@/lib/utils";
 
+/** Round a maximum up to 1, 2, 2.5 or 5 times a power of ten, so axis labels read cleanly. */
+export function niceCeil(x: number): number {
+  if (x <= 0) return x;
+  const p = 10 ** Math.floor(Math.log10(x));
+  const m = [1, 2, 2.5, 5, 10].find((k) => k * p >= x * 0.999)!;
+  return m * p;
+}
+
 /**
  * A small, quiet chart for one alt series: bars from a zero baseline for yearly totals, a line for
  * monthly or half-monthly readings. Partial periods are lighter and labelled. Hover or focus shows
@@ -26,7 +34,7 @@ export function AltChart({ points, kind, unit, height = 112, label }: { points: 
   const vals = points.map((p) => p.value);
   const lo = kind === "bar" ? Math.min(0, ...vals) : Math.min(...vals);
   const hi0 = Math.max(...vals, kind === "bar" ? 0 : -Infinity);
-  const hi = hi0 === lo ? lo + 1 : hi0;
+  const hi = niceCeil(hi0 === lo ? lo + 1 : hi0);
   const y = (v: number) => top + ih - ((v - lo) / (hi - lo)) * ih;
   const step = iw / points.length;
   const x = (i: number) => left + step * i + step / 2;
