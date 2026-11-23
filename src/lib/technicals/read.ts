@@ -120,7 +120,7 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
     const text =
       `The 12-1 month return is ${fmtPct(mo.mom12_1)}` +
       (fin(mo.mom6_1) ? ` (6-1 month ${fmtPct(mo.mom6_1)})` : "") +
-      (rel.length ? `; over 12 months the stock is ${rel.join(" and ")}` : "") +
+      (rel.length ? `; over 12 months it is ${rel.join(" and ")}` : "") +
       (ctx.universe
         ? `. The 12-1 figure is at the ${pctile(ctx.universe.momPct)} of ${ctx.universe.names.toLocaleString("en-US")} covered companies.`
         : ".");
@@ -179,7 +179,7 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
       table: {
         title: "Stretch",
         formula:
-          "z-score: (close − average of the last N closes) ÷ their standard deviation. RSI is Wilder's 14-day figure; instead of the fixed 30 and 70 lines it is ranked against the stock's own trailing two years (up to 504 sessions), using only data up to each day.",
+          "z-score: (close − average of the last N closes) ÷ their standard deviation. RSI is Wilder's 14-day figure; instead of the fixed 30 and 70 lines it is ranked against its own trailing two years (up to 504 sessions), using only data up to each day.",
         cols: ["Measure", "Value", "Reading"],
         rows: [
           ["20-day z-score", fmtNum(sx.z20, 2, true), Math.abs(sx.z20) >= 2 ? "beyond 2 deviations" : "inside 2 deviations"],
@@ -283,13 +283,13 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
       const t = best.cell.test;
       const more = new Set(today.map((x) => x.row.key)).size - 1;
       text =
-        `${best.row.name} has been followed by ${fmtPct(t.excess)} ${t.excess > 0 ? "more" : "less"} than this stock's usual ${best.h}-day return ` +
+        `${best.row.name} has been followed by ${fmtPct(t.excess)} ${t.excess > 0 ? "more" : "less"} than its usual ${best.h}-day return ` +
         `(${t.nEff} independent cases, interval ${t.ci ? `${fmtPct(t.ci[0])} to ${fmtPct(t.ci[1])}` : "–"}), and it holds today` +
         (more > 0 ? `; ${more} more condition${more === 1 ? "" : "s"} in force also pass every check.` : ".");
     } else {
       text =
         `No statistically reliable signal today: ${active.length ? `none of the ${active.length} condition${active.length === 1 ? "" : "s"} in force` : "no tested condition is in force that"} ` +
-        `has been followed by returns distinguishable from this stock's own base rate (${sampleNote}).`;
+        `has been followed by returns distinguishable from its own base rate (${sampleNote}).`;
     }
     out.push({
       key: "verdict",
@@ -313,7 +313,7 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
           ],
       table: {
         title: "Conditions in force today",
-        formula: `Each condition is tested at ${EVIDENCE.horizons.join(", ")} trading days against this stock's own all-days return. Reliable means: at least ${EVIDENCE.minIndependent} non-overlapping cases, a false-discovery rate of ${EVIDENCE.fdr * 100}% across everything tested (Benjamini-Hochberg), a bootstrap interval that excludes zero, an effect above ${EVIDENCE.cost * 100}% trading cost, the same sign in both halves of the history, and support from the cross-company statistics where they exist.`,
+        formula: `Each condition is tested at ${EVIDENCE.horizons.join(", ")} trading days against its own all-days return. Reliable means: at least ${EVIDENCE.minIndependent} non-overlapping cases, a false-discovery rate of ${EVIDENCE.fdr * 100}% across everything tested (Benjamini-Hochberg), a bootstrap interval that excludes zero, an effect above ${EVIDENCE.cost * 100}% trading cost, the same sign in both halves of the history, and support from the cross-company statistics where they exist.`,
         cols: ["Condition", "Since", ...EVIDENCE.horizons.map((h) => `${h}-day excess`), "Verdict"],
         rows: active.map((r) => [
           r.name,

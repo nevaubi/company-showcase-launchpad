@@ -95,6 +95,11 @@ export interface EvidenceRow {
   /** Bars on which the condition held since the first bar used */
   days: number;
   cells: Partial<Record<Horizon, EvidenceCell>>;
+  /**
+   * Bar indices of the non-overlapping occurrences behind each horizon's count (each at least that many bars
+   * after the previous one), newest last: the cases the evidence sheet lists.
+   */
+  cases: Partial<Record<Horizon, number[]>>;
 }
 export interface Evidence {
   rows: EvidenceRow[];
@@ -198,6 +203,19 @@ export function evidence(B: Bars, opt: EvidenceOptions = {}): Evidence {
     for (const d of drafts) if (d.cond === cond) cells[d.h] = cellOf(d);
     let days = 0;
     for (let i = cond.from; i < n; i++) days += cond.flag[i];
+    const cases: Partial<Record<Horizon, number[]>> = {};
+    for (const h of EVIDENCE.horizons) {
+      if (!cells[h]) continue;
+      const list: number[] = [];
+      let prev = -Infinity;
+      // the same greedy rule as countIndependent, over bars whose forward window is complete
+      for (let t = cond.from; t <= n - 1 - h; t++)
+        if (cond.flag[t] && t - prev >= h) {
+          list.push(t);
+          prev = t;
+        }
+      cases[h] = list;
+    }
     return {
       key: cond.key,
       name: cond.name,
@@ -210,6 +228,7 @@ export function evidence(B: Bars, opt: EvidenceOptions = {}): Evidence {
       sessionsAgo: cond.at != null ? n - 1 - cond.at : null,
       days,
       cells,
+      cases,
     };
   });
   const reliable: { key: string; h: Horizon }[] = [];
