@@ -282,7 +282,7 @@ function VerdictPanel({ v, from, to, stored, section, onSection }: { v: Verdict;
             </p>
           </div>
           <div aria-hidden className="mt-1.5 grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_3.5rem_2.5rem] gap-2 border-b px-1.5 pb-1 text-[11px] text-muted-foreground">
-            <span>Section</span><span>Paragraphs added, removed, rewritten</span><span className="text-right">Changes</span><span className="text-right">High</span>
+            <span>Section</span><span className="invisible sm:visible">Paragraphs added, removed, rewritten</span><span className="text-right">Changes</span><span className="text-right">High</span>
           </div>
           <ul aria-label="Sections ranked by change">
             {v.sections.map((s) => {

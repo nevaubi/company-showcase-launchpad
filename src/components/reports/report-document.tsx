@@ -1,3 +1,4 @@
+import { TickerMark } from "@/components/app/ticker";
 import { useMemo } from "react";
 import { ExternalLink, Info, ShieldCheck } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
@@ -108,7 +109,7 @@ function ClaimText({ c, order, facts, ticker }: { c: Claim; order: Map<string, n
 
 function CellView({ cell, ticker, label }: { cell: TableCell | null; ticker: string; label: string }) {
   const { open } = useSource();
-  if (!cell) return <span className="text-muted-foreground">—</span>;
+  if (!cell) return <span className="text-muted-foreground">–</span>;
   const base = cell.ref ? refTarget(cell.ref, ticker, cell.text) : null;
   const t = base && !base.doc && !base.external ? { ...base, label } : base;
   const cls = cn(cell.tone === "positive" && "text-positive", cell.tone === "negative" && "text-negative");
@@ -181,7 +182,7 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
             <PopoverTrigger asChild><button type="button" className="inline-flex items-center gap-1 hover:text-foreground" data-print-hide><Info className="size-3.5" /> {content.qa.removed.length} unsupported sentence{content.qa.removed.length === 1 ? "" : "s"} removed</button></PopoverTrigger>
             <PopoverContent className="w-96 space-y-2 text-xs">
               <p className="font-medium">Removed during source checks</p>
-              {content.qa.removed.slice(0, 8).map((r, i) => <p key={i} className="border-l-2 pl-2 text-muted-foreground"><span className="text-foreground">{r.text}</span> — {r.reason}</p>)}
+              {content.qa.removed.slice(0, 8).map((r, i) => <p key={i} className="border-l-2 pl-2 text-muted-foreground"><span className="text-foreground">{r.text}</span>: {r.reason}</p>)}
             </PopoverContent>
           </Popover>
         )}
@@ -189,7 +190,7 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
 
       {content.glance && content.glance.length > 0 && <Glance items={content.glance} facts={facts} ticker={content.ticker} />}
       {content.peers && content.peers.length > 0 && (
-        <p className="border-b px-7 py-1.5 text-[11px] text-muted-foreground">Peer set: {content.peers.map((p) => `${p.name} (${p.ticker})`).join(", ")}</p>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-7 py-1.5 text-[11px] text-muted-foreground">Peer set: {content.peers.map((p) => <TickerMark key={p.ticker} ticker={p.ticker} name={p.name} size="xs" />)}</p>
       )}
 
       <div className="report-body space-y-7 px-7 py-6 text-[13.5px] leading-relaxed">
@@ -221,7 +222,7 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
                   <span className="num text-right text-muted-foreground">{n}.</span>
                   <span>
                     <span>{readableDates(f.text.length > 220 ? `${f.text.slice(0, 218)}…` : f.text)}</span>{" "}
-                    <span className="text-muted-foreground">— {refCaption(f.ref)}</span>
+                    <span className="text-muted-foreground">· {refCaption(f.ref)}</span>
                     {t && <button type="button" onClick={() => open(t)} className="ml-1 inline-flex items-center gap-0.5 text-[color:var(--color-primary)] hover:underline" data-print-hide>open <ExternalLink className="size-3" /></button>}
                   </span>
                 </li>
