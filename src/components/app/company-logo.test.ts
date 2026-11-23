@@ -1,15 +1,17 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COVERAGE } from "@/lib/coverage";
-import { LOGO_FILES } from "@/lib/logos.generated";
-import { logoManifest, render } from "../../../scripts/logo-manifest";
-import { logoUrl } from "./company-logo";
+import { LOGO_FILES, LOGO_TILES } from "@/lib/logos.generated";
+import { isTile, logoManifest, logoTiles, pngCorners, render } from "../../../scripts/logo-manifest";
+import { isLogoTile, logoUrl } from "./company-logo";
 
 const files = readdirSync("public/logos");
+const bytes = (f: string) => new Uint8Array(readFileSync(`public/logos/${f}`));
 
 describe("bundled company logos", () => {
   it("the generated manifest matches public/logos (rerun bun scripts/logo-manifest.ts after adding a logo)", () => {
-    expect(readFileSync("src/lib/logos.generated.ts", "utf8")).toBe(render(logoManifest(files)));
+    const manifest = logoManifest(files);
+    expect(readFileSync("src/lib/logos.generated.ts", "utf8")).toBe(render(manifest, logoTiles(manifest, bytes)));
   });
 
   it("resolves every listed ticker to a file that exists", () => {
@@ -27,6 +29,43 @@ describe("bundled company logos", () => {
     expect(logoUrl("LIN")).toBe("/logos/LIN.png");
     expect(logoUrl("BRK-B")).toMatch(/^\/logos\/BRK-B\.(svg|png|jpg)$/);
     expect(logoUrl("NOT-A-TICKER")).toBeUndefined();
+  });
+
+  it("reads the corners of each kind of PNG the folder holds", () => {
+    // 8-bit RGBA, transparent canvas
+    const adam = pngCorners(bytes("ADAM.png"))!;
+    expect([adam.width, adam.height]).toEqual([190, 140]);
+    for (const c of adam.corners) expect(c[3]).toBe(0);
+    // 4-bit palette, purple tile
+    const aaoi = pngCorners(bytes("AAOI.png"))!;
+    expect([aaoi.width, aaoi.height]).toEqual([256, 256]);
+    for (const c of aaoi.corners) expect(c).toEqual([92, 70, 143, 255]);
+    // 8-bit greyscale, black tile
+    for (const c of pngCorners(bytes("ACGL.png"))!.corners) expect(c).toEqual([0, 0, 0, 255]);
+    // interlaced: not covered, so never called a tile
+    expect(pngCorners(bytes("HONA.png"))).toBeNull();
+    // 8-bit RGB without alpha, white canvas
+    for (const c of pngCorners(bytes("AAL.png"))!.corners) expect(c[3]).toBe(255);
+    // a GIF saved under a .png name, and bytes that are not an image at all
+    expect(pngCorners(bytes("ACAD.png"))).toBeNull();
+    expect(pngCorners(new Uint8Array(64))).toBeNull();
+  });
+
+  it("calls a mark a tile only when it paints its own square, non-white background", () => {
+    const px = (r: number, g: number, b: number, a = 255): [number, number, number, number] => [r, g, b, a];
+    const four = (c: [number, number, number, number]) => [c, c, c, c];
+    expect(isTile({ width: 256, height: 256, corners: four(px(0, 0, 0)) })).toBe(true);
+    expect(isTile({ width: 256, height: 256, corners: four(px(240, 243, 250)) })).toBe(true);
+    expect(isTile({ width: 256, height: 256, corners: four(px(255, 255, 255)) })).toBe(false); // white canvas: blends into the plate
+    expect(isTile({ width: 256, height: 256, corners: four(px(0, 0, 0, 0)) })).toBe(false); // transparent canvas
+    expect(isTile({ width: 300, height: 39, corners: four(px(20, 40, 90)) })).toBe(false); // a banner, not a square
+    expect(isTile({ width: 256, height: 256, corners: [px(0, 0, 0), px(0, 0, 0), px(0, 0, 0), px(200, 30, 30)] })).toBe(false); // artwork reaching one corner
+    expect(isTile(null)).toBe(false);
+    expect(isLogoTile("aaoi")).toBe(true);
+    expect(isLogoTile("AAPL")).toBe(false);
+    expect(isLogoTile("ADAM")).toBe(false);
+    // every listed tile is a bundled PNG
+    for (const t of LOGO_TILES.split(" ")) expect(logoUrl(t), t).toBe(`/logos/${t}.png`);
   });
 
   it("has a mark for every covered company", () => {
