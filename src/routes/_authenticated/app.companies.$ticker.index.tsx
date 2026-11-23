@@ -6,8 +6,7 @@ import { IrPanel } from "@/components/ir/panel";
 import { IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { SourceTarget } from "@/components/source/source-context";
-import { useCompany, usePrices, useQuotes } from "@/lib/data";
+import { useCompany } from "@/lib/data";
 import { getNarratives } from "@/lib/ai.functions";
 import { companyChangesQuery } from "@/lib/changes/data";
 import { whyCards } from "@/lib/company/why";
@@ -23,7 +22,7 @@ import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { EarningsSection } from "@/components/company/earnings-section";
 import { EventsTimeline } from "@/components/company/events-timeline";
 import { FilingChangesPanel } from "@/components/company/filing-insights";
-import { FinancialAnalysisSection, type PriceContext } from "@/components/company/financial-analysis";
+import { FinancialAnalysisSection } from "@/components/company/financial-analysis";
 import { KpiInsightsPanel } from "@/components/company/kpi-insights";
 import { LeadershipPanel } from "@/components/company/leadership";
 import { LevelsAndSignals } from "@/components/company/levels-signals";
@@ -111,34 +110,11 @@ function Section({ id, children, className }: { id: string; children: ReactNode;
 }
 
 function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }) {
-  const year = usePrices(ticker, "1y");
-  const quote = useQuotes([ticker]).data?.quotes[0];
   const changes = useQuery(companyChangesQuery(ticker));
   const q = data.statements.quarterly;
   const a = data.statements.annual;
   const p = data.profile;
   const drivers = useMemo(() => whyCards(data), [data]);
-
-  // the last price: the live quote, else the last stored close with its date
-  const lastBar = year.data?.bars.at(-1);
-  const price: PriceContext | null = useMemo(() => {
-    const live = quote?.price || null;
-    const px = live ?? lastBar?.[4] ?? null;
-    if (!px) return null;
-    const shares = p.sharesOutstanding;
-    const sharesTarget: SourceTarget | null =
-      shares && p.sharesOutstandingAccn
-        ? {
-            ticker,
-            label: "Shares outstanding (cover page)",
-            periodLabel: p.sharesOutstandingAsOf ? `as of ${fmtDate(p.sharesOutstandingAsOf)}` : undefined,
-            unit: "shares",
-            value: shares,
-            src: { accn: p.sharesOutstandingAccn, concept: "dei:EntityCommonStockSharesOutstanding", end: p.sharesOutstandingAsOf ?? "", value: shares },
-          }
-        : null;
-    return { price: px, asOf: live ? null : (lastBar?.[0]?.slice(0, 10) ?? null), shares: shares ?? null, sharesTarget };
-  }, [quote?.price, lastBar, p.sharesOutstanding, p.sharesOutstandingAccn, p.sharesOutstandingAsOf, ticker]);
 
   const sections = useMemo(() => Object.values(SECTIONS).filter((s) => s.id !== SECTIONS.drivers.id || drivers.length > 0), [drivers.length]);
   // the pipeline's ranked list when it exists; the dated events otherwise, never both
@@ -150,7 +126,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       <SectionNav sections={sections} />
 
       <Section id={SECTIONS.analysis.id}>
-        <FinancialAnalysisSection ticker={ticker} data={data} price={price} />
+        <FinancialAnalysisSection ticker={ticker} data={data} />
       </Section>
 
       {drivers.length > 0 && (

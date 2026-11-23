@@ -18,6 +18,7 @@ import { getEstimates } from "@/lib/estimates.functions";
 import type { Bar, CompanyDataset } from "@/lib/financials/types";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { StatGrid } from "./stat-grid";
 
 const pct = (v: number, digits = 1) => `${(Math.abs(v) * 100).toFixed(digits)}%`;
 const signedPct = (v: number, digits = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${pct(v, digits)}`;
@@ -74,7 +75,7 @@ export function EarningsSection({ ticker, data }: { ticker: string; data: Compan
         </Button>
       }
     >
-      <div className="grid grid-cols-2 divide-x divide-y divide-border/60 md:grid-cols-3 2xl:grid-cols-6 2xl:divide-y-0">
+      <StatGrid className="grid-cols-2 md:grid-cols-3 2xl:grid-cols-6">
         <Block
           label="Next report"
           value={next ? fmtDate(next.date) : DASH}
@@ -129,7 +130,7 @@ export function EarningsSection({ ticker, data }: { ticker: string; data: Compan
             </>
           )}
         </div>
-      </div>
+      </StatGrid>
       {shown.length > 0 && (
         <div className="border-t px-4 py-3" data-section="Earnings reactions">
           <p className={IR.caption}>

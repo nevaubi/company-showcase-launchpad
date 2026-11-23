@@ -46,7 +46,8 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
   const toggle = (l: Layer) =>
     setOn((s) => {
       const n = new Set(s);
-      n.has(l) ? n.delete(l) : n.add(l);
+      if (n.has(l)) n.delete(l);
+      else n.add(l);
       return n;
     });
 

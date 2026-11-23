@@ -68,7 +68,7 @@ function Insiders({ ticker, data }: { ticker: string; data: CompanyDataset }) {
         <Fact label="Net" value={<span className={net > 0 ? "text-positive" : net < 0 ? "text-negative" : ""}>{net === 0 ? "$0" : `${net > 0 ? "+" : ""}${fmtFig(net, "usd")}`}</span>} />
       </dl>
       {trades.length > 0 ? (
-        <ul className="mt-2 divide-y divide-border/60 border-t border-border/60">
+        <ul aria-label="Latest open-market trades" className="mt-2 divide-y divide-border/60 border-t border-border/60">
           {trades.map((t, i) => (
             <li key={`${t.accn}-${i}`}>
               <button
@@ -93,6 +93,7 @@ function Insiders({ ticker, data }: { ticker: string; data: CompanyDataset }) {
         <p className={cn("mt-2", IR.caption)}>No open-market purchase or sale on file.</p>
       )}
       <p className={cn("mt-1.5", IR.caption)}>
+        {trades.length > 0 ? "The latest open-market trades, whatever their date. " : ""}
         <Link to="/app/companies/$ticker/insiders" params={{ ticker }} className="text-link hover:underline">
           Ownership and every Form 4
         </Link>

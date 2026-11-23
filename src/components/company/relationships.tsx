@@ -110,7 +110,8 @@ function Side({ ticker, title, rows, total, empty }: { ticker: string; title: st
 function Tagged({ ticker, rows }: { ticker: string; rows: TaggedConcentration[] }) {
   const { open } = useSource();
   if (!rows.length) return null;
-  const basis = (r: TaggedConcentration) => r.benchmarkLabel?.toLowerCase() ?? r.benchmark;
+  // "revenue" as the filing's own caption words it is often "Sales revenue net": say revenue; other totals keep the caption
+  const basis = (r: TaggedConcentration) => (r.benchmark === "revenue" ? "revenue" : (r.benchmarkLabel?.toLowerCase() ?? r.benchmark));
   return (
     <div className="border-t px-4 py-3" data-section="Stated concentration">
       <p className={IR.group}>Concentration the company states</p>
