@@ -66,8 +66,10 @@ describe("holdInPlace", () => {
     expect(scrollBy).not.toHaveBeenCalled();
 
     holdInPlace(row, 1000);
+    tops.set(row, 1000);
     frame(1200); // past its time: this frame still corrects, then it stops
     expect(scrollBy).toHaveBeenCalledTimes(1);
+    expect(scrollBy).toHaveBeenLastCalledWith({ top: 100, behavior: "instant" });
     tops.set(row, 2000);
     frame();
     expect(scrollBy).toHaveBeenCalledTimes(1);
