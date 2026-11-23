@@ -12,6 +12,7 @@ import type { Filing, SourceRef } from "@/lib/financials/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { CompanyLogo } from "@/components/app/company-logo";
 
 interface ActiveDoc {
   accn: string;
@@ -81,7 +82,7 @@ export function SourcePanel() {
           <header className="flex items-start gap-3 border-b px-5 pb-4 pt-4">
             <div className="min-w-0 flex-1">
               <p className="eyebrow flex items-center gap-1.5">
-                <FileText className="size-3" /> Source attribution · {target.ticker}
+                <FileText className="size-3" /> Source attribution · <CompanyLogo ticker={target.ticker} size="2xs" decorative /> {target.ticker}
               </p>
               <h2 className="mt-1.5 truncate text-lg font-semibold leading-tight">
                 {target.label}

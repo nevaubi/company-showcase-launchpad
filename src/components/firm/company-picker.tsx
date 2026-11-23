@@ -25,7 +25,7 @@ export function CompanyPicker({ onPick, exclude, children, align = "start" }: {
             <CommandGroup>
               {list.map((c) => (
                 <CommandItem key={c.ticker} value={`${c.ticker} ${c.name}`} onSelect={() => { setOpen(false); onPick(c.ticker); }}>
-                  <CompanyLogo ticker={c.ticker} src={c.logo} size="xs" />
+                  <CompanyLogo ticker={c.ticker} size="xs" decorative />
                   <span className="num w-14 font-medium">{c.ticker}</span>
                   <span className="min-w-0 flex-1 truncate text-muted-foreground">{c.name}</span>
                 </CommandItem>

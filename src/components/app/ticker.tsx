@@ -5,6 +5,7 @@ import { coverageOf } from "@/lib/coverage";
 import { cn } from "@/lib/utils";
 
 const SIZES = {
+  "2xs": { logo: "2xs", gap: "gap-1", symbol: "text-xs leading-4", name: "text-xs leading-4" },
   xs: { logo: "xs", gap: "gap-1.5", symbol: "text-[13px] leading-5", name: "text-[13px] leading-5" },
   sm: { logo: "sm", gap: "gap-2", symbol: "text-sm leading-5", name: "text-sm leading-5" },
   md: { logo: "md", gap: "gap-2.5", symbol: "text-base leading-6", name: "text-sm leading-5" },
