@@ -62,7 +62,8 @@ function BillingPage() {
   const requestTrial = async () => {
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
-    const { error } = await supabase.from("waitlist").update({ status: "pending" }).eq("user_id", u.user.id);
+    // Never move an approved person back to pending: that would remove their access.
+    const { error } = await supabase.from("waitlist").update({ status: "pending" }).eq("user_id", u.user.id).neq("status", "approved");
     if (error) {
       toast.error("Couldn't send the request — please use Contact us instead.");
       return;
@@ -118,6 +119,10 @@ function BillingPage() {
                 </p>
                 {d.waitlistStatus === "pending" ? (
                   <p className="mt-3 text-sm font-medium">Request received — we're reviewing it and will email you.</p>
+                ) : d.waitlistStatus === "approved" ? (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    {d.tier === "expired" ? "To renew your access, use Contact us and we'll extend it." : "You're approved and have access."}
+                  </p>
                 ) : (
                   <Button className="mt-3" onClick={requestTrial}>
                     {d.tier === "expired" ? "Request renewal" : "Request a trial"}
