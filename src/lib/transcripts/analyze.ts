@@ -41,18 +41,19 @@ export function questionIndex(t: ParsedTranscript): QuestionEntry[] {
   return out;
 }
 
-function gist(text: string) {
-  // Skip pleasantries ("Thanks for taking my question.") to reach the substance.
+/** The substance of a question: its first sentence or two after pleasantries and preambles. */
+export function gist(text: string) {
+  // Skip pleasantries ("Thanks for taking my question.", "I guess maybe 1 question. Just.") to reach the substance.
   const sentences = text.replace(/\s+/g, " ").match(/[^.?!]+[.?!]+/g) ?? [text];
-  const filler = /^(\s*(hi|hey|hello|good (morning|afternoon|evening)|thank|thanks|great|congrat|yes|yeah|okay|ok|sure|maybe|so|i have two|two questions|i wanted to)\b[^.?!]{0,60}[.?!])$/i;
-  const body = sentences.filter((s) => !filler.test(s));
+  const filler = /^(\s*(?:[a-z]+(?: [a-z]+)?,\s*)?(hi|hey|hello|good (morning|afternoon|evening)|thank|thanks|great|congrat|yes|yeah|okay|ok|sure|maybe|so|i guess|i have two|i have one|two questions|one question|i wanted to|just)\b[^.?!]{0,60}[.?!])$/i;
+  const body = sentences.filter((s) => !filler.test(s) && s.trim().length >= 25);
   const pick = (body.length ? body : sentences).slice(0, 2).join(" ").trim();
   return pick.length > 220 ? `${pick.slice(0, 217).trimEnd()}…` : pick;
 }
 
 const STOP = new Set(
   (
-    "a about above across actually after again against all almost also although always am among an and another any anything are around as ask asked at back based be because been before being below best better between big bit both but by call can continue continued could couple day days did do does doing done down during each early either else end even ever every expect expected first for from further get getting give go going good got great guess had half has have having he hear her here hey hi high higher his how i if important in into is it its itself just keep kind know last later let level like little look looking lot made make making many may maybe me mean might more most much my need new next no not now number obviously of off on once one ones only or other our out over overall part particular particularly people perhaps please point pretty probably put quarter quarters question questions quite rather really right said same saw say saying see seeing seen she should side significant since so some something sort still strong such sure take talk talked talking terms than thank thanks that the their them then there these they thing things think thinking this those though three through time times to today together too took two up us very want wanted was way we well were what when where whether which while who why will with within without would year years yes yet you your yeah okay frankly billion million percent business january february march april june july august september october november december prepared remarks guys folks color"
+    "a about above across actually after again against all almost also although always am among an and another any anything are around as ask asked at back based be because been before being below best better between big bit both but by call can continue continued could couple day days did do does doing done down during each early either else end even ever every expect expected first for from further get getting give go going good got great guess had half has have having he hear her here hey hi high higher his how i if important in into is it its itself just keep kind know last later let level like little look looking lot made make making many may maybe me mean might more most much my need new next no not now number obviously of off on once one ones only or other our out over overall part particular particularly people perhaps please point pretty probably put quarter quarters question questions quite rather really right said same saw say saying see seeing seen she should side significant since so some something sort still strong such sure take talk talked talking terms than thank thanks that the their them then there these they thing things think thinking this those though three through time times to today together too took two up us very want wanted was way we well were what when where whether which while who why will with within without would year years yes yet you your yeah okay frankly billion million percent business january february march april june july august september october november december prepared remarks guys folks color inc corp company"
   ).split(" "),
 );
 
