@@ -25,7 +25,7 @@ const FONT = 10.5;
 // ---------- formatting ----------
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 export function fmtChart(v: number | null | undefined, unit: ChartUnit, opts: { compact?: boolean; signed?: boolean } = {}): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   const sign = v < 0 ? "−" : opts.signed && v > 0 ? "+" : "";
   const a = Math.abs(v);
   switch (unit) {
@@ -95,7 +95,7 @@ function PickedStrip({ id, facts, ticker, onClose }: { id: string; facts: Map<st
   return (
     <div className="mt-2 rounded-md border bg-secondary/40 px-3 py-2 text-[11px]" data-print-hide>
       <div className="flex items-start gap-2">
-        <p className="min-w-0 flex-1"><span className="text-foreground">{readableDates(f.text)}</span> <span className="text-muted-foreground">— {refCaption(f.ref)}</span></p>
+        <p className="min-w-0 flex-1"><span className="text-foreground">{readableDates(f.text)}</span> <span className="text-muted-foreground">· {refCaption(f.ref)}</span></p>
         <button type="button" onClick={onClose} aria-label="Close" className="text-muted-foreground hover:text-foreground"><X className="size-3.5" /></button>
       </div>
       {members.length > 0 && (
@@ -317,7 +317,7 @@ function Peers({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "peers" 
             {chart.rows.map((r, i) => {
               const c: ChartPoint | undefined = r.cells[ci];
               const y = headH + i * rowH;
-              if (c?.v == null) return <text key={r.ticker} x={x0} y={y + rowH / 2} dy="0.32em" style={{ fill: C.muted, fontSize: FONT - 1 }}>—</text>;
+              if (c?.v == null) return <text key={r.ticker} x={x0} y={y + rowH / 2} dy="0.32em" style={{ fill: C.muted, fontSize: FONT - 1 }}>–</text>;
               const color = r.self ? C.brand : C.peer;
               return (
                 <g key={r.ticker} style={{ cursor: c.f ? "pointer" : undefined }} onClick={() => ctx.onPick(c.f, `${r.ticker} · ${mt.label}`)}>
