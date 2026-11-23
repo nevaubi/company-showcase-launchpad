@@ -35,7 +35,7 @@ const GRADE_TONE: Record<Grade, string> = {
 };
 
 const GRADE_HELP: Record<Grade, string> = {
-  proven: "Passes all eight checks of the strict gate",
+  proven: "Passes all eight checks of the strict gate and stands out from every rule tried on its monthly record",
   candidate: "Stands out from every rule tried at a 5% false-discovery rate",
   watch: "Stands out from every rule tried at a 10% false-discovery rate",
   probation: "Would be listed, but its live record is well below its backtest",

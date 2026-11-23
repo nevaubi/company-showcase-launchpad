@@ -159,9 +159,12 @@ export interface LiveCheck {
 }
 
 /**
- * proven: passes every check of the strict gate. candidate: not proven, but survives
- * false-discovery control at 5% on its month-by-month record. watch: survives it at 10%.
- * probation: would be listed, but its live record is well below its backtest. unproven: the rest.
+ * Every listed grade survives false-discovery control on the month-by-month record: watch at 10%,
+ * candidate at 5%, proven when the variant also passes every check of the nightly strict gate.
+ * The gate alone lists nothing: its stored t-statistic counts overlapping signal days as
+ * independent until the job stores the corrected one, so a pass the monthly record does not
+ * confirm stays unproven. probation: would be listed, but its live record is well below its
+ * backtest. unproven: the rest.
  */
 export type Grade = "proven" | "candidate" | "watch" | "probation" | "unproven";
 
@@ -333,9 +336,7 @@ export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, 
     const enoughMonths = b.months >= EVIDENCE.minMonths;
     const ok = b.mean > 0 && enoughMonths && edge > 0;
     let grade: Grade = "unproven";
-    if (v.passed && edge >= 0) grade = "proven";
-    else if (ok && q[i] <= EVIDENCE.candidateFdr) grade = "candidate";
-    else if (ok && q[i] <= EVIDENCE.watchFdr) grade = "watch";
+    if (ok && q[i] <= EVIDENCE.watchFdr) grade = v.passed ? "proven" : q[i] <= EVIDENCE.candidateFdr ? "candidate" : "watch";
     let reason = "";
     if (grade !== "unproven" && live.verdict === "behind") {
       grade = "probation";
@@ -344,7 +345,9 @@ export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, 
       reason = !(b.mean > 0) ? "No profit after costs since 2022"
         : !enoughMonths ? `Only ${b.months} months with trades since 2022`
           : q[i] <= EVIDENCE.watchFdr ? "Has lost money in markets like today's"
-            : "Cannot be told apart from luck";
+            : live.verdict === "behind" ? "Cannot be told apart from luck, and losing live"
+              : v.passed ? "Passes the nightly checks, but its monthly record cannot be told apart from luck"
+                : "Cannot be told apart from luck";
     }
     return { ...head, blocks: b, kept, base, regimes: fits, regime: fit, edge, live, grade, reason };
   });

@@ -206,6 +206,17 @@ describe("ranking", () => {
     expect(all.some((x) => x.key === "tsmom:L:21")).toBe(true);
   });
 
+  it("leaves a rule out of the next in line once its live record is well below zero", () => {
+    const losing: VariantEvidence = { ...ev("reversal:L:5", "unproven", 0, 2.1), live: { n: 400, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01", blocks: 11, band: 0.012, z: -3.2, verdict: "behind" } };
+    const more = [...signals, ...Array.from({ length: 6 }, (_, k) => sig(`REVL${k}`, "reversal:L:5", { sector: SECTORS[k] }))];
+    const out = rankSetups(book([...variants, losing]), more);
+    expect(out.closest.some((x) => x.key === "reversal:L:5")).toBe(false);
+    expect(out.all.filter((x) => x.key === "reversal:L:5")).toHaveLength(6);
+    // With a record still too short to judge, its t of 2.1 puts it first among the rules that are not listed.
+    const waiting = book([...variants, { ...losing, live: { ...losing.live, verdict: "short" } }]);
+    expect(rankSetups(waiting, more).closest.find((x) => x.grade === "unproven")!.key).toBe("reversal:L:5");
+  });
+
   it("filters by side, holding period, family and sector before the limits apply", () => {
     const f = (over: Partial<RankFilters>) => rankSetups(b, signals, { ...DEFAULT_FILTERS, ...over });
     expect(f({ side: "short" }).list.every((x) => x.side === -1)).toBe(true);
