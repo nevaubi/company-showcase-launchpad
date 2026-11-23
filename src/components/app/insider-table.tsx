@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import type { InsiderTrade } from "@/lib/financials/types";
 import { fmtCompactUsd, fmtDate, fmtInt, fmtPrice, INSIDER_CODES } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { TickerMark } from "@/components/app/ticker";
 
 export type InsiderRow = InsiderTrade & { ticker: string };
 
@@ -77,7 +78,7 @@ export function InsiderTable({ rows, showTicker = false }: { rows: InsiderRow[];
                   onClick={() => open({ ticker: r.ticker, label: `Form 4 · ${r.owner}`, periodLabel: fmtDate(r.date), unit: "usd", value: 0, doc: { accn: r.accn, doc: r.doc, title: `${r.owner} — ${r.role}` } })}
                 >
                   <td className="num whitespace-nowrap px-4 py-2 text-xs">{fmtDate(r.date)}</td>
-                  {showTicker && <td className="num px-2 py-2 font-medium">{r.ticker}</td>}
+                  {showTicker && <td className="px-2 py-2"><TickerMark ticker={r.ticker} link={false} /></td>}
                   <td className="max-w-[16rem] px-2 py-2">
                     <span className="block truncate font-medium">{r.owner}</span>
                     <span className="block max-w-[14rem] truncate text-[11px] text-muted-foreground" title={r.role}>
@@ -120,7 +121,7 @@ export function InsiderTable({ rows, showTicker = false }: { rows: InsiderRow[];
             return (
               <li key={`${o.ticker}-${o.owner}`} className="px-4 py-3">
                 <div className="flex items-baseline gap-2">
-                  {showTicker && <span className="num text-xs font-semibold">{o.ticker}</span>}
+                  {showTicker && <TickerMark ticker={o.ticker} size="2xs" link={false} className="self-center" />}
                   <span className="truncate text-[13px] font-medium">{o.owner}</span>
                   <span className="num ml-auto text-xs text-muted-foreground">{o.n} trades</span>
                 </div>

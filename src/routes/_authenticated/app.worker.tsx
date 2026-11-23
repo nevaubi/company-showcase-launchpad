@@ -8,6 +8,8 @@ import { PageHeader, Panel } from "@/components/app/page-header";
 import { getWorkerProgress, type WorkerProgress } from "@/lib/worker.functions";
 import { cn } from "@/lib/utils";
 import { FREE_SAFETY, FREE_TIERS } from "@/lib/ir/openai-allowance";
+import { CompanyLogo } from "@/components/app/company-logo";
+import { TickerMark } from "@/components/app/ticker";
 
 export const Route = createFileRoute("/_authenticated/app/worker")({
   head: () => ({
@@ -123,7 +125,7 @@ function WorkerPage() {
               <tbody>
                 {p.loop!.current.map((t) => (
                   <tr key={t} className="border-t border-border/60">
-                    <td className="py-1"><Link to="/app/companies/$ticker/ir" params={{ ticker: t }} className="font-medium hover:underline">{t}</Link></td>
+                    <td className="py-1"><Link to="/app/companies/$ticker/ir" params={{ ticker: t }} className="inline-flex items-center gap-1.5 align-middle font-medium hover:underline"><CompanyLogo ticker={t} size="2xs" decorative />{t}</Link></td>
                     <td className="num text-right">{n(p.docs[t]?.[1] ?? 0)} / {n(p.docs[t]?.[0] ?? 0)}</td>
                     <td className="num text-right">{n(p.facts[t] ?? 0)}</td>
                     <td className="num text-right">{p.recent[t] ? `+${n(p.recent[t])}` : "—"}</td>
@@ -144,7 +146,7 @@ function WorkerPage() {
       <Panel title={`Up next (${n(d.queue.length)})`} className="min-w-0">
         <p className="flex flex-wrap gap-1.5 text-[12px]">
           {d.queue.slice(0, 60).map((t, i) => (
-            <span key={t} className="rounded border border-border px-1.5 py-0.5"><span className="text-muted-foreground">{i + 1}.</span> {t}</span>
+            <span key={t} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5"><span className="text-muted-foreground">{i + 1}.</span><CompanyLogo ticker={t} size="2xs" decorative />{t}</span>
           ))}
         </p>
       </Panel>
@@ -157,7 +159,7 @@ function WorkerPage() {
         <Panel title={`Set aside for review (${Object.keys(p.loop!.review).length})`} className="min-w-0">
           <ul className="grid grid-cols-1 gap-1 text-[12px] sm:grid-cols-2">
             {Object.entries(p.loop!.review).map(([t, why]) => (
-              <li key={t}><span className="font-medium">{t}</span> <span className="text-muted-foreground">— {why}</span></li>
+              <li key={t}><TickerMark ticker={t} size="2xs" link={false} /> <span className="text-muted-foreground">— {why}</span></li>
             ))}
           </ul>
         </Panel>

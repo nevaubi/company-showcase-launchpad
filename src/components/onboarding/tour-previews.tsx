@@ -1,4 +1,5 @@
 import type { TourPreview } from "@/lib/onboarding/steps";
+import { CompanyLogo } from "@/components/app/company-logo";
 
 /** Small looping illustrations (CSS keyframes, tokens only) shown at the top of each tour card. */
 export function Preview({ kind }: { kind: TourPreview }) {
@@ -24,7 +25,7 @@ const BODY: Record<TourPreview, React.ReactNode> = {
         <kbd className="ml-auto rounded border px-1 text-[9px] text-muted-foreground">⌘K</kbd>
       </div>
       <div className="tour-drop rounded-md border bg-background p-1.5 text-[11px]">
-        <div className="rounded bg-accent px-2 py-1"><b>NVDA</b> · NVIDIA Corp</div>
+        <div className="rounded bg-accent px-2 py-1"><CompanyLogo ticker="NVDA" size="2xs" decorative className="mr-1.5 align-middle" /><b>NVDA</b> · NVIDIA Corp</div>
         <div className="px-2 py-1 text-muted-foreground">NVDA 10-K · FY2026</div>
       </div>
     </div>
@@ -33,7 +34,7 @@ const BODY: Record<TourPreview, React.ReactNode> = {
     <div className="flex h-full flex-col justify-center gap-1.5 px-5 text-[11px]">
       {[["NVDA", "+2.4%"], ["MSFT", "+0.8%"], ["COST", "−0.3%"]].map(([t, c], k) => (
         <div key={t} className="tour-rise flex items-center rounded-md border bg-background px-2.5 py-1.5" style={{ animationDelay: `${k * 220}ms` }}>
-          <b>{t}</b><Bar w="40%" cls="mx-3" /><span className="ml-auto font-mono tabular-nums">{c}</span>
+          <CompanyLogo ticker={t} size="2xs" decorative className="mr-1.5" /><b>{t}</b><Bar w="40%" cls="mx-3" /><span className="ml-auto font-mono tabular-nums">{c}</span>
         </div>
       ))}
     </div>
