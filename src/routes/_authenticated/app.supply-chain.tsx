@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSource } from "@/components/source/source-context";
 import { CompanyPicker } from "@/components/supply/company-picker";
+import { FollowPanel } from "@/components/supply/follow-panel";
 import { OffscreenCue, type Cue } from "@/components/supply/off-screen-cue";
 import { holdInPlace } from "@/components/supply/scroll-to";
 import { SectionNav } from "@/components/supply/section-nav";
@@ -43,6 +44,8 @@ const isOverlay = (v: unknown): v is Overlay => typeof v === "string" && (SUPPLY
 const isDepth = (v: unknown): v is number => v === 1 || v === 2;
 const isFlow = (v: unknown): v is ChainFlow => v === "all" || v === "making" || v === "selling" || v === "tech";
 const isSize = (v: unknown): v is ChainSize => v === "share" || v === "dollars";
+/** Width of the map section from which the evidence panel sits beside the map; below it the panel goes under. The same number is in the grid's container query. */
+const BESIDE = 1060;
 /** Clear of the app header, the section links under it and a little air. */
 const ANCHOR = "scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]";
 
@@ -327,8 +330,8 @@ function SupplyChainPage() {
             )}
           </div>
 
+          <FollowPanel id="supply-analysis" minWidth={BESIDE} resetKey={`${ticker}|${view}|${tab}|${search.sel ?? ""}|${search.iso ?? ""}`}>
           <SupplyAnalysis
-            stickyClassName="@[1060px]:sticky @[1060px]:top-[calc(var(--sticky-top,3.5rem)+3.25rem)]"
             tab={tab}
             onTab={setTab}
             evidence={
@@ -349,6 +352,7 @@ function SupplyChainPage() {
             changes={<ChangesTab ticker={ticker} name={focusName} isolated={isolated} onOpen={(l, label) => openLink(l as RiskLink, label)} />}
             reactions={<ReactionsTab ticker={ticker} name={focusName} graph={lit} covered={covered} onSelect={pick} />}
           />
+          </FollowPanel>
         </div>
       </section>
 

@@ -1,7 +1,7 @@
 // The panel beside the supply-chain map: the filing evidence for the selected name, and the lists that go with the
 // map (stated exposure, the shock simulation, what changed since the last annual report, earnings sympathy moves).
 // Every list follows what is isolated on the map. Nothing here scrolls the page: a click only changes what is shown.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, FileText, Focus, Globe2, Link2, Lock, Zap } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
@@ -15,7 +15,6 @@ import { confidence, mirrors, type GraphNode, type HopNode, type NodeRisk, type 
 import { KIND_WORD, NATURE_WORD, nodeFacts, type ExposureRow } from "@/lib/supply/describe";
 import { isolatedHas, type Isolated } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
-import { fitsBeside } from "@/lib/supply/page-nav";
 import { SUPPLY_TABS, type SupplyTab } from "@/lib/supply/url-state";
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -319,12 +318,8 @@ export function litImpactKeys(isolated: Isolated | null, nodes: (GraphNode | Hop
   return isolated ? new Set(nodes.filter((n) => isolated.lit.has(n.key)).map(impactKey)) : null;
 }
 
-/**
- * The panel frame: one heading, the five tabs as real tab buttons, and the tab bodies the page passes in. Beside the map
- * it follows the reader down the page (`stickyClassName`) while it is short enough to fit in the window; a taller one
- * stays in the flow, so none of it is ever cut off, and the page's cue points back to it.
- */
-export function SupplyAnalysis({ tab, onTab, evidence, exposure, shock, changes, reactions, stickyClassName }: {
+/** The panel's content: one heading, the five tabs as real tab buttons, and the tab bodies the page passes in. */
+export function SupplyAnalysis({ tab, onTab, evidence, exposure, shock, changes, reactions }: {
   tab: SupplyTab;
   onTab: (t: SupplyTab) => void;
   evidence: ReactNode;
@@ -332,37 +327,21 @@ export function SupplyAnalysis({ tab, onTab, evidence, exposure, shock, changes,
   shock: ReactNode;
   changes: ReactNode;
   reactions: ReactNode;
-  /** classes that make the panel follow the reader; applied only while it fits */
-  stickyClassName?: string;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [fits, setFits] = useState(true);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const check = () => setFits(fitsBeside(el.offsetHeight, window.innerHeight));
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    window.addEventListener("resize", check);
-    check();
-    return () => { ro.disconnect(); window.removeEventListener("resize", check); };
-  }, []);
   const body: Record<SupplyTab, ReactNode> = { evidence, exposure, shock, changes, reactions };
   const section: Record<SupplyTab, string> = { evidence: "Link evidence", exposure: "Stated exposure", shock: "Shock simulation", changes: "Changes since the last annual report", reactions: "Earnings moves" };
   return (
-    <div ref={ref} id="supply-analysis" className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]", fits && stickyClassName)}>
-      <Panel title="Evidence and analysis" collapse={false}>
-        <Tabs value={tab} onValueChange={(t) => { if (isSupplyTab(t)) onTab(t); }}>
-          <TabsList className="mb-3 grid h-8 w-full grid-cols-5 rounded-md p-0.5">
-            {TAB_ORDER.map((t) => <TabsTrigger key={t} value={t} data-tour={t === "shock" ? "supply-shock" : undefined} className="h-7 rounded px-1 text-xs">{TAB_LABEL[t]}</TabsTrigger>)}
-          </TabsList>
-          {TAB_ORDER.map((t) => (
-            <TabsContent key={t} value={t} data-section={section[t]} className="mt-0">
-              {tab === t ? body[t] : null}
-            </TabsContent>
-          ))}
-        </Tabs>
-      </Panel>
-    </div>
+    <Panel title="Evidence and analysis" collapse={false}>
+      <Tabs value={tab} onValueChange={(t) => { if (isSupplyTab(t)) onTab(t); }}>
+        <TabsList className="mb-3 grid h-8 w-full grid-cols-5 rounded-md p-0.5">
+          {TAB_ORDER.map((t) => <TabsTrigger key={t} value={t} data-tour={t === "shock" ? "supply-shock" : undefined} className="h-7 rounded px-1 text-xs">{TAB_LABEL[t]}</TabsTrigger>)}
+        </TabsList>
+        {TAB_ORDER.map((t) => (
+          <TabsContent key={t} value={t} data-section={section[t]} className="mt-0">
+            {tab === t ? body[t] : null}
+          </TabsContent>
+        ))}
+      </Tabs>
+    </Panel>
   );
 }
