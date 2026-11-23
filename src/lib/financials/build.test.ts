@@ -225,3 +225,93 @@ describe("Q4 derivation across a later restatement", () => {
     expect(cell.v).toBe(140); // 480 − 340, not 480 − 250
   });
 });
+
+// Causes found by checking the builder against filings' own statements (round 3 accuracy sample).
+describe("headline lines against the filed statements", () => {
+  const at = (end: string, val: number) => fact(undefined, end, val, "10-K", "2026-02-20");
+  const fy25 = (s: ReturnType<typeof buildStatements>, stmt: "income" | "balance" | "cashflow", key: string) => {
+    const st = s.annual[stmt];
+    return st.rows.find((r) => r.key === key)?.cells[st.periods.findIndex((p) => p.key === "FY2025")] ?? null;
+  };
+  const base = { Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } };
+
+  it("does not add short-term debt a long-term figure already includes (Chevron FY2025: tag choice)", () => {
+    // CVX tags $39,781M as both LongTermDebtAndCapitalLeaseObligations and …IncludingCurrentMaturities; DebtCurrent $10,918M
+    // is gross short-term debt before $9,941M was reclassified into long-term. Face: 977 + 39,781 = 40,758.
+    const s = buildStatements(filer({
+      ...base,
+      LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 39_781)] },
+      LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: { facts: [at("2025-12-31", 39_781)] },
+      DebtCurrent: { facts: [at("2025-12-31", 10_918)] },
+      ShortTermBorrowings: { facts: [at("2025-12-31", 977)] },
+    }));
+    const d = fy25(s, "balance", "totalDebt")!;
+    expect(d.v).toBe(40_758);
+    expect(d.derived?.parts.map((p) => p.concept)).toEqual(["us-gaap:LongTermDebtAndCapitalLeaseObligations", "us-gaap:ShortTermBorrowings"]);
+  });
+
+  it("adds short-term borrowings beside current maturities (FedEx FY2026, Home Depot: tag choice)", () => {
+    // FDX: current portion 1,676 + short-term borrowings 745 + long-term 23,293 = 25,714 (we showed 24,969).
+    const s = buildStatements(filer({
+      ...base,
+      LongTermDebtNoncurrent: { facts: [at("2025-12-31", 23_293)] },
+      LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 1_676)] },
+      ShortTermBorrowings: { facts: [at("2025-12-31", 745)] },
+    }));
+    const d = fy25(s, "balance", "totalDebt")!;
+    expect(d.v).toBe(25_714);
+    expect(d.derived?.parts.map((p) => p.value)).toEqual([23_293, 1_676, 745]);
+  });
+
+  it("reads notes payable and loans as debt (Oracle: tag choice, total debt was the current part only)", () => {
+    const s = buildStatements(filer({
+      ...base,
+      LongTermNotesAndLoans: { facts: [at("2025-12-31", 117_712)] },
+      NotesPayableCurrent: { facts: [at("2025-12-31", 7_625)] },
+    }));
+    expect(fy25(s, "balance", "totalDebt")!.v).toBe(125_337);
+  });
+
+  it("reads Deere's long-term borrowings from its company extension (company extension)", () => {
+    const cf = filer({ ...base, DebtCurrent: { facts: [at("2025-12-31", 13_796)] } });
+    cf.facts.de = { LongTermDebtAndFinanceLeasesNoncurrent: { units: { USD: [at("2025-12-31", 43_544)] } } };
+    const d = fy25(buildStatements(cf), "balance", "totalDebt")!;
+    expect(d.v).toBe(57_340);
+    expect(d.derived?.parts[0].concept).toBe("de:LongTermDebtAndFinanceLeasesNoncurrent");
+  });
+
+  it("drops a segment-measure 'operating income' when the statement runs straight to pretax (MetLife FY2025: tag choice)", () => {
+    const y = (v: number) => [fact("2025-01-01", "2025-12-31", v, "10-K", "2026-02-19")];
+    const s = buildStatements(filer({
+      Revenues: { facts: y(77_084) },
+      BenefitsLossesAndExpenses: { facts: y(72_423) },
+      IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest: { facts: y(4_661) },
+      OperatingIncomeLoss: { facts: y(6_137) }, // "Total consolidated adjusted earnings" in the segment note
+      NetIncomeLoss: { facts: y(3_379) },
+    }));
+    expect(fy25(s, "income", "operatingIncome")).toBeNull();
+    expect(fy25(s, "income", "pretaxIncome")!.v).toBe(4_661);
+  });
+
+  it("keeps operating income when costs and expenses lead to it, not to pretax income", () => {
+    const y = (v: number) => [fact("2025-01-01", "2025-12-31", v, "10-K", "2026-02-19")];
+    const s = buildStatements(filer({
+      Revenues: { facts: y(1_000) },
+      CostsAndExpenses: { facts: y(800) },
+      OperatingIncomeLoss: { facts: y(200) },
+      IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest: { facts: y(180) },
+    }));
+    expect(fy25(s, "income", "operatingIncome")!.v).toBe(200);
+  });
+
+  it("takes a utility's total operating revenues over its contract-revenue note figure (Duke FY2025: tag choice)", () => {
+    const y = (v: number) => [fact("2025-01-01", "2025-12-31", v, "10-K", "2026-02-26")];
+    const s = buildStatements(filer({
+      RegulatedAndUnregulatedOperatingRevenue: { facts: y(32_237) },
+      RevenueFromContractWithCustomerIncludingAssessedTax: { facts: y(31_741) },
+      OperatingIncomeLoss: { facts: y(6_000) },
+    }));
+    expect(fy25(s, "income", "revenue")!.src?.concept).toBe("us-gaap:RegulatedAndUnregulatedOperatingRevenue");
+    expect(fy25(s, "income", "revenue")!.v).toBe(32_237);
+  });
+});

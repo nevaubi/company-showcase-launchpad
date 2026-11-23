@@ -630,15 +630,29 @@ const SHORT_BORROWINGS: LineDef = {
   key: "_stb",
   label: "Short-term borrowings",
   concepts: [],
-  components: ["CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings"],
+  components: ["CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings", "NotesPayableCurrent"],
   unit: "usd",
   kind: "stock",
 };
 
 /** Long-term debt concepts that already include current maturities. */
 const INCLUDES_CURRENT = new Set(["us-gaap:LongTermDebt", "us-gaap:LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities"]);
+/** Short-term debt concepts that hold only the current portion of long-term debt, not short-term borrowings. */
+const CURRENT_MATURITIES_ONLY = new Set(["us-gaap:LongTermDebtCurrent", "us-gaap:LongTermDebtAndCapitalLeaseObligationsCurrent"]);
 
-/** Total debt = long-term + short-term debt, without double-counting current maturities. */
+/**
+ * The long-term figure includes current maturities when its own concept says so, or when the filing
+ * tags the same amount, on the same date, with a concept that does (Chevron tags $39.8B as both
+ * LongTermDebtAndCapitalLeaseObligations and …IncludingCurrentMaturities; adding its DebtCurrent
+ * double counted $9.9B of reclassified short-term debt).
+ */
+function includesCurrent(cf: CompanyFacts, l: Cell, end: string) {
+  if (!l.src) return false;
+  if (INCLUDES_CURRENT.has(l.src.concept)) return true;
+  return [...INCLUDES_CURRENT].some((c) => factsFor(cf, c, "USD").some((f) => !f.start && near(f.end, end, 4) && f.val === l.v));
+}
+
+/** Total debt = long-term + short-term debt, without double-counting current maturities or leaving out short-term borrowings. */
 function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row {
   const ltd = rowOf(balance, "longTermDebt");
   const std = rowOf(balance, "shortTermDebt");
@@ -646,15 +660,21 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
     const l = ltd?.cells[i] ?? null;
     const s = std?.cells[i] ?? null;
     if (!l && !s) return null;
-    if (l?.src && INCLUDES_CURRENT.has(l.src.concept)) {
-      // This concept already includes current maturities; add only short-term borrowings.
-      const extra = pickCell(cf, SHORT_BORROWINGS, (f) => !f.start && near(f.end, p.end, 4));
-      if (extra) return combine(l, extra, "add", ["Long-term debt incl. current maturities", "Short-term borrowings"]);
-      return { v: l.v, derived: { formula: "Long-term debt incl. current maturities", parts: partsFrom(l, "Long-term debt incl. current maturities", 1) } };
+    const borrowings = () => pickCell(cf, SHORT_BORROWINGS, (f) => !f.start && near(f.end, p.end, 4));
+    if (l && includesCurrent(cf, l, p.end)) {
+      // This figure already includes current maturities; add only short-term borrowings.
+      const label = "Long-term debt incl. current maturities";
+      const extra = borrowings();
+      if (extra) return combine(l, extra, "add", [label, "Short-term borrowings"]);
+      return { v: l.v, derived: { formula: label, parts: partsFrom(l, label, 1) } };
     }
-    if (l && s) return combine(l, s, "add", ["Long-term debt", "Short-term debt"]);
-    const only = (l ?? s)!;
-    const label = l ? "Long-term debt" : "Short-term debt";
+    // Current maturities alone (FedEx, Home Depot): short-term borrowings and commercial paper are separate lines.
+    const sb = s?.src && CURRENT_MATURITIES_ONLY.has(s.src.concept) ? borrowings() : null;
+    const short = s && sb ? combine(s, sb, "add", ["Current maturities of long-term debt", "Short-term borrowings"]) : s;
+    const shortLabel = sb ? "(current maturities + short-term borrowings)" : "Short-term debt";
+    if (l && short) return combine(l, short, "add", ["Long-term debt", shortLabel]);
+    const only = (l ?? short)!;
+    const label = l ? "Long-term debt" : shortLabel;
     return { v: only.v, derived: { formula: label, parts: partsFrom(only, label, 1) } };
   });
   return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells };
@@ -689,6 +709,39 @@ export function fixShareScale(income: Row[]) {
   }
 }
 
+/** Income statement totals that run from revenue straight to pretax income on statements without an operating subtotal. */
+const TOTAL_EXPENSES: LineDef = {
+  key: "_totalExpenses",
+  label: "Total benefits, losses and expenses",
+  concepts: ["BenefitsLossesAndExpenses", "CostsAndExpenses"],
+  unit: "usd",
+  kind: "flow",
+  additive: true,
+};
+
+/**
+ * Drop an "operating income" that cannot be an income-statement subtotal. Since ASU 2023-07 some
+ * filers tag their segment profit total with OperatingIncomeLoss (MetLife's $6,137M "total
+ * consolidated adjusted earnings", FY2025) while the statement itself runs revenue − total
+ * benefits and expenses = pretax income. When the filing's own totals show that, an operating
+ * income that differs from pretax income is a segment measure, not GAAP operating income.
+ */
+export function dropSegmentOperatingIncome(income: Row[], totalExpenses: Row) {
+  const oi = rowOf(income, "operatingIncome");
+  const rev = rowOf(income, "revenue");
+  const pt = rowOf(income, "pretaxIncome");
+  if (!oi || !rev || !pt) return;
+  oi.cells = oi.cells.map((c, i) => {
+    const r = rev.cells[i];
+    const t = totalExpenses.cells[i];
+    const b = pt.cells[i];
+    if (!c || !r || !t || !b || !r.v) return c;
+    const tol = Math.abs(r.v) * 0.005;
+    const straightToPretax = Math.abs(r.v - t.v - b.v) <= tol;
+    return straightToPretax && Math.abs(c.v - b.v) > tol ? null : c;
+  });
+}
+
 export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
   const years = detectFiscalYears(cf);
   const periods = buildPeriods(years);
@@ -700,6 +753,7 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     const balance = buildStatement(cf, BALANCE_LINES.filter(keepLine), ps, years, freq);
     const cash = buildStatement(cf, CASHFLOW_LINES.filter(keepLine), ps, years, freq);
     fillDerived(income, "grossProfit", "revenue", "costOfRevenue", ["Revenue", "Cost of revenue"]);
+    dropSegmentOperatingIncome(income, buildStatement(cf, [TOTAL_EXPENSES], ps, years, freq)[0]);
     fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
     const cfo = rowOf(cash, "cfo");
