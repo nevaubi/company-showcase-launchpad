@@ -45,7 +45,7 @@ export function SourceStrip() {
   );
 }
 
-function Spark({ h }: { h: number[] }) {
+export function Spark({ h }: { h: number[] }) {
   const max = Math.max(1, ...h);
   return (
     <div className="flex h-5 items-end gap-px" aria-hidden>
@@ -176,7 +176,7 @@ function Heatmap({ signals, loading, onOpen }: { signals: Signal[]; loading: boo
   );
 }
 
-function CellSheet({ cell, signal, onClose }: { cell: { ticker: string; dataset: string } | null; signal?: Signal; onClose: () => void }) {
+export function CellSheet({ cell, signal, onClose }: { cell: { ticker: string; dataset: string } | null; signal?: Signal; onClose: () => void }) {
   const q = useQuery({ ...altCellQuery(cell?.ticker ?? "", cell?.dataset ?? "", 180), enabled: !!cell });
   return (
     <Sheet open={!!cell} onOpenChange={(o) => !o && onClose()}>
