@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Activity, TrendingDown, TrendingUp, Minus } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { PriceChart, type ChartMarker, type Overlay } from "@/components/charts/price-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePrices, type Range } from "@/lib/data";
-import { marketsQuery } from "@/lib/markets/query";
+import { supportResistance } from "@/lib/markets/core";
+import type { Bar } from "@/lib/financials/types";
 import { performance, readTechnicals } from "@/lib/company/technicals";
 import { openGaps, type OhlcBar } from "@/lib/technicals/dense";
 import { fmtDate, fmtPct, fmtPrice } from "@/lib/format";
@@ -43,8 +43,6 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
   const long = usePrices(ticker, "5y");
   const spyLong = usePrices("SPY", "5y");
   const spyView = usePrices("SPY", range, "1d", on.has("index"));
-  const m = useQuery(marketsQuery);
-  const mc = m.data?.companies.find((c) => c.ticker === ticker);
   const toggle = (l: Layer) =>
     setOn((s) => {
       const n = new Set(s);
@@ -98,17 +96,19 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
   }, [on, data]);
 
   const px = bars.at(-1)?.[4] ?? null;
+  // Levels come from the loaded bars (the same rule as the Levels and signals panel), so they are as fresh as the chart.
+  const clustered = useMemo(() => supportResistance((long.data?.bars ?? []) as Bar[]), [long.data]);
   const levels = useMemo(() => {
-    if (!on.has("levels") || !mc || px == null) return [];
-    const sup = mc.levels.support.filter((l) => l.price < px).sort((a, b) => b.price - a.price)[0];
-    const res = mc.levels.resistance
+    if (!on.has("levels") || px == null) return [];
+    const sup = clustered.support.filter((l) => l.price < px).sort((a, b) => b.price - a.price)[0];
+    const res = clustered.resistance
       .filter((l) => l.price > px)
       .sort((a, b) => a.price - b.price)[0];
     return [
       ...(sup ? [{ price: sup.price, label: "Support", color: "var(--muted-foreground)" }] : []),
       ...(res ? [{ price: res.price, label: "Resistance", color: "var(--muted-foreground)" }] : []),
     ];
-  }, [on, mc, px]);
+  }, [on, clustered, px]);
 
   // Open 2% gaps over the last five years, shaded from the gap day to today when it falls inside the view.
   const gaps = useMemo(

@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import type { CompanyDataset, Statement } from "@/lib/financials/types";
-import { analyze, figTarget, measureOf, vsMedian, vsPrior, type Fig, type FinancialAnalysis } from "./analysis";
+import { analyze, figTarget, measureOf, medianTarget, vsMedian, vsPrior, type Fig, type FinancialAnalysis } from "./analysis";
 import { company, eightQuarters, fill, period, type Lines } from "./fixtures/synthetic";
 
 const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(path.resolve(__dirname, `../../test/fixtures/companies/${t}.json`), "utf8")) as CompanyDataset);
@@ -121,7 +121,8 @@ describe("analyze: checked by hand against the filings", () => {
     expect(dp.netMargin.v * dp.assetTurnover.v * dp.leverage.v).toBeCloseTo(dp.roe.v, 10);
     expect(dp.roe.v).toBeCloseTo(now(a, "roe")!, 12);
     expect(keyFig(a, "revenue")?.run).toHaveLength(8);
-    expect(keyFig(a, "revenue")?.run.at(-1)).toBe(revenue * M);
+    expect(keyFig(a, "revenue")?.run.at(-1)).toEqual({ label: "Q3 FY26", v: revenue * M });
+    expect(keyFig(a, "revenue")?.run[0].label).toBe("Q4 FY24");
   });
 
   it("NVDA (fiscal year ends in January): trailing twelve months to Q2 FY27", () => {
@@ -440,4 +441,18 @@ describe("analyze: agrees with the statements' own annual ratios", () => {
       }
       expect(compared).toBeGreaterThanOrEqual(5);
     });
+});
+
+describe("medianTarget", () => {
+  it("opens the fiscal years behind a median with each year's value and filed parts", () => {
+    const a = analyze(load("AAPL"));
+    const m = measureOf(a, "grossMargin")!;
+    const target = medianTarget("AAPL", m, (v) => `${(v * 100).toFixed(1)}%`)!;
+    expect(target).toMatchObject({ ticker: "AAPL", label: "Gross margin, median of 5 fiscal years", periodLabel: "FY2021 to FY2025", unit: "pct", value: m.median!.v });
+    expect(target.derived!.formula).toBe("Median of FY2021 41.8%, FY2022 43.3%, FY2023 44.1%, FY2024 46.2%, FY2025 46.9%");
+    // gross profit and revenue of each of the five years
+    expect(target.derived!.parts).toHaveLength(10);
+    expect(target.derived!.parts.map((p) => p.label)).toEqual(expect.arrayContaining(["Gross profit · FY2021", "Revenue · FY2025"]));
+    expect(medianTarget("AAPL", measureOf(a, "revenueYoY")!, String)).toBeNull();
+  });
 });
