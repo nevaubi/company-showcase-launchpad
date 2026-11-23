@@ -6,7 +6,7 @@ import { hazardLink } from "@/lib/alt/hazards";
 import { PERIOD_LABEL, actionSummary, ratingLabel } from "@/lib/estimates/core";
 import type { QueryClient } from "@tanstack/react-query";
 import { companyQuery, macroQuery, newsQuery, pricesQuery, quotesQuery, universeQuery, type Range } from "@/lib/data";
-import { COVERAGE, coverageOf, MACRO_SERIES } from "@/lib/coverage";
+import { COVERAGE, companyCiks, coverageOf, MACRO_SERIES } from "@/lib/coverage";
 import { getFilingDocument, searchFilings } from "@/lib/sec.functions";
 import { crawlSite, extractFromPage, fetchUrl, mapSite, readWebpage, webSearch } from "@/lib/web.functions";
 import { getEarningsTranscript, listEarningsCalls } from "@/lib/transcripts.functions";
@@ -18,8 +18,10 @@ import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { runSandbox } from "@/lib/research/sandbox";
 import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
 import { supabase } from "@/integrations/supabase/client";
-import { altLeadersQuery, fmtAlt, leaderStats } from "@/lib/alt/query";
-import { focusGraph, linkDollars, simulateShock, type RiskLink } from "@/lib/supply/core";
+import { altLeadersQuery, fmtAlt, leaderStats, readAlt, type AltRow } from "@/lib/alt/query";
+import { focusGraph, simulateShock, type RiskLink } from "@/lib/supply/core";
+import { supplyNodeLine } from "@/lib/supply/assistant-text";
+import { supplyHref } from "@/lib/supply/url-state";
 import type { UniverseEntry } from "@/lib/financials/types";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery } from "@/lib/hedge/query";
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
@@ -124,7 +126,7 @@ const PAGE_PATH: Record<string, (t: string) => string> = {
   insiders: (t) => `/app/companies/${t}/insiders`,
   calls: (t) => `/app/companies/${t}/calls`,
   ir: (t) => `/app/companies/${t}/ir`,
-  supply_chain: (t) => (t ? `/app/supply-chain?t=${t}` : "/app/supply-chain"),
+  supply_chain: (t) => supplyHref({ t: t || undefined }),
   ideas: () => "/app/ideas",
   markets: () => "/app/markets",
   macro: () => "/app/macro",
@@ -235,9 +237,9 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         if (args.ticker) {
           const tk = String(args.ticker).toUpperCase();
           // ≤ ~55 rows a year (states + total), so one page holds every year
-          const { data: rows, error } = await supabase.from("alt_data").select("ticker,date,title,value,meta,source_url").eq("ticker", tk).eq("dataset", "medicare_states").order("uid").limit(1000);
-          if (error) return { output: `Error: ${error.message}`, summary: "Medicare by state failed" };
-          return { output: clip(geoCompanyText((rows ?? []) as never, tk)), summary: `${tk} Medicare drugs by state` };
+          const rows = await readAlt("ticker,date,title,value,meta,source_url", (q) => q.eq("ticker", tk).eq("dataset", "medicare_states").order("uid").limit(1000), qc).catch((e: Error) => e);
+          if (rows instanceof Error) return { output: `Error: ${rows.message}`, summary: "Medicare by state failed" };
+          return { output: clip(geoCompanyText(rows as never, tk)), summary: `${tk} Medicare drugs by state` };
         }
         const st = String(args.since ?? "").toUpperCase().slice(0, 2);
         if (!/^[A-Z]{2}$/.test(st)) return { output: "For a cross-company Medicare state ranking pass the two-letter state code in since (e.g. 'TX').", summary: "state needed" };
@@ -246,9 +248,9 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       }
       if (args.dataset === "tri" && args.ticker) {
         const tk = String(args.ticker).toUpperCase();
-        const { data: rows, error } = await supabase.from("alt_data").select("date,title,value,meta,source_url").eq("ticker", tk).eq("dataset", "tri").order("date").limit(100);
-        if (error) return { output: `Error: ${error.message}`, summary: "TRI failed" };
-        return { output: clip(triText((rows ?? []) as never, tk)), summary: `${tk} plants (EPA TRI)` };
+        const rows = await readAlt("date,title,value,meta,source_url", (q) => q.eq("ticker", tk).eq("dataset", "tri").order("date").limit(100), qc).catch((e: Error) => e);
+        if (rows instanceof Error) return { output: `Error: ${rows.message}`, summary: "TRI failed" };
+        return { output: clip(triText(rows as never, tk)), summary: `${tk} plants (EPA TRI)` };
       }
       if (!args.ticker && args.dataset && LEAD[String(args.dataset)]) {
         const d = String(args.dataset);
@@ -259,14 +261,21 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         const out = [`${LEAD[d]} — ${rows.length} companies`, "LARGEST:", ...top("value").map(line), "MOST ABOVE THEIR OWN NORMAL:", ...top("vsTypical").map(line), "BIGGEST RISE VS 1Y:", ...top("chg").map(line)];
         return { output: clip(out.join("\n")), summary: `${rows.length}-company ${d} leaderboard` };
       }
-      let q = supabase.from("alt_data").select("ticker,dataset,kind,date,title,value,unit,meta,source_url").order("date", { ascending: false }).limit(400);
-      if (args.ticker) q = q.eq("ticker", String(args.ticker).toUpperCase());
-      if (args.dataset) q = q.eq("dataset", String(args.dataset));
-      if (args.since) q = q.gte("date", String(args.since));
-      const { data, error } = await q;
-      if (error) return { output: `Error: ${error.message}`, summary: "alt data failed" };
-      const lines = (data ?? []).map((r: any) => `${r.date} ${r.ticker} [${r.dataset}${r.kind === "series" ? " series" : ""}] ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""}${r.meta?.category ? ` (${r.meta.category})` : ""}${r.meta?.filers ? ` filers: ${r.meta.filers.slice(0, 3).join("; ")}` : ""}${r.meta?.agencies?.length ? ` agencies: ${r.meta.agencies.join("; ")}` : ""} <${r.source_url}>`);
-      return { output: clip(lines.join("\n") || "No alt data rows match."), summary: `${data?.length ?? 0} alt-data rows` };
+      // screened: the assistant never sees a row filed under the wrong company (src/lib/alt/screen.ts)
+      const data = await readAlt<AltRow>(
+        "ticker,dataset,kind,date,title,value,unit,meta,source_url",
+        (q) => {
+          q = q.order("date", { ascending: false }).limit(400);
+          if (args.ticker) q = q.eq("ticker", String(args.ticker).toUpperCase());
+          if (args.dataset) q = q.eq("dataset", String(args.dataset));
+          if (args.since) q = q.gte("date", String(args.since));
+          return q;
+        },
+        qc,
+      ).catch((e: Error) => e);
+      if (data instanceof Error) return { output: `Error: ${data.message}`, summary: "alt data failed" };
+      const lines = data.map((r: any) => `${r.date} ${r.ticker} [${r.dataset}${r.kind === "series" ? " series" : ""}] ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""}${r.meta?.category ? ` (${r.meta.category})` : ""}${r.meta?.filers ? ` filers: ${r.meta.filers.slice(0, 3).join("; ")}` : ""}${r.meta?.agencies?.length ? ` agencies: ${r.meta.agencies.join("; ")}` : ""} <${r.source_url}>`);
+      return { output: clip(lines.join("\n") || "No alt data rows match."), summary: `${data.length} alt-data rows` };
     }
     case "get_hedge_fund_data": {
       const p = await qc.fetchQuery(hedgeFundsQuery);
@@ -402,7 +411,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const [d, links, alt, sig, ideas, f144, review, computed] = await Promise.all([
         dataset(qc, t),
         qc.fetchQuery(supplyLinksQuery),
-        supabase.from("alt_data").select("dataset,kind,date,title,value,unit,source_url").eq("ticker", t).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(60),
+        readAlt<AltRow>("dataset,kind,date,title,value,unit,source_url", (q) => q.eq("ticker", t).eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(60), qc).catch(() => [] as AltRow[]),
         supabase.from("supply_signals").select("kind,title,detail,impact,quote,filed,form,accn,url").eq("ticker", t).order("filed", { ascending: false }).limit(40),
         qc.fetchQuery(setupsQuery).catch(() => null),
         partnerFile<Form144File>(`form144/${t}.json`).catch(() => null),
@@ -426,7 +435,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
           "SEC COMMENT LETTERS:",
           ...review.threads.slice(0, 4).map((th) => `${th.first}..${th.last} ${th.form ?? ""} ${th.period ?? ""} [${th.status}] topics: ${th.topics.map((k) => review.topics[k] ?? k).join(", ") || "n/a"}; ${th.letters.flatMap((l) => l.comments ?? []).slice(0, 3).map((c) => `"${c.text.slice(0, 160)}"`).join(" ")} <${th.letters[0]?.url ?? ""}>`),
         );
-      out.push("ALT DATA EVENTS:", ...(alt.data ?? []).map((r: any) => `${r.date} [${r.dataset}] ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""} <${r.source_url}>`));
+      out.push("ALT DATA EVENTS:", ...alt.map((r: any) => `${r.date} [${r.dataset}] ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""} <${r.source_url}>`));
       out.push("SUPPLY-CHAIN INTEL (verbatim-verified):", ...(sig.data ?? []).map((r: any) => `${r.filed ?? ""} [${r.kind}/${r.impact}] ${r.title}: "${String(r.quote).slice(0, 220)}" ${r.accn ? `accn ${r.accn}` : r.url ?? ""}`));
       const g = focusGraph(t, links, Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName])));
       out.push(`SUPPLY LINKS: ${g.slice(0, 25).map((n) => `${n.relation}:${n.name}${n.links[0].share_pct != null ? `(${n.links[0].share_pct}%)` : ""}${(n.links[0] as RiskLink).single_source ? "[single-source]" : ""}`).join("; ")}`);
@@ -526,17 +535,14 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const names = Object.fromEntries(COVERAGE.map((c) => [c.ticker, c.shortName]));
       const revenue = Object.fromEntries(u.companies.map((c) => [c.ticker, c.revenueTTM ?? undefined]));
       const g = focusGraph(t, links, names).filter((n) => !args.relation || n.relation === args.relation);
-      const lines = g.slice(0, 60).map((n) => {
-        const l = n.links[0] as RiskLink;
-        const d = linkDollars(l, revenue);
-        return `${n.relation.toUpperCase()} ${n.name}${n.ticker ? ` (${n.ticker})` : ""}: ${l.detail}${l.share_pct != null ? ` | share ${l.share_pct}%` : ""}${d != null ? ` | ≈$${(d / 1e6).toFixed(0)}M` : ""}${l.single_source ? " | SINGLE SOURCE" : ""}${l.regions?.length ? ` | regions ${l.regions.join(", ")}` : ""}${l.risk ? ` | risk: ${l.risk}` : ""} | per ${l.ticker} ${l.form} ${l.accn}: "${l.quote}"`;
-      });
+      // verified claims only (read.ts): stated flows by kind, other figures marked "not a flow", sole source vs stated dependency
+      const lines = g.slice(0, 60).map((n) => supplyNodeLine(t, n, revenue));
       // End-to-end chain (suppliers' suppliers → … → customers' customers) incl. XBRL-tagged shares.
       const tagged = await qc.fetchQuery(taggedSharesQuery).catch(() => []);
       const flow = (["making", "selling", "tech"].includes(String(args.flow)) ? args.flow : "all") as ChainFlow;
       const product = typeof args.product === "string" ? args.product : "";
       const chain = args.relation === "partner" || args.relation === "competitor" ? null : buildChain(t, links, tagged, names, revenue, { depth: args.depth === 3 ? 3 : args.depth === 1 ? 1 : 2, flow, product });
-      const body = [lines.join("\n") || `No named links for ${t}.`, chain && chain.edges.length ? chainText(chain) : ""].filter(Boolean).join("\n\n");
+      const body = [`Open in the app: ${supplyHref({ t })} (each line ends with the address that selects that name)`, lines.join("\n") || `No named links for ${t}.`, chain && chain.edges.length ? chainText(chain) : ""].filter(Boolean).join("\n\n");
       return { output: clip(body), summary: `${g.length} links for ${t}${chain ? ` · ${chain.nodes.length - 1} in the chain` : ""}`, refs: g.slice(0, 5).map((n) => ({ ticker: n.links[0].ticker, accn: n.links[0].accn, label: n.name })) };
     }
     case "simulate_supply_shock": {
@@ -547,7 +553,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const revenue = Object.fromEntries(u.companies.map((c) => [c.ticker, c.revenueTTM ?? undefined]));
       const r = simulateShock(t, shock, links, names, revenue);
       const lines = r.slice(0, 30).map((i) => `${i.name}${i.ticker ? ` (${i.ticker})` : ""} | ${i.channel} | ${i.severity} | hop ${i.hop}${i.revenuePct != null ? ` | ${(i.revenuePct * 100).toFixed(2)}% of revenue` : ""}${i.dollars != null ? ` ≈$${(i.dollars / 1e6).toFixed(0)}M` : ""} | path ${i.path.join(" → ")} | source ${i.link.ticker} ${i.link.form} ${i.link.accn}`);
-      return { output: `Shock: ${names[t] ?? t} −${shock * 100}%. Mechanical estimate from disclosed shares.\n${lines.join("\n") || "No linked companies."}`, summary: `${r.length} companies affected` };
+      return { output: `Shock: ${names[t] ?? t} −${shock * 100}%. Mechanical estimate from stated shares and stated flows on trade links only (financing, acquisition and regulator ties are left out). Open it: ${supplyHref({ t, tab: "shock" })}\n${lines.join("\n") || "No linked companies."}`, summary: `${r.length} companies affected` };
     }
     case "navigate_to": {
       const page = String(args.page);
@@ -775,7 +781,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     }
     case "search_filings": {
       const t = args.ticker ? coverageOf(String(args.ticker)) : undefined;
-      const r = await searchFilings({ data: { q: String(args.query).slice(0, 200), ciks: t ? [t.cik] : undefined } });
+      const r = await searchFilings({ data: { q: String(args.query).slice(0, 200), ciks: t ? companyCiks(t) : undefined } });
       return {
         output: `${r.total} documents match.\n` + r.hits.map((h) => `${h.company} | ${h.form} | filed ${h.filed} | accession ${h.accn} | doc ${h.doc} | ${h.description ?? ""}`).join("\n"),
         summary: `"${args.query}": ${r.total.toLocaleString()} hits`,

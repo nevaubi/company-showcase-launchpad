@@ -21,8 +21,8 @@ const TYPE_LABEL: Record<string, string> = {
 
 function Hit({ h, showTicker }: { h: DocHit; showTicker: boolean }) {
   return (
-    <li className="px-3.5 py-2.5">
-      <div className="flex flex-wrap items-center gap-1.5 text-[12.5px]">
+    <li className="px-4 py-2">
+      <div className="flex flex-wrap items-center gap-1.5 text-[13px]">
         {showTicker && <Badge variant="mono">{h.ticker}</Badge>}
         <span className="min-w-0 flex-1 truncate font-medium">
           {(h.title ?? "Document").split("||")[0]}
@@ -46,7 +46,7 @@ function Hit({ h, showTicker }: { h: DocHit; showTicker: boolean }) {
           </a>
         )}
       </div>
-      <p className="mt-1 text-[12.5px] leading-snug text-muted-foreground">
+      <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
         {snippetParts(h.snippet).map((p, i) =>
           p.hit ? (
             <mark key={i} className="rounded-sm bg-highlight-soft px-0.5 text-foreground">
@@ -100,20 +100,20 @@ export function DocSearch({ ticker, embedded }: { ticker: string; embedded?: boo
           e.preventDefault();
           if (q.trim().length > 1) run.mutate(q.trim());
         }}
-        className="flex gap-2 border-b px-3.5 py-2.5"
+        className="flex gap-2 border-b px-4 py-2"
       >
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder='e.g. "net revenue retention" or backlog'
-          className="h-8 text-xs"
+          className="h-8 text-[13px]"
         />
-        <Button type="submit" size="sm" disabled={run.isPending}>
+        <Button type="submit" size="sm" disabled={run.isPending} aria-label="Search">
           {run.isPending ? <Loader2 className="animate-spin" /> : <Search />}
         </Button>
       </form>
       {run.isError && (
-        <p className="px-3.5 py-3 text-sm text-negative">{(run.error as Error).message}</p>
+        <p className="px-4 py-3 text-[13px] text-negative">{(run.error as Error).message}</p>
       )}
       {run.data &&
         (run.data.length ? (
@@ -127,7 +127,7 @@ export function DocSearch({ ticker, embedded }: { ticker: string; embedded?: boo
             ))}
           </ul>
         ) : (
-          <p className="px-3.5 py-3 text-sm text-muted-foreground">No matches.</p>
+          <p className="px-4 py-3 text-[13px] text-muted-foreground">No matches.</p>
         ))}
     </Panel>
   );

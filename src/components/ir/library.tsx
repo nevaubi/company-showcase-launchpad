@@ -1,9 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { CheckCircle2, Clock3, Download, Eye, FileSpreadsheet, FileText, Image as ImageIcon, Presentation, Search } from "lucide-react";
 import { toast } from "sonner";
-import { Panel } from "@/components/app/page-header";
+import { IrPanel } from "@/components/ir/panel";
+import { IR } from "@/components/ir/typography";
+import { collapseDocCopies } from "@/lib/ir/dedupe";
 import { Segmented } from "@/components/app/segmented";
 import { useSource } from "@/components/source/source-context";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +16,7 @@ import { getIrDownload, getIrImages, type IrDocRow } from "@/lib/ir.functions";
 import { mergeStore, STORE_PREFIX, storeUrl, type StoreDoc } from "@/lib/ir/store";
 import { EXT_PREFIX } from "@/lib/ir/external";
 import { fmtDate } from "@/lib/format";
+import { libraryTitle } from "@/lib/ir/display";
 import { cn } from "@/lib/utils";
 
 const KIND_LABEL: Record<string, string> = {
@@ -43,14 +46,8 @@ const KIND_ONE: Record<string, string> = {
   other: "Exhibit",
 };
 
-/** Human title: filenames like "a8-kex991q4202609262026" become "Earnings release · Sep 2026". */
-export function docTitle(d: Pick<IrDocRow, "title" | "period" | "filed" | "kind">) {
-  const t = d.title?.trim() ?? "";
-  const looksLikeFile = !t || /\d{5,}|^(ex|d)\d|ex[-_ ]?99|^[a-z0-9]+[_-][a-z0-9_-]+$/i.test(t) || !/\s/.test(t);
-  if (!looksLikeFile) return t;
-  const when = d.period ? fmtDate(d.period, { month: "short", year: "numeric" }) : d.filed ? fmtDate(d.filed, { month: "short", year: "numeric" }) : "";
-  return [KIND_ONE[d.kind] ?? "Document", when].filter(Boolean).join(" · ");
-}
+/** Human title for a stored document (see `libraryTitle`). */
+export const docTitle = (d: Pick<IrDocRow, "title" | "period" | "filed" | "kind">) => libraryTitle(d, KIND_ONE[d.kind] ?? "Document");
 
 function KindIcon({ ext }: { ext: string | null }) {
   if (/^(xlsx?|xlsm|csv)$/.test(ext ?? "")) return <FileSpreadsheet className="size-4 shrink-0 text-positive" />;
@@ -98,6 +95,8 @@ export function IrLibrary({
   const [query, setQuery] = useState("");
   const [showImages, setShowImages] = useState(false);
   const [limit, setLimit] = useState(150);
+  // The whole list renders without a "show more" step: further rows follow in the background.
+
   const wantImages = images > 0 && (showImages || kind === "image");
   const imgQ = useQuery({ queryKey: ["ir-images", ticker], queryFn: () => fetchImages({ data: { ticker } }), enabled: wantImages, staleTime: 10 * 60_000 });
   const documents = useMemo(() => (wantImages && imgQ.data ? [...files, ...imgQ.data] : files), [files, imgQ.data, wantImages]);
@@ -114,7 +113,8 @@ export function IrLibrary({
   }, [documents]);
   const maxYear = Math.max(1, ...years.map(([, n]) => n));
   const q = query.trim().toLowerCase();
-  const list = documents.filter(
+  const { docs: unique, copies } = useMemo(() => collapseDocCopies(documents), [documents]);
+  const list = unique.filter(
     (d) =>
       (kind === "all" || d.kind === kind) &&
       (showImages || kind === "image" || d.kind !== "image") &&
@@ -173,39 +173,38 @@ export function IrLibrary({
     }
   };
 
-  return (
-    <Panel
-      title={embedded ? undefined : "IR document library"}
-      className={embedded ? "border-y-0 bg-transparent" : undefined}
-      subtitle={`${(files.length + images).toLocaleString()} files stored permanently${images ? ` (${images.toLocaleString()} slide images)` : ""}${extra.length ? ` (${extra.length.toLocaleString()} from the Filed Under document store)` : ""} · ${(total / 1e6).toFixed(1)} MB of documents · ${read.toLocaleString()} read for data · earnings releases, supplements, presentations and data files from EDGAR and the IR website`}
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
+  useEffect(() => {
+    if (limit >= list.length) return;
+    const t = setTimeout(() => setLimit((n) => n + 300), 16);
+    return () => clearTimeout(t);
+  }, [limit, list.length]);
+
+  const body = (
+    <>
+      <div className={cn("flex flex-wrap items-center gap-2 border-b px-4 py-2", IR.caption)}>
+        <span>
+          {(files.length + images).toLocaleString()} files stored permanently{images ? ` (${images.toLocaleString()} slide images)` : ""}
+          {extra.length ? `, ${extra.length.toLocaleString()} from the Filed Under document store` : ""} · {(total / 1e6).toFixed(1)} MB · {read.toLocaleString()} read for figures
+          {copies.size ? ` · ${[...copies.values()].reduce((n, c) => n + c.length, 0).toLocaleString()} duplicate copies shown under the copy that was read` : ""}
+        </span>
+        <div data-agent-controls className="ml-auto flex flex-wrap items-center gap-2">
           <Segmented label="Document type" value={kind} onChange={(v) => (setKind(v), setLimit(150))} options={[{ v: "all", l: "All" }, ...kinds.map((k) => ({ v: k, l: KIND_LABEL[k] ?? k }))]} size="xs" />
           {kind === "all" && images > 0 && (
-            <Button size="sm" variant="ghost" onClick={() => setShowImages((x) => !x)}>
+            <Button size="sm" variant="ghost" aria-pressed={showImages} onClick={() => setShowImages((x) => !x)}>
               {wantImages && imgQ.isLoading ? "Loading images…" : showImages ? "Hide images" : `Show ${images.toLocaleString()} images`}
             </Button>
           )}
         </div>
-      }
-    >
+      </div>
       {years.length > 1 && (
         <div className="border-b px-4 pb-2 pt-3">
           <div className="flex items-end gap-[3px]" role="group" aria-label="Documents by year">
             {years.map(([y, n]) => (
               <Tooltip key={y} delayDuration={150}>
                 <TooltipTrigger asChild>
-                  <button
-                    onClick={() => setYear((cur) => (cur === y ? null : y))}
-                    aria-pressed={year === y}
-                    aria-label={`${y}: ${n} documents`}
-                    className="group flex min-w-0 flex-1 flex-col items-center gap-1"
-                  >
-                    <span
-                      className={cn("w-full rounded-sm bg-chart-1/25 transition-colors group-hover:bg-chart-1/60", year === y && "bg-chart-1")}
-                      style={{ height: 6 + (n / maxYear) * 34 }}
-                    />
-                    <span className={cn("num text-[9px] text-muted-foreground", year === y && "font-semibold text-foreground")}>’{y.slice(2)}</span>
+                  <button type="button" onClick={() => setYear((cur) => (cur === y ? null : y))} aria-pressed={year === y} aria-label={`${y}: ${n} documents`} className="group flex min-w-0 flex-1 flex-col items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <span className={cn("w-full rounded-sm bg-muted-foreground/70 transition-colors duration-150 group-hover:bg-foreground/70 motion-reduce:transition-none", year === y && "bg-foreground")} style={{ height: 6 + (n / maxYear) * 30 }} />
+                    <span className={cn("num text-[10px] text-muted-foreground", year === y && "font-semibold text-foreground")}>’{y.slice(2)}</span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent className="text-xs">
@@ -219,9 +218,9 @@ export function IrLibrary({
       <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2">
         <div className="relative w-full sm:w-64">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search titles" className="h-8 pl-7 text-xs" aria-label="Search documents" />
+          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search titles" className="h-8 pl-7 text-[13px]" aria-label="Search documents" />
         </div>
-        <span className="text-xs text-muted-foreground">
+        <span className={IR.caption}>
           {list.length.toLocaleString()} shown{year ? ` · ${year}` : ""}
         </span>
         {year && (
@@ -231,41 +230,44 @@ export function IrLibrary({
         )}
       </div>
       {!list.length ? (
-        <p className="p-5 text-sm text-muted-foreground">{documents.length ? "No documents match these filters." : "No stored documents yet — the collector adds files for each company in rotation."}</p>
+        <p className="px-4 py-4 text-[13px] text-muted-foreground">{documents.length ? "No documents match these filters." : "No stored documents yet. The collector adds files for each company in rotation."}</p>
       ) : (
         <ul className="divide-y">
-          {list.slice(0, limit).map((d) => (
-            <li key={d.id} className="flex min-w-0 items-center gap-3 px-4 py-2">
-              <KindIcon ext={d.ext} />
-              <button onClick={() => view(d)} className="min-w-0 flex-1 text-left">
-                <p className="truncate text-sm hover:underline">{docTitle(d)}</p>
-                <p className="num truncate text-[11px] text-muted-foreground">
-                  {d.filed ? fmtDate(d.filed) : "IR website"} · {d.exhibit ?? (d.ext ?? "").toUpperCase()}
-                  {d.pages ? ` · ${d.pages} pp` : ""} · {((d.bytes ?? 0) / 1024).toFixed(0)} KB
-                </p>
-              </button>
-              <ReadState d={d} />
-              <Badge variant="outline" className="hidden sm:inline-flex">
-                {KIND_LABEL[d.kind] ?? d.kind}
-              </Badge>
-              <Button size="icon-sm" variant="ghost" aria-label={d.viewable ? "Open stored copy" : "Open original file"} onClick={() => view(d)} className="hidden sm:inline-flex">
-                <Eye />
-              </Button>
-              <Button size="icon-sm" variant="ghost" aria-label="Download stored copy" onClick={() => save(d)}>
-                <Download />
-              </Button>
-            </li>
-          ))}
-          {list.length > limit && (
-            <li className="px-4 py-3 text-center">
-              <Button size="sm" variant="outline" onClick={() => setLimit((n) => n + 300)}>
-                Show more ({(list.length - limit).toLocaleString()} remaining)
-              </Button>
-            </li>
-          )}
+          {list.slice(0, limit).map((d) => {
+            const dup = copies.get(d.id);
+            return (
+              <li key={d.id} className="flex min-w-0 items-center gap-3 px-4 py-2 transition-colors duration-150 hover:bg-secondary/60 motion-reduce:transition-none">
+                <KindIcon ext={d.ext} />
+                <button type="button" onClick={() => view(d)} className="min-w-0 flex-1 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <p className={cn("truncate hover:underline", IR.row)}>{docTitle(d)}</p>
+                  <p className={cn("num truncate", IR.caption)}>
+                    {d.filed ? fmtDate(d.filed) : "IR website"} · {d.exhibit ?? (d.ext ?? "").toUpperCase()}
+                    {d.pages ? ` · ${d.pages} pp` : ""} · {((d.bytes ?? 0) / 1024).toFixed(0)} KB
+                    {dup ? ` · also stored as ${dup.map((c) => ((c as IrDocRow).ext ?? "copy").toUpperCase()).join(", ")}` : ""}
+                  </p>
+                </button>
+                <ReadState d={d} />
+                <Badge variant="outline" className="hidden rounded-sm sm:inline-flex">
+                  {KIND_ONE[d.kind] ?? d.kind}
+                </Badge>
+                <Button size="icon-sm" variant="ghost" aria-label={d.viewable ? "Open stored copy" : "Open original file"} onClick={() => view(d)} className="hidden sm:inline-flex">
+                  <Eye />
+                </Button>
+                <Button size="icon-sm" variant="ghost" aria-label="Download stored copy" onClick={() => save(d)}>
+                  <Download />
+                </Button>
+              </li>
+            );
+          })}
         </ul>
       )}
-    </Panel>
+    </>
+  );
+  if (embedded) return body;
+  return (
+    <IrPanel section="Source documents" title="Stored documents" bodyClassName="p-0">
+      {body}
+    </IrPanel>
   );
 }
 
@@ -273,8 +275,8 @@ function ReadState({ d }: { d: IrDocRow }) {
   if (d.extract_status?.startsWith("ok"))
     return (
       <Tooltip>
-        <TooltipTrigger className="hidden items-center gap-1 text-[11px] text-positive sm:inline-flex">
-          <CheckCircle2 className="size-3.5" />
+        <TooltipTrigger className="hidden items-center gap-1 text-[11px] text-muted-foreground sm:inline-flex">
+          <CheckCircle2 className="size-3.5 text-positive" />
           <span className="num">{(d.extract_facts ?? 0).toLocaleString()}</span>
         </TooltipTrigger>
         <TooltipContent className="text-xs">{(d.extract_facts ?? 0).toLocaleString()} data points read from this document</TooltipContent>

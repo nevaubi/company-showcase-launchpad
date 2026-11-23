@@ -5,12 +5,13 @@ export interface LandingStats { irFacts: number | null; irDocs: number | null; s
 /** Public aggregate counts for the home page. Returns only row-count estimates, never row data. */
 export const getLandingStats = createServerFn({ method: "GET" }).handler(async (): Promise<LandingStats> => {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const est = async (table: "ir_kpi_facts" | "ir_documents" | "supply_links") => {
+  const { countSupplyLinks } = await import("@/lib/supply/read");
+  const est = async (table: "ir_kpi_facts" | "ir_documents") => {
     try {
       const { count, error } = await supabaseAdmin.from(table).select("*", { count: "estimated", head: true });
       return error ? null : count ?? null;
     } catch { return null; }
   };
-  const [irFacts, irDocs, supplyLinks] = await Promise.all([est("ir_kpi_facts"), est("ir_documents"), est("supply_links")]);
+  const [irFacts, irDocs, supplyLinks] = await Promise.all([est("ir_kpi_facts"), est("ir_documents"), countSupplyLinks(supabaseAdmin).catch(() => null)]);
   return { irFacts, irDocs, supplyLinks };
 });

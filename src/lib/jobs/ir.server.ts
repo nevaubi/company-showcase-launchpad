@@ -4,7 +4,7 @@
 //  2. Files hosted on the company's IR site, discovered with Firecrawl map
 // Each file is kept byte-for-byte in the private `ir-documents` bucket with a sha256.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import type { CoverageCompany } from "@/lib/coverage";
+import { companyCiks, type CoverageCompany } from "@/lib/coverage";
 import { classifyIrDocument, irFileExt, IR_FILE_RE } from "@/lib/ir/classify";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 
@@ -26,6 +26,8 @@ interface Candidate {
   filed?: string;
   period?: string;
   sec?: boolean;
+  /** CIK whose index lists the filing (archive URLs resolve only under it) */
+  cik?: string;
 }
 
 async function store(c: CoverageCompany, k: Candidate): Promise<{ stored: boolean; reason?: string; bytes?: number }> {
@@ -83,21 +85,24 @@ interface Submissions {
  * files, which are read only when `since` reaches back past the "recent" window.
  */
 export async function secExhibitCandidates(c: CoverageCompany, since = new Date(Date.now() - 3 * 365 * 86400000).toISOString().slice(0, 10)): Promise<Candidate[]> {
-  const cik = c.cik.padStart(10, "0");
-  const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${cik}.json`)).json()) as Submissions;
-  const pages: FilingColumns[] = [sub.filings.recent];
-  for (const f of sub.filings.files ?? []) {
-    if (f.filingTo < since) continue;
-    pages.push((await (await fetchSec(`https://data.sec.gov/submissions/${f.name}`)).json()) as FilingColumns);
+  // Every CIK of the company (a former registrant's index keeps its own releases).
+  const pages: { cik: string; r: FilingColumns }[] = [];
+  for (const k of companyCiks(c)) {
+    const sub = (await (await fetchSec(`https://data.sec.gov/submissions/CIK${k.padStart(10, "0")}.json`)).json()) as Submissions;
+    pages.push({ cik: k, r: sub.filings.recent });
+    for (const f of sub.filings.files ?? []) {
+      if (f.filingTo < since) continue;
+      pages.push({ cik: k, r: (await (await fetchSec(`https://data.sec.gov/submissions/${f.name}`)).json()) as FilingColumns });
+    }
   }
   const out: Candidate[] = [];
   const seen = new Set<string>();
-  for (const r of pages) {
+  for (const { cik, r } of pages) {
     for (let i = 0; i < r.form.length; i++) {
       if (!/^8-K(\/A)?$/.test(r.form[i]) || r.filingDate[i] < since || !/2\.02|7\.01/.test(r.items?.[i] ?? "")) continue;
       if (seen.has(r.accessionNumber[i])) continue;
       seen.add(r.accessionNumber[i]);
-      out.push({ url: r.accessionNumber[i], source: "sec-exhibit", accn: r.accessionNumber[i], filed: r.filingDate[i], period: r.reportDate[i] || undefined });
+      out.push({ url: r.accessionNumber[i], source: "sec-exhibit", accn: r.accessionNumber[i], filed: r.filingDate[i], period: r.reportDate[i] || undefined, cik });
     }
   }
   return out.sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? ""));
@@ -106,7 +111,8 @@ export async function secExhibitCandidates(c: CoverageCompany, since = new Date(
 /** Expand one 8-K into its exhibit files using the filing index table (type + description columns). */
 export async function exhibitsOf(c: CoverageCompany, f: Candidate): Promise<Candidate[]> {
   if (!f.accn) throw new Error("Exhibit discovery requires an accession");
-  const idx = await (await fetchSec(archiveUrl(c.cik, f.accn, `${f.accn}-index.htm`))).text();
+  const cik = f.cik ?? c.cik;
+  const idx = await (await fetchSec(archiveUrl(cik, f.accn, `${f.accn}-index.htm`))).text();
   const out: Candidate[] = [];
   for (const row of idx.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
     const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((m) => m[1]);
@@ -120,7 +126,7 @@ export async function exhibitsOf(c: CoverageCompany, f: Candidate): Promise<Cand
     const isExhibit = /^EX-99/i.test(type);
     const isDataFile = /\.(xlsx?|pdf|pptx?|docx?|jpe?g|png|gif)$/i.test(name) && !/^R\d+\.htm/i.test(name);
     if (!isExhibit && !isDataFile) continue;
-    out.push({ ...f, url: archiveUrl(c.cik, f.accn, name), exhibit: type || undefined, description: description || undefined, sec: true });
+    out.push({ ...f, url: archiveUrl(cik, f.accn, name), exhibit: type || undefined, description: description || undefined, sec: true });
   }
   return out;
 }
@@ -220,7 +226,7 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
   const since = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
   const { data: recent, error } = await supabaseAdmin
     .from("sec_filings")
-    .select("accn, ticker, filed, report, items, form")
+    .select("accn, ticker, cik, filed, report, items, form")
     .like("form", "8-K%")
     .gte("filed", since)
     .or("items.like.%2.02%,items.like.%7.01%")
@@ -263,7 +269,8 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
   }
   let all: Candidate[];
   try {
-    all = await exhibitsOf(c, { url: next.accn, source: "sec-exhibit", accn: next.accn, filed: next.filed, period: next.report ?? undefined });
+    // The filing's own CIK (sec_filings records the index that listed it).
+    all = await exhibitsOf(c, { url: next.accn, source: "sec-exhibit", accn: next.accn, filed: next.filed, period: next.report ?? undefined, cik: next.cik || undefined });
   } catch (e) {
     const reason = (e as Error).message;
     const status = await recordFailure(`index: ${reason}`);

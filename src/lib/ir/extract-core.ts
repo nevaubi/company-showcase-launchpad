@@ -2,6 +2,7 @@
 // The model only *points* at table cells (table/row/cell indexes) and describes them; every value
 // is re-read from the parsed cell and scaled here, so a stored fact can never carry a number that
 // isn't printed in the source document.
+import { inFullUnits, printedScale, screenRows } from "@/lib/ir/scale-check";
 import { decodeHtml, parseNumber, type ParsedTable } from "@/lib/ir/tables";
 
 export const CATEGORIES = ["segment", "product", "geography", "customer", "channel", "cost", "kpi", "balance"] as const;
@@ -213,7 +214,8 @@ export interface FactRow {
   months: number;
   value: number;
   unit: string;
-  locator: { t: number; r: number; c: number; text: string };
+  /** `suspect`: why the figure's scale is doubtful (see scale-check.ts); the value is stored as read */
+  locator: { t: number; r: number; c: number; text: string; suspect?: string };
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -248,9 +250,14 @@ export function factsFromModel(out: ModelOutput, tables: ParsedTable[], filed?: 
       continue;
     }
     const periods = new Map(tb.periods.map((p) => [p.p, p]));
+    // The table's own evidence on its money scale: cells already in full units, else printed scale words.
+    const usdTexts = tb.rows.filter((r) => r.unit === "usd" && r.scale > 1).flatMap((r) => r.cells.map((c) => table.rows[r.r]?.[c.c] ?? ""));
+    const full = inFullUnits(usdTexts, Math.max(1, ...tb.rows.filter((r) => r.unit === "usd").map((r) => r.scale)));
+    const printed = printedScale(table);
     for (const row of tb.rows) {
       const label = cleanLabel(row.label);
-      const unitScale = row.unit === "usd" || row.unit === "count" || row.unit === "other" ? row.scale : 1;
+      let unitScale = row.unit === "usd" || row.unit === "count" || row.unit === "other" ? row.scale : 1;
+      if (row.unit === "usd" && unitScale > 1) unitScale = full ? 1 : (printed ?? unitScale);
       for (const cell of row.cells) {
         const key = `${tb.t}:${row.r}:${cell.c}`;
         if (seen.has(key)) continue;
@@ -281,5 +288,5 @@ export function factsFromModel(out: ModelOutput, tables: ParsedTable[], filed?: 
       }
     }
   }
-  return { rows, rejected };
+  return { rows: screenRows(rows), rejected };
 }

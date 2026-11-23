@@ -7,7 +7,7 @@ const link = (share: number | null): SupplyLink => ({ id: String(Math.random()),
 const node = (relation: Relation, name: string, share: number | null = null): GraphNode => ({ key: `${relation}:${name}`, name, ticker: null, domain: null, relation, links: [link(share)] });
 const focus: GraphNode = { key: "focus", name: "NVIDIA", ticker: "NVDA", domain: null, relation: "focus", links: [] };
 const ALL = new Set<Relation>(["customer", "supplier", "partner", "competitor"]);
-const risk = (p: Partial<NodeRisk>): NodeRisk => ({ singleSource: false, concentrated: false, hotspots: [], regions: [], dollars: null, ...p });
+const risk = (p: Partial<NodeRisk>): NodeRisk => ({ singleSource: false, dependency: false, concentrated: false, hotspots: [], regions: [], dollars: null, nature: "trade", ...p });
 
 /* jsdom has no layout: give the container a width and a ResizeObserver so the wide layout renders */
 const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
@@ -29,7 +29,7 @@ describe("SupplyNetwork", () => {
     render(<SupplyNetwork {...props} onSelect={onSelect} />);
     const suppliers = screen.getByRole("group", { name: /^Suppliers: 1$/ });
     const tsmc = within(suppliers).getByRole("button", { name: /TSMC, supplier, single source\. Open the filing evidence\./ });
-    expect(within(screen.getByRole("group", { name: /^Customers/ })).getByRole("button", { name: /Microsoft, customer, \$40\.0B stated/ })).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: /^Customers/ })).getByRole("button", { name: /Microsoft, customer, 19% share/ })).toBeInTheDocument();
     fireEvent.click(tsmc);
     expect(onSelect).toHaveBeenCalledWith("supplier:TSMC");
   });
@@ -56,5 +56,14 @@ describe("SupplyNetwork", () => {
     render(<SupplyNetwork {...props} overlay="single" />);
     expect(screen.getByRole("button", { name: /TSMC, supplier, single source, flagged by the overlay/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Microsoft, customer/ }).getAttribute("aria-label")).not.toMatch(/flagged/);
+  });
+
+  it("shows the shock only on supplier and customer names, not on a partner or competitor that shares the ticker", () => {
+    const g = [{ ...node("supplier", "HPE"), ticker: "HPE", key: "supplier:HPE" }, { ...node("partner", "HPE"), ticker: "HPE", key: "partner:HPE" }, { ...node("competitor", "HPE"), ticker: "HPE", key: "competitor:HPE" }];
+    const impacts = new Map([["HPE", { key: "HPE", name: "HPE", ticker: "HPE", hop: 1, channel: "lost sales" as const, revenuePct: 0.1, dollars: null, severity: "high" as const, path: [], link: g[0].links[0] }]]);
+    render(<SupplyNetwork {...props} graph={g} risks={{}} impacts={impacts} />);
+    expect(screen.getByRole("button", { name: /^HPE, supplier.*shock: high impact/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^HPE, partner.*not reached by the shock/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^HPE, competitor.*not reached by the shock/ })).toBeInTheDocument();
   });
 });

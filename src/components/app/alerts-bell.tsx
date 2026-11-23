@@ -1,12 +1,14 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { Bell, ExternalLink, FileText, Network, ShoppingBag, TrendingUp, UserRound } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { selectSupplyLinks } from "@/lib/supply/read";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useSource } from "@/components/source/source-context";
 import { useWatchlist } from "@/lib/workspace";
+import { readAlt } from "@/lib/alt/query";
 import { buildAlerts, unreadCount, type Alert, type AlertKind } from "@/lib/alerts/core";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -18,19 +20,20 @@ export const alertsQuery = (tickers: string[]) => ({
   queryKey: ["alerts", tickers.join(",")],
   enabled: tickers.length > 0,
   staleTime: 10 * 60_000,
-  queryFn: async (): Promise<Alert[]> => {
+  queryFn: async ({ client }: { client?: QueryClient }): Promise<Alert[]> => {
     const since = new Date(Date.now() - DAYS * 86400_000).toISOString().slice(0, 10);
     const [f, i, l, a, ideas, rl] = await Promise.all([
       supabase.from("sec_filings").select("accn,ticker,form,filed,doc,description,items,discovered_at").in("ticker", tickers).gte("filed", since).limit(400),
       supabase.from("insider_trades").select("accn,seq,ticker,owner,role,code,shares,price,plan_10b5,trade_date,doc,filed,discovered_at").in("ticker", tickers).gte("filed", since).in("code", ["P", "S"]).limit(500),
-      supabase.from("supply_links").select("id,ticker,counterparty,relation,detail,accn,doc,form,filed,created_at,is_current").in("ticker", tickers).eq("is_current", true).gte("filed", since).limit(300),
-      supabase.from("alt_data").select("uid,ticker,dataset,title,date,source_url,created_at").in("ticker", tickers).eq("kind", "event").gte("date", since).limit(300),
+      selectSupplyLinks(supabase, "id,ticker,counterparty,relation,detail,accn,doc,form,filed,created_at,is_current", (q) => q.in("ticker", tickers).eq("is_current", true).gte("filed", since).limit(300)),
+      // screened: no rows filed under the wrong company (src/lib/alt/screen.ts)
+      readAlt<{ uid: string; ticker: string; dataset: string; title: string; date: string | null; source_url: string | null; created_at: string }>("uid,ticker,dataset,title,date,source_url,created_at", (q) => q.in("ticker", tickers).eq("kind", "event").gte("date", since).limit(300), client).catch(() => []),
       fetch("/data/signals.json").then((r) => r.json()).catch(() => ({ ideas: [] })),
       supabase.from("filing_redlines").select("ticker,form,to_accn,to_filed,high,medium,stats").in("ticker", tickers).gte("to_filed", since).limit(100),
     ]);
     return buildAlerts({
       tickers, since,
-      filings: f.data ?? [], insiders: (i.data ?? []) as never, links: (l.data ?? []) as never, alt: a.data ?? [], ideas: ideas?.ideas ?? [], redlines: (rl.data ?? []) as never,
+      filings: f.data ?? [], insiders: (i.data ?? []) as never, links: (l.data ?? []) as never, alt: a, ideas: ideas?.ideas ?? [], redlines: (rl.data ?? []) as never,
     });
   },
 });

@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChangeCard, TYPE_LABEL } from "@/components/redline/change-card";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/lib/data";
-import { coverageOf } from "@/lib/coverage";
+import { coverageOf, historyCik } from "@/lib/coverage";
 import { defaultBase, REDLINE_VERSION, textsOf, type FilingRef, type Redline } from "@/lib/redline/core";
 import { summarizeRedline } from "@/lib/redline.functions";
 import type { RedlineSummary } from "@/lib/redline/summary";
@@ -79,7 +79,10 @@ function RedlinePage() {
   const to = filings.find((f) => f.accn === search.to) ?? filings[0] ?? null;
   const base = to ? defaultBase(company.data?.filings.filter((f) => f.doc) ?? [], to) : null;
   const from = filings.find((f) => f.accn === search.from && to && f.filed < to.filed) ?? base;
-  const q = useRedline(ticker, cov ? String(Number(cov.cik)) : undefined, form, from, to);
+  // The dataset's filings are listed under the CIK the dataset was built from (the history CIK when
+  // the company changed registrant): their archive URLs resolve only under that CIK.
+  const cik = company.data?.profile.cik ? String(Number(company.data.profile.cik)) : cov ? String(Number(historyCik(cov))) : undefined;
+  const q = useRedline(ticker, cik, form, from, to);
 
   const [level, setLevel] = useSessionState<LevelFilter>("redline:level", "medium", (v): v is LevelFilter => v === "high" || v === "medium" || v === "all");
   const [type, setType] = useState<TypeFilter>("all");

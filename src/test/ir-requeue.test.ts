@@ -16,3 +16,36 @@ describe("finished-company re-read", () => {
     expect(rereadTickers(["X"], [row("X", "2026-11-18", undefined, "sec-copy")], "2026-11-19T00:00:00Z", today).tickers).toEqual([]);
   });
 });
+
+import { isConfigFailure, requeueEnabled, requeueLimit, requeuePlan } from "../../scripts/lib/ir-requeue";
+describe("configuration-failed re-queue", () => {
+  it("matches only the stored configuration errors", () => {
+    expect(isConfigFailure("error: OpenAI 400 invalid_value: Invalid model ID.")).toBe(true);
+    expect(isConfigFailure("error: Escalation failed on page 7: OpenAI 400 invalid_value: Invalid model ID.")).toBe(true);
+    expect(isConfigFailure("rendition failed: Invalid row number in model")).toBe(false);
+    expect(isConfigFailure("error: pdftoppm exited with code 1")).toBe(false);
+    expect(isConfigFailure("error: convert: no images defined")).toBe(false);
+    expect(isConfigFailure("error: OpenAI 400 invalid_request_error: context too long")).toBe(false);
+    expect(isConfigFailure("error: Model returned invalid JSON")).toBe(false);
+    expect(isConfigFailure("ok 12 facts")).toBe(false);
+    expect(isConfigFailure(null)).toBe(false);
+  });
+  it("resets top-ranked companies first, bounded per pass", () => {
+    const rank = new Map([["NVDA", 1], ["AAPL", 2]]);
+    const rows = [
+      { id: "1", ticker: "TINY", status: "error: OpenAI 400 invalid_value: Invalid model ID." },
+      { id: "2", ticker: "AAPL", status: "error: OpenAI 400 invalid_value: Invalid model ID." },
+      { id: "3", ticker: "NVDA", status: "error: OpenAI 400 invalid_value: Invalid model ID." },
+      { id: "4", ticker: "NVDA", status: "error: pdftoppm exited with code 1" },
+      { id: "5", ticker: "AAPL", status: "error: OpenAI 400 invalid_value: Invalid model ID." },
+    ];
+    expect(requeuePlan(rows, rank, 10)).toEqual({ ids: ["3", "2", "5", "1"], tickers: ["NVDA", "AAPL", "TINY"] });
+    expect(requeuePlan(rows, rank, 2).ids).toEqual(["3", "2"]);
+  });
+  it("is off unless switched on, and bounded", () => {
+    expect(requeueEnabled({})).toBe(false);
+    expect(requeueEnabled({ IR_REQUEUE_CONFIG: "1" })).toBe(true);
+    expect(requeueLimit({})).toBe(2000);
+    expect(requeueLimit({ IR_REQUEUE_CONFIG_MAX: "99999" })).toBe(5000);
+  });
+});

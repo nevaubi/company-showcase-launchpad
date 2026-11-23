@@ -4,7 +4,15 @@ import { CURATED_GROUPS, EXTRA_COVERAGE } from "./coverage-extra";
 
 export interface CoverageCompany {
   ticker: string;
+  /** The registrant SEC's ticker file maps the ticker to today: new filings arrive under it. */
   cik: string;
+  /**
+   * Earlier registrants of the same company, newest first (a holding-company reorganisation gives
+   * the listed company a new CIK; XOM moved from 34088 to 2115436 in July 2026). Their filings stay
+   * under their own CIK: SEC feed jobs read every CIK (`companyCiks`), statement history is built
+   * from the oldest (`historyCik`), and an archive URL must use the CIK the filing was filed under.
+   */
+  formerCiks?: string[];
   shortName: string;
   sector: string;
   industry: string;
@@ -151,9 +159,11 @@ export const CURATED_COVERAGE: CoverageCompany[] = [
   co("COST", "909832", "Costco", "Consumer Staples", "Consumer Staples Merchandise Retail", "XLP", "https://www.costco.com", "https://investor.costco.com", 1983,
     "Membership warehouse club operator; membership fees provide most operating profit while merchandise is sold at low markups.",
     ["WMT", "AMZN", "PG"]),
-  co("XOM", "34088", "ExxonMobil", "Energy", "Integrated Oil & Gas", "XLE", "https://corporate.exxonmobil.com", "https://investor.exxonmobil.com", 1870,
+  // ExxonMobil Holdings Corp (CIK 2115436) became the listed registrant in July 2026; the history
+  // (and companyfacts) stays under Exxon Mobil Corp, CIK 34088.
+  co("XOM", "2115436", "ExxonMobil", "Energy", "Integrated Oil & Gas", "XLE", "https://corporate.exxonmobil.com", "https://investor.exxonmobil.com", 1870,
     "Integrated oil and gas company reporting Upstream, Energy Products, Chemical Products and Specialty Products, with major Permian and Guyana production.",
-    ["CVX", "COP", "SLB"]),
+    ["CVX", "COP", "SLB"], ["34088"]),
   co("CVX", "93410", "Chevron", "Energy", "Integrated Oil & Gas", "XLE", "https://www.chevron.com", "https://www.chevron.com/investors", 1879,
     "Integrated energy company reporting Upstream and Downstream segments, with Permian, Tengiz and (after acquiring Hess) Guyana assets.",
     ["XOM", "COP", "SLB"]),
@@ -349,9 +359,9 @@ export const CURATED_COVERAGE: CoverageCompany[] = [
 
 function co(
   ticker: string, cik: string, shortName: string, sector: string, industry: string, sectorEtf: string,
-  website: string, ir: string, founded: number, description: string, peers: string[],
+  website: string, ir: string, founded: number, description: string, peers: string[], formerCiks?: string[],
 ): CoverageCompany {
-  return { ticker, cik, shortName, sector, industry, sectorEtf, website, ir, founded, description, peers };
+  return { ticker, cik, shortName, sector, industry, sectorEtf, website, ir, founded, description, peers, ...(formerCiks?.length ? { formerCiks } : {}) };
 }
 
 const CURATED_SET = new Set(CURATED_COVERAGE.map((c) => c.ticker));
@@ -364,6 +374,18 @@ export const COVERAGE: CoverageCompany[] = [
 const BY_TICKER = new Map(COVERAGE.map((c) => [c.ticker, c]));
 
 export const COVERAGE_TICKERS = COVERAGE.map((c) => c.ticker);
+
+const unpad = (cik: string) => String(Number(cik));
+/** Every CIK a covered company files or filed under, current first (unpadded). */
+export const companyCiks = (c: Pick<CoverageCompany, "cik" | "formerCiks">): string[] => [...new Set([c.cik, ...(c.formerCiks ?? [])].map(unpad))];
+/** The CIK whose filings and companyfacts hold the statement history: the oldest registrant. */
+export const historyCik = (c: Pick<CoverageCompany, "cik" | "formerCiks">): string => (c.formerCiks?.length ? c.formerCiks[c.formerCiks.length - 1] : c.cik);
+/** Covered ticker for every current and former CIK (unpadded). */
+export const tickerByCik = (list: readonly Pick<CoverageCompany, "ticker" | "cik" | "formerCiks">[] = COVERAGE): Map<string, string> => {
+  const m = new Map<string, string>();
+  for (const c of list) for (const k of companyCiks(c)) if (!m.has(k)) m.set(k, c.ticker);
+  return m;
+};
 export const coverageOf = (ticker: string) => BY_TICKER.get(ticker.toUpperCase());
 /** Datasets and price snapshots for curated companies ship in public/data; the rest are served from storage. */
 export const isBundled = (ticker: string) => CURATED_SET.has(ticker.toUpperCase());

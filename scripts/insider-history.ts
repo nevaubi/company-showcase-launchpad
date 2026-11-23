@@ -4,12 +4,13 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { sb, args, log, dbGate } from "./lib/supa";
-import { COVERAGE } from "../src/lib/coverage";
+import { COVERAGE, tickerByCik } from "../src/lib/coverage";
 
 const UA = "FiledUnder research admin@filedunder.ai";
 const DIR = "/tmp/form345";
 mkdirSync(DIR, { recursive: true });
-const byCik = new Map(COVERAGE.map((c) => [String(Number(c.cik)), c.ticker]));
+// Issuer CIKs in SEC's data sets: current and former registrants of each covered company.
+const byCik = tickerByCik(COVERAGE);
 const bySym = new Map(COVERAGE.map((c) => [c.ticker.replace("-", "."), c.ticker]));
 
 const MON: Record<string, string> = { JAN: "01", FEB: "02", MAR: "03", APR: "04", MAY: "05", JUN: "06", JUL: "07", AUG: "08", SEP: "09", OCT: "10", NOV: "11", DEC: "12" };

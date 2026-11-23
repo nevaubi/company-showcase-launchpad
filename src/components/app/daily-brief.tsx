@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { friendlyError } from "@/lib/errors";
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, type QueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { RefreshCw, Sparkles } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getDailyBrief } from "@/lib/brief.functions";
 import { auctionsQuery, crowding, gauges, hedgeFundsQuery, allSeries } from "@/lib/hedge/query";
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
-import { fmtAlt } from "@/lib/alt/query";
+import { fmtAlt, readAlt, type AltRow } from "@/lib/alt/query";
 import { cn } from "@/lib/utils";
 
 interface Fact {
@@ -26,7 +26,7 @@ interface Fact {
 const pct = (x: number) => `${(x * 100).toFixed(0)}%`;
 
 /** Collect numbered, source-linked facts from every data area for the brief. */
-async function gatherFacts(tickers: string[]): Promise<Fact[]> {
+async function gatherFacts(tickers: string[], client?: QueryClient): Promise<Fact[]> {
   const since = new Date(Date.now() - 21 * 86400_000).toISOString().slice(0, 10);
   const facts: Fact[] = [];
   const add = (area: string, text: string, href: string, external = false) =>
@@ -39,17 +39,15 @@ async function gatherFacts(tickers: string[]): Promise<Fact[]> {
       .catch(() => null),
     hedgeFundsQuery.queryFn().catch(() => null),
     auctionsQuery.queryFn().catch(() => null),
-    (() => {
-      let q = supabase
-        .from("alt_data")
-        .select("ticker,dataset,date,title,value,unit,source_url")
-        .eq("kind", "event")
-        .gte("date", since)
-        .order("date", { ascending: false })
-        .limit(60);
-      if (scope) q = q.in("ticker", scope);
-      return q;
-    })(),
+    // screened: no rows filed under the wrong company (src/lib/alt/screen.ts)
+    readAlt(
+      "ticker,dataset,date,title,value,unit,source_url",
+      (q) => {
+        q = q.eq("kind", "event").gte("date", since).order("date", { ascending: false }).limit(60);
+        return scope ? q.in("ticker", scope) : q;
+      },
+      client,
+    ).catch(() => [] as AltRow[]),
     (() => {
       let q = supabase
         .from("supply_signals")
@@ -71,7 +69,7 @@ async function gatherFacts(tickers: string[]): Promise<Fact[]> {
       `${i.ticker} ${i.direction.toUpperCase()} setup (score ${i.score}) at $${i.price}: ${i.signals.map((s: any) => `${s.detail} [rule hit rate ${pct(s.stats.hitRate)} over ${s.stats.n} past cases, avg excess vs SPY ${(s.stats.avgExcess * 100).toFixed(1)}%]`).join("; ")}`,
       "/app/ideas",
     );
-  for (const r of (alt.data ?? []) as any[])
+  for (const r of alt)
     add(
       `alt data/${r.dataset}`,
       `${r.date} ${r.ticker}: ${r.title}${r.value != null ? ` = ${fmtAlt(r.value, r.unit)}` : ""}`,
@@ -124,7 +122,7 @@ export function DailyBrief({ tickers }: { tickers: string[] }) {
   const key = useMemo(() => [...tickers].sort().join(",").slice(0, 80) || "market", [tickers]);
   const facts = useQuery({
     queryKey: ["brief-facts", key],
-    queryFn: () => gatherFacts(tickers),
+    queryFn: ({ client }) => gatherFacts(tickers, client),
     staleTime: 30 * 60_000,
   });
   const brief = useQuery({

@@ -1,17 +1,85 @@
-// Worker step (daily): one job_runs row (job `freshness`) summarising stale/missing datasets and every
-// paused job, from the `data_freshness()` aggregate (so no row limit can hide old sources).
+// Worker step (the loop calls it hourly): one job_runs row (job `freshness`) summarising stale/missing
+// datasets and paused jobs from the `data_freshness()` aggregate, then the automatic remedies
+// (src/lib/jobs/remediation.ts). Its own gate is persisted (job_state `freshness`, cursor = last check
+// in epoch s), so restarts and the loop's hourly call never run it more than about once an hour.
+// `--force` ignores the gate.
 import { log, sb } from "./lib/supa";
-import { dataFreshness, pausedJobs } from "@/lib/jobs/data-freshness";
+import { dataFreshness, groupPaused, pausedJobs } from "@/lib/jobs/data-freshness";
+import { checkDue, episodeOf, INTEL_REQUEST_KEY, loopRequestKey, planRemedies, readReceipts, remedyKey } from "@/lib/jobs/remediation";
+import { providerKey, routeDecision, routeOf, PROVIDER_IDS, type CircuitRow } from "@/lib/jobs/provider-health";
 
-const now = new Date().toISOString();
+const nowMs = Date.now();
+const now = new Date(nowMs).toISOString();
+const nowS = Math.floor(nowMs / 1000);
+
+const { data: gate, error: gateError } = await sb.from("job_state").select("cursor").eq("job", "freshness").maybeSingle();
+if (gateError) throw new Error(gateError.message);
+if (!process.argv.includes("--force") && !checkDue(gate?.cursor, nowMs)) {
+  log(`freshness: checked ${Math.round((nowMs - (gate?.cursor ?? 0) * 1000) / 60_000)} min ago; next check after 55 min`);
+  process.exit(0);
+}
+// Claim the hour before the work, so two overlapping calls do not both remediate.
+await sb.from("job_state").upsert({ job: "freshness", cursor: nowS, updated_at: now });
+
 const { data, error } = await sb.rpc("data_freshness");
 if (error) throw new Error(error.message);
 const report = dataFreshness((data ?? []) as { key: string; newest: string | null }[]);
-const { data: st } = await sb.from("job_state").select("job,paused_reason,updated_at").not("paused_reason", "is", null);
-const paused = pausedJobs(st ?? []);
+const { data: st, error: stError } = await sb.from("job_state").select("job,cursor,paused_reason,updated_at").or('paused_reason.not.is.null,job.like."remedy:*",job.like."provider:*"').limit(5000);
+if (stError) throw new Error(stError.message);
+const rows = (st ?? []) as { job: string; cursor: number | null; paused_reason: string | null; updated_at: string }[];
+const paused = pausedJobs(rows);
 const bad = report.filter((r) => r.status !== "fresh");
-await sb.from("job_runs").insert({ job: "freshness", started_at: now, finished_at: now, ok: bad.length === 0, items: bad.length, detail: { stale: bad.map(({ key, label, newest, ageHours, maxAgeHours, status }) => ({ key, label, newest, ageHours, maxAgeHours, status })), paused, checked: report.length } as never });
-log(`freshness: ${bad.length}/${report.length} stale or missing; ${paused.length} paused`);
+
+// Remedies. AI steps run only while the reasoning route is healthy.
+const receipts = readReceipts(rows);
+const circuits = new Map(rows.filter((r) => r.job.startsWith("provider:")).map((r) => [r.job, r as CircuitRow]));
+const aiRoute = routeOf(process.env.IR_REASON_MODEL || "gpt-6.1-sol", process.env).filter((id) => PROVIDER_IDS.includes(id));
+const ai = routeDecision(circuits, aiRoute, nowMs);
+const actions = planRemedies(bad, receipts, ai.state === "closed", nowMs);
+const applied: string[] = [];
+const failed: string[] = [];
+for (const a of actions) {
+  try {
+    if (a.apply && a.remedy.kind === "loop") {
+      const { error: e } = await sb.from("job_state").upsert({ job: loopRequestKey(a.remedy.step), cursor: nowS, updated_at: now });
+      if (e) throw new Error(e.message);
+    }
+    if (a.apply && a.remedy.kind === "intel") {
+      // A request the intel step honours at most once (intelDue); the weekly marker and its retry state are not touched.
+      const newest = bad.find((b) => b.key === a.key)?.newest ?? null;
+      const { error: e } = await sb.from("job_state").upsert({ job: INTEL_REQUEST_KEY, cursor: nowS, paused_reason: `requested: ${a.key} stale since ${newest ?? "never"}`, updated_at: now });
+      if (e) throw new Error(e.message);
+    }
+    if (a.receipt) {
+      const { error: e } = await sb.from("job_state").upsert({ job: remedyKey(a.key), cursor: nowS, paused_reason: episodeOf(bad.find((b) => b.key === a.key)?.newest), updated_at: now });
+      if (e) throw new Error(e.message);
+    }
+    if (a.apply) applied.push(`${a.key}: ${a.remedy.kind === "loop" ? `loop ${a.remedy.step}` : "supply intel requested once"}`);
+  } catch (e) {
+    failed.push(`${a.key}: ${(e as Error).message.slice(0, 120)}`);
+  }
+}
+
+const groups = groupPaused(paused);
+await sb.from("job_runs").insert({
+  job: "freshness",
+  started_at: now,
+  finished_at: new Date().toISOString(),
+  ok: bad.length === 0 && failed.length === 0,
+  items: bad.length,
+  detail: {
+    stale: bad.map(({ key, label, newest, ageHours, maxAgeHours, status }) => ({ key, label, newest, ageHours, maxAgeHours, status })),
+    paused: groups.map((g) => ({ job: g.job, count: g.count, reason: g.reason.slice(0, 160), since: g.since })),
+    remedies: actions.map((a) => ({ key: a.key, apply: a.apply, why: a.why })),
+    applied,
+    failed,
+    aiRoute: { providers: aiRoute, state: ai.state },
+    checked: report.length,
+  } as never,
+});
+log(`freshness: ${bad.length}/${report.length} stale or missing; ${groups.length} paused groups; ${applied.length} remedies applied`);
 for (const b of bad) log(`  ${b.status} ${b.label}: newest ${b.newest ?? "none"} (limit ${b.maxAgeHours}h)`);
-for (const p of paused) log(`  paused ${p.job}: ${p.reason.slice(0, 100)}`);
+for (const a of actions) log(`  remedy ${a.key}: ${a.why}`);
+for (const g of groups) log(`  paused ${g.job}${g.count > 1 ? ` (${g.count})` : ""}: ${g.reason.slice(0, 100)}`);
+for (const f of failed) log(`  remedy failed ${f}`);
 process.exit(0);

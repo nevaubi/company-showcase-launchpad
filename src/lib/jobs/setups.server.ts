@@ -5,6 +5,7 @@
 // code the full-history script uses (src/lib/signals/*), so the job only maintains what changed.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { COVERAGE } from "@/lib/coverage";
+import { pageSupplyLinks } from "@/lib/supply/read";
 import type { Bar } from "@/lib/financials/types";
 import { fetchCboeDaily, fetchNasdaqDaily, fetchYahoo, isCboeIndex, pool, toBars } from "@/lib/market-data.server";
 import { benchFromBars, BENCH_SYMBOLS, contextFromBench, parseCboeCsv, VIX3M_URL, type BenchFile, type EngineContext } from "@/lib/signals/context";
@@ -17,6 +18,7 @@ import { parseRules, stepBot, type Candidate, type Ohlc, type Position } from "@
 import { GATE, OOS_START } from "@/lib/signals/backtest";
 import { roundTripCost, tradeCost } from "@/lib/signals/features";
 import type { Json } from "@/integrations/supabase/types";
+import { barProblem } from "@/lib/jobs/bar-check";
 
 type Result = { ok: boolean; items: number; detail: Record<string, unknown> };
 const db = () => supabaseAdmin;
@@ -72,11 +74,24 @@ async function fetchDaily(symbol: string): Promise<Bar[]> {
   }
 }
 
-async function upsertBars(symbol: string, bars: Bar[]) {
-  const rows = bars.map(([date, open, high, low, close, adj, volume]) => ({ symbol, date, open, high, low, close, adj_close: adj, volume: Math.round(volume), updated_at: nowIso() }));
-  if (!rows.length) return 0;
-  const { error } = await db().from("market_bars").upsert(rows);
-  if (error) throw new Error(error.message);
+/**
+ * Store bars, rejecting any whose open or close lies outside its high-low range (`barProblem`). A
+ * rejected bar for the session itself throws after the good bars are stored, so the symbol is
+ * reported as failed for this session instead of carrying an impossible bar into the scan.
+ */
+async function upsertBars(symbol: string, bars: Bar[], session?: string) {
+  const bad: string[] = [];
+  const good = bars.filter(([date, open, high, low, close]) => {
+    const p = barProblem({ open, high, low, close });
+    if (p) bad.push(`${date}: ${p}`);
+    return !p;
+  });
+  const rows = good.map(([date, open, high, low, close, adj, volume]) => ({ symbol, date, open, high, low, close, adj_close: adj, volume: Math.round(volume), updated_at: nowIso() }));
+  if (rows.length) {
+    const { error } = await db().from("market_bars").upsert(rows);
+    if (error) throw new Error(error.message);
+  }
+  if (session && bad.some((b) => b.startsWith(session))) throw new Error(`rejected bar ${bad.find((b) => b.startsWith(session))}`);
   return rows.length;
 }
 
@@ -155,6 +170,7 @@ const PHASES: Record<string, Phase> = {
     const closeAt = closeInstant(asOf);
     let items = 0;
     const failed: string[] = [];
+    const rejected: string[] = [];
     while (left()) {
       const start = await take(asOf, "bars", 6);
       if (start == null) break;
@@ -166,10 +182,17 @@ const PHASES: Record<string, Phase> = {
       const { data: have } = await db().from("market_bars").select("symbol, updated_at").eq("date", asOf).in("symbol", batch);
       const fresh = new Set((have ?? []).filter((r) => r.updated_at >= closeAt).map((r) => r.symbol));
       const todo = batch.filter((s) => !fresh.has(s));
-      const res = await pool(todo, 3, async (s) => upsertBars(s, (await fetchDaily(s)).filter((b) => b[0] <= asOf)));
-      res.forEach((r, k) => (r.status === "fulfilled" ? (items += r.value) : failed.push(todo[k])));
+      const res = await pool(todo, 3, async (s) => upsertBars(s, (await fetchDaily(s)).filter((b) => b[0] <= asOf), asOf));
+      res.forEach((r, k) => {
+        if (r.status === "fulfilled") items += r.value;
+        else {
+          failed.push(todo[k]);
+          const why = String((r.reason as Error)?.message ?? "");
+          if (why.startsWith("rejected bar")) rejected.push(`${todo[k]} ${why.slice(13)}`);
+        }
+      });
     }
-    return { ok: true, items, detail: { asOf, phase: "bars", failed } };
+    return { ok: true, items, detail: { asOf, phase: "bars", failed, ...(rejected.length ? { rejected } : {}) } };
   },
 
   /** Extend the calendar/benchmark file to the session and queue every ticker for the scan. */
@@ -505,7 +528,7 @@ async function pairsFor(asOf: string, sector: string): Promise<number> {
 async function customerMomentum(asOf: string, ctx: EngineContext): Promise<number> {
   const D = ctx.dates.length;
   if ((D - 1) % 21 !== 0) return 0; // monthly rule, same bar grid as the full-history scan
-  const links = await selectAll((a, b) => db().from("supply_links").select("ticker, counterparty_ticker, relation, filed").in("relation", ["customer", "supplier"]).not("counterparty_ticker", "is", null).lte("filed", asOf).order("id").range(a, b));
+  const links = await pageSupplyLinks<{ ticker: string; counterparty_ticker: string | null; relation: string; filed: string }>(db(), "ticker, counterparty_ticker, relation, filed", (q) => q.in("relation", ["customer", "supplier"]).not("counterparty_ticker", "is", null).lte("filed", asOf).order("id"));
   const customersOf = new Map<string, Set<string>>();
   for (const l of links) {
     const [sup, cus] = l.relation === "customer" ? [l.ticker, l.counterparty_ticker!] : [l.counterparty_ticker!, l.ticker];

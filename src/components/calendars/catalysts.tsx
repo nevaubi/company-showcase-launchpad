@@ -5,7 +5,7 @@ import { ExternalLink } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import LoadingState from "@/components/ui/loading-state";
-import { supabase } from "@/integrations/supabase/client";
+import { readAlt, withoutCopiedAwards } from "@/lib/alt/query";
 import { addDays, weekStart } from "@/lib/calendars/data";
 import type { CalData } from "@/lib/calendars/rows";
 import {
@@ -43,15 +43,18 @@ function useAltCatalystRows(from: string, to: string) {
   return useQuery({
     queryKey: ["catalyst-alt", from, to],
     staleTime: 30 * 60_000,
-    queryFn: async (): Promise<AltEventRow[]> => {
-      const cols = "uid,ticker,dataset,date,title,value,meta,source,source_url";
-      const [trials, awards, ends, fda] = await Promise.all([
-        supabase.from("alt_data").select(cols).eq("dataset", "trials").gte("meta->>primary_completion", from.slice(0, 7)).lte("meta->>primary_completion", to).limit(600),
-        supabase.from("alt_data").select(cols).eq("dataset", "contracts").eq("kind", "event").gte("date", from).lte("date", to).order("value", { ascending: false }).limit(300),
-        supabase.from("alt_data").select(cols).eq("dataset", "contracts").eq("kind", "event").gte("meta->>end", from).lte("meta->>end", to).order("value", { ascending: false }).limit(300),
-        supabase.from("alt_data").select(cols).eq("dataset", "fda").eq("kind", "event").gte("date", from).lte("date", to).limit(300),
+    queryFn: async ({ client }): Promise<AltEventRow[]> => {
+      const cols = "uid,ticker,dataset,kind,date,title,value,meta,source,source_url";
+      type Row = AltEventRow & { kind: string };
+      // readAlt keeps only rows that are the company's own (src/lib/alt/screen.ts)
+      const parts = await Promise.all([
+        readAlt<Row>(cols, (q) => q.eq("dataset", "trials").gte("meta->>primary_completion", from.slice(0, 7)).lte("meta->>primary_completion", to).limit(600), client),
+        // copied government-wide award rows are left out before the limit, so they cannot crowd out real ones
+        readAlt<Row>(cols, (q) => withoutCopiedAwards(q.eq("dataset", "contracts").eq("kind", "event").gte("date", from).lte("date", to)).order("value", { ascending: false }).limit(300), client),
+        readAlt<Row>(cols, (q) => withoutCopiedAwards(q.eq("dataset", "contracts").eq("kind", "event").gte("meta->>end", from).lte("meta->>end", to)).order("value", { ascending: false }).limit(300), client),
+        readAlt<Row>(cols, (q) => q.eq("dataset", "fda").eq("kind", "event").gte("date", from).lte("date", to).limit(300), client),
       ]);
-      return [trials, awards, ends, fda].flatMap((r) => (r.data ?? []) as unknown as AltEventRow[]);
+      return parts.flat();
     },
   });
 }

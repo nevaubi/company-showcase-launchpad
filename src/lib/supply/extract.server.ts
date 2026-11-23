@@ -1,7 +1,9 @@
 // Supply-chain link extraction for one company, shared by scripts/supply-chain.ts and the partner
 // job route (src/routes/api/public/partner/$task.ts). Reads the latest 10-K + any newer 10-Q
 // (current links) and prior 10-Ks (history); every link must carry a quote found verbatim in the
-// filing text. Stored links are replaced only when every filing was read.
+// filing text. Stored links are replaced only when every filing was read. Rows are stored as the model returned them:
+// amount, single source and regions are verified against the quote when rows are read (src/lib/supply/read.ts runs
+// `trustLink` from src/lib/supply/claims.ts), so a rule change applies to every stored row and nothing is lost.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { IR_MODELS, openaiStructured } from "@/lib/openai.server";
 import { normText, quoteInText, RELATIONS } from "@/lib/supply/core";
@@ -96,18 +98,18 @@ const SCHEMA = {
           amount_usd: {
             type: ["number", "null"],
             description:
-              "Dollar amount tied to this counterparty (revenue, purchase commitment, contract value) in full USD, only if stated",
+              "U.S. dollar figure the quote ties to this counterparty (revenue from it, purchases from it, contract value with it), in full USD; null if the quote has none, and never the filer's own total or a percentage's base",
           },
           single_source: {
             type: "boolean",
             description:
-              "true only if the text says sole, single or limited source / depends on this counterparty",
+              "true if the quote says this counterparty is the sole, single, only or exclusive source or supplier, or that the filer depends on it (limited source, substantially all, key dependency); the app shows sole-source wording as single source and the rest as a stated dependency",
           },
           regions: {
             type: "array",
             items: { type: "string" },
             description:
-              "Countries/regions the text ties to this link (e.g. Taiwan, China); empty if none",
+              "Countries/regions the quote itself names for this link (e.g. Taiwan, China); empty if the quote names none",
           },
           risk: {
             type: "string",
@@ -154,8 +156,10 @@ relation = what the counterparty is to the filer: customer (buys from the filer)
 Rules:
 - Only organisations named in the text. Never infer from general knowledge. Skip "a customer", "certain suppliers".
 - quote must be copied character-for-character from the text and must mention the counterparty or its role. No ellipses.
-- share_pct only when the text states a percentage for that counterparty; amount_usd only when a dollar figure is stated for it (convert "$2.1 billion" to 2100000000).
-- single_source only when the text says sole/single/limited source or a stated dependency. regions: geographies the text ties to the link. risk: the stated dependency/concentration risk in a few words.
+- share_pct only when the text states a percentage for that counterparty.
+- amount_usd only when the quote itself contains a U.S. dollar figure that the quote ties to this counterparty (revenue from it, sales to it, purchases from it, an agreement with it, money paid to or received from it). Never the filer's own total, the base of a percentage ("12% of our $2.5 billion revenue" has no amount for the counterparty), or another party's figure. Write it in full dollars using the unit the quote gives ("$2.1 billion" = 2100000000); if the quote writes a table figure without its unit ("$1,018"), quote the words that give the unit or leave amount_usd null. Never use a figure from outside the quote, a percentage, a share count, or another currency.
+- single_source when the quote says this counterparty is the sole, single, only or exclusive source or supplier, or states a dependency on it ("limited source", "substantially all", "depends on"); also describe that dependency in risk. Never set it when the filer is the counterparty's source.
+- regions: only countries or regions the quote names. risk: the stated dependency/concentration risk in a few words.
 - counterparty_ticker: the primary US ticker if the company is publicly listed (e.g. TSM for TSMC, MSFT for Microsoft); empty for private companies, governments, agencies.
 - product: what flows, only if stated. link_type: the most specific kind of relationship the text supports.
 - Prefer the most important links: concentration disclosures, sole-source suppliers, major partners. Up to 60 links. One row per counterparty+relation.`;
@@ -230,12 +234,10 @@ async function readFiling(
       detail: l.detail,
       share_pct: l.share_pct,
       quote: l.quote,
+      // stored as returned; read-time checks keep only what the quote states (see the header)
       amount_usd: l.amount_usd,
       single_source: !!l.single_source,
-      regions: (l.regions ?? [])
-        .map((r) => r.trim())
-        .filter(Boolean)
-        .slice(0, 6),
+      regions: (l.regions ?? []).map((r) => r.trim()).filter(Boolean).slice(0, 6),
       risk: l.risk?.trim() || null,
       product: l.product?.trim() || null,
       link_type: l.link_type || null,

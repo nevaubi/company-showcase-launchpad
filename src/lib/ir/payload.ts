@@ -1,7 +1,7 @@
 // Compact, precomputed IR series payload stored per company (ir_company_series) and sent to the
 // IR data page. Pure: built by the pipeline scripts and by the server after new extractions.
 import { tidyPayload } from "@/lib/ir/tidy";
-import { buildIrSeries, childrenOf, neverTies, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
+import { buildIrSeries, childrenOf, neverTies, scopeName, type IrCell, type IrFact, type IrSeries, type LabelMapEntry, type ReconcileCheck } from "@/lib/ir/kpis";
 
 export type PayloadLocator = [number, number, number] | { p: number; b: number[] };
 
@@ -33,8 +33,26 @@ export interface PayloadCell {
   e?: string;
   m?: number;
   f?: { formula: string; parts: PayloadPart[] };
-  /** "scale": about 1,000× off the neighbouring periods — likely a thousands/millions mix-up */
-  w?: "scale";
+  /**
+   * "scale": about 1,000× off the neighbouring periods (older payloads); "suspect": the figure's unit
+   * or period is contradicted by the documents (reason in `why`). `holdSuspects` (suspect.ts) moves
+   * such cells out of `q`/`y`/`mo` into `held`, so they are never plotted, summed or compared.
+   */
+  w?: "scale" | "suspect";
+  why?: string;
+  /** another document prints a different value for this period (see IrCell.alt) */
+  alt?: PayloadAlt;
+}
+export interface PayloadAlt {
+  v: number;
+  d?: number;
+  l?: PayloadLocator;
+  x?: string;
+  p?: number;
+  sh?: string;
+  e?: string;
+  m?: number;
+  kind: "conflict" | "restated";
 }
 export interface PayloadSeries {
   k: string;
@@ -52,6 +70,8 @@ export interface PayloadSeries {
   y: Record<string, PayloadCell>;
   /** monthly view only: one-month flows and balances at month-ends that don't close a quarter */
   mo?: Record<string, PayloadCell>;
+  /** cells held back as suspect, by period kind: shown with their reason, never used in figures */
+  held?: { q?: Record<string, PayloadCell>; y?: Record<string, PayloadCell>; mo?: Record<string, PayloadCell> };
 }
 export interface PayloadGroup {
   id: string;
@@ -117,6 +137,10 @@ export interface IrStats {
   checksFY: { ok: number; total: number; partial?: number };
   /** values flagged as ~1,000× off their neighbouring periods */
   scaleFlags?: number;
+  /** cells held back as suspect (see suspect.ts) */
+  held?: number;
+  /** shown values that another document prints differently */
+  conflicts?: number;
   /** printed totals whose listed lines never add up, shown as plain lines instead of a breakdown */
   unlinked?: number;
   /** tables and lines before the merge pass (same tables split by era or wording, repeats) */
@@ -130,25 +154,26 @@ const locOf = (f: IrFact): PayloadLocator | undefined => {
   return undefined;
 };
 
+/** Documents that print a line (its cells' facts). */
+const docsOf = (s: IrSeries) => new Set([...Object.values(s.cells), ...Object.values(s.annual)].map((c) => c.fact?.document_id ?? c.fact?.accn).filter(Boolean));
+
 /**
- * Periods whose value is ~1,000× (or 1,000,000×) off its neighbours while the neighbours agree with
- * each other: the table was almost certainly read in the wrong unit (thousands vs millions).
+ * Several lines can carry the label a part names as its parent ("Noninterest income" of one segment
+ * and of the whole bank). The part belongs to the one printed in its own table: same breakdown, then a
+ * one printed in the same documents, then a printed total; ties keep the first, as before.
  */
-export function scaleOutliers(cells: Record<string, { v: number }>): Set<string> {
-  const ends = Object.keys(cells).filter((e) => cells[e].v !== 0).sort();
-  const out = new Set<string>();
-  for (let i = 0; i < ends.length; i++) {
-    const nb = [...ends.slice(Math.max(0, i - 2), i), ...ends.slice(i + 1, i + 3)].map((e) => Math.abs(cells[e].v));
-    if (nb.length < 2) continue;
-    const lo = Math.min(...nb);
-    const hi = Math.max(...nb);
-    if (hi / lo > 30) continue; // neighbours disagree among themselves: no baseline
-    const med = [...nb].sort((a, b) => a - b)[Math.floor(nb.length / 2)];
-    const r = Math.abs(cells[ends[i]].v) / med;
-    const lg = Math.log10(r);
-    if (Math.abs(lg) >= 2.5 && Math.abs(Math.abs(lg) - 3 * Math.round(Math.abs(lg) / 3)) <= 0.5) out.add(ends[i]);
-  }
-  return out;
+export function bestParent(kid: IrSeries, candidates: IrSeries[]): IrSeries {
+  const mine = docsOf(kid);
+  const score = (p: IrSeries) => {
+    let n = 0;
+    // Breakdown names drift between releases ("Consolidated Income Statement" / "Income statement"),
+    // so they are compared by their scope name; a shared document outranks a printed total.
+    if (kid.breakdown && scopeName(p.breakdown) === scopeName(kid.breakdown)) n += 4;
+    if (p.isTotal) n += 1;
+    for (const d of docsOf(p)) if (mine.has(d)) return n + 2;
+    return n;
+  };
+  return candidates.reduce((best, p) => (score(p) > score(best) ? p : best));
 }
 
 export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<string, LabelMapEntry>): IrPayload {
@@ -171,6 +196,10 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
   };
   // A figure read from running text cites its sentence; table and slide figures their printed cell text.
   const factCell = (f: IrFact) => ({ d: di(f), l: locOf(f), x: (f.locator as { q?: string; text?: string }).q ?? (f.locator as { text?: string }).text, s: f.period_start ?? undefined, e: f.period_end, m: f.months });
+  const altOf = (a: NonNullable<IrCell["alt"]>): PayloadAlt => {
+    const { s: _s, ...rest } = factCell(a.fact);
+    return { v: a.v, ...rest, kind: a.kind };
+  };
   const cellOf = (c: IrCell): PayloadCell => {
     if (c.derived)
       return {
@@ -180,21 +209,23 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
           parts: c.derived.parts.map((p) => ({ label: p.label, v: p.value, sign: p.sign, ...factCell(p.fact), e: p.fact.period_end, m: p.fact.months })),
         },
       };
-    return c.fact ? { v: c.v, ...factCell(c.fact) } : { v: c.v };
+    if (!c.fact) return { v: c.v };
+    const out: PayloadCell = { v: c.v, ...factCell(c.fact) };
+    if (c.suspect) Object.assign(out, { w: "suspect" as const, why: c.suspect });
+    if (c.alt) out.alt = altOf(c.alt);
+    return out;
   };
 
   // Parent keys from the (possibly re-parented) hierarchy.
+  const claims = new Map<IrSeries, IrSeries[]>();
+  for (const s of series) for (const k of childrenOf(series, s)) claims.set(k, [...(claims.get(k) ?? []), s]);
   const parentOf = new Map<IrSeries, IrSeries>();
-  for (const s of series) for (const k of childrenOf(series, s)) if (!parentOf.has(k)) parentOf.set(k, s);
+  for (const [k, list] of claims) parentOf.set(k, list.length > 1 ? bestParent(k, list) : list[0]);
   const kids = new Map<IrSeries, IrSeries[]>();
   for (const [k, p] of parentOf) kids.set(p, [...(kids.get(p) ?? []), k]);
 
-  let scaleFlags = 0;
-  const flagged = (cells: Record<string, IrCell>, unit: string) => {
-    const bad = unit === "pct" || unit === "ratio" ? new Set<string>() : scaleOutliers(cells);
-    scaleFlags += bad.size;
-    return Object.fromEntries(Object.entries(cells).map(([e, c]) => [e, bad.has(e) ? { ...cellOf(c), w: "scale" as const } : cellOf(c)]));
-  };
+  // Unit slips and other contradicted figures are held back by `holdSuspects` (suspect.ts) in the tidy pass.
+  const cellsMap = (cells: Record<string, IrCell>) => Object.fromEntries(Object.entries(cells).map(([e, c]) => [e, cellOf(c)]));
   const out: PayloadSeries[] = series
     .filter((s) => Object.keys(s.cells).length || Object.keys(s.annual).length || Object.keys(s.monthly ?? {}).length)
     .map((s) => ({
@@ -208,8 +239,8 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       bd: s.breakdown ?? null,
       ...(s.scope ? { sc: s.breakdown ?? s.scope } : {}),
       ...(s.pit ? { pit: true } : {}),
-      q: flagged(s.cells, s.unit),
-      y: flagged(s.annual, s.unit),
+      q: cellsMap(s.cells),
+      y: cellsMap(s.annual),
       ...(s.monthly && Object.keys(s.monthly).length ? { mo: Object.fromEntries(Object.entries(s.monthly).map(([e, c]) => [e, cellOf(c)])) } : {}),
     }));
   const kept = new Set(out.map((s) => s.k));
@@ -267,7 +298,6 @@ export function buildPayload(ticker: string, facts: IrFact[], labelMap?: Record<
       // Selected-item lists aren't additive by design: report them apart from real tie-out checks.
       checksQ: { ok: q.filter((c) => c.ok).length, total: q.filter((c) => !c.partial).length, partial: q.filter((c) => c.partial).length },
       checksFY: { ok: fy.filter((c) => c.ok).length, total: fy.filter((c) => !c.partial).length, partial: fy.filter((c) => c.partial).length },
-      scaleFlags,
       unlinked: unlink.size,
     },
   });

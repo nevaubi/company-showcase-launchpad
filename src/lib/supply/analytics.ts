@@ -1,6 +1,7 @@
 // Pure analytics for the supply-chain page: country exposure, region shocks, concentration history,
 // link freshness and ecosystem baskets. No browser/Node APIs — shared by app and tests.
-import { entityKey, HOTSPOTS, linkDollars, type ProLink, type SupplyLink } from "./core";
+import { knownHomeCountry } from "./home-country";
+import { copies, entityKey, HOTSPOTS, linkDollars, statedRegions, type ProLink, type SupplyLink } from "./core";
 
 const ALIAS: Record<string, string> = {
   "u.s.": "United States", us: "United States", usa: "United States", "united states of america": "United States", "u.s.a.": "United States", america: "United States",
@@ -17,28 +18,13 @@ export function canonCountry(raw: string | null | undefined): string | null {
   if (!t) return null;
   return ALIAS[t.toLowerCase()] ?? (t === t.toLowerCase() ? t.replace(/\b\w/g, (c) => c.toUpperCase()) : t);
 }
-/** Headquarters country of well-known non-U.S. counterparties (public facts), so a link to TSMC counts as a Taiwan tie even when the filing sentence names no country. */
-const HQ: [RegExp, string][] = [
-  [/taiwan semiconductor|\btsmc\b|hon hai|foxconn|wistron|quanta|pegatron|compal|inventec|mediatek|united microelectronics|\bumc\b|\base\b technology|advanced semiconductor engineering|largan|delta electronics|unimicron|nanya|realtek|asustek|acer\b/, "Taiwan"],
-  [/samsung|sk hynix|hynix|\blg\b|lg (energy|display|electronics|chem)|hyundai|\bkia\b|sk on\b|posco/, "South Korea"],
-  [/\bsony\b|toyota|panasonic|murata|kioxia|tokyo electron|mitsubishi|hitachi|toshiba|nidec|kyocera|renesas|shin-etsu|sumco|\btdk\b|fujitsu|nintendo|honda|nissan|softbank|takeda|astellas|daiichi|olympus|canon\b|keyence|denso/, "Japan"],
-  [/huawei|\bbyd\b|catl|contemporary amperex|alibaba|tencent|baidu|xiaomi|lenovo|\bzte\b|smic|semiconductor manufacturing international|jd\.com|pdd|bytedance|luxshare|goertek|boe technology|haier|midea|cosco|sinopec|petrochina|cnooc/, "China"],
-  [/\basml\b|nxp|philips|stellantis|shell\b|heineken|prosus/, "Netherlands"],
-  [/infineon|siemens|\bbasf\b|\bsap\b|bosch|zeiss|volkswagen|bmw|mercedes|bayer|merck kgaa|deutsche telekom|continental ag|allianz/, "Germany"],
-  [/novo nordisk|maersk|vestas|genmab/, "Denmark"],
-  [/nestl|novartis|roche|stmicro|abb\b|ubs\b|logitech|glencore|te connectivity/, "Switzerland"],
-  [/teva|check point|mobileye|tower semiconductor|elbit/, "Israel"],
-  [/tata\b|infosys|wipro|reliance|hcl tech|dr\. reddy|sun pharma/, "India"],
-  [/nokia/, "Finland"], [/ericsson|volvo|spotify/, "Sweden"],
-  [/astrazeneca|glaxo|\bgsk\b|unilever|\bbp\b|arm holdings|\barm\b ltd|rolls-royce|bae systems|vodafone|hsbc|barclays|diageo|rio tinto/, "United Kingdom"],
-  [/airbus|sanofi|lvmh|totalenergies|schneider|safran|thales|capgemini|danone|kering|l'or[eé]al|dassault/, "France"],
-  [/bhp|\bcsl\b/, "Australia"], [/shopify|nutrien|enbridge|\bcn rail|canadian (national|pacific)|celestica|magna\b|teck/, "Canada"],
-  [/vale\b|petrobras|embraer/, "Brazil"], [/aramco/, "Saudi Arabia"], [/femsa|cemex|grupo bimbo|walmex/, "Mexico"],
-];
+/**
+ * Home country of a counterparty, so a link to TSMC counts as a Taiwan tie even when the filing sentence names no country.
+ * Only whole, distinctive company names count (the same strict table the globe uses to place a name), so "Corteva" is not
+ * Israeli because it contains "teva" and "Village of Midvale" is not Brazilian because it contains "vale".
+ */
 export function counterpartyCountry(name: string): string | null {
-  const n = name.toLowerCase();
-  for (const [re, c] of HQ) if (re.test(n)) return c;
-  return null;
+  return knownHomeCountry(name);
 }
 
 export const isHotspot = (country: string) => HOTSPOTS.some((h) => country.toLowerCase().includes(h));
@@ -67,15 +53,17 @@ export function countryExposure(links: ProLink[], signals: SignalLite[], revenue
     if (!r) { r = { country: c, hotspot: isHotspot(c), links: 0, companies: [], singleSource: 0, dollars: 0, facilities: 0, policy: 0, risks: 0, hq: 0, _c: new Set() }; m.set(c, r); }
     return r;
   };
+  // one row per link (10-K and 10-Q copies were merged by dedupeCurrent); regions are only those its sentences name
   for (const l of links) {
-    for (const raw of new Set((l.regions ?? []).map(canonCountry).filter(Boolean) as string[])) {
+    const sole = copies(l).some((c) => !!c.single_source);
+    for (const raw of new Set(statedRegions(l).map(canonCountry).filter(Boolean) as string[])) {
       const r = row(raw);
       r.links++; r._c.add(l.ticker);
-      if (l.single_source) r.singleSource++;
+      if (sole) r.singleSource++;
       r.dollars += linkDollars(l, revenue) ?? 0;
     }
     const hq = l.relation !== "competitor" ? counterpartyCountry(l.counterparty) : null;
-    if (hq) { const r = row(hq); r.hq++; r._c.add(l.ticker); if (l.single_source) r.singleSource++; }
+    if (hq) { const r = row(hq); r.hq++; r._c.add(l.ticker); if (sole) r.singleSource++; }
   }
   for (const s of signals) {
     const c = canonCountry(s.country);
@@ -120,19 +108,20 @@ export function regionShock(country: string, links: ProLink[], signals: SignalLi
     return h;
   };
   for (const l of links) {
-    const stated = (l.regions ?? []).some((r) => canonCountry(r) === c);
+    const stated = statedRegions(l).some((r) => canonCountry(r) === c);
+    const sole = copies(l).some((x) => !!x.single_source);
     if (!stated) {
       if (l.relation === "competitor" || counterpartyCountry(l.counterparty) !== c) continue;
       const h = hit(l.ticker);
       h.hq++;
-      if (l.single_source) h.singleSource++;
+      if (sole) h.singleSource++;
       h.dollars += linkDollars(l, revenue) ?? 0;
       if (h.examples.length < 3) h.examples.push(`${l.relation}: ${l.counterparty}`);
       continue;
     }
     const h = hit(l.ticker);
     h.links++;
-    if (l.single_source) h.singleSource++;
+    if (sole) h.singleSource++;
     h.dollars += linkDollars(l, revenue) ?? 0;
     if (h.examples.length < 3) h.examples.push(`${l.relation}: ${l.counterparty}`);
   }
