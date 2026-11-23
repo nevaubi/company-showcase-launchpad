@@ -8,7 +8,7 @@ import { agrees, crossCheckSec, stdLineOf, type CheckStatements } from "./sec-ch
 // Real rows: IR standard-line values copied from production with the checksum-verified transfer
 // (ticker|line|period_end|months|values[|…]|md5-6), see /home/claude/fu/round3/reports/iracc_data.
 function realValues(file: string, t: string, line: string, e: string, m: number): number[] {
-  for (const ln of readFileSync(path.resolve(__dirname, "../../test/fixtures/ir", file), "utf8").split("\n")) {
+  for (const ln of readFileSync(path.resolve(__dirname, "fixtures", file), "utf8").split("\n")) {
     if (!ln) continue;
     const body = ln.slice(0, ln.lastIndexOf("|"));
     expect(createHash("md5").update(body).digest("hex").slice(0, 6)).toBe(ln.slice(ln.lastIndexOf("|") + 1));

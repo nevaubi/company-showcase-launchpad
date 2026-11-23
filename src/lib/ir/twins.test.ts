@@ -10,7 +10,7 @@ import { cleanMember } from "./tidy";
 // end in one document) and 3 Sep 2026 (the release), the same figures under both dates.
 function rows(t: string, line: string) {
   const out: { e: string; m: number; v: number }[] = [];
-  for (const ln of readFileSync(path.resolve(__dirname, "../../test/fixtures/ir/std-lines-b01.txt"), "utf8").split("\n")) {
+  for (const ln of readFileSync(path.resolve(__dirname, "fixtures/std-lines-b01.txt"), "utf8").split("\n")) {
     if (!ln) continue;
     const body = ln.slice(0, ln.lastIndexOf("|"));
     expect(createHash("md5").update(body).digest("hex").slice(0, 6)).toBe(ln.slice(ln.lastIndexOf("|") + 1));
