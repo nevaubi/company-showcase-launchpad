@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
-import { ArrowRight, GitCompareArrows, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowRight, ChevronLeft, ChevronRight, GitCompareArrows, Search, ShieldCheck, Sparkles } from "lucide-react";
 import { Panel, Empty } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ChangeCard, TYPE_LABEL } from "@/components/redline/change-card";
+import { Pager, QuietLine } from "@/components/filings/parts";
+import { paginate } from "@/lib/filings/list";
+import { LEVEL_LABEL, redlineVerdict, verdictSentence, type Verdict } from "@/lib/filings/redline-verdict";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/lib/data";
 import { coverageOf, historyCik } from "@/lib/coverage";
@@ -88,14 +91,16 @@ function RedlinePage() {
   const [type, setType] = useState<TypeFilter>("all");
   const [figures, setFigures] = useState(false);
   const [text, setText] = useState("");
-  const [shown, setShown] = useState(PAGE);
+  const [page, setPage] = useState(1);
   const [focus, setFocus] = useState<string | null>(null);
   const section = search.section ?? "all";
   const jumpTo = useRef<string | null>(null);
-  useEffect(() => { if (!jumpTo.current) setShown(PAGE); }, [section, level, type, figures, text, from?.accn, to?.accn]);
+  const listTop = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (!jumpTo.current) setPage(1); }, [section, level, type, figures, text, from?.accn, to?.accn]);
 
   const r = q.data?.redline;
   const titles = new Map((r?.sections ?? []).map((s) => [s.key, s.title]));
+  const verdict = useMemo(() => (r ? redlineVerdict(r) : null), [r]);
   const visible = useMemo(() => {
     if (!r) return [];
     const needle = text.trim().toLowerCase();
@@ -107,121 +112,116 @@ function RedlinePage() {
       (!needle || [textsOf(c).before, textsOf(c).after, c.context].some((t) => t?.toLowerCase().includes(needle))),
     ).sort((a, b) => b.score - a.score);
   }, [r, section, level, type, figures, text]);
-  // After a jump from the brief, render far enough down the list and scroll to the change.
+  const pg = paginate(visible, page, PAGE);
+  // After a jump from the brief, open the page that holds the change and bring it into view (an explicit "go to" action).
   useEffect(() => {
     const id = jumpTo.current;
     if (!id) return;
     const i = visible.findIndex((c) => c.id === id);
     if (i < 0) return;
     jumpTo.current = null;
-    setShown((n) => Math.max(n, i + 5));
+    setPage(Math.floor(i / PAGE) + 1);
     setTimeout(() => document.getElementById(`change-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
   }, [visible]);
-  const totals = useMemo(() => {
-    const cs = r?.changes.filter((c) => !c.figuresOnly) ?? [];
-    const risk = cs.filter((c) => c.section === "1A" || c.section === "II-1A");
-    return {
-      newRisks: risk.filter((c) => c.type === "added" && c.isHeading).length,
-      removedRisks: risk.filter((c) => c.type === "removed" && c.isHeading).length,
-      added: cs.filter((c) => c.type === "added").length,
-      removed: cs.filter((c) => c.type === "removed").length,
-      changed: cs.filter((c) => c.type === "changed").length,
-      high: cs.filter((c) => c.level === "high").length,
-      medium: cs.filter((c) => c.level === "medium").length,
-    };
-  }, [r]);
 
   const setSearch = (s: Partial<{ form: "10-K" | "10-Q"; to: string | undefined; from: string | undefined; section: string | undefined }>) =>
-    navigate({ search: (prev) => ({ ...prev, ...s }), replace: true });
+    navigate({ search: (prev) => ({ ...prev, ...s }), replace: true, resetScroll: false });
   const jump = (id: string) => {
     const c = r?.changes.find((x) => x.id === id);
     if (!c) return;
     jumpTo.current = id;
     setFocus(id);
-    const already = visible.some((x) => x.id === id);
-    if (already) { jumpTo.current = null; setShown((n) => Math.max(n, visible.findIndex((x) => x.id === id) + 5)); setTimeout(() => document.getElementById(`change-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
+    const i = visible.findIndex((x) => x.id === id);
+    if (i >= 0) { jumpTo.current = null; setPage(Math.floor(i / PAGE) + 1); setTimeout(() => document.getElementById(`change-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 60); return; }
     setSearch({ section: undefined });
     setLevel("all"); setType("all"); setText(""); if (c.figuresOnly) setFigures(true);
+  };
+  // Paging from the bottom of the list brings the top of the new page into view; paging from the top does not move the page.
+  const turn = (n: number, fromBottom: boolean) => {
+    setPage(n);
+    if (fromBottom) requestAnimationFrame(() => listTop.current?.scrollIntoView({ block: "start" }));
   };
 
   if (company.isLoading) return <Skeleton className="h-96" />;
   if (!filings.length) return <Empty title={`No ${form} filings to compare`} icon={<GitCompareArrows />}>Pick another form type.</Empty>;
 
+  const compared = (verdict?.sections ?? []).filter((s) => s.found === "both");
+  const order = compared.map((s) => s.key);
+  const at = order.indexOf(section);
+  const prevKey = section === "all" ? null : at > 0 ? order[at - 1] : "all";
+  const nextKey = section === "all" ? order[0] ?? null : at >= 0 && at < order.length - 1 ? order[at + 1] : null;
+  const sectionLabel = (k: string | null) => (k === "all" ? "All sections" : k ? titles.get(k) ?? k : "");
+
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="grid grid-cols-1 gap-4">
+      <div data-section="Comparison" className="flex flex-wrap items-center gap-2">
         <Segmented label="Form" value={form} onChange={(v) => setSearch({ form: v, to: undefined, from: undefined, section: undefined })} options={[{ v: "10-K", l: "Annual (10-K)" }, { v: "10-Q", l: "Quarterly (10-Q)" }]} />
         <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-sm">
-          <FilingSelect label="Compare" value={from?.accn} options={filings.filter((f) => to && f.filed < to.filed)} onChange={(v) => setSearch({ from: v })} />
-          <ArrowRight className="size-3.5 text-muted-foreground" />
-          <FilingSelect label="with" value={to?.accn} options={filings} onChange={(v) => setSearch({ to: v, from: undefined })} />
+          <FilingSelect label="Compare" value={to?.accn} options={filings} onChange={(v) => setSearch({ to: v, from: undefined })} />
+          <ArrowRight className="size-3.5 rotate-180 text-muted-foreground" />
+          <FilingSelect label="against" value={from?.accn} options={filings.filter((f) => to && f.filed < to.filed)} onChange={(v) => setSearch({ from: v })} />
         </div>
         {from && base && from.accn === base.accn && <span className="text-[11px] text-muted-foreground">{form === "10-Q" ? "Same quarter a year earlier" : "Prior annual report"}</span>}
       </div>
 
       {q.isLoading ? (
         <Panel collapse={false} bodyClassName="p-0"><div className="space-y-3 p-4" aria-live="polite"><p className="text-shimmer text-sm font-medium">Reading both filings and lining up every paragraph…</p><Skeleton className="h-16" /><Skeleton className="h-40" /></div></Panel>
-      ) : q.isError || !r ? (
+      ) : q.isError || !r || !verdict ? (
         <Panel collapse={false} bodyClassName="p-0"><div className="p-6 text-center"><p className="font-medium">Couldn't compare these filings</p><p className="mt-1 text-sm text-muted-foreground">{(q.error as Error)?.message ?? "Try another pair."}</p><Button className="mt-3" size="sm" variant="outline" onClick={() => q.refetch()}>Try again</Button></div></Panel>
       ) : (
         <>
-          <section className="grid grid-cols-2 gap-px overflow-hidden border bg-border sm:grid-cols-4 xl:grid-cols-8">
-            {[
-              ["New risk factors", totals.newRisks], ["Risk factors removed", totals.removedRisks], ["Paragraphs added", totals.added],
-              ["Paragraphs removed", totals.removed], ["Rewritten", totals.changed], ["High materiality", totals.high], ["Medium", totals.medium], ["Sections compared", r.sections.filter((x) => x.found === "both").length],
-            ].map(([l, v]) => (
-              <div key={l as string} className="bg-card px-3 py-2">
-                <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">{l}</p>
-                <p className={cn("num text-lg font-semibold", l === "High materiality" && (v as number) > 0 && "text-negative")}>{v as number}</p>
-              </div>
-            ))}
-          </section>
+          <VerdictPanel v={verdict} from={from!} to={to!} stored={q.data!.stored} section={section} onSection={(k) => setSearch({ section: k === "all" ? undefined : k })} />
 
           <SummaryPanel stored={q.data!.stored} initial={q.data!.summary} from={from!} to={to!} onJump={jump} titles={titles} r={r} />
 
-          <div className="grid grid-cols-1 gap-3 lg:grid-cols-[13rem_minmax(0,1fr)]">
-            <nav aria-label="Sections" className="flex min-w-0 gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-              {[{ key: "all", title: "All sections", n: r.changes.filter((c) => !c.figuresOnly).length, high: totals.high, found: "both" as const }, ...r.sections.map((s) => ({ key: s.key, title: s.title, n: s.added + s.removed + s.changed, high: s.high, found: s.found }))].map((s) => (
-                <button key={s.key} type="button" onClick={() => setSearch({ section: s.key === "all" ? undefined : s.key })} disabled={s.found !== "both"}
-                  className={cn("flex shrink-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[13px] transition-colors hover:bg-secondary disabled:opacity-50",
-                    section === s.key && "bg-secondary font-medium")}>
-                  <span className="min-w-0 flex-1 truncate">{s.title}</span>
-                  {s.found !== "both" ? <span className="text-[10px] text-muted-foreground">{s.found === "new" ? "new only" : "not found"}</span> : (
-                    <>
-                      {s.high > 0 && <span className="num rounded bg-negative/10 px-1 text-[10.5px] text-negative">{s.high}</span>}
-                      <span className="num text-[11px] text-muted-foreground">{s.n}</span>
-                    </>
-                  )}
-                </button>
-              ))}
-            </nav>
-
+          <div data-section="Changes" className="min-w-0" ref={listTop} style={{ scrollMarginTop: "calc(var(--sticky-top, 3.5rem) + 8px)" }}>
             <Panel
-              className="min-w-0"
               bodyClassName="p-0"
               collapse={false}
-              title={section === "all" ? "Changes ranked by materiality" : titles.get(section)}
-              subtitle={`${visible.length} shown · ${fmtDate(from!.filed)} → ${fmtDate(to!.filed)}${q.data!.stored ? "" : " · compared just now"}`}
-              actions={
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Find words, e.g. tariff" className="h-7 w-48 pl-7 text-xs" aria-label="Search changes" />
-                </div>
-              }
+              title={section === "all" ? "All sections · changes ranked by materiality" : `${titles.get(section) ?? section} · changes ranked by materiality`}
+              subtitle={`${visible.length.toLocaleString()} shown · ${from!.form} filed ${fmtDate(to!.filed)} against ${fmtDate(from!.filed)}${q.data!.stored ? "" : " · compared just now"}`}
             >
-              <div className="flex flex-wrap items-center gap-2 border-b px-3.5 py-2">
-                <Segmented label="Materiality" value={level} onChange={setLevel} options={[{ v: "high", l: "High" }, { v: "medium", l: "High + medium" }, { v: "all", l: "All" }]} />
-                <Segmented label="Change type" value={type} onChange={setType} options={[{ v: "all", l: "Any change" }, { v: "added", l: "Added" }, { v: "removed", l: "Removed" }, { v: "changed", l: "Rewritten" }]} />
-                <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground"><Switch checked={figures} onCheckedChange={setFigures} aria-label="Show figure-only updates" /> Figure-only updates</label>
+              <div className="sticky top-[var(--sticky-top,3.5rem)] z-10 grid grid-cols-1 gap-2 border-b bg-card/95 px-3.5 py-2 backdrop-blur">
+                <div className="flex flex-wrap items-center gap-2">
+                  {section !== "all" && (
+                    <button type="button" onClick={() => setSearch({ section: undefined })} className="inline-flex h-7 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
+                      <ChevronLeft className="size-3.5" /> All sections
+                    </button>
+                  )}
+                  <Select value={section} onValueChange={(v) => setSearch({ section: v === "all" ? undefined : v })}>
+                    <SelectTrigger aria-label="Section" className="h-7 w-56 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-xs">All sections · {verdict.changed.toLocaleString()}</SelectItem>
+                      {compared.map((s) => (
+                        <SelectItem key={s.key} value={s.key} className="text-xs">{s.title} · {(s.added + s.removed + s.changed).toLocaleString()}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {prevKey && <button type="button" onClick={() => setSearch({ section: prevKey === "all" ? undefined : prevKey })} className="inline-flex h-7 max-w-48 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground" title="Previous section by amount of change"><ChevronLeft className="size-3.5 shrink-0" /><span className="truncate">{sectionLabel(prevKey)}</span></button>}
+                  {nextKey && <button type="button" onClick={() => setSearch({ section: nextKey })} className="inline-flex h-7 max-w-48 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground" title="Next section by amount of change"><span className="truncate">{sectionLabel(nextKey)}</span><ChevronRight className="size-3.5 shrink-0" /></button>}
+                  <div className="relative ml-auto">
+                    <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                    <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Find words, e.g. tariff" className="h-7 w-48 pl-7 text-xs" aria-label="Search changes" />
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Segmented label="Materiality" size="xs" value={level} onChange={setLevel} options={[{ v: "high", l: "High" }, { v: "medium", l: "High + medium" }, { v: "all", l: "All" }]} />
+                  <Segmented label="Change type" size="xs" value={type} onChange={setType} options={[{ v: "all", l: "Any change" }, { v: "added", l: "Added" }, { v: "removed", l: "Removed" }, { v: "changed", l: "Rewritten" }]} />
+                  <label className="flex items-center gap-2 text-[12px] text-muted-foreground"><Switch checked={figures} onCheckedChange={setFigures} aria-label="Show figure-only updates" /> Figure-only updates</label>
+                  <Pager p={pg} onPage={(n) => turn(n, false)} label="Change pages, top" className="ml-auto" />
+                </div>
               </div>
               {!visible.length ? (
-                <Empty title="Nothing matches" icon={<GitCompareArrows />}>{level !== "all" ? "Try showing all materiality levels." : "Try another section or search."}</Empty>
+                <QuietLine className="py-6 text-center">{level !== "all" ? "Nothing at this materiality here. Try showing all levels." : "Nothing matches. Try another section or search."}</QuietLine>
               ) : (
                 <div>
-                  {visible.slice(0, shown).map((c) => <ChangeCard key={c.id} c={c} ticker={ticker} sectionTitle={titles.get(c.section) ?? c.section} from={r.from} to={r.to} highlighted={focus === c.id} />)}
-                  {visible.length > shown && (
-                    <div className="p-3 text-center"><Button variant="outline" size="sm" onClick={() => setShown((n) => n + PAGE)}>Show {Math.min(PAGE, visible.length - shown)} more of {visible.length - shown}</Button></div>
-                  )}
+                  {pg.rows.map((c) => <ChangeCard key={c.id} c={c} ticker={ticker} sectionTitle={titles.get(c.section) ?? c.section} from={r.from} to={r.to} highlighted={focus === c.id} />)}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3.5 py-2">
+                    {nextKey ? (
+                      <button type="button" onClick={() => setSearch({ section: nextKey })} className="inline-flex h-7 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">Next section: {sectionLabel(nextKey)} <ChevronRight className="size-3.5" /></button>
+                    ) : <span />}
+                    <Pager p={pg} onPage={(n) => turn(n, true)} label="Change pages, bottom" />
+                  </div>
                 </div>
               )}
             </Panel>
@@ -232,6 +232,96 @@ function RedlinePage() {
         </>
       )}
     </div>
+  );
+}
+
+/** The verdict: which filing against which, how much changed and why, and the sections ranked by change (each one opens its changes). */
+function VerdictPanel({ v, from, to, stored, section, onSection }: { v: Verdict; from: Filing; to: Filing; stored: boolean; section: string; onSection: (k: string) => void }) {
+  const max = Math.max(1, ...v.sections.map((s) => s.added + s.removed + s.changed));
+  const pct = (x: number) => `${(x * 100).toFixed(x > 0 && x < 0.01 ? 1 : 0)}%`;
+  const facts: [string, string, boolean?][] = [
+    ["Added", v.added.toLocaleString()],
+    ["Removed", v.removed.toLocaleString()],
+    ["Rewritten", v.rewritten.toLocaleString()],
+    ["High materiality", v.high.toLocaleString(), v.high > 0],
+    ["New risk factors", v.newRisks.toLocaleString()],
+    ["Risk factors removed", v.removedRisks.toLocaleString()],
+  ];
+  return (
+    <section data-section="Verdict" className="panel-in min-w-0 border-y bg-card/40">
+      <div className="grid grid-cols-1 gap-4 px-3.5 py-3 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <div className="min-w-0">
+          <p className="eyebrow">{from.form} · {stored ? "stored comparison" : "compared just now"}</p>
+          <p className="mt-1 text-[13px]">
+            <span className="font-semibold">{from.form} filed {fmtDate(to.filed)}</span>
+            {to.report && <span className="text-muted-foreground"> (period {fmtDate(to.report)})</span>} against <span className="font-semibold">{fmtDate(from.filed)}</span>
+            {from.report && <span className="text-muted-foreground"> (period {fmtDate(from.report)})</span>}
+          </p>
+          <div className="mt-3 flex items-baseline gap-3">
+            <span className={cn("num text-[18px] font-semibold", v.level === "major" && "text-negative")}>{pct(v.share)}</span>
+            <span className="text-[13px] font-medium">{LEVEL_LABEL[v.level]}</span>
+          </div>
+          <p className="num text-[11px] text-muted-foreground">{v.changed.toLocaleString()} of {v.paragraphs.toLocaleString()} compared paragraphs added, removed or rewritten</p>
+          <p className="mt-2 text-[13px]">{verdictSentence(v)}</p>
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+            {facts.map(([l, x, warn]) => (
+              <div key={l} className="flex items-baseline justify-between gap-2 border-b border-dashed py-0.5">
+                <dt className="text-muted-foreground">{l}</dt>
+                <dd className={cn("num", warn && "text-negative")}>{x}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-baseline justify-between gap-2">
+            <p className="text-[13px] font-semibold">Sections ranked by change</p>
+            <p className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><span className="size-2 rounded-[2px] bg-positive" /> added</span>
+              <span className="inline-flex items-center gap-1"><span className="size-2 rounded-[2px] bg-negative" /> removed</span>
+              <span className="inline-flex items-center gap-1"><span className="size-2 rounded-[2px] bg-chart-5" /> rewritten</span>
+            </p>
+          </div>
+          <div aria-hidden className="mt-1.5 grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_3.5rem_2.5rem] gap-2 border-b px-1.5 pb-1 text-[11px] text-muted-foreground">
+            <span>Section</span><span>Paragraphs added, removed, rewritten</span><span className="text-right">Changes</span><span className="text-right">High</span>
+          </div>
+          <ul aria-label="Sections ranked by change">
+            {v.sections.map((s) => {
+              const n = s.added + s.removed + s.changed;
+              const ok = s.found === "both";
+              return (
+                <li key={s.key}>
+                  <button
+                    type="button"
+                    disabled={!ok}
+                    aria-pressed={section === s.key}
+                    onClick={() => onSection(section === s.key ? "all" : s.key)}
+                    className={cn(
+                      "grid min-h-7 w-full grid-cols-[minmax(0,10rem)_minmax(0,1fr)_3.5rem_2.5rem] items-center gap-2 rounded px-1.5 text-left text-[12px] transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none",
+                      section === s.key && "bg-secondary font-medium",
+                    )}
+                    title={ok ? `${s.added} added, ${s.removed} removed, ${s.changed} rewritten of ${s.paragraphs} paragraphs; ${s.high} high materiality` : undefined}
+                  >
+                    <span className={cn("truncate", !ok && "text-muted-foreground")}>{s.title}</span>
+                    {ok ? (
+                      <span className="flex h-2 min-w-0 overflow-hidden rounded-[2px] bg-secondary">
+                        <span className="h-full bg-positive" style={{ width: `${(s.added / max) * 100}%` }} />
+                        <span className="h-full bg-negative" style={{ width: `${(s.removed / max) * 100}%` }} />
+                        <span className="h-full bg-chart-5" style={{ width: `${(s.changed / max) * 100}%` }} />
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">{s.found === "new" ? "Only in the newer filing" : "Not found in the newer filing"}</span>
+                    )}
+                    <span className="num text-right text-muted-foreground">{ok ? n.toLocaleString() : ""}</span>
+                    <span className={cn("num text-right", s.high ? "text-negative" : "text-muted-foreground")}>{ok ? (s.high ? s.high : "–") : ""}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <p className="mt-1 text-[11px] text-muted-foreground">Ranked by the materiality score of each section's changes. Pick a section to read its changes below.</p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -274,7 +364,7 @@ function SummaryPanel({ stored, initial, from, to, onJump, titles, r }: { stored
   const s = state.summary;
 
   return (
-    <Panel collapse={false} bodyClassName="p-0" title={<span className="inline-flex items-center gap-1.5"><Sparkles className="size-3.5" /> What changed</span>}
+    <div data-section="What changed" className="min-w-0"><Panel collapse={false} bodyClassName="p-0" title={<span className="inline-flex items-center gap-1.5"><Sparkles className="size-3.5" /> What changed</span>}
       subtitle={s && s.bullets.length ? <span className="inline-flex items-center gap-1 text-positive"><ShieldCheck className="size-3" /> Every point quotes the filing verbatim</span> : undefined}>
       <div className="px-3.5 py-3 text-[13px]">
         {!stored ? (
@@ -306,6 +396,6 @@ function SummaryPanel({ stored, initial, from, to, onJump, titles, r }: { stored
           </>
         ) : null}
       </div>
-    </Panel>
+    </Panel></div>
   );
 }

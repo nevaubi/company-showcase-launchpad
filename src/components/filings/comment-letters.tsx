@@ -109,11 +109,37 @@ function Thread({
 }
 
 /** SEC Division of Corporation Finance review letters and the company's replies, grouped by the filing reviewed. */
-export function CommentLetters({ ticker }: { ticker: string }) {
+export function CommentLetters({ ticker, embedded = false }: { ticker: string; embedded?: boolean }) {
   const q = useQuery(commentsQuery(ticker));
   const [all, setAll] = useState(false);
-  if (q.isLoading) return <Skeleton className="h-40" />;
+  if (q.isLoading) return <Skeleton className={embedded ? "m-3.5 h-24" : "h-40"} />;
   const threads = (q.data?.threads ?? []).filter((t) => all || t.periodic || t.rounds > 0);
+  const more = q.data && q.data.threads.length > threads.length ? (
+    <button onClick={() => setAll(true)} className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
+      Show registration reviews
+    </button>
+  ) : undefined;
+  const body = threads.length ? (
+    <ul className="divide-y">
+      {threads.map((t, i) => (
+        <Thread key={t.key} t={t} topics={q.data?.topics ?? {}} defaultOpen={i < 2 && t.n_comments > 0} />
+      ))}
+    </ul>
+  ) : (
+    <p className="px-3.5 py-3 text-[12px] text-muted-foreground">
+      {q.isError ? "SEC review correspondence could not be loaded right now." : "No released SEC review correspondence on file for this company."}
+    </p>
+  );
+  if (embedded)
+    return (
+      <div data-section="SEC comment letters">
+        <div className="flex flex-wrap items-center gap-2 border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">
+          <MessageSquareQuote className="size-3.5" /> Staff review letters and company replies, grouped by the filing reviewed · released 20+ business days after a review closes
+          {more && <span className="ml-auto">{more}</span>}
+        </div>
+        {body}
+      </div>
+    );
   return (
     <Panel
       title={
@@ -122,34 +148,11 @@ export function CommentLetters({ ticker }: { ticker: string }) {
         </span>
       }
       subtitle="Staff review letters and company replies · released 20+ business days after a review closes"
-      actions={
-        q.data && q.data.threads.length > threads.length ? (
-          <button
-            onClick={() => setAll(true)}
-            className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-secondary"
-          >
-            Show registration reviews
-          </button>
-        ) : undefined
-      }
+      actions={more}
+      collapse={false}
       bodyClassName="p-0"
     >
-      {threads.length ? (
-        <ul className="divide-y">
-          {threads.slice(0, 12).map((t, i) => (
-            <Thread
-              key={t.key}
-              t={t}
-              topics={q.data?.topics ?? {}}
-              defaultOpen={i === 0 && t.n_comments > 0}
-            />
-          ))}
-        </ul>
-      ) : (
-        <p className="px-3.5 py-4 text-[12.5px] text-muted-foreground">
-          No released SEC review correspondence on file for this company.
-        </p>
-      )}
+      {body}
     </Panel>
   );
 }
