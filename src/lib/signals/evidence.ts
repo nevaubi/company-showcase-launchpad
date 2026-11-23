@@ -204,7 +204,7 @@ export interface Discovery {
   tested: number;
   /** The best t-statistic that many worthless rules are expected to show. */
   expectedBestT: number;
-  /** The t-statistic the best rule needs to be watched (first Benjamini-Hochberg step at the watch rate, normal scale). */
+  /** The t-statistic the best rule needs to be watched: the first Benjamini-Hochberg step at the watch rate, Student's t on a typical record's months. */
   firstBarT: number;
   bestT: number | null;
   bestKey: string | null;
@@ -258,6 +258,25 @@ function regimeCells(v: VariantMeta, months: number): Cell[] {
   return out;
 }
 
+/** The t-statistic with `p` of Student's t below it (bisection on the CDF; `df` large reads as the normal). */
+export function tQuantile(p: number, df: number): number {
+  if (!(df > 0) || !Number.isFinite(df) || df > 1e4) return normInv(p);
+  let lo = -60, hi = 60;
+  for (let k = 0; k < 80; k++) {
+    const mid = (lo + hi) / 2;
+    if (tCdf(mid, df) < p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+/** Degrees of freedom of a typical record: the median number of independent months, less one. */
+function typicalDf(vs: readonly VariantEvidence[]): number {
+  const n = vs.flatMap((e) => (e.blocks ? [e.blocks.nEff] : [])).sort((a, b) => a - b);
+  if (!n.length) return Infinity;
+  return Math.max((n.length % 2 ? n[n.length >> 1] : (n[n.length / 2 - 1] + n[n.length / 2]) / 2) - 1, 1);
+}
+
 /** Live record against what the backtest allows for a record that short. */
 export function liveCheck(v: Pick<VariantMeta, "live" | "horizon">, expected: number, monthlySd: number | null, asOf: string): LiveCheck {
   const L = v.live;
@@ -297,7 +316,7 @@ export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, 
     const b = blocks[i];
     const head = { key: v.key, strategy: v.strategy, family: v.family, side: v.side, horizon: v.horizon, passed: v.passed, tStored: adjustedT(v.outSample), p: p[i], q: q[i] };
     if (!b) {
-      return { ...head, blocks: null, kept: 0, base: 0, regimes: [], regime: null, edge: 0, live: liveCheck(v, 0, null, asOf), grade: "unproven", reason: "Fewer than 12 months with trades since 2022" };
+      return { ...head, blocks: null, kept: 0, base: 0, regimes: [], regime: null, edge: 0, live: liveCheck(v, 0, null, asOf), grade: "unproven", reason: "Under 12 months of trades since 2022" };
     }
     // Shrinkage from the whole set, or what the variant's own record keeps beyond the luckiest worthless rule, whichever is larger.
     const pooled = (prior.value * b.nEff) / (1 + prior.value * b.nEff);
@@ -322,7 +341,7 @@ export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, 
       grade = "probation";
       reason = "Live record is well below its backtest";
     } else if (grade === "unproven") {
-      reason = !(b.mean > 0) ? "Does not make money after costs since 2022"
+      reason = !(b.mean > 0) ? "No profit after costs since 2022"
         : !enoughMonths ? `Only ${b.months} months with trades since 2022`
           : q[i] <= EVIDENCE.watchFdr ? "Has lost money in markets like today's"
             : "Cannot be told apart from luck";
@@ -341,7 +360,7 @@ export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, 
   const discovery: Discovery = {
     tested,
     expectedBestT: lucky,
-    firstBarT: normInv(1 - EVIDENCE.watchFdr / Math.max(tested, 1)),
+    firstBarT: tQuantile(1 - EVIDENCE.watchFdr / Math.max(tested, 1), typicalDf(out)),
     bestT: best?.t ?? null,
     bestKey: best?.key ?? null,
     atSingleBar,

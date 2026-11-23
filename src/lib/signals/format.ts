@@ -66,6 +66,9 @@ export function monthLabel(key: string): string {
 
 export const sideLabel = (side: 1 | -1) => (side > 0 ? "Long" : "Short");
 
+/** A stored signal line with true minus signs: "price -0.2%" reads "price −0.2%". Hyphens inside words stay. */
+export const tidyDetail = (detail: string) => detail.replace(/(^|[\s(])-(?=\d)/g, "$1−");
+
 /** The covered company's short name, left out when it only repeats the symbol ("UPS UPS"). */
 export function nameOf(ticker: string): string | undefined {
   const n = coverageOf(ticker)?.shortName;

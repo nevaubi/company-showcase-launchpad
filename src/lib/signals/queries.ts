@@ -44,20 +44,27 @@ interface SignalRow {
 
 const num = (x: unknown) => (x == null ? null : Number(x));
 
-/** Live signals of one session, read a page at a time (the API returns at most 1,000 rows a call). */
+/**
+ * Live signals of one session, read a page at a time (the API returns at most 1,000 rows a call).
+ * A signal was live on `asOf` when it was first seen on or before that session and last seen on or
+ * after it. Matching `last_seen` exactly would lose every signal the next night's scan has already
+ * touched, while the published run still points at `asOf`.
+ */
 export async function fetchLiveSignals(asOf: string): Promise<LiveSignal[]> {
   const out: LiveSignal[] = [];
   for (let from = 0; from < 20 * PAGE; from += PAGE) {
     const { data, error } = await supabase
       .from("setup_signals")
       .select(SIGNAL_COLUMNS)
-      .eq("last_seen", asOf)
+      .gte("last_seen", asOf)
       .order("ticker")
       .order("variant")
       .order("fired_at")
       .range(from, from + PAGE - 1);
     if (error) throw new Error(error.message);
     for (const r of (data ?? []) as unknown as SignalRow[]) {
+      // First seen after `asOf`: the next session's signal, not this one's.
+      if (r.first_seen != null && r.first_seen > asOf) continue;
       out.push({
         ticker: r.ticker, name: r.name ?? r.ticker, sector: r.sector ?? "", variant: r.variant, firedAt: r.fired_at, firstSeen: r.first_seen,
         strength: Number(r.strength ?? 0), detail: r.detail ?? "", price: Number(r.price ?? 0), atr: Number(r.atr ?? 0), dv20: num(r.dv20), cost: num(r.cost),
@@ -108,7 +115,7 @@ export const sparksQuery = (asOf: string, rows: readonly { ticker: string; key: 
       const out = new Map<string, number[]>();
       for (let k = 0; k < tickers.length; k += 40) {
         // The variant filter keeps the answer to about one row per ticker on screen.
-        const { data, error } = await supabase.from("setup_signals").select("ticker, spark").eq("last_seen", asOf).in("ticker", tickers.slice(k, k + 40)).in("variant", variants).limit(PAGE);
+        const { data, error } = await supabase.from("setup_signals").select("ticker, spark").gte("last_seen", asOf).in("ticker", tickers.slice(k, k + 40)).in("variant", variants).limit(PAGE);
         if (error) throw new Error(error.message);
         for (const r of (data ?? []) as { ticker: string; spark: number[] | null }[]) if (!out.has(r.ticker) && r.spark?.length) out.set(r.ticker, r.spark.map(Number));
       }

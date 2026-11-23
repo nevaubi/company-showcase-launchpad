@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildEvidence } from "./evidence";
 import { evidenceLine, liveLine, luckLines, recordLine, verdictLine } from "./explain";
-import { count, dayLong, dayShort, holdLabel, monthLabel, niceTicks, num, pct, price, usdCompact } from "./format";
+import { count, dayLong, dayShort, holdLabel, monthLabel, nameOf, niceTicks, num, pct, price, tidyDetail, usdCompact } from "./format";
 import { DEFAULT_FILTERS } from "./rank";
 import { defaultView, filtersActive, filtersOf, searchOf, setupsSearch } from "./url-state";
 import { realVariants } from "./variants-real.fixture";
@@ -38,6 +38,18 @@ describe("figures as the pages print them", () => {
     expect([holdLabel(1), holdLabel(5), holdLabel(10), holdLabel(21), holdLabel(40)]).toEqual(["1 day", "5 days", "10 days", "4 weeks", "8 weeks"]);
   });
 
+  it("gives stored signal text a true minus without touching hyphens inside words", () => {
+    expect(tidyDetail("3.9x normal volume, price -0.2%")).toBe("3.9x normal volume, price −0.2%");
+    expect(tidyDetail("-4.0 standard deviations vs its sector over 5 days")).toBe("−4.0 standard deviations vs its sector over 5 days");
+    expect(tidyDetail("12-1 momentum near a 52-week high (-3.1)")).toBe("12-1 momentum near a 52-week high (−3.1)");
+  });
+
+  it("drops a company name that only repeats the symbol", () => {
+    expect(nameOf("UPS")).toBeUndefined();
+    expect(nameOf("SCHW")).toBe("Charles Schwab");
+    expect(nameOf("NOT_A_TICKER")).toBeUndefined();
+  });
+
   it("picks round axis ticks that include zero when the range spans it", () => {
     expect(niceTicks(0, 0.42)).toEqual([0, 0.1, 0.2, 0.3, 0.4]);
     expect(niceTicks(-0.13, 0.08)).toEqual([-0.1, -0.05, 0, 0.05]);
@@ -51,7 +63,7 @@ describe("the evidence in words, on the production record of 20 Nov 2026", () =>
 
   it("states the verdict with the numbers behind it", () => {
     expect(verdictLine(book)).toBe(
-      "No rule clears the bar today. The best of 46 scores t 1.97 on its monthly record since 2022. Luck alone would put the best of 46 worthless rules near 2.24, and a rule has to reach 2.85 to stand out.",
+      "No rule clears the bar today. The best of 46 scores t 1.97 on its monthly record since 2022. Luck alone would put the best of 46 worthless rules near 2.24, and a rule has to reach 2.98 to stand out.",
     );
     const luck = luckLines(book);
     expect(luck).toHaveLength(3);
@@ -62,7 +74,7 @@ describe("the evidence in words, on the production record of 20 Nov 2026", () =>
   it("says why a rule is not listed, without calling a backtest proven", () => {
     const vol = book.byKey.get("volPremium:L:20")!;
     expect(recordLine(vol)).toBe("+0.67% a trade after costs since 2022, 33 of 58 months up, t 1.88");
-    expect(evidenceLine(vol, book.discovery)).toBe(`${recordLine(vol)}. Not past the bar: with 46 rules tried, the best needs t 2.85 before it stands out from luck.`);
+    expect(evidenceLine(vol, book.discovery)).toBe(`${recordLine(vol)}. Not past the bar: with 46 rules tried, the best needs t 2.98 before it stands out from luck.`);
     expect(evidenceLine(book.byKey.get("shortFlow:S:5")!, book.discovery)).toBe("Does not make money after costs since 2022: −0.32% a trade, t −3.95.");
     for (const e of book.variants) expect(evidenceLine(e, book.discovery)).not.toMatch(/proven|Passes/);
   });

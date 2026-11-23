@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { adjustedT, finalize, overlapLag, variantPartial, type DailyAgg, type Regime, type VariantProof } from "./backtest";
-import { buildEvidence, EVIDENCE, LISTED, liveCheck, monthlyBlocks, priorScale } from "./evidence";
+import { buildEvidence, EVIDENCE, LISTED, liveCheck, monthlyBlocks, priorScale, tQuantile } from "./evidence";
 import { variantMeta, type LiveRecord, type VariantMeta } from "./setups";
 import { bhFdr, bhQ, expectedMaxZ, hacSe, tCdf, tHac } from "./stats";
 import { STRATEGIES } from "./strategies";
@@ -97,6 +97,15 @@ describe("standard errors when trades overlap", () => {
     expect(bhQ(p).map((x) => +x.toFixed(5))).toEqual([0.005, 0.02, 0.05125, 0.05125, 0.6]);
     for (const level of [0.01, 0.05, 0.06, 0.2]) expect(bhQ(p).map((x) => x <= level)).toEqual(bhFdr(p, level));
     expect(expectedMaxZ(46)).toBeCloseTo(2.24, 2);
+  });
+});
+
+describe("the bar on Student's t", () => {
+  it("matches the printed table and falls back to the normal for long records", () => {
+    expect(tQuantile(0.975, 10)).toBeCloseTo(2.228, 3);
+    expect(tQuantile(0.95, 5)).toBeCloseTo(2.015, 3);
+    expect(tQuantile(0.975, 1e9)).toBeCloseTo(1.96, 3);
+    expect(tQuantile(0.5, 7)).toBeCloseTo(0, 9);
   });
 });
 
@@ -209,7 +218,7 @@ describe("shrinkage toward zero", () => {
     expect(e.reason).toBe("Only 18 months with trades since 2022");
     const loser = buildEvidence(universe(7, { "gap:S:1": -0.8 }), "Up, calm", "2026-11-20").byKey.get("gap:S:1")!;
     expect(loser.grade).toBe("unproven");
-    expect(loser.reason).toBe("Does not make money after costs since 2022");
+    expect(loser.reason).toBe("No profit after costs since 2022");
     expect(loser.q).toBeGreaterThan(0.99);
   });
 });
@@ -333,7 +342,8 @@ describe("production record of 20 Nov 2026", () => {
     expect(d.bestT!).toBeLessThan(d.expectedBestT);
     expect(d.atSingleBar).toBe(3);
     expect(d.expectedAtSingleBar).toBeCloseTo(2.3, 5);
-    expect(d.firstBarT).toBeCloseTo(2.85, 2);
+    // First Benjamini-Hochberg step at 10% over 46 tests: p = 0.1 / 46, on Student's t for a typical record (about 50 months).
+    expect(d.firstBarT).toBeCloseTo(2.98, 2);
     expect(book.variants.filter((e) => LISTED.includes(e.grade))).toHaveLength(0);
     expect(Math.min(...book.variants.map((e) => e.q))).toBeCloseTo(0.706, 2);
     // The spread of real edges is within one standard error of zero, and regimes add nothing.
