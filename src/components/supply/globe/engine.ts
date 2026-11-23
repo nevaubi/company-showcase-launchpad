@@ -380,7 +380,7 @@ export class GlobeEngine {
       if (d < 2e-5) { same++; lead ||= !!q.lead; } else if (d < nearest) nearest = d;
     }
     if (!Number.isFinite(nearest)) return this.minZoom;
-    const reach = same > 1 ? fanOffsets(lead ? same - 1 : same, FAN_D).reach : badgeRadius(p.weight, p.lead);
+    const reach = same > 1 ? fanOffsets(lead ? same - 1 : same, FAN_D, lead ? badgeRadius(1, true) + 3 : 0).reach : badgeRadius(p.weight, p.lead);
     return (reach + 30) / nearest / baseScale({ w: this.w, h: this.h }, this.flat);
   }
   /** Back to the home view (see setHome). */
@@ -486,14 +486,16 @@ export class GlobeEngine {
     const land = new Path2D(), coast = new Path2D(), border = new Path2D();
     trace(geo, view, { fill: land, coast, border });
     ctx.fillStyle = pal.land; ctx.fill(land, 'evenodd');
+    /* the tint says where the ties are while several countries are in view; once one country fills the frame it would
+       only make that country's land read as water, so it fades out as the map closes in (a picked country keeps it) */
+    const ease = clamp(1 - (R / baseScale({ w, h }, this.flat) - 1.6) / 4.4, 0, 1);
     for (const f of this.fills) {
+      if (ease <= 0 && !f.outline) continue;
       const polys = polysOf(geo, f.name);
       if (!polys) continue;
       const shape = new Path2D();
       trace(geo, view, { fill: shape, coast: null, border: null }, polys);
-      /* the tint says where the ties are when the whole world is in view; close in it steps back so the names carry the picture */
-      const ease = clamp(1.3 - 0.15 * this.cam.zoom, 0.55, 1);
-      ctx.globalAlpha = (f.name === this.overCountry ? Math.min(1, f.alpha + 0.1) : f.alpha) * (f.outline ? 1 : ease);
+      ctx.globalAlpha = (f.name === this.overCountry ? Math.min(1, f.alpha + 0.1) : f.alpha) * (f.outline ? Math.max(ease, 0.5) : ease);
       ctx.fillStyle = f.color; ctx.fill(shape, 'evenodd');
       if (f.outline) { ctx.globalAlpha = 0.9; ctx.strokeStyle = f.color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.stroke(shape); }
     }
@@ -573,7 +575,7 @@ export class GlobeEngine {
       if (members.length === 1) { const m: Mark = { id: `p:${lead.key}`, x: c.x, y: c.y, r: c.r, members, place: this.vecByKey.get(lead.key) as Vec3, kind: 'single' }; marks.push(m); of.set(lead.key, m); return; }
       const stuck = local && members.length <= 28 && members.every((m) => angleBetween([m.lon, m.lat], [lead.lon, lead.lat]) * deepest < STUCK_PX);
       if (stuck) {
-        const fan = fanOffsets(lead.lead ? members.length - 1 : members.length, FAN_D);
+        const fan = fanOffsets(lead.lead ? members.length - 1 : members.length, FAN_D, lead.lead ? badgeRadius(1, true) + 3 : 0);
         const fits = c.x - fan.reach > 4 && c.y - fan.reach > 4 && c.x + fan.reach < w - 4 && c.y + fan.reach < h - 4;
         const clear = !taken.some((t, j) => j !== ci && Math.hypot(t.x - c.x, t.y - c.y) < t.r + fan.reach + 4);
         if (fits && clear) {
@@ -641,7 +643,8 @@ export class GlobeEngine {
       if (span < tw * 0.85) continue;
       project(view, l.at[0], l.at[1], 0, pr);
       if (pr.z < 0.25 || pr.x < 0 || pr.y < 0 || pr.x > w || pr.y > h) continue;
-      ask(`a:${l.atlas}`, 'country', l.name, pr.x, pr.y, 0, (tinted.has(l.atlas) ? 500 : 120) + Math.min(100, l.size * 100), true);
+      /* a country's name may sit a line or two off its middle when a badge stands there, within about a third of the country's size */
+      ask(`a:${l.atlas}`, 'country', l.name, pr.x, pr.y, span * 0.3, (tinted.has(l.atlas) ? 500 : 120) + Math.min(100, l.size * 100), true);
     }
     for (const g of this.regions) {
       const span = g.size * R;
@@ -650,7 +653,7 @@ export class GlobeEngine {
       if (pr.z < 0.25 || pr.x < 0 || pr.y < 0 || pr.x > w || pr.y > h) continue;
       const full = this.textWidth('region', g.name.toUpperCase());
       const text = span >= full * 1.15 ? g.name : g.short && span >= 44 ? g.short : null;
-      if (text) ask(`g:${g.name}`, 'region', text, pr.x, pr.y, 0, 60 + Math.min(40, g.size * 100), true);
+      if (text) ask(`g:${g.name}`, 'region', text, pr.x, pr.y, span * 0.25, 60 + Math.min(40, g.size * 100), true);
     }
     const placed = placeLabels(asks, obstacles, { w, h }, this.labelSides);
     this.labelSides = new Map(placed.map((p) => [p.id, p.side]));

@@ -45,6 +45,18 @@ describe('label placement', () => {
     expect(p.left).toBeCloseTo(160); expect(p.top).toBeCloseTo(143.5);
     expect(placeLabels([area], [markerBox(200, 150, 8)], FRAME)).toHaveLength(0);
   });
+  it('moves an area name a line or two off the middle when a marker sits there, as far as the area allows', () => {
+    const big = ask({ id: 'country', area: true, r: 40, w: 80 });
+    const [p] = placeLabels([big], [markerBox(200, 150, 8)], FRAME);
+    expect(p.side).toBe('up1');
+    expect(p.top).toBeCloseTo(143.5 - 18);
+    /* above is taken too: below */
+    expect(placeLabels([big], [markerBox(200, 150, 8), { x: 150, y: 120, w: 100, h: 20 }], FRAME)[0].side).toBe('down1');
+    /* a small area may stray one line, not two */
+    const small = ask({ id: 'state', area: true, r: 20, w: 80 });
+    expect(placeLabels([small], [{ x: 150, y: 124, w: 100, h: 52 }], FRAME)).toHaveLength(0);
+    expect(placeLabels([big], [{ x: 150, y: 124, w: 100, h: 52 }], FRAME)[0].side).toBe('up2');
+  });
   it('keeps a name on the side it had last frame while that side is free', () => {
     const before = new Map([['a', 'below' as const]]);
     expect(placeLabels([ask({ id: 'a' })], [markerBox(200, 150, 10)], FRAME, before)[0].side).toBe('below');

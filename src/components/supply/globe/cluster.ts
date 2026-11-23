@@ -86,19 +86,23 @@ export function clusterSpots<T>(spots: Spot<T>[], gap = 3): Cluster<T>[] {
 
 /**
  * Offsets for an opened cluster of n badges of diameter d: one ring for a few, a sunflower spiral for more. No two
- * badges overlap and none sits on the centre, which keeps the dot marking the true place. Returns the radius needed.
+ * badges overlap and none comes within `hole` px of the centre plus its own radius: the centre keeps the dot that marks
+ * the true place, or the badge of the company the map is about (pass that badge's radius as `hole`). Returns the
+ * radius the whole fan needs.
  */
-export function fanOffsets(n: number, d: number): { at: [number, number][]; reach: number } {
+export function fanOffsets(n: number, d: number, hole = 0): { at: [number, number][]; reach: number } {
   const at: [number, number][] = [];
   if (n <= 0) return { at, reach: 0 };
+  const inner = hole > 0 ? hole + d / 2 + 4 : d * 0.95;
   if (n <= 8) {
-    const ring = Math.max(d * 0.95, (n * (d + 4)) / (2 * Math.PI));
+    const ring = Math.max(inner, (n * (d + 4)) / (2 * Math.PI));
     for (let i = 0; i < n; i++) { const a = -Math.PI / 2 + (i / n) * Math.PI * 2; at.push([ring * Math.cos(a), ring * Math.sin(a)]); }
     return { at, reach: ring + d / 2 };
   }
-  const c = (d + 4) / 1.3;
+  /* a sunflower keeps the same room per badge at every radius; starting it further out leaves the hole free */
+  const c = (d + 4) / 1.3, first = Math.max(1.4, (inner / c) ** 2);
   let reach = 0;
-  for (let i = 0; i < n; i++) { const r = c * Math.sqrt(i + 1.4), a = i * 2.399963; at.push([r * Math.cos(a), r * Math.sin(a)]); reach = Math.max(reach, r); }
+  for (let i = 0; i < n; i++) { const r = c * Math.sqrt(i + first), a = i * 2.399963; at.push([r * Math.cos(a), r * Math.sin(a)]); reach = Math.max(reach, r); }
   return { at, reach: reach + d / 2 };
 }
 

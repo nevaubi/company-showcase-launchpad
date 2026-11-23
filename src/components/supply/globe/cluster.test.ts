@@ -75,6 +75,16 @@ describe('fanOffsets', () => {
     }
     expect(fanOffsets(0, 23)).toEqual({ at: [], reach: 0 });
   });
+  it('leaves room in the middle for the badge of the company the map is about', () => {
+    for (const n of [1, 3, 7, 8, 9, 20]) {
+      const d = 27, hole = 19, { at } = fanOffsets(n, d, hole);
+      for (let i = 0; i < n; i++) {
+        /* clear of the middle badge by a few pixels, and of each other */
+        expect(Math.hypot(at[i][0], at[i][1])).toBeGreaterThanOrEqual(hole + d / 2 + 4 - 1e-9);
+        for (let j = i + 1; j < n; j++) expect(Math.hypot(at[i][0] - at[j][0], at[i][1] - at[j][1])).toBeGreaterThanOrEqual(d + 1);
+      }
+    }
+  });
 });
 
 describe('rimGroups', () => {
