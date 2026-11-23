@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { IrDocuments } from "@/components/ir/documents";
 import { storeIndexQuery, type StoreDoc } from "@/lib/ir/store";
 import { friendlyError } from "@/lib/errors";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
@@ -17,11 +17,11 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getIrData, type IrDocRow } from "@/lib/ir.functions";
-import { irPageKey, loadIrPage, type IrPageData } from "@/lib/ir/client";
-import { secRevenueCheck } from "@/lib/ir/display";
+import { checkStatementsOf, irPageKey, loadIrPage, type IrPageData } from "@/lib/ir/client";
 import type { IrPayload } from "@/lib/ir/payload";
-import { useCompany } from "@/lib/data";
-import { fmtCompactUsd, fmtDate } from "@/lib/format";
+import { companyQuery } from "@/lib/data";
+import { IrChecksLine } from "@/components/ir/checks";
+import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const monthYear = (iso: string) =>
@@ -77,9 +77,11 @@ function IrPage() {
   const clearFocus = useCallback(() => navigate({ search: {}, replace: true }), [navigate]);
   const fetchIr = useServerFn(getIrData);
   const store = useQuery(storeIndexQuery(ticker));
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: irPageKey(ticker),
-    queryFn: () => loadIrPage(ticker, fetchIr),
+    // The company's SEC statements (usually already cached by the company header) feed the cross-check.
+    queryFn: () => loadIrPage(ticker, fetchIr, () => qc.fetchQuery(companyQuery(ticker)).then(checkStatementsOf)),
     staleTime: 5 * 60_000,
     retry: 3,
     retryDelay: (n) => Math.min(2000 * 2 ** n, 15_000),
@@ -134,7 +136,7 @@ export function IrPageView({ ticker, data, store, focus, onFocusDone }: { ticker
   const hasSeries = !!data.payload && data.payload.series.length > 0;
   return (
     <div className="grid grid-cols-1 gap-6">
-      <IrSummary ticker={ticker} payload={data.payload} pending={data.pending} documents={data.documents} images={data.images ?? 0} builtAt={data.builtAt} />
+      <IrSummary ticker={ticker} data={data} payload={data.payload} pending={data.pending} documents={data.documents} images={data.images ?? 0} builtAt={data.builtAt} />
       {hasSeries && <IrKeyMetrics ticker={ticker} payload={data.payload!} />}
       {hasSeries && <IrFinancialMap ticker={ticker} payload={data.payload!} />}
       {hasSeries ? (
@@ -169,6 +171,7 @@ function useSlow(active: boolean, ms: number) {
 
 function IrSummary({
   ticker,
+  data,
   payload,
   pending,
   documents,
@@ -176,24 +179,15 @@ function IrSummary({
   builtAt,
 }: {
   ticker: string;
+  data: IrPageData;
   payload: IrPayload | null;
   pending: number;
   documents: IrDocRow[];
   images: number;
   builtAt: string | null;
 }) {
-  const company = useCompany(ticker);
   const files = documents.length + images;
   const read = documents.filter((d) => d.extract_status?.startsWith("ok")).length;
-
-  const sec = useMemo(() => {
-    const st = company.data?.statements.quarterly.income;
-    const row = st?.rows.find((r) => r.key === "revenue");
-    if (!payload || !st || !row) return [];
-    const reported = st.periods.flatMap((p, i) => (row.cells[i] ? [{ end: p.end, v: row.cells[i]!.v }] : []));
-    return secRevenueCheck(payload, reported);
-  }, [company.data, payload]);
-  const secBad = sec.filter((c) => !c.ok);
   const s = payload?.stats;
   // Values filled by calculation (fourth quarters, year-to-date differences, summed years).
   const calculated = useMemo(() => (payload ? payload.series.reduce((n, x) => n + Object.values(x.q).filter((c) => c.f).length + Object.values(x.y).filter((c) => c.f).length, 0) : 0), [payload]);
@@ -253,28 +247,7 @@ function IrSummary({
           </p>
         </div>
       )}
-      {sec.length > 0 && (
-        <div className={cn("flex flex-wrap items-center gap-2 border-t px-4 py-2", IR.caption)}>
-          {secBad.length ? (
-            <Tooltip>
-              <TooltipTrigger className="inline-flex items-center gap-1.5 text-foreground">
-                <span aria-hidden className="inline-block size-1.5 rounded-full bg-warning" />
-                Release top line matches SEC-reported revenue in {sec.length - secBad.length} of {sec.length} quarters
-              </TooltipTrigger>
-              <TooltipContent className="max-w-sm text-xs">
-                {secBad.slice(-6).map((b) => (
-                  <p key={b.period}>
-                    {fmtDate(b.period)}: release {fmtCompactUsd(b.ir, 2)} vs 10-Q/10-K {fmtCompactUsd(b.sec, 2)}
-                  </p>
-                ))}
-                <p className="mt-1 opacity-75">Differences usually come from later recasts (divestitures, reclassifications) in the SEC statements.</p>
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <span>Release top line matches SEC-reported revenue in all {sec.length} overlapping quarters</span>
-          )}
-        </div>
-      )}
+      {payload && <IrChecksLine ticker={ticker} payload={payload} check={data.secCheck} consistency={data.consistency} timings={data.timings} late={data.secCheckLate} />}
     </IrPanel>
   );
 }
