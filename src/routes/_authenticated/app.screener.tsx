@@ -530,7 +530,7 @@ function ResultsTable({
               const f = F.get(id)!;
               const on = spec.sort?.field === id;
               return (
-                <th key={id} scope="col" aria-sort={on ? (spec.sort!.dir === "asc" ? "ascending" : "descending") : "none"} className={cn(head, "min-w-[6.5rem] px-3 py-1.5 text-right align-bottom")}>
+                <th key={id} scope="col" aria-sort={on ? (spec.sort!.dir === "asc" ? "ascending" : "descending") : "none"} className={cn(head, "min-w-[5.5rem] px-3 py-1.5 text-right align-bottom")}>
                   <button
                     type="button"
                     onClick={() => sortBy(id)}
