@@ -32,6 +32,8 @@ export interface GlobePoint {
   weight: number;
   /** logo image address; a plain marker is drawn until it loads or when it fails */
   logo?: string;
+  /** the logo is known to be the company's own mark (not a favicon looked up by domain): only such a logo stands for a whole cluster */
+  logoTrusted?: boolean;
   /** the place is only known to country or state level: drawn with a broken ring */
   approx?: boolean;
   /** the company the scene is about: largest badge, never folded into another name's cluster */
@@ -446,11 +448,15 @@ export class GlobeEngine {
     /* dots travel only along the selected link, at about 30 frames a second; with no selection the picture is still */
     const flowing = showing && !this.reduced && this.drawn.some((d) => d.hot);
     if (flowing) { this.clock += dt; if (now - this.lastTop >= 32) this.dirtyTop = true; }
-    if (showing && this.palette && this.w > 1) {
-      if (this.dirtyBase) { this.dirtyBase = false; this.drawBase(); }
-      if (this.dirtyTop) { this.dirtyTop = false; this.lastTop = now; this.draw(); }
+    try {
+      if (showing && this.palette && this.w > 1) {
+        if (this.dirtyBase) { this.dirtyBase = false; this.drawBase(); }
+        if (this.dirtyTop) { this.dirtyTop = false; this.lastTop = now; this.draw(); }
+      }
+    } finally {
+      /* a frame that failed to draw must not strand a flight halfway: the loop goes on whatever happened above */
+      if (showing && (moving || flowing || this.fly || this.zoomAnim || this.spin)) this.schedule(); else { this.last = 0; this.publish(); }
     }
-    if (showing && (moving || flowing || this.fly || this.zoomAnim || this.spin)) this.schedule(); else { this.last = 0; this.publish(); }
   };
   /** The view at rest, as an attribute on the canvas ("lon,lat,zoom,globe|flat"): tests and the page's assistant can read where the map is without reading pixels. */
   private publish(): void {
@@ -880,7 +886,7 @@ export class GlobeEngine {
     if (picked || hot) { ctx.beginPath(); ctx.arc(m.x, m.y, r * 1.2 + (p.ring ? 7 : 4), 0, Math.PI * 2); ctx.strokeStyle = picked ? pal.accent : pal.ink2; ctx.lineWidth = picked ? 2 : 1.25; ctx.stroke(); }
   }
 
-  /** Several names at one spot: a ring split by relation, the heaviest name's logo inside, and how many more there are. */
+  /** Several names at one spot: a ring split by relation, the heaviest name's logo inside with how many more there are, or the count alone when that name has no mark of its own. */
   private drawCluster(m: Mark, pal: GlobePalette): void {
     const ctx = this.ctx, n = m.members.length, lead = m.members[0], hot = this.hover === m.id, r = m.r, dpr = this.dpr;
     const picked = m.members.some((p) => p.key === this.scene.selected), flagged = m.members.find((p) => p.ring)?.ring;
@@ -893,7 +899,7 @@ export class GlobeEngine {
       const gap = slices.length > 1 ? 0.07 : 0;
       ctx.beginPath(); ctx.arc(m.x, m.y, r - band / 2, sl.a0 + gap, sl.a1 - gap); ctx.strokeStyle = sl.color; ctx.stroke();
     }
-    const inner = r - band - 1.5, size = Math.round(inner * 1.5 * dpr), tile = lead.logo ? this.atlas.tile(lead.logo, size) : null;
+    const inner = r - band - 1.5, size = Math.round(inner * 1.5 * dpr), tile = lead.logo && lead.logoTrusted ? this.atlas.tile(lead.logo, size) : null;
     ctx.fillStyle = pal.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (tile) {
       const s = size / dpr, x = Math.round((m.x - s / 2) * dpr) / dpr, y = Math.round((m.y - s / 2) * dpr) / dpr;

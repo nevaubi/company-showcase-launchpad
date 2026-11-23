@@ -174,8 +174,8 @@ export function pickRes(R: number, have: { 50: boolean; 10: boolean }): MapRes {
 }
 /** A vertex is left out when the line would move by less than this many pixels without it. */
 export const DETAIL_PX = 0.4;
-/** Islands smaller than this on screen are not drawn. */
-const MIN_POLY_PX = 0.7;
+/** Islands whose bounding cap is smaller than this radius on screen (under two pixels across) are not drawn. */
+const MIN_POLY_PX = 1;
 
 /* ---------- tracing ---------- */
 export interface PathSink { moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; arc(x: number, y: number, r: number, a0: number, a1: number, ccw?: boolean): void; closePath(): void }

@@ -261,7 +261,8 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
     const flagged = (key: string) => overlayHit(overlay, risks[key]);
     const outside = (p: Placed) => { const n = nodeByKey.get(p.key); return impacts != null && n != null && !impactOf(impacts, n); };
     if (home) {
-      points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 1, lead: true, approx: home.precision !== "city", logo: focus.ticker ? logoUrl(focus.ticker) : undefined, shape: "circle" });
+      const mark = focus.ticker ? logoUrl(focus.ticker) : undefined;
+      points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 1, lead: true, approx: home.precision !== "city", logo: mark, logoTrusted: !!mark, shape: "circle" });
     }
     for (const p of placed) {
       if (p.relation === "focus") continue;
@@ -269,10 +270,12 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
       const value = p.hop === 1 ? side.value(p.key) : 0, share = node ? maxShare(node) : 0;
       const weight = value > 0 && side.max > 0 ? Math.sqrt(value / side.max) : 0;
       const dim = !lit(p.key), faded = outside(p);
+      /* a covered company's bundled mark; otherwise a logo looked up by domain, good enough for its own badge */
+      const mark = p.ticker ? logoUrl(p.ticker) : undefined;
       points.push({
         key: p.key, name: p.name, hub: p.place, lon: p.lon, lat: p.lat,
         color: theme.relation[p.relation], weight, faded, dim,
-        logo: p.ticker ? logoUrl(p.ticker) ?? externalLogo(node?.domain ?? null, p.ticker) : externalLogo(node?.domain ?? null, null),
+        logo: mark ?? externalLogo(node?.domain ?? null, p.ticker), logoTrusted: !!mark,
         approx: p.basis !== "hq", ring: flagged(p.key) ? theme.negative : undefined, shape: RELATION_SHAPE[p.relation],
         /* the figure behind the width, written as the Network cards write it */
         note: p.hop === 1 && value > 0 ? (share > 0 ? `${share}%` : side.basis === "dollars" ? fmtCompactUsd(value) : undefined) : undefined,
@@ -518,7 +521,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
               {onIsolate && (selIsolated
                 ? <button type="button" data-agent-click className={quiet} onClick={() => ask({ kind: "clear" })}><X aria-hidden="true" className="size-3.5" />Show all</button>
                 : <button type="button" data-agent-click className={quiet} onClick={() => ask(pathwayOf(selNode))}><Waypoints aria-hidden="true" className="size-3.5" />Isolate this pathway</button>)}
-              {selPlaced && <button type="button" className={quiet} aria-label={`Zoom to ${selNode.name}`} onClick={() => revealRef.current(selPlaced)}><Crosshair aria-hidden="true" className="size-3.5" />Zoom to</button>}
+              {selPlaced && <button type="button" data-agent-click className={quiet} aria-label={`Zoom to ${selNode.name}`} onClick={() => revealRef.current(selPlaced)}><Crosshair aria-hidden="true" className="size-3.5" />Zoom to</button>}
             </div>
           )}
         </div>
