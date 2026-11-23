@@ -113,6 +113,29 @@ function latestPeriod(statements: Statement[]): Period | undefined {
 
 const pick = (p: Period | undefined) => (p ? { key: p.key, label: p.label, end: p.end } : undefined);
 
+/**
+ * Every 10-K/10-Q the statements do not hold (periods after the latest statement period, and 10-Ks
+ * whose year is not an annual column), oldest first: what a read-time extension should read.
+ */
+export function missingReports(d: CompanyDataset): Filing[] {
+  const A = d.statements.annual;
+  const Q = d.statements.quarterly;
+  const all = [A.income, A.balance, A.cashflow, Q.income, Q.balance, Q.cashflow];
+  const latestEnd = all.map((s) => s.periods.at(-1)?.end ?? "").sort().at(-1);
+  if (!latestEnd) return [];
+  const ends = all.flatMap((s) => s.periods.map((p) => p.end));
+  const yearEnd = [A.income, A.balance, A.cashflow].map((s) => s.periods.at(-1)?.end ?? "").sort().at(-1) ?? "";
+  const yearEnds = A.income.periods.map((p) => p.end);
+  const near = (a: string, b: string) => Math.abs(days(a, b)) <= END_TOLERANCE;
+  return d.filings
+    .filter((f) => PERIODIC.test(f.form) && f.report)
+    .filter((f) =>
+      (days(latestEnd, f.report!) > END_TOLERANCE && !ends.some((e) => near(e, f.report!))) ||
+      (f.form.startsWith("10-K") && !!yearEnd && days(yearEnd, f.report!) > END_TOLERANCE && !yearEnds.some((e) => near(e, f.report!))),
+    )
+    .sort((a, b) => a.filed.localeCompare(b.filed));
+}
+
 export function assessCurrency(d: CompanyDataset, opts: CurrencyOptions = {}): Currency {
   const A = d.statements.annual;
   const Q = d.statements.quarterly;

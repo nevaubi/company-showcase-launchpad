@@ -176,7 +176,8 @@ async function check(c: (typeof COVERAGE)[number]): Promise<Row> {
   const built = buildStatements(factsFiledBefore(cf, BUILD_DAY), { bank });
   row.fresh = { q: lastEnd(fresh, "quarterly"), a: lastEnd(fresh, "annual") };
   row.built = { q: lastEnd(built, "quarterly"), a: lastEnd(built, "annual") };
-  row.newestInFacts = !!newest && accnsIn(cf).has(newest.accn);
+  const inFactsAll = accnsIn(cf);
+  row.newestInFacts = !!newest && inFactsAll.has(newest.accn);
 
   // The app's own check, on the statements as of the last rebuild and the filings SEC lists today.
   const toFiling = (f: EdgarFiling): Filing => ({ accn: f.accn, form: f.form, filed: f.filed, ...(f.report ? { report: f.report } : {}), doc: f.doc, items: f.items });
@@ -200,7 +201,7 @@ async function check(c: (typeof COVERAGE)[number]): Promise<Row> {
     row.lagDays = days(missing[0]?.filed ?? gap.filed, TODAY);
     // The reason is the first report the statements miss: everything after it follows from it.
     const f = missing[0] ?? periodic.find((x) => x.accn === gap.accn)!;
-    const inFacts = accnsIn(cf);
+    const inFacts = inFactsAll;
     if (f.filed >= BUILD_DAY && holds(fresh, f.report)) row.reason = "awaiting-rebuild";
     else if (f.cik !== hist && !inFacts.has(f.accn)) row.reason = "registrant-change";
     else if (!f.xbrl) row.reason = "no-xbrl";

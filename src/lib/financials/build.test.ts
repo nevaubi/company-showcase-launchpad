@@ -388,3 +388,42 @@ describe("years in progress beyond the last 10-K (fiscal calendar)", () => {
     expect(q.rows.find((r) => r.key === "revenue")!.cells.slice(-3).map((c) => c?.v)).toEqual([75, 82, 84]);
   });
 });
+
+describe("debt lines tagged twice", () => {
+  const at = (end: string, val: number) => fact(undefined, end, val, "10-K", "2026-02-20");
+  const base = { Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } };
+  const debt = (s: ReturnType<typeof buildStatements>) => {
+    const st = s.annual.balance;
+    return st.rows.find((r) => r.key === "totalDebt")!.cells[st.periods.findIndex((p) => p.key === "FY2025")]!;
+  };
+  it("counts one amount tagged under two concepts once (Con Edison: CommercialPaper and NotesPayableCurrent)", () => {
+    const s = buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 26_844)] }, CommercialPaper: { facts: [at("2025-12-31", 392)] }, NotesPayableCurrent: { facts: [at("2025-12-31", 392)] }, LongTermDebtCurrent: { facts: [at("2025-12-31", 250)] } }));
+    expect(debt(s).v).toBe(26_844 + 250 + 392);
+  });
+  it("does not add commercial paper inside a larger short-term borrowings total (PepsiCo)", () => {
+    const s = buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: { facts: [at("2025-12-31", 42_658)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 9_223)] }, CommercialPaper: { facts: [at("2025-12-31", 4_800)] } }));
+    expect(debt(s).v).toBe(51_881);
+  });
+  it("keeps current maturities when plain LongTermDebt is the noncurrent line (IDACORP)", () => {
+    const s = buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 3_331_038)] }, LongTermDebt: { facts: [at("2025-12-31", 3_331_038)] }, LongTermDebtCurrent: { facts: [at("2025-12-31", 116_300)] } }));
+    expect(debt(s).v).toBe(3_447_338);
+  });
+});
+
+describe("commercial paper beside short-term borrowings", () => {
+  const at = (end: string, val: number) => fact(undefined, end, val, "10-K", "2026-02-20");
+  const base = { Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } };
+  const debt = (s: ReturnType<typeof buildStatements>) => {
+    const st = s.annual.balance;
+    return st.rows.find((r) => r.key === "totalDebt")!.cells[st.periods.findIndex((p) => p.key === "FY2025")]!.v;
+  };
+  it("is not added on top of the borrowings line (FedEx FY2026: $750M paper, $745M borrowings)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 23_293)] }, LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 1_676)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 745)] }, CommercialPaper: { facts: [at("2025-12-31", 750)] } })))).toBe(25_714);
+  });
+  it("is not added after paper was reclassified to long-term (Chevron FY2025)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 39_781)] }, LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: { facts: [at("2025-12-31", 39_781)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 977)] }, CommercialPaper: { facts: [at("2025-12-31", 4_642)] } })))).toBe(40_758);
+  });
+  it("still counts paper that is the only short-term line (Home Depot)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 46_341)] }, LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 4_967)] }, CommercialPaper: { facts: [at("2025-12-31", 4_464)] } })))).toBe(55_772);
+  });
+});

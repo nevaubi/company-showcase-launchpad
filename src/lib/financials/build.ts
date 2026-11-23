@@ -275,9 +275,9 @@ function pickCell(cf: CompanyFacts, def: LineDef, pred: (f: RawFact) => boolean)
   const picked = firstConcept(cf, def, pred);
   if (picked) return reportedCell(picked);
   if (!def.components?.length) return null;
-  const found = def.components
-    .map((c) => choose(factsFor(cf, c, unitKey(def)), c, pred))
-    .filter((x): x is Picked => !!x);
+  const found = dedupeComponents(
+    def.components.map((c) => choose(factsFor(cf, c, unitKey(def)), c, pred)).filter((x): x is Picked => !!x),
+  );
   if (!found.length) return null;
   if (found.length === 1) return reportedCell(found[0]);
   const names = found.map((x) => humanizeConcept(x.concept));
@@ -285,6 +285,21 @@ function pickCell(cf: CompanyFacts, def: LineDef, pred: (f: RawFact) => boolean)
     v: found.reduce((sum, x) => sum + x.fact.val, 0),
     derived: { formula: names.join(" + "), parts: found.map((x, i) => ({ ...ref(x), label: names[i], sign: 1 as const })) },
   };
+}
+
+/**
+ * Components that are one line tagged twice are counted once: an identical amount under two
+ * concepts (Con Edison tags its $392M "Notes payable" as both CommercialPaper and
+ * NotesPayableCurrent), and commercial paper beside a short-term borrowings line.
+ */
+function dedupeComponents(found: Picked[]): Picked[] {
+  const out: Picked[] = [];
+  for (const x of found) if (!out.some((y) => y.fact.val === x.fact.val)) out.push(x);
+  // Commercial paper beside a short-term borrowings line is part of it: PepsiCo's $9,223M includes $4,800M of
+  // paper, FedEx tags $750M face value of paper and $745M carried; Chevron's $977M is what is left after
+  // reclassifying paper to long-term. Paper alone (Home Depot's "Short-term debt") still counts.
+  const stb = out.some((x) => x.concept === "ShortTermBorrowings");
+  return stb ? out.filter((x) => x.concept !== "CommercialPaper") : out;
 }
 
 /** "CommercialPaper" → "Commercial paper" */
@@ -686,7 +701,9 @@ const CURRENT_MATURITIES_ONLY = new Set(["us-gaap:LongTermDebtCurrent", "us-gaap
 function includesCurrent(cf: CompanyFacts, l: Cell, end: string) {
   if (!l.src) return false;
   if (INCLUDES_CURRENT.has(l.src.concept)) return true;
-  return [...INCLUDES_CURRENT].some((c) => factsFor(cf, c, "USD").some((f) => !f.start && near(f.end, end, 4) && f.val === l.v));
+  // Only the explicit "including current maturities" concept counts here: plain LongTermDebt is often
+  // the noncurrent line (IDACORP, Trupanion tag their noncurrent debt with it).
+  return factsFor(cf, "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "USD").some((f) => !f.start && near(f.end, end, 4) && f.val === l.v);
 }
 
 /** Total debt = long-term + short-term debt, without double-counting current maturities or leaving out short-term borrowings. */
@@ -706,7 +723,9 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
       return { v: l.v, derived: { formula: label, parts: partsFrom(l, label, 1) } };
     }
     // Current maturities alone (FedEx, Home Depot): short-term borrowings and commercial paper are separate lines.
-    const sb = s?.src && CURRENT_MATURITIES_ONLY.has(s.src.concept) ? borrowings() : null;
+    const sbAll = s?.src && CURRENT_MATURITIES_ONLY.has(s.src.concept) ? borrowings() : null;
+    // The same amount under a second concept is the same line (Goosehead: current maturities also tagged NotesPayableCurrent).
+    const sb = sbAll && sbAll.v !== s!.v ? sbAll : null;
     const short = s && sb ? combine(s, sb, "add", ["Current maturities of long-term debt", "Short-term borrowings"]) : s;
     const shortLabel = sb ? "(current maturities + short-term borrowings)" : "Short-term debt";
     if (l && short) return combine(l, short, "add", ["Long-term debt", shortLabel]);
