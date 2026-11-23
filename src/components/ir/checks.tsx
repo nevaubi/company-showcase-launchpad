@@ -13,10 +13,10 @@ import { STD_LABEL, type SecCheck, type SecItem } from "@/lib/ir/sec-check";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const STATUS: Record<SecItem["status"], string> = { agree: "agrees", held: "held", flagged: "differs" };
-const ORDER: Record<SecItem["status"], number> = { held: 0, flagged: 1, agree: 2 };
+const STATUS: Record<SecItem["status"], string> = { agree: "agrees", held: "held", flagged: "differs", released: "agrees, shown again" };
+const ORDER: Record<SecItem["status"], number> = { held: 0, flagged: 1, released: 2, agree: 3 };
 
-export function IrChecksLine({ ticker, payload, check, consistency }: { ticker: string; payload: IrPayload; check?: SecCheck | null; consistency?: ConsistencySummary }) {
+export function IrChecksLine({ ticker, payload, check, consistency, timings }: { ticker: string; payload: IrPayload; check?: SecCheck | null; consistency?: ConsistencySummary; timings?: { unpackMs: number; tidyMs: number; checkMs: number } }) {
   const { open } = useSource();
   const items = useMemo(() => [...(check?.items ?? [])].sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.line.localeCompare(b.line) || b.e.localeCompare(a.e)), [check]);
   const byKey = useMemo(() => new Map(payload.series.map((s) => [s.k, s])), [payload]);
@@ -36,7 +36,7 @@ export function IrChecksLine({ ticker, payload, check, consistency }: { ticker: 
   const unit = (x: SecItem) => (x.line === "epsDiluted" ? "usdPerShare" : "usd");
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2", IR.caption)} data-section="IR checks">
+    <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2", IR.caption)} data-section="IR checks" data-timings={timings ? JSON.stringify(timings) : undefined}>
       {check === null ? (
         <span>Not checked against SEC filings: the company's statements could not be loaded.</span>
       ) : check && check.checked > 0 ? (
@@ -45,6 +45,7 @@ export function IrChecksLine({ ticker, payload, check, consistency }: { ticker: 
           {check.checked.toLocaleString()} figure{check.checked === 1 ? "" : "s"} checked against SEC filings: {check.agree.toLocaleString()} agree
           {check.held > 0 && `, ${check.held} held`}
           {check.flagged > 0 && `, ${check.flagged} differ`}
+          {check.released > 0 && ` (${check.released} the unit guard had held, shown again)`}
         </span>
       ) : (
         <span>No figure here is also in the company's SEC statements.</span>

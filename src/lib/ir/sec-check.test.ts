@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { IrPayload, PayloadCell, PayloadSeries } from "./payload";
 import { agrees, crossCheckSec, stdLineOf, type CheckStatements } from "./sec-check";
+import { tidyPayload } from "./tidy";
 
 // Real rows: IR standard-line values copied from production with the checksum-verified transfer
 // (ticker|line|period_end|months|values[|…]|md5-6), see /home/claude/fu/round3/reports/iracc_data.
@@ -43,6 +44,8 @@ describe("which IR lines stand for a standard statement line", () => {
     expect(stdLineOf(series("a", "Net interest income (annualized) (GAAP)", {}, { parent: "p", total: false }))).toBeNull(); // CFG
     expect(stdLineOf(series("a", "Operating income", {}, { bd: "Experiences operating income by business" }))).toBeNull(); // DIS
     expect(stdLineOf(series("a", "Adjusted operating income", {}))).toBeNull();
+    expect(stdLineOf(series("a", "Diluted earnings per share (EPS)", {}, { unit: "usdPerShare", bd: "Per Common Share" }))).toBe("epsDiluted"); // PNC
+    expect(stdLineOf(series("a", "Net interest income", {}, { total: false, bd: "Retail Banking segment results" }))).toBeNull(); // PNC segment
     expect(stdLineOf(series("a", "Revenue", {}, { parent: "p", total: false }))).toBeNull();
   });
 });
@@ -105,6 +108,14 @@ describe("cross-check against the SEC statements", () => {
     expect(c.flags?.[0].why).toBe("The 10-Q reports $18.64B; this figure is $20.22B (+8.4%).");
   });
 
+  it("explains a plain net income a little above the filing's (noncontrolling interests; PNC Q2 2026, real values)", () => {
+    const [ir] = realValues("std-lines-b06.txt", "PNC", "ni", "2026-06-30", 3);
+    const p = payload([series("ni", "Net income", { "2026-06-30": cell(ir) }, { bd: "Consolidated Financial Highlights" })]);
+    const { check } = crossCheckSec(p, statements("netIncome", { "2026-06-30": 2_040_000_000 }));
+    expect(check?.items[0]).toMatchObject({ status: "flagged", ir: 2_055_000_000 });
+    expect(check?.items[0].why).toMatch(/noncontrolling interests/);
+  });
+
   it("leaves periods the filing doesn't carry unchecked, and checks nothing without statements", () => {
     const p = payload([series("rev", "Revenue", { "2026-09-30": cell(1e9) })]);
     expect(crossCheckSec(p, statements("revenue", { "2026-06-30": 9e8 })).check).toMatchObject({ checked: 0 });
@@ -139,5 +150,24 @@ describe("cross-check against the SEC statements", () => {
     expect(out.series[0].held?.q?.["2025-06-30"]).toBeDefined();
     expect(out.series[0].held?.q?.["2025-12-31"]?.why).toMatch(/calculated from a figure/);
     expect(out.checks).toHaveLength(0);
+  });
+
+  it("shows again what the unit guard held when the filing confirms it, and holds the slips instead (ACN revenue, real values)", () => {
+    // ACN's stored revenue mixes dollar figures (4 quarters) and figures read in thousands (5 quarters):
+    // the guard's vote held the correct dollar quarters. The 10-Q settles it.
+    const ends = ["2024-02-29", "2024-08-31", "2024-11-30", "2025-02-28", "2025-05-31", "2025-08-31", "2025-11-30", "2026-02-28", "2026-05-31"];
+    const sec = [15_799_514_000, 16_405_819_000, 17_689_545_000, 16_659_301_000, 17_727_871_000, 17_596_260_000, 18_742_125_000, 18_044_066_000, 18_718_144_000];
+    const q = Object.fromEntries(ends.map((e, i) => [e, { v: realValues("std-lines-b09.txt", "ACN", "rev", e, 3)[0], d: i, e, m: 3 }]));
+    const tidied = tidyPayload(payload([series("rev", "Revenue", q, { cat: "segment", bd: "Revenue" })]));
+    const heldBefore = Object.keys(tidied.series[0].held?.q ?? {});
+    expect(heldBefore.length).toBeGreaterThan(0);
+    const { payload: out, check } = crossCheckSec(tidied, statements("revenue", Object.fromEntries(ends.map((e, i) => [e, sec[i]]))));
+    const shown = out.series[0].q;
+    // every dollar quarter is shown, every thousands quarter is held, none corrected
+    for (const [i, e] of ends.entries()) {
+      if (q[e].v === sec[i]) expect(shown[e]?.v).toBe(sec[i]);
+      else expect(out.series[0].held?.q?.[e]?.v).toBe(q[e].v);
+    }
+    expect(check?.released).toBe(heldBefore.filter((e) => q[e].v === sec[ends.indexOf(e)]).length);
   });
 });

@@ -43,7 +43,7 @@ export interface CheckStatements {
   annual?: CheckStatement | null;
 }
 
-export type SecStatus = "agree" | "held" | "flagged";
+export type SecStatus = "agree" | "held" | "flagged" | "released";
 export interface SecItem {
   k: string;
   label: string;
@@ -63,6 +63,8 @@ export interface SecCheck {
   agree: number;
   held: number;
   flagged: number;
+  /** figures the display guard (suspect.ts) had held that the filing confirms: shown again */
+  released: number;
   items: SecItem[];
   /** time the check took in the worker, ms */
   ms?: number;
@@ -79,16 +81,12 @@ const LINE_RULES: { line: StdLine; unit: string; root: boolean; test: (n: string
   { line: "provisionCreditLosses", unit: "usd", root: false, test: (n) => /^(total )?provision (for|benefit for|benefit from|for benefit from) (credit|loan|loan and lease) losses$/.test(n) || n === "provision for credit losses" },
 ];
 
-const groupTitleOf = (p: IrPayload) => {
-  const m = new Map<string, string>();
-  for (const g of p.groups) for (const r of g.rows) if (!m.has(r.k)) m.set(r.k, `${g.t ?? ""} ${g.label ?? ""}`);
-  return m;
-};
-
 /** Standard line a payload series stands for, or null. */
-export function stdLineOf(s: PayloadSeries, title = ""): StdLine | null {
-  const words = `${s.label} ${s.bd ?? ""} ${s.sc ?? ""} ${title}`;
-  if (OTHER_BASIS.test(words)) return null;
+export function stdLineOf(s: PayloadSeries): StdLine | null {
+  // The printed name and the table it was printed in decide; page-made group titles ("Other segment
+  // revenue lines") describe the page's grouping, not the figure, so they are not read.
+  const words = `${s.label} ${s.bd ?? ""} ${s.sc ?? ""}`;
+  if (OTHER_BASIS.test(s.unit === "usdPerShare" ? words.replace(/\b(earnings|income) per (common )?share\b/gi, " ") : words)) return null;
   const n = normLabel(s.label);
   for (const r of LINE_RULES) {
     if (r.unit !== s.unit || !r.test(n)) continue;
@@ -194,21 +192,21 @@ const keyOf = (k: string, kind: "q" | "y", e: string) => `${k}|${kind}|${e}`;
  */
 export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefined): { payload: IrPayload; check: SecCheck | null } {
   if (!st || (!st.quarterly && !st.annual)) return { payload: p, check: null };
-  const titles = groupTitleOf(p);
   const candidates = new Map<StdLine, PayloadSeries[]>();
   for (const s of p.series) {
-    const line = stdLineOf(s, titles.get(s.k));
+    const line = stdLineOf(s);
     if (line) candidates.set(line, [...(candidates.get(line) ?? []), s]);
   }
   const items: SecItem[] = [];
   const hold = new Map<string, string>();
   const flag = new Map<string, PayloadCellFlag>();
+  const release = new Map<string, PayloadCell>();
   for (const [line, list] of candidates) {
     const side = sideOf(st, line);
     for (const kind of ["q", "y"] as const) {
       const sec = kind === "q" ? side.q : side.y;
       if (!sec.size) continue;
-      const ends = new Set(list.flatMap((s) => Object.keys(kind === "q" ? s.q : s.y)));
+      const ends = new Set(list.flatMap((s) => [...Object.keys(kind === "q" ? s.q : s.y), ...Object.keys((kind === "q" ? s.held?.q : s.held?.y) ?? {})]));
       for (const e of ends) {
         const ref = find(sec, e);
         if (!ref) continue;
@@ -216,6 +214,15 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
           const c = (kind === "q" ? s.q : s.y)[e];
           return c ? [{ s, c }] : [];
         });
+        // Figures the display guard held (a unit vote, a column read twice) that the filing confirms
+        // exactly are shown again: the stored value is what the document prints, and SEC agrees.
+        for (const s of list) {
+          const h = (kind === "q" ? s.held?.q : s.held?.y)?.[e];
+          if (!h || h.f || cells.some((x) => x.s === s) || !agrees(h.v, ref.v, s.unit)) continue;
+          release.set(keyOf(s.k, kind, e), h);
+          items.push({ k: s.k, label: s.label, line, kind, e, ir: h.v, sec: ref.v, accn: ref.accn, concept: ref.concept, status: "released", why: `Held by the unit guard (${(h.why ?? "").replace(/\.$/, "")}); the ${filingOf(kind)} reports the same figure, so it is shown.` });
+        }
+        if (!cells.length) continue;
         const top = Math.max(...cells.map((x) => Math.abs(x.c.v)));
         for (const { s, c } of cells) {
           if (Math.abs(c.v) < 0.9 * top) continue;
@@ -233,14 +240,17 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
           const pct = ref.v !== 0 ? ((c.v - ref.v) / Math.abs(ref.v)) * 100 : null;
           const alt = c.alt && agrees(c.alt.v, ref.v, s.unit) ? ` ${c.alt.kind === "restated" ? "An earlier" : "Another"} document prints ${fmt(c.alt.v, s.unit)}, which agrees.` : "";
           const derived = c.f ? ` The figure is calculated: ${c.f.formula}.` : "";
-          const why = `The ${filingOf(kind)} reports ${fmt(ref.v, s.unit)}; this figure is ${fmt(c.v, s.unit)}${pct != null ? ` (${pct > 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}%)` : ""}.${alt}${derived}`;
+          // A release's plain "Net income" often includes noncontrolling interests; the filing's line is
+          // the company's share, so a small excess is a different measure rather than a misread.
+          const nci = line === "netIncome" && !/attributable/i.test(s.label) && ref.v > 0 && c.v > ref.v && c.v <= ref.v * 1.05 ? " The release's net income may include noncontrolling interests; the filing's line is the company's share." : "";
+          const why = `The ${filingOf(kind)} reports ${fmt(ref.v, s.unit)}; this figure is ${fmt(c.v, s.unit)}${pct != null ? ` (${pct > 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}%)` : ""}.${alt}${derived}${nci}`;
           flag.set(keyOf(s.k, kind, e), { k: "sec", why, v: ref.v });
           items.push({ ...base, status: "flagged", why });
         }
       }
     }
   }
-  if (!items.length) return { payload: p, check: { checked: 0, agree: 0, held: 0, flagged: 0, items } };
+  if (!items.length) return { payload: p, check: { checked: 0, agree: 0, held: 0, flagged: 0, released: 0, items } };
 
   // Calculated values that use a held figure are held too; tie-out checks touching one are dropped.
   const heldKeys = new Set(hold.keys());
@@ -250,6 +260,14 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
     let changed = false;
     const out: PayloadSeries = { ...s, q: { ...s.q }, y: { ...s.y } };
     const held = { q: { ...(s.held?.q ?? {}) }, y: { ...(s.held?.y ?? {}) }, ...(s.held?.mo ? { mo: s.held.mo } : {}) };
+    for (const kind of ["q", "y"] as const)
+      for (const [e, c] of Object.entries(held[kind])) {
+        if (!release.has(keyOf(s.k, kind, e))) continue;
+        const { w: _w, why: _why, ...plain } = c;
+        out[kind][e] = plain;
+        delete held[kind][e];
+        changed = true;
+      }
     for (const kind of ["q", "y"] as const) {
       const cells = out[kind];
       for (const [e, c] of Object.entries(cells)) {
@@ -291,9 +309,10 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
       }))
     : p.checks;
   const held = items.filter((x) => x.status === "held").length;
-  const check: SecCheck = { checked: items.length, agree: items.filter((x) => x.status === "agree").length, held, flagged: items.filter((x) => x.status === "flagged").length, items };
+  const released = items.filter((x) => x.status === "released").length;
+  const check: SecCheck = { checked: items.length, agree: items.filter((x) => x.status === "agree" || x.status === "released").length, held, flagged: items.filter((x) => x.status === "flagged").length, released, items };
   return {
-    payload: { ...p, series, checks, stats: { ...p.stats, held: (p.stats.held ?? 0) + held + extra } },
+    payload: { ...p, series, checks, stats: { ...p.stats, held: Math.max(0, (p.stats.held ?? 0) + held + extra - released) } },
     check,
   };
 }
