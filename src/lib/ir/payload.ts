@@ -42,6 +42,16 @@ export interface PayloadCell {
   why?: string;
   /** another document prints a different value for this period (see IrCell.alt) */
   alt?: PayloadAlt;
+  /** read-time checks this figure fails (sec-check.ts, consistency.ts): shown at the figure, never applied */
+  flags?: PayloadCellFlag[];
+}
+/** A failed read-time check at one figure: what failed and the arithmetic, in words. */
+export interface PayloadCellFlag {
+  /** "sec": differs from the 10-Q/10-K; "year": the quarters don't add up to the year; "formula": a calculated value doesn't match its parts */
+  k: "sec" | "year" | "formula";
+  why: string;
+  /** the other figure (the filing's, the quarters' sum, the formula's result) */
+  v?: number;
 }
 export interface PayloadAlt {
   v: number;
