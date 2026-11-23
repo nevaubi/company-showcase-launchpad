@@ -1,19 +1,20 @@
 import { useState } from "react";
+import { LOGO_FILES } from "@/lib/logos.generated";
 import { cn } from "@/lib/utils";
 
 /**
  * Official logo for every covered company, bundled in public/logos (sources listed in
  * public/logos/sources.json). The bundled file wins over any URL in the data so every
- * surface shows the same mark.
+ * surface shows the same mark. Which tickers have a file, and its type, comes from
+ * src/lib/logos.generated.ts (bun scripts/logo-manifest.ts after adding a logo).
  */
-const RASTER = new Set(["LIN"]);
-const COVERED = new Set(
-  "AAPL ABBV ABT ADBE AMD AMGN AMT AMZN AVGO AXP BA BAC BKNG C CAT CMCSA COP COST CRM CSCO CVX DE DIS DUK EQIX FCX GE GOOGL GS HD HON IBM INTC ISRG JNJ JPM KO LIN LLY LMT LOW MA MCD META MRK MS MSFT MU NEE NFLX NKE NOW NVDA ORCL PEP PFE PG PLD PM QCOM RTX SBUX SCHW SLB SO SPGI T TMO TSLA TXN UNH UNP UPS V VZ WFC WMT XOM".split(" "),
-);
+const EXT = new Map<string, string>();
+for (const [ext, tickers] of Object.entries(LOGO_FILES)) for (const t of tickers.split(" ")) if (t) EXT.set(t, ext);
 
 export const logoUrl = (ticker: string) => {
   const t = ticker.toUpperCase();
-  return COVERED.has(t) ? `/logos/${t}.${RASTER.has(t) ? "png" : "svg"}` : undefined;
+  const ext = EXT.get(t);
+  return ext ? `/logos/${t}.${ext}` : undefined;
 };
 
 export function CompanyLogo({

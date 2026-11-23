@@ -8,6 +8,7 @@ import { CompanyLogo } from "@/components/app/company-logo";
 import { externalLogo, impactOf, overlayHit, RELATION_COLOR, RELATION_DASH, RELATION_LABEL, RELATION_ORDER, type Overlay } from "./supply-map-meta";
 import { figure, LineSample, NodeHoverCard, RelationMark } from "./supply-marks";
 import type { GraphNode, HopNode, NodeRisk, Relation, ShockImpact } from "@/lib/supply/core";
+import type { IsolateProps } from "@/lib/supply/isolate-contract";
 import { groupTotals, NATURE_WORD, nodeFacts, type NodeFacts } from "@/lib/supply/describe";
 import { layoutNetwork, NET, type Basis, type NetCard } from "@/lib/supply/network-layout";
 import { fmtCompactUsd } from "@/lib/format";
@@ -36,7 +37,7 @@ function useWidth<T extends HTMLElement>() {
 
 const parentOf = (c: NetCard): string | null => (c.hop === 2 ? (c.node as HopNode).parent : null);
 
-export interface SupplyNetworkProps {
+export interface SupplyNetworkProps extends IsolateProps {
   focus: GraphNode;
   graph: GraphNode[];
   hop2: HopNode[];
