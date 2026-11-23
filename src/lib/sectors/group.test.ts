@@ -44,7 +44,7 @@ describe("group page model", () => {
   });
   it("reads the address leniently", () => {
     expect(groupSearch.parse({ sort: "om", dir: "asc", dm: "pe" })).toMatchObject({ sort: "om", dir: "asc", dm: "pe" });
-    expect(groupSearch.parse({ sort: "bogus", dm: "nope", span: "7" })).toEqual({ sort: undefined, dm: undefined, span: undefined });
+    expect(groupSearch.parse({ sort: "bogus", dm: "nope", span: "20" })).toEqual({ sort: undefined, dm: undefined, span: undefined });
   });
   it("slugs match the pipeline's", () => {
     expect(slugify("Hotels, Restaurants & Leisure")).toBe("hotels-restaurants-and-leisure");

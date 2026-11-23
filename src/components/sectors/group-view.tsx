@@ -10,7 +10,7 @@ import { TickerMark } from "@/components/app/ticker";
 import { MultiLine } from "@/components/charts/multi-line";
 import { Skeleton } from "@/components/ui/skeleton";
 import { COVERAGE } from "@/lib/coverage";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, ordinal } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { boardRows, type BoardRow } from "@/lib/sectors/board";
 import { byUnit, mult, pct, pts, tone, usd } from "@/lib/sectors/format";
@@ -20,8 +20,8 @@ import { distribution, ranks, type Distribution as Dist } from "@/lib/sectors/st
 import { AggregateTrends, BreakdownSheet, SectorNotes } from "./sector-views";
 import { Breadcrumb, groupLink, heat, QuietLine, Section, SectionNav, ShareMeter, SortTh, useWidth, type Crumb } from "./ui";
 
-const NAV_H = "41px";
-const STICKY_TH = `min-[1400px]:[&>th]:sticky min-[1400px]:[&>th]:top-[calc(var(--sticky-top,3.5rem)+${NAV_H})] min-[1400px]:[&>th]:z-10`;
+/** Below the section nav (41 px); written out in full so Tailwind sees the class. */
+const STICKY_TH = "min-[1400px]:[&>th]:sticky min-[1400px]:[&>th]:top-[calc(var(--sticky-top,3.5rem)+41px)] min-[1400px]:[&>th]:z-10";
 
 export function GroupView({
   slug,
@@ -96,18 +96,18 @@ export function GroupView({
           className="mb-0"
           eyebrow={d.kind === "sector" ? `Sector${d.etf ? ` · ${d.etf}` : ""}` : `Industry · ${d.sector}`}
           title={d.name}
-          description={`${d.members.length} covered companies, classified by SIC code with documented overrides. Aggregates are Σ numerator ÷ Σ denominator over the companies reporting both. Built ${fmtDate(d.generated.slice(0, 10))}${tape.data?.asOf ? `; breadth as of ${fmtDate(tape.data.asOf)}` : ""}.`}
+          description={`${d.members.length} covered companies, classified by SIC code with documented overrides. Fundamentals${sum.q ? ` for ${qLabel(sum.q)}` : ""} are Σ numerator ÷ Σ denominator over the companies reporting both. Built ${fmtDate(d.generated.slice(0, 10))}${tape.data?.asOf ? `; breadth as of ${fmtDate(tape.data.asOf)}` : ""}.`}
         />
       </div>
       <SummaryStrip d={d} s={sum} onPick={pick} />
       <SectionNav sections={nav} />
       <Peers d={d} ov={ov.data ?? null} tape={tape.data?.idx ?? null} loading={ov.isLoading} />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Performance d={d} win={search.pw ?? "252"} onWin={(v) => setSearch({ pw: v === "252" ? undefined : v })} />
+        <Performance d={d} win={search.pw ?? "1y"} onWin={(v) => setSearch({ pw: v === "1y" ? undefined : v })} />
         <Valuation d={d} onPick={pick} />
       </div>
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <AggregateTrends g={d} metric={metric} q={search.q} span={search.span ?? "20"} onSpan={(v) => setSearch({ span: v === "20" ? undefined : v })} onPick={pick} />
+        <AggregateTrends g={d} metric={metric} q={search.q} span={search.span ?? "5y"} onSpan={(v) => setSearch({ span: v === "5y" ? undefined : v })} onPick={pick} />
         <SectorNotes only={d.slug} />
       </div>
       <Distribution rows={rows} dm={search.dm ?? "rev_growth"} onDm={(v) => setSearch({ dm: v === "rev_growth" ? undefined : v })} name={d.name} />
@@ -144,27 +144,22 @@ function SummaryStrip({ d, s, onPick }: { d: GroupFile; s: ReturnType<typeof sum
     {
       label: "Revenue growth",
       value: pct(s.revAgg, { sign: true }),
-      sub: `median ${pct(s.revMed, { sign: true })}${s.q ? ` · ${qLabel(s.q)}` : ""}`,
+      sub: `median ${pct(s.revMed, { sign: true })}`,
       title: "Σ revenue ÷ Σ year-ago revenue − 1; open the companies behind it",
       onClick: () => onPick("rev_growth", lastAgg(d, "rev_growth")?.q),
     },
     {
       label: "Operating margin",
       value: pct(s.omAgg),
-      sub: (
-        <>
-          median {pct(s.omMed)}
-          {omD != null && <span className={cn("ml-1", tone(omD))}>{pts(omD)} YoY</span>}
-        </>
-      ),
-      title: "Σ operating income ÷ Σ revenue, trailing twelve months; open the companies behind it",
+      sub: omD != null ? <span className={tone(omD)}>{pts(omD)} YoY</span> : `median ${pct(s.omMed)}`,
+      title: `Σ operating income ÷ Σ revenue, trailing twelve months; company median ${pct(s.omMed)}. Open the companies behind it`,
       onClick: () => onPick("om", lastAgg(d, "om")?.q),
     },
     {
       label: "P/E",
       value: mult(s.peAgg),
-      sub: `median ${mult(s.peMed)}${s.pePct != null ? ` · ${Math.round(s.pePct * 100)}th pct of 10Y` : ""}`,
-      title: "Σ market cap ÷ Σ trailing earnings; open the companies behind it",
+      sub: s.pePct != null ? `${ordinal(Math.round(s.pePct * 100))} pct, 10Y` : `median ${mult(s.peMed)}`,
+      title: `Σ market cap ÷ Σ trailing earnings; company median ${mult(s.peMed)}. Open the companies behind it`,
       onClick: () => onPick("pe", d.quarters.at(-1)),
     },
     {
@@ -182,7 +177,7 @@ function SummaryStrip({ d, s, onPick }: { d: GroupFile; s: ReturnType<typeof sum
     {
       label: "Above 200-day",
       value: s.above200.thin ? `${s.above200.hits} of ${s.above200.known}` : pct(s.above200.share, { digits: 0 }),
-      sub: s.nearHigh.known ? `${s.nearHigh.hits} near a 52-week high` : "–",
+      sub: s.nearHigh.known ? `${s.nearHigh.hits} near 52w high` : "–",
     },
   ];
   return (
@@ -242,8 +237,8 @@ function Peers({ d, ov, tape, loading }: { d: GroupFile; ov: import("@/lib/secto
         <div className="max-[1399px]:overflow-x-auto">
           <table className="w-full min-w-[820px] border-separate border-spacing-0 text-[13px]">
             <thead className="text-[11px] text-muted-foreground">
-              <tr className="[&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th]:font-medium">
-                <th className="pl-3.5 text-left">Group</th>
+              <tr className="[&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
+                <th className="sticky left-0 z-[2] bg-card pl-3.5 text-left">Group</th>
                 <th className="w-[76px] text-right">Mkt cap</th>
                 <th className="w-[64px] text-right">3M</th>
                 <th className="w-[64px] text-right">1Y</th>
@@ -273,9 +268,9 @@ function PeerTr({ r, here, spy }: { r: BoardRow; here: boolean; spy: Record<stri
   return (
     <tr
       aria-current={here ? "page" : undefined}
-      className={cn("[&>td]:h-7 [&>td]:border-b [&>td]:px-2 hover:[&>td]:bg-secondary/60", here && "[&>td]:bg-secondary/70", r.kind === "sector" && "font-medium")}
+      className={cn("[&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 hover:[&>td]:bg-secondary/60", here && "[&>td]:bg-secondary", r.kind === "sector" && "font-medium")}
     >
-      <td className={cn("max-w-0 pl-3.5", here && "shadow-[inset_2px_0_0_var(--ink)]")}>
+      <td className={cn("sticky left-0 z-[1] max-w-0 bg-card pl-3.5 max-[1399px]:min-w-[200px]", here && "shadow-[inset_2px_0_0_var(--ink)]")}>
         <span className="flex min-w-0 items-baseline gap-1.5">
           {here ? (
             <span className="truncate">{r.name}</span>
@@ -310,19 +305,19 @@ function PeerTr({ r, here, spy }: { r: BoardRow; here: boolean; spy: Record<stri
 /* ---------- performance and valuation ---------- */
 const RET = ["1W", "1M", "3M", "6M", "YTD", "1Y"];
 
-function Performance({ d, win, onWin }: { d: GroupFile; win: "126" | "252" | "all"; onWin: (v: "126" | "252" | "all") => void }) {
+function Performance({ d, win, onWin }: { d: GroupFile; win: "6m" | "1y" | "2y"; onWin: (v: "6m" | "1y" | "2y") => void }) {
   const p = d.perf;
   const series = useMemo(() => {
     if (!p) return [];
-    const n = win === "all" ? p.dates.length : +win;
+    const n = win === "2y" ? p.dates.length : win === "6m" ? 126 : 252;
     const from = Math.max(0, p.dates.length - n);
     const reb = (arr: (number | null)[]) => {
       const base = arr.slice(from).find((v): v is number => v != null);
       return p.dates.slice(from).map((x, i) => ({ x, y: base && arr[from + i] != null ? (arr[from + i]! / base - 1) * 100 : null }));
     };
     return [
-      { key: "cw", label: "Cap-weighted", color: "var(--chart-1)", points: reb(p.cw) },
-      { key: "ew", label: "Equal-weighted", color: "var(--chart-3)", points: reb(p.ew) },
+      { key: "cw", label: "Cap wt", color: "var(--chart-1)", points: reb(p.cw) },
+      { key: "ew", label: "Equal wt", color: "var(--chart-3)", points: reb(p.ew) },
       { key: "spy", label: "SPY", color: "var(--muted-foreground)", points: reb(p.spy) },
     ];
   }, [p, win]);
@@ -340,7 +335,7 @@ function Performance({ d, win, onWin }: { d: GroupFile; win: "126" | "252" | "al
       id="performance"
       name="Performance"
       title="Performance"
-      caption="The group's companies, cap- and equal-weighted, against SPY · price return"
+      caption="The group's companies cap-weighted (Cap wt) and equal-weighted (Equal wt) against SPY · price return"
       actions={
         <Segmented
           size="xs"
@@ -348,9 +343,9 @@ function Performance({ d, win, onWin }: { d: GroupFile; win: "126" | "252" | "al
           value={win}
           onChange={onWin}
           options={[
-            { v: "126", l: "6M" },
-            { v: "252", l: "1Y" },
-            { v: "all", l: "2Y" },
+            { v: "6m", l: "6M" },
+            { v: "1y", l: "1Y" },
+            { v: "2y", l: "2Y" },
           ]}
         />
       }
@@ -373,7 +368,7 @@ function Performance({ d, win, onWin }: { d: GroupFile; win: "126" | "252" | "al
         <div className="max-sm:overflow-x-auto border-t">
           <table className="w-full min-w-[460px] text-[13px]">
             <thead>
-              <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th]:font-medium">
+              <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
                 <th className="pl-3.5 text-left">Return</th>
                 {RET.map((k) => (
                   <th key={k} className="text-right">
@@ -384,8 +379,8 @@ function Performance({ d, win, onWin }: { d: GroupFile; win: "126" | "252" | "al
             </thead>
             <tbody>
               {lines.map(([k, l]) => (
-                <tr key={k} className={cn("[&>td]:h-7 [&>td]:border-b [&>td]:px-2 last:[&>td]:border-b-0", k === "spy" && "text-muted-foreground")}>
-                  <td className="pl-3.5">{l}</td>
+                <tr key={k} className={cn("[&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 last:[&>td]:border-b-0", k === "spy" && "text-muted-foreground")}>
+                  <td className="whitespace-nowrap pl-3.5">{l}</td>
                   {RET.map((w) => (
                     <td key={w} className={cn("num text-right", k !== "spy" && tone(R![k]![w]))}>
                       {pct(R![k]![w], { sign: true })}
@@ -415,7 +410,7 @@ function RangeRow({ label, r, now, onClick }: { label: string; r: ValRange | nul
         <span className="font-medium">{label}</span>
         <span className="num">
           <span className="font-medium">{mult(now)}</span>
-          <span className="ml-1.5 text-[11px] text-muted-foreground">{r.pct != null ? `${Math.round(r.pct * 100)}th percentile` : "–"}</span>
+          <span className="ml-1.5 text-[11px] text-muted-foreground">{r.pct != null ? `${ordinal(Math.round(r.pct * 100))} percentile` : "–"}</span>
         </span>
       </span>
       <span className="relative mt-2 block h-1.5 rounded-full bg-secondary">
@@ -526,8 +521,8 @@ function Distribution({ rows, dm, onDm, name }: { rows: Row[]; dm: string; onDm:
 
 function Strip({ dist, fmt }: { dist: Dist<Row>; fmt: (v: number | null | undefined) => string }) {
   const [ref, W] = useWidth<HTMLDivElement>();
-  const H = 150;
-  const m = { l: 10, r: 10, t: 14, b: 26 };
+  const H = 124;
+  const m = { l: 10, r: 10, t: 16, b: 24 };
   const x = (v: number) => m.l + ((Math.max(dist.lo, Math.min(dist.hi, v)) - dist.lo) / (dist.hi - dist.lo)) * (W - m.l - m.r);
   const mid = m.t + (H - m.t - m.b) / 2;
   // Dots stack outward from the middle within 6 px columns, so dense values stay visible.
@@ -594,6 +589,8 @@ function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[
   const shown = useMemo(() => sortRows(ind ? rows.filter((r) => r.industry === ind) : rows, sort, dir), [rows, ind, sort, dir]);
   const th = { sort, dir, onSort: (k: string, d2: "asc" | "desc") => setSearch({ sort: k === "mcap" ? undefined : k, dir: d2 }) };
   const qs = new Set(rows.map((r) => r.q).filter(Boolean));
+  // A whole sector adds the industry column; the weight column gives way so the table fits the page.
+  const wide = isSector && !ind;
   return (
     <Section
       id="constituents"
@@ -611,12 +608,12 @@ function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[
         </div>
       )}
       <div className="max-[1399px]:overflow-x-auto max-[1399px]:scrollbar-thin">
-        <table className={cn("w-full border-separate border-spacing-0 text-[13px]", isSector && !ind ? "min-w-[1080px]" : "min-w-[960px]")}>
+        <table className={cn("w-full border-separate border-spacing-0 text-[13px]", wide ? "min-w-[1060px]" : "min-w-[960px]")}>
           <thead className="text-[11px] text-muted-foreground">
             <tr className={cn("[&>th]:border-b [&>th]:bg-card", STICKY_TH)}>
               <SortTh k="tk" label="Company" align="left" first="asc" className="sticky left-0 z-20 pl-3.5" {...th} />
-              {isSector && !ind && <SortTh k="industry" label="Industry" align="left" first="asc" {...th} />}
-              {COLS.slice(0, 5).map((c) => (
+              {wide && <SortTh k="industry" label="Industry" align="left" first="asc" className="max-sm:hidden" {...th} />}
+              {COLS.slice(0, 5).filter((c) => !(wide && c.k === "w")).map((c) => (
                 <SortTh key={c.k} k={c.k} label={c.l} title={c.t} className={cn(c.k === "ret_1m" && "border-l")} {...th} />
               ))}
               <SortTh k="a200" label="> 200d" title="Above its 200-day average (daily)" {...th} />
@@ -627,16 +624,16 @@ function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[
           </thead>
           <tbody>
             {shown.map((r) => (
-              <tr key={r.tk} className="group [&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td]:transition-colors [&>td]:duration-150 hover:[&>td]:bg-secondary">
-                <td className="sticky left-0 z-10 max-w-[210px] bg-card pl-3.5">
+              <tr key={r.tk} className="group [&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 [&>td]:transition-colors [&>td]:duration-150 hover:[&>td]:bg-secondary">
+                <td className="sticky left-0 z-[1] max-w-[200px] bg-card pl-3.5">
                   <TickerMark ticker={r.tk} name={r.name} className="max-w-full" />
                 </td>
-                {isSector && !ind && (
-                  <td className="max-w-[150px] truncate text-[12px] text-muted-foreground" title={r.industry}>
+                {wide && (
+                  <td className="max-w-[140px] truncate text-[12px] text-muted-foreground max-sm:hidden" title={r.industry}>
                     {r.industry}
                   </td>
                 )}
-                {COLS.slice(0, 5).map((c) => (
+                {COLS.slice(0, 5).filter((c) => !(wide && c.k === "w")).map((c) => (
                   <td key={c.k} className={cn("num text-right", c.unit === "ret" && tone(c.get(r)), c.k === "ret_1m" && "border-l", c.k === "w" && "text-muted-foreground")}>
                     {byUnit(c.get(r), c.unit)}
                   </td>
@@ -700,18 +697,18 @@ function Macro({ d }: { d: GroupFile }) {
     <Section name="Macro sensitivity" title="Macro sensitivity" caption="Correlation of the group's cap-weighted return with changes in each series; below about 0.2 either way is weak">
       <table className="w-full text-[13px]">
         <thead>
-          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th]:font-medium">
+          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
             <th className="pl-3.5 text-left">Series</th>
             <th className="w-[84px] text-right">Daily, 1Y</th>
             <th className="w-[96px] text-right">Monthly, 10Y</th>
-            <th className="text-right max-sm:hidden">Latest</th>
+            <th className="w-[130px] text-right max-sm:hidden">Latest</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((m) => {
             const f = fac.get(m.id);
             return (
-              <tr key={m.id} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 last:[&>td]:border-b-0">
+              <tr key={m.id} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 last:[&>td]:border-b-0">
                 <td className="max-w-0 truncate pl-3.5">
                   {f?.url ? (
                     <a href={f.url} target="_blank" rel="noreferrer" className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title={f.source}>
@@ -750,7 +747,7 @@ function Kpis({ d }: { d: GroupFile }) {
     <Section name="Industry KPIs" title="Industry KPIs" caption="From each company's filings or releases; median or sum as stated">
       <table className="w-full text-[13px]">
         <thead>
-          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th]:font-medium">
+          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
             <th className="pl-3.5 text-left">KPI</th>
             <th className="w-[110px] text-right">Latest</th>
             <th className="w-[80px] text-right">Year ago</th>
@@ -763,7 +760,7 @@ function Kpis({ d }: { d: GroupFile }) {
             while (i >= 0 && x.agg[i] == null) i--;
             const u = x.unit === "%" ? "%" : x.unit === "days" ? "days" : x.unit === "USD" ? "usd" : x.unit;
             return (
-              <tr key={x.id} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 last:[&>td]:border-b-0" title={x.definition}>
+              <tr key={x.id} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 last:[&>td]:border-b-0" title={x.definition}>
                 <td className="max-w-0 truncate pl-3.5">
                   {x.name} <span className="text-[11px] text-muted-foreground">{x.how}{x.industry ? ` · ${x.industry}` : ""}</span>
                 </td>
@@ -806,7 +803,7 @@ function Insiders({ d }: { d: GroupFile }) {
       </div>
       <table className="w-full text-[13px]">
         <thead>
-          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th]:font-medium">
+          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
             <th className="pl-3.5 text-left">Company</th>
             <th className="w-[80px] text-right">Insiders</th>
             <th className="w-[90px] text-right">Bought</th>
@@ -815,7 +812,7 @@ function Insiders({ d }: { d: GroupFile }) {
         </thead>
         <tbody>
           {cos.map((c) => (
-            <tr key={c.tk} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 last:[&>td]:border-b-0">
+            <tr key={c.tk} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 last:[&>td]:border-b-0">
               <td className="max-w-0 pl-3.5">
                 <TickerMark ticker={c.tk} name />
               </td>
@@ -868,7 +865,7 @@ function Segments({ d }: { d: GroupFile }) {
     <Section id="segments" name="Segment exposure" title="Exposure from other groups" caption="Reported business segments of companies classified elsewhere whose revenue belongs here">
       <table className="w-full text-[13px]">
         <thead>
-          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th]:font-medium">
+          <tr className="text-[11px] text-muted-foreground [&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
             <th className="pl-3.5 text-left">Company and segment</th>
             <th className="text-left max-sm:hidden">Counted in</th>
             <th className="w-[110px] text-right">Revenue</th>
@@ -876,7 +873,7 @@ function Segments({ d }: { d: GroupFile }) {
         </thead>
         <tbody>
           {s.map((x) => (
-            <tr key={`${x.tk}-${x.member}`} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 last:[&>td]:border-b-0">
+            <tr key={`${x.tk}-${x.member}`} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 last:[&>td]:border-b-0">
               <td className="max-w-0 pl-3.5">
                 <TickerMark ticker={x.tk}>
                   <span className="truncate text-muted-foreground">{x.label}</span>

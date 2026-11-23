@@ -127,7 +127,7 @@ export function SortTh({
         title={title}
         onClick={() => onSort(k, on ? (dir === "asc" ? "desc" : "asc") : first)}
         className={cn(
-          "inline-flex h-7 items-center gap-0.5 rounded px-1 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          "inline-flex h-7 items-center gap-0.5 whitespace-nowrap rounded px-1 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           align === "right" ? "-mr-1 flex-row-reverse" : "-ml-1",
           on && "text-foreground",
         )}

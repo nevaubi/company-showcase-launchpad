@@ -33,11 +33,12 @@ const quadOf = (ratio: number, mom: number) => QUAD.find((q) => (ratio >= 100 ? 
  * Weekly relative rotation of the sector ETFs against SPY. Trails are quiet; the latest point and its label
  * take the colour of the quadrant it sits in, so eleven sectors never need eleven hues.
  */
-export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4" | "10"; onTail: (t: "4" | "10") => void }) {
+export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4w" | "10w"; onTail: (t: "4w" | "10w") => void }) {
+  const weeks = tail === "10w" ? 10 : 4;
   const [ref, W] = useWidth<HTMLDivElement>();
   const navigate = useNavigate();
   const sectors = ov.groups.filter((g) => g.kind === "sector" && g.etf && ov.etf_rrg?.[g.etf]?.length);
-  const pts = sectors.flatMap((g) => ov.etf_rrg[g.etf!].slice(-+tail));
+  const pts = sectors.flatMap((g) => ov.etf_rrg[g.etf!].slice(-weeks));
   if (!pts.length) return null;
   const H = 320;
   const m = 24;
@@ -47,6 +48,17 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4" | 
   const x = (v: number) => m + ((v - (100 - span)) / (2 * span)) * (W - 2 * m);
   const y = (v: number) => m + ((100 + span - v) / (2 * span)) * (H - 2 * m);
   const week = pts.reduce((a, p) => (p[0] > a ? p[0] : a), "");
+  // Labels that would print on top of each other step down until they clear (12 px apart within 34 px across).
+  const labelY = new Map<string, number>();
+  const placed: { x: number; y: number }[] = [];
+  for (const g of [...sectors].sort((a, b) => ov.etf_rrg[b.etf!].at(-1)![2] - ov.etf_rrg[a.etf!].at(-1)![2])) {
+    const last = ov.etf_rrg[g.etf!].at(-1)!;
+    const lx = x(last[1]);
+    let ly = y(last[2]) + 3.5;
+    while (placed.some((p) => Math.abs(p.x - lx) < 34 && Math.abs(p.y - ly) < 12)) ly += 12;
+    placed.push({ x: lx, y: ly });
+    labelY.set(g.slug, ly);
+  }
   return (
     <Section
       id="rotation"
@@ -60,8 +72,8 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4" | 
           value={tail}
           onChange={onTail}
           options={[
-            { v: "4", l: "4 wk" },
-            { v: "10", l: "10 wk" },
+            { v: "4w", l: "4 wk" },
+            { v: "10w", l: "10 wk" },
           ]}
         />
       }
@@ -80,10 +92,11 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4" | 
             <line x1={x(100)} x2={x(100)} y1={m} y2={H - m} stroke="var(--rule)" />
             <line x1={m} x2={W - m} y1={y(100)} y2={y(100)} stroke="var(--rule)" />
             {sectors.map((g) => {
-              const tr = ov.etf_rrg[g.etf!].slice(-+tail);
+              const tr = ov.etf_rrg[g.etf!].slice(-weeks);
               const last = tr[tr.length - 1];
               const c = quadOf(last[1], last[2]).c;
               const right = x(last[1]) < W - m - 40;
+              const ly = labelY.get(g.slug) ?? y(last[2]) + 3.5;
               return (
                 <g
                   key={g.slug}
@@ -99,7 +112,7 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4" | 
                     <circle key={p[0]} cx={x(p[1])} cy={y(p[2])} r={1.6} fill="var(--muted-foreground)" opacity={0.5} />
                   ))}
                   <circle cx={x(last[1])} cy={y(last[2])} r={4.5} fill={c} stroke="var(--background)" strokeWidth={1.5} />
-                  <text x={x(last[1]) + (right ? 7 : -7)} y={y(last[2]) + 3.5} textAnchor={right ? "start" : "end"} fontSize={11} fontWeight={600} fill="var(--foreground)">
+                  <text x={x(last[1]) + (right ? 7 : -7)} y={ly} textAnchor={right ? "start" : "end"} fontSize={11} fontWeight={600} fill="var(--foreground)">
                     {g.etf}
                   </text>
                   <title>{`${g.name} (${g.etf}) · week of ${last[0]}: RS-ratio ${last[1].toFixed(1)}, RS-momentum ${last[2].toFixed(1)}`}</title>
@@ -111,7 +124,7 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4" | 
       </div>
       <p className="border-t px-3.5 py-2 text-[11px] leading-4 text-muted-foreground">
         Ratio above 100: ahead of SPY over 13 weeks. Momentum above 100: the lead is growing. Groups tend to turn clockwise through improving,
-        leading, weakening and lagging. Grey trails show the last {tail} weeks; click a sector to open it.
+        leading, weakening and lagging. Grey trails show the last {weeks} weeks; click a sector to open it.
       </p>
     </Section>
   );
@@ -188,15 +201,15 @@ export function AggregateTrends({
   g: GroupFile;
   metric: string;
   q?: string;
-  span: "20" | "40" | "all";
-  onSpan: (s: "20" | "40" | "all") => void;
+  span: "5y" | "10y" | "all";
+  onSpan: (s: "5y" | "10y" | "all") => void;
   onPick: (m: string, q?: string) => void;
 }) {
   const [ref, W] = useWidth<HTMLDivElement>();
   const s = g.agg[metric];
   const unit = g.metrics[metric]?.unit;
   const idx = g.quarters.map((_, i) => i).filter((i) => s?.agg[i] != null);
-  const show = span === "all" ? idx : idx.slice(-+span);
+  const show = span === "all" ? idx : idx.slice(span === "5y" ? -20 : -40);
   const vals = show.map((i) => s.agg[i]!).concat(show.map((i) => s.med[i]).filter((v): v is number => v != null));
   const H = 220;
   const m = { t: 12, r: 12, b: 24, l: 52 };
@@ -234,8 +247,8 @@ export function AggregateTrends({
             value={span}
             onChange={onSpan}
             options={[
-              { v: "20", l: "5Y" },
-              { v: "40", l: "10Y" },
+              { v: "5y", l: "5Y" },
+              { v: "10y", l: "10Y" },
               { v: "all", l: "All" },
             ]}
           />

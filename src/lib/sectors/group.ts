@@ -133,9 +133,9 @@ export const groupSearch = z.object({
   m: z.string().max(40).optional().catch(undefined),
   q: z.string().max(8).optional().catch(undefined),
   /** Trend span in quarters. */
-  span: z.enum(["20", "40", "all"]).optional().catch(undefined),
+  span: z.enum(["5y", "10y", "all"]).optional().catch(undefined),
   /** Performance chart window. */
-  pw: z.enum(["126", "252", "all"]).optional().catch(undefined),
+  pw: z.enum(["6m", "1y", "2y"]).optional().catch(undefined),
   /** Constituents sort and direction. */
   sort: sortKey.optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).optional().catch(undefined),

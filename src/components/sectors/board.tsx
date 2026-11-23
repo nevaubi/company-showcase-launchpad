@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { boardRows, relativeSeries, sortBoard, SPANS, WINDOWS, type BoardRow, type BoardSort, type Span } from "@/lib/sectors/board";
 import type { MemberTape } from "@/lib/sectors/breadth";
 import { mult, pct, tone, usd } from "@/lib/sectors/format";
-import { qLabel, type Overview } from "@/lib/sectors/groups";
+import { qLabel, SECTOR_ETF, type Overview } from "@/lib/sectors/groups";
 import { Section, ShareMeter, SortTh, heat, useWidth } from "./ui";
 
 /** Where each window's shading saturates (return minus SPY's). */
@@ -69,8 +69,7 @@ export function SectorBoard({
       <div className="max-[1399px]:overflow-x-auto max-[1399px]:scrollbar-thin">
         <table className={cn("w-full border-separate border-spacing-0 text-[13px]", ind ? "min-w-[1100px]" : "min-w-[1030px]")}>
           <colgroup>
-            <col className={ind ? "w-[166px]" : "w-[200px]"} />
-            {ind && <col className="w-[120px]" />}
+            <col className={ind ? "w-[286px]" : "w-[200px]"} />
             <col className="w-[72px]" />
             {WINDOWS.map((w) => (
               <col key={w} className="w-[56px]" />
@@ -85,7 +84,7 @@ export function SectorBoard({
           </colgroup>
           <thead className="text-[11px] text-muted-foreground">
             <tr>
-              <th className={cn(stickyHead, "h-6 border-b-0 px-3")} colSpan={ind ? 3 : 2} />
+              <th className={cn(stickyHead, "h-6 border-b-0 px-3")} colSpan={2} />
               <th className={cn(stickyHead, "eyebrow h-6 border-l px-2 text-left font-normal")} colSpan={WINDOWS.length}>
                 Return, cap-weighted
               </th>
@@ -100,8 +99,7 @@ export function SectorBoard({
               </th>
             </tr>
             <tr className="[&>th]:border-b [&>th]:bg-card min-[1400px]:[&>th]:sticky min-[1400px]:[&>th]:top-[calc(var(--sticky-top,3.5rem)+1.5rem)] min-[1400px]:[&>th]:z-10">
-              <SortTh k="name" label={ind ? "Industry" : "Sector"} align="left" first="asc" className="pl-3.5" {...th} />
-              {ind && <SortTh k="sector" label="Sector" align="left" first="asc" {...th} />}
+              <SortTh k="name" label={ind ? "Industry" : "Sector"} align="left" first="asc" className="sticky left-0 z-[15] pl-3.5" {...th} />
               <SortTh k="mcap" label="Mkt cap" title="Market cap of the covered companies" {...th} />
               {WINDOWS.map((w, i) => (
                 <SortTh key={w} k={`r${w}`} label={w} title={`Cap-weighted price return, ${w}`} className={cn(i === 0 && "border-l")} {...th} />
@@ -122,8 +120,7 @@ export function SectorBoard({
           </tbody>
           <tfoot>
             <tr className="text-muted-foreground">
-              <td className="h-7 px-3.5">S&amp;P 500 (SPY)</td>
-              {ind && <td />}
+              <td className="sticky left-0 z-[5] h-7 bg-card px-3.5">S&amp;P 500 (SPY)</td>
               <td />
               {WINDOWS.map((w, i) => (
                 <td key={w} className={cn("num px-2 text-right", i === 0 && "border-l")}>
@@ -147,25 +144,27 @@ export function SectorBoard({
 }
 
 function BoardTr({ r, ind }: { r: BoardRow; ind: boolean }) {
+  // Industries carry their sector as a quiet suffix after the name and count.
   const to = r.kind === "sector" ? { to: "/app/sectors/$sector" as const, params: { sector: r.name } } : { to: "/app/sectors/g/$slug" as const, params: { slug: r.slug } };
   return (
-    <tr className="group [&>td]:border-b [&>td]:transition-colors [&>td]:duration-150 hover:[&>td]:bg-secondary/60">
-      <td className="h-7 max-w-0 px-3.5">
+    <tr className="group [&>td]:border-b [&>td]:transition-colors [&>td]:duration-150 hover:[&>td]:bg-secondary">
+      <td className="sticky left-0 z-[5] h-7 max-w-0 bg-card px-3.5 max-[1399px]:min-w-[150px]">
         <span className="flex min-w-0 items-baseline gap-1.5">
           <Link
             {...to}
+            title={r.name}
             className="truncate rounded-sm font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {r.name}
           </Link>
           <span className="num shrink-0 text-[11px] text-muted-foreground">{r.n}</span>
+          {ind && (
+            <span className="min-w-0 truncate text-[11px] text-muted-foreground" title={r.sector}>
+              · {r.sector}
+            </span>
+          )}
         </span>
       </td>
-      {ind && (
-        <td className="max-w-0 truncate px-2 text-[12px] text-muted-foreground" title={r.sector}>
-          {r.sector}
-        </td>
-      )}
       <td className="num px-2 text-right">{usd(r.mcap)}</td>
       {WINDOWS.map((w, i) => (
         <td
@@ -204,7 +203,8 @@ function PctBar({ p }: { p: number }) {
 }
 
 /* ---------- relative performance of the sector ETFs, small multiples on one scale ---------- */
-const SECTOR_ETFS = BENCHMARKS.filter((b) => b.group === "sector" && b.sector);
+/** One SPDR fund per sector (the benchmark list also carries SMH, an industry fund). */
+const SECTOR_ETFS = BENCHMARKS.filter((b) => b.group === "sector" && b.sector && SECTOR_ETF[b.sector] === b.symbol);
 
 export function RelativePanels({ span, onSpan }: { span: Span; onSpan: (s: Span) => void }) {
   const syms = ["SPY", ...SECTOR_ETFS.map((b) => b.symbol)];
@@ -263,13 +263,13 @@ export function RelativePanels({ span, onSpan }: { span: Span; onSpan: (s: Span)
 
 function Mini({ s, lo, hi, label }: { s: { date: string; v: number }[]; lo: number; hi: number; label: string }) {
   const [ref, W] = useWidth<HTMLSpanElement>();
-  const H = 44;
+  const H = 52;
   const pad = (hi - lo) * 0.06 || 0.01;
   const x = (i: number) => (i / Math.max(1, s.length - 1)) * (W - 2) + 1;
   const y = (v: number) => 2 + ((hi + pad - v) / (hi - lo + 2 * pad)) * (H - 4);
   const last = s.at(-1)!.v;
   return (
-    <span ref={ref} className="mt-1 block h-11">
+    <span ref={ref} className="mt-1 block h-[52px]">
       {W > 0 && (
         <svg width={W} height={H} role="img" aria-label={`${label}: ${pct(last, { sign: true })}`}>
           <line x1={0} x2={W} y1={y(0)} y2={y(0)} stroke="var(--rule)" />
@@ -306,11 +306,11 @@ export function MacroContext() {
         <div className="max-lg:overflow-x-auto">
           <table className="w-full min-w-[640px] text-[13px]">
             <thead className="text-[11px] text-muted-foreground">
-              <tr className="[&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th]:font-medium">
-                <th className="pl-3.5 text-left">Series</th>
+              <tr className="[&>th]:h-8 [&>th]:border-b [&>th]:px-2 [&>th:first-child]:pl-3.5 [&>th]:font-medium">
+                <th className="min-w-[210px] pl-3.5 text-left">Series</th>
                 <th className="w-[90px] text-right">Latest</th>
                 <th className="w-[150px] text-right">Change</th>
-                <th className="w-[84px]">
+                <th className="relative w-[84px]">
                   <span className="sr-only">Trend</span>
                 </th>
                 <th className="text-left">Sectors it drives</th>
@@ -318,7 +318,7 @@ export function MacroContext() {
             </thead>
             <tbody>
               {drivers.map(({ d, r }) => (
-                <tr key={d.id} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 hover:[&>td]:bg-secondary/60">
+                <tr key={d.id} className="[&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 hover:[&>td]:bg-secondary/60">
                   <td className="max-w-0 pl-3.5">
                     <Link
                       to="/app/macro"

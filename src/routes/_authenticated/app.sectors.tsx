@@ -16,7 +16,7 @@ const pageSearch = z.object({
   sort: z.enum(BOARD_SORTS as unknown as [string, ...string[]]).optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).optional().catch(undefined),
   span: z.enum(SPANS.map((s) => s.v) as unknown as [string, ...string[]]).optional().catch(undefined),
-  tail: z.enum(["4", "10"]).optional().catch(undefined),
+  tail: z.enum(["4w", "10w"]).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/_authenticated/app/sectors")({
@@ -70,7 +70,7 @@ function Sectors() {
       )}
       <RelativePanels span={(s.span ?? "6M") as "3M" | "6M" | "1Y"} onSpan={(v) => set({ span: v === "6M" ? undefined : v })} />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        {overview.data ? <RotationGraph ov={overview.data} tail={s.tail ?? "4"} onTail={(t) => set({ tail: t === "4" ? undefined : t })} /> : <div />}
+        {overview.data ? <RotationGraph ov={overview.data} tail={s.tail ?? "4w"} onTail={(t) => set({ tail: t === "4w" ? undefined : t })} /> : <div />}
         <SectorNotes />
       </div>
       <MacroContext />
