@@ -10,6 +10,7 @@ import { logoUrl } from "@/components/app/company-logo";
 import { analyticsFile } from "@/lib/analytics-files";
 import { canonCountry, type CountryRow } from "@/lib/supply/analytics";
 import { maxShare, NOT_TRADE, type GraphNode, type HopNode, type NodeRisk, type Relation, type ShockImpact } from "@/lib/supply/core";
+import type { IsolateProps } from "@/lib/supply/isolate-contract";
 import { arcEnds, BASIS_LABEL, frameAll, placeGraph, readHq, SOURCE_LABEL, type Centroid, type Hq, type HqFile, type Placed } from "@/lib/supply/geo";
 import { nodeFacts, type NodeFacts } from "@/lib/supply/describe";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
@@ -64,7 +65,7 @@ function readTheme(): Theme {
   };
 }
 
-export interface SupplyGlobeProps {
+export interface SupplyGlobeProps extends IsolateProps {
   focus: GraphNode;
   graph: GraphNode[];
   hop2: HopNode[];
