@@ -315,3 +315,76 @@ describe("headline lines against the filed statements", () => {
     expect(fy25(s, "income", "revenue")!.v).toBe(32_237);
   });
 });
+
+describe("52/53-week retail calendars (fiscal calendar)", () => {
+  const add = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+  it("places 12/12/12/16-week quarters before the 10-K (Costco: Q2 and Q3 were missing all year)", () => {
+    const y0 = "2024-09-02", y1 = "2025-08-31", s1 = "2025-09-01";
+    const rev = [
+      fact(y0, y1, 1000, "10-K", "2025-10-08"),
+      fact(s1, add(s1, 83), 230, "10-Q", "2025-12-15"), // 12 weeks
+      fact(add(s1, 84), add(s1, 167), 240, "10-Q", "2026-03-10"),
+      fact(s1, add(s1, 167), 470, "10-Q", "2026-03-10"), // 24 weeks: 168 days
+      fact(add(s1, 168), add(s1, 251), 250, "10-Q", "2026-06-02"),
+      fact(s1, add(s1, 251), 720, "10-Q", "2026-06-02"), // 36 weeks: 252 days
+    ];
+    const q = buildStatements(filer({ Revenues: { facts: rev } })).quarterly.income;
+    expect(q.periods.filter((p) => p.fy === 2026).map((p) => [p.key, p.end])).toEqual([
+      ["FY2026Q1", add(s1, 83)],
+      ["FY2026Q2", add(s1, 167)],
+      ["FY2026Q3", add(s1, 251)],
+    ]);
+    expect(q.rows.find((r) => r.key === "revenue")!.cells.slice(-3).map((c) => c?.v)).toEqual([230, 240, 250]);
+  });
+
+  it("places a 16-week first quarter (Kroger, Albertsons: no quarters at all before)", () => {
+    const s0 = "2025-02-02", e0 = "2026-01-31";
+    const rev = [
+      fact(s0, add(s0, 111), 450, "10-Q", "2025-06-20"), // 16 weeks
+      fact(add(s0, 112), add(s0, 195), 340, "10-Q", "2025-09-12"),
+      fact(s0, add(s0, 195), 790, "10-Q", "2025-09-12"), // 28 weeks: 196 days
+      fact(add(s0, 196), add(s0, 279), 345, "10-Q", "2025-12-05"),
+      fact(s0, add(s0, 279), 1135, "10-Q", "2025-12-05"), // 40 weeks: 280 days
+      fact(s0, e0, 1480, "10-K", "2026-04-01"),
+      fact("2024-02-04", "2025-02-01", 1400, "10-K", "2025-04-01"),
+    ];
+    const q = buildStatements(filer({ Revenues: { facts: rev } })).quarterly.income;
+    expect(q.rows.find((r) => r.key === "revenue")!.cells.slice(-4).map((c) => c?.v)).toEqual([450, 340, 345, 345]);
+  });
+});
+
+describe("years in progress beyond the last 10-K (fiscal calendar)", () => {
+  it("places the next year's quarters when a 10-K is missing from companyfacts (Clorox FY2026)", () => {
+    const rev = [
+      fact("2024-07-01", "2025-06-30", 700, "10-K", "2025-08-10"),
+      fact("2023-07-01", "2024-06-30", 690, "10-K", "2024-08-10"),
+      fact("2025-07-01", "2025-09-30", 170, "10-Q", "2025-11-03"),
+      fact("2025-07-01", "2025-12-31", 350, "10-Q", "2026-02-03"),
+      fact("2025-10-01", "2025-12-31", 180, "10-Q", "2026-02-03"),
+      fact("2025-07-01", "2026-03-31", 520, "10-Q", "2026-04-30"),
+      fact("2026-01-01", "2026-03-31", 170, "10-Q", "2026-04-30"),
+      // no FY2026 10-K facts; the FY2027 Q1 10-Q:
+      fact("2026-07-01", "2026-09-30", 175, "10-Q", "2026-11-02"),
+    ];
+    const q = buildStatements(filer({ Revenues: { facts: rev } })).quarterly.income;
+    expect(q.periods.slice(-2).map((p) => [p.key, p.end])).toEqual([["FY2026Q3", "2026-03-31"], ["FY2027Q1", "2026-09-30"]]);
+    expect(q.rows.find((r) => r.key === "revenue")!.cells.at(-1)?.v).toBe(175);
+  });
+
+  it("starts the new year after a transition period 10-KT (Ferguson: July year end to December)", () => {
+    const rev = [
+      fact("2023-08-01", "2024-07-31", 290, "10-K", "2024-09-20"),
+      fact("2024-08-01", "2025-07-31", 300, "10-K", "2025-09-20"),
+      fact("2025-08-01", "2025-10-31", 80, "10-Q", "2025-12-09"),
+      fact("2025-08-01", "2025-12-31", 130, "10-KT", "2026-02-27"), // five-month transition period
+      fact("2026-01-01", "2026-03-31", 75, "10-Q", "2026-05-05"),
+      fact("2026-04-01", "2026-06-30", 82, "10-Q", "2026-08-10"),
+      fact("2026-01-01", "2026-06-30", 157, "10-Q", "2026-08-10"),
+      fact("2026-07-01", "2026-09-30", 84, "10-Q", "2026-11-09"),
+      fact("2026-01-01", "2026-09-30", 241, "10-Q", "2026-11-09"),
+    ];
+    const q = buildStatements(filer({ Revenues: { facts: rev } })).quarterly.income;
+    expect(q.periods.slice(-3).map((p) => [p.key, p.end])).toEqual([["FY2026Q1", "2026-03-31"], ["FY2026Q2", "2026-06-30"], ["FY2026Q3", "2026-09-30"]]);
+    expect(q.rows.find((r) => r.key === "revenue")!.cells.slice(-3).map((c) => c?.v)).toEqual([75, 82, 84]);
+  });
+});

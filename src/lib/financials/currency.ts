@@ -5,15 +5,16 @@
 // 2.02, including the ones withFiledReleases adds from the filing list).
 //
 // Rules, in order of precision:
-// - A periodic report (10-K, 10-KT, 10-Q, amendments excluded) is "in the statements" when a cell
-//   cites its accession, or when its period of report is a statement period end (within six days,
-//   for 52/53-week calendars). It is newer when its period of report ends after the latest
-//   statement period (by more than six days). A filing without a period of report counts as newer
-//   only when it was filed after the newest periodic report the statements cite.
-// - An earnings release is newer when it was filed on a later day than the newest report the
-//   statements include and at least 85 days after the latest statement period ended (the next
-//   quarter cannot have been released earlier; releases about the current quarter, which often
-//   arrive the same day as the 10-Q or before it, never count).
+// - A periodic report (10-K, 10-KT, 10-Q, amendments excluded) is newer when its period of report
+//   ends more than six days (52/53-week calendars) after the latest statement period and is not a
+//   statement period end. Cited accessions do not decide this: a balance sheet's year-end column
+//   cites the newest 10-Q that repeats it as a comparative. A filing without a period of report
+//   counts as newer only when filed after the newest report the statements include (the one whose
+//   period of report is the latest period, else the newest one an income or cash flow cell cites).
+// - An earnings release is newer when it was filed on a later day than every periodic report above
+//   and at least 85 days after the latest period known (statements or a newer report): the next
+//   quarter cannot have been released earlier, and a release about the latest quarter, which often
+//   arrives the same day as the 10-Q, a day after it, or before it, never counts.
 import type { Cell, CompanyDataset, Filing, Period, Statement } from "./types";
 
 const DAY = 86_400_000;
@@ -90,7 +91,7 @@ function cellAccns(c: Cell | null, out: Set<string>) {
   for (const a of c.alts ?? []) out.add(a);
 }
 
-/** Accessions cited by the cells of each statement's latest period. */
+/** Accessions cited by the cells of each flow statement's latest period. */
 function citedAtLatest(statements: Statement[]): Set<string> {
   const out = new Set<string>();
   for (const s of statements) {
@@ -133,25 +134,30 @@ export function assessCurrency(d: CompanyDataset, opts: CurrencyOptions = {}): C
     url: filingUrl(filingCik(f.accn, cik, opts.ciks), f.accn, f.doc),
   });
 
-  const cited = new Set([...citedAtLatest(qStatements), ...citedAtLatest(aStatements)]);
+  const cited = new Set([...citedAtLatest([Q.income, Q.cashflow]), ...citedAtLatest([A.income, A.cashflow])]);
   const ends = new Set([...qStatements, ...aStatements].flatMap((s) => s.periods.map((p) => p.end)));
   const isEnd = (r: string) => [...ends].some((e) => Math.abs(days(e, r)) <= END_TOLERANCE);
   const periodic = d.filings.filter((f) => PERIODIC.test(f.form)).sort((a, b) => b.filed.localeCompare(a.filed) || b.accn.localeCompare(a.accn));
 
   // Newest report the statements include: cited at the latest period, else one whose period of report is the latest end.
   const inc =
-    periodic.find((f) => cited.has(f.accn)) ??
-    periodic.find((f) => f.report && Math.abs(days(latestEnd, f.report)) <= END_TOLERANCE);
+    periodic.find((f) => f.report && Math.abs(days(latestEnd, f.report)) <= END_TOLERANCE) ??
+    periodic.find((f) => cited.has(f.accn) && !(f.report && days(latestEnd, f.report) > END_TOLERANCE));
   const includedFiled = inc?.filed ?? "";
 
   const isNewer = (f: Filing) =>
-    f.report ? days(latestEnd, f.report) > END_TOLERANCE && !isEnd(f.report) && !cited.has(f.accn) : !!includedFiled && f.filed > includedFiled && !cited.has(f.accn);
-  const annual = periodic.find((f) => f.form.startsWith("10-K") && isNewer(f));
+    f.report ? days(latestEnd, f.report) > END_TOLERANCE && !isEnd(f.report) : !!includedFiled && f.filed > includedFiled && !cited.has(f.accn);
+  // An annual report is also missing when its year is not an annual column, even if later quarters
+  // are in the tables (Clorox: FY2027 Q1 placed, the FY2026 10-K absent from SEC companyfacts).
+  const yearEnds = A.income.periods.map((p) => p.end);
+  const annualMissing = (f: Filing) => !!f.report && !!year && days(year.end, f.report) > END_TOLERANCE && !yearEnds.some((e) => Math.abs(days(e, f.report!)) <= END_TOLERANCE);
+  const annual = periodic.find((f) => f.form.startsWith("10-K") && (isNewer(f) || annualMissing(f)));
   const quarterly = periodic.find((f) => f.form.startsWith("10-Q") && isNewer(f));
   const newestPeriodicFiled = [includedFiled, annual?.filed ?? "", quarterly?.filed ?? ""].sort().at(-1) ?? "";
+  const latestKnown = [latestEnd, annual?.report ?? "", quarterly?.report ?? ""].sort().at(-1)!;
   const release = [...d.earningsReleases]
     .sort((a, b) => b.filed.localeCompare(a.filed))
-    .find((r) => r.filed > newestPeriodicFiled && days(latestEnd, r.filed) >= NEXT_RELEASE_MIN_DAYS);
+    .find((r) => r.filed > newestPeriodicFiled && days(latestKnown, r.filed) >= NEXT_RELEASE_MIN_DAYS);
 
   const newer: CurrencyFiling[] = [];
   if (annual) newer.push(toFiling(annual, "annual"));
@@ -159,9 +165,9 @@ export function assessCurrency(d: CompanyDataset, opts: CurrencyOptions = {}): C
   if (release) newer.push({ kind: "release", form: "8-K", accn: release.accn, filed: release.filed, doc: release.doc, url: filingUrl(filingCik(release.accn, cik, opts.ciks), release.accn, release.doc) });
   newer.sort((a, b) => b.filed.localeCompare(a.filed));
 
-  const yearEnds = year && quarter && Math.abs(days(year.end, quarter.end)) <= END_TOLERANCE;
+  const yearIsLatest = year && quarter && Math.abs(days(year.end, quarter.end)) <= END_TOLERANCE;
   const through =
-    !quarter || (year && year.end > quarter.end) || yearEnds
+    !quarter || (year && year.end > quarter.end) || yearIsLatest
       ? `Statements run through the fiscal year ended ${dayLabel((year ?? quarter)!.end)}.`
       : `Statements run through the quarter ended ${dayLabel(quarter.end)}.`;
 

@@ -51,7 +51,7 @@ const attrsOf = (tag: string) => {
  * non-greedy match per element would read only the outer one.
  */
 export function inlineNumbers(html: string, units = parseUnits(html)) {
-  const out: { concept: string; value: number; unit: string; context: string }[] = [];
+  const out: { concept: string; value: number; unit: string; context: string; decimals: number }[] = [];
   const open = /<ix:nonFraction\b([^>]*)>/gi;
   for (const m of html.matchAll(open)) {
     const a = attrsOf(m[1]);
@@ -61,24 +61,34 @@ export function inlineNumbers(html: string, units = parseUnits(html)) {
     if (close < 0) continue;
     const v = factValue(a, html.slice(from, close));
     if (v == null) continue;
-    out.push({ concept: a.name, value: v, unit: units.get(a.unitRef ?? "") ?? a.unitRef ?? "", context: a.contextRef });
+    const decimals = a.decimals === "INF" ? Infinity : Number(a.decimals ?? -Infinity);
+    out.push({ concept: a.name, value: v, unit: units.get(a.unitRef ?? "") ?? a.unitRef ?? "", context: a.contextRef, decimals: Number.isNaN(decimals) ? -Infinity : decimals });
   }
   return out;
 }
 
-/** Non-dimensional numeric facts of an inline XBRL document, in companyfacts form. */
+/**
+ * Non-dimensional numeric facts of an inline XBRL document, in companyfacts form. A figure shown
+ * twice at different precision (Adobe: 395.5 million diluted shares in the statements, "395
+ * million" in the discussion) keeps the most precise value, as SEC's companyfacts does.
+ */
 export function factsFromInline(html: string, filing: FiledReport): CompanyFacts {
-  const cf: CompanyFacts = { facts: {} };
   const contexts = parseContexts(html);
   const units = parseUnits(html);
+  const best = new Map<string, { concept: string; unit: string; fact: RawFact; decimals: number }>();
   for (const fact of inlineNumbers(html, units)) {
     if (!KEEP_UNITS.has(fact.unit)) continue;
     const ctx = contexts.get(fact.context);
     if (!ctx || ctx.dims.length || ctx.typed) continue;
     const end = ctx.end ?? ctx.instant;
     if (!end) continue;
-    add(cf, fact.concept, fact.unit, { ...(ctx.start ? { start: ctx.start } : {}), end, val: fact.value, accn: filing.accn, form: filing.form, filed: filing.filed });
+    const key = `${fact.concept}|${fact.unit}|${ctx.start ?? ""}|${end}`;
+    const prev = best.get(key);
+    if (prev && prev.decimals >= fact.decimals) continue;
+    best.set(key, { concept: fact.concept, unit: fact.unit, decimals: fact.decimals, fact: { ...(ctx.start ? { start: ctx.start } : {}), end, val: fact.value, accn: filing.accn, form: filing.form, filed: filing.filed } });
   }
+  const cf: CompanyFacts = { facts: {} };
+  for (const b of best.values()) add(cf, b.concept, b.unit, b.fact);
   return cf;
 }
 
@@ -147,10 +157,14 @@ export function extendStatements(d: CompanyDataset, reads: { filing: FiledReport
   const bank = isBankIndustry(d.profile?.industry);
   let cur = d;
   const added: Extension["added"] = [];
+  // Facts of every filing read so far stay in the set: a 10-K's fourth quarter is the year minus the
+  // nine months its Q3 10-Q reported, so the caller passes that 10-Q too (it adds no period itself).
+  let read: CompanyFacts = { facts: {} };
   for (const { filing, html } of [...reads].sort((a, b) => a.filing.filed.localeCompare(b.filing.filed))) {
     const filings = cur.filings.some((f) => f.accn === filing.accn) ? cur.filings : [{ ...filing }, ...cur.filings];
     const base = { ...cur, filings };
-    const fresh = buildStatements(mergeFacts(factsFromDataset(base), factsFromInline(html, filing)), { bank });
+    read = mergeFacts(read, factsFromInline(html, filing));
+    const fresh = buildStatements(mergeFacts(factsFromDataset(base), read), { bank });
     const statements = { annual: { ...cur.statements.annual }, quarterly: { ...cur.statements.quarterly } };
     const got = { annual: [] as string[], quarterly: [] as string[] };
     for (const freq of ["annual", "quarterly"] as const) {
@@ -173,7 +187,10 @@ export function extendStatements(d: CompanyDataset, reads: { filing: FiledReport
       const kpis: Statement = { periods: income.periods, rows: buildKpis(income.rows, balance.rows, cashflow.rows, income.periods, freq, { bank }) };
       statements[freq] = { income, balance, cashflow, kpis };
     }
-    if (!got.annual.length && !got.quarterly.length) continue;
+    if (!got.annual.length && !got.quarterly.length) {
+      cur = base;
+      continue;
+    }
     added.push({ accn: filing.accn, form: filing.form, filed: filing.filed, ...got });
     cur = { ...base, statements };
   }

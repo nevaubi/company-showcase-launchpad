@@ -108,3 +108,13 @@ describe("extendStatements", () => {
     expect(cf.facts["us-gaap"].Revenues.units.USD.map((x) => x.val).sort((a, b) => a - b)).toEqual([125, 335]);
   });
 });
+
+describe("factsFromInline precision", () => {
+  it("keeps the most precise of two tags for the same figure", () => {
+    const html = `${ctx("q", dur("2025-07-01", "2025-09-30"))}<xbrli:unit id="shares"><xbrli:measure>xbrli:shares</xbrli:measure></xbrli:unit>
+      <ix:nonFraction unitRef="shares" contextRef="q" name="us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding" decimals="-6" scale="6">395</ix:nonFraction>
+      <ix:nonFraction unitRef="shares" contextRef="q" name="us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding" decimals="-5" scale="6">395.5</ix:nonFraction>`;
+    const cf = factsFromInline(html, Q3_FILING);
+    expect(cf.facts["us-gaap"].WeightedAverageNumberOfDilutedSharesOutstanding.units.shares.map((x) => x.val)).toEqual([395_500_000]);
+  });
+});

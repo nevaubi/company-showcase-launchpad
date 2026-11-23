@@ -158,3 +158,42 @@ describe("helpers", () => {
     expect(filingUrl("0000320193", "0000320193-26-000026")).toBe("https://www.sec.gov/Archives/edgar/data/320193/000032019326000026/0000320193-26-000026-index.htm");
   });
 });
+
+describe("assessCurrency edge cases found on all covered companies", () => {
+  it("is behind when later 10-Qs repeat the year-end balance sheet the statements cite (Domino's, PepsiCo)", () => {
+    // Statements through Q1 2026; the year-end 2025 balance cell's source is the Q3 10-Q (latest filing to repeat it).
+    const d = dataset({ quarters: [q("FY2026Q1", "2026-03-31", 2026, 1)], qAccns: ["0000000001-26-000001"] });
+    d.statements.annual.balance = {
+      periods: d.statements.annual.income.periods,
+      rows: [{ key: "totalAssets", label: "Total assets", unit: "usd", kind: "reported", cells: [{ v: 5, src: { accn: "0000000001-26-000003", concept: "us-gaap:Assets", end: "2025-12-31", value: 5 } }] }],
+    };
+    d.filings = [{ accn: "0000000001-26-000003", form: "10-Q", filed: "2026-11-04", report: "2026-09-30", doc: "q3.htm" }, ...d.filings];
+    const c = assessCurrency(d);
+    expect(c.status).toBe("behind");
+    expect(c.newer.find((n) => n.kind === "quarterly")?.report).toBe("2026-09-30");
+  });
+
+  it("does not count a release filed the day after the newer 10-Q it accompanies (DTE)", () => {
+    const d = dataset({ quarters: [q("FY2026Q1", "2026-03-31", 2026, 1)], qAccns: ["0000000001-26-000001"], releases: [{ accn: "0000000001-26-000030", filed: "2026-11-06", doc: "ex99.htm", title: "r" }] });
+    d.filings = [{ accn: "0000000001-26-000003", form: "10-Q", filed: "2026-11-05", report: "2026-09-30", doc: "q3.htm" }, ...d.filings];
+    expect(assessCurrency(d).newer.map((n) => n.kind)).toEqual(["quarterly"]);
+  });
+});
+
+describe("annual report missing behind later quarters", () => {
+  it("names the 10-K whose year is not in the tables (Clorox)", () => {
+    const quarters = [q("FY2026Q3", "2026-03-31", 2026, 3), q("FY2027Q1", "2026-09-30", 2027, 1)];
+    const years = [{ key: "FY2025", label: "FY2025", fy: 2025, start: "2024-07-01", end: "2025-06-30" }];
+    const filings: Filing[] = [
+      { accn: "0000021076-26-000040", form: "10-Q", filed: "2026-11-02", report: "2026-09-30", doc: "q1.htm" },
+      { accn: "0000021076-26-000030", form: "10-K", filed: "2026-08-08", report: "2026-06-30", doc: "k.htm" },
+      { accn: "0000021076-26-000020", form: "10-Q", filed: "2026-04-30", report: "2026-03-31", doc: "q3.htm" },
+    ];
+    const c = assessCurrency(dataset({ cik: "0000021076", quarters, years, filings, releases: [], qAccns: ["0000021076-26-000020", "0000021076-26-000040"], aAccns: ["0000021076-25-000030"] }));
+    expect(c.status).toBe("behind");
+    expect(c.newer.map((n) => [n.kind, n.report])).toEqual([["annual", "2026-06-30"]]);
+    expect(c.text).toBe(
+      "Statements run through the quarter ended 30 Sep 2026. An annual report (10-K) for the year ended 30 Jun 2026 was filed on 8 Aug 2026 and is not in these tables yet.",
+    );
+  });
+});

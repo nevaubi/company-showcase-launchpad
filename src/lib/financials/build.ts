@@ -83,6 +83,14 @@ function allDurationFacts(cf: CompanyFacts): RawFact[] {
   return out;
 }
 
+/**
+ * Longest discrete quarter, in days. Retailers on 52/53-week years run 12/12/12/16-week quarters
+ * (Costco: 84, 168 and 252 days year to date) or 16/12/12/12 (Kroger: a 112-day first quarter), so
+ * the year-to-date buckets are 160–200 and 245–290 days; with the old 170–195 and 260–285 Costco's
+ * second and third quarters were never placed until its 10-K arrived.
+ */
+const Q_MAX = 115;
+
 export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
   const durations = allDurationFacts(cf);
   const annual = durations.filter((f) => isAnnualForm(f.form) && f.start && inRange(durationDays(f.start, f.end), 350, 380));
@@ -98,15 +106,15 @@ export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
     const fromStart = durations.filter((f) => near(f.start, start, 4));
     const bucket = (lo: number, hi: number) =>
       mostCommon(fromStart.filter((f) => inRange(durationDays(f.start!, f.end), lo, hi)).map((f) => f.end));
-    let q1 = bucket(80, 100);
-    let q2 = bucket(170, 195);
-    let q3 = bucket(260, 285);
+    let q1 = bucket(80, Q_MAX);
+    let q2 = bucket(160, 200);
+    let q3 = bucket(245, 290);
     if (!q1 || !q2 || !q3) {
       // Fall back to discrete three-month periods inside the year.
       const discreteEnds = durations
         .filter(
           (f) =>
-            inRange(durationDays(f.start!, f.end), 80, 100) &&
+            inRange(durationDays(f.start!, f.end), 80, Q_MAX) &&
             toTime(f.end) > toTime(start) + 60 * DAY &&
             toTime(f.end) < toTime(end) - 30 * DAY,
         )
@@ -120,23 +128,52 @@ export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
   }
   years.sort((a, b) => toTime(a.end) - toTime(b.end));
 
-  // Fiscal year in progress: 10-Q periods that start the day after the last 10-K year.
+  // Fiscal years in progress: 10-Q periods that start the day after the last 10-K year.
   const last = years.at(-1);
   if (last) {
-    const start = addDays(last.end, 1);
-    const fromStart = durations.filter((f) => near(f.start, start, 4) && f.form.startsWith("10-Q"));
-    const bucket = (lo: number, hi: number) =>
-      mostCommon(fromStart.filter((f) => inRange(durationDays(f.start!, f.end), lo, hi)).map((f) => f.end));
-    // Keep quarters in position: when a 10-Q is missing from companyfacts (URI, DOW, ED and EIX lack
-    // their Q2 FY2026 facts), a later nine-month YTD must stay Q3. Dropping the gap turned it into
-    // "Q2" and derived Q2 as 9M − Q1, double the real quarter. The missing quarter keeps its
-    // calendar end and simply has no cells.
-    const found = [bucket(80, 100), bucket(170, 195), bucket(260, 285)];
-    const lastFound = found.reduce((acc, e, i) => (e ? i : acc), -1);
-    const qEnds = found.slice(0, lastFound + 1).map((e, i) => e ?? quarterEndAfter(start, i + 1));
-    if (qEnds.length) {
-      const end = addDays(start, durationDays(last.start, last.end));
-      years.push({ fy: fiscalYearFromEnd(end), start, end, qEnds, partial: true });
+    const yearDays = durationDays(last.start, last.end);
+    const quartersFrom = (start: string) => {
+      const fromStart = durations.filter((f) => near(f.start, start, 4) && f.form.startsWith("10-Q"));
+      const bucket = (lo: number, hi: number) =>
+        mostCommon(fromStart.filter((f) => inRange(durationDays(f.start!, f.end), lo, hi)).map((f) => f.end));
+      // Keep quarters in position: when a 10-Q is missing from companyfacts (URI, DOW, ED and EIX lack
+      // their Q2 FY2026 facts), a later nine-month YTD must stay Q3. Dropping the gap turned it into
+      // "Q2" and derived Q2 as 9M − Q1, double the real quarter. The missing quarter keeps its
+      // calendar end and simply has no cells.
+      const found = [bucket(80, Q_MAX), bucket(160, 200), bucket(245, 290)];
+      const lastFound = found.reduce((acc, e, i) => (e ? i : acc), -1);
+      return found.slice(0, lastFound + 1).map((e, i) => e ?? quarterEndAfter(start, i + 1));
+    };
+    // A short 10-K or 10-KT period starting here is a transition (Ferguson moved its year end from
+    // July to December with a five-month 10-KT; Paramount Skydance's successor 10-K covers 8 Aug to
+    // 31 Dec 2025): the next year starts after it.
+    const transitionFrom = (start: string) =>
+      durations
+        .filter((f) => isAnnualForm(f.form) && near(f.start, start, 4) && inRange(durationDays(f.start!, f.end), 28, 349))
+        .sort((a, b) => (a.end < b.end ? 1 : -1))[0];
+    const used = new Set(years.map((y) => y.fy));
+    let start = addDays(last.end, 1);
+    // Several years can be in progress when a 10-K is missing from companyfacts (Clorox's FY2026
+    // 10-K): each year's quarters are still placed, the year itself has no annual column.
+    for (let guard = 0; guard < 4; guard++) {
+      const qEnds = quartersFrom(start);
+      let end = addDays(start, yearDays);
+      let next = addDays(end, 1);
+      let t = transitionFrom(start);
+      while (t) {
+        end = t.end;
+        next = addDays(t.end, 1);
+        // A successor period can follow a predecessor stub (Skydance: Jan–Aug, then Aug–Dec).
+        t = transitionFrom(next);
+      }
+      const fy = fiscalYearFromEnd(end);
+      if (qEnds.length && !used.has(fy) && qEnds.every((e) => toTime(e) <= toTime(end) + 6 * DAY)) {
+        years.push({ fy, start, end, qEnds, partial: true });
+        used.add(fy);
+      }
+      // Go on only when a later year's quarters exist.
+      if (!durations.some((f) => near(f.start, next, 4) && f.form.startsWith("10-Q"))) break;
+      start = next;
     }
   }
   return years;
@@ -276,7 +313,7 @@ function quarterCell(
   prevCells: (Cell | null)[],
 ): Cell | null {
   if (def.kind === "stock") return pickCell(cf, def, (f) => !f.start && near(f.end, p.end, 4));
-  const direct = firstConcept(cf, def, (f) => isDuration(80, 100)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4));
+  const direct = firstConcept(cf, def, (f) => isDuration(80, Q_MAX)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4));
   if (direct) return reportedCell(direct);
   if (!def.additive || !p.fq || p.fq === 1) return null;
 
@@ -296,7 +333,7 @@ function quarterCell(
     // 10-Qs), the non-negative guard below drops the mismatched result instead of showing it.
     const prevPred =
       k - 1 === 1
-        ? (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f)
+        ? (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, Q_MAX)(f)
         : (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f);
     // A later 10-Q can restate the old nine months for a divestiture (IFF FY2025) while the 10-K
     // total is still on the original basis; subtracting the restated YTD inflates Q4. When the
