@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GraphNode, HopNode, RiskLink } from "./core";
-import { arcEnds, cityKey, frameAll, cityLabel, indexCities, isExonym, knownHomeCountry, matchCity, placeGraph, placeOne, readHq, statedCountries, usState, type GazCity, type Hq, type HqFile } from "./geo";
+import { arcEnds, cityKey, frameAll, cityLabel, indexCities, isExonym, knownHomeCountry, matchCity, placeGraph, placeOne, readHq, statedCountries, statedPlaces, US_STATE_PLACES, US_STATES, usState, usStateOfRegion, type GazCity, type Hq, type HqFile } from "./geo";
 
 const link = (p: Partial<RiskLink>): RiskLink => ({ id: "1", ticker: "NVDA", counterparty: "X", counterparty_ticker: null, counterparty_domain: null, relation: "supplier", detail: "", share_pct: null, quote: "q", accn: "a", doc: "d", form: "10-K", filed: "2026-02-01", ...p });
 const node = (p: Partial<GraphNode>): GraphNode => ({ key: "supplier:x", name: "X", ticker: null, domain: null, relation: "supplier", links: [], ...p });
@@ -77,7 +77,75 @@ describe("statedCountries", () => {
   });
 });
 
+describe("U.S. states are states, not the countries that share their names", () => {
+  /* current supply_links rows whose regions name Georgia, read on 23 Nov 2026 (quotes as stored) */
+  const ACHR = link({ ticker: "ACHR", counterparty: "Newton County Industrial Development Authority", regions: ["Georgia"], quote: "the Company entered into a lease arrangement with the Newton County Industrial Development Authority (the \"Authority\") for the Company\u2019s manufacturing facilities to be constructed in Covington, Georgia." });
+  const AFL = link({ ticker: "AFL", counterparty: "KPMG LLP", regions: ["United States", "Georgia"], quote: "KPMG LLP (PCAOB Firm ID 185 ), an independent registered public accounting firm, has issued an attestation report from the firm's location in Atlanta, Georgia on the effectiveness of internal control over the Company's financial reporting" });
+  const SO = link({ ticker: "SO", counterparty: "Dalton", regions: ["Georgia"], quote: "Dalton serves its requirements from self-owned generation facilities, some of which are jointly-owned with Georgia Power, and through purchases from Southern Power through a service agreement." });
+  const centre = (c: string) => ({ ...CENTRE, Georgia: [43.5, 42.2] as [number, number], "United States": [-98.6, 39.8] as [number, number], Mexico: [-102.5, 23.9] as [number, number] })[c] ?? null;
+
+  it("reads a region entry as a state only by its full name, and Georgia as the state unless the sentence points at the Caucasus", () => {
+    expect(usStateOfRegion("Texas", "a plant in Texas")).toBe("TX");
+    expect(usStateOfRegion("State of New Mexico", "leased from the State of New Mexico")).toBe("NM");
+    expect(usStateOfRegion("Georgia", ACHR.quote)).toBe("GA");
+    expect(usStateOfRegion("Georgia", SO.quote)).toBe("GA");
+    expect(usStateOfRegion("Georgia", "our distributor in Tbilisi, Georgia")).toBeNull();
+    expect(usStateOfRegion("Georgia", "sales offices in Armenia, Azerbaijan and Georgia")).toBeNull();
+    expect(usStateOfRegion("Georgia", "customers in the Republic of Georgia")).toBeNull();
+    /* two-letter codes collide with words and with country codes */
+    expect(usStateOfRegion("CA", "shipped to CA")).toBeNull();
+    expect(usStateOfRegion("IN", "sold in India")).toBeNull();
+    expect(usStateOfRegion("Ontario", "a mill in Ontario")).toBeNull();
+    expect(usStateOfRegion("Washington", "regulators in Washington, D.C. approved")).toBe("DC");
+    expect(usStateOfRegion("Washington", "a fab in Camas, Washington")).toBe("WA");
+  });
+  it("never counts a state as a country", () => {
+    expect(statedPlaces([ACHR])).toEqual({ countries: [], states: ["GA"] });
+    expect(statedCountries([ACHR, SO])).toEqual([]);
+    /* the sentence says Atlanta, Georgia; it does not say United States, so only the state counts */
+    expect(statedPlaces([AFL])).toEqual({ countries: [], states: ["GA"] });
+    expect(statedPlaces([link({ regions: ["Georgia"], quote: "our bottler in Tbilisi, Georgia" })])).toEqual({ countries: ["Georgia"], states: [] });
+    /* a state the sentence does not name is not evidence either */
+    expect(statedPlaces([link({ regions: ["Texas"], quote: "we rely on one supplier for this resin" })])).toEqual({ countries: [], states: [] });
+  });
+  it("places a name the filing ties to one state at that state, to state level", () => {
+    for (const l of [ACHR, AFL, SO]) {
+      const at = placeOne(node({ name: l.counterparty, links: [l] }), HQ, centre);
+      expect(at).toMatchObject({ basis: "filing-state", place: "Georgia, U.S.", country: "United States" });
+      /* in the U.S. state (about 32.7 N, 83.4 W), not in the Caucasus (42 N, 43 E) */
+      expect((at as { lon: number }).lon).toBeCloseTo(-83.4, 1);
+      expect((at as { lat: number }).lat).toBeCloseTo(32.7, 1);
+    }
+    expect(placeOne(node({ name: "Tbilisi Bottlers", links: [link({ regions: ["Georgia"], quote: "our bottler in Tbilisi, Georgia" })] }), HQ, centre)).toMatchObject({ basis: "filing-region", country: "Georgia", lon: 43.5 });
+  });
+  it("falls back to the country when the sentences name several states, and stays unplaced across countries", () => {
+    const two = node({ name: "Gulf Pipeline Partners", links: [link({ regions: ["Texas", "Louisiana"], quote: "pipelines that run through Texas and Louisiana" })] });
+    expect(placeOne(two, HQ, centre)).toMatchObject({ basis: "filing-region", place: "United States", lon: -98.6 });
+    const mixed = placeOne(node({ name: "Border Assembly Co", links: [link({ regions: ["Texas", "Mexico"], quote: "plants in Texas and in Mexico" })] }), HQ, centre);
+    expect(mixed).toHaveProperty("why");
+    expect((mixed as { why: string }).why).toBe("filing names 2 countries (Mexico, Texas)");
+    /* a state and its own country are one place */
+    const same = node({ name: "Lone Star Supply", links: [link({ regions: ["Texas", "United States"], quote: "our only United States plant, in Texas" })] });
+    expect(placeOne(same, HQ, centre)).toMatchObject({ basis: "filing-state", place: "Texas, U.S." });
+  });
+  it("has a centre for every state, inside the United States", () => {
+    for (const code of Object.keys(US_STATES)) {
+      const at = US_STATE_PLACES[code];
+      expect(at, code).toBeDefined();
+      const [lat, lon, km] = at;
+      expect(lat).toBeGreaterThan(17); expect(lat).toBeLessThan(72);
+      expect(lon).toBeGreaterThan(-180); expect(lon).toBeLessThan(-64);
+      expect(km).toBeGreaterThan(10); expect(km).toBeLessThan(1400);
+    }
+    expect(Object.keys(US_STATE_PLACES)).toHaveLength(Object.keys(US_STATES).length);
+  });
+});
+
 describe("knownHomeCountry", () => {
+  it("places U.S. federal bodies in the United States, and only those", () => {
+    for (const name of ["U.S. government", "U.S. federal government", "U.S. Department of Defense", "U.S. Department of the Treasury", "United States Air Force", "U.S. Food and Drug Administration"]) expect(knownHomeCountry(name)).toBe("United States");
+    for (const name of ["U.S. Steel", "US Foods", "U.S. Bancorp", "United States Cellular", "U.S. subsidiaries of Toyota", "Government of Canada"]) expect(knownHomeCountry(name)).toBeNull();
+  });
   it("recognises large foreign companies by their full name", () => {
     expect(knownHomeCountry("Samsung Electronics Co., Ltd.")).toBe("South Korea");
     expect(knownHomeCountry("SK Hynix Inc.")).toBe("South Korea");
