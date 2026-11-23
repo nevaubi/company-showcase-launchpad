@@ -1,7 +1,6 @@
 // Statistics behind the Technicals page. Pure functions over plain arrays (no browser or Node APIs), so the
 // page, its web worker and the tests run the same code. Every formula is written out where it is used and is
 // checked in stat.test.ts against hand-computed or textbook values, and in verify/ against numpy.
-import { normCdf } from "@/lib/signals/stats";
 
 export const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -89,8 +88,51 @@ export function tTwoSided(t: number, dof: number): number {
   if (!Number.isFinite(t) || !(dof > 0)) return NaN;
   return incBeta(dof / (dof + t * t), dof / 2, 0.5);
 }
-/** Two-sided p-value of a standard normal statistic. */
-export const zTwoSided = (z: number) => (Number.isFinite(z) ? 2 * (1 - normCdf(Math.abs(z))) : NaN);
+/**
+ * Upper regularised incomplete gamma function Q(a, x) = Γ(a, x) ÷ Γ(a): the series for P(a, x) below
+ * x = a + 1, the continued fraction (modified Lentz) above, so the far tail keeps its relative accuracy.
+ */
+export function gammaQ(a: number, x: number): number {
+  if (!(a > 0) || Number.isNaN(x)) return NaN;
+  if (!(x > 0)) return 1;
+  const front = Math.exp(-x + a * Math.log(x) - logGamma(a));
+  if (x < a + 1) {
+    let ap = a;
+    let sum = 1 / a;
+    let del = sum;
+    for (let n = 0; n < 1000; n++) {
+      ap += 1;
+      del *= x / ap;
+      sum += del;
+      if (Math.abs(del) < Math.abs(sum) * 1e-17) break;
+    }
+    return Math.max(0, 1 - sum * front);
+  }
+  const tiny = 1e-300;
+  let b = x + 1 - a;
+  let c = 1 / tiny;
+  let d = 1 / b;
+  let h = d;
+  for (let i = 1; i < 1000; i++) {
+    const an = -i * (i - a);
+    b += 2;
+    d = an * d + b;
+    if (Math.abs(d) < tiny) d = tiny;
+    c = b + an / c;
+    if (Math.abs(c) < tiny) c = tiny;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < 1e-16) break;
+  }
+  return front * h;
+}
+/**
+ * Two-sided p-value of a standard normal statistic: P(χ²₁ > z²) = Q(1/2, z²/2). Exact to about fifteen
+ * digits, including far in the tail where a polynomial approximation of the normal distribution loses
+ * its relative accuracy.
+ */
+export const zTwoSided = (z: number) => (Number.isFinite(z) ? gammaQ(0.5, (z * z) / 2) : NaN);
 
 /** Benjamini-Hochberg adjusted p-values (q-values): q_(i) = min over j >= i of p_(j) · m / j. */
 export function bhAdjust(p: number[]): number[] {

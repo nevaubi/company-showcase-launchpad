@@ -3,6 +3,9 @@ import { indicators, type Bars } from "./conditions";
 import {
   drawdownStats,
   impliedMove,
+  levelBands,
+  MEAN_ABS_NORMAL,
+  weekdaysBetween,
   liquidity,
   measures,
   randomWalk,
@@ -20,6 +23,9 @@ const days = (n: number) =>
 function bars(c: number[], v?: number[]): Bars {
   return { d: days(c.length), o: [...c], h: c.map((x) => x * 1.01), l: c.map((x) => x * 0.99), c, v: v ?? c.map(() => 1e6), tr: c.map((x) => x / c[0]) };
 }
+
+/** Bars whose open, high, low and close are all the close: swing highs and lows sit exactly on the series. */
+const flat = (c: number[]): Bars => ({ d: days(c.length), o: [...c], h: [...c], l: [...c], c, v: c.map(() => 1e6), tr: c.map((x) => x / c[0]) });
 
 describe("trend fit", () => {
   it("recovers an exact exponential trend", () => {
@@ -57,9 +63,7 @@ describe("relative strength and the market model", () => {
 
   it("is zero against itself, with beta and correlation of one", () => {
     const r = relStrength({ ...bars(btr), tr: btr }, bench);
-    expect(r.rs63).toBeCloseTo(0, 12);
-    expect(r.rs252).toBeCloseTo(0, 12);
-    expect(r.rsMom).toBeCloseTo(0, 12);
+    for (const k of ["rs21", "rs63", "rs126", "rs252", "rsMom", "rsMom6"] as const) expect(r[k]).toBeCloseTo(0, 12);
     expect(r.beta).toBeCloseTo(1, 10);
     expect(r.corr).toBeCloseTo(1, 10);
     expect(r.idioVol).toBeCloseTo(0, 8);
@@ -75,6 +79,23 @@ describe("relative strength and the market model", () => {
     const own = tr[n - 1] / tr[n - 64] - 1;
     const b = btr[n - 1] / btr[n - 64] - 1;
     expect(r.rs63).toBeCloseTo((1 + own) / (1 + b) - 1, 12);
+    // every window is the same ratio of growth factors: own growth ÷ benchmark growth − 1
+    const g = (x: number[], from: number, to: number) => x[n - 1 - to] / x[n - 1 - from];
+    expect(r.rs21).toBeCloseTo(g(tr, 21, 0) / g(btr, 21, 0) - 1, 12);
+    expect(r.rs126).toBeCloseTo(g(tr, 126, 0) / g(btr, 126, 0) - 1, 12);
+    expect(r.rs252).toBeCloseTo(g(tr, 252, 0) / g(btr, 252, 0) - 1, 12);
+    // the momentum windows skip the latest 21 sessions
+    expect(r.rsMom).toBeCloseTo(g(tr, 252, 21) / g(btr, 252, 21) - 1, 12);
+    expect(r.rsMom6).toBeCloseTo(g(tr, 126, 21) / g(btr, 126, 21) - 1, 12);
+  });
+  it("leaves a window empty when the history is shorter than it", () => {
+    const m = 150;
+    const short = relStrength({ ...bars(btr.slice(0, m)), tr: btr.slice(0, m) }, { ...bench, d: bench.d.slice(0, m), tr: btr.slice(0, m) });
+    expect(short.rs21).toBeCloseTo(0, 12);
+    expect(short.rs126).toBeCloseTo(0, 12);
+    expect(short.rsMom6).toBeCloseTo(0, 12);
+    expect(short.rs252).toBeNull();
+    expect(short.rsMom).toBeNull();
   });
   it("pairs returns by date when the benchmark misses days", () => {
     const tr = [1];
@@ -189,6 +210,74 @@ describe("all measures on one history", () => {
     expect(M.volatility.expected[1].high).toBeCloseTo(M.close * (1 + (rv / Math.sqrt(252)) * Math.sqrt(21)), 10);
     expect(impliedMove(0.32, 5)).toBeCloseTo(0.32 * Math.sqrt(5 / 252), 12);
     expect(impliedMove(0.32, 21)).toBeCloseTo(0.092376, 6);
+  });
+  it("reports the band each support or resistance level spans", () => {
+    // A zigzag with troughs at 100.0, 100.5 and 101.0 (one support), a lone trough at 104.0, peaks at 110.0
+    // and 110.6 (one resistance) and a lone peak at 114.0. Legs are 12 bars, so each turn is a swing point.
+    const turns = [105, 100, 110, 100.5, 110.6, 101, 114, 104, 107];
+    const c: number[] = [];
+    for (let t = 0; t + 1 < turns.length; t++) for (let k = 0; k < 12; k++) c.push(turns[t] + ((turns[t + 1] - turns[t]) * k) / 12);
+    c.push(turns[turns.length - 1]);
+    const B = flat(c);
+    const I = indicators(B);
+    const got = levelBands(B.h, B.l, B.c, I.atr[c.length - 1]);
+    // the tolerance is the larger of 1% of the close (1.07) and 0.75 ATR
+    expect(got[0].tol).toBeGreaterThanOrEqual(1.07);
+    expect(got[0].tol).toBeLessThan(2);
+    expect(got.map((b) => [b.lo, b.hi])).toEqual([
+      [100, 101],
+      [110, 110.6],
+    ]);
+    expect(got[0].price).toBeCloseTo(100.5, 12);
+    expect(got[1].price).toBeCloseTo(110.3, 12);
+    // the measures carry the same bands on the levels ta.js reports, and both are tight (under two tolerances wide)
+    const M = measures({ bars: B, indicators: I });
+    const sr = M.levels.filter((x) => x.kind === "support" || x.kind === "resistance");
+    expect(sr.map((x) => [x.label, x.band, x.touches, x.tight])).toEqual([
+      ["Resistance", [110, 110.6], 2, true],
+      ["Support", [100, 101], 3, true],
+    ]);
+    expect(sr[1].detail).toContain("3 swing points from 100.00 to 101.00 (0 highs, 3 lows)");
+  });
+  it("calls a long chain of swing points a zone, not a line", () => {
+    // troughs stepping up by 0.8: each is within the tolerance of the next, the chain spans 4.0
+    const lows = [100, 100.8, 101.6, 102.4, 103.2, 104];
+    const c: number[] = [];
+    let prev = 106;
+    for (const lo of lows) {
+      for (let k = 0; k < 12; k++) c.push(prev + ((lo - prev) * k) / 12);
+      for (let k = 0; k < 12; k++) c.push(lo + ((112 - lo) * k) / 12);
+      prev = 112;
+    }
+    c.push(112);
+    const B = flat(c);
+    const I = indicators(B);
+    const M = measures({ bars: B, indicators: I });
+    const zone = M.levels.find((x) => x.kind === "support")!;
+    expect(zone.touches).toBe(6);
+    expect(zone.band).toEqual([100, 104]);
+    expect(zone.tight).toBe(false);
+    expect(zone.label).toBe("Support zone");
+    expect(zone.price).toBeCloseTo(102, 10);
+  });
+  it("counts the sessions between a snapshot and an expiry on the calendar", () => {
+    // Wed 18 Nov 2026 to Fri 20 Nov 2026: Thursday and Friday
+    expect(weekdaysBetween("2026-11-18", "2026-11-20")).toBe(2);
+    // to Fri 18 Dec 2026: 2 + four full weeks
+    expect(weekdaysBetween("2026-11-18", "2026-12-18")).toBe(22);
+    // a Friday to the next Monday is one session; to the Saturday or Sunday, none
+    expect(weekdaysBetween("2026-11-20", "2026-11-23")).toBe(1);
+    expect(weekdaysBetween("2026-11-20", "2026-11-21")).toBe(0);
+    expect(weekdaysBetween("2026-11-20", "2026-11-22")).toBe(0);
+    // from a Saturday: the following week's five sessions
+    expect(weekdaysBetween("2026-11-21", "2026-11-27")).toBe(5);
+    // a year of weekdays: 20 Nov 2025 (Thu) to 20 Nov 2026 (Fri) is 261
+    expect(weekdaysBetween("2025-11-20", "2026-11-20")).toBe(261);
+    expect(weekdaysBetween("2026-11-20", "2026-11-20")).toBe(0);
+    expect(weekdaysBetween("2026-11-20", "2026-11-01")).toBe(0);
+    expect(weekdaysBetween("bad", "2026-11-01")).toBe(0);
+    // the mean absolute value of a standard normal
+    expect(MEAN_ABS_NORMAL).toBeCloseTo(0.7978845608, 10);
   });
   it("does the stop and position arithmetic", () => {
     const atr = M.risk.atr!;
