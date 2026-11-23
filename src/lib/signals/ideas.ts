@@ -114,6 +114,7 @@ export function ideasVerdict(records: readonly RuleRecord[]): string {
   const edge = judged.filter((r) => r.reading === "edge");
   const against = judged.filter((r) => r.reading === "against");
   if (!judged.length) return "No rule has enough history to judge yet.";
-  if (edge.length) return `${edge.length} of ${judged.length} rules beat the S&P 500 more often than a coin flip allows. The rest did not.`;
-  return `None of the ${judged.length} rules with a history has beaten the S&P 500 more often than a coin flip allows${against.length ? `, and ${against.length} lost to it on average` : ""}. Use these ideas as a place to start research, not as forecasts.`;
+  if (edge.length) return `${edge.length} of ${judged.length} rules made money against the S&P 500 and beat it more often than a coin flip allows. The rest did not.`;
+  // A rule can beat the index more often than chance and still lose on average, so both are named.
+  return `None of the ${judged.length} rules with a history has both made money against the S&P 500 and beaten it more often than a coin flip allows${against.length ? `; ${against.length} lost to it on average` : ""}. Use these ideas as a place to start research, not as forecasts.`;
 }

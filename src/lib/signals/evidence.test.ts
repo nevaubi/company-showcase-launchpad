@@ -105,7 +105,8 @@ describe("the bar on Student's t", () => {
     expect(tQuantile(0.975, 10)).toBeCloseTo(2.228, 3);
     expect(tQuantile(0.95, 5)).toBeCloseTo(2.015, 3);
     expect(tQuantile(0.975, 1e9)).toBeCloseTo(1.96, 3);
-    expect(tQuantile(0.5, 7)).toBeCloseTo(0, 9);
+    // The CDF is flat to within 2e-8 of zero (t squared falls below the float spacing of df), so the median is good to about seven digits.
+    expect(tQuantile(0.5, 7)).toBeCloseTo(0, 6);
   });
 });
 
