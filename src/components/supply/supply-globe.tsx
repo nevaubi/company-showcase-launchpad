@@ -495,6 +495,12 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
 
         {/* what is isolated and what is selected, docked at the foot of the map so they never cover a name that was just clicked */}
         <div ref={dockRef} className="absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1.5">
+          {/* how the wheel and one finger behave right now: shown while the map holds them, and for a moment when a wheel passed over it */}
+          {(wheelHint || engaged) && (
+            <p aria-hidden="true" data-globe-hint="" className="pointer-events-none rounded-md border bg-card px-2 py-1 text-[11px] text-muted-foreground shadow-paper">
+              {engaged ? <><span className="hidden [@media(pointer:fine)]:inline">Scroll zooms the map. Move the pointer away to scroll the page.</span><span className="[@media(pointer:fine)]:hidden">Map is active. Tap outside it to scroll the page.</span></> : "Click the map to zoom with the wheel, or hold Ctrl."}
+            </p>
+          )}
           {isolate && (
             <div role="status" data-globe-isolated="" className="flex max-w-full items-center gap-1 rounded-md border bg-card py-0.5 pl-2.5 pr-0.5 text-xs shadow-paper">
               <Waypoints aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
@@ -516,11 +522,6 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
             </div>
           )}
         </div>
-        {(wheelHint || engaged) && (
-          <p aria-hidden="true" className="pointer-events-none absolute bottom-3 right-3 z-10 max-w-[60%] rounded-md border bg-card px-2 py-1 text-right text-[11px] text-muted-foreground shadow-paper">
-            {engaged ? <><span className="hidden [@media(pointer:fine)]:inline">Scroll zooms the map. Move the pointer away to scroll the page.</span><span className="[@media(pointer:fine)]:hidden">Map is active. Tap outside it to scroll the page.</span></> : "Click the map to zoom with the wheel, or hold Ctrl."}
-          </p>
-        )}
 
         <TipLayer ref={tipRef} size={() => ({ w: wrapRef.current?.clientWidth ?? 600, h: wrapRef.current?.clientHeight ?? 500 })} />
         {menu && (
