@@ -103,24 +103,44 @@ export interface Placed {
 export interface Unplaced { key: string; name: string; ticker: string | null; relation: Relation | "focus"; hop: 1 | 2; why: string }
 export type Centroid = (country: string) => [number, number] | null;
 
+/** True when the quoted sentence (normalised, padded with spaces) contains the word or phrase as a whole. */
+const namesIt = (quote: string, w: string) => new RegExp(`[^a-z]${normText(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^a-z]`).test(quote);
+
 /**
- * Places a node's links are tied to: countries in canonical spelling and U.S. states as two-letter codes, most often
- * named first. `regions` is filled in by the model that reads the filing and is not checked on its own, so a region
- * only counts when the quoted sentence (which is verified word for word against the filing) names it too. A region that
- * is a U.S. state is a state, never the country that shares its name: "Georgia" is the state unless the sentence
- * points at the Caucasus (see `usStateOfRegion`).
+ * Regions a node's links are tied to, in canonical spelling, most often named first.
+ * `regions` is filled in by the model that reads the filing and is not checked on its own, so a region only counts
+ * when the quoted sentence (which is verified word for word against the filing) names it too.
+ * This is also the test `regionsInQuote` (claims.ts) uses to decide which stored regions to keep, so it accepts any
+ * named region, a U.S. state included; `statedPlaces` is what tells a state from a country.
+ */
+export function statedCountries(links: RiskLink[]): string[] {
+  const tally = new Map<string, number>();
+  for (const l of links) {
+    const quote = ` ${normText(l.quote ?? "")} `;
+    const named = (l.regions ?? []).filter((raw) => {
+      const c = canonCountry(raw);
+      return !!c && [raw, c].some((w) => namesIt(quote, w));
+    });
+    for (const c of new Set(named.map(canonCountry) as string[])) tally.set(c, (tally.get(c) ?? 0) + 1);
+  }
+  return [...tally].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([c]) => c);
+}
+
+/**
+ * The same named regions, split into countries (canonical spelling) and U.S. states (two-letter codes), most often
+ * named first. A region that is a U.S. state is a state, never the country that shares its name: "Georgia" is the
+ * state unless the sentence points at the Caucasus (see `usStateOfRegion`).
  */
 export function statedPlaces(links: RiskLink[]): { countries: string[]; states: string[] } {
   const countries = new Map<string, number>(), states = new Map<string, number>();
   for (const l of links) {
     const quote = ` ${normText(l.quote ?? "")} `;
-    const names = (w: string) => new RegExp(`[^a-z]${normText(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^a-z]`).test(quote);
     const c = new Set<string>(), s = new Set<string>();
     for (const raw of l.regions ?? []) {
       const state = usStateOfRegion(raw, l.quote);
-      if (state) { if (names(raw.replace(/^(the )?state of /i, ""))) s.add(state); continue; }
+      if (state) { if (namesIt(quote, raw.replace(/^(the )?state of /i, ""))) s.add(state); continue; }
       const canon = canonCountry(raw);
-      if (canon && [raw, canon].some(names)) c.add(canon);
+      if (canon && [raw, canon].some((w) => namesIt(quote, w))) c.add(canon);
     }
     for (const x of c) countries.set(x, (countries.get(x) ?? 0) + 1);
     for (const x of s) states.set(x, (states.get(x) ?? 0) + 1);
@@ -128,8 +148,6 @@ export function statedPlaces(links: RiskLink[]): { countries: string[]; states: 
   const ranked = (m: Map<string, number>) => [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k]) => k);
   return { countries: ranked(countries), states: ranked(states) };
 }
-/** Countries a node's links are tied to (see `statedPlaces`); a U.S. state is not a country. */
-export const statedCountries = (links: RiskLink[]): string[] => statedPlaces(links).countries;
 
 /**
  * Position of one company or counterparty.

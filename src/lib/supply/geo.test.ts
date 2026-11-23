@@ -99,9 +99,11 @@ describe("U.S. states are states, not the countries that share their names", () 
     expect(usStateOfRegion("Washington", "regulators in Washington, D.C. approved")).toBe("DC");
     expect(usStateOfRegion("Washington", "a fab in Camas, Washington")).toBe("WA");
   });
-  it("never counts a state as a country", () => {
+  it("never counts a state as a country when it places a name", () => {
     expect(statedPlaces([ACHR])).toEqual({ countries: [], states: ["GA"] });
-    expect(statedCountries([ACHR, SO])).toEqual([]);
+    /* statedCountries stays the plain "which stored regions does the sentence name" test that claims.ts keeps regions by */
+    expect(statedCountries([ACHR, SO])).toEqual(["Georgia"]);
+    expect(statedCountries([link({ regions: ["Massachusetts"], quote: "our plant in Billerica, Massachusetts" })])).toEqual(["Massachusetts"]);
     /* the sentence says Atlanta, Georgia; it does not say United States, so only the state counts */
     expect(statedPlaces([AFL])).toEqual({ countries: [], states: ["GA"] });
     expect(statedPlaces([link({ regions: ["Georgia"], quote: "our bottler in Tbilisi, Georgia" })])).toEqual({ countries: ["Georgia"], states: [] });
@@ -144,7 +146,7 @@ describe("U.S. states are states, not the countries that share their names", () 
 describe("knownHomeCountry", () => {
   it("places U.S. federal bodies in the United States, and only those", () => {
     for (const name of ["U.S. government", "U.S. federal government", "U.S. Department of Defense", "U.S. Department of the Treasury", "United States Air Force", "U.S. Food and Drug Administration"]) expect(knownHomeCountry(name)).toBe("United States");
-    for (const name of ["U.S. Steel", "US Foods", "U.S. Bancorp", "United States Cellular", "U.S. subsidiaries of Toyota", "Government of Canada"]) expect(knownHomeCountry(name)).toBeNull();
+    for (const name of ["U.S. Steel", "US Foods", "U.S. Bancorp", "United States Cellular", "U.S. Xpress Enterprises", "US Ecology", "Government of Canada", "Department of Defense contractors"]) expect(knownHomeCountry(name)).toBeNull();
   });
   it("recognises large foreign companies by their full name", () => {
     expect(knownHomeCountry("Samsung Electronics Co., Ltd.")).toBe("South Korea");
