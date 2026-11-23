@@ -298,8 +298,11 @@ function dedupeComponents(found: Picked[]): Picked[] {
   // Commercial paper beside a short-term borrowings line is part of it: PepsiCo's $9,223M includes $4,800M of
   // paper, FedEx tags $750M face value of paper and $745M carried; Chevron's $977M is what is left after
   // reclassifying paper to long-term. Paper alone (Home Depot's "Short-term debt") still counts.
+  // OtherShortTermBorrowings is the same kind of breakdown: in the taxonomy and in the filings it is
+  // the rest of the borrowings total (Citigroup 2009: $10,223M paper + $58,656M other = $68,879M
+  // short-term borrowings; JPMorgan 2016: $11,738M + $22,705M = $34,443M).
   const stb = out.some((x) => x.concept === "ShortTermBorrowings");
-  return stb ? out.filter((x) => x.concept !== "CommercialPaper") : out;
+  return stb ? out.filter((x) => x.concept !== "CommercialPaper" && x.concept !== "OtherShortTermBorrowings") : out;
 }
 
 /** "CommercialPaper" → "Commercial paper" */
