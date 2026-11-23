@@ -179,32 +179,41 @@ export interface NavItem {
  */
 export function SectionNav({ items, className }: { items: NavItem[]; className?: string }) {
   const [active, setActive] = useState(items[0]?.id);
+  const ids = items.map((i) => i.id).join(",");
   useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") return;
-    const seen = new Map<string, number>();
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) seen.set(e.target.id, e.isIntersecting ? e.intersectionRatio : 0);
-        // the first section in page order that is on screen
-        const first = items.find((it) => (seen.get(it.id) ?? 0) > 0);
-        if (first) setActive(first.id);
-      },
-      { rootMargin: "-110px 0px -55% 0px", threshold: [0, 0.01, 0.5] },
-    );
-    for (const it of items) {
-      const el = document.getElementById(it.id);
-      if (el) io.observe(el);
-    }
-    return () => io.disconnect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items.map((i) => i.id).join(",")]);
+    // The current section is the last one whose top has passed under the sticky bars. Positions are read on
+    // scroll (one frame at most), so sections that mount or grow after their data arrives are still found.
+    let frame = 0;
+    const read = () => {
+      frame = 0;
+      const line = 140;
+      let cur: string | undefined;
+      for (const id of ids.split(",")) {
+        const el = document.getElementById(id);
+        if (el && el.getBoundingClientRect().top <= line) cur = id;
+      }
+      const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      const last = ids.split(",").filter((id) => document.getElementById(id)).pop();
+      setActive(atEnd && last ? last : (cur ?? ids.split(",")[0]));
+    };
+    const onScroll = () => {
+      if (!frame) frame = requestAnimationFrame(read);
+    };
+    read();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [ids]);
   const go = (e: MouseEvent, id: string) => {
     e.preventDefault();
     const el = document.getElementById(id);
     if (!el) return;
     const calm = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     el.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
-    setActive(id);
   };
   return (
     <nav aria-label="Sections" className={cn("scrollbar-thin flex min-w-0 items-center gap-0.5 overflow-x-auto", className)}>
