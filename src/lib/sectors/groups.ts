@@ -9,6 +9,9 @@
 // the published figure.
 import { queryOptions } from "@tanstack/react-query";
 import { partnerFile } from "@/lib/data";
+import { MISSING, mult, pct, usd } from "./format";
+import { getSectorBreadth } from "./breadth.functions";
+import { tapeIndex, type TapeFile } from "./breadth";
 
 export type Latest = [string, number | null, number];
 export interface GroupSummary {
@@ -25,7 +28,12 @@ export interface GroupSummary {
   pe_range?: ValRange | null;
   returns?: Record<"cw" | "ew" | "spy" | "etf", Record<string, number | null> | null>;
   rrg?: [string, number, number][] | null;
-  breadth?: Record<string, number | null> | null;
+  /** Share of members above their 50- and 200-day averages on the last day of the pipeline's price files. */
+  breadth?: { b50?: number | null; b200?: number | null } | null;
+  /** Share of the group's market cap in its five largest members. */
+  top5?: number | null;
+  /** Cross-sectional standard deviation of members' 21-day returns. */
+  disp?: number | null;
 }
 export interface ValRange {
   min: number;
@@ -73,6 +81,8 @@ export interface Constituent {
   gm?: number | null;
   om?: number | null;
   roic?: number | null;
+  above50?: boolean | null;
+  above200?: boolean | null;
 }
 export interface GroupFile {
   slug: string;
@@ -101,6 +111,7 @@ export interface GroupFile {
     b200?: (number | null)[];
   };
   returns?: Record<"cw" | "ew" | "spy" | "etf", Record<string, number | null> | null>;
+  rrg?: [string, number, number][] | null;
   macro?: {
     id: string;
     name: string;
@@ -205,6 +216,17 @@ export const compQuery = (slug: string) =>
     retry: 1,
   });
 
+/** Every covered company's returns and trend flags (setup_series), indexed by ticker. */
+export const tapeQuery = queryOptions({
+  queryKey: ["sectors", "tape"],
+  queryFn: async () => {
+    const f: TapeFile = await getSectorBreadth();
+    return { asOf: f.asOf, idx: tapeIndex(f.rows) };
+  },
+  staleTime: 15 * 60_000,
+  retry: 1,
+});
+
 export const SECTOR_ETF: Record<string, string> = {
   "Information Technology": "XLK",
   Financials: "XLF",
@@ -220,23 +242,15 @@ export const SECTOR_ETF: Record<string, string> = {
 };
 
 /* ---------- formatting ---------- */
+/** Format a stored figure by its unit, one decimal throughout (see ./format.ts); `digits` only for axis ticks. */
 export function fmtMetric(v: number | null | undefined, unit: string | undefined, digits = 1) {
-  if (v == null || !Number.isFinite(v)) return "–";
-  if (unit === "pct")
-    return `${(v * 100).toFixed(Math.abs(v) < 0.1 ? digits : Math.max(0, digits - 1))}%`;
-  if (unit === "x") return `${v.toFixed(1)}×`;
-  if (unit === "usd") {
-    const a = Math.abs(v),
-      s = v < 0 ? "−" : "";
-    return a >= 1e12
-      ? `${s}$${(a / 1e12).toFixed(2)}T`
-      : a >= 1e9
-        ? `${s}$${(a / 1e9).toFixed(1)}B`
-        : `${s}$${(a / 1e6).toFixed(0)}M`;
-  }
-  if (unit === "days") return `${v.toFixed(0)}d`;
-  if (unit === "%") return `${v.toFixed(2)}%`;
-  return v.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  if (v == null || !Number.isFinite(v)) return MISSING;
+  if (unit === "pct") return pct(v, { digits });
+  if (unit === "x") return digits === 1 ? mult(v) : `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}×`;
+  if (unit === "usd" || unit === "USD") return usd(v);
+  if (unit === "days") return `${v.toFixed(0)} d`;
+  if (unit === "%") return `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)}%`;
+  return `${v < 0 ? "−" : ""}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
 }
 export const qLabel = (q: string) => q.replace(/^(\d{4})Q(\d)$/, "Q$2 $1");
 
