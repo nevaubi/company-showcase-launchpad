@@ -28,13 +28,15 @@ export function CompanyLogo({
   /** Fallback for tickers outside coverage */
   src?: string;
   className?: string;
-  size?: "xs" | "sm" | "md" | "lg" | "xl";
+  /** 2xs (16 px) sits on an 11 or 12 px line without making it taller */
+  size?: "2xs" | "xs" | "sm" | "md" | "lg" | "xl";
   /** Set when the ticker is written next to the logo: the mark is then hidden from screen readers */
   decorative?: boolean;
 }) {
   const [failed, setFailed] = useState(false);
   const url = logoUrl(ticker) ?? src;
   const dims = {
+    "2xs": "size-4 p-[2px] rounded-[3px]",
     xs: "size-5 p-[3px] rounded",
     sm: "size-7 p-1 rounded-md",
     md: "size-9 p-1.5 rounded-md",
@@ -50,7 +52,7 @@ export function CompanyLogo({
       {url && !failed ? (
         <img src={url} alt={decorative ? "" : `${ticker} logo`} className="h-full w-full object-contain" loading="lazy" decoding="async" onError={() => setFailed(true)} />
       ) : (
-        <span className={cn("num font-semibold leading-none text-logo-plate-foreground", size === "xs" ? "text-[7px]" : size === "sm" ? "text-[8px]" : "text-[10px]")}>{ticker.slice(0, 4)}</span>
+        <span className={cn("num font-semibold leading-none text-logo-plate-foreground", size === "2xs" ? "text-[6px]" : size === "xs" ? "text-[7px]" : size === "sm" ? "text-[8px]" : "text-[10px]")}>{ticker.slice(0, 4)}</span>
       )}
     </span>
   );

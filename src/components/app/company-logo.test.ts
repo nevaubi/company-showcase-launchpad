@@ -15,7 +15,7 @@ describe("bundled company logos", () => {
   it("resolves every listed ticker to a file that exists", () => {
     const onDisk = new Set(files);
     const listed = Object.entries(LOGO_FILES).flatMap(([ext, list]) => list.split(" ").map((t) => ({ t, ext })));
-    expect(listed.length).toBeGreaterThan(1800);
+    expect(listed.length).toBeGreaterThanOrEqual(COVERAGE.length);
     for (const { t, ext } of listed) {
       expect(logoUrl(t)).toBe(`/logos/${t}.${ext}`);
       expect(onDisk.has(`${t}.${ext}`)).toBe(true);
@@ -29,8 +29,21 @@ describe("bundled company logos", () => {
     expect(logoUrl("NOT-A-TICKER")).toBeUndefined();
   });
 
-  it("covers the whole research universe apart from a short known list", () => {
+  it("has a mark for every covered company", () => {
     const missing = COVERAGE.map((c) => c.ticker).filter((t) => !logoUrl(t));
-    expect(missing.length).toBeLessThanOrEqual(7);
+    expect(missing).toEqual([]);
+  });
+
+  it("records where every bundled mark came from", () => {
+    const sources = JSON.parse(readFileSync("public/logos/sources.json", "utf8")) as Record<string, { file: string; source: string; url: string }>;
+    const marks = files.filter((f) => f !== "sources.json");
+    expect(Object.keys(sources).length).toBe(marks.length);
+    for (const f of marks) {
+      const entry = sources[f.slice(0, f.lastIndexOf("."))];
+      expect(entry?.file, f).toBe(f);
+      expect(entry.source.length, f).toBeGreaterThan(0);
+    }
+    // the seven marks added in round 3 come from each company's own site, never a logo directory
+    for (const t of ["ADAM", "BRVE", "CSQR", "IOND", "MSGK", "STDN", "USLM"]) expect(sources[t].url, t).toMatch(/^https:\/\//);
   });
 });
