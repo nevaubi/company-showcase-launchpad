@@ -709,6 +709,18 @@ function includesCurrent(cf: CompanyFacts, l: Cell, end: string) {
   return factsFor(cf, "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "USD").some((f) => !f.start && near(f.end, end, 4) && f.val === l.v);
 }
 
+/**
+ * NotesPayableCurrent counts as short-term debt beside a long-term debt line (Oracle's "Notes payable
+ * and other borrowings, current"), but alone it is usually a note figure, not a balance sheet line:
+ * Meta's FY2015 balance sheet has no debt at all, yet it tags $201M of NotesPayableCurrent in a note.
+ */
+function dropLoneNotesPayable(balance: Row[]) {
+  const s = rowOf(balance, "shortTermDebt");
+  const l = rowOf(balance, "longTermDebt");
+  if (!s) return;
+  s.cells = s.cells.map((c, i) => (c?.src?.concept === "us-gaap:NotesPayableCurrent" && !l?.cells[i] ? null : c));
+}
+
 /** Total debt = long-term + short-term debt, without double-counting current maturities or leaving out short-term borrowings. */
 function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row {
   const ltd = rowOf(balance, "longTermDebt");
@@ -815,6 +827,7 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     dropSegmentOperatingIncome(income, buildStatement(cf, [TOTAL_EXPENSES], ps, years, freq)[0]);
     fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
+    dropLoneNotesPayable(balance);
     const cfo = rowOf(cash, "cfo");
     const capex = rowOf(cash, "capex");
     const fcf: Row = {
