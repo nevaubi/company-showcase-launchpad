@@ -137,7 +137,9 @@ export function CallReader({
       el.setAttribute("data-active", "true");
       const stick = (toolbar.current?.getBoundingClientRect().bottom ?? 120) + 16;
       const y = el.getBoundingClientRect().top + window.scrollY - stick - 40;
-      window.scrollTo({ top: y, behavior: window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+      // Smooth only for short hops: a long smooth scroll through the transcript is slow and disorienting.
+      const far = Math.abs(y - window.scrollY) > window.innerHeight * 2;
+      window.scrollTo({ top: y, behavior: far || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     }
   };
 
@@ -318,7 +320,7 @@ export function CallReader({
         }
       >
         {topics.length ? (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[520px] text-[13px]">
               <thead className="text-[11px] text-muted-foreground">
                 <tr className="border-b">
@@ -380,7 +382,7 @@ export function CallReader({
       {/* ───────── Questions */}
       <Section id="call-questions" name="Analyst questions" title={`Analyst questions · ${asked.length}`} caption="Each exchange with the call's topics it touched, how long the answer ran and who gave it. Click a row to read it.">
         {asked.length ? (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[760px] text-[13px]">
               <thead className="text-[11px] text-muted-foreground">
                 <tr className="border-b">

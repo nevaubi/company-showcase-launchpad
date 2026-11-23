@@ -127,7 +127,7 @@ export function LatestQuarter({
     >
       {pending && <PendingNote ticker={ticker} cik={cik} pending={pending} score={score} companyName={companyName} />}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_17rem]">
-        <div className="min-w-0 overflow-x-auto lg:border-r">
+        <div className="relative min-w-0 overflow-x-auto lg:border-r">
           <table className="w-full min-w-[560px] text-[13px]">
             <caption className="sr-only">
               {p.label} results against the prior quarter and the same quarter a year earlier
@@ -182,7 +182,8 @@ export function LatestQuarter({
         </div>
         <div className="grid min-w-0 grid-cols-2 content-start divide-x border-t lg:grid-cols-1 lg:divide-x-0 lg:divide-y lg:border-t-0 lg:border-b-0">
           <Stat
-            label="EPS vs the Street"
+            className="bg-transparent"
+            label="EPS vs the Street, provider basis"
             value={
               cur.surprise?.actual != null && cur.surprise.estimate != null ? (
                 <span className="num">
@@ -195,7 +196,7 @@ export function LatestQuarter({
             hint={
               cur.surprise?.surprisePct != null ? (
                 <>
-                  <span className={cn("num", toneText(cur.surprise.surprisePct))}>{signedPct(cur.surprise.surprisePct)}</span> surprise, as the estimates provider records EPS
+                  <span className={cn("num", toneText(cur.surprise.surprisePct))}>{signedPct(cur.surprise.surprisePct)}</span> surprise. The provider's EPS is often adjusted, so it can differ from filed diluted EPS
                 </>
               ) : (
                 "No consensus on record for this quarter"
@@ -212,6 +213,7 @@ export function LatestQuarter({
 function ReactionStat({ ticker, reaction, release }: { ticker: string; reaction: Reaction | null; release: EarningsRelease | null }) {
   return (
     <Stat
+      className="bg-transparent"
       label="Stock reaction, 2 days"
       value={reaction ? <span className={cn("num", toneText(reaction.move))}>{signedPct(reaction.move)}</span> : <span className="text-muted-foreground">–</span>}
       hint={
@@ -324,8 +326,8 @@ export function History({ ticker, quarters, profit }: { ticker: string; quarters
       caption={`Last ${n} quarters, newest first. Growth is against the same quarter a year earlier. Reaction: close before the release to the close the day after; drift: the 20 sessions after that.`}
     >
       <HistoryCharts quarters={[...quarters].reverse()} profit={profit} />
-      <div className="min-w-0 overflow-x-auto border-t">
-        <table className="w-full min-w-[880px] text-[13px]">
+      <div className="relative min-w-0 overflow-x-auto border-t">
+        <table className="w-full min-w-[880px] bg-card text-[13px]">
           <caption className="sr-only">Quarterly results, growth, margins, consensus surprise and stock reaction</caption>
           <thead className="text-[11px] text-muted-foreground">
             <tr>
@@ -369,9 +371,9 @@ export function History({ ticker, quarters, profit }: { ticker: string; quarters
               const pl = q.period.label;
               return (
                 <tr key={q.period.key} className={cn("h-7 border-b border-border/60 last:border-0", i === 0 && "font-medium")}>
-                  <th scope="row" className="sticky left-0 z-[1] bg-card py-1 pl-4 pr-2 text-left font-normal">
+                  <th scope="row" className="sticky left-0 z-[1] bg-card py-1 pl-4 pr-2 text-left font-normal whitespace-nowrap">
                     <span className={cn("num", i === 0 && "font-medium")}>{pl}</span>{" "}
-                    <span className="text-[11px] text-muted-foreground">{fmtDate(q.period.end, { month: "short", year: "numeric" })}</span>
+                    <span className="hidden text-[11px] text-muted-foreground sm:inline">{fmtDate(q.period.end, { month: "short", year: "numeric" })}</span>
                   </th>
                   <Td>
                     <SourceNum ticker={ticker} f={q.revenue} label="Revenue" period={pl} unit="usd" />

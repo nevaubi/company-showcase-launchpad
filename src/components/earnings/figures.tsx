@@ -16,12 +16,13 @@ export function fmtFig(v: number | null | undefined, unit: FigUnit): string {
 }
 
 /** Signed percentage with a true minus: +16.4%, −1.6%. */
-export const signedPct = (v: number | null | undefined, digits = 1) => (v == null || !Number.isFinite(v) ? "–" : fmtPct(v, digits, true));
+export const signedPct = (v: number | null | undefined, digits = 1) =>
+  v == null || !Number.isFinite(v) ? "–" : Math.abs(v) * 10 ** (digits + 2) < 0.5 ? `${(0).toFixed(digits)}%` : fmtPct(v, digits, true);
 /** Difference of two ratios in percentage points: +0.4 pts. */
 export const signedPts = (v: number | null | undefined) =>
-  v == null || !Number.isFinite(v) ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v * 100).toFixed(1)} pts`;
+  v == null || !Number.isFinite(v) ? "–" : Math.abs(v * 100) < 0.05 ? "0.0 pts" : `${v > 0 ? "+" : "−"}${Math.abs(v * 100).toFixed(1)} pts`;
 
-export const toneText = (v: number | null | undefined) => (v == null || !Number.isFinite(v) || v === 0 ? "" : v > 0 ? "text-positive" : "text-negative");
+export const toneText = (v: number | null | undefined) => (v == null || !Number.isFinite(v) || Math.abs(v) < 0.0005 ? "" : v > 0 ? "text-positive" : "text-negative");
 
 export function figTarget(ticker: string, f: Figure, label: string, periodLabel: string, unit: FigUnit): SourceTarget {
   return {

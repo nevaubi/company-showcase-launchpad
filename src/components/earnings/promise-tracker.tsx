@@ -62,7 +62,7 @@ export function PromiseTracker({
             const moved = g.items.length - items.length;
             return (
               <div key={g.status} data-section={`Promises ${STATUS[g.status].group.toLowerCase()}`} className="border-b last:border-b-0">
-                <h3 className="flex items-center gap-2 bg-secondary/40 px-4 py-1.5 text-[13px] font-semibold">
+                <h3 className="flex flex-wrap items-center gap-x-2 gap-y-0.5 bg-secondary/40 px-4 py-1.5 text-[13px] font-semibold">
                   <span className={cn("size-2 shrink-0 rounded-full", STATUS[g.status].dot)} aria-hidden />
                   {STATUS[g.status].group}
                   <span className="num font-normal text-muted-foreground">{g.items.length}</span>

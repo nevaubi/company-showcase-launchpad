@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
 import { Segmented } from "@/components/app/segmented";
+import { TickerMark } from "@/components/app/ticker";
 import LoadingState from "@/components/ui/loading-state";
 import {
   groupUpcoming,
@@ -15,29 +16,16 @@ import { fmtDate, fmtRelative } from "@/lib/format";
 import { useWatchlist } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
 
-const tone = (v: number | null | undefined) =>
-  v == null
-    ? ""
-    : v > 0
-      ? "text-emerald-700 dark:text-emerald-400"
-      : v < 0
-        ? "text-red-700 dark:text-red-400"
-        : "";
+const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "text-positive" : v < 0 ? "text-negative" : "");
 
-function Section({
-  title,
-  note,
-  children,
-}: {
-  title: string;
-  note?: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-md border border-border p-4">
-      <h2 className="text-sm font-semibold">{title}</h2>
-      {note && <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>}
-      <div className="mt-3">{children}</div>
+    <section data-section={title} className="min-w-0 border-y bg-card/40">
+      <header className="border-b px-4 py-2.5">
+        <h2 className="text-[14px] font-semibold tracking-tight">{title}</h2>
+        {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
+      </header>
+      <div className="min-w-0 px-4 py-3">{children}</div>
     </section>
   );
 }
@@ -84,16 +72,16 @@ export function EarningsSeason() {
             { v: "mine", l: "Watchlist" },
           ]}
         />
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[11px] text-muted-foreground">
           Last {s.window_days} days · updated {fmtRelative(s.generated)}
         </p>
       </div>
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <Section
           title="Beat rate by sector"
           note="Share of reports beating consensus EPS; median one-day move after the report."
         >
-          <table className="w-full text-xs tabular-nums">
+          <table className="w-full text-[13px] tabular-nums">
             <thead className="text-muted-foreground">
               <tr className="text-left">
                 <th className="pb-1 font-normal">Sector</th>
@@ -123,25 +111,25 @@ export function EarningsSeason() {
         <Section title="Does a beat move the stock?" note={d.basis}>
           <dl className="grid grid-cols-2 gap-3 text-sm tabular-nums">
             <div>
-              <dt className="text-xs text-muted-foreground">Beats</dt>
+              <dt className="text-[11px] text-muted-foreground">Beats</dt>
               <dd>
                 {d.beats.n} reports, median move {pct(d.beats.median_move)}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Beats that still fell</dt>
+              <dt className="text-[11px] text-muted-foreground">Beats that still fell</dt>
               <dd>
                 {d.beats.share_down == null ? "–" : `${Math.round(d.beats.share_down * 100)}%`}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Misses</dt>
+              <dt className="text-[11px] text-muted-foreground">Misses</dt>
               <dd>
                 {d.misses.n} reports, median move {pct(d.misses.median_move)}
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Surprise vs move, correlation</dt>
+              <dt className="text-[11px] text-muted-foreground">Surprise vs move, correlation</dt>
               <dd>
                 {d.corr_surprise_move == null ? "–" : d.corr_surprise_move.toFixed(2)} ({d.n_pairs}{" "}
                 pairs)
@@ -154,11 +142,11 @@ export function EarningsSeason() {
           note="Dates from the consensus provider; estimated dates are marked."
         >
           {!upcoming.length ? (
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Nothing scheduled{scope === "mine" ? " for your watchlist" : ""}.
             </p>
           ) : (
-            <ul className="space-y-2 text-xs">
+            <ul className="space-y-2 text-[13px]">
               {upcoming.map(([date, rows]) => (
                 <li key={date}>
                   <div className="font-medium">
@@ -170,13 +158,10 @@ export function EarningsSeason() {
                         key={r.ticker}
                         to="/app/companies/$ticker/earnings"
                         params={{ ticker: r.ticker }}
-                        title={`${r.name}${r.eps != null ? ` · consensus EPS ${r.eps.toFixed(2)}` : ""}${r.median_abs_move != null ? ` · typical move ±${(r.median_abs_move * 100).toFixed(1)}%` : ""}`}
-                        className={cn(
-                          "rounded bg-muted px-1.5 py-0.5 font-mono hover:bg-muted/70",
-                          r.is_estimate && "italic opacity-80",
-                        )}
+                        title={`${r.name}${r.is_estimate ? " · estimated date" : ""}${r.eps != null ? ` · consensus EPS ${r.eps.toFixed(2)}` : ""}${r.median_abs_move != null ? ` · typical move ±${(r.median_abs_move * 100).toFixed(1)}%` : ""}`}
+                        className={cn("inline-flex h-7 items-center rounded-md border px-1.5 transition-colors duration-150 hover:bg-secondary", r.is_estimate && "border-dashed")}
                       >
-                        {r.ticker}
+                        <TickerMark ticker={r.ticker} link={false} />
                       </Link>
                     ))}
                     {rows.length > 18 && (
@@ -213,10 +198,10 @@ export function EarningsSeason() {
 
 function ReportedTable({ rows }: { rows: SeasonReported[] }) {
   if (!rows.length)
-    return <p className="text-xs text-muted-foreground">No reports in the window.</p>;
+    return <p className="text-[11px] text-muted-foreground">No reports in the window.</p>;
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[720px] text-xs tabular-nums">
+    <div className="relative overflow-x-auto">
+      <table className="w-full min-w-[720px] text-[13px] tabular-nums">
         <thead className="text-muted-foreground">
           <tr className="text-left">
             <th className="pb-1 font-normal">Company</th>
@@ -233,14 +218,10 @@ function ReportedTable({ rows }: { rows: SeasonReported[] }) {
           {rows.map((r) => (
             <tr key={`${r.ticker}-${r.filed}`} className="border-t border-border/60">
               <td className="py-1 pr-2">
-                <Link
-                  to="/app/companies/$ticker/earnings"
-                  params={{ ticker: r.ticker }}
-                  className="font-mono hover:underline"
-                >
-                  {r.ticker}
-                </Link>{" "}
-                <span className="text-muted-foreground">{r.name}</span>
+                <Link to="/app/companies/$ticker/earnings" params={{ ticker: r.ticker }} className="inline-flex min-w-0 items-center gap-1.5 hover:underline">
+                  <TickerMark ticker={r.ticker} link={false} />
+                  <span className="truncate text-muted-foreground">{r.name}</span>
+                </Link>
               </td>
               <td className="py-1">{r.filed}</td>
               <td className="py-1 text-right">{r.eps_actual?.toFixed(2) ?? "–"}</td>
