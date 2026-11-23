@@ -8,7 +8,7 @@ import { PageHeader, Panel, Stat } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { Scoreboard } from "@/components/signals/scoreboard";
 import { SetupsList } from "@/components/signals/setups-list";
-import { FilterSelect } from "@/components/signals/parts";
+import { FilterSelect, SECTION_OFFSET, SectionJump } from "@/components/signals/parts";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +37,13 @@ export const Route = createFileRoute("/_authenticated/app/setups")({
 
 /** Rows of the "all fired" view shown at once; the filters narrow the rest. */
 const ALL_LIMIT = 100;
+
+/** The page's sections, for the in-page nav. */
+const SECTIONS = [
+  { id: "today", label: "Today's setups" },
+  { id: "scoreboard", label: "Scoreboard" },
+  { id: "method", label: "How this is tested" },
+] as const;
 
 function SetupsPage() {
   const { data, isLoading, error, refetch } = useQuery(setupsQuery);
@@ -68,9 +75,10 @@ function SetupsPage() {
           </>
         }
       />
+      <SectionJump sections={SECTIONS} />
       <MarketStrip data={data} />
       <TodayPanel data={data} />
-      <Panel title="Scoreboard: every rule, backtest against live" subtitle="Sorted by how far each rule stands from luck. Open a row for its record, checks and regimes." collapse={false}>
+      <Panel id="scoreboard" className={SECTION_OFFSET} title="Scoreboard: every rule, backtest against live" subtitle="Sorted by how far each rule stands from luck. Open a row for its record, checks and regimes." collapse={false}>
         <div data-section="Strategy scoreboard">
           <Scoreboard data={data} book={data.book} />
         </div>
@@ -155,6 +163,8 @@ function TodayPanel({ data }: { data: SetupsData }) {
 
   return (
     <Panel
+      id="today"
+      className={SECTION_OFFSET}
       title="Today's setups"
       subtitle={`Signals fired on the last three sessions to ${dayLong(data.asOf)}`}
       actions={
@@ -236,7 +246,7 @@ const SOURCES = [
 function MethodPanel({ data }: { data: SetupsData }) {
   const year = data.oosStart.slice(0, 4);
   return (
-    <Panel title="How this is tested" subtitle="Fixed rules, real costs, and a bar set by how many rules were tried" collapse={false}>
+    <Panel id="method" className={SECTION_OFFSET} title="How this is tested" subtitle="Fixed rules, real costs, and a bar set by how many rules were tried" collapse={false}>
       <div className="grid grid-cols-1 gap-x-8 gap-y-5 lg:grid-cols-3" data-section="Methodology">
         <div className="min-w-0">
           <h3 className="mb-1 text-[13px] font-semibold leading-5">The test</h3>

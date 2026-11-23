@@ -1,6 +1,7 @@
 // Small pieces shared by the signals pages: table cell classes (28 px rows, tabular figures), side
-// and grade tags, a sortable column head and a labelled select for the filter row.
-import type { ReactNode } from "react";
+// and grade tags, a sortable column head, a labelled select for the filter row and the in-page
+// section nav.
+import { useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowDownRight, ArrowUp, ArrowUpRight } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Grade } from "@/lib/signals/evidence";
@@ -136,5 +137,58 @@ export function Fact({ label, children, className }: { label: string; children: 
       <div className={CAPTION}>{label}</div>
       <div className="num text-[13px] leading-5">{children}</div>
     </div>
+  );
+}
+
+/** Space a section leaves above itself when the nav jumps to it: the app header plus the nav's own row. */
+export const SECTION_OFFSET = "scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]";
+
+/**
+ * Compact nav for a long page: one link per section, the one in view marked. A click scrolls to
+ * the section and changes nothing else (no route change, no view state). It sticks under the app
+ * header, or under the company bar where a page sets `--sticky-top`.
+ */
+export function SectionJump({ sections }: { sections: readonly { id: string; label: string }[] }) {
+  const [active, setActive] = useState(sections[0]?.id);
+  const ids = sections.map((s) => s.id).join(",");
+  useEffect(() => {
+    const els = ids
+      .split(",")
+      .map((id) => document.getElementById(id))
+      .filter((e): e is HTMLElement => !!e);
+    if (!els.length || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        const seen = entries.filter((e) => e.isIntersecting).sort((x, y) => x.boundingClientRect.top - y.boundingClientRect.top);
+        if (seen[0]) setActive(seen[0].target.id);
+      },
+      { rootMargin: "-112px 0px -55% 0px" },
+    );
+    els.forEach((e) => io.observe(e));
+    return () => io.disconnect();
+  }, [ids]);
+  if (sections.length < 2) return null;
+  return (
+    <nav aria-label="On this page" data-section="Page sections" className="no-scrollbar sticky top-[var(--sticky-top,3.5rem)] z-10 flex gap-1 overflow-x-auto border-b bg-background/95 py-1.5 backdrop-blur">
+      {sections.map((s) => (
+        <a
+          key={s.id}
+          href={`#${s.id}`}
+          aria-current={active === s.id ? "location" : undefined}
+          onClick={(e) => {
+            e.preventDefault();
+            const calm = typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            document.getElementById(s.id)?.scrollIntoView({ behavior: calm ? "auto" : "smooth", block: "start" });
+            setActive(s.id);
+          }}
+          className={cn(
+            "inline-flex min-h-7 shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 text-[11px] leading-4 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            active === s.id ? "border-foreground/30 bg-secondary text-foreground" : "border-transparent text-muted-foreground",
+          )}
+        >
+          {s.label}
+        </a>
+      ))}
+    </nav>
   );
 }
