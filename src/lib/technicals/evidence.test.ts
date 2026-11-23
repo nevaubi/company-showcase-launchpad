@@ -206,6 +206,21 @@ describe("the checks behind a verdict", () => {
     expect(lazy.reliable).toEqual(E.reliable);
   });
 
+  it("lists the non-overlapping cases behind each count", () => {
+    for (const r of E.rows)
+      for (const h of EVIDENCE.horizons) {
+        const c = r.cells[h];
+        if (!c) {
+          expect(r.cases[h]).toBeUndefined();
+          continue;
+        }
+        const list = r.cases[h]!;
+        expect(list).toHaveLength(c.test.nEff);
+        for (let k = 1; k < list.length; k++) expect(list[k] - list[k - 1]).toBeGreaterThanOrEqual(h);
+        expect(list[list.length - 1] + h).toBeLessThan(B.c.length);
+      }
+  });
+
   it("states the sample it used", () => {
     expect(E.sample.from).toBe(B.d[EVIDENCE.start]);
     expect(E.sample.to).toBe(B.d[B.d.length - 1]);

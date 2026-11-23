@@ -47,12 +47,14 @@ export const peersQuery = (sym: string) =>
     retry: 0,
   });
 
+// Figures are shown with a true minus sign (U+2212), as everywhere else in the app.
+const neg = (s: string) => s.replace("-", "−");
 const sgn = (v: number | null | undefined, d = 1) =>
-  v == null || !Number.isFinite(v) ? "–" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
+  v == null || !Number.isFinite(v) ? "–" : `${v > 0 ? "+" : ""}${neg((v * 100).toFixed(d))}%`;
 const pct = (v: number | null | undefined, d = 1) =>
-  v == null || !Number.isFinite(v) ? "–" : `${(v * 100).toFixed(d)}%`;
+  v == null || !Number.isFinite(v) ? "–" : `${neg((v * 100).toFixed(d))}%`;
 const num = (v: number | null | undefined, d = 2) =>
-  v == null || !Number.isFinite(v) ? "–" : v.toFixed(d);
+  v == null || !Number.isFinite(v) ? "–" : neg(v.toFixed(d));
 
 /** Metric labels, formats and definitions, matching the old site's quant page. */
 export const METRICS: Record<

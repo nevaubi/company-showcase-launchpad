@@ -2,6 +2,7 @@
 // description of the data with its inputs; none is a forecast. Definitions are in the doc comments and are
 // checked against numpy in verify/ (three stocks) and against textbook values in measures.test.ts.
 import TA, { type ConeRow, type TaState } from "./ta";
+import { fmtBarDate } from "./chart-model";
 import type { Bars, Indicators } from "./conditions";
 import {
   efficiencyRatio,
@@ -40,10 +41,16 @@ export interface TrendFit {
 export interface RelStrength {
   sym: string;
   kind: "market" | "sector";
-  /** (1 + own return) ÷ (1 + benchmark return) − 1 over 63 and 252 sessions, and for the 12-1 month window */
+  /**
+   * (1 + own return) ÷ (1 + benchmark return) − 1 over 21, 63, 126 and 252 sessions, and for the 12-1 and
+   * 6-1 month windows (252 to 21 and 126 to 21 sessions ago)
+   */
+  rs21: number | null;
   rs63: number | null;
+  rs126: number | null;
   rs252: number | null;
   rsMom: number | null;
+  rsMom6: number | null;
   /** Market model over the last 252 paired daily returns */
   n: number;
   beta: number | null;
@@ -53,6 +60,44 @@ export interface RelStrength {
   /** Annualised standard deviation of the part of returns the benchmark does not explain */
   idioVol: number | null;
 }
+export interface LevelBand {
+  /** Mean of the swing prices in the chain: the level's price */
+  price: number;
+  lo: number;
+  hi: number;
+  /** Chaining tolerance in price units: the larger of 1% of the close and 0.75 ATR */
+  tol: number;
+}
+/**
+ * The price band each support or resistance level spans. ta.js chains swing prices into one level when each
+ * is within the tolerance of the next, so a level with many points can cover a wide zone, not a line. This
+ * recomputes the same chains (same swings, lookback and tolerance) to report where each starts and ends.
+ */
+export function levelBands(h: number[], l: number[], c: number[], atrLast: number | null | undefined, lookback = 504, k = 5): LevelBand[] {
+  const n = c.length;
+  if (!n) return [];
+  const from = Math.max(0, n - lookback);
+  const sw = TA.swings(h.slice(from), l.slice(from), k);
+  const tol = Math.max(0.01 * c[n - 1], 0.75 * (atrLast || c[n - 1] * 0.02));
+  const pts = [...sw.highs.map((i) => h[i + from]), ...sw.lows.map((i) => l[i + from])].sort((a, b) => a - b);
+  const out: LevelBand[] = [];
+  let run: number[] = [];
+  const flush = () => {
+    if (run.length >= 2) out.push({ price: run.reduce((a, b) => a + b, 0) / run.length, lo: run[0], hi: run[run.length - 1], tol });
+  };
+  for (const p of pts) {
+    if (run.length && p - run[run.length - 1] <= tol) run.push(p);
+    else {
+      flush();
+      run = [p];
+    }
+  }
+  flush();
+  return out;
+}
+/** A level is drawn as a line only when its swing points sit within this many tolerances of each other. */
+export const TIGHT_LEVEL = 2;
+
 export interface LevelRow {
   price: number;
   /** What defines the level */
@@ -64,6 +109,10 @@ export interface LevelRow {
   /** Distance in units of ATR(14) */
   atrs: number | null;
   touches?: number;
+  /** Support and resistance: lowest and highest swing price in the level */
+  band?: [number, number];
+  /** Support and resistance: the swing points sit close enough together to be read as one line */
+  tight?: boolean;
 }
 export interface Measures {
   asOf: string;
@@ -208,9 +257,12 @@ export function relStrength(B: Bars, b: BenchSeries): RelStrength {
   return {
     sym: b.sym,
     kind: b.kind,
+    rs21: rs(i - 21, i),
     rs63: rs(i - 63, i),
+    rs126: rs(i - 126, i),
     rs252: rs(i - 252, i),
     rsMom: rs(i - 252, i - 21),
+    rsMom6: rs(i - 126, i - 21),
     n: mm?.n ?? ys.length,
     beta: mm?.beta ?? null,
     seBeta: mm?.seBeta ?? null,
@@ -338,36 +390,41 @@ export function measures({ bars: B, indicators: I, bench = [], earnings = [] }: 
   // ---- levels: one ladder of everything price may react to, nearest first within each side
   const atrs = (p: number) => (fin(atr) && atr > 0 ? (p - close) / atr : null);
   const levels: LevelRow[] = [];
-  const push = (price: number | null | undefined, kind: LevelRow["kind"], label: string, detail: string, touches?: number) => {
+  const push = (price: number | null | undefined, kind: LevelRow["kind"], label: string, detail: string, extra?: Partial<LevelRow>) => {
     if (!fin(price) || price <= 0) return;
-    levels.push({ price, kind, label, detail, distance: price / close - 1, atrs: atrs(price), touches });
+    levels.push({ price, kind, label, detail, distance: price / close - 1, atrs: atrs(price), ...extra });
   };
-  for (const L of TA.levels(h, l, c))
+  const bands = levelBands(h, l, c, atr);
+  for (const L of TA.levels(h, l, c)) {
+    const band = bands.find((b) => Math.abs(b.price - L.price) <= 1e-9 * Math.max(1, Math.abs(L.price)));
+    const tight = band ? band.hi - band.lo <= TIGHT_LEVEL * band.tol : true;
+    const name = L.kind === "support" ? "Support" : "Resistance";
     push(
       L.price,
       L.kind,
-      L.kind === "support" ? "Support" : "Resistance",
-      `${L.touches} swing points (${L.highs} highs, ${L.lows} lows), last ${d[L.last]}`,
-      L.touches,
+      tight ? name : `${name} zone`,
+      `${L.touches} swing points${band ? ` from ${band.lo.toFixed(2)} to ${band.hi.toFixed(2)}` : ""} (${L.highs} ${L.highs === 1 ? "high" : "highs"}, ${L.lows} ${L.lows === 1 ? "low" : "lows"}), last ${fmtBarDate(d[L.last])}`,
+      { touches: L.touches, band: band ? [band.lo, band.hi] : undefined, tight },
     );
-  push(st.sma50, "average", "50-day average", "Simple average of the last 50 closes");
-  push(st.sma200, "average", "200-day average", "Simple average of the last 200 closes");
-  push(st.hi52, "range", "52-week high", `Intraday high on ${d[st.hi52i]}`);
-  push(st.lo52, "range", "52-week low", `Intraday low on ${d[st.lo52i]}`);
+  }
+  push(st.sma50, "average", "50-day average", "Average of the last 50 closes");
+  push(st.sma200, "average", "200-day average", "Average of the last 200 closes");
+  push(st.hi52, "range", "52-week high", `Intraday high, ${fmtBarDate(d[st.hi52i])}`);
+  push(st.lo52, "range", "52-week low", `Intraday low, ${fmtBarDate(d[st.lo52i])}`);
   if (I.hasVolume) {
     const lowAnchor = st.lo52i;
-    push(TA.anchoredVwap(h, l, c, v, lowAnchor)[i], "vwap", "VWAP from the 52-week low", `Volume-weighted average price since ${d[lowAnchor]}`);
+    push(TA.anchoredVwap(h, l, c, v, lowAnchor)[i], "vwap", "VWAP from the 52-week low", `Volume-weighted average price since ${fmtBarDate(d[lowAnchor])}`);
     const lastE = [...earnings].reverse().find((x) => x <= d[i]);
     if (lastE) {
       const a = d.findIndex((x) => x >= lastE);
-      if (a >= 0 && a < i) push(TA.anchoredVwap(h, l, c, v, a)[i], "vwap", "VWAP from the last earnings release", `Volume-weighted average price since ${d[a]}`);
+      if (a >= 0 && a < i) push(TA.anchoredVwap(h, l, c, v, a)[i], "vwap", "VWAP from the last earnings release", `Volume-weighted average price since ${fmtBarDate(d[a])}`);
     }
   }
   for (const g of TA.gapFills(I.events, h, l)) {
     if (g.filled != null) continue;
     const dist = g.edge / close - 1;
     if (Math.abs(dist) > 0.2) continue;
-    push(g.edge, "gap", g.type === "gap_up" ? "Open gap below" : "Open gap above", `Gap of ${d[g.i]} fills at this price (${(g.bottom).toFixed(2)} to ${(g.top).toFixed(2)})`);
+    push(g.edge, "gap", g.type === "gap_up" ? "Open gap below" : "Open gap above", `Gap of ${fmtBarDate(d[g.i])}, ${g.bottom.toFixed(2)} to ${g.top.toFixed(2)}; filled at this price`);
   }
   levels.sort((a, b) => b.price - a.price);
 
@@ -446,3 +503,24 @@ export function measures({ bars: B, indicators: I, bench = [], earnings = [] }: 
 
 /** One-standard-deviation move over `sessions` trading days implied by an annualised volatility. */
 export const impliedMove = (annualVol: number, sessions: number) => annualVol * Math.sqrt(sessions / 252);
+
+/**
+ * Weekdays after `from` up to and including `to` (ISO dates): the trading sessions between a snapshot and
+ * an option expiry, market holidays aside. Zero when `to` is not after `from`.
+ */
+export function weekdaysBetween(from: string, to: string): number {
+  const a = Date.parse(`${from.slice(0, 10)}T00:00:00Z`);
+  const b = Date.parse(`${to.slice(0, 10)}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return 0;
+  const days = Math.round((b - a) / 864e5);
+  // whole weeks carry five sessions each; the remainder is walked day by day
+  let n = Math.floor(days / 7) * 5;
+  const dow = new Date(a).getUTCDay();
+  for (let k = 1; k <= days % 7; k++) {
+    const w = (dow + k) % 7;
+    if (w !== 0 && w !== 6) n++;
+  }
+  return n;
+}
+/** √(2/π): the mean absolute value of a standard normal. An at-the-money straddle prices about this many standard deviations. */
+export const MEAN_ABS_NORMAL = Math.sqrt(2 / Math.PI);

@@ -8,6 +8,7 @@ import {
   efficiencyRatio,
   ForwardReturns,
   forwardTest,
+  gammaQ,
   hashSeed,
   incBeta,
   logGamma,
@@ -77,6 +78,42 @@ describe("distribution functions against table values", () => {
     // many degrees of freedom: the normal value
     expect(tTwoSided(1.96, 1e6)).toBeCloseTo(0.05, 4);
     expect(zTwoSided(1.959964)).toBeCloseTo(0.05, 5);
+  });
+  it("upper incomplete gamma against closed forms and chi-square tables", () => {
+    // Q(1, x) = e^(−x) and Q(2, x) = e^(−x)(1 + x)
+    expect(gammaQ(1, 0.3)).toBeCloseTo(Math.exp(-0.3), 14);
+    expect(gammaQ(1, 12)).toBeCloseTo(Math.exp(-12), 18);
+    expect(gammaQ(2, 15) / (Math.exp(-15) * 16)).toBeCloseTo(1, 12);
+    expect(gammaQ(2, 0.5)).toBeCloseTo(Math.exp(-0.5) * 1.5, 14);
+    // chi-square survival: P(χ²₃ > 7.3) and P(χ²₅ > 0.4)
+    expect(gammaQ(1.5, 3.65)).toBeCloseTo(0.06292623645904312, 13);
+    expect(gammaQ(2.5, 0.2)).toBeCloseTo(0.9953295932358704, 13);
+    expect(gammaQ(0.5, 0)).toBe(1);
+    expect(gammaQ(0.5, -1)).toBe(1);
+    expect(gammaQ(0, 1)).toBeNaN();
+  });
+  it("normal two-sided p-values keep their relative accuracy in the tail", () => {
+    // reference values: 2 · (1 − Φ(z))
+    const ref: [number, number][] = [
+      [0.5, 0.6170750774519738],
+      [1, 0.31731050786291415],
+      [1.959963984540054, 0.05],
+      [2, 0.04550026389635839],
+      [2.2, 0.02780689502699719],
+      [3, 0.0026997960632601866],
+      [3.5, 0.00046525815807105003],
+      [5, 5.733031437583866e-7],
+      [8, 1.244192114854348e-15],
+    ];
+    for (const [z, p] of ref) {
+      expect(zTwoSided(z) / p).toBeCloseTo(1, 11);
+      expect(zTwoSided(-z)).toBe(zTwoSided(z));
+    }
+    expect(zTwoSided(0)).toBe(1);
+    expect(zTwoSided(NaN)).toBeNaN();
+    expect(zTwoSided(Infinity)).toBeNaN();
+    // agrees with the Student-t value as the degrees of freedom grow
+    expect(tTwoSided(2.5, 1e7) / zTwoSided(2.5)).toBeCloseTo(1, 5);
   });
 });
 
