@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 const STATUS: Record<SecItem["status"], string> = { agree: "agrees", held: "held", flagged: "differs", released: "agrees, shown again" };
 const ORDER: Record<SecItem["status"], number> = { held: 0, flagged: 1, released: 2, agree: 3 };
 
-export function IrChecksLine({ ticker, payload, check, consistency, timings }: { ticker: string; payload: IrPayload; check?: SecCheck | null; consistency?: ConsistencySummary; timings?: { unpackMs: number; tidyMs: number; checkMs: number } }) {
+export function IrChecksLine({ ticker, payload, check, consistency, timings, late }: { ticker: string; payload: IrPayload; check?: SecCheck | null; consistency?: ConsistencySummary; late?: boolean; timings?: { unpackMs: number; tidyMs: number; checkMs: number } }) {
   const { open } = useSource();
   const items = useMemo(() => [...(check?.items ?? [])].sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.line.localeCompare(b.line) || b.e.localeCompare(a.e)), [check]);
   const byKey = useMemo(() => new Map(payload.series.map((s) => [s.k, s])), [payload]);
@@ -38,7 +38,7 @@ export function IrChecksLine({ ticker, payload, check, consistency, timings }: {
   return (
     <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2", IR.caption)} data-section="IR checks" data-timings={timings ? JSON.stringify(timings) : undefined}>
       {check === null ? (
-        <span>Not checked against SEC filings: the company's statements could not be loaded.</span>
+        <span>{late ? "Not checked against SEC filings on this load: the company's statements were still loading." : "Not checked against SEC filings: the company's statements could not be loaded."}</span>
       ) : check && check.checked > 0 ? (
         <span className="text-foreground">
           {check.held + check.flagged > 0 && <span aria-hidden className="mr-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" />}

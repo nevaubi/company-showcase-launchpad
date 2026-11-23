@@ -15,6 +15,8 @@ export interface IrPageData {
   secCheck?: SecCheck | null;
   /** read-time quarters-against-year and formula checks */
   consistency?: ConsistencySummary;
+  /** the statements were still loading when the IR data was ready, so the cross-check did not run */
+  secCheckLate?: boolean;
   /** worker timings, ms */
   timings?: { unpackMs: number; tidyMs: number; checkMs: number };
 }
@@ -32,6 +34,7 @@ type CheckStatement = NonNullable<CheckStatements["quarterly"]>;
 /** Bank-sized payloads arrive as a gzipped byte stream (see getIrData); unpack it in the browser. */
 type IrFetch = (opts: { data: { ticker: string } }) => Promise<{ gz: unknown }>;
 class WorkerUnavailable extends Error {}
+const STATEMENTS_WAIT_MS = 2500;
 
 /**
  * Unpacking and tidying run in a web worker, so a bank-sized payload never freezes the page while
@@ -39,7 +42,14 @@ class WorkerUnavailable extends Error {}
  */
 export async function loadIrPage(ticker: string, fetchIr: IrFetch = getIrData, getStatements?: () => Promise<CheckStatements | null>): Promise<IrPageData> {
   // The SEC statements for the cross-check load alongside; the page never waits on them failing.
-  const [{ gz }, statements] = await Promise.all([fetchIr({ data: { ticker } }), getStatements ? getStatements().catch(() => null) : Promise.resolve(null)]);
+  // Once the IR data is here, the statements get at most STATEMENTS_WAIT_MS more: the page is never
+  // held back by them (the checks line then says the check did not run).
+  const pending = getStatements ? getStatements().catch(() => null) : Promise.resolve(null);
+  const { gz } = await fetchIr({ data: { ticker } });
+  let late = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const statements = await Promise.race([pending, new Promise<null>((r) => (timer = setTimeout(() => ((late = true), r(null)), STATEMENTS_WAIT_MS)))]);
+  clearTimeout(timer);
   const bytes = await new Response(gz as ReadableStream<BufferSource>).arrayBuffer();
   if (typeof Worker !== "undefined") {
     try {
@@ -53,7 +63,7 @@ export async function loadIrPage(ticker: string, fetchIr: IrFetch = getIrData, g
         }
         w.onmessage = (e: MessageEvent<{ ok: boolean; data?: IrPageData; error?: string }>) => {
           w.terminate();
-          if (e.data.ok && e.data.data) resolve(e.data.data);
+          if (e.data.ok && e.data.data) resolve(late ? { ...e.data.data, secCheckLate: true } : e.data.data);
           else reject(new Error(e.data.error ?? "The IR data could not be read"));
         };
         w.onerror = (e) => {
@@ -70,7 +80,8 @@ export async function loadIrPage(ticker: string, fetchIr: IrFetch = getIrData, g
     }
   }
   const { unpackIrPage } = await import("./unpack");
-  return unpackIrPage(bytes, statements);
+  const data = await unpackIrPage(bytes, statements);
+  return late ? { ...data, secCheckLate: true } : data;
 }
 
 export const irPageKey = (ticker: string) => ["ir", ticker] as const;

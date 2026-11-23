@@ -247,7 +247,7 @@ function IrSummary({
           </p>
         </div>
       )}
-      {payload && <IrChecksLine ticker={ticker} payload={payload} check={data.secCheck} consistency={data.consistency} timings={data.timings} />}
+      {payload && <IrChecksLine ticker={ticker} payload={payload} check={data.secCheck} consistency={data.consistency} timings={data.timings} late={data.secCheckLate} />}
     </IrPanel>
   );
 }
