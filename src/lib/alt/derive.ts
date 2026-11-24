@@ -1,10 +1,14 @@
 // Derived alt-data measures: trends by period, size against the company's own scale, recency, and
-// unusual-change detection against the company's own history. Pure; every figure keeps the rows
-// (and so the source URLs) it was computed from.
-import { isPartial, type PeriodMeta } from "@/lib/alt/periods";
+// the two unusual-change rules. Pure; every figure keeps the rows (and so the source URLs) it was
+// computed from. What a stored history can support is decided in `history.ts`, not here.
+import { addDays, daysBetween, inProgress } from "@/lib/alt/history";
+import type { PeriodMeta } from "@/lib/alt/periods";
+
+export { addDays, daysBetween };
 
 export interface DerivedRow {
   uid?: string;
+  dataset?: string;
   date: string | null;
   value: number | null;
   title?: string;
@@ -15,36 +19,23 @@ export interface DerivedRow {
   source_url?: string | null;
 }
 
-const DAY = 864e5;
-export const addDays = (iso: string, n: number) => new Date(Date.parse(`${iso.slice(0, 10)}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
-export const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b.slice(0, 10)}T00:00:00Z`) - Date.parse(`${a.slice(0, 10)}T00:00:00Z`)) / DAY);
-
 /* ---------------- statistics ---------------- */
 
-/** P(X ≥ k) for X ~ Poisson(λ). */
-export function poissonUpper(k: number, lambda: number): number {
+/** P(X ≥ k) for X ~ Binomial(n, p), summed in log space so large n does not underflow. */
+export function binomialUpper(k: number, n: number, p: number): number {
   if (k <= 0) return 1;
-  if (lambda <= 0) return 0;
-  let term = Math.exp(-lambda);
-  let cdf = term;
-  for (let i = 1; i < k; i++) {
-    term *= lambda / i;
-    cdf += term;
+  if (k > n) return 0;
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  const lp = Math.log(p);
+  const lq = Math.log(1 - p);
+  let logC = 0; // ln C(n, i)
+  let tail = 0;
+  for (let i = 0; i <= n; i++) {
+    if (i > 0) logC += Math.log((n - i + 1) / i);
+    if (i >= k) tail += Math.exp(logC + i * lp + (n - i) * lq);
   }
-  return Math.max(0, 1 - cdf);
-}
-
-/** P(X ≤ k) for X ~ Poisson(λ). */
-export function poissonLower(k: number, lambda: number): number {
-  if (k < 0) return 0;
-  if (lambda <= 0) return 1;
-  let term = Math.exp(-lambda);
-  let cdf = term;
-  for (let i = 1; i <= k; i++) {
-    term *= lambda / i;
-    cdf += term;
-  }
-  return Math.min(1, cdf);
+  return Math.min(1, tail);
 }
 
 export function median(xs: number[]): number {
@@ -57,148 +48,149 @@ export function median(xs: number[]): number {
 /* ---------------- unusual-change rules ---------------- */
 
 /**
- * The rule for event counts (8-K items, 13D/G filings, recalls, Federal Register notices...), per
- * company and dataset, in 90-day windows (oldest first, the last one is the latest 90 days).
+ * The rule for counts of filings and records, per company and dataset, over 90-day windows that the
+ * stored history holds whole (`wholeWindows` in history.ts; oldest first, the last is the latest).
  *
- * History starts at the company's first window with any record, so a source that only began
- * covering a company recently (nothing on file before) is "new", never "unusual". At least
- * EVENT_MIN_PRIOR earlier windows are required. A rise is flagged when the latest window has at
- * least 3 records, at least twice the prior mean λ, a Poisson tail P(X ≥ n | λ) below EVENT_P and
- * a z-score of at least 3 against the prior spread (floored at √λ and 1, so a lumpy history is not
- * mistaken for a quiet one). A fall is flagged when λ ≥ 4 and P(X ≤ n | λ) < EVENT_P.
+ * The company's own rate is not known, only estimated from a handful of windows, so the latest
+ * window is tested exactly against them: if every window had the same rate, then given the total T
+ * over all k + 1 windows the latest count is Binomial(T, 1/(k + 1)). A rise is flagged when
+ *   - at least RISE_MIN_PRIOR earlier windows are whole (a year),
+ *   - the latest window holds at least RISE_MIN_RECENT units,
+ *   - it is above every earlier window (so one old burst is not beaten by an ordinary quarter) and
+ *     at least twice their mean, and
+ *   - P(X ≥ latest | T) < RISE_ALPHA.
+ * Falls are never flagged: no row records when its company was last collected, so a fall cannot be
+ * told from a pause in collection or a publication delay.
  */
-export const EVENT_P = 0.005;
-export const EVENT_MIN_PRIOR = 4;
+export const RISE_ALPHA = 0.001;
+export const RISE_MIN_PRIOR = 4;
+export const RISE_MIN_RECENT = 3;
 
-export type UnusualStatus = "spike" | "drop" | "normal" | "short" | "new";
-
-export interface CountVerdict {
-  status: UnusualStatus;
+export interface RiseVerdict {
+  status: "rise" | "normal" | "short";
   recent: number;
-  /** mean records per window before the latest */
-  baseline: number;
-  /** windows of history used */
+  /** mean units per window before the latest */
+  mean: number;
+  /** the busiest earlier window */
+  max: number;
+  /** earlier windows used */
   prior: number;
-  /** tail probability of a count this extreme under the company's own rate */
+  /** P(X ≥ recent) given the total over all windows, under one common rate */
   p: number;
-  z: number;
 }
 
-export function countVerdict(history: number[], opts: { maxPrior?: number; minPrior?: number } = {}): CountVerdict {
-  const recent = history[history.length - 1] ?? 0;
-  const first = history.findIndex((n) => n > 0);
-  let prior = first < 0 || first === history.length - 1 ? [] : history.slice(first, -1);
-  if (opts.maxPrior) prior = prior.slice(-opts.maxPrior);
-  const base = { recent, baseline: 0, prior: prior.length, p: 1, z: 0 };
-  if (first === history.length - 1 && recent > 0) return { ...base, status: "new" };
-  if (prior.length < (opts.minPrior ?? EVENT_MIN_PRIOR)) return { ...base, status: "short" };
-  const lambda = prior.reduce((a, b) => a + b, 0) / prior.length;
-  const sd = Math.sqrt(prior.reduce((a, b) => a + (b - lambda) ** 2, 0) / prior.length);
-  const z = (recent - lambda) / Math.max(sd, Math.sqrt(lambda), 1);
-  const up = poissonUpper(recent, lambda);
-  const down = poissonLower(recent, lambda);
-  const out = { ...base, baseline: lambda };
-  if (recent >= 3 && recent >= 2 * lambda && up < EVENT_P && z >= 3) return { ...out, status: "spike", p: up, z };
-  if (lambda >= 4 && down < EVENT_P) return { ...out, status: "drop", p: down, z };
-  return { ...out, status: "normal", p: Math.min(up, down), z };
+export function riseVerdict(counts: number[]): RiseVerdict {
+  const recent = counts[counts.length - 1] ?? 0;
+  const prior = counts.slice(0, -1);
+  if (prior.length < RISE_MIN_PRIOR) return { status: "short", recent, mean: 0, max: 0, prior: prior.length, p: 1 };
+  const sum = prior.reduce((a, b) => a + b, 0);
+  const mean = sum / prior.length;
+  const max = Math.max(...prior);
+  const p = binomialUpper(recent, sum + recent, 1 / (prior.length + 1));
+  const rise = recent >= RISE_MIN_RECENT && recent > max && recent >= 2 * mean && p < RISE_ALPHA;
+  return { status: rise ? "rise" : "normal", recent, mean, max, prior: prior.length, p };
+}
+
+/** "p < 0.0001" or "p = 0.0004": never more precision than the test has. */
+export function pLabel(p: number): string {
+  return p < 0.0001 ? "p < 0.0001" : `p = ${p.toFixed(4)}`;
+}
+
+export interface Reading {
+  date: string;
+  value: number;
+}
+
+export interface RangeVerdict<R extends Reading> {
+  status: "above" | "below" | "normal" | "short";
+  latest: R | null;
+  /** the earlier readings compared against */
+  prior: R[];
+  /** the highest and lowest of them */
+  hi: R | null;
+  lo: R | null;
+  /** latest ÷ highest (above) or lowest ÷ latest (below); Infinity when the divisor is not positive */
+  ratio: number;
 }
 
 /**
- * The rule for series (monthly pageviews, half-monthly fails to deliver, quarterly bank ratios):
- * Iglewicz–Hoaglin modified z-score of the latest reading against the previous `window` readings,
- * M = 0.6745·(x − median)/MAD, flagged when |M| ≥ SERIES_Z. Skewed money and count series are
- * compared on a log scale (log1p), rates on their own scale. The MAD is floored (`floor`) so a
- * perfectly flat history does not turn a rounding change into a flag. At least SERIES_MIN_PRIOR
- * earlier readings are required.
+ * The rule for series (`RangeRule` in history.ts): the latest reading against the range of the
+ * earlier readings dated within `days` before it. Above: at least `factor` times the highest of
+ * them, at least `minBeyond` beyond it and at least `minLatest`. Below (two-sided rules): no more
+ * than the lowest divided by `factor`. It runs only with `minPrior` earlier readings, and only when
+ * their median is at least `minLevel`. Readings must be finished periods, oldest first.
  */
-export const SERIES_Z = 3.5;
-export const SERIES_MIN_PRIOR = 8;
-
-export interface SeriesVerdict {
-  status: "spike" | "drop" | "normal" | "short";
-  latest: number;
-  median: number;
-  z: number;
-  prior: number;
+export function rangeVerdict<R extends Reading>(readings: R[], rule: { days: number; minPrior: number; factor: number; minBeyond?: number; minLatest?: number; minLevel?: number; sides: "up" | "both" }): RangeVerdict<R> {
+  const latest = readings[readings.length - 1] ?? null;
+  const none = { latest, prior: [] as R[], hi: null, lo: null, ratio: 1 };
+  if (!latest) return { ...none, status: "short" };
+  const from = addDays(latest.date, -rule.days);
+  const prior = readings.filter((r) => r.date >= from && r.date < latest.date);
+  if (prior.length < rule.minPrior) return { ...none, prior, status: "short" };
+  const hi = prior.reduce((a, r) => (r.value > a.value ? r : a));
+  const lo = prior.reduce((a, r) => (r.value < a.value ? r : a));
+  const out = { latest, prior, hi, lo };
+  if (rule.minLevel != null && median(prior.map((r) => r.value)) < rule.minLevel) return { ...out, ratio: 1, status: "normal" };
+  const beyond = rule.minBeyond ?? 0;
+  const v = latest.value;
+  if (v > hi.value && v >= rule.factor * hi.value && v - hi.value >= beyond && v >= (rule.minLatest ?? -Infinity)) return { ...out, ratio: hi.value > 0 ? v / hi.value : Infinity, status: "above" };
+  if (rule.sides === "both" && lo.value > 0 && v < lo.value && v <= lo.value / rule.factor && lo.value - v >= beyond) return { ...out, ratio: v > 0 ? lo.value / v : Infinity, status: "below" };
+  return { ...out, ratio: 1, status: "normal" };
 }
 
-export function seriesVerdict(values: number[], opts: { log?: boolean; window?: number; floor?: number; minPrior?: number } = {}): SeriesVerdict {
-  const latest = values[values.length - 1];
-  const prior = values.slice(0, -1).slice(-(opts.window ?? 12));
-  const med = prior.length ? median(prior) : NaN;
-  if (latest == null || prior.length < (opts.minPrior ?? SERIES_MIN_PRIOR)) return { status: "short", latest, median: med, z: 0, prior: prior.length };
-  const f = (x: number) => (opts.log ? Math.log1p(Math.max(0, x)) : x);
-  const xs = prior.map(f);
-  const m = median(xs);
-  const mad = median(xs.map((x) => Math.abs(x - m)));
-  const z = (0.6745 * (f(latest) - m)) / Math.max(mad, opts.floor ?? (opts.log ? 0.05 : 1e-9));
-  return { status: z >= SERIES_Z ? "spike" : z <= -SERIES_Z ? "drop" : "normal", latest, median: med, z, prior: prior.length };
-}
-
-/* ---------------- windows, trends, recency ---------------- */
-
-/** Records per 90-day window back from `today` (oldest first; the last is the latest 90 days). */
-export function eventWindows(dates: (string | null)[], today: string, windows = 9, days = 90): number[] {
-  const h = Array(windows).fill(0) as number[];
-  for (const d of dates) {
-    if (!d) continue;
-    const age = daysBetween(d, today);
-    if (age < 0) continue;
-    const b = Math.floor(age / days);
-    if (b < windows) h[windows - 1 - b]++;
+/**
+ * Single quarters from a year-to-date annualised rate (FDIC's net charge-off rate): the first
+ * quarter is its own reading, and quarter k is about k·Yk − (k − 1)·Yk−1, which needs the previous
+ * quarter of the same year on file. An estimate (average loans move a little within a year), used
+ * so that one large charge-off is seen in its own quarter instead of in every later reading of the
+ * year. Each value keeps the readings it was derived from.
+ */
+export function quarterOnly<R extends { date: string | null; value: number | null }>(rows: R[]): { date: string; value: number; from: R[] }[] {
+  const dated = rows.filter((r) => r.date && r.value != null).sort((a, b) => a.date!.localeCompare(b.date!));
+  const by = new Map(dated.map((r) => [r.date!.slice(0, 7), r]));
+  const out: { date: string; value: number; from: R[] }[] = [];
+  for (const r of dated) {
+    const month = Number(r.date!.slice(5, 7));
+    if (month % 3 !== 0) continue;
+    const k = month / 3;
+    if (k === 1) {
+      out.push({ date: r.date!, value: r.value!, from: [r] });
+      continue;
+    }
+    const prev = by.get(`${r.date!.slice(0, 4)}-${String(month - 3).padStart(2, "0")}`);
+    if (prev) out.push({ date: r.date!, value: k * r.value! - (k - 1) * prev.value!, from: [r, prev] });
   }
-  return h;
+  return out;
 }
 
-export interface Trailing<T> {
-  /** last 365 days */
-  now: T[];
-  /** the 365 days before */
-  before: T[];
-  count: number;
-  prevCount: number;
-  sum: number;
-  prevSum: number;
-  /** count change vs the year before; null without anything a year before */
-  change: number | null;
-}
-
-/** Records and their values in the trailing twelve months and the twelve before. */
-export function trailingYear<T extends DerivedRow>(rows: T[], today: string): Trailing<T> {
-  const y1 = addDays(today, -365);
-  const y2 = addDays(today, -730);
-  const now = rows.filter((r) => r.date && r.date > y1 && r.date <= today);
-  const before = rows.filter((r) => r.date && r.date > y2 && r.date <= y1);
-  const s = (xs: T[]) => xs.reduce((a, r) => a + (r.value ?? 0), 0);
-  return { now, before, count: now.length, prevCount: before.length, sum: s(now), prevSum: s(before), change: before.length ? now.length / before.length - 1 : null };
-}
+/* ---------------- trends, recency ---------------- */
 
 export interface PeriodChange<T> {
   latest: T;
   /** the reading about a year earlier (same quarter, month or fiscal year) */
   prior: T | null;
   change: number | null;
-  /** the newest reading when it covers only part of its period (shown apart, never compared) */
-  partial: T | null;
+  /** readings whose period is still running or not settled, oldest first (shown apart, never compared) */
+  partials: T[];
 }
 
-/** Latest full-period reading against the one a year earlier; partial periods are kept apart. */
+/** Latest finished reading against the one a year earlier; readings in progress are kept apart. */
 export function yearOnYear<T extends DerivedRow>(rows: T[], today: string): PeriodChange<T> | null {
   const dated = rows.filter((r) => r.date && r.value != null).sort((a, b) => a.date!.localeCompare(b.date!));
-  const full = dated.filter((r) => !isPartial(r as never, today));
-  const partials = dated.filter((r) => isPartial(r as never, today));
+  const full = dated.filter((r) => !inProgress(r as never, today));
   const latest = full[full.length - 1];
   if (!latest) return null;
   const target = addDays(latest.date!, -365);
   const prior = full.filter((r) => Math.abs(daysBetween(r.date!, target)) <= 20).pop() ?? null;
-  const partial = partials.filter((r) => r.date! > latest.date! || (r.meta as PeriodMeta | null)?.ytd).pop() ?? null;
+  // partial readings that belong after the latest finished one (a later period, or a year to date)
+  const partials = dated.filter((r) => inProgress(r as never, today) && (r.date! > latest.date! || !!(r.meta as PeriodMeta | null)?.ytd || !!(r.meta as PeriodMeta | null)?.fiscal_year));
   const change = prior?.value ? (latest.value! - prior.value) / Math.abs(prior.value) : null;
-  return { latest, prior, change, partial };
+  return { latest, prior, change, partials };
 }
 
-/** Sum of the latest 12 monthly readings against the 12 before (needs at least 11 of each). */
+/** Sum of the latest 12 finished monthly readings against the 12 before (needs at least 11 of each). */
 export function trailingTwelveMonths<T extends DerivedRow>(rows: T[], today: string) {
-  const full = rows.filter((r) => r.date && r.value != null && r.date <= today).sort((a, b) => a.date!.localeCompare(b.date!));
+  const full = rows.filter((r) => r.date && r.value != null && r.date <= today && !inProgress(r as never, today)).sort((a, b) => a.date!.localeCompare(b.date!));
   const now = full.slice(-12);
   const before = full.slice(-24, -12);
   if (now.length < 11) return null;
