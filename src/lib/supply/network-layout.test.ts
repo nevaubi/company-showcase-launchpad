@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { nodeRisk, type GraphNode, type HopNode, type NodeRisk, type Relation, type RiskLink, type SupplyLink } from "./core";
 import { trustLink } from "./claims";
-import { bandWidths, layoutNetwork, NET, sideBasis } from "./network-layout";
+import { bandLegend, bandWidths, layoutNetwork, NET, sideBasis } from "./network-layout";
 
 const link = (share: number | null): SupplyLink => ({ id: String(Math.random()), ticker: "NVDA", counterparty: "X", counterparty_ticker: null, counterparty_domain: null, relation: "supplier", detail: "", share_pct: share, quote: "q", accn: "a", doc: "d", form: "10-K", filed: "2026-02-01" });
 const node = (relation: Relation, name: string, share: number | null = null): GraphNode => ({ key: `${relation}:${name}`, name, ticker: null, domain: null, relation, links: [link(share)] });
@@ -196,5 +196,15 @@ describe("widths come only from trade flows", () => {
     for (const c of L.cards.filter((c) => c.relation === "partner" || c.relation === "competitor")) { expect(c.w).toBeGreaterThanOrEqual(NET.cellMin); expect(c.x + c.w).toBeLessThanOrEqual(L.width); }
     const partner = L.cards.find((c) => c.relation === "partner")!, firstRival = L.cards.find((c) => c.relation === "competitor")!;
     expect(firstRival.x - (partner.x + partner.w)).toBe(NET.groupGap);
+  });
+});
+
+describe("bandLegend", () => {
+  it("says what band width shows on each side, and says so plainly when a side states no flow", () => {
+    expect(bandLegend({ supplier: "dollars", customer: "dollars" })).toMatch(/^Band width shows stated revenue/);
+    expect(bandLegend({ supplier: "share", customer: "none" })).toBe("Supplier bands show the stated share. No customer flow is stated, so customer bands are equal.");
+    expect(bandLegend({ supplier: "none", customer: "dollars" })).toMatch(/^Customer bands show stated revenue.*No supplier flow is stated/);
+    expect(bandLegend({ supplier: "none", customer: "none" })).toBe("No flow or share is stated, so every band has the same width.");
+    expect(bandLegend({ supplier: "dollars", customer: "share" })).toMatch(/Supplier bands show stated revenue.*; customer bands show the stated share\./);
   });
 });

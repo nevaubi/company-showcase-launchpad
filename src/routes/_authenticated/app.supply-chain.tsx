@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSource } from "@/components/source/source-context";
 import { CompanyPicker } from "@/components/supply/company-picker";
+import { FollowPanel } from "@/components/supply/follow-panel";
 import { OffscreenCue, type Cue } from "@/components/supply/off-screen-cue";
 import { holdInPlace } from "@/components/supply/scroll-to";
 import { SectionNav } from "@/components/supply/section-nav";
@@ -43,6 +44,8 @@ const isOverlay = (v: unknown): v is Overlay => typeof v === "string" && (SUPPLY
 const isDepth = (v: unknown): v is number => v === 1 || v === 2;
 const isFlow = (v: unknown): v is ChainFlow => v === "all" || v === "making" || v === "selling" || v === "tech";
 const isSize = (v: unknown): v is ChainSize => v === "share" || v === "dollars";
+/** Width of the map section from which the evidence panel sits beside the map; below it the panel goes under. The same number is in the grid's container query. */
+const BESIDE = 1060;
 /** Clear of the app header, the section links under it and a little air. */
 const ANCHOR = "scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]";
 
@@ -213,6 +216,8 @@ function SupplyChainPage() {
      The page is not scrolled. The map above may get taller or shorter, so what the reader pressed is held where it is on
      screen, and when the map is out of view a cue offers to go there. */
   const pressed = useRef<Element | null>(null);
+  /* what the reader last pressed, by pointer or by keyboard (Enter in a search field presses no button: nothing is held) */
+  const press = (e: { target: EventTarget }) => { pressed.current = e.target instanceof Element ? e.target.closest("button, a, [role='option']") : null; };
   const endHold = useRef<() => void>(() => {});
   useEffect(() => () => endHold.current(), []);
   const go = useCallback((tk: string, keepCountry: string | null = null) => {
@@ -246,14 +251,16 @@ function SupplyChainPage() {
   const statements = useMemo(() => graph.flatMap((n) => n.links), [graph]);
   const failed = linksQuery.isError && !links;
   const drawn = view === "chain" ? (fullChain?.nodes.length ?? 0) > 1 : graph.length > 0;
+  /* while the shock tab is open the Network draws it: said in the canvas header, where it costs no height */
+  const shockNote = tab === "shock" && view === "network" ? `Shock on ${names[src] ?? src}: dashed cards are not reached` : null;
   const status = (
-    <IsolationStatus label={isolated?.label ?? null} note={view === "chain" ? isolated?.chainNote : null} onClear={clearIsolation}
-      hint={view === "chain" ? "Click a company or a line to isolate its pathway" : view === "globe" ? "Click a marker to read its filing sentences" : "Click a card to read its filing sentences"} />
+    <IsolationStatus label={isolated?.label ?? null} onClear={clearIsolation}
+      hint={shockNote ?? (view === "globe" ? "Click a marker to read its filing sentences" : "Click a card to read its filing sentences")} />
   );
   const lit = isolated ? graph.filter((n) => isolated.lit.has(n.key) || isolated.relation === n.relation) : graph;
 
   return (
-    <div onClickCapture={(e) => { pressed.current = e.target instanceof Element ? e.target.closest("button, a, [role='option']") : null; }}>
+    <div onClickCapture={press} onKeyDownCapture={(e) => { if (e.key === "Enter" || e.key === " ") press(e); }}>
       <PageHeader
         eyebrow="Filings and data"
         title="Supply chain map"
@@ -300,7 +307,7 @@ function SupplyChainPage() {
                 </div>
               ) : view === "chain" && chain ? (
                 <ValueChain chain={chain} flow={chainFlow} onFlow={setChainFlow} product={chainProduct} onProduct={setChainProduct} size={chainSize}
-                  isolated={isolated} onIsolate={onIsolate} names={names} onOpenText={openLink} onOpenTag={openTag} status={status} />
+                  isolated={isolated} onIsolate={onIsolate} onOpenText={openLink} onOpenTag={openTag} />
               ) : (
                 <>
                   {/* one line that never wraps on a wide screen, so what is isolated can change without moving the map */}
@@ -327,8 +334,8 @@ function SupplyChainPage() {
             )}
           </div>
 
+          <FollowPanel id="supply-analysis" minWidth={BESIDE} resetKey={`${ticker}|${view}|${tab}|${search.sel ?? ""}|${search.iso ?? ""}`}>
           <SupplyAnalysis
-            stickyClassName="@[1060px]:sticky @[1060px]:top-[calc(var(--sticky-top,3.5rem)+3.25rem)]"
             tab={tab}
             onTab={setTab}
             evidence={
@@ -349,6 +356,7 @@ function SupplyChainPage() {
             changes={<ChangesTab ticker={ticker} name={focusName} isolated={isolated} onOpen={(l, label) => openLink(l as RiskLink, label)} />}
             reactions={<ReactionsTab ticker={ticker} name={focusName} graph={lit} covered={covered} onSelect={pick} />}
           />
+          </FollowPanel>
         </div>
       </section>
 

@@ -4,8 +4,12 @@
 // No browser/Node APIs, so the geometry is unit-tested.
 import type { Chain, ChainEdge, ChainNode } from "./chain";
 
-/** Geometry in px: `box` is a node's height, `step` the distance between two rows, `head` the tier labels' band. */
-export const CHAIN = { box: 36, step: 44, head: 34, pad: 10, boxMax: 208, boxMin: 120, gutterMin: 40, wMin: 1.25, wMax: 9 } as const;
+/**
+ * Geometry in px: `box` is a node's height (two lines: name, ticker), `step` the distance between two rows, `head` the
+ * tier labels' band. The gutter between two columns is kept before the box width: it holds the lines and the figure of
+ * each link, so a box narrows first (down to `boxMin`; under `compact` it shows the ticker alone).
+ */
+export const CHAIN = { box: 44, step: 52, head: 34, pad: 10, boxMax: 208, boxMin: 72, compact: 96, gutterMin: 44, wMin: 1.25, wMax: 9 } as const;
 
 export interface ChainColumn { tier: number; x: number; w: number; count: number }
 export interface ChainBox { key: string; x: number; y: number; w: number; h: number; tier: number }
