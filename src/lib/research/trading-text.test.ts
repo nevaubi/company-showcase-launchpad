@@ -62,7 +62,7 @@ describe("assistant setups text", () => {
   it("summarises an autopilot against SPY", () => {
     const t = botsText([{ id: "b1", name: "House momentum", house: true, status: "active", capital: 100000, startedOn: "2026-11-01", lastAsOf: "2026-11-16", lastError: null, description: null, open: 3, stats: { totalReturn: 0.021, spyReturn: -0.01, excess: 0.031, trades: 12, hit: 0.58, avgTrade: 0.004, maxDrawdown: -0.03, sharpe: null, days: 11 } }]);
     expect(t).toContain("return +2.10% vs SPY −1.00% (excess +3.10%)");
-    expect(t).toContain("Sharpe — (needs 20+ days)");
+    expect(t).toContain("Sharpe – (needs 20+ days)");
     expect(t).toContain("</app/autopilots/b1>");
   });
 });
