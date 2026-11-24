@@ -423,6 +423,22 @@ describe("commercial paper beside short-term borrowings", () => {
   it("is not added after paper was reclassified to long-term (Chevron FY2025)", () => {
     expect(debt(buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 39_781)] }, LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: { facts: [at("2025-12-31", 39_781)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 977)] }, CommercialPaper: { facts: [at("2025-12-31", 4_642)] } })))).toBe(40_758);
   });
+  it("does not add other short-term borrowings that are part of the borrowings total (Citigroup 2009, JPMorgan 2016)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 364_019)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 68_879)] }, CommercialPaper: { facts: [at("2025-12-31", 10_223)] }, OtherShortTermBorrowings: { facts: [at("2025-12-31", 58_656)] } })))).toBe(364_019 + 68_879);
+  });
+  it("still counts other short-term borrowings when there is no borrowings total (NextEra)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 80_000)] }, CommercialPaper: { facts: [at("2025-12-31", 3_000)] }, OtherShortTermBorrowings: { facts: [at("2025-12-31", 1_500)] } })))).toBe(84_500);
+  });
+  it("does not turn a lone NotesPayableCurrent note figure into debt (Meta FY2015)", () => {
+    const s = buildStatements(filer({ ...base, NotesPayableCurrent: { facts: [at("2025-12-31", 201)] } }));
+    const st = s.annual.balance;
+    const i = st.periods.findIndex((p) => p.key === "FY2025");
+    expect(st.rows.find((r) => r.key === "shortTermDebt")?.cells[i] ?? null).toBeNull();
+    expect(st.rows.find((r) => r.key === "totalDebt")?.cells[i] ?? null).toBeNull();
+  });
+  it("counts NotesPayableCurrent beside long-term debt (Oracle)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermNotesAndLoans: { facts: [at("2025-12-31", 92_568)] }, NotesPayableCurrent: { facts: [at("2025-12-31", 7_271)] } })))).toBe(99_839);
+  });
   it("still counts paper that is the only short-term line (Home Depot)", () => {
     expect(debt(buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 46_341)] }, LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 4_967)] }, CommercialPaper: { facts: [at("2025-12-31", 4_464)] } })))).toBe(55_772);
   });

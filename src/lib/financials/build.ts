@@ -298,8 +298,11 @@ function dedupeComponents(found: Picked[]): Picked[] {
   // Commercial paper beside a short-term borrowings line is part of it: PepsiCo's $9,223M includes $4,800M of
   // paper, FedEx tags $750M face value of paper and $745M carried; Chevron's $977M is what is left after
   // reclassifying paper to long-term. Paper alone (Home Depot's "Short-term debt") still counts.
+  // OtherShortTermBorrowings is the same kind of breakdown: in the taxonomy and in the filings it is
+  // the rest of the borrowings total (Citigroup 2009: $10,223M paper + $58,656M other = $68,879M
+  // short-term borrowings; JPMorgan 2016: $11,738M + $22,705M = $34,443M).
   const stb = out.some((x) => x.concept === "ShortTermBorrowings");
-  return stb ? out.filter((x) => x.concept !== "CommercialPaper") : out;
+  return stb ? out.filter((x) => x.concept !== "CommercialPaper" && x.concept !== "OtherShortTermBorrowings") : out;
 }
 
 /** "CommercialPaper" → "Commercial paper" */
@@ -706,6 +709,18 @@ function includesCurrent(cf: CompanyFacts, l: Cell, end: string) {
   return factsFor(cf, "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "USD").some((f) => !f.start && near(f.end, end, 4) && f.val === l.v);
 }
 
+/**
+ * NotesPayableCurrent counts as short-term debt beside a long-term debt line (Oracle's "Notes payable
+ * and other borrowings, current"), but alone it is usually a note figure, not a balance sheet line:
+ * Meta's FY2015 balance sheet has no debt at all, yet it tags $201M of NotesPayableCurrent in a note.
+ */
+function dropLoneNotesPayable(balance: Row[]) {
+  const s = rowOf(balance, "shortTermDebt");
+  const l = rowOf(balance, "longTermDebt");
+  if (!s) return;
+  s.cells = s.cells.map((c, i) => (c?.src?.concept === "us-gaap:NotesPayableCurrent" && !l?.cells[i] ? null : c));
+}
+
 /** Total debt = long-term + short-term debt, without double-counting current maturities or leaving out short-term borrowings. */
 function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row {
   const ltd = rowOf(balance, "longTermDebt");
@@ -812,6 +827,7 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     dropSegmentOperatingIncome(income, buildStatement(cf, [TOTAL_EXPENSES], ps, years, freq)[0]);
     fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
+    dropLoneNotesPayable(balance);
     const cfo = rowOf(cash, "cfo");
     const capex = rowOf(cash, "capex");
     const fcf: Row = {
