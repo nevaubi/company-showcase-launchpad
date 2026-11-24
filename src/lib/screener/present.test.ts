@@ -163,3 +163,17 @@ describe("seriesRange", () => {
     expect(seriesRange([])).toBeNull();
   });
 });
+
+describe("fmtField edge cases", () => {
+  it("keeps cents on high share prices, never prints a signed zero, and writes ordinals and whole scores", () => {
+    expect(fmtField(F.get("price"), 5468.04)).toBe("$5,468.04");
+    expect(fmtField(F.get("mcap"), 999.97e9)).toBe("$1.00T");
+    expect(fmtField(F.get("om"), -0.0001)).toBe("0.0%");
+    expect(fmtField(F.get("om"), -0.018)).toBe("−1.8%");
+    const pctl: FieldDef = { id: "r", g: "x", n: "Rank", u: "pctl", d: "" };
+    expect([0.01, 0.02, 0.03, 0.11, 0.21].map((v) => fmtField(pctl, v))).toEqual(["1st", "2nd", "3rd", "11th", "21st"]);
+    const score: FieldDef = { id: "s", g: "x", n: "Score", u: "score", d: "" };
+    expect(fmtField(score, 7)).toBe("7");
+    expect(fmtField(score, 7.25)).toBe("7.3");
+  });
+});
