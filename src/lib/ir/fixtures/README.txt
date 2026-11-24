@@ -13,7 +13,7 @@ breakdown|parent|label|unit|is_total|period_start|period_end|months|value|filed|
 Used by suspect.test.ts (iracc-H5).
 
 lkq-lines.txt: LKQ's standard-line candidates since 2025 (52 lines), the reviewer's checksum-verified
-transfer of 23 Nov 2026 (/home/claude/work/r3/review-iracc/r2/lines.ok, pA/pB.txt.ok). Fields:
+transfer of 23 Nov 2026. Fields:
 ticker|category|metric|unit|is_total|label|parent|breakdown|q:yyyymmdd=v[~alt],...|y:... Real segment
 lines (4% to 46% of revenue) that no scale rule may hold. Used by suspect.test.ts.
 
