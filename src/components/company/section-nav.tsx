@@ -7,6 +7,13 @@ import { cn } from "@/lib/utils";
  * gets no chip. The section "in view" is the last one whose top has passed under the sticky rows, so the first chip
  * is marked at the top of the page and the last one at the bottom.
  */
+/** The line just under the sticky rows above the page (app header, any company bar) and this nav, in px. */
+function stickyLine(nav: HTMLElement | null): number {
+  if (!nav) return 112;
+  const top = parseFloat(getComputedStyle(nav).top);
+  return (Number.isFinite(top) ? top : 56) + nav.offsetHeight + 8;
+}
+
 export function SectionNav({ sections }: { sections: { id: string; label: string }[] }) {
   const [active, setActive] = useState(sections[0]?.id);
   const [present, setPresent] = useState<string>(() => sections.map((s) => s.id).join(" "));
@@ -16,8 +23,7 @@ export function SectionNav({ sections }: { sections: { id: string; label: string
     let frame = 0;
     const measure = () => {
       frame = 0;
-      // the line just under the sticky header and this nav
-      const line = 112;
+      const line = stickyLine(nav);
       const shown = sections.filter((s) => (document.getElementById(s.id)?.offsetHeight ?? 0) > 0);
       let current = shown[0]?.id;
       for (const s of shown) if (document.getElementById(s.id)!.getBoundingClientRect().top - line <= 0) current = s.id;
@@ -57,11 +63,11 @@ export function SectionNav({ sections }: { sections: { id: string; label: string
             e.preventDefault();
             const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
             // an explicit jump the reader asked for: move the page to the section, under the sticky rows
-            window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 104, behavior: reduce ? "auto" : "smooth" });
+            window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - stickyLine(nav), behavior: reduce ? "auto" : "smooth" });
             setActive(s.id);
           }}
           className={cn(
-            "shrink-0 rounded-full border px-2.5 py-0.5 text-[12px] whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+            "inline-flex min-h-7 shrink-0 items-center rounded-full border px-2.5 text-[12px] whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
             active === s.id ? "border-foreground/30 bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >

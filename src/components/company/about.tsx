@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ArrowUpRight, Info } from "lucide-react";
 import { IrPanel } from "@/components/ir/panel";
 import { Button } from "@/components/ui/button";
@@ -101,12 +102,23 @@ export function AboutPanel({ ticker, data }: { ticker: string; data: CompanyData
 }
 
 function Photos({ images }: { images: NonNullable<ReturnType<typeof useCompanyContext>["data"]>["images"] }) {
+  // a photo the image host will not serve is dropped rather than left as an empty frame
+  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
+  const shown = images.filter((m) => !failed.has(m.url)).slice(0, PHOTOS);
+  if (!shown.length) return null;
   return (
     <ul className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-      {images.slice(0, PHOTOS).map((m) => (
+      {shown.map((m) => (
         <li key={m.url} className="min-w-0">
           <figure className="relative overflow-hidden rounded-md border bg-secondary">
-            <img src={commonsThumb(m.url, 500)} alt="" referrerPolicy="no-referrer" loading="lazy" className="aspect-[16/10] w-full object-cover" />
+            <img
+              src={commonsThumb(m.url, 500)}
+              alt=""
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              onError={() => setFailed((f) => new Set(f).add(m.url))}
+              className="aspect-[16/10] w-full object-cover"
+            />
             <CreditNote credit={m.credit} className="absolute right-1 top-1" />
           </figure>
           <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground" title={m.caption}>

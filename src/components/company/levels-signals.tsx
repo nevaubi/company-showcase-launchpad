@@ -2,6 +2,7 @@
 // fired in the last ten sessions, each with its record on this stock. Computed from the loaded daily bars
 // (src/lib/company/setup.ts), so the date is the date of the last bar, for every covered company.
 import { useMemo } from "react";
+import { Link } from "@tanstack/react-router";
 import { IrPanel } from "@/components/ir/panel";
 import { DASH, IR } from "@/components/ir/typography";
 import { chartSetup, RECENT_SESSIONS, type Level } from "@/lib/company/setup";
@@ -9,6 +10,7 @@ import { usePrices } from "@/lib/data";
 import type { Bar } from "@/lib/financials/types";
 import { fmtDate, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { StatGrid } from "./stat-grid";
 
 const pct = (v: number) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${(Math.abs(v) * 100).toFixed(1)}%`;
@@ -34,6 +36,15 @@ export function LevelsAndSignals({ ticker }: { ticker: string }) {
       title="Levels and signals"
       subtitle={`Daily bars through ${fmtDate(setup.asOf)} · adjusted close ${fmtPrice(setup.price)} · fixed rules over ${setup.sessions.toLocaleString("en-US")} sessions, no forecast`}
       bodyClassName="p-0"
+      actions={
+        // the full indicator board (trend, momentum, volatility, volume, gaps and the event log) lives in Markets;
+        // the Overview keeps only the read above and these levels, so it is not repeated here
+        <Button size="xs" variant="ghost" asChild>
+          <Link to="/app/markets" search={{ symbol: ticker, view: "indicators" }}>
+            Indicator board
+          </Link>
+        </Button>
+      }
     >
       <StatGrid className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)]">
         <LevelBlock label="Nearest support" level={setup.support} price={setup.price} />
