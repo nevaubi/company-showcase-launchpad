@@ -11,7 +11,7 @@ import { Segmented, type SegOption } from "@/components/app/segmented";
 import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
 import { ClearIsolation } from "@/components/supply/supply-toolbar";
 import { BASIS_WORD, CHAIN_FLOWS, LINK_TYPE_LABEL, TIER_LABEL, type Chain, type ChainEdge, type ChainFlow, type ChainNode, type TaggedShare } from "@/lib/supply/chain";
-import { CHAIN, edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
+import { CHAIN, boxName, edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
 import type { RiskLink } from "@/lib/supply/core";
 import { chainEdgePath, chainPath, pathHops, type Isolated, type PathHop } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
@@ -299,11 +299,11 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
                 <span className={cn("block truncate font-medium", n.ticker && "num")}>{n.ticker ?? n.name}</span>
               ) : n.ticker ? (
                 <>
-                  <span className="block truncate font-medium leading-4">{n.name}</span>
+                  <span className="block truncate font-medium leading-4">{boxName(n.name)}</span>
                   <span className={cn("num block truncate text-[10px] leading-3", focus ? "opacity-80" : "text-muted-foreground")}>{n.ticker}</span>
                 </>
               ) : (
-                <span className="line-clamp-2 font-medium leading-[15px]">{n.name}</span>
+                <span className="line-clamp-2 font-medium leading-[15px]">{boxName(n.name)}</span>
               )}
             </span>
             {sole.has(n.key) && <Lock className="size-3 shrink-0 text-negative" aria-hidden="true" />}
@@ -565,10 +565,10 @@ export function ChainTable({ chain, names, revenue, isolated, onIsolate, onOpenT
                   {e.types.length > 0 && <span className="block h-4 truncate text-[11px] leading-4 text-muted-foreground">{products}</span>}
                 </td>
                 <td className={cn("num col-start-1 row-start-3 mt-1 min-w-0 @[640px]:mt-0 @[640px]:px-2 @[640px]:py-1.5 @[640px]:text-right", e.share == null ? "hidden" : "block", CELL)}>
-                  {e.share != null ? <>{e.share}%<span className="ml-1 text-[11px] text-muted-foreground @[640px]:ml-0 @[640px]:block">of {e.basis ? BASIS_WORD[e.basis] : "an unstated base"}</span></> : <span className="text-muted-foreground">–</span>}
+                  {e.share != null ? <>{e.share}%<span className="ml-1 font-sans text-[11px] leading-4 text-muted-foreground @[640px]:ml-0 @[640px]:block">of {e.basis ? BASIS_WORD[e.basis] : "an unstated base"}</span></> : <span className="text-muted-foreground">–</span>}
                 </td>
                 <td className={cn("num col-span-2 col-start-2 row-start-3 mt-1 min-w-0 text-right @[640px]:mt-0 @[640px]:px-2 @[640px]:py-1.5", e.dollars == null ? "hidden" : "block", CELL)} title={formula(e)}>
-                  {e.dollars != null ? <><span className="@[640px]:hidden">≈ </span>{fmtCompactUsd(e.dollars)}<span className="ml-1 text-[11px] text-muted-foreground @[640px]:ml-0 @[640px]:block">{e.dollarsFrom === "stated" ? "stated flow" : "share × revenue"}</span></> : <span className="text-muted-foreground">–</span>}
+                  {e.dollars != null ? <><span className="@[640px]:hidden">≈ </span>{fmtCompactUsd(e.dollars)}<span className="ml-1 whitespace-nowrap font-sans text-[11px] leading-4 text-muted-foreground @[640px]:ml-0 @[640px]:block">{e.dollarsFrom === "stated" ? "stated flow" : "share × revenue"}</span></> : <span className="text-muted-foreground">–</span>}
                 </td>
                 <td className={cn("col-start-2 row-start-1 block @[640px]:px-1 @[640px]:py-1 @[640px]:text-right", CELL)}>
                   <button type="button" onClick={() => openFirst(e, label, onOpenText, onOpenTag)} aria-label={`Open the source: ${label}, ${e.evidence.length} ${e.evidence.length === 1 ? "filing" : "filings"}`} title={e.evidence.length === 1 ? "Open the filing that states it" : `Open the first of ${e.evidence.length} filings that state it`}

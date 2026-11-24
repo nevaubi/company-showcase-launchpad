@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Chain, ChainNode } from "./chain";
-import { CHAIN, edgePath, edgeWidth, layoutChain } from "./chain-layout";
+import { CHAIN, boxName, edgePath, edgeWidth, layoutChain } from "./chain-layout";
 
 const n = (key: string, tier: number, via: string | null): ChainNode => ({ key, name: key, ticker: key, tier, via });
 const chain: Chain = {
@@ -72,5 +72,19 @@ describe("line width", () => {
     expect(edgePath(a, b, false)).toMatchObject({ lx: 106, anchor: "start" });
     expect(edgePath(a, b, true)).toMatchObject({ lx: 294, anchor: "end" });
     expect(edgePath(a, b, false).d.startsWith("M100,118")).toBe(true);
+  });
+});
+
+describe("boxName", () => {
+  it("drops trailing legal forms and keeps the rest of the name", () => {
+    expect(boxName("Taiwan Semiconductor Manufacturing Co., Ltd.")).toBe("Taiwan Semiconductor Manufacturing");
+    expect(boxName("Hewlett Packard Enterprise Company")).toBe("Hewlett Packard Enterprise");
+    expect(boxName("Foxconn Industrial Internet Co Ltd")).toBe("Foxconn Industrial Internet");
+    expect(boxName("Entegris, Inc.")).toBe("Entegris");
+  });
+  it("prefers a covered company's short name and never returns an empty string", () => {
+    expect(boxName("NVIDIA Corporation", "NVIDIA")).toBe("NVIDIA");
+    expect(boxName("Inc.")).toBe("Inc.");
+    expect(boxName("Amkor Technology")).toBe("Amkor Technology");
   });
 });

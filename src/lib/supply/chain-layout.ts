@@ -36,6 +36,19 @@ export function layoutChain(chain: Chain, width: number): ChainLayout {
   return { width, height, boxW, columns, boxes };
 }
 
+/** Legal-form words at the end of a name that say nothing in a 100 px box ("Inc.", "Corporation", "Co., Ltd."). */
+const LEGAL_TAIL = /(?:[,\s]+(?:inc|incorporated|corp|corporation|co|company|ltd|limited|llc|l\.?l\.?c|plc|p\.?l\.?c|n\.?v|s\.?a|s\.?e|ag|gmbh|lp|l\.?p|sa\/nv|k\.?k)\.?)+$/i;
+
+/**
+ * The name written in a chain box: a covered company's short name when there is one, else the stated name without
+ * its trailing legal form. The full name stays in the box's accessible name and title.
+ */
+export function boxName(name: string, shortName?: string | null): string {
+  if (shortName && shortName.trim()) return shortName.trim();
+  const t = name.trim().replace(LEGAL_TAIL, "").trim();
+  return t || name.trim();
+}
+
 export type ChainSizeBasis = "share" | "dollars";
 /** What a line's width shows: the stated share, or dollars on a square-root scale so one very large flow does not flatten the rest. Unsized links get the thinnest line. */
 export function edgeWidth(e: Pick<ChainEdge, "share" | "dollars">, basis: ChainSizeBasis, maxDollars: number): { width: number; sized: boolean } {
