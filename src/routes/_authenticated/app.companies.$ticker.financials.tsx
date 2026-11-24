@@ -71,7 +71,7 @@ function Financials() {
   const [chartOpen, setChartOpen] = useState(true);
   const [exporting, setExporting] = useState(false);
   const gate = useFeatureGate();
-  const set = (patch: Partial<z.infer<typeof pageSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
+  const set = (patch: Partial<z.infer<typeof pageSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
 
   const filingsByAccn = useMemo(() => new Map((data?.filings ?? []).map((f) => [f.accn, f])), [data]);
 
