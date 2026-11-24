@@ -42,7 +42,7 @@ import { botStats } from "@/lib/signals/bots";
 import type { Family } from "@/lib/signals/strategies";
 import { passages, storeIndexQuery, storeText } from "@/lib/ir/store";
 import { searchDocuments } from "@/lib/ir/search";
-import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, getEarningsWorkup, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
+import { computedDigest, getAnalystTrackRecord, getCallAnalysis, getCallThemes, getTrialCatalysts, getEarningsSeason, fmtVal, getEarningsWorkup, getFinancials, getKpiSignals, getKpis, getQuantProfile, searchDocTables } from "@/lib/research/intel";
 import { buildFile, fmtBytes, type Cell, type FileFormat } from "@/lib/research/files";
 import { exposureIndexQuery, filingDetailQuery, namedByQuery } from "@/lib/xbrl/queries";
 import { bankStatesText, companyExposureText, insurersText, lendersText, regionText, stateDepositsText, type InsurerSort } from "@/lib/xbrl/exposure-text";
@@ -71,14 +71,6 @@ export interface ToolRun {
   pins?: Pin[];
   /** Next moves offered to the user as buttons under the answer. */
   choices?: string[];
-}
-
-function fmtVal(v: number, unit: Row["unit"]) {
-  if (unit === "pct") return `${(v * 100).toFixed(1)}%`;
-  if (unit === "ratio") return v.toFixed(2);
-  if (unit === "usdPerShare") return `$${v.toFixed(2)}`;
-  if (unit === "shares") return `${(v / 1e6).toFixed(1)}M sh`;
-  return `$${(v / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M`;
 }
 
 async function dataset(qc: QueryClient, ticker: string): Promise<CompanyDataset> {
@@ -594,34 +586,8 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       return { output: lines.join("\n"), summary: `${u.companies.length} covered companies` };
     }
     case "get_financials": {
-      const d = await dataset(qc, String(args.ticker));
-      const freq = args.frequency === "quarterly" ? "quarterly" : "annual";
-      const st = d.statements[freq][(args.statement as "income") ?? "income"];
-      const n = Math.max(1, Math.min(16, Number(args.periods) || 8));
-      const start = Math.max(0, st.periods.length - n);
-      const periods = st.periods.slice(start);
-      const metrics = (args.metrics as string[] | null)?.map((m) => m.toLowerCase());
-      const rows = st.rows.filter((r) => !metrics || metrics.includes(r.key.toLowerCase()) || metrics.includes(r.label.toLowerCase()));
-      const accns = new Set<string>();
-      const header = `${d.profile.ticker} ${args.statement} (${freq}). Columns: ${periods.map((p) => `${p.label} [${p.start ?? ""}→${p.end}]`).join(", ")}`;
-      const body = rows.map((r) => {
-        const vals = r.cells.slice(start).map((c) => {
-          if (!c) return "—";
-          if (c.src) accns.add(c.src.accn);
-          return `${fmtVal(c.v, r.unit)}${c.derived ? "*" : ""}`;
-        });
-        return `${r.label} [${r.key}]: ${vals.join(" | ")}`;
-      });
-      const filings = d.filings.filter((f) => accns.has(f.accn)).map((f) => `${f.accn} = ${f.form} for period ${f.report} filed ${f.filed}`);
-      // How current these statements are, in the same words the Statements tab shows (a newer 10-Q, 10-K or results release is named when one exists).
-      const cov = coverageOf(d.profile.ticker);
-      const currency = assessCurrency(d, { ciks: cov ? companyCiks(cov) : [String(Number(d.profile.cik))] });
-      const out = `${header}\n${body.join("\n")}\n(* = calculated from other reported values)\nStatement currency: ${currency.text}\nSource filings (cite as filing:${d.profile.ticker}:ACCESSION):\n${filings.slice(0, 20).join("\n")}`;
-      return {
-        output: clip(out),
-        summary: `${d.profile.ticker} ${args.statement}, ${periods.length} ${freq} periods`,
-        refs: d.filings.filter((f) => accns.has(f.accn)).slice(0, 4).map((f) => ({ ticker: d.profile.ticker, accn: f.accn, label: `${f.form} ${f.report?.slice(0, 7)}` })),
-      };
+      // The statements the Financials tab shows: served periods plus any read at view time from newer 10-Q/10-K filings.
+      return getFinancials(qc, await dataset(qc, String(args.ticker)), args);
     }
     case "get_segments": {
       const d = await dataset(qc, String(args.ticker));

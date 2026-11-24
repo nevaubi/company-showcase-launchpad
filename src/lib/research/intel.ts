@@ -4,12 +4,25 @@
 // parsed out of IR PDFs. These are the facts the pipeline spends hours producing; the assistant should start here
 // before re-deriving anything from raw filings or the web.
 import type { QueryClient } from "@tanstack/react-query";
-import { partnerFile } from "@/lib/data";
+import { companyQuery, partnerFile, pricesQuery } from "@/lib/data";
 import { kpiFileQuery, type KpiFile, type KpiItem, type KpiValue } from "@/lib/statements/filed";
 import { kpiInsightsQuery, kpiInsightsIndexQuery, type KpiInsightsFile, type KpiSource } from "@/lib/insights/kpi";
 import { previewQuery, scoreQuery, seasonQuery } from "@/lib/earnings/workflow";
-import { flowsQuery, quantReadQuery, signalsQuery, statesQuery } from "@/lib/technicals/data";
-import { peersQuery } from "@/lib/technicals/cross";
+import { coverageOf } from "@/lib/coverage";
+import type { Bar, CompanyDataset, Row } from "@/lib/financials/types";
+import type { ReadPeriod } from "@/lib/financials/extend";
+import { assessCurrency } from "@/lib/financials/currency";
+import { ciksOf, fetchFiledStatements, readSentence, unreadSentence } from "@/components/financials/currency";
+import { earningsReleasesOf, mergeHistory, universeRank, type SymbolHistory } from "@/components/technicals/use-technicals";
+import { barsFromPriceRows, type AnalysisInput, type Technicals } from "@/lib/technicals/analysis";
+import { runAnalysis } from "@/lib/technicals/client";
+import { EVIDENCE, REASON_TEXT, type EvidenceCell, type Horizon, type Reason } from "@/lib/technicals/evidence";
+import type { BenchSeries } from "@/lib/technicals/measures";
+import { pooledFamily, POOLED_REASON_TEXT, type PooledRow } from "@/lib/technicals/pooled";
+import { fmtNum, fmtPct } from "@/lib/technicals/read";
+import { nameList, verdictSummary } from "@/lib/technicals/verdict";
+import { flowsQuery, histQuery, quantReadQuery, signalsQuery, statesQuery } from "@/lib/technicals/data";
+import { crossQuery, peersQuery } from "@/lib/technicals/cross";
 import { situationQuery } from "@/lib/situations/data";
 import { briefQuery } from "@/lib/insights/brief";
 import { storeIndexQuery } from "@/lib/ir/store";
@@ -343,10 +356,118 @@ export async function getEarningsSeason(qc: QueryClient, args: Record<string, un
 
 /* ---------------------------------------------------------------- market profile */
 
+/* ---------------------------------------------------------------- technicals (the page's analysis) */
+
+/** The Technicals page's input for one symbol, assembled from the same queries as useTechnicals. */
+async function technicalsInput(qc: QueryClient, sym: string): Promise<{ input: AnalysisInput; key: unknown[]; source: SymbolHistory["source"] } | null> {
+  const covered = coverageOf(sym);
+  const marketSym = sym === "SPY" ? null : "SPY";
+  const sectorSym = covered?.sectorEtf && covered.sectorEtf !== sym ? covered.sectorEtf : null;
+  const [stored, prices, market, sector, company, pooled, cross] = await Promise.all([
+    safe(qc.fetchQuery(histQuery(sym))),
+    safe(qc.fetchQuery(pricesQuery(sym, "10y", "1d"))),
+    marketSym ? safe(qc.fetchQuery(pricesQuery(marketSym, "10y", "1d"))) : null,
+    sectorSym ? safe(qc.fetchQuery(pricesQuery(sectorSym, "10y", "1d"))) : null,
+    covered ? safe(qc.fetchQuery(companyQuery(sym))) : null,
+    safe(qc.fetchQuery(signalsQuery)),
+    covered ? safe(qc.fetchQuery(crossQuery)) : null,
+  ]);
+  const history = mergeHistory(stored, prices?.bars);
+  if (!history) return null;
+  const benchOf = (s: string, kind: BenchSeries["kind"], rows: Bar[] | undefined): BenchSeries | null => {
+    if (!rows?.length) return null;
+    const B = barsFromPriceRows(rows);
+    return { sym: s, kind, d: B.d, tr: B.tr };
+  };
+  const bench = [marketSym && benchOf(marketSym, "market", market?.bars), sectorSym && benchOf(sectorSym, "sector", sector?.bars)].filter((x): x is BenchSeries => !!x);
+  const releases = earningsReleasesOf(company);
+  const universe = universeRank(cross, sym);
+  const input: AnalysisInput = { sym, bars: history.bars, bench, releases, pooled: pooled?.signals ?? null, pooledBase: pooled?.base ?? null, universe };
+  // The page's query key (use-technicals.ts), so an analysis the page has computed is reused and not run again.
+  const key = ["technicals", sym, history.last, history.bars.c.length, bench.map((x) => `${x.sym}:${x.d[x.d.length - 1]}`).join(","), releases.length, pooled?.as_of ?? "", universe?.asOf ?? ""];
+  return { input, key, source: history.source };
+}
+
+/** The analysis the Technicals page shows for the symbol (the same entry, inputs and cache), or null without enough history. */
+export async function technicalsFor(qc: QueryClient, sym: string): Promise<{ T: Technicals | null; input: AnalysisInput | null; source?: SymbolHistory["source"] }> {
+  const x = await technicalsInput(qc, sym);
+  if (!x) return { T: null, input: null };
+  const T = await qc.fetchQuery({ queryKey: x.key, queryFn: () => runAnalysis(x.input), staleTime: Infinity, gcTime: 10 * 60_000, retry: 0 });
+  return { T, input: x.input, source: x.source };
+}
+
+// evidence.ts applies the checks in this order and records the first one a cell fails.
+const CHECKS: [Reason, string][] = [
+  ["small", "cases"],
+  ["base", "base rate"],
+  ["interval", "interval"],
+  ["cost", "cost"],
+  ["unstable", "halves"],
+  ["pooled", "across companies"],
+];
+const CHECKS_TEXT = `checks in order, the first failure stops: cases (at least ${EVIDENCE.minIndependent} non-overlapping), base rate (q at most ${EVIDENCE.fdr}), interval (bootstrap interval excludes zero), cost (above ${EVIDENCE.cost * 100}% against days without the condition), halves (same sign in both halves of the history), across companies (not contradicted where a record exists)`;
+const p2 = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "–" : fmtPct(v, 2));
+
+function checksText(c: EvidenceCell): string {
+  const i = c.reason === "ok" ? CHECKS.length : CHECKS.findIndex(([r]) => r === c.reason);
+  const passed = CHECKS.slice(0, Math.max(0, i)).map(([, t]) => t);
+  return [passed.length ? `passed ${passed.join(", ")}` : "", i >= 0 && i < CHECKS.length ? `failed ${CHECKS[i][1]}` : ""].filter(Boolean).join("; ");
+}
+
+function cellText(h: Horizon, c: EvidenceCell): string {
+  const t = c.test;
+  return (
+    `    ${h} days: ${t.nEff} independent cases (${t.n} days held), log excess ${p2(t.excess)}${t.ci ? ` (${p2(t.ci[0])} to ${p2(t.ci[1])})` : ""}, ` +
+    `t ${fmtNum(t.t, 2)}, q ${c.q == null ? "not tested" : fmtNum(c.q, 3)}${c.pooled ? `, across companies ${c.pooled.n} events ${p2(c.pooled.excess)}` : ""}: ` +
+    `${c.verdict === "reliable" ? "RELIABLE" : "no clear difference"}; ${checksText(c)}`
+  );
+}
+
+function pooledText(p: PooledRow): string {
+  return `    ${p.name}, ${p.h} days: ${p.n.toLocaleString("en-US")} events in ${p.months} months from ${p.symbols} companies, average ${p2(p.mean)} against ${p2(p.base)} on all days, excess ${p2(p.excess)}${p.ci ? ` (${p2(p.ci[0])} to ${p2(p.ci[1])})` : ""}, q ${fmtNum(p.q, 3)}: ${p.verdict === "reliable" ? "RELIABLE across companies" : POOLED_REASON_TEXT[p.reason]}`;
+}
+
+/** The Technicals page's evidence for one symbol, as text: the read, the verdict and its basis, the tested conditions, what the test can detect, the cross-company record and the rules (head), then each condition in force at each horizon (detail, last so a clip cuts it first). */
+export function technicalsText(T: Technicals, source?: SymbolHistory["source"]): { head: string[]; detail: string[] } {
+  const E = T.evidence;
+  const V = verdictSummary(E, T.pooled);
+  const out: string[] = [];
+  const detail: string[] = [];
+  out.push(
+    `TECHNICALS, as /app/markets?symbol=${T.sym} computes them: ${T.bars.toLocaleString("en-US")} daily sessions ${T.first} to ${T.asOf}${source === "prices" ? " (ten-year price file; the stored long history was not available)" : ""}. Figures describe the record; the page gives no forecast and no advice.`,
+  );
+  out.push("READ (the page's sentences, each with the figures it prints):");
+  for (const r of T.read) {
+    out.push(`  ${r.label}: ${r.text}${r.figures.length ? ` [${r.figures.map((f) => `${f.label} ${f.value}`).join("; ")}]` : ""}`);
+    if (r.aside) out.push(`    ${r.aside}`);
+  }
+  const verdict = T.read.find((r) => r.key === "verdict");
+  const outcome = { own: "reliable on the stock's own history", pooled: "not detectable on the stock alone, reliable across companies", neither: "no statistically reliable signal" }[V.outcome];
+  out.push(
+    `VERDICT BASIS: ${outcome}. ${E.tested} tests in the false-discovery family; in force today and tested: ${nameList(V.tested.map((r) => r.name)) || "none"}; in force but too few cases to test: ${nameList(V.untested.map((r) => r.name)) || "none"}; cross-company record ${V.pooledAvailable ? `checked for ${nameList(V.pooledChecked.map((r) => r.name)) || "no condition in force (those exist for chart events only)"}` : "not available right now"}.`,
+  );
+  const det = EVIDENCE.horizons.map((h) => `${h} days ${E.detectable[h] == null ? "–" : `${(E.detectable[h]! * 100).toFixed(2)}%`}`).join(", ");
+  out.push(`SMALLEST EFFECT THE TEST COULD DETECT (log excess with an even chance of passing): ${det}. "No clear difference" is not evidence that there is no effect.`);
+  const active = E.rows.filter((r) => r.active);
+  const pooledActive = (T.pooled ?? []).filter((p) => active.some((r) => r.key === p.type));
+  if (pooledActive.length) out.push("ACROSS COMPANIES, chart events in force (tech/signals.json, one false-discovery adjustment over every event and horizon):", ...pooledActive.map(pooledText));
+  if (verdict) out.push(`RULES: ${verdict.table.formula}`);
+  detail.push(`EVIDENCE, conditions in force today (the page's Evidence section; log excess with its 95% bootstrap interval; ${CHECKS_TEXT}):`);
+  for (const r of active) {
+    const cells = EVIDENCE.horizons.filter((h) => r.cells[h]);
+    detail.push(`  ${r.name} (${r.kind}${r.atDate ? `, ${r.kind === "event" ? "fired" : "since"} ${r.atDate}` : ""}): ${r.text}${cells.length ? "" : ` Too few cases to test (${EVIDENCE.horizons.map((h) => `${r.cases[h]?.length ?? 0} at ${h} days`).join(", ")}).`}`);
+    for (const h of cells) detail.push(cellText(h, r.cells[h]!));
+  }
+  const other = E.reliable.filter((x) => !active.some((r) => r.key === x.key));
+  if (other.length)
+    detail.push(`  Reliable on ${T.sym}'s history but not in force today: ${other.map((x) => `${E.rows.find((r) => r.key === x.key)?.name ?? x.key} at ${x.h} days`).join(", ")}.`);
+  return { head: out, detail };
+}
+
 export async function getQuantProfile(qc: QueryClient, args: Record<string, unknown>): Promise<IntelRun> {
   const t = String(args.ticker).toUpperCase();
-  const [read, peers, flows, states, signals, sit, brief] = await Promise.all([
-    safe(qc.fetchQuery(quantReadQuery(t))),
+  const [tech, peers, flows, states, signals, sit, brief] = await Promise.all([
+    safe(technicalsFor(qc, t)),
     safe(qc.fetchQuery(peersQuery(t))),
     safe(qc.fetchQuery(flowsQuery(t))),
     safe(qc.fetchQuery(statesQuery)),
@@ -354,22 +475,19 @@ export async function getQuantProfile(qc: QueryClient, args: Record<string, unkn
     safe(qc.fetchQuery(situationQuery(t))),
     safe(qc.fetchQuery(briefQuery(t))),
   ]);
-  const out: string[] = [];
-  if (read) {
-    out.push(`QUANT READ as of ${read.as_of}: ${read.sentences.map((s: { text: string }) => s.text).join(" ")}`);
-    out.push(`  stats: ${Object.entries(read.facts ?? {}).map(([k, v]) => `${k}=${Array.isArray(v) ? v[0] : v}`).join(", ")}`);
-  }
+  const T = tech?.T ?? null;
+  const text = T ? technicalsText(T, tech?.source) : { head: [], detail: [] };
+  const out: string[] = [...text.head];
+  // The cross-company verdicts: the page's, or the same function on the file when there is no price history here.
+  const pooled = T?.pooled ?? (signals ? pooledFamily(signals) : null);
   const st = (states as unknown as { rows?: ({ t: string; events?: [string, string][] } & Record<string, unknown>)[] } | null)?.rows?.find((r) => r.t === t);
   if (st) {
     const { events, ...rest } = st;
-    out.push(`TECHNICAL STATE (vs50/vs200 = distance from the moving average; from_hi/from_lo = distance from the 52-week high/low; r21/r63/r252 = returns; vol21_pct = percentile of 21-day volatility in its own history): ${JSON.stringify(asPercents(compact(rest)))}`);
-    // Each recent event with its historical forward return across all tracked stocks since 2008 (base rate, not a forecast).
-    const base = (signals as unknown as { signals?: Record<string, Record<string, { n?: number; mean?: number; hit?: number; excess?: number }>> } | null)?.signals ?? {};
+    out.push(`TECHNICAL STATE (pipeline scan; vs50/vs200 = distance from the moving average; from_hi/from_lo = distance from the 52-week high/low; r21/r63/r252 = returns; vol21_pct = percentile of 21-day volatility in its own history): ${JSON.stringify(asPercents(compact(rest)))}`);
+    // Each recent event with its tested cross-company record (pooled.ts), not the untested average.
     for (const [name, date] of events ?? []) {
-      const b = base[name];
-      const hz = b?.["20"] ? "20" : "5";
-      const h = b?.[hz];
-      out.push(`  event ${name} on ${date}${h ? `: historically ${h.n} events, ${hz}-day mean return ${((h.mean ?? 0) * 100).toFixed(2)}%, hit rate ${((h.hit ?? 0) * 100).toFixed(0)}%, excess vs all stocks ${((h.excess ?? 0) * 100).toFixed(2)}%` : ""}`);
+      const p = pooled?.find((r) => r.type === name && r.h === 20) ?? pooled?.find((r) => r.type === name);
+      out.push(`  event ${name} on ${date}${p ? `: across companies ${p.h} days, excess ${p2(p.excess)}, q ${fmtNum(p.q, 3)}, ${p.verdict === "reliable" ? "reliable across companies" : POOLED_REASON_TEXT[p.reason].toLowerCase()}` : ": no cross-company record"}`);
     }
   }
   if (peers) {
@@ -393,8 +511,70 @@ export async function getQuantProfile(qc: QueryClient, args: Record<string, unkn
   }
   if (sit) out.push(`SPECIAL SITUATION COMPONENTS (as of ${sit.as_of}): ${JSON.stringify(asPercents(compact(sit.components, 4, 240)))}`);
   if (brief?.sentences?.length) out.push(`30-DAY BRIEF (${brief.label}): ${brief.sentences.map((s: { text: string }) => s.text).join(" ")}`);
+  out.push(...text.detail);
   if (!out.length) return { output: `No computed market profile for ${t}. Use get_price_history.`, summary: "none" };
-  return { output: clip(out.join("\n")), summary: `market profile for ${t}` };
+  return { output: clip(out.join("\n")), summary: T ? `technicals for ${t} as of ${T.asOf}` : `market profile for ${t}` };
+}
+
+/* ---------------------------------------------------------------- financial statements */
+
+export function fmtVal(v: number, unit: Row["unit"]) {
+  if (unit === "pct") return `${(v * 100).toFixed(1)}%`;
+  if (unit === "ratio") return v.toFixed(2);
+  if (unit === "usdPerShare") return `$${v.toFixed(2)}`;
+  if (unit === "shares") return `${(v / 1e6).toFixed(1)}M sh`;
+  return `$${(v / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M`;
+}
+
+export interface FinancialsRun extends IntelRun {
+  refs: { ticker: string; accn: string; label: string }[];
+}
+
+/**
+ * A statement table as the Financials tab shows it: the served statements plus the periods the page reads
+ * at view time from newer 10-Q/10-K filings (the same plan, budget and query cache as useFiledStatements),
+ * each such column marked with the filing it was read from. The currency line says what was read and what
+ * could not be.
+ */
+export async function getFinancials(qc: QueryClient, served: CompanyDataset, args: Record<string, unknown>): Promise<FinancialsRun> {
+  const filed = await fetchFiledStatements(qc, served, served.profile.ticker);
+  const d = filed.dataset ?? served;
+  const freq = args.frequency === "quarterly" ? "quarterly" : "annual";
+  const st = d.statements[freq][(args.statement as "income") ?? "income"];
+  const n = Math.max(1, Math.min(16, Number(args.periods) || 8));
+  const start = Math.max(0, st.periods.length - n);
+  const periods = st.periods.slice(start) as ReadPeriod[];
+  const metrics = (args.metrics as string[] | null)?.map((m) => m.toLowerCase());
+  const rows = st.rows.filter((r) => !metrics || metrics.includes(r.key.toLowerCase()) || metrics.includes(r.label.toLowerCase()));
+  const accns = new Set<string>();
+  const col = (p: ReadPeriod) => `${p.label} [${p.start ?? ""}→${p.end}]${p.readFrom ? ` (read at view time from the ${p.readFrom.form} ${p.readFrom.accn})` : ""}`;
+  const header = `${d.profile.ticker} ${args.statement} (${freq}). Columns: ${periods.map(col).join(", ")}`;
+  const body = rows.map((r) => {
+    const vals = r.cells.slice(start).map((c) => {
+      if (!c) return "—";
+      if (c.src) accns.add(c.src.accn);
+      // A calculated value cites the filings of its parts (a derived fourth quarter: the 10-K and the Q3 10-Q).
+      for (const part of c.derived?.parts ?? []) if (part.accn) accns.add(part.accn);
+      return `${fmtVal(c.v, r.unit)}${c.derived ? "*" : ""}`;
+    });
+    return `${r.label} [${r.key}]: ${vals.join(" | ")}`;
+  });
+  const readAccns = new Set(filed.extension?.added.map((a) => a.accn) ?? []);
+  const filings = d.filings.filter((f) => accns.has(f.accn)).map((f) => `${f.accn} = ${f.form} for period ${f.report} filed ${f.filed}${readAccns.has(f.accn) ? " (read at view time)" : ""}`);
+  // How current these statements are, in the words of the Statement currency line on the Financials tab.
+  const c = filed.current ?? assessCurrency(d, { ciks: ciksOf(d.profile.ticker, d) });
+  const through = `${c.text.split(". ")[0]}.`;
+  const rest = c.text.slice(through.length).trim();
+  const read = filed.extension ? readSentence(d, filed.extension) : "";
+  const unread = filed.unread?.length ? unreadSentence(filed.unread) : "";
+  const failedLine = filed.failed && !filed.extension && !unread ? "The newer filing could not be read here, so the tables show the scheduled build only." : "";
+  const currency = [through, read, c.status === "behind" || !read ? rest : "", unread, failedLine].filter(Boolean).join(" ");
+  const out = `${header}\n${body.join("\n")}\n(* = calculated from other reported values)\nStatement currency: ${currency}\nSource filings (cite as filing:${d.profile.ticker}:ACCESSION):\n${filings.slice(0, 20).join("\n")}`;
+  return {
+    output: clip(out),
+    summary: `${d.profile.ticker} ${args.statement}, ${periods.length} ${freq} periods${readAccns.size ? `, ${periods.filter((p) => p.readFrom).length} read at view time` : ""}`,
+    refs: d.filings.filter((f) => accns.has(f.accn)).slice(0, 4).map((f) => ({ ticker: d.profile.ticker, accn: f.accn, label: `${f.form} ${f.report?.slice(0, 7)}` })),
+  };
 }
 
 /* ---------------------------------------------------------------- parsed tables */

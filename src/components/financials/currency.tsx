@@ -2,17 +2,17 @@
 // newer report or release exists, plus (on the Financials tab) the read-time extension that adds a
 // newer 10-Q/10-K straight from the filing's inline XBRL.
 import { useMemo } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { CircleCheck, CircleDot, ExternalLink } from "lucide-react";
 import { getFilingDocument } from "@/lib/sec.functions";
 import { companyCiks, coverageOf } from "@/lib/coverage";
 import { assessCurrency, dayLabel, filingCik, filingUrl, missingReports, type Currency } from "@/lib/financials/currency";
 import type { Extension, FiledReport } from "@/lib/financials/extend";
 import { extendInBrowser } from "@/lib/financials/extend-browser";
-import type { CompanyDataset, Filing } from "@/lib/financials/types";
+import type { CompanyDataset, Filing, Period } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 
-const ciksOf = (ticker: string, d: CompanyDataset) => {
+export const ciksOf = (ticker: string, d: CompanyDataset) => {
   const c = coverageOf(ticker);
   return c ? companyCiks(c) : [String(Number(d.profile.cik))];
 };
@@ -96,6 +96,90 @@ export interface FiledStatements {
   bytes?: number;
 }
 
+/** What the view-time read produced: the extension (when a filing added a period), what was not read, and the download size. */
+export interface FiledRead {
+  extension: Extension | undefined;
+  unread: UnreadFiling[];
+  bytes: number;
+}
+
+/** Query key of the view-time read; the Financials tab, the Overview and the assistant share it, so a filing is read once. */
+export const filedStatementsKey = (ticker: string, d: CompanyDataset | undefined, plan: Filing[]) => ["filed-statements", ticker, d?.generatedAt, plan.map((f) => f.accn).join(",")];
+
+/**
+ * Reads the planned filings one after another, newest first, within READ_BUDGET; a document that fails
+ * (over the server's size limit, SEC refused) is listed and the others still count. Each document goes
+ * through the query cache (key "filing-doc"), so one already read elsewhere is not downloaded again.
+ */
+export async function readFiledReports(qc: QueryClient, d: CompanyDataset, ciks: string[], plan: Filing[]): Promise<FiledRead> {
+  const reads: { filing: FiledReport; html: string }[] = [];
+  const unread: UnreadFiling[] = [];
+  const skipped = new Set<string>();
+  let spent = 0;
+  let largest = 0;
+  for (const { filing: f, supportOf } of readOrder(plan, d)) {
+    const note = (reason: UnreadFiling["reason"]) => unread.push({ accn: f.accn, form: f.form, filed: f.filed, ...(f.report ? { report: f.report } : {}), reason });
+    if (supportOf && skipped.has(supportOf)) continue;
+    if (spent > 0 && spent + largest > READ_BUDGET) {
+      skipped.add(f.accn);
+      if (!supportOf) note("budget");
+      continue;
+    }
+    const cik = filingCik(f.accn, d.profile.cik, ciks);
+    try {
+      const doc = await qc.fetchQuery({
+        queryKey: ["filing-doc", cik, f.accn, f.doc],
+        queryFn: () => getFilingDocument({ data: { cik, accn: f.accn, doc: f.doc } }),
+        staleTime: Infinity,
+        gcTime: 10 * 60_000,
+        retry: 1,
+      });
+      const html = (doc as { html: string }).html;
+      spent += html.length;
+      largest = Math.max(largest, html.length);
+      reads.push({ filing: { accn: f.accn, form: f.form, filed: f.filed, report: f.report, doc: f.doc }, html });
+    } catch {
+      skipped.add(f.accn);
+      if (!supportOf) note("failed");
+    }
+  }
+  const extension = reads.length ? await extendInBrowser(d, reads) : undefined;
+  return { extension, unread: unread.sort((a, b) => a.filed.localeCompare(b.filed)), bytes: spent };
+}
+
+/** The hook's result from the read's state: the extended dataset once a filing added a period, the served one otherwise. */
+function settle(d: CompanyDataset | undefined, served: Currency | undefined, ciks: string[], plan: Filing[], q: { data: FiledRead | undefined; error: boolean; fetched: boolean }): FiledStatements {
+  const extended = q.data?.extension && q.data.extension.added.length ? q.data.extension : undefined;
+  const unread = q.data?.unread ?? [];
+  return {
+    dataset: extended?.dataset ?? d,
+    served,
+    current: extended ? assessCurrency(extended.dataset, { ciks }) : served,
+    extension: extended,
+    reading: plan.length > 0 && !q.fetched,
+    failed: q.error || (!extended && unread.some((u) => u.reason === "failed")),
+    unread,
+    bytes: q.data?.bytes ?? 0,
+  };
+}
+
+/**
+ * The same read outside React (the assistant's get_financials): the same plan, budget and query keys as
+ * useFiledStatements, so a filing the page has read is not read again and the answer matches the page.
+ */
+export async function fetchFiledStatements(qc: QueryClient, d: CompanyDataset, ticker: string): Promise<FiledStatements & { plan: Filing[] }> {
+  const ciks = ciksOf(ticker, d);
+  const served = assessCurrency(d, { ciks });
+  const plan = served.status === "behind" ? readPlan(d, served) : [];
+  if (!plan.length) return { ...settle(d, served, ciks, plan, { data: undefined, error: false, fetched: true }), plan };
+  try {
+    const data = await qc.fetchQuery({ queryKey: filedStatementsKey(ticker, d, plan), queryFn: () => readFiledReports(qc, d, ciks, plan), staleTime: Infinity, retry: false });
+    return { ...settle(d, served, ciks, plan, { data, error: false, fetched: true }), plan };
+  } catch {
+    return { ...settle(d, served, ciks, plan, { data: undefined, error: true, fetched: true }), plan };
+  }
+}
+
 /** The company's statements with any newer 10-Q/10-K read from SEC at view time. */
 export function useFiledStatements(d: CompanyDataset | undefined, ticker: string, opts: { enabled?: boolean } = {}): FiledStatements {
   const enabled = opts.enabled ?? true;
@@ -103,83 +187,43 @@ export function useFiledStatements(d: CompanyDataset | undefined, ticker: string
   const served = useMemo(() => (d ? assessCurrency(d, { ciks }) : undefined), [d, ciks]);
   const plan = useMemo(() => (enabled && d && served && served.status === "behind" ? readPlan(d, served) : []), [enabled, d, served]);
   const qc = useQueryClient();
-  // One query reads the filings one after another, newest first, within READ_BUDGET; a document
-  // that fails (over the server's size limit, SEC refused) is listed and the others still count.
   const ext = useQuery({
-    queryKey: ["filed-statements", ticker, d?.generatedAt, plan.map((f) => f.accn).join(",")],
+    queryKey: filedStatementsKey(ticker, d, plan),
     enabled: plan.length > 0,
-    queryFn: async () => {
-      const reads: { filing: FiledReport; html: string }[] = [];
-      const unread: UnreadFiling[] = [];
-      const skipped = new Set<string>();
-      let spent = 0;
-      let largest = 0;
-      for (const { filing: f, supportOf } of readOrder(plan, d!)) {
-        const note = (reason: UnreadFiling["reason"]) => unread.push({ accn: f.accn, form: f.form, filed: f.filed, ...(f.report ? { report: f.report } : {}), reason });
-        if (supportOf && skipped.has(supportOf)) continue;
-        if (spent > 0 && spent + largest > READ_BUDGET) {
-          skipped.add(f.accn);
-          if (!supportOf) note("budget");
-          continue;
-        }
-        const cik = filingCik(f.accn, d!.profile.cik, ciks);
-        try {
-          const doc = await qc.fetchQuery({
-            queryKey: ["filing-doc", cik, f.accn, f.doc],
-            queryFn: () => getFilingDocument({ data: { cik, accn: f.accn, doc: f.doc } }),
-            staleTime: Infinity,
-            gcTime: 10 * 60_000,
-            retry: 1,
-          });
-          const html = (doc as { html: string }).html;
-          spent += html.length;
-          largest = Math.max(largest, html.length);
-          reads.push({ filing: { accn: f.accn, form: f.form, filed: f.filed, report: f.report, doc: f.doc }, html });
-        } catch {
-          skipped.add(f.accn);
-          if (!supportOf) note("failed");
-        }
-      }
-      const extension = reads.length ? await extendInBrowser(d!, reads) : undefined;
-      return { extension, unread: unread.sort((a, b) => a.filed.localeCompare(b.filed)), bytes: spent };
-    },
+    queryFn: () => readFiledReports(qc, d!, ciks, plan),
     staleTime: Infinity,
     retry: false,
   });
-  const extended = ext.data?.extension && ext.data.extension.added.length ? ext.data.extension : undefined;
-  const dataset = extended?.dataset ?? d;
-  const current = useMemo(() => (extended ? assessCurrency(extended.dataset, { ciks }) : served), [extended, served, ciks]);
-  const unread = ext.data?.unread ?? [];
-  return {
-    dataset,
-    served,
-    current,
-    extension: extended,
-    reading: plan.length > 0 && !ext.isFetched,
-    failed: ext.isError || (!extended && unread.some((u) => u.reason === "failed")),
-    unread,
-    bytes: ext.data?.bytes ?? 0,
-  };
+  return useMemo(
+    () => settle(d, served, ciks, plan, { data: ext.data, error: ext.isError, fetched: ext.isFetched }),
+    [d, served, ciks, plan, ext.data, ext.isError, ext.isFetched],
+  );
 }
 
 const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
 
+/** A column in prose, one style for years and quarters: "FY2026", "Q4 FY2026" (the column heads say "FY2026" and "Q4 FY26"). */
+function columnName(periods: Period[], key: string): string {
+  const p = periods.find((x) => x.key === key);
+  if (!p || !Number.isFinite(p.fy)) return p?.label ?? key;
+  return p.fq ? `Q${p.fq} FY${p.fy}` : `FY${p.fy}`;
+}
+
 /** Sentence for the periods read at view time. */
 export function readSentence(d: CompanyDataset, ext: Extension): string {
-  const labels = ext.added.flatMap((a) => {
-    const q = a.quarterly.map((k) => d.statements.quarterly.income.periods.find((p) => p.key === k)?.label ?? k);
-    const y = a.annual.map((k) => d.statements.annual.income.periods.find((p) => p.key === k)?.label ?? k);
-    return [...y, ...q];
+  const quarter = (k: string) => columnName(d.statements.quarterly.income.periods, k);
+  const year = (k: string) => columnName(d.statements.annual.income.periods, k);
+  const labels = ext.added.flatMap((a) => [...a.annual.map(year), ...a.quarterly.map(quarter)]);
+  // Each form with its own filing dates: "the 10-Q filed on 31 Jul 2026 and the 10-K filed on 3 Nov 2026".
+  const forms = [...new Set(ext.added.map((a) => a.form))].map((form) => {
+    const of = ext.added.filter((a) => a.form === form);
+    return `the ${form}${of.length > 1 ? "s" : ""} filed on ${list(of.map((a) => dayLabel(a.filed)))}`;
   });
-  const forms = [...new Set(ext.added.map((a) => a.form))];
-  const dates = ext.added.map((a) => dayLabel(a.filed));
   const one = labels.length === 1;
   // A 10-K's fourth quarter is calculated: the year less the nine months its Q3 10-Q reported.
-  const q4 = ext.added
-    .filter((a) => a.form.startsWith("10-K"))
-    .flatMap((a) => a.quarterly.map((k) => d.statements.quarterly.income.periods.find((p) => p.key === k)?.label ?? k));
+  const q4 = ext.added.filter((a) => a.form.startsWith("10-K")).flatMap((a) => a.quarterly.map(quarter));
   const derived = q4.length ? ` ${list(q4)} ${q4.length === 1 ? "is" : "are"} derived: the year less the first nine months.` : "";
-  return `${one ? "The" : ""}${one ? ` ${labels[0]} column is` : `${labels.length} columns (${list(labels)}) are`} read at view time from the ${list(forms)}${ext.added.length > 1 ? "s" : ""} filed on ${list(dates)}; the scheduled rebuild has not added ${one ? "it" : "them"} yet.${derived}`;
+  return `${one ? "The" : ""}${one ? ` ${labels[0]} column is` : `${labels.length} columns (${list(labels)}) are`} read at view time from ${list(forms)}; the scheduled rebuild has not added ${one ? "it" : "them"} yet.${derived}`;
 }
 
 /** Sentence for missing filings this view did not read. */
