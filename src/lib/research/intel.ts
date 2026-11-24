@@ -20,6 +20,7 @@ import { EVIDENCE, REASON_TEXT, type EvidenceCell, type Horizon, type Reason } f
 import type { BenchSeries } from "@/lib/technicals/measures";
 import { pooledFamily, POOLED_REASON_TEXT, type PooledRow } from "@/lib/technicals/pooled";
 import { fmtNum, fmtPct } from "@/lib/technicals/read";
+import { cellLabel, fmtQ } from "@/lib/technicals/labels";
 import { nameList, verdictSummary } from "@/lib/technicals/verdict";
 import { flowsQuery, histQuery, signalsQuery, statesQuery } from "@/lib/technicals/data";
 import { crossQuery, peersQuery } from "@/lib/technicals/cross";
@@ -418,13 +419,13 @@ function cellText(h: Horizon, c: EvidenceCell): string {
   const t = c.test;
   return (
     `    ${h} days: ${t.nEff} independent cases (${t.n} days held), log excess ${p2(t.excess)}${t.ci ? ` (${p2(t.ci[0])} to ${p2(t.ci[1])})` : ""}, ` +
-    `t ${fmtNum(t.t, 2)}, q ${c.q == null ? "not tested" : fmtNum(c.q, 3)}${c.pooled ? `, across companies ${c.pooled.n} events ${p2(c.pooled.excess)}` : ""}: ` +
-    `${c.verdict === "reliable" ? "RELIABLE" : "no clear difference"}; ${checksText(c)}`
+    `t ${fmtNum(t.t, 2)}, q ${c.q == null ? "not tested" : fmtQ(c.q)}${c.pooled ? `, across companies ${c.pooled.n} events ${p2(c.pooled.excess)} (simple return)` : ""}: ` +
+    `${cellLabel(c).text}; ${checksText(c)}`
   );
 }
 
 function pooledText(p: PooledRow): string {
-  return `    ${p.name}, ${p.h} days: ${p.n.toLocaleString("en-US")} events in ${p.months} months from ${p.symbols} companies, average ${p2(p.mean)} against ${p2(p.base)} on all days, excess ${p2(p.excess)}${p.ci ? ` (${p2(p.ci[0])} to ${p2(p.ci[1])})` : ""}, q ${fmtNum(p.q, 3)}: ${p.verdict === "reliable" ? "RELIABLE across companies" : POOLED_REASON_TEXT[p.reason]}`;
+  return `    ${p.name}, ${p.h} days: ${p.n.toLocaleString("en-US")} events in ${p.months} months from ${p.symbols} companies, average ${p2(p.mean)} against ${p2(p.base)} on all days, excess ${p2(p.excess)}${p.ci ? ` (${p2(p.ci[0])} to ${p2(p.ci[1])})` : ""}, q ${fmtQ(p.q)}: ${p.verdict === "reliable" ? "RELIABLE across companies" : POOLED_REASON_TEXT[p.reason]}`;
 }
 
 /** The Technicals page's evidence for one symbol, as text: the read, the verdict and its basis, the tested conditions, what the test can detect, the cross-company record and the rules (head), then each condition in force at each horizon (detail, last so a clip cuts it first). */
@@ -447,7 +448,7 @@ export function technicalsText(T: Technicals, source?: SymbolHistory["source"]):
     `VERDICT BASIS: ${outcome}. ${E.tested} tests in the false-discovery family; in force today and tested: ${nameList(V.tested.map((r) => r.name)) || "none"}; in force but too few cases to test: ${nameList(V.untested.map((r) => r.name)) || "none"}; cross-company record ${V.pooledAvailable ? `checked for ${nameList(V.pooledChecked.map((r) => r.name)) || "no condition in force (those exist for chart events only)"}` : "not available right now"}.`,
   );
   const det = EVIDENCE.horizons.map((h) => `${h} days ${E.detectable[h] == null ? "–" : `${(E.detectable[h]! * 100).toFixed(2)}%`}`).join(", ");
-  out.push(`SMALLEST EFFECT THE TEST COULD DETECT (log excess with an even chance of passing): ${det}. "No clear difference" is not evidence that there is no effect.`);
+  out.push(`SMALLEST EFFECT THE TEST COULD DETECT (difference in average log return from days without the condition with an even chance of passing; – where fewer than ${EVIDENCE.minDetect} conditions are tested at that horizon): ${det}. "No clear difference" is not evidence that there is no effect.`);
   const active = E.rows.filter((r) => r.active);
   const pooledActive = (T.pooled ?? []).filter((p) => active.some((r) => r.key === p.type));
   if (pooledActive.length) out.push("ACROSS COMPANIES, chart events in force (tech/signals.json, one false-discovery adjustment over every event and horizon):", ...pooledActive.map(pooledText));

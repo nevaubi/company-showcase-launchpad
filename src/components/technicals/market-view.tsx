@@ -11,6 +11,7 @@ import { POOLED_REASON_TEXT, pooledFamily } from "@/lib/technicals/pooled";
 import TA from "@/lib/technicals/ta";
 import { cn } from "@/lib/utils";
 import { CrossScatter } from "./cross-section";
+import { fmtQ } from "@/lib/technicals/labels";
 import { f2, Note, pc, pp, signTone, T as S, TableWrap, Tag, TechPanel, type NavItem } from "./ui";
 
 export const MARKET_NAV: NavItem[] = [
@@ -258,7 +259,7 @@ function PooledPanel({
                         </td>
                         <td className={cn(S.num, "font-medium", ok && signTone(r.excess))}>{pp(r.excess, 2)}</td>
                         <td className={cn(S.num, S.wide)}>{r.ci ? `${pp(r.ci[0])} to ${pp(r.ci[1])}` : "–"}</td>
-                        <td className={cn(S.num, S.wide)}>{r.q == null ? "–" : r.q < 0.001 ? "<0.001" : f2(r.q, 3)}</td>
+                        <td className={cn(S.num, S.wide)}>{r.q != null && r.q < 0.001 ? "<0.001" : fmtQ(r.q)}</td>
                         <td className={S.num}>{list.length ? list.length.toLocaleString("en-US") : "–"}</td>
                         <td className={S.td}>
                           {ok ? (

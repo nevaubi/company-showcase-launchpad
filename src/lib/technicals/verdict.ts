@@ -72,9 +72,10 @@ export function sampleLength(bars: number): string {
 }
 
 /**
- * What the bar can see, in plain words: "With 9 years of AAPL's history, only an average effect of about 1.7%
- * over 5 days, 4.2% over 20 days or 6.3% over 60 days would show up as reliable; smaller effects show as no
- * clear difference." null when nothing is tested.
+ * What the bar can see, in plain words: "With 9 years of AAPL's history, only a condition after which the
+ * average return differs from days without it by about 2.0% over 5 days, 5.1% over 20 days or 9.0% over 60
+ * days would have an even chance of showing up as reliable; smaller differences show as no clear difference."
+ * null when no horizon has enough tested cells.
  */
 export function detectableText(E: Evidence, sym: string): string | null {
   const parts = EVIDENCE.horizons
@@ -83,8 +84,8 @@ export function detectableText(E: Evidence, sym: string): string | null {
   if (!parts.length) return null;
   const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}` : parts[0];
   return (
-    `With ${sampleLength(E.sample.bars)} of ${sym}'s history, only an average effect of about ${list} ` +
-    `would have an even chance of showing up as reliable; smaller effects show as no clear difference.`
+    `With ${sampleLength(E.sample.bars)} of ${sym}'s history, only a condition after which the average return differs ` +
+    `from days without it by about ${list} would have an even chance of showing up as reliable; smaller differences show as no clear difference.`
   );
 }
 

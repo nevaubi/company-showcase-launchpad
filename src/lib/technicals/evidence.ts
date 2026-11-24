@@ -30,6 +30,8 @@ export const EVIDENCE = {
   minIndependent: 20,
   /** Below this only the count is shown */
   minReport: 8,
+  /** Tested cells a horizon needs before the page states what effect the test could detect there */
+  minDetect: 5,
   /** Benjamini-Hochberg false-discovery rate across everything tested for the stock */
   fdr: 0.05,
   /** Round-trip trading cost the mean excess has to clear */
@@ -243,13 +245,19 @@ export function evidence(B: Bars, opt: EvidenceOptions = {}): Evidence {
       cases,
     };
   });
+  // What the bar can see: the difference from days without the condition that a cell needs for an even chance
+  // of passing the false-discovery control, t(1 − fdr/(2m)) × SE of that difference (the Hodrick SE of the
+  // excess ÷ (1 − share of days flagged), the same contrast the cost hurdle uses), median over the horizon's
+  // cells. Against all days the bar shrinks toward zero for states that hold on most days, so a short history
+  // made of a few common states would print a smaller figure than a long one. With fewer than minDetect cells
+  // at a horizon no figure is stated rather than quoting one or two conditions.
   const detectable = {} as Record<Horizon, number | null>;
   for (const h of EVIDENCE.horizons) {
     const need = family
       .filter((d) => d.h === h)
-      .map((d) => tCritical(EVIDENCE.fdr / family.length, d.test.dof) * d.test.se)
+      .map((d) => (tCritical(EVIDENCE.fdr / family.length, d.test.dof) * d.test.se) / (1 - d.test.n / d.test.nAll))
       .filter(Number.isFinite);
-    detectable[h] = need.length ? median(need) : null;
+    detectable[h] = need.length >= EVIDENCE.minDetect ? median(need) : null;
   }
   const reliable: { key: string; h: Horizon }[] = [];
   for (const r of rows)

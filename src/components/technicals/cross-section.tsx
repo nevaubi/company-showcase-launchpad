@@ -67,6 +67,37 @@ export function CrossScatter({ symbol, onPick }: { symbol: string | null; onPick
   const px = (v: number) => m.l + ((clip(v, xd) - xd[0]) / (xd[1] - xd[0])) * (W - m.l - m.r);
   const py = (v: number) => H - m.b - ((clip(v, yd) - yd[0]) / (yd[1] - yd[0])) * (H - m.t - m.b);
   const fit = ols(xv, yv);
+  // Direct labels where there is room: each point's ticker to its right (left near the edge), skipped when it
+  // would overlap a label already placed, the selected symbol's own label first. Only up to 40 points.
+  const labels: { sym: string; x: number; y: number; end: boolean }[] = [];
+  if (W > 0 && pts.length <= 40) {
+    const boxes: [number, number, number, number][] = [];
+    const box = (x: number, y: number, w: number, end: boolean): [number, number, number, number] => [end ? x - w : x, y - 9, end ? x : x + w, y + 3];
+    const hit = (b: [number, number, number, number]) => boxes.some((o) => b[0] < o[2] && b[2] > o[0] && b[1] < o[3] && b[3] > o[1]);
+    if (mx != null && my != null) {
+      const end = px(mx) > W - 80;
+      boxes.push(box(px(mx) + (end ? -9 : 9), py(my) + 4, (symbol ?? "").length * 7 + 2, end));
+    }
+    // the dots are obstacles too, so a label never covers another company's point
+    for (const p of pts) {
+      const x = px(val(p, xk)!);
+      const y = py(val(p, yk)!);
+      boxes.push([x - 3, y - 3, x + 3, y + 3]);
+    }
+    for (const p of pts) {
+      if (p.sym === symbol) continue;
+      const x0 = px(val(p, xk)!);
+      const y0 = py(val(p, yk)!);
+      const w = p.sym.length * 6 + 2;
+      const end = x0 + 6 + w > W - m.r;
+      const x = x0 + (end ? -6 : 6);
+      const y = y0 + 3.5;
+      const b = box(x, y, w, end);
+      if (hit(b)) continue;
+      boxes.push(b);
+      labels.push({ sym: p.sym, x, y, end });
+    }
+  }
   const ordered = [...pts].sort((a, b) => Number(a.sym === symbol) - Number(b.sym === symbol) || Number(a.sector === sector) - Number(b.sector === sector));
   const pick = (v: string, set: (k: string) => void, label: string) => (
     <Select value={v} onValueChange={set}>
@@ -175,6 +206,20 @@ export function CrossScatter({ symbol, onPick }: { symbol: string | null; onPick
                     />
                   );
                 })}
+                {labels.map((l) => (
+                  <text
+                    key={l.sym}
+                    x={l.x}
+                    y={l.y}
+                    textAnchor={l.end ? "end" : "start"}
+                    className="num pointer-events-none fill-muted-foreground text-[10px]"
+                    stroke="var(--card)"
+                    strokeWidth={3}
+                    paintOrder="stroke"
+                  >
+                    {l.sym}
+                  </text>
+                ))}
                 {mx != null && my != null && (
                   <text
                     x={px(mx) + (px(mx) > W - 80 ? -9 : 9)}

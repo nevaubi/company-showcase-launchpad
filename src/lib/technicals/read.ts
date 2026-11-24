@@ -5,6 +5,7 @@ import { EVIDENCE, isTested, type Evidence, type Horizon } from "./evidence";
 import type { Measures } from "./measures";
 import type { PooledRow } from "./pooled";
 import { fin } from "./stat";
+import { cellLabel, fmtQ } from "./labels";
 import { detectableText, nameList, pooledFor, verdictSummary } from "./verdict";
 
 /** The horizon the verdict table's cross-company column shows (the Evidence section's default). */
@@ -293,7 +294,7 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
       const t = best.cell.test;
       const more = new Set(V.own.map((x) => x.row.key)).size - 1;
       text =
-        `${best.row.name} has been followed on ${sym}'s own history by ${fmtPct(t.excess)} ${t.excess > 0 ? "more" : "less"} than its usual ${best.h}-day return ` +
+        `${best.row.name} has been followed on ${sym}'s own history by ${fmtPct(Math.abs(t.excess), 1, false)} ${t.excess > 0 ? "more" : "less"} than its usual ${best.h}-day return ` +
         `(${t.nEff} independent cases, interval ${t.ci ? `${fmtPct(t.ci[0])} to ${fmtPct(t.ci[1])}` : "–"}), and it holds today` +
         (more > 0 ? `; ${more} more condition${more === 1 ? "" : "s"} in force also pass every check.` : ".");
     } else if (V.outcome === "pooled") {
@@ -302,8 +303,8 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
       const ownCell = best.own;
       text =
         `Not detectable on ${sym}'s own history, but reliable across companies: ${best.row.name} has been followed across ${p.symbols.toLocaleString("en-US")} covered companies by an average of ` +
-        `${fmtPct(p.excess)} ${(p.excess ?? 0) > 0 ? "more" : "less"} than all days over ${p.h} days (${p.n.toLocaleString("en-US")} events, interval ${p.ci ? `${fmtPct(p.ci[0])} to ${fmtPct(p.ci[1])}` : "–"}, q ${fmtNum(p.q, 3)}). ` +
-        `That is an average across companies, not a forecast for ${sym}; on ${sym} alone it has been ${ownCell ? `${fmtPct(ownCell.test.excess)} (${ownCell.reason === "small" || ownCell.reason === "few" ? "too few cases to test" : "no clear difference"})` : "too rare to test"}.`;
+        `${fmtPct(Math.abs(p.excess ?? 0), 1, false)} ${(p.excess ?? 0) > 0 ? "more" : "less"} than all days over ${p.h} days (${p.n.toLocaleString("en-US")} events, interval ${p.ci ? `${fmtPct(p.ci[0])} to ${fmtPct(p.ci[1])}` : "–"}, q ${fmtQ(p.q)}). ` +
+        `That is an average across companies, not a forecast for ${sym}; on ${sym} alone it has been ${ownCell ? `${fmtPct(ownCell.test.excess)} (${ownCell.q == null ? "too few cases to test" : cellLabel(ownCell).text})` : "too rare to test"}.`;
     } else {
       const ownPart = V.tested.length
         ? `none of the ${V.tested.length} tested condition${V.tested.length === 1 ? "" : "s"} in force has been followed by returns distinguishable from ${sym}'s own base rate`
@@ -339,7 +340,7 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
               ...(V.own[0].cell.test.ci
                 ? [{ label: "95% interval", value: `${fmtPct(V.own[0].cell.test.ci[0])} to ${fmtPct(V.own[0].cell.test.ci[1])}` }]
                 : []),
-              { label: "q", value: fmtNum(V.own[0].cell.q, 3) },
+              { label: "q", value: fmtQ(V.own[0].cell.q) },
             ]
           : V.outcome === "pooled"
             ? [
@@ -347,7 +348,7 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
                 { label: "Horizon", value: `${V.pooled[0].p.h} days` },
                 { label: "Events", value: V.pooled[0].p.n.toLocaleString("en-US") },
                 { label: "Companies", value: V.pooled[0].p.symbols.toLocaleString("en-US") },
-                { label: "q", value: fmtNum(V.pooled[0].p.q, 3) },
+                { label: "q", value: fmtQ(V.pooled[0].p.q) },
               ]
             : [
                 { label: "In force", value: String(active.length) },
@@ -368,12 +369,12 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
           const poolReliable = EVIDENCE.horizons.some((h) => pooledFor(ctx.pooled, r.key, h)?.verdict === "reliable");
           return [
             r.name,
-            r.kind === "state" ? fmtDay(r.atDate) : `${fmtDay(r.atDate)} (${r.sessionsAgo} sessions ago)`,
+            r.kind === "state" ? fmtDay(r.atDate) : `${fmtDay(r.atDate)} (${r.sessionsAgo === 0 ? "today" : `${r.sessionsAgo} session${r.sessionsAgo === 1 ? "" : "s"} ago`})`,
             ...EVIDENCE.horizons.map((h) => {
               const c = r.cells[h];
               return c ? `${fmtPct(c.test.excess)} (t ${fmtNum(c.test.t, 1, true)}${c.q == null ? ", not tested: small sample" : ""})` : "too few";
             }),
-            p ? `${fmtPct(p.excess)} (${p.n.toLocaleString("en-US")} events${p.q != null ? `, q ${fmtNum(p.q, 2)}` : ""})` : !ctx.pooled ? "not available" : "no record",
+            p ? `${fmtPct(p.excess)} (${p.n.toLocaleString("en-US")} events${p.q != null ? `, q ${fmtQ(p.q)}` : ""})` : !ctx.pooled ? "not available" : "no record",
             ownReliable ? "reliable on its own history" : poolReliable ? "reliable across companies" : isTested(r) ? "no clear difference" : "too few to test",
           ];
         }),

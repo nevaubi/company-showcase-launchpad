@@ -1,3 +1,4 @@
+import { cellLabel, fmtQ } from "@/lib/technicals/labels";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
@@ -190,7 +191,7 @@ import { analyze, barsFromPriceRows, type Technicals } from "@/lib/technicals/an
 import { EVIDENCE } from "@/lib/technicals/evidence";
 import type { BenchSeries } from "@/lib/technicals/measures";
 import type { SignalsFile } from "@/lib/technicals/data";
-import { fmtPct, fmtNum } from "@/lib/technicals/read";
+import { fmtPct } from "@/lib/technicals/read";
 import { fmtVal, getFinancials, getQuantProfile, technicalsText } from "./intel";
 
 const fixture = (t: string) => hydrateDataset(JSON.parse(readFileSync(`src/test/fixtures/companies/${t}.json`, "utf8")) as CompanyDataset);
@@ -228,7 +229,7 @@ describe("get_quant_profile gives the Technicals page's analysis", () => {
       expect(r.output).toContain(`Evidence: ${verdict.text}`);
       expect(r.output).toContain(verdict.aside!);
       for (const s of T.read) expect(r.output).toContain(s.text);
-      for (const h of EVIDENCE.horizons) expect(r.output).toContain(`${h} days ${(T.evidence.detectable[h]! * 100).toFixed(2)}%`);
+      for (const h of EVIDENCE.horizons) expect(r.output).toContain(`${h} days ${T.evidence.detectable[h] == null ? "–" : `${(T.evidence.detectable[h]! * 100).toFixed(2)}%`}`);
       // Each tested cell of a condition in force: cases, log excess, adjusted q and its verdict.
       for (const row of T.evidence.rows.filter((x) => x.active))
         for (const h of EVIDENCE.horizons) {
@@ -237,8 +238,29 @@ describe("get_quant_profile gives the Technicals page's analysis", () => {
           const sign = (v: number) => fmtPct(v, 2);
           expect(r.output).toContain(`${h} days: ${c.test.nEff} independent cases (${c.test.n} days held)`);
           expect(r.output).toContain(`log excess ${sign(c.test.excess)}`);
-          if (c.q != null) expect(r.output).toContain(`q ${fmtNum(c.q, 3)}`);
+          if (c.q != null) expect(r.output).toContain(`q ${fmtQ(c.q)}`);
         }
+      // Page against tool, cell by cell: with every condition treated as in force, each tested cell's line ends
+      // with the label the page's Evidence table shows for it (cellLabel), never "no clear difference" for a cell
+      // too small to test or one that failed a later check.
+      const all = { ...T, evidence: { ...T.evidence, rows: T.evidence.rows.map((x) => ({ ...x, active: true })) } };
+      const lines = technicalsText(all, "prices").detail;
+      let compared = 0;
+      for (const row of all.evidence.rows) {
+        const at = lines.findIndex((l) => l.startsWith(`  ${row.name} (`));
+        expect(at).toBeGreaterThanOrEqual(0);
+        for (const h of EVIDENCE.horizons) {
+          const c = row.cells[h];
+          if (!c) continue;
+          const line = lines.slice(at + 1).find((l) => l.startsWith(`    ${h} days: ${c.test.nEff} independent cases`))!;
+          const label = cellLabel(c).text;
+          expect(line).toContain(`: ${label}; `);
+          if (c.q == null) expect(label).toBe(`small sample (${c.test.nEff})`);
+          if (c.reason !== "base") expect(line).not.toContain("no clear difference");
+          compared++;
+        }
+      }
+      expect(compared).toBeGreaterThan(60);
       // The untested pooled averages are gone.
       expect(r.output).not.toMatch(/hit rate|historically \d+ events/);
     }, 60_000);

@@ -46,29 +46,50 @@ describe("Student-t critical values", () => {
 });
 
 describe("what the bar can see (minimum detectable effect)", () => {
-  // The independent review computed, from the app's own cells, the excess a condition needs for an even chance
-  // of being called reliable: t(1 − 0.025/m, nEff − 1) × Hodrick SE, median over the family's cells per horizon.
-  // AAPL: 1.7% at 5 days, 4.2% at 20, 6.3% at 60 (scipy, reviews/technicals.md, M1).
+  // The bar is the difference from days without the condition that a cell needs for an even chance of being
+  // called reliable: t(1 − 0.025/m, nEff − 1) × Hodrick SE ÷ (1 − share of days flagged), median over the
+  // horizon's family cells. Independent figures (scipy, work/r3/p4-tech3/py/mde_contrast.py on these fixtures):
+  // AAPL 1.95% / 5.12% / 9.04%; AAPL last 700 bars 3.21% at 5 days (6 cells), 20 days has 1 cell; AAPL last
+  // 420 bars 2 cells. The review's figures on the preview's longer bars: 1.95% / 5.06% / 9.07% (p3-tech M1).
+  // Against all days (the old bar) the same fixtures gave 1.73% / 4.21% / 6.27%, and 1.36% and 0.41% when cut.
   const T = run("AAPL");
-  it("reproduces the review's figures for Apple within rounding", () => {
-    const pct = (h: 5 | 20 | 60) => Math.round(T.evidence.detectable[h]! * 1000) / 10;
-    expect(pct(5)).toBeCloseTo(1.7, 1);
-    expect(pct(20)).toBeCloseTo(4.2, 1);
-    expect(pct(60)).toBeCloseTo(6.3, 1);
+  const cut = (n: number) => analyze({ sym: "AAPL", bars: barsFromPriceRows(rows("AAPL").slice(-n)), bench: [], intervals: "candidates" })!;
+  const pct = (E: Technicals["evidence"], h: 5 | 20 | 60) => Math.round(E.detectable[h]! * 10000) / 100;
+  it("reproduces the independent figures for Apple against days without the condition", () => {
+    expect(pct(T.evidence, 5)).toBe(1.95);
+    expect(pct(T.evidence, 20)).toBe(5.12);
+    expect(pct(T.evidence, 60)).toBe(9.04);
+    const short = cut(700).evidence;
+    expect(pct(short, 5)).toBe(3.21);
+    expect(short.detectable[20]).toBeNull();
+    expect(short.detectable[60]).toBeNull();
   });
-  it("is the median over the horizon's cells of the critical t times the standard error", () => {
+  it("never falls when history is removed", () => {
+    for (const n of [1500, 1000, 700, 420, 300]) {
+      const E = cut(n).evidence;
+      for (const h of EVIDENCE.horizons) if (E.detectable[h] != null) expect(E.detectable[h]!).toBeGreaterThan(T.evidence.detectable[h]!);
+    }
+  });
+  it("states no figure from fewer than five cells", () => {
+    const E = cut(420).evidence;
+    expect(EVIDENCE.horizons.map((h) => E.detectable[h])).toEqual([null, null, null]);
+    expect(detectableText(E, "AAPL")).toBeNull();
+  });
+  it("is the median over the horizon's cells of the critical t times the standard error of the contrast", () => {
     const m = T.evidence.tested;
     const need = T.evidence.rows
       .map((r) => r.cells[20])
       .filter((c) => c?.q != null)
-      .map((c) => tCritical(EVIDENCE.fdr / m, c!.test.dof) * c!.test.se)
+      .map((c) => (tCritical(EVIDENCE.fdr / m, c!.test.dof) * c!.test.se) / (1 - c!.test.n / c!.test.nAll))
       .sort((a, b) => a - b);
     const mid = need.length % 2 ? need[(need.length - 1) / 2] : (need[need.length / 2 - 1] + need[need.length / 2]) / 2;
     expect(T.evidence.detectable[20]).toBeCloseTo(mid, 12);
   });
-  it("says it in plain words beside the verdict", () => {
+  it("says it in plain words beside the verdict, with its basis", () => {
     const text = detectableText(T.evidence, "AAPL")!;
-    expect(text).toMatch(/^With 9 years of AAPL's history, only an average effect of about 1\.7% over 5 days, 4\.2% over 20 days or 6\.3% over 60 days/);
+    expect(text).toBe(
+      "With 9 years of AAPL's history, only a condition after which the average return differs from days without it by about 2.0% over 5 days, 5.1% over 20 days or 9.0% over 60 days would have an even chance of showing up as reliable; smaller differences show as no clear difference.",
+    );
     const v = T.read.find((s) => s.key === "verdict")!;
     expect(v.aside).toBe(text);
     expect(v.table.formula).toContain(text);
@@ -104,7 +125,7 @@ describe("the verdict sentence", () => {
     expect(S.outcome).toBe("pooled");
     const v = technicalRead(T.measures, E, { sym: "AAPL", pooled: P }).find((s) => s.key === "verdict")!;
     expect(v.text).toMatch(/^Not detectable on AAPL's own history, but reliable across companies: /);
-    expect(v.text).toContain(`${row.name} has been followed across 1,800 covered companies by an average of +1.3% more than all days over 20 days (4,200 events, interval +0.8% to +1.8%, q 0.000)`);
+    expect(v.text).toContain(`${row.name} has been followed across 1,800 covered companies by an average of 1.3% more than all days over 20 days (4,200 events, interval +0.8% to +1.8%, q 0.000)`);
     expect(v.text).toContain("That is an average across companies, not a forecast for AAPL");
     expect(v.tone).toBe(1);
     expect(v.table.rows.find((r) => r[0] === row.name)![v.table.cols.length - 1]).toBe("reliable across companies");
