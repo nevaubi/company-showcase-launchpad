@@ -656,6 +656,270 @@
    "old": "PerkinElmer, Inc., previously styled Perkin-Elmer, is an American global corporation that was founded in 1937 and originally focused on precision optics.",
    "new": "Revvity is a U.S.-listed life sciences tools & services company headquartered in Waltham, MA (SEC SIC 3826: Laboratory Analytical Instruments).",
    "source": "Fallback sentence: the description names only the former name and never the current one: PERKINELMER INC until 2023-04-14; EG&G INC until 1999-07-26. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 31791: business address WALTHAM, MA; SIC 3826), read 24 Nov 2026."
+  },
+  {
+   "ticker": "UGI",
+   "cik": "884614",
+   "field": "description",
+   "old": "Ugi Corp /Pa/ is a U.S.-listed multi-utilities company headquartered in King Of Prussia, PA (SEC SIC 4932: Gas & Other Services Combined).",
+   "new": "UGI is a U.S.-listed multi-utilities company headquartered in King Of Prussia, PA (SEC SIC 4932: Gas & Other Services Combined).",
+   "source": "fallback sentence: carries the corrected display name (UGI), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "FNB",
+   "cik": "37808",
+   "field": "description",
+   "old": "Fnb Corp/Pa/ is a U.S.-listed banks company headquartered in Pittsburgh, PA (SEC SIC 6021: National Commercial Banks).",
+   "new": "F.N.B. is a U.S.-listed banks company headquartered in Pittsburgh, PA (SEC SIC 6021: National Commercial Banks).",
+   "source": "fallback sentence: carries the corrected display name (F.N.B.), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "PRK",
+   "cik": "805676",
+   "field": "description",
+   "old": "Park National Corp /Oh/ is a U.S.-listed banks company headquartered in Newark, OH (SEC SIC 6021: National Commercial Banks).",
+   "new": "Park National is a U.S.-listed banks company headquartered in Newark, OH (SEC SIC 6021: National Commercial Banks).",
+   "source": "fallback sentence: carries the corrected display name (Park National), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "HMN",
+   "cik": "850141",
+   "field": "description",
+   "old": "Horace Mann Educators Corp /De/ is a U.S.-listed insurance company headquartered in Springfield, IL (SEC SIC 6331: Fire, Marine & Casualty Insurance).",
+   "new": "Horace Mann Educators is a U.S.-listed insurance company headquartered in Springfield, IL (SEC SIC 6331: Fire, Marine & Casualty Insurance).",
+   "source": "fallback sentence: carries the corrected display name (Horace Mann Educators), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "GTY",
+   "cik": "1052752",
+   "field": "description",
+   "old": "Getty Realty Corp /Md/ is a U.S.-listed real estate management & services company headquartered in New York, NY (SEC SIC 6500: Real Estate).",
+   "new": "Getty Realty is a U.S.-listed real estate management & services company headquartered in New York, NY (SEC SIC 6500: Real Estate).",
+   "source": "fallback sentence: carries the corrected display name (Getty Realty), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "USPH",
+   "cik": "885978",
+   "field": "description",
+   "old": "U S Physical Therapy Inc /Nv is a U.S.-listed health care providers & services company headquartered in Houston, TX (SEC SIC 8000: Services-Health Services).",
+   "new": "U.S. Physical Therapy is a U.S.-listed health care providers & services company headquartered in Houston, TX (SEC SIC 8000: Services-Health Services).",
+   "source": "fallback sentence: carries the corrected display name (U.S. Physical Therapy), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "GIII",
+   "cik": "821002",
+   "field": "description",
+   "old": "G Iii Apparel Group Ltd /De/ is a U.S.-listed textiles, apparel & luxury goods company headquartered in New York, NY (SEC SIC 2300: Apparel & Other Finishd Prods Of  Fabrics & Similar Matl).",
+   "new": "G-III Apparel Group is a U.S.-listed textiles, apparel & luxury goods company headquartered in New York, NY (SEC SIC 2300: Apparel & Other Finishd Prods Of  Fabrics & Similar Matl).",
+   "source": "fallback sentence: carries the corrected display name (G-III Apparel Group), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "HFWA",
+   "cik": "1046025",
+   "field": "description",
+   "old": "Heritage Financial Corp /Wa/ is a U.S.-listed banks company headquartered in Olympia, WA (SEC SIC 6036: Savings Institutions, Not Federally Chartered).",
+   "new": "Heritage Financial is a U.S.-listed banks company headquartered in Olympia, WA (SEC SIC 6036: Savings Institutions, Not Federally Chartered).",
+   "source": "fallback sentence: carries the corrected display name (Heritage Financial), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "UHAL",
+   "cik": "4457",
+   "field": "description",
+   "old": "U-Haul Holding Co /NV/ is a U.S.-listed commercial & professional services company headquartered in Reno, NV (SEC SIC 7510: Services-Auto Rental & Leasing (No Drivers)).",
+   "new": "U-Haul Holding is a U.S.-listed commercial & professional services company headquartered in Reno, NV (SEC SIC 7510: Services-Auto Rental & Leasing (No Drivers)).",
+   "source": "fallback sentence: carries the corrected display name (U-Haul Holding), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "DNTH",
+   "cik": "1690585",
+   "field": "description",
+   "old": "Dianthus Therapeutics, Inc. /DE/ is a U.S.-listed pharmaceuticals company headquartered in New York, NY (SEC SIC 2834: Pharmaceutical Preparations).",
+   "new": "Dianthus Therapeutics is a U.S.-listed pharmaceuticals company headquartered in New York, NY (SEC SIC 2834: Pharmaceutical Preparations).",
+   "source": "fallback sentence: carries the corrected display name (Dianthus Therapeutics), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "SEB",
+   "cik": "88121",
+   "field": "description",
+   "old": "Seaboard Corp /De/ is a U.S.-listed consumer staples retail company headquartered in Shawnee Mission, KS (SEC SIC 5150: Wholesale-Farm Product Raw Materials).",
+   "new": "Seaboard is a U.S.-listed consumer staples retail company headquartered in Shawnee Mission, KS (SEC SIC 5150: Wholesale-Farm Product Raw Materials).",
+   "source": "fallback sentence: carries the corrected display name (Seaboard), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "VRDN",
+   "cik": "1590750",
+   "field": "description",
+   "old": "Viridian Therapeutics, Inc.\\DE is a U.S.-listed pharmaceuticals company headquartered in Waltham, MA (SEC SIC 2834: Pharmaceutical Preparations).",
+   "new": "Viridian Therapeutics is a U.S.-listed pharmaceuticals company headquartered in Waltham, MA (SEC SIC 2834: Pharmaceutical Preparations).",
+   "source": "fallback sentence: carries the corrected display name (Viridian Therapeutics), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "CLBK",
+   "cik": "2115119",
+   "field": "description",
+   "old": "Columbia Financial, Inc./MD/ is a U.S.-listed banks company headquartered in Fair Lawn, NJ (SEC SIC 6035: Savings Institution, Federally Chartered).",
+   "new": "Columbia Financial is a U.S.-listed banks company headquartered in Fair Lawn, NJ (SEC SIC 6035: Savings Institution, Federally Chartered).",
+   "source": "fallback sentence: carries the corrected display name (Columbia Financial), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "BELFA",
+   "cik": "729580",
+   "field": "description",
+   "old": "Bel Fuse Inc /Nj is a U.S.-listed electronic equipment & components company headquartered in West Orange, NJ (SEC SIC 3677: Electronic Coils, Transformers & Other Inductors).",
+   "new": "Bel Fuse is a U.S.-listed electronic equipment & components company headquartered in West Orange, NJ (SEC SIC 3677: Electronic Coils, Transformers & Other Inductors).",
+   "source": "fallback sentence: carries the corrected display name (Bel Fuse), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "JOE",
+   "cik": "745308",
+   "field": "description",
+   "old": "ST JOE is a U.S.-listed real estate management & services company headquartered in Panama City Beach, FL (SEC SIC 6552: Land Subdividers & Developers (No Cemeteries)).",
+   "new": "St. Joe is a U.S.-listed real estate management & services company headquartered in Panama City Beach, FL (SEC SIC 6552: Land Subdividers & Developers (No Cemeteries)).",
+   "source": "fallback sentence: carries the corrected display name (St. Joe), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "PECO",
+   "cik": "1476204",
+   "field": "description",
+   "old": "Phillips Edison & is a U.S.-listed reits company headquartered in Cincinnati, OH (SEC SIC 6798: Real Estate Investment Trusts).",
+   "new": "Phillips Edison & Company is a U.S.-listed reits company headquartered in Cincinnati, OH (SEC SIC 6798: Real Estate Investment Trusts).",
+   "source": "fallback sentence: carries the corrected display name (Phillips Edison & Company), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "RBA",
+   "cik": "1046102",
+   "field": "description",
+   "old": "Rb Global is a U.S.-listed commercial & professional services company headquartered in Burnaby (SEC SIC 7389: Services-Business Services, Nec).",
+   "new": "RB Global is a U.S.-listed commercial & professional services company headquartered in Burnaby (SEC SIC 7389: Services-Business Services, Nec).",
+   "source": "fallback sentence: carries the corrected display name (RB Global), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "OGE",
+   "cik": "1021635",
+   "field": "description",
+   "old": "Oge Energy is a U.S.-listed electric utilities company headquartered in Oklahoma City, OK (SEC SIC 4911: Electric Services).",
+   "new": "OGE Energy is a U.S.-listed electric utilities company headquartered in Oklahoma City, OK (SEC SIC 4911: Electric Services).",
+   "source": "fallback sentence: carries the corrected display name (OGE Energy), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "MTG",
+   "cik": "876437",
+   "field": "description",
+   "old": "Mgic Investment is a U.S.-listed insurance company headquartered in Milwaukee, WI (SEC SIC 6351: Surety Insurance).",
+   "new": "MGIC Investment is a U.S.-listed insurance company headquartered in Milwaukee, WI (SEC SIC 6351: Surety Insurance).",
+   "source": "fallback sentence: carries the corrected display name (MGIC Investment), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "MYRG",
+   "cik": "700923",
+   "field": "description",
+   "old": "Myr Group is a U.S.-listed construction & engineering company headquartered in Thornton, CO (SEC SIC 1623: Water, Sewer, Pipeline, Comm & Power Line Construction).",
+   "new": "MYR Group is a U.S.-listed construction & engineering company headquartered in Thornton, CO (SEC SIC 1623: Water, Sewer, Pipeline, Comm & Power Line Construction).",
+   "source": "fallback sentence: carries the corrected display name (MYR Group), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "CVBF",
+   "cik": "354647",
+   "field": "description",
+   "old": "Cvb Financial is a U.S.-listed banks company headquartered in Ontario, CA (SEC SIC 6022: State Commercial Banks).",
+   "new": "CVB Financial is a U.S.-listed banks company headquartered in Ontario, CA (SEC SIC 6022: State Commercial Banks).",
+   "source": "fallback sentence: carries the corrected display name (CVB Financial), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "LCII",
+   "cik": "763744",
+   "field": "description",
+   "old": "Lci Industries is a U.S.-listed automobiles & components company headquartered in Elkhart, IN (SEC SIC 3714: Motor Vehicle Parts & Accessories).",
+   "new": "LCI Industries is a U.S.-listed automobiles & components company headquartered in Elkhart, IN (SEC SIC 3714: Motor Vehicle Parts & Accessories).",
+   "source": "fallback sentence: carries the corrected display name (LCI Industries), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "LTC",
+   "cik": "887905",
+   "field": "description",
+   "old": "Ltc Properties is a U.S.-listed reits company headquartered in Westlake Village, CA (SEC SIC 6798: Real Estate Investment Trusts).",
+   "new": "LTC Properties is a U.S.-listed reits company headquartered in Westlake Village, CA (SEC SIC 6798: Real Estate Investment Trusts).",
+   "source": "fallback sentence: carries the corrected display name (LTC Properties), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "DXPE",
+   "cik": "1020710",
+   "field": "description",
+   "old": "Dxp Enterprises is a U.S.-listed trading companies & distributors company headquartered in Houston, TX (SEC SIC 5084: Wholesale-Industrial Machinery & Equipment).",
+   "new": "DXP Enterprises is a U.S.-listed trading companies & distributors company headquartered in Houston, TX (SEC SIC 5084: Wholesale-Industrial Machinery & Equipment).",
+   "source": "fallback sentence: carries the corrected display name (DXP Enterprises), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "AMN",
+   "cik": "1142750",
+   "field": "description",
+   "old": "Amn Healthcare Services is a U.S.-listed health care providers & services company headquartered in Dallas, TX (SEC SIC 7363: Services-Help Supply Services).",
+   "new": "AMN Healthcare Services is a U.S.-listed health care providers & services company headquartered in Dallas, TX (SEC SIC 7363: Services-Help Supply Services).",
+   "source": "fallback sentence: carries the corrected display name (AMN Healthcare Services), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "LPG",
+   "cik": "1596993",
+   "field": "description",
+   "old": "Dorian Lpg is a U.S.-listed oil & gas midstream company headquartered in Stamford, CT (SEC SIC 4412: Deep Sea Foreign Transportation Of  Freight).",
+   "new": "Dorian LPG is a U.S.-listed oil & gas midstream company headquartered in Stamford, CT (SEC SIC 4412: Deep Sea Foreign Transportation Of  Freight).",
+   "source": "fallback sentence: carries the corrected display name (Dorian LPG), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "ANIP",
+   "cik": "1023024",
+   "field": "description",
+   "old": "Ani Pharmaceuticals is a U.S.-listed pharmaceuticals company headquartered in Princeton, NJ (SEC SIC 2834: Pharmaceutical Preparations).",
+   "new": "ANI Pharmaceuticals is a U.S.-listed pharmaceuticals company headquartered in Princeton, NJ (SEC SIC 2834: Pharmaceutical Preparations).",
+   "source": "fallback sentence: carries the corrected display name (ANI Pharmaceuticals), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "ADIG",
+   "cik": "2105139",
+   "field": "description",
+   "old": "Adi Global Distribution is a U.S.-listed trading companies & distributors company headquartered in Wilmington, DE (SEC SIC 5072: Wholesale-Hardware).",
+   "new": "ADI Global Distribution is a U.S.-listed trading companies & distributors company headquartered in Wilmington, DE (SEC SIC 5072: Wholesale-Hardware).",
+   "source": "fallback sentence: carries the corrected display name (ADI Global Distribution), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "CVI",
+   "cik": "1376139",
+   "field": "description",
+   "old": "Cvr Energy is a U.S.-listed integrated oil & refining company headquartered in Sugar Land, TX (SEC SIC 2911: Petroleum Refining).",
+   "new": "CVR Energy is a U.S.-listed integrated oil & refining company headquartered in Sugar Land, TX (SEC SIC 2911: Petroleum Refining).",
+   "source": "fallback sentence: carries the corrected display name (CVR Energy), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "AMC",
+   "cik": "1411579",
+   "field": "description",
+   "old": "Amc Entertainment Holdings is a U.S.-listed entertainment company headquartered in Leawood, KS (SEC SIC 7830: Services-Motion Picture Theaters).",
+   "new": "AMC Entertainment Holdings is a U.S.-listed entertainment company headquartered in Leawood, KS (SEC SIC 7830: Services-Motion Picture Theaters).",
+   "source": "fallback sentence: carries the corrected display name (AMC Entertainment Holdings), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "ESE",
+   "cik": "866706",
+   "field": "description",
+   "old": "Esco Technologies is a U.S.-listed electrical equipment company headquartered in St. Louis, MO (SEC SIC 3669: Communications Equipment, Nec).",
+   "new": "ESCO Technologies is a U.S.-listed electrical equipment company headquartered in St. Louis, MO (SEC SIC 3669: Communications Equipment, Nec).",
+   "source": "fallback sentence: carries the corrected display name (ESCO Technologies), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "JBSS",
+   "cik": "880117",
+   "field": "description",
+   "old": "Sanfilippo John B & Son is a U.S.-listed food, beverage & tobacco company headquartered in Elgin, IL (SEC SIC 2060: Sugar & Confectionery Products).",
+   "new": "John B. Sanfilippo & Son is a U.S.-listed food, beverage & tobacco company headquartered in Elgin, IL (SEC SIC 2060: Sugar & Confectionery Products).",
+   "source": "fallback sentence: carries the corrected display name (John B. Sanfilippo & Son), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "SBCF",
+   "cik": "730708",
+   "field": "description",
+   "old": "Seacoast Banking Corp of Florida is a U.S.-listed banks company headquartered in Stuart, FL (SEC SIC 6022: State Commercial Banks).",
+   "new": "Seacoast Banking Corporation of Florida is a U.S.-listed banks company headquartered in Stuart, FL (SEC SIC 6022: State Commercial Banks).",
+   "source": "fallback sentence: carries the corrected display name (Seacoast Banking Corporation of Florida), see scripts/data/coverage-corrections.json"
   }
  ]
 }

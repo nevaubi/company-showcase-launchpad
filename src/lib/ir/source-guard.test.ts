@@ -71,6 +71,16 @@ describe("source guard: reviewed wrong pairs", () => {
     expect(isIrFileAllowed("WABC", "https://s21.q4cdn.com/534284578/files/doc_financials/2025/ar/2025-Annual-Report.pdf")).toBe(true);
   });
 
+  it("refuses the q4cdn folders the 24 Nov title sample showed to be another company's (real rows)", () => {
+    // NBTB: The Bancorp's q4 site; SBCF: First Seacoast Bancorp's (FSEA) annual report.
+    expect(isIrFileAllowed("NBTB", "https://s27.q4cdn.com/928525813/files/doc_news/The-Bancorp-Advances-Apex-2030-Through-Continued-Organizational-Alignment-2026.pdf")).toBe(false);
+    expect(isIrFileAllowed("SBCF", "https://s24.q4cdn.com/806922067/files/doc_financials/2024/ar/FSEA-2024-Annual-Report.pdf")).toBe(false);
+    // their own stored releases stay, and the folder stays open to its real owner
+    expect(isIrFileAllowed("NBTB", "https://www.sec.gov/Archives/edgar/data/790359/000114036125015461/ef20047848_ex99-1.htm")).toBe(true);
+    expect(isIrFileAllowed("SBCF", "https://www.sec.gov/Archives/edgar/data/730708/000073070825000210/sbcf3q2025earningsrelease.htm")).toBe(true);
+    expect(isIrFileAllowed("TBBK", "https://s27.q4cdn.com/928525813/files/doc_news/x.pdf")).toBe(true);
+  });
+
   it("matches subdomains of a listed host and survives bad urls", () => {
     expect(isIrFileAllowed("ON", "https://www.sonal.co.in/x.pdf")).toBe(false);
     expect(isIrFileAllowed("ON", "https://notsonal.co.in/x.pdf")).toBe(true);

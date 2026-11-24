@@ -30,6 +30,54 @@ export function nameWords(name: string): string[] {
   return merged.filter((w) => !FILLER.has(w));
 }
 
+// ---------- display names ----------
+/** A trailing legal form, cut from a display name the way "Accenture plc" became "Accenture". */
+const LEGAL = /,?\s+(Inc\.?|Incorporated|Corporation|Corp\.?|Co\.?|Company|Ltd\.?|Limited|plc|PLC|N\.V\.|S\.A\.|SE|AG|L\.P\.|LP|LLC|Holdings? Inc\.?)$/i;
+/**
+ * SEC's state-of-incorporation and successor markers on a registrant string: "WHIRLPOOL CORP /DE/",
+ * "FNB CORP/PA/", "U S PHYSICAL THERAPY INC /NV", "Rivian Automotive, Inc. / DE", "RUSH ENTERPRISES INC \TX\",
+ * "Six Flags Entertainment Corporation/NEW". They are filing metadata, never part of a name. A slash inside
+ * a name ("M/I Homes", "M/A-COM") is left alone: the marker must be the last thing in the string.
+ */
+const SEC_MARKER = /\s*[/\\]\s*(?:NEW|[A-Za-z]{2,4})\s*[/\\]?\s*$/i;
+/** "& Co." and "& Company" are part of a name ("Levi Strauss & Co.", "Moelis & Company"), not its legal form. */
+const AMPERSAND_FORM = /&\s+(?:Co\.?|Company)$/i;
+const SMALL = new Set(["and", "of", "the", "for", "in", "on", "de"]);
+/** Short words without a vowel that are words or abbreviations, not initials. */
+const VOWELLESS_WORDS = new Set(["st", "mr", "dr", "jr", "sr", "mt", "ft", "sky", "fly", "dry", "gym", "lynx", "hwy"]);
+const ROMAN = /^(?:ii|iii|iv|vi|vii|viii|ix|xi)$/;
+/** Abbreviations with a vowel that are always written in capitals. */
+const ABBREVIATIONS = new Set(["reit", "reits", "usa"]);
+
+/** One word of an all-caps registrant string in the case the generated names use. */
+function caseWord(w: string, first: boolean): string {
+  if (!first && SMALL.has(w)) return w;
+  const bare = w.replace(/[^a-z]/g, "");
+  // Initials and acronyms: no vowel ("FNB", "CVB", "DXP", "LPG") or a roman numeral ("III").
+  if (bare.length >= 2 && (ROMAN.test(bare) || ABBREVIATIONS.has(bare) || (!/[aeiouy]/.test(bare) && !VOWELLESS_WORDS.has(bare)))) return w.toUpperCase();
+  return w.replace(/(^|[-/&.])([a-z])/g, (_, p, c) => p + c.toUpperCase());
+}
+
+/**
+ * The display name the generator shows for a registrant string or partner name: SEC's state and successor
+ * markers removed, trailing legal forms cut (up to three, so "Holdings, Inc." goes but "& Co." stays), and an
+ * all-caps string set in title case with initials kept in capitals. A casing the rule cannot know ("AMC",
+ * "G-III", "U.S.") comes from the company's own filing through scripts/data/coverage-corrections.json.
+ */
+export function displayName(name: string): string {
+  let n = name.trim().replace(/\s+/g, " ");
+  for (let i = 0; i < 3; i++) {
+    const before = n;
+    n = n.replace(SEC_MARKER, "").trim();
+    if (!AMPERSAND_FORM.test(n)) n = n.replace(LEGAL, "").trim();
+    n = n.replace(/,$/, "").trim();
+    if (n === before) break;
+  }
+  if (n === n.toUpperCase() && /[A-Z]{4}/.test(n))
+    n = n.toLowerCase().split(" ").map((w, i) => caseWord(w, i === 0)).join(" ");
+  return n;
+}
+
 /** Initials of a name's words, for short names written as an acronym ("AMD", "IBM"). */
 const initials = (words: string[]) => words.map((w) => w[0]).join("");
 

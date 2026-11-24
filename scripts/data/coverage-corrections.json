@@ -520,6 +520,430 @@
     "GPK"
    ],
    "source": "Recomputed for the corrected group Containers, Packaging & Paper: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  },
+  {
+   "ticker": "UGI",
+   "cik": "884614",
+   "field": "shortName",
+   "old": "Ugi Corp /Pa/",
+   "new": "UGI",
+   "source": "SEC registrant string for CIK 884614: UGI CORP /PA/ (state or successor marker and casing are SEC metadata). The company prints 'UGI Corporation' in its 10-K 0000884614-26-000070 (filed 2026-11-19)"
+  },
+  {
+   "ticker": "FNB",
+   "cik": "37808",
+   "field": "shortName",
+   "old": "Fnb Corp/Pa/",
+   "new": "F.N.B.",
+   "source": "SEC registrant string for CIK 37808: FNB CORP/PA/ (state or successor marker and casing are SEC metadata). The company prints 'F.N.B. Corporation' in its 10-Q 0000037808-26-000029 (filed 2026-11-03); 10-K 0000037808-26-000007 (filed 2026-02-24) cover: 'F.N.B. CORPORATION'"
+  },
+  {
+   "ticker": "MP",
+   "cik": "1801368",
+   "field": "shortName",
+   "old": "MP Materials Corp. / DE",
+   "new": "MP Materials",
+   "source": "SEC registrant string for CIK 1801368: MP Materials Corp. / DE (state or successor marker and casing are SEC metadata). The company prints 'MP Materials Corp.' in its 10-Q 0001801368-26-000057 (filed 2026-11-06); 10-K 0001801368-26-000008 (filed 2026-02-26) cover: 'MP MATERIALS CORP.'"
+  },
+  {
+   "ticker": "WHR",
+   "cik": "106640",
+   "field": "shortName",
+   "old": "Whirlpool Corp /De/",
+   "new": "Whirlpool",
+   "source": "SEC registrant string for CIK 106640: WHIRLPOOL CORP /DE/ (state or successor marker and casing are SEC metadata). The company prints 'Whirlpool Corporation' in its 10-Q 0000106640-26-000077 (filed 2026-10-27); 10-K 0000106640-26-000009 (filed 2026-02-11) cover: 'WHIRLPOOL CORPORATION'"
+  },
+  {
+   "ticker": "DAVE",
+   "cik": "1841408",
+   "field": "shortName",
+   "old": "Dave Inc./DE",
+   "new": "Dave",
+   "source": "SEC registrant string for CIK 1841408: Dave Inc./DE (state or successor marker and casing are SEC metadata). The company prints 'Dave Inc.' in its 10-Q 0001193125-26-447414 (filed 2026-11-04); 10-K 0001193125-26-085370 (filed 2026-03-02) cover: 'DAVE INC.'"
+  },
+  {
+   "ticker": "PRK",
+   "cik": "805676",
+   "field": "shortName",
+   "old": "Park National Corp /Oh/",
+   "new": "Park National",
+   "source": "SEC registrant string for CIK 805676: PARK NATIONAL CORP /OH/ (state or successor marker and casing are SEC metadata). The company prints 'Park National Corporation' in its 10-Q 0000805676-26-000073 (filed 2026-11-05); 10-K 0000805676-26-000017 (filed 2026-02-23) cover: 'PARK NATIONAL CORPORATION'"
+  },
+  {
+   "ticker": "HMN",
+   "cik": "850141",
+   "field": "shortName",
+   "old": "Horace Mann Educators Corp /De/",
+   "new": "Horace Mann Educators",
+   "source": "SEC registrant string for CIK 850141: HORACE MANN EDUCATORS CORP /DE/ (state or successor marker and casing are SEC metadata). The company prints 'Horace Mann Educators Corporation' in its 10-Q 0000850141-26-000041 (filed 2026-11-06); 10-K 0000850141-26-000007 (filed 2026-02-27) cover: 'HORACE MANN EDUCATORS CORPORATION'"
+  },
+  {
+   "ticker": "DCOM",
+   "cik": "846617",
+   "field": "shortName",
+   "old": "Dime Commercial Bancshares, Inc. /NY/",
+   "new": "Dime Commercial Bancshares",
+   "source": "SEC registrant string for CIK 846617: Dime Commercial Bancshares, Inc. /NY/ (state or successor marker and casing are SEC metadata). The company prints 'Dime Commercial Bancshares, Inc.' in its 10-Q 0000846617-26-000052 (filed 2026-10-30); 10-K 0000846617-26-000013 (filed 2026-02-20) cover: 'Dime Community Bancshares, Inc.'; renamed after its latest 10-K, whose cover still prints the former name Dime Community Bancshares, Inc."
+  },
+  {
+   "ticker": "GTY",
+   "cik": "1052752",
+   "field": "shortName",
+   "old": "Getty Realty Corp /Md/",
+   "new": "Getty Realty",
+   "source": "SEC registrant string for CIK 1052752: GETTY REALTY CORP /MD/ (state or successor marker and casing are SEC metadata). The company prints 'Getty Realty Corp.' in its 10-Q 0001193125-26-428988 (filed 2026-10-22); 10-K 0001193125-26-048965 (filed 2026-02-12) cover: 'RSUANT TO SECTION 13 OR 15(d) OF THE SECURITIES EXCHANGE ACT OF 1934 COMMISSION FILE NUMBER 001-13777 GETTY REALTY CORP.'"
+  },
+  {
+   "ticker": "USPH",
+   "cik": "885978",
+   "field": "shortName",
+   "old": "U S Physical Therapy Inc /Nv",
+   "new": "U.S. Physical Therapy",
+   "source": "SEC registrant string for CIK 885978: U S PHYSICAL THERAPY INC /NV (state or successor marker and casing are SEC metadata). The company prints 'U.S. Physical' in its 10-Q 0001140361-26-042104 (filed 2026-11-05); 10-K 0001140361-26-007170 (filed 2026-02-27) cover: 'RITIES EXCHANGE ACT OF 1934 FOR THE TRANSITION PERIOD FROM TO COMMISSION FILE NUMBER 1-11151 U.S. PHYSICAL THERAPY, INC.'; 10-K cover prints 'U.S. PHYSICAL THERAPY, INC.'"
+  },
+  {
+   "ticker": "GIII",
+   "cik": "821002",
+   "field": "shortName",
+   "old": "G Iii Apparel Group Ltd /De/",
+   "new": "G-III Apparel Group",
+   "source": "SEC registrant string for CIK 821002: G III APPAREL GROUP LTD /DE/ (state or successor marker and casing are SEC metadata). The company prints 'G-III Apparel' in its 10-Q 0001104659-26-105950 (filed 2026-09-08); 10-K 0001104659-26-033891 (filed 2026-03-24) cover: 'G-III APPAREL GROUP, LTD.'; 10-K cover prints 'G-III APPAREL GROUP, LTD.'"
+  },
+  {
+   "ticker": "HFWA",
+   "cik": "1046025",
+   "field": "shortName",
+   "old": "Heritage Financial Corp /Wa/",
+   "new": "Heritage Financial",
+   "source": "SEC registrant string for CIK 1046025: HERITAGE FINANCIAL CORP /WA/ (state or successor marker and casing are SEC metadata). The company prints 'Heritage Financial Corporation' in its 10-Q 0001628280-26-071543 (filed 2026-11-06); 10-K 0001628280-26-012703 (filed 2026-02-27) cover: 'HERITAGE FINANCIAL CORP ORATION'"
+  },
+  {
+   "ticker": "OI",
+   "cik": "812074",
+   "field": "shortName",
+   "old": "O-I Glass, Inc. /DE/",
+   "new": "O-I Glass",
+   "source": "SEC registrant string for CIK 812074: O-I Glass, Inc. /DE/ (state or successor marker and casing are SEC metadata). The company prints 'O-I Glass, Inc.' in its 10-Q 0001104659-26-119653 (filed 2026-10-28); 10-K 0001104659-26-014319 (filed 2026-02-12) cover: 'O-I GLASS, INC.'"
+  },
+  {
+   "ticker": "FUN",
+   "cik": "1999001",
+   "field": "shortName",
+   "old": "Six Flags Entertainment Corporation/NEW",
+   "new": "Six Flags Entertainment",
+   "source": "SEC registrant string for CIK 1999001: Six Flags Entertainment Corporation/NEW (state or successor marker and casing are SEC metadata). The company prints 'Six Flags Entertainment Corporation' in its 10-Q 0001999001-26-000107 (filed 2026-11-05); 10-K 0001999001-26-000048 (filed 2026-02-26) cover: 'SIX FLAGS ENTERTAINMENT CORPORATION'"
+  },
+  {
+   "ticker": "RIVN",
+   "cik": "1874178",
+   "field": "shortName",
+   "old": "Rivian Automotive, Inc. / DE",
+   "new": "Rivian Automotive",
+   "source": "SEC registrant string for CIK 1874178: Rivian Automotive, Inc. / DE (state or successor marker and casing are SEC metadata). The company prints 'Rivian Automotive, Inc.' in its 10-Q 0001874178-26-000066 (filed 2026-10-29); 10-K 0001874178-26-000008 (filed 2026-02-12) cover: 'Rivian Automotive, Inc.'"
+  },
+  {
+   "ticker": "UHAL",
+   "cik": "4457",
+   "field": "shortName",
+   "old": "U-Haul Holding Co /NV/",
+   "new": "U-Haul Holding",
+   "source": "SEC registrant string for CIK 4457: U-Haul Holding Co /NV/ (state or successor marker and casing are SEC metadata). The company prints 'U-Haul Holding Company' in its 10-Q 0001193125-26-447303 (filed 2026-11-04)"
+  },
+  {
+   "ticker": "DNTH",
+   "cik": "1690585",
+   "field": "shortName",
+   "old": "Dianthus Therapeutics, Inc. /DE/",
+   "new": "Dianthus Therapeutics",
+   "source": "SEC registrant string for CIK 1690585: Dianthus Therapeutics, Inc. /DE/ (state or successor marker and casing are SEC metadata). The company prints 'Dianthus Therapeutics, Inc.' in its 10-Q 0001690585-26-000040 (filed 2026-11-04); 10-K 0001690585-26-000006 (filed 2026-03-09) cover: 'Dianthus Therapeutics, Inc.'"
+  },
+  {
+   "ticker": "CLMT",
+   "cik": "2013745",
+   "field": "shortName",
+   "old": "Calumet, Inc. /DE",
+   "new": "Calumet",
+   "source": "SEC registrant string for CIK 2013745: Calumet, Inc. /DE (state or successor marker and casing are SEC metadata). The company prints 'Calumet, Inc.' in its 10-Q 0002013745-26-000036 (filed 2026-11-06); 10-K 0002013745-26-000007 (filed 2026-02-27) cover: 'Calumet, Inc.'"
+  },
+  {
+   "ticker": "CORZ",
+   "cik": "1839341",
+   "field": "shortName",
+   "old": "Core Scientific, Inc./tx",
+   "new": "Core Scientific",
+   "source": "SEC registrant string for CIK 1839341: Core Scientific, Inc./tx (state or successor marker and casing are SEC metadata). The company prints 'Core Scientific, Inc.' in its 10-Q 0001839341-26-000030 (filed 2026-11-05); 10-K 0001628280-26-013305 (filed 2026-03-02) cover: 'Core Scientific, Inc.'"
+  },
+  {
+   "ticker": "SEB",
+   "cik": "88121",
+   "field": "shortName",
+   "old": "Seaboard Corp /De/",
+   "new": "Seaboard",
+   "source": "SEC registrant string for CIK 88121: SEABOARD CORP /DE/ (state or successor marker and casing are SEC metadata). The company prints 'Seaboard Corporation' in its 10-Q 0000088121-26-000067 (filed 2026-11-03); 10-K 0000088121-26-000012 (filed 2026-02-12) cover: 'SEABOARD CORPORATION'"
+  },
+  {
+   "ticker": "VRDN",
+   "cik": "1590750",
+   "field": "shortName",
+   "old": "Viridian Therapeutics, Inc.\\DE",
+   "new": "Viridian Therapeutics",
+   "source": "SEC registrant string for CIK 1590750: Viridian Therapeutics, Inc.\\DE (state or successor marker and casing are SEC metadata). The company prints 'Viridian Therapeutics, Inc.' in its 10-Q 0001590750-26-000022 (filed 2026-11-04)"
+  },
+  {
+   "ticker": "CLBK",
+   "cik": "2115119",
+   "field": "shortName",
+   "old": "Columbia Financial, Inc./MD/",
+   "new": "Columbia Financial",
+   "source": "SEC registrant string for CIK 2115119: Columbia Financial, Inc./MD/ (state or successor marker and casing are SEC metadata). The company prints 'Columbia Financial, Inc.' in its 10-Q 0002115119-26-000037 (filed 2026-11-09)"
+  },
+  {
+   "ticker": "BELFA",
+   "cik": "729580",
+   "field": "shortName",
+   "old": "Bel Fuse Inc /Nj",
+   "new": "Bel Fuse",
+   "source": "SEC registrant string for CIK 729580: BEL FUSE INC /NJ (state or successor marker and casing are SEC metadata). The company prints 'Bel Fuse Inc.' in its 10-Q 0001437749-26-034634 (filed 2026-11-03); 10-K 0001437749-26-005354 (filed 2026-02-24) cover: 'BEL FUSE INC.'"
+  },
+  {
+   "ticker": "JOE",
+   "cik": "745308",
+   "field": "shortName",
+   "old": "ST JOE",
+   "new": "St. Joe",
+   "source": "SEC registrant string for CIK 745308: ST JOE Co (state or successor marker and casing are SEC metadata). The company prints 'St. Joe Company' in its 10-Q 0001104659-26-119631 (filed 2026-10-28)"
+  },
+  {
+   "ticker": "AJG",
+   "cik": "354190",
+   "field": "shortName",
+   "old": "Arthur J. Gallagher &",
+   "new": "Arthur J. Gallagher & Co.",
+   "source": "SEC registrant string for CIK 354190: Arthur J. Gallagher & Co. (state or successor marker and casing are SEC metadata). The company prints 'Arthur J. Gallagher & Co.' in its 10-Q 0001628280-26-070650 (filed 2026-11-05); 10-K 0001628280-26-008662 (filed 2026-02-17) cover: 'ARTHUR J. GALLAGHER & CO.'"
+  },
+  {
+   "ticker": "MKC",
+   "cik": "63754",
+   "field": "shortName",
+   "old": "McCormick &",
+   "new": "McCormick & Company",
+   "source": "SEC registrant string for CIK 63754: MCCORMICK & CO INC (state or successor marker and casing are SEC metadata). The company prints 'McCormick & Company' in its 10-Q 0000063754-26-000329 (filed 2026-10-01); 10-K 0000063754-26-000037 (filed 2026-01-22) cover: 'McCORMICK & COMPANY, INCORPORATED'"
+  },
+  {
+   "ticker": "VSXY",
+   "cik": "1856437",
+   "field": "shortName",
+   "old": "Victoria's Secret &",
+   "new": "Victoria's Secret & Co.",
+   "source": "SEC registrant string for CIK 1856437: Victoria's Secret & Co. (state or successor marker and casing are SEC metadata). The company prints 'Victoria's Secret & Co.' in its 10-Q 0001856437-26-000021 (filed 2026-09-04); 10-K 0001856437-26-000004 (filed 2026-03-20) cover: 'VICTORIA'S SECRET & CO.'"
+  },
+  {
+   "ticker": "PECO",
+   "cik": "1476204",
+   "field": "shortName",
+   "old": "Phillips Edison &",
+   "new": "Phillips Edison & Company",
+   "source": "SEC registrant string for CIK 1476204: Phillips Edison & Company, Inc. (state or successor marker and casing are SEC metadata). The company prints 'Phillips Edison & Company' in its 10-Q 0001476204-26-000054 (filed 2026-10-27); 10-K 0001476204-26-000005 (filed 2026-02-10) cover: 'PHILLIPS EDISON & COMPANY, INC.'"
+  },
+  {
+   "ticker": "MC",
+   "cik": "1596967",
+   "field": "shortName",
+   "old": "Moelis &",
+   "new": "Moelis & Company",
+   "source": "SEC registrant string for CIK 1596967: Moelis & Co (state or successor marker and casing are SEC metadata). The company prints 'Moelis & Company' in its 10-Q 0001193125-26-450261 (filed 2026-11-06); 10-K 0001193125-26-076747 (filed 2026-02-26) cover: 'Moelis & Company'"
+  },
+  {
+   "ticker": "OGN",
+   "cik": "1821825",
+   "field": "shortName",
+   "old": "Organon &",
+   "new": "Organon & Co.",
+   "source": "SEC registrant string for CIK 1821825: Organon & Co. (state or successor marker and casing are SEC metadata). The company prints 'Organon & Co.' in its 10-Q 0001821825-26-000004 (filed 2026-10-30); 10-K 0001628280-26-011125 (filed 2026-02-24) cover: 'Organon & Co.'"
+  },
+  {
+   "ticker": "LEVI",
+   "cik": "94845",
+   "field": "shortName",
+   "old": "Levi Strauss &",
+   "new": "Levi Strauss & Co.",
+   "source": "SEC registrant string for CIK 94845: LEVI STRAUSS & CO (state or successor marker and casing are SEC metadata). The company prints 'Levi Strauss & Co.' in its 10-Q 0000094845-26-000047 (filed 2026-10-07); 10-K 0000094845-26-000008 (filed 2026-01-28) cover: 'LEVI STRAUSS & CO.'"
+  },
+  {
+   "ticker": "RBA",
+   "cik": "1046102",
+   "field": "shortName",
+   "old": "Rb Global",
+   "new": "RB Global",
+   "source": "SEC registrant string for CIK 1046102: RB GLOBAL INC. (state or successor marker and casing are SEC metadata). The company prints 'RB Global, Inc.' in its 10-Q 0001628280-26-071895 (filed 2026-11-09); 10-K 0001628280-26-011682 (filed 2026-02-25) cover: 'RB Global, Inc .'"
+  },
+  {
+   "ticker": "CACI",
+   "cik": "16058",
+   "field": "shortName",
+   "old": "Caci",
+   "new": "CACI International",
+   "source": "SEC registrant string for CIK 16058: CACI INTERNATIONAL INC /DE/ (state or successor marker and casing are SEC metadata). The company prints 'CACI International Inc' in its 10-Q 0001628280-26-066827 (filed 2026-10-22); 10-K 0001628280-26-054195 (filed 2026-08-06) cover: 'CACI International Inc'"
+  },
+  {
+   "ticker": "OGE",
+   "cik": "1021635",
+   "field": "shortName",
+   "old": "Oge Energy",
+   "new": "OGE Energy",
+   "source": "SEC registrant string for CIK 1021635: OGE ENERGY CORP. (state or successor marker and casing are SEC metadata). The company prints 'OGE Energy Corp.' in its 10-Q 0001021635-26-000036 (filed 2026-10-28); 10-K 0001193125-26-055414 (filed 2026-02-18) cover: 'Commission File Number'"
+  },
+  {
+   "ticker": "AGCO",
+   "cik": "880266",
+   "field": "shortName",
+   "old": "Agco",
+   "new": "AGCO",
+   "source": "SEC registrant string for CIK 880266: AGCO CORP /DE (state or successor marker and casing are SEC metadata). The company prints 'AGCO Corporation' in its 10-Q 0000880266-26-000077 (filed 2026-10-29); 10-K 0000880266-26-000010 (filed 2026-02-13) cover: 'AGCO CORPORATION'"
+  },
+  {
+   "ticker": "MTG",
+   "cik": "876437",
+   "field": "shortName",
+   "old": "Mgic Investment",
+   "new": "MGIC Investment",
+   "source": "SEC registrant string for CIK 876437: MGIC INVESTMENT CORP (state or successor marker and casing are SEC metadata). The company prints 'MGIC Investment Corporation' in its 10-Q 0000876437-26-000033 (filed 2026-11-04); 10-K 0000876437-26-000010 (filed 2026-02-25) cover: 'MGIC Investment Corp oration'"
+  },
+  {
+   "ticker": "AAON",
+   "cik": "824142",
+   "field": "shortName",
+   "old": "Aaon",
+   "new": "AAON",
+   "source": "SEC registrant string for CIK 824142: AAON, INC. (state or successor marker and casing are SEC metadata). The company prints 'AAON, Inc.' in its 10-Q 0000824142-26-000088 (filed 2026-11-09); 10-K 0000824142-26-000005 (filed 2026-03-02) cover: 'AAON, INC.'"
+  },
+  {
+   "ticker": "MYRG",
+   "cik": "700923",
+   "field": "shortName",
+   "old": "Myr Group",
+   "new": "MYR Group",
+   "source": "SEC registrant string for CIK 700923: MYR GROUP INC. (state or successor marker and casing are SEC metadata). The company prints 'MYR Group Inc.' in its 10-Q 0000700923-26-000052 (filed 2026-10-28); 10-K 0000700923-26-000007 (filed 2026-02-25) cover: 'MYR GROUP INC.'"
+  },
+  {
+   "ticker": "CVBF",
+   "cik": "354647",
+   "field": "shortName",
+   "old": "Cvb Financial",
+   "new": "CVB Financial",
+   "source": "SEC registrant string for CIK 354647: CVB FINANCIAL CORP (state or successor marker and casing are SEC metadata). The company prints 'CVB Financial Corp.' in its 10-Q 0001193125-26-451799 (filed 2026-11-06); 10-K 0001193125-26-083221 (filed 2026-02-27) cover: 'CVB FINANCIAL CORP.'"
+  },
+  {
+   "ticker": "LCII",
+   "cik": "763744",
+   "field": "shortName",
+   "old": "Lci Industries",
+   "new": "LCI Industries",
+   "source": "SEC registrant string for CIK 763744: LCI INDUSTRIES (state or successor marker and casing are SEC metadata). The company prints 'LCI Industries' in its 10-Q 0000763744-26-000115 (filed 2026-11-05); 10-K 0000763744-26-000011 (filed 2026-02-26) cover: 'LCI INDUSTRIES'"
+  },
+  {
+   "ticker": "LTC",
+   "cik": "887905",
+   "field": "shortName",
+   "old": "Ltc Properties",
+   "new": "LTC Properties",
+   "source": "SEC registrant string for CIK 887905: LTC PROPERTIES INC (state or successor marker and casing are SEC metadata). The company prints 'LTC Properties, Inc.' in its 10-Q 0001104659-26-122146 (filed 2026-11-03); 10-K 0001104659-26-019178 (filed 2026-02-24) cover: 'LTC PROPERTIES, INC.'"
+  },
+  {
+   "ticker": "DXPE",
+   "cik": "1020710",
+   "field": "shortName",
+   "old": "Dxp Enterprises",
+   "new": "DXP Enterprises",
+   "source": "SEC registrant string for CIK 1020710: DXP ENTERPRISES INC (state or successor marker and casing are SEC metadata). The company prints 'DXP Enterprises, Inc.' in its 10-Q 0001628280-26-071141 (filed 2026-11-05); 10-K 0001628280-26-012382 (filed 2026-02-26) cover: 'DXP Enterprises, Inc.'"
+  },
+  {
+   "ticker": "AMN",
+   "cik": "1142750",
+   "field": "shortName",
+   "old": "Amn Healthcare Services",
+   "new": "AMN Healthcare Services",
+   "source": "SEC registrant string for CIK 1142750: AMN HEALTHCARE SERVICES INC (state or successor marker and casing are SEC metadata). The company prints 'AMN Healthcare Services, Inc.' in its 10-Q 0001628280-26-071229 (filed 2026-11-06); 10-K 0001628280-26-009918 (filed 2026-02-20) cover: 'AMN HEALTHCARE SERVICES, INC.'"
+  },
+  {
+   "ticker": "LPG",
+   "cik": "1596993",
+   "field": "shortName",
+   "old": "Dorian Lpg",
+   "new": "Dorian LPG",
+   "source": "SEC registrant string for CIK 1596993: DORIAN LPG LTD. (state or successor marker and casing are SEC metadata). The company prints 'Dorian LPG Ltd.' in its 10-Q 0001596993-26-000052 (filed 2026-11-05); 10-K 0001596993-26-000025 (filed 2026-05-27) cover: '&#8203; Dorian LPG Ltd.'"
+  },
+  {
+   "ticker": "ANIP",
+   "cik": "1023024",
+   "field": "shortName",
+   "old": "Ani Pharmaceuticals",
+   "new": "ANI Pharmaceuticals",
+   "source": "SEC registrant string for CIK 1023024: ANI PHARMACEUTICALS INC (state or successor marker and casing are SEC metadata). The company prints 'ANI Pharmaceuticals, Inc.' in its 10-Q 0001023024-26-000078 (filed 2026-11-05); 10-K 0001023024-26-000014 (filed 2026-02-27) cover: 'ANI PHARMACEUTICALS, INC .'"
+  },
+  {
+   "ticker": "ADIG",
+   "cik": "2105139",
+   "field": "shortName",
+   "old": "Adi Global Distribution",
+   "new": "ADI Global Distribution",
+   "source": "SEC registrant string for CIK 2105139: ADI GLOBAL DISTRIBUTION INC. (state or successor marker and casing are SEC metadata). The company prints 'ADI Global Distribution Inc.' in its 10-Q 0001628280-26-073496 (filed 2026-11-12)"
+  },
+  {
+   "ticker": "CVI",
+   "cik": "1376139",
+   "field": "shortName",
+   "old": "Cvr Energy",
+   "new": "CVR Energy",
+   "source": "SEC registrant string for CIK 1376139: CVR ENERGY INC (state or successor marker and casing are SEC metadata). The company prints 'CVR Energy, Inc.' in its 10-Q 0001376139-26-000043 (filed 2026-11-03); 10-K 0001376139-26-000014 (filed 2026-02-18) cover: 'CVR Energy, Inc .'"
+  },
+  {
+   "ticker": "AMC",
+   "cik": "1411579",
+   "field": "shortName",
+   "old": "Amc Entertainment Holdings",
+   "new": "AMC Entertainment Holdings",
+   "source": "SEC registrant string for CIK 1411579: AMC ENTERTAINMENT HOLDINGS, INC. (state or successor marker and casing are SEC metadata). The company prints 'AMC Entertainment Holdings, Inc.' in its 10-Q 0001411579-26-000075 (filed 2026-11-04); 10-K 0001411579-26-000016 (filed 2026-02-23) cover: '&#8203; &#8203; AMC ENTERTAINMENT HOLDINGS, INC. &#8203;'"
+  },
+  {
+   "ticker": "ESE",
+   "cik": "866706",
+   "field": "shortName",
+   "old": "Esco Technologies",
+   "new": "ESCO Technologies",
+   "source": "SEC registrant string for CIK 866706: ESCO TECHNOLOGIES INC (state or successor marker and casing are SEC metadata). The company prints 'ESCO Technologies Inc.' in its 10-Q 0001104659-26-093266 (filed 2026-08-10); 10-K 0001104659-25-117276 (filed 2025-12-01) cover: '&#8203; &#8203; ESCO Technologies Inc.'"
+  },
+  {
+   "ticker": "VICI",
+   "cik": "1705696",
+   "field": "shortName",
+   "old": "Vici Properties",
+   "new": "VICI Properties",
+   "source": "SEC registrant string for CIK 1705696: VICI PROPERTIES INC. (state or successor marker and casing are SEC metadata). The company prints 'VICI Properties Inc.' in its 10-Q 0001705696-26-000120 (filed 2026-10-28); 10-K 0001705696-26-000034 (filed 2026-02-25) cover: 'VICI Properties Inc. VICI Properties L.P.'"
+  },
+  {
+   "ticker": "IEX",
+   "cik": "832101",
+   "field": "shortName",
+   "old": "Idex",
+   "new": "IDEX",
+   "source": "SEC registrant string for CIK 832101: IDEX CORP /DE/ (state or successor marker and casing are SEC metadata). The company prints 'IDEX Corporation' in its 10-Q 0000832101-26-000029 (filed 2026-10-28); 10-K 0000832101-26-000003 (filed 2026-02-19) cover: 'IDEX CORP ORATION'"
+  },
+  {
+   "ticker": "JBSS",
+   "cik": "880117",
+   "field": "shortName",
+   "old": "Sanfilippo John B & Son",
+   "new": "John B. Sanfilippo & Son",
+   "source": "SEC registrant string for CIK 880117: SANFILIPPO JOHN B & SON INC (state or successor marker and casing are SEC metadata). The company prints 'John B. Sanfilippo & Son' in its 10-Q 0001193125-26-436164 (filed 2026-10-28); 10-K 0001193125-26-356919 (filed 2026-08-19) cover: 'JOHN B. SANFILIPPO & SON, INC.'; SEC lists the name surname first"
+  },
+  {
+   "ticker": "SBCF",
+   "cik": "730708",
+   "field": "shortName",
+   "old": "Seacoast Banking Corp of Florida",
+   "new": "Seacoast Banking Corporation of Florida",
+   "source": "SEC registrant string for CIK 730708: SEACOAST BANKING CORP OF FLORIDA (state or successor marker and casing are SEC metadata). The company prints 'Seacoast Banking Corporation of Florida' in its 10-Q 0001628280-26-070242 (filed 2026-11-04); 10-K 0001628280-26-012787 (filed 2026-02-27) cover: 'Seacoast Banking Corporation of Florida'"
   }
  ]
 }

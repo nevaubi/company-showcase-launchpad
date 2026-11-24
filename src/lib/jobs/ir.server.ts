@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { companyCiks, type CoverageCompany } from "@/lib/coverage";
 import { classifyIrDocument, irFileExt, IR_FILE_RE } from "@/lib/ir/classify";
 import { isIrFileAllowed } from "@/lib/ir/source-guard";
+import { judgeHit, networkFolder } from "@/lib/jobs/ir-site-match";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 
 const BUCKET = "ir-documents";
@@ -152,21 +153,35 @@ export async function irSiteCandidates(c: CoverageCompany): Promise<Candidate[]>
       if (/\b402\b/.test((e as Error).message)) throw e;
     }
   }
-  // Tavily finds decks and supplements hosted on CDNs the IR pages only link via scripts.
+  // Tavily finds decks and supplements hosted on CDNs the IR pages only link via scripts. A hit is taken
+  // only on evidence (ir-site-match.ts): the company's own host, the content-network folder its stored
+  // files already use, or its distinctive name or ticker as whole words.
   try {
     const { tavilySearch } = await import("@/lib/web.server");
-    const host = new URL(irSite).hostname.replace(/^www\./, "");
-    const site = new URL(website).hostname.replace(/^www\./, "");
+    const ownHosts = [irSite, website].map((u) => {
+      try {
+        return new URL(u).hostname.replace(/^www\./, "");
+      } catch {
+        return "";
+      }
+    }).filter(Boolean);
+    const knownFolders = new Set<string>();
+    const { data: stored } = await supabaseAdmin
+      .from("ir_documents")
+      .select("source_url")
+      .eq("ticker", c.ticker)
+      .or("source_url.ilike.%q4cdn.com/%,source_url.ilike.%gcs-web.com/%")
+      .limit(1000);
+    for (const d of stored ?? []) {
+      const f = networkFolder(d.source_url);
+      if (f && isIrFileAllowed(c.ticker, d.source_url)) knownFolders.add(f);
+    }
+    const evidence = { ticker: c.ticker, shortName: c.shortName, ownHosts, knownFolders: [...knownFolders] };
     for (const q of [`${c.shortName} investor presentation earnings slides pdf`, `${c.shortName} financial supplement quarterly data xlsx`]) {
       const r = await tavilySearch(q, { maxResults: 10, depth: "basic" });
       for (const x of r.results) {
         const u = x.url.split("#")[0];
-        const h = new URL(u).hostname;
-        const cdn = /q4cdn\.com|gcs-web\.com/.test(h);
-        const named = `${x.title} ${u}`.toLowerCase();
-        const mentions = named.includes(c.ticker.toLowerCase()) || named.includes(c.shortName.toLowerCase().split(/[ .']/)[0]);
-        const own = h.endsWith(host) || h.endsWith(site) || (cdn && mentions);
-        if (own && IR_FILE_RE.test(u.split("?")[0])) links.add(u);
+        if (IR_FILE_RE.test(u.split("?")[0]) && judgeHit({ url: u, title: x.title ?? "" }, evidence).own) links.add(u);
       }
     }
   } catch {

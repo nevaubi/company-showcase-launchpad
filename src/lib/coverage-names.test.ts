@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   acceptName,
   applyCorrections,
+  displayName,
   industryImplausible,
   nameVerdict,
   namesAgree,
@@ -148,5 +149,46 @@ describe("applyCorrections", () => {
     const r = applyCorrections([entry("HCC", "1691303", "Warrior Met Coal")], [fix({})]);
     expect(r.applied).toEqual([]);
     expect(r.rejected).toEqual([]);
+  });
+});
+
+describe("displayName (registrant strings as SEC gives them, 24 Nov 2026)", () => {
+  it("drops SEC state and successor markers, then the legal form", () => {
+    expect(displayName("WHIRLPOOL CORP /DE/")).toBe("Whirlpool");
+    expect(displayName("UGI CORP /PA/")).toBe("UGI");
+    expect(displayName("FNB CORP/PA/")).toBe("FNB");
+    expect(displayName("PARK NATIONAL CORP /OH/")).toBe("Park National");
+    expect(displayName("BEL FUSE INC /NJ")).toBe("Bel Fuse");
+    expect(displayName("Six Flags Entertainment Corporation/NEW")).toBe("Six Flags Entertainment");
+    expect(displayName("Rivian Automotive, Inc. / DE")).toBe("Rivian Automotive");
+    expect(displayName("Core Scientific, Inc./tx")).toBe("Core Scientific");
+    expect(displayName("Columbia Financial, Inc./MD/")).toBe("Columbia Financial");
+    expect(displayName("MP Materials Corp. / DE")).toBe("MP Materials");
+    expect(displayName("RUSH ENTERPRISES INC \\TX\\")).toBe("Rush Enterprises");
+    expect(displayName("U-Haul Holding Co /NV/")).toBe("U-Haul Holding");
+  });
+  it("keeps initials and roman numerals in capitals when casing an all-caps string", () => {
+    expect(displayName("G III APPAREL GROUP LTD /DE/")).toBe("G III Apparel Group");
+    expect(displayName("CVB FINANCIAL CORP")).toBe("CVB Financial");
+    expect(displayName("DXP ENTERPRISES INC")).toBe("DXP Enterprises");
+    expect(displayName("DORIAN LPG LTD.")).toBe("Dorian LPG");
+    expect(displayName("HERC HOLDINGS INC")).toBe("Herc");
+    expect(displayName("SEACOAST BANKING CORP OF FLORIDA")).toBe("Seacoast Banking Corp of Florida");
+  });
+  it("keeps '& Co.' and '& Company', which are part of the name", () => {
+    expect(displayName("Levi Strauss & Co.")).toBe("Levi Strauss & Co.");
+    expect(displayName("Moelis & Company")).toBe("Moelis & Company");
+    expect(displayName("ARTHUR J. GALLAGHER & CO.")).toBe("Arthur J. Gallagher & Co.");
+    expect(displayName("McCormick & Company, Incorporated")).toBe("McCormick & Company");
+  });
+  it("leaves names that are already right", () => {
+    expect(displayName("M/I Homes, Inc.")).toBe("M/I Homes");
+    expect(displayName("M/I HOMES, INC.")).toBe("M/I Homes");
+    expect(displayName("NNN REIT, Inc.")).toBe("NNN REIT");
+    expect(displayName("O-I Glass, Inc. /DE/")).toBe("O-I Glass");
+    expect(displayName("F.N.B. Corporation")).toBe("F.N.B.");
+    expect(displayName("Accenture plc")).toBe("Accenture");
+    expect(displayName("Wells Fargo & Company/MN")).toBe("Wells Fargo & Company");
+    expect(displayName("AT&T Inc.")).toBe("AT&T");
   });
 });

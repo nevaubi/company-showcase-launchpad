@@ -18,7 +18,7 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync } from "node:fs";
 import { CURATED_COVERAGE as COVERAGE } from "@/lib/coverage";
 import type { CoverageCompany } from "@/lib/coverage";
-import { acceptName, applyCorrections, namesAgree, type Correction } from "./lib/coverage-names";
+import { acceptName, applyCorrections, displayName, namesAgree, type Correction } from "./lib/coverage-names";
 import { applyDetailCorrections, fallbackDescription as secSentence, type CoverageDetails, type DetailCorrection } from "./lib/coverage-details";
 
 const args = Object.fromEntries(process.argv.slice(2).map((a) => a.replace(/^--/, "").split("=")).map(([k, v]) => [k, v ?? "1"]));
@@ -219,15 +219,8 @@ async function wikidataByTicker(tickers: string[]): Promise<Map<string, WD>> {
   return out;
 }
 
-const LEGAL = /,?\s+(Inc\.?|Incorporated|Corporation|Corp\.?|Co\.?|Company|Ltd\.?|Limited|plc|PLC|N\.V\.|S\.A\.|SE|AG|L\.P\.|LP|LLC|Holdings? Inc\.?)$/i;
-const SMALL = new Set(["and", "of", "the", "for", "in", "on", "de"]);
-function cleanName(name: string): string {
-  let n = name.trim();
-  for (let i = 0; i < 3 && LEGAL.test(n); i++) n = n.replace(LEGAL, "").trim();
-  if (n === n.toUpperCase() && /[A-Z]{4}/.test(n))
-    n = n.toLowerCase().split(" ").map((w, i) => (i && SMALL.has(w) ? w : w.replace(/(^|[-/&.])([a-z])/g, (_, p, c) => p + c.toUpperCase()))).join(" ");
-  return n.replace(/\s+/g, " ");
-}
+/** Display names: SEC markers and legal forms cut, all-caps strings cased (scripts/lib/coverage-names.ts). */
+const cleanName = displayName;
 const tokens = (s: string) => cleanName(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((t) => t.length >= 4);
 /** The website whose domain carries a word of the company's name; the shortest otherwise. */
 function pickWebsite(urls: string[], name: string): string | undefined {

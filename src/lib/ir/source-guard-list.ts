@@ -138,4 +138,22 @@ export const GUARDED_SOURCES: readonly GuardedSource[] = [
     files: 1,
     facts: 0,
   },
+  {
+    ticker: "NBTB",
+    host: "s27.q4cdn.com",
+    path: "/928525813/",
+    owner: "The Bancorp, Inc. (TBBK)",
+    evidence: "q4cdn title sample 24 Nov 2026: all 16 titles are The Bancorp's ('The Bancorp Reports 3Q 2026 EPS of $1.53', 'The Bancorp, Inc. Sets Third Quarter 2026 Financial Results'); the same company as the guarded investors.thebancorp.com",
+    files: 16,
+    facts: 0,
+  },
+  {
+    ticker: "SBCF",
+    host: "s24.q4cdn.com",
+    path: "/806922067/",
+    owner: "First Seacoast Bancorp (FSEA) and Cambridge Financial Group, Inc., not Seacoast Banking Corporation of Florida",
+    evidence: "q4cdn title sample 24 Nov 2026: 'Cambridge Financial Group, Inc. Completes Acquisition of First Seacoast...', 'Cambridge Financial Group, Inc. and First Seacoast Bancorp...'; file name 'FSEA-2024-Annual-Report.pdf'",
+    files: 3,
+    facts: 0,
+  },
 ];
