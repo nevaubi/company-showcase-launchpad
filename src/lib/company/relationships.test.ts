@@ -24,7 +24,7 @@ const NAMES = { AAPL: "Apple", CRUS: "Cirrus Logic", AMKR: "Amkor", SNX: "TD Syn
 const LINKS: RiskLink[] = [
   // other companies naming Apple as their customer: they are Apple's suppliers, and the share is of their revenue
   link("CRUS", "Apple Inc.", "AAPL", "customer", { share_pct: 91, single_source: true, quote: "One customer, Apple Inc., represented 91 percent of total net sales.", filed: "2026-05-20" }),
-  link("AMKR", "Apple", "AAPL", "customer", { share_pct: 29.8, quote: "Apple accounted for 29.8% of our net sales to customers." }),
+  link("AMKR", "Apple", "AAPL", "customer", { share_pct: 29.8, quote: "Apple accounted for 29.8% of our net sales." }),
   link("QCOM", "Apple", "AAPL", "customer", { quote: "We sell modems to Apple." }),
   // Apple naming its own suppliers, without a share
   link("AAPL", "Taiwan Semiconductor", "TSM", "supplier", { single_source: true, quote: "Substantially all of the Company's processors are manufactured by a single outsourcing partner." }),
@@ -50,6 +50,8 @@ describe("keyRelationships", () => {
     expect(crus.share).toEqual({ pct: 91, of: "CRUS", basis: "revenue" });
     expect(shareOfWords(crus.share!, (t) => NAMES[t as keyof typeof NAMES] ?? t)).toBe("of Cirrus Logic's revenue");
     expect(crus.source.quote).toMatch(/91 percent/);
+    // a share of net sales is revenue even when the sentence does not use the word "customer"
+    expect(r.suppliers[1].share).toEqual({ pct: 29.8, of: "AMKR", basis: "revenue" });
     const snx = r.customers[0];
     expect(snx.share).toEqual({ pct: 12, of: "SNX", basis: "vendor" });
     expect(shareOfWords(snx.share!, (t) => NAMES[t as keyof typeof NAMES] ?? t)).toBe("of TD Synnex's purchases");

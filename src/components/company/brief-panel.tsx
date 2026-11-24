@@ -52,12 +52,8 @@ export function BriefPanel({ ticker }: { ticker: string }) {
   if (!b?.sentences.length) return null;
   const facts = new Map(b.facts.map((f) => [f.id, f]));
   return (
-    <Panel
-      title="Last 30 days"
-      subtitle={`${b.label} · ${fmtRelative(b.generated)}`}
-      collapse={false}
-    >
-      <ul className="grid gap-1.5 px-3.5 py-2.5 text-[13px]">
+    <Panel className="rounded-md border bg-card shadow-paper" title={<span className="text-sm">Last 30 days</span>} subtitle={`${b.label} · ${fmtRelative(b.generated)}`} collapse={false} bodyClassName="p-0">
+      <ul className="grid gap-1.5 px-4 py-2.5 text-[13px]">
         {b.sentences.map((s, k) => (
           <li key={k} className="leading-relaxed">
             {humanizeDates(s.text)}{" "}
@@ -68,7 +64,7 @@ export function BriefPanel({ ticker }: { ticker: string }) {
           </li>
         ))}
       </ul>
-      <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
+      <p className="border-t px-4 py-2 text-[11px] text-muted-foreground">
         Hover a number for the record a sentence rests on; click it to open the tab that shows it.
         Every number was checked against the records in code, and{" "}
         <span title={`Drafted by ${b.models.draft}; checked by ${b.models.check ?? "n/a"}`} className="underline decoration-dotted underline-offset-2">a second model</span>{" "}

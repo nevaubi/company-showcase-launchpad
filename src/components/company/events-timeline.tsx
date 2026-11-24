@@ -28,7 +28,7 @@ const KIND_LABEL: Record<EventKind, string> = {
   insider_sell: "Insider sale",
   pattern: "Signal",
   alt: "Record",
-  intel: "Supply chain",
+  intel: "Statement",
 };
 /** Records filed about the company itself. Federal Register notices are left out: they are matched by name and mostly concern other parties. */
 const ALT_LABEL: Record<string, string> = { ownership: "Ownership", contracts: "Government contract", fda: "FDA", recalls: "Recall" };
@@ -56,7 +56,7 @@ export function EventsTimeline({ ticker, data }: { ticker: string; data: Company
           (q) => q.eq("ticker", ticker).eq("kind", "event").in("dataset", Object.keys(ALT_LABEL)).not("date", "is", null).order("date", { ascending: false }).limit(40),
           client,
         ),
-        supabase.from("supply_signals").select("kind,title,detail,impact,filed,accn,doc,url").eq("ticker", ticker).not("filed", "is", null).order("filed", { ascending: false }).limit(30),
+        supabase.from("supply_signals").select("kind,title,detail,impact,filed,accn,doc,url,source_kind").eq("ticker", ticker).not("filed", "is", null).order("filed", { ascending: false }).limit(30),
       ]);
       return { alt, sig: sig.data ?? [] };
     },
@@ -66,7 +66,7 @@ export function EventsTimeline({ ticker, data }: { ticker: string; data: Company
     const ev: TimelineEvent[] = [];
     for (const r of extra.data?.alt ?? []) ev.push({ date: r.date!, kind: "alt", title: `${ALT_LABEL[r.dataset] ?? r.dataset}: ${r.title}`, detail: r.value != null ? fmtAlt(r.value, r.unit) : undefined, url: r.source_url ?? undefined, tone: r.dataset === "recalls" ? "negative" : "neutral" });
     for (const s of extra.data?.sig ?? [])
-      ev.push({ date: s.filed!.slice(0, 10), kind: "intel", title: s.title, detail: s.detail ?? undefined, accn: s.accn ?? undefined, doc: s.doc ?? undefined, url: s.accn ? undefined : (s.url ?? undefined), tone: s.impact === "positive" ? "positive" : s.impact === "negative" ? "negative" : "neutral" });
+      ev.push({ date: s.filed!.slice(0, 10), kind: "intel", label: s.source_kind === "transcript" ? "Earnings call" : s.source_kind === "web" ? "Web" : undefined, title: s.title, detail: s.detail ?? undefined, accn: s.accn ?? undefined, doc: s.doc ?? undefined, url: s.accn ? undefined : (s.url ?? undefined), tone: s.impact === "positive" ? "positive" : s.impact === "negative" ? "negative" : "neutral" });
     for (const r of data.earningsReleases) ev.push({ date: r.filed, kind: "earnings", title: r.title || "Earnings release", accn: r.accn, doc: r.doc });
     for (const f of data.filings) {
       const kind: EventKind | null = f.form === "10-K" ? "annual" : f.form === "10-Q" ? "quarterly" : f.form === "8-K" ? "8k" : f.form === "DEF 14A" ? "proxy" : null;
@@ -91,7 +91,7 @@ export function EventsTimeline({ ticker, data }: { ticker: string; data: Company
     <IrPanel
       section="Recent events"
       title="Recent events"
-      subtitle={`The ${ROWS} latest: filings, earnings releases, insider trades, ownership and contract records, supply-chain statements · every row opens its source`}
+      subtitle={`The ${ROWS} latest: filings, earnings releases, insider trades, ownership and contract records, statements from calls and filings · every row opens its source`}
       bodyClassName="p-0"
       actions={
         <>
@@ -108,9 +108,9 @@ export function EventsTimeline({ ticker, data }: { ticker: string; data: Company
         {events.map((e, i) => {
           const body = (
             <>
-              <span className={cn("num w-[4.5rem] shrink-0", IR.caption)}>{fmtDate(e.date)}</span>
+              <span className={cn("num w-[5.25rem] shrink-0 whitespace-nowrap pt-0.5", IR.caption)}>{fmtDate(e.date)}</span>
               <Badge variant="outline" className="w-[5.75rem] shrink-0 justify-center text-[10px]">
-                {KIND_LABEL[e.kind]}
+                {e.label ?? KIND_LABEL[e.kind]}
               </Badge>
               <span className="min-w-0 flex-1">
                 <span className={cn("block truncate text-[13px] leading-5", e.tone === "positive" && "text-positive", e.tone === "negative" && "text-negative")} title={e.title}>

@@ -6,8 +6,7 @@ import { IrPanel } from "@/components/ir/panel";
 import { IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { SourceTarget } from "@/components/source/source-context";
-import { useCompany, usePrices, useQuotes } from "@/lib/data";
+import { useCompany } from "@/lib/data";
 import { getNarratives } from "@/lib/ai.functions";
 import { companyChangesQuery } from "@/lib/changes/data";
 import { whyCards } from "@/lib/company/why";
@@ -23,7 +22,7 @@ import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
 import { EarningsSection } from "@/components/company/earnings-section";
 import { EventsTimeline } from "@/components/company/events-timeline";
 import { FilingChangesPanel } from "@/components/company/filing-insights";
-import { FinancialAnalysisSection, type PriceContext } from "@/components/company/financial-analysis";
+import { FinancialAnalysisSection } from "@/components/company/financial-analysis";
 import { KpiInsightsPanel } from "@/components/company/kpi-insights";
 import { LeadershipPanel } from "@/components/company/leadership";
 import { LevelsAndSignals } from "@/components/company/levels-signals";
@@ -95,44 +94,30 @@ const SECTIONS = {
   news: { id: "ov-news", label: "News" },
 } as const;
 
-/** A section of the page: the nav jumps to its id, and it stacks its panels with the page's one gap. */
+/**
+ * Panels owned by other units (the ranked changes, the indicator board, firm notes) are drawn with the older flat
+ * panel; this gives them the same finish as the rest of the page without touching their files.
+ */
+const FRAMED = "min-w-0 [&>section]:rounded-md [&>section]:border [&>section]:bg-card [&>section]:shadow-paper";
+
+/**
+ * A section of the page: the nav jumps to its id, and it stacks its panels with the page's one gap. Panels that have
+ * no data for the company render nothing; a section left with nothing in it takes no space (and loses its nav chip).
+ */
 function Section({ id, children, className }: { id: string; children: ReactNode; className?: string }) {
   return (
-    <section id={id} className={cn("grid min-w-0 scroll-mt-28 grid-cols-1 gap-3", className)}>
+    <section id={id} className={cn("grid min-w-0 scroll-mt-28 grid-cols-1 gap-3 [&:not(:has(>*:not(:empty)))]:hidden", className)}>
       {children}
     </section>
   );
 }
 
 function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }) {
-  const year = usePrices(ticker, "1y");
-  const quote = useQuotes([ticker]).data?.quotes[0];
   const changes = useQuery(companyChangesQuery(ticker));
   const q = data.statements.quarterly;
   const a = data.statements.annual;
   const p = data.profile;
   const drivers = useMemo(() => whyCards(data), [data]);
-
-  // the last price: the live quote, else the last stored close with its date
-  const lastBar = year.data?.bars.at(-1);
-  const price: PriceContext | null = useMemo(() => {
-    const live = quote?.price || null;
-    const px = live ?? lastBar?.[4] ?? null;
-    if (!px) return null;
-    const shares = p.sharesOutstanding;
-    const sharesTarget: SourceTarget | null =
-      shares && p.sharesOutstandingAccn
-        ? {
-            ticker,
-            label: "Shares outstanding (cover page)",
-            periodLabel: p.sharesOutstandingAsOf ? `as of ${fmtDate(p.sharesOutstandingAsOf)}` : undefined,
-            unit: "shares",
-            value: shares,
-            src: { accn: p.sharesOutstandingAccn, concept: "dei:EntityCommonStockSharesOutstanding", end: p.sharesOutstandingAsOf ?? "", value: shares },
-          }
-        : null;
-    return { price: px, asOf: live ? null : (lastBar?.[0]?.slice(0, 10) ?? null), shares: shares ?? null, sharesTarget };
-  }, [quote?.price, lastBar, p.sharesOutstanding, p.sharesOutstandingAccn, p.sharesOutstandingAsOf, ticker]);
 
   const sections = useMemo(() => Object.values(SECTIONS).filter((s) => s.id !== SECTIONS.drivers.id || drivers.length > 0), [drivers.length]);
   // the pipeline's ranked list when it exists; the dated events otherwise, never both
@@ -144,7 +129,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       <SectionNav sections={sections} />
 
       <Section id={SECTIONS.analysis.id}>
-        <FinancialAnalysisSection ticker={ticker} data={data} price={price} />
+        <FinancialAnalysisSection ticker={ticker} data={data} />
       </Section>
 
       {drivers.length > 0 && (
@@ -156,7 +141,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
       <Section id={SECTIONS.changed.id}>
         <BriefPanel ticker={ticker} />
         {ranked ? (
-          <div data-section="What changed" className="min-w-0">
+          <div data-section="What changed" className={FRAMED}>
             <WhatChangedPanel ticker={ticker} />
           </div>
         ) : (
@@ -170,14 +155,14 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
           <ResearchChart ticker={ticker} data={data} />
         </div>
         <LevelsAndSignals ticker={ticker} />
-        <div id="ov-indicators" data-section="Indicator board" className="min-w-0 scroll-mt-28">
+        <div id="ov-indicators" data-section="Indicator board" className={cn(FRAMED, "scroll-mt-28")}>
           <CompanyIndicators ticker={ticker} />
         </div>
       </Section>
 
       <Section id={SECTIONS.earnings.id} className="xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <EarningsSection ticker={ticker} data={data} />
-        <div data-section="Latest earnings call" className="min-w-0">
+        <div data-section="Latest earnings call" className="min-w-0 empty:hidden">
           <EarningsCallPanel ticker={ticker} />
         </div>
       </Section>
@@ -193,7 +178,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <Section id={SECTIONS.operating.id}>
         <ReportedKpis ticker={ticker} />
-        <div data-section="operating-insights" className="min-w-0">
+        <div data-section="operating-insights" className="min-w-0 empty:hidden">
           <KpiInsightsPanel ticker={ticker} />
         </div>
       </Section>
@@ -213,7 +198,9 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <Section id={SECTIONS.news.id}>
         <NarrativesPanel ticker={ticker} name={p.name} />
-        <FirmNotes ticker={ticker} />
+        <div data-section="Firm notes" className={cn(FRAMED, "empty:hidden")}>
+          <FirmNotes ticker={ticker} />
+        </div>
       </Section>
 
       <p className={IR.caption} data-section="As of">

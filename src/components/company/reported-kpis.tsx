@@ -80,8 +80,11 @@ export function ReportedKpis({ ticker }: { ticker: string }) {
       ? `${stats.series.toLocaleString("en-US")} series from ${stats.documents?.toLocaleString("en-US") ?? "the"} company documents${stats.lastPeriod ? `, through ${fmtDate(stats.lastPeriod)}` : ""}`
       : "Lines from the company's own releases, supplements and presentations";
 
+  // a company with no stored IR documents has no such section
+  if (!stored && !index.isLoading) return null;
   return (
     <div ref={ref} className="min-w-0">
+      {index.isLoading ? null : (
       <IrPanel
         section="What the company reports"
         title="What the company reports"
@@ -95,12 +98,10 @@ export function ReportedKpis({ ticker }: { ticker: string }) {
           </Button>
         }
       >
-        {index.isLoading || (stored && (ir.isLoading || !near)) ? (
+        {ir.isLoading || !near ? (
           <div className="p-4">
             <Skeleton className="h-36" />
           </div>
-        ) : !stored ? (
-          <p className="px-4 py-3 text-[13px] text-muted-foreground">No investor-relations documents are stored for {ticker} yet, so there are no company-reported series to show.</p>
         ) : ir.isError || !payload ? (
           <p className="px-4 py-3 text-[13px] text-muted-foreground">The stored IR data could not be read just now. The IR data tab has the full tables.</p>
         ) : lines.length === 0 ? (
@@ -168,6 +169,7 @@ export function ReportedKpis({ ticker }: { ticker: string }) {
           </table>
         )}
       </IrPanel>
+      )}
     </div>
   );
 }

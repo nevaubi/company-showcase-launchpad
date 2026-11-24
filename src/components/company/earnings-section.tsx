@@ -18,6 +18,7 @@ import { getEstimates } from "@/lib/estimates.functions";
 import type { Bar, CompanyDataset } from "@/lib/financials/types";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { StatGrid } from "./stat-grid";
 
 const pct = (v: number, digits = 1) => `${(Math.abs(v) * 100).toFixed(digits)}%`;
 const signedPct = (v: number, digits = 1) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${pct(v, digits)}`;
@@ -74,7 +75,7 @@ export function EarningsSection({ ticker, data }: { ticker: string; data: Compan
         </Button>
       }
     >
-      <div className="grid grid-cols-2 divide-x divide-y divide-border/60 md:grid-cols-3 2xl:grid-cols-6 2xl:divide-y-0">
+      <StatGrid className="grid-cols-2 md:grid-cols-3 2xl:grid-cols-6">
         <Block
           label="Next report"
           value={next ? fmtDate(next.date) : DASH}
@@ -105,56 +106,55 @@ export function EarningsSection({ ticker, data }: { ticker: string; data: Compan
             <p className={cn("mt-0.5", IR.stat)}>{DASH}</p>
           )}
         </div>
-        <div className="min-w-0 px-4 py-3">
-          <p className={cn("truncate", IR.caption)}>Last EPS against consensus</p>
-          {est.isLoading ? (
-            <Skeleton className="mt-1 h-6 w-24" />
-          ) : lastSurprise ? (
-            <>
-              <p className={cn("mt-0.5 truncate", IR.stat)}>
-                ${lastSurprise.actual!.toFixed(2)} <span className="text-[13px] font-normal text-muted-foreground">against ${lastSurprise.estimate!.toFixed(2)}</span>
-              </p>
-              <p className={cn("mt-0.5", IR.caption)}>
-                {lastSurprise.surprisePct != null && <span className={cn("num", tone(lastSurprise.surprisePct))}>{signedPct(lastSurprise.surprisePct)}</span>} quarter to {fmtDate(lastSurprise.quarter)}
-                {beats ? ` · above consensus in ${beats.beats} of ${beats.n}` : ""} ·{" "}
-                <Link to="/app/companies/$ticker/estimates" params={{ ticker }} className="text-link hover:underline">
-                  estimates
-                </Link>
-              </p>
-            </>
-          ) : (
-            <>
-              <p className={cn("mt-0.5", IR.stat)}>{DASH}</p>
-              <p className={cn("mt-0.5", IR.caption)}>no consensus history stored for {ticker}</p>
-            </>
-          )}
-        </div>
-      </div>
+        {(est.isLoading || lastSurprise) && (
+          <div className="min-w-0 px-4 py-3">
+            <p className={cn("truncate", IR.caption)}>Last EPS against consensus</p>
+            {lastSurprise ? (
+              <>
+                <p className={cn("mt-0.5 truncate", IR.stat)}>
+                  ${lastSurprise.actual!.toFixed(2)} <span className="text-[13px] font-normal text-muted-foreground">against ${lastSurprise.estimate!.toFixed(2)}</span>
+                </p>
+                <p className={cn("mt-0.5", IR.caption)}>
+                  {lastSurprise.surprisePct != null && <span className={cn("num", tone(lastSurprise.surprisePct))}>{signedPct(lastSurprise.surprisePct)}</span>} quarter to {fmtDate(lastSurprise.quarter)}
+                  {beats ? ` · above consensus in ${beats.beats} of ${beats.n}` : ""} ·{" "}
+                  <Link to="/app/companies/$ticker/estimates" params={{ ticker }} className="text-link hover:underline">
+                    estimates
+                  </Link>
+                </p>
+              </>
+            ) : (
+              <Skeleton className="mt-1 h-6 w-24" />
+            )}
+          </div>
+        )}
+      </StatGrid>
       {shown.length > 0 && (
         <div className="border-t px-4 py-3" data-section="Earnings reactions">
           <p className={IR.caption}>
             Last {shown.length} reports, oldest first: two-day move after each release (bars reach ±{pct(max)}). Click a bar for the release.
           </p>
-          <div className="mt-2 flex h-20 items-stretch gap-[2px]">
-            {shown.map((r) => (
-              <button
-                key={r.accn}
-                type="button"
-                onClick={() => openRelease(r)}
-                title={`${fmtDate(r.date)}: ${signedPct(r.move)}${r.excess != null ? `, ${signedPct(r.excess)} against the S&P 500` : ""}`}
-                aria-label={`Earnings release ${fmtDate(r.date)}: stock ${signedPct(r.move)} over two days`}
-                className="group flex min-w-0 max-w-10 flex-1 flex-col rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <span className="flex flex-1 items-end">{r.move >= 0 && <span className="w-full rounded-t-[3px] bg-positive group-hover:opacity-80" style={{ height: `${Math.max(2, (r.move / max) * 100)}%` }} />}</span>
-                <span className="h-px bg-border" />
-                <span className="flex flex-1 items-start">{r.move < 0 && <span className="w-full rounded-b-[3px] bg-negative group-hover:opacity-80" style={{ height: `${Math.max(2, (-r.move / max) * 100)}%` }} />}</span>
-              </button>
-            ))}
+          <div className="mt-2 w-fit max-w-full">
+            <div className="flex h-20 items-stretch gap-[2px]">
+              {shown.map((r) => (
+                <button
+                  key={r.accn}
+                  type="button"
+                  onClick={() => openRelease(r)}
+                  title={`${fmtDate(r.date)}: ${signedPct(r.move)}${r.excess != null ? `, ${signedPct(r.excess)} against the S&P 500` : ""}`}
+                  aria-label={`Earnings release ${fmtDate(r.date)}: stock ${signedPct(r.move)} over two days`}
+                  className="group flex w-6 min-w-0 shrink flex-col rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-7"
+                >
+                  <span className="flex flex-1 items-end">{r.move >= 0 && <span className="w-full rounded-t-[3px] bg-positive group-hover:opacity-80" style={{ height: `${Math.max(2, (r.move / max) * 100)}%` }} />}</span>
+                  <span className="h-px bg-border" />
+                  <span className="flex flex-1 items-start">{r.move < 0 && <span className="w-full rounded-b-[3px] bg-negative group-hover:opacity-80" style={{ height: `${Math.max(2, (-r.move / max) * 100)}%` }} />}</span>
+                </button>
+              ))}
+            </div>
+            <p className={cn("mt-1 flex justify-between gap-4", IR.caption)}>
+              <span>{fmtDate(shown[0].date)}</span>
+              {shown.length > 1 && <span>{fmtDate(shown[shown.length - 1].date)}</span>}
+            </p>
           </div>
-          <p className={cn("mt-1 flex justify-between", IR.caption)}>
-            <span>{fmtDate(shown[0].date)}</span>
-            <span>{fmtDate(shown[shown.length - 1].date)}</span>
-          </p>
         </div>
       )}
     </IrPanel>

@@ -29,7 +29,15 @@ export interface KeyRelationships {
   totals: { customers: number; suppliers: number; partners: number; competitors: number };
 }
 
-const BASIS_WORD: Record<ConcBasis, string> = { revenue: "revenue", receivables: "receivables", vendor: "purchases", channel: "channel sales", other: "stated total" };
+const BASIS_WORD: Record<ConcBasis, string> = { revenue: "revenue", receivables: "receivables", vendor: "purchases", channel: "channel sales", other: "total, as its filing states it" };
+/**
+ * What a stated share is a share of. The supply chain's reader needs the word "customer" beside "revenue" to call a
+ * share revenue; a sentence such as "Apple accounted for 29.8% of our net sales" says the same without it.
+ */
+function basisOf(quote: string): ConcBasis {
+  const basis = concentrationBasis(quote);
+  return basis === "other" && /\b(revenues?|net sales|total sales|sales)\b/i.test(quote) ? "revenue" : basis;
+}
 /** "12% of Cirrus Logic's revenue": whose total the share is of, in words. */
 export const shareOfWords = (s: NonNullable<Relationship["share"]>, nameOf: (ticker: string) => string): string => `of ${nameOf(s.of)}'s ${BASIS_WORD[s.basis]}`;
 
@@ -45,7 +53,7 @@ function toRelationship(n: GraphNode): Relationship {
     ticker: n.ticker,
     domain: n.domain,
     relation: n.relation as "customer" | "supplier",
-    share: withShare ? { pct: withShare.share_pct as number, of: withShare.ticker, basis: concentrationBasis(withShare.quote ?? "") } : null,
+    share: withShare ? { pct: withShare.share_pct as number, of: withShare.ticker, basis: basisOf(withShare.quote ?? "") } : null,
     singleSource: facts.singleSource,
     filings: facts.filings,
     summary: facts.summary,

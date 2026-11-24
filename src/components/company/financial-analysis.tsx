@@ -6,8 +6,8 @@ import { Link } from "@tanstack/react-router";
 import { IrPanel } from "@/components/ir/panel";
 import { DASH, IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
-import { useSource, type SourceTarget } from "@/components/source/source-context";
-import { analyze, figTarget, measureOf, medianTarget, vsPrior, type Fig, type FinancialAnalysis, type KeyFigure, type Measure, type MeasureGroup, type MeasureUnit } from "@/lib/company/analysis";
+import { useSource } from "@/components/source/source-context";
+import { analyze, figTarget, medianTarget, vsPrior, type Fig, type FinancialAnalysis, type KeyFigure, type Measure, type MeasureGroup, type MeasureUnit } from "@/lib/company/analysis";
 import { changeTone, fmtChange, fmtValue, fmtWithUnit, groupUnit, rowValues, unitLabel, usdScale } from "@/lib/company/analysis-format";
 import { financialRead, fmtFig, READ_RULES, type ReadItem } from "@/lib/company/read";
 import { newerFilings, type NewerFiling } from "@/lib/company/staleness";
@@ -16,6 +16,7 @@ import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { FigButton } from "./fig-button";
 import { Spark } from "./spark";
+import { StatGrid } from "./stat-grid";
 
 /* ------------------------------------------------------------------ what "latest" means, and what is not in it yet */
 
@@ -38,7 +39,7 @@ function NotYetIncluded({ ticker, filings }: { ticker: string; filings: NewerFil
           key={f.accn}
           size="xs"
           variant="outline"
-          className="h-6"
+          className="h-auto min-h-6 whitespace-normal py-0.5 text-left"
           onClick={() => open({ ticker, label: f.kind === "release" ? "Earnings release" : f.form, periodLabel: f.report ?? f.filed, unit: "usd", value: 0, doc: { accn: f.accn, doc: f.doc, form: f.form, filed: f.filed, title: f.kind === "release" ? "Earnings release (8-K)" : `Form ${f.form}` } })}
         >
           {f.kind === "release" ? `results released ${fmtDate(f.filed)} (8-K)` : `${f.form} for the period to ${f.report ? fmtDate(f.report) : "a later date"}, filed ${fmtDate(f.filed)}`}
@@ -78,58 +79,6 @@ function KeyTile({ ticker, k }: { ticker: string; k: KeyFigure }) {
         )}
       </p>
     </div>
-  );
-}
-
-export interface PriceContext {
-  /** last traded or last stored price, and the day it is from when known */
-  price: number;
-  asOf?: string | null;
-  /** shares on the cover page of the latest report */
-  shares: number | null;
-  sharesTarget: SourceTarget | null;
-}
-
-/** Market value and earnings multiple at the last price: the only two figures here that are not from a filing alone. */
-function PriceTiles({ ticker, a, ctx }: { ticker: string; a: FinancialAnalysis; ctx: PriceContext }) {
-  const eps = measureOf(a, "eps");
-  const cap = ctx.shares ? ctx.price * ctx.shares : null;
-  const pe = eps?.now && eps.now.v > 0 ? ctx.price / eps.now.v : null;
-  const at = `at ${fmtFig(ctx.price, "perShare")}${ctx.asOf ? `, ${fmtDate(ctx.asOf)}` : ""}`;
-  return (
-    <>
-      <div className="min-w-0 px-4 py-3">
-        <p className={cn("truncate", IR.caption)}>Market value</p>
-        <p className={cn("mt-0.5", IR.stat)}>{cap != null ? fmtFig(cap, "usd") : DASH}</p>
-        <p className={cn("mt-0.5 truncate", IR.caption)} title={`Shares on the cover of the latest report × the last price, ${at}`}>
-          {ctx.shares && ctx.sharesTarget ? (
-            <>
-              <FigButton target={ctx.sharesTarget} className="-ml-1">
-                {(ctx.shares / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M
-              </FigButton>{" "}
-              shares {at}
-            </>
-          ) : (
-            "shares outstanding not on file"
-          )}
-        </p>
-      </div>
-      <div className="min-w-0 px-4 py-3">
-        <p className={cn("truncate", IR.caption)}>Price to earnings</p>
-        <p className={cn("mt-0.5", IR.stat)}>{pe != null ? `${fmtValue(pe, "x")}×` : DASH}</p>
-        <p className={cn("mt-0.5 truncate", IR.caption)} title={eps?.note ?? `Last price ÷ diluted EPS over the trailing twelve months, ${at}`}>
-          {eps?.now ? (
-            <>
-              on EPS{" "}
-              <FigButton target={figTarget(ticker, "Diluted EPS", eps.now, "perShare")}>{fmtFig(eps.now.v, "perShare")}</FigButton>
-              {eps.now.v <= 0 ? " (a loss)" : ""}
-            </>
-          ) : (
-            "EPS over twelve months not available"
-          )}
-        </p>
-      </div>
-    </>
   );
 }
 
@@ -196,8 +145,8 @@ function MeasureRow({ ticker, a, m, shared }: { ticker: string; a: FinancialAnal
       <th scope="row" className="py-1 pl-4 pr-2 text-left align-top font-normal">
         <span>{m.label}</span>
         {(!shared || period) && (
-          <span className={cn("ml-1.5 whitespace-nowrap", IR.caption)}>
-            {[!shared ? unitLabel(m.unit, scale) : null, period].filter(Boolean).join(" · ")}
+          <span className={cn("whitespace-nowrap", IR.caption)}>
+            , {[!shared ? unitLabel(m.unit, scale) : null, period].filter(Boolean).join(" · ")}
           </span>
         )}
         {!m.now && m.note && <span className={cn("block", IR.caption)}>Not shown: {m.note}.</span>}
@@ -227,7 +176,7 @@ function MeasureRow({ ticker, a, m, shared }: { ticker: string; a: FinancialAnal
   );
 }
 
-function DuPontRow({ ticker, a }: { ticker: string; a: FinancialAnalysis }) {
+function DuPontLine({ ticker, a }: { ticker: string; a: FinancialAnalysis }) {
   const d = a.dupont;
   if (!d) return null;
   const part = (label: string, fig: Fig, unit: MeasureUnit) => (
@@ -236,12 +185,10 @@ function DuPontRow({ ticker, a }: { ticker: string; a: FinancialAnalysis }) {
     </FigButton>
   );
   return (
-    <tr data-measure="dupont" className="border-t border-border/60">
-      <td colSpan={6} className={cn("px-4 py-1.5", IR.caption)}>
-        <span className="text-foreground">Return on equity {part("Return on equity", d.roe, "pct")}</span> = net margin {part("Net margin", d.netMargin, "pct")} × asset turnover {part("Asset turnover", d.assetTurnover, "x")} × equity multiplier{" "}
-        {part("Equity multiplier", d.leverage, "x")}
-      </td>
-    </tr>
+    <p data-measure="dupont" className={cn("border-t border-border/60 px-4 py-1.5", IR.caption)}>
+      <span className="text-foreground">Return on equity {part("Return on equity", d.roe, "pct")}</span> = net margin {part("Net margin", d.netMargin, "pct")} × asset turnover {part("Asset turnover", d.assetTurnover, "x")} × equity multiplier{" "}
+      {part("Equity multiplier", d.leverage, "x")}
+    </p>
   );
 }
 
@@ -249,35 +196,36 @@ function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; 
   const shared = groupUnit(g);
   const medianYears = Math.max(0, ...g.measures.map((m) => m.median?.n ?? 0));
   return (
-    <table data-group={g.id} className={cn("mb-4 w-full table-fixed break-inside-avoid", IR.row)}>
+    <div data-group={g.id} className="mb-4 break-inside-avoid">
+    <table className={cn("w-full table-fixed", IR.row)}>
       <colgroup>
         <col />
-        <col className="w-[4.5rem]" />
-        <col className="w-[4.5rem]" />
-        <col className="w-[4.25rem]" />
-        <col className="hidden w-[4.5rem] sm:table-column" />
-        <col className="hidden w-20 sm:table-column" />
+        <col className="w-16" />
+        <col className="w-16" />
+        <col className="w-16" />
+        <col className="hidden w-16 sm:table-column" />
+        <col className="hidden w-[5.5rem] sm:table-column" />
       </colgroup>
       <thead>
         <tr className={IR.caption}>
           <th scope="col" className="px-4 pb-1 pt-2 text-left font-normal">
             <span className={cn("text-foreground", IR.group)}>{g.title}</span>
-            {shared && <span className="ml-1.5">{unitLabel(shared)}</span>}
+            {shared && <span>, {unitLabel(shared)}</span>}
           </th>
           <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
             Latest
           </th>
           <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
-            Year earlier
+            Year ago
           </th>
           <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
             Change
           </th>
-          <th scope="col" className="hidden pb-1 pr-3 pt-2 text-right font-normal sm:table-cell" title="Median of the last five fiscal years that have a figure (at least three)">
-            {medianYears > 0 && medianYears < 5 ? `${medianYears}-yr median` : "5-yr median"}
+          <th scope="col" className="hidden pb-1 pr-3 pt-2 text-right font-normal sm:table-cell" title={`Median of the last ${medianYears || 5} fiscal years that have a figure (a median needs three)`}>
+            Median
           </th>
-          <th scope="col" className="hidden pb-1 pr-4 pt-2 text-right font-normal sm:table-cell">
-            By fiscal year
+          <th scope="col" className="hidden pb-1 pr-4 pt-2 text-right font-normal sm:table-cell" title="Each fiscal year, then the latest figure as the dot">
+            Fiscal years
           </th>
         </tr>
       </thead>
@@ -285,19 +233,23 @@ function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; 
         {g.measures.map((m) => (
           <MeasureRow key={m.key} ticker={ticker} a={a} m={m} shared={shared} />
         ))}
-        {g.id === "returns" && <DuPontRow ticker={ticker} a={a} />}
       </tbody>
     </table>
+    {g.id === "returns" && <DuPontLine ticker={ticker} a={a} />}
+    </div>
   );
 }
 
 /* ------------------------------------------------------------------ the section */
 
-export function FinancialAnalysisSection({ ticker, data, price }: { ticker: string; data: CompanyDataset; price: PriceContext | null }) {
+export function FinancialAnalysisSection({ ticker, data }: { ticker: string; data: CompanyDataset }) {
   const a = useMemo(() => analyze(data), [data]);
   const read = useMemo(() => financialRead(a), [a]);
   const newer = useMemo(() => newerFilings(data, a.quarter?.end ?? a.fiscalYear?.end ?? null), [data, a]);
-  const prior = a.groups.flatMap((g) => g.measures).find((m) => m.prior && m.now && m.now.period === a.current)?.prior?.period;
+  const measures = a.groups.flatMap((g) => g.measures);
+  const prior = measures.find((m) => m.prior && m.now && m.now.period === a.current)?.prior?.period;
+  const widest = measures.reduce<Measure["median"]>((best, m) => (m.median && (!best || m.median.n > best.n) ? m.median : best), null);
+  const medianSpan = widest ? `${widest.from} to ${widest.to}` : null;
   if (!a.current) {
     return (
       <IrPanel section="Financial analysis" title="Financial analysis" subtitle="Computed from the statements">
@@ -305,7 +257,6 @@ export function FinancialAnalysisSection({ ticker, data, price }: { ticker: stri
       </IrPanel>
     );
   }
-  const tiles = a.keyFigures.length + (price ? 2 : 0);
   return (
     <>
       <IrPanel
@@ -322,12 +273,11 @@ export function FinancialAnalysisSection({ ticker, data, price }: { ticker: stri
         }
       >
         <NotYetIncluded ticker={ticker} filings={newer} />
-        <div className={cn("grid grid-cols-2 divide-x divide-y divide-border/60 sm:grid-cols-3", tiles >= 7 ? "xl:grid-cols-7" : tiles === 6 ? "xl:grid-cols-6" : "xl:grid-cols-5", "[&>*]:border-border/60 xl:divide-y-0")}>
+        <StatGrid className={cn("grid-cols-2 sm:grid-cols-3", a.keyFigures.length >= 5 ? "xl:grid-cols-5" : a.keyFigures.length === 4 ? "xl:grid-cols-4" : "")}>
           {a.keyFigures.map((k) => (
             <KeyTile key={k.key} ticker={ticker} k={k} />
           ))}
-          {price && <PriceTiles ticker={ticker} a={a} ctx={price} />}
-        </div>
+        </StatGrid>
       </IrPanel>
 
       <IrPanel
@@ -341,16 +291,17 @@ export function FinancialAnalysisSection({ ticker, data, price }: { ticker: stri
           <ReadColumn ticker={ticker} title="Concerns" items={read.concerns} empty="No concern rule is met by the current figures." />
         </div>
         <p className={cn("border-t px-4 py-2", IR.caption)}>
-          Rules, for example: revenue growth of {READ_RULES.growthStrong * 100}% or more ({READ_RULES.bank.growthStrong * 100}% for a bank), an operating margin a point above or a point and a half below a year earlier, free cash flow
-          under {READ_RULES.conversionWeak * 100}% of net income, net debt over {READ_RULES.leverageHigh}× EBITDA, receivables or inventories growing {READ_RULES.workingCapitalGap * 100} points faster than revenue. At most {READ_RULES.perSide} per
-          side, heaviest rule first. It is a reading aid, not advice.
+          {a.kind === "bank"
+            ? `Rules, for example: revenue growth of ${READ_RULES.bank.growthStrong * 100}% or more, an efficiency ratio a point lower or a point and a half higher than a year earlier, return on equity of ${READ_RULES.bank.roeStrong * 100}% or more or under ${READ_RULES.bank.roeWeak * 100}%, provisions moving ${READ_RULES.bank.provisionMove * 100} points of average loans, deposits growing ${READ_RULES.bank.depositGrowth * 100}% or falling.`
+            : `Rules, for example: revenue growth of ${READ_RULES.growthStrong * 100}% or more, an operating margin a point above or a point and a half below a year earlier, free cash flow under ${READ_RULES.conversionWeak * 100}% of net income, net debt over ${READ_RULES.leverageHigh}× EBITDA, receivables or inventories growing ${READ_RULES.workingCapitalGap * 100} points faster than revenue.`}{" "}
+          At most {READ_RULES.perSide} per side, heaviest rule first. It is a reading aid, not advice.
         </p>
       </IrPanel>
 
       <IrPanel
         section="Financial analysis"
         title="Financial analysis"
-        subtitle={`${spanSentence(a)}${prior ? ` Year earlier is ${prior.replace("TTM", "the twelve months")}.` : ""} Change is in the row's unit (points for percentages).`}
+        subtitle={`${spanSentence(a)}${prior ? ` Year ago is ${prior.replace("TTM", "the twelve months")}.` : ""}${medianSpan ? ` Median is over fiscal years ${medianSpan}.` : ""} Change is latest less year ago, in the row's unit (points for percentages).`}
         bodyClassName="p-0"
       >
         <div className="gap-x-0 pt-1 xl:columns-2 xl:[column-rule:1px_solid_var(--border)]">
