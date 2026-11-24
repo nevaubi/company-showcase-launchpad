@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { memo, useMemo, useState, type KeyboardEvent } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { memo, useMemo, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { ArrowDown, ArrowUp, Search, Star } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { TickerMark } from "@/components/app/ticker";
@@ -16,7 +16,7 @@ import { useToggleFollow } from "@/lib/workspace";
 import { useSessionState } from "@/lib/use-session-state";
 import { cn } from "@/lib/utils";
 import { fmtField, type FieldDef } from "@/lib/screener/engine";
-import { ROW_H, useWindowRange } from "@/lib/screener/window";
+import { ROW_H, useRowFocus, useWindowRange } from "@/lib/screener/window";
 
 export const Route = createFileRoute("/_authenticated/app/companies/")({
   head: () => ({
@@ -153,6 +153,13 @@ function Companies() {
   }, [rows, sort, sector, group, groupOk, following, q, follow]);
 
   const [start, end] = useWindowRange(body, sorted.length);
+  const nav = useMemo(() => {
+    const at = new Map(sorted.map((r, i) => [r.ticker, i]));
+    return { keys: sorted.map((r) => r.ticker), pos: (k: string) => at.get(k) ?? 0 };
+  }, [sorted]);
+  const focus = useRowFocus(body, nav.keys, nav.pos, "fu:companies:focus");
+  const firstKey = sorted[start]?.ticker;
+  const openRow = useMemo(() => (t: string) => void navigate({ to: "/app/companies/$ticker", params: { ticker: t } }), [navigate]);
   const head = cn("border-b bg-card", fits && `sticky ${STICKY} z-20`);
   const toggleSort = (k: SortKey, first: 1 | -1 = -1) => setSort((s) => ({ key: k, dir: s.key === k ? (-s.dir as 1 | -1) : first }));
   const filtersOn = q || sector !== "All" || group !== "All" || following;
@@ -271,7 +278,7 @@ function Companies() {
                 </tr>
               )}
               {sorted.slice(start, end).map((r) => (
-                <CompanyRow key={r.ticker} r={r} sticky={!fits} sortKey={sort.key} followed={follow.isFollowed(r.ticker)} pending={follow.pending} onFollow={follow.toggle} onOpen={(t) => navigate({ to: "/app/companies/$ticker", params: { ticker: t } })} />
+                <CompanyRow key={r.ticker} r={r} sticky={!fits} sortKey={sort.key} followed={follow.isFollowed(r.ticker)} pending={follow.pending} onFollow={follow.toggle} onOpen={openRow} tab={focus.tabIndex(r.ticker, firstKey)} onRowFocus={focus.onFocus} onRowBlur={focus.onBlur} onRowKey={focus.onKey} />
               ))}
               {end < sorted.length && (
                 <tr aria-hidden style={{ height: (sorted.length - end) * ROW_H }}>
@@ -296,21 +303,12 @@ function Companies() {
   );
 }
 
-function rowKeys(e: KeyboardEvent<HTMLTableRowElement>, open: () => void) {
-  if (e.target !== e.currentTarget) return;
-  if (e.key === "Enter") return open();
-  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  e.preventDefault();
-  const el = (e.key === "ArrowDown" ? e.currentTarget.nextElementSibling : e.currentTarget.previousElementSibling) as HTMLElement | null;
-  if (el?.dataset.row) el.focus();
-}
-
-const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pending, onFollow, onOpen }: { r: CRow; sticky: boolean; sortKey: SortKey; followed: boolean; pending: boolean; onFollow: (t: string) => void; onOpen: (t: string) => void }) {
+const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pending, onFollow, onOpen, tab, onRowFocus, onRowBlur, onRowKey }: { r: CRow; sticky: boolean; sortKey: SortKey; followed: boolean; pending: boolean; onFollow: (t: string) => void; onOpen: (t: string) => void; tab: number; onRowFocus: (key: string) => void; onRowBlur: (e: FocusEvent<HTMLElement>) => void; onRowKey: (e: KeyboardEvent<HTMLElement>, key: string, open: () => void) => void }) {
   const num = (k: SortKey, text: string, extra?: string) => (
     <td className={cn("num overflow-hidden text-ellipsis whitespace-nowrap border-b px-2 py-1 text-right group-hover:bg-secondary", sortKey === k && "font-medium", extra)}>{text}</td>
   );
   return (
-    <tr data-row tabIndex={0} onClick={() => onOpen(r.ticker)} onKeyDown={(e) => rowKeys(e, () => onOpen(r.ticker))} aria-label={`${r.ticker} ${r.name}`} className="group h-[29px] cursor-pointer focus-visible:outline-none focus-visible:[&>td]:bg-highlight-soft [&>td]:transition-colors [&>td]:duration-150">
+    <tr data-row data-key={r.ticker} tabIndex={tab} onClick={() => onOpen(r.ticker)} onFocus={() => onRowFocus(r.ticker)} onBlur={onRowBlur} onKeyDown={(e) => onRowKey(e, r.ticker, () => onOpen(r.ticker))} aria-label={`${r.ticker} ${r.name}`} className="group h-[29px] cursor-pointer focus-visible:outline-none focus-visible:[&>td]:bg-highlight-soft [&>td]:transition-colors [&>td]:duration-150">
       <td className="border-b px-1 text-center group-hover:bg-secondary">
         <button
           type="button"
@@ -319,6 +317,7 @@ const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pend
             e.stopPropagation();
             onFollow(r.ticker);
           }}
+          tabIndex={tab}
           aria-pressed={followed}
           aria-label={followed ? `Unfollow ${r.ticker}` : `Follow ${r.ticker}`}
           className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -327,7 +326,10 @@ const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pend
         </button>
       </td>
       <td className={cn("left-0 z-10 overflow-hidden border-b border-r bg-card px-3 py-1 group-hover:bg-secondary", sticky && "sticky")}>
-        <TickerMark ticker={r.ticker} name={r.name} link={false} logoSrc={r.logo} className="min-w-0" />
+        {/* A real link (open in a new tab, the assistant can follow it) outside the tab order: the row is the tab stop. */}
+        <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }} tabIndex={-1} onClick={(e) => e.stopPropagation()} className="flex min-w-0 rounded-sm hover:underline">
+          <TickerMark ticker={r.ticker} name={r.name} link={false} logoSrc={r.logo} className="min-w-0" />
+        </Link>
       </td>
       <td className="truncate whitespace-nowrap border-b px-2 py-1 text-[11px] text-muted-foreground group-hover:bg-secondary" title={`${r.sector} · ${r.group}`}>
         {r.group}

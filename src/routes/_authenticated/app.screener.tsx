@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { memo, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { memo, useEffect, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Check, Columns3, CornerDownLeft, Download, Link2, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { PageHeader } from "@/components/app/page-header";
@@ -54,7 +54,7 @@ import {
   type FieldGroup,
 } from "@/lib/screener/present";
 import { SERIES_FIELD_IDS } from "@/lib/screener/series";
-import { ROW_H, useWindowRange } from "@/lib/screener/window";
+import { ROW_H, useRowFocus, useWindowRange } from "@/lib/screener/window";
 
 export const Route = createFileRoute("/_authenticated/app/screener")({
   validateSearch: (s: Record<string, unknown>) => screenSearch(s),
@@ -468,16 +468,6 @@ function groupRows(rows: Row[], key: (r: Row) => string): [string, Row[]][] {
 
 type Item = { kind: "group"; label: string; rows: Row[] } | { kind: "row"; r: Row };
 
-function moveFocus(e: KeyboardEvent<HTMLTableRowElement>, open: () => void) {
-  if (e.key === "Enter") return open();
-  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  e.preventDefault();
-  let el: Element | null = e.currentTarget;
-  do el = e.key === "ArrowDown" ? el.nextElementSibling : el.previousElementSibling;
-  while (el && !(el as HTMLElement).dataset.row);
-  (el as HTMLElement | null)?.focus({ preventScroll: false });
-}
-
 function ResultsTable({
   rows,
   grouped,
@@ -504,6 +494,20 @@ function ResultsTable({
     [grouped, rows],
   );
   const [start, end] = useWindowRange(body, items.length);
+  const nav = useMemo(() => {
+    const keys: string[] = [];
+    const at = new Map<string, number>();
+    items.forEach((it, i) => {
+      if (it.kind === "row") {
+        keys.push(it.r.ticker);
+        at.set(it.r.ticker, i);
+      }
+    });
+    return { keys, pos: (k: string) => at.get(k) ?? 0 };
+  }, [items]);
+  const focus = useRowFocus(body, nav.keys, nav.pos, "fu:screener:focus");
+  const firstRendered = items.slice(start, end).find((it) => it.kind === "row");
+  const firstKey = firstRendered?.kind === "row" ? firstRendered.r.ticker : undefined;
   const span = cols.length + 1 + (sim ? 1 : 0);
   const head = cn("border-b bg-card", fits && `sticky ${STICKY} z-20`);
   return (
@@ -553,7 +557,7 @@ function ResultsTable({
             it.kind === "group" ? (
               <GroupHead key={`g:${it.label}`} label={it.label} rows={it.rows} cols={cols} F={F} sim={sim} sticky={!fits} />
             ) : (
-              <ResultRow key={it.r.ticker} r={it.r} cols={cols} F={F} sim={sim} sticky={!fits} sortField={spec.sort?.field} onOpen={onOpen} />
+              <ResultRow key={it.r.ticker} r={it.r} cols={cols} F={F} sim={sim} sticky={!fits} sortField={spec.sort?.field} onOpen={onOpen} tab={focus.tabIndex(it.r.ticker, firstKey)} onRowFocus={focus.onFocus} onRowBlur={focus.onBlur} onRowKey={focus.onKey} />
             ),
           )}
           {end < items.length && (
@@ -575,6 +579,10 @@ const ResultRow = memo(function ResultRow({
   sticky,
   sortField,
   onOpen,
+  tab,
+  onRowFocus,
+  onRowBlur,
+  onRowKey,
 }: {
   r: Row;
   cols: string[];
@@ -583,19 +591,29 @@ const ResultRow = memo(function ResultRow({
   sticky: boolean;
   sortField?: string;
   onOpen: (t: string) => void;
+  tab: number;
+  onRowFocus: (key: string) => void;
+  onRowBlur: (e: FocusEvent<HTMLElement>) => void;
+  onRowKey: (e: KeyboardEvent<HTMLElement>, key: string, open: () => void) => void;
 }) {
   return (
     <tr
       data-row
-      tabIndex={0}
+      data-key={r.ticker}
+      tabIndex={tab}
       onClick={() => onOpen(r.ticker)}
-      onKeyDown={(e) => moveFocus(e, () => onOpen(r.ticker))}
+      onFocus={() => onRowFocus(r.ticker)}
+      onBlur={onRowBlur}
+      onKeyDown={(e) => onRowKey(e, r.ticker, () => onOpen(r.ticker))}
       aria-label={`${r.ticker} ${r.name}`}
       className="group h-[29px] cursor-pointer focus-visible:outline-none [&>td]:transition-colors [&>td]:duration-150 focus-visible:[&>td]:bg-highlight-soft"
     >
       <td className={cn("left-0 z-10 w-64 max-w-64 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary", sticky && "sticky")}>
         <span className="flex min-w-0 items-center gap-2" title={`${r.name} · ${r.sector} · ${r.industry}`}>
-          <TickerMark ticker={r.ticker} name={r.name} link={false} className="min-w-0" />
+          {/* A real link (open in a new tab, the assistant can follow it) outside the tab order: the row is the tab stop. */}
+          <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }} tabIndex={-1} onClick={(e) => e.stopPropagation()} className="min-w-0 rounded-sm hover:underline">
+            <TickerMark ticker={r.ticker} name={r.name} link={false} className="min-w-0" />
+          </Link>
           {r.basic && (
             <span className="shrink-0 rounded border px-1 text-[10px] leading-4 text-muted-foreground" title="SEC fundamentals only; no technicals, correlations or insider fields">
               basic
