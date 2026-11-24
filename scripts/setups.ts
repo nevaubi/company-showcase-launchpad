@@ -20,6 +20,7 @@ import { benchFromBars, BENCH_SYMBOLS, contextFromBench, parseCboeCsv, VIX3M_URL
 import { parseShortVolume, FINRA_SHORT_URL } from "../src/lib/signals/finra";
 import { ftdUrl, latestLikelyPeriod, nextPeriod, parseFtd, periodEnd, unzipText } from "../src/lib/alt/ftd";
 import type { TickerEvents } from "../src/lib/signals/events";
+import { mergeOfficialBars, type OfficialRow } from "../src/lib/jobs/setups-bars";
 import { pickSetups, variantKey, variantMeta, type LiveFiring, type MarketContext, type PairSetup, type SetupsFile } from "../src/lib/signals/setups";
 
 const CACHE = String(args.cache ?? "/tmp/px");
@@ -64,6 +65,24 @@ await Promise.all(Array.from({ length: 16 }, async (_, w) => {
     if (++loaded % 400 === 0) log("prices", loaded);
   }
 }));
+// The official daily bars win over the partner file for every date both hold; a partner bar newer
+// than every official bar (possibly a mid-session snapshot) is dropped (src/lib/jobs/setups-bars.ts).
+{
+  const officialFrom = new Date(Date.now() - 70 * 86400_000).toISOString().slice(0, 10);
+  const rows = await selectAll<OfficialRow & { symbol: string }>((a, b) =>
+    sb.from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").gte("date", officialFrom).order("symbol").order("date").range(a, b));
+  const bySymbol = new Map<string, OfficialRow[]>();
+  for (const r of rows) (bySymbol.get(r.symbol) ?? bySymbol.set(r.symbol, []).get(r.symbol)!).push(r);
+  const provisional: string[] = [];
+  let corrected = 0;
+  for (const [t, bars] of priceFiles) {
+    const m = mergeOfficialBars(bars, bySymbol.get(t) ?? [], officialFrom, "9999-12-31");
+    if (m.provisional) provisional.push(`${t} ${m.provisional}`);
+    if (m.corrected.length) corrected++;
+    priceFiles.set(t, m.bars);
+  }
+  log("official bars", rows.length, "rows;", corrected, "files corrected;", provisional.length, "provisional bars skipped", provisional.slice(0, 10).join(", "));
+}
 // End the calendar on the last day most stocks have a bar.
 const lastCount = new Map<string, number>();
 for (const bars of priceFiles.values()) for (const b of bars.slice(-15)) lastCount.set(b[0].slice(0, 10), (lastCount.get(b[0].slice(0, 10)) ?? 0) + 1);

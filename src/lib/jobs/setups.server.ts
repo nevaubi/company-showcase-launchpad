@@ -19,6 +19,7 @@ import { GATE, OOS_START } from "@/lib/signals/backtest";
 import { roundTripCost, tradeCost } from "@/lib/signals/features";
 import type { Json } from "@/integrations/supabase/types";
 import { barProblem } from "@/lib/jobs/bar-check";
+import { mergeOfficialBars } from "@/lib/jobs/setups-bars";
 
 type Result = { ok: boolean; items: number; detail: Record<string, unknown> };
 const db = () => supabaseAdmin;
@@ -233,22 +234,29 @@ const PHASES: Record<string, Phase> = {
     const { ctx } = await context(asOf);
     let items = 0;
     const errors: string[] = [];
+    const provisional: string[] = [];
+    let corrected = 0;
+    // Partner bars skipped because no official bar exists yet; the session is provisional for them.
+    const prov = () => (provisional.length ? { provisional: { skipped: provisional.length, bars: provisional.slice(0, 50) } } : {});
     while (left()) {
       const { data: claimed } = await db().rpc("setup_claim_tickers", { _as_of: asOf, _n: 3 });
       const list = (claimed ?? []) as { ticker: string; sector: string | null }[];
       if (!list.length) {
         const { count } = await db().from("setup_scan").select("ticker", { count: "exact", head: true }).or(`scanned_for.is.null,scanned_for.lt.${asOf}`);
         if (!count || stuck) await advance(asOf, "scan", "cross");
-        return { ok: true, items, detail: { asOf, phase: "scan", remaining: count ?? 0 } };
+        return { ok: true, items, detail: { asOf, phase: "scan", remaining: count ?? 0, corrected, ...prov() } };
       }
       try {
-        items += await scanBatch(asOf, ctx, list);
+        const b = await scanBatch(asOf, ctx, list);
+        items += b.n;
+        provisional.push(...b.provisional);
+        corrected += b.corrected.length;
       } catch (e) {
         errors.push((e as Error).message);
         await db().from("setup_scan").update({ claimed_at: null, error: (e as Error).message.slice(0, 300) }).in("ticker", list.map((x) => x.ticker));
       }
     }
-    return { ok: errors.length === 0, items, detail: { asOf, phase: "scan", errors } };
+    return { ok: errors.length === 0, items, detail: { asOf, phase: "scan", errors, corrected, ...prov() } };
   },
 
   /** Cross-company signals: cointegrated pairs per sector and customer momentum along supply links. */
@@ -392,15 +400,24 @@ async function priceFile(ticker: string): Promise<Bar[]> {
   return ((JSON.parse(await data.text()) as { bars?: Bar[] }).bars ?? []);
 }
 
-async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: string; sector: string | null }[]): Promise<number> {
+interface BatchOut {
+  n: number;
+  /** `TICKER date` of partner bars dropped because `market_bars` has no official bar for them yet. */
+  provisional: string[];
+  /** Tickers where an official bar replaced a partner bar with a different close. */
+  corrected: string[];
+}
+
+async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: string; sector: string | null }[]): Promise<BatchOut> {
   const D = ctx.dates.length;
   const tickers = list.map((x) => x.ticker);
   const tail = ctx.dates[D - SAMPLE_TAIL];
   const shortFrom = ctx.dates[Math.max(0, D - 160)];
   const failsFrom = ctx.dates[Math.max(0, D - 420)];
+  const recentFrom = ctx.dates[Math.max(0, D - 45)];
   const [files, recent, earn, buys, shorts, sigs, fails] = await Promise.all([
     Promise.all(tickers.map((t) => priceFile(t).catch(() => [] as Bar[]))),
-    db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").in("symbol", tickers).gte("date", ctx.dates[Math.max(0, D - 45)]).lte("date", asOf).order("date").limit(5000),
+    db().from("market_bars").select("symbol, date, open, high, low, close, adj_close, volume").in("symbol", tickers).gte("date", recentFrom).lte("date", asOf).order("date").limit(5000),
     db().from("earnings_events").select("ticker, filed").in("ticker", tickers).limit(5000),
     db().from("insider_buys").select("ticker, filed, owner, value, plan_10b5").in("ticker", tickers).limit(5000),
     db().from("short_volume").select("symbol, date, short_vol, total_vol").in("symbol", tickers).gte("date", shortFrom).limit(5000),
@@ -408,6 +425,10 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
     // SEC fails-to-deliver half-months (kept current by the gov-data job)
     db().from("alt_data").select("ticker, date, value").eq("dataset", "settlement").in("ticker", tickers).gte("date", failsFrom).limit(5000),
   ]);
+  // Without the official bars every partner bar in the window would count as provisional: fail the batch.
+  if (recent.error) throw new Error(`market_bars: ${recent.error.message}`);
+  const provisional: string[] = [];
+  const corrected: string[] = [];
   const samples: Record<string, unknown>[] = [];
   const signals: Record<string, unknown>[] = [];
   const series: Record<string, unknown>[] = [];
@@ -416,12 +437,12 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
   for (let k = 0; k < list.length; k++) {
     const { ticker, sector } = list[k];
     const name = COVERAGE.find((c) => c.ticker === ticker)?.shortName ?? ticker;
-    const file = files[k];
-    const fileEnd = file.at(-1)?.[0] ?? "";
-    const tailBars: Bar[] = (recent.data ?? [])
-      .filter((r) => r.symbol === ticker && r.date > fileEnd)
-      .map((r) => [r.date, Number(r.open), Number(r.high), Number(r.low), Number(r.close), Number(r.adj_close ?? r.close), Number(r.volume ?? 0)]);
-    const bars = [...file, ...tailBars];
+    // The official `market_bars` row wins for every date both sources hold; a partner bar with no
+    // official row yet (possibly a mid-session snapshot) is dropped and reported.
+    const merged = mergeOfficialBars(files[k], (recent.data ?? []).filter((r) => r.symbol === ticker), recentFrom, asOf);
+    const bars = merged.bars;
+    if (merged.provisional) provisional.push(`${ticker} ${merged.provisional}`);
+    if (merged.corrected.length) corrected.push(ticker);
     const stale = bars.at(-1)?.[0] !== asOf;
     const events = {
       earnings: (earn.data ?? []).filter((e) => e.ticker === ticker).map((e) => e.filed),
@@ -480,7 +501,7 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
       vol60: round(f.vol60[last], 5), above200: a.c[last] > f.sma200[last], near_high: a.c[last] >= 0.98 * f.max252[last],
       short5: s5 != null && Number.isFinite(s5) ? round(s5, 4) : null, updated_at: nowIso(),
     });
-    scanRows.push({ ticker, sector, scanned_for: asOf, claimed_at: null, bars: bars.length, samples: out.samples.length, error: stale ? "no bar for the session yet" : null, updated_at: nowIso() });
+    scanRows.push({ ticker, sector, scanned_for: asOf, claimed_at: null, bars: bars.length, samples: out.samples.length, error: stale ? (merged.provisional ? `provisional bar for ${merged.provisional} skipped (no official bar yet)` : "no bar for the session yet") : null, updated_at: nowIso() });
   }
   const done = scanRows.filter((r) => !String(r.error ?? "").startsWith("scan:")).map((r) => r.ticker as string);
   await db().from("setup_samples").delete().in("ticker", done).gte("d", tail).not("variant", "like", "custMom%");
@@ -497,7 +518,7 @@ async function scanBatch(asOf: string, ctx: EngineContext, list: { ticker: strin
   for (const o of outcomes) await db().from("setup_signals").update({ outcome_net: o.outcome_net, outcome_ex: o.outcome_ex, outcome_at: o.outcome_at } as never).eq("ticker", o.ticker as string).eq("variant", o.variant as string).eq("fired_at", o.fired_at as string);
   if (series.length) await db().from("setup_series").upsert(series as never);
   await db().from("setup_scan").upsert(scanRows as never);
-  return list.length;
+  return { n: list.length, provisional, corrected };
 }
 
 // ---------------------------------------------------------------- cross-company
