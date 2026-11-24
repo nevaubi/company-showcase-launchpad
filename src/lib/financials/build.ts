@@ -302,7 +302,15 @@ function dedupeComponents(found: Picked[]): Picked[] {
   // the rest of the borrowings total (Citigroup 2009: $10,223M paper + $58,656M other = $68,879M
   // short-term borrowings; JPMorgan 2016: $11,738M + $22,705M = $34,443M).
   const stb = out.some((x) => x.concept === "ShortTermBorrowings");
-  return stb ? out.filter((x) => x.concept !== "CommercialPaper" && x.concept !== "OtherShortTermBorrowings") : out;
+  const kept = stb ? out.filter((x) => x.concept !== "CommercialPaper" && x.concept !== "OtherShortTermBorrowings") : out;
+  // The two convertible concepts of each side name the same line; filers move between them from one
+  // filing to the next (Ondas: $15,568K under one in its FY2024 10-K, $15,868K under the other in the
+  // FY2025 comparative), so only the first listed counts.
+  return kept.filter(
+    (x) =>
+      !(x.concept === "ConvertibleDebtNoncurrent" && kept.some((y) => y.concept === "ConvertibleLongTermNotesPayable")) &&
+      !(x.concept === "ConvertibleDebtCurrent" && kept.some((y) => y.concept === "ConvertibleNotesPayableCurrent")),
+  );
 }
 
 /** "CommercialPaper" → "Commercial paper" */
@@ -697,6 +705,9 @@ const SHORT_BORROWINGS: LineDef = {
  */
 const SHORT_BORROWINGS_AND_NOTES: LineDef = { ...SHORT_BORROWINGS, components: [...SHORT_BORROWINGS.components!, "NotesPayableCurrent"] };
 
+/** Current convertible notes; the first concept listed counts (dedupeComponents). */
+const CONVERTIBLE_CURRENT: LineDef = { key: "_cvc", label: "Convertible notes, current", concepts: [], components: ["ConvertibleNotesPayableCurrent", "ConvertibleDebtCurrent"], unit: "usd", kind: "stock" };
+
 /** Totals that show whether current notes payable sit outside a plain LongTermDebt figure. */
 const NOTES_TOTALS = ["NotesPayable", "DebtInstrumentCarryingAmount", ...TOTAL_DEBT_CONCEPTS];
 
@@ -737,6 +748,14 @@ function dropLoneNotesPayable(balance: Row[]) {
 function debtFromLines(cf: CompanyFacts, l: Cell | null, s: Cell | null, end: string): Cell | null {
   if (!l && !s) return null;
   const atEnd = (f: RawFact) => !f.start && near(f.end, end, 4);
+  // Convertible notes due within a year are their own balance sheet line beside a long-term line built from
+  // convertible notes (Akamai's $1,148.3M at 30 Sep 2026). They are not a short-term component in general:
+  // Microsoft tags $1,200M of ConvertibleDebtCurrent at 30 Jun 2012 inside its $1,231M current maturities' note.
+  const convertibleLong = !!l?.derived?.parts.some((x) => x.concept.includes("Convertible")) || !!l?.src?.concept.includes("Convertible");
+  if (convertibleLong && !s?.derived?.parts.some((x) => x.concept.includes("Convertible")) && !s?.src?.concept.includes("Convertible")) {
+    const cc = pickCell(cf, CONVERTIBLE_CURRENT, atEnd);
+    if (cc) s = s ? combine(s, cc, "add", ["Short-term debt", "Convertible notes, current"]) : cc;
+  }
   if (l && includesCurrent(cf, l, end)) {
     // Plain LongTermDebt is sometimes the noncurrent line after all: Biogen tags $4,548.7M of it beside
     // $1,749.1M of current notes and a $6,297.8M NotesPayable total (Q1 2025). The current notes are added
@@ -786,21 +805,46 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
     const lines = debtFromLines(cf, ltd?.cells[i] ?? null, std?.cells[i] ?? null, p.end);
     const evidence = Math.max(0, ...DEBT_EVIDENCE_CONCEPTS.map((c) => choose(factsFor(cf, c, "USD"), c, atEnd)?.fact.val ?? 0));
     const tagged = firstConcept(cf, TOTAL_DEBT_TAGGED, atEnd);
+    const concepts = lines ? (lines.src ? [lines.src.concept] : (lines.derived?.parts ?? []).map((x) => x.concept)) : [];
+    if (concepts.some((c) => c.includes("Convertible"))) {
+      // Convertible notes read as lines, beside a tagged total that is not their sum: the total may or may
+      // not include them (Super Micro's $3,977M of credit lines and term loans leaves out its $4,669M of
+      // convertible notes; the face is $8,646M), so no total is shown, as before.
+      if (tagged && Math.abs(tagged.fact.val - lines!.v) > tagged.fact.val * 0.005) return null;
+      // Both current convertible concepts with different amounts: the filing tags its convertibles
+      // inconsistently (Ondas FY2025: $2,000K and $2,950K; its face has $6,450K in two lines).
+      const cur = ["ConvertibleNotesPayableCurrent", "ConvertibleDebtCurrent"].map((c) => choose(factsFor(cf, c, "USD"), c, atEnd)?.fact.val);
+      if (cur[0] != null && cur[1] != null && cur[0] !== cur[1]) return null;
+      // Current convertibles counted while noncurrent ones the filing tags for the same date are not
+      // (a notes line took the long-term place): a part, not the total (Ondas FY2024: $33.5M of $54.2M).
+      const nonc = ["ConvertibleLongTermNotesPayable", "ConvertibleDebtNoncurrent"].some((c) => (choose(factsFor(cf, c, "USD"), c, atEnd)?.fact.val ?? 0) > 0);
+      if (nonc && !concepts.some((c) => /ConvertibleLongTermNotesPayable|ConvertibleDebtNoncurrent/.test(c))) return null;
+    }
     if (tagged && (!lines || lines.v < tagged.fact.val * 0.75)) {
       // A tagged total below another debt amount of the same date is a subtotal too: Super Micro tags its
       // $3,977M of credit lines and term loans with it, beside $4,669M of convertible notes (Q1 FY27).
       return evidence > tagged.fact.val * 1.1 ? null : reportedCell(tagged);
     }
-    // The noncurrent notes line can be only part of the long-term debt: Treace tags $90.8M of
-    // LongTermNotesPayable and $4.1M of current notes beside $136.7M of LongTermDebt (FY2025), BKV a zero
-    // beside $190M (Q3 2024). When LongTermDebt, which includes current maturities, is more than a tenth
-    // above the notes, it is the long-term figure.
+    // The noncurrent notes line can be only part of the long-term debt. BKV tags a zero of it beside
+    // $190M of LongTermDebt (Q3 2024): when LongTermDebt, which includes current maturities, is more than
+    // a tenth above the notes, it is the long-term figure. But when the filing's own NotesPayable total
+    // equals the two notes lines, the notes are a complete group and LongTermDebt is another instrument
+    // beside them: TerrAscend's balance sheet has current notes $4.2M, notes $88.7M and private placement
+    // notes $196.0M (tagged LongTermDebt), $288.9M in all (Q3 2026, 10-Q 0001754195-26-000089).
     const l = ltd?.cells[i];
     if (l?.src?.concept === "us-gaap:LongTermNotesPayable") {
       const whole = choose(factsFor(cf, "LongTermDebt", "USD"), "LongTermDebt", atEnd);
-      const notes = l.v + (choose(factsFor(cf, "NotesPayableCurrent", "USD"), "NotesPayableCurrent", atEnd)?.fact.val ?? 0);
-      const alt = whole && whole.fact.val > notes * 1.1 ? debtFromLines(cf, reportedCell(whole), null, p.end) : null;
-      if (alt && evidence <= alt.v * 2) return alt;
+      const npc = choose(factsFor(cf, "NotesPayableCurrent", "USD"), "NotesPayableCurrent", atEnd);
+      const notes = l.v + (npc?.fact.val ?? 0);
+      if (whole && whole.fact.val > notes * 1.1) {
+        const np = choose(factsFor(cf, "NotesPayable", "USD"), "NotesPayable", atEnd);
+        const grouped = notes > 0 && !!np && Math.abs(np.fact.val - notes) <= np.fact.val * 0.03;
+        const notesCell = npc ? combine(l, reportedCell(npc), "add", ["Long-term notes payable", "Current notes payable"])! : l;
+        const alt = grouped
+          ? combine(notesCell, reportedCell(whole), "add", [npc ? "(long-term + current notes payable)" : "Long-term notes payable", "Other long-term debt"])
+          : debtFromLines(cf, reportedCell(whole), null, p.end);
+        if (alt && evidence <= alt.v * 2) return alt;
+      }
     }
     return lines && evidence <= lines.v * 2 ? lines : null;
   });

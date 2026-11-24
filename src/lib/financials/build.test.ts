@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildStatements, quarterEndAfter, type CompanyFacts, type RawFact } from "./build";
 import { fmtCell, scaled, unitLabel } from "../format";
 import debtFacts from "./fixtures/debt-facts.json";
+import convertibleFacts from "./fixtures/debt-facts-convertible.json";
 
 let n = 0;
 const fact = (start: string | undefined, end: string, val: number, form: string, filed: string, accn = `0000000001-26-${String(++n).padStart(6, "0")}`): RawFact => ({
@@ -478,9 +479,13 @@ describe("total debt, net debt and short-term investments on real filings", () =
 
   it("falls back to LongTermDebt when the noncurrent notes line is only part of the debt (BKV Q3 2024: zero notes, $190M of debt)", () => {
     expect(cellAt("BKV", "quarterly", "totalDebt", "2024-09-30")!.v).toBe(190_000_000);
-    // Treace: $88.7M of notes against $196.0M of LongTermDebt (Q3 2026), $90.8M + $4.1M against $136.7M (FY2025).
-    expect(cellAt("TRLV", "quarterly", "totalDebt", "2026-09-30")!.v).toBeGreaterThanOrEqual(196_008_000);
-    expect(cellAt("TRLV", "annual", "totalDebt", "2025-12-31")!.v).toBeGreaterThanOrEqual(136_741_000);
+  });
+
+  it("adds LongTermDebt beside a notes group that NotesPayable totals (TerrAscend Q3 2026, 10-Q 0001754195-26-000089; FY2025, 10-K 0001754195-26-000019)", () => {
+    // Face: current notes 4,239 + notes 88,654 + private placement notes 196,008 (tagged LongTermDebt) = $288,901K;
+    // NotesPayable 93,765 totals the two notes lines. FY2025: 4,077 + 90,839 + 136,741.
+    expect(cellAt("TRLV", "quarterly", "totalDebt", "2026-09-30")!.v).toBe(288_901_000);
+    expect(cellAt("TRLV", "annual", "totalDebt", "2025-12-31")!.v).toBe(231_657_000);
   });
 
   it("matches the face when current and long-term notes add up to LongTermDebt (Andersen Q3 2026, 10-Q 0002065708-26-000009)", () => {
@@ -567,3 +572,36 @@ describe("capital expenditure from company extensions", () => {
     expect(cell.src?.concept).toBe("ci:PaymentsForProceedsFromPropertyPlantAndEquipment");
   });
 });
+
+/** Reduced companyfacts (AKAM, MRNA, DDOG cached 23 Nov 2026, ONDS 24 Nov 2026), checked against each filing's balance sheet. */
+describe("convertible notes and credit lines as balance sheet debt lines", () => {
+  const FIXTURE = convertibleFacts as unknown as Record<string, CompanyFacts>;
+  const cellAt = (t: string, freq: "annual" | "quarterly", key: string, end: string) => {
+    const st = buildStatements(FIXTURE[t])[freq].balance;
+    const i = st.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    return st.rows.find((r) => r.key === key)?.cells[i] ?? null;
+  };
+
+  it("reads current and noncurrent convertible notes (Akamai Q3 2026, 10-Q 0001086222-26-000100)", () => {
+    // Face: convertible senior notes 1,148,346 (current) + 6,419,341 = $7,567,687K; no other debt line.
+    expect(cellAt("AKAM", "quarterly", "totalDebt", "2026-09-30")!.v).toBe(7_567_687_000);
+    expect(cellAt("AKAM", "quarterly", "longTermDebt", "2026-09-30")!.v).toBe(6_419_341_000);
+  });
+
+  it("reads a lone convertible notes line (Datadog Q3 2026, 10-Q 0001628280-26-070292)", () => {
+    expect(cellAt("DDOG", "quarterly", "totalDebt", "2026-09-30")!.v).toBe(986_595_000);
+  });
+
+  it("adds convertible notes to a drawn credit line (Moderna Q3 2026, 10-Q 0001682852-26-000197)", () => {
+    // Face: "Long-term debt" 591 (LongTermLineOfCredit) + convertible notes 2,958 = $3,549M.
+    expect(cellAt("MRNA", "quarterly", "totalDebt", "2026-09-30")!.v).toBe(3_549_000_000);
+  });
+
+  it("shows no total when the convertibles are tagged inconsistently (Ondas FY2025, 10-K 0001213900-26-035981)", () => {
+    // Face: 1,500 + 704 + 3,500 + 2,950 + 3,834 = $12,488K, three of the lines under company extensions.
+    expect(cellAt("ONDS", "annual", "totalDebt", "2025-12-31")).toBeNull();
+    expect(cellAt("ONDS", "annual", "totalDebt", "2024-12-31")).toBeNull();
+  });
+});
+

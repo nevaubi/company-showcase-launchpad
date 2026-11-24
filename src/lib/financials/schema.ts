@@ -214,7 +214,15 @@ export const BALANCE_LINES: LineDef[] = [
     "Short-term debt & current maturities",
     ["DebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent", "ShortTermBorrowingsAndCurrentPortionOfLongTermDebt"],
     "stock",
-    { components: ["LongTermDebtCurrent", "CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings", "NotesPayableCurrent"] },
+    {
+      components: [
+        "LongTermDebtCurrent",
+        "CommercialPaper",
+        "ShortTermBorrowings",
+        "OtherShortTermBorrowings",
+        "NotesPayableCurrent",
+      ],
+    },
   ),
   usd("currentLiabilities", "Total current liabilities", ["LiabilitiesCurrent"], "stock", { bold: true }),
   usd(
@@ -236,6 +244,13 @@ export const BALANCE_LINES: LineDef[] = [
       "de:LongTermDebtAndFinanceLeasesNoncurrent",
     ],
     "stock",
+    {
+      // Without one of the lines above, the balance sheet's long-term debt is often convertible notes and a
+      // drawn credit line, each its own line: Datadog's $986.6M, Akamai's $6,419.3M, Moderna's $2,958M of
+      // convertible notes beside $591M under its credit facility (30 Sep 2026). Before, these companies had
+      // no long-term debt and no total debt at all.
+      components: ["ConvertibleLongTermNotesPayable", "ConvertibleDebtNoncurrent", "LongTermLineOfCredit"],
+    },
   ),
   usd("operatingLeases", "Operating lease liabilities", ["OperatingLeaseLiabilityNoncurrent"], "stock"),
   usd("totalLiabilities", "Total liabilities", ["Liabilities"], "stock", { bold: true }),
