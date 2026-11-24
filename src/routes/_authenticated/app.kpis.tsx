@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { TickerMark } from "@/components/app/ticker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { densify, leftOutNote, resolveGroup, sectorGroups, WHOLE_SECTOR } from "@/lib/kpis/dense";
+import { defaultColumns, densify, leftOutNote, resolveGroup, sectorGroups, WHOLE_SECTOR } from "@/lib/kpis/dense";
 import { columnScale, fmtChange, fmtInScale, modalEnd, modalPeriod, periodMark, type ColumnScale } from "@/lib/kpis/matrix";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -69,7 +69,6 @@ interface Latest {
 
 const STALE_DAYS = 548;
 const MAX_COLS = 12;
-const DEFAULT_COLS = 8;
 const STICKY = "top-[var(--sticky-top,3.5rem)]";
 /** Matrix row height in px (28 px of content and padding, 1 px rule); the windowing below counts on it. */
 const KPI_ROW_H = 29;
@@ -191,7 +190,7 @@ function KpiMatrix() {
   const chosen = (
     picked.length
       ? picked.map((id) => ranked.find((x) => x.k.id === id)).filter(Boolean)
-      : ranked.slice(0, DEFAULT_COLS)
+      : defaultColumns(ranked)
   ) as { k: TaxKpi; n: number }[];
 
   // Every company in scope with any fresh KPI gets a row; densify() then leaves out the ones with nothing in the

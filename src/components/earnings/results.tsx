@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { DerivedQ4Note, fmtFig, MachineWritten, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
 import { Quiet, Section } from "./layout";
 import { HistoryCharts } from "./history-charts";
-import { readFromOf } from "./results-view";
+import { latestFigures, readFromOf, type LatestFigures } from "./results-view";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Period } from "@/lib/financials/types";
 
@@ -129,6 +129,7 @@ export function LatestQuarter({
   const p = cur.period;
   const src = cur.revenue?.cell?.src ?? cur.netIncome?.cell?.src ?? cur.eps?.cell?.src;
   const filedFrom = src ? `${src.accn}` : null;
+  const figs = latestFigures(cur, pending);
 
   return (
     <Section
@@ -148,7 +149,7 @@ export function LatestQuarter({
         </>
       }
     >
-      {pending && <PendingNote ticker={ticker} cik={cik} pending={pending} score={score} companyName={companyName} readNote={readNote} />}
+      {pending && <PendingNote ticker={ticker} cik={cik} pending={pending} score={score} companyName={companyName} readNote={readNote} figs={figs} />}
       {!pending && readNote && (
         <p data-section="Read at view time" className="border-b bg-secondary/40 px-4 py-2.5 text-[13px] text-muted-foreground">
           {readNote}
@@ -213,7 +214,7 @@ export function LatestQuarter({
         <div className="grid min-w-0 grid-cols-2 content-start divide-x border-t lg:grid-cols-1 lg:divide-x-0 lg:divide-y lg:border-t-0 lg:border-b-0">
           <Stat
             className="bg-transparent"
-            label="EPS vs the Street, provider basis"
+            label={`EPS vs the Street, ${p.label}`}
             value={
               cur.surprise?.actual != null && cur.surprise.estimate != null ? (
                 <span className="num">
@@ -226,14 +227,14 @@ export function LatestQuarter({
             hint={
               cur.surprise?.surprisePct != null ? (
                 <>
-                  <span className={cn("num", toneText(cur.surprise.surprisePct))}>{signedPct(cur.surprise.surprisePct)}</span> surprise. The provider's EPS is often adjusted, so it can differ from filed diluted EPS
+                  <span className={cn("num", toneText(cur.surprise.surprisePct))}>{signedPct(cur.surprise.surprisePct)}</span> surprise on the provider's basis. That EPS is often adjusted, so it can differ from filed diluted EPS
                 </>
               ) : (
                 "No consensus on record for this quarter"
               )
             }
           />
-          <ReactionStat ticker={ticker} reaction={cur.reaction} release={cur.release} window={cur.window} />
+          <ReactionStat ticker={ticker} quarter={p.label} reaction={cur.reaction} release={cur.release} window={cur.window} />
         </div>
       </div>
     </Section>
@@ -250,20 +251,36 @@ export function windowText(w: ReactionWindow | null | undefined): string | null 
   return `Adjusted close $${w.from.close.toFixed(2)} on ${d(w.from.date)} to $${w.to.close.toFixed(2)} on ${d(w.to.date)}`;
 }
 
-function ReactionStat({ ticker, reaction, release, window: w }: { ticker: string; reaction: Reaction | null; release: EarningsRelease | null; window: ReactionWindow | null }) {
+function ReactionStat({
+  ticker,
+  quarter,
+  reaction,
+  release,
+  window: w,
+}: {
+  ticker: string;
+  quarter: string;
+  reaction: Reaction | null;
+  release: EarningsRelease | null;
+  window: ReactionWindow | null;
+}) {
   return (
     <Stat
       className="bg-transparent"
-      label="Stock reaction, 2 days"
+      label={`Stock reaction, 2 days, ${quarter}`}
       value={reaction ? <span className={cn("num", toneText(reaction.move))}>{signedPct(reaction.move)}</span> : <span className="text-muted-foreground">–</span>}
       hint={
         reaction ? (
           <>
-            <span className={cn("num", toneText(reaction.excess))}>{signedPct(reaction.excess)}</span> vs S&amp;P 500 ·{" "}
-            <span className={cn("num", toneText(reaction.drift20))}>{signedPct(reaction.drift20)}</span> over the next 20 sessions
+            {reactionParts(reaction).map((part, i) => (
+              <span key={part.key}>
+                {i > 0 && " · "}
+                <span className={cn("num", toneText(part.v))}>{signedPct(part.v)}</span> {part.text}
+              </span>
+            ))}
             {release && (
               <>
-                {" · "}
+                {reactionParts(reaction).length > 0 && " · "}
                 <ReleaseLink ticker={ticker} r={release}>
                   release
                 </ReleaseLink>
@@ -281,6 +298,14 @@ function ReactionStat({ ticker, reaction, release, window: w }: { ticker: string
   );
 }
 
+/** The parts of a reaction's sub-line that have a value: a missing figure drops its phrase rather than printing a mark inside the sentence (p5-shots L12). */
+function reactionParts(r: Reaction): { key: string; v: number; text: string }[] {
+  const out: { key: string; v: number; text: string }[] = [];
+  if (r.excess != null) out.push({ key: "excess", v: r.excess, text: "vs S&P 500" });
+  if (r.drift20 != null) out.push({ key: "drift", v: r.drift20, text: "over the next 20 sessions" });
+  return out;
+}
+
 /** The company has reported a newer quarter than the statements hold: say so precisely, with what is known from the release. */
 function PendingNote({
   ticker,
@@ -289,6 +314,7 @@ function PendingNote({
   score,
   companyName,
   readNote,
+  figs,
 }: {
   ticker: string;
   cik?: string;
@@ -296,7 +322,9 @@ function PendingNote({
   score: Scorecard | null;
   companyName: string;
   readNote?: string | null;
+  figs: LatestFigures;
 }) {
+  const q = figs.release?.label;
   const r = pending.release;
   const url = releaseUrl(cik, r);
   const sc = score && score.accession === r.accn ? score : null;
@@ -345,7 +373,7 @@ function PendingNote({
         )}
         {pending.surprise?.actual != null && pending.surprise.estimate != null && (
           <div>
-            <dt className="inline">EPS vs the Street (provider) </dt>
+            <dt className="inline">EPS vs the Street, {q} </dt>
             <dd className="num inline text-foreground">
               ${pending.surprise.actual.toFixed(2)} vs ${pending.surprise.estimate.toFixed(2)},{" "}
               <span className={toneText(pending.surprise.surprisePct)}>{signedPct(pending.surprise.surprisePct)}</span>
@@ -354,7 +382,7 @@ function PendingNote({
         )}
         {pending.reaction && (
           <div>
-            <dt className="inline">Stock, 2 days </dt>
+            <dt className="inline">Stock reaction, 2 days, {q} </dt>
             <dd className="num inline text-foreground">
               <span className={toneText(pending.reaction.move)}>{signedPct(pending.reaction.move)}</span>
               {pending.reaction.excess != null && (
@@ -366,6 +394,7 @@ function PendingNote({
           </div>
         )}
       </dl>
+      {figs.why && <p className="mt-1 text-[11px] text-muted-foreground">{figs.why}</p>}
     </div>
   );
 }

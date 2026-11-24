@@ -8,9 +8,11 @@
 // `period.readFrom`; a quarter a 10-K adds is derived (the year less the first nine months).
 import { statementView, type FiledLike, type StatementState } from "@/lib/company/currency-view";
 import { pendingRelease, profitLine, quarterRecords, recentQuarters, type PendingRelease, type ProfitLine, type QuarterInputs, type QuarterRecord } from "@/lib/earnings/quarters";
+import type { Surprise } from "@/lib/estimates/core";
 import type { ReadPeriod } from "@/lib/financials/extend";
 import type { CompanyDataset, Filing, Period } from "@/lib/financials/types";
 import { fmtDate } from "@/lib/format";
+import type { Reaction } from "@/lib/markets/core";
 
 export interface ResultsModel {
   state: StatementState;
@@ -71,4 +73,44 @@ export function resultsReadNote(m: ResultsModel): string | null {
   if (m.state === "reading") return `Reading the ${newest.form} filed on ${day(newest.filed)} from SEC.`;
   if (m.state === "failed") return `The ${newest.form} filed on ${day(newest.filed)} could not be read here; the scheduled rebuild will add it.`;
   return null;
+}
+
+/** The quarter after `p` in the same labelling ("Q3 FY26" to "Q4 FY26", "Q4 FY26" to "Q1 FY27"), or null without a fiscal quarter. */
+export function nextQuarterLabel(p: Period): string | null {
+  if (p.fy == null || p.fq == null || p.fq < 1 || p.fq > 4) return null;
+  const fy = p.fq === 4 ? p.fy + 1 : p.fy;
+  const fq = p.fq === 4 ? 1 : p.fq + 1;
+  return `Q${fq} FY${String(fy).slice(2)}`;
+}
+
+/** The consensus and price figures of one quarter, named by that quarter. */
+export interface QuarterFigures {
+  label: string;
+  surprise: Surprise | null;
+  reaction: Reaction | null;
+}
+
+export interface LatestFigures {
+  /** The quarter the Latest quarter table shows: its side tiles. */
+  side: QuarterFigures;
+  /** The newest release's figures when it reports a quarter the statements do not hold yet and has any; null otherwise. */
+  release: QuarterFigures | null;
+  /** Why two quarters' figures stand in one panel, when they do. */
+  why: string | null;
+}
+
+/**
+ * Which quarter each "EPS vs the Street" and 2-day reaction in the Latest quarter panel belongs to (p5-shots M1).
+ * The side tiles always describe the table's quarter. When a newer release is pending (the read of its 10-Q/10-K
+ * is under way or failed), its own figures are named by the quarter it reports: the next fiscal quarter when it
+ * is the only release since, otherwise the quarter end the provider gives, otherwise "the newest release".
+ */
+export function latestFigures(cur: QuarterRecord, pending: PendingRelease | null): LatestFigures {
+  const side: QuarterFigures = { label: cur.period.label, surprise: cur.surprise, reaction: cur.reaction };
+  if (!pending || (!pending.surprise && !pending.reaction)) return { side, release: null, why: null };
+  const next = pending.count === 1 ? nextQuarterLabel(cur.period) : null;
+  const label = next ?? (pending.surprise?.quarter ? `the quarter ended ${day(pending.surprise.quarter)}` : "the newest release");
+  const release: QuarterFigures = { label, surprise: pending.surprise, reaction: pending.reaction };
+  const why = `The figures above are ${label}, from the newest release; the table and the tiles beside it are ${side.label}, the newest quarter in the filed statements.`;
+  return { side, release, why };
 }

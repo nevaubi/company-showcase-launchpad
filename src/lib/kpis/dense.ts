@@ -125,3 +125,21 @@ export function rankByReporters<T extends ScopedRow>(
     .filter((x) => x.n > 0)
     .sort((a, b) => b.n - a.n || a.id.localeCompare(b.id));
 }
+
+/** A default column must be reported by at least this share of the companies the most reported KPI has. */
+export const DEFAULT_SHARE = 0.5;
+/** Most default columns drawn. */
+export const DEFAULT_COLS = 8;
+
+/**
+ * The matrix's default columns for a scope (p5-shots M13). `ranked` is in catalogue order with each KPI's count
+ * of companies in scope that have a value; the result is ranked by that count (ties keep catalogue order) and
+ * keeps only KPIs reported by at least `share` of the companies the leader has, so a group's default view is its
+ * own measures and mostly filled. Banks with ROTCE at 64 companies keep CET1 61, NIM 55 and efficiency 55 and
+ * drop dividends paid at 18. Nothing reported: no columns.
+ */
+export function defaultColumns<T extends { n: number }>(ranked: T[], max = DEFAULT_COLS, share = DEFAULT_SHARE): T[] {
+  const sorted = ranked.filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+  const top = sorted[0]?.n ?? 0;
+  return sorted.filter((x) => x.n >= top * share).slice(0, max);
+}

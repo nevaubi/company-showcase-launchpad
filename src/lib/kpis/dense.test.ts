@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { densify, emptyCells, leftOutNote, rankByReporters, resolveGroup, sectorGroups, WHOLE_SECTOR, type ScopedRow } from "./dense";
+import { defaultColumns, densify, emptyCells, leftOutNote, rankByReporters, resolveGroup, sectorGroups, WHOLE_SECTOR, type ScopedRow } from "./dense";
 
 /** A constructed Financials sector: 12 banks, 6 insurers, 4 payment networks, 2 exchanges, and one tech company. */
 function sector() {
@@ -78,5 +78,40 @@ describe("KPI matrix density", () => {
     expect(leftOutNote({ hiddenRows: 0, hiddenCols: ["a", "b", "c", "d"] }, String, "Banks")).toBe(
       "Left out: a, b and 2 more have no value for Banks.",
     );
+  });
+});
+
+describe("defaultColumns: a group's default columns are the KPIs most of its companies report (p5-shots M13)", () => {
+  // 20 banks: four bank measures reported by 12 to 16, four generic ones by 2 to 4 (as in the review's shot)
+  const banks = Array.from({ length: 20 }, (_, i) => `B${i}`);
+  const kpis: Record<string, Record<string, ScopedRow>> = {};
+  const put = (kpi: string, n: number) => {
+    for (const t of banks.slice(0, n)) (kpis[kpi] ??= {})[t] = { sec: "Financials", ind: "Banks" };
+  };
+  // catalogue order: generic ones first, so "first eight by count" alone would mix them in
+  [["dividends_paid", 4], ["segment_operating_income", 3], ["adjusted_ebitda_margin", 3], ["fcf", 2], ["rotce", 16], ["cet1_ratio", 15], ["nim", 12], ["efficiency_ratio", 12]].forEach(([k, n]) => put(k as string, n as number));
+  const keep = (r: ScopedRow) => r.ind === "Banks";
+  const ranked = Object.keys(kpis).map((id) => ({ id, n: Object.values(kpis[id]).filter(keep).length }));
+
+  it("keeps the group's own measures, ties in catalogue order, and drops the sparse generic ones", () => {
+    expect(defaultColumns(ranked).map((x) => x.id)).toEqual(["rotce", "cet1_ratio", "nim", "efficiency_ratio"]);
+  });
+
+  it("the default view is mostly filled where the old first-eight rule was nearly half empty", () => {
+    const fill = (cols: string[]) => {
+      const rows = banks.map((t) => ({ t, cells: Object.fromEntries(cols.map((c) => [c, kpis[c][t] ? 1 : null])) }));
+      const d = densify(rows, cols);
+      return emptyCells(d.rows, d.cols);
+    };
+    const before = fill([...ranked].sort((a, b) => b.n - a.n).slice(0, 8).map((x) => x.id));
+    const after = fill(defaultColumns(ranked).map((x) => x.id));
+    expect(before.empty / before.total).toBeGreaterThan(0.45);
+    expect(after.empty / after.total).toBeLessThan(0.3);
+  });
+
+  it("caps at eight and returns nothing when nothing is reported", () => {
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `k${i}`, n: 10 }));
+    expect(defaultColumns(many).map((x) => x.id)).toEqual(many.slice(0, 8).map((x) => x.id));
+    expect(defaultColumns([{ id: "a", n: 0 }])).toEqual([]);
   });
 });

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { EvidenceButton } from "@/components/source/evidence-button";
 import { TickerMark } from "@/components/app/ticker";
 import { detail, tag } from "@/components/alt/alt-views";
+import { shortAgency } from "@/lib/alt/agency";
 import { fmtAlt } from "@/lib/alt/catalog";
 import type { AltRow } from "@/lib/alt/query";
 import { periodLabel } from "@/lib/alt/periods";
@@ -62,11 +63,11 @@ export function AltRecords({ rows, ticker, pageSize = 8, showTicker, series, emp
                       {t?.text && <span className={cn("hidden shrink-0 rounded-[3px] sm:inline border px-1 text-[10px] leading-4 first-letter:uppercase", t.tone === "neg" ? "text-negative" : t.tone === "pos" ? "text-positive" : "text-muted-foreground")}>{t.text}</span>}
                       {r.source_url && !series ? (
                         <a href={r.source_url} target="_blank" rel="noreferrer" className="group inline-flex h-7 min-w-0 shrink items-center gap-1 hover:underline">
-                          <span className="truncate">{r.title}</span>
+                          <span className="truncate">{shortAgency(r.title)}</span>
                           <ExternalLink className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
                         </a>
                       ) : (
-                        <span className="truncate">{series ? seriesDetail(r) : r.title}</span>
+                        <span className="truncate">{series ? seriesDetail(r) : shortAgency(r.title)}</span>
                       )}
                       {d && <span className="hidden min-w-0 max-w-[40%] shrink-[3] truncate text-[11px] text-muted-foreground 2xl:inline">{d}</span>}
                     </div>

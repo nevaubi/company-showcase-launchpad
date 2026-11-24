@@ -345,3 +345,29 @@ export function plantIndex(year: number, recs: TriRec[], match: (parent: string)
   }
   return [...out.values()];
 }
+
+/** A year's plant detail as the panel draws it (p5-shots M12). */
+export interface PlantsView {
+  states: { state: string; facilities: number; releases: number }[];
+  facilities: TriFacility[];
+  /** The tile's sub-line: "in 4 states", or null when the file names no states. */
+  where: string | null;
+  /** Said once, in place of the empty grid and list, when the file counts plants but names none. */
+  note: string | null;
+}
+
+/**
+ * What the Plants and releases panel shows for one year's "TRI facilities" row. The count comes from the row's
+ * value; the states and plant names from its meta. When the meta has neither, the tile shows the count alone and
+ * one line says the file names no plants, instead of "in 0 states" beside an unlit grid.
+ */
+export function plantsView(value: number | null | undefined, meta: Record<string, unknown> | null | undefined, year: number): PlantsView {
+  const states = (Array.isArray(meta?.states) ? meta.states : []) as PlantsView["states"];
+  const facilities = (Array.isArray(meta?.facilities) ? meta.facilities : []) as TriFacility[];
+  const where = states.length ? `in ${states.length} ${states.length === 1 ? "state" : "states"}` : null;
+  let note: string | null = null;
+  if (!states.length && !facilities.length)
+    note = value ? `The EPA file for ${year} counts ${value} ${value === 1 ? "plant" : "plants"} for this company but names none, so there is no map or plant list.` : `The EPA file for ${year} lists no plants for this company.`;
+  else if (!facilities.length) note = `The EPA file for ${year} lists no plant names for this company.`;
+  return { states, facilities, where, note };
+}

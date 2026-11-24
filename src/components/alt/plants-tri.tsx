@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { fmtAlt, type AltRow } from "@/lib/alt/query";
 import { fmtSigned } from "@/lib/alt/catalog";
 import { STATES } from "@/lib/alt/sod";
-import { TRI_FACILITIES, TRI_PAGE, TRI_PRODUCTION, TRI_RELEASES, type TriFacility } from "@/lib/alt/tri";
+import { plantsView, TRI_FACILITIES, TRI_PAGE, TRI_PRODUCTION, TRI_RELEASES, type TriFacility } from "@/lib/alt/tri";
 import { cn } from "@/lib/utils";
 import { UsTileMap } from "./us-tile-map";
 
@@ -31,22 +31,23 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
   const rel = get(TRI_RELEASES, y);
   const prod = get(TRI_PRODUCTION, y);
   const relPrev = get(TRI_RELEASES, y - 1);
-  const facilities = useMemo(() => ((fac?.meta?.facilities ?? []) as TriFacility[]), [fac]);
+  const view = useMemo(() => plantsView(fac?.value, fac?.meta, y), [fac, y]);
+  const facilities = view.facilities;
   const shownAll = st ? facilities.filter((f) => f.state === st) : facilities;
   const shown = all ? shownAll : shownAll.slice(0, 15);
   if (!y || !fac) return null;
-  const states = (fac.meta.states ?? []) as { state: string; facilities: number; releases: number }[];
+  const states = view.states;
   const chems = (fac.meta.top_chemicals ?? []) as { chemical: string; releases: number }[];
   const relChg = rel?.value != null && relPrev?.value ? rel.value / relPrev.value - 1 : null;
   const src = (f: TriFacility) => open({ ticker, label: `${title(f.name)} (${f.city}, ${f.state}), EPA TRI ${y}`, unit: "usd", value: 0, external: { url: f.url, date: `${y}-12-31`, quote: `${lb(f.releases)} released · ${f.chemicals} chemicals${f.ratio != null ? ` · production ratio ${f.ratio.toFixed(2)}` : ""}` } });
 
   return (
-    <div className="grid grid-cols-1 gap-4 p-3.5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
+    <div className={cn("grid grid-cols-1 gap-4 p-3.5", facilities.length > 0 && "xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]")}>
       <div className="min-w-0">
         <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border text-[12px]">
           <div className="bg-card px-2.5 py-1.5">
             <p className="text-[11px] text-muted-foreground">Plants reporting, {y}</p>
-            <p className="num font-semibold">{fac.value} <span className="font-normal text-muted-foreground">in {states.length} states</span></p>
+            <p className="num font-semibold">{fac.value} {view.where && <span className="font-normal text-muted-foreground">{view.where}</span>}</p>
           </div>
           <div className="bg-card px-2.5 py-1.5" title="Median of the plants' reported production ratios (this year's production ÷ last year's, per chemical)">
             <p className="text-[11px] text-muted-foreground">Production index</p>
@@ -62,20 +63,20 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
           </div>
         </div>
         <div className="mb-2 flex items-center justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground">{st ? <>Showing {STATES[st] ?? st} · <button type="button" className="underline underline-offset-2" onClick={() => setSt(null)}>all states</button></> : "Plants per state · tap to filter the list"}</p>
+          <p className="text-[11px] text-muted-foreground">{!states.length ? (view.note ?? "") : st ? <>Showing {STATES[st] ?? st} · <button type="button" className="underline underline-offset-2" onClick={() => setSt(null)}>all states</button></> : "Plants per state · tap to filter the list"}</p>
           {years.length > 1 && (
             <select value={y} onChange={(e) => { setYear(Number(e.target.value)); setSt(null); }} aria-label="Year" className="h-7 rounded-md border bg-background px-2 text-[12px]">
               {years.map((yr) => <option key={yr} value={yr}>{yr}</option>)}
             </select>
           )}
         </div>
-        <UsTileMap
+        {states.length > 0 && <UsTileMap
           values={Object.fromEntries(states.map((s) => [s.state, s.facilities]))}
           label={(s) => { const x = states.find((z) => z.state === s); return x ? String(x.facilities) : null; }}
           title={(s) => { const x = states.find((z) => z.state === s); return x ? `${STATES[s] ?? s}: ${x.facilities} plants · ${lb(x.releases)} released` : `${STATES[s] ?? s}: no reporting plants`; }}
           selected={st}
           onSelect={(s) => setSt((cur) => (cur === s || !states.some((z) => z.state === s) ? null : s))}
-        />
+        />}
         <div className="mt-3">
           <p className="mb-1 text-[11px] font-medium text-muted-foreground">By year</p>
           <table className="w-full text-[13px]">
@@ -97,7 +98,7 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
         </div>
       </div>
       <div className="min-w-0">
-        {!facilities.length && <p className="text-[12px] text-muted-foreground">The EPA file for {y} lists no plant names for this company.</p>}
+        {!facilities.length && states.length > 0 && view.note && <p className="text-[12px] text-muted-foreground">{view.note}</p>}
         <div className={cn("overflow-x-auto", !facilities.length && "hidden")}>
           <table className="w-full text-[13px]">
             <thead>

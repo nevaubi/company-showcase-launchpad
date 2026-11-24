@@ -11,25 +11,30 @@ import { cn } from "@/lib/utils";
 
 export type StatementView = "values" | "yoy" | "common";
 
-/** Growth of a row's latest value: CAGR across the visible span (annual) or YoY (quarterly). */
-export function rowTrend(row: Row, periods: Period[], freq: "annual" | "quarterly"): { v: number; label: string } | null {
+/**
+ * Growth of a row's latest value: CAGR (annual) or YoY (quarterly). Only over a span whose first and last
+ * periods both have values, and the last is the table's newest column: a row whose recent years are empty
+ * shows no growth (p5-shots M7). `since` names the first period when the span is shorter than the table's.
+ */
+export function rowTrend(row: Row, periods: Period[], freq: "annual" | "quarterly"): { v: number; label: string; since: string | null } | null {
   if (row.unit === "pct" || row.unit === "ratio" || row.unit === "days") return null;
   const idx = row.cells.map((c, i) => (c ? i : -1)).filter((i) => i >= 0);
   if (idx.length < 2) return null;
   const last = idx.at(-1)!;
+  if (last !== periods.length - 1) return null;
   const lv = row.cells[last]!.v;
   if (freq === "quarterly") {
     const p = periods[last];
     const j = periods.findIndex((q) => q.fy === p.fy - 1 && q.fq === p.fq);
     const prev = j >= 0 ? row.cells[j]?.v : undefined;
     if (prev == null || prev <= 0 || lv <= 0) return null;
-    return { v: lv / prev - 1, label: `${p.label} vs ${periods[j].label}` };
+    return { v: lv / prev - 1, label: `${p.label} vs ${periods[j].label}`, since: null };
   }
   const first = idx[0];
   const fv = row.cells[first]!.v;
   const years = periods[last].fy - periods[first].fy;
   const g = cagr(fv, lv, years);
-  return g == null ? null : { v: g, label: `${periods[first].label}–${periods[last].label} (${years}y)` };
+  return g == null ? null : { v: g, label: `${periods[first].label}–${periods[last].label} (${years}y)`, since: first > 0 ? periods[first].label : null };
 }
 
 export function StatementTable({
@@ -323,6 +328,7 @@ export function StatementTable({
                           <span className={cn("num text-xs", trend.v >= 0 ? "text-positive" : "text-negative")}>
                             {trend.v >= 0 ? "+" : "−"}
                             {Math.abs(trend.v * 100).toFixed(1)}%
+                            {trend.since && <span className="block text-[10px] leading-3 text-muted-foreground">from {trend.since}</span>}
                           </span>
                         </TooltipTrigger>
                         <TooltipContent className="text-xs">{freq === "annual" ? `Compound annual growth, ${trend.label}` : `Year over year, ${trend.label}`}</TooltipContent>

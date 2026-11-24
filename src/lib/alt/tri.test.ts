@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normParent, parseTri, TRI_FACILITIES, TRI_PRODUCTION, TRI_RELEASES, triMatcher, triRows, triText } from "./tri";
+import { normParent, parseTri, plantsView, TRI_FACILITIES, TRI_PRODUCTION, TRI_RELEASES, triMatcher, triRows, triText } from "./tri";
 
 const HEAD = '"1. YEAR","2. TRIFD","3. FRS ID","4. FACILITY NAME","6. CITY","7. COUNTY","8. ST","12. LATITUDE","13. LONGITUDE","15. PARENT CO NAME","17. STANDARD PARENT CO NAME","23. INDUSTRY SECTOR","30. PRIMARY NAICS","37. CHEMICAL","46. CARCINOGEN","48. PFAS","50. UNIT OF MEASURE","65. ON-SITE RELEASE TOTAL","88. OFF-SITE RELEASE TOTAL","107. TOTAL RELEASES","119. PRODUCTION WSTE (8.1-8.7)","121. PROD_RATIO_OR_ ACTIVITY","122. 8.9 - PRODUCTION RATIO"';
 const line = (trifd: string, name: string, st: string, parent: string, chem: string, total: number, ratio: string, unit = "Pounds", kind = "PRODUCTION") =>
@@ -88,5 +88,27 @@ describe("triText", () => {
     expect(t).toContain("2024: 3 plants, 1.5K lb released, production 1.000");
     expect(t).toContain("STATES 2024: TX 2 (1.5K lb), LA 1 (1 lb)");
     expect(t).toMatch(/PLANT ONE, UNIT 2, TOWN TX · Chemicals · 1\.5K lb · 2 chemicals · production ratio 1\.20 <https:\/\/echo\.epa\.gov/);
+  });
+});
+
+describe("plantsView: the tile never contradicts its panel (p5-shots M12)", () => {
+  it("counts plants with no states or names: no 'in 0 states', one note, nothing to draw", () => {
+    const v = plantsView(11, { states: [], facilities: [] }, 2024);
+    expect(v.where).toBeNull();
+    expect(v.states).toEqual([]);
+    expect(v.note).toBe("The EPA file for 2024 counts 11 plants for this company but names none, so there is no map or plant list.");
+    expect(plantsView(11, null, 2024).where).toBeNull();
+  });
+  it("states without plant names: the grid is drawn and the list says it has no names", () => {
+    const v = plantsView(3, { states: [{ state: "TX", facilities: 2, releases: 10 }, { state: "CA", facilities: 1, releases: 5 }] }, 2024);
+    expect(v.where).toBe("in 2 states");
+    expect(v.note).toBe("The EPA file for 2024 lists no plant names for this company.");
+  });
+  it("full detail: no note, one state in the singular", () => {
+    const f = { name: "A", city: "X", state: "TX", releases: 1, chemicals: 1, url: "", ratio: null };
+    const v = plantsView(1, { states: [{ state: "TX", facilities: 1, releases: 1 }], facilities: [f] }, 2024);
+    expect(v.where).toBe("in 1 state");
+    expect(v.note).toBeNull();
+    expect(v.facilities).toHaveLength(1);
   });
 });
