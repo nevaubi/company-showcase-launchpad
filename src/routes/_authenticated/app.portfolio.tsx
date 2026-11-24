@@ -45,7 +45,8 @@ function PortfolioPage() {
         onSuccess: (newId) => {
           setDialog(null);
           toast.success(`Saved ${holdings.length} holdings`);
-          navigate({ search: { id: newId }, replace: true });
+          // Which portfolio is shown is view state: the address changes, the page does not move.
+          navigate({ search: { id: newId }, replace: true, resetScroll: false });
         },
       },
     );
@@ -59,7 +60,7 @@ function PortfolioPage() {
         actions={
           <>
             {(list.data?.length ?? 0) > 1 && current && (
-              <Select value={current.id} onValueChange={(v) => navigate({ search: { id: v }, replace: true })}>
+              <Select value={current.id} onValueChange={(v) => navigate({ search: { id: v }, replace: true, resetScroll: false })}>
                 <SelectTrigger className="h-8 w-48 text-xs">
                   <SelectValue />
                 </SelectTrigger>
@@ -92,9 +93,12 @@ function PortfolioPage() {
                 </Button>
               </>
             )}
-            <Button size="sm" onClick={() => setDialog("new")}>
-              {current ? <Plus /> : <Upload />} {current ? "New" : "Import holdings"}
-            </Button>
+            {/* With no portfolio yet the empty state below carries the one import button. */}
+            {current && (
+              <Button size="sm" onClick={() => setDialog("new")}>
+                <Plus /> New
+              </Button>
+            )}
           </>
         }
       />

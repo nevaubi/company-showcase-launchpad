@@ -1,21 +1,128 @@
 // Browser queries for the setups engine: the latest published run (Cloud, refreshed nightly) with the
-// bundled full-history file as the fallback, and the paper autopilots (RLS: house + own bots).
+// bundled full-history file as the fallback, the session's live signals, and the paper autopilots
+// (RLS: house + own bots).
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { buildEvidence, type EvidenceBook } from "./evidence";
+import { rankSetups, toSetup, type LiveSignal } from "./rank";
 import type { SetupsFile } from "./setups";
 import type { EquityRow, Position } from "./bots";
+
+/** The published run plus the session's live signals, as the pages and the assistant read it. */
+export interface SetupsData extends SetupsFile {
+  /**
+   * Every signal the engine holds live for `asOf` (fired within the last three sessions), without
+   * its sparkline. `setups` is ranked from these at read time (`rankSetups` with the default
+   * filters), not the list the nightly job stored: the short list, or, when no rule is listed, the
+   * signals of the closest rules (`proven: false`, expected edge zero), which is what the page
+   * shows by default and what the assistant reads.
+   */
+  live: LiveSignal[];
+  /** Set when the signals could not be read; the scoreboard still works. */
+  liveError: string | null;
+  /** Evidence for every variant, worked out once per load from the stored records (kept in the query cache). */
+  book: EvidenceBook;
+}
+
+const SIGNAL_COLUMNS = "ticker, variant, fired_at, first_seen, name, sector, strength, detail, price, atr, dv20, cost";
+const PAGE = 1000;
+
+interface SignalRow {
+  ticker: string;
+  variant: string;
+  fired_at: string;
+  first_seen: string | null;
+  name: string | null;
+  sector: string | null;
+  strength: number | null;
+  detail: string | null;
+  price: number | null;
+  atr: number | null;
+  dv20: number | null;
+  cost: number | null;
+}
+
+const num = (x: unknown) => (x == null ? null : Number(x));
+
+/**
+ * Live signals of one session, read a page at a time (the API returns at most 1,000 rows a call).
+ * A signal was live on `asOf` when it was first seen on or before that session and last seen on or
+ * after it. Matching `last_seen` exactly would lose every signal the next night's scan has already
+ * touched, while the published run still points at `asOf`.
+ */
+export async function fetchLiveSignals(asOf: string): Promise<LiveSignal[]> {
+  const out: LiveSignal[] = [];
+  for (let from = 0; from < 20 * PAGE; from += PAGE) {
+    const { data, error } = await supabase
+      .from("setup_signals")
+      .select(SIGNAL_COLUMNS)
+      .gte("last_seen", asOf)
+      .order("ticker")
+      .order("variant")
+      .order("fired_at")
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    for (const r of (data ?? []) as unknown as SignalRow[]) {
+      // First seen after `asOf`: the next session's signal, not this one's.
+      if (r.first_seen != null && r.first_seen > asOf) continue;
+      out.push({
+        ticker: r.ticker, name: r.name ?? r.ticker, sector: r.sector ?? "", variant: r.variant, firedAt: r.fired_at, firstSeen: r.first_seen,
+        strength: Number(r.strength ?? 0), detail: r.detail ?? "", price: Number(r.price ?? 0), atr: Number(r.atr ?? 0), dv20: num(r.dv20), cost: num(r.cost),
+      });
+    }
+    if (!data || data.length < PAGE) break;
+  }
+  return out;
+}
+
+async function fetchSetupsFile(): Promise<SetupsFile> {
+  const { data } = await supabase.from("setup_results").select("payload").order("as_of", { ascending: false }).limit(1).maybeSingle();
+  if (data?.payload) return data.payload as unknown as SetupsFile;
+  const r = await fetch("/data/setups.json");
+  if (!r.ok) throw new Error(`setups ${r.status}`);
+  return (await r.json()) as SetupsFile;
+}
 
 export const setupsQuery = queryOptions({
   queryKey: ["setups", "latest"],
   staleTime: 10 * 60_000,
-  queryFn: async (): Promise<SetupsFile> => {
-    const { data } = await supabase.from("setup_results").select("payload").order("as_of", { ascending: false }).limit(1).maybeSingle();
-    if (data?.payload) return data.payload as unknown as SetupsFile;
-    const r = await fetch("/data/setups.json");
-    if (!r.ok) throw new Error(`setups ${r.status}`);
-    return (await r.json()) as SetupsFile;
+  queryFn: async (): Promise<SetupsData> => {
+    const file = await fetchSetupsFile();
+    let live: LiveSignal[] = [];
+    let liveError: string | null = null;
+    try {
+      live = await fetchLiveSignals(file.asOf);
+    } catch (e) {
+      liveError = (e as Error).message;
+    }
+    const book = buildEvidence(file.variants, file.regime, file.asOf);
+    // What the page shows by default: the short list, or the closest rules' signals when no rule is listed.
+    const ranking = rankSetups(book, live);
+    const shown = ranking.list.length ? ranking.list : ranking.closest;
+    return { ...file, setups: shown.map((r) => toSetup(r)), live, liveError, book };
   },
 });
+
+/** Sixty closes per ticker for the rows on screen (the signals query leaves them out: 60 numbers a row). */
+export const sparksQuery = (asOf: string, rows: readonly { ticker: string; key: string }[]) => {
+  const tickers = [...new Set(rows.map((r) => r.ticker))].sort();
+  const variants = [...new Set(rows.map((r) => r.key))].sort();
+  return queryOptions({
+    queryKey: ["setups", "sparks", asOf, tickers.join(","), variants.join(",")],
+    staleTime: 30 * 60_000,
+    enabled: tickers.length > 0,
+    queryFn: async (): Promise<Map<string, number[]>> => {
+      const out = new Map<string, number[]>();
+      for (let k = 0; k < tickers.length; k += 40) {
+        // The variant filter keeps the answer to about one row per ticker on screen.
+        const { data, error } = await supabase.from("setup_signals").select("ticker, spark").gte("last_seen", asOf).in("ticker", tickers.slice(k, k + 40)).in("variant", variants).limit(PAGE);
+        if (error) throw new Error(error.message);
+        for (const r of (data ?? []) as { ticker: string; spark: number[] | null }[]) if (!out.has(r.ticker) && r.spark?.length) out.set(r.ticker, r.spark.map(Number));
+      }
+      return out;
+    },
+  });
+};
 
 export interface BotRow {
   id: string;

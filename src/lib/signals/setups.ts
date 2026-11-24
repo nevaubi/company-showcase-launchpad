@@ -1,6 +1,6 @@
 // Published setups: the shape written by `bun scripts/setups.ts` (public/data/setups.json, the
 // fallback) and by the daily setups job (setup_results), plus the shared selection rules. Browser-safe.
-import { GATE, type Regime, type VariantProof } from "./backtest";
+import { adjustedT, GATE, type Regime, type VariantProof } from "./backtest";
 import { STRATEGY, type Family, type StrategyId } from "./strategies";
 
 export interface LiveRecord {
@@ -104,7 +104,7 @@ export function variantMeta(p: VariantProof, live?: LiveRecord): VariantMeta {
 }
 
 /** A variant is a "near miss" worth watching: positive after costs out of sample with t >= 1.5. */
-export const isNearMiss = (v: VariantMeta) => !v.passed && (v.outSample.avgNet ?? 0) > 0 && (v.outSample.t ?? 0) >= 1.5;
+export const isNearMiss = (v: VariantMeta) => !v.passed && (v.outSample.avgNet ?? 0) > 0 && (adjustedT(v.outSample) ?? 0) >= 1.5;
 
 export interface LiveFiring {
   ticker: string;
@@ -164,7 +164,7 @@ export function gateChecks(v: VariantMeta, gate: Record<string, number> = GATE):
   return [
     { id: "n", label: `${gate.minN}+ trades out of sample`, ok: o.n >= gate.minN && o.days >= gate.minDays },
     { id: "net", label: "Profitable after costs", ok: (o.avgNet ?? 0) > 0 },
-    { id: "t", label: `t-stat ≥ ${gate.minT}`, ok: (o.t ?? 0) >= gate.minT },
+    { id: "t", label: `t-stat ≥ ${gate.minT}`, ok: (adjustedT(o) ?? 0) >= gate.minT },
     { id: "fdr", label: "Survives false-discovery control", ok: v.fdr },
     { id: "dsr", label: `Deflated Sharpe ≥ ${gate.minDsr}`, ok: (v.dsr ?? 0) >= gate.minDsr },
     { id: "is", label: "Worked in earlier years", ok: (v.inSample.avgNet ?? 0) > 0 },
