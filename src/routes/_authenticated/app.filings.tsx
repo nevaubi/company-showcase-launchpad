@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { ArrowUpRight, ChevronLeft, ChevronRight, Search, X } from "lucide-react";
@@ -7,7 +7,9 @@ import { PageHeader, Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { TickerMark } from "@/components/app/ticker";
 import { DisclosureChanges } from "@/components/filings/disclosure-changes";
+import { HoldHeight } from "@/components/filings/hold-height";
 import { FormChip, Pager, QuietLine } from "@/components/filings/parts";
+import { useSearchText } from "@/components/filings/use-search-text";
 import { useSource } from "@/components/source/source-context";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -70,6 +72,7 @@ function useFilingDay(day: string | undefined) {
     queryKey: ["feed-neighbours", current],
     enabled: !!current,
     staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const [prev, next] = await Promise.all([
         supabase.from("sec_filings").select("filed").lt("filed", current!).order("filed", { ascending: false }).limit(1),
@@ -82,6 +85,9 @@ function useFilingDay(day: string | undefined) {
     queryKey: ["feed-day", current],
     enabled: !!current,
     staleTime: 5 * 60_000,
+    // The previous day's rows stay (dimmed) while the next day loads, so the page keeps its height
+    // and the reader's place; a skeleton here shrank the page and the browser scrolled to the top.
+    placeholderData: keepPreviousData,
     queryFn: async (): Promise<FeedFiling[]> => {
       const out: FeedFiling[] = [];
       for (let from = 0; from < 6000; from += 1000) {
@@ -103,15 +109,7 @@ function Filings() {
   const watch = useWatchlist();
   const watched = useMemo(() => new Set((watch.data ?? []).map((w) => w.ticker)), [watch.data]);
   const set = (s: Partial<Search>, keepPage = false) => navigate({ search: (prev) => ({ ...prev, ...(keepPage ? {} : { page: undefined }), ...s }), replace: true, resetScroll: false });
-  const [text, setText] = useState(search.q ?? "");
-  useEffect(() => setText(search.q ?? ""), [search.q]);
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if ((search.q ?? "") !== text.trim()) set({ q: text.trim() || undefined });
-    }, 200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
+  const [text, setText] = useSearchText(search.q, (q) => set({ q }));
   const sector = search.sector && SECTORS.includes(search.sector) ? search.sector : "all";
   const stableSector = useCallback(sectorOf, []);
 
@@ -153,6 +151,7 @@ function Filings() {
           </button>
         )}
       </div>
+      <HoldHeight hold={view} className="grid min-w-0 grid-cols-1 gap-4">
       {view === "filings" ? (
         <DayFeed search={search} set={set} sector={sector} watched={watched} />
       ) : (
@@ -164,6 +163,7 @@ function Filings() {
           <DisclosureChanges scope={{ form: search.form ?? "all", sector, watch: !!search.watch, q: search.q ?? "", days: search.days ?? 30 }} sectorOf={stableSector} watched={watched} />
         </>
       )}
+      </HoldHeight>
     </div>
   );
 }
@@ -195,7 +195,7 @@ function DayFeed({ search, set, sector, watched }: { search: Search; set: (s: Pa
         collapse={false}
         bodyClassName="p-0"
         title={d.day ? fmtDate(d.day, { weekday: "long", month: "long", day: "numeric", year: "numeric" }) : "Latest filing day"}
-        subtitle={d.rows.data ? `${filings.toLocaleString()} filings from covered companies${d.day && d.day === d.latest ? " · latest day, still arriving" : ""} · same-day insider forms from one company share a row` : "Loading the filing day"}
+        subtitle={d.rows.isPlaceholderData ? `Loading ${d.day ? fmtDate(d.day, { month: "short", day: "numeric" }) : "the filing day"}` : d.rows.data ? `${filings.toLocaleString()} filings from covered companies${d.day && d.day === d.latest ? " · latest day, still arriving" : ""} · same-day insider forms from one company share a row` : "Loading the filing day"}
         actions={
           <nav aria-label="Filing days" className="flex items-center">
             <button type="button" className={dayBtn} disabled={!d.prev} onClick={() => set({ day: d.prev ?? undefined })} title="Earlier filing day">
@@ -216,14 +216,14 @@ function DayFeed({ search, set, sector, watched }: { search: Search; set: (s: Pa
           <Segmented label="Form family" size="xs" value={fam} onChange={(v) => set({ fam: v === "all" ? undefined : v })} options={FAMS.filter((f) => f === "all" || counts[f] > 0 || f === fam).map((f) => ({ v: f, l: `${FAM_LABEL[f]} · ${counts[f].toLocaleString()}` }))} />
           <Pager p={p} onPage={(n) => set({ page: n }, true)} label="Feed pages, top" className="ml-auto" />
         </div>
-        {d.loadingDay || d.rows.isLoading ? (
+        {d.loadingDay || (d.rows.isLoading && !d.rows.data) ? (
           <Skeleton className="m-3.5 h-96" />
         ) : d.rows.isError ? (
           <QuietLine>Filings could not be loaded right now.</QuietLine>
         ) : !p.rows.length ? (
           <QuietLine>{filings ? "No filings on this day match these filters." : "No filings recorded on this day."}</QuietLine>
         ) : (
-          <div role="table" aria-label="Filings" className="text-[13px]">
+          <div role="table" aria-label="Filings" aria-busy={d.rows.isPlaceholderData || undefined} className={cn("text-[13px] transition-opacity duration-150", d.rows.isPlaceholderData && "pointer-events-none opacity-50")}>
             <div role="row" className={cn(GRID, "border-b px-3.5 py-1.5 text-[11px] text-muted-foreground")}>
               <span role="columnheader">Company</span>
               <span role="columnheader" className="hidden sm:block">

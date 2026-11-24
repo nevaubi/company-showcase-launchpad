@@ -9,6 +9,7 @@ import { CommentLetters } from "@/components/filings/comment-letters";
 import { FilingRows, KeyDocStrip } from "@/components/filings/company-filings";
 import { IrDocRows, scopeIrDocs, useIrDocs } from "@/components/filings/ir-docs";
 import { FormChip, Pager, QuietLine } from "@/components/filings/parts";
+import { useSearchText } from "@/components/filings/use-search-text";
 import { useSource } from "@/components/source/source-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,17 +53,9 @@ function Filings() {
   const year = search.year ?? null;
   const page = search.page ?? 1;
   // The words box types into local state; the address follows a moment later so typing stays smooth.
-  const [text, setText] = useState(search.q ?? "");
-  useEffect(() => setText(search.q ?? ""), [search.q]);
   const set = (s: Partial<z.infer<typeof searchSchema>>, keepPage = false) =>
     navigate({ search: (prev) => ({ ...prev, ...(keepPage ? {} : { page: undefined }), ...s }), replace: true, resetScroll: false });
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if ((search.q ?? "") !== text.trim()) set({ q: text.trim() || undefined });
-    }, 200);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [text]);
+  const [text, setText] = useSearchText(search.q, (q) => set({ q }));
 
   const rows = useMemo(() => dedupeFilings([...(company.data?.filings ?? []), ...insiderFilings(company.data?.insiders ?? [])]), [company.data]);
   const counts = useMemo(() => countByFamily(rows), [rows]);

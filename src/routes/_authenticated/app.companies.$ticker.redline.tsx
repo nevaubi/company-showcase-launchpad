@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChangeCard, TYPE_LABEL } from "@/components/redline/change-card";
 import { Pager, QuietLine } from "@/components/filings/parts";
 import { paginate } from "@/lib/filings/list";
-import { LEVEL_LABEL, redlineVerdict, verdictSentence, type Verdict } from "@/lib/filings/redline-verdict";
+import { LEVEL_LABEL, notComparedSentence, redlineVerdict, verdictSentence, type Verdict } from "@/lib/filings/redline-verdict";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/lib/data";
 import { coverageOf, historyCik } from "@/lib/coverage";
@@ -239,11 +239,11 @@ function RedlinePage() {
 function VerdictPanel({ v, from, to, stored, section, onSection }: { v: Verdict; from: Filing; to: Filing; stored: boolean; section: string; onSection: (k: string) => void }) {
   const max = Math.max(1, ...v.sections.map((s) => s.added + s.removed + s.changed));
   const pct = (x: number) => `${(x * 100).toFixed(x > 0 && x < 0.01 ? 1 : 0)}%`;
-  const facts: [string, string, boolean?][] = [
+  const facts: [string, string][] = [
     ["Added", v.added.toLocaleString()],
     ["Removed", v.removed.toLocaleString()],
     ["Rewritten", v.rewritten.toLocaleString()],
-    ["High materiality", v.high.toLocaleString(), v.high > 0],
+    ["High materiality", v.high.toLocaleString()],
     ["New risk factors", v.newRisks.toLocaleString()],
     ["Risk factors removed", v.removedRisks.toLocaleString()],
   ];
@@ -257,17 +257,29 @@ function VerdictPanel({ v, from, to, stored, section, onSection }: { v: Verdict;
             {to.report && <span className="text-muted-foreground"> (period {fmtDate(to.report)})</span>} against <span className="font-semibold">{fmtDate(from.filed)}</span>
             {from.report && <span className="text-muted-foreground"> (period {fmtDate(from.report)})</span>}
           </p>
-          <div className="mt-3 flex items-baseline gap-3">
-            <span className={cn("num text-[18px] font-semibold", v.level === "major" && "text-negative")}>{pct(v.share)}</span>
-            <span className="text-[13px] font-medium">{LEVEL_LABEL[v.level]}</span>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <span className="num text-[18px] font-semibold">{pct(v.share)}</span>
+            <span data-level={v.level} className={cn("text-[13px] font-medium", v.level === "unusual" && "text-negative")}>{LEVEL_LABEL[v.level]}</span>
           </div>
           <p className="num text-[11px] text-muted-foreground">{v.changed.toLocaleString()} of {v.paragraphs.toLocaleString()} compared paragraphs added, removed or rewritten</p>
+          {v.basis && v.norm && (
+            <p className="mt-1 text-[12px]">
+              {v.basis}
+              <span className="text-muted-foreground"> on file. The typical {v.norm.form} changes {pct(v.norm.cuts.find(([p]) => p === 0.5)![1])} ({v.norm.sample.toLocaleString()} stored comparisons, {fmtDate(v.norm.asOf)}).</span>
+            </p>
+          )}
+          {v.level === "unrated" && <p className="mt-1 text-[12px] text-muted-foreground">No stored comparisons of this form to grade it against.</p>}
           <p className="mt-2 text-[13px]">{verdictSentence(v)}</p>
+          {notComparedSentence(v) && (
+            <p data-section="Sections not compared" className="mt-2 rounded-[4px] border border-dashed px-2 py-1 text-[12px]">
+              <span className="font-medium">{notComparedSentence(v)}</span>
+            </p>
+          )}
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-            {facts.map(([l, x, warn]) => (
+            {facts.map(([l, x]) => (
               <div key={l} className="flex items-baseline justify-between gap-2 border-b border-dashed py-0.5">
                 <dt className="text-muted-foreground">{l}</dt>
-                <dd className={cn("num", warn && "text-negative")}>{x}</dd>
+                <dd className="num">{x}</dd>
               </div>
             ))}
           </dl>
