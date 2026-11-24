@@ -252,10 +252,14 @@ function PendingNote({ ticker, cik, pending, score, companyName }: { ticker: str
     <div data-section="Newest release" className="border-b bg-secondary/40 px-4 py-2.5">
       <p className="text-[13px]">
         <span className="font-medium">
-          {companyName} reported {sc?.quarter_end ? `the quarter ended ${fmtDate(sc.quarter_end)}` : `the quarter after ${pending.throughLabel}`} on {fmtDate(r.filed)}.
+          {sc?.quarter_end
+            ? `${companyName} reported the quarter ended ${fmtDate(sc.quarter_end)} on ${fmtDate(r.filed)}.`
+            : pending.count > 1
+              ? `${companyName} has filed ${pending.count} earnings releases since ${pending.throughLabel}, the latest on ${fmtDate(r.filed)}.`
+              : `${companyName} filed an earnings release on ${fmtDate(r.filed)}, after ${pending.throughLabel}.`}
         </span>{" "}
         <span className="text-muted-foreground">
-          Its statements are not in these tables yet; they run through the quarter ended {fmtDate(pending.throughEnd)}.{" "}
+          {sc?.quarter_end ? "Its statements are not in these tables yet; they" : "These tables"} run through the quarter ended {fmtDate(pending.throughEnd)}.{" "}
         </span>
         <ReleaseLink ticker={ticker} r={r} className="text-[13px]">
           Open the release

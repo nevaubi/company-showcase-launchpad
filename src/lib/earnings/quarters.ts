@@ -4,7 +4,7 @@
 // estimates provider has them, its EPS surprise records. Every value keeps the statement cell it
 // came from (a SourceRef or a derived formula), and every computed figure carries a formula whose
 // parts are those cells, so click-to-source works for all of it.
-import type { Cell, CompanyDataset, DerivedPart, EarningsRelease, Period, Row, Statement } from "@/lib/financials/types";
+import type { Cell, CompanyDataset, DerivedPart, EarningsRelease, Filing, Period, Row, Statement } from "@/lib/financials/types";
 import type { Reaction } from "@/lib/markets/core";
 import type { PeriodEstimate, Surprise } from "@/lib/estimates/core";
 
@@ -34,7 +34,7 @@ export interface QuarterRecord {
   yoy: Partial<Record<MetricKey, Figure>>;
   /** Change against the immediately preceding quarter. */
   qoq: Partial<Record<MetricKey, Figure>>;
-  /** The earnings release that reported this quarter (first Item 2.02 8-K filed after the quarter end, within 100 days). */
+  /** The earnings release that reported this quarter (see `releaseFor`); null when it cannot be established. */
   release: EarningsRelease | null;
   /** The stock's reaction to that release. */
   reaction: Reaction | null;
@@ -118,15 +118,43 @@ export function priorIndex(periods: Period[], i: number): number {
   return g >= 75 && g <= 105 ? k : -1;
 }
 
-/** The release that reported a quarter: the first earnings release filed after its end, within 100 days. */
-export function releaseFor(end: string, releases: EarningsRelease[]): EarningsRelease | null {
-  let best: EarningsRelease | null = null;
-  for (const r of releases) {
-    const g = days(end, r.filed.slice(0, 10));
-    if (g <= 0 || g > 100) continue;
-    if (!best || r.filed < best.filed) best = r;
+const PERIODIC_FORMS = new Set(["10-Q", "10-K", "10-QT", "10-KT"]);
+
+/**
+ * Filing date of the periodic report (original 10-Q or 10-K, not an amendment) whose report period ends
+ * within five days of `end`: the document whose statements hold that quarter. Null when the filing list
+ * has none (it is not filed yet, or the list does not reach back that far).
+ */
+export function periodicFiledFor(end: string, filings: Filing[] | null | undefined): string | null {
+  let best: string | null = null;
+  for (const f of filings ?? []) {
+    if (!PERIODIC_FORMS.has(f.form) || !f.report) continue;
+    if (Math.abs(days(f.report, end)) > 5) continue;
+    const filed = f.filed.slice(0, 10);
+    if (!best || filed < best) best = filed;
   }
   return best;
+}
+
+/**
+ * The release that reported a quarter. Companies often file more than one Item 2.02 8-K a quarter
+ * (Tesla's deliveries report, AbbVie's and EOG's pre-announcements), so position in the list says
+ * nothing. When the periodic report holding the quarter is known, the release is the last one filed
+ * after the quarter end and no later than that report (the results release precedes or accompanies the
+ * 10-Q/10-K). Without that report, a release is matched only when it is the single one within 100 days
+ * of the quarter end; two or more candidates leave the quarter unmatched rather than guessed.
+ */
+export function releaseFor(end: string, releases: EarningsRelease[], filings?: Filing[] | null): EarningsRelease | null {
+  const periodic = periodicFiledFor(end, filings);
+  const cands = releases.filter((r) => {
+    const filed = r.filed.slice(0, 10);
+    const g = days(end, filed);
+    if (g <= 0) return false;
+    return periodic ? filed <= periodic && g <= 120 : g <= 100;
+  });
+  if (!cands.length) return null;
+  if (periodic) return cands.reduce((a, b) => (b.filed > a.filed ? b : a));
+  return cands.length === 1 ? cands[0] : null;
 }
 
 /** The provider's surprise record for a quarter: its "quarter" date within 31 days of the period end (calendar vs fiscal ends). */
@@ -214,7 +242,7 @@ export function quarterRecords({ dataset: d, reactions = [], surprises }: Quarte
       if (gy) yoy[k] = gy;
       if (gq) qoq[k] = gq;
     }
-    const release = releaseFor(b.period.end, d.earningsReleases);
+    const release = releaseFor(b.period.end, d.earningsReleases, d.filings);
     return {
       ...b,
       yoy,
@@ -233,39 +261,63 @@ export function recentQuarters(records: QuarterRecord[], n = 12): QuarterRecord[
 }
 
 export interface PendingRelease {
+  /** The newest of the releases filed after the statements' latest quarter. */
   release: EarningsRelease;
-  /** The quarter the statements end with; the release reports a later one. */
+  /** How many Item 2.02 releases were filed after the statements' latest quarter (and its periodic report). */
+  count: number;
+  /** The quarter the statements end with. */
   throughEnd: string;
   throughLabel: string;
   reaction: Reaction | null;
+  /** The provider's EPS record for the quarter that release reports: its quarter end within 100 days before the release. */
   surprise: Surprise | null;
 }
 
 /**
- * An earnings release newer than every quarter in the statements: the company has reported a quarter
- * whose figures the dataset does not hold yet (they arrive with the 10-Q or 10-K, or when the read-time
- * release layer adds them). Null when the statements are current.
+ * Earnings releases filed after every quarter the statements hold: the company has reported results
+ * whose figures the dataset does not have yet. A release counts only when it is filed after the latest
+ * quarter's end, after the release matched to it and after the 10-Q/10-K that holds it, so a second
+ * Item 2.02 filing inside the same quarter is never taken for a newer quarter. Which quarter each
+ * release reports is not stated here (a company can file several a quarter); the caller names only
+ * the count and the newest date. Null when the statements are current.
  */
-export function pendingRelease(records: QuarterRecord[], releases: EarningsRelease[], reactions: Reaction[] = [], surprises?: Surprise[] | null): PendingRelease | null {
+export function pendingRelease(
+  records: QuarterRecord[],
+  releases: EarningsRelease[],
+  reactions: Reaction[] = [],
+  surprises?: Surprise[] | null,
+  filings?: Filing[] | null,
+): PendingRelease | null {
   const latest = [...records].reverse().find((r) => r.revenue || r.profit || r.netIncome);
   if (!latest) return null;
   const used = new Set(records.map((r) => r.release?.accn).filter(Boolean));
+  const periodic = periodicFiledFor(latest.period.end, filings);
   const newer = releases
-    .filter((r) => !used.has(r.accn) && days(latest.period.end, r.filed.slice(0, 10)) > 0 && (!latest.release || r.filed > latest.release.filed))
+    .filter((r) => {
+      const filed = r.filed.slice(0, 10);
+      if (used.has(r.accn) || days(latest.period.end, filed) <= 0) return false;
+      if (latest.release && r.filed <= latest.release.filed) return false;
+      if (periodic && filed <= periodic) return false;
+      return true;
+    })
     .sort((a, b) => b.filed.localeCompare(a.filed));
   const rel = newer[0];
   if (!rel) return null;
-  // The provider's record for the quarter after the latest statement quarter (about three months later).
-  const after = (surprises ?? []).filter((s) => {
-    const g = days(latest.period.end, s.quarter);
-    return g >= 60 && g <= 125 && s.quarter < rel.filed.slice(0, 10);
-  });
+  const relDate = rel.filed.slice(0, 10);
+  const minEnd = latest.period.end;
+  let surprise: Surprise | null = null;
+  for (const s of surprises ?? []) {
+    if (!s.quarter || s.quarter >= relDate || days(minEnd, s.quarter) <= 20) continue;
+    if (days(s.quarter, relDate) > 100) continue;
+    if (!surprise || s.quarter > surprise.quarter) surprise = s;
+  }
   return {
     release: rel,
+    count: newer.length,
     throughEnd: latest.period.end,
     throughLabel: latest.period.label,
-    reaction: reactions.find((r) => r.date === rel.filed.slice(0, 10)) ?? null,
-    surprise: after[0] ?? null,
+    reaction: reactions.find((r) => r.date === relDate) ?? null,
+    surprise,
   };
 }
 

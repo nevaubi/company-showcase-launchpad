@@ -85,7 +85,7 @@ function Earnings() {
     if (!d) return null;
     const records = quarterRecords({ dataset: d, reactions, surprises });
     const recent = recentQuarters(records, 12);
-    const pending = pendingRelease(records, d.earningsReleases, reactions, surprises);
+    const pending = pendingRelease(records, d.earningsReleases, reactions, surprises, d.filings);
     return { records, recent, pending, profit: profitLine(d) };
   }, [d, reactions, surprises]);
 

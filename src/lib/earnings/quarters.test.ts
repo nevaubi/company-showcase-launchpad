@@ -10,6 +10,7 @@ const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(path.resolve(
 const AAPL = load("AAPL");
 const JPM = load("JPM");
 const NVDA = load("NVDA");
+const C = load("C");
 
 const reaction = (date: string, move: number, excess: number | null = null, drift20: number | null = null): Reaction => ({
   date,
@@ -109,9 +110,10 @@ describe("period matching", () => {
     expect(priorIndex(ps, 1)).toBe(-1);
     expect(yearAgoIndex(ps, 1)).toBe(-1);
   });
-  it("matches the first release after the quarter end only", () => {
+  it("without the periodic report, matches only a single candidate and leaves two unmatched", () => {
     const rel = (filed: string) => ({ accn: filed, filed, doc: "", title: "" });
-    expect(releaseFor("2026-06-30", [rel("2026-06-29"), rel("2026-10-30"), rel("2026-07-20"), rel("2026-07-25")])?.filed).toBe("2026-07-20");
+    expect(releaseFor("2026-06-30", [rel("2026-06-29"), rel("2026-07-20")])?.filed).toBe("2026-07-20");
+    expect(releaseFor("2026-06-30", [rel("2026-07-02"), rel("2026-07-22")])).toBeNull();
     expect(releaseFor("2026-06-30", [rel("2026-10-30")])).toBeNull();
   });
   it("matches a surprise record within a month of the period end", () => {
@@ -166,5 +168,72 @@ describe("nextConsensus", () => {
   });
   it("is null without estimates", () => {
     expect(nextConsensus(null, "2026-09-30")).toBeNull();
+  });
+});
+
+// Real EDGAR filing dates (submissions index, read 23 Nov 2026): each company files two Item 2.02 8-Ks
+// a quarter (Tesla: deliveries, then results; AbbVie and EOG: a pre-announcement, then results).
+const EDGAR_2026: Record<string, { releases: string[]; periodic: [form: string, filed: string, report: string][] }> = {
+  TSLA: {
+    releases: ["2025-10-02", "2025-10-22", "2026-01-02", "2026-01-28", "2026-04-02", "2026-04-22", "2026-07-02", "2026-07-22", "2026-10-02", "2026-10-21"],
+    periodic: [["10-Q", "2025-10-23", "2025-09-30"], ["10-K", "2026-01-29", "2025-12-31"], ["10-Q", "2026-04-23", "2026-03-31"], ["10-Q", "2026-07-23", "2026-06-30"], ["10-Q", "2026-10-22", "2026-09-30"]],
+  },
+  ABBV: {
+    releases: ["2025-10-03", "2025-10-31", "2026-01-07", "2026-02-04", "2026-04-03", "2026-04-29", "2026-07-06", "2026-07-31", "2026-10-05", "2026-10-30"],
+    periodic: [["10-Q", "2025-11-04", "2025-09-30"], ["10-K", "2026-02-20", "2025-12-31"], ["10-Q", "2026-05-08", "2026-03-31"], ["10-Q", "2026-08-03", "2026-06-30"], ["10-Q", "2026-11-03", "2026-09-30"]],
+  },
+  EOG: {
+    releases: ["2025-10-08", "2025-11-06", "2026-01-12", "2026-02-24", "2026-04-09", "2026-05-05", "2026-07-09", "2026-08-04", "2026-10-08", "2026-11-05"],
+    periodic: [["10-Q", "2025-11-06", "2025-09-30"], ["10-K", "2026-02-24", "2025-12-31"], ["10-Q", "2026-05-05", "2026-03-31"], ["10-Q", "2026-08-04", "2026-06-30"], ["10-Q", "2026-11-05", "2026-09-30"]],
+  },
+};
+const RESULTS: Record<string, string[]> = {
+  TSLA: ["2025-10-22", "2026-01-28", "2026-04-22", "2026-07-22", "2026-10-21"],
+  ABBV: ["2025-10-31", "2026-02-04", "2026-04-29", "2026-07-31", "2026-10-30"],
+  EOG: ["2025-11-06", "2026-02-24", "2026-05-05", "2026-08-04", "2026-11-05"],
+};
+const ENDS = ["2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30", "2026-09-30"];
+
+function multiDataset(t: string, statementEnds: string[]): CompanyDataset {
+  const e = EDGAR_2026[t];
+  const periods = statementEnds.map((end, i) => ({ key: `P${i}`, label: `Q ending ${end}`, fy: 2026, end }));
+  const cell = (end: string) => ({ v: 100, src: { accn: "x", concept: "us-gaap:Revenues", end } });
+  return {
+    statements: { quarterly: { income: { periods, rows: [{ key: "revenue", label: "Revenue", unit: "usd", cells: statementEnds.map(cell) }] } } },
+    earningsReleases: e.releases.map((filed) => ({ accn: `a-${filed}`, filed, doc: "ex99.htm", title: "" })),
+    filings: e.periodic.map(([form, filed, report]) => ({ accn: `p-${filed}`, form, filed, report, doc: "" })),
+  } as unknown as CompanyDataset;
+}
+
+describe("two Item 2.02 releases a quarter (earnings-C1)", () => {
+  for (const t of Object.keys(EDGAR_2026)) {
+    it(`${t}: each quarter gets its results release, not the earlier filing`, () => {
+      const recs = quarterRecords({ dataset: multiDataset(t, ENDS) });
+      expect(recs.map((r) => r.release?.filed ?? null)).toEqual(RESULTS[t]);
+    });
+    it(`${t}: with current statements there is no newer release`, () => {
+      const d = multiDataset(t, ENDS);
+      expect(pendingRelease(quarterRecords({ dataset: d }), d.earningsReleases, [], null, d.filings)).toBeNull();
+    });
+  }
+  it("TSLA with statements through June: one quarter later has two releases, reported as a count", () => {
+    const d = multiDataset("TSLA", ENDS.slice(0, 4));
+    const p = pendingRelease(quarterRecords({ dataset: d }), d.earningsReleases, [], null, d.filings);
+    expect(p?.release.filed).toBe("2026-10-21");
+    expect(p?.count).toBe(2);
+  });
+});
+
+describe("statements lagging several quarters (earnings-H1)", () => {
+  it("Citigroup: counts the releases since Q4 FY25 and takes the surprise nearest the newest release", () => {
+    const recs = quarterRecords({ dataset: C });
+    const p = pendingRelease(recs, C.earningsReleases, [], [
+      { quarter: "2026-03-31", actual: 1, estimate: 1, surprisePct: 0 },
+      { quarter: "2026-09-30", actual: 2, estimate: 1.9, surprisePct: 0.05 },
+    ], C.filings);
+    expect(p?.throughLabel).toBe("Q4 FY25");
+    expect(p?.release.filed).toBe("2026-10-13");
+    expect(p?.count).toBe(3);
+    expect(p?.surprise?.quarter).toBe("2026-09-30");
   });
 });
