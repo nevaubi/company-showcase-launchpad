@@ -77,6 +77,12 @@ describe("topicShift", () => {
 });
 
 describe("callTone", () => {
+  it("reads a negated positive word as negative and the month May as no hedge (earnings-L3)", () => {
+    const t = callTone(call([turn(0, "CEO", "management", "prepared", "Demand was not strong. In May we shipped. We may see a record.")]));
+    expect(t.prepared.positive).toBe(1);
+    expect(t.prepared.negative).toBe(1);
+    expect(t.prepared.hedge).toBe(1);
+  });
   it("counts the word list in management's words by section", () => {
     const t = callTone(cur);
     // prepared: "record" +1; "headwind", "constrained" −2

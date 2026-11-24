@@ -105,26 +105,40 @@ export function CallReader({
   const hits = re ? visible.reduce((n, x) => n + (x.text.match(re)?.length ?? 0), 0) : 0;
 
   /**
-   * Filters change how much transcript there is. When the toolbar is stuck at the top, keep it there and
-   * show the start of the filtered list; otherwise leave the page where it is. Either way the controls do
-   * not move under the pointer.
+   * Filters change how much transcript there is. When the toolbar is stuck at the top, keep the reader's
+   * place: the first turn showing under the toolbar stays at the same height if the new filter still shows
+   * it (widening to "Full call" from turn 24 stays at turn 24, earnings-L4); otherwise the start of the
+   * filtered list comes up under the toolbar. When the toolbar is not stuck the page stays where it is.
    */
+  const placeTurn = useRef<{ id: string; top: number } | null>(null);
   const filter = (p: Patch) => {
     const top = toolbar.current?.getBoundingClientRect().top ?? null;
     const stuck = top != null && top <= parseFloat(getComputedStyle(toolbar.current!).top || "0") + 1;
     anchor.current = stuck ? top : null;
+    placeTurn.current = null;
+    if (stuck && toolbar.current) {
+      const below = toolbar.current.getBoundingClientRect().bottom;
+      const first = [...(body.current?.querySelectorAll<HTMLElement>("[id^='turn-']") ?? [])].find((el) => el.getBoundingClientRect().bottom > below + 4);
+      if (first) placeTurn.current = { id: first.id, top: first.getBoundingClientRect().top };
+    }
     setHit(0);
     set(p);
   };
   useLayoutEffect(() => {
     if (anchor.current == null) return;
-    const sec = document.getElementById("call-transcript");
-    if (sec && toolbar.current) {
-      const stickTop = parseFloat(getComputedStyle(toolbar.current).top || "0");
-      const y = sec.getBoundingClientRect().top + window.scrollY - stickTop + 1;
-      if (window.scrollY > y) window.scrollTo({ top: y, behavior: "auto" });
+    const kept = placeTurn.current ? document.getElementById(placeTurn.current.id) : null;
+    if (kept && placeTurn.current) {
+      window.scrollTo({ top: window.scrollY + kept.getBoundingClientRect().top - placeTurn.current.top, behavior: "auto" });
+    } else {
+      const sec = document.getElementById("call-transcript");
+      if (sec && toolbar.current) {
+        const stickTop = parseFloat(getComputedStyle(toolbar.current).top || "0");
+        const y = sec.getBoundingClientRect().top + window.scrollY - stickTop + 1;
+        if (window.scrollY > y) window.scrollTo({ top: y, behavior: "auto" });
+      }
     }
     anchor.current = null;
+    placeTurn.current = null;
   }, [section, speaker]);
 
   /** Move to match k (explicit: Enter, next or previous). Typing never scrolls. */
@@ -255,7 +269,7 @@ export function CallReader({
                       {k.label && <span className="font-medium">{k.label}: </span>}
                       {k.text}
                       {k.i != null && (
-                        <button type="button" onClick={() => jumpTurn(k.i!)} className="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+                        <button type="button" onClick={() => jumpTurn(k.i!)} className="relative ml-1 text-[11px] before:absolute before:-inset-y-1 before:inset-x-0 before:content-[''] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
                           said here
                         </button>
                       )}
@@ -303,6 +317,7 @@ export function CallReader({
                   <tr>
                     <th className="pb-1 text-left font-normal" />
                     <th className="pb-1 text-right font-normal">Net tone</th>
+                    <th className="pb-1 text-right font-normal">Scored</th>
                     <th className="pb-1 text-right font-normal">Hedging</th>
                     {prevTone && <th className="pb-1 text-right font-normal">Prior call</th>}
                   </tr>
@@ -313,7 +328,8 @@ export function CallReader({
                       <th scope="row" className="text-left font-normal">
                         {k === "prepared" ? "Prepared" : "Answers"}
                       </th>
-                      <td className="num text-right">{net(tone[k])}</td>
+                      <td className={cn("num text-right", tone[k].positive + tone[k].negative < 30 && "text-muted-foreground")}>{net(tone[k])}</td>
+                      <td className="num text-right text-muted-foreground">{(tone[k].positive + tone[k].negative).toLocaleString("en-US")}</td>
                       <td className="num text-right">{tone[k].hedgeRate.toFixed(1)}</td>
                       {prevTone && <td className="num text-right text-muted-foreground">{net(prevTone[k])}</td>}
                     </tr>
@@ -321,7 +337,7 @@ export function CallReader({
                 </tbody>
               </table>
               <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-                Net tone: positive minus negative words over both, from a fixed finance word list (after Loughran and McDonald), −1 to +1. Hedging: words like may, could, approximately per 1,000 words.
+                Net tone: positive minus negative words over both, from a fixed finance word list (after Loughran and McDonald), −1 to +1; a positive word just after "not" or "no" counts as negative. Scored: the words counted, greyed under 30 and a dash under 10. Hedging: words like may, could, approximately per 1,000 words.
               </p>
             </div>
           </div>
@@ -386,7 +402,7 @@ export function CallReader({
                     )}
                     <td className="py-1 pl-2 pr-4 text-right">
                       {r.count > 0 && (
-                        <button type="button" onClick={() => findTerm(r.term)} className="rounded-sm px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
+                        <button type="button" onClick={() => findTerm(r.term)} className="relative rounded-sm px-1.5 py-0.5 text-[11px] before:absolute before:-inset-y-1 before:inset-x-0 before:content-[''] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
                           Find in transcript
                         </button>
                       )}
@@ -467,7 +483,7 @@ export function CallReader({
 
       {/* ───────── Transcript */}
       <section id="call-transcript" data-section="Transcript" className={cn("min-w-0 border-y bg-card", SECTION_SCROLL_MARGIN)}>
-        <div ref={toolbar} data-section="Transcript controls" className="sticky top-[calc(var(--sticky-top,3.5rem)+2.75rem)] z-10 flex flex-wrap items-center gap-2 border-b bg-card/95 px-4 py-2 backdrop-blur">
+        <div ref={toolbar} data-section="Transcript controls" className="z-10 max-sm:static sm:sticky sm:top-[calc(var(--sticky-top,3.5rem)+2.75rem)] flex flex-wrap items-center gap-2 border-b bg-card/95 px-4 py-2 backdrop-blur">
           <Segmented
             label="Section"
             value={section}

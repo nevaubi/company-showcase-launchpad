@@ -161,18 +161,42 @@ export interface ToneScore {
   hedgeRate: number;
 }
 
+const NEGATORS = new Set(["not", "no", "never", "nor", "isn't", "wasn't", "aren't", "weren't", "don't", "doesn't", "didn't", "won't", "can't", "cannot"]);
+
+/**
+ * Word-list tone. A positive word within three words after a negator ("not strong", "no improvement")
+ * counts as negative; a negated negative word counts as neither. "May" written with a capital mid-sentence
+ * is the month, not a hedge (earnings-L3).
+ */
 function toneOf(turns: TranscriptTurn[]): ToneScore {
   let pos = 0;
   let neg = 0;
   let hedge = 0;
   let words = 0;
   for (const x of turns) {
-    for (const w of normalize(x.text).split(/[^a-z-]+/)) {
-      if (!w) continue;
-      words++;
-      if (POSITIVE.has(w)) pos++;
-      else if (NEGATIVE.has(w)) neg++;
-      if (HEDGE.has(w)) hedge++;
+    let sinceNeg = Infinity;
+    let sentenceStart = true;
+    for (const tok of x.text.replace(/[’]/g, "'").split(/\s+/)) {
+      const raw = tok.replace(/^[^A-Za-z']+|[^A-Za-z'-]+$/g, "");
+      const ends = /[.?!]["”)]?$/.test(tok);
+      if (raw) {
+        const w = raw.toLowerCase().replace(/'s$/, "");
+        words++;
+        const negated = sinceNeg <= 3;
+        if (POSITIVE.has(w)) {
+          if (negated) neg++;
+          else pos++;
+        } else if (NEGATIVE.has(w)) {
+          if (!negated) neg++;
+        }
+        if (HEDGE.has(w) && !(w === "may" && raw === "May" && !sentenceStart)) hedge++;
+        sinceNeg = NEGATORS.has(w) ? 1 : sinceNeg + 1;
+        sentenceStart = false;
+      }
+      if (ends) {
+        sentenceStart = true;
+        sinceNeg = Infinity;
+      }
     }
   }
   return { words, positive: pos, negative: neg, hedge, net: pos + neg >= 10 ? (pos - neg) / (pos + neg) : null, hedgeRate: words ? (hedge / words) * 1000 : 0 };

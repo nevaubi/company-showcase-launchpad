@@ -71,7 +71,8 @@ export function SourceNum({
       onClick={() => open(figTarget(ticker, f, label, period, unit))}
       title={`${label}, ${period}${f.q4 === "derived" ? ", calculated: the 10-K states only the full year" : f.q4 === "release" ? ", as printed in the earnings release" : ""}: open the source${f.derived || f.cell?.derived ? " and formula" : ""}`}
       className={cn(
-        "num rounded-sm tabular-nums decoration-dotted underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        // A 28 px hit area around the 20 px figure without changing the row height (earnings-L1).
+        "num relative rounded-sm tabular-nums decoration-dotted before:absolute before:-inset-y-1 before:-inset-x-1 before:content-[''] underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         (f.derived || f.cell?.derived) && "underline decoration-muted-foreground/50",
         className,
       )}

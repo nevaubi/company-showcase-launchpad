@@ -48,8 +48,9 @@ function Calls() {
   const ticker = raw.toUpperCase();
   const s = Route.useSearch();
   const navigate = Route.useNavigate();
-  // View state only: never reset the scroll position.
-  const set = (patch: Partial<CallsSearch>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
+  // View state only: never reset the scroll position. Switching calls is a history entry, so Back returns
+  // to the previous call (earnings-L4); filters within a call replace the entry.
+  const set = (patch: Partial<CallsSearch>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: !("call" in patch), resetScroll: false });
   const co = coverageOf(ticker);
 
   const listFn = useServerFn(listEarningsCalls);
