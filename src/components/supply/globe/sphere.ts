@@ -184,10 +184,14 @@ const facing = (cLon: number, cLat: number, lon: number, lat: number) => Math.co
 const seen = (z: number) => clamp((z - 0.15) / 0.5, 0, 1);
 /** The company itself must face the viewer at least this squarely (about 65 degrees from the centre). */
 const FOCUS_FACING = 0.42;
+/** A tie's far end counts as in view from this facing on (about 78 degrees from the centre): nearer the horizon it is a sliver. */
+const SHOWN_FACING = 0.2;
+/** The opening view's centre stays within this latitude: a view from above the Arctic is not one a reader recognises. */
+export const OPEN_MAX_LAT = 50;
 
 /**
  * The opening (and reset) view of the globe for a company and the names placed round it. When the whole set fits on the
- * near side, it is the framing of fitCamera. When it spreads over more than a hemisphere (NVIDIA: its customers in North
+ * near side (the company squarely in view, the centre within OPEN_MAX_LAT), it is the framing of fitCamera. When it spreads over more than a hemisphere (NVIDIA: its customers in North
  * America, its foundry, memory and assembly in Asia), the centre is the one that shows the most weight squarely, with the
  * company itself kept well inside the disc, instead of the company's own side with the rest left on the horizon. The zoom
  * then fits what faces the viewer. The flat map shows the whole set as fitCamera frames it.
@@ -197,20 +201,28 @@ export function openingCamera(focus: LonLat, places: WeightedPlace[], vp: Viewpo
   const all: LonLat[] = [focus, ...ok.map((p) => [p.lon, p.lat] as LonLat)];
   const fit = fitCamera(all, vp, flat, opts);
   if (flat || !ok.length) return fit;
-  if (all.every(([lon, lat]) => facing(fit.lon, fit.lat, lon, lat) >= 0.12)) return fit;
+  /* the framing that fits everything, when it faces the company squarely enough and does not tilt toward a pole */
+  const fitHolds = facing(fit.lon, fit.lat, focus[0], focus[1]) >= FOCUS_FACING && Math.abs(fit.lat) <= OPEN_MAX_LAT + 1;
+  if (fitHolds && all.every(([lon, lat]) => facing(fit.lon, fit.lat, lon, lat) >= 0.12)) return fit;
   /* the set wraps round the globe: search centres on a 5 degree grid for the most of every side in plain sight, each side
      scored as the share of its weight that faces the viewer, so forty customers at home do not outvote six suppliers abroad */
   const sideTotal = new Map<string, number>();
   for (const p of ok) sideTotal.set(p.side ?? '', (sideTotal.get(p.side ?? '') ?? 0) + p.w);
-  let best: { lon: number; lat: number; score: number; near: number } | null = null;
-  for (let lat = -60; lat <= 72; lat += 5) {
+  /* first the fewest ties with an end behind the edge (a tie whose both ends a view can show is not left with one hidden),
+     then the most weight in plain sight; the centre never tilts past OPEN_MAX_LAT, so the reader sees a globe they know */
+  let best: { lon: number; lat: number; hidden: number; score: number; near: number } | null = null;
+  for (let lat = -OPEN_MAX_LAT; lat <= OPEN_MAX_LAT; lat += 5) {
     for (let lon = -180; lon < 180; lon += 5) {
       const zf = facing(lon, lat, focus[0], focus[1]);
       if (zf < FOCUS_FACING) continue;
-      let score = seen(zf);
-      for (const p of ok) score += (p.w / (sideTotal.get(p.side ?? '') as number)) * seen(facing(lon, lat, p.lon, p.lat));
+      let score = seen(zf), hidden = 0;
+      for (const p of ok) {
+        const z = facing(lon, lat, p.lon, p.lat);
+        if (z < SHOWN_FACING) hidden++;
+        score += (p.w / (sideTotal.get(p.side ?? '') as number)) * seen(z);
+      }
       /* between equal views, the one closer to the company */
-      if (!best || score > best.score + 1e-9 || (Math.abs(score - best.score) <= 1e-9 && zf > best.near)) best = { lon, lat, score, near: zf };
+      if (!best || hidden < best.hidden || (hidden === best.hidden && (score > best.score + 1e-9 || (Math.abs(score - best.score) <= 1e-9 && zf > best.near)))) best = { lon, lat, hidden, score, near: zf };
     }
   }
   if (!best) return fit;

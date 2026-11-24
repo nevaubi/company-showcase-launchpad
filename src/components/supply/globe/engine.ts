@@ -16,8 +16,9 @@ import world110 from 'world-atlas/countries-110m.json';
 import { arcLift, arcSegments, arrowHead, bundleArcs, cutEnd, cutStart, distanceToArc, flowWidth, headSize, newArcPath, sampleArc, stubArc, trimArc, type ArcGroup, type ArcPath } from './arcs';
 import { LogoAtlas } from './atlas';
 import { badgeRadius, clusterSlices, clusterSpots, fanOffsets, rimGroups, type GlobeShape, type Spot } from './cluster';
-import { LOD, packTopology, pickRes, polygonsByName, traceFlat, traceGlobe, traceGraticule, type MapRes, type PackedGeo } from './geometry';
-import { afterFrame, reuseBase } from './loop';
+import { LOD, packTopology, pickRes, traceFlat, traceGlobe, type MapRes, type PackedGeo } from './geometry';
+import { adoptPicture, afterFrame, BEYOND, covers, pictureZoom, reuseBase } from './loop';
+import { paintMap, polysOf, tintEase } from './paint';
 import { areaKind, badgeText, labelText, markerBox, placeLabels, type Box, type LabelAsk, type LabelSide } from './labels';
 import { anchorCentre, angleBetween, baseScale, clamp, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, openingCamera, project, RAD, slerp, toLonLat, toVec, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type Vec3, type View, type WeightedPlace } from './sphere';
 
@@ -124,6 +125,12 @@ const loadHere = (res: 50 | 10) => {
     .catch(() => mapDone(res, null, 'main'));
 };
 let mapWorker: Worker | null = null, workerBroken = false;
+/* pictures of the map drawn by the worker for a zoom (see paintBase): answers by request id */
+interface PaintReply { paint: number; ok: boolean; bitmap?: ImageBitmap }
+const paintWaiters = new Map<number, (d: PaintReply) => void>();
+let paintSeq = 0, paintOk = typeof OffscreenCanvas !== 'undefined' && typeof ImageBitmap !== 'undefined';
+/** The worker can draw the map: it is running and OffscreenCanvas has not been refused. */
+const workerPictures = (): boolean => paintOk && !!mapWorker && !workerBroken;
 const loadMap = (res: 50 | 10): void => {
   if (mapState[res] !== 'idle') return;
   mapState[res] = 'loading';
@@ -131,11 +138,13 @@ const loadMap = (res: 50 | 10): void => {
   try {
     if (!mapWorker) {
       mapWorker = new Worker(new URL('./hi-geo.worker.ts', import.meta.url), { type: 'module' });
-      mapWorker.onmessage = (e: MessageEvent<{ ok: boolean; res: 50 | 10; packed?: PackedGeo }>) => {
+      mapWorker.onmessage = (e: MessageEvent<{ ok: boolean; res: 50 | 10; packed?: PackedGeo } | PaintReply>) => {
+        if ('paint' in e.data) { const d = e.data, f = paintWaiters.get(d.paint); paintWaiters.delete(d.paint); if (!d.ok) paintOk = false; if (f) f(d); else d.bitmap?.close(); return; }
         if (e.data.ok && e.data.packed) mapDone(e.data.res, e.data.packed, 'worker'); else loadHere(e.data.res);
       };
       mapWorker.onerror = (e) => {
         e.preventDefault(); workerBroken = true; mapWorker?.terminate(); mapWorker = null;
+        for (const [id, f] of paintWaiters) { paintWaiters.delete(id); f({ paint: id, ok: false }); }
         for (const r of [50, 10] as const) if (mapState[r] === 'loading') loadHere(r);
       };
     }
@@ -144,12 +153,6 @@ const loadMap = (res: 50 | 10): void => {
     workerBroken = true;
     loadHere(res);
   }
-};
-const byName = new WeakMap<PackedGeo, Map<string, number[]>>();
-const polysOf = (geo: PackedGeo, name: string): number[] | undefined => {
-  let m = byName.get(geo);
-  if (!m) { m = polygonsByName(geo); byName.set(geo, m); }
-  return m.get(name);
 };
 
 /* ---------- country names and shapes for hit testing, from the small map ---------- */
@@ -261,6 +264,16 @@ export class GlobeEngine {
   private baseStale = true;
   /** the view the base canvas was last fully traced at */
   private snapView: View | null = null;
+  /** map detail and camera of the picture on the base canvas, and of the worker's picture asked for or waiting */
+  private snapKey = '';
+  private asked: { id: number; key: string; epoch: number } | null = null;
+  private held: { bitmap: ImageBitmap; view: View; key: string } | null = null;
+  /** a picture further out than the view at rest, kept ready so a zoom out has map to reveal from its first frame */
+  private revealPic: { bitmap: ImageBitmap; view: View; key: string } | null = null;
+  /** counts traces on the page's thread: a worker picture asked for before the latest one is out of date */
+  private epoch = 0;
+  /** the camera was turned by a drag since the last frame: a turn is not a zoom and is traced at once */
+  private panned = false;
   private dirtyTop = true;
   private last = 0;
   private lastTop = 0;
@@ -300,7 +313,8 @@ export class GlobeEngine {
     const onShow = () => { if (!document.hidden) this.invalidate(true); };
     document.addEventListener('visibilitychange', onShow);
     this.cleanup.push(() => document.removeEventListener('visibilitychange', onShow));
-    const onMap = () => this.invalidate(true);
+    /* a more detailed map: the worker redraws the picture when it draws (the old one is coarse, not wrong), else trace again */
+    const onMap = () => this.invalidate(!workerPictures());
     mapWaiters.add(onMap);
     this.cleanup.push(() => mapWaiters.delete(onMap));
     this.bind();
@@ -403,7 +417,7 @@ export class GlobeEngine {
   release(): void { this.setEngaged(false); }
   get zoom(): number { return this.cam.zoom; }
   get isFlat(): boolean { return this.flat; }
-  destroy(): void { this.destroyed = true; cancelAnimationFrame(this.raf); this.raf = 0; this.cleanup.forEach((f) => f()); this.cleanup = []; }
+  destroy(): void { this.held?.bitmap.close(); this.revealPic?.bitmap.close(); this.held = this.revealPic = null; this.asked = null; this.destroyed = true; cancelAnimationFrame(this.raf); this.raf = 0; this.cleanup.forEach((f) => f()); this.cleanup = []; }
 
   /* ---------- camera ---------- */
   private get minZoom(): number { return this.flat ? MIN_ZOOM_FLAT : MIN_ZOOM_GLOBE; }
@@ -495,7 +509,6 @@ export class GlobeEngine {
     return (res === 110 ? map110() : maps[res]) ?? map110();
   }
   /** Sea, land, tinted countries, shores and borders: everything under the links. */
-  private tintEase(R: number): number { return clamp(1 - (R / baseScale({ w: this.w, h: this.h }, this.flat) - 1.6) / 4.4, 0, 1); }
 
   /* the tinted country under the pointer, if any: only those answer a moving pointer */
   private tintOf(name: string | null): GlobeFill | undefined { return name ? this.fills.find((f) => f.name === name) : undefined; }
@@ -506,26 +519,93 @@ export class GlobeEngine {
    * otherwise a full trace at the camera's view, with the transform taken off in the same frame.
    */
   private paintBase(): void {
-    const view = this.view(), was = this.snapView;
+    const view = this.view(), was = this.snapView, panned = this.panned;
+    this.panned = false;
+    const sameFrame = !!was && !this.baseStale && was.flat === view.flat && was.w === view.w && was.h === view.h;
+    if (sameFrame && !this.fly && !this.spin && !panned && workerPictures()) { this.workerBase(view); return; }
     const zooming = !!(this.zoomAnim || this.pinch) && !this.fly;
-    if (was && !this.baseStale && was.flat === view.flat && was.w === view.w && was.h === view.h) {
+    if (was && sameFrame) {
       const ratio = view.R / was.R, whole = !was.flat && was.R <= Math.min(was.w, was.h) / 2;
-      if (reuseBase({ zooming, stale: false, ratio, whole })) {
-        /* hold the place the zoom holds: where it was in the traced map, where it is now */
-        const place = this.zoomAnim?.place ?? this.pinch?.place ?? null;
-        let ax = was.cx, ay = was.cy, bx = view.cx, by = view.cy;
-        if (place) {
-          const p0 = project(was, place[0], place[1]), p1 = project(view, place[0], place[1]);
-          if (p0.z > 0 && p1.z > 0) { ax = p0.x; ay = p0.y; bx = p1.x; by = p1.y; }
-        }
-        this.setBaseTransform(`matrix(${ratio},0,0,${ratio},${bx - ratio * ax},${by - ratio * ay})`);
-        return;
-      }
+      if (reuseBase({ zooming, stale: false, ratio, whole })) { this.setBaseTransform(this.transformFor(was, view)); return; }
     }
     this.drawBase(view);
     this.setBaseTransform('');
     this.baseStale = false;
     this.snapView = view;
+    this.snapKey = this.pictureKey(this.cam, view.R);
+    this.epoch++;
+    this.dropPictures();
+  }
+  /** Forget the worker's pictures: the map was traced here, so they are older than what is shown. */
+  private dropPictures(): void {
+    this.held?.bitmap.close(); this.revealPic?.bitmap.close();
+    this.held = this.revealPic = null; this.asked = null;
+  }
+  private whole(v: View): boolean { return !v.flat && v.R <= Math.min(v.w, v.h) / 2; }
+  private pictureKey(c: Camera, R: number): string {
+    return `${pickRes(R, { 50: maps[50] != null, 10: maps[10] != null })}|${c.lon.toFixed(4)},${c.lat.toFixed(4)},${c.zoom.toFixed(5)}`;
+  }
+  /** Where the camera will be at a zoom, holding the place the wheel or pinch holds. */
+  private cameraAtZoom(zoom: number): Camera {
+    const z = this.zoomAnim, place = z?.place ?? this.pinch?.place ?? null, px = z?.px ?? this.w / 2, py = z?.py ?? this.h / 2;
+    const centre = place ? anchorCentre(place, px - this.w / 2, py - this.h / 2, this.scaleAt(zoom), this.flat, this.cam.lon) : null;
+    return this.clamped({ lon: centre?.lon ?? this.cam.lon, lat: centre?.lat ?? this.cam.lat, zoom });
+  }
+  /**
+   * A frame whose camera changed only by zooming (or whose map grew more detailed): the picture the worker drew last is
+   * shown moved and scaled, a newer one replaces it when it fills the frame (adoptPicture), and the next one is asked for.
+   * Nothing is traced on this thread, during the gesture or after it.
+   */
+  private workerBase(view: View): void {
+    let shown = this.snapView as View;
+    const take = (p: { bitmap: ImageBitmap; view: View; key: string }) => {
+      const c = this.bctx;
+      c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, this.base.width, this.base.height); c.drawImage(p.bitmap, 0, 0);
+      p.bitmap.close();
+      this.snapView = shown = p.view; this.snapKey = p.key;
+    };
+    if (this.held && adoptPicture({ R: shown.R, whole: this.whole(shown) }, { R: this.held.view.R, whole: this.whole(this.held.view) }, view.R)) { take(this.held); this.held = null; }
+    if (this.revealPic && !covers(shown.R, view.R, this.whole(shown)) && covers(this.revealPic.view.R, view.R, this.whole(this.revealPic.view))) { take(this.revealPic); this.revealPic = null; }
+    this.setBaseTransform(this.transformFor(shown, view));
+    const z = this.zoomAnim, cam = this.cameraAtZoom(pictureZoom(this.cam.zoom, z ? Math.exp(z.target) : null, this.minZoom));
+    const atRest = !z && !this.pinch;
+    const want = atRest ? this.cam : cam, wantR = this.scaleAt(want.zoom), key = this.pictureKey(want, wantR);
+    this.mapFor(wantR);
+    if (key !== this.snapKey && key !== this.held?.key) this.ask(want, key, false);
+    else if (atRest && key === this.snapKey && !this.revealPic && !this.held) {
+      /* at rest and sharp: draw the map further out once, for the first frames of the next zoom out */
+      const out = this.clamped({ ...this.cam, zoom: Math.max(this.minZoom, this.cam.zoom / (BEYOND * BEYOND)) });
+      if (out.zoom < this.cam.zoom * 0.999) this.ask(out, this.pictureKey(out, this.scaleAt(out.zoom)), true);
+    }
+  }
+  private ask(cam: Camera, key: string, reveal: boolean): void {
+    /* one picture at a time: the frame after it arrives asks again for what is wanted then */
+    if (this.asked && this.asked.epoch === this.epoch) return;
+    const worker = mapWorker, pal = this.palette;
+    if (!worker || !pal) return;
+    const view = makeView(cam, { w: this.w, h: this.h }, this.flat), id = ++paintSeq, epoch = this.epoch;
+    const res = pickRes(view.R, { 50: maps[50] != null, 10: maps[10] != null });
+    this.asked = { id, key, epoch };
+    paintWaiters.set(id, (d) => {
+      if (this.asked?.id === id) this.asked = null;
+      if (!d.ok || !d.bitmap) { if (!this.destroyed) this.invalidate(true); return; }
+      if (this.destroyed || epoch !== this.epoch || view.w !== this.w || view.h !== this.h || view.flat !== this.flat) { d.bitmap.close(); return; }
+      const slot = { bitmap: d.bitmap, view, key };
+      if (reveal) { this.revealPic?.bitmap.close(); this.revealPic = slot; } else { this.held?.bitmap.close(); this.held = slot; }
+      this.dirtyBase = true; this.schedule();
+    });
+    worker.postMessage({ paint: id, res, view, dpr: this.dpr, pw: this.base.width, ph: this.base.height, palette: pal, fills: this.fills });
+  }
+  /** The CSS transform that puts a picture traced at `was` where the map of `view` is, holding the zoom's place (else the centre). */
+  private transformFor(was: View, view: View): string {
+    const ratio = view.R / was.R;
+    const place = this.zoomAnim?.place ?? this.pinch?.place ?? ([this.cam.lon, this.cam.lat] as LonLat);
+    let ax = was.cx, ay = was.cy, bx = view.cx, by = view.cy;
+    const p0 = project(was, place[0], place[1]), p1 = project(view, place[0], place[1]);
+    if (p0.z > 0 && p1.z > 0) { ax = p0.x; ay = p0.y; bx = p1.x; by = p1.y; }
+    const tx = bx - ratio * ax, ty = by - ratio * ay;
+    if (Math.abs(ratio - 1) < 1e-6 && Math.abs(tx) < 0.01 && Math.abs(ty) < 0.01) return '';
+    return `matrix(${ratio},0,0,${ratio},${tx},${ty})`;
   }
   private setBaseTransform(t: string): void {
     const st = this.base.style;
@@ -534,40 +614,7 @@ export class GlobeEngine {
   }
 
   private drawBase(view: View): void {
-    const ctx = this.bctx, pal = this.palette as GlobePalette, { w, h } = this, { cx, cy, R } = view;
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    /* flat sea, no glow or shading: the land and the links carry the picture */
-    ctx.fillStyle = pal.ocean;
-    if (this.flat) ctx.fillRect(0, 0, w, h); else { ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill(); }
-    /* a quiet grid: every 30 degrees from afar, every 10 closer in, none once a country fills the frame */
-    const step = R < 420 ? 30 : R < 2600 ? 10 : 0;
-    if (step) { const grid = new Path2D(); traceGraticule(view, step, grid); ctx.strokeStyle = pal.grid; ctx.lineWidth = 0.5; ctx.stroke(grid); }
-    const geo = this.mapFor(R), trace = this.flat ? traceFlat : traceGlobe;
-    const land = new Path2D(), coast = new Path2D(), border = new Path2D();
-    trace(geo, view, { fill: land, coast, border });
-    ctx.fillStyle = pal.land; ctx.fill(land, 'evenodd');
-    /* the tint says where the ties are while several countries are in view; once one country fills the frame it would
-       only make that country's land read as water, so it fades out as the map closes in (a picked country keeps it) */
-    const ease = this.tintEase(R);
-    for (const f of this.fills) {
-      if (ease <= 0 && !f.outline) continue;
-      const polys = polysOf(geo, f.name);
-      if (!polys) continue;
-      const shape = new Path2D();
-      trace(geo, view, { fill: shape, coast: null, border: null }, polys);
-      ctx.globalAlpha = f.alpha * (f.outline ? Math.max(ease, 0.5) : ease);
-      ctx.fillStyle = f.color; ctx.fill(shape, 'evenodd');
-      if (f.outline) { ctx.globalAlpha = 0.9; ctx.strokeStyle = f.color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.stroke(shape); }
-    }
-    ctx.globalAlpha = 1;
-    /* hairlines: exactly one device pixel wide at every zoom and pixel ratio, which is also the width browsers stroke
-       fastest (a wider line with round joins took six times as long as everything else in the frame together) */
-    ctx.lineJoin = 'bevel'; ctx.lineCap = 'butt';
-    const hair = 0.999 / this.dpr;
-    ctx.strokeStyle = pal.coast; ctx.lineWidth = hair; ctx.stroke(coast);
-    ctx.strokeStyle = pal.border; ctx.lineWidth = hair; ctx.stroke(border);
-    if (!this.flat) { ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.strokeStyle = pal.rim; ctx.lineWidth = 1; ctx.stroke(); }
+    paintMap(this.bctx, this.mapFor(view.R), view, this.dpr, this.palette as GlobePalette, this.fills);
   }
 
   /** The tinted country under a screen position, if any. */
@@ -669,7 +716,7 @@ export class GlobeEngine {
     /* the tinted country under the pointer is lifted here, on the overlay, so a moving pointer never repaints the map */
     const over = this.tintOf(this.overCountry);
     if (over) {
-      const geo = this.mapFor(view.R), polys = polysOf(geo, over.name), ease = this.tintEase(view.R), lift = 0.1 * (over.outline ? Math.max(ease, 0.5) : ease);
+      const geo = this.mapFor(view.R), polys = polysOf(geo, over.name), ease = tintEase(view), lift = 0.1 * (over.outline ? Math.max(ease, 0.5) : ease);
       if (polys && lift > 0) {
         const shape = new Path2D();
         (this.flat ? traceFlat : traceGlobe)(geo, view, { fill: shape, coast: null, border: null }, polys);
@@ -1123,6 +1170,7 @@ export class GlobeEngine {
         const R = this.scaleAt(this.cam.zoom), held = g.place ? anchorCentre(g.place, x - this.w / 2, y - this.h / 2, R, this.flat, this.cam.lon) : null;
         const want = held ?? { lon: this.cam.lon - (dx / R / RAD) / Math.max(0.25, Math.cos(this.cam.lat * RAD)), lat: this.cam.lat + dy / R / RAD };
         this.cam = this.clamped({ ...want, zoom: this.cam.zoom });
+        this.panned = true;
         if (!held || Math.abs(this.cam.lat - want.lat) > 1e-6) g.place = unproject(this.view(), x, y);
         const now = performance.now();
         this.trail.push({ t: now, lon: this.cam.lon, lat: this.cam.lat });

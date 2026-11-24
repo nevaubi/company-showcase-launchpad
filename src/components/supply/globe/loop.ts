@@ -56,3 +56,27 @@ export function reuseBase(s: BaseState): boolean {
   if (s.ratio >= 1) return s.ratio < RETRACE_RATIO;
   return s.whole && s.ratio > 1 / RETRACE_RATIO;
 }
+
+/**
+ * Zoom drawn by the map worker (engine.ts, `hi-geo.worker.ts`): during a wheel or pinch zoom and once it rests, the page
+ * shows the last picture the worker drew, moved and scaled by a CSS transform, and asks for the next one; the page's own
+ * thread never traces coasts for a zoom. A zoom out asks for a picture beyond its target (BEYOND further out), so there is
+ * map to reveal while it runs; a zoom in asks for its target, which is sharp the moment the camera arrives.
+ */
+export const BEYOND = 1.3;
+
+/** A picture traced at scale `tracedR` fills a frame drawn at scale `R`: it is scaled up, or it holds the whole disc. */
+export function covers(tracedR: number, R: number, whole: boolean): boolean {
+  return whole || R >= tracedR * 0.999;
+}
+
+/** Whether a newly drawn picture replaces the one shown: when it fills the frame, or when the shown one does not either. */
+export function adoptPicture(shown: { R: number; whole: boolean }, next: { R: number; whole: boolean }, R: number): boolean {
+  return covers(next.R, R, next.whole) || !covers(shown.R, R, shown.whole);
+}
+
+/** The zoom of the picture to ask the worker for: the target of a zoom in, beyond the target of a zoom out, else the camera's. */
+export function pictureZoom(zoom: number, target: number | null, minZoom: number): number {
+  if (target == null || !Number.isFinite(target)) return zoom;
+  return target < zoom * 0.999 ? Math.max(minZoom, target / BEYOND) : target;
+}

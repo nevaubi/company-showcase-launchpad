@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { anchorCentre, angleBetween, baseScale, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, MAX_LAT, miller, MILLER_MAX, millerInv, project, RAD, toLonLat, toVec, openingCamera, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type WeightedPlace } from './sphere';
+import { OPENING_SETS } from './opening.fixture';
+import { anchorCentre, OPEN_MAX_LAT, angleBetween, baseScale, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, MAX_LAT, miller, MILLER_MAX, millerInv, project, RAD, toLonLat, toVec, openingCamera, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type WeightedPlace } from './sphere';
 
 const VP = { w: 774, h: 580 };
 const SANTA_CLARA: LonLat = [-121.955, 37.354], TAIPEI: LonLat = [121.5, 25.0], BOSTON: LonLat = [-71.06, 42.36];
@@ -211,6 +212,45 @@ describe('openingCamera', () => {
   it('keeps the company inside the disc even when every tie lies on the other side of the world', () => {
     const cam = openingCamera(santaClara, [P(100.5, 13.75, 5), P(77.2, 28.6, 5), P(55.3, 25.2, 5)], vp, false);
     expect(facing(cam, santaClara)).toBeGreaterThanOrEqual(0.42);
+  });
+
+  describe('on the real placements of the preview kit (review p3-sup-L3)', () => {
+    const kit = { w: 756, h: 540 }, opts = { pad: 65, minZoom: 0.8, maxZoom: 7 };
+    const open = (t: string) => {
+      const set = OPENING_SETS[t];
+      const cam = openingCamera(set.focus, set.ties.map(([lon, lat, w, side]) => ({ lon, lat, w, side })), kit, false, opts);
+      return { set, cam };
+    };
+    for (const t of ['NVDA', 'UTHR', 'ALGM', 'CRUS']) {
+      it(`${t} opens at a latitude a reader knows, the company in view and no tie with an end behind the edge`, () => {
+        const { set, cam } = open(t);
+        expect(Math.abs(cam.lat)).toBeLessThanOrEqual(OPEN_MAX_LAT + 1);
+        expect(facing(cam, set.focus)).toBeGreaterThanOrEqual(0.42);
+        for (const [lon, lat] of set.ties) expect(facing(cam, [lon, lat])).toBeGreaterThanOrEqual(0.2);
+      });
+    }
+    it('UTHR shows its tie in the United Kingdom and its customers in Japan, not the Arctic (it opened at 70 N)', () => {
+      const { cam } = open('UTHR');
+      expect(cam.lat).toBeLessThan(70);
+      expect(facing(cam, [-3.28, 54.06])).toBeGreaterThan(0.2);
+      expect(facing(cam, [137.32, 36.38])).toBeGreaterThan(0.2);
+    });
+    it('NVDA keeps Asia and the United States on the near side, centred over the North Pacific', () => {
+      const { cam } = open('NVDA');
+      expect(cam.lon > 150 || cam.lon < -140).toBe(true);
+      expect(facing(cam, [120.97, 24.8])).toBeGreaterThan(0.3);
+    });
+  });
+
+  it('frames ties across the date line from the date line (Seattle with Asian suppliers and an Australian customer)', () => {
+    const seattle: LonLat = [-122.33, 47.61];
+    /* real places: Hsinchu, Seoul, Tokyo, Sydney */
+    const ties = [P(120.97, 24.8, 2, 's'), P(126.98, 37.57, 1, 's'), P(139.69, 35.69, 1, 's'), P(151.21, -33.87, 1, 'c')];
+    const cam = openingCamera(seattle, ties, vp, false);
+    expect(Math.abs(lonDelta(180, cam.lon))).toBeLessThan(40);
+    expect(Math.abs(cam.lat)).toBeLessThanOrEqual(OPEN_MAX_LAT);
+    for (const p of ties) expect(facing(cam, [p.lon, p.lat])).toBeGreaterThanOrEqual(0.2);
+    expect(facing(cam, seattle)).toBeGreaterThanOrEqual(0.42);
   });
 
   it('leaves the flat map to fitCamera, which shows the whole set', () => {
