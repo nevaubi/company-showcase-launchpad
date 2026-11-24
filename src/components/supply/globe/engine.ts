@@ -472,6 +472,11 @@ export class GlobeEngine {
     return (res === 110 ? map110() : maps[res]) ?? map110();
   }
   /** Sea, land, tinted countries, shores and borders: everything under the links. */
+  private tintEase(R: number): number { return clamp(1 - (R / baseScale({ w: this.w, h: this.h }, this.flat) - 1.6) / 4.4, 0, 1); }
+
+  /* the tinted country under the pointer, if any: only those answer a moving pointer */
+  private tintOf(name: string | null): GlobeFill | undefined { return name ? this.fills.find((f) => f.name === name) : undefined; }
+
   private drawBase(): void {
     const ctx = this.bctx, pal = this.palette as GlobePalette, { w, h } = this, view = this.view(), { cx, cy, R } = view;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
@@ -488,14 +493,14 @@ export class GlobeEngine {
     ctx.fillStyle = pal.land; ctx.fill(land, 'evenodd');
     /* the tint says where the ties are while several countries are in view; once one country fills the frame it would
        only make that country's land read as water, so it fades out as the map closes in (a picked country keeps it) */
-    const ease = clamp(1 - (R / baseScale({ w, h }, this.flat) - 1.6) / 4.4, 0, 1);
+    const ease = this.tintEase(R);
     for (const f of this.fills) {
       if (ease <= 0 && !f.outline) continue;
       const polys = polysOf(geo, f.name);
       if (!polys) continue;
       const shape = new Path2D();
       trace(geo, view, { fill: shape, coast: null, border: null }, polys);
-      ctx.globalAlpha = (f.name === this.overCountry ? Math.min(1, f.alpha + 0.1) : f.alpha) * (f.outline ? Math.max(ease, 0.5) : ease);
+      ctx.globalAlpha = f.alpha * (f.outline ? Math.max(ease, 0.5) : ease);
       ctx.fillStyle = f.color; ctx.fill(shape, 'evenodd');
       if (f.outline) { ctx.globalAlpha = 0.9; ctx.strokeStyle = f.color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.stroke(shape); }
     }
@@ -605,6 +610,16 @@ export class GlobeEngine {
     const ctx = this.ctx, pal = this.palette as GlobePalette, view = this.view(), { w, h } = this;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
+    /* the tinted country under the pointer is lifted here, on the overlay, so a moving pointer never repaints the map */
+    const over = this.tintOf(this.overCountry);
+    if (over) {
+      const geo = this.mapFor(view.R), polys = polysOf(geo, over.name), ease = this.tintEase(view.R), lift = 0.1 * (over.outline ? Math.max(ease, 0.5) : ease);
+      if (polys && lift > 0) {
+        const shape = new Path2D();
+        (this.flat ? traceFlat : traceGlobe)(geo, view, { fill: shape, coast: null, border: null }, polys);
+        ctx.globalAlpha = lift; ctx.fillStyle = over.color; ctx.fill(shape, 'evenodd'); ctx.globalAlpha = 1;
+      }
+    }
     const { specks, rim } = this.layout(view);
     const marks = this.marks, selected = this.scene.selected;
     const real = marks.filter((m) => m.kind === 'single' || m.kind === 'cluster');
@@ -1039,7 +1054,7 @@ export class GlobeEngine {
       const got = this.hitAt(x, y);
       this.setHover(got?.id ?? null, got ? (got.hit.kind === 'point' ? [got.hit.point.key] : got.hit.points.map((p) => p.key)) : []);
       const country = got ? null : this.countryAt(x, y);
-      if (country !== this.overCountry) { this.overCountry = country; this.invalidate(true); }
+      if (country !== this.overCountry) { const redraw = !!(this.tintOf(country) || this.tintOf(this.overCountry)); this.overCountry = country; if (redraw) this.invalidate(); }
       el.style.cursor = got || country ? 'pointer' : 'grab';
       this.cb.onHover(got?.hit ?? null, e.clientX, e.clientY);
       this.cb.onCountry?.(country, 'hover', e.clientX, e.clientY);
@@ -1074,7 +1089,7 @@ export class GlobeEngine {
     /* the browser took the gesture over (a swipe scrolls the page): drop it without treating it as a tap */
     on(el, 'pointercancel', (e) => release(e, true));
     const unhover = () => {
-      if (this.hover || this.overCountry) { this.hover = null; this.hoverKeys = new Set(); this.overCountry = null; this.invalidate(true); }
+      if (this.hover || this.overCountry) { this.hover = null; this.hoverKeys = new Set(); this.overCountry = null; this.invalidate(); }
       this.cb.onHover(null, 0, 0); this.cb.onCountry?.(null, 'hover', 0, 0);
     };
     /* onto a control laid over the map: nothing on the map is under the pointer any more */
