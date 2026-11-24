@@ -135,7 +135,7 @@ export function Scoreboard({ data, book, sameLive }: { data: SetupsFile; book: E
                     <td className={cn(TD, NUM, "hidden sm:table-cell border-l")} title={sameLive?.get(v.key) ? `Same trades as ${sameLive.get(v.key)!.join(" and ")}` : undefined}>{l.n ? count(l.n) : "–"}</td>
                     <td className={cn(TD, NUM, "hidden sm:table-cell", l.n ? pctTone(l.avgNet) : "")}>{l.n ? pct(l.avgNet) : "–"}</td>
                     <td className={cn(TD, NUM, "hidden sm:table-cell")}>{l.n ? pct(l.hit, 0, false) : "–"}</td>
-                    <td className={cn(TD, "max-w-[11rem] whitespace-normal py-1 pr-3.5 leading-4 sm:max-w-[15rem] sm:truncate sm:whitespace-nowrap sm:py-0 sm:leading-5")} title={e.reason || undefined}>
+                    <td className={cn(TD, "min-w-[8rem] max-w-[11rem] whitespace-normal py-1 pr-3.5 leading-4 sm:max-w-[15rem] sm:truncate sm:whitespace-nowrap sm:py-0 sm:leading-5")} title={e.reason || undefined}>
                       {e.grade === "unproven" ? <span className="text-muted-foreground">{e.reason}</span> : <GradeTag grade={e.grade} />}
                     </td>
                   </tr>
@@ -212,11 +212,14 @@ function VariantDetail({ v, e, data, book, same }: Row & { data: SetupsFile; boo
         {v.family === "pairs" ? (
           <Pairs pairs={data.pairs} grade={e.grade} />
         ) : (
-          <Button asChild size="xs" variant="outline">
-            <Link to="/app/autopilots" search={{ variant: v.key }}>
-              <Bot aria-hidden /> Paper-trade this rule automatically
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {!LISTED.includes(e.grade) && <span className={CAPTION}>Not listed. Paper only, if you want to follow it anyway:</span>}
+            <Button asChild size="xs" variant={LISTED.includes(e.grade) ? "outline" : "ghost"} className={LISTED.includes(e.grade) ? undefined : "text-muted-foreground"}>
+              <Link to="/app/autopilots" search={{ variant: v.key }}>
+                <Bot aria-hidden /> Paper-trade this rule automatically
+              </Link>
+            </Button>
+          </div>
         )}
       </div>
       <div className="min-w-0 space-y-3">
