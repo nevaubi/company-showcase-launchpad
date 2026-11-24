@@ -18,6 +18,7 @@ import { LogoAtlas } from './atlas';
 import { badgeRadius, clusterSlices, clusterSpots, fanOffsets, rimGroups, type GlobeShape, type Spot } from './cluster';
 import { LOD, packTopology, pickRes, polygonsByName, traceFlat, traceGlobe, traceGraticule, type MapRes, type PackedGeo } from './geometry';
 import { markerBox, placeLabels, type Box, type LabelAsk, type LabelSide } from './labels';
+import { afterFrame } from './loop';
 import { anchorCentre, angleBetween, baseScale, clamp, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, project, RAD, slerp, toLonLat, toVec, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type Vec3, type View } from './sphere';
 
 export type { GlobeShape } from './cluster';
@@ -284,7 +285,7 @@ export class GlobeEngine {
     this.cleanup.push(() => motion.removeEventListener('change', onMotion));
     /* nothing is drawn while the globe is scrolled out of view or the tab is in the background */
     if (typeof IntersectionObserver !== 'undefined') {
-      const io = new IntersectionObserver((entries) => { this.onScreen = entries.some((e) => e.isIntersecting); if (this.onScreen) this.invalidate(true); });
+      const io = new IntersectionObserver((entries) => { const e = entries[entries.length - 1]; if (!e) return; this.onScreen = e.isIntersecting; if (this.onScreen) this.invalidate(true); });
       io.observe(canvas);
       this.cleanup.push(() => io.disconnect());
     }
@@ -427,22 +428,21 @@ export class GlobeEngine {
     this.raf = 0;
     const dt = Math.min(64, now - (this.last || now));
     this.last = now;
-    let moving = false;
     if (this.fly) {
       const t = clamp((now - this.fly.start) / this.fly.ms, 0, 1);
       /* a flight that starts deeper than the limit (the limit has just dropped) comes back to it smoothly */
       this.cam = this.clamped(this.fly.at(t), Math.max(this.maxZoom, this.cam.zoom));
       if (t >= 1) this.fly = null;
-      this.dirtyBase = this.dirtyTop = true; moving = true;
+      this.dirtyBase = this.dirtyTop = true;
     } else if (this.zoomAnim) {
-      this.stepZoom(dt); moving = true;
+      this.stepZoom(dt);
     } else if (this.spin && !this.gesture) {
       this.cam = this.clamped({ lon: this.cam.lon + this.spin.lon * dt, lat: this.cam.lat + this.spin.lat * dt, zoom: this.cam.zoom });
       const k = Math.exp(-dt / 280);
       this.spin.lon *= k; this.spin.lat *= k;
       /* stop once the coast is slower than a pixel every few frames */
       if (Math.hypot(this.spin.lon, this.spin.lat) * RAD * this.scaleAt(this.cam.zoom) < 0.012) this.spin = null;
-      this.dirtyBase = this.dirtyTop = true; moving = true;
+      this.dirtyBase = this.dirtyTop = true;
     }
     const showing = this.onScreen && !document.hidden;
     /* dots travel only along the selected link, at about 30 frames a second; with no selection the picture is still */
@@ -455,9 +455,19 @@ export class GlobeEngine {
       }
     } finally {
       /* a frame that failed to draw must not strand a flight halfway: the loop goes on whatever happened above */
-      if (showing && (moving || flowing || this.fly || this.zoomAnim || this.spin)) this.schedule(); else { this.last = 0; this.publish(); }
+      const next = afterFrame({ showing, animating: !!(this.fly || this.zoomAnim || (this.spin && !this.gesture)), flowing });
+      if (next.settle) this.settle();
+      if (next.publish) this.publish();
+      if (next.again) this.schedule(); else this.last = 0;
     }
   };
+  /** End any camera motion where it was going (the map is out of view: nobody would see the steps). */
+  private settle(): void {
+    if (this.fly) { this.cam = this.clamped(this.fly.at(1), Math.max(this.maxZoom, this.cam.zoom)); this.fly = null; }
+    if (this.zoomAnim) this.stepZoom(1e6);
+    this.spin = null;
+    this.dirtyBase = this.dirtyTop = true;
+  }
   /** The view at rest, as an attribute on the canvas ("lon,lat,zoom,globe|flat"): tests and the page's assistant can read where the map is without reading pixels. */
   private publish(): void {
     const view = `${this.cam.lon.toFixed(3)},${this.cam.lat.toFixed(3)},${this.cam.zoom.toFixed(3)},${this.flat ? 'flat' : 'globe'}`;
