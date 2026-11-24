@@ -27,10 +27,10 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/redline")({
   validateSearch: z.object({
-    form: z.enum(["10-K", "10-Q"]).optional(),
-    to: z.string().regex(/^\d{10}-\d{2}-\d{6}$/).optional(),
-    from: z.string().regex(/^\d{10}-\d{2}-\d{6}$/).optional(),
-    section: z.string().max(8).optional(),
+    form: z.enum(["10-K", "10-Q"]).optional().catch(undefined),
+    to: z.string().regex(/^\d{10}-\d{2}-\d{6}$/).optional().catch(undefined),
+    from: z.string().regex(/^\d{10}-\d{2}-\d{6}$/).optional().catch(undefined),
+    section: z.string().max(8).optional().catch(undefined),
   }),
   head: ({ params }) => {
     const name = coverageOf(params.ticker)?.shortName ?? params.ticker.toUpperCase();

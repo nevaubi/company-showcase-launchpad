@@ -11,7 +11,7 @@ import { Pager, QuietLine } from "@/components/filings/parts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { collapseDocCopies } from "@/lib/ir/dedupe";
 import { libraryTitle } from "@/lib/ir/display";
-import { groupByYear, matchesQuery, paginate } from "@/lib/filings/list";
+import { groupByYear, matchesQuery, paginate, yearCount, yearTotals } from "@/lib/filings/list";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -89,6 +89,7 @@ export function IrDocRows({ ticker, docs, loading, error, year, q, page, onPage 
   const { open } = useSource();
   const scoped = useMemo(() => scopeIrDocs(docs, year, q), [docs, year, q]);
   const p = paginate(scoped, page);
+  const totals = useMemo(() => yearTotals(scoped), [scoped]);
   if (loading) return <Skeleton className="m-3.5 h-40" />;
   if (error) return <QuietLine>Stored IR documents could not be loaded right now.</QuietLine>;
   if (!docs.length) return <QuietLine>No IR documents stored for this company yet.</QuietLine>;
@@ -110,7 +111,7 @@ export function IrDocRows({ ticker, docs, loading, error, year, q, page, onPage 
           <div role="rowgroup" key={g.year}>
             <div role="row" className="border-b bg-secondary/40 px-3.5 py-1">
               <span role="cell" className="eyebrow">
-                {g.year === "Undated" ? "Undated (stored from IR sites without a date)" : g.year} · {g.rows.length}
+                {g.year === "Undated" ? "Undated (stored from IR sites without a date)" : g.year} · {yearCount(g.rows.length, totals.get(g.year))}
               </span>
             </div>
             {g.rows.map((d) => (

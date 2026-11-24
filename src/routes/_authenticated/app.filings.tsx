@@ -23,17 +23,22 @@ import { fmtDate } from "@/lib/format";
 import { useWatchlist } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
 
+const isRealDay = (d: string) => {
+  const t = new Date(`${d}T00:00:00Z`);
+  return !Number.isNaN(t.getTime()) && t.toISOString().slice(0, 10) === d;
+};
 const FAMS = ["all", "periodic", "current", "ownership", "proxy", "offerings", "other"] as const;
 const searchSchema = z.object({
-  view: z.enum(["filings", "changes"]).optional(),
-  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  fam: z.enum(FAMS).optional(),
-  sector: z.string().max(60).optional(),
-  watch: z.boolean().optional(),
-  q: z.string().max(80).optional(),
-  page: z.coerce.number().int().min(1).max(1000).optional(),
-  form: z.enum(["all", "10-K", "10-Q"]).optional(),
-  days: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional(),
+  view: z.enum(["filings", "changes"]).optional().catch(undefined),
+  // A day that does not exist (2026-02-31) falls back to the latest day instead of rolling over.
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealDay).optional().catch(undefined),
+  fam: z.enum(FAMS).optional().catch(undefined),
+  sector: z.string().max(60).optional().catch(undefined),
+  watch: z.boolean().optional().catch(undefined),
+  q: z.string().max(80).optional().catch(undefined),
+  page: z.coerce.number().int().min(1).max(1000).optional().catch(undefined),
+  form: z.enum(["all", "10-K", "10-Q"]).optional().catch(undefined),
+  days: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional().catch(undefined),
 });
 type Search = z.infer<typeof searchSchema>;
 

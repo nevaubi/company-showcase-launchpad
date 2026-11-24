@@ -4,7 +4,7 @@ import { ArrowUpRight, GitCompareArrows, Megaphone } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import { FormChip } from "@/components/filings/parts";
 import { describeFiling, familyOf } from "@/lib/filings/kinds";
-import { canCompare, groupByYear, type KeyDocs, type ListFiling } from "@/lib/filings/list";
+import { canCompare, groupByYear, yearCount, type KeyDocs, type ListFiling } from "@/lib/filings/list";
 import { indexUrl } from "@/lib/filings/daily";
 import type { EarningsRelease } from "@/lib/financials/types";
 import { fmtDate } from "@/lib/format";
@@ -120,7 +120,7 @@ export function KeyDocStrip({ ticker, cik, keys, rows }: { ticker: string; cik: 
 const GRID = "grid grid-cols-[3.25rem_minmax(0,1fr)_4.5rem] items-center gap-x-2 sm:gap-x-3 sm:grid-cols-[4rem_5.5rem_minmax(0,1fr)_6.5rem_6.5rem] lg:grid-cols-[4rem_5.5rem_minmax(0,1fr)_6.5rem_9rem]";
 
 /** Dense filing rows for one page, under year headers: date, form, plain description, period, actions. */
-export function FilingRows({ ticker, cik, rows, all, releases }: { ticker: string; cik: string; rows: ListFiling[]; all: ListFiling[]; releases: Map<string, EarningsRelease> }) {
+export function FilingRows({ ticker, cik, rows, all, releases, years }: { ticker: string; cik: string; rows: ListFiling[]; all: ListFiling[]; releases: Map<string, EarningsRelease>; years?: Map<string, number> }) {
   const { open } = useSource();
   return (
     <div role="table" aria-label="Filings" className="text-[13px]">
@@ -141,7 +141,7 @@ export function FilingRows({ ticker, cik, rows, all, releases }: { ticker: strin
         <div role="rowgroup" key={g.year}>
           <div role="row" className="border-b bg-secondary/40 px-3.5 py-1">
             <span role="cell" className="eyebrow">
-              {g.year} · {g.rows.length}
+              {g.year} · {yearCount(g.rows.length, years?.get(g.year))}
             </span>
           </div>
           {g.rows.map((f) => {

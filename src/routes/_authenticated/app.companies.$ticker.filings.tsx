@@ -19,14 +19,15 @@ import { useCompany } from "@/lib/data";
 import { searchFilings } from "@/lib/sec.functions";
 import { commentsQuery } from "@/lib/filings/review";
 import { FAMILIES } from "@/lib/filings/kinds";
-import { countByFamily, dedupeFilings, insiderFilings, latestKeyDocs, LIST_KINDS, paginate, scopeFilings, yearsOf, type ListKind } from "@/lib/filings/list";
+import { countByFamily, edgarListUrl, insiderFilings, latestKeyDocs, listCoverage, liveToList, LIST_KINDS, mergeFilings, paginate, yearTotals as totalsByYear, scopeFilings, yearsOf, type ListKind, type LiveFilingRow } from "@/lib/filings/list";
+import { supabase } from "@/integrations/supabase/client";
 import { fmtDate } from "@/lib/format";
 
 const searchSchema = z.object({
-  kind: z.enum(LIST_KINDS as [ListKind, ...ListKind[]]).optional(),
-  year: z.coerce.number().int().min(1990).max(2100).optional(),
-  q: z.string().max(80).optional(),
-  page: z.coerce.number().int().min(1).max(10_000).optional(),
+  kind: z.enum(LIST_KINDS as [ListKind, ...ListKind[]]).optional().catch(undefined),
+  year: z.coerce.number().int().min(1990).max(2100).optional().catch(undefined),
+  q: z.string().max(80).optional().catch(undefined),
+  page: z.coerce.number().int().min(1).max(10_000).optional().catch(undefined),
 });
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/filings")({
@@ -40,6 +41,22 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/fili
   ] }),
   component: Filings,
 });
+
+/** Every row of the live 60-day filing table for the company (all forms), and the table's first day. */
+function useLiveFilings(ticker: string) {
+  return useQuery({
+    queryKey: ["filings-live", ticker],
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const [rows, since] = await Promise.all([
+        supabase.from("sec_filings").select("accn, form, filed, report, doc, description, items").eq("ticker", ticker).order("filed", { ascending: false }).limit(2000),
+        supabase.from("sec_filings").select("filed").order("filed", { ascending: true }).limit(1),
+      ]);
+      if (rows.error) throw rows.error;
+      return { rows: ((rows.data ?? []) as LiveFilingRow[]).map(liveToList), since: (since.data?.[0]?.filed as string | undefined) ?? null };
+    },
+  });
+}
 
 function Filings() {
   const { ticker: raw } = Route.useParams();
@@ -57,12 +74,16 @@ function Filings() {
     navigate({ search: (prev) => ({ ...prev, ...(keepPage ? {} : { page: undefined }), ...s }), replace: true, resetScroll: false });
   const [text, setText] = useSearchText(search.q, (q) => set({ q }));
 
-  const rows = useMemo(() => dedupeFilings([...(company.data?.filings ?? []), ...insiderFilings(company.data?.insiders ?? [])]), [company.data]);
+  const live = useLiveFilings(ticker);
+  const insider = useMemo(() => insiderFilings(company.data?.insiders ?? []), [company.data]);
+  const rows = useMemo(() => mergeFilings(live.data?.rows ?? [], company.data?.filings ?? [], insider), [live.data, company.data, insider]);
+  const cover = useMemo(() => listCoverage(rows, insider, live.data?.since ?? null), [rows, insider, live.data]);
   const counts = useMemo(() => countByFamily(rows), [rows]);
   const years = useMemo(() => yearsOf([...rows, ...(ir.data ?? []).filter((d): d is typeof d & { filed: string } => !!d.filed)]), [rows, ir.data]);
   const keys = useMemo(() => latestKeyDocs(rows, company.data?.earningsReleases ?? []), [rows, company.data]);
   const releases = useMemo(() => new Map((company.data?.earningsReleases ?? []).map((r) => [r.accn, r])), [company.data]);
   const scoped = useMemo(() => scopeFilings(rows, { kind, year, q: search.q ?? "" }), [rows, kind, year, search.q]);
+  const yearTotals = useMemo(() => totalsByYear(scoped), [scoped]);
   const irCount = useMemo(() => (ir.data ? scopeIrDocs(ir.data, null, "").length : null), [ir.data]);
   const letterCount = letters.data?.n_threads ?? letters.data?.threads.length ?? 0;
 
@@ -71,14 +92,20 @@ function Filings() {
   const p = paginate(scoped, page);
   const filtered = year != null || !!search.q;
   const kindOptions = [
-    { v: "key" as ListKind, l: `Key filings · ${(rows.length - counts.ownership).toLocaleString()}`, title: "Every SEC filing except insider and holder forms" },
+    { v: "key" as ListKind, l: `Key filings · ${(rows.length - counts.ownership).toLocaleString()}`, title: "Filings on file except insider and holder forms" },
     { v: "all" as ListKind, l: `All · ${rows.length.toLocaleString()}` },
     ...FAMILIES.filter((f) => f.id !== "correspondence" && counts[f.id] > 0).map((f) => ({ v: f.id as ListKind, l: `${f.short} · ${counts[f.id].toLocaleString()}`, title: f.note })),
     ...(letterCount || counts.correspondence ? [{ v: "correspondence" as ListKind, l: `SEC letters · ${letterCount || counts.correspondence}`, title: "SEC staff comment letters and company responses" }] : []),
     { v: "ir" as ListKind, l: `IR documents${irCount != null ? ` · ${irCount.toLocaleString()}` : ""}`, title: "Releases, presentations, supplements and data files stored from EDGAR exhibits and the company's IR site" },
   ];
   const family = FAMILIES.find((f) => f.id === kind);
-  const scopeLabel = kind === "key" ? "Key filings (all but insider and holder forms)" : kind === "all" ? "All SEC filings" : kind === "ir" ? "IR documents" : (family?.label ?? "Filings");
+  const scopeLabel = kind === "key" ? "Key filings (on file, all but insider and holder forms)" : kind === "all" ? "All filings on file" : kind === "ir" ? "IR documents" : (family?.label ?? "Filings");
+  const since = cover.liveSince ? fmtDate(cover.liveSince) : "the last 60 days";
+  const edgarLink = (label: string, type?: string) => (
+    <a href={edgarListUrl(cik, { type, year })} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2">
+      {label}
+    </a>
+  );
 
   return (
     <div className="grid grid-cols-1 gap-4">
@@ -130,16 +157,36 @@ function Filings() {
             <IrDocRows ticker={ticker} docs={ir.data ?? []} loading={ir.isLoading} error={ir.isError} year={year} q={search.q ?? ""} page={page} onPage={(n) => set({ page: n }, true)} />
           ) : (
             <>
-              {kind === "ownership" && (
-                <QuietLine className="border-b">
-                  Form 4s come from the insider trade record; Forms 3, 144, 13D and 13G are listed for the last 60 days. Trade sizes, prices and holdings are on{" "}
-                  <Link to="/app/companies/$ticker/insiders" params={{ ticker }} className="text-foreground underline-offset-2 hover:underline">
-                    Insiders &amp; influence
-                  </Link>
-                  .
+              <QuietLine className="border-b py-2" section="List coverage">
+                {kind === "ownership" ? (
+                  <>
+                    Every ownership filing since {since}.
+                    {cover.insiderBefore > 0 && cover.insiderFirst && <> Before that, only the {cover.insiderBefore.toLocaleString()} Form 4s in the insider trade record (from {fmtDate(cover.insiderFirst)}); Form 4s with only option or other derivative transactions, Form 144 and holder forms from before {since} are not listed.</>}{" "}
+                    {edgarLink("Full Form 4 list on EDGAR", "4")}. Trade sizes, prices and holdings are on{" "}
+                    <Link to="/app/companies/$ticker/insiders" params={{ ticker }} className="text-foreground underline-offset-2 hover:underline">
+                      Insiders &amp; influence
+                    </Link>
+                    .
+                  </>
+                ) : (
+                  <>
+                    {cover.total.toLocaleString()} filings on file{cover.first && cover.last ? `, ${fmtDate(cover.first)} to ${fmtDate(cover.last)}` : ""}: annual, quarterly, current, proxy, registration and other reports from the company record, every filing since {since}, and Form 4s from the insider trade record. Prospectus supplements, free writing prospectuses and older holder forms are on {edgarLink("EDGAR's full list")}.
+                  </>
+                )}
+              </QuietLine>
+              {p.rows.length ? (
+                <FilingRows ticker={ticker} cik={cik} rows={p.rows} all={rows} releases={releases} years={yearTotals} />
+              ) : (
+                <QuietLine>
+                  {year != null && !search.q ? (
+                    <>
+                      Nothing on file for {year} in this view{kind === "ownership" && cover.insiderFirst && cover.liveSince ? `: before ${since}, ownership filings here are limited to the insider trade record` : ""}. {edgarLink(`${year} filings on EDGAR`, kind === "ownership" ? "4" : undefined)}.
+                    </>
+                  ) : (
+                    "No filings match these filters."
+                  )}
                 </QuietLine>
               )}
-              {p.rows.length ? <FilingRows ticker={ticker} cik={cik} rows={p.rows} all={rows} releases={releases} /> : <QuietLine>No filings match these filters.</QuietLine>}
               {p.pages > 1 && (
                 <div className="flex justify-end border-t px-3.5 py-2">
                   <Pager p={p} onPage={(n) => set({ page: n }, true)} label="Filing pages, bottom" />
