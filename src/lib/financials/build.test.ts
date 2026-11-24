@@ -9,6 +9,11 @@ import capexOilFacts from "./fixtures/capex-oil-facts.json";
 import stiCapexFacts from "./fixtures/sti-capex-facts.json";
 import linesFacts from "./fixtures/debt-facts-lines.json";
 import capexImprovementsFacts from "./fixtures/capex-improvements-facts.json";
+import cfoContinuingFacts from "./fixtures/cfo-continuing-facts.json";
+import capexProvenFacts from "./fixtures/capex-proven-facts.json";
+import epsContinuingFacts from "./fixtures/eps-continuing-facts.json";
+import incomeLinesFacts from "./fixtures/income-lines-facts.json";
+import periodsEpsFacts from "./fixtures/periods-eps-facts.json";
 
 let n = 0;
 const fact = (start: string | undefined, end: string, val: number, form: string, filed: string, accn = `0000000001-26-${String(++n).padStart(6, "0")}`): RawFact => ({
@@ -864,5 +869,161 @@ describe("capex from capital improvements only where the investing section prove
     // Face: this concept is labelled "Acquisitions of land and buildings and improvements" (204,517), beside
     // (398,417) of real estate additions (10-K 0001479094-26-000009).
     expect(capex("STAG", "annual", "2025-12-31").capex).toBeNull();
+  });
+});
+
+/** Annual cell of one line, in millions to one decimal, from reduced real companyfacts. */
+function annualM(fixture: unknown, t: string, st: "income" | "cashflow" | "balance", key: string, end: string) {
+  const s = buildStatements((fixture as Record<string, CompanyFacts>)[t]).annual[st];
+  const i = s.periods.findIndex((p) => p.end === end);
+  expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+  const c = s.rows.find((r) => r.key === key)?.cells[i];
+  return c ? Math.round(c.v / 1e5) / 10 : null;
+}
+const cellAt = (fixture: unknown, t: string, st: "income" | "cashflow" | "balance", key: string, end: string) => {
+  const s = buildStatements((fixture as Record<string, CompanyFacts>)[t]).annual[st];
+  const i = s.periods.findIndex((p) => p.end === end);
+  expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+  return s.rows.find((r) => r.key === key)?.cells[i] ?? null;
+};
+
+describe("cash from operations where the statement prints only the continuing-operations subtotal", () => {
+  it("reads the continuing-operations line for a year with no total tagged", () => {
+    // Face: "Net Cash Provided by Continuing Operating Activities" 3,430 / 3,844 (FY2025 / FY2024), discontinued
+    // operations' cash (0 / −46) in its own block, no total line (10-K 0000010795-25-000099).
+    expect(annualM(cfoContinuingFacts, "BDX", "cashflow", "cfo", "2025-09-30")).toBe(3430);
+    expect(annualM(cfoContinuingFacts, "BDX", "cashflow", "cfo", "2024-09-30")).toBe(3844);
+    expect(cellAt(cfoContinuingFacts, "BDX", "cashflow", "cfo", "2025-09-30")?.src?.concept).toBe(
+      "us-gaap:NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+    );
+    // Face: "Net cash provided by operating activities of continuing operations" 1,853.1, investing −711.4
+    // (10-K 0000940944-26-000025); free cash flow follows.
+    expect(annualM(cfoContinuingFacts, "DRI", "cashflow", "cfo", "2026-05-31")).toBe(1853.1);
+    expect(annualM(cfoContinuingFacts, "DRI", "cashflow", "fcf", "2026-05-31")).not.toBeNull();
+    // Face: "Net Cash Provided by Operating Activities of Continuing Operations" 13,122, investing −16,421,
+    // financing 3,097 (10-K 0000310158-22-000003, FY2021).
+    expect(annualM(cfoContinuingFacts, "MRK", "cashflow", "cfo", "2021-12-31")).toBe(13122);
+    expect(annualM(cfoContinuingFacts, "MRK", "cashflow", "cfi", "2021-12-31")).toBe(-16421);
+    expect(annualM(cfoContinuingFacts, "MRK", "cashflow", "cff", "2021-12-31")).toBe(3097);
+  });
+
+  it("keeps the tagged total where there is one", () => {
+    // Merck FY2022 tags the total 19,095 (equal to continuing operations that year).
+    expect(cellAt(cfoContinuingFacts, "MRK", "cashflow", "cfo", "2022-12-31")?.src?.concept).toBe("us-gaap:NetCashProvidedByUsedInOperatingActivities");
+  });
+});
+
+describe("capex from construction spending and from Dominion's extension", () => {
+  it("reads construction spending only for a year the investing section proves it the whole capital line (Con Edison)", () => {
+    // Face: "Utility capital expenditures" 4,764 (PaymentsForConstructionInProcess), "Non-utility capital
+    // expenditures" 0 / 1 (FY2025 / FY2024, an extension), 10-K 0001047862-26-000031.
+    expect(annualM(capexProvenFacts, "ED", "cashflow", "capex", "2025-12-31")).toBe(4764);
+    // FY2024: the extension line of 1 sits beside it, the tagged lines do not add up without it: left empty.
+    expect(annualM(capexProvenFacts, "ED", "cashflow", "capex", "2024-12-31")).toBeNull();
+  });
+
+  it("reads Dominion's consolidated property additions (FY2025 $12,641M, 10-K 0001193125-26-063120)", () => {
+    const cf = filer({ Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } });
+    cf.facts.d = {
+      PaymentsToAcquirePropertyPlantAndEquipmentIncludingNuclearFuel: {
+        units: { USD: [fact("2025-01-01", "2025-12-31", 12641, "10-K", "2026-02-27", "0001193125-26-063120")] },
+      },
+    };
+    const a = buildStatements(cf).annual.cashflow;
+    const cell = a.rows.find((r) => r.key === "capex")!.cells[a.periods.findIndex((p) => p.key === "FY2025")]!;
+    expect(cell.v).toBe(12641);
+    expect(cell.src?.concept).toBe("d:PaymentsToAcquirePropertyPlantAndEquipmentIncludingNuclearFuel");
+  });
+});
+
+describe("diluted EPS tagged as continuing-operations EPS", () => {
+  const eps = (t: string, end: string) => cellAt(epsContinuingFacts, t, "income", "epsDiluted", end)?.v ?? null;
+  it("reads it where the statement has no discontinued operations", () => {
+    // Face: "Diluted" $1.52 (10-K 0000831259-26-000012, FY2025); Airbnb "Diluted (in USD per share)" $4.03
+    // (10-K 0001559720-26-000004, FY2025). Both under IncomeLossFromContinuingOperationsPerDilutedShare.
+    expect(eps("FCX", "2025-12-31")).toBe(1.52);
+    expect(eps("ABNB", "2025-12-31")).toBe(4.03);
+    expect(cellAt(epsContinuingFacts, "ABNB", "income", "epsBasic", "2025-12-31")?.v).toBe(4.1);
+  });
+
+  it("leaves it empty beside discontinued operations (Dell FY2022)", () => {
+    // Face: continuing $6.26 and discontinued $0.76 diluted, no total line (10-K 0001571996-22-000009).
+    expect(eps("DELL", "2022-01-28")).toBeNull();
+    // FY2026 keeps its EarningsPerShareDiluted figure.
+    expect(cellAt(epsContinuingFacts, "DELL", "income", "epsDiluted", "2026-01-30")?.src?.concept).toBe("us-gaap:EarningsPerShareDiluted");
+  });
+});
+
+describe("net income and revenue lines tagged with other concepts", () => {
+  const FIXTURE = incomeLinesFacts as unknown as Record<string, CompanyFacts>;
+  const at = (t: string, key: string, end: string, bank = false) => {
+    const s = buildStatements(FIXTURE[t], { bank }).annual.income;
+    const i = s.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    return s.rows.find((r) => r.key === key)?.cells[i] ?? null;
+  };
+
+  it("reads Booking's net income tagged as available to common stockholders", () => {
+    // Face: "Net income" $5,404M FY2025, NetIncomeLossAvailableToCommonStockholdersBasic (10-K 0001075531-26-000009).
+    expect(at("BKNG", "netIncome", "2025-12-31")?.v).toBe(5404e6);
+  });
+
+  it("does not read it for a year with noncontrolling interests tagged", () => {
+    // Booking's own facts with one added noncontrolling-interest amount for FY2025: the common figure is then not
+    // net income, so the cell stays empty.
+    const cf = structuredClone(FIXTURE.BKNG);
+    cf.facts["us-gaap"].NetIncomeLossAttributableToNoncontrollingInterest = {
+      units: { USD: [{ start: "2025-01-01", end: "2025-12-31", val: 10e6, accn: "0000000001-26-999999", form: "10-K", filed: "2026-02-20" }] },
+    };
+    const s = buildStatements(cf).annual.income;
+    const i = s.periods.findIndex((p) => p.end === "2025-12-31");
+    expect(s.rows.find((r) => r.key === "netIncome")?.cells[i] ?? null).toBeNull();
+  });
+
+  it("reads a gas utility's regulated operating revenue (ONE Gas FY2025 $2,427.4M, 10-K 0001587732-26-000009)", () => {
+    expect(at("OGS", "revenue", "2025-12-31")?.v).toBe(2427428000);
+  });
+
+  it("does not show a bank's contract fee revenue as its revenue (Fifth Third FY2023)", () => {
+    // Face: net interest income 5,827, total noninterest income 2,881, no revenue total; the $577M of
+    // RevenueFromContractWithCustomerIncludingAssessedTax is a note figure (10-K 0000035527-24-000088).
+    expect(at("FITB", "revenue", "2023-12-31", true)).toBeNull();
+    expect(at("FITB", "netInterestIncome", "2023-12-31", true)?.v).toBe(5827e6);
+  });
+});
+
+describe("annual columns after a change of fiscal year end, and EPS against a net loss", () => {
+  const FIXTURE = periodsEpsFacts as unknown as Record<string, CompanyFacts>;
+  const annual = (t: string) => buildStatements(FIXTURE[t]).annual.income;
+
+  it("keeps one column per year after a reverse merger (Chronoscale)", () => {
+    // 10-K 0001628280-26-058018 reports the acquirer's years to 31 May 2026 and 2025 (net loss 50,320 / 72,730);
+    // the registrant's own calendar 2024 and 2025 overlap them and leave.
+    const s = annual("CHRN");
+    const labels = s.periods.map((p) => p.label);
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(s.periods.map((p) => p.end)).toEqual(expect.arrayContaining(["2025-05-31", "2026-05-31"]));
+    expect(s.periods.map((p) => p.end)).not.toContain("2025-12-31");
+    expect(s.periods.map((p) => p.end)).not.toContain("2024-12-31");
+  });
+
+  it("keeps the audited year, not a recast comparative, when one filing reports both (Bristow)", () => {
+    // 10-K 0001525221-24-000011 prints the year to 31 March 2022 (net loss attributable 15,791), the nine months to
+    // 31 December 2022 and calendar 2023; calendar 2022 is a comparative only.
+    const ends = annual("VTOL").periods.map((p) => p.end);
+    expect(ends).toContain("2022-03-31");
+    expect(ends).not.toContain("2022-12-31");
+  });
+
+  it("empties a positive EPS in a loss year unless income available to common is positive", () => {
+    // Spyre FY2023: 10-K/A 0001636282-24-000107 tags +13.76 against a net loss of 338,790; the 10-K printed −49.12.
+    const sy = annual("SYRE");
+    const i = sy.periods.findIndex((p) => p.end === "2023-12-31");
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(sy.rows.find((r) => r.key === "epsDiluted")?.cells[i] ?? null).toBeNull();
+    // Corsair FY2023: net loss 2,590, available to common +3,187, EPS 0.03 (10-K 0000950170-24-021415): kept.
+    const cr = annual("CRSR");
+    const j = cr.periods.findIndex((p) => p.end === "2023-12-31");
+    expect(cr.rows.find((r) => r.key === "epsDiluted")?.cells[j]?.v).toBe(0.03);
   });
 });

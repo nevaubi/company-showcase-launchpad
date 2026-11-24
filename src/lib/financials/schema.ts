@@ -38,6 +38,9 @@ export const INCOME_LINES: LineDef[] = [
       "SalesRevenueNet",
       "RevenueFromContractWithCustomerIncludingAssessedTax",
       "SalesRevenueGoodsNet",
+      // Last: a gas utility's only revenue line. ONE Gas prints "Regulated Operating Revenue" $2,427.4M FY2025 as the
+      // statement's top line (10-K 0001587732-26-000009); for utilities that tag a total above, it is a part.
+      "RegulatedOperatingRevenue",
     ],
     "flow",
     { bold: true },
@@ -111,11 +114,27 @@ export const INCOME_LINES: LineDef[] = [
     "flow",
   ),
   usd("incomeTax", "Income tax expense", ["IncomeTaxExpenseBenefit"], "flow", { indent: 1 }),
-  usd("netIncome", "Net income", ["NetIncomeLoss", "ProfitLoss"], "flow", { bold: true }),
+  usd(
+    "netIncome",
+    "Net income",
+    [
+      "NetIncomeLoss",
+      "ProfitLoss",
+      // Last, and only for a period with no preferred dividends and no noncontrolling interests tagged, where it is
+      // the same figure (netIncomeAvailableOnly in build.ts): Booking's "Net income" $5,404M FY2025 (10-K
+      // 0001075531-26-000009) is tagged with it alone.
+      "NetIncomeLossAvailableToCommonStockholdersBasic",
+    ],
+    "flow",
+    { bold: true },
+  ),
   {
     key: "epsBasic",
     label: "EPS, basic",
-    concepts: ["EarningsPerShareBasic"],
+    // The continuing-operations figure only where the statement has no discontinued operations, so that it is the
+    // statement's own EPS line (dropContinuingEpsBesideDiscontinued in build.ts): Freeport-McMoRan, Exelon,
+    // Halliburton and Airbnb tag their only EPS lines with it.
+    concepts: ["EarningsPerShareBasic", "IncomeLossFromContinuingOperationsPerBasicShare"],
     unit: "usdPerShare",
     kind: "flow",
     additive: true,
@@ -123,7 +142,9 @@ export const INCOME_LINES: LineDef[] = [
   {
     key: "epsDiluted",
     label: "EPS, diluted",
-    concepts: ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted"],
+    // Freeport-McMoRan's "Diluted" $1.52 FY2025 (10-K 0000831259-26-000012), Airbnb's "Diluted" $4.03 FY2025
+    // (10-K 0001559720-26-000004): IncomeLossFromContinuingOperationsPerDilutedShare, no discontinued operations.
+    concepts: ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted", "IncomeLossFromContinuingOperationsPerDilutedShare"],
     unit: "usdPerShare",
     kind: "flow",
     additive: true,
@@ -281,7 +302,7 @@ export const BALANCE_LINES: LineDef[] = [
 ];
 
 export const CASHFLOW_LINES: LineDef[] = [
-  usd("cfNetIncome", "Net income", ["NetIncomeLoss", "ProfitLoss"], "flow"),
+  usd("cfNetIncome", "Net income", ["NetIncomeLoss", "ProfitLoss", "NetIncomeLossAvailableToCommonStockholdersBasic"], "flow"),
   usd(
     "dna",
     "Depreciation & amortization",
@@ -297,7 +318,21 @@ export const CASHFLOW_LINES: LineDef[] = [
   usd("sbc", "Stock-based compensation", ["ShareBasedCompensation", "AllocatedShareBasedCompensationExpense"], "flow", {
     indent: 1,
   }),
-  usd("cfo", "Cash from operations", ["NetCashProvidedByUsedInOperatingActivities"], "flow", { bold: true }),
+  usd(
+    "cfo",
+    "Cash from operations",
+    [
+      "NetCashProvidedByUsedInOperatingActivities",
+      // Read only for a period with no total tagged: a filer with discontinued operations whose statement prints
+      // no total, only the continuing-operations subtotal of the operating section, with the discontinued
+      // operations' cash in a separate block below. Becton Dickinson: "Net Cash Provided by Continuing Operating
+      // Activities" $3,430M FY2025 (10-K 0000010795-25-000099); Darden: "Net cash provided by operating
+      // activities of continuing operations" $1,853.1M FY2026 (10-K 0000940944-26-000025).
+      "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+    ],
+    "flow",
+    { bold: true },
+  ),
   usd(
     "capex",
     "Capital expenditures",
@@ -326,6 +361,13 @@ export const CASHFLOW_LINES: LineDef[] = [
       // in build.ts): it is that for Snap-on's "Capital expenditures" $76.0M, and a fragment for Weyerhaeuser, which
       // tags $51M of reforestation with it beside $423M of capital spending under its own extension.
       "PaymentsForCapitalImprovements",
+      // Dominion's consolidated "Plant construction and other property additions (including nuclear fuel)" $12,641M
+      // FY2025 (10-K 0001193125-26-063120); its us-gaap PaymentsToAcquirePropertyPlantAndEquipment is Virginia
+      // Power's line, tagged with a legal-entity dimension.
+      "d:PaymentsToAcquirePropertyPlantAndEquipmentIncludingNuclearFuel",
+      // Read last and under the same investing-section proof as capital improvements (PROVEN_CAPITAL_LINES in
+      // build.ts): Con Edison's "Utility capital expenditures" $4,764M FY2025 (10-K 0001047862-26-000031).
+      "PaymentsForConstructionInProcess",
     ],
     "flow",
     { indent: 1 },
@@ -337,7 +379,15 @@ export const CASHFLOW_LINES: LineDef[] = [
     "flow",
     { indent: 1 },
   ),
-  usd("cfi", "Cash from investing", ["NetCashProvidedByUsedInInvestingActivities"], "flow", { bold: true }),
+  usd(
+    "cfi",
+    "Cash from investing",
+    // The continuing-operations subtotal stands where no total is tagged, as for cash from operations: Dollar
+    // Tree's "Net cash used in investing activities of continuing operations" $648.7M FY2025 (10-K 0000935703-26-000025).
+    ["NetCashProvidedByUsedInInvestingActivities", "NetCashProvidedByUsedInInvestingActivitiesContinuingOperations"],
+    "flow",
+    { bold: true },
+  ),
   usd(
     "debtIssued",
     "Debt issued",
@@ -369,7 +419,14 @@ export const CASHFLOW_LINES: LineDef[] = [
   usd("dividends", "Dividends paid", ["PaymentsOfDividends", "PaymentsOfDividendsCommonStock", "PaymentsOfOrdinaryDividends"], "flow", {
     indent: 1,
   }),
-  usd("cff", "Cash from financing", ["NetCashProvidedByUsedInFinancingActivities"], "flow", { bold: true }),
+  usd(
+    "cff",
+    "Cash from financing",
+    // DuPont: "Cash used for financing activities - continuing operations" $1,750M FY2025 (10-K 0001666700-26-000013).
+    ["NetCashProvidedByUsedInFinancingActivities", "NetCashProvidedByUsedInFinancingActivitiesContinuingOperations"],
+    "flow",
+    { bold: true },
+  ),
 ];
 
 /**

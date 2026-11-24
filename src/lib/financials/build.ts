@@ -127,6 +127,7 @@ export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
     years.push({ fy: fiscalYearFromEnd(end), start, end, qEnds: q1 && q2 && q3 ? [q1, q2, q3] : [] });
   }
   years.sort((a, b) => toTime(a.end) - toTime(b.end));
+  dropOverlappingYears(years, annual);
 
   // Fiscal years in progress: 10-Q periods that start the day after the last 10-K year.
   const last = years.at(-1);
@@ -177,6 +178,52 @@ export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
     }
   }
   return years;
+}
+
+/** Two annual periods that share more than a month cannot both be fiscal years of one company. */
+const OVERLAP_DAYS = 31;
+
+/**
+ * After a change of fiscal year end, or a reverse merger that brings in the accounting acquirer's history, the
+ * facts hold annual periods that overlap: Chronoscale's own calendar 2024 and 2025 beside its acquirer's years to
+ * 31 May 2025 and 2026 (10-K 0001628280-26-058018), Bristow's year to 31 March 2022 beside calendar 2022, Hut 8's
+ * year to 30 June 2023 beside calendar 2023. Two such columns both labelled FY2025 counted months twice. Of two
+ * overlapping years that no one filing reports together, the one the latest filing reports stays: that filing's
+ * basis is the company's history now (Chronoscale's acquirer, whose years end 31 May). On
+ * a tie, the year that ends on the same day of the year as the latest year stays, then the one more facts report
+ * (Valmont tags one figure of its 53-week FY2022 to 24 December beside the year to 31 December).
+ */
+function dropOverlappingYears(years: FiscalYear[], annual: RawFact[]) {
+  const factsOf = (y: FiscalYear) => annual.filter((f) => near(f.start, y.start, 4) && near(f.end, y.end, 6));
+  const last = years.at(-1);
+  const monthDay = (d: string) => d.slice(5);
+  const score = (y: FiscalYear): [string, number, number] => {
+    const fs = factsOf(y);
+    const filed = fs.reduce((m, f) => (f.filed > m ? f.filed : m), "");
+    const onYearEnd = last && Math.abs(toTime(`2000-${monthDay(y.end)}`) - toTime(`2000-${monthDay(last.end)}`)) <= 7 * DAY ? 1 : 0;
+    return [filed, onYearEnd, fs.length];
+  };
+  // A filing's own year is the latest annual period it reports.
+  const lastEnd = new Map<string, string>();
+  for (const f of annual) if (f.end > (lastEnd.get(f.accn) ?? "")) lastEnd.set(f.accn, f.end);
+  const own = (y: FiscalYear) => factsOf(y).some((f) => near(lastEnd.get(f.accn), y.end, 6));
+  const better = (a: FiscalYear, b: FiscalYear) => {
+    // Where one filing reports both, the year that was a 10-K's own year is the audited one and the other a recast
+    // comparative: Bristow's 10-K 0001525221-24-000011 prints the year to 31 March 2022 (its 10-K of May 2022) and
+    // the nine-month transition period; its calendar 2022 is a comparative only.
+    const accns = new Set(factsOf(a).map((f) => f.accn));
+    if (factsOf(b).some((f) => accns.has(f.accn)) && own(a) !== own(b)) return own(a);
+    const [x, y] = [score(a), score(b)];
+    return x[0] !== y[0] ? x[0] > y[0] : x[1] !== y[1] ? x[1] > y[1] : x[2] >= y[2];
+  };
+  const overlap = (a: FiscalYear, b: FiscalYear) =>
+    (Math.min(toTime(a.end), toTime(b.end)) - Math.max(toTime(a.start), toTime(b.start))) / DAY > OVERLAP_DAYS;
+  const drop = new Set<FiscalYear>();
+  for (const a of years)
+    for (const b of years) if (a !== b && !drop.has(a) && !drop.has(b) && overlap(a, b)) drop.add(better(a, b) ? b : a);
+  const kept = years.filter((y) => !drop.has(y));
+  years.length = 0;
+  years.push(...kept);
 }
 
 /**
@@ -1099,8 +1146,15 @@ function debtLineLeftOut(cf: CompanyFacts, total: Cell, std: Cell | null, ltd: C
 /** Investing payments and proceeds that are not investing lines (financing, operating, tax and lease items). */
 const NOT_INVESTING = /Dividend|Repurchase|Repayment|Debt|Borrow|Stock|Shares|Tax|Interest|Financing|FinanceLease|Distribution|Warrant|Option|NotesPayable|LoansPayable|Preferred|Equity(?!Method)|Lease(?!hold)|Operating|Contingent|Withholding|Commission|Underwriting|Issuance|Payroll|Pension|Settlement|Restructuring/;
 /** Investing outflows of the same kind as capital spending: beside one of them, capital improvements may be a part. */
-const OTHER_CAPITAL_OUTFLOW = /PropertyPlant|Machinery|Equipment|ProductiveAssets|RealEstate|Building|Timber/;
+const OTHER_CAPITAL_OUTFLOW = /PropertyPlant|Machinery|Equipment|ProductiveAssets|RealEstate|Building|Timber|CapitalImprovements|ConstructionInProcess/;
 const CAPITAL_IMPROVEMENTS = "PaymentsForCapitalImprovements";
+/**
+ * Concepts that are a filer's whole capital line for some filers and a part of it for others: read last, and kept
+ * only for a period whose investing section proves them the whole line (capitalImprovementsProven).
+ * Con Edison's "Utility capital expenditures" ($4,764M FY2025, beside "Non-utility capital expenditures" of $0
+ * under its own extension, 10-K 0001047862-26-000031) is PaymentsForConstructionInProcess.
+ */
+const PROVEN_CAPITAL_LINES = [CAPITAL_IMPROVEMENTS, "PaymentsForConstructionInProcess"];
 
 /**
  * PaymentsForCapitalImprovements is a filer's whole capital line only when the investing section proves it:
@@ -1111,16 +1165,16 @@ const CAPITAL_IMPROVEMENTS = "PaymentsForCapitalImprovements";
  * (10-K 0001193125-26-051422). Nuvation Bio tags $8.0M of capitalized approval intangibles with it beside $0.4M of
  * equipment purchases; STAG Industrial tags $204.5M with it beside $398.4M of real estate additions: both left out.
  */
-function capitalImprovementsProven(cf: CompanyFacts, start: string | undefined, end: string): boolean {
+function capitalImprovementsProven(cf: CompanyFacts, start: string | undefined, end: string, concept = CAPITAL_IMPROVEMENTS): boolean {
   if (!start) return false;
   const same = (f: RawFact) => f.start === start && f.end === end;
   const val = (c: string) => choose(factsFor(cf, c, "USD"), c, same)?.fact.val;
   const total = val("NetCashProvidedByUsedInInvestingActivities");
-  const ci = val(CAPITAL_IMPROVEMENTS);
+  const ci = val(concept);
   if (total == null || !ci) return false;
   const lines = new Set<number>();
   for (const c of Object.keys(cf.facts["us-gaap"] ?? {})) {
-    if (c === CAPITAL_IMPROVEMENTS || !/^(Payments|Proceeds)/.test(c) || NOT_INVESTING.test(c)) continue;
+    if (c === concept || !/^(Payments|Proceeds)/.test(c) || NOT_INVESTING.test(c)) continue;
     const v = val(c);
     if (!v) continue;
     if (/^Payments/.test(c) && OTHER_CAPITAL_OUTFLOW.test(c)) return false;
@@ -1132,16 +1186,15 @@ function capitalImprovementsProven(cf: CompanyFacts, start: string | undefined, 
   return subsetReaches(values, total + ci) && !subsetReaches(values, total);
 }
 
-/** Empties capex cells read from PaymentsForCapitalImprovements for a period the investing section does not prove. */
+/** Empties capex cells read from a PROVEN_CAPITAL_LINES concept for a period the investing section does not prove. */
 function dropUnprovenCapitalImprovements(cf: CompanyFacts, cash: Row[]) {
   const row = rowOf(cash, "capex");
   if (!row) return;
-  const concept = `us-gaap:${CAPITAL_IMPROVEMENTS}`;
   row.cells = row.cells.map((c) => {
     if (!c) return c;
     const refs = c.src ? [c.src] : (c.derived?.parts ?? []);
-    const read = refs.filter((r) => r.concept === concept);
-    return read.length && !read.every((r) => capitalImprovementsProven(cf, r.start, r.end)) ? null : c;
+    const read = refs.filter((r) => PROVEN_CAPITAL_LINES.some((p) => r.concept === `us-gaap:${p}`));
+    return read.length && !read.every((r) => capitalImprovementsProven(cf, r.start, r.end, r.concept.slice("us-gaap:".length))) ? null : c;
   });
 }
 
@@ -1172,6 +1225,113 @@ export function fixShareScale(income: Row[]) {
       };
     });
   }
+}
+
+const CONTINUING_EPS = new Set(["us-gaap:IncomeLossFromContinuingOperationsPerBasicShare", "us-gaap:IncomeLossFromContinuingOperationsPerDilutedShare"]);
+/** Facts that say a period has discontinued operations: then continuing-operations EPS is not the statement's EPS. */
+const DISCONTINUED = [
+  ["IncomeLossFromDiscontinuedOperationsNetOfTax", "USD"],
+  ["IncomeLossFromDiscontinuedOperationsNetOfTaxAttributableToReportingEntity", "USD"],
+  ["DiscontinuedOperationIncomeLossFromDiscontinuedOperationNetOfTax", "USD"],
+  ["IncomeLossFromDiscontinuedOperationsNetOfTaxPerBasicShare", "USD/shares"],
+  ["IncomeLossFromDiscontinuedOperationsNetOfTaxPerDilutedShare", "USD/shares"],
+  ["DiscontinuedOperationIncomeLossFromDiscontinuedOperationNetOfTaxPerBasicShare", "USD/shares"],
+  ["DiscontinuedOperationIncomeLossFromDiscontinuedOperationNetOfTaxPerDilutedShare", "USD/shares"],
+] as const;
+
+/**
+ * EPS read from the continuing-operations concepts stands only for a period with no discontinued operations tagged:
+ * Dell's FY2022 statement prints continuing ($6.26) and discontinued ($0.76) diluted EPS and no total
+ * (10-K 0001571996-22-000009), so its EPS stays empty rather than show the continuing part as the whole.
+ */
+function dropContinuingEpsBesideDiscontinued(cf: CompanyFacts, income: Row[]) {
+  const discontinued = (start: string | undefined, end: string) =>
+    DISCONTINUED.some(([c, u]) => factsFor(cf, c, u).some((f) => f.val !== 0 && near(f.start, start, 4) && near(f.end, end, 4)));
+  for (const key of ["epsBasic", "epsDiluted"]) {
+    const row = rowOf(income, key);
+    if (!row) continue;
+    row.cells = row.cells.map((c) => {
+      if (!c) return c;
+      const refs = c.src ? [c.src] : (c.derived?.parts ?? []);
+      return refs.some((r) => CONTINUING_EPS.has(r.concept)) && refs.some((r) => discontinued(r.start, r.end)) ? null : c;
+    });
+  }
+}
+
+/** Amounts that separate net income from net income available to common stockholders. */
+const NOT_AVAILABLE_TO_COMMON = [
+  "PreferredStockDividendsIncomeStatementImpact",
+  "DividendsPreferredStock",
+  "PreferredStockDividendsAndOtherAdjustments",
+  "NetIncomeLossAttributableToNoncontrollingInterest",
+  "MinorityInterestInNetIncomeLossOfConsolidatedEntities",
+  "IncomeLossFromContinuingOperationsAttributableToNoncontrollingEntity",
+  "NetIncomeLossAttributableToRedeemableNoncontrollingInterest",
+  "UndistributedEarningsLossAllocatedToParticipatingSecuritiesBasic",
+  "DistributedEarnings",
+];
+const AVAILABLE_TO_COMMON = "us-gaap:NetIncomeLossAvailableToCommonStockholdersBasic";
+
+/**
+ * Net income available to common stockholders is net income only when nothing stands between them: a period with
+ * preferred dividends, noncontrolling interests or participating securities tagged keeps the line empty.
+ */
+function netIncomeAvailableOnly(cf: CompanyFacts, rows: Row[], key: string) {
+  const row = rowOf(rows, key);
+  if (!row) return;
+  const between = (start: string | undefined, end: string) =>
+    NOT_AVAILABLE_TO_COMMON.some((c) => factsFor(cf, c, "USD").some((f) => f.val !== 0 && near(f.start, start, 4) && near(f.end, end, 4)));
+  row.cells = row.cells.map((c) => {
+    if (!c) return c;
+    const refs = c.src ? [c.src] : (c.derived?.parts ?? []);
+    return refs.some((r) => r.concept === AVAILABLE_TO_COMMON) && refs.some((r) => between(r.start, r.end)) ? null : c;
+  });
+}
+
+/**
+ * A positive EPS in a period with a net loss is a contradiction unless the filing shows income available to common
+ * stockholders above zero (Corsair FY2023: a net loss of $2.6M, $3.2M available to common after a change in the
+ * redemption value of a noncontrolling interest, EPS $0.03, 10-K 0000950170-24-021415). Spyre's 10-K/A tags +$13.76
+ * for FY2023 against a net loss of $338.8M and its original 10-K's −$49.12 (0001636282-24-000107,
+ * 0001636282-24-000005): such a cell is emptied.
+ */
+function dropEpsAgainstNetLoss(cf: CompanyFacts, income: Row[], periods: Period[]) {
+  const ni = rowOf(income, "netIncome");
+  if (!ni) return;
+  const availablePositive = (p: Period) =>
+    ["NetIncomeLossAvailableToCommonStockholdersBasic", "NetIncomeLossAvailableToCommonStockholdersDiluted"].some((c) =>
+      factsFor(cf, c, "USD").some((f) => f.val > 0 && near(f.start, p.start, 4) && near(f.end, p.end, 4)),
+    );
+  for (const key of ["epsBasic", "epsDiluted"]) {
+    const row = rowOf(income, key);
+    if (!row) continue;
+    row.cells = row.cells.map((c, i) => {
+      const n = ni.cells[i];
+      return c && n && c.v > 0 && n.v < 0 && !availablePositive(periods[i]) ? null : c;
+    });
+  }
+}
+
+const FEE_REVENUE = new Set(["us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax", "us-gaap:RevenueFromContractWithCustomerIncludingAssessedTax"]);
+
+/**
+ * A bank's contract revenue (ASC 606) is fee income inside noninterest income, not its revenue: Fifth Third tags
+ * $577M of it for FY2023 beside noninterest income of $2,881M and net interest income of $5,827M, and its statement
+ * prints no revenue total (10-K 0000035527-24-000088). Such a cell is emptied when the period's noninterest income
+ * is at least as large.
+ */
+function dropBankFeeRevenue(cf: CompanyFacts, income: Row[]) {
+  const row = rowOf(income, "revenue");
+  if (!row) return;
+  row.cells = row.cells.map((c) => {
+    if (!c) return c;
+    const refs = c.src ? [c.src] : (c.derived?.parts ?? []);
+    const fee = refs.filter((r) => FEE_REVENUE.has(r.concept));
+    if (!fee.length) return c;
+    return fee.some((r) => factsFor(cf, "NoninterestIncome", "USD").some((f) => near(f.start, r.start, 4) && near(f.end, r.end, 4) && f.val >= r.value))
+      ? null
+      : c;
+  });
 }
 
 /** Income statement totals that run from revenue straight to pretax income on statements without an operating subtotal. */
@@ -1217,8 +1377,13 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     const income = buildStatement(cf, INCOME_LINES.filter(keepLine), ps, years, freq);
     const balance = buildStatement(cf, BALANCE_LINES.filter(keepLine), ps, years, freq);
     const cash = buildStatement(cf, CASHFLOW_LINES.filter(keepLine), ps, years, freq);
+    if (opts.bank) dropBankFeeRevenue(cf, income);
     fillDerived(income, "grossProfit", "revenue", "costOfRevenue", ["Revenue", "Cost of revenue"]);
     dropSegmentOperatingIncome(income, buildStatement(cf, [TOTAL_EXPENSES], ps, years, freq)[0]);
+    dropContinuingEpsBesideDiscontinued(cf, income);
+    netIncomeAvailableOnly(cf, income, "netIncome");
+    netIncomeAvailableOnly(cf, cash, "cfNetIncome");
+    dropEpsAgainstNetLoss(cf, income, ps);
     fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
     dropLoneNotesPayable(balance);
