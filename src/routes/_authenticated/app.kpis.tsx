@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { TickerMark } from "@/components/app/ticker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { columnScale, fmtChange, fmtInScale, modalPeriod, shortPeriod, type ColumnScale } from "@/lib/kpis/matrix";
+import { columnScale, fmtChange, fmtInScale, modalEnd, modalPeriod, periodMark, type ColumnScale } from "@/lib/kpis/matrix";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -344,10 +344,10 @@ function KpiMatrix() {
 
   // One unit and scale per column, and the period most companies in it report.
   const colMeta = useMemo(() => {
-    const m = new Map<string, { scale: ColumnScale; period: string | null }>();
+    const m = new Map<string, { scale: ColumnScale; period: string | null; end: string | null }>();
     for (const { k } of cols) {
       const pts = rows.map((r) => r.cells[k.id]?.p ?? null);
-      m.set(k.id, { scale: columnScale(k, pts.filter(Boolean).map((p) => p![1])), period: modalPeriod(pts) });
+      m.set(k.id, { scale: columnScale(k, pts.filter(Boolean).map((p) => p![1])), period: modalPeriod(pts), end: modalEnd(pts) });
     }
     return m;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -556,8 +556,7 @@ function KpiMatrix() {
                           </td>
                         );
                       const h = heat ? heatOf.get(k.id)?.get(r.t) : undefined;
-                      const stale = age(c.p[0]) > 200;
-                      const off = c.p[2] !== meta.period;
+                      const mark = periodMark(c.p, meta);
                       return (
                         <td key={k.id} className={cn("border-b p-0 text-right group-hover:bg-secondary", colHover(k.id))}>
                           <button
@@ -570,7 +569,7 @@ function KpiMatrix() {
                             className={cn("num flex w-full items-baseline justify-end gap-1.5 whitespace-nowrap px-3 py-1 tabular-nums hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", sort.c === k.id && IR.strong)}
                             style={h != null ? { background: `color-mix(in oklab, ${h > 0 ? "var(--positive)" : "var(--negative)"} ${Math.round(Math.abs(h) * 14)}%, transparent)` } : undefined}
                           >
-                            {off && <span className={cn("text-[10px] font-normal", stale ? "text-negative" : "text-muted-foreground")}>{shortPeriod(c.p[2])}</span>}
+                            {mark && <span className={cn("text-[10px] font-normal", mark.stale ? "text-negative" : "text-muted-foreground")}>{mark.text}</span>}
                             {view === "change" ? fmtChange(c.p[3], k) : fmtInScale(c.p[1], meta.scale)}
                           </button>
                         </td>
@@ -582,7 +581,7 @@ function KpiMatrix() {
             </table>
           </div>
           <p className={cn("border-t px-3 py-2", IR.caption)}>
-            Each column is one standardized KPI; each company's value is its own reported series mapped to that definition (series on a different reporting basis are never joined). Periods are the company's fiscal periods; a label in red is older than about six months. Change is percentage points for rates and percent for amounts. Shading ranks within the column. Click a value for the release it was read from, or a row for the company.
+            Each column is one standardized KPI; each company's value is its own reported series mapped to that definition (series on a different reporting basis are never joined). Periods are the company's fiscal periods; a cell carries its own period when it differs from the column's (by label or by more than 45 days of period end), and a label in red is older than about six months. Change is percentage points for rates and percent for amounts. Shading ranks within the column. Click a value for the release it was read from, or a row for the company.
           </p>
         </div>
       )}
