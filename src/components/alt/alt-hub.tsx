@@ -200,7 +200,7 @@ export function Leaders({ theme, find = "" }: { theme: ThemeFilter; find?: strin
                     <td className="pl-3"><TickerMark ticker={r.ticker} /></td>
                     <td className="num truncate text-[11px] text-muted-foreground" title={r.settledFrom ? `Newest reading (${r.settledFrom}) covers a period still running` : undefined}>{leaderPeriod(board.dataset, r, today)}</td>
                     <td className="num text-right font-medium">{fmtAlt(r.value, r.unit)}</td>
-                    <td className="num text-right">{vsTypical == null ? "–" : vsTypical >= 100 ? "≥100×" : `${vsTypical.toFixed(1)}×`}</td>
+                    <td className="num text-right">{vsTypical == null ? "–" : vsTypical >= 100 ? "≥100×" : vsTypical < 0.05 ? "<0.1×" : `${vsTypical.toFixed(1)}×`}</td>
                     <td className={cn("num text-right", chg == null ? "text-muted-foreground" : chg >= 0 ? "text-positive" : "text-negative")}>{r.unit === "%" && r.prior_value != null ? bpChange(r.value - r.prior_value) : fmtChange(chg)}</td>
                     <td className="pr-2 text-right">{r.source_url && <EvidenceButton ticker={r.ticker} title={board.label} url={r.source_url} date={r.date} />}</td>
                   </tr>

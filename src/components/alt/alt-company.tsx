@@ -82,7 +82,7 @@ function Figures({ ticker, figures }: { ticker: string; figures: Figure[] }) {
           <>
             <span className="block truncate text-[11px] text-muted-foreground">{f.label}</span>
             <span className={cn("block truncate font-semibold leading-tight", /^[\d$<>.,%×+\u2212\u2013 KMBT-]+( lb)?$/.test(f.value) ? "num text-lg" : "text-[13px] leading-6")}>{f.value}</span>
-            {f.sub && <span className={cn("num block truncate text-[11px]", f.tone === "positive" ? "text-positive" : f.tone === "negative" ? "text-negative" : "text-muted-foreground")} title={f.sub}>{f.sub}</span>}
+            {f.sub && <span className={cn("num block text-[11px] sm:truncate", f.tone === "positive" ? "text-positive" : f.tone === "negative" ? "text-negative" : "text-muted-foreground")} title={f.sub}>{f.sub}</span>}
           </>
         );
         const cls = cn("flex min-w-0 flex-col justify-start px-3.5 py-2 text-left", i % 2 === 1 && "sm:border-l", i > 0 && "border-t sm:border-t-0", i > 1 && "sm:border-t");
@@ -212,9 +212,9 @@ function Summary({ ticker, alt }: { ticker: string; alt: CompanyAlt }) {
           <tbody>
             {alt.themes.flatMap((t) => t.views.map((v, i) => (
               <tr key={v.dataset} className={cn("h-7", i === 0 ? "border-t first:border-t-0" : "")}>
-                <td className="w-[34%] truncate pl-3.5 text-[11px] text-muted-foreground" title={t.label}>{i === 0 ? t.short : ""}</td>
+                <td className="w-[30%] truncate pl-3.5 pr-2 text-[11px] text-muted-foreground sm:w-[34%]" title={t.label}>{i === 0 ? t.short : ""}</td>
                 <td className="truncate"><SectionLink to={panelId(v.dataset)} className="hover:underline">{v.label}</SectionLink>{v.flag && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" aria-label="unusual" />}</td>
-                <td className="num pr-3.5 text-right text-[11px] text-muted-foreground">{fmtDay(v.latest)}</td>
+                <td className="num whitespace-nowrap pl-2 pr-3.5 text-right text-[11px] text-muted-foreground">{fmtDay(v.latest)}</td>
               </tr>
             )))}
           </tbody>

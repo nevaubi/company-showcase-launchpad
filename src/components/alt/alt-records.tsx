@@ -71,7 +71,7 @@ export function AltRecords({ rows, ticker, pageSize = 8, showTicker, series, emp
                       {d && <span className="hidden min-w-0 max-w-[40%] shrink-[3] truncate text-[11px] text-muted-foreground 2xl:inline">{d}</span>}
                     </div>
                   </td>
-                  {amounts && <td className="num truncate pr-2 text-right">{r.value != null ? `${fmtAlt(r.value, r.unit === "units" || r.unit === "patients" ? null : r.unit)}${unitWord(r.unit)}` : ""}</td>}
+                  {amounts && <td className="num truncate pr-2 text-right">{r.value != null && <>{fmtAlt(r.value, r.unit === "units" || r.unit === "patients" ? null : r.unit)}<span className="max-sm:hidden">{unitWord(r.unit)}</span></>}</td>}
                   <td className="pr-1 text-right [&_button]:h-6 [&_button]:px-1.5 max-sm:[&_button]:px-1 max-sm:[&_button]:text-[0px] sm:pr-2">{r.source_url && <EvidenceButton ticker={ticker ?? r.ticker} title={r.title} url={r.source_url} date={r.date ?? undefined} />}</td>
                 </tr>
               );

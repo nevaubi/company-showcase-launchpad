@@ -135,6 +135,13 @@ describe("wording and materiality", () => {
     expect(alt.views.find((v) => v.dataset === "tri")!.quiet).toMatch(/^Under 10,000 lb/);
     expect(snapshotFigures(alt).map((x) => x.view.dataset)).toEqual(["contracts"]);
   });
+  it("keeps a regulatory panel with a recent year of zero to one quiet line (UTHR)", () => {
+    const years = [2023, 2024, 2025].map((y, i) => row({ ticker: "UTHR", dataset: "regulatory", kind: "series", title: "Federal Register documents naming the company", date: `${y}-12-31`, value: [2, 1, 0][i], unit: "docs" }));
+    const doc = row({ ticker: "UTHR", dataset: "regulatory", date: "2023-05-01", title: "Notice" });
+    expect(buildCompanyAlt([...years, doc], TODAY).views.find((v) => v.dataset === "regulatory")!.quiet).toMatch(/^Fewer than three documents/);
+    const busy = Array.from({ length: 4 }, (_, i) => row({ ticker: "UTHR", dataset: "regulatory", uid: `fr:${i}`, date: addDays(TODAY, -20 * (i + 1)), title: "Notice" }));
+    expect(buildCompanyAlt([...years, ...busy], TODAY).views.find((v) => v.dataset === "regulatory")!.quiet).toBeUndefined();
+  });
   it("omits a regulatory series of zeros and a company without rows", () => {
     const zeros = [2024, 2025].map((y) => row({ dataset: "regulatory", kind: "series", title: "Federal Register documents naming the company", date: `${y}-12-31`, value: 0, unit: "docs" }));
     expect(buildCompanyAlt(zeros, TODAY).views).toEqual([]);

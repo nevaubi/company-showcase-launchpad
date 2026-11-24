@@ -554,7 +554,7 @@ export function bpChange(d: number): string {
  * What makes a dataset worth a full panel and a snapshot tile: something recent or of size. A view
  * below it is shown as one quiet line on the tab and left out of the snapshot.
  */
-export function quietReason(v: Pick<DatasetView, "dataset" | "figures" | "flag" | "latest" | "table">, today: string): string | undefined {
+export function quietReason(v: Pick<DatasetView, "dataset" | "figures" | "flag" | "latest" | "table"> & { rows?: CompanyAltRow[] }, today: string): string | undefined {
   if (v.flag) return undefined;
   const age = v.latest ? daysBetween(v.latest, today) : Infinity;
   const n = (i: number) => v.figures[i]?.num ?? 0;
@@ -563,8 +563,12 @@ export function quietReason(v: Pick<DatasetView, "dataset" | "figures" | "flag" 
       return n(0) < 10e6 && !(v.figures.find((f) => f.label.startsWith("Largest award"))?.num) ? `Under $10M in the latest fiscal year and no award action of $1M or more in 12 months` : undefined;
     case "medicare":
       return n(0) < 10e6 ? "Under $10M of Medicare spending in the latest year" : undefined;
-    case "regulatory":
-      return n(0) < 3 && age > 365 ? "Fewer than three documents in the latest year" : undefined;
+    case "regulatory": {
+      // the yearly series is dated 31 Dec, so its age says nothing; count documents of the last 12 months
+      const yearAgo = addDays(today, -365);
+      const docs = (v.rows ?? []).filter((r) => r.kind === "event" && !!r.date && r.date > yearAgo && r.date <= today).length;
+      return n(0) < 3 && docs < 3 ? "Fewer than three documents in the latest year or the last 12 months" : undefined;
+    }
     case "fda":
     case "recalls":
     case "consumer":
