@@ -3,6 +3,10 @@ import { buildStatements, quarterEndAfter, type CompanyFacts, type RawFact } fro
 import { fmtCell, scaled, unitLabel } from "../format";
 import debtFacts from "./fixtures/debt-facts.json";
 import convertibleFacts from "./fixtures/debt-facts-convertible.json";
+import leftOutFacts from "./fixtures/debt-facts-left-out.json";
+import heldFacts from "./fixtures/debt-facts-held.json";
+import capexOilFacts from "./fixtures/capex-oil-facts.json";
+import stiCapexFacts from "./fixtures/sti-capex-facts.json";
 
 let n = 0;
 const fact = (start: string | undefined, end: string, val: number, form: string, filed: string, accn = `0000000001-26-${String(++n).padStart(6, "0")}`): RawFact => ({
@@ -605,3 +609,171 @@ describe("convertible notes and credit lines as balance sheet debt lines", () =>
   });
 });
 
+
+/**
+ * Reduced companyfacts (fetched 24 Nov 2026 by the p3-fin review) of six filers whose balance sheet prints a
+ * debt line under a concept the total is not built from, or whose plain LongTermDebt is the notes' principal.
+ * Each face was read from the 10-Q's balance sheet. A fragment is never shown as total debt: these stay empty.
+ */
+describe("total debt that leaves out a tagged debt line", () => {
+  const FIXTURE = leftOutFacts as unknown as Record<string, CompanyFacts>;
+  const debtAt = (t: string, end: string) => {
+    const st = buildStatements(FIXTURE[t]).quarterly.balance;
+    const i = st.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    return st.rows.find((r) => r.key === "totalDebt")?.cells[i] ?? null;
+  };
+
+  it("does not show a note's convertible figure as the total (Tempus Q3 2026, 10-Q 0001193125-26-442624)", () => {
+    // Face: convertible senior notes $1,174.877M under a company extension; companyfacts has only $175.967M
+    // of ConvertibleDebtNoncurrent from a note. Before: 175,967,000.
+    expect(debtAt("TEM", "2026-09-30")).toBeNull();
+  });
+
+  it("does not drop term loans beside convertible notes (Collegium Q3 2026, 10-Q 0001628280-26-070589)", () => {
+    // Face: 60.5 (LoansPayableCurrent) + 782.0 (LongTermLoansPayable) + 239.0 convertible = $1,081.5M. Before: 239.0.
+    expect(debtAt("COLL", "2026-09-30")).toBeNull();
+  });
+
+  it("does not drop convertible notes beside other debt (Applied Optoelectronics Q3 2026, 10-Q 0001437749-26-035282)", () => {
+    // Face: 60.0 + 36.6 + 128.8 convertible = $225.4M. Before: 96.6.
+    expect(debtAt("AAOI", "2026-09-30")).toBeNull();
+  });
+
+  it("does not drop a current term loan (Dropbox Q3 2026, 10-Q 0001467623-26-000061)", () => {
+    // Face: 0.0 + 27.1 (LinesOfCreditCurrent) + 691.1 + 2,580.2 = $3,298.4M. Before: 3,271.3.
+    expect(debtAt("DBX", "2026-09-30")).toBeNull();
+  });
+
+  it("does not show the notes' principal as the carrying amount (Onto Q3 2026, Peloton Q3 2026)", () => {
+    // Onto face: convertible notes $1,473.2M; LongTermDebt is the $1,500.0M principal (10-Q 0001193125-26-453859).
+    expect(debtAt("ONTO", "2026-09-30")).toBeNull();
+    // Peloton face: 10.0 + 345.3 + 943.7 = $1,299.0M; LongTermDebt $1,327.5M (10-Q 0001639825-26-000048).
+    expect(debtAt("PTON", "2026-09-30")).toBeNull();
+  });
+});
+
+/** Reduced companyfacts (fetched 24 Nov 2026 by the p3-fin review); figures as printed in each 10-K. */
+describe("short-term investments and capex under other concepts", () => {
+  const FIXTURE = stiCapexFacts as unknown as Record<string, CompanyFacts>;
+  const annual = (t: string, st: "balance" | "cashflow", key: string, end: string) => {
+    const s = buildStatements(FIXTURE[t]).annual[st];
+    const i = s.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    return s.rows.find((r) => r.key === key)?.cells[i] ?? null;
+  };
+
+  it("reads current debt securities as short-term investments (DocuSign FY2026, 10-K 0001261333-26-000021)", () => {
+    // Face: "Investments—current" $264,084K. Before: empty.
+    expect(annual("DOCU", "balance", "shortTermInvestments", "2026-01-31")!.v).toBe(264_084_000);
+  });
+
+  it("reads other short-term investments (Old Republic FY2025, 10-K 0000074260-26-000008)", () => {
+    // Face: "Short-term investments" $1,613.6M. Before: empty, and net debt overstated by that amount.
+    expect(Math.round(annual("ORI", "balance", "shortTermInvestments", "2025-12-31")!.v / 1e5)).toBe(16_136);
+  });
+
+  it("does not read capital improvements as capex: for some filers it is a fragment (Mid-America FY2025 stays empty)", () => {
+    // Mid-America's face line "Capital improvements" $360.2M is its whole capital line, but Weyerhaeuser tags
+    // $51M of reforestation with the same concept beside $423M under its own extension; the facts cannot tell them apart.
+    expect(annual("MAA", "cashflow", "capex", "2025-12-31")).toBeNull();
+  });
+
+  it("reads additions to oil and gas properties as capex (Gulfport FY2025, 10-K 0001628280-26-011487)", () => {
+    // Face: "Additions to oil and natural gas properties" $527.6M. Before: empty.
+    expect(Math.round(annual("GPOR", "cashflow", "capex", "2025-12-31")!.v / 1e5)).toBe(5_276);
+  });
+});
+
+/**
+ * Reduced companyfacts (24 Nov 2026 cache) of filers whose total debt the hold rule must leave standing, or
+ * must hold for a stated reason. Every figure below was read from the filing's balance sheet (R page) on
+ * 24 Nov 2026; in $M.
+ */
+describe("total debt held only when the facts contradict it", () => {
+  const FIXTURE = heldFacts as unknown as Record<string, CompanyFacts>;
+  const debtAt = (t: string, freq: "annual" | "quarterly", end: string) => {
+    const st = buildStatements(FIXTURE[t])[freq].balance;
+    const i = st.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    return st.rows.find((r) => r.key === "totalDebt")?.cells[i] ?? null;
+  };
+  const m = (c: { v: number } | null) => (c ? Math.round(c.v / 1e5) / 10 : null);
+
+  it("keeps convertible notes that are all of a company's debt (Palo Alto Networks, Okta, Hims & Hers)", () => {
+    // "Long-term convertible senior notes" $1,774M, 10-K 0001327567-26-000023. Held empty by the first rule.
+    expect(m(debtAt("PANW", "annual", "2026-07-31"))).toBe(1774);
+    // "Convertible senior notes, net" $350M current, $0 noncurrent, 10-K 0001660134-26-000020.
+    expect(m(debtAt("OKTA", "annual", "2026-01-31"))).toBe(350);
+    // "Convertible senior notes, net" $972.6M, 10-K 0001773751-26-000022.
+    expect(m(debtAt("HIMS", "annual", "2025-12-31"))).toBe(972.6);
+  });
+
+  it("holds a note's convertible figure when the balance sheet leaves room for a larger untagged line (Tempus Q3 2026)", () => {
+    // Face: convertible senior notes $1,174.9M under tem:ConvertibleSeniorNotesNet; ConvertibleDebtNoncurrent $176.0M is
+    // a note figure, and $1,197M of noncurrent liabilities have no tagged line (10-Q 0001193125-26-442624).
+    expect(debtAt("TEM", "quarterly", "2026-09-30")).toBeNull();
+  });
+
+  it("holds convertible notes beside another long-term line it does not read (TransMedics FY2025, Knight-Swift Q3 2026)", () => {
+    // Face: 10.0 + 452.8 convertible + 49.6 term loan (OtherLongTermDebtNoncurrent) = $512.4M (10-K 0001193125-26-067032). Main: 462.8.
+    expect(debtAt("TMDX", "annual", "2025-12-31")).toBeNull();
+    // Face: 167.6 + 180.2 + convertible senior notes (ConvertibleDebtNoncurrent $1,467.4M) (10-Q 0001492691-26-000069). Main: 231.9.
+    expect(debtAt("KNX", "quarterly", "2026-09-30")).toBeNull();
+  });
+
+  it("keeps a total when the other concept is the same debt at principal or the whole of it (Tractor Supply, Allegiant)", () => {
+    // Face: "Long-term debt" $1,765.0M; UnsecuredDebt $1,780.0M is the notes' principal (10-K 0000916365-26-000014).
+    expect(m(debtAt("TSCO", "annual", "2025-12-27"))).toBe(1765);
+    // Face: 118.1 + 1,681.5 = $1,799.6M; SecuredLongTermDebt tags the same $1,799.6M (10-K 0001362468-26-000008).
+    expect(m(debtAt("ALGT", "annual", "2025-12-31"))).toBe(1799.6);
+  });
+
+  it("keeps a long-term line that is the convertible notes themselves (Viavi FY2026)", () => {
+    // Face: short-term debt 244.8 + long-term debt 397.1 (ConvertibleDebtNoncurrent, also tagged LongTermDebt) (10-K 0001628280-26-056765).
+    expect(m(debtAt("VIAV", "annual", "2026-06-27"))).toBe(641.9);
+  });
+
+  it("reads a real-estate trust's total from its own lines (Camden, Regency, Rexford, Equity LifeStyle)", () => {
+    // Face: unsecured notes 3,921.5 + secured notes 306.8 = $4,228.3M; its $600M of commercial paper is inside the
+    // unsecured notes (10-Q 0001628280-26-071470). Main: 4,828.3.
+    expect(m(debtAt("CPT", "quarterly", "2026-09-30"))).toBe(4228.3);
+    // Face: notes payable 4,619.3 + unsecured credit facility 120.0 = $4,739.3M = LongTermDebt (10-K 0001193125-26-051668).
+    expect(m(debtAt("REG", "annual", "2025-12-31"))).toBe(4739.3);
+    // Face: "Notes payable" $3,251.9M (LongTermDebt); secured + unsecured $3,278.6M are principal (10-K 0001571283-26-000006).
+    expect(m(debtAt("REXR", "annual", "2025-12-31"))).toBe(3251.9);
+    // Face: 2,779.2 + 437.5 + 105.0 = $3,321.6M; LongTermDebt $3,345.9M is that plus $24.3M of unamortized costs
+    // (10-K 0001628280-26-008722). Main: 3,345.9.
+    expect(m(debtAt("ELS", "annual", "2025-12-31"))).toBe(3321.6);
+  });
+
+  it("holds a trust's LongTermDebt that its lines do not explain (Essex Q2 2026, Kimco FY2025, Welltower Q3 2026)", () => {
+    // Face: 5,569.3 + 784.2 + 345.0 (ess:LinesOfCreditAndCommercialPaper) = $6,698.5M; LongTermDebt $6,386.5M (10-Q 0000920522-26-000022).
+    expect(debtAt("ESS", "quarterly", "2026-06-30")).toBeNull();
+    // Face: notes payable 7,718.7 + mortgages 467.2 = $8,185.9M; LongTermDebt $7,718.7M is the notes alone (10-K 0001193125-26-060760).
+    expect(debtAt("KIM", "annual", "2025-12-31")).toBeNull();
+    // Face: 1,041.1 + 14,687.0 + 3,467.1 (well: extension) = $19,195.2M; LongTermDebt $18,154.1M (10-Q 0000766704-26-000046).
+    expect(debtAt("WELL", "quarterly", "2026-09-30")).toBeNull();
+  });
+});
+
+/** Reduced companyfacts (24 Nov 2026 cache); figures as printed on each 10-K's cash flow statement, in $M. */
+describe("capex of oil and gas producers", () => {
+  const FIXTURE = capexOilFacts as unknown as Record<string, CompanyFacts>;
+  const capex = (t: string, end: string) => {
+    const s = buildStatements(FIXTURE[t]).annual.cashflow;
+    const i = s.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    const c = s.rows.find((r) => r.key === "capex")?.cells[i];
+    return c ? Math.round(c.v / 1e5) / 10 : null;
+  };
+
+  it("reads development spending, not property acquisitions (Diamondback, SM Energy FY2025)", () => {
+    // Face: "Additions to oil and natural gas properties" (3,523) beside "Property acquisitions" (5,938), 10-K 0001539838-26-000010.
+    expect(capex("FANG", "2025-12-31")).toBe(3523);
+    // Face: "Capital expenditures" (1,438) beside acquisitions (34), 10-K 0000893538-26-000032.
+    expect(capex("SM", "2025-12-31")).toBe(1438);
+    // Face: "Additions to oil and natural gas properties" (527.6), its only capital line, 10-K 0001628280-26-011487.
+    expect(capex("GPOR", "2025-12-31")).toBe(527.6);
+  });
+});

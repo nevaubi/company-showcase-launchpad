@@ -114,7 +114,7 @@ export const INCOME_LINES: LineDef[] = [
   usd("netIncome", "Net income", ["NetIncomeLoss", "ProfitLoss"], "flow", { bold: true }),
   {
     key: "epsBasic",
-    label: "EPS — basic",
+    label: "EPS, basic",
     concepts: ["EarningsPerShareBasic"],
     unit: "usdPerShare",
     kind: "flow",
@@ -122,7 +122,7 @@ export const INCOME_LINES: LineDef[] = [
   },
   {
     key: "epsDiluted",
-    label: "EPS — diluted",
+    label: "EPS, diluted",
     concepts: ["EarningsPerShareDiluted", "EarningsPerShareBasicAndDiluted"],
     unit: "usdPerShare",
     kind: "flow",
@@ -139,7 +139,7 @@ export const INCOME_LINES: LineDef[] = [
   },
   {
     key: "sharesBasic",
-    label: "Weighted avg. shares — basic",
+    label: "Weighted avg. shares, basic",
     concepts: ["WeightedAverageNumberOfSharesOutstandingBasic"],
     unit: "shares",
     kind: "flow",
@@ -147,7 +147,7 @@ export const INCOME_LINES: LineDef[] = [
   },
   {
     key: "sharesDiluted",
-    label: "Weighted avg. shares — diluted",
+    label: "Weighted avg. shares, diluted",
     concepts: ["WeightedAverageNumberOfDilutedSharesOutstanding"],
     unit: "shares",
     kind: "flow",
@@ -171,6 +171,11 @@ export const BALANCE_LINES: LineDef[] = [
       "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
       // NVIDIA tags its "Marketable securities" ($34,143M at 26 Jul 2026) with this concept from its FY2026 10-K on.
       "DebtSecuritiesCurrent",
+      // Read only when none of the above is tagged (the first concept found is the line, nothing is summed):
+      // DocuSign's "Investments—current" $264.1M (10-K 0001261333-26-000021), Old Republic's "Short-term
+      // investments" $1,613.6M (10-K 0000074260-26-000008).
+      "DebtSecuritiesAvailableForSaleExcludingAccruedInterestCurrent",
+      "OtherShortTermInvestments",
     ],
     "stock",
   ),
@@ -249,6 +254,9 @@ export const BALANCE_LINES: LineDef[] = [
       // drawn credit line, each its own line: Datadog's $986.6M, Akamai's $6,419.3M, Moderna's $2,958M of
       // convertible notes beside $591M under its credit facility (30 Sep 2026). Before, these companies had
       // no long-term debt and no total debt at all.
+      // ConvertibleDebtNoncurrent alone is checked against the balance sheet's liabilities before it stands
+      // (debtLineLeftOut in build.ts): Tempus tags $176.0M of it from a note while its balance sheet carries
+      // $1,174.9M of convertible notes under a company extension (10-Q 0001193125-26-442624).
       components: ["ConvertibleLongTermNotesPayable", "ConvertibleDebtNoncurrent", "LongTermLineOfCredit"],
     },
   ),
@@ -299,6 +307,18 @@ export const CASHFLOW_LINES: LineDef[] = [
       "PaymentsToAcquireOtherPropertyPlantAndEquipment",
       "PaymentsToAcquireOtherProductiveAssets",
       "PaymentsToDevelopRealEstateAssets",
+      // Oil and gas producers' capital line, read only when none of the above is tagged: Gulfport's "Additions to
+      // oil and gas properties" $527.6M (10-K 0001628280-26-011487). PaymentsForCapitalImprovements is NOT read:
+      // it is the whole capital line for some filers (Mid-America's "Capital improvements" $360.2M) and a fragment
+      // for others (Weyerhaeuser tags $51M of reforestation with it beside $423M of capital spending under its own
+      // extension), and nothing in the facts tells the two apart.
+      // The development concept comes ahead of the two acquisition concepts, which some producers use for property purchases beside it: Diamondback's
+      // "Additions to oil and natural gas properties" $3,523M beside "Property acquisitions" $5,938M
+      // (PaymentsToAcquireOilAndGasProperty, 10-K 0001539838-26-000010), SM Energy's "Capital expenditures" $1,438M
+      // beside $34M of acquisitions (PaymentsToAcquireOilAndGasPropertyAndEquipment, 10-K 0000893538-26-000032).
+      "PaymentsToExploreAndDevelopOilAndGasProperties",
+      "PaymentsToAcquireOilAndGasPropertyAndEquipment",
+      "PaymentsToAcquireOilAndGasProperty",
       // Company extensions (read from the filings' inline XBRL at ingest) for filers with no us-gaap capex line.
       "cop:PaymentToAcquireProductiveAssetsAndInvestments",
       "cop:CapitalExpendituresAndInvestments",

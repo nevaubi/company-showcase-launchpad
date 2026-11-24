@@ -744,6 +744,15 @@ function dropLoneNotesPayable(balance: Row[]) {
   s.cells = s.cells.map((c, i) => (c?.src?.concept === "us-gaap:NotesPayableCurrent" && !l?.cells[i] ? null : c));
 }
 
+/**
+ * A bank's OtherShortTermInvestments is a piece of its "Federal funds sold, securities purchased under
+ * resale agreements and other short-term investments" line (Wells Fargo FY2010: $2,324M of it), not a line.
+ */
+function dropBankOtherShortTermInvestments(balance: Row[]) {
+  const s = rowOf(balance, "shortTermInvestments");
+  if (s) s.cells = s.cells.map((c) => (c?.src?.concept === "us-gaap:OtherShortTermInvestments" ? null : c));
+}
+
 /** Total debt from the balance sheet lines: long-term + short-term, without double-counting current maturities or leaving out short-term borrowings. */
 function debtFromLines(cf: CompanyFacts, l: Cell | null, s: Cell | null, end: string): Cell | null {
   if (!l && !s) return null;
@@ -768,7 +777,12 @@ function debtFromLines(cf: CompanyFacts, l: Cell | null, s: Cell | null, end: st
     const lt = npc && npcTotal ? combine(l, reportedCell(npc), "add", ["Long-term debt", "Current notes payable"])! : l;
     // This figure already includes current maturities; add only short-term borrowings.
     const label = npcTotal ? "(long-term debt + current notes payable)" : "Long-term debt incl. current maturities";
-    const extra = pickCell(cf, SHORT_BORROWINGS, atEnd);
+    // A real-estate trust whose secured and unsecured debt add up to its LongTermDebt has nothing beside it:
+    // Camden's balance sheet prints $3,921.5M of unsecured and $306.8M of secured notes, $4,228.3M in all,
+    // while it tags $600M of commercial paper that sits inside the unsecured notes (10-Q 0001628280-26-071470).
+    const reitParts = ["SecuredDebt", "UnsecuredDebt"].reduce((t, c) => t + (choose(factsFor(cf, c, "USD"), c, atEnd)?.fact.val ?? 0), 0);
+    const reitWhole = l.src?.concept === "us-gaap:LongTermDebt" && reitParts > 0 && Math.abs(reitParts - l.v) <= l.v * 0.005;
+    const extra = reitWhole ? null : pickCell(cf, SHORT_BORROWINGS, atEnd);
     if (extra) return combine(lt, extra, "add", [label, "Short-term borrowings"]);
     return npcTotal ? lt : { v: l.v, derived: { formula: label, parts: partsFrom(l, label, 1) } };
   }
@@ -846,9 +860,171 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
         if (alt && evidence <= alt.v * 2) return alt;
       }
     }
+    if (lines) {
+      const trust = trustTotal(cf, lines, p.end);
+      if (trust !== undefined) return trust;
+    }
     return lines && evidence <= lines.v * 2 ? lines : null;
   });
-  return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells };
+  // A debt line the builder does not read, tagged for the same date and not inside the lines it read,
+  // makes the total a fragment: it is left empty (debtLineLeftOut).
+  const held = cells.map((c, i) => (c && debtLineLeftOut(cf, c, std?.cells[i] ?? null, ltd?.cells[i] ?? null, periods[i].end) ? null : c));
+  return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells: held };
+}
+
+/**
+ * A real-estate trust's balance sheet prints its debt as secured debt, unsecured debt, notes payable and a line
+ * of credit, and it tags its LongTermDebt beside them, sometimes at carrying amount, sometimes at principal:
+ * - the lines, with or without the credit line, add up to LongTermDebt: it stands (American Homes 4 Rent: $420.0M +
+ *   $4,742.3M = $5,162.3M, 10-Q 0001562401-26-000058; Welltower's $16,383.5M + $2,813.8M, 10-K 0000766704-26-000010;
+ *   Federal Realty's $521.8M + $1,057.3M + $3,364.0M within 0.4% of its $4,963.6M, 10-K 0000034903-26-000017, whose
+ *   $310.0M credit line sits inside its notes payable; Acadia, Apple Hospitality, Camden, Regency);
+ * - secured and unsecured debt above LongTermDebt are principal against its carrying amount, and LongTermDebt is the
+ *   face line: Rexford's "Notes payable" $3,251.9M (10-K 0001571283-26-000006), Phillips Edison's $2,375.3M;
+ * - LongTermDebt above the lines by exactly the unamortized issuance costs is principal: the lines are the face.
+ *   Equity LifeStyle: $2,779.2M + $437.5M + $105.0M = $3,321.6M; LongTermDebt $3,345.9M less $24.3M of costs
+ *   (10-K 0001628280-26-008722);
+ * - LongTermDebt above the lines for no stated reason: a line may be missing (Essex prints $345.0M of lines of
+ *   credit and commercial paper under a company extension, its LongTermDebt is $6,386.5M against a face total
+ *   of $6,698.5M, 10-Q 0000920522-26-000022), or LongTermDebt is the notes alone (Kimco's $7,718.7M beside $467.2M
+ *   of mortgages, 10-K 0001193125-26-060760), so nothing is shown.
+ * Undefined when the filing is not of this kind.
+ */
+function trustTotal(cf: CompanyFacts, lines: Cell, end: string): Cell | null | undefined {
+  const read = lines.src ? [lines.src.concept] : (lines.derived?.parts ?? []).map((x) => x.concept);
+  if (read.length !== 1 || read[0] !== "us-gaap:LongTermDebt") return undefined;
+  const atEnd = (f: RawFact) => !f.start && near(f.end, end, 4);
+  const pick = (c: string) => choose(factsFor(cf, c, "USD"), c, atEnd);
+  const ltd = lines.v;
+  const close = (x: number, y: number) => Math.abs(x - y) <= Math.abs(y) * 0.005;
+  const found = (c: string, label: string) => { const x = pick(c); return x && x.fact.val > 0 ? { x, label } : null; };
+  const base = [found("SecuredDebt", "Secured debt"), found("SecuredDebtOther", "Other secured debt"), found("UnsecuredDebt", "Unsecured debt")].filter((x) => !!x);
+  if (!base.length) return undefined;
+  // Other lines a trust prints beside them, each counted or not: notes payable (unless it is LongTermDebt itself:
+  // Kimco tags both $7,718.7M, beside $467.2M of mortgages), senior notes, term loans, a drawn credit line. A credit
+  // line tagged with the same amount as another line is that line (Regency's $120.0M unsecured credit facility).
+  const optional = [
+    found("NotesPayable", "Notes payable"),
+    found("SeniorNotes", "Senior notes"),
+    found("LoansPayableToBank", "Term loans"),
+    found("LoansPayable", "Term loans"),
+    // Knight-Swift: $1,118.0M of UnsecuredDebt + $626.0M revolver (LongTermLineOfCredit) = its $1,744.0M LongTermDebt.
+    found("LongTermLineOfCredit", "Revolving line of credit"),
+  ].filter((y) => !!y && !close(y.x.fact.val, ltd));
+  const credit = found("LineOfCredit", "Line of credit");
+  let sets = [base];
+  for (const y of optional) sets = sets.flatMap((set) => [set, [...set, y!]]);
+  const options = sets.flatMap((set) => (credit && !set.some((y) => y!.x.fact.val === credit.x.fact.val) ? [set, [...set, credit]] : [set]));
+  const total = (set: typeof base) => set.reduce((t, y) => t + y.x.fact.val, 0);
+  if (options.some((set) => close(total(set), ltd))) return lines;
+  if (options.every((set) => total(set) > ltd) && Math.min(...options.map(total)) <= ltd * (1 + SAME_DEBT)) return lines;
+  const costs = pick("UnamortizedDebtIssuanceExpense") ?? pick("DebtIssuanceCostsNet");
+  // Only the secured, unsecured and credit lines make a figure of their own (Equity LifeStyle).
+  const faceSet = costs ? [base, ...(credit ? [[...base, credit]] : [])].find((set) => close(total(set), ltd - costs.fact.val)) : undefined;
+  if (!faceSet) return null;
+  return {
+    v: total(faceSet),
+    derived: { formula: faceSet.map((y) => y.label).join(" + "), parts: faceSet.flatMap((y) => partsFrom(reportedCell(y.x), y.label, 1)) },
+  };
+}
+
+/**
+ * Debt lines filers print on the balance sheet under concepts the total is not built from, by the side
+ * of the balance sheet they sit on. Collegium's term notes (LoansPayableCurrent $60.5M + LongTermLoansPayable
+ * $782.0M beside $239.0M of convertible notes, 10-Q 0001628280-26-070589), Dropbox's current term loan
+ * (LinesOfCreditCurrent $27.1M, 10-Q 0001467623-26-000061), Applied Optoelectronics' convertible notes
+ * ($128.8M beside $96.6M of other debt, 10-Q 0001437749-26-035282), Mirion's convertible debt ($754.5M beside
+ * $444.7M of other debt, 10-K 0001628280-26-009869), TransMedics' term loan (OtherLongTermDebtNoncurrent
+ * $49.6M beside $452.8M of convertible notes, 10-K 0001193125-26-067032).
+ */
+const UNREAD_NONCURRENT = ["LongTermLoansPayable", "ConvertibleLongTermNotesPayable", "ConvertibleDebtNoncurrent", "SecuredLongTermDebt", "UnsecuredLongTermDebt", "OtherLongTermDebtNoncurrent"];
+const UNREAD_CURRENT = ["LoansPayableCurrent", "LinesOfCreditCurrent", "ConvertibleNotesPayableCurrent", "ConvertibleDebtCurrent"];
+/** A real-estate trust's balance sheet lines (Essex, Camden, Acadia): parts of its own LongTermDebt total, never more than it. */
+const UNREAD_EITHER = ["SecuredDebt", "UnsecuredDebt"];
+/** Concepts that hold current and noncurrent debt together. */
+const WHOLE_DEBT = new Set(["LongTermDebt", "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", ...TOTAL_DEBT_CONCEPTS]);
+const isCurrentConcept = (c: string) => /Current(?!Maturities)|ShortTerm|CommercialPaper/.test(c) && !/Noncurrent/.test(c);
+/**
+ * Principal against carrying amount: the same notes, measured before and after unamortized issuance costs,
+ * differ by up to 2%. Tractor Supply tags its $1,780.0M of senior notes as UnsecuredDebt beside the balance
+ * sheet's "Long-term debt" $1,765.0M (10-K 0000916365-26-000014); Allegiant tags its whole $1,799.6M as
+ * SecuredLongTermDebt beside a $1,681.5M noncurrent line (10-K 0001362468-26-000008).
+ */
+const SAME_DEBT = 0.02;
+/** Other long-term debt lines a filer may print beside convertible notes. */
+const OTHER_LONG_TERM = ["LongTermDebtNoncurrent", "LongTermDebt", "LongTermNotesPayable", "LongTermLoansPayable", "SecuredLongTermDebt", "UnsecuredLongTermDebt", "OtherLongTermDebtNoncurrent", "ConvertibleLongTermNotesPayable"];
+/** Concepts ending in Noncurrent that are assets, valuations or note details, not balance sheet liability lines. */
+const NOT_A_LIABILITY_LINE = /Asset|Receivable|Investment|Securities|Property|Intangible|Goodwill|Prepaid|Inventor|Cash|Allowance|FairValue|Maturit|Gross|Amortiz|Unrecognized|Capitalized|Costs|^LiabilitiesNoncurrent$/;
+
+/**
+ * Noncurrent liabilities the filing tags no line for: total liabilities less current liabilities, less every
+ * distinct noncurrent liability amount tagged for the date. Null when the totals are not tagged.
+ */
+function untaggedNoncurrent(cf: CompanyFacts, end: string): number | null {
+  const atEnd = (f: RawFact) => !f.start && near(f.end, end, 4);
+  const val = (c: string) => choose(factsFor(cf, c, "USD"), c, atEnd)?.fact.val;
+  const total = val("Liabilities") ?? ((x, e) => (x != null && e != null ? x - e : undefined))(val("LiabilitiesAndStockholdersEquity"), val("StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest") ?? val("StockholdersEquity"));
+  const current = val("LiabilitiesCurrent");
+  if (total == null || current == null) return null;
+  const noncurrent = val("LiabilitiesNoncurrent") ?? total - current;
+  const lines = new Set<number>();
+  for (const c of Object.keys(cf.facts["us-gaap"] ?? {})) {
+    if (!(c.endsWith("Noncurrent") || c === "DeferredIncomeTaxLiabilitiesNet") || NOT_A_LIABILITY_LINE.test(c)) continue;
+    const v = val(c);
+    if (v) lines.add(v);
+  }
+  return noncurrent - [...lines].reduce((s, v) => s + v, 0);
+}
+
+/**
+ * True when the total leaves out a debt line the filing tags for the same date, or when two figures for it
+ * disagree and nothing in the facts says which one the balance sheet prints:
+ * - a tagged amount larger than everything read on its side of the balance sheet cannot be inside it, unless
+ *   it is the same debt at principal (SAME_DEBT); a real-estate trust's secured and unsecured debt together
+ *   cannot exceed its total either;
+ * - a plain LongTermDebt that separately tagged noncurrent lines (convertible notes, secured term loans) come
+ *   within a tenth of from below is the notes' principal, not the balance sheet's carrying amount: Onto's
+ *   LongTermDebt is the $1,500.0M face value, its balance sheet carries $1,473.2M of convertible notes (10-Q
+ *   0001193125-26-453859); Peloton's $1,327.5M against $10.0M + $345.3M + $943.7M = $1,299.0M on the face (10-Q
+ *   0001639825-26-000048). Secured and unsecured debt below LongTermDebt are a trust's parts of it, beside lines
+ *   of credit it does not tag separately (Essex's $5,569.3M + $784.2M of $6,386.5M at 30 Jun 2026);
+ * - convertible notes as the only long-term line stand only when the balance sheet adds up without another
+ *   one: Palo Alto Networks' $1,774M "Long-term convertible senior notes" is all its debt (10-K
+ *   0001327567-26-000023), but Tempus tags $176.0M of ConvertibleDebtNoncurrent from a note while its balance
+ *   sheet carries $1,174.9M of convertible notes under a company extension, which leaves $1,197M of its
+ *   noncurrent liabilities without a tagged line (10-Q 0001193125-26-442624).
+ */
+function debtLineLeftOut(cf: CompanyFacts, total: Cell, std: Cell | null, ltd: Cell | null, end: string): boolean {
+  const atEnd = (f: RawFact) => !f.start && near(f.end, end, 4);
+  const parts = total.src ? [{ concept: total.src.concept, value: total.v }] : (total.derived?.parts ?? []).map((p) => ({ concept: p.concept, value: p.value * p.sign }));
+  const bare = (c: string) => c.replace(/^us-gaap:/, "");
+  const names = new Set(parts.map((p) => bare(p.concept)));
+  const sum = (xs: typeof parts) => xs.reduce((s, p) => s + p.value, 0);
+  const whole = sum(parts.filter((p) => WHOLE_DEBT.has(bare(p.concept))));
+  const rest = parts.filter((p) => !WHOLE_DEBT.has(bare(p.concept)));
+  const current = whole + sum(rest.filter((p) => isCurrentConcept(bare(p.concept))));
+  const noncurrent = whole + sum(rest.filter((p) => !isCurrentConcept(bare(p.concept))));
+  const tagged = (c: string) => (names.has(c) ? 0 : (choose(factsFor(cf, c, "USD"), c, atEnd)?.fact.val ?? 0));
+  const room = (c: string) => (UNREAD_CURRENT.includes(c) ? current : UNREAD_NONCURRENT.includes(c) ? noncurrent : total.v);
+  const sameDebt = (v: number) => Math.abs(v - total.v) <= total.v * SAME_DEBT;
+  for (const c of [...UNREAD_NONCURRENT, ...UNREAD_CURRENT, ...UNREAD_EITHER]) {
+    const v = tagged(c);
+    if (v > 0 && v > room(c) * (1 + SAME_DEBT) && !sameDebt(v)) return true;
+  }
+  if (UNREAD_EITHER.reduce((s, c) => s + tagged(c), 0) > total.v * (1 + SAME_DEBT)) return true;
+  if (whole > 0) {
+    // The two convertible concepts of a side name one line; count the first.
+    const lines = UNREAD_NONCURRENT.filter((c) => c !== "ConvertibleDebtNoncurrent" || !tagged("ConvertibleLongTermNotesPayable"));
+    const separate = lines.reduce((s, c) => s + tagged(c), 0) + (std?.v ?? 0);
+    if (separate > 0 && separate >= whole * 0.9 && separate < whole * 0.995) return true;
+  }
+  const lt: string[] = ltd ? (ltd.src ? [ltd.src.concept] : (ltd.derived?.parts ?? []).map((p) => p.concept)).map(bare) : [];
+  if (lt.length > 0 && !lt.some((c) => c !== "ConvertibleDebtNoncurrent")) {
+    if (OTHER_LONG_TERM.some((c) => !lt.includes(c) && tagged(c) > 0 && Math.abs(tagged(c) - ltd!.v) > ltd!.v * SAME_DEBT)) return true;
+    const gap = untaggedNoncurrent(cf, end);
+    if (gap == null || gap > Math.max(ltd!.v, 0)) return true;
+  }
+  return false;
 }
 
 /**
@@ -928,6 +1104,7 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
     dropLoneNotesPayable(balance);
+    if (opts.bank) dropBankOtherShortTermInvestments(balance);
     const cfo = rowOf(cash, "cfo");
     const capex = rowOf(cash, "capex");
     const fcf: Row = {
