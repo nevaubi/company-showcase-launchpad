@@ -7,6 +7,7 @@ import type { HqFile } from "@/lib/supply/geo";
 import {
   activeTab,
   APP_HEADER_REM,
+  awaiting,
   barTopRem,
   changeTone,
   cleanCompanyName,
@@ -20,6 +21,7 @@ import {
   legalNameAdds,
   legalNameLabel,
   marketCap,
+  partState,
   priceStatus,
   range52,
   stickyTopRem,
@@ -240,6 +242,34 @@ describe("price facts", () => {
     expect(changeTone(0.004)).toBe("flat");
     expect(changeTone(-0.004)).toBe("flat");
     expect(changeTone(undefined)).toBe("flat");
+  });
+});
+
+describe("late arrivals", () => {
+  const quote = (have: boolean, pending: boolean) => partState(have, pending);
+  it("holds the place of a figure only while every missing input can still arrive", () => {
+    // market cap = last price x cover-page shares: quote and dataset both on their way
+    expect(awaiting(null, [quote(false, true), partState(false, true)])).toBe(true);
+    // quote in, dataset still loading: the cap keeps its place beside the 52-week range
+    expect(awaiting(null, [quote(true, false), partState(false, true)])).toBe(true);
+    // the dataset answered without a share count: the cap cannot arrive, so no gap is left for it
+    expect(awaiting(null, [quote(false, true), partState(false, false)])).toBe(false);
+    // no quote and none coming (the request failed and no close is stored)
+    expect(awaiting(null, [quote(false, false), partState(true, false)])).toBe(false);
+  });
+  it("never holds a place for a figure that is there, or once nothing is pending", () => {
+    expect(awaiting(4.94e12, [quote(true, false), partState(true, false)])).toBe(false);
+    expect(awaiting(4.94e12, [quote(true, false), partState(false, true)])).toBe(false);
+    // both inputs in and still no value (a zero share count): it will not arrive, so no skeleton stays behind
+    expect(awaiting(marketCap(338.32, 0), [quote(true, false), partState(true, false)])).toBe(false);
+    // the 52-week range comes with the quote itself: a stored close has none
+    expect(awaiting(range52(338.32, undefined, undefined), [quote(true, false)])).toBe(false);
+    expect(awaiting(range52(undefined, undefined, undefined), [quote(false, true)])).toBe(true);
+  });
+  it("reads an input as ready before pending, and missing only when nothing is on its way", () => {
+    expect(partState(true, true)).toBe("ready");
+    expect(partState(false, true)).toBe("pending");
+    expect(partState(false, false)).toBe("missing");
   });
 });
 
