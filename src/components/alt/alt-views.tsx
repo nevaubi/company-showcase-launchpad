@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 
 const fmtD = (d: string | null) => (d ? new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—");
 
-export function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
+function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
   const m = r.meta ?? {};
   if (r.dataset === "ownership") return { text: m.activist ? "13D · activist" : "13G · passive", tone: m.activist ? "neg" : undefined };
   if (r.dataset === "events") return { text: m.category, tone: ["restatement", "impairment", "cyber", "audit", "listing"].includes(m.category) ? "neg" : undefined };
@@ -25,7 +25,7 @@ export function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
   return null;
 }
 
-export function detail(r: AltRow): string | null {
+function detail(r: AltRow): string | null {
   const m = r.meta ?? {};
   if (r.dataset === "ownership") return (m.filers ?? []).slice(1).join(", ") || null;
   if (r.dataset === "regulatory") return [(m.agencies ?? []).join(", "), m.abstract].filter(Boolean).join(" — ") || null;

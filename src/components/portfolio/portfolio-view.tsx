@@ -35,7 +35,6 @@ import {
   type Position,
 } from "@/lib/portfolio/analytics";
 import { cn } from "@/lib/utils";
-import { TickerMark } from "@/components/app/ticker";
 
 const FACTORS: FactorDef[] = [
   { id: "beta", label: "Beta to the S&P 500", unit: "ratio", source: "Screener: 1-year daily returns vs SPY" },
@@ -174,7 +173,9 @@ export function PortfolioView({ holdings }: { holdings: Holding[] }) {
                   <td className="text-[11.5px]">
                     {f.contributors.map((c) => (
                       <span key={c.ticker} className="mr-3 inline-block">
-                        <TickerMark ticker={c.ticker} size="2xs" />
+                        <Link to="/app/companies/$ticker" params={{ ticker: c.ticker }} className="font-medium hover:underline">
+                          {c.ticker}
+                        </Link>
                         <span className="num text-muted-foreground"> {fmtF(c.x, f.unit)}</span>
                       </span>
                     ))}
@@ -236,7 +237,7 @@ export function PortfolioView({ holdings }: { holdings: Holding[] }) {
               <tbody>
                 {liq.map((r) => (
                   <tr key={r.ticker}>
-                    <td><TickerMark ticker={r.ticker} link={false} /></td>
+                    <td className="font-medium">{r.ticker}</td>
                     <td className="num text-right">{w(r.weight)}</td>
                     <td className="num text-right">{r.value != null ? fmtCompactUsd(r.value) : "–"}</td>
                     <td className="num text-right">{r.adv != null ? fmtCompactUsd(r.adv) : "–"}</td>
@@ -330,7 +331,7 @@ function EvidenceList({ items, label, showName }: { items: (OverlapEvidence & { 
             className="group text-left"
             onClick={() => open({ ticker: h.ticker, label: `${h.ticker} ${h.form} filed ${h.filed}`, unit: "", value: 0, doc: { accn: h.accn, doc: h.doc, form: h.form, filed: h.filed, search: h.quote.slice(0, 160) } })}
           >
-            <TickerMark ticker={h.ticker} size="2xs" link={false} />
+            <span className="font-medium">{h.ticker}</span>
             {showName && h.counterparty && <span className="text-muted-foreground"> · {h.counterparty}</span>}
             {label && h.share != null && <span className="num"> · {h.share}% {label}</span>}
             <span className="num text-muted-foreground"> · {w(h.weight)} of book</span>
@@ -373,8 +374,7 @@ function ShockPanel({ m }: { m: ReturnType<typeof useModel> }) {
           <div className="flex flex-wrap gap-1 text-[11px]">
             <span className="text-muted-foreground">Most linked to your holdings:</span>
             {candidates.slice(0, 8).map((c) => (
-              <button key={c.ticker} type="button" onClick={() => setSrc(c.ticker)} className={cn("inline-flex items-center gap-1 rounded border px-1.5 py-0.5 hover:bg-secondary", source === c.ticker && "border-foreground")}>
-                <CompanyLogo ticker={c.ticker} size="2xs" decorative />
+              <button key={c.ticker} type="button" onClick={() => setSrc(c.ticker)} className={cn("rounded border px-1.5 py-0.5 hover:bg-secondary", source === c.ticker && "border-foreground")}>
                 {c.ticker} <span className="text-muted-foreground">({c.holdings})</span>
               </button>
             ))}
@@ -415,7 +415,7 @@ function ShockPanel({ m }: { m: ReturnType<typeof useModel> }) {
               <tbody>
                 {result.rows.slice(0, 30).map((r) => (
                   <tr key={`${r.ticker}:${r.hop}:${r.channel}`}>
-                    <td><TickerMark ticker={r.ticker} link={false} /></td>
+                    <td className="font-medium">{r.ticker}</td>
                     <td className="num text-right">{w(r.weight)}</td>
                     <td>{r.hop === 1 ? "First order" : "Second order"}</td>
                     <td className={cn(r.severity === "high" && "font-medium text-negative")}>{r.channel}</td>

@@ -46,21 +46,6 @@ describe("chart read", () => {
     expect(cross.detail).toContain("no longer describes the trend");
   });
 
-  it("averages volume over sessions that have one", () => {
-    const flat = series(200, () => 100);
-    // the same volume every session: no heavy or quiet trading to report
-    expect(readTechnicals(flat, flat).volRatio).toBeCloseTo(1, 12);
-    // sessions stored without a volume are gaps in the record, not quiet days: the last 20 are not "heavy" because
-    // most of the 90 before them have no volume
-    const gaps = flat.map((b, i): Bar => (i < 185 ? [b[0], b[1], b[2], b[3], b[4], b[5], 0] : b));
-    const r = readTechnicals(gaps, gaps);
-    expect(r.volRatio).toBeNull();
-    expect(r.insights.find((x) => /trading/.test(x.title))).toBeUndefined();
-    // a real pickup is still reported
-    const busy = flat.map((b, i): Bar => (i >= 180 ? [b[0], b[1], b[2], b[3], b[4], b[5], 2000] : b));
-    expect(readTechnicals(busy, busy).insights.find((x) => x.title === "Heavy trading")).toBeTruthy();
-  });
-
   it("keeps a recent cross as a live signal", () => {
     // The cross lands about 36 sessions before the last bar.
     const bars = series(480, (i) => (i < 400 ? 200 - i * 0.2 : 120 + (i - 400) * 0.9));

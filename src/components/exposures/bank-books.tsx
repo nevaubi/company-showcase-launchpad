@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { coverageOf } from "@/lib/coverage";
 import { Segmented } from "@/components/app/segmented";
 import { Switch } from "@/components/ui/switch";
 import { useSource } from "@/components/source/source-context";
@@ -98,10 +97,10 @@ export function BankBooks({ index }: { index: ExposureIndex }) {
 
   const pctCell = (r: Row, k: Metric, num: ExpVal | undefined, den: ExpVal | undefined, label: string, formula: string, period: string, signed = false) => {
     const v = r.m[k];
-    if (v == null || !num || !den) return <td className="border-b px-3 py-1 text-right text-muted-foreground group-hover:bg-secondary">–</td>;
+    if (v == null || !num || !den) return <td className="border-b px-3 py-1.5 text-right text-muted-foreground group-hover:bg-secondary">—</td>;
     const bad = WORSE_HIGH.includes(k) && cut[k] != null && v >= cut[k]!;
     return (
-      <td className="border-b px-3 py-1 text-right group-hover:bg-secondary">
+      <td className="border-b px-3 py-1.5 text-right group-hover:bg-secondary">
         <button type="button" className={cn("num whitespace-nowrap tabular-nums hover:underline", bad && "text-negative", signed && v < 0 && "text-negative")} onClick={() => open(ratioTarget(r.ticker, label, period, num, den, formula, v))}>
           {fmtPct(v, k === "ltd" ? 0 : signed ? 1 : 2, signed)}
         </button>
@@ -115,21 +114,21 @@ export function BankBooks({ index }: { index: ExposureIndex }) {
         <Segmented label="Lender size" value={size} onChange={setSize} options={SIZES} />
         <p className="text-[11px] text-muted-foreground">By loans at the latest fiscal year-end.</p>
         {nOthers > 0 && (
-          <label className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
             <Switch checked={others} onCheckedChange={setOthers} aria-label="Include other companies with loan books" /> Other companies with loan books ({nOthers})
           </label>
         )}
       </div>
-      <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
         <Stat label="Lenders" value={String(rows.length)} />
         <Stat label="Loans, combined" value={fmtCompactUsd(totalLoans)} hint={`deposits ${fmtCompactUsd(totalDeposits)}`} />
         <Stat label="Median net charge-off rate" value={fmtPct(med.nco, 2)} />
         <Stat label="Median allowance ÷ loans" value={fmtPct(med.acl, 2)} hint={med.npl != null ? `nonaccrual ${fmtPct(med.npl, 2)} of loans` : undefined} />
       </div>
       {!rows.length ? (
-        <p className="rounded-md border bg-card p-6 text-sm text-muted-foreground">No lender of this size yet.</p>
+        <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">No lender of this size yet.</p>
       ) : (
-        <div className="overflow-hidden rounded-md border bg-card shadow-paper">
+        <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
           <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full min-w-[880px] border-separate border-spacing-0 text-[13px]">
               <thead>
@@ -167,30 +166,30 @@ export function BankBooks({ index }: { index: ExposureIndex }) {
                   const prev = (x?: { end: string }) => (x ? fmtDate(x.end, { month: "short", year: "numeric" }) : "");
                   return (
                     <tr key={r.ticker} className="group">
-                      <td className="sticky left-0 z-10 max-w-52 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary">
+                      <td className="sticky left-0 z-10 max-w-52 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary">
                         <span className="flex items-center gap-2" title={byTk.get(r.ticker)?.industry}>
                           <CompanyLogo ticker={r.ticker} className="size-5" />
                           <Link to="/app/companies/$ticker/financials" params={{ ticker: r.ticker }} search={{ basis: "detail" }} className="num font-medium hover:underline">
                             {r.ticker}
                           </Link>
-                          <span className="hidden truncate text-[13px] text-muted-foreground sm:inline" title={`${r.name} · year-end ${fmtDate(b.end)}`}>
-                            {coverageOf(r.ticker)?.shortName ?? r.name}
+                          <span className="hidden truncate text-xs text-muted-foreground sm:inline" title={`${r.name} · year-end ${fmtDate(b.end)}`}>
+                            {r.name}
                           </span>
                         </span>
                       </td>
-                      <td className="border-b px-3 py-1 text-right group-hover:bg-secondary">
+                      <td className="border-b px-3 py-1.5 text-right group-hover:bg-secondary">
                         <button type="button" className="num whitespace-nowrap tabular-nums hover:underline" onClick={() => open(valTarget(r.ticker, "Loans", p, b.loans))}>
                           {fmtCompactUsd(b.loans.v)}
                         </button>
                       </td>
                       {pctCell(r, "loanG", b.loans, b.loansPrior, `Loan growth since ${prev(b.loansPrior)}`, "Loans ÷ prior year-end loans − 1", p, true)}
-                      <td className="border-b px-3 py-1 text-right group-hover:bg-secondary">
+                      <td className="border-b px-3 py-1.5 text-right group-hover:bg-secondary">
                         {b.deposits ? (
                           <button type="button" className="num whitespace-nowrap tabular-nums hover:underline" onClick={() => open(valTarget(r.ticker, "Total deposits", p, b.deposits!))}>
                             {fmtCompactUsd(b.deposits.v)}
                           </button>
                         ) : (
-                          <span className="text-muted-foreground">–</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                       {pctCell(r, "depG", b.deposits, b.depositsPrior, `Deposit growth since ${prev(b.depositsPrior)}`, "Deposits ÷ prior year-end deposits − 1", p, true)}

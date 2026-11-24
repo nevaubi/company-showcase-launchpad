@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { useQueries } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
@@ -7,7 +7,6 @@ import { z } from "zod";
 import { PageHeader, Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { TickerMark } from "@/components/app/ticker";
 import { MultiLine, type LineSeries } from "@/components/charts/multi-line";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSource } from "@/components/source/source-context";
@@ -104,7 +103,7 @@ function partsOf(x: { cell: Cell; label: string }): DerivedPart[] {
 const fmtUsd = (v: number | null | undefined) => {
   if (v == null || !Number.isFinite(v)) return "–";
   const a = Math.abs(v),
-    s = v < 0 ? "\u2212" : "";
+    s = v < 0 ? "−" : "";
   return a >= 1e12
     ? `${s}$${(a / 1e12).toFixed(2)}T`
     : a >= 1e9
@@ -272,14 +271,20 @@ function Compare() {
         description="Up to eight companies side by side. Market and ratio fields from the screener dataset; reported lines trace to the SEC filings."
       />
 
-      <div data-section="Compare picker" data-agent-controls className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {tickers.map((tk) => (
           <span
             key={tk}
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border bg-card pl-2 pr-1 text-[13px]"
+            className="inline-flex h-8 items-center gap-2 rounded-full border bg-card pl-2 pr-1 text-sm font-medium"
           >
-            <span className="size-2 shrink-0 rounded-full" style={{ background: color(tk) }} aria-hidden />
-            <TickerMark ticker={tk} className="hover:underline" />
+            <span className="size-2.5 rounded-full" style={{ background: color(tk) }} />
+            <Link
+              to="/app/companies/$ticker"
+              params={{ ticker: tk }}
+              className="num hover:underline"
+            >
+              {tk}
+            </Link>
             <button
               type="button"
               aria-label={`Remove ${tk}`}
@@ -309,7 +314,8 @@ function Compare() {
                     onClick={() => add(c.ticker)}
                     className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-secondary"
                   >
-                    <TickerMark ticker={c.ticker} name={c.name} link={false} className="min-w-0" />
+                    <span className="num w-14 font-medium">{c.ticker}</span>
+                    <span className="truncate text-muted-foreground">{c.name}</span>
                   </button>
                 ))}
               </div>
@@ -324,11 +330,9 @@ function Compare() {
                 key={c.ticker}
                 type="button"
                 onClick={() => add(c.ticker)}
-                className="inline-flex h-7 items-center gap-1 rounded-md border px-1.5 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                title={`Add ${c.name}`}
+                className="num rounded border px-1.5 py-0.5 hover:bg-secondary hover:text-foreground"
               >
-                <CompanyLogo ticker={c.ticker} size="xs" decorative />
-                <span className="num">{c.ticker}</span>
+                +{c.ticker}
               </button>
             ))}
           </span>
@@ -385,14 +389,14 @@ function Compare() {
           ))}
         </div>
       ) : (
-        <div className="grid min-w-0 grid-cols-1 gap-4">
-          <div data-section="Comparison table" className="min-w-0 overflow-hidden rounded-md border bg-card shadow-paper">
+        <div className="grid gap-4">
+          <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
             <div className="overflow-x-auto scrollbar-thin">
-              <table className="w-full min-w-[640px] border-separate border-spacing-0 text-[13px] leading-5">
+              <table className="w-full min-w-[640px] border-separate border-spacing-0 text-[13px]">
                 <thead>
                   <tr>
-                    <th className="sticky left-0 z-20 min-w-48 border-b border-r bg-card px-3 py-2 text-left align-bottom">
-                      <span className="eyebrow">Metric</span>
+                    <th className="sticky left-0 z-20 min-w-48 border-b border-r bg-card px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                      Metric
                     </th>
                     {tickers.map((tk) => (
                       <th key={tk} className="min-w-32 border-b bg-card px-3 py-2 text-right">
@@ -412,14 +416,14 @@ function Compare() {
                   <tr>
                     <td
                       colSpan={tickers.length + 1}
-                      className="eyebrow border-b bg-secondary/60 px-3 py-1"
+                      className="border-b bg-secondary px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
                     >
                       Reported, from filings
                     </td>
                   </tr>
                   {REPORTED.map((R) => (
                     <tr key={R.key} className="group">
-                      <td className="sticky left-0 z-10 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary">
+                      <td className="sticky left-0 z-10 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary">
                         {R.n}
                       </td>
                       {tickers.map((tk) => {
@@ -466,13 +470,13 @@ function Compare() {
               </table>
             </div>
             <p className="border-t px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
-              Green cell = best in the set, red cell = worst, where a direction is meaningful (lower is better for multiples, leverage and volatility). Ratios use
+              Best and worst in the set are marked where a direction is meaningful. Ratios use
               trailing four quarters and the live price where quoted. Reported lines open every
               filing value that makes them up.
             </p>
           </div>
 
-          <div data-section="Compare charts" className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
             <Panel
               title="Price performance"
               subtitle="Total price change from the first close in the window, %"
@@ -560,7 +564,7 @@ function MetricGroup({
       <tr>
         <td
           colSpan={tickers.length + 1}
-          className="eyebrow border-b bg-secondary/60 px-3 py-1"
+          className="border-b bg-secondary px-3 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
         >
           {title}
         </td>
@@ -571,7 +575,7 @@ function MetricGroup({
         return (
           <tr key={m.id} className="group">
             <td
-              className="sticky left-0 z-10 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary"
+              className="sticky left-0 z-10 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary"
               title={f ? `${f.d}${f.src ? `\nSource: ${f.src}` : ""}` : undefined}
             >
               {f?.n ?? m.n}
@@ -586,7 +590,7 @@ function MetricGroup({
                     "num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary",
                     v == null && "text-muted-foreground/50",
                     tag === "best" && "bg-positive-soft font-medium",
-                    tag === "worst" && "bg-negative-soft",
+                    tag === "worst" && "text-negative",
                   )}
                 >
                   {fmtField(
@@ -631,14 +635,10 @@ function RevenueHistory({
   }));
   const n = Math.max(0, ...hist.map((x) => x.h.length));
   if (!n) return null;
-  // Column labels from the company with the longest history; others are aligned to their latest year.
-  const longest = hist.reduce((a, b) => (b.h.length > a.h.length ? b : a)).h;
-  const sameYears = hist.every(({ h }) => h.length === 0 || h.at(-1)?.[0] === longest.at(-1)?.[0]);
   return (
-    <div data-section="Annual revenue">
     <Panel
       title="Annual revenue"
-      subtitle={sameYears ? "Last ten fiscal years from 10-K filings; fiscal years end in different months" : "Last ten fiscal years from 10-K filings, aligned on each company's latest year"}
+      subtitle="Last ten fiscal years from 10-K filings; fiscal years end in different months"
       collapse={false}
     >
       <div className="overflow-x-auto scrollbar-thin">
@@ -653,7 +653,7 @@ function RevenueHistory({
                   key={i}
                   className="px-3 py-2 text-right text-[11px] font-medium text-muted-foreground"
                 >
-                  {sameYears ? longest[i]?.[0] : i === n - 1 ? "Latest FY" : `FY \u2212${n - 1 - i}`}
+                  {i === n - 1 ? "Latest FY" : `FY −${n - 1 - i}`}
                 </th>
               ))}
               <th className="px-3 py-2 text-right text-[11px] font-medium text-muted-foreground">
@@ -675,8 +675,8 @@ function RevenueHistory({
                 <tr key={tk} className="border-b last:border-0">
                   <td className="px-3 py-1.5">
                     <span className="inline-flex items-center gap-1.5">
-                      <span className="size-2 shrink-0 rounded-full" style={{ background: color(tk) }} aria-hidden />
-                      <TickerMark ticker={tk} />
+                      <span className="size-2 rounded-full" style={{ background: color(tk) }} />
+                      <span className="num font-medium">{tk}</span>
                     </span>
                   </td>
                   {[...pad, ...h].map((x, i) => (
@@ -689,7 +689,7 @@ function RevenueHistory({
                     </td>
                   ))}
                   <td className="num px-3 py-1.5 text-right tabular-nums">
-                    {cagr == null ? "–" : `${cagr < 0 ? "\u2212" : ""}${Math.abs(cagr * 100).toFixed(1)}%`}
+                    {cagr == null ? "–" : `${(cagr * 100).toFixed(1)}%`}
                   </td>
                 </tr>
               );
@@ -698,6 +698,5 @@ function RevenueHistory({
         </table>
       </div>
     </Panel>
-    </div>
   );
 }

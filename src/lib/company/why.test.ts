@@ -23,10 +23,7 @@ describe("whyCards", () => {
           expect(ins.drivers.length).toBeGreaterThan(0);
           expect(ins.drivers.length).toBeLessThanOrEqual(3);
           expect(new Set(ins.drivers.map((x) => x.point)).size).toBe(ins.drivers.length);
-          for (const x of ins.drivers) {
-            expect(x.point).toBeGreaterThanOrEqual(0);
-            expect(x.point).toBeLessThan(8);
-          }
+          for (const x of ins.drivers) expect(x.point).toBeGreaterThanOrEqual(0), expect(x.point).toBeLessThan(8);
           // Drivers explain the change to within what the named lines leave out.
           expect(Math.abs(sum(ins.drivers.map((x) => x.delta)) - change)).toBeLessThanOrEqual(Math.abs(change) * 0.1 + 1);
           // Every driver named in the text exists, and each driver is read out once.

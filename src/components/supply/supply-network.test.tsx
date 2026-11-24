@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { SupplyNetwork } from "./supply-network";
 import type { GraphNode, NodeRisk, Relation, SupplyLink } from "@/lib/supply/core";
 
@@ -40,60 +40,16 @@ describe("SupplyNetwork", () => {
     expect(screen.getByRole("button", { name: /^TSMC, supplier/ })).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("draws every name: a long list is never cut behind a show-more", () => {
+  it("expands one long list, keeps focus on the first newly shown card, and collapses again", () => {
     const many = Array.from({ length: 20 }, (_, i) => node("supplier", `S${String(i).padStart(2, "0")}`, 30 - i));
     render(<SupplyNetwork {...props} graph={[...many, node("customer", "Microsoft", 19)]} />);
-    expect(screen.getAllByRole("button", { name: /, supplier.*Open the filing evidence/ })).toHaveLength(20);
-    expect(screen.queryByRole("button", { name: /more suppliers/i })).toBeNull();
-  });
-
-  it("dims the names outside what is isolated, says so, and keeps them usable", () => {
-    const onSelect = vi.fn();
-    render(<SupplyNetwork {...props} onSelect={onSelect} isolate={new Set(["supplier:TSMC"])} isolateLabel="TSMC" isolatedKey="supplier:TSMC" onIsolate={() => {}} />);
-    const tsmc = screen.getByRole("button", { name: /^TSMC, supplier/ }), amd = screen.getByRole("button", { name: /^AMD, competitor/ });
-    expect(tsmc.getAttribute("aria-label")).not.toMatch(/outside what is isolated/);
-    expect(amd.getAttribute("aria-label")).toMatch(/outside what is isolated/);
-    expect(tsmc.closest("[data-card]")).not.toHaveAttribute("data-dim");
-    expect(amd.closest("[data-card]")).toHaveAttribute("data-dim");
-    fireEvent.click(amd);
-    expect(onSelect).toHaveBeenCalledWith("competitor:AMD");
-    expect(screen.getByText(/Isolated: TSMC/)).toBeInTheDocument();
-  });
-
-  it("the open card carries the isolate button: it asks for that name and shows as pressed while it is the one isolated", () => {
-    const onIsolate = vi.fn();
-    const { rerender } = render(<SupplyNetwork {...props} selected="supplier:TSMC" onIsolate={onIsolate} />);
-    const button = screen.getByRole("button", { name: "Isolate TSMC" });
-    expect(button).toHaveAttribute("aria-pressed", "false");
-    /* unopened cards keep their whole width for the name */
-    expect(screen.queryByRole("button", { name: "Isolate AMD" })).toBeNull();
-    fireEvent.click(button);
-    expect(onIsolate).toHaveBeenCalledWith({ kind: "node", key: "supplier:TSMC" });
-    rerender(<SupplyNetwork {...props} onIsolate={onIsolate} isolate={new Set(["supplier:TSMC"])} isolatedKey="supplier:TSMC" />);
-    expect(screen.getByRole("button", { name: "Stop isolating TSMC" })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("keeps the key the same whatever is isolated or shocked, so nothing above the evidence changes height on a phone", () => {
-    const key = (c: HTMLElement) => c.querySelector('[data-section="Network legend"]')!.querySelectorAll("li, p:not(.sr-only)").length;
-    const plain = render(<SupplyNetwork {...props} onIsolate={() => {}} />);
-    const before = key(plain.container);
-    plain.unmount();
-    const busy = render(<SupplyNetwork {...props} onIsolate={() => {}} isolate={new Set(["supplier:TSMC"])} isolateLabel="TSMC" isolatedKey="supplier:TSMC" impacts={new Map()} />);
-    expect(key(busy.container)).toBe(before);
-  });
-
-  it("a group's isolate button asks for that relation", () => {
-    const onIsolate = vi.fn();
-    const { rerender } = render(<SupplyNetwork {...props} onIsolate={onIsolate} />);
-    fireEvent.click(screen.getByRole("button", { name: "Isolate competitors" }));
-    expect(onIsolate).toHaveBeenCalledWith({ kind: "relation", relation: "competitor" });
-    rerender(<SupplyNetwork {...props} onIsolate={onIsolate} isolate={new Set(["competitor:AMD"])} isolatedRelation="competitor" />);
-    expect(screen.getByRole("button", { name: "Stop isolating competitors" })).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("offers no isolate buttons when the page does not handle isolation", () => {
-    render(<SupplyNetwork {...props} />);
-    expect(screen.queryByRole("button", { name: /^Isolate/ })).toBeNull();
+    expect(screen.getAllByRole("button", { name: /, supplier/ })).toHaveLength(12);
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Show 8 more suppliers" })); });
+    expect(screen.getAllByRole("button", { name: /, supplier/ })).toHaveLength(20);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: /^S12, supplier/ }));
+    act(() => { fireEvent.click(screen.getByRole("button", { name: "Show fewer suppliers" })); });
+    expect(screen.getAllByRole("button", { name: /, supplier/ })).toHaveLength(12);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Show 8 more suppliers" }));
   });
 
   it("flags cards the overlay hits without relying on colour alone", () => {

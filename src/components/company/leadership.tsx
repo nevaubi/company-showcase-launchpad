@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { IrPanel } from "@/components/ir/panel";
+import { Users } from "lucide-react";
+import { Panel } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { useSource } from "@/components/source/source-context";
 import { useCompanyContext } from "@/lib/company/context-query";
@@ -98,8 +99,15 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
   const src = [...new Set(people.map((p) => p.source.form))].join(" & ");
 
   return (
-    <IrPanel section="Management and board" title="Management and board" subtitle={`From the latest ${src} · click anyone for the passage that names them`} bodyClassName="p-4">
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+    <Panel
+      title={
+        <span className="flex items-center gap-1.5">
+          <Users className="size-3.5" /> Leadership & board
+        </span>
+      }
+      subtitle={`From the latest ${src} · click anyone for the passage`}
+    >
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <div className="min-w-0">
           <p className="eyebrow mb-3">Management</p>
           {ceo && (
@@ -113,11 +121,11 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                   openP(ceo);
                 }
               }}
-              className="flex w-full cursor-pointer items-center gap-4 rounded-md border bg-secondary/30 p-3 text-left transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex w-full items-center gap-4 rounded-lg border bg-secondary/30 p-4 text-left transition-colors hover:bg-secondary cursor-pointer"
             >
               <Avatar p={ceo} size="lg" />
               <div className="min-w-0">
-                <p className="text-sm font-semibold leading-5 tracking-tight">{ceo.name}</p>
+                <p className="font-display text-xl leading-tight">{ceo.name}</p>
                 <p className="text-[13px]">{ceo.title}</p>
                 <Meta p={ceo} />
                 {ceo.bio && (
@@ -143,7 +151,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                           openP(p);
                         }
                       }}
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-md border p-2 text-left transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="flex w-full items-center gap-3 rounded-lg border p-2.5 text-left transition-colors hover:bg-secondary cursor-pointer"
                     >
                       <Avatar p={p} />
                       <div className="min-w-0">
@@ -165,7 +173,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
               Board of directors · {board.length} · {board.filter((b) => b.independent).length}{" "}
               independent
             </p>
-            <ul className="grid grid-cols-1 gap-x-2 sm:grid-cols-2">
+            <ul className="divide-y rounded-lg border">
               {board.map((p) => (
                 <li key={p.name}>
                   <div
@@ -178,7 +186,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                         openP(p);
                       }
                     }}
-                    className="flex w-full cursor-pointer items-center gap-3 rounded-md border-b border-border/60 px-2 py-1.5 text-left transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-secondary cursor-pointer"
                   >
                     <Avatar p={p} />
                     <div className="min-w-0 flex-1">
@@ -206,6 +214,6 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
           </div>
         )}
       </div>
-    </IrPanel>
+    </Panel>
   );
 }

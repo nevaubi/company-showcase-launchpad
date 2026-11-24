@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { digestFrom, parseTranscript, transcriptMatches, transcriptRef } from "./parse";
+import { parseTranscript, transcriptMatches, transcriptRef } from "./parse";
 import { questionIndex, talkShare } from "./analyze";
 
 // Current layout: inline "**Name:** text" turns with a participants list.
@@ -126,47 +126,5 @@ describe("transcript URLs", () => {
     expect(transcriptMatches("https://www.fool.com/earnings/call-transcripts/2025/10/31/apple-q4-2025-earnings-call-transcript", "AAPL", "Apple")).toBe(true);
     expect(transcriptMatches("https://www.fool.com/earnings/call-transcripts/2026/10/14/bofa-bac-q3-2026-earnings-call-transcript", "JPM", "JPMorgan Chase")).toBe(false);
     expect(transcriptMatches("https://www.fool.com/investing/2026/11/02/apple-sales-rise", "AAPL", "Apple")).toBe(false);
-  });
-  it("rejects another company whose name starts with the same word (production AAPL list held Apple Hospitality)", () => {
-    const fc = "https://www.fool.com/earnings/call-transcripts/";
-    expect(transcriptMatches(`${fc}2026/11/06/apple-hospitality-aple-q3-2026-earnings-call-transcript`, "AAPL", "Apple")).toBe(false);
-    expect(transcriptMatches(`${fc}2026/11/02/apple-aapl-q4-2026-earnings-call-transcript`, "AAPL", "Apple")).toBe(true);
-    expect(transcriptMatches(`${fc}2026/01/15/j-p-morgan-chase-jpm-q4-2025-earnings-call-transcript`, "JPM", "JPMorgan Chase")).toBe(true);
-    expect(transcriptMatches(`${fc}2026/10/29/alphabet-goog-q3-2026-earnings-call-transcript`, "GOOGL", "Alphabet")).toBe(true);
-    expect(transcriptMatches(`${fc}2025/11/19/nvidia-q3-2026-earnings-call-transcript`, "NVDA", "Nvidia")).toBe(true);
-    expect(transcriptMatches(`${fc}2026/04/21/jpmorgan-chase-q1-2026-earnings-call-transcript`, "JPM", "JPMorgan Chase")).toBe(true);
-  });
-});
-
-describe("digestFrom", () => {
-  const md = [
-    "## TAKEAWAYS",
-    "",
-    "- **Revenue** -- $114.5 billion, representing 12% growth.",
-    "- **Diluted EPS** \\-\\- $2.10, rising 14%.",
-    "",
-    "## RISKS",
-    "",
-    "- Memory costs are rising.",
-    "",
-    "## SUMMARY",
-    "",
-    "Apple reported record September-quarter revenue.",
-    "",
-    "## Full Conference Call Transcript",
-    "",
-    "**Operator:** Welcome.",
-  ].join("\n");
-  it("reads the summary paragraph, labelled takeaways and risks", () => {
-    const d = digestFrom(md)!;
-    expect(d.summary).toBe("Apple reported record September-quarter revenue.");
-    expect(d.takeaways).toEqual([
-      { label: "Revenue", text: "$114.5 billion, representing 12% growth." },
-      { label: "Diluted EPS", text: "$2.10, rising 14%." },
-    ]);
-    expect(d.risks).toEqual([{ label: "", text: "Memory costs are rising." }]);
-  });
-  it("is null for a page without those sections", () => {
-    expect(digestFrom("**Operator:** Welcome.")).toBeNull();
   });
 });

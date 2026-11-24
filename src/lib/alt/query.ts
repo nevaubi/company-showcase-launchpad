@@ -3,7 +3,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { COVERAGE, coverageOf } from "@/lib/coverage";
 import { universeQuery } from "@/lib/data";
 import { ALT_NAMES, REFRESH_DATASET, sharedCores, tickerKeys, type CompanyKeys } from "@/lib/alt/contracts";
-import { SERIES_WATCH, seriesCandidates, confirmSeries, type UnusualItem } from "@/lib/alt/hub";
 import { BUCKET_RECOUNT, eventBuckets, screenAltRows, withScreenColumns, type EventBucket, type ScreenRowLike } from "@/lib/alt/screen";
 
 export interface AltRow {
@@ -88,7 +87,25 @@ async function latestDate(dataset: string): Promise<string | undefined> {
   return (data?.[0]?.date as string | undefined) ?? undefined;
 }
 
-export { DATASETS } from "@/lib/alt/catalog";
+export const DATASETS: Record<string, { label: string; blurb: string; source: string }> = {
+  ownership: { label: "Ownership & activists", blurb: "Schedule 13D (activist) and 13G (5%+ passive) holder filings", source: "SEC EDGAR" },
+  events: { label: "Corporate events", blurb: "8-K items: deals, M&A, new debt, restructurings, impairments, exec changes, auditor changes, restatements, cyber incidents", source: "SEC EDGAR" },
+  contracts: { label: "Government contracts", blurb: "Federal contract obligations by fiscal year and the largest awards", source: "USAspending.gov" },
+  regulatory: { label: "Regulatory actions", blurb: "Rules, proposed rules and notices in the Federal Register naming the company", source: "Federal Register" },
+  fda: { label: "FDA approvals & recalls", blurb: "Drug approvals and new indications, drug/device/food recalls", source: "openFDA" },
+  recalls: { label: "Vehicle & equipment recalls", blurb: "NHTSA recall campaigns and units affected", source: "NHTSA" },
+  complaints: { label: "Consumer complaints", blurb: "CFPB complaints per year with product mix", source: "CFPB" },
+  bank: { label: "Bank call reports", blurb: "Quarterly FDIC data for the main insured bank: deposits, loans, NIM, charge-offs, capital", source: "FDIC" },
+  capital: { label: "Capital markets", blurb: "Shelf registrations, bond/equity takedowns, tender offers, merger registrations and stock-plan filings", source: "SEC EDGAR" },
+  trials: { label: "Clinical trials", blurb: "Trials the company leads as sponsor: phase, status, enrollment and completion dates", source: "ClinicalTrials.gov" },
+  consumer: { label: "Consumer product recalls", blurb: "CPSC recalls naming the company as maker, importer or retailer, with units and hazard", source: "CPSC" },
+  attention: { label: "Public attention", blurb: "Monthly Wikipedia pageviews — a free demand/interest proxy", source: "Wikimedia" },
+  medicare: { label: "Medicare drug spending", blurb: "Gross Medicare spending on the company's drugs — Part D (pharmacy) and Part B (given in clinics) — per year and the latest quarter, before rebates", source: "CMS" },
+  medicare_states: { label: "Medicare drugs by state", blurb: "Gross Medicare Part D drug costs for the company's own brands by the prescriber's state, its slice of each state's Part D spending and how far each state over- or under-indexes vs Medicare overall", source: "CMS" },
+  tri: { label: "Plants & releases", blurb: "EPA Toxics Release Inventory: the company's US plants that handle listed chemicals, by state, with yearly releases and a production index (each plant's reported production this year ÷ last year)", source: "EPA" },
+  deposits: { label: "Deposits by state", blurb: "Branch deposits each June 30 by state and metro area for all the company's insured banks, with its share of each state's deposits", source: "FDIC" },
+  settlement: { label: "Fails to deliver", blurb: "Shares sold but not delivered on settlement day (NSCC), average daily balance per half-month valued at the day's price; persistent or spiking fails can flag hard-to-borrow stock", source: "SEC" },
+};
 
 export interface AltLeader {
   ticker: string;
@@ -150,7 +167,14 @@ export function seriesByTitle(rows: AltRow[]) {
   return m;
 }
 
-export { fmtAlt } from "@/lib/alt/catalog";
+export function fmtAlt(v: number | null, unit: string | null) {
+  if (v == null) return "—";
+  if (unit === "USD") { const a = Math.abs(v); return a >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : a >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : a >= 1e3 ? `$${(v / 1e3).toFixed(0)}K` : `$${v.toFixed(0)}`; }
+  if (unit === "%") return `${v.toFixed(2)}%`;
+  if (unit === "ratio") return `${v.toFixed(2)}×`;
+  if (unit === "lbs") return `${v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${(v / 1e3).toFixed(0)}K` : Math.round(v).toLocaleString()} lb`;
+  return v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e4 ? `${(v / 1e3).toFixed(0)}K` : v.toLocaleString();
+}
 
 /**
  * Event counts per company × dataset in 90-day windows (last ~27 months). The database function counts
@@ -236,27 +260,4 @@ export const medicareStateQuery = (state: string) => ({
     return { latest, rows };
   },
   staleTime: 6 * 60 * 60_000,
-});
-
-/**
- * Series readings unusual for the company across all companies: the leaderboard pre-screens each
- * watched series, then the candidates' recent readings are tested with the company tab's rule.
- */
-export const altSeriesUnusualQuery = () => ({
-  queryKey: ["alt_series_unusual"],
-  queryFn: async ({ client }: { client?: QueryClient }) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const since = new Date(Date.now() - 800 * 864e5).toISOString().slice(0, 10);
-    const out: UnusualItem[] = [];
-    for (const w of SERIES_WATCH) {
-      const { data, error } = await supabase.rpc("alt_series_leaders", { _dataset: w.dataset, _title: w.title });
-      if (error) throw error;
-      const tickers = seriesCandidates((data ?? []) as AltLeader[], w);
-      if (!tickers.length) continue;
-      const rows = await readAltAll<AltRow>("uid,ticker,dataset,kind,date,title,value,unit,meta,source,source_url", (q) => q.eq("dataset", w.dataset).eq("title", w.title).in("ticker", tickers).gte("date", since).order("uid"), client);
-      out.push(...confirmSeries(rows, w, today));
-    }
-    return out;
-  },
-  staleTime: 30 * 60_000,
 });

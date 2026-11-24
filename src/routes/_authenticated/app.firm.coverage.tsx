@@ -170,6 +170,7 @@ function CoveragePage() {
                     key={r.ticker}
                     row={r}
                     name={company.get(r.ticker)?.name}
+                    logo={company.get(r.ticker)?.logo}
                     sector={company.get(r.ticker)?.sector}
                     price={price.get(r.ticker) ?? null}
                     members={members.data ?? []}
@@ -198,8 +199,8 @@ function Tile({ label, value, tone }: { label: string; value: number; tone?: "ne
   );
 }
 
-function CoverageTableRow({ row: r, name, sector, price, members, editable, admin, updatedBy, onSave, onRemove }: {
-  row: CoverageRow; name?: string; sector?: string; price: number | null;
+function CoverageTableRow({ row: r, name, logo, sector, price, members, editable, admin, updatedBy, onSave, onRemove }: {
+  row: CoverageRow; name?: string; logo?: string; sector?: string; price: number | null;
   members: { user_id: string; display_name: string | null; email: string | null }[];
   editable: boolean; admin: boolean; updatedBy: string | null;
   onSave: (patch: Partial<CoverageRow>) => void; onRemove: () => void;
@@ -215,7 +216,7 @@ function CoverageTableRow({ row: r, name, sector, price, members, editable, admi
     <TableRow className={cn(r.restricted && "bg-negative-soft/30")}>
       <TableCell>
         <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }} className="flex items-center gap-2 hover:underline">
-          <CompanyLogo ticker={r.ticker} size="xs" decorative />
+          <CompanyLogo ticker={r.ticker} src={logo} size="xs" />
           <span className="num font-semibold">{r.ticker}</span>
           <span className="max-w-40 truncate text-[12px] text-muted-foreground" title={sector}>{name}</span>
         </Link>

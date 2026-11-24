@@ -57,8 +57,6 @@ export interface TimelineEvent {
   /** External source page (alt data, web) when the event isn't a filing. */
   url?: string;
   tone?: "positive" | "negative" | "neutral";
-  /** Shown instead of the kind's own label ("Earnings call" for a statement taken from a call). */
-  label?: string;
 }
 
 /** Merge, sort newest first, and drop 8-Ks that duplicate an earnings release. */

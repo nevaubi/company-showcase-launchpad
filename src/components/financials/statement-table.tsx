@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { ChartColumnBig } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import { Sparkline } from "@/components/charts/sparkline";
@@ -42,7 +42,7 @@ export function StatementTable({
   freq = "annual",
   charted,
   onToggleChart,
-  maxHeight,
+  maxHeight = "72vh",
 }: {
   statement: Statement;
   ticker: string;
@@ -57,50 +57,18 @@ export function StatementTable({
   /** Row keys currently shown in the chart above the table */
   charted?: string[];
   onToggleChart?: (key: string) => void;
-  /** Kept for callers; the table no longer scrolls vertically inside the page (its head sticks to the page). */
   maxHeight?: string;
 }) {
-  void maxHeight;
   const { open, target } = useSource();
   const scroller = useRef<HTMLDivElement>(null);
-  const lastHead = useRef<HTMLTableCellElement>(null);
   const start = maxPeriods ? Math.max(0, statement.periods.length - maxPeriods) : 0;
   const periods = statement.periods.slice(start);
-  // Rows with no value in the visible periods are left out (a bank's "Gross profit", a line a filer stopped tagging).
-  const rows = useMemo(
-    () => statement.rows.map((r) => ({ ...r, cells: r.cells.slice(start) })).filter((r) => r.cells.some(Boolean)),
-    [statement, start],
-  );
-  // The unit most rows share is stated once in the head; rows in another unit say theirs.
-  const tableUnit = useMemo(() => {
-    const n = new Map<string, number>();
-    for (const r of rows) n.set(r.unit, (n.get(r.unit) ?? 0) + 1);
-    return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] as Row["unit"] | undefined;
-  }, [rows]);
+  const rows = useMemo(() => statement.rows.map((r) => ({ ...r, cells: r.cells.slice(start) })), [statement, start]);
 
-  // When the table fits, it does not scroll sideways, so its head can stick to the page; otherwise it
-  // scrolls inside its own wrapper and opens on the latest period (not on the trend columns).
-  const [fits, setFits] = useState(true);
-  useLayoutEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const check = () => setFits(el.scrollWidth <= el.clientWidth + 1);
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [rows, periods.length]);
   useEffect(() => {
     const el = scroller.current;
-    const th = lastHead.current;
-    if (!el || fits) return;
-    const id = requestAnimationFrame(() => {
-      if (!th) return void (el.scrollLeft = el.scrollWidth);
-      // Bring the latest period's right edge to the wrapper's right edge.
-      el.scrollLeft += th.getBoundingClientRect().right - el.getBoundingClientRect().right;
-    });
-    return () => cancelAnimationFrame(id);
-  }, [statement, maxPeriods, fits, periods.length]);
+    if (el) el.scrollLeft = el.scrollWidth;
+  }, [statement, maxPeriods]);
 
   // The filing behind each column: the accession most cells in that period came from.
   const columnFiling = useMemo(
@@ -111,10 +79,6 @@ export function StatementTable({
           const a = r.cells[i]?.src?.accn;
           if (a) counts.set(a, (counts.get(a) ?? 0) + 1);
         }
-        // A calculated column (a fourth quarter) is labelled by the filing of its positive parts (the 10-K).
-        if (!counts.size)
-          for (const r of rows)
-            for (const p of r.cells[i]?.derived?.parts ?? []) if (p.sign === 1) counts.set(p.accn, (counts.get(p.accn) ?? 0) + 1);
         const accn = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
         return accn ? filingsByAccn.get(accn) : undefined;
       }),
@@ -152,47 +116,28 @@ export function StatementTable({
   };
 
   return (
-    <div data-section="Financial statements" className="min-w-0 overflow-clip rounded-lg border bg-card shadow-paper">
-      <div ref={scroller} className={cn("scrollbar-thin", fits ? "overflow-visible" : "overflow-x-auto")}>
+    <div className="min-w-0 overflow-hidden rounded-lg border bg-card shadow-paper">
+      <div ref={scroller} className="overflow-auto scrollbar-thin" style={{ maxHeight }}>
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
-              <th className={cn("sticky left-0 z-30 w-44 min-w-44 border-b border-r bg-card px-3 py-2 text-left align-bottom sm:w-auto sm:min-w-72 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}>
+              <th className="sticky left-0 top-0 z-30 min-w-56 border-b border-r bg-card px-4 py-2 text-left align-bottom sm:min-w-72">
                 <span className="eyebrow">Line item</span>
-                {tableUnit && <span className="num ml-2 text-[11px] font-normal text-muted-foreground">{unitLabel(tableUnit, scale)}</span>}
               </th>
               {periods.map((p, i) => {
                 const f = columnFiling[i];
-                const read = (p as Period & { readFrom?: { form: string; filed: string } }).readFrom;
                 return (
-                  <th
-                    key={p.key}
-                    ref={i === periods.length - 1 ? lastHead : undefined}
-                    className={cn("z-20 border-b bg-card px-3 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]", read && "bg-highlight-soft")}
-                  >
+                  <th key={p.key} className="sticky top-0 z-20 border-b bg-card px-3 py-2 text-right align-bottom">
                     <span className="num block text-[11px] font-semibold">{p.label}</span>
-                    <span className="num block text-[11px] font-normal text-muted-foreground">{fmtDate(p.end, { month: "short", year: "2-digit" })}</span>
-                    {read ? (
-                      <Tooltip delayDuration={250}>
-                        <TooltipTrigger asChild>
-                          <span tabIndex={0} className="num block text-[10px] font-normal uppercase tracking-wide text-foreground/80 underline decoration-dotted underline-offset-2">
-                            {read.form} · new
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-60 text-xs">
-                          Read at view time from the {read.form} filed {fmtDate(read.filed)}. The scheduled rebuild has not added this period yet.
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="num block text-[10px] font-normal uppercase tracking-wide text-muted-foreground/70">{f?.form ?? "\u00a0"}</span>
-                    )}
+                    <span className="num block text-[10px] font-normal text-muted-foreground">{fmtDate(p.end, { month: "short", year: "2-digit" })}</span>
+                    {f && <span className="num block text-[9px] font-normal uppercase tracking-wide text-muted-foreground/70">{f.form}</span>}
                   </th>
                 );
               })}
-              <th className={cn("z-20 border-b border-l bg-card px-3 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
+              <th className="sticky top-0 z-20 border-b border-l bg-card px-3 py-2 text-right align-bottom">
                 <span className="eyebrow">{freq === "annual" ? "CAGR" : "YoY"}</span>
               </th>
-              <th className={cn("z-20 border-b bg-card px-3 py-2 text-left align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
+              <th className="sticky top-0 z-20 border-b bg-card px-3 py-2 text-left align-bottom">
                 <span className="eyebrow">Trend</span>
               </th>
             </tr>
@@ -207,7 +152,7 @@ export function StatementTable({
                   <th
                     scope="row"
                     className={cn(
-                      "sticky left-0 z-10 max-w-44 border-b border-r bg-card px-2 py-1.5 text-left font-normal transition-colors group-hover:bg-secondary sm:max-w-none",
+                      "sticky left-0 z-10 border-b border-r bg-card px-2 py-1.5 text-left font-normal transition-colors group-hover:bg-secondary",
                       row.bold && "font-semibold",
                       isCharted && "bg-highlight-soft",
                     )}
@@ -229,8 +174,8 @@ export function StatementTable({
                       ) : (
                         <span className="w-2" />
                       )}
-                      <span className={cn("truncate", row.kind === "kpi" && row.unit === "usd" && "italic")} title={row.label}>{row.label}</span>
-                      {row.unit !== tableUnit && <span className="num ml-auto whitespace-nowrap pl-2 text-[11px] font-normal text-muted-foreground">{unitLabel(row.unit, scale)}</span>}
+                      <span className={cn(row.kind === "kpi" && row.unit === "usd" && "italic")}>{row.label}</span>
+                      <span className="num ml-auto pl-3 text-[10px] font-normal text-muted-foreground">{unitLabel(row.unit, scale)}</span>
                     </span>
                   </th>
                   {row.cells.map((cell, i) => {

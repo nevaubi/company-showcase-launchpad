@@ -31,9 +31,6 @@ export const INCOME_LINES: LineDef[] = [
     [
       "Revenues",
       "RevenuesNetOfInterestExpense",
-      // Utilities' face total ("Total operating revenues"); without it Duke's FY2025 revenue was the
-      // $31,741M contract-revenue note figure instead of the $32,237M on its income statement.
-      "RegulatedAndUnregulatedOperatingRevenue",
       "RevenueFromContractWithCustomerExcludingAssessedTax",
       "SalesRevenueNet",
       "RevenueFromContractWithCustomerIncludingAssessedTax",
@@ -208,7 +205,7 @@ export const BALANCE_LINES: LineDef[] = [
     "Short-term debt & current maturities",
     ["DebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent", "ShortTermBorrowingsAndCurrentPortionOfLongTermDebt"],
     "stock",
-    { components: ["LongTermDebtCurrent", "CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings", "NotesPayableCurrent"] },
+    { components: ["LongTermDebtCurrent", "CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings"] },
   ),
   usd("currentLiabilities", "Total current liabilities", ["LiabilitiesCurrent"], "stock", { bold: true }),
   usd(
@@ -220,10 +217,6 @@ export const BALANCE_LINES: LineDef[] = [
       "LongTermDebt",
       "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
       "LongTermDebtAndFinanceLeaseObligations",
-      // Oracle's balance sheet line ("Notes payable and other borrowings, non-current").
-      "LongTermNotesAndLoans",
-      // Company extension (read from the filings' inline XBRL at ingest): Deere's "Long-term borrowings".
-      "de:LongTermDebtAndFinanceLeasesNoncurrent",
     ],
     "stock",
   ),

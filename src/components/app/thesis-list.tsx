@@ -4,7 +4,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuotes } from "@/lib/data";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { TickerMark } from "@/components/app/ticker";
 
 export type ThesisRow = { id: string; ticker: string; title: string; stance: string; entry_price: number | null; target_price: number | null; status: string; updated_at: string; user_id?: string; firm_id?: string | null };
 
@@ -33,7 +32,7 @@ export function ThesisList({ theses, loading, userId }: { theses: ThesisRow[]; l
           <li key={t.id}>
             <Link to="/app/theses/$id" params={{ id: t.id }} className="block px-4 py-3 hover:bg-secondary/60">
               <div className="flex items-center gap-2">
-                <TickerMark ticker={t.ticker} size="2xs" link={false} />
+                <span className="num text-xs font-semibold">{t.ticker}</span>
                 <Badge variant={t.stance === "long" ? "positive" : t.stance === "short" ? "negative" : "outline"} className="capitalize">
                   {t.stance}
                 </Badge>

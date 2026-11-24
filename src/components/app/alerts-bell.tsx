@@ -12,7 +12,6 @@ import { readAlt } from "@/lib/alt/query";
 import { buildAlerts, unreadCount, type Alert, type AlertKind } from "@/lib/alerts/core";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { TickerMark } from "@/components/app/ticker";
 
 const ICON: Record<AlertKind, typeof Bell> = { filing: FileText, insider: UserRound, supply: Network, alt: ShoppingBag, idea: TrendingUp };
 const DAYS = 30;
@@ -108,7 +107,7 @@ export function AlertsBell() {
                   <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <TickerMark ticker={a.ticker} size="2xs" link={false} className="text-foreground" />
+                      <span className="font-medium text-foreground">{a.ticker}</span>
                       <span>{fmtDate(a.at.slice(0, 10))}</span>
                       {isNew && <span className="size-1.5 rounded-full bg-destructive" />}
                     </div>

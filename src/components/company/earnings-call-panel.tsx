@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { friendlyError } from "@/lib/errors";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { ExternalLink, RefreshCw, ScrollText } from "lucide-react";
+import { ExternalLink, Mic, RefreshCw, ScrollText } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -31,9 +31,11 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
   const b = q.data?.brief;
   return (
     <Panel
-      className="rounded-md border bg-card shadow-paper"
-      collapse={false}
-      title={<span className="text-sm">Latest earnings call</span>}
+      title={
+        <span className="flex items-center gap-1.5">
+          <Mic className="size-3.5" /> Latest earnings call
+        </span>
+      }
       subtitle={
         b
           ? `${b.title} · researched from ${b.sources.length} web sources · ${fmtRelative(b.generatedAt)}`

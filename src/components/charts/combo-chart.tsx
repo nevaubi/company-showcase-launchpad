@@ -121,8 +121,8 @@ export function ComboChart({
       <svg width={width} height={height} className="block" role="img" aria-label={series.map((s) => s.label).join(", ")}>
         <g transform={`translate(${margin.left},${margin.top})`}>
           {yL.ticks(4).map((t) => (
-            <g key={t} transform={`translate(0,${Math.round(yL(t)) + 0.5})`}>
-              <line x1={0} x2={iw} stroke="var(--border)" strokeDasharray={t === 0 && zeroLine ? undefined : "2 3"} shapeRendering="crispEdges" />
+            <g key={t} transform={`translate(0,${yL(t)})`}>
+              <line x1={0} x2={iw} stroke="var(--border)" strokeDasharray={t === 0 && zeroLine ? undefined : "2 3"} />
               <text x={-8} dy="0.32em" textAnchor="end" className="fill-muted-foreground font-mono text-[10px]">
                 {fmtL(t)}
               </text>

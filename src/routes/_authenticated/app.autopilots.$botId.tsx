@@ -1,23 +1,19 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
+import { ArrowDownRight, ArrowLeft, ArrowUpRight, Pause, Play, RotateCcw, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
-import { DataUnavailable } from "@/components/app/data-unavailable";
 import { PageHeader, Panel } from "@/components/app/page-header";
-import { TickerMark } from "@/components/app/ticker";
-import { EquityChart, rulesSummary } from "@/components/autopilot/shared";
-import { BotStrip } from "@/components/signals/bot-strip";
-import { NUM, SideTag, TD, TH } from "@/components/signals/parts";
+import { CompanyLogo } from "@/components/app/company-logo";
+import { BotStatStrip, EquityChart, rulesSummary, variantLabel } from "@/components/autopilot/shared";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
-import { fmtPrice } from "@/lib/format";
+import { fmtDate, fmtPct, fmtPrice, toneClass, toneOf } from "@/lib/format";
 import { parseRules, type Position } from "@/lib/signals/bots";
-import { dayLong, dayShort, holdLabel, nameOf, pct, price } from "@/lib/signals/format";
 import { botDetailQuery } from "@/lib/signals/queries";
 import { STRATEGY, type StrategyId } from "@/lib/signals/strategies";
 import { cn } from "@/lib/utils";
@@ -37,21 +33,31 @@ export const Route = createFileRoute("/_authenticated/app/autopilots/$botId")({
 });
 
 const strategyName = (s: string) => STRATEGY[s as StrategyId]?.label ?? s;
-const tone = (v: number | null | undefined) => (v == null || v === 0 ? "" : v > 0 ? "text-positive" : "text-negative");
 
-/** Logo, symbol and name in one 28 px cell; the name is dropped on a phone so the figures stay in reach. */
+function Side({ side }: { side: 1 | -1 }) {
+  return (
+    <span className={cn("inline-flex items-center gap-0.5 text-xs font-semibold", side > 0 ? "text-positive" : "text-negative")}>
+      {side > 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
+      {side > 0 ? "Long" : "Short"}
+    </span>
+  );
+}
+
 function Stock({ p }: { p: Position }) {
   return (
-    <>
-      <TickerMark ticker={p.ticker} className="align-top sm:hidden" />
-      <TickerMark ticker={p.ticker} name={nameOf(p.ticker) ?? p.name ?? undefined} className="hidden align-top sm:inline-flex" />
-    </>
+    <Link to="/app/companies/$ticker" params={{ ticker: p.ticker }} className="flex items-center gap-2">
+      <CompanyLogo ticker={p.ticker} size="sm" />
+      <span className="min-w-0">
+        <span className="block font-medium">{p.ticker}</span>
+        <span className="block max-w-[9rem] truncate text-[11px] text-muted-foreground">{p.name}</span>
+      </span>
+    </Link>
   );
 }
 
 function BotPage() {
   const { botId } = Route.useParams();
-  const { data, isLoading, error, refetch } = useQuery(botDetailQuery(botId));
+  const { data, isLoading, error } = useQuery(botDetailQuery(botId));
   const [uid, setUid] = useState<string | null>(null);
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -75,7 +81,7 @@ function BotPage() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Autopilot reset. It starts again with tonight's signals.");
+      toast.success("Autopilot reset — it starts again with tonight's signals");
       refresh();
     },
     onError: (e) => toast.error((e as Error).message),
@@ -104,7 +110,7 @@ function BotPage() {
     onError: (e) => toast.error((e as Error).message),
   });
 
-  if (error) return <DataUnavailable title="This autopilot could not load" error={error} onRetry={() => void refetch()} />;
+  if (error) return <p className="text-sm text-muted-foreground">This autopilot could not load: {(error as Error).message}</p>;
   if (isLoading || !data) return <div className="space-y-3"><Skeleton className="h-16" /><Skeleton className="h-20" /><Skeleton className="h-56" /></div>;
   if (!data.bot) return <p className="text-sm text-muted-foreground">This autopilot doesn't exist or isn't shared with you. <Link to="/app/autopilots" className="underline">Back to autopilots</Link></p>;
   const bot = data.bot;
@@ -117,64 +123,63 @@ function BotPage() {
   return (
     <div className="space-y-5">
       <PageHeader
-        eyebrow={<Link to="/app/autopilots" className="inline-flex items-center gap-1 hover:underline"><ArrowLeft className="h-3 w-3" aria-hidden /> Autopilots</Link>}
+        eyebrow={<Link to="/app/autopilots" className="inline-flex items-center gap-1 hover:underline"><ArrowLeft className="h-3 w-3" /> Autopilots</Link>}
         title={bot.name}
         description={bot.description ?? undefined}
         actions={
-          <>
-            <span className={cn("inline-flex h-[18px] items-center rounded border px-1.5 text-[11px] leading-none", bot.status === "active" ? "border-positive/50 text-positive" : "text-muted-foreground")}>{bot.status === "active" ? "Running" : "Paused"}</span>
-            <span className="text-[11px] text-muted-foreground">{bot.last_as_of ? `Updated through ${dayLong(bot.last_as_of)}` : "Starts after the next close"} · {bot.user_id ? "yours" : "house autopilot"}</span>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className={cn("rounded border px-1.5 py-0.5", bot.status === "active" ? "text-positive" : "text-muted-foreground")}>{bot.status === "active" ? "Running" : "Paused"}</span>
+            <span className="text-muted-foreground">{bot.last_as_of ? `Updated through ${fmtDate(bot.last_as_of)}` : "Starts after the next close"} · {bot.user_id ? "yours" : "house autopilot"}</span>
             {own && (
               <>
-                <Button size="xs" variant="outline" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
-                  {bot.status === "active" ? <><Pause aria-hidden /> Pause</> : <><Play aria-hidden /> Resume</>}
+                <Button size="sm" variant="outline" className="h-7" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
+                  {bot.status === "active" ? <><Pause className="mr-1 h-3.5 w-3.5" /> Pause</> : <><Play className="mr-1 h-3.5 w-3.5" /> Resume</>}
                 </Button>
                 <Confirm title="Reset this autopilot?" body="All its positions, trades and equity history are deleted and it starts again from its starting capital." action="Reset" onConfirm={() => reset.mutate()}>
-                  <Button size="xs" variant="ghost"><RotateCcw aria-hidden /> Reset</Button>
+                  <Button size="sm" variant="ghost" className="h-7"><RotateCcw className="mr-1 h-3.5 w-3.5" /> Reset</Button>
                 </Confirm>
                 <Confirm title="Delete this autopilot?" body="Its positions, trades and history are deleted. This can't be undone." action="Delete" onConfirm={() => remove.mutate()}>
-                  <Button size="xs" variant="ghost" className="text-negative"><Trash2 aria-hidden /> Delete</Button>
+                  <Button size="sm" variant="ghost" className="h-7 text-negative"><Trash2 className="mr-1 h-3.5 w-3.5" /> Delete</Button>
                 </Confirm>
               </>
             )}
-          </>
+          </div>
         }
       />
-      {bot.last_error && <p className="rounded border px-3 py-2 text-[11px] leading-4 text-negative">{bot.last_error}</p>}
+      {bot.last_error && <p className="rounded border px-3 py-2 text-xs text-negative">{bot.last_error}</p>}
 
-      <BotStrip capital={Number(bot.capital)} equity={data.equity} closed={closed} open={open.length + pending.length} />
+      <BotStatStrip capital={Number(bot.capital)} equity={data.equity} closed={closed} open={open.length + pending.length} />
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <Panel title="Equity against the S&P 500" subtitle="Both rebased to 100 on the first day and marked at each close" collapse={false}>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[2fr_1fr]">
+        <Panel title="Equity vs the S&P 500" subtitle="Both rebased to 100 on the first day; marked at each close" collapse={false}>
           <div data-section="Equity curve"><EquityChart capital={Number(bot.capital)} equity={data.equity} /></div>
         </Panel>
-        <Panel title="Rules" subtitle={`Started ${dayLong(bot.started_on)} with ${fmtPrice(Number(bot.capital))}`} collapse={false}>
-          <ul className="list-disc space-y-1 pl-4 text-[13px] leading-5" data-section="Rules">
+        <Panel title="Rules" subtitle={`Started ${fmtDate(bot.started_on)} with ${fmtPrice(Number(bot.capital))}`} collapse={false}>
+          <ul className="list-disc space-y-1 pl-4 text-xs" data-section="Rules">
             {rulesSummary(bot.rules).map((r) => <li key={r}>{r}</li>)}
             <li className="text-muted-foreground">Signals are queued after the close and filled at the next open. Trading costs and short borrow are charged on each exit.</li>
           </ul>
-          <p className="mt-2 text-[11px] leading-4 text-muted-foreground">Each rule's evidence is on the <Link to="/app/setups" className="underline underline-offset-2">setups scoreboard</Link>.</p>
+          {rules.select === "variants" && rules.variants.length > 0 && (
+            <p className="mt-2 text-[11px] text-muted-foreground">See each rule's evidence on the <Link to="/app/setups" className="underline">setups scoreboard</Link>.</p>
+          )}
         </Panel>
       </div>
 
-      <Panel title="Open positions" subtitle={open.length ? `${open.length} open, marked at the latest close` : "None open"} collapse={false}>
+      <Panel title="Open positions" subtitle={open.length ? `${open.length} open · marked at the latest close` : "None open"} collapse={false}>
         {open.length ? (
-          <div className="-mx-3.5 overflow-x-auto" data-section="Open positions">
-            <table className="w-full min-w-[620px] border-collapse sm:min-w-[860px]">
-              <thead>
-                <tr className="border-b">
-                  <th scope="col" className={cn(TH, "pl-3.5")}>Stock</th>
-                  <th scope="col" className={TH}>Side</th>
-                  <th scope="col" className={TH}>Rule</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Hold</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Entered</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Entry</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Last</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Return</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Size</th>
-                  {rules.exits === "stops" && <th scope="col" className={cn(TH, "text-right")}>Stop</th>}
-                  {rules.exits === "stops" && <th scope="col" className={cn(TH, "text-right")}>Target</th>}
-                  <th className={cn(TH, "pr-3.5")} aria-label="Actions" />
+          <div className="overflow-x-auto" data-section="Open positions">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="text-left text-[11px] text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-normal">Stock</th>
+                  <th className="pr-3 font-normal">Strategy</th>
+                  <th className="pr-3 font-normal">Entered</th>
+                  <th className="pr-3 text-right font-normal">Entry</th>
+                  <th className="pr-3 text-right font-normal">Last</th>
+                  <th className="pr-3 text-right font-normal">Return</th>
+                  <th className="pr-3 text-right font-normal">Size</th>
+                  {rules.exits === "stops" && <th className="pr-3 text-right font-normal">Stop / target</th>}
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -182,20 +187,17 @@ function BotPage() {
                   const last = data.last.get(p.ticker);
                   const ret = last && p.entry_price ? (p.side * (last.close - p.entry_price)) / p.entry_price : null;
                   return (
-                    <tr key={p.id} className="border-b last:border-b-0">
-                      <td className={cn(TD, "max-w-[15rem] pl-3.5")}><Stock p={p} /></td>
-                      <td className={TD}><SideTag side={p.side} /></td>
-                      <td className={cn(TD, "whitespace-nowrap")}>{strategyName(p.strategy)}{p.close_requested ? <span className="text-muted-foreground"> · closing at the next close</span> : null}</td>
-                      <td className={cn(TD, "whitespace-nowrap text-right text-muted-foreground")}>{holdLabel(p.horizon)}</td>
-                      <td className={cn(TD, NUM, "text-muted-foreground")}>{dayShort(p.entry_date)}</td>
-                      <td className={cn(TD, NUM)}>{price(p.entry_price)}</td>
-                      <td className={cn(TD, NUM)}>{price(last?.close)}</td>
-                      <td className={cn(TD, NUM, tone(ret))}>{pct(ret)}</td>
-                      <td className={cn(TD, NUM, "text-muted-foreground")}>{fmtPrice(p.notional)}</td>
-                      {rules.exits === "stops" && <td className={cn(TD, NUM)}>{price(p.stop)}</td>}
-                      {rules.exits === "stops" && <td className={cn(TD, NUM)}>{price(p.target)}</td>}
-                      <td className={cn(TD, "py-0 pr-3.5 text-right")}>
-                        {own && !p.close_requested && <Button size="xs" variant="ghost" onClick={() => closePos.mutate(p.id!)} disabled={closePos.isPending}><X aria-hidden /> Close</Button>}
+                    <tr key={p.id} className="border-t align-middle">
+                      <td className="py-2 pr-3"><Stock p={p} /></td>
+                      <td className="pr-3"><div className="flex items-center gap-1.5"><Side side={p.side} /><span>{strategyName(p.strategy)}</span></div><div className="text-[11px] text-muted-foreground">Hold {p.horizon} days{p.close_requested ? " · closing at next close" : ""}</div></td>
+                      <td className="pr-3 text-xs">{fmtDate(p.entry_date!)}</td>
+                      <td className="pr-3 text-right tabular-nums">{fmtPrice(p.entry_price)}</td>
+                      <td className="pr-3 text-right tabular-nums">{fmtPrice(last?.close)}</td>
+                      <td className={cn("pr-3 text-right tabular-nums", toneClass[toneOf(ret)])}>{fmtPct(ret, 2, true)}</td>
+                      <td className="pr-3 text-right tabular-nums text-xs text-muted-foreground">{fmtPrice(p.notional)}</td>
+                      {rules.exits === "stops" && <td className="pr-3 text-right text-xs tabular-nums text-muted-foreground">{fmtPrice(p.stop)} / {fmtPrice(p.target)}</td>}
+                      <td className="text-right">
+                        {own && !p.close_requested && <Button size="sm" variant="ghost" className="h-7" onClick={() => closePos.mutate(p.id!)} disabled={closePos.isPending}><X className="mr-1 h-3.5 w-3.5" /> Close</Button>}
                       </td>
                     </tr>
                   );
@@ -204,35 +206,31 @@ function BotPage() {
             </table>
           </div>
         ) : (
-          <p className="text-[13px] leading-5 text-muted-foreground" data-section="Open positions">{pending.length ? "Orders are queued for the next open." : bot.status === "active" ? "Waiting for signals that match the rules." : "Paused: no new positions."}</p>
+          <p className="py-1 text-sm text-muted-foreground">{pending.length ? "Orders are queued for the next open." : bot.status === "active" ? "Waiting for signals that match the rules." : "Paused — no new positions."}</p>
         )}
       </Panel>
 
       {pending.length > 0 && (
         <Panel title="Queued for the next open" subtitle="From the latest close's signals" collapse={false}>
-          <div className="-mx-3.5 overflow-x-auto" data-section="Queued orders">
-            <table className="w-full min-w-[560px] border-collapse">
-              <thead>
-                <tr className="border-b">
-                  <th scope="col" className={cn(TH, "pl-3.5")}>Stock</th>
-                  <th scope="col" className={TH}>Side</th>
-                  <th scope="col" className={TH}>Rule</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Hold</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Signal</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Signal close</th>
-                  <th className={cn(TH, "pr-3.5")} aria-label="Actions" />
+          <div className="overflow-x-auto" data-section="Queued orders">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="text-left text-[11px] text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-normal">Stock</th>
+                  <th className="pr-3 font-normal">Strategy</th>
+                  <th className="pr-3 font-normal">Signal</th>
+                  <th className="pr-3 text-right font-normal">Signal close</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
                 {pending.map((p) => (
-                  <tr key={p.id} className="border-b last:border-b-0">
-                    <td className={cn(TD, "max-w-[15rem] pl-3.5")}><Stock p={p} /></td>
-                    <td className={TD}><SideTag side={p.side} /></td>
-                    <td className={cn(TD, "whitespace-nowrap")}>{strategyName(p.strategy)}</td>
-                    <td className={cn(TD, "whitespace-nowrap text-right text-muted-foreground")}>{holdLabel(p.horizon)}</td>
-                    <td className={cn(TD, NUM, "text-muted-foreground")}>{dayShort(p.signal_date)}</td>
-                    <td className={cn(TD, NUM)}>{price(p.signal_price)}</td>
-                    <td className={cn(TD, "py-0 pr-3.5 text-right")}>{own && !p.close_requested && <Button size="xs" variant="ghost" onClick={() => closePos.mutate(p.id!)}><X aria-hidden /> Cancel</Button>}</td>
+                  <tr key={p.id} className="border-t">
+                    <td className="py-2 pr-3"><Stock p={p} /></td>
+                    <td className="pr-3"><div className="flex items-center gap-1.5"><Side side={p.side} /><span className="text-xs">{variantLabel(p.variant)}</span></div></td>
+                    <td className="pr-3 text-xs">{fmtDate(p.signal_date)}</td>
+                    <td className="pr-3 text-right tabular-nums">{fmtPrice(p.signal_price)}</td>
+                    <td className="text-right">{own && !p.close_requested && <Button size="sm" variant="ghost" className="h-7" onClick={() => closePos.mutate(p.id!)}><X className="mr-1 h-3.5 w-3.5" /> Cancel</Button>}</td>
                   </tr>
                 ))}
               </tbody>
@@ -241,48 +239,42 @@ function BotPage() {
         </Panel>
       )}
 
-      <Panel title="Closed trades" subtitle={closed.length ? `${closed.length} trades, returns after costs` : "None yet"} collapse={false}>
+      <Panel title="Closed trades" subtitle={closed.length ? `${closed.length} trades · returns after costs` : "None yet"}>
         {closed.length ? (
-          <div className="-mx-3.5 overflow-x-auto" data-section="Closed trades">
-            <table className="w-full min-w-[620px] border-collapse sm:min-w-[900px]">
-              <thead>
-                <tr className="border-b">
-                  <th scope="col" className={cn(TH, "pl-3.5")}>Stock</th>
-                  <th scope="col" className={TH}>Side</th>
-                  <th scope="col" className={TH}>Rule</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Entered</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Exited</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Entry</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Exit</th>
-                  <th scope="col" className={TH}>Why it closed</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Profit</th>
-                  <th scope="col" className={cn(TH, "text-right")}>Return</th>
-                  <th scope="col" className={cn(TH, "pr-3.5 text-right")} title="The S&P 500 over the same days">S&P 500</th>
+          <div className="overflow-x-auto" data-section="Closed trades">
+            <table className="w-full min-w-[820px] text-sm">
+              <thead className="text-left text-[11px] text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-normal">Stock</th>
+                  <th className="pr-3 font-normal">Strategy</th>
+                  <th className="pr-3 font-normal">Held</th>
+                  <th className="pr-3 text-right font-normal">Entry → exit</th>
+                  <th className="pr-3 font-normal">Why it closed</th>
+                  <th className="pr-3 text-right font-normal">P&L</th>
+                  <th className="pr-3 text-right font-normal">Return</th>
+                  <th className="pr-3 text-right font-normal">S&P same days</th>
                 </tr>
               </thead>
               <tbody>
                 {closed.map((p) => (
-                  <tr key={p.id} className="border-b last:border-b-0">
-                    <td className={cn(TD, "max-w-[15rem] pl-3.5")}><Stock p={p} /></td>
-                    <td className={TD}><SideTag side={p.side} /></td>
-                    <td className={cn(TD, "whitespace-nowrap")}>{strategyName(p.strategy)}</td>
-                    <td className={cn(TD, NUM, "text-muted-foreground")}>{dayShort(p.entry_date)}</td>
-                    <td className={cn(TD, NUM, "text-muted-foreground")}>{dayShort(p.exit_date)}</td>
-                    <td className={cn(TD, NUM)}>{price(p.entry_price)}</td>
-                    <td className={cn(TD, NUM)}>{price(p.exit_price)}</td>
-                    <td className={cn(TD, "whitespace-nowrap text-muted-foreground")}>{p.exit_reason}</td>
-                    <td className={cn(TD, NUM, tone(p.pnl))}>{p.pnl == null ? "–" : `${p.pnl < 0 ? "−" : ""}${fmtPrice(Math.abs(p.pnl))}`}</td>
-                    <td className={cn(TD, NUM, tone(p.ret))}>{pct(p.ret)}</td>
-                    <td className={cn(TD, NUM, "pr-3.5 text-muted-foreground")}>{pct(p.ret_spy)}</td>
+                  <tr key={p.id} className="border-t">
+                    <td className="py-2 pr-3"><Stock p={p} /></td>
+                    <td className="pr-3"><div className="flex items-center gap-1.5"><Side side={p.side} /><span>{strategyName(p.strategy)}</span></div></td>
+                    <td className="pr-3 text-xs">{fmtDate(p.entry_date!)} – {fmtDate(p.exit_date!)}</td>
+                    <td className="pr-3 text-right tabular-nums text-xs">{fmtPrice(p.entry_price)} → {fmtPrice(p.exit_price)}</td>
+                    <td className="pr-3 text-xs">{p.exit_reason}</td>
+                    <td className={cn("pr-3 text-right tabular-nums", toneClass[toneOf(p.pnl)])}>{fmtPrice(p.pnl)}</td>
+                    <td className={cn("pr-3 text-right tabular-nums", toneClass[toneOf(p.ret)])}>{fmtPct(p.ret, 2, true)}</td>
+                    <td className="pr-3 text-right tabular-nums text-muted-foreground">{fmtPct(p.ret_spy, 2, true)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          <p className="text-[13px] leading-5 text-muted-foreground" data-section="Closed trades">Trades appear here once their holding period ends.</p>
+          <p className="py-1 text-sm text-muted-foreground">Trades appear here once their holding period ends.</p>
         )}
-        {cancelled.length > 0 && <p className="mt-2 text-[11px] leading-4 text-muted-foreground">{cancelled.length} queued order{cancelled.length === 1 ? " was" : "s were"} cancelled (no cash, no trading, or cancelled by you).</p>}
+        {cancelled.length > 0 && <p className="mt-2 text-[11px] text-muted-foreground">{cancelled.length} queued order{cancelled.length === 1 ? " was" : "s were"} cancelled (no cash, no trading, or cancelled by you).</p>}
       </Panel>
     </div>
   );

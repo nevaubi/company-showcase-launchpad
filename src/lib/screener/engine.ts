@@ -623,37 +623,28 @@ export function run(all: Row[], spec: Spec, F: Map<string, FieldDef>, q = "") {
 }
 
 /* ---------- describing ---------- */
-const MINUS = "\u2212";
-const grp = (v: number, d: number) =>
-  v.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
-/**
- * A field value as the screener shows it: one decimal convention per unit (so a column reads evenly),
- * a true minus sign and an en dash for missing. `compact` trims trailing zeros for running text
- * (filter chips: "Operating margin > 15%").
- */
-export function fmtField(f: FieldDef | undefined, v: unknown, compact = false): string {
-  if (v == null || v === "") return "\u2013";
+export function fmtField(f: FieldDef | undefined, v: unknown): string {
+  if (v == null || v === "") return "–";
   if (typeof v === "boolean") return v ? "Yes" : "No";
   if (typeof v !== "number" || !Number.isFinite(v)) return String(v);
-  const s = v < 0 ? MINUS : "";
-  const a = Math.abs(v);
-  const trim = (x: string) => (compact ? x.replace(/\.0+(?=\D*$)/, "").replace(/(\.\d*?)0+(?=\D*$)/, "$1") : x);
   const u = f?.u;
   if (u === "usd") {
-    if (a >= 1e12) return `${s}$${trim(grp(a / 1e12, 2))}T`;
-    if (a >= 1e9) return `${s}$${trim(grp(a / 1e9, 1))}B`;
-    if (a >= 1e6) return `${s}$${grp(a / 1e6, 0)}M`;
-    if (a >= 1e4) return `${s}$${grp(a / 1e3, 0)}K`;
-    return `${s}$${trim(grp(a, 2))}`;
+    const a = Math.abs(v),
+      s = v < 0 ? "−" : "";
+    if (a >= 1e12) return `${s}$${(a / 1e12).toFixed(2)}T`;
+    if (a >= 1e9) return `${s}$${(a / 1e9).toFixed(1)}B`;
+    if (a >= 1e6) return `${s}$${(a / 1e6).toFixed(0)}M`;
+    if (a === 0) return "$0";
+    return `${s}$${a.toFixed(a < 100 ? 2 : 0)}`;
   }
-  if (u === "pct") return `${s}${trim(grp(a * 100, 1))}%`;
-  if (u === "pctl") return `${s}${Math.round(a * 100)}th`;
-  if (u === "x") return `${s}${trim(grp(a, 1))}\u00d7`;
-  if (u === "corr") return `${s}${a.toFixed(2)}`;
-  if (u === "days") return `${s}${Math.round(a)}d`;
-  if (u === "score") return `${s}${trim(grp(a, a >= 10 ? 0 : 1))}`;
-  if (Number.isInteger(v) || a >= 1000) return `${s}${grp(a, 0)}`;
-  return `${s}${trim(grp(a, a < 10 ? 2 : 1))}`;
+  if (u === "pct") return `${(v * 100).toFixed(Math.abs(v) < 0.1 ? 1 : 0)}%`;
+  if (u === "pctl") return `${Math.round(v * 100)}th`;
+  if (u === "x") return `${v.toFixed(v >= 100 ? 0 : 1)}×`;
+  if (u === "corr") return v.toFixed(2);
+  if (u === "days") return `${Math.round(v)}d`;
+  return Math.abs(v) >= 1000
+    ? Math.round(v).toLocaleString("en-US")
+    : v.toFixed(Math.abs(v) < 10 ? 2 : 1);
 }
 const OPTXT: Record<string, string> = {
   ">": ">",
@@ -673,9 +664,9 @@ export function filterText(f: Filter, F: Map<string, FieldDef>) {
     return `${n}: ${f.op} ${f.pct}%${f.scope && f.scope !== "all" ? ` in ${f.scope}` : ""}`;
   if (f.op === "between") {
     const [lo, hi] = f.value as [number | null, number | null];
-    return `${n} ${lo != null ? fmtField(fd, lo, true) : "any"} to ${hi != null ? fmtField(fd, hi, true) : "any"}`;
+    return `${n} ${lo != null ? fmtField(fd, lo) : "…"} to ${hi != null ? fmtField(fd, hi) : "…"}`;
   }
-  return `${n} ${OPTXT[f.op]} ${fmtField(fd, f.value, true)}`;
+  return `${n} ${OPTXT[f.op]} ${fmtField(fd, f.value)}`;
 }
 
 /* ---------- presets and column sets ---------- */

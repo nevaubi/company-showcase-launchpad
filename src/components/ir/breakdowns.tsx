@@ -458,8 +458,6 @@ const BreakdownCard = memo(function BreakdownCard({
     const c = cellsOf(r.s)[e];
     return c?.alt ? [{ s: r.s, e, c, alt: c.alt }] : [];
   }));
-  // Figures that fail a read-time check (SEC filing, quarters against the year, formula), listed with the arithmetic.
-  const flagged = rows.flatMap((r) => cols.flatMap((e) => (cellsOf(r.s)[e]?.flags ?? []).map((f) => ({ s: r.s, e, f }))));
   // A loose list can hold the same label from several tables (each segment's "Net interest income"): name the table.
   const repeated = new Map<string, number>();
   for (const r of rows) repeated.set(r.s.label, (repeated.get(r.s.label) ?? 0) + 1);
@@ -510,7 +508,7 @@ const BreakdownCard = memo(function BreakdownCard({
   if (!rows.length) return null;
   const heads = uniqueHeads(cols, freq, fyEnd);
   const head = (e: string) => heads.get(e)!;
-  const stickyHead = fits ? "sticky top-[var(--sticky-top,3.5rem)] z-10" : "";
+  const stickyHead = fits ? "sticky top-14 z-10" : "";
   return (
     // Off-screen breakdowns skip layout and paint, so long lists (hundreds for big banks) stay smooth.
     <section className="min-w-0 scroll-mt-24 pt-6 first:pt-4 [content-visibility:auto] [contain-intrinsic-size:auto_320px]" aria-label={title} data-group={group.id}>
@@ -541,13 +539,7 @@ const BreakdownCard = memo(function BreakdownCard({
             {heldN > 0 && (
               <span className="text-foreground">
                 {" · "}
-                <HeldMark /> {heldN} figure{heldN === 1 ? "" : "s"} held back: unit, sign or period contradicted by the documents or the SEC filing
-              </span>
-            )}
-            {flagged.length > 0 && (
-              <span className="text-foreground">
-                {" · "}
-                <CheckDot /> {flagged.length} figure{flagged.length === 1 ? "" : "s"} fail{flagged.length === 1 ? "s" : ""} a check, listed below
+                <HeldMark /> {heldN} figure{heldN === 1 ? "" : "s"} held back: unit or period contradicted by the documents
               </span>
             )}
           </p>
@@ -717,15 +709,14 @@ const BreakdownCard = memo(function BreakdownCard({
                           <button
                             type="button"
                             onClick={() => openCell(s, e, c)}
-                            title={[cellTitle(payload, c, e, freq, s.unit, scale, chk), ...(c.flags ?? []).map((f) => f.why)].join("\n")}
+                            title={cellTitle(payload, c, e, freq, s.unit, scale, chk)}
                             className={cn(IR.cellButton, IR.num, s.total && IR.total)}
                           >
                             <span className={cn(c.f && IR.derived)}>{fmtIr(c.v, s.unit, scale, opts)}</span>
                             {c.alt && <AltMark className="ml-1" />}
                             {c.alt && <span className="sr-only"> (printed differently in another document)</span>}
-                            {(off || !!c.flags?.length) && <CheckDot className="ml-1" />}
+                            {off && <CheckDot className="ml-1" />}
                             {off && <span className="sr-only"> ({checkText(chk, s.unit, scale)})</span>}
-                            {c.flags?.map((f) => <span key={f.k} className="sr-only"> ({f.why})</span>)}
                           </button>
                         </td>
                       );
@@ -746,21 +737,6 @@ const BreakdownCard = memo(function BreakdownCard({
                 <CheckDot className="shrink-0" />
                 <span className="min-w-0">
                   {isRootLabel(s, root) ? s.label : rowLabel(s.label, root?.label, group.px)}, {head(e).short}: {checkText(c, s.unit, scale)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {flagged.length > 0 && (
-        <div className={cn("border-t px-4 pt-2", IR.caption)} data-section="Failed checks">
-          <p className="text-foreground">Figures that fail a check</p>
-          <ul className="mt-1 grid grid-cols-1 gap-x-6 gap-y-0.5 sm:grid-cols-2">
-            {flagged.map(({ s, e, f }) => (
-              <li key={`${s.k}|${e}|${f.k}`} className="flex min-w-0 items-baseline gap-1.5">
-                <CheckDot className="shrink-0" />
-                <span className="min-w-0">
-                  {isRootLabel(s, root) ? s.label : rowLabel(s.label, root?.label, group.px)}, {head(e).short}: {f.why}
                 </span>
               </li>
             ))}

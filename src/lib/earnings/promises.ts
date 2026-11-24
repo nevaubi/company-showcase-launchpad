@@ -90,20 +90,3 @@ export function credibility(ps: Pick<TrackedPromise, "status">[]) {
   const graded = n.kept + n.missed + n.partial;
   return { ...n, graded, score: graded >= 3 ? (n.kept + n.partial / 2) / graded : null };
 }
-
-/** Order the tracker reads in: what is still open first, then what went wrong, then what was delivered. */
-export const STATUS_ORDER: PromiseStatus[] = ["pending", "missed", "partial", "kept"];
-
-/** Promises grouped by state (pending, missed, partly kept, kept), newest call first inside each group; empty groups dropped. */
-export function groupPromises<T extends Pick<TrackedPromise, "status" | "callDate">>(ps: T[]): { status: PromiseStatus; items: T[] }[] {
-  return STATUS_ORDER.map((status) => ({
-    status,
-    items: ps.filter((p) => p.status === status).sort((a, b) => b.callDate.localeCompare(a.callDate)),
-  })).filter((g) => g.items.length > 0);
-}
-
-/** Guidance management gave on its most recent call: verbatim-checked promises in the guidance category from that call. */
-export function latestGuidance<T extends Pick<TrackedPromise, "category" | "callDate">>(ps: T[]): T[] {
-  const latest = ps.reduce((m, p) => (p.callDate > m ? p.callDate : m), "");
-  return latest ? ps.filter((p) => p.callDate === latest && /guid|outlook/i.test(p.category)) : [];
-}

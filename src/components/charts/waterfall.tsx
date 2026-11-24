@@ -50,8 +50,8 @@ export function Waterfall({ steps, height = 240, format, className }: { steps: W
       <svg width={width} height={height} className="block">
         <g transform={`translate(${margin.left},${margin.top})`}>
           {y.ticks(4).map((t) => (
-            <g key={t} transform={`translate(0,${Math.round(y(t)) + 0.5})`}>
-              <line x1={0} x2={iw} stroke="var(--border)" strokeDasharray="2 3" shapeRendering="crispEdges" />
+            <g key={t} transform={`translate(0,${y(t)})`}>
+              <line x1={0} x2={iw} stroke="var(--border)" strokeDasharray="2 3" />
               <text x={-8} dy="0.32em" textAnchor="end" className="fill-muted-foreground font-mono text-[10px]">
                 {format(t)}
               </text>

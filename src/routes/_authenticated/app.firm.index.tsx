@@ -18,7 +18,6 @@ import { activityText, assignableRoles, canRemove, isEmail, ROLE_HELP, ROLE_LABE
 import { fmtDate, fmtRelative } from "@/lib/format";
 import { useServerFn } from "@tanstack/react-start";
 import { emailFirmInvite } from "@/lib/waitlist.functions";
-import { TickerMark } from "@/components/app/ticker";
 
 export const Route = createFileRoute("/_authenticated/app/firm/")({
   head: () => ({
@@ -342,7 +341,7 @@ function ActivityPanel() {
               <span className="font-medium">{a.actor_id ? name(a.actor_id) : "System"}</span>{" "}
               <span className="text-muted-foreground">{activityText(a.action, (a.detail ?? {}) as Record<string, unknown>, name)}</span>
               {a.ticker && (
-                <> {" · "}<TickerMark ticker={a.ticker} size="2xs" className="text-link" /></>
+                <> {" · "}<Link to="/app/companies/$ticker" params={{ ticker: a.ticker }} className="num font-medium text-link hover:underline">{a.ticker}</Link></>
               )}
               <span className="num ml-1.5 text-[11px] text-muted-foreground" title={new Date(a.created_at).toLocaleString()}>{fmtRelative(a.created_at)}</span>
             </li>

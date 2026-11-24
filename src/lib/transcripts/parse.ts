@@ -29,8 +29,6 @@ export interface ParsedTranscript {
   words: number;
   /** Index of the first Q&A turn, or null when the call has no Q&A. */
   qaStart: number | null;
-  /** The page's own summary and takeaways (third-party), when present. Older cached transcripts lack it. */
-  digest?: TranscriptDigest | null;
 }
 
 export interface TranscriptRef {
@@ -215,7 +213,7 @@ export function parseTranscript(markdown: string): ParsedTranscript {
   }
   const order: Record<SpeakerKind, number> = { management: 0, analyst: 1, operator: 2 };
   const speakers = [...bySpeaker.values()].sort((a, b) => order[a.kind] - order[b.kind] || b.words - a.words);
-  return { speakers, turns, words: turns.reduce((s, t) => s + t.words, 0), qaStart, digest: digestFrom(markdown) };
+  return { speakers, turns, words: turns.reduce((s, t) => s + t.words, 0), qaStart };
 }
 
 /** "_Barclays -- Analyst_" → "Barclays" */
@@ -244,77 +242,15 @@ export function transcriptRef(url: string): TranscriptRef {
   };
 }
 
-/**
- * Does this transcript URL belong to the company? Slugs read "<name>-<ticker>-q<n>-<year>-...". The ticker
- * token decides when there is one: a slug that starts with the company's first name word but carries another
- * ticker ("apple-hospitality-aple-q3-2026" for AAPL) is another company. Share classes match by prefix
- * ("goog" for GOOGL). Older slugs without a ticker ("apple-q4-2025") fall back to the first name word.
- */
+/** Does this transcript URL belong to the company? Matches the ticker token or the name's first word in the slug. */
 export function transcriptMatches(url: string, ticker: string, name: string, altTickers: string[] = []): boolean {
   const slug = url.match(/call-transcripts\/\d{4}\/\d{2}\/\d{2}\/([^/?#]+)/)?.[1]?.toLowerCase();
   if (!slug || !/transcri/.test(slug)) return false;
-  const tickers = [ticker, ...altTickers].map((t) => t.toLowerCase().replace(/[^a-z]/g, "")).filter(Boolean);
+  const tickers = [ticker, ...altTickers].map((t) => t.toLowerCase().replace(/[^a-z]/g, ""));
   if (tickers.some((t) => slug.includes(`-${t}-q`) || slug.startsWith(`${t}-q`))) return true;
-  const head = slug.match(/^(.*?)-q[1-4]-\d{4}-/)?.[1];
-  if (!head) return false;
-  const words = head.split("-");
   const first = name
     .toLowerCase()
     .replace(/[^a-z0-9 ]/g, "")
     .split(" ")[0];
-  if (!first || first.length <= 2 || words[0] !== first) return false;
-  const token = words[words.length - 1];
-  if (words.length === 1 || token === first) return true;
-  // The token before "-q" is the slug's ticker when it is short and not part of the company's name.
-  const nameWords = new Set(name.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/));
-  if (nameWords.has(token) || token.length > 5) return true;
-  return tickers.some((t) => t.startsWith(token) || token.startsWith(t));
+  return !!first && first.length > 2 && slug.startsWith(`${first}-`) && /-q[1-4]-\d{4}-/.test(slug);
 }
-
-export interface TranscriptDigest {
-  /** The page's own summary paragraph (third-party editorial, not company words). */
-  summary: string | null;
-  /** "Label -- text" bullets from the page's takeaways list. */
-  takeaways: { label: string; text: string }[];
-  risks: { label: string; text: string }[];
-}
-
-function bullets(md: string, heading: RegExp): { label: string; text: string }[] {
-  const lines = md.replace(/\r/g, "").split("\n");
-  const start = lines.findIndex((l) => heading.test(l.trim()));
-  if (start < 0) return [];
-  const out: { label: string; text: string }[] = [];
-  for (let i = start + 1; i < lines.length; i++) {
-    const l = lines[i].trim();
-    if (/^#{1,3}\s/.test(l)) break;
-    if (!/^[-*]\s+/.test(l)) continue;
-    const m = l.replace(/^[-*]\s+/, "").match(/^\*\*(.+?)\*\*\s*(?:\\?-\\?-|—|–|:)\s*(.+)$/);
-    if (m) out.push({ label: cleanInline(m[1]), text: cleanInline(m[2]) });
-    else out.push({ label: "", text: cleanInline(l.replace(/^[-*]\s+/, "")) });
-  }
-  return out.filter((b) => b.text.length > 3);
-}
-
-/** The transcript page's summary, takeaways and risks sections, when it has them. */
-export function digestFrom(md: string): TranscriptDigest | null {
-  const lines = md.replace(/\r/g, "").split("\n").map((l) => l.trim());
-  const at = lines.findIndex((l) => /^#{2,3}\s*summary:?\s*$/i.test(l));
-  let summary: string | null = null;
-  if (at >= 0) {
-    const paras: string[] = [];
-    for (let i = at + 1; i < lines.length; i++) {
-      if (/^#{1,3}\s/.test(lines[i])) break;
-      // The summary paragraph only: bullet lists under it repeat quotes and figures shown elsewhere.
-      if (/^[-*]\s/.test(lines[i])) break;
-      if (lines[i]) paras.push(cleanInline(lines[i]));
-    }
-    // Drop the page's live price tags, e.g. "Apple Inc. (AAPL +2.46%)".
-    summary = paras.join(" ").replace(/\s*\((?:NASDAQ:|NYSE:)?\s*[A-Z.]{1,6}\s*[+\-−]?\d+(?:\.\d+)?%\)/g, "").replace(/\s+/g, " ").trim() || null;
-  }
-  const takeaways = bullets(md, /^#{2,3}\s*takeaways:?\s*$/i);
-  const risks = bullets(md, /^#{2,3}\s*risks:?\s*$/i);
-  return summary || takeaways.length || risks.length ? { summary, takeaways, risks } : null;
-}
-
-/** Share classes whose calls are published under another ticker (same table as the server's search). */
-export const SHARE_CLASS_TICKERS: Record<string, string[]> = { GOOGL: ["GOOG"], "BRK-B": ["BRK"], META: ["FB"] };

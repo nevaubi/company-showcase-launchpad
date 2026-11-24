@@ -32,7 +32,7 @@ export function MarketMoves() {
               params={{ ticker: r.ticker }}
               className="flex items-center gap-2 px-3 py-1.5 hover:bg-secondary/60"
             >
-              <CompanyLogo ticker={r.ticker} size="xs" decorative />
+              <CompanyLogo ticker={r.ticker} src={r.logo ?? undefined} size="xs" />
               <span className="num w-12 text-xs font-semibold">{r.ticker}</span>
               <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted-foreground">
                 {r.name}

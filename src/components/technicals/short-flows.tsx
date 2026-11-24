@@ -1,12 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { Panel } from "@/components/app/page-header";
 import { MultiLine } from "@/components/charts/multi-line";
 import { useSource } from "@/components/source/source-context";
 import { useUniverse } from "@/lib/data";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { altQuery, flowsQuery, type ShortInterestRow } from "@/lib/technicals/data";
-import { Note, T as S, TableWrap, TechPanel } from "./ui";
 
 const fmtSh = (v: number | null | undefined) => {
   if (v == null || !Number.isFinite(v)) return "–";
@@ -21,15 +21,10 @@ const fmtSh = (v: number | null | undefined) => {
 };
 const pct = (v: number | null | undefined, d = 1) =>
   v == null || !Number.isFinite(v) ? "–" : `${(v * 100).toFixed(d)}%`;
-const chg = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "–" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(1)}%`);
-const WRAP = "scroll-mt-[calc(var(--sticky-top,3.5rem)+3.25rem)]";
+const th = "px-3 py-1.5 text-[11px] font-medium text-muted-foreground";
 
-/**
- * FINRA short interest, Reg SHO daily short-sale volume, off-exchange share and SEC fails to deliver for one symbol.
- * Renders nothing when no file exists for the symbol, unless `placeholder` asks for a one-line note instead
- * (the Technicals page, where the section is in the page's navigation).
- */
-export function ShortAndFlows({ symbol, placeholder }: { symbol: string; placeholder?: boolean }) {
+/** FINRA short interest, Reg SHO daily short-sale volume, off-exchange share and SEC fails to deliver for one symbol. */
+export function ShortAndFlows({ symbol }: { symbol: string }) {
   const flows = useQuery(flowsQuery(symbol));
   const alt = useQuery(altQuery(symbol));
   const uni = useUniverse();
@@ -73,15 +68,8 @@ export function ShortAndFlows({ symbol, placeholder }: { symbol: string; placeho
     ];
   }, [flows.data]);
 
-  if (flows.isLoading || alt.isLoading) return placeholder ? <div id="flows" data-section="Short interest and flows" className={WRAP} /> : null;
-  if (!flows.data && !alt.data)
-    return placeholder ? (
-      <div id="flows" className={WRAP}>
-        <TechPanel section="Short interest and flows" title="Short interest and flows">
-          <p className={cn("px-3 py-4", S.caption)}>No short-interest or off-exchange volume file is published for {symbol} yet.</p>
-        </TechPanel>
-      </div>
-    ) : null;
+  if (flows.isLoading || alt.isLoading) return null;
+  if (!flows.data && !alt.data) return null;
   const src = flows.data?.src_short_interest;
   const openSi = (r: ShortInterestRow, label: string, value: number | null, unit: string) =>
     open({
@@ -91,111 +79,157 @@ export function ShortAndFlows({ symbol, placeholder }: { symbol: string; placeho
       unit,
       value: value ?? 0,
       external: {
-        url: src?.page ?? "https://www.finra.org/finra-data/browse-catalog/equity-short-interest/data",
+        url:
+          src?.page ?? "https://www.finra.org/finra-data/browse-catalog/equity-short-interest/data",
         date: r.date,
         quote: `${symbol} short interest for settlement date ${r.date}: ${r.short?.toLocaleString() ?? "–"} shares (previous ${r.prev?.toLocaleString() ?? "–"}, change ${r.chg_pct ?? "–"}%); average daily volume ${r.adv?.toLocaleString() ?? "–"}; days to cover ${r.dtc ?? "–"}.${r.revised ? " Revised by FINRA." : ""}`,
         confidence: `FINRA Query API consolidatedShortInterest, retrieved ${src?.retrieved_at?.slice(0, 10) ?? "–"}.${shares ? ` Percent of shares outstanding uses the cover-page count of ${shares.toLocaleString()} shares.` : ""}`,
       },
     });
   const ftd = alt.data?.ftd?.rows ?? [];
-  const ftd60 = ftd.filter((r) => r[0] >= new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10));
+  const ftd60 = ftd.filter(
+    (r) => r[0] >= new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10),
+  );
   const ftdMax = ftd60.reduce((m, r) => (r[1] > m[1] ? r : m), ftd60[0] ?? ["", 0, 0, ""]);
-  const siMax = Math.max(1, ...si.map((x) => x.short ?? 0));
-  const stats: [string, string, () => void][] = last
-    ? [
-        ["Shares short", fmtSh(last.short), () => openSi(last, "Short interest", last.short, "shares")],
-        [
-          "Share of shares outstanding",
-          shares && last.short ? pct(last.short / shares, 2) : "–",
-          () => openSi(last, "Short interest, % of shares outstanding", shares && last.short ? last.short / shares : null, "pct"),
-        ],
-        ["Days to cover", last.dtc?.toFixed(2) ?? "–", () => openSi(last, "Days to cover", last.dtc, "count")],
-        ["Change from prior report", chg(last.chg_pct), () => openSi(last, "Change in short interest", last.chg_pct, "count")],
-      ]
-    : [];
   return (
-    <div id="flows" data-section="Short interest and flows" data-tour="tech-flows" className={cn(WRAP, "grid grid-cols-1 gap-4 [&>*]:min-w-0", si.length > 0 && "xl:grid-cols-2")}>
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       {si.length > 0 && (
-        <TechPanel section="Short interest" title="Short interest" subtitle={`FINRA, twice a month by settlement date${last ? `; latest ${fmtDate(last.date)}` : ""}`}>
+        <Panel
+          title="Short interest"
+          subtitle="FINRA, twice a month by settlement date"
+          collapse={false}
+          bodyClassName="p-0"
+        >
           {last && (
             <div className="grid grid-cols-2 border-b sm:grid-cols-4">
-              {stats.map(([l, v, on]) => (
+              {[
+                [
+                  "Shares short",
+                  fmtSh(last.short),
+                  () => openSi(last, "Short interest", last.short, "shares"),
+                ],
+                [
+                  "% of shares out",
+                  shares && last.short ? pct(last.short / shares, 2) : "–",
+                  () =>
+                    openSi(
+                      last,
+                      "Short interest, % of shares outstanding",
+                      shares && last.short ? last.short / shares : null,
+                      "pct",
+                    ),
+                ],
+                [
+                  "Days to cover",
+                  last.dtc?.toFixed(2) ?? "–",
+                  () => openSi(last, "Days to cover", last.dtc, "count"),
+                ],
+                [
+                  "Change",
+                  last.chg_pct != null
+                    ? `${last.chg_pct > 0 ? "+" : ""}${last.chg_pct.toFixed(1)}%`
+                    : "–",
+                  () => openSi(last, "Change in short interest", last.chg_pct, "count"),
+                ],
+              ].map(([l, v, on]) => (
                 <button
-                  key={l}
+                  key={l as string}
                   type="button"
-                  data-agent-click
-                  onClick={on}
-                  title="Open the FINRA record"
-                  className="border-r px-3 py-2 text-left transition-colors duration-150 last:border-r-0 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none"
+                  onClick={on as () => void}
+                  className="border-r px-3.5 py-2 text-left last:border-r-0 hover:bg-secondary"
                 >
-                  <p className={S.caption}>{l}</p>
-                  <p className="num text-lg font-semibold leading-6 tabular-nums">{v}</p>
+                  <p className="text-[11px] text-muted-foreground">{l as string}</p>
+                  <p className="num text-base font-medium tabular-nums">{v as string}</p>
+                  <p className="text-[10.5px] text-muted-foreground">{fmtDate(last.date)}</p>
                 </button>
               ))}
             </div>
           )}
-          <div className="flex h-24 items-end gap-0.5 px-3 pt-2" role="img" aria-label={`Shares short at each of the last ${si.length} settlement dates`}>
-            {si.map((r) => (
-              <button
-                key={r.date}
-                type="button"
-                onClick={() => openSi(r, "Short interest", r.short, "shares")}
-                title={`${fmtDate(r.date)}: ${fmtSh(r.short)} short, ${r.dtc ?? "–"} days to cover`}
-                aria-label={`${fmtDate(r.date)}: ${fmtSh(r.short)} shares short`}
-                className="min-w-0 flex-1 rounded-t-sm bg-chart-1/60 transition-colors duration-150 hover:bg-chart-1 focus-visible:bg-chart-1 focus-visible:outline-none motion-reduce:transition-none"
-                style={{ height: `${((r.short ?? 0) / siMax) * 100}%` }}
-              />
-            ))}
+          <div className="flex h-24 items-end gap-0.5 px-3.5 pt-2">
+            {si.map((r) => {
+              const max = Math.max(...si.map((x) => x.short ?? 0));
+              return (
+                <button
+                  key={r.date}
+                  type="button"
+                  onClick={() => openSi(r, "Short interest", r.short, "shares")}
+                  title={`${r.date}: ${fmtSh(r.short)} short, ${r.dtc ?? "–"} days to cover`}
+                  className="flex-1 rounded-t-sm bg-chart-1/60 hover:bg-chart-1"
+                  style={{ height: `${((r.short ?? 0) / (max || 1)) * 100}%` }}
+                />
+              );
+            })}
           </div>
-          <div className="flex justify-between px-3 pb-1 text-[10px] text-muted-foreground">
-            <span className="num">{fmtDate(si[0].date)}</span>
-            <span className="num">{fmtDate(si[si.length - 1].date)}</span>
+          <div className="flex justify-between px-3.5 pb-1 text-[10px] text-muted-foreground">
+            <span>{fmtDate(si[0].date)}</span>
+            <span>{fmtDate(si[si.length - 1].date)}</span>
           </div>
-          <TableWrap min={420}>
-            <table className="w-full border-collapse border-t">
-              <thead>
-                <tr className="border-b">
-                  <th className={S.th}>Settlement</th>
-                  <th className={S.thNum}>Shares short</th>
-                  <th className={S.thNum}>Of shares out</th>
-                  <th className={S.thNum}>Days to cover</th>
-                  <th className={S.thNum}>Change</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...si]
-                  .reverse()
-                  .slice(0, 6)
-                  .map((r) => (
-                    <tr key={r.date} className={S.row}>
-                      <td className={S.td}>
-                        <button type="button" data-agent-click onClick={() => openSi(r, "Short interest", r.short, "shares")} title="Open the FINRA record" className={cn(S.cellButton, "num")}>
-                          {fmtDate(r.date)}
-                        </button>
-                      </td>
-                      <td className={S.num}>{fmtSh(r.short)}</td>
-                      <td className={S.num}>{shares && r.short ? pct(r.short / shares, 2) : "–"}</td>
-                      <td className={S.num}>{r.dtc?.toFixed(2) ?? "–"}</td>
-                      <td className={S.num}>{chg(r.chg_pct)}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </TableWrap>
-          <Note>
-            Positions reported by broker-dealers as of each settlement date, published by FINRA about a week later. Days to cover: shares short ÷ average daily volume. The share uses shares
-            outstanding, not float.{" "}
-            {src?.page && (
-              <a href={src.page} target="_blank" rel="noreferrer" className="text-link hover:underline">
-                FINRA data ↗
-              </a>
-            )}
-          </Note>
-        </TechPanel>
+          <table className="w-full border-t text-[12px]">
+            <thead>
+              <tr className="border-b text-left">
+                <th className={th}>Settlement</th>
+                <th className={cn(th, "text-right")}>Short</th>
+                <th className={cn(th, "text-right")}>% shares out</th>
+                <th className={cn(th, "text-right")}>Days to cover</th>
+                <th className={cn(th, "text-right")}>Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...si]
+                .reverse()
+                .slice(0, 6)
+                .map((r) => (
+                  <tr
+                    key={r.date}
+                    className="cursor-pointer border-b last:border-0 hover:bg-secondary"
+                    onClick={() => openSi(r, "Short interest", r.short, "shares")}
+                  >
+                    <td className="num px-3 py-1">{fmtDate(r.date)}</td>
+                    <td className="num px-3 py-1 text-right">{fmtSh(r.short)}</td>
+                    <td className="num px-3 py-1 text-right">
+                      {shares && r.short ? pct(r.short / shares, 2) : "–"}
+                    </td>
+                    <td className="num px-3 py-1 text-right">{r.dtc?.toFixed(2) ?? "–"}</td>
+                    <td
+                      className={cn(
+                        "num px-3 py-1 text-right",
+                        (r.chg_pct ?? 0) > 0
+                          ? "text-negative"
+                          : (r.chg_pct ?? 0) < 0
+                            ? "text-positive"
+                            : "",
+                      )}
+                    >
+                      {r.chg_pct != null
+                        ? `${r.chg_pct > 0 ? "+" : ""}${r.chg_pct.toFixed(1)}%`
+                        : "–"}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+          <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
+            Positions reported by broker-dealers as of each settlement date, published by FINRA
+            about a week later. Days to cover = shares short ÷ average daily volume. Percent uses
+            shares outstanding, not float.{" "}
+            <a
+              href={src?.page}
+              target="_blank"
+              rel="noreferrer"
+              className="text-link hover:underline"
+            >
+              FINRA data ↗
+            </a>
+          </p>
+        </Panel>
       )}
-      <div className={cn("grid grid-cols-1 content-start gap-4 [&>*]:min-w-0", si.length === 0 && "xl:grid-cols-2")}>
+      <div className="grid gap-4">
         {alt.data?.short_volume && (
-          <TechPanel section="Short-sale volume" title="Short-sale share of off-exchange volume" subtitle="FINRA Reg SHO daily files, last 120 sessions">
+          <Panel
+            title="Short-sale share of off-exchange volume"
+            subtitle="FINRA Reg SHO daily files, last 120 sessions, %"
+            collapse={false}
+          >
             <div className="px-3 py-2">
               <MultiLine
                 series={svSeries}
@@ -205,17 +239,27 @@ export function ShortAndFlows({ symbol, placeholder }: { symbol: string; placeho
                 xFormat={(x) => fmtDate(x, { month: "short", day: "numeric" })}
               />
             </div>
-            <Note>
-              Short-sale volume is mostly market makers selling short to fill buy orders, so a share near 40 to 50% is normal; changes in the 20-day average say more than the level. It is not
-              short interest.{" "}
-              <a href={alt.data.short_volume.url} target="_blank" rel="noreferrer" className="text-link hover:underline">
+            <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
+              Short-sale volume is mostly market makers selling short to fill buy orders, so a ratio
+              near 40–50% is normal; changes in the 20-day average matter more than the level. Not
+              the same as short interest.{" "}
+              <a
+                href={alt.data.short_volume.url}
+                target="_blank"
+                rel="noreferrer"
+                className="text-link hover:underline"
+              >
                 Source ↗
               </a>
-            </Note>
-          </TechPanel>
+            </p>
+          </Panel>
         )}
         {offSeries[0].points.length > 0 && (
-          <TechPanel section="Off-exchange volume" title="Off-exchange share of volume" subtitle="FINRA weekly ATS and non-ATS volume over consolidated volume">
+          <Panel
+            title="Off-exchange share of volume"
+            subtitle="FINRA weekly ATS and non-ATS volume over consolidated volume, %"
+            collapse={false}
+          >
             <div className="px-3 py-2">
               <MultiLine
                 series={offSeries}
@@ -225,7 +269,7 @@ export function ShortAndFlows({ symbol, placeholder }: { symbol: string; placeho
                 xFormat={(x) => fmtDate(x, { month: "short", day: "numeric" })}
               />
             </div>
-            <Note>
+            <p className="border-t px-3.5 py-2 text-[11px] text-muted-foreground">
               Weeks are published two to four weeks late.{" "}
               {flows.data?.ats_venues.rows.length
                 ? `Largest dark pools in the week of ${fmtDate(flows.data.ats_venues.week ?? "")}: ${flows.data.ats_venues.rows
@@ -233,14 +277,19 @@ export function ShortAndFlows({ symbol, placeholder }: { symbol: string; placeho
                     .map((v) => `${v.name} ${pct(v.pct_of_ats, 0)}`)
                     .join(", ")}.`
                 : ""}
-              {ftd60.length ? ` SEC fails to deliver, last 60 days: peak ${ftdMax[1].toLocaleString()} shares on ${fmtDate(ftdMax[0])}.` : ""}{" "}
-              {flows.data?.src_weekly.page && (
-                <a href={flows.data.src_weekly.page} target="_blank" rel="noreferrer" className="text-link hover:underline">
-                  FINRA OTC transparency ↗
-                </a>
-              )}
-            </Note>
-          </TechPanel>
+              {ftd60.length
+                ? ` SEC fails to deliver, last 60 days: peak ${ftdMax[1].toLocaleString()} shares on ${fmtDate(ftdMax[0])}.`
+                : ""}{" "}
+              <a
+                href={flows.data?.src_weekly.page}
+                target="_blank"
+                rel="noreferrer"
+                className="text-link hover:underline"
+              >
+                FINRA OTC transparency ↗
+              </a>
+            </p>
+          </Panel>
         )}
       </div>
     </div>

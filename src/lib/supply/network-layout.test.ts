@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { nodeRisk, type GraphNode, type HopNode, type NodeRisk, type Relation, type RiskLink, type SupplyLink } from "./core";
 import { trustLink } from "./claims";
-import { bandLegend, bandWidths, layoutNetwork, NET, sideBasis } from "./network-layout";
+import { bandWidths, layoutNetwork, NET, sideBasis } from "./network-layout";
 
 const link = (share: number | null): SupplyLink => ({ id: String(Math.random()), ticker: "NVDA", counterparty: "X", counterparty_ticker: null, counterparty_domain: null, relation: "supplier", detail: "", share_pct: share, quote: "q", accn: "a", doc: "d", form: "10-K", filed: "2026-02-01" });
 const node = (relation: Relation, name: string, share: number | null = null): GraphNode => ({ key: `${relation}:${name}`, name, ticker: null, domain: null, relation, links: [link(share)] });
@@ -180,31 +180,12 @@ describe("widths come only from trade flows", () => {
     expect(sideBasis([{ dollars: 5e9, share: 0, trade: false }, { dollars: null, share: 0 }])).toBe("none");
     expect(bandWidths([{ dollars: 5e9, share: 0, trade: false }, { dollars: 1e9, share: 0 }], "dollars")).toEqual([NET.tMin, NET.tMax]);
   });
-  it("every first-order card has the same height whatever its relation or figures, so figures and flags line up", () => {
-    const withFig = layoutNetwork({ ...base, graph: [...graph, node("partner", "Arm Holdings", 4)] });
-    expect(withFig.cards.filter((c) => c.hop === 1).every((c) => c.h === NET.card)).toBe(true);
-    expect(withFig.cards.filter((c) => c.hop === 2).every((c) => c.h === NET.child)).toBe(true);
-  });
-  it("gives the longer second-row group more columns, and never lets a card get narrower than the minimum", () => {
-    const rivals = Array.from({ length: 30 }, (_, i) => node("competitor", `Rival ${i}`));
-    const L = layoutNetwork({ ...base, graph: [...graph.filter((n) => n.relation !== "competitor"), ...rivals], width: 760, limit: null });
-    const cols = (r: Relation) => new Set(L.cards.filter((c) => c.relation === r).map((c) => c.x)).size;
-    expect(cols("partner")).toBe(1);
-    expect(cols("competitor")).toBe(3);
-    expect(L.cards.filter((c) => c.relation === "competitor")).toHaveLength(30);
-    expect(L.more).toEqual([]);
-    for (const c of L.cards.filter((c) => c.relation === "partner" || c.relation === "competitor")) { expect(c.w).toBeGreaterThanOrEqual(NET.cellMin); expect(c.x + c.w).toBeLessThanOrEqual(L.width); }
-    const partner = L.cards.find((c) => c.relation === "partner")!, firstRival = L.cards.find((c) => c.relation === "competitor")!;
-    expect(firstRival.x - (partner.x + partner.w)).toBe(NET.groupGap);
-  });
-});
-
-describe("bandLegend", () => {
-  it("says what band width shows on each side, and says so plainly when a side states no flow", () => {
-    expect(bandLegend({ supplier: "dollars", customer: "dollars" })).toMatch(/^Band width shows stated revenue/);
-    expect(bandLegend({ supplier: "share", customer: "none" })).toBe("Supplier bands show the stated share. No customer flow is stated, so customer bands are equal.");
-    expect(bandLegend({ supplier: "none", customer: "dollars" })).toMatch(/^Customer bands show stated revenue.*No supplier flow is stated/);
-    expect(bandLegend({ supplier: "none", customer: "none" })).toBe("No flow or share is stated, so every band has the same width.");
-    expect(bandLegend({ supplier: "dollars", customer: "share" })).toMatch(/Supplier bands show stated revenue.*; customer bands show the stated share\./);
+  it("second-row cells grow to two lines when a name in the group carries a figure, so the name keeps the full width", () => {
+    const plain = layoutNetwork(base);
+    expect(plain.cards.filter((c) => c.relation === "competitor").every((c) => c.h === NET.cell)).toBe(true);
+    const withFig = layoutNetwork({ ...base, graph: [...graph.filter((n) => n.relation !== "partner"), node("partner", "Arm", 4)] });
+    const arm = withFig.cards.find((c) => c.key === "partner:Arm")!;
+    expect(arm.h).toBe(NET.card);
+    expect(withFig.cards.filter((c) => c.relation === "competitor").every((c) => c.h === NET.cell)).toBe(true);
   });
 });

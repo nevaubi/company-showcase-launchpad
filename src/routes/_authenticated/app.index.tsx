@@ -184,7 +184,7 @@ function Dashboard() {
                     <tr key={t} className="border-b last:border-0 hover:bg-secondary/60">
                       <td className="px-4 py-2">
                         <Link to="/app/companies/$ticker" params={{ ticker: t }} className="flex items-center gap-2.5">
-                          <CompanyLogo ticker={t} size="sm" decorative />
+                          <CompanyLogo ticker={t} src={u?.logo} size="sm" />
                           <span>
                             <span className="num flex items-center gap-1.5 font-semibold">
                               {t}
@@ -259,7 +259,7 @@ function Dashboard() {
             {filingsFeed.map((c) => (
               <li key={c.ticker}>
                 <Link to="/app/companies/$ticker/filings" params={{ ticker: c.ticker }} className="flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/60">
-                  <CompanyLogo ticker={c.ticker} size="xs" decorative />
+                  <CompanyLogo ticker={c.ticker} src={c.logo} size="xs" />
                   <span className="num w-12 text-xs font-semibold">{c.ticker}</span>
                   <Badge variant="outline">{c.lastFiling!.form}</Badge>
                   <span className="num ml-auto text-xs text-muted-foreground">{fmtDate(c.lastFiling!.filed)}</span>

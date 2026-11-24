@@ -28,46 +28,6 @@ export function moments(x: number[]) {
 /** t-statistic of the mean against zero. */
 export const tStat = (x: number[]) => (x.length < 3 ? NaN : mean(x) / (std(x) / Math.sqrt(x.length)));
 
-/**
- * Standard error of the mean of `x` when observations close together in time are correlated
- * (Newey-West with Bartlett weights). `at` is each observation's time index, ascending; it defaults
- * to 0, 1, 2, ... and may have gaps (days with no signal). Two observations `d` steps apart count
- * with weight 1 - d / (lag + 1), and not at all beyond `lag`. With lag 0 this is sd / sqrt(n).
- *
- * Trades held for h days that were signalled fewer than h days apart share part of their holding
- * period, so their day averages are not independent; treating them as independent understates the
- * error of the mean. The triangular weights are a positive-definite kernel, so the variance never
- * goes negative, on a regular or an irregular grid.
- */
-export function hacSe(x: ArrayLike<number>, lag = 0, at?: ArrayLike<number>): number {
-  const n = x.length;
-  if (n < 2) return NaN;
-  const m = mean(x);
-  let g = 0;
-  for (let i = 0; i < n; i++) g += (x[i] - m) ** 2;
-  const L = Math.max(0, Math.floor(lag));
-  if (L > 0) {
-    let cross = 0;
-    for (let i = 0; i < n; i++) {
-      const ei = x[i] - m;
-      for (let j = i + 1; j < n; j++) {
-        const d = at ? at[j] - at[i] : j - i;
-        if (d > L) break;
-        if (d > 0) cross += (1 - d / (L + 1)) * ei * (x[j] - m);
-      }
-    }
-    g += 2 * cross;
-  }
-  return Math.sqrt(Math.max(g, 0) / (n * (n - 1)));
-}
-
-/** t-statistic of the mean with the Newey-West standard error. */
-export const tHac = (x: ArrayLike<number>, lag = 0, at?: ArrayLike<number>) => {
-  if (x.length < 3) return NaN;
-  const se = hacSe(x, lag, at);
-  return se > 0 ? mean(x) / se : NaN;
-};
-
 /** Standard normal CDF (Abramowitz-Stegun 7.1.26 via erf). */
 export function normCdf(z: number) {
   const t = 1 / (1 + 0.3275911 * Math.abs(z) / Math.SQRT2);
@@ -96,63 +56,6 @@ export function normInv(p: number): number {
 
 /** One-sided p-value that the true mean is <= 0, from a t-stat (normal approximation, fine for n >= 30). */
 export const pOneSided = (t: number) => (Number.isFinite(t) ? 1 - normCdf(t) : 1);
-
-/** Natural log of the gamma function (Lanczos, g = 7). */
-function lnGamma(x: number): number {
-  const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
-  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lnGamma(1 - x);
-  const y = x - 1;
-  let a = c[0];
-  for (let i = 1; i < 9; i++) a += c[i] / (y + i);
-  const t = y + 7.5;
-  return 0.5 * Math.log(2 * Math.PI) + (y + 0.5) * Math.log(t) - t + Math.log(a);
-}
-
-/** Regularised incomplete beta function I_x(a, b), by Lentz's continued fraction. */
-function betaInc(x: number, a: number, b: number): number {
-  if (x <= 0) return 0;
-  if (x >= 1) return 1;
-  if (x > (a + 1) / (a + b + 2)) return 1 - betaInc(1 - x, b, a);
-  const front = Math.exp(lnGamma(a + b) - lnGamma(a) - lnGamma(b) + a * Math.log(x) + b * Math.log(1 - x)) / a;
-  const tiny = 1e-300;
-  let f = 1, c = 1, d = 0;
-  for (let i = 0; i <= 300; i++) {
-    const m = i >> 1;
-    const num = i === 0 ? 1 : i % 2 === 0 ? (m * (b - m) * x) / ((a + 2 * m - 1) * (a + 2 * m)) : -((a + m) * (a + b + m) * x) / ((a + 2 * m) * (a + 2 * m + 1));
-    d = 1 + num * d;
-    if (Math.abs(d) < tiny) d = tiny;
-    d = 1 / d;
-    c = 1 + num / c;
-    if (Math.abs(c) < tiny) c = tiny;
-    f *= c * d;
-    if (Math.abs(1 - c * d) < 1e-12) break;
-  }
-  return front * (f - 1);
-}
-
-/** Student's t cumulative distribution with `df` degrees of freedom. */
-export function tCdf(t: number, df: number): number {
-  if (!Number.isFinite(t)) return t > 0 ? 1 : 0;
-  if (!(df > 0)) return NaN;
-  const tail = 0.5 * betaInc(df / (df + t * t), df / 2, 0.5);
-  return t >= 0 ? 1 - tail : tail;
-}
-
-/**
- * Benjamini-Hochberg q-values: for each p-value, the smallest false-discovery rate at which it
- * would count as a discovery among all of them. `bhFdr(p, q)[i]` is `bhQ(p)[i] <= q`.
- */
-export function bhQ(p: readonly number[]): number[] {
-  const m = p.length;
-  const idx = p.map((v, i) => [v, i] as const).sort((a, b) => a[0] - b[0]);
-  const out = new Array<number>(m).fill(1);
-  let best = 1;
-  for (let r = m - 1; r >= 0; r--) {
-    best = Math.min(best, (idx[r][0] * m) / (r + 1));
-    out[idx[r][1]] = Math.min(1, best);
-  }
-  return out;
-}
 
 /** Simple OLS y = a + b x. */
 export function ols(x: ArrayLike<number>, y: ArrayLike<number>) {
@@ -235,22 +138,13 @@ export function halfLife(e: ArrayLike<number>) {
 }
 
 /**
- * The largest of `trials` independent standard normal draws, on average (Bailey & López de Prado
- * 2014, eq. 6). It is the t-statistic the luckiest of that many worthless strategies is expected
- * to show: about 2.2 for 46 tries.
- */
-export function expectedMaxZ(trials: number) {
-  const g = 0.5772156649;
-  const N = Math.max(trials, 2);
-  return (1 - g) * normInv(1 - 1 / N) + g * normInv(1 - 1 / (N * Math.E));
-}
-
-/**
  * Deflated Sharpe ratio (Bailey & López de Prado 2014): probability the observed per-period Sharpe
  * beats the best Sharpe expected from `trials` unskilled strategies with variance `srVar` across trials.
  */
 export function deflatedSharpe(sr: number, n: number, skew: number, kurt: number, trials: number, srVar: number) {
-  const sr0 = Math.sqrt(Math.max(srVar, 0)) * expectedMaxZ(trials);
+  const g = 0.5772156649;
+  const N = Math.max(trials, 2);
+  const sr0 = Math.sqrt(Math.max(srVar, 0)) * ((1 - g) * normInv(1 - 1 / N) + g * normInv(1 - 1 / (N * Math.E)));
   const den = Math.sqrt(Math.max(1 - skew * sr + ((kurt - 1) / 4) * sr * sr, 1e-9));
   return normCdf(((sr - sr0) * Math.sqrt(n - 1)) / den);
 }

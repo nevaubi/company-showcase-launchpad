@@ -12,13 +12,12 @@
 //      the years they cover), and splits long "other lines" lists by the prefix their lines share.
 // Every value keeps its own source cell: merging only moves cells between lines, it never changes a
 // number or invents one.
-import { mergeTwinEnds } from "@/lib/ir/twins";
 import { METRIC_LABEL, groupTitle } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 import { holdSuspects } from "@/lib/ir/suspect";
 
-export const TIDY_VERSION = 8;
+export const TIDY_VERSION = 7;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -1037,17 +1036,12 @@ interface Member {
   generic: boolean;
 }
 const memberTokens = (piece: string) => labelTokens(piece).filter((w) => !MEASURE_WORDS.has(w) && !TABLE_WORDS.has(w));
-/** Table words that also start segment names ("Data Center", "Information Services"). */
-const NAME_TABLE_WORDS = new Set(["data", "information", "type", "types", "plan", "plans"]);
 /** The words of a printed name that name the segment: "Health Care Benefits adjusted operating income" → "Health Care Benefits". */
-export const cleanMember = (piece: string) => {
+const cleanMember = (piece: string) => {
   const words = piece.replace(/\((\d+|[a-z])\)/gi, " ").split(/\s+/).filter(Boolean);
   const own = new Set(memberTokens(piece));
   const isOwn = (w: string) => labelTokens(w).some((t) => own.has(t));
-  let first = words.findIndex(isOwn);
-  // A capitalised word the table vocabulary drops can still be part of the name ("Data Center",
-  // "Information Systems"): keep it when it stands right before the name's own words.
-  while (first > 0 && /^[A-Z]/.test(words[first - 1]) && NAME_TABLE_WORDS.has(words[first - 1].toLowerCase())) first--;
+  const first = words.findIndex(isOwn);
   let last = -1;
   for (let i = words.length - 1; i >= 0 && last < 0; i--) if (isOwn(words[i])) last = i;
   if (first < 0) return "";
@@ -1451,10 +1445,8 @@ function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[])
   return { groups: [...made, ...left], checks: [...kept, ...newChecks] };
 }
 
-export function tidyPayload(p0: IrPayload, opts: { log?: string[] } = {}): IrPayload {
-  if (p0.tidy === TIDY_VERSION && !opts.log) return p0;
-  // A quarter printed under two dates a week apart (52/53-week years) becomes one column first.
-  const p = mergeTwinEnds(p0);
+export function tidyPayload(p: IrPayload, opts: { log?: string[] } = {}): IrPayload {
+  if (p.tidy === TIDY_VERSION && !opts.log) return p;
   const series = p.series.map((s) => ({ ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) }));
   const out: IrPayload = { ...p, series, groups: p.groups.map((g) => ({ ...g, t: undefined, rows: [...g.rows] })), checks: p.checks.map((x) => ({ ...x })) };
   const c: Ctx = { p: out, byKey: new Map(series.map((s) => [s.k, s])), alias: new Map(Object.entries(p.alias ?? {})), removed: new Set(), kids: new Map(), renamed: new Map(), touched: new Set(), home: new Map(), log: opts.log };

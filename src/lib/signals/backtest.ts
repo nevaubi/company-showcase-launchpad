@@ -1,9 +1,8 @@
-// Out-of-sample evaluation with costs, date clustering, overlap correction, multiple-testing control
-// and regime checks.
+// Out-of-sample evaluation with costs, date clustering, multiple-testing control and regime checks.
 // Rules are fixed in advance (published parameters, no fitting); 2016-2021 is the in-sample check and
 // 2022 onward the out-of-sample test. Variants are reduced to per-day aggregates first so the same
 // math runs on in-memory samples (script) and on database aggregates (daily job).
-import { bhFdr, deflatedSharpe, hacSe, moments, pOneSided } from "./stats";
+import { bhFdr, deflatedSharpe, moments, pOneSided } from "./stats";
 
 export const OOS_START = "2022-01-01";
 export type Regime = "Up, calm" | "Up, stressed" | "Down, calm" | "Down, stressed";
@@ -62,14 +61,7 @@ export interface SplitStats {
   avgGross: number | null;
   avgExSpy: number | null;
   hit: number | null;
-  /** t-statistic of the per-day averages with every signal day counted as independent. */
   t: number | null;
-  /**
-   * The same statistic with a Newey-West error over the days whose holding periods overlap
-   * (`overlapLag`). Absent in results stored before the correction existed; read both through
-   * `adjustedT`.
-   */
-  tHac?: number | null;
   sharpe: number | null;
   skew: number;
   kurt: number;
@@ -77,29 +69,11 @@ export interface SplitStats {
 
 const r4 = (x: number) => (Number.isFinite(x) ? Math.round(x * 1e5) / 1e5 : null);
 
-/**
- * How many trading days apart two signal days can be and still share part of a holding period,
- * doubled: Bartlett weights fall off linearly, so a window of h - 1 days recovers only about two
- * thirds of the variance an h-day overlap adds, and 2(h - 1) recovers most of it.
- */
-export const overlapLag = (horizon: number) => (Number.isFinite(horizon) && horizon > 1 ? 2 * (Math.round(horizon) - 1) : 0);
-
-/** The t-statistic to judge a split by: the overlap-corrected one, never larger than the plain one. */
-export function adjustedT(s: Pick<SplitStats, "t" | "tHac">): number | null {
-  if (s.tHac == null) return s.t;
-  return s.t == null ? s.tHac : Math.min(s.t, s.tHac);
-}
-
-/**
- * Stats with returns first averaged per signal date, so 200 stocks firing on one day count as one
- * observation. `lag` is the number of trading days over which day averages may be correlated
- * because their trades were open at the same time (`overlapLag`); `tHac` allows for it.
- */
-export function dailyStats(days: DailyAgg[], lag = 0): SplitStats {
+/** Stats with returns first averaged per signal date, so 200 stocks firing on one day count as one observation. */
+export function dailyStats(days: DailyAgg[]): SplitStats {
   let n = 0, net = 0, gross = 0, ex = 0, hit = 0;
   const clusters: number[] = [];
-  const at: number[] = [];
-  for (const d of [...days].sort((a, b) => a.i - b.i)) {
+  for (const d of days) {
     if (!d.n) continue;
     n += d.n;
     net += d.net;
@@ -107,11 +81,9 @@ export function dailyStats(days: DailyAgg[], lag = 0): SplitStats {
     ex += d.ex;
     hit += d.hits;
     clusters.push(d.net / d.n);
-    at.push(d.i);
   }
   const m = clusters.length > 2 ? moments(clusters) : { mean: NaN, sd: NaN, skew: 0, kurt: 3 };
   const t = m.mean / (m.sd / Math.sqrt(clusters.length));
-  const se = clusters.length > 2 ? hacSe(clusters, lag, at) : NaN;
   return {
     n,
     days: clusters.length,
@@ -120,7 +92,6 @@ export function dailyStats(days: DailyAgg[], lag = 0): SplitStats {
     avgExSpy: n ? r4(ex / n) : null,
     hit: n ? r4(hit / n) : null,
     t: r4(t),
-    tHac: r4(se > 0 ? m.mean / se : NaN),
     sharpe: r4(m.mean / m.sd),
     skew: Number.isFinite(m.skew) ? m.skew : 0,
     kurt: Number.isFinite(m.kurt) ? m.kurt : 3,
@@ -162,8 +133,6 @@ export const GATE = { minN: 100, minDays: 50, minT: 2, minDsr: 0.95, fdrQ: 0.05,
 export function variantPartial(key: string, days: DailyAgg[], dates: string[], regime: Regime[]): VariantPartial {
   const oosFrom = dates.findIndex((d) => d >= OOS_START);
   const cut = oosFrom < 0 ? dates.length : oosFrom;
-  // Variant keys are strategy:side:holding days; anything else is treated as a one-day hold.
-  const lag = overlapLag(Number(key.split(":")[2]));
   const valid = days.filter((d) => d.i >= 0 && d.i < dates.length);
   const regimes = Object.fromEntries(REGIMES.map((r) => [r, { n: 0, sum: 0 }])) as Record<Regime, { n: number; sum: number }>;
   const years = new Map<string, { n: number; sum: number }>();
@@ -192,8 +161,8 @@ export function variantPartial(key: string, days: DailyAgg[], dates: string[], r
   });
   return {
     key,
-    inSample: dailyStats(valid.filter((d) => d.i < cut), lag),
-    outSample: dailyStats(valid.filter((d) => d.i >= cut), lag),
+    inSample: dailyStats(valid.filter((d) => d.i < cut)),
+    outSample: dailyStats(valid.filter((d) => d.i >= cut)),
     regimes: Object.fromEntries(REGIMES.map((r) => [r, { n: regimes[r].n, avgNet: regimes[r].n ? r4(regimes[r].sum / regimes[r].n) : null }])) as VariantPartial["regimes"],
     years: [...years.entries()].sort().map(([year, x]) => ({ year, n: x.n, avgNet: r4(x.sum / x.n) })),
     curve,
@@ -203,25 +172,19 @@ export function variantPartial(key: string, days: DailyAgg[], dates: string[], r
 
 /** Apply the strict gate across every variant (false-discovery and deflated-Sharpe depend on all of them). */
 export function finalize(parts: VariantPartial[]): VariantProof[] {
-  const pv = parts.map((p) => {
-    const t = adjustedT(p.outSample);
-    return t == null ? 1 : pOneSided(t);
-  });
+  const pv = parts.map((p) => (p.outSample.t == null ? 1 : pOneSided(p.outSample.t)));
   const fdr = bhFdr(pv, GATE.fdrQ);
   const srs = parts.map((p) => p.outSample.sharpe).filter((x): x is number => x != null);
   const srMean = srs.reduce((a, b) => a + b, 0) / Math.max(srs.length, 1);
   const srVar = srs.reduce((a, b) => a + (b - srMean) ** 2, 0) / Math.max(srs.length - 1, 1);
   return parts.map((p, k) => {
     const o = p.outSample;
-    const t = adjustedT(o);
-    // Overlap leaves fewer independent days: the corrected t is the plain one times sqrt(nEff / days).
-    const nEff = o.t && t != null && o.t > 0 ? Math.max(2, o.days * Math.min(1, (t / o.t) ** 2)) : o.days;
-    const dsr = o.sharpe == null ? null : r4(deflatedSharpe(o.sharpe, nEff, o.skew, o.kurt, parts.length, srVar));
+    const dsr = o.sharpe == null ? null : r4(deflatedSharpe(o.sharpe, o.days, o.skew, o.kurt, parts.length, srVar));
     const goodRegimes = REGIMES.filter((r) => p.regimes[r].n >= GATE.minRegimeN && (p.regimes[r].avgNet ?? 0) > 0).length;
     const failed: string[] = [];
     if (o.n < GATE.minN || o.days < GATE.minDays) failed.push(`Too few out-of-sample trades (${o.n})`);
     if (!((o.avgNet ?? 0) > 0)) failed.push("Loses money out of sample after costs");
-    if (!((t ?? 0) >= GATE.minT)) failed.push(`Not statistically significant (t = ${t?.toFixed(2) ?? "n/a"})`);
+    if (!((o.t ?? 0) >= GATE.minT)) failed.push(`Not statistically significant (t = ${o.t?.toFixed(2) ?? "n/a"})`);
     if (!fdr[k]) failed.push("Fails the false-discovery check across all strategies");
     if (!((dsr ?? 0) >= GATE.minDsr)) failed.push(`Deflated Sharpe ${dsr == null ? "n/a" : dsr.toFixed(2)} below ${GATE.minDsr}`);
     if (!((p.inSample.avgNet ?? 0) > 0)) failed.push(p.inSample.n ? "Did not work in the earlier years" : "No earlier-years history to confirm it");
