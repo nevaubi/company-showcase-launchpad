@@ -4,7 +4,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Bot, ChevronRight, Plus } from "lucide-react";
+import { AlertTriangle, Bot, ChevronRight, Plus } from "lucide-react";
 import { Sparkline } from "@/components/charts/sparkline";
 import { TickerMark } from "@/components/app/ticker";
 import { Button } from "@/components/ui/button";
@@ -12,18 +12,18 @@ import { impliedMoveBy } from "@/lib/options/core";
 import { optionsLatestQuery } from "@/lib/options/data";
 import { LISTED, type EvidenceBook } from "@/lib/signals/evidence";
 import { evidenceLine, liveLine } from "@/lib/signals/explain";
-import { dayLong, dayShort, holdLabel, num, pct, price, tidyDetail, usdCompact } from "@/lib/signals/format";
-import { MAX_ATR_SHARE, type RankedSetup } from "@/lib/signals/rank";
+import { dayLong, dayShort, holdLabel, num, pct, price, tidyDetail, usdCompact, ruleNameOf } from "@/lib/signals/format";
+import { MAX_ATR_SHARE, priceGap, type RankedSetup } from "@/lib/signals/rank";
 import { STRATEGY } from "@/lib/signals/strategies";
 import { cn } from "@/lib/utils";
 import { CAPTION, Fact, GradeTag, NUM, SideTag, TD, TH } from "./parts";
-
-const COLS = 8;
 
 export function SetupsList({
   rows,
   book,
   sparks,
+  bars,
+  sameLive,
   totals,
   onTrack,
   tracking,
@@ -34,6 +34,10 @@ export function SetupsList({
   totals?: Map<string, number>;
   /** Sixty closes per ticker; rows show a dash until they arrive. */
   sparks: Map<string, number[]> | undefined;
+  /** Market bar closes by `ticker|date`, to check each stored price against. */
+  bars?: Map<string, number>;
+  /** Rules whose live trades are the same trades as other rules'. */
+  sameLive?: Map<string, string[]>;
   onTrack: (r: RankedSetup) => void;
   tracking: boolean;
 }) {
@@ -43,10 +47,13 @@ export function SetupsList({
     for (const r of rows) m.set(r.key, [...(m.get(r.key) ?? []), r]);
     return [...m.entries()];
   }, [rows]);
+  // A stop and a target belong to listed rules only; a table of unlisted rules has no such columns.
+  const plan = rows.some((r) => LISTED.includes(r.grade));
+  const COLS = plan ? 8 : 6;
 
   return (
     <div className="@container -mx-3.5 overflow-x-auto">
-      <table className="w-full min-w-[520px] border-collapse sm:min-w-[820px]">
+      <table className={cn("w-full border-collapse", plan ? "min-w-[520px] sm:min-w-[820px]" : "min-w-0 sm:min-w-[680px]")}>
         <thead>
           <tr className="border-b">
             <th className={cn(TH, "w-7 pl-3.5 pr-0")} aria-label="Open" />
@@ -54,9 +61,13 @@ export function SetupsList({
             <th scope="col" className={TH}>Signal</th>
             <th scope="col" className={cn(TH, "hidden text-right sm:table-cell")}>Fired</th>
             <th scope="col" className={cn(TH, "text-right")} title="Last close on the signal's session">Price</th>
-            <th scope="col" className={cn(TH, "text-right")} title="2 times the 14-day average daily range from the price (2.5 times for momentum, event and supply-chain rules)">Stop</th>
-            <th scope="col" className={cn(TH, "text-right")} title="1.5 times the distance to the stop (2 times for momentum, event and supply-chain rules)">Target</th>
-            <th scope="col" className={cn(TH, "pr-3.5")}>60 days</th>
+            {plan && (
+              <>
+                <th scope="col" className={cn(TH, "text-right")} title="2 times the 14-day average daily range from the price (2.5 times for momentum, event and supply-chain rules)">Stop</th>
+                <th scope="col" className={cn(TH, "text-right")} title="1.5 times the distance to the stop (2 times for momentum, event and supply-chain rules)">Target</th>
+              </>
+            )}
+            <th scope="col" className={cn(TH, "hidden pr-3.5 sm:table-cell")}>60 days</th>
           </tr>
         </thead>
         {groups.map(([key, list]) => {
@@ -72,7 +83,7 @@ export function SetupsList({
                       <span className="font-semibold">{STRATEGY[e.strategy]?.label ?? e.strategy}</span>
                       <SideTag side={e.side} />
                       <span className="text-muted-foreground">{holdLabel(e.horizon)}</span>
-                      <GradeTag grade={e.grade} />
+                      {listed && <GradeTag grade={e.grade} />}
                       {listed && (
                         <span className="num" title="The rule's average after costs since 2022, shrunk toward zero for luck and adjusted for today's market">
                           Expected edge {pct(e.edge)} a trade
@@ -85,7 +96,7 @@ export function SetupsList({
                       )}
                     </div>
                     <p className={cn(CAPTION, "mt-0.5 max-w-[68rem]")}>
-                      {evidenceLine(e, book.discovery)} {liveLine(e.live)}
+                      {evidenceLine(e, book.discovery)} {liveLine(e.live, sameLive?.get(key)?.map(ruleNameOf))}
                     </p>
                   </div>
                 </td>
@@ -93,6 +104,8 @@ export function SetupsList({
               {list.map((r) => {
                 const isOpen = open === r.id;
                 const spark = sparks?.get(r.ticker);
+                const bar = bars?.get(`${r.ticker}|${r.priceOn}`);
+                const gap = priceGap(r.price, bar);
                 return (
                   <Fragment key={r.id}>
                     <tr
@@ -119,14 +132,27 @@ export function SetupsList({
                         <TickerMark ticker={r.ticker} className="align-top sm:hidden" />
                         <TickerMark ticker={r.ticker} name={r.name} className="hidden align-top sm:inline-flex" />
                       </td>
-                      <td className={cn(TD, "max-w-[9rem] truncate sm:max-w-[22rem]")} title={tidyDetail(r.detail)}>
+                      <td className={cn(TD, "min-w-[8rem] whitespace-normal py-1 leading-4 sm:max-w-[22rem] sm:truncate sm:whitespace-nowrap sm:leading-5")} title={tidyDetail(r.detail)}>
                         {r.detail ? tidyDetail(r.detail) : <span className="text-muted-foreground">–</span>}
                       </td>
                       <td className={cn(TD, NUM, "hidden text-muted-foreground sm:table-cell")}>{dayShort(r.firedAt)}</td>
-                      <td className={cn(TD, NUM)}>{price(r.price)}</td>
-                      <td className={cn(TD, NUM)}>{r.barsOk ? price(r.stop) : <span className="text-muted-foreground">–</span>}</td>
-                      <td className={cn(TD, NUM)}>{r.barsOk ? price(r.target) : <span className="text-muted-foreground">–</span>}</td>
-                      <td className={cn(TD, "pr-3.5")}>
+                      <td className={cn(TD, NUM, !plan && "pr-3.5 sm:pr-2")}>
+                        <span className="inline-flex items-center justify-end gap-1">
+                          {gap != null && bar != null && (
+                            <span role="img" className="text-warning" title={priceGapText(r, bar, gap)} aria-label={priceGapText(r, bar, gap)}>
+                              <AlertTriangle className="size-3" aria-hidden />
+                            </span>
+                          )}
+                          {price(r.price)}
+                        </span>
+                      </td>
+                      {plan && (
+                        <>
+                          <td className={cn(TD, NUM)}>{r.barsOk && listed ? price(r.stop) : <span className="text-muted-foreground">–</span>}</td>
+                          <td className={cn(TD, NUM)}>{r.barsOk && listed ? price(r.target) : <span className="text-muted-foreground">–</span>}</td>
+                        </>
+                      )}
+                      <td className={cn(TD, "hidden pr-3.5 sm:table-cell")}>
                         {spark && r.barsOk ? <Sparkline values={spark} tone="ink" fill={false} strokeWidth={1.25} className="block h-5 w-20" /> : <span className="text-muted-foreground">–</span>}
                       </td>
                     </tr>
@@ -134,7 +160,7 @@ export function SetupsList({
                       <tr className="border-b bg-highlight-soft/20">
                         <td colSpan={COLS} className="p-0">
                           <div className="sticky left-0 w-[100cqw] px-3.5 py-3">
-                            <SetupDetail r={r} peers={list.length} onTrack={onTrack} tracking={tracking} />
+                            <SetupDetail r={r} listed={listed} bar={bar ?? null} gap={gap} peers={list.length} onTrack={onTrack} tracking={tracking} />
                           </div>
                         </td>
                       </tr>
@@ -150,8 +176,11 @@ export function SetupsList({
   );
 }
 
-/** The signal itself, its risk plan with distances, what options price in, and the actions. */
-function SetupDetail({ r, peers, onTrack, tracking }: { r: RankedSetup; peers: number; onTrack: (r: RankedSetup) => void; tracking: boolean }) {
+const priceGapText = (r: RankedSetup, bar: number, gap: number) =>
+  `Stored price ${price(r.price)} differs from the market bar close of ${dayShort(r.priceOn)}, ${price(bar)}, by ${pct(gap, 1)}. The nightly price series may hold a mid-session snapshot.`;
+
+/** The signal itself, what options price in, and the actions; the risk plan in full only for a listed rule. */
+function SetupDetail({ r, listed, bar, gap, peers, onTrack, tracking }: { r: RankedSetup; listed: boolean; bar: number | null; gap: number | null; peers: number; onTrack: (r: RankedSetup) => void; tracking: boolean }) {
   const opts = useQuery(optionsLatestQuery([r.ticker]));
   const o = opts.data?.get(r.ticker);
   const priced = o ? impliedMoveBy(o.term, Math.ceil((r.horizon * 7) / 5)) : null;
@@ -159,19 +188,33 @@ function SetupDetail({ r, peers, onTrack, tracking }: { r: RankedSetup; peers: n
   const toStop = r.stop / r.price - 1;
   const toTarget = r.target / r.price - 1;
   const wide = r.family === "momentum" || r.family === "events" || r.family === "links";
+  const planFacts = (
+    <>
+      <Fact label="Stop">{r.barsOk ? `${price(r.stop)} (${pct(toStop, 1)})` : "–"}</Fact>
+      <Fact label="Target">{r.barsOk ? `${price(r.target)} (${pct(toTarget, 1)})` : "–"}</Fact>
+    </>
+  );
+  const planNote = r.barsOk
+    ? `The stop is ${wide ? "2.5" : "2"} average daily ranges from the price and the target ${wide ? "2" : "1.5"} times that distance. `
+    : `No stop or target: the stored prices for this stock look wrong (an average daily range above ${Math.round(MAX_ATR_SHARE * 100)}% of the price). `;
   return (
     <div className="space-y-2.5">
+      {!listed && (
+        <p className="text-[13px] font-medium leading-5">
+          This rule is not listed: its record cannot be told apart from luck. The signal is shown to watch, not to act on.
+        </p>
+      )}
       <p className="text-[13px] leading-5">
         {r.detail ? `${tidyDetail(r.detail)}. ` : ""}
         <span className="text-muted-foreground">
           Fired on the close of {dayLong(r.firedAt)}
-          {r.liveCaught ? ", caught that night" : ", found on a later scan (not counted in the live record)"}. Enter at the next open, exit at the close {holdLabel(r.horizon)} later, or at the stop or target.
+          {r.liveCaught ? ", caught that night" : ", found on a later scan (not counted in the live record)"}. The rule enters at the next open and exits at the close {holdLabel(r.horizon)} later.
         </span>
       </p>
+      {gap != null && bar != null && <p className="text-[13px] leading-5 text-warning">{priceGapText(r, bar, gap)}</p>}
       <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 lg:grid-cols-8">
         <Fact label="Price">{price(r.price)}</Fact>
-        <Fact label="Stop">{r.barsOk ? `${price(r.stop)} (${pct(toStop, 1)})` : "–"}</Fact>
-        <Fact label="Target">{r.barsOk ? `${price(r.target)} (${pct(toTarget, 1)})` : "–"}</Fact>
+        {listed && planFacts}
         <Fact label="Average daily range">{r.barsOk ? `${price(r.atr)} (${pct(r.atr / r.price, 1, false)})` : "–"}</Fact>
         <Fact label="Traded a day">{usdCompact(r.dollarVolume)}</Fact>
         <Fact label="Cost, round trip">{r.cost == null ? "–" : `${num(r.cost * 1e4, 0)} bp`}</Fact>
@@ -179,27 +222,50 @@ function SetupDetail({ r, peers, onTrack, tracking }: { r: RankedSetup; peers: n
         <Fact label="Options price in">{priced ? `±${pct(priced.m, 1, false)} by ${dayShort(priced.e)}` : "–"}</Fact>
       </div>
       <p className={CAPTION}>
-        {r.barsOk
-          ? `The stop is ${wide ? "2.5" : "2"} average daily ranges from the price and the target ${wide ? "2" : "1.5"} times that distance. `
-          : `No stop or target: the stored prices for this stock look wrong (an average daily range above ${Math.round(MAX_ATR_SHARE * 100)}% of the price). `}
-        {priced && r.barsOk ? `The target is ${num(Math.abs(toTarget) / priced.m, 1)} times the move options price in by ${dayShort(priced.e)}. ` : ""}
+        {listed ? planNote : ""}
+        {listed && priced && r.barsOk ? `The target is ${num(Math.abs(toTarget) / priced.m, 1)} times the move options price in by ${dayShort(priced.e)}. ` : ""}
         Strength orders signals inside a rule only: on the live record so far it shows no link to the outcome.
       </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button size="xs" variant="outline" onClick={() => onTrack(r)} disabled={tracking || !r.barsOk}>
-          <Plus aria-hidden /> Paper trade
-        </Button>
-        <Button asChild size="xs" variant="ghost">
-          <Link to="/app/autopilots" search={{ variant: r.key }}>
-            <Bot aria-hidden /> Automate this rule
-          </Link>
-        </Button>
-        <Button asChild size="xs" variant="ghost">
-          <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }}>
-            Open {r.ticker}
-          </Link>
-        </Button>
-      </div>
+      {listed ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="xs" variant="outline" onClick={() => onTrack(r)} disabled={tracking || !r.barsOk}>
+            <Plus aria-hidden /> Paper trade
+          </Button>
+          <Button asChild size="xs" variant="ghost">
+            <Link to="/app/autopilots" search={{ variant: r.key }}>
+              <Bot aria-hidden /> Automate this rule
+            </Link>
+          </Button>
+          <Button asChild size="xs" variant="ghost">
+            <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }}>
+              Open {r.ticker}
+            </Link>
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-1.5 border-t pt-2.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild size="xs" variant="outline">
+              <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }}>
+                Open {r.ticker}
+              </Link>
+            </Button>
+          </div>
+          <p className={CAPTION}>If you paper-trade it anyway (paper only, no money):</p>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4 lg:grid-cols-8">{planFacts}</div>
+          <p className={CAPTION}>{planNote}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="xs" variant="ghost" className="text-muted-foreground" onClick={() => onTrack(r)} disabled={tracking || !r.barsOk}>
+              <Plus aria-hidden /> Paper trade
+            </Button>
+            <Button asChild size="xs" variant="ghost" className="text-muted-foreground">
+              <Link to="/app/autopilots" search={{ variant: r.key }}>
+                <Bot aria-hidden /> Automate this rule
+              </Link>
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,8 +15,8 @@ export interface SetupsData extends SetupsFile {
    * Every signal the engine holds live for `asOf` (fired within the last three sessions), without
    * its sparkline. `setups` is ranked from these at read time (`rankSetups` with the default
    * filters), not the list the nightly job stored: the short list, or, when no rule is listed, the
-   * signals of the closest rules (`proven: false`, expected edge zero), which is what the page
-   * shows by default and what the assistant reads.
+   * watch list of the closest rules (`proven: false`, expected edge zero), which is what the
+   * assistant reads. The page itself opens on the short list even when it is empty.
    */
   live: LiveSignal[];
   /** Set when the signals could not be read; the scoreboard still works. */
@@ -27,7 +27,7 @@ export interface SetupsData extends SetupsFile {
   sameLive: Map<string, string[]>;
 }
 
-const SIGNAL_COLUMNS = "ticker, variant, fired_at, first_seen, name, sector, strength, detail, price, atr, dv20, cost";
+const SIGNAL_COLUMNS = "ticker, variant, fired_at, first_seen, last_seen, name, sector, strength, detail, price, atr, dv20, cost";
 const PAGE = 1000;
 
 interface SignalRow {
@@ -35,6 +35,7 @@ interface SignalRow {
   variant: string;
   fired_at: string;
   first_seen: string | null;
+  last_seen: string | null;
   name: string | null;
   sector: string | null;
   strength: number | null;
@@ -69,7 +70,7 @@ export async function fetchLiveSignals(asOf: string): Promise<LiveSignal[]> {
       // First seen after `asOf`: the next session's signal, not this one's.
       if (r.first_seen != null && r.first_seen > asOf) continue;
       out.push({
-        ticker: r.ticker, name: r.name ?? r.ticker, sector: r.sector ?? "", variant: r.variant, firedAt: r.fired_at, firstSeen: r.first_seen,
+        ticker: r.ticker, name: r.name ?? r.ticker, sector: r.sector ?? "", variant: r.variant, firedAt: r.fired_at, firstSeen: r.first_seen, lastSeen: r.last_seen,
         strength: Number(r.strength ?? 0), detail: r.detail ?? "", price: Number(r.price ?? 0), atr: Number(r.atr ?? 0), dv20: num(r.dv20), cost: num(r.cost),
       });
     }
@@ -137,12 +138,35 @@ export const setupsQuery = queryOptions({
       }
     }
     const book = buildEvidence(file.variants, file.regime, file.asOf, trades ? liveDays(trades) : null);
-    // What the page shows by default: the short list, or the closest rules' signals when no rule is listed.
+    // What the assistant reads: the short list, or the watch list when no rule is listed.
     const ranking = rankSetups(book, live);
     const shown = ranking.list.length ? ranking.list : ranking.closest;
     return { ...file, setups: shown.map((r) => toSetup(r)), live, liveError, book, sameLive: sameLiveTrades(trades ?? []) };
   },
 });
+
+/**
+ * Market bar closes for the sessions the rows' prices belong to (`ticker|date` to close), so a row
+ * whose stored price disagrees with the bar can say so. A failed read flags nothing.
+ */
+export const barClosesQuery = (rows: readonly { ticker: string; priceOn: string }[]) => {
+  const tickers = [...new Set(rows.map((r) => r.ticker))].sort();
+  const dates = [...new Set(rows.map((r) => r.priceOn))].sort();
+  return queryOptions({
+    queryKey: ["setups", "bar-closes", tickers.join(","), dates.join(",")],
+    staleTime: 30 * 60_000,
+    enabled: tickers.length > 0,
+    queryFn: async (): Promise<Map<string, number>> => {
+      const out = new Map<string, number>();
+      for (let k = 0; k < tickers.length; k += 100) {
+        const { data, error } = await supabase.from("market_bars").select("symbol, date, close").in("symbol", tickers.slice(k, k + 100)).in("date", dates).limit(1000);
+        if (error) throw new Error(error.message);
+        for (const r of (data ?? []) as { symbol: string; date: string; close: number | string | null }[]) if (r.close != null) out.set(`${r.symbol}|${r.date}`, Number(r.close));
+      }
+      return out;
+    },
+  });
+};
 
 /** Sixty closes per ticker for the rows on screen (the signals query leaves them out: 60 numbers a row). */
 export const sparksQuery = (asOf: string, rows: readonly { ticker: string; key: string }[]) => {

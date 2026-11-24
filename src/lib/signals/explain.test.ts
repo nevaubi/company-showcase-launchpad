@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildEvidence } from "./evidence";
-import { evidenceLine, liveLine, luckLines, recordLine, verdictLine } from "./explain";
+import { emptyListLine, evidenceLine, liveLine, luckLines, recordLine, verdictLine } from "./explain";
 import { count, dayLong, dayShort, holdLabel, monthLabel, nameOf, niceTicks, num, pct, pctTone, price, tidyDetail, usdCompact } from "./format";
 import { DEFAULT_FILTERS } from "./rank";
 import { defaultView, filtersActive, filtersOf, searchOf, setupsSearch } from "./url-state";
@@ -69,7 +69,7 @@ describe("the evidence in words, on the production record of 20 Nov 2026", () =>
 
   it("states the verdict with the numbers behind it", () => {
     expect(verdictLine(book)).toBe(
-      "No rule clears the bar today. The best of 46 scores t 1.97 on its monthly record since 2022. Luck alone would put the best of 46 worthless rules near 2.24, and a rule has to reach 2.98 to stand out.",
+      "No rule clears the bar today. The best of 46 scores t 1.97 on its monthly record since 2022. Luck alone would put the best of 46 worthless rules at about 2.2, and the first rule has to reach 2.98 to be listed.",
     );
     const luck = luckLines(book);
     expect(luck).toHaveLength(3);
@@ -77,10 +77,26 @@ describe("the evidence in words, on the production record of 20 Nov 2026", () =>
     expect(luck[2]).toBe("Today the best rule scores 1.97, and 3 rules beat 1.65 where luck alone gives 2.3. That is what luck looks like, so nothing is listed.");
   });
 
+  it("explains an empty list with the bar and the edge a rule would need to clear it", () => {
+    const line = emptyListLine(book);
+    expect(line).toContain("No rule clears the bar today");
+    expect(line).toContain("t near 2.2, so the first rule has to reach 2.98");
+    // 2.98 * sqrt(12 / 59) = 1.34 and 2.98 * sqrt(12 / 24) = 2.11 (the shortest record that can be listed).
+    expect(line).toMatch(/annual Sharpe ratio of roughly 1\.3 to 2\.\d after costs for an even chance/);
+    expect(line).toContain("not that no rule has any edge");
+    expect(line).not.toMatch(/2\.24/);
+  });
+
   it("says why a rule is not listed, without calling a backtest proven", () => {
     const vol = book.byKey.get("volPremium:L:20")!;
     expect(recordLine(vol)).toBe("+0.67% a trade after costs since 2022, 33 of 58 months up, t 1.88");
-    expect(evidenceLine(vol, book.discovery)).toBe(`${recordLine(vol)}. Not past the bar: with 46 rules tried, the best needs t 2.98 before it stands out from luck.`);
+    // The verdict leads; a backtest average never stands without its t and the words that it is not told apart from luck.
+    expect(evidenceLine(vol, book.discovery)).toBe("Not listed: cannot be told apart from luck (t 1.88, needs 2.98). Backtest +0.67% a trade after costs since 2022, 33 of 58 months up.");
+    for (const e of book.variants) {
+      const line = evidenceLine(e, book.discovery);
+      if (e.blocks && e.blocks.mean > 0) expect(line).toMatch(/^Not listed/);
+      expect(line).toMatch(/t −?\d/);
+    }
     expect(evidenceLine(book.byKey.get("shortFlow:S:5")!, book.discovery)).toBe("Does not make money after costs since 2022: −0.32% a trade, t −3.95.");
     for (const e of book.variants) expect(evidenceLine(e, book.discovery)).not.toMatch(/proven|Passes/);
   });
@@ -125,6 +141,7 @@ describe("the address of the setups page", () => {
 
   it("opens on the short list, or on the closest rules when the short list is empty", () => {
     expect(defaultView(3)).toBe("short");
-    expect(defaultView(0)).toBe("closest");
+    // An empty short list is still the default: its empty state is the message.
+    expect(defaultView(0)).toBe("short");
   });
 });

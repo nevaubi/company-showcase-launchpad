@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { adjustedT, REGIMES } from "@/lib/signals/backtest";
 import { EVIDENCE, LISTED, type EvidenceBook, type Grade, type VariantEvidence } from "@/lib/signals/evidence";
 import { evidenceLine, liveLine } from "@/lib/signals/explain";
-import { count, holdLabel, monthLabel, num, pct, pctTone, VERDICT_LABEL } from "@/lib/signals/format";
+import { count, holdLabel, monthLabel, num, pct, pctTone, VERDICT_LABEL, ruleNameOf } from "@/lib/signals/format";
 import { gateChecks, type PairSetup, type SetupsFile, type VariantMeta } from "@/lib/signals/setups";
 import { FAMILY_LABEL, STRATEGY, type Family } from "@/lib/signals/strategies";
 import { cn } from "@/lib/utils";
@@ -28,7 +28,6 @@ interface Row {
 }
 
 const label = (r: Row) => STRATEGY[r.v.strategy]?.label ?? r.v.strategy;
-
 /** Sort value per column; missing values always sink to the bottom. */
 function valueOf(r: Row, k: SortKey): number | string | null {
   const b = r.e.blocks, l = r.e.live;
@@ -46,7 +45,7 @@ function valueOf(r: Row, k: SortKey): number | string | null {
   }
 }
 
-export function Scoreboard({ data, book }: { data: SetupsFile; book: EvidenceBook }) {
+export function Scoreboard({ data, book, sameLive }: { data: SetupsFile; book: EvidenceBook; sameLive?: Map<string, string[]> }) {
   const [open, setOpen] = useState<string | null>(null);
   const [family, setFamily] = useState<"all" | Family>("all");
   const [sort, setSort] = useState<SortState<SortKey>>({ key: "t", dir: -1 });
@@ -69,9 +68,9 @@ export function Scoreboard({ data, book }: { data: SetupsFile; book: EvidenceBoo
     <div>
       <Segmented<"all" | Family> label="Scoreboard family" size="xs" value={family} onChange={setFamily} options={FAMILIES.map((f) => ({ v: f, l: f === "all" ? "All" : FAMILY_LABEL[f] }))} />
       <div className="@container -mx-3.5 mt-3 overflow-x-auto">
-        <table className="w-full min-w-[980px] border-collapse">
+        <table className="w-full border-collapse sm:min-w-[980px]">
           <thead>
-            <tr>
+            <tr className="hidden sm:table-row">
               <th colSpan={3} />
               <th colSpan={5} scope="colgroup" className="eyebrow border-b px-2 pb-1 text-left">Backtest since {data.oosStart.slice(0, 4)}, after costs</th>
               <th colSpan={3} scope="colgroup" className="eyebrow border-b border-l px-2 pb-1 text-left">Live, finished trades</th>
@@ -80,15 +79,15 @@ export function Scoreboard({ data, book }: { data: SetupsFile; book: EvidenceBoo
             <tr className="border-b">
               <th className={cn(TH, "w-7 pl-3.5 pr-0")} aria-label="Open" />
               <SortTh k="rule" align="left" {...head}>Rule</SortTh>
-              <th scope="col" className={TH}>Side, hold</th>
-              <SortTh k="n" title="Trades since 2022, stocks under $5M a day left out" {...head}>Trades</SortTh>
-              <SortTh k="avg" title="Average net return per trade against the sector fund, each month counted once" {...head}>Avg net</SortTh>
-              <SortTh k="months" title="Months with a positive average, out of months with trades" {...head}>Months up</SortTh>
+              <th scope="col" className={cn(TH, "hidden sm:table-cell")}>Side, hold</th>
+              <SortTh k="n" className="hidden sm:table-cell" title="Trades since 2022, stocks under $5M a day left out" {...head}>Trades</SortTh>
+              <SortTh k="avg" className="hidden sm:table-cell" title="Average net return per trade against the sector fund, each month counted once" {...head}>Avg net</SortTh>
+              <SortTh k="months" className="hidden sm:table-cell" title="Months with a positive average, out of months with trades" {...head}>Months up</SortTh>
               <SortTh k="t" title="The average divided by its error, with months as the unit and the error widened for holds that run across months" {...head}>t</SortTh>
               <SortTh k="q" title="Share of rules listed down to this one that would be expected to be luck. A rule is watched at 10% or less." {...head}>Luck rate</SortTh>
-              <SortTh k="liveN" className="border-l" title="Signals caught on the day they fired whose holding period has finished" {...head}>Trades</SortTh>
-              <SortTh k="liveAvg" title="Average net return per finished live trade" {...head}>Avg net</SortTh>
-              <SortTh k="liveHit" title="Share of finished live trades that made money" {...head}>Up</SortTh>
+              <SortTh k="liveN" className="hidden sm:table-cell border-l" title="Signals caught on the day they fired whose holding period has finished" {...head}>Trades</SortTh>
+              <SortTh k="liveAvg" className="hidden sm:table-cell" title="Average net return per finished live trade" {...head}>Avg net</SortTh>
+              <SortTh k="liveHit" className="hidden sm:table-cell" title="Share of finished live trades that made money" {...head}>Up</SortTh>
               <SortTh k="status" align="left" className="pr-3.5" {...head}>Status</SortTh>
             </tr>
           </thead>
@@ -114,19 +113,29 @@ export function Scoreboard({ data, book }: { data: SetupsFile; book: EvidenceBoo
                         <ChevronRight className={cn("size-3.5 transition-transform duration-150 motion-reduce:transition-none", isOpen && "rotate-90")} aria-hidden />
                       </button>
                     </td>
-                    <td className={cn(TD, "whitespace-nowrap")}>{label(r)}</td>
-                    <td className={cn(TD, "whitespace-nowrap")}>
+                    <td className={cn(TD, "py-1 leading-4 sm:whitespace-nowrap sm:py-0 sm:leading-5")}>
+                      {label(r)}
+                      <span className="block whitespace-nowrap text-[11px] text-muted-foreground sm:hidden">
+                        {v.side > 0 ? "Long" : "Short"}, {holdLabel(v.horizon)}
+                      </span>
+                      {l.n > 0 && sameLive?.get(v.key) && (
+                        <span className="block whitespace-normal text-[11px] leading-4 text-muted-foreground">
+                          Same live trades as {sameLive.get(v.key)!.map(ruleNameOf).join(" and ")}
+                        </span>
+                      )}
+                    </td>
+                    <td className={cn(TD, "hidden whitespace-nowrap sm:table-cell")}>
                       <SideTag side={v.side} /> <span className="text-muted-foreground">{holdLabel(v.horizon)}</span>
                     </td>
-                    <td className={cn(TD, NUM)}>{count(v.outSample.n)}</td>
-                    <td className={cn(TD, NUM, pctTone(b?.mean))}>{pct(b?.mean)}</td>
-                    <td className={cn(TD, NUM)}>{b ? `${b.positive}/${b.months}` : "–"}</td>
+                    <td className={cn(TD, NUM, "hidden sm:table-cell")}>{count(v.outSample.n)}</td>
+                    <td className={cn(TD, NUM, "hidden sm:table-cell", pctTone(b?.mean))}>{pct(b?.mean)}</td>
+                    <td className={cn(TD, NUM, "hidden sm:table-cell")}>{b ? `${b.positive}/${b.months}` : "–"}</td>
                     <td className={cn(TD, NUM)}>{num(b?.t, 2)}</td>
                     <td className={cn(TD, NUM, b && e.q <= EVIDENCE.watchFdr ? "" : "text-muted-foreground")}>{b ? pct(e.q, 0, false) : "–"}</td>
-                    <td className={cn(TD, NUM, "border-l")}>{l.n ? count(l.n) : "–"}</td>
-                    <td className={cn(TD, NUM, l.n ? pctTone(l.avgNet) : "")}>{l.n ? pct(l.avgNet) : "–"}</td>
-                    <td className={cn(TD, NUM)}>{l.n ? pct(l.hit, 0, false) : "–"}</td>
-                    <td className={cn(TD, "max-w-[15rem] truncate pr-3.5")} title={e.reason || undefined}>
+                    <td className={cn(TD, NUM, "hidden sm:table-cell border-l")} title={sameLive?.get(v.key) ? `Same trades as ${sameLive.get(v.key)!.join(" and ")}` : undefined}>{l.n ? count(l.n) : "–"}</td>
+                    <td className={cn(TD, NUM, "hidden sm:table-cell", l.n ? pctTone(l.avgNet) : "")}>{l.n ? pct(l.avgNet) : "–"}</td>
+                    <td className={cn(TD, NUM, "hidden sm:table-cell")}>{l.n ? pct(l.hit, 0, false) : "–"}</td>
+                    <td className={cn(TD, "max-w-[11rem] whitespace-normal py-1 pr-3.5 leading-4 sm:max-w-[15rem] sm:truncate sm:whitespace-nowrap sm:py-0 sm:leading-5")} title={e.reason || undefined}>
                       {e.grade === "unproven" ? <span className="text-muted-foreground">{e.reason}</span> : <GradeTag grade={e.grade} />}
                     </td>
                   </tr>
@@ -134,7 +143,7 @@ export function Scoreboard({ data, book }: { data: SetupsFile; book: EvidenceBoo
                     <tr className="border-b bg-highlight-soft/20">
                       <td colSpan={COLS} className="p-0">
                         <div className="sticky left-0 w-[100cqw] px-3.5 py-3">
-                          <VariantDetail v={v} e={e} data={data} book={book} />
+                          <VariantDetail v={v} e={e} data={data} book={book} same={sameLive?.get(v.key)} />
                         </div>
                       </td>
                     </tr>
@@ -151,7 +160,7 @@ export function Scoreboard({ data, book }: { data: SetupsFile; book: EvidenceBoo
 
 const H = "mb-1 text-[13px] font-semibold leading-5";
 
-function VariantDetail({ v, e, data, book }: Row & { data: SetupsFile; book: EvidenceBook }) {
+function VariantDetail({ v, e, data, book, same }: Row & { data: SetupsFile; book: EvidenceBook; same?: string[] }) {
   const s = STRATEGY[v.strategy];
   const b = e.blocks;
   const o = v.outSample;
@@ -167,7 +176,7 @@ function VariantDetail({ v, e, data, book }: Row & { data: SetupsFile; book: Evi
           </p>
         </div>
         <p className="text-[13px] leading-5">
-          {evidenceLine(e, book.discovery)} <span className="text-muted-foreground">{liveLine(e.live)}</span>
+          {evidenceLine(e, book.discovery)} <span className="text-muted-foreground">{liveLine(e.live, same?.map(ruleNameOf))}</span>
         </p>
         <div>
           <div className={H}>Record over time</div>
@@ -299,7 +308,7 @@ function VariantDetail({ v, e, data, book }: Row & { data: SetupsFile; book: Evi
         </div>
         <div>
           <div className={H}>Live against the backtest</div>
-          <p className="text-[13px] leading-5">{liveLine(e.live)}</p>
+          <p className="text-[13px] leading-5">{liveLine(e.live, same?.map(ruleNameOf))}</p>
           {e.live.n > 0 && e.live.band != null && (
             <p className={cn(CAPTION, "mt-0.5")}>
               {VERDICT_LABEL[e.live.verdict]}. Over a record this short the average can sit {pct(e.live.band, 1, false)} either side of the expected {pct(e.edge)} by luck

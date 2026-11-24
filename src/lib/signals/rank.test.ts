@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Regime } from "./backtest";
 import { buildEvidence, type BlockStats, type EvidenceBook, type Grade, type VariantEvidence } from "./evidence";
-import { barsLookRight, compareSetups, crowd, DEFAULT_FILTERS, dollarVolumeOf, holdBucket, RANK_LIMITS, rankSetups, toSetup, type LiveSignal, type RankFilters } from "./rank";
+import { barsLookRight, compareSetups, crowd, DEFAULT_FILTERS, dollarVolumeOf, holdBucket, priceGap, RANK_LIMITS, rankSetups, toSetup, type LiveSignal, type RankFilters } from "./rank";
 import { parseVariantKey } from "./setups";
 import { STRATEGY } from "./strategies";
 import { realVariants } from "./variants-real.fixture";
@@ -267,5 +267,15 @@ describe("the list on real statistics and on noise", () => {
     // Where the old page showed up to 150 rows of near misses, noise now fills well under one row a day on average.
     expect(nonEmpty).toBeLessThanOrEqual(9);
     expect(rows / 60).toBeLessThan(1.5);
+  });
+});
+
+describe("stored price against the market bar", () => {
+  it("flags a gap above 1% and nothing else", () => {
+    // SNEX on 20 Nov 2026: series 35.345 against a bar close of 36.63.
+    expect(priceGap(35.345, 36.63)).toBeCloseTo(35.345 / 36.63 - 1, 12);
+    expect(priceGap(36.8, 36.63)).toBeNull();
+    expect(priceGap(36.63, null)).toBeNull();
+    expect(priceGap(0, 36.63)).toBeNull();
   });
 });

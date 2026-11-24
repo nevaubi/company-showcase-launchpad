@@ -46,8 +46,11 @@ export function searchOf(f: RankFilters): Omit<SetupsSearch, "view"> {
   };
 }
 
-/** The view shown when the address names none: the short list, or the closest rules when it is empty. */
-export const defaultView = (shortListLength: number): SetupView => (shortListLength > 0 ? "short" : "closest");
+/**
+ * The view shown when the address names none: always the short list, even when it is empty (its
+ * empty state says why). The closest rules are a separate watch list, never the default.
+ */
+export const defaultView = (_shortListLength?: number): SetupView => "short";
 
 export const filtersActive = (f: RankFilters) =>
   f.side !== DEFAULT_FILTERS.side || f.hold !== DEFAULT_FILTERS.hold || f.family !== DEFAULT_FILTERS.family || f.sector !== DEFAULT_FILTERS.sector || f.minDollarVolume !== DEFAULT_FILTERS.minDollarVolume;

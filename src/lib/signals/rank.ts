@@ -16,6 +16,8 @@ export interface LiveSignal {
   firedAt: string;
   /** Session on which the engine first saw it; equal to `firedAt` when it was caught live. */
   firstSeen?: string | null;
+  /** Last session the scan saw it: `price` is that session's stored close. */
+  lastSeen?: string | null;
   strength: number;
   detail: string;
   price: number;
@@ -55,6 +57,20 @@ export type RankLimits = { max: number; perRule: number; perSector: number };
 export const MAX_ATR_SHARE = 0.4;
 export const barsLookRight = (price: number, atr: number) => Number.isFinite(atr) && atr > 0 && atr < MAX_ATR_SHARE * price;
 
+/** Largest gap between a stored price and the market bar of the same session that is not flagged. */
+export const PRICE_TOLERANCE = 0.01;
+
+/**
+ * The stored close checked against the market bar of the same session: the gap as a fraction of
+ * the bar close when it exceeds `PRICE_TOLERANCE`, null when they agree or there is no bar. The
+ * nightly series can keep a mid-session snapshot (20 Nov 2026: 522 of 1,717 stocks off by over 1%).
+ */
+export function priceGap(stored: number | null | undefined, bar: number | null | undefined): number | null {
+  if (stored == null || bar == null || !(stored > 0) || !(bar > 0)) return null;
+  const gap = stored / bar - 1;
+  return Math.abs(gap) > PRICE_TOLERANCE ? gap : null;
+}
+
 export const holdBucket = (horizon: number): Exclude<HoldFilter, "all"> => (horizon <= 5 ? "week" : horizon <= 10 ? "fortnight" : "month");
 
 /**
@@ -83,6 +99,8 @@ export interface RankedSetup {
   side: 1 | -1;
   horizon: number;
   firedAt: string;
+  /** Session whose stored close `price` is. */
+  priceOn: string;
   detail: string;
   strength: number;
   price: number;
@@ -217,7 +235,7 @@ export function rankSetups(book: EvidenceBook, signals: readonly LiveSignal[], f
       rows.push({
         id: `${s.ticker}|${key}|${s.firedAt}`,
         ticker: s.ticker, name: s.name, sector: s.sector, key, strategy: e.strategy, family: e.family, side: e.side, horizon: e.horizon,
-        firedAt: s.firedAt, detail: s.detail, strength: s.strength, price: s.price, atr: s.atr,
+        firedAt: s.firedAt, priceOn: s.lastSeen ?? s.firedAt, detail: s.detail, strength: s.strength, price: s.price, atr: s.atr,
         dollarVolume: dollarVolumeOf(s, e.side, e.horizon), cost: s.cost, stop: plan.stop, target: plan.target, risk: Math.abs(s.price - plan.stop) / s.price,
         grade: e.grade, edge: e.edge - costPenalty, costPenalty, q: e.q, ruleT: e.blocks?.t ?? null, strengthPct,
         liveCaught: s.firstSeen != null && s.firstSeen === s.firedAt,
