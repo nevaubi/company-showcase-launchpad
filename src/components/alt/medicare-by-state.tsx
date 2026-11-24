@@ -3,13 +3,14 @@ import { useSource } from "@/components/source/source-context";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { fmtAlt, type AltRow } from "@/lib/alt/query";
+import { fmtSigned } from "@/lib/alt/catalog";
 import { GEO_PAGE, GEO_TOTAL, type GeoDrug } from "@/lib/alt/medicare-geo";
 import { STATES } from "@/lib/alt/sod";
 import { cn } from "@/lib/utils";
 import { UsTileMap } from "./us-tile-map";
 
-const pct = (v: number | undefined | null, d = 1) => (v == null || !Number.isFinite(v) ? "—" : v > 0 && v < 0.0005 && d <= 1 ? "<0.1%" : `${(v * 100).toFixed(d)}%`);
-const idx = (v: number | undefined | null) => (v == null || !Number.isFinite(v) ? "—" : `${v.toFixed(2)}×`);
+const pct = (v: number | undefined | null, d = 1) => (v == null || !Number.isFinite(v) ? "–" : v > 0 && v < 0.0005 && d <= 1 ? "<0.1%" : `${(v * 100).toFixed(d)}%`);
+const idx = (v: number | undefined | null) => (v == null || !Number.isFinite(v) ? "–" : `${v.toFixed(2)}×`);
 
 /**
  * A drug maker's Medicare Part D drug costs by prescriber state (CMS): tile map by share of the
@@ -55,11 +56,11 @@ export function MedicareByState({ ticker, rows }: { ticker: string; rows: AltRow
           </div>
           <div className="bg-card px-2.5 py-1.5" title="Share of the company's Part D spending in CMS's Spending by Drug file that this state view covers (brands its own labelers hold ≥95% of)">
             <p className="text-[11px] text-muted-foreground">Brands · coverage</p>
-            <p className="num font-semibold">{total?.meta?.drugs ?? "—"} · {pct(total?.meta?.coverage, 0)}</p>
+            <p className="num font-semibold">{total?.meta?.drugs ?? "–"} · {pct(total?.meta?.coverage, 0)}</p>
           </div>
           <div className="bg-card px-2.5 py-1.5">
             <p className="text-[11px] text-muted-foreground">Since {y0}</p>
-            <p className={cn("num font-semibold", growth != null && growth < 0 && "text-negative")}>{growth == null ? "—" : `${growth >= 0 ? "+" : ""}${(growth * 100).toFixed(0)}%`}</p>
+            <p className={cn("num font-semibold", growth != null && growth < 0 && "text-negative")}>{fmtSigned(growth, 0)}</p>
           </div>
         </div>
         <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -92,7 +93,7 @@ export function MedicareByState({ ticker, rows }: { ticker: string; rows: AltRow
           {pick ? (
             <div>
               <p>
-                <span className="font-medium text-foreground">{STATES[pick.meta.state] ?? pick.meta.state}</span>: {fmtAlt(pick.value, "USD")} — {pct(pick.meta.share)} of the company's Part D costs and {pct(pick.meta.market_share, 2)} of all Part D drug costs prescribed there; {idx(pick.meta.index)} its weight in Medicare overall.
+                <span className="font-medium text-foreground">{STATES[pick.meta.state] ?? pick.meta.state}</span>: {fmtAlt(pick.value, "USD")}: {pct(pick.meta.share)} of the company's Part D costs and {pct(pick.meta.market_share, 2)} of all Part D drug costs prescribed there; {idx(pick.meta.index)} its weight in Medicare overall.
               </p>
               <ul className="mt-1 space-y-0.5">
                 {(pick.meta.drugs as GeoDrug[] | undefined)?.map((d) => (
@@ -126,16 +127,16 @@ export function MedicareByState({ ticker, rows }: { ticker: string; rows: AltRow
       </div>
       <div className="min-w-0">
         <div className="overflow-x-auto">
-          <table className="research-table w-full">
+          <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="px-2 py-2 font-medium">State</th>
-                <th className="px-2 py-2 text-right font-medium">Part D costs</th>
-                <th className="px-2 py-2 text-right font-medium" title="Share of the company's Part D drug costs">Of company</th>
-                <th className="px-2 py-2 text-right font-medium" title="Share of all Part D drug costs prescribed in the state">Of state</th>
-                <th className="px-2 py-2 text-right font-medium" title="State's share of the company's costs ÷ state's share of all Part D costs">Index</th>
-                <th className="px-2 py-2 text-right font-medium">vs {y0}</th>
-                <th className="hidden px-2 py-2 font-medium md:table-cell xl:hidden 2xl:table-cell">Largest drug</th>
+              <tr className="h-7 border-b text-left text-[11px] text-muted-foreground [&>th]:whitespace-nowrap">
+                <th className="px-2 font-normal">State</th>
+                <th className="px-2 text-right font-normal">Part D costs</th>
+                <th className="px-2 text-right font-normal" title="Share of the company's Part D drug costs">Of company</th>
+                <th className="px-2 text-right font-normal" title="Share of all Part D drug costs prescribed in the state">Of state</th>
+                <th className="px-2 text-right font-normal" title="State's share of the company's costs ÷ state's share of all Part D costs">Index</th>
+                <th className="px-2 text-right font-normal">vs {y0}</th>
+                <th className="hidden px-2 font-normal md:table-cell xl:hidden 2xl:table-cell">Largest drug</th>
               </tr>
             </thead>
             <tbody>
@@ -144,16 +145,16 @@ export function MedicareByState({ ticker, rows }: { ticker: string; rows: AltRow
                 const g = old?.value && y0 !== y ? (r.value ?? 0) / old.value - 1 : null;
                 const top = (r.meta.drugs as GeoDrug[] | undefined)?.[0];
                 return (
-                  <tr key={r.uid} className={cn("border-b last:border-0", sel === r.meta.state && "bg-secondary")} onMouseEnter={() => setSel(r.meta.state)}>
-                    <td className="whitespace-nowrap px-2 py-1.5" title={STATES[r.meta.state]}><span className="num font-medium">{r.meta.state}</span> <span className="hidden text-[11px] text-muted-foreground sm:inline xl:hidden 2xl:inline">{STATES[r.meta.state]}</span></td>
+                  <tr key={r.uid} className={cn("h-7 border-b last:border-0 hover:bg-secondary/40", sel === r.meta.state && "bg-secondary")} onMouseEnter={() => setSel(r.meta.state)}>
+                    <td className="whitespace-nowrap px-2" title={STATES[r.meta.state]}><span className="num font-medium">{r.meta.state}</span> <span className="hidden text-[11px] text-muted-foreground sm:inline xl:hidden 2xl:inline">{STATES[r.meta.state]}</span></td>
                     <td className="num px-2 text-right">
                       <button type="button" className="underline decoration-dotted underline-offset-2" onClick={() => src(`${ticker} Part D costs in ${STATES[r.meta.state] ?? r.meta.state}, ${y} (largest drug's record)`, r.value, r.source_url)}>{fmtAlt(r.value, "USD")}</button>
                     </td>
                     <td className="num px-2 text-right">{pct(r.meta.share)}</td>
                     <td className="num px-2 text-right">{pct(r.meta.market_share, 2)}</td>
                     <td className={cn("num px-2 text-right", r.meta.index > 1.15 ? "text-chart-1" : r.meta.index < 0.87 ? "text-chart-2" : "")}>{idx(r.meta.index)}</td>
-                    <td className={cn("num px-2 text-right", g != null && g < 0 && "text-negative")} title={old?.value != null ? `${y0}: ${fmtAlt(old.value, "USD")}` : undefined}>{g == null ? (y0 === y ? "—" : "new") : `${g >= 0 ? "+" : ""}${(g * 100).toFixed(0)}%`}</td>
-                    <td className="hidden max-w-[11rem] truncate px-2 text-[12px] text-muted-foreground md:table-cell xl:hidden 2xl:table-cell" title={top ? `${top.brand} (${top.generic}) ${fmtAlt(top.value, "USD")}` : undefined}>{top?.brand ?? "—"}</td>
+                    <td className={cn("num px-2 text-right", g != null && g < 0 && "text-negative")} title={old?.value != null ? `${y0}: ${fmtAlt(old.value, "USD")}` : undefined}>{g == null ? (y0 === y ? "–" : "new") : fmtSigned(g, 0)}</td>
+                    <td className="hidden max-w-[11rem] truncate px-2 text-[12px] text-muted-foreground md:table-cell xl:hidden 2xl:table-cell" title={top ? `${top.brand} (${top.generic}) ${fmtAlt(top.value, "USD")}` : undefined}>{top?.brand ?? "–"}</td>
                   </tr>
                 );
               })}

@@ -640,3 +640,10 @@ export function snapshotFigures(alt: CompanyAlt, max = 6): { view: DatasetView; 
   }
   return out;
 }
+
+/** The snapshot's subtitle: how many datasets are on file and how many read unusual, each in the right number. */
+export function snapshotNote(flags: number, datasets: number): string {
+  const sets = `${datasets} public dataset${datasets === 1 ? "" : "s"} on file`;
+  if (!flags) return sets;
+  return `${flags} unusual against ${flags === 1 ? "its" : "their"} own history · ${sets}`;
+}

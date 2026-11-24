@@ -2,13 +2,16 @@ import { useMemo, useState } from "react";
 import { useSource } from "@/components/source/source-context";
 import { Button } from "@/components/ui/button";
 import { fmtAlt, type AltRow } from "@/lib/alt/query";
+import { fmtSigned } from "@/lib/alt/catalog";
 import { STATES } from "@/lib/alt/sod";
 import { TRI_FACILITIES, TRI_PAGE, TRI_PRODUCTION, TRI_RELEASES, type TriFacility } from "@/lib/alt/tri";
 import { cn } from "@/lib/utils";
 import { UsTileMap } from "./us-tile-map";
 
-const lb = (v: number | null | undefined) => (v == null ? "—" : fmtAlt(v, "lbs"));
-const chg = (r: number | null | undefined) => (r == null ? "—" : `${r >= 1 ? "+" : ""}${((r - 1) * 100).toFixed(0)}%`);
+const lb = (v: number | null | undefined) => (v == null ? "–" : fmtAlt(v, "lbs"));
+/** Pounds in a column whose head states the unit. */
+const lbCell = (v: number | null | undefined) => lb(v).replace(/ lb$/, "");
+const chg = (r: number | null | undefined) => fmtSigned(r == null ? null : r - 1, 0);
 const title = (s: string) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()).replace(/\b(Llc|Inc|Lp|Co)\b/g, (w) => w.toUpperCase());
 
 /**
@@ -35,7 +38,7 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
   const states = (fac.meta.states ?? []) as { state: string; facilities: number; releases: number }[];
   const chems = (fac.meta.top_chemicals ?? []) as { chemical: string; releases: number }[];
   const relChg = rel?.value != null && relPrev?.value ? rel.value / relPrev.value - 1 : null;
-  const src = (f: TriFacility) => open({ ticker, label: `${title(f.name)} (${f.city}, ${f.state}) — EPA TRI ${y}`, unit: "usd", value: 0, external: { url: f.url, date: `${y}-12-31`, quote: `${lb(f.releases)} released · ${f.chemicals} chemicals${f.ratio != null ? ` · production ratio ${f.ratio.toFixed(2)}` : ""}` } });
+  const src = (f: TriFacility) => open({ ticker, label: `${title(f.name)} (${f.city}, ${f.state}), EPA TRI ${y}`, unit: "usd", value: 0, external: { url: f.url, date: `${y}-12-31`, quote: `${lb(f.releases)} released · ${f.chemicals} chemicals${f.ratio != null ? ` · production ratio ${f.ratio.toFixed(2)}` : ""}` } });
 
   return (
     <div className="grid grid-cols-1 gap-4 p-3.5 xl:grid-cols-[minmax(0,420px)_minmax(0,1fr)]">
@@ -47,11 +50,11 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
           </div>
           <div className="bg-card px-2.5 py-1.5" title="Median of the plants' reported production ratios (this year's production ÷ last year's, per chemical)">
             <p className="text-[11px] text-muted-foreground">Production index</p>
-            <p className="num font-semibold">{prod ? `${prod.value?.toFixed(2)}×` : "—"} {prod && <span className="font-normal text-muted-foreground">{prod.meta.up}↑ {prod.meta.down}↓</span>}</p>
+            <p className="num font-semibold">{prod?.value != null ? `${prod.value.toFixed(2)}×` : "–"} {prod && <span className="font-normal text-muted-foreground">{prod.meta.up}↑ {prod.meta.down}↓</span>}</p>
           </div>
           <div className="bg-card px-2.5 py-1.5">
             <p className="text-[11px] text-muted-foreground">Releases</p>
-            <p className="num font-semibold">{lb(rel?.value)} {relChg != null && <span className={cn("font-normal", relChg > 0 ? "text-negative" : "text-positive")}>{relChg >= 0 ? "+" : ""}{(relChg * 100).toFixed(0)}%</span>}</p>
+            <p className="num font-semibold">{lb(rel?.value)} {relChg != null && <span className={cn("font-normal", relChg > 0 ? "text-negative" : "text-positive")}>{fmtSigned(relChg, 0)}</span>}</p>
           </div>
           <div className="bg-card px-2.5 py-1.5" title="Releases of chemicals EPA lists as carcinogens">
             <p className="text-[11px] text-muted-foreground">Of which carcinogens</p>
@@ -75,17 +78,17 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
         />
         <div className="mt-3">
           <p className="mb-1 text-[11px] font-medium text-muted-foreground">By year</p>
-          <table className="research-table w-full text-[12px]">
-            <thead><tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground"><th className="px-1.5 py-1 font-medium">Year</th><th className="px-1.5 py-1 text-right font-medium">Plants</th><th className="px-1.5 py-1 text-right font-medium">Releases</th><th className="px-1.5 py-1 text-right font-medium" title="Median plant production ratio">Production</th></tr></thead>
+          <table className="w-full text-[13px]">
+            <thead><tr className="h-7 border-b text-left text-[11px] text-muted-foreground [&>th]:whitespace-nowrap"><th className="px-2 font-normal">Year</th><th className="px-2 text-right font-normal">Plants</th><th className="px-2 text-right font-normal">Releases, lb</th><th className="px-2 text-right font-normal" title="Median plant production ratio, change from the year before">Production</th></tr></thead>
             <tbody>
               {years.map((yr) => {
                 const p = get(TRI_PRODUCTION, yr);
                 return (
-                  <tr key={yr} className={cn("border-b last:border-0", yr === y && "bg-secondary")}>
-                    <td className="num px-1.5 py-1"><button type="button" onClick={() => { setYear(yr); setSt(null); }} className="hover:underline">{yr}</button></td>
-                    <td className="num px-1.5 text-right">{get(TRI_FACILITIES, yr)?.value ?? "—"}</td>
-                    <td className="num px-1.5 text-right">{lb(get(TRI_RELEASES, yr)?.value)}</td>
-                    <td className="num px-1.5 text-right">{p ? chg(p.value) : "—"}</td>
+                  <tr key={yr} className={cn("h-7 border-b last:border-0 hover:bg-secondary/40", yr === y && "bg-secondary")}>
+                    <td className="num px-2"><button type="button" onClick={() => { setYear(yr); setSt(null); }} aria-pressed={yr === y} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{yr}</button></td>
+                    <td className="num px-2 text-right">{get(TRI_FACILITIES, yr)?.value ?? "–"}</td>
+                    <td className="num px-2 text-right">{lbCell(get(TRI_RELEASES, yr)?.value)}</td>
+                    <td className="num px-2 text-right">{p ? chg(p.value) : "–"}</td>
                   </tr>
                 );
               })}
@@ -95,27 +98,27 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
       </div>
       <div className="min-w-0">
         <div className="overflow-x-auto">
-          <table className="research-table w-full">
+          <table className="w-full text-[13px]">
             <thead>
-              <tr className="border-b text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-                <th className="px-2 py-2 font-medium">Plant</th>
-                <th className="hidden px-2 py-2 font-medium lg:table-cell xl:hidden 2xl:table-cell">Industry</th>
-                <th className="px-2 py-2 text-right font-medium">Released</th>
-                <th className="px-2 py-2 text-right font-medium" title="The plant's median reported production ratio: this year's production ÷ last year's">Production</th>
-                <th className="px-2 py-2" />
+              <tr className="h-7 border-b text-left text-[11px] text-muted-foreground [&>th]:whitespace-nowrap">
+                <th className="px-2 font-normal">Plant</th>
+                <th className="hidden px-2 font-normal lg:table-cell xl:hidden 2xl:table-cell">Industry</th>
+                <th className="px-2 text-right font-normal">Released, lb</th>
+                <th className="px-2 text-right font-normal" title="The plant's median reported production ratio: this year's production ÷ last year's">Production</th>
+                <th className="px-1" />
               </tr>
             </thead>
             <tbody>
               {shown.map((f) => (
-                <tr key={f.id} className="border-b last:border-0">
-                  <td className="max-w-[16rem] px-2 py-1.5">
-                    <p className="truncate text-[12.5px] font-medium" title={f.name}>{title(f.name)}</p>
-                    <p className="truncate text-[11px] text-muted-foreground">{title(f.city)}, {f.state}{f.parent && fac.meta.parents?.length > 1 ? ` · ${title(f.parent)}` : ""}</p>
+                <tr key={f.id} className="h-7 border-b last:border-0 hover:bg-secondary/40">
+                  <td className="max-w-[18rem] truncate px-2" title={`${f.name}, ${f.city}, ${f.state}${f.parent ? ` (${f.parent})` : ""}`}>
+                    <span className="font-medium">{title(f.name)}</span>{" "}
+                    <span className="text-[11px] text-muted-foreground">{title(f.city)}, {f.state}{f.parent && fac.meta.parents?.length > 1 ? ` · ${title(f.parent)}` : ""}</span>
                   </td>
                   <td className="hidden max-w-[10rem] truncate px-2 text-[12px] text-muted-foreground lg:table-cell xl:hidden 2xl:table-cell" title={`NAICS ${f.naics}`}>{f.sector}</td>
-                  <td className="num px-2 text-right">{lb(f.releases)}</td>
+                  <td className="num px-2 text-right">{lbCell(f.releases)}</td>
                   <td className="num px-2 text-right">{chg(f.ratio)}</td>
-                  <td className="px-1 text-right"><Button variant="ghost" size="xs" className="text-muted-foreground" onClick={() => src(f)}>Source</Button></td>
+                  <td className="px-1 py-0 text-right leading-none"><Button variant="ghost" size="xs" className="h-6 text-muted-foreground" onClick={() => src(f)}>Source</Button></td>
                 </tr>
               ))}
             </tbody>

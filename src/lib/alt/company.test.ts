@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCompanyAlt, completeThrough, phaseLine, riseFlag, sameDrugChange, snapshotFigures, type CompanyAltRow } from "./company";
+import { buildCompanyAlt, completeThrough, phaseLine, riseFlag, sameDrugChange, snapshotFigures, snapshotNote, type CompanyAltRow } from "./company";
 import { addDays } from "./history";
 
 const TODAY = "2026-11-23";
@@ -177,5 +177,14 @@ describe("riseFlag on a source that publishes late", () => {
   });
   it("keeps SEC sources complete through today", () => {
     expect(completeThrough({ lagDays: 3 }, TODAY)).toBe(TODAY);
+  });
+});
+
+describe("snapshotNote", () => {
+  it("counts datasets and unusual readings in the right number", () => {
+    expect(snapshotNote(0, 1)).toBe("1 public dataset on file");
+    expect(snapshotNote(0, 3)).toBe("3 public datasets on file");
+    expect(snapshotNote(1, 1)).toBe("1 unusual against its own history · 1 public dataset on file");
+    expect(snapshotNote(2, 7)).toBe("2 unusual against their own history · 7 public datasets on file");
   });
 });

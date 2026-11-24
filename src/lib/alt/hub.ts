@@ -124,3 +124,15 @@ export function confirmSeries(rows: CompanyAltRow[], rule: RangeRule, today: str
 export function rankUnusual(items: UnusualItem[]): UnusualItem[] {
   return [...items].sort((a, b) => (a.kind !== b.kind ? (a.kind === "rise" ? -1 : 1) : b.strength - a.strength || (b.date ?? "").localeCompare(a.date ?? "")));
 }
+
+/**
+ * How much of the hub's height to hold after a control shortened it, so the browser never has to pull the reader
+ * up. A press notes the page's height (`held`); from then on the page keeps at least enough height to reach the
+ * bottom of the window at the reader's position, and never more than it had. Scrolling up lets it go; 0 releases.
+ * `top` is the page's top in document coordinates.
+ */
+export function holdFloor(held: number, scrollY: number, viewportH: number, top: number): number {
+  if (held <= 0) return 0;
+  const need = Math.ceil(scrollY + viewportH - top);
+  return need <= 0 ? 0 : Math.min(held, need);
+}

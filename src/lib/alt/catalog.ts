@@ -106,3 +106,16 @@ export function fmtDay(d: string | null | undefined): string {
   if (!d) return "–";
   return `${MONTHS[Number(d.slice(5, 7)) - 1]} ${Number(d.slice(8, 10))}, ${d.slice(0, 4)}`;
 }
+
+/** A signed change as a percentage at a fixed number of decimals, for a table column ("+12%", "−3%"); "–" when missing. */
+export function fmtSigned(c: number | null | undefined, d: number): string {
+  if (c == null || !Number.isFinite(c)) return "–";
+  const txt = Math.abs(c * 100).toFixed(d);
+  if (!/[1-9]/.test(txt)) return `${txt}%`;
+  return `${c < 0 ? MINUS : "+"}${txt}%`;
+}
+
+/** A share as a percentage at a fixed number of decimals, for a table column; "–" when missing. */
+export function fmtPct(v: number | null | undefined, d: number): string {
+  return v == null || !Number.isFinite(v) ? "–" : `${(v * 100).toFixed(d)}%`;
+}

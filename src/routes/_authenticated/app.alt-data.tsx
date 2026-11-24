@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { Input } from "@/components/ui/input";
 import { PlantHazardsPanel } from "@/components/alt/plant-hazards";
+import { useHoldPage } from "@/components/alt/hold-page";
 import { Catalogue, DatasetFeed, Leaders, MaterialFilings, UnusualNow, type ThemeFilter } from "@/components/alt/alt-hub";
 import { DATASETS, THEMES } from "@/lib/alt/catalog";
 
@@ -33,11 +34,13 @@ function AltHub() {
   const [theme, setTheme] = useState<ThemeFilter>("all");
   const [find, setFind] = useState("");
   const dataset = d && DATASETS[d] ? d : null;
+  // a theme or a dataset that removes content keeps the page's height under the reader until they scroll up
+  const { ref, hold } = useHoldPage<HTMLDivElement>();
   return (
-    <div className="grid grid-cols-1 gap-5">
+    <div ref={ref} className="grid grid-cols-1 content-start gap-5">
       <PageHeader eyebrow="Filings and data" title="Alternative data" description="Public registries scored against each company's own history: what is unusual now, who leads each measure, and every dataset with its coverage. Every row links to its record." />
       <div data-section="Alt data filters" className="flex flex-wrap items-center gap-2">
-        <Segmented label="Theme" value={theme} onChange={setTheme} options={THEME_OPTIONS} />
+        <Segmented label="Theme" value={theme} onChange={(v) => { hold(); setTheme(v); }} options={THEME_OPTIONS} />
         <Input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Ticker" aria-label="Filter by ticker" className="h-8 w-28 text-[13px]" />
       </div>
       <div data-section="Unusual now" className="min-w-0"><UnusualNow theme={theme} find={find} /></div>
@@ -45,7 +48,7 @@ function AltHub() {
         <div data-section="Leaderboard" className="min-w-0"><Leaders theme={theme} find={find} /></div>
         <div data-section="Material filings" className="min-w-0"><MaterialFilings theme={theme} find={find} /></div>
       </div>
-      <div data-section="Datasets" className="min-w-0"><Catalogue theme={theme} selected={dataset} onSelect={(x) => navigate({ search: { d: x === dataset ? undefined : x }, resetScroll: false, replace: true })} /></div>
+      <div data-section="Datasets" className="min-w-0"><Catalogue theme={theme} selected={dataset} onSelect={(x) => { hold(); void navigate({ search: { d: x === dataset ? undefined : x }, resetScroll: false, replace: true }); }} /></div>
       {dataset && <div data-section="Dataset records" className="min-w-0"><DatasetFeed dataset={dataset} /></div>}
       <PlantHazardsPanel />
     </div>

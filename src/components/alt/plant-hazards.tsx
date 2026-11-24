@@ -6,6 +6,7 @@ import { Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { hazardLink, type CompanyHazards, type HazardKind } from "@/lib/alt/hazards";
 import { plantHazardsQuery } from "@/lib/alt/hazards-query";
+import { TickerMark } from "@/components/app/ticker";
 import { cn } from "@/lib/utils";
 
 const title = (s: string) => s.toLowerCase().replace(/\b[a-z]/g, (c) => c.toUpperCase()).replace(/\b(Llc|Inc|Lp|Co)\b/g, (w) => w.toUpperCase());
@@ -104,7 +105,7 @@ export function PlantHazardsPanel({ className }: { className?: string }) {
                           <td className="px-3.5 py-1.5">
                             <span className="inline-flex items-center gap-1.5">
                               {isOpen ? <ChevronDown className="h-3 w-3 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 text-muted-foreground" />}
-                              <Link to="/app/companies/$ticker/alt-data" params={{ ticker: c.ticker }} onClick={(e) => e.stopPropagation()} className="font-semibold hover:underline">{c.ticker}</Link>
+                              <Link to="/app/companies/$ticker/alt-data" params={{ ticker: c.ticker }} onClick={(e) => e.stopPropagation()} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><TickerMark ticker={c.ticker} link={false} /></Link>
                             </span>
                           </td>
                           <td className="num px-2 text-right">{c.plants.length}</td>

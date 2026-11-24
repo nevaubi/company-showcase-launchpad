@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fmtAlt, fmtChange, fmtDay, fmtShare } from "./catalog";
+import { fmtAlt, fmtChange, fmtDay, fmtPct, fmtSigned, fmtShare } from "./catalog";
 
 // fmtAlt is used across the app (daily brief, overview extras, state deposits, the assistant): these
 // pin the output every caller now receives.
@@ -63,5 +63,19 @@ describe("fmtShare and fmtDay", () => {
   it("days", () => {
     expect(fmtDay("2026-11-20")).toBe("Nov 20, 2026");
     expect(fmtDay(null)).toBe("–");
+  });
+});
+
+describe("table cells (one decimal convention per column)", () => {
+  it("signs a change with a true minus at a fixed number of decimals, an en dash when missing", () => {
+    expect(fmtSigned(-0.123, 0)).toBe("−12%");
+    expect(fmtSigned(0.123, 1)).toBe("+12.3%");
+    expect(fmtSigned(-0.001, 0)).toBe("0%");
+    expect(fmtSigned(null, 0)).toBe("–");
+  });
+  it("prints a share at fixed decimals, an en dash when missing", () => {
+    expect(fmtPct(0.1234, 1)).toBe("12.3%");
+    expect(fmtPct(undefined, 1)).toBe("–");
+    expect(fmtPct(Number.NaN, 0)).toBe("–");
   });
 });

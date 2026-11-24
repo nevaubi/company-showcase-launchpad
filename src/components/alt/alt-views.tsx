@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { DATASETS, fmtAlt, type AltRow } from "@/lib/alt/query";
 import { EvidenceButton } from "@/components/source/evidence-button";
 import { Button } from "@/components/ui/button";
+import { TickerMark } from "@/components/app/ticker";
 
 const fmtD = (d: string | null) => (d ? new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—");
 
@@ -51,7 +52,7 @@ export function AltEventList({ rows, showTicker, max = 200 }: { rows: AltRow[]; 
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-1.5">
                   {showTicker && (
-                    <Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="font-medium hover:underline">{r.ticker}</Link>
+                    <Link to="/app/companies/$ticker/alt-data" params={{ ticker: r.ticker }} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"><TickerMark ticker={r.ticker} link={false} /></Link>
                   )}
                   {t?.text && <Badge variant="outline" className={cn("text-[10px] capitalize", t.tone === "neg" && "text-negative", t.tone === "pos" && "text-positive")}>{t.text}</Badge>}
                   {r.value != null && <span className="num text-[12px] font-medium">{fmtAlt(r.value, r.unit)}{r.unit === "units" ? " units" : r.unit === "patients" ? " patients" : ""}</span>}

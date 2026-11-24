@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bucketCandidates, confirmCounts, confirmSeries, rangeCandidates, rankUnusual, type UnusualItem } from "./hub";
+import { bucketCandidates, holdFloor, confirmCounts, confirmSeries, rangeCandidates, rankUnusual, type UnusualItem } from "./hub";
 import { riseFlag, type CompanyAltRow } from "./company";
 import { RANGE_RULES, addDays } from "./history";
 import type { EventBucket } from "./screen";
@@ -113,5 +113,16 @@ describe("rankUnusual", () => {
   it("puts rises first and ranks each kind by its own strength", () => {
     const it = (ticker: string, kind: UnusualItem["kind"], strength: number): UnusualItem => ({ ticker, dataset: "events", kind, direction: "up", text: "", strength, date: null, rule: "", figure: { label: "", value: "", rows: [] } });
     expect(rankUnusual([it("R1", "range", 9), it("C1", "rise", 3.2), it("C2", "rise", 5), it("R2", "range", 2)]).map((x) => x.ticker)).toEqual(["C2", "C1", "R1", "R2"]);
+  });
+});
+
+describe("holdFloor", () => {
+  it("keeps the page tall enough to reach the window's bottom at the reader's position, never taller than it was", () => {
+    // page starts 56 px down, was 2400 px tall; reader at 1700 with a 900 px window needs 2544 -> capped at 2400
+    expect(holdFloor(2400, 1700, 900, 56)).toBe(2400);
+    // after scrolling up to 900 only 1744 px are needed
+    expect(holdFloor(2400, 900, 900, 56)).toBe(1744);
+    expect(holdFloor(0, 1700, 900, 56)).toBe(0);
+    expect(holdFloor(2400, 0, 40, 56)).toBe(0);
   });
 });
