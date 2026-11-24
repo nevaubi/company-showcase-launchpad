@@ -143,6 +143,38 @@ export function distribution<T>(items: readonly T[], value: (t: T) => Num): Dist
   };
 }
 
+export interface Ends<T> {
+  /** All known values in one ranked list, highest first, when there are fewer than twice `k`. */
+  all: DistPoint<T>[] | null;
+  /** Otherwise the `k` highest (highest first) and the `k` lowest (lowest first); never the same item twice. */
+  top: DistPoint<T>[];
+  bottom: DistPoint<T>[];
+  /** Items left out of a list although they tie with its last entry. */
+  topTied: number;
+  bottomTied: number;
+}
+
+/**
+ * The two ends of a distribution for "highest" and "lowest" lists. A group with fewer than `2k` known values
+ * gets one ranked list instead, so no company appears at both ends. Ties keep a stable order (by `id`), and
+ * the count of items cut off although they equal the last one shown is reported.
+ */
+export function ends<T>(points: readonly DistPoint<T>[], id: (t: T) => string, k = 5): Ends<T> {
+  const asc = [...points].sort((a, b) => a.v - b.v || id(a.item).localeCompare(id(b.item)));
+  const desc = [...points].sort((a, b) => b.v - a.v || id(a.item).localeCompare(id(b.item)));
+  if (asc.length < 2 * k) return { all: desc, top: [], bottom: [], topTied: 0, bottomTied: 0 };
+  const top = desc.slice(0, k);
+  const bottom = asc.slice(0, k);
+  const tied = (list: DistPoint<T>[], rest: DistPoint<T>[]) => rest.filter((p) => p.v === list[list.length - 1].v).length;
+  return { all: null, top, bottom, topTied: tied(top, desc.slice(k)), bottomTied: tied(bottom, asc.slice(k)) };
+}
+
+/** Arithmetic mean of the finite values; null when there are none. */
+export function mean(xs: readonly Num[]): number | null {
+  const v = xs.filter(finite);
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+}
+
 export type SortDir = "asc" | "desc";
 
 /** Comparator that keeps missing values last in either direction. */
