@@ -1,0 +1,525 @@
+{
+ "about": "Sourced corrections applied by scripts/expand-coverage.ts. Each names the SEC fact (data.sec.gov submissions for the CIK) that justifies it; a correction whose old value no longer matches is reported and not applied.",
+ "corrections": [
+  {
+   "ticker": "HCC",
+   "cik": "1691303",
+   "field": "shortName",
+   "old": "Tokio Marine HCC",
+   "new": "Warrior Met Coal",
+   "source": "SEC registrant for CIK 1691303: WARRIOR MET COAL, INC.; the old name is neither its current nor any former SEC name (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "AGO",
+   "cik": "1273813",
+   "field": "shortName",
+   "old": "BlueMountain Capital",
+   "new": "Assured Guaranty",
+   "source": "SEC registrant for CIK 1273813: ASSURED GUARANTY LTD; the old name is neither its current nor any former SEC name (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "GATX",
+   "cik": "40211",
+   "field": "shortName",
+   "old": "General American Transportation",
+   "new": "GATX",
+   "source": "SEC registrant for CIK 40211: GATX CORP; the old name is neither its current nor any former SEC name (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "DGII",
+   "cik": "854775",
+   "field": "shortName",
+   "old": "XBee",
+   "new": "Digi International",
+   "source": "SEC registrant for CIK 854775: DIGI INTERNATIONAL INC; the old name is neither its current nor any former SEC name (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "BXP",
+   "cik": "1037540",
+   "field": "shortName",
+   "old": "Boston Properties",
+   "new": "BXP",
+   "source": "SEC registrant for CIK 1037540: BXP, Inc.; former name BOSTON PROPERTIES INC until 2024-06-20 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "BEN",
+   "cik": "38777",
+   "field": "shortName",
+   "old": "Franklin Resources",
+   "new": "Franklin Templeton",
+   "source": "SEC registrant for CIK 38777: FRANKLIN TEMPLETON INC; former name FRANKLIN RESOURCES INC until 2026-08-14 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "HPQ",
+   "cik": "47217",
+   "field": "shortName",
+   "old": "Hewlett-Packard",
+   "new": "HP",
+   "source": "SEC registrant for CIK 47217: HP INC; former name HEWLETT PACKARD CO until 2015-10-23 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "PTC",
+   "cik": "857005",
+   "field": "shortName",
+   "old": "Parametric Technology",
+   "new": "PTC",
+   "source": "SEC registrant for CIK 857005: PTC INC.; former name PARAMETRIC TECHNOLOGY CORP until 2013-01-24 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "ATI",
+   "cik": "1018963",
+   "field": "shortName",
+   "old": "Allegheny Technologies",
+   "new": "ATI",
+   "source": "SEC registrant for CIK 1018963: ATI INC; former name ALLEGHENY TECHNOLOGIES INC until 2022-06-22 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "SGI",
+   "cik": "1206264",
+   "field": "shortName",
+   "old": "Tempur Sealy International",
+   "new": "Somnigroup",
+   "source": "SEC registrant for CIK 1206264: SOMNIGROUP INTERNATIONAL INC.; former name TEMPUR SEALY INTERNATIONAL, INC. until 2025-02-14 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "FHN",
+   "cik": "36966",
+   "field": "shortName",
+   "old": "First Horizon National",
+   "new": "First Horizon",
+   "source": "SEC registrant for CIK 36966: FIRST HORIZON CORP; former name FIRST HORIZON NATIONAL CORP until 2020-11-25 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "AYI",
+   "cik": "1144215",
+   "field": "shortName",
+   "old": "Acuity Brands",
+   "new": "Acuity",
+   "source": "SEC registrant for CIK 1144215: ACUITY INC. (DE); former name ACUITY BRANDS INC until 2025-04-17 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "NNN",
+   "cik": "751364",
+   "field": "shortName",
+   "old": "National Retail Properties",
+   "new": "NNN REIT",
+   "source": "SEC registrant for CIK 751364: NNN REIT, INC.; former name NATIONAL RETAIL PROPERTIES, INC. until 2023-04-27 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "BKH",
+   "cik": "1130464",
+   "field": "shortName",
+   "old": "Black Hills",
+   "new": "Bright Horizon Energy",
+   "source": "SEC registrant for CIK 1130464: Bright Horizon Energy Corp; former name BLACK HILLS CORP /SD/ until 2026-11-16 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "UFPI",
+   "cik": "912767",
+   "field": "shortName",
+   "old": "Universal Forest Products",
+   "new": "UFP Industries",
+   "source": "SEC registrant for CIK 912767: UFP INDUSTRIES INC; former name UNIVERSAL FOREST PRODUCTS INC until 2020-04-23 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "CDP",
+   "cik": "860546",
+   "field": "shortName",
+   "old": "Corporate Office Properties Trust",
+   "new": "COPT Defense Properties",
+   "source": "SEC registrant for CIK 860546: COPT DEFENSE PROPERTIES; former name CORPORATE OFFICE PROPERTIES TRUST until 2023-09-14 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "FLG",
+   "cik": "910073",
+   "field": "shortName",
+   "old": "Flagstar Financial",
+   "new": "Flagstar",
+   "source": "SEC registrant for CIK 910073: FLAGSTAR BANK, NATIONAL ASSOCIATION; former name FLAGSTAR FINANCIAL, INC. until 2025-10-17 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "TAP",
+   "cik": "24545",
+   "field": "shortName",
+   "old": "Molson Coors Brewing",
+   "new": "Molson Coors",
+   "source": "SEC registrant for CIK 24545: MOLSON COORS BEVERAGE CO; former name MOLSON COORS BREWING CO until 2019-11-26 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "BFH",
+   "cik": "1101215",
+   "field": "shortName",
+   "old": "Alliance Data",
+   "new": "Bread Financial",
+   "source": "SEC registrant for CIK 1101215: BREAD FINANCIAL HOLDINGS, INC.; former name ALLIANCE DATA SYSTEMS CORP until 2022-03-23 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "CBU",
+   "cik": "723188",
+   "field": "shortName",
+   "old": "Community Bank, N.A.",
+   "new": "Community Financial System",
+   "source": "SEC registrant for CIK 723188: COMMUNITY FINANCIAL SYSTEM, INC.; former name COMMUNITY BANK SYSTEM, INC. until 2024-05-10 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "HTO",
+   "cik": "766829",
+   "field": "shortName",
+   "old": "SJW Group",
+   "new": "H2O America",
+   "source": "SEC registrant for CIK 766829: H2O AMERICA; former name SJW GROUP until 2025-05-01 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "EPAC",
+   "cik": "6955",
+   "field": "shortName",
+   "old": "Actuant",
+   "new": "Enerpac Tool Group",
+   "source": "SEC registrant for CIK 6955: ENERPAC TOOL GROUP CORP; former name ACTUANT CORP until 2020-01-28 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "WOR",
+   "cik": "108516",
+   "field": "shortName",
+   "old": "Worthington Industries",
+   "new": "Worthington Enterprises",
+   "source": "SEC registrant for CIK 108516: WORTHINGTON ENTERPRISES, INC.; former name WORTHINGTON INDUSTRIES INC until 2023-11-20 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "WKC",
+   "cik": "789460",
+   "field": "shortName",
+   "old": "World Fuel Services",
+   "new": "World Kinect",
+   "source": "SEC registrant for CIK 789460: WORLD KINECT CORP; former name WORLD FUEL SERVICES CORP until 2023-06-07 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "ZD",
+   "cik": "1084048",
+   "field": "shortName",
+   "old": "J2 Global",
+   "new": "Ziff Davis",
+   "source": "SEC registrant for CIK 1084048: ZIFF DAVIS, INC.; former name J2 GLOBAL, INC. until 2021-10-04 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "MLKN",
+   "cik": "66382",
+   "field": "shortName",
+   "old": "Herman Miller",
+   "new": "MillerKnoll",
+   "source": "SEC registrant for CIK 66382: MILLERKNOLL, INC.; former name HERMAN MILLER INC until 2021-10-29 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "AORT",
+   "cik": "784199",
+   "field": "shortName",
+   "old": "CryoLife",
+   "new": "Artivion",
+   "source": "SEC registrant for CIK 784199: ARTIVION, INC.; former name CRYOLIFE INC until 2022-01-06 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "LNN",
+   "cik": "836157",
+   "field": "shortName",
+   "old": "Lindsay Manufacturing",
+   "new": "Lindsay",
+   "source": "SEC registrant for CIK 836157: LINDSAY CORP; former name LINDSAY MANUFACTURING CO until 2006-12-11 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "DMC",
+   "cik": "1047340",
+   "field": "shortName",
+   "old": "Fresh Del Monte Produce",
+   "new": "Del Monte",
+   "source": "SEC registrant for CIK 1047340: DEL MONTE CORP; former name FRESH DEL MONTE PRODUCE INC until 2026-06-04 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "HOS",
+   "cik": "866829",
+   "field": "shortName",
+   "old": "Helix Energy Solutions Group",
+   "new": "Hornbeck Offshore",
+   "source": "SEC registrant for CIK 866829: HORNBECK OFFSHORE SERVICES, INC.; former name HELIX ENERGY SOLUTIONS GROUP INC until 2026-08-31 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "MOD",
+   "cik": "67347",
+   "field": "shortName",
+   "old": "Modine Manufacturing",
+   "new": "Modexus",
+   "source": "SEC registrant for CIK 67347: MODEXUS SOLUTIONS, INC.; former name MODINE MANUFACTURING CO until 2026-11-04 (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "HCC",
+   "cik": "1691303",
+   "field": "industry",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 1220 (Silver Ores) for CIK 1691303, WARRIOR MET COAL, INC.: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "HCC",
+   "cik": "1691303",
+   "field": "group",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 1220 (Silver Ores) for CIK 1691303, WARRIOR MET COAL, INC.: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "HCC",
+   "cik": "1691303",
+   "field": "peers",
+   "old": [
+    "AVNT",
+    "MTRN",
+    "SXT",
+    "CBT"
+   ],
+   "new": [
+    "CLF",
+    "MTRN",
+    "KALU",
+    "MP"
+   ],
+   "source": "Recomputed for the corrected group Metals & Mining: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  },
+  {
+   "ticker": "AMR",
+   "cik": "1704715",
+   "field": "industry",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 1221 (Bituminous Coal & Lignite Surface Mining) for CIK 1704715, Alpha Metallurgical Resources, Inc.: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "AMR",
+   "cik": "1704715",
+   "field": "group",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 1221 (Bituminous Coal & Lignite Surface Mining) for CIK 1704715, Alpha Metallurgical Resources, Inc.: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "AMR",
+   "cik": "1704715",
+   "field": "peers",
+   "old": [
+    "WS",
+    "CC",
+    "MTX",
+    "IOSP"
+   ],
+   "new": [
+    "USAR",
+    "MTUS",
+    "CENX",
+    "WS"
+   ],
+   "source": "Recomputed for the corrected group Metals & Mining: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  },
+  {
+   "ticker": "RS",
+   "cik": "861884",
+   "field": "industry",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 5051 (Wholesale-Metals Service Centers & of fices) for CIK 861884, RELIANCE, INC.: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "RS",
+   "cik": "861884",
+   "field": "group",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 5051 (Wholesale-Metals Service Centers & of fices) for CIK 861884, RELIANCE, INC.: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "RS",
+   "cik": "861884",
+   "field": "peers",
+   "old": [
+    "RGLD",
+    "RPM",
+    "SOLS",
+    "ATR"
+   ],
+   "new": [
+    "STLD",
+    "RGLD",
+    "SCCO",
+    "NUE"
+   ],
+   "source": "Recomputed for the corrected group Metals & Mining: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  },
+  {
+   "ticker": "WS",
+   "cik": "1968487",
+   "field": "industry",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 3310 (Steel Works, Blast Furnaces & Rolling & Finishing Mills) for CIK 1968487, Worthington Steel, Inc.: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "WS",
+   "cik": "1968487",
+   "field": "group",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 3310 (Steel Works, Blast Furnaces & Rolling & Finishing Mills) for CIK 1968487, Worthington Steel, Inc.: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "WS",
+   "cik": "1968487",
+   "field": "peers",
+   "old": [
+    "AMR",
+    "CC",
+    "MTX",
+    "IOSP"
+   ],
+   "new": [
+    "KALU",
+    "CENX",
+    "AMR",
+    "MTRN"
+   ],
+   "source": "Recomputed for the corrected group Metals & Mining: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  },
+  {
+   "ticker": "RGLD",
+   "cik": "85535",
+   "field": "industry",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 6795 (Mineral Royalty Traders) for CIK 85535, ROYAL GOLD INC: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "RGLD",
+   "cik": "85535",
+   "field": "group",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 6795 (Mineral Royalty Traders) for CIK 85535, ROYAL GOLD INC: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "RGLD",
+   "cik": "85535",
+   "field": "peers",
+   "old": [
+    "RS",
+    "RPM",
+    "SOLS",
+    "ATR"
+   ],
+   "new": [
+    "STLD",
+    "SCCO",
+    "RS",
+    "AA"
+   ],
+   "source": "Recomputed for the corrected group Metals & Mining: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  },
+  {
+   "ticker": "MTRN",
+   "cik": "1104657",
+   "field": "industry",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 3460 (Metal Forgings & Stampings) for CIK 1104657, MATERION Corp: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "MTRN",
+   "cik": "1104657",
+   "field": "group",
+   "old": "Chemicals",
+   "new": "Metals & Mining",
+   "source": "SEC SIC 3460 (Metal Forgings & Stampings) for CIK 1104657, MATERION Corp: not a chemicals business; Metals & Mining is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "MTRN",
+   "cik": "1104657",
+   "field": "peers",
+   "old": [
+    "CBT",
+    "SMG",
+    "AVNT",
+    "ASH"
+   ],
+   "new": [
+    "KALU",
+    "HCC",
+    "WS",
+    "CENX"
+   ],
+   "source": "Recomputed for the corrected group Metals & Mining: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  },
+  {
+   "ticker": "GEF",
+   "cik": "43920",
+   "field": "industry",
+   "old": "Chemicals",
+   "new": "Containers, Packaging & Paper",
+   "source": "SEC SIC 3412 (Metal Shipping Barrels, Drums, Kegs & Pails) for CIK 43920, GREIF, INC: not a chemicals business; Containers, Packaging & Paper is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "GEF",
+   "cik": "43920",
+   "field": "group",
+   "old": "Chemicals",
+   "new": "Containers, Packaging & Paper",
+   "source": "SEC SIC 3412 (Metal Shipping Barrels, Drums, Kegs & Pails) for CIK 43920, GREIF, INC: not a chemicals business; Containers, Packaging & Paper is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "GEF",
+   "cik": "43920",
+   "field": "peers",
+   "old": [
+    "APD",
+    "ALB",
+    "CF",
+    "DOW"
+   ],
+   "new": [
+    "OI",
+    "SLVM",
+    "SON",
+    "SLGN"
+   ],
+   "source": "Recomputed for the corrected group Containers, Packaging & Paper: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  },
+  {
+   "ticker": "OI",
+   "cik": "812074",
+   "field": "industry",
+   "old": "Chemicals",
+   "new": "Containers, Packaging & Paper",
+   "source": "SEC SIC 3221 (Glass Containers) for CIK 812074, O-I Glass, Inc. /DE/: not a chemicals business; Containers, Packaging & Paper is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "OI",
+   "cik": "812074",
+   "field": "group",
+   "old": "Chemicals",
+   "new": "Containers, Packaging & Paper",
+   "source": "SEC SIC 3221 (Glass Containers) for CIK 812074, O-I Glass, Inc. /DE/: not a chemicals business; Containers, Packaging & Paper is the taxonomy's Materials industry for it (data.sec.gov submissions, read 24 Nov 2026)"
+  },
+  {
+   "ticker": "OI",
+   "cik": "812074",
+   "field": "peers",
+   "old": [
+    "FMC",
+    "KOP",
+    "SCL",
+    "HUN"
+   ],
+   "new": [
+    "SLVM",
+    "SON",
+    "SLGN",
+    "GPK"
+   ],
+   "source": "Recomputed for the corrected group Containers, Packaging & Paper: same group, nearest size by SEC dei:EntityPublicFloat (newest instant frames CY2024Q2I to CY2025Q4I; companies without one last), then sector, four at most"
+  }
+ ]
+}
