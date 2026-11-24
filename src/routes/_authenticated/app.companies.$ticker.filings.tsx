@@ -19,7 +19,7 @@ import { useCompany } from "@/lib/data";
 import { searchFilings } from "@/lib/sec.functions";
 import { commentsQuery } from "@/lib/filings/review";
 import { FAMILIES } from "@/lib/filings/kinds";
-import { countByFamily, edgarListUrl, insiderFilings, latestKeyDocs, listCoverage, liveToList, LIST_KINDS, mergeFilings, paginate, yearTotals as totalsByYear, scopeFilings, yearsOf, type ListKind, type LiveFilingRow } from "@/lib/filings/list";
+import { countByFamily, edgarListUrl, insiderFilings, latestKeyDocs, listCoverage, liveToList, LIST_KINDS, mergeFilings, isKeyFiling, paginate, yearTotals as totalsByYear, scopeFilings, yearsOf, type ListKind, type LiveFilingRow } from "@/lib/filings/list";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtDate } from "@/lib/format";
 
@@ -82,7 +82,9 @@ function Filings() {
   const years = useMemo(() => yearsOf([...rows, ...(ir.data ?? []).filter((d): d is typeof d & { filed: string } => !!d.filed)]), [rows, ir.data]);
   const keys = useMemo(() => latestKeyDocs(rows, company.data?.earningsReleases ?? []), [rows, company.data]);
   const releases = useMemo(() => new Map((company.data?.earningsReleases ?? []).map((r) => [r.accn, r])), [company.data]);
-  const scoped = useMemo(() => scopeFilings(rows, { kind, year, q: search.q ?? "" }), [rows, kind, year, search.q]);
+  const cikOf = company.data ? String(Number(company.data.profile.cik)) : undefined;
+  const scoped = useMemo(() => scopeFilings(rows, { kind, year, q: search.q ?? "", cik: cikOf }), [rows, kind, year, search.q, cikOf]);
+  const keyCount = useMemo(() => rows.filter((r) => isKeyFiling(r, cikOf)).length, [rows, cikOf]);
   const yearTotals = useMemo(() => totalsByYear(scoped), [scoped]);
   const irCount = useMemo(() => (ir.data ? scopeIrDocs(ir.data, null, "").length : null), [ir.data]);
   const letterCount = letters.data?.n_threads ?? letters.data?.threads.length ?? 0;
@@ -92,14 +94,14 @@ function Filings() {
   const p = paginate(scoped, page);
   const filtered = year != null || !!search.q;
   const kindOptions = [
-    { v: "key" as ListKind, l: `Key filings · ${(rows.length - counts.ownership).toLocaleString()}`, title: "Filings on file except insider and holder forms" },
+    { v: "key" as ListKind, l: `Key filings · ${keyCount.toLocaleString()}`, title: "Filings on file except insider and holder forms (active 13D stakes in the company are kept)" },
     { v: "all" as ListKind, l: `All · ${rows.length.toLocaleString()}` },
     ...FAMILIES.filter((f) => f.id !== "correspondence" && counts[f.id] > 0).map((f) => ({ v: f.id as ListKind, l: `${f.short} · ${counts[f.id].toLocaleString()}`, title: f.note })),
     ...(letterCount || counts.correspondence ? [{ v: "correspondence" as ListKind, l: `SEC letters · ${letterCount || counts.correspondence}`, title: "SEC staff comment letters and company responses" }] : []),
     { v: "ir" as ListKind, l: `IR documents${irCount != null ? ` · ${irCount.toLocaleString()}` : ""}`, title: "Releases, presentations, supplements and data files stored from EDGAR exhibits and the company's IR site" },
   ];
   const family = FAMILIES.find((f) => f.id === kind);
-  const scopeLabel = kind === "key" ? "Key filings (on file, all but insider and holder forms)" : kind === "all" ? "All filings on file" : kind === "ir" ? "IR documents" : (family?.label ?? "Filings");
+  const scopeLabel = kind === "key" ? "Key filings (on file, all but insider and passive holder forms)" : kind === "all" ? "All filings on file" : kind === "ir" ? "IR documents" : (family?.label ?? "Filings");
   const since = cover.liveSince ? fmtDate(cover.liveSince) : "the last 60 days";
   const edgarLink = (label: string, type?: string) => (
     <a href={edgarListUrl(cik, { type, year })} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2">

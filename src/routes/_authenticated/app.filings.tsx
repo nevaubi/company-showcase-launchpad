@@ -179,7 +179,7 @@ function DayFeed({ search, set, sector, watched }: { search: Search; set: (s: Pa
   const { open } = useSource();
   const d = useFilingDay(search.day);
   const fam = search.fam ?? "all";
-  const all = useMemo(() => feedRows(d.rows.data ?? []), [d.rows.data]);
+  const all = useMemo(() => feedRows(d.rows.data ?? [], nameOf), [d.rows.data]);
   // Counts follow every filter except the family, so each family button says what it would show.
   const scoped = useMemo(() => filterFeed(all, { family: "all", sector, watch: !!search.watch, q: search.q ?? "" }, sectorOf, nameOf, watched), [all, sector, search.watch, search.q, watched]);
   const counts = useMemo(() => familyCounts(scoped), [scoped]);
@@ -249,7 +249,7 @@ function DayFeed({ search, set, sector, watched }: { search: Search; set: (s: Pa
                     <TickerMark ticker={r.ticker} name size="xs" className="max-w-full" />
                     <button type="button" onClick={() => openRow(r)} className="flex min-w-0 items-center gap-2 pl-[26px] text-left sm:hidden">
                       <FormChip form={r.form} />
-                      <span className="truncate">{r.title}</span>
+                      <span className={cn("truncate", r.alert && "font-medium text-negative")}>{r.title}</span>
                     </button>
                   </span>
                   <span role="cell" className="hidden sm:block">
@@ -257,13 +257,13 @@ function DayFeed({ search, set, sector, watched }: { search: Search; set: (s: Pa
                   </span>
                   <span role="cell" className="hidden min-w-0 sm:block">
                     <button type="button" onClick={() => openRow(r)} className="flex w-full min-w-0 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      <span className="truncate underline-offset-2 group-hover:underline">{r.title}</span>
+                      <span className={cn("truncate underline-offset-2 group-hover:underline", r.alert && "font-medium text-negative")}>{r.title}</span>
                       {r.detail && <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground md:inline">{r.detail}</span>}
                     </button>
                   </span>
                   <span role="cell" className="flex items-center justify-end gap-0.5">
                     {r.filings.length > 1 && (
-                      <Link to="/app/companies/$ticker/filings" params={{ ticker: r.ticker }} search={{ kind: "ownership" }} className="inline-flex h-7 items-center rounded px-1.5 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground" title={`All ${r.filings.length} filings on the company's Filings tab`}>
+                      <Link to="/app/companies/$ticker/filings" params={{ ticker: r.ticker }} search={{ kind: "ownership", q: f.filed }} className="inline-flex h-7 items-center rounded px-1.5 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground" title={`The ${r.filings.length} filings of ${fmtDate(f.filed)} on the company's Filings tab`}>
                         All
                       </Link>
                     )}

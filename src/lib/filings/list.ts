@@ -1,6 +1,6 @@
 // The company Filings tab's list logic: scope (kind, year, words) held in the address, counts per
 // kind, year groups and pages, and the strip of latest key documents. Pure, so the page stays thin.
-import { describeFiling, familyOf, formName, type FilingFamily } from "./kinds";
+import { describeFiling, familyOf, filedByIssuer, formName, isActiveStake, type FilingFamily } from "./kinds";
 import { INSIDER_CODES } from "@/lib/format";
 
 export interface ListFiling {
@@ -20,6 +20,8 @@ export interface ListScope {
   kind: ListKind;
   year: number | null;
   q: string;
+  /** The company's CIK: tells its own Schedule 13D/G filings (about other issuers) from stakes in it. */
+  cik?: string;
 }
 
 export const PAGE_SIZE = 50;
@@ -46,8 +48,8 @@ export const yearsOf = (rows: { filed: string }[]): number[] =>
   [...new Set(rows.map((r) => Number(r.filed.slice(0, 4))).filter((y) => y > 1990))].sort((a, b) => b - a);
 
 /** Words a reader might type for a filing: form, plain description, item words, EDGAR description, dates. */
-export function searchText(r: ListFiling): string {
-  const d = describeFiling(r);
+export function searchText(r: ListFiling, cik?: string): string {
+  const d = describeFiling({ ...r, selfFiled: filedByIssuer(r.accn, cik) });
   // The accession is left out: its digits ("...-16-020258") matched year searches for other years.
   return [r.form, formName(r.form), d.title, d.detail, r.desc, r.items, r.filed, r.report].filter(Boolean).join(" ").toLowerCase();
 }
@@ -62,8 +64,17 @@ export function matchesQuery(text: string, q: string): boolean {
 export function scopeFilings(rows: ListFiling[], s: ListScope): ListFiling[] {
   if (s.kind === "ir") return [];
   return rows
-    .filter((r) => (s.kind === "all" || (s.kind === "key" ? familyOf(r.form) !== "ownership" : familyOf(r.form) === s.kind)) && (s.year == null || r.filed.startsWith(String(s.year))) && (!s.q.trim() || matchesQuery(searchText(r), s.q)))
+    .filter((r) => (s.kind === "all" || (s.kind === "key" ? isKeyFiling(r, s.cik) : familyOf(r.form) === s.kind)) && (s.year == null || r.filed.startsWith(String(s.year))) && (!s.q.trim() || matchesQuery(searchText(r, s.cik), s.q)))
     .sort(byFiledDesc);
+}
+
+/**
+ * Key filings: everything but ownership forms, except a Schedule 13D (an active, possibly activist
+ * stake) filed by someone else about the company, which a reader wants to see first.
+ */
+export function isKeyFiling(r: ListFiling, cik?: string): boolean {
+  if (familyOf(r.form) !== "ownership") return true;
+  return isActiveStake(r.form) && !!cik && !filedByIssuer(r.accn, cik);
 }
 
 export interface Page<T> {

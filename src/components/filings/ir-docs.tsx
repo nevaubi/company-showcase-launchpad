@@ -28,6 +28,9 @@ export interface IrListDoc {
 }
 
 /** Stored kinds shown here; images belong to the IR library and SEC copies are already in the filing list. */
+/** Type label of a stored document: "other" is an exhibit only when it came from an SEC filing (it has an accession). */
+export const irKindLabel = (d: { kind: string; accn: string | null }) => (d.kind === "other" ? (d.accn ? "Exhibit" : "Document") : (IR_KIND[d.kind] ?? "Document"));
+
 export const IR_KIND: Record<string, string> = {
   "press-release": "Release",
   presentation: "Presentation",
@@ -72,8 +75,8 @@ export const cleanTitle = (t: string) => t.replace(/^\[[^\]]*\]\s*/, "").replace
 /** Dated documents newest first, undated ones last, scoped by year and words. */
 export function scopeIrDocs(docs: IrListDoc[], year: number | null, q: string): (IrListDoc & { title2: string; year: string | null })[] {
   return docs
-    .map((d) => ({ ...d, title2: cleanTitle(libraryTitle(d, IR_KIND[d.kind] ?? "Document")), year: yearOfDoc(d) }))
-    .filter((d) => (year == null || d.year === String(year)) && (!q.trim() || matchesQuery(`${d.title2} ${IR_KIND[d.kind] ?? ""} ${d.period ?? ""} ${d.filed ?? ""}`.toLowerCase(), q)))
+    .map((d) => ({ ...d, title2: cleanTitle(libraryTitle(d, irKindLabel(d))), year: yearOfDoc(d) }))
+    .filter((d) => (year == null || d.year === String(year)) && (!q.trim() || matchesQuery(`${d.title2} ${irKindLabel(d)} ${d.period ?? ""} ${d.filed ?? ""}`.toLowerCase(), q)))
     .sort((a, b) => Number(!a.filed) - Number(!b.filed) || (b.filed ?? "").localeCompare(a.filed ?? "") || (b.year ?? "").localeCompare(a.year ?? "") || a.title2.localeCompare(b.title2));
 }
 
@@ -120,7 +123,7 @@ export function IrDocRows({ ticker, docs, loading, error, year, q, page, onPage 
                   {d.filed ? fmtDate(d.filed, { month: "short", day: "numeric" }) : "–"}
                 </span>
                 <span role="cell" className="hidden text-[12px] text-muted-foreground sm:block">
-                  {IR_KIND[d.kind] ?? "Document"}
+                  {irKindLabel(d)}
                 </span>
                 <span role="cell" className="min-w-0">
                   {d.viewable ? (
