@@ -7,7 +7,7 @@ import { agrees, crossCheckSec, stdLineOf, type CheckStatements } from "./sec-ch
 import { tidyPayload } from "./tidy";
 
 // Real rows: IR standard-line values copied from production with the checksum-verified transfer
-// (ticker|line|period_end|months|values[|…]|md5-6), see /home/claude/fu/round3/reports/iracc_data.
+// (ticker|line|period_end|months|values[|…]|md5-6); fixtures/README.txt describes the files.
 function realValues(file: string, t: string, line: string, e: string, m: number): number[] {
   for (const ln of readFileSync(path.resolve(__dirname, "fixtures", file), "utf8").split("\n")) {
     if (!ln) continue;
@@ -173,9 +173,8 @@ describe("cross-check against the SEC statements", () => {
   });
 });
 
-// Fix pass (review iracc C1, C2, H3, H4, M2): real companies and periods, values from the reviewer's
-// independent run (/home/claude/work/r3/review-iracc/r2/summary.txt: IR rows through tidy against
-// EDGAR companyfacts put through buildStatements).
+// Real companies and periods found by an independent review run: IR rows through the tidy, checked
+// against EDGAR companyfacts put through buildStatements. Sign first, real sources, other measures.
 describe("review fixes: sign first, real sources, other measures", () => {
   const st = (key: string, q: Record<string, number>, accn = "0001065696-26-000056", y: Record<string, number> = {}, derived?: string): CheckStatements => ({
     quarterly: { periods: Object.keys(q).map((end) => ({ end })), rows: [{ key, cells: Object.values(q).map((v) => ({ v, ...(derived ? { derived } : { src: { accn, concept: "us-gaap:X" } }) })) }] },

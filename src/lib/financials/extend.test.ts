@@ -119,15 +119,16 @@ describe("factsFromInline precision", () => {
   });
 });
 
-// Real filings (review finding M7): JPMorgan served through Q3 2025, its FY2025 10-K read at view
-// time with the Q3 2025 10-Q. The documents are 12.9 MB and 11.5 MB, so they stay outside the repo:
-// the round's EDGAR corpus and this unit's own fetch. The test runs where they are present.
-import { existsSync, readFileSync } from "node:fs";
+// Real filings: JPMorgan served through Q3 2025, its FY2025 10-K read at view time with the Q3 2025
+// 10-Q. The documents are 12.9 MB and 11.5 MB on EDGAR; the fixtures keep what extend.ts reads from
+// them (contexts without dimensions, units and the tagged numbers that use those contexts), and give
+// the same statements as the full documents.
+import { readFileSync } from "node:fs";
 import { hydrateDataset } from "./dataset";
 import type { Statement } from "./types";
-const JPM_K = "/home/claude/fu/round3/reports/currency_data/edgar/docs/0001628280-26-008131/jpm-20251231.htm";
-const JPM_Q3 = "/home/claude/work/r3/fin-read/docs/0001628280-25-048859/jpm-20250930.htm";
-describe.skipIf(!existsSync(JPM_K) || !existsSync(JPM_Q3))("JPMorgan 10-K read at view time (M7)", () => {
+const JPM_K = "src/lib/financials/fixtures/docs/jpm-20251231.reduced.htm";
+const JPM_Q3 = "src/lib/financials/fixtures/docs/jpm-20250930.reduced.htm";
+describe("JPMorgan 10-K read at view time", () => {
   const full = hydrateDataset(JSON.parse(readFileSync("src/test/fixtures/companies/JPM.json", "utf8")) as CompanyDataset);
   const cut = (s: Statement, end: string): Statement => {
     const n = s.periods.filter((p) => p.end <= end).length;

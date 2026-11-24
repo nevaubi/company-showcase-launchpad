@@ -1,6 +1,6 @@
 // Real strategy statistics as stored in production `setup_variant_stats.stats->meta` on 2026-11-20
-// (46 variants, session 2026-11-20), copied with the checksum method of fu/round2/TRANSFER.md and
-// verified line by line with tools/linecheck.py (sources: work/r3/signals/transfer/variants_*.txt).
+// (46 variants, session 2026-11-20), copied with a checksum-verified transfer: every line was checked
+// against the md5 of the same row computed in the database before it was accepted.
 // One variant per line, fields separated by "|":
 //   key | in-sample | out-of-sample | regimes | maxDrawdown | dsr | fdr | passed | live | years | curve
 //   in-sample, out-of-sample: n, days, avgNet, avgGross, avgExSpy, hit, t, sharpe, skew, kurt (skew and
