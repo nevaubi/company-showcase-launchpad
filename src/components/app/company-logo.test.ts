@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COVERAGE } from "@/lib/coverage";
@@ -9,6 +10,14 @@ const files = readdirSync("public/logos");
 const bytes = (f: string) => new Uint8Array(readFileSync(`public/logos/${f}`));
 
 describe("bundled company logos", () => {
+  /**
+   * Covered companies that show initials on purpose: the bundled file was another company's mark or a shared
+   * placeholder, and none of the company's own SEC filings carries a mark that can be cut out cleanly
+   * (logo audit, November 2026). A wrong logo is worse than initials. Add a file only from the company's own
+   * material, then take the ticker off this list.
+   */
+  const INITIALS_ON_PURPOSE = ["HNGE", "WAT", "XXI"];
+
   it("the generated manifest matches public/logos (rerun bun scripts/logo-manifest.ts after adding a logo)", () => {
     const manifest = logoManifest(files);
     expect(readFileSync("src/lib/logos.generated.ts", "utf8")).toBe(render(manifest, logoTiles(manifest, bytes)));
@@ -17,7 +26,7 @@ describe("bundled company logos", () => {
   it("resolves every listed ticker to a file that exists", () => {
     const onDisk = new Set(files);
     const listed = Object.entries(LOGO_FILES).flatMap(([ext, list]) => list.split(" ").map((t) => ({ t, ext })));
-    expect(listed.length).toBeGreaterThanOrEqual(COVERAGE.length);
+    expect(listed.length).toBeGreaterThanOrEqual(COVERAGE.length - INITIALS_ON_PURPOSE.length);
     for (const { t, ext } of listed) {
       expect(logoUrl(t)).toBe(`/logos/${t}.${ext}`);
       expect(onDisk.has(`${t}.${ext}`)).toBe(true);
@@ -68,9 +77,18 @@ describe("bundled company logos", () => {
     for (const t of LOGO_TILES.split(" ")) expect(logoUrl(t), t).toBe(`/logos/${t}.png`);
   });
 
-  it("has a mark for every covered company", () => {
+  it("has a mark for every covered company except those that show initials on purpose", () => {
     const missing = COVERAGE.map((c) => c.ticker).filter((t) => !logoUrl(t));
-    expect(missing).toEqual([]);
+    expect(missing.sort()).toEqual([...INITIALS_ON_PURPOSE].sort());
+  });
+
+  it("never gives two companies the same file (a shared file is a placeholder or a borrowed mark)", () => {
+    const byHash = new Map<string, string[]>();
+    for (const f of files.filter((n) => n !== "sources.json")) {
+      const h = createHash("sha1").update(bytes(f)).digest("hex");
+      byHash.set(h, [...(byHash.get(h) ?? []), f]);
+    }
+    expect([...byHash.values()].filter((list) => list.length > 1)).toEqual([]);
   });
 
   it("records where every bundled mark came from", () => {
