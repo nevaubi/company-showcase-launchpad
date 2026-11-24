@@ -14,6 +14,7 @@ import { getPromises } from "@/lib/earnings.functions";
 import { credibility } from "@/lib/earnings/promises";
 import { alertsQuery } from "@/components/app/alerts-bell";
 import { durationDays } from "@/lib/financials/build";
+import { assessCurrency } from "@/lib/financials/currency";
 import type { CompanyDataset, Row } from "@/lib/financials/types";
 import { runSandbox } from "@/lib/research/sandbox";
 import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
@@ -612,7 +613,10 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
         return `${r.label} [${r.key}]: ${vals.join(" | ")}`;
       });
       const filings = d.filings.filter((f) => accns.has(f.accn)).map((f) => `${f.accn} = ${f.form} for period ${f.report} filed ${f.filed}`);
-      const out = `${header}\n${body.join("\n")}\n(* = calculated from other reported values)\nSource filings (cite as filing:${d.profile.ticker}:ACCESSION):\n${filings.slice(0, 20).join("\n")}`;
+      // How current these statements are, in the same words the Statements tab shows (a newer 10-Q, 10-K or results release is named when one exists).
+      const cov = coverageOf(d.profile.ticker);
+      const currency = assessCurrency(d, { ciks: cov ? companyCiks(cov) : [String(Number(d.profile.cik))] });
+      const out = `${header}\n${body.join("\n")}\n(* = calculated from other reported values)\nStatement currency: ${currency.text}\nSource filings (cite as filing:${d.profile.ticker}:ACCESSION):\n${filings.slice(0, 20).join("\n")}`;
       return {
         output: clip(out),
         summary: `${d.profile.ticker} ${args.statement}, ${periods.length} ${freq} periods`,

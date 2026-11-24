@@ -22,7 +22,7 @@ export const TOOL_DEFS = [
     type: "function",
     name: "get_financials",
     description:
-      "Reported financial statement table from XBRL company facts. Every value carries the SEC accession number it came from. Quarterly fourth quarters are derived (annual minus nine months).",
+      "Reported financial statement table from XBRL company facts, as the scheduled build serves it. Every value carries the SEC accession number it came from. Quarterly fourth quarters are derived (annual minus nine months). To say how current the statements are, compare the newest column's period end with the company's newest 10-Q/10-K in its filing list: if a newer one exists, say the build has not added it yet and that the Statements tab (/app/companies/TICKER/financials) extends the tables from the latest filing when it opens (it reads up to four missing 10-Q/10-K filings and adds their periods as new columns sourced to that filing; its Statement currency line says which). An earnings release (8-K) newer than the last 10-Q/10-K is reported results not yet in the statements.",
     parameters: obj(
       {
         ticker: str("Ticker, e.g. NVDA"),
@@ -338,7 +338,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_kpis",
-    description: "Operating KPIs read from the company's own earnings releases, financial supplements, decks and workbooks (thousands of line items per company: segment revenue, NIM, CET1, charge-offs, deposits, backlog, users, units, margins, monthly operating metrics), each value with its document, page and printed text. Covers the pipeline's KPI corpus and this site's own deep reads, whichever is fuller. Far deeper than XBRL. Call with query null first to see the categories, then with a query for the values. Prefer this over get_financials for anything a company reports outside the three statements. Cite each value as a markdown link to the <…> link or document URL it comes with.",
+    description: "Operating KPIs read from the company's own earnings releases, financial supplements, decks and workbooks (thousands of line items per company: segment revenue, NIM, CET1, charge-offs, deposits, backlog, users, units, margins, monthly operating metrics), each value with its document, page and printed text. Covers the pipeline's KPI corpus and this site's own deep reads, whichever is fuller. Far deeper than XBRL. Call with query null first to see the categories, then with a query for the values. Prefer this over get_financials for anything a company reports outside the three statements. Values are as extracted: the IR data tab cross-checks consolidated figures the SEC statements also carry (revenue, operating income, net income, diluted EPS; for banks net interest income and the credit-loss provision) against the 10-Q/10-K when it opens and marks those that differ or fail a check, but that check is not a guarantee (it can miss sign errors, restatements and derived fourth quarters), so for a figure that matters and is also in the statements, compare it with get_financials. Cite each value as a markdown link to the <…> link or document URL it comes with.",
     parameters: obj(
       {
         ticker: str("Covered ticker"),
@@ -354,12 +354,12 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_setups",
-    description: "The short-term setups engine (refreshed nightly over every covered stock): today's setups (stock, long/short, strategy, hold, signal reason, price, stop, target, edge after costs) and the strategy scoreboard: each published strategy's out-of-sample trades, hit rate, t-stat, deflated Sharpe, drawdown, live record and which strict checks it fails. Use for trade-idea, 'is anything setting up on X', or 'which strategies work' questions. Watch-only setups are unproven; say so.",
+    description: "The short-term setups engine (refreshed nightly over every covered stock), as the Setups page shows it: the day's verdict (how many of the rules tried clear the bar against luck; today none may), the short list (signals from listed rules only), the Closest rows (a watch list from the rules nearest the bar, not listed) and the rule scoreboard: each published rule's monthly record since 2022 after costs, its t against the bar luck sets for that many rules, its live record and which strict checks it fails. With a ticker: every live signal on that stock and its rule's standing. Use for trade-idea, 'is anything setting up on X' or 'do any of these rules work' questions. Signals from rules that are not listed are a watch list, not evidence; say so, and never describe a rule as proven, tested and working or predictive unless the output lists it as proven.",
     parameters: obj(
       {
         ticker: nullable(str("Only setups on this ticker; null for all")),
         family: nullable({ type: "string", enum: ["reversal", "momentum", "events", "links", "multi", "pairs"], description: "Strategy family: reversal = snap-back, links = supply chain, multi = confluence" }),
-        include_watch: nullable({ type: "boolean", description: "Include watch-only near misses (default true)" }),
+        include_watch: nullable({ type: "boolean", description: "Include the closest rules' signals when no rule is listed (default true)" }),
         max: nullable({ type: "number", description: "Setups to list (default 15, max 40)" }),
       },
       ["ticker", "family", "include_watch", "max"],
