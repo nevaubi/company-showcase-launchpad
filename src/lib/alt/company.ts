@@ -590,7 +590,9 @@ export function buildCompanyAlt(rows: CompanyAltRow[], today: string, revenue: R
     if (!rs?.length) continue;
     const built = BUILDERS[dataset]?.(rs, today, revenue);
     if (!built) continue;
-    const v: DatasetView = { dataset, label: info.label, source: info.source, theme: info.theme, latest: recency(rs, today).latest, count: rs.length, rows: rs, ...built };
+    // "latest" names the newest finished period: a month still running is not the dataset's latest reading
+    const done = settled(rs, today);
+    const v: DatasetView = { dataset, label: info.label, source: info.source, theme: info.theme, latest: recency(done.length ? done : rs, today).latest, count: rs.length, rows: rs, ...built };
     v.quiet = quietReason(v, today);
     views.push(v);
   }

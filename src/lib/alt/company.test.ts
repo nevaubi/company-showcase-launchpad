@@ -149,6 +149,15 @@ describe("wording and materiality", () => {
   });
 });
 
+describe("a month in progress", () => {
+  it("is not the dataset's latest date", () => {
+    const months = Array.from({ length: 14 }, (_, i) => new Date(Date.UTC(2025, 9 + i, 1)).toISOString().slice(0, 10));
+    const rows = months.map((d) => row({ ticker: "KO", dataset: "attention", kind: "series", title: "Wikipedia pageviews", date: d, value: 50_000, unit: "views" }));
+    expect(rows.at(-1)!.date).toBe("2026-11-01");
+    expect(buildCompanyAlt(rows, TODAY).views.find((v) => v.dataset === "attention")!.latest).toBe("2026-10-01");
+  });
+});
+
 describe("riseFlag on a source that publishes late", () => {
   // FDA recalls: about 2 a quarter for two years, then 9 recalls 100 to 170 days back (published, whole),
   // and 6 in the last 30 days (some of a quarter that is not all published yet)
