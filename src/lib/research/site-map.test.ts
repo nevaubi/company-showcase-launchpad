@@ -110,33 +110,68 @@ describe("site map", () => {
       "1400 px",
       "Reading the newer filing from SEC.",
       "the panels keep their height",
-      "the served quarter's cards stay",
+      "Quarter drivers (titled with the quarter it explains, e.g. \"Q3 FY26: what moved\"",
+      "the subtitle names the newer one",
+      "Summary built from SEC registration data · facts from SEC EDGAR",
+      "Summary from Wikipedia · facts from SEC EDGAR",
+      "no rows in any of its panels",
+      "at most 1.2 seconds",
+      "a wide wordmark gets a plate widened to its shape",
+      "the company's own site icon or its ticker letters",
     ])
       expect(overview).toContain(s);
-    expect(overview).not.toMatch(/IR site,/);
+    expect(overview).not.toMatch(/IR site,|Latest quarter \(Why it moved|the served quarter's cards stay/);
     const statements = map.split("\n").find((l) => l.includes("· /app/companies/NVDA/financials ·"))!;
-    expect(statements).toContain("The Overview and the assistant's get_financials use the same read");
+    expect(statements).toContain("and the assistant's get_financials use the same read");
     expect(statements).toContain("about 25 MB");
     expect(statements).not.toContain("the Overview and get_financials use the scheduled build only");
+    expect(statements).toContain("the Earnings tab's results (Latest quarter, Quarterly history)");
+    expect(statements).toContain("\"10-K · new\"");
+    expect(statements).toContain("EPS, basic; EPS, diluted; Weighted avg. shares, basic; Weighted avg. shares, diluted");
+    expect(statements).not.toMatch(/ — /);
+    const earnings = map.split("\n").find((l) => l.includes("· /app/companies/NVDA/earnings ·"))!;
+    for (const s of [
+      "a line titled Read at view time above the Latest quarter table",
+      "the scheduled rebuild has not added it yet",
+      "so Q4 FY26 is derived: the year less the first nine months.",
+      "Reading the 10-K filed on DATE from SEC.",
+      "could not be read here; the scheduled rebuild will add it.",
+    ])
+      expect(earnings).toContain(s);
+    const filings = map.split("\n").find((l) => l.includes("· /app/companies/NVDA/filings ·"))!;
+    expect(filings).toContain("Form 25-NSE \"Exchange removal of a listed security\"");
+    expect(filings).toContain("Form 25 \"Removal of a class of securities from listing\"");
+    expect(filings).toContain("\"Deregistration of a class of securities\"");
 
     const supply = line(map, "/app/supply-chain");
     for (const s of [
-      "Stated exposure, which reads Estimated exposure or Stated and estimated exposure",
+      "Stated exposure, which reads Estimated exposure or Exposure (stated, est.)",
       "Shares of 10% or more",
       "Single-source inputs",
-      "Hotspots in link sentences, or Hotspots in filings and calls",
+      "Hotspot regions, its hint ending \"in link sentences\" or \"in filings and calls\"",
       "is 2nd order, not drawn at Direct\" with a Show 2nd order button (sets depth=2)",
       "one wheel notch zooms about 1.25 times",
       "opens centred between its sides",
-      "a U.S. state counts toward the United States",
+      "a U.S. state, city or basin counts toward the United States",
       "The Dependency score counts the company's own 10-K and 10-Q only",
+      "reads \"not scored\", never 0 points",
+      "\"Not scored:\" and the reason",
+      "an unnamed customer's share of revenue stated in the company's own filing counts in the customer part",
+      "a name is rated as a country only when it is a known country name",
+      "Rest of world is no place at all",
     ])
       expect(supply).toContain(s);
-    expect(supply).not.toMatch(/Concentrated, 10% or more|Disclosed exposure|Hotspot regions/);
+    expect(supply).not.toMatch(/Concentrated, 10% or more|Disclosed exposure|Stated and estimated exposure|Hotspots in link sentences|Hotspots in filings and calls/);
 
     const tech = line(map, "/app/markets");
     expect(tech).toContain("Log excess");
-    expect(tech).toContain("Across companies column");
+    expect(tech).toContain("Across companies, simple return column");
+    expect(tech).toContain("Other conditions sentence of counts");
+    expect(tech).toContain("with an All N conditions button that opens every condition tested");
+    expect(tech).toContain("Not in force, with a verdict at H days · N");
+    expect(tech).toContain("only a condition after which the average return differs from days without it by about X% over 5 days");
+    expect(tech).not.toContain("only an average effect of about");
+    expect(tech).not.toContain("Across companies column");
     expect(tech).toContain("Not detectable on SYM's own history, but reliable across companies");
     expect(tech).toContain("would have an even chance of showing up as reliable");
     expect(tech).toContain("on phones 5D, 2Y and 10Y are left out");
@@ -172,6 +207,12 @@ describe("site map", () => {
     ])
       expect(sectors).toContain(s);
     expect(sectors).not.toMatch(/scorecard|heatmap|deep dive|wk=/i);
+    expect(sectors).toContain("the caption names them \"on a wider window\"");
+    expect(sectors).toContain("company names are shortened, the full name on hover");
+    const kpis = line(siteMapText(), "/app/kpis");
+    expect(kpis).toContain("a KPI matrix groups row (Industry group)");
+    expect(kpis).toContain("Whole sector");
+    expect(kpis).toContain("\"Left out: N companies report none of these KPIs\" with a Show them button (Leave them out to undo)");
   });
 
   it("carries the review fixes of filings, earnings, companies and IR data", () => {
