@@ -42,13 +42,28 @@ export interface NetLayout {
   basis: { supplier: Basis; customer: Basis };
 }
 export type Basis = "dollars" | "share" | "none";
+const BASIS_WORDS: Record<Exclude<Basis, "none">, string> = { dollars: "stated revenue, purchases or contract value (or a stated share × revenue)", share: "the stated share" };
+/** What band width means on each side of the company, as the legend says it. It depends on the filings alone, never on what is selected. */
+export function bandLegend(basis: { supplier: Basis; customer: Basis }): string {
+  const { supplier: s, customer: c } = basis;
+  if (s === "none" && c === "none") return "No flow or share is stated, so every band has the same width.";
+  if (s === "none") return `Customer bands show ${BASIS_WORDS[c as Exclude<Basis, "none">]}. No supplier flow is stated, so supplier bands are equal.`;
+  if (c === "none") return `Supplier bands show ${BASIS_WORDS[s]}. No customer flow is stated, so customer bands are equal.`;
+  if (s === c) return `Band width shows ${BASIS_WORDS[s]}.`;
+  return `Supplier bands show ${BASIS_WORDS[s]}; customer bands show ${BASIS_WORDS[c]}.`;
+}
 
-/** Geometry in px. `card` holds two lines (name, then product); `cell` is a one-line card in the second row; `child` a second-order name. */
-export const NET = { head: 30, card: 44, cell: 32, child: 28, gap: 6, indent: 16, gutter: 72, rowGap: 40, pad: 4, minFocus: 176, maxFocus: 360, focusMin: 168, focusMax: 232, tMin: 2, tMax: 18 } as const;
+/**
+ * Geometry in px. Every first-order name gets the same `card` (two lines: name and figure, then ticker, product and flags),
+ * whatever its relation, so figures and flags line up down a column and across the page; `child` is a second-order name.
+ * `head` holds a group's name and count on one line and its totals on the next. `cellMin` is the narrowest a card in the
+ * second row may get.
+ */
+export const NET = { head: 48, card: 44, child: 28, gap: 4, indent: 16, gutter: 56, rowGap: 36, groupGap: 24, cellMin: 172, pad: 4, minFocus: 112, maxFocus: 360, focusMin: 132, focusMax: 208, tMin: 2, tMax: 18 } as const;
 
 const isHop2 = (n: GraphNode | HopNode): n is HopNode => (n as HopNode).hop === 2;
 const tradeNode = (n: GraphNode | HopNode) => (n.links as RiskLink[]).some(isTradeLink);
-/** A name whose filings state a share or a verified dollar figure: its card needs a second line in the narrow second row. */
+/** A name whose filings state a share or a verified dollar figure. */
 export const hasFigure = (n: Pick<GraphNode, "links">): boolean => (n.links as RiskLink[]).some((l) => copies(l).some((c) => (c.share_pct ?? 0) > 0)) || statedAmounts(n.links as RiskLink[]).length > 0;
 const weight = (c: { dollars: number | null; share: number; node: { links: unknown[] } }) => [c.dollars ?? 0, c.share, c.node.links.length] as const;
 const byWeight = (a: NetCard, b: NetCard) => {
@@ -88,7 +103,7 @@ export interface NetworkInput {
 export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expanded }: NetworkInput): NetLayout {
   const W = Math.max(560, Math.floor(width));
   /* the company column is narrower than the two flow columns, so long counterparty names keep their room */
-  const focusW = Math.round(Math.min(NET.focusMax, Math.max(NET.focusMin, W * 0.2)));
+  const focusW = Math.round(Math.min(NET.focusMax, Math.max(NET.focusMin, W * 0.18)));
   const colW = Math.floor((W - 2 * NET.gutter - focusW) / 2);
   const xLeft = 0, xMid = colW + NET.gutter, xRight = W - colW;
   const top = NET.head + NET.gap;
@@ -147,29 +162,30 @@ export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expan
   const focusY = Math.max(top, Math.round(top + (sideEnd - top - focusH) / 2));
   const focus = { x: xMid, y: focusY, w: focusW, h: focusH };
 
-  /* partners and competitors are not flows: they sit in a second row under the company, side by side */
+  /* partners and competitors are not flows: they sit in a second row under the company, side by side. The row is cut into
+     equal columns and each group takes its share of them by how many names it has, so a long list of competitors next to
+     two partners spreads out instead of running down the page. */
   const rowY = Math.max(sideEnd, focusY + focusH + NET.gap) + NET.rowGap;
   const partners = cut(first("partner"), "partner"), competitors = cut(first("competitor"), "competitor");
-  const both = first("partner").length > 0 && first("competitor").length > 0;
-  const group = (r: "partner" | "competitor", shown: NetCard[], x0: number, gw: number): { end: number; cx: number } => {
+  const both = partners.length > 0 && competitors.length > 0;
+  const total = Math.max(both ? 2 : 1, Math.floor((W - (both ? NET.groupGap : 0) + NET.gap) / (NET.cellMin + NET.gap)));
+  const cw = Math.floor((W - (both ? NET.groupGap : 0) - (total - (both ? 2 : 1)) * NET.gap) / total);
+  const partnerCols = both ? Math.max(1, Math.min(total - 1, Math.round((total * partners.length) / (partners.length + competitors.length)))) : total;
+  const group = (r: "partner" | "competitor", shown: NetCard[], x0: number, cols: number): { end: number; cx: number } => {
     const all = first(r);
-    if (!all.length) return { end: rowY, cx: x0 + gw / 2 };
-    const cols = Math.max(1, Math.min(both ? 2 : 4, Math.floor((gw + NET.gap) / (150 + NET.gap))));
-    const cw = Math.floor((gw - (cols - 1) * NET.gap) / cols);
+    if (!all.length) return { end: rowY, cx: x0 };
+    const gw = cols * cw + (cols - 1) * NET.gap;
     headers.push({ relation: r, x: x0, y: rowY, w: gw, shown: shown.length, total: all.length });
     const y0 = rowY + NET.head + NET.gap;
-    /* a figure goes on its own line under the name, so a long name keeps the whole cell width */
-    const ch = shown.some((c) => hasFigure(c.node)) ? NET.card : NET.cell;
-    const cell = (i: number) => ({ x: x0 + (i % cols) * (cw + NET.gap), y: y0 + Math.floor(i / cols) * (ch + NET.gap) });
-    shown.forEach((c, i) => { const at = cell(i); c.x = at.x; c.y = at.y; c.w = cw; c.h = ch; cards.push(c); });
+    const cell = (i: number) => ({ x: x0 + (i % cols) * (cw + NET.gap), y: y0 + Math.floor(i / cols) * (NET.card + NET.gap) });
+    shown.forEach((c, i) => { const at = cell(i); c.x = at.x; c.y = at.y; c.w = cw; c.h = NET.card; cards.push(c); });
     let n = shown.length;
-    if (all.length > shown.length) { const at = cell(n); more.push({ relation: r, x: at.x, y: at.y, w: cw, h: ch, hidden: all.length - shown.length }); n++; }
+    if (all.length > shown.length) { const at = cell(n); more.push({ relation: r, x: at.x, y: at.y, w: cw, h: NET.card, hidden: all.length - shown.length }); n++; }
     /* the connector from the company lands on the group's heading mark */
-    return { end: y0 + Math.ceil(n / cols) * (ch + NET.gap), cx: x0 + 4 };
+    return { end: y0 + Math.ceil(n / cols) * (NET.card + NET.gap), cx: x0 + 4 };
   };
-  const half = Math.floor((W - NET.gutter / 2) / 2);
-  const gp = group("partner", partners, 0, both ? half : W);
-  const gc = group("competitor", competitors, both ? W - half : 0, both ? half : W);
+  const gp = group("partner", partners, 0, both ? partnerCols : total);
+  const gc = group("competitor", competitors, both ? partnerCols * (cw + NET.gap) - NET.gap + NET.groupGap : 0, both ? total - partnerCols : total);
   const hasPartners = partners.length > 0, hasCompetitors = competitors.length > 0;
 
   /* bands between the outer columns and the company, stacked along its edges in the same order as the cards */
