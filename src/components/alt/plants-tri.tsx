@@ -97,7 +97,8 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
         </div>
       </div>
       <div className="min-w-0">
-        <div className="overflow-x-auto">
+        {!facilities.length && <p className="text-[12px] text-muted-foreground">The EPA file for {y} lists no plant names for this company.</p>}
+        <div className={cn("overflow-x-auto", !facilities.length && "hidden")}>
           <table className="w-full text-[13px]">
             <thead>
               <tr className="h-7 border-b text-left text-[11px] text-muted-foreground [&>th]:whitespace-nowrap">
@@ -144,7 +145,7 @@ export function PlantsTri({ ticker, rows }: { ticker: string; rows: AltRow[] }) 
           </div>
         )}
         <p className="mt-3 text-[11px] text-muted-foreground">
-          US plants with 10+ employees that handle listed chemicals above EPA thresholds, under the parent company they report ({(fac.meta.parents ?? []).slice(0, 3).map(title).join("; ")}{fac.meta.parents?.length > 3 ? "…" : ""}). Production is each plant's own ratio of this year's activity to last year's.{" "}
+          US plants with 10+ employees that handle listed chemicals above EPA thresholds, under the parent company they report{fac.meta.parents?.length ? <> ({(fac.meta.parents as string[]).slice(0, 3).map(title).join("; ")}{fac.meta.parents.length > 3 ? "…" : ""})</> : null}. Production is each plant's own ratio of this year's activity to last year's.{" "}
           <a href={rel?.source_url ?? TRI_PAGE} target="_blank" rel="noreferrer" className="underline underline-offset-2">EPA {y} data file</a>
         </p>
       </div>

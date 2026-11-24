@@ -34,7 +34,7 @@ import {
 import { tapeAsOf, type MemberTape, type TapeFile } from "@/lib/sectors/breadth";
 import { pickDrivers } from "@/lib/sectors/drivers";
 import { fundRisk } from "@/lib/sectors/etf";
-import { mult, pct, ratio, tone, usd } from "@/lib/sectors/format";
+import { corr100, mult, pct, ratio, tone, usd } from "@/lib/sectors/format";
 import { qLabel, SECTOR_ETF, type Overview } from "@/lib/sectors/groups";
 import { baseMembers } from "@/lib/sectors/members";
 import { marketIndex } from "@/lib/sectors/risk";
@@ -613,7 +613,7 @@ export function FundCorrelation() {
                   Beta
                 </th>
                 {risk.symbols.map((s, j) => (
-                  <th key={s} className={cn("num px-0 text-center font-normal", j === 0 && "border-l")} title={name(s)}>
+                  <th key={s} className={cn("num pl-0 pr-1.5 text-right font-normal", j === 0 && "border-l")} title={name(s)}>
                     {s.replace(/^XL/, "")}
                   </th>
                 ))}
@@ -643,11 +643,11 @@ export function FundCorrelation() {
                   {risk.symbols.map((t, j) => (
                     <td
                       key={t}
-                      className={cn("num px-0 text-center text-[11px]", j === 0 && "border-l")}
+                      className={cn("num pl-0 pr-1.5 text-right text-[11px]", j === 0 && "border-l")}
                       style={i === j ? undefined : corrBg(risk.corr[i][j])}
                       title={i === j ? undefined : `${name(s)} and ${name(t)}: ${ratio(risk.corr[i][j])}`}
                     >
-                      {i === j ? <span className="text-muted-foreground/50">·</span> : risk.corr[i][j] == null ? "–" : Math.round(risk.corr[i][j]! * 100)}
+                      {i === j ? <span className="text-muted-foreground/50">·</span> : corr100(risk.corr[i][j])}
                     </td>
                   ))}
                 </tr>

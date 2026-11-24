@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { TickerMark } from "@/components/app/ticker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { densify, leftOutNote, resolveGroup, sectorGroups, WHOLE_SECTOR } from "@/lib/kpis/dense";
 import { columnScale, fmtChange, fmtInScale, modalEnd, modalPeriod, periodMark, type ColumnScale } from "@/lib/kpis/matrix";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -124,6 +125,8 @@ function KpiMatrix() {
   const [view, setView] = useSessionState<"value" | "change">("fu:kpis:view", "value");
   const [hideStale, setHideStale] = useSessionState("fu:kpis:stale", true);
   const [heat, setHeat] = useSessionState("fu:kpis:heat", true);
+  const [group, setGroup] = useSessionState("fu:kpis:group", "");
+  const [showEmpty, setShowEmpty] = useState(false);
   const [sort, setSort] = useState<{ c: string; d: 1 | -1 }>({ c: "mcap", d: -1 });
   const { open } = useSource();
   const qc = useQueryClient();
@@ -160,9 +163,18 @@ function KpiMatrix() {
       }
     return { sec: [...sec.keys()].sort(), ind: [...ind.keys()].sort() };
   }, [latest.data]);
+  // Within a sector the matrix shows one industry group at a time (src/lib/kpis/dense.ts): a bank's KPIs are not
+  // an insurer's, and a whole sector under one set of columns was three quarters empty cells.
+  const sector = scope.startsWith("sec:") ? scope.slice(4) : null;
+  const groups = useMemo(
+    () => (sector ? sectorGroups(latest.data?.kpis ?? {}, sector) : { groups: [], small: 0 }),
+    [latest.data, sector],
+  );
+  const activeGroup = sector ? resolveGroup(groups.groups, group) : null;
   const inScope = (r: { sec: string; ind: string }) =>
-    scope === "all" ||
-    (scope.startsWith("sec:") ? r.sec === scope.slice(4) : r.ind === scope.slice(4));
+    (scope === "all" ||
+      (scope.startsWith("sec:") ? r.sec === scope.slice(4) : r.ind === scope.slice(4))) &&
+    (activeGroup == null || r.ind === activeGroup);
   const fresh = (p: Point) => !!p && (!hideStale || age(p[0]) <= STALE_DAYS);
 
   // KPIs ranked by how many companies in scope report them freshly.
@@ -175,24 +187,26 @@ function KpiMatrix() {
       .filter((x) => x.n > 0)
       .sort((a, b) => b.n - a.n);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [KP, latest.data, scope, K, hideStale]);
-  const cols = (
+  }, [KP, latest.data, scope, activeGroup, K, hideStale]);
+  const chosen = (
     picked.length
       ? picked.map((id) => ranked.find((x) => x.k.id === id)).filter(Boolean)
       : ranked.slice(0, DEFAULT_COLS)
   ) as { k: TaxKpi; n: number }[];
 
-  const rows = useMemo(() => {
+  // Every company in scope with any fresh KPI gets a row; densify() then leaves out the ones with nothing in the
+  // chosen columns (counted in the caption, one press shows them).
+  const allRows = useMemo(() => {
     const L = latest.data?.kpis ?? {};
     const tks = new Set<string>();
-    for (const { k } of cols)
+    for (const k of KP)
       for (const [t, r] of Object.entries(L[k.id] ?? {})) if (inScope(r) && fresh(r[K])) tks.add(t);
     return [...tks].map((t) => {
       const u = byTk.get(t);
       const px = live.get(t);
       const mcap = px && u?.sharesOutstanding ? px * u.sharesOutstanding : null;
       const cells = Object.fromEntries(
-        cols.map(({ k }) => {
+        chosen.map(({ k }) => {
           const r = L[k.id]?.[t];
           return [k.id, r && fresh(r[K]) ? { p: r[K]!, kpiId: r.kpi_id } : null];
         }),
@@ -207,7 +221,10 @@ function KpiMatrix() {
       };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [latest.data, cols.map((c) => c.k.id).join(), scope, K, hideStale, byTk, live]);
+  }, [latest.data, KP, chosen.map((c) => c.k.id).join(), scope, activeGroup, K, hideStale, byTk, live]);
+  const dense = useMemo(() => densify(allRows, chosen.map((c) => c.k.id), showEmpty), [allRows, chosen.map((c) => c.k.id).join(), showEmpty]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = dense.rows;
+  const cols = chosen.filter((c) => dense.cols.includes(c.k.id));
 
   const sorted = useMemo(() => {
     const val = (r: (typeof rows)[number]) => {
@@ -307,7 +324,7 @@ function KpiMatrix() {
 
   const togglePick = (id: string) =>
     setPicked((cur) => {
-      const base = cur.length ? cur : cols.map((c) => c.k.id);
+      const base = cur.length ? cur : chosen.map((c) => c.k.id);
       return base.includes(id)
         ? base.filter((x) => x !== id)
         : base.length >= MAX_COLS
@@ -377,6 +394,14 @@ function KpiMatrix() {
     );
   const families = [...new Set(ranked.map((x) => x.k.family))];
   const scopeName = scope === "all" ? "all companies" : scope.slice(4);
+  const where = activeGroup ?? scopeName;
+  const leftOut = leftOutNote(dense, (id) => KP.find((k) => k.id === id)?.name ?? id, where);
+  const pickGroup = (g: string) => {
+    setGroup(g);
+    setPicked([]);
+    setShowEmpty(false);
+    setSort((cur) => (cur.c === "t" || cur.c === "mcap" || cur.c === "revg" ? cur : { c: "mcap", d: -1 }));
+  };
   return (
     <div>
       <PageHeader
@@ -390,6 +415,8 @@ function KpiMatrix() {
           onValueChange={(v) => {
             setScope(v);
             setPicked([]);
+            setGroup("");
+            setShowEmpty(false);
           }}
         >
           <SelectTrigger aria-label="Companies" className="h-8 w-56 text-xs">
@@ -412,7 +439,7 @@ function KpiMatrix() {
         <Popover>
           <PopoverTrigger asChild>
             <Button size="sm" variant="outline" className="h-8 text-xs" aria-label="Choose KPIs" disabled={!ranked.length}>
-              <ListChecks /> KPIs · {cols.length}
+              <ListChecks /> KPIs · {chosen.length}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-96 p-0">
@@ -431,7 +458,7 @@ function KpiMatrix() {
                   {ranked
                     .filter((x) => x.k.family === fam)
                     .map(({ k, n }) => {
-                      const on = cols.some((c) => c.k.id === k.id);
+                      const on = chosen.some((c) => c.k.id === k.id);
                       return (
                         <button
                           key={k.id}
@@ -476,14 +503,55 @@ function KpiMatrix() {
         // overflow-anchor: none: rows are keyed by ticker, so when the period or the columns change the browser's
         // scroll anchoring would follow a row to its new place and move the page (measured 152 px on Latest year).
         <div data-section="KPI matrix" className="rounded-md border bg-card shadow-paper" style={{ overflowAnchor: "none" }}>
+          {sector && groups.groups.length > 1 && (
+            <div data-section="KPI matrix groups" className="flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
+              <span id="kpi-groups" className={cn(IR.caption, "mr-1")}>
+                Industry group
+              </span>
+              <div role="group" aria-labelledby="kpi-groups" className="flex flex-wrap gap-1">
+                {[...groups.groups.map((g) => ({ v: g.ind, l: g.ind, n: g.n })), { v: WHOLE_SECTOR, l: `Whole sector`, n: groups.groups.reduce((s, g) => s + g.n, 0) + groups.small }].map((o) => {
+                  const on = (activeGroup ?? WHOLE_SECTOR) === o.v;
+                  return (
+                    <button
+                      key={o.v}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => pickGroup(o.v)}
+                      className={cn(
+                        "inline-flex h-7 items-center gap-1.5 rounded border px-2 text-xs transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                        on ? "border-foreground bg-foreground text-background" : "bg-card hover:bg-secondary",
+                      )}
+                    >
+                      {o.l}
+                      <span className={cn("num text-[11px]", on ? "text-background/70" : "text-muted-foreground")}>{o.n}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="flex flex-wrap items-baseline gap-x-3 border-b px-3 py-2">
             <p className="text-[13px]">
               <span className="num font-semibold">{sorted.length}</span>
               <span className="text-muted-foreground">
                 {" "}
-                {sorted.length === 1 ? "company" : "companies"} · {cols.length} KPIs · {K === "q" ? "latest quarter" : "latest fiscal year"} {view === "change" ? "change vs a year earlier" : "values"}
+                {sorted.length === 1 ? "company" : "companies"}
+                {activeGroup ? ` in ${activeGroup}` : ""} · {cols.length} KPIs · {K === "q" ? "latest quarter" : "latest fiscal year"} {view === "change" ? "change vs a year earlier" : "values"}
               </span>
             </p>
+            {(leftOut || showEmpty) && (
+              <p data-kpi-left-out className={cn(IR.caption, "flex items-baseline gap-2")}>
+                <span>{showEmpty ? "Showing companies and KPIs with no value here." : leftOut}</span>
+                <button
+                  type="button"
+                  aria-pressed={showEmpty}
+                  onClick={() => setShowEmpty((v) => !v)}
+                  className="rounded-sm font-medium text-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {showEmpty ? "Leave them out" : "Show them"}
+                </button>
+              </p>
+            )}
             <p className={cn(IR.caption, "ml-auto")}>Units in each column head; a period label appears only where it differs from the column's.</p>
           </div>
           <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")}>

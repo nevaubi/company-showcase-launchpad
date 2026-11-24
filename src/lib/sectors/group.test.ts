@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { boardRows } from "./board";
 import { groupTape, tapeIndex, type MemberTape } from "./breadth";
-import { figAt, groupSearch, joinRows, lastFullIndex, refQuarter, slugify, sortRows, summary, tableSort } from "./group";
+import { figAt, groupSearch, joinRows, lastFullIndex, refQuarter, slugify, sortRows, summary, tableSort, fitCompanies } from "./group";
 import type { Constituent, GroupFile, Overview } from "./groups";
 import { baseMembers, membersOf, pageMembers } from "./members";
 import { marketIndex } from "./risk";
@@ -166,5 +166,44 @@ describe("breadth is counted once per page", () => {
     expect(peer.above200).toBe(0.4);
     // without the overview file there is no peers table; the strip counts the group file's own flags
     expect(summary(file, joinRows(cons, { tape: null }), null).breadth).toMatchObject({ from: "pipeline", share: 1, above200: { hits: 1, known: 1 } });
+  });
+});
+
+describe("companies table fits its wrapper", () => {
+  // Wrapper widths at 1280, 1366 and 1440 px windows (sidebar and gutters taken off), and a phone.
+  const W = { w1280: 990, w1366: 1076, w1440: 1150, phone: 368 };
+  it("drops the least useful columns until a whole sector fits at 1280 and 1366", () => {
+    const at1280 = fitCompanies("fundamentals", { wholeSector: true, sort: "mcap", dir: "desc", avail: W.w1280 });
+    expect(at1280.fits).toBe(true);
+    expect(at1280.industry).toBe(true);
+    expect(at1280.hidden).toEqual(["ret_ytd", "a200"]);
+    expect(at1280.minW).toBeLessThanOrEqual(W.w1280);
+    const at1366 = fitCompanies("fundamentals", { wholeSector: true, sort: "mcap", dir: "desc", avail: W.w1366 });
+    expect(at1366).toMatchObject({ fits: true, hidden: ["ret_ytd"] });
+    const at1440 = fitCompanies("fundamentals", { wholeSector: true, sort: "mcap", dir: "desc", avail: W.w1440 });
+    expect(at1440).toMatchObject({ fits: true, hidden: [] });
+    expect(fitCompanies("risk", { wholeSector: true, sort: "mcap", dir: "desc", avail: W.w1280 }).fits).toBe(true);
+  });
+  it("keeps the sorted column when it would be dropped", () => {
+    const f = fitCompanies("fundamentals", { wholeSector: true, sort: "ret_ytd", dir: "desc", avail: W.w1280 });
+    expect(f.keys).toContain("ret_ytd");
+    expect(f.sort).toBe("ret_ytd");
+    expect(f.fits).toBe(true);
+    expect(f.hidden).toEqual(["a200", "fcf_yield"]);
+  });
+  it("on a phone keeps every value column, leaves out the industry and never sorts by it", () => {
+    const f = fitCompanies("fundamentals", { wholeSector: true, sort: "industry", dir: "asc", avail: W.phone });
+    expect(f.industry).toBe(false);
+    expect(f.sort).toBe("mcap");
+    expect(f.dir).toBe("desc");
+    expect(f.hidden).toEqual([]);
+    expect(f.fits).toBe(false);
+    // On a wide window the industry sort stands.
+    expect(fitCompanies("fundamentals", { wholeSector: true, sort: "industry", dir: "asc", avail: W.w1440 })).toMatchObject({ sort: "industry", dir: "asc" });
+    // The sorted column leads when it would start off screen.
+    expect(fitCompanies("fundamentals", { wholeSector: true, sort: "pe", dir: "asc", avail: W.phone }).keys[0]).toBe("pe");
+  });
+  it("an unmeasured wrapper keeps every column", () => {
+    expect(fitCompanies("fundamentals", { wholeSector: false, sort: "mcap", dir: "desc", avail: 0 }).keys).toHaveLength(12);
   });
 });

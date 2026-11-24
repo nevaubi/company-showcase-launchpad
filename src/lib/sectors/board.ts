@@ -177,7 +177,7 @@ export const BOARD_DROP: Record<BoardSet, readonly BoardSort[]> = {
  * wrapper scrolls sideways; if the sorted column would then start off screen it moves to the front, so the
  * column the rows are ordered by is always in view. An unmeasured wrapper (0) keeps every column.
  */
-export function fitBoard<C extends { k: BoardSort; w: number }>(cols: readonly C[], drop: readonly BoardSort[], sort: BoardSort, avail: number, nameW: number): C[] {
+export function fitBoard<K extends string, C extends { k: K; w: number }>(cols: readonly C[], drop: readonly K[], sort: K, avail: number, nameW: number): C[] {
   let out = [...cols];
   if (!(avail > 0)) return out;
   const total = () => nameW + out.reduce((s, c) => s + c.w, 0);

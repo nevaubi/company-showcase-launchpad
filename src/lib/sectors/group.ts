@@ -7,6 +7,7 @@ import { annualised, type GroupTape, type MemberTape } from "./breadth";
 import type { MarketIndex, Signal } from "./risk";
 import { shareOf, sortBy, type Share, type SortDir } from "./stats";
 import type { Unit } from "./format";
+import { fitBoard } from "./board";
 
 export interface Row extends Constituent {
   /** Above the 200-day average and within 2% of the 52-week high, by the page's one breadth rule. */
@@ -113,6 +114,55 @@ export function tableSort(set: ColSet, sort: string | undefined, dir: SortDir | 
   const shown = sort === "tk" || sort === "industry" || (COL_SETS[set] as readonly string[]).includes(sort ?? "");
   if (!shown) return { sort: "mcap", dir: "desc" };
   return { sort: sort!, dir: dir ?? (sort === "tk" || sort === "industry" || sort === "pe" ? "asc" : "desc") };
+}
+
+/* ---------- companies table fitting ---------- */
+/** Columns each set gives up first when the companies table does not fit its wrapper, least useful first. */
+export const COMPANY_DROP: Record<ColSet, readonly string[]> = {
+  fundamentals: ["ret_ytd", "a200", "fcf_yield", "gm", "roic", "ret_1y"],
+  risk: ["nh", "a200", "vol", "ret_1y", "beta"],
+};
+/** Width of a companies-table column in px (fixed layout; the company column takes the rest). */
+export const companyColW = (k: string) => (k === "sig" ? 220 : k === "nh" || k === "em" || k === "vol" ? 84 : 70);
+/** Industry column of a whole-sector table, and the narrowest the company column may get. */
+export const IND_W = 148;
+export const COMPANY_NAME_W = { desk: 210, phone: 150 } as const;
+
+export interface CompanyFit {
+  /** Value columns to draw, in order. */
+  keys: string[];
+  /** Whether the industry column is drawn. */
+  industry: boolean;
+  /** Columns of the set not drawn at this width (the weight column on a whole sector excepted: it gives way by design). */
+  hidden: string[];
+  /** The sort to apply: never a column that is not drawn. */
+  sort: string;
+  dir: SortDir;
+  /** Whether the table fits its wrapper without scrolling sideways (then its head can stick to the page). */
+  fits: boolean;
+  minW: number;
+}
+
+/**
+ * The companies table at a wrapper width of `avail` px. A whole sector (no industry picked) adds the industry
+ * column and gives up the weight column; a phone (wrapper under 600 px) leaves the industry out and keeps every
+ * value column, scrolling sideways inside its wrapper with the sorted column moved to the front. Otherwise
+ * columns are dropped in `COMPANY_DROP` order, never the sorted one, until the table fits, so at 1280 and
+ * 1366 it needs no inner scroller. A sort by a column that is not drawn falls back to market cap.
+ */
+export function fitCompanies(set: ColSet, o: { wholeSector: boolean; sort: string; dir: SortDir; avail: number }): CompanyFit {
+  const phone = o.avail > 0 && o.avail < 600;
+  const industry = o.wholeSector && !phone;
+  const base = (COL_SETS[set] as readonly string[]).filter((k) => !(industry && k === "w"));
+  const sortShown = o.sort === "tk" || (o.sort === "industry" ? industry : base.includes(o.sort));
+  const sort = sortShown ? o.sort : "mcap";
+  const dir: SortDir = sortShown ? o.dir : "desc";
+  const nameW = (phone ? COMPANY_NAME_W.phone : COMPANY_NAME_W.desk) + (industry ? IND_W : 0);
+  const cols = base.map((k) => ({ k, w: companyColW(k) }));
+  const fit = fitBoard(cols, phone ? [] : COMPANY_DROP[set], sort, o.avail, nameW);
+  const keys = fit.map((c) => c.k);
+  const minW = nameW + fit.reduce((s, c) => s + c.w, 0);
+  return { keys, industry, hidden: base.filter((k) => !keys.includes(k)), sort, dir, fits: o.avail >= minW, minW };
 }
 
 /* ---------- distribution metrics ---------- */

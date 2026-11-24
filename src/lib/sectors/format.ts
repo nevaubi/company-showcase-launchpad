@@ -62,3 +62,10 @@ export type Unit = "pct" | "x" | "usd" | "ret";
 export function byUnit(v: number | null | undefined, unit: Unit): string {
   return unit === "pct" ? pct(v) : unit === "ret" ? pct(v, { sign: true }) : unit === "x" ? mult(v) : usd(v);
 }
+
+/** A correlation printed × 100 as a whole number with a true minus ("−16"), the quiet en dash when missing. */
+export function corr100(v: number | null | undefined): string {
+  if (!ok(v)) return MISSING;
+  const n = Math.round(v * 100);
+  return n < 0 ? `−${-n}` : String(n);
+}

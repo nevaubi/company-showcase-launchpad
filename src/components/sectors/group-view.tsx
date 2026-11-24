@@ -20,12 +20,13 @@ import { boardRows, type BoardRow } from "@/lib/sectors/board";
 import { groupTape, tapeAsOf } from "@/lib/sectors/breadth";
 import { driversOf } from "@/lib/sectors/drivers";
 import { byUnit, count, mult, pct, pts, ratio, tone, usd } from "@/lib/sectors/format";
-import { COL_SETS, COLS, DIST, joinRows, sortRows, summary, tableSort, tapeOn, type ColSet, type GroupSearch, type Row, type Summary } from "@/lib/sectors/group";
+import { COL_SETS, COLS, COMPANY_NAME_W, companyColW, DIST, fitCompanies, IND_W, joinRows, sortRows, summary, tableSort, tapeOn, type ColSet, type GroupSearch, type Row, type Summary } from "@/lib/sectors/group";
 import { BREAKDOWN_METRICS, fmtMetric, groupQuery, loadFailure, overviewQuery, qLabel, tapeQuery, type GroupFile, type ValRange } from "@/lib/sectors/groups";
 import { baseMembers, membersOf, pageMembers, type Member } from "@/lib/sectors/members";
 import { groupRisk, marketIndex, type MarketIndex, type Signal } from "@/lib/sectors/risk";
 import { distribution, ends, ranks, type DistPoint, type Distribution as Dist } from "@/lib/sectors/stats";
 import { shortIndustry } from "@/lib/sectors/short-industry";
+import { shortCompany } from "@/lib/sectors/short-name";
 import { DriverRow } from "./board";
 import { AggregateTrends, BreakdownSheet, SectorNotes, useHasNotes } from "./sector-views";
 import { Breadcrumb, groupLink, heat, QuietLine, Section, SectionNav, ShareMeter, SortTh, STICKY_HEAD_NAV, Tile, useWidth, type Crumb } from "./ui";
@@ -796,12 +797,10 @@ function Flag({ v, yes, no }: { v: boolean | null; yes: string; no: string }) {
   );
 }
 
-/** Industry column of a whole-sector companies table (short names, see shortIndustry). */
-const IND_W = 148;
 
 function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[]; search: GroupSearch; setSearch: (p: Partial<GroupSearch>) => void }) {
   const set: ColSet = search.cols ?? "fundamentals";
-  const { sort, dir } = tableSort(set, search.sort, search.dir);
+  const asked = tableSort(set, search.sort, search.dir);
   const isSector = d.kind === "sector";
   const inds = useMemo(() => {
     const m = new Map<string, number>();
@@ -809,23 +808,23 @@ function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[
     return [...m].sort((a, b) => b[1] - a[1]);
   }, [rows]);
   const ind = isSector && search.ind && inds.some(([n]) => n === search.ind) ? search.ind : null;
+  // Columns fitted to the wrapper (fitCompanies): no inner scroller from 1280 px up, so the head sticks to the
+  // page; the caption names what a wider window shows; a column that is not drawn never orders the rows.
+  const [wrap, wrapW] = useWidth<HTMLDivElement>();
+  const fit = fitCompanies(set, { wholeSector: isSector && !ind, sort: asked.sort, dir: asked.dir, avail: wrapW });
+  const { sort, dir, keys, fits } = fit;
+  const phone = wrapW > 0 && wrapW < 600;
+  const wide = fit.industry;
   const shown = useMemo(() => sortRows(ind ? rows.filter((r) => r.industry === ind) : rows, sort, dir), [rows, ind, sort, dir]);
   const th = { sort, dir, onSort: (k: string, d2: "asc" | "desc") => setSearch({ sort: k === "mcap" && d2 === "desc" ? undefined : k, dir: k === "mcap" && d2 === "desc" ? undefined : d2 }) };
   const qs = new Set(rows.map((r) => r.q).filter(Boolean));
-  // A whole sector adds the industry column; the weight column gives way so the table fits the page.
-  const [wrap, wrapW] = useWidth<HTMLDivElement>();
-  // A phone (wrapper under 600 px) leaves the industry out: the filter chips above name it.
-  const phone = wrapW > 0 && wrapW < 600;
-  const wide = isSector && !ind && !phone;
-  const keys = (COL_SETS[set] as readonly string[]).filter((k) => !(wide && k === "w"));
   // Fixed layout: every column but the company's has its width, and the company column takes the rest, so
   // a long name never pushes the table past its wrapper and the spare width goes to the names.
-  const colW = (k: string) => (k === "sig" ? 220 : k === "nh" || k === "em" || k === "vol" ? 84 : 70);
-  const nameW = phone ? 150 : 210;
-  const minW = nameW + (wide ? IND_W : 0) + keys.reduce((s, k) => s + colW(k), 0);
-  const fits = wrapW >= minW;
-  // When the table scrolls sideways anyway (below about 1360 px, and on a phone), the names get more room.
-  const tableMin = fits ? minW : minW - nameW + (phone ? 196 : 250);
+  const colW = companyColW;
+  const nameW = phone ? COMPANY_NAME_W.phone : COMPANY_NAME_W.desk;
+  // When the table scrolls sideways anyway (a phone), the names get more room.
+  const tableMin = fits ? fit.minW : fit.minW - nameW + (phone ? 196 : 250);
+  const hiddenNames = fit.hidden.map((k) => COL_BY.get(k)?.l ?? SPECIAL[k]?.l ?? k);
   const noSignalFile = set === "risk" && !rows.some((r) => r.inMarket);
   return (
     <Section
@@ -836,7 +835,7 @@ function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[
         set === "fundamentals"
           ? `fundamentals for each company's latest quarter${qs.size === 1 ? ` (${qLabel([...qs][0]!)})` : ""}, prices from the latest close`
           : `beta to SPY over a year, 60-session volatility annualised, average earnings move and chart signals${noSignalFile ? " (the markets file did not load)" : ""}`
-      } · click a column to sort`}
+      } · click a column to sort${hiddenNames.length ? ` · ${hiddenNames.join(", ")} on a wider window` : ""}`}
       actions={
         <Segmented
           size="xs"
@@ -889,8 +888,8 @@ function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[
           <tbody>
             {shown.map((r) => (
               <tr key={r.tk} className="group [&>td]:h-7 [&>td]:border-b [&>td]:px-2 [&>td:first-child]:pl-3.5 [&>td]:transition-colors [&>td]:duration-150 hover:[&>td]:bg-secondary">
-                <td className="sticky left-0 z-[1] bg-card pl-3.5">
-                  <TickerMark ticker={r.tk} name={r.name} className="max-w-full" />
+                <td className="sticky left-0 z-[1] bg-card pl-3.5" title={r.name}>
+                  <TickerMark ticker={r.tk} name={shortCompany(r.name)} className="max-w-full" />
                 </td>
                 {wide && (
                   <td className="truncate text-[12px] text-muted-foreground" title={r.industry}>
