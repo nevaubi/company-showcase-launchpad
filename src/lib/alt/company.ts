@@ -143,29 +143,39 @@ function countFigure<T extends CompanyAltRow>(t: TrailingCount<T>, label: string
 const coverageOf = (s: CountSupport<CompanyAltRow>, t: TrailingCount<CompanyAltRow>) => (!t.whole && s.since ? `Stored history starts ${dayLabel(s.since)}: counts cover what is on file since then.` : undefined);
 
 /**
+ * The last day through which a stream's records are all on file. A source that publishes within a
+ * week (SEC filings, CPSC) is complete through today; one that publishes weeks later (NHTSA, FDA
+ * recalls) only through today less its delay, so the latest window compared is a whole one.
+ */
+export const completeThrough = (s: Pick<CountSupport<CompanyAltRow>, "lagDays">, today: string) => (s.lagDays >= 14 ? addDays(today, -s.lagDays) : today);
+
+/**
  * The rise rule on one dataset's watched streams (`riseVerdict` over `wholeWindows`). Flags a rise
  * only; returns nothing when fewer than a year of whole windows precede the latest one.
  */
 export function riseFlag(dataset: string, rows: CompanyAltRow[], today: string): Flag | undefined {
   const s = countSupport(dataset, rows, { watched: true });
   if (s.none) return undefined;
-  const w = wholeWindows(s, today);
+  // every window compared ends where the source has published everything: today less its delay
+  const end = completeThrough(s, today);
+  const w = wholeWindows(s, end);
   if (w.counts.length < 2) return undefined;
   const v = riseVerdict(w.counts);
   if (v.status !== "rise") return undefined;
   const [one, many] = s.noun;
   const evidence = rowsOf(w.latest).sort(byDateDesc);
+  const span = end === today ? "the last 90 days" : `the 90 days to ${dayLabel(end)}`;
   return {
     dataset,
     kind: "rise",
     direction: "up",
-    text: `${plural(v.recent, one, many)} in the last 90 days; at most ${v.max} in any of the ${v.prior} earlier 90-day windows (mean ${v.mean.toFixed(1)})`,
+    text: `${plural(v.recent, one, many)} in ${span}; at most ${v.max} in any of the ${v.prior} earlier 90-day windows (mean ${v.mean.toFixed(1)})`,
     strength: -Math.log10(Math.max(v.p, 1e-12)),
     date: evidence[0]?.date ?? null,
     rows: evidence,
     history: w.counts,
-    rule: `More than every earlier window and at least twice their mean; if all ${v.prior + 1} windows shared one rate, a count this high would land in the latest with ${pLabel(v.p)} (exact conditional test, flag below 0.001). Windows after the first stored record only${s.lagDays >= 30 ? `; the latest ${s.lagDays} days may not all be published yet` : ""}.`,
-    figure: { label: `${cap(many)}, last 90 days`, value: v.recent.toLocaleString("en-US"), sub: `Most in an earlier 90 days: ${v.max}`, rows: evidence, num: v.recent, asOf: today },
+    rule: `More than every earlier window and at least twice their mean; if all ${v.prior + 1} windows shared one rate, a count this high would land in the latest with ${pLabel(v.p)} (exact conditional test, flag below 0.001). Windows after the first stored record only${end === today ? "" : `, ending ${s.lagDays} days back because the source publishes that late`}.`,
+    figure: { label: `${cap(many)}, ${end === today ? "last 90 days" : `90 days to ${dayLabel(end)}`}`, value: v.recent.toLocaleString("en-US"), sub: `Most in an earlier 90 days: ${v.max}`, rows: evidence, num: v.recent, asOf: today },
   };
 }
 

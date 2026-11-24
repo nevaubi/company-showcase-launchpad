@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCompanyAlt, phaseLine, sameDrugChange, snapshotFigures, type CompanyAltRow } from "./company";
+import { buildCompanyAlt, completeThrough, phaseLine, riseFlag, sameDrugChange, snapshotFigures, type CompanyAltRow } from "./company";
 import { addDays } from "./history";
 
 const TODAY = "2026-11-23";
@@ -139,5 +139,27 @@ describe("wording and materiality", () => {
     const zeros = [2024, 2025].map((y) => row({ dataset: "regulatory", kind: "series", title: "Federal Register documents naming the company", date: `${y}-12-31`, value: 0, unit: "docs" }));
     expect(buildCompanyAlt(zeros, TODAY).views).toEqual([]);
     expect(buildCompanyAlt([], TODAY).themes).toEqual([]);
+  });
+});
+
+describe("riseFlag on a source that publishes late", () => {
+  // FDA recalls: about 2 a quarter for two years, then 9 recalls 100 to 170 days back (published, whole),
+  // and 6 in the last 30 days (some of a quarter that is not all published yet)
+  const recall = (daysBack: number, i: number) => row({ ticker: "ABT", dataset: "fda", date: addDays(TODAY, -daysBack), meta: { kind: "recall", reason: `reason ${daysBack} ${i}` } });
+  const base = Array.from({ length: 16 }, (_, i) => recall(200 + i * 50, i));
+  it("compares only windows that end where the source is complete, and says so", () => {
+    const burst = Array.from({ length: 9 }, (_, i) => recall(100 + i * 8, i));
+    const f = riseFlag("fda", [...base, ...burst], TODAY)!;
+    expect(f).toBeDefined();
+    expect(completeThrough({ lagDays: 90 }, TODAY)).toBe(addDays(TODAY, -90));
+    expect(f.text).toContain(`90 days to Aug 25, 2026`);
+    expect(f.figure?.label).toContain("90 days to");
+  });
+  it("does not flag recent records inside the publication delay", () => {
+    const fresh = Array.from({ length: 9 }, (_, i) => recall(5 + i * 2, i));
+    expect(riseFlag("fda", [...base, ...fresh], TODAY)).toBeUndefined();
+  });
+  it("keeps SEC sources complete through today", () => {
+    expect(completeThrough({ lagDays: 3 }, TODAY)).toBe(TODAY);
   });
 });
