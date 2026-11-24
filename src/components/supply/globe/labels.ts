@@ -7,7 +7,7 @@
 // names do not hop from side to side while the map moves.
 
 export interface Box { x: number; y: number; w: number; h: number }
-export type LabelSide = 'right' | 'left' | 'below' | 'above' | 'ne' | 'se' | 'sw' | 'nw' | 'centre';
+export type LabelSide = 'right' | 'left' | 'below' | 'above' | 'ne' | 'se' | 'sw' | 'nw' | 'centre' | 'up1' | 'down1' | 'up2' | 'down2';
 
 export interface LabelAsk {
   id: string;
@@ -15,7 +15,7 @@ export interface LabelAsk {
   w: number; h: number;
   /** the marker the name belongs to, or the middle of the area it names */
   x: number; y: number;
-  /** clearance from the anchor: the marker's radius including its rings (0 for an area name) */
+  /** clearance from the anchor: the marker's radius including its rings. For an area name: how far (px) the name may sit above or below the middle of the area, 0 to keep it there */
   r: number;
   /** higher goes first */
   priority: number;
@@ -25,6 +25,9 @@ export interface LabelAsk {
 export interface PlacedLabel { id: string; left: number; top: number; w: number; h: number; side: LabelSide }
 
 const SIDES: LabelSide[] = ['right', 'left', 'below', 'above', 'se', 'ne', 'sw', 'nw'];
+/** An area's name: on its middle, else one or two lines above or below it (`r` is how far it may stray, 0 keeps it on the middle). */
+const AREA_SIDES: LabelSide[] = ['centre', 'up1', 'down1', 'up2', 'down2'];
+const AREA_SHIFT: Partial<Record<LabelSide, number>> = { centre: 0, up1: -1, down1: 1, up2: -2, down2: 2 };
 const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 
 /** Top-left corner of a name of size w x h on one side of a marker of radius r at (x, y). */
@@ -39,7 +42,7 @@ export function labelSpot(side: LabelSide, x: number, y: number, r: number, w: n
     case 'ne': return [x + k, y - k - h + 2];
     case 'sw': return [x - k - w, y + k - 2];
     case 'nw': return [x - k - w, y - k - h + 2];
-    default: return [x - w / 2, y - h / 2];
+    default: return [x - w / 2, y - h / 2 + (AREA_SHIFT[side] ?? 0) * (h + 5)];
   }
 }
 
@@ -52,7 +55,8 @@ export function placeLabels(asks: LabelAsk[], obstacles: Box[], frame: { w: numb
   const taken: Box[] = obstacles.slice(), out: PlacedLabel[] = [];
   const order = asks.map((a, i) => [a, i] as const).sort((p, q) => q[0].priority - p[0].priority || p[1] - q[1]);
   for (const [a] of order) {
-    const sides: LabelSide[] = a.area ? ['centre'] : SIDES;
+    /* an area name strays from the middle only as far as the area reaches */
+    const sides: LabelSide[] = a.area ? AREA_SIDES.filter((s) => Math.abs(AREA_SHIFT[s] ?? 0) * (a.h + 5) <= a.r) : SIDES;
     const before = previous?.get(a.id);
     const tries = before && sides.includes(before) ? [before, ...sides.filter((s) => s !== before)] : sides;
     for (const side of tries) {

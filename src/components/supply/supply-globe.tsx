@@ -122,7 +122,7 @@ const TipLayer = forwardRef<{ set: (t: TipUpdate) => void }, { size: () => { w: 
 });
 const SEVERITY: Record<ShockImpact["severity"], string> = { high: "High impact", medium: "Medium impact", low: "Low impact" };
 const rowWeight = (r: CountryRow) => r.links + r.hq + r.facilities * 1.5 + r.policy;
-const WIDTH_TEXT: Record<Basis, string> = { dollars: "stated dollars", share: "stated share", none: "" };
+const WIDTH_TEXT: Record<Basis, string> = { dollars: "the stated dollars", share: "the stated share", none: "" };
 const relationWord = (r: Relation | "focus") => (r === "focus" ? "this company" : RELATION_ONE[r].toLowerCase());
 const isHop = (n: GraphNode | HopNode): n is HopNode => (n as HopNode).hop === 2;
 /**
@@ -429,7 +429,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
   }, [failed]);
 
   const visibleRelations = RELATION_ORDER.filter((r) => visible.has(r));
-  const widthNote = (["supplier", "customer"] as const).filter((r) => visible.has(r) && sides[r].basis !== "none").map((r) => `${RELATION_LABEL[r].toLowerCase()}: ${WIDTH_TEXT[sides[r].basis]}`);
+  const widthNote = (["supplier", "customer"] as const).filter((r) => visible.has(r) && sides[r].basis !== "none").map((r) => `${WIDTH_TEXT[sides[r].basis]} for ${RELATION_LABEL[r].toLowerCase()}`);
   /* names that could not be placed, grouped by the reason, so the reason is stated once */
   const unplacedGroups = useMemo(() => {
     const groups = new Map<string, typeof unplaced>();
@@ -578,7 +578,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
         </div>
         <p>
           Arrows point the way goods and services move; partnerships run both ways.
-          {widthNote.length > 0 && <> Line width: {widthNote.join("; ")}, as in the Network view. Links that end in one cluster are drawn as one.</>}
+          {widthNote.length > 0 && <> Line width follows {widthNote.join(" and ")}, as the bands in the Network view do; links that end in one cluster are drawn as one.</>}
           {impacts && <span className="text-foreground"> Shock view: names the simulated shock does not reach are drawn pale.</span>}
         </p>
         <p>
