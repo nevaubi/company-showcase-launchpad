@@ -308,10 +308,7 @@ export const CASHFLOW_LINES: LineDef[] = [
       "PaymentsToAcquireOtherProductiveAssets",
       "PaymentsToDevelopRealEstateAssets",
       // Oil and gas producers' capital line, read only when none of the above is tagged: Gulfport's "Additions to
-      // oil and gas properties" $527.6M (10-K 0001628280-26-011487). PaymentsForCapitalImprovements is NOT read:
-      // it is the whole capital line for some filers (Mid-America's "Capital improvements" $360.2M) and a fragment
-      // for others (Weyerhaeuser tags $51M of reforestation with it beside $423M of capital spending under its own
-      // extension), and nothing in the facts tells the two apart.
+      // oil and gas properties" $527.6M (10-K 0001628280-26-011487).
       // The development concept comes ahead of the two acquisition concepts, which some producers use for property purchases beside it: Diamondback's
       // "Additions to oil and natural gas properties" $3,523M beside "Property acquisitions" $5,938M
       // (PaymentsToAcquireOilAndGasProperty, 10-K 0001539838-26-000010), SM Energy's "Capital expenditures" $1,438M
@@ -325,6 +322,10 @@ export const CASHFLOW_LINES: LineDef[] = [
       "nee:CapitalExpendituresIndependentPowerInvestmentsAndNuclearFuelPurchases",
       // Cigna's "Purchases of property and equipment, net" ($1,212M FY2025, 10-K 0001739940-26-000006).
       "ci:PaymentsForProceedsFromPropertyPlantAndEquipment",
+      // Last, and kept only where the investing section proves it the whole capital line (capitalImprovementsProven
+      // in build.ts): it is that for Snap-on's "Capital expenditures" $76.0M, and a fragment for Weyerhaeuser, which
+      // tags $51M of reforestation with it beside $423M of capital spending under its own extension.
+      "PaymentsForCapitalImprovements",
     ],
     "flow",
     { indent: 1 },

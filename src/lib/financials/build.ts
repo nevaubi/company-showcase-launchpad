@@ -868,7 +868,8 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
   });
   // A debt line the builder does not read, tagged for the same date and not inside the lines it read,
   // makes the total a fragment: it is left empty (debtLineLeftOut).
-  const held = cells.map((c, i) => (c && debtLineLeftOut(cf, c, std?.cells[i] ?? null, ltd?.cells[i] ?? null, periods[i].end) ? null : c));
+  const withCredit = cells.map((c, i) => (c ? addCurrentCreditLine(cf, c, std?.cells[i] ?? null, periods[i].end) : c));
+  const held = withCredit.map((c, i) => (c && debtLineLeftOut(cf, c, std?.cells[i] ?? null, ltd?.cells[i] ?? null, periods[i].end) ? null : c));
   return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells: held };
 }
 
@@ -910,6 +911,9 @@ function trustTotal(cf: CompanyFacts, lines: Cell, end: string): Cell | null | u
     found("LoansPayable", "Term loans"),
     // Knight-Swift: $1,118.0M of UnsecuredDebt + $626.0M revolver (LongTermLineOfCredit) = its $1,744.0M LongTermDebt.
     found("LongTermLineOfCredit", "Revolving line of credit"),
+    // Bluerock Homes: mortgages $1,099.9M + credit facility $112.6M + term loan $139.2M + construction loans
+    // $271.9M = its $1,623.6M LongTermDebt (10-Q 0000907254-26-000051).
+    found("ConstructionLoan", "Construction loans"),
   ].filter((y) => !!y && !close(y.x.fact.val, ltd));
   const credit = found("LineOfCredit", "Line of credit");
   let sets = [base];
@@ -976,6 +980,65 @@ function untaggedNoncurrent(cf: CompanyFacts, end: string): number | null {
   return noncurrent - [...lines].reduce((s, v) => s + v, 0);
 }
 
+/** Current concepts that are assets, valuations or note details, never a current liability line. */
+const NOT_A_CURRENT_LINE = /Asset|Receivable|Investment|Securities|Prepaid|Inventor|Cash|Allowance|Gross|Maturit|Noncurrent|^LiabilitiesCurrent$/;
+
+/** Whether some of the values add up to the target exactly (meet in the middle; at most 26 values). */
+function subsetReaches(values: number[], target: number): boolean {
+  const sums = (xs: number[]) => xs.reduce((acc, x) => acc.concat(acc.map((y) => y + x)), [0]);
+  const h = values.length >> 1;
+  const left = new Set(sums(values.slice(0, h)));
+  return sums(values.slice(h)).some((b) => left.has(target - b));
+}
+
+/**
+ * Whether a current debt concept is a line of the balance sheet, decided by the current liabilities adding up:
+ * true when some of the distinct current liability amounts tagged for the date add up to total current
+ * liabilities exactly with it and none do without it, false when the reverse holds, undefined otherwise (a line
+ * under a company extension leaves both sums short). Seaboard's "Lines of credit" $711M is a line
+ * ($389M + $112M + $136M + $437M + $711M = $1,785M, 10-Q 0000088121-26-000067), as are IDEXX's $398.0M and
+ * Diodes' $30.3M; Materion's $221.1M LinesOfCreditCurrent is a note figure, its current liabilities of
+ * $253.6M add up without it (10-K 0001104657-26-000011), as do Portland General's $912M without its $320M.
+ */
+function currentLiabilityLine(cf: CompanyFacts, concept: string, end: string, also = 0): boolean | undefined {
+  if (concept !== "LinesOfCreditCurrent") return undefined;
+  const atEnd = (f: RawFact) => !f.start && near(f.end, end, 4);
+  const val = (c: string) => choose(factsFor(cf, c, "USD"), c, atEnd)?.fact.val;
+  const total = val("LiabilitiesCurrent");
+  const v = val(concept);
+  if (!total || !v) return undefined;
+  const others = new Set<number>();
+  for (const c of Object.keys(cf.facts["us-gaap"] ?? {})) {
+    if (c === concept || !/(Current|ShortTermBorrowings|CommercialPaper)$/.test(c) || NOT_A_CURRENT_LINE.test(c)) continue;
+    const x = val(c);
+    if (x && x > 0 && x !== v && x !== also) others.add(x);
+  }
+  if (others.size > 26) return undefined;
+  const values = [...others];
+  // With `also`, that amount (a short-term line already read) is in both sums.
+  const withIt = subsetReaches(values, total - v - also);
+  const without = subsetReaches(values, total - also);
+  return withIt === without ? undefined : withIt;
+}
+
+/**
+ * A current credit line the current liabilities prove a balance sheet line (currentLiabilityLine) is added to lines
+ * that leave it out, provided the short-term debt already read is a line by the same test (one subset adds up with
+ * both): IDEXX's $374.8M + $75.0M + "Line of credit" $398.0M = $847.8M (10-K 0000874716-26-000038), Seaboard's
+ * $969M + "Lines of credit" $711M (10-Q 0000088121-26-000067). Iridium's NotesPayableCurrent $172.8M is not a current
+ * line by that test, so its credit line is not added and the total stays held.
+ */
+function addCurrentCreditLine(cf: CompanyFacts, total: Cell, std: Cell | null, end: string): Cell {
+  const parts = total.src ? [total.src.concept] : (total.derived?.parts ?? []).map((p) => p.concept);
+  if (parts.includes("us-gaap:LinesOfCreditCurrent")) return total;
+  const also = std && std.v > 0 ? std.v : 0;
+  if (currentLiabilityLine(cf, "LinesOfCreditCurrent", end, also) !== true) return total;
+  const atEnd = (f: RawFact) => !f.start && near(f.end, end, 4);
+  const line = choose(factsFor(cf, "LinesOfCreditCurrent", "USD"), "LinesOfCreditCurrent", atEnd);
+  if (!line) return total;
+  return combine(total, reportedCell(line), "add", ["Debt", "Lines of credit, current"]) ?? total;
+}
+
 /**
  * True when the total leaves out a debt line the filing tags for the same date, or when two figures for it
  * disagree and nothing in the facts says which one the balance sheet prints:
@@ -1009,14 +1072,20 @@ function debtLineLeftOut(cf: CompanyFacts, total: Cell, std: Cell | null, ltd: C
   const sameDebt = (v: number) => Math.abs(v - total.v) <= total.v * SAME_DEBT;
   for (const c of [...UNREAD_NONCURRENT, ...UNREAD_CURRENT, ...UNREAD_EITHER]) {
     const v = tagged(c);
-    if (v > 0 && v > room(c) * (1 + SAME_DEBT) && !sameDebt(v)) return true;
+    if (v > 0 && v > room(c) * (1 + SAME_DEBT) && !sameDebt(v) && currentLiabilityLine(cf, c, end) !== false) return true;
   }
   if (UNREAD_EITHER.reduce((s, c) => s + tagged(c), 0) > total.v * (1 + SAME_DEBT)) return true;
   if (whole > 0) {
     // The two convertible concepts of a side name one line; count the first.
     const lines = UNREAD_NONCURRENT.filter((c) => c !== "ConvertibleDebtNoncurrent" || !tagged("ConvertibleLongTermNotesPayable"));
-    const separate = lines.reduce((s, c) => s + tagged(c), 0) + (std?.v ?? 0);
-    if (separate > 0 && separate >= whole * 0.9 && separate < whole * 0.995) return true;
+    const unread = lines.reduce((s, c) => s + tagged(c), 0);
+    const separate = unread + (std?.v ?? 0);
+    // Only an unread noncurrent line can be the notes at carrying amount: current maturities alone are inside
+    // LongTermDebt (CBL's $1,981.9M of $2,025.5M "Mortgage and other indebtedness", 10-Q 0001193125-26-453440).
+    // A tagged credit line that makes up the rest exactly is the other face line: FirstCash prints a $169.0M
+    // revolver and $2,278.1M of other long-term debt, its LongTermDebt $2,447.1M (10-Q 0000840489-26-000099).
+    const completed = ["LongTermLineOfCredit", "LineOfCredit"].some((c) => tagged(c) > 0 && Math.abs(separate + tagged(c) - whole) <= whole * 0.005);
+    if (unread > 0 && separate >= whole * 0.9 && separate < whole * 0.995 && !completed) return true;
   }
   const lt: string[] = ltd ? (ltd.src ? [ltd.src.concept] : (ltd.derived?.parts ?? []).map((p) => p.concept)).map(bare) : [];
   if (lt.length > 0 && !lt.some((c) => c !== "ConvertibleDebtNoncurrent")) {
@@ -1025,6 +1094,55 @@ function debtLineLeftOut(cf: CompanyFacts, total: Cell, std: Cell | null, ltd: C
     if (gap == null || gap > Math.max(ltd!.v, 0)) return true;
   }
   return false;
+}
+
+/** Investing payments and proceeds that are not investing lines (financing, operating, tax and lease items). */
+const NOT_INVESTING = /Dividend|Repurchase|Repayment|Debt|Borrow|Stock|Shares|Tax|Interest|Financing|FinanceLease|Distribution|Warrant|Option|NotesPayable|LoansPayable|Preferred|Equity(?!Method)|Lease(?!hold)|Operating|Contingent|Withholding|Commission|Underwriting|Issuance|Payroll|Pension|Settlement|Restructuring/;
+/** Investing outflows of the same kind as capital spending: beside one of them, capital improvements may be a part. */
+const OTHER_CAPITAL_OUTFLOW = /PropertyPlant|Machinery|Equipment|ProductiveAssets|RealEstate|Building|Timber/;
+const CAPITAL_IMPROVEMENTS = "PaymentsForCapitalImprovements";
+
+/**
+ * PaymentsForCapitalImprovements is a filer's whole capital line only when the investing section proves it:
+ * the period's tagged investing lines add up to net cash from investing exactly with it and not without it (so no
+ * line hides under a company extension), and no other property, equipment or real-estate outflow is tagged beside it.
+ * Snap-on: "Capital expenditures" $76.0M, the only such line (10-K 0000091440-26-000045). Weyerhaeuser's $51M of
+ * reforestation sits beside $423M under its own extension, and its investing lines do not add up without that one
+ * (10-K 0001193125-26-051422). Nuvation Bio tags $8.0M of capitalized approval intangibles with it beside $0.4M of
+ * equipment purchases; STAG Industrial tags $204.5M with it beside $398.4M of real estate additions: both left out.
+ */
+function capitalImprovementsProven(cf: CompanyFacts, start: string | undefined, end: string): boolean {
+  if (!start) return false;
+  const same = (f: RawFact) => f.start === start && f.end === end;
+  const val = (c: string) => choose(factsFor(cf, c, "USD"), c, same)?.fact.val;
+  const total = val("NetCashProvidedByUsedInInvestingActivities");
+  const ci = val(CAPITAL_IMPROVEMENTS);
+  if (total == null || !ci) return false;
+  const lines = new Set<number>();
+  for (const c of Object.keys(cf.facts["us-gaap"] ?? {})) {
+    if (c === CAPITAL_IMPROVEMENTS || !/^(Payments|Proceeds)/.test(c) || NOT_INVESTING.test(c)) continue;
+    const v = val(c);
+    if (!v) continue;
+    if (/^Payments/.test(c) && OTHER_CAPITAL_OUTFLOW.test(c)) return false;
+    // "Payments for (proceeds from)" concepts are outflows when positive, like plain payments.
+    lines.add(/^PaymentsForProceeds|^Payments(?!.*Proceeds)/.test(c) ? -v : v);
+  }
+  if (lines.size > 26) return false;
+  const values = [...lines];
+  return subsetReaches(values, total + ci) && !subsetReaches(values, total);
+}
+
+/** Empties capex cells read from PaymentsForCapitalImprovements for a period the investing section does not prove. */
+function dropUnprovenCapitalImprovements(cf: CompanyFacts, cash: Row[]) {
+  const row = rowOf(cash, "capex");
+  if (!row) return;
+  const concept = `us-gaap:${CAPITAL_IMPROVEMENTS}`;
+  row.cells = row.cells.map((c) => {
+    if (!c) return c;
+    const refs = c.src ? [c.src] : (c.derived?.parts ?? []);
+    const read = refs.filter((r) => r.concept === concept);
+    return read.length && !read.every((r) => capitalImprovementsProven(cf, r.start, r.end)) ? null : c;
+  });
 }
 
 /**
@@ -1105,6 +1223,7 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
     dropLoneNotesPayable(balance);
     if (opts.bank) dropBankOtherShortTermInvestments(balance);
+    dropUnprovenCapitalImprovements(cf, cash);
     const cfo = rowOf(cash, "cfo");
     const capex = rowOf(cash, "capex");
     const fcf: Row = {

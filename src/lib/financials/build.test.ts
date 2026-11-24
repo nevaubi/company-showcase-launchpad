@@ -7,6 +7,8 @@ import leftOutFacts from "./fixtures/debt-facts-left-out.json";
 import heldFacts from "./fixtures/debt-facts-held.json";
 import capexOilFacts from "./fixtures/capex-oil-facts.json";
 import stiCapexFacts from "./fixtures/sti-capex-facts.json";
+import linesFacts from "./fixtures/debt-facts-lines.json";
+import capexImprovementsFacts from "./fixtures/capex-improvements-facts.json";
 
 let n = 0;
 const fact = (start: string | undefined, end: string, val: number, form: string, filed: string, accn = `0000000001-26-${String(++n).padStart(6, "0")}`): RawFact => ({
@@ -673,9 +675,10 @@ describe("short-term investments and capex under other concepts", () => {
     expect(Math.round(annual("ORI", "balance", "shortTermInvestments", "2025-12-31")!.v / 1e5)).toBe(16_136);
   });
 
-  it("does not read capital improvements as capex: for some filers it is a fragment (Mid-America FY2025 stays empty)", () => {
-    // Mid-America's face line "Capital improvements" $360.2M is its whole capital line, but Weyerhaeuser tags
-    // $51M of reforestation with the same concept beside $423M under its own extension; the facts cannot tell them apart.
+  it("does not read capital improvements as capex where the investing section does not prove it (Mid-America FY2025 stays empty)", () => {
+    // Mid-America's face line "Capital improvements" $360.2M is its whole capital line, but its tagged investing
+    // lines do not add up to net cash from investing (a line sits under an extension), the same evidence that keeps
+    // Weyerhaeuser's $51M of reforestation, a fragment beside $423M under its own extension, from being read.
     expect(annual("MAA", "cashflow", "capex", "2025-12-31")).toBeNull();
   });
 
@@ -775,5 +778,91 @@ describe("capex of oil and gas producers", () => {
     expect(capex("SM", "2025-12-31")).toBe(1438);
     // Face: "Additions to oil and natural gas properties" (527.6), its only capital line, 10-K 0001628280-26-011487.
     expect(capex("GPOR", "2025-12-31")).toBe(527.6);
+  });
+});
+
+describe("total debt the facts prove complete (reduced real companyfacts)", () => {
+  const FIXTURE = linesFacts as unknown as Record<string, CompanyFacts>;
+  const debtAt = (t: string, freq: "annual" | "quarterly", end: string) => {
+    const st = buildStatements(FIXTURE[t])[freq].balance;
+    const i = st.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    return st.rows.find((r) => r.key === "totalDebt")?.cells[i] ?? null;
+  };
+  const m = (c: { v: number } | null) => (c ? Math.round(c.v / 1e5) / 10 : null);
+
+  it("ignores a credit-line figure the current liabilities add up without (Materion, Portland General)", () => {
+    // Face: "Short-term debt" 22.4 + "Long-term debt" 436.3; no credit line among current liabilities of 253.6,
+    // although LinesOfCreditCurrent 221.1 is tagged from a note (10-K 0001104657-26-000011).
+    expect(m(debtAt("MTRN", "annual", "2025-12-31"))).toBe(458.8);
+    // Face: "Long-term debt, net of current portion" 5,010; current liabilities 912 without the 320 (10-Q 0001193125-26-436451).
+    expect(m(debtAt("POR", "quarterly", "2026-09-30"))).toBe(5010);
+  });
+
+  it("adds a credit line the current liabilities prove a balance sheet line (Seaboard, IDEXX, Dave)", () => {
+    // Face: "Lines of credit" 711 among current liabilities of 1,785, "Long-term debt, less current maturities" 969
+    // (10-Q 0000088121-26-000067); 10-K 0000088121-26-000012: 458 + 977. Main showed 969 and 977 alone.
+    expect(m(debtAt("SEB", "quarterly", "2026-10-03"))).toBe(1680);
+    expect(m(debtAt("SEB", "annual", "2025-12-31"))).toBe(1435);
+    // Face: "Credit Facility" 474.0 + current portion 75.0 + long-term 299.9 (10-Q 0000874716-26-000135).
+    expect(m(debtAt("IDXX", "quarterly", "2026-09-30"))).toBe(848.9);
+    // Face: "Debit facility, current" 75.0, long-term 0 (10-K 0001193125-26-085370).
+    expect(m(debtAt("DAVE", "annual", "2025-12-31"))).toBe(75);
+  });
+
+  it("does not add it when the short-term debt read beside it is not a current line (Iridium)", () => {
+    // Face: credit facility 214.3 + term loan 1,925.0 (10-Q); NotesPayableCurrent 172.8 is not among the current lines,
+    // so lines + credit line would overstate the debt: the total stays held.
+    expect(debtAt("IRDM", "quarterly", "2026-09-30")).toBeNull();
+  });
+
+  it("does not read current maturities inside LongTermDebt as the notes' carrying amount (CBL)", () => {
+    // Face: "Mortgage and other indebtedness, net" 2,025.5, of which 1,981.9 matures within a year (10-Q 0001193125-26-453440).
+    expect(m(debtAt("CBL", "quarterly", "2026-09-30"))).toBe(2025.5);
+  });
+
+  it("keeps LongTermDebt when a tagged credit line makes up the rest exactly (FirstCash)", () => {
+    // Face: revolver 169.0 + other long-term debt 2,278.1 = 2,447.1 (10-Q 0000840489-26-000099).
+    expect(m(debtAt("FCFS", "quarterly", "2026-09-30"))).toBe(2447.1);
+  });
+
+  it("counts construction loans among a trust's face lines (Bluerock Homes)", () => {
+    // Face: mortgages 1,099.9 + credit facility 112.6 + term loan 139.2 + construction loans 271.9 = 1,623.6
+    // (10-Q 0000907254-26-000051), equal to its LongTermDebt.
+    expect(m(debtAt("BFS", "quarterly", "2026-09-30"))).toBe(1623.6);
+  });
+});
+
+describe("capex from capital improvements only where the investing section proves it (reduced real companyfacts)", () => {
+  const FIXTURE = capexImprovementsFacts as unknown as Record<string, CompanyFacts>;
+  const capex = (t: string, freq: "annual" | "quarterly", end: string) => {
+    const s = buildStatements(FIXTURE[t])[freq].cashflow;
+    const i = s.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    const c = s.rows.find((r) => r.key === "capex")?.cells[i];
+    const f = s.rows.find((r) => r.key === "fcf")?.cells[i];
+    return { capex: c ? Math.round(c.v / 1e5) / 10 : null, fcf: f ? Math.round(f.v / 1e5) / 10 : null };
+  };
+
+  it("reads it when it is the whole capital line (Snap-on, Rexford)", () => {
+    // Face: "Capital expenditures" (76.0), the only property line of investing (10-K 0000091440-26-000045).
+    expect(capex("SNA", "annual", "2026-01-03").capex).toBe(76);
+    expect(capex("SNA", "annual", "2026-01-03").fcf).not.toBeNull();
+    // Third quarter: nine months (69.0, 10-Q 0000091440-26-000172) less six months (44.3, 10-Q 0000091440-26-000144).
+    expect(capex("SNA", "quarterly", "2026-10-03").capex).toBe(24.7);
+    // Face: "Capital expenditures" (333,424) thousand (10-K 0001571283-26-000006).
+    expect(capex("REXR", "annual", "2025-12-31").capex).toBe(333.4);
+  });
+
+  it("leaves it out where it is a fragment or another kind of payment (Weyerhaeuser, Nuvation Bio, STAG)", () => {
+    // Face: "Capital expenditures for property and equipment" (423) under wy:, reforestation (51) under this concept
+    // (10-K 0001193125-26-051422): 51 would understate capex eightfold.
+    expect(capex("WY", "annual", "2025-12-31")).toEqual({ capex: null, fcf: null });
+    // Face: "Cash paid for capitalized market approval intangibles" (8,000) beside "Purchases of property and
+    // equipment" (354) under PaymentsToAcquireMachineryAndEquipment (10-K 0001193125-26-085584).
+    expect(capex("NUVB", "annual", "2025-12-31").capex).toBeNull();
+    // Face: this concept is labelled "Acquisitions of land and buildings and improvements" (204,517), beside
+    // (398,417) of real estate additions (10-K 0001479094-26-000009).
+    expect(capex("STAG", "annual", "2025-12-31").capex).toBeNull();
   });
 });
