@@ -213,7 +213,8 @@ export function exchanges(t: ParsedTranscript, topics: string[], gistOf: (text: 
   const out: (Exchange & { text: string; by: Map<string, number> })[] = [];
   let cur: (typeof out)[number] | null = null;
   for (const x of t.turns) {
-    if (x.section !== "qa" || x.kind === "operator") continue;
+    // Unidentified speakers are neither a question nor an answer: their words are not attributed.
+    if (x.section !== "qa" || x.kind === "operator" || x.kind === "unidentified") continue;
     if (x.kind === "analyst") {
       if (!cur || cur.analyst !== x.speaker) {
         cur = { i: x.i, analyst: x.speaker, firm: firm.get(x.speaker) ?? null, words: 0, answerWords: 0, topics: [], gist: "", answeredBy: [], text: "", by: new Map() };

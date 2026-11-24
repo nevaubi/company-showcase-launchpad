@@ -20,7 +20,7 @@ import { PageNav, Quiet, Section, SECTION_SCROLL_MARGIN, jumpTo } from "./layout
 type SectionKey = "all" | "prepared" | "qa";
 type Patch = { call?: string; section?: SectionKey; speaker?: string | undefined };
 
-const KIND_LABEL = { management: "Management", analyst: "Analyst", operator: "Operator" } as const;
+const KIND_LABEL = { management: "Management", analyst: "Analyst", operator: "Operator", unidentified: "Role not identified" } as const;
 const SECTIONS = [
   { id: "call-summary", label: "Summary" },
   { id: "call-themes", label: "Themes" },
@@ -270,6 +270,12 @@ export function CallReader({
                   <span className="size-2 rounded-full bg-chart-3" /> Analysts
                 </dt>
                 <dd className="num text-right">{pct(share.analyst)}</dd>
+                {share.unidentified > 0 && (
+                  <>
+                    <dt className="text-muted-foreground">Role not identified</dt>
+                    <dd className="num text-right">{pct(share.unidentified)}</dd>
+                  </>
+                )}
                 <dt className="text-muted-foreground">Prepared remarks</dt>
                 <dd className="num text-right">{share.prepared > 0 ? pct(share.prepared) : "–"}</dd>
               </dl>
@@ -465,7 +471,7 @@ export function CallReader({
               aria-label="Show one speaker"
             >
               <option value="">Everyone</option>
-              {(["management", "analyst"] as const).map((k) => (
+              {(["management", "analyst", "unidentified"] as const).filter((k) => people.some((sp) => sp.kind === k)).map((k) => (
                 <optgroup key={k} label={KIND_LABEL[k]}>
                   {people
                     .filter((sp) => sp.kind === k)
@@ -546,7 +552,7 @@ export function CallReader({
 }
 
 function Turn({ x, role, mark }: { x: TranscriptTurn; role?: EarningsTranscript["speakers"][number]; mark: (s: string) => ReactNode }) {
-  const sub = x.kind === "analyst" ? (role?.firm ?? "Analyst") : x.kind === "operator" ? null : role?.role;
+  const sub = x.kind === "analyst" ? (role?.firm ?? "Analyst") : x.kind === "operator" ? null : x.kind === "unidentified" ? "Role not identified" : role?.role;
   return (
     <article id={`turn-${x.i}`} className={cn("scroll-mt-[calc(var(--sticky-top,3.5rem)+6.5rem)] px-4 py-3", x.kind === "analyst" && "bg-secondary/40", x.kind === "operator" && "py-2")}>
       <header className="mb-1 flex min-w-0 items-center gap-2">

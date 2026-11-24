@@ -4,7 +4,7 @@ import type { ParsedTranscript } from "./parse";
 /** Share of spoken words by speaker group, plus the prepared-remarks share. */
 export function talkShare(t: ParsedTranscript) {
   const total = t.words || 1;
-  const by = { management: 0, analyst: 0, operator: 0 };
+  const by = { management: 0, analyst: 0, operator: 0, unidentified: 0 };
   let prepared = 0;
   for (const x of t.turns) {
     by[x.kind] += x.words;
@@ -14,6 +14,7 @@ export function talkShare(t: ParsedTranscript) {
     management: by.management / total,
     analyst: by.analyst / total,
     operator: by.operator / total,
+    unidentified: by.unidentified / total,
     prepared: t.qaStart == null ? 0 : prepared / total,
   };
 }
