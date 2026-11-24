@@ -32,7 +32,7 @@ describe("what a rule's history can say", () => {
     expect(coinBand(0)).toBeNull();
   });
 
-  it("reads the published histories: nothing beats a coin flip, three rules lost money", () => {
+  it("reads the published histories: no rule both made money and beat a coin flip, three rules lost money", () => {
     const by = new Map(ruleRecords(POOLED).map((r) => [r.kind, r]));
     expect(by.get("cheap")!.reading).toBe("coin flip");
     expect(by.get("accel")!.reading).toBe("coin flip");
@@ -43,7 +43,7 @@ describe("what a rule's history can say", () => {
     expect(by.get("decel")!.reading).toBe("against");
     expect(by.get("breakdown")!.reading).toBe("against");
     expect(by.get("insiderBuy")!.reading).toBe("thin");
-    expect(ideasVerdict(ruleRecords(POOLED))).toBe("None of the 6 rules with a history has beaten the S&P 500 more often than a coin flip allows, and 3 lost to it on average. Use these ideas as a place to start research, not as forecasts.");
+    expect(ideasVerdict(ruleRecords(POOLED))).toBe("None of the 6 rules with a history has both made money against the S&P 500 and beaten it more often than a coin flip allows; 3 lost to it on average. Use these ideas as a place to start research, not as forecasts.");
   });
 
   it("calls an edge only when the hit rate clears the coin's range and the average is positive", () => {

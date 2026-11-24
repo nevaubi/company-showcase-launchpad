@@ -113,7 +113,7 @@ export interface RankedSetup {
 export interface Ranking {
   /** The default list: listed grades only, best first, crowding limits applied. */
   list: RankedSetup[];
-  /** The same limits over every rule with a positive backtest average: what would be next in line. */
+  /** The same limits over every rule with a positive record that its live record does not contradict: what would be next in line. */
   closest: RankedSetup[];
   /** Every signal that passes the filters, one per ticker, rule and side, best first (rows with broken bars included, flagged). */
   all: RankedSetup[];
@@ -235,7 +235,12 @@ export function rankSetups(book: EvidenceBook, signals: readonly LiveSignal[], f
     return true;
   });
   const listed = all.filter((r) => r.barsOk && LISTED.includes(r.grade) && (r.grade === "proven" ? r.edge >= 0 : r.edge > 0));
-  const next = all.filter((r) => r.barsOk && r.grade !== "probation" && (book.byKey.get(r.key)?.blocks?.mean ?? 0) > 0);
+  // Next in line: a positive record, and no live record that contradicts it (probation for a rule that
+  // would be listed, "behind" for one that is not: well below zero over enough holding periods).
+  const next = all.filter((r) => {
+    const e = book.byKey.get(r.key);
+    return r.barsOk && r.grade !== "probation" && e?.live.verdict !== "behind" && (e?.blocks?.mean ?? 0) > 0;
+  });
   return {
     list: crowd(listed, limits),
     closest: crowd(next, limits),

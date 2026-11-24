@@ -14,6 +14,12 @@ export function pct(v: number | null | undefined, digits = 2, signed = true): st
   return `${signOf(v, signed, s)}${s}%`;
 }
 
+/** Colour class for a signed percentage: none when it prints as zero at `digits` decimals, so "0.00%" is never red or green. */
+export function pctTone(v: number | null | undefined, digits = 2): "" | "text-positive" | "text-negative" {
+  if (v == null || !Number.isFinite(v) || Number((Math.abs(v) * 100).toFixed(digits)) === 0) return "";
+  return v > 0 ? "text-positive" : "text-negative";
+}
+
 /** A plain number with a true minus sign: `num(-1.5, 2)` is "−1.50". */
 export function num(v: number | null | undefined, digits = 2, signed = false): string {
   if (v == null || !Number.isFinite(v)) return DASH;

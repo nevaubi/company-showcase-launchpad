@@ -17,7 +17,7 @@ export function evidenceLine(e: VariantEvidence, d: Discovery): string {
   const rate = pct(e.q, 0, false);
   switch (e.grade) {
     case "proven":
-      return `Passes all eight checks. ${record}. Expected edge today ${pct(e.edge)} a trade.`;
+      return `Passes all eight checks and stands out from ${d.tested} rules tried. ${record}. Expected edge today ${pct(e.edge)} a trade after shrinkage.`;
     case "candidate":
       return `${record}. Stands out from ${d.tested} rules tried: about ${rate} of rules listed this way would be luck. Expected edge today ${pct(e.edge)} a trade after shrinkage.`;
     case "watch":

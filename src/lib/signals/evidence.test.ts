@@ -105,7 +105,8 @@ describe("the bar on Student's t", () => {
     expect(tQuantile(0.975, 10)).toBeCloseTo(2.228, 3);
     expect(tQuantile(0.95, 5)).toBeCloseTo(2.015, 3);
     expect(tQuantile(0.975, 1e9)).toBeCloseTo(1.96, 3);
-    expect(tQuantile(0.5, 7)).toBeCloseTo(0, 9);
+    // The CDF is flat to within 2e-8 of zero (t squared falls below the float spacing of df), so the median is good to about seven digits.
+    expect(tQuantile(0.5, 7)).toBeCloseTo(0, 6);
   });
 });
 
@@ -299,6 +300,41 @@ describe("probation", () => {
     expect(dip.live.z!).toBeGreaterThan(EVIDENCE.liveZ);
     expect(dip.live.z!).toBeLessThan(0);
     expect(dip.live.verdict).toBe("in line");
+  });
+
+  it("marks a rule that is not listed as losing live once its record is well below zero", () => {
+    // Every record is noise. Take a short-hold rule with a positive record that is not listed.
+    const first = buildEvidence(universe(31), "Up, calm", "2026-11-20");
+    const key = first.variants.find((e) => e.grade === "unproven" && e.blocks!.mean > 0 && e.horizon <= 5)!.key;
+    const live = { n: 900, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01" };
+    const e = buildEvidence(universe(31).map((v) => (v.key === key ? { ...v, live } : v)), "Up, calm", "2026-11-20").byKey.get(key)!;
+    // Expected edge zero, so the live average is read against zero.
+    expect(e.edge).toBe(0);
+    expect(e.live.blocks).toBeGreaterThanOrEqual(EVIDENCE.liveMinBlocks);
+    expect(e.live.verdict).toBe("behind");
+    expect(e.grade).toBe("unproven");
+    expect(e.reason).toBe("Cannot be told apart from luck, and losing live");
+  });
+});
+
+describe("the proven grade", () => {
+  it("needs the nightly gate and the monthly record together", () => {
+    const real = { "insider:L:20": 0.9, "pead:L:20": 0.9 };
+    const first = buildEvidence(universe(21, real), "Up, calm", "2026-11-20");
+    // A noise rule with a positive record: say the nightly gate passed it on overlapping signal days.
+    const lucky = first.variants.find((e) => !(e.key in real) && e.grade === "unproven" && e.blocks!.mean > 0)!.key;
+    const vs = universe(21, real).map((v) => (v.key === "insider:L:20" || v.key === lucky ? { ...v, passed: true } : v));
+    const book = buildEvidence(vs, "Up, calm", "2026-11-20");
+    // Gate and monthly record agree: proven. The monthly record alone: candidate.
+    expect(book.byKey.get("insider:L:20")!.grade).toBe("proven");
+    expect(book.byKey.get("pead:L:20")!.grade).toBe("candidate");
+    // The gate alone lists nothing.
+    const e = book.byKey.get(lucky)!;
+    expect(e.passed).toBe(true);
+    expect(e.q).toBeGreaterThan(EVIDENCE.watchFdr);
+    expect(e.grade).toBe("unproven");
+    expect(e.reason).toBe("Passes the nightly checks, but its monthly record cannot be told apart from luck");
+    expect(book.discovery.proven).toBe(1);
   });
 });
 
