@@ -1,6 +1,7 @@
 // The Earnings calls tab below the call picker: summary and key numbers, themes against the previous
 // call, the analyst questions, then the transcript with section, speaker and search controls that never
 // move the page. Analytics are pure in src/lib/transcripts/; this file only lays them out.
+import { MachineWritten } from "./figures";
 import { Link } from "@tanstack/react-router";
 import { Fragment, useDeferredValue, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bot, ChevronDown, ChevronUp, Search, X } from "lucide-react";
@@ -201,7 +202,9 @@ export function CallReader({
             {t.digest?.summary && (
               <div className="border-b px-4 py-3">
                 <p className="text-[13px] leading-5">{t.digest.summary}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Summary published with the transcript by The Motley Fool, not the company's words.</p>
+                <p className="mt-1">
+                  <MachineWritten by="Summary The Motley Fool publishes with the transcript and says is written partly by language models; not the company's words." href={t.url} sourceLabel="Transcript page" />
+                </p>
               </div>
             )}
             {!showTakeaways && (
@@ -232,7 +235,10 @@ export function CallReader({
             {showTakeaways && takeaways && (
               <div>
                 <div className="px-4 pt-3 pb-1">
-                  <h3 className="eyebrow">Key numbers, checked against the call</h3>
+                  <h3 className="eyebrow">Publisher's takeaways</h3>
+                  <p className="mt-1">
+                    <MachineWritten by="Written partly by language models at The Motley Fool." href={t.url} sourceLabel="Transcript page" />
+                  </p>
                 </div>
                 <ul className="grid grid-cols-1 gap-x-6 px-4 pb-3 md:grid-cols-2">
                   {takeaways.kept.map((k, n) => (
@@ -248,8 +254,8 @@ export function CallReader({
                   ))}
                 </ul>
                 <p className="px-4 pb-3 text-[11px] text-muted-foreground">
-                  The Motley Fool's takeaways, kept only when every figure in them was said by management on the call
-                  {takeaways.dropped ? `; ${takeaways.dropped} left out because a figure in them was not.` : "."}
+                  Kept when every dollar amount and percentage in them also appears in management's words on the call; other numbers and the wording are not checked
+                  {takeaways.dropped ? `. ${takeaways.dropped} left out because such a figure was not found.` : "."}
                 </p>
               </div>
             )}

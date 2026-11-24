@@ -87,3 +87,21 @@ export function Stat({ label, value, hint, className }: { label: ReactNode; valu
     </div>
   );
 }
+
+/**
+ * Visible mark beside any text or grade a language model wrote (earnings-H3, M6): what wrote it and a
+ * link to the source it was written from, so it is never read as the company's words or a computed figure.
+ */
+export function MachineWritten({ by, href, sourceLabel = "Source" }: { by: string; href?: string; sourceLabel?: string }) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+      <span className="rounded-sm border px-1 py-px font-mono text-[10px] tracking-wide uppercase">Machine-written</span>
+      <span>{by}</span>
+      {href && (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-foreground hover:underline">
+          {sourceLabel}
+        </a>
+      )}
+    </span>
+  );
+}

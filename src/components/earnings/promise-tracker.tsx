@@ -1,5 +1,6 @@
 // Management promise tracker: what management committed to on its calls (verbatim, checked against
 // the transcript by vetPromises), grouped by state, each with the later call's words that graded it.
+import { MachineWritten } from "./figures";
 import { ExternalLink } from "lucide-react";
 import { credibility, groupPromises, type PromiseStatus, type TrackedPromise } from "@/lib/earnings/promises";
 import { quoteLink } from "@/lib/supply/counterparty";
@@ -31,10 +32,13 @@ export function PromiseTracker({
   const groups = groupPromises(ps);
   const calls = data?.calls ?? [];
   const caption = calls.length
-    ? `${ps.length} commitments from ${calls.length} earnings calls, ${fmtDate(calls[0].date)} to ${fmtDate(calls[calls.length - 1].date)}, graded against later calls. Every quote is checked word for word against its transcript.`
-    : "Commitments from the last five earnings calls, graded against later calls.";
+    ? `${ps.length} commitments from ${calls.length} earnings calls, ${fmtDate(calls[0].date)} to ${fmtDate(calls[calls.length - 1].date)}, summarised and graded by a language model against later calls. The quotes are checked word for word against their transcripts; the summaries, grades and credibility score are the model's judgement.`
+    : "Commitments from the last five earnings calls, summarised and graded by a language model against later calls.";
   return (
     <Section id="promises" name="Promise tracker" title="Promises" caption={caption}>
+      <div className="px-4 pt-2">
+        <MachineWritten by="Summaries, grades and the credibility score; quotes verified word for word." />
+      </div>
       {loading ? (
         <Quiet>Reading the last five earnings calls. The first load for a company takes about a minute.</Quiet>
       ) : error || data?.error ? (

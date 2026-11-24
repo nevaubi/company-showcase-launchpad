@@ -11,7 +11,7 @@ import type { EarningsPricing } from "@/lib/options/core";
 import type { NextEarnings } from "@/lib/company/catalysts";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fmtFig, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
+import { fmtFig, MachineWritten, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
 import { Quiet, Section } from "./layout";
 import { HistoryCharts } from "./history-charts";
 
@@ -524,14 +524,17 @@ export function NextReport({
       </div>
       {guidance.length > 0 && (
         <div className="border-t px-4 py-3">
-          <h3 className="eyebrow mb-2">Guidance on the {guidance[0].callQuarter ?? fmtDate(guidance[0].callDate)} call</h3>
+          <h3 className="eyebrow mb-1">Guidance on the {guidance[0].callQuarter ?? fmtDate(guidance[0].callDate)} call</h3>
+          <p className="mb-2">
+            <MachineWritten by="Quotes checked word for word against the transcript; the line under each is a model's summary." href={guidance[0].url} sourceLabel="Transcript" />
+          </p>
           <ul className="grid gap-2">
             {guidance.map((g, i) => (
               <li key={i} className="grid gap-0.5 text-[13px]">
-                <span className="font-medium">{g.summary}</span>
-                <a href={g.url} target="_blank" rel="noopener noreferrer" className="border-l-2 border-border pl-2 text-[11px] text-muted-foreground italic hover:text-foreground">
+                <a href={g.url} target="_blank" rel="noopener noreferrer" className="border-l-2 border-border pl-2 italic hover:text-foreground">
                   “{g.quote}” <ExternalLink className="inline size-3 not-italic" />
                 </a>
+                <span className="pl-2 text-[11px] text-muted-foreground">{g.summary}</span>
               </li>
             ))}
           </ul>
@@ -539,7 +542,10 @@ export function NextReport({
       )}
       {listenFor.length > 0 && (
         <div className="border-t px-4 py-3">
-          <h3 className="eyebrow mb-2">Listen for</h3>
+          <h3 className="eyebrow mb-1">Suggested questions</h3>
+          <p className="mb-2">
+            <MachineWritten by="Suggested by a language model from the release and past calls." />
+          </p>
           <ol className="list-decimal space-y-1 pl-4 text-[13px]">
             {listenFor.map((t, i) => (
               <li key={i}>{t}</li>
