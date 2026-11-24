@@ -127,19 +127,24 @@ export function StatementCurrency({ data, ticker, filed, className }: { data: Co
   const through = c.text.split(". ")[0] + ".";
   const rest = c.text.slice(through.length).trim();
   return (
-    <p data-section="Statement currency" className={cn("flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[13px] text-muted-foreground", className)}>
+    <p data-section="Statement currency" className={cn("grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-1.5 text-[13px] text-muted-foreground", className)}>
       <Icon className={cn("size-3.5 shrink-0 translate-y-0.5", behind ? "text-warning" : "text-muted-foreground/70")} aria-hidden />
-      <span className="text-foreground">{through}</span>
-      {read && <span>{read}</span>}
-      {(behind || !read) && rest && <span>{rest}</span>}
-      {filed?.reading && <span className="text-muted-foreground/80">Reading the newer filing from SEC.</span>}
-      {filed?.failed && !ext && <span className="text-muted-foreground/80">The newer filing could not be read here, so the tables show the scheduled build only.</span>}
-      {link && (
-        <a href={link.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-sm text-foreground underline decoration-border underline-offset-2 transition-colors hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          {link.label}
-          <ExternalLink className="size-3" aria-hidden />
-        </a>
-      )}
+      <span className="min-w-0">
+        <span className="text-foreground">{through}</span>
+        {read && <> {read}</>}
+        {(behind || !read) && rest && <> {rest}</>}
+        {filed?.reading && <span className="text-muted-foreground/80"> Reading the newer filing from SEC.</span>}
+        {filed?.failed && !ext && <span className="text-muted-foreground/80"> The newer filing could not be read here, so the tables show the scheduled build only.</span>}
+        {link && (
+          <>
+            {" "}
+            <a href={link.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 whitespace-nowrap rounded-sm text-foreground underline decoration-border underline-offset-2 transition-colors hover:decoration-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              {link.label}
+              <ExternalLink className="size-3" aria-hidden />
+            </a>
+          </>
+        )}
+      </span>
     </p>
   );
 }
