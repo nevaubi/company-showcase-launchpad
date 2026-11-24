@@ -9,6 +9,7 @@ import { useCompanyDetails } from "@/lib/company/details-query";
 import { aboutFields, aboutSubtitle } from "@/lib/company/details";
 import { ceoSourceNote, commonsThumb, rankPeople, type Credit } from "@/lib/company/context";
 import { fiscalYearEndLabel, fmtCompact, fmtDate, titleCase } from "@/lib/format";
+import { sicDescription } from "@/lib/sec/sic";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
 
@@ -82,7 +83,7 @@ export function AboutPanel({ ticker, data }: { ticker: string; data: CompanyData
       ["Fiscal year ends", p.fiscalYearEnd ? fiscalYearEndLabel(p.fiscalYearEnd) : null],
       ["Incorporated", p.stateOfIncorporation],
       ["Exchange", `${p.exchange}: ${ticker}`],
-      ["SIC", p.sic ? `${p.sic} · ${titleCase(p.sicDescription)}` : null],
+      ["SIC", p.sic ? `${p.sic} · ${titleCase(sicDescription(p.sic, p.sicDescription))}` : null],
       ["CIK", <span className="num text-[13px]">{p.cik}</span>],
     ] as [string, React.ReactNode][]
   ).filter(([, v]) => v !== null && v !== undefined && v !== "" && v !== 0);

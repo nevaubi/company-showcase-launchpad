@@ -6,7 +6,8 @@
 // The drawn shape of each mark comes from public/logos/aspect.json (sha256, the file's own width/height,
 // and its ink box), measured by rasterising every file (SVG through rsvg-convert at 256 px height,
 // raster files as they are) and trimming transparent and near-white margins. After adding or replacing
-// a file, measure it again the same way; a file whose bytes no longer match its measurement is treated
+// a file, measure it again the same way (`python3 -I scripts/logo-measure.py public/logos public/logos/aspect.json`,
+// needs Pillow and rsvg-convert); a file whose bytes no longer match its measurement is treated
 // as square and named in a warning, and the unit test fails until it is measured.
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";

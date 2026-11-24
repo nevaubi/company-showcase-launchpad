@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useSource } from "@/components/source/source-context";
 import { externalLogo } from "@/components/supply/supply-map-meta";
+import { logoKey } from "@/lib/supply/logo-key";
 import { supabase } from "@/integrations/supabase/client";
 import { keyRelationships, shareOfWords, taggedConcentration, type Relationship, type TaggedConcentration } from "@/lib/company/relationships";
 import { coverageOf } from "@/lib/coverage";
@@ -71,7 +72,7 @@ function Side({ ticker, title, rows, total, empty }: { ticker: string; title: st
                     <TickerMark ticker={r.ticker} name nameFirst />
                   ) : (
                     <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle">
-                      <CompanyLogo ticker={r.ticker ?? r.name.slice(0, 4).toUpperCase()} src={externalLogo(r.domain, r.ticker)} size="xs" decorative />
+                      <CompanyLogo ticker={logoKey(r)} src={externalLogo(r.domain, r.ticker)} size="xs" decorative />
                       <span className="truncate font-medium">{r.name}</span>
                     </span>
                   )}

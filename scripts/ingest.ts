@@ -39,6 +39,7 @@ import type {
 } from "../src/lib/financials/types";
 import { COVERAGE, historyCik, isBundled, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
 import { coverageDetails } from "../src/lib/coverage-details.server";
+import { sicDescription } from "../src/lib/sec/sic";
 import { summarize, type MacroSummary } from "../src/lib/macro";
 
 const UA = "FiledUnder Research research@filedunder.ai";
@@ -655,7 +656,7 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
     name: sub.name,
     exchange: sub.exchanges[0] ?? "",
     sic: sub.sic,
-    sicDescription: sub.sicDescription,
+    sicDescription: sicDescription(sub.sic, sub.sicDescription),
     sector: cfg.sector,
     industry: cfg.industry,
     fiscalYearEnd: sub.fiscalYearEnd,

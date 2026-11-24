@@ -107,7 +107,8 @@ describe("company names", () => {
 
   it("leaves no tagged name in the covered universe and only ever removes a tag", () => {
     const changed = COVERAGE.filter((c) => cleanCompanyName(c.shortName) !== c.shortName);
-    expect(changed.length).toBeGreaterThan(0);
+    // The generator strips SEC's state and successor tags at the source now, so the cleaner finds nothing to remove.
+    expect(changed.map((c) => c.ticker)).toEqual([]);
     for (const c of changed) {
       const clean = cleanCompanyName(c.shortName);
       expect(c.shortName.startsWith(clean)).toBe(true);

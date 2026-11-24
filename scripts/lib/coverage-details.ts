@@ -2,6 +2,7 @@
 // founding year, description) that scripts/expand-coverage.ts writes to src/lib/coverage-details.server.ts.
 // Flags an entry for review; never decides by itself that a field is wrong. No Node or network APIs.
 import { nameWords, namesAgree } from "./coverage-names";
+import { sicDescription } from "../../src/lib/sec/sic";
 
 export interface CoverageDetails {
   website?: string;
@@ -129,7 +130,7 @@ export interface FallbackFacts {
 /** The generator's honest description when no encyclopedia entry names the company: SEC facts only. */
 export function fallbackDescription(f: FallbackFacts): string {
   const where = f.city ? ` headquartered in ${titleCase(f.city)}, ${f.stateOrCountry ?? ""}`.replace(/, $/, "") : "";
-  return `${f.name} is a U.S.-listed ${f.industry.toLowerCase()} company${where} (SEC SIC ${f.sic ?? "—"}: ${titleCase(f.sicDescription ?? "")}).`;
+  return `${f.name} is a U.S.-listed ${f.industry.toLowerCase()} company${where} (SEC SIC ${f.sic ?? "—"}: ${titleCase(sicDescription(f.sic, f.sicDescription))}).`;
 }
 
 export type DetailField = keyof CoverageDetails;

@@ -920,6 +920,22 @@
    "old": "Seacoast Banking Corp of Florida is a U.S.-listed banks company headquartered in Stuart, FL (SEC SIC 6022: State Commercial Banks).",
    "new": "Seacoast Banking Corporation of Florida is a U.S.-listed banks company headquartered in Stuart, FL (SEC SIC 6022: State Commercial Banks).",
    "source": "fallback sentence: carries the corrected display name (Seacoast Banking Corporation of Florida), see scripts/data/coverage-corrections.json"
+  },
+  {
+   "ticker": "HCC",
+   "cik": "1691303",
+   "field": "description",
+   "old": "Warrior Met Coal is a U.S.-listed metals & mining company headquartered in Brookwood, AL (SEC SIC 1220: Silver Ores).",
+   "new": "Warrior Met Coal is a U.S.-listed metals & mining company headquartered in Brookwood, AL (SEC SIC 1220: Bituminous Coal & Lignite Mining).",
+   "source": "SEC's published SIC code list gives 1220 as BITUMINOUS COAL & LIGNITE MINING; the company data for the CIK (data.sec.gov submissions, sicDescription) says \"Silver Ores\" for the same code. Both read 24 Nov 2026 (sec.gov/search-filings/standard-industrial-classification-sic-code-list)."
+  },
+  {
+   "ticker": "CNR",
+   "cik": "1710366",
+   "field": "description",
+   "old": "Core Natural Resources is a U.S.-listed oil & gas midstream company headquartered in Canonsburg, PA (SEC SIC 1220: Silver Ores).",
+   "new": "Core Natural Resources is a U.S.-listed oil & gas midstream company headquartered in Canonsburg, PA (SEC SIC 1220: Bituminous Coal & Lignite Mining).",
+   "source": "SEC's published SIC code list gives 1220 as BITUMINOUS COAL & LIGNITE MINING; the company data for the CIK (data.sec.gov submissions, sicDescription) says \"Silver Ores\" for the same code. Both read 24 Nov 2026 (sec.gov/search-filings/standard-industrial-classification-sic-code-list)."
   }
  ]
 }
