@@ -38,7 +38,9 @@ describe("site map", () => {
     const map = siteMapText();
     const setups = map.split("\n").find((l) => l.includes("· /app/setups"))!;
     expect(setups).toContain("judged against luck");
-    expect(setups).toContain("Closest, a watch list of up to 20 signals");
+    expect(setups).toContain("The page opens on the short list");
+    expect(setups).toContain("The Watch list tab holds up to 20 signals");
+    expect(setups).toContain("with no stop or target");
     expect(setups).toContain("not a recommendation and not evidence");
     expect(setups).not.toMatch(/out-of-sample trades|predict|works|tested and working/i);
     const ideas = map.split("\n").find((l) => l.includes("· /app/ideas"))!;

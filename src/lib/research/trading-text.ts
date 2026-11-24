@@ -1,10 +1,10 @@
-// Assistant text for the setups engine (short list, Closest watch list, rule scoreboard) and the paper autopilots.
+// Assistant text for the setups engine (short list, watch list, rule scoreboard) and the paper autopilots.
 // Pure: the executor passes in what the pages already load. Wording follows the Setups page: rules are judged
-// against luck, a rule is "listed" or "not listed", and the Closest rows are a watch list, never evidence.
+// against luck, a rule is "listed" or "not listed", and the Watch list rows are never evidence and carry no stop or target.
 import { fmtPct } from "@/lib/format";
 import type { BotStats } from "@/lib/signals/bots";
 import type { EvidenceBook } from "@/lib/signals/evidence";
-import { evidenceLine, liveLine, verdictLine } from "@/lib/signals/explain";
+import { emptyListLine, evidenceLine, liveLine, verdictLine } from "@/lib/signals/explain";
 import { rankSetups, type LiveSignal, type RankedSetup } from "@/lib/signals/rank";
 import type { SetupsFile } from "@/lib/signals/setups";
 import { FAMILY_LABEL, STRATEGY, type Family } from "@/lib/signals/strategies";
@@ -29,12 +29,19 @@ export function setupsText(f: SetupsInput, a: SetupsArgs = {}): string {
   const book = f.book ?? null;
   const out = [
     `Short-term setups engine, closing prices ${f.asOf} (${f.source === "daily" ? "nightly run" : "full-history run"} over ${f.companies.toLocaleString("en-US")} stocks). Market regime: ${f.regime}.${m ? ` VIX ${num(m.vix, 1)}${m.vixRatio != null ? `, VIX/VIX3M ${num(m.vixRatio)}${m.vixRatio > 1 ? " (inverted: stress)" : ""}` : ""}; ${fmtPct(m.breadth200, 0)} of stocks above their 200-day average; ${fmtPct(m.nearHighs, 0)} within 2% of a 52-week high; median short-sale share of volume ${fmtPct(m.shortRatio, 0)} (FINRA).` : ""}`,
-    `Each rule is a published strategy judged against luck on trades after ${f.oosStart}, after trading and borrowing costs, month by month (holds overlap, so signal days are not counted as independent). ${f.variants.length} rules are tried, so a rule is listed only if it stands out from all of them under false-discovery control (Benjamini-Hochberg: watch at 10%, candidate at 5%; "proven" also needs all eight checks of the strict gate). ${book ? verdictLine(book) : `${f.variants.filter((v) => v.passed).length} of ${f.variants.length} rules pass the strict gate; the read-time luck check was not available.`} Signals from rules that are not listed are a watch list, not evidence and not a recommendation: say so when citing them, and never call a backtest figure proven or predictive. Not investment advice. Page: /app/setups (views: Short list, Closest, All fired; filters: side, hold, family, sector, traded a day).`,
+    `Each rule is a published strategy judged against luck on trades after ${f.oosStart}, after trading and borrowing costs, month by month (holds overlap, so signal days are not counted as independent). ${f.variants.length} rules are tried, so a rule is listed only if it stands out from all of them under false-discovery control (Benjamini-Hochberg: watch at 10%, candidate at 5%; "proven" also needs all eight checks of the strict gate). ${book ? (book.discovery.proven + book.discovery.candidates + book.discovery.watch > 0 ? verdictLine(book) : emptyListLine(book)) : `${f.variants.filter((v) => v.passed).length} of ${f.variants.length} rules pass the strict gate; the read-time luck check was not available.`} Signals from rules that are not listed are a watch list, not evidence and not a recommendation: say so when citing them, and never call a backtest figure proven or predictive. Not investment advice. Page: /app/setups (opens on the Short list; views: Short list, Watch list, All fired; filters: side, hold, family, sector, traded a day).`,
   ];
   const t = a.ticker?.toUpperCase();
   const max = Math.max(1, Math.min(a.max ?? 15, 40));
-  const line = (s: RankedSetup) =>
-    `  ${s.ticker} ${s.name} [${s.sector}] ${s.side > 0 ? "LONG" : "SHORT"} ${STRATEGY[s.strategy]?.label ?? s.strategy}, hold ${s.horizon} days, rule ${s.grade === "unproven" ? "not listed" : s.grade}; signal ${s.firedAt}: ${s.detail}; price $${num(s.price)}${s.barsOk ? `, stop $${num(s.stop)}, target $${num(s.target)}` : " (stored prices look wrong: no stop or target)"}; expected edge ${pct(s.edge)} per trade vs sector after costs </app/companies/${s.ticker}>`;
+  const line = (s: RankedSetup) => {
+    const listed = s.grade !== "unproven";
+    const head = `  ${s.ticker} ${s.name} [${s.sector}] ${s.side > 0 ? "LONG" : "SHORT"} ${STRATEGY[s.strategy]?.label ?? s.strategy}, hold ${s.horizon} days, rule ${listed ? s.grade : "not listed"}; signal ${s.firedAt}: ${s.detail}; price $${num(s.price)}`;
+    // The page shows a stop, a target and an expected edge only for a listed rule.
+    const tail = !listed
+      ? " (watch list only: this rule's record cannot be told apart from luck; no stop, target or expected edge)"
+      : `${s.barsOk ? `, stop $${num(s.stop)}, target $${num(s.target)}` : " (stored prices look wrong: no stop or target)"}; expected edge ${pct(s.edge)} per trade vs sector after costs`;
+    return `${head}${tail} </app/companies/${s.ticker}>`;
+  };
   if (book && f.live) {
     const r = rankSetups(book, f.live);
     const pick = (rows: RankedSetup[]) => rows.filter((s) => (!t || s.ticker === t) && (!a.family || s.family === a.family));
@@ -51,7 +58,7 @@ export function setupsText(f: SetupsInput, a: SetupsArgs = {}): string {
       for (const s of short.slice(0, max)) out.push(line(s));
       if (a.includeWatch !== false) {
         const closest = pick(r.closest);
-        out.push(`CLOSEST, NOT LISTED (${closest.length}: a watch list from the rules nearest the bar, same limits; expected edge is zero after shrinkage):`);
+        out.push(`WATCH LIST, NOT LISTED (${closest.length}: signals of the rules nearest the bar, same limits; these are not suggestions, the rules cannot be told apart from luck and the page shows no stop or target for them):`);
         for (const s of closest.slice(0, max)) out.push(line(s));
         if (closest.length > max) out.push(`  …${closest.length - max} more`);
       }

@@ -354,12 +354,12 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_setups",
-    description: "The short-term setups engine (refreshed nightly over every covered stock), as the Setups page shows it: the day's verdict (how many of the rules tried clear the bar against luck; today none may), the short list (signals from listed rules only), the Closest rows (a watch list from the rules nearest the bar, not listed) and the rule scoreboard: each published rule's monthly record since 2022 after costs, its t against the bar luck sets for that many rules, its live record and which strict checks it fails. With a ticker: every live signal on that stock and its rule's standing. Use for trade-idea, 'is anything setting up on X' or 'do any of these rules work' questions. Signals from rules that are not listed are a watch list, not evidence; say so, and never describe a rule as proven, tested and working or predictive unless the output lists it as proven.",
+    description: "The short-term setups engine (refreshed nightly over every covered stock), as the Setups page shows it: the day's verdict (how many of the rules tried clear the bar against luck; today none may), the short list (signals from listed rules only), the Watch list rows (signals of the rules nearest the bar, not listed, with no stop or target) and the rule scoreboard: each published rule's monthly record since 2022 after costs, its t against the bar luck sets for that many rules, its live record and which strict checks it fails. With a ticker: every live signal on that stock and its rule's standing. Use for trade-idea, 'is anything setting up on X' or 'do any of these rules work' questions. Signals from rules that are not listed are a watch list, not evidence; say so, give no stop or target for them, never quote a backtest average without saying it cannot be told apart from luck, and never describe a rule as proven, tested and working or predictive unless the output lists it as proven.",
     parameters: obj(
       {
         ticker: nullable(str("Only setups on this ticker; null for all")),
         family: nullable({ type: "string", enum: ["reversal", "momentum", "events", "links", "multi", "pairs"], description: "Strategy family: reversal = snap-back, links = supply chain, multi = confluence" }),
-        include_watch: nullable({ type: "boolean", description: "Include the closest rules' signals when no rule is listed (default true)" }),
+        include_watch: nullable({ type: "boolean", description: "Include the watch list (the closest rules' signals, none listed) when no rule is listed (default true)" }),
         max: nullable({ type: "number", description: "Setups to list (default 15, max 40)" }),
       },
       ["ticker", "family", "include_watch", "max"],

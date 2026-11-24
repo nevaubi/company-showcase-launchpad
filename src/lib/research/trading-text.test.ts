@@ -37,16 +37,22 @@ describe("assistant setups text", () => {
   it("hides signals from rules that are not listed when asked for listed rules only", () => {
     expect(setupsText(file, { includeWatch: false })).toContain("none.");
   });
-  it("on the real 46 rules, says none clears the bar and gives the Closest rows as a watch list", () => {
+  it("on the real 46 rules, says none clears the bar and gives the Watch list rows without stop or target", () => {
     const variants = realVariants();
     const book = buildEvidence(variants, "Down, stressed", "2026-11-20");
     const live: LiveSignal[] = variants.slice(0, 6).map((v, k) => ({ ticker: `T${k}`, name: `Company ${k}`, sector: k % 2 ? "Energy" : "Financials", variant: v.key, firedAt: "2026-11-20", firstSeen: "2026-11-20", strength: 2, detail: "", price: 100, atr: 2, dv20: 2e8, cost: 0.0008 }));
     const t = setupsText({ ...file, variants, book, live });
-    expect(t).toContain("No rule clears the bar today. The best of 46 scores t 1.97");
-    expect(t).toContain("near 2.24");
+    expect(t).toContain("No rule clears the bar today, so the short list is empty");
+    expect(t).toContain("a t near 2.2,");
+    expect(t).toContain("the best today reaches 1.97");
+    expect(t).toContain("An empty list says that nothing here is exceptional, not that no rule has any edge.");
     expect(t).toContain("SHORT LIST (0");
     expect(t).toContain("none: no listed rule has a live signal.");
-    expect(t).toContain("CLOSEST, NOT LISTED");
+    expect(t).toContain("WATCH LIST, NOT LISTED");
+    // Rows of rules that are not listed carry no stop, target or expected edge.
+    const watch = t.split("\n").filter((l) => l.includes("rule not listed"));
+    expect(watch.length).toBeGreaterThan(0);
+    for (const l of watch) expect(l).not.toMatch(/stop \$|target \$|expected edge [-+0-9]/);
     expect(t).toContain("a watch list, not evidence and not a recommendation");
     expect(t).toMatch(/rule not listed/);
     expect(t).not.toMatch(/watch-only|PASSES every check/);
