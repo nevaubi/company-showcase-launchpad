@@ -18,7 +18,7 @@ import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries 
 import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 import { holdSuspects } from "@/lib/ir/suspect";
 
-export const TIDY_VERSION = 9;
+export const TIDY_VERSION = 10;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -311,7 +311,8 @@ function mergeSiblings(c: Ctx, g: PayloadGroup, ctx: Set<string>) {
   const byParent = new Map<string, PayloadSeries[]>();
   for (const s of rows) {
     if (s.k === g.root) continue;
-    const pk = s.parent ?? "";
+    // a line printed without a parent in a group whose root is its total is a child of that root, like the others
+    const pk = s.parent && s.parent !== g.root ? s.parent : "";
     const list = byParent.get(pk);
     if (list) list.push(s);
     else byParent.set(pk, [s]);
@@ -348,7 +349,13 @@ function mergeSiblings(c: Ctx, g: PayloadGroup, ctx: Set<string>) {
         // Siblings both printed in one period are two lines of that table unless they carry the same numbers.
         if (sameLine(a, ka, b, memberKey(b, ctx), { aRoot: false, bRoot: false }) !== "same") continue;
         if (overlaps(periodsOf(a), periodsOf(b)) && compare(a, b).agree === 0) continue;
+        // the line that stays takes the other's place under the group's total, so the total still ties out
+        const adopt = !a.parent && !!g.root && b.parent === g.root;
         absorb(c, a, b);
+        if (adopt && c.removed.has(b.k)) {
+          a.parent = g.root;
+          c.kids.set(g.root!, [...(c.kids.get(g.root!) ?? []), a]);
+        }
         add(a);
       }
     }

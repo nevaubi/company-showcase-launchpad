@@ -102,7 +102,7 @@ describe("double breakdowns", () => {
     ]);
     const { checks, series } = buildIrSeries(facts);
     expect(checks.filter((c) => !c.ok)).toEqual([]);
-    expect(series.find((s) => s.label === "Gaming")?.parent).toBe("Total revenue — second breakdown");
+    expect(series.find((s) => s.label === "Gaming")?.parent).toBe("Total revenue: second breakdown");
     expect(series.find((s) => s.label === "Cloud")?.parent).toBe("Total revenue");
   });
 });
@@ -326,7 +326,7 @@ describe("period-end counts next to net additions", () => {
     ];
     const { series } = buildIrSeries(facts);
     const stock = series.find((x) => x.label === "Customer relationships")!;
-    const flow = series.find((x) => x.label === "Customer relationships — net change")!;
+    const flow = series.find((x) => x.label === "Customer relationships: net change")!;
     expect(Object.values(stock.cells).map((c) => c.v)).toEqual([31_062_000, 31_339_000]);
     expect(Object.values(flow.cells).map((c) => c.v)).toEqual([370_000, 277_000]);
   });
@@ -356,7 +356,7 @@ describe("U.S. / international / worldwide columns", () => {
     const facts = [...col("U.S.", 912e6, 154e6, 1066e6), ...col("International", 168e6, 132e6, 300e6), ...col("Global", 1080e6, 286e6, 1366e6)];
     const { series, checks } = buildIrSeries(facts);
     expect(series.find((x) => x.label === "Vyalev")?.cells[end].v).toBe(286e6);
-    expect(series.find((x) => x.label === "Vyalev — U.S.")?.parent).toBe("Neuroscience — U.S.");
+    expect(series.find((x) => x.label === "Vyalev: U.S.")?.parent).toBe("Neuroscience: U.S.");
     expect(checks).toHaveLength(3);
     expect(checks.every((c) => c.ok)).toBe(true);
   });

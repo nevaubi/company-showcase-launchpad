@@ -34,7 +34,7 @@
 // the neighbouring quarter, or four times the quarter); otherwise the figure stays and carries a
 // flag with both numbers, because a release can differ from a later 10-Q for good reasons
 // (recasts, a subtotal the release calls by the same name).
-import { normLabel } from "@/lib/ir/kpis";
+import { LEVEL_SPLIT, normLabel } from "@/lib/ir/kpis";
 import type { IrPayload, PayloadCell, PayloadCellFlag, PayloadSeries } from "@/lib/ir/payload";
 
 export type StdLine = "revenue" | "operatingIncome" | "netIncome" | "epsDiluted" | "netInterestIncome" | "provisionCreditLosses";
@@ -218,9 +218,13 @@ function contradiction(ir: number, sec: number, unit: string, kind: "q" | "y", e
     const yr = find(side.y, e);
     if (yr && agrees(ir, yr.v, unit) && !agrees(sec, yr.v, unit)) return `${fmt(ir, unit)} is the 10-K's full-year figure; ${f} gives ${fmt(sec, unit)} for the quarter`;
     if (Math.abs(sec) > 0 && Math.abs(ir / sec - 4) < 0.08) return `${fmt(ir, unit)} is about four times the ${fmt(sec, unit)} from ${f}: an annualized or full-year figure in a quarter column`;
+    // Another quarter's figure is a claim of identity: it needs the same digits to the figure's printed
+    // precision (LKQ's 3,463M is not Q2 2023's 3,448M), and a figure within OWN_NEAR of its own period's
+    // filing is that period's figure, whatever another quarter happens to print (LKQ's 192M against 193M).
+    const own = sec !== 0 && Math.abs(ir / sec - 1) <= OWN_NEAR;
     for (const [k, x] of side.q) {
       const days = Math.abs(ms(k) - ms(e)) / DAY;
-      if (days > 20 && days < reach && agrees(ir, x.v, unit) && !agrees(sec, x.v, unit)) return `${fmt(ir, unit)} is the SEC figure for the quarter ending ${k}; ${f} gives ${fmt(sec, unit)} for this one`;
+      if (!own && days > 20 && days < reach && agrees(ir, x.v, unit) && Math.abs(ir - x.v) <= printedStep(ir) && !agrees(sec, x.v, unit)) return `${fmt(ir, unit)} is the SEC figure for the quarter ending ${k}; ${f} gives ${fmt(sec, unit)} for this one`;
     }
   } else {
     const q = find(side.q, e);
@@ -234,6 +238,9 @@ const keyOf = (k: string, kind: "q" | "y", e: string) => `${k}|${kind}|${e}`;
 /** Largest gap (as a share of the filing's figure) a later filing's recast may explain. */
 export const RECAST_LIMIT = 0.15;
 
+/** A figure this close to its own period's filing is not read as another quarter's figure. */
+export const OWN_NEAR = 0.02;
+
 const PART_TABLE = /\b(by|per) (reportable )?(segment|subsidiar|utilit|operating compan|compan|geograph|region|countr|offering|product|service|business|division|brand|channel|market|categor|source|line of business|lines of business|unit)|\b(subsidiar(y|ies)|segments?|business lines?|lines of business|divisions?)\b/i;
 
 /**
@@ -246,6 +253,55 @@ export function partOf(s: PayloadSeries, byKey?: Map<string, PayloadSeries>): bo
   if (!s.parent || s.total) return false;
   const par = byKey?.get(s.parent);
   return !(par && stdLineOf(par) && !PART_TABLE.test(`${par.bd ?? ""} ${par.sc ?? ""}`));
+}
+
+/**
+ * Whether a cell is one part of a table that splits the company although its title does not say so, from
+ * the table's own lines: the same table prints this line again for the period (another printing, or a
+ * same-named line of the table) with a value more than OWN_NEAR apart, and no printing of the period is within OWN_NEAR of the
+ * filing. LKQ's table "Total Revenue" prints "Total Revenue" 129M, 1,442M and 1,607M for Q2 2025 (its
+ * segments) against the 10-Q's 3,513M. A table that also prints the filing's figure is not a split by this
+ * test (KEY's chart bar 39M beside 107M against 108M stays compared).
+ */
+function splitsHere(s: PayloadSeries, c: PayloadCell, v: number, list: PayloadSeries[], kind: "q" | "y", e: string, sec: number): boolean {
+  const norm = (x: string) => x.toLowerCase().replace(/[^a-z]+/g, " ").trim();
+  const sibs = [c.alt?.v, ...list.filter((o) => o !== s && (o.bd ?? "") === (s.bd ?? "") && norm(o.label) === norm(s.label)).map((o) => (kind === "q" ? o.q : o.y)[e]?.v)].filter((x): x is number => x != null && Number.isFinite(x) && x !== 0);
+  if (!sibs.some((x) => Math.abs(x / v - 1) > OWN_NEAR)) return false;
+  return sec !== 0 && ![v, ...sibs].some((x) => Math.abs(x / sec - 1) <= OWN_NEAR);
+}
+
+/**
+ * A company revenue line that mixes two levels (p3-ir C4: payloads stored before the build kept them
+ * apart). When some of a line's quarters agree with the 10-Q revenue (within 10%) and others are a
+ * LEVEL_SPLIT factor or more away from it, the far quarters are another level of the company folded into
+ * the line (VSAT's segment total 459.7M among consolidated quarters of 1.14B to 1.17B): they are held
+ * with the reason, so no change is computed across the break. The filing's own move between the quarters
+ * is in the ratio, so a real jump in revenue is never read as a break.
+ */
+function levelBreaks(list: PayloadSeries[], sec: Map<string, Ref>, items: SecItem[], hold: Map<string, string>, flag: Map<string, PayloadCellFlag>) {
+  if (!sec.size) return;
+  for (const s of list) {
+    if (s.unit !== "usd") continue;
+    const rows = Object.entries(s.q).flatMap(([e, c]) => {
+      const ref = find(sec, e);
+      return ref && ref.v > 0 && c.v > 0 ? [{ e, c, ref, r: c.v / ref.v }] : [];
+    });
+    const level = rows.filter((x) => Math.abs(x.r - 1) <= 0.1);
+    const far = rows.filter((x) => x.r <= 1 / LEVEL_SPLIT || x.r >= LEVEL_SPLIT);
+    if (!level.length || !far.length) continue;
+    const range = `${fmt(Math.min(...level.map((x) => x.c.v)), s.unit)}${level.length > 1 ? ` to ${fmt(Math.max(...level.map((x) => x.c.v)), s.unit)}` : ""}`;
+    for (const { e, c, ref, r } of far) {
+      const key = keyOf(s.k, "q", e);
+      if (hold.has(key)) continue;
+      const why = `${fmt(c.v, s.unit)} is ${r < 1 ? `${Math.round(r * 100)}% of` : `${r.toFixed(1)}×`} the 10-Q's revenue for the quarter (${fmt(ref.v, s.unit)}), while this line's other quarters (${range}) agree with the filings: a figure from another level of the company (a segment's or a part's total) mixed into the company's line`;
+      hold.set(key, `${why} (${ref.accn ?? "SEC filing"})`);
+      flag.delete(key);
+      const base = { k: s.k, label: s.label, line: "revenue" as const, kind: "q" as const, e, ir: c.v, sec: ref.v, accn: ref.accn, concept: ref.concept };
+      const at = items.findIndex((x) => x.k === s.k && x.kind === "q" && x.e === e);
+      if (at >= 0) items[at] = { ...base, status: "held", why };
+      else items.push({ ...base, status: "held", why });
+    }
+  }
 }
 
 /**
@@ -307,7 +363,7 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
           // net interest income) is not compared, unless it is the filing's figure at another unit.
           // Only a part of the company (see partOf) may skip: a consolidated table's figure is always compared.
           const r = ref.v !== 0 ? Math.abs(v) / Math.abs(ref.v) : 1;
-          const whole = !partOf(s, byKey);
+          const whole = !partOf(s, byKey) && !splitsHere(s, c, v, list, kind, e, ref.v);
           const eligible = opposite || whole || Math.abs(r - 1) <= 0.1 || (Math.abs(c.v) === top && !anyAgrees && r >= 0.5 && r <= 2);
           const unitOff = ref.v !== 0 && v !== 0 && s.unit !== "usdPerShare" && (() => {
             const k = Math.log10(r);
@@ -359,6 +415,9 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
       }
     }
   }
+  // the company's revenue line by its printed name, whatever table holds it (C4 folds a segment table's total)
+  const revenueNamed = p.series.filter((s) => s.unit === "usd" && !OTHER_BASIS.test(s.label) && !(s.parent && !s.total) && LINE_RULES[0].test(normLabel(s.label)));
+  levelBreaks(revenueNamed, sideOf(st, "revenue").q, items, hold, flag);
   if (!items.length) return { payload: p, check: { checked: 0, agree: 0, held: 0, flagged: 0, released: 0, later: 0, items } };
 
   // Calculated values that use a held figure are held too; tie-out checks touching one are dropped.

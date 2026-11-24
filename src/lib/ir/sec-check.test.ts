@@ -4,6 +4,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { IrPayload, PayloadCell, PayloadSeries } from "./payload";
 import { agrees, crossCheckSec, stdLineOf, type CheckStatements } from "./sec-check";
+import { keyLines } from "./highlights";
+import { periodGrids } from "./periods";
 import { tidyPayload } from "./tidy";
 
 // Real rows: IR standard-line values copied from production with the checksum-verified transfer
@@ -333,5 +335,99 @@ describe("p3-ir review: no wrong KEY figure passes unmarked", () => {
     // within 15% a later comparative still reads as a possible recast
     const near = payload([series("r", "Revenue", { "2025-09-30": cell(2_050_000_000) }, { bd: "Consumer banking" })]);
     expect(crossCheckSec(near, keySt("revenue", { "2025-09-30": [1_895_000_000, "0000091576-26-000023"] })).check!.items[0].status).toBe("later");
+  });
+});
+
+// p5-ir4 item 1: the new checks run on the kit and review payloads (measure.ts) newly held two right LKQ
+// figures as another quarter's. Statement cells are LKQ's EDGAR companyfacts (fetched 2026-11-24): each
+// period's newest filing, as buildStatements keeps it.
+describe("p5-ir4: another quarter's figure needs its digits, and a figure near its own period is that period's", () => {
+  const lkqSt = (key: string, q: Record<string, [number, string]>): CheckStatements => ({
+    quarterly: { periods: Object.keys(q).map((end) => ({ end })), rows: [{ key, cells: Object.values(q).map(([v, accn]) => ({ v, src: { accn, concept: "us-gaap:X" } })) }] },
+    annual: { periods: [], rows: [] },
+  });
+
+  it("LKQ revenue Q1 2025 3,463M (the original 10-Q's figure; a 2026 10-Q recasts it to 3,327M) is not held as Q2 2023's 3,448M", () => {
+    const p = payload([series("r", "Revenue", { "2025-03-31": cell(3_463_000_000) }, { bd: "Revenue" })]);
+    const st = lkqSt("revenue", { "2023-06-30": [3_448_000_000, "0001065696-24-000112"], "2025-03-31": [3_327_000_000, "0001065696-26-000033"] });
+    const { payload: out, check } = crossCheckSec(p, st);
+    expect(check!.items[0]).toMatchObject({ status: "later", ir: 3_463_000_000, sec: 3_327_000_000 });
+    expect(out.series[0].q["2025-03-31"]?.v).toBe(3_463_000_000);
+  });
+
+  it("LKQ net income Q2 2025 192M against its own 193M is not held as Q3 2024's 192M (flagged: another line agrees)", () => {
+    const p = payload([
+      series("a", "Net (loss) income attributable to LKQ stockholders", { "2025-06-30": cell(192_000_000) }, { bd: "Net income reconciliation" }),
+      series("b", "Net income", { "2025-06-30": cell(193_000_000) }, { bd: "Consolidated income statement" }),
+    ]);
+    const st = lkqSt("netIncome", { "2024-09-30": [192_000_000, "0001065696-25-000063"], "2025-06-30": [193_000_000, "0001065696-26-000044"] });
+    const { payload: out, check } = crossCheckSec(p, st);
+    expect(Object.fromEntries(check!.items.map((x) => [x.k, x.status]))).toEqual({ a: "flagged", b: "agree" });
+    expect(out.series[0].q["2025-06-30"]?.v).toBe(192_000_000);
+  });
+
+  it("KEY C2 with KEY's real Q1 2026 1,222M in the statements stays held (same digits, 11.6% from its own period)", () => {
+    const p = payload([series("a", "Net interest income", { "2025-03-31": cell(1_223_000_000) }, { bd: "Income statement" })]);
+    const st = lkqSt("netInterestIncome", { "2025-03-31": [1_096_000_000, "0001628280-26-030507"], "2026-03-31": [1_222_000_000, "0001628280-26-030507"] });
+    const { check } = crossCheckSec(p, st);
+    expect(check!.items[0]).toMatchObject({ status: "held" });
+    expect(check!.items[0].why).toMatch(/quarter ending 2026-03-31/);
+  });
+});
+
+// p5-ir4 item 1: LKQ's table named "Total Revenue" (fixtures/lkq-lines.txt; production document ae0bce8a and
+// 2a335b4b print "Total Revenue" 129M, 1,442M and 1,607M for Q2 2025) is a split of the company by its own lines.
+describe("p5-ir4: a table whose lines print several totals for one period, none the filing's, splits the company", () => {
+  const st: CheckStatements = { quarterly: { periods: [{ end: "2025-06-30" }], rows: [{ key: "revenue", cells: [{ v: 3_513_000_000, src: { accn: "0001065696-25-000044", concept: "us-gaap:Revenues" } }] }] }, annual: { periods: [], rows: [] } };
+  const conflict = (v: number) => ({ alt: { v, d: 1, kind: "conflict" as const } });
+
+  it("LKQ Q2 2025: 1,607M and 129M (beside 1,442M) against the 10-Q's 3,513M are not flagged", () => {
+    const p = payload([
+      series("a", "Total Revenue", { "2025-06-30": cell(1_607_000_000) }, { bd: "Total Revenue", total: false }),
+      series("b", "Total Revenue", { "2025-06-30": cell(129_000_000, conflict(1_442_000_000)) }, { bd: "Total Revenue" }),
+    ]);
+    const { payload: out, check } = crossCheckSec(p, st);
+    expect(check!.items.filter((x) => x.status === "flagged" || x.status === "held")).toEqual([]);
+    expect(out.series.every((s) => !s.q["2025-06-30"]?.flags?.length)).toBe(true);
+  });
+
+  it("a lone 1,466M under that title is still flagged, and so is a part beside a printing of the filing's figure", () => {
+    const lone = payload([series("a", "Total Revenue", { "2025-06-30": cell(1_466_000_000) }, { bd: "Total Revenue" })]);
+    expect(crossCheckSec(lone, st).check!.items[0].status).toBe("flagged");
+    const beside = payload([series("b", "Total Revenue", { "2025-06-30": cell(465_000_000, conflict(3_513_000_000)) }, { bd: "Revenue" })]);
+    expect(crossCheckSec(beside, st).check!.items[0].status).toBe("flagged");
+  });
+});
+
+// p3-ir C4 at read time: the VSAT payload stored before the build fix (IR kit payload VSAT.json, line
+// "Total Revenue" of "Revenue by segment", values as stored) and Viasat's 10-Q revenue (EDGAR companyfacts
+// via buildStatements; the two derived quarters carry no accession).
+describe("p5-ir4: a stored line that mixes a segment total into the company's revenue", () => {
+  const vsatLine = () =>
+    series("t", "Total Revenue", { "2025-03-31": cell(454_300_000), "2025-06-30": cell(1_171_054_000), "2025-09-30": cell(1_141_000_000), "2025-12-31": cell(459_700_000), "2026-03-31": cell(465_200_000), "2026-06-30": cell(1_156_543_000) }, { cat: "segment", bd: "Revenue by segment" });
+  const sec: Record<string, [number, string | null]> = { "2024-12-31": [1_123_767_000, "0001193125-26-041421"], "2025-03-31": [1_147_082_000, null], "2025-06-30": [1_171_054_000, "0001193125-26-337903"], "2025-09-30": [1_140_893_000, "0001193125-26-452035"], "2025-12-31": [1_157_045_000, "0001193125-26-041421"], "2026-03-31": [1_171_288_000, null], "2026-06-30": [1_156_543_000, "0001193125-26-337903"], "2026-09-30": [1_179_996_000, "0001193125-26-452035"] };
+  const st: CheckStatements = { quarterly: { periods: Object.keys(sec).map((end) => ({ end })), rows: [{ key: "revenue", cells: Object.values(sec).map(([v, accn]) => (accn ? { v, src: { accn, concept: "us-gaap:Revenues" } } : { v, derived: "FY total − 9M YTD" })) }] }, annual: { periods: [], rows: [] } };
+
+  it("holds the three segment-level quarters with the reason and keeps the consolidated ones", () => {
+    const { payload: out, check } = crossCheckSec(payload([vsatLine()]), st);
+    const held = check!.items.filter((x) => x.status === "held").map((x) => x.e).sort();
+    expect(held).toEqual(["2025-03-31", "2025-12-31", "2026-03-31"]);
+    expect(check!.items.find((x) => x.e === "2026-03-31")!.why).toMatch(/\$465M is 40% of the 10-Q's revenue .* another level of the company/);
+    expect(Object.keys(out.series[0].q).sort()).toEqual(["2025-06-30", "2025-09-30", "2026-06-30"]);
+    expect(out.series[0].held?.q?.["2025-12-31"]).toMatchObject({ v: 459_700_000 });
+  });
+
+  it("no key metric is computed across the break (was +148.6% against the quarter before)", () => {
+    const { payload: out } = crossCheckSec(payload([vsatLine()]), st);
+    const before = keyLines(payload([vsatLine()]), periodGrids(payload([vsatLine()])).q).find((l) => l.s.k === "t");
+    expect(before?.qoq).toBeCloseTo(148.6, 0);
+    const after = keyLines(out, out.quarters).find((l) => l.s.k === "t");
+    expect(after?.qoq ?? null).toBeNull();
+  });
+
+  it("a real jump in the company's revenue is not a break: the filing moves with the line", () => {
+    const jump = series("t", "Total revenue", { "2025-06-30": cell(500_000_000), "2025-09-30": cell(1_200_000_000) });
+    const { check } = crossCheckSec(payload([jump]), statements("revenue", { "2025-06-30": 500_000_000, "2025-09-30": 1_200_000_000 }));
+    expect(check!.items.map((x) => x.status)).toEqual(["agree", "agree"]);
   });
 });

@@ -17,7 +17,7 @@ import { useUnitScale } from "@/hooks/use-preference";
 import { coverageOf } from "@/lib/coverage";
 import { useCompany } from "@/lib/data";
 import { downloadBlob, fetchLogo, slug } from "@/lib/export/xlsx-theme";
-import { DIMENSIONS, countScales, derivedOf, fmtIr, groupColumns, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, printedUnit, refOf, rowDecimals, rowLabel, unitCaption } from "@/lib/ir/display";
+import { DIMENSIONS, countScales, derivedOf, fmtIr, groupColumns, groupCsv, groupOrder, groupTitle, inDimension, periodLabel, periodLong, printedUnit, refOf, rowDecimals, rowLabel, shownLabel, unitCaption } from "@/lib/ir/display";
 import type { IrPayload, PayloadAlt, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { currency } from "@/lib/ir/highlights";
 import { cellsFor, fiscalCalendar, heldFor, periodGrids, uniqueHeads, type FiscalCalendar } from "@/lib/ir/periods";
@@ -189,14 +189,14 @@ export function IrBreakdowns({ ticker, payload, focus, onFocusDone }: { ticker: 
               groups: payload.groups,
               freqs: (grids.m.length >= 3 ? ["q", "y", "m"] : ["q", "y"]) as Freq[],
               cols: undefined,
-              scope: `Complete history — all ${payload.groups.length} breakdowns, quarterly${grids.m.length >= 3 ? ", annual and monthly" : " and annual"}`,
+              scope: `Complete history: all ${payload.groups.length} breakdowns, quarterly${grids.m.length >= 3 ? ", annual and monthly" : " and annual"}`,
             }
           : what.kind === "group"
             ? (() => {
                 // Only the periods this breakdown fills, like the table on screen.
                 const gc = groupColumns(what.group.rows.flatMap((r) => (byKey.get(r.k) ? [{ s: byKey.get(r.k)! }] : [])), cols, freq);
                 const gr = gc.length ? `${periodLabel(gc[0], freq)} – ${periodLabel(gc[gc.length - 1], freq)}` : range;
-                return { groups: [what.group], freqs: [freq], cols: { [freq]: gc.length ? gc : cols }, scope: `One breakdown — ${groupTitle(what.group, what.group.root ? byKey.get(what.group.root) : undefined)} · ${gc.length || cols.length} ${periodWord}s (${gr})` };
+                return { groups: [what.group], freqs: [freq], cols: { [freq]: gc.length ? gc : cols }, scope: `One breakdown: ${groupTitle(what.group, what.group.root ? byKey.get(what.group.root) : undefined)} · ${gc.length || cols.length} ${periodWord}s (${gr})` };
               })()
             : {
                 groups,
@@ -603,7 +603,7 @@ const BreakdownCard = memo(function BreakdownCard({
             {series.map((s) => (
               <span key={s.id} className="inline-flex items-center gap-1">
                 <span className={cn("inline-block size-2 rounded-sm", s.type === "line" && "h-0.5 w-3 rounded-none")} style={{ background: s.color }} />
-                {s.label}
+                {shownLabel(s.label)}
               </span>
             ))}
           </div>
@@ -681,7 +681,7 @@ const BreakdownCard = memo(function BreakdownCard({
                       title={s.sc ? `${s.label} · ${s.sc}` : undefined}
                     >
                       {d >= 2 && <span aria-hidden className="absolute inset-y-0 border-l border-border" style={{ left: indentStyle(d - 1).paddingLeft + 4 }} />}
-                      {isRoot ? s.label : rowLabel(s.label, root?.label, group.px)}
+                      {isRoot ? shownLabel(s.label) : rowLabel(s.label, root?.label, group.px)}
                       {s.sc && !isRoot && root?.sc !== s.sc ? (
                         <span className={cn("ml-1 font-normal", IR.caption)}>· {s.sc}</span>
                       ) : !root && s.bd && (repeated.get(s.label) ?? 0) > 1 ? (

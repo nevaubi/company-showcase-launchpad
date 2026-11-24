@@ -78,12 +78,12 @@ export function groupTitle(g: PayloadGroup, root?: PayloadSeries) {
   if (g.t) return g.t;
   if (!g.root) {
     const c = CATEGORY_LABEL[g.cat] ?? g.cat;
-    return `${METRIC_LABEL[g.met] ?? g.met} — other ${c.endsWith(" line") ? `${c}s` : `${c} lines`}`;
+    return `${METRIC_LABEL[g.met] ?? g.met}: other ${c.endsWith(" line") ? `${c}s` : `${c} lines`}`;
   }
   if (root?.sc) return root.sc.replace(/:$/, "");
   if (g.bd && !/^(total|consolidated)/i.test(g.bd)) return g.bd.replace(/:$/, "");
   const metric = METRIC_LABEL[g.met] ?? g.met;
-  if (g.cat === "cost") return root?.label ? `${root.label} — components` : "Costs & expenses";
+  if (g.cat === "cost") return root?.label ? `${root.label}: components` : "Costs & expenses";
   if (g.cat === "kpi" || g.cat === "balance") return root?.label ?? `${metric}`;
   return `${metric} by ${CATEGORY_LABEL[g.cat] ?? g.cat}`;
 }
@@ -319,18 +319,27 @@ export function secRevenueCheck(p: IrPayload, reported: { end: string; v: number
 const GEO_TAGS = ["U.S.", "International"];
 const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+/**
+ * A line name as the page shows it. The readers and the build compose "Heading — child" names
+ * ("Data Center — Compute"); the page shows that separator as a colon ("Data Center: Compute"), so no
+ * em dash reaches a label. Any other text stays as stored.
+ */
+export function shownLabel(label: string) {
+  return label.replace(/\s+—\s+/g, ": ");
+}
+
 /** Inside a "U.S." or "International" breakdown (or a list titled by the lines' lead-in), rows don't repeat it. */
 export function rowLabel(label: string, rootLabel?: string | null, px?: string) {
   if (px && label.toLowerCase().startsWith(px.toLowerCase())) {
     const rest = label.slice(px.length).replace(/^\s*([—–-]|:)\s*/, "");
-    if (rest) return rest[0].toUpperCase() + rest.slice(1);
+    if (rest) return shownLabel(rest[0].toUpperCase() + rest.slice(1));
   }
-  if (!rootLabel) return label;
+  if (!rootLabel) return shownLabel(label);
   for (const tag of GEO_TAGS) {
-    const re = new RegExp(`\\s*—\\s*${esc(tag)}$|^${esc(tag)}\\s*—\\s*`);
-    if (re.test(rootLabel)) return label.replace(re, "") || label;
+    const re = new RegExp(`\\s*(—|:)\\s*${esc(tag)}$|^${esc(tag)}\\s*(—|:)\\s*`);
+    if (re.test(rootLabel)) return shownLabel(label.replace(re, "") || label);
   }
-  return label;
+  return shownLabel(label);
 }
 
 /** A title that starts like a document id ("0a1b2c3d-1234-…", also with spaces). */

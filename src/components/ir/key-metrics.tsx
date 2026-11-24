@@ -6,7 +6,7 @@ import { Segmented } from "@/components/app/segmented";
 import { useSource } from "@/components/source/source-context";
 import { openIrCell } from "@/components/ir/breakdowns";
 import { useUnitScale } from "@/hooks/use-preference";
-import { fmtIr, unitCaption } from "@/lib/ir/display";
+import { fmtIr, shownLabel, unitCaption } from "@/lib/ir/display";
 import { biggestMoves, keyLines, type KeyLine } from "@/lib/ir/highlights";
 import type { IrPayload } from "@/lib/ir/payload";
 import { fiscalCalendar, fiscalLabel, periodGrids } from "@/lib/ir/periods";
@@ -97,7 +97,7 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
                 {lines.map((l) => (
                   <tr key={l.s.k} className="transition-colors duration-150 hover:bg-secondary/60 motion-reduce:transition-none">
                     <th scope="row" className="px-4 py-1.5 text-left font-normal">
-                      <div className={cn("truncate", IR.row, IR.strong)} title={l.s.label}>{l.s.label}</div>
+                      <div className={cn("truncate", IR.row, IR.strong)} title={shownLabel(l.s.label)}>{shownLabel(l.s.label)}</div>
                       <div className={cn("truncate", IR.caption)} title={l.groupTitle}>
                         {l.groupTitle} · {unitOf(l)}
                       </div>
@@ -130,7 +130,7 @@ export function IrKeyMetrics({ ticker, payload }: { ticker: string; payload: IrP
                     {list.map((l) => (
                       <li key={l.s.k} className={cn("flex items-center gap-3 px-4 py-1.5", IR.row)}>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate" title={l.s.label}>{l.s.label}</div>
+                          <div className="truncate" title={shownLabel(l.s.label)}>{shownLabel(l.s.label)}</div>
                           <div className={cn("truncate", IR.caption)}>{l.groupTitle} · {unitOf(l)}</div>
                         </div>
                         {value(l)}

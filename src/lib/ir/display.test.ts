@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countScale, countScales, fmtIr, libraryTitle, printedUnit, rowDecimals } from "./display";
+import { countScale, countScales, fmtIr, groupTitle, libraryTitle, printedUnit, rowDecimals, rowLabel, shownLabel } from "./display";
 
 describe("IR number formatting", () => {
   it("prints negatives with a true minus sign, not parentheses", () => {
@@ -75,5 +75,19 @@ describe("library titles", () => {
     // Review L7: an exhibit number or a large figure inside a real title.
     expect(t("Exhibit 99.1 NVIDIA Announces Financial Results for Third Quarter Fiscal 2027")).toBe("Exhibit 99.1 NVIDIA Announces Financial Results for Third Quarter Fiscal 2027");
     expect(t("Record revenue of $57,006 million")).toBe("Record revenue of $57,006 million");
+  });
+});
+
+// Shot review p5-shots M3: labels the page composes from a parent and a child use a colon, never an em dash.
+describe("p5-ir4: composed labels carry no em dash", () => {
+  it("shows a reader's 'Heading — child' name with a colon and leaves other text as stored", () => {
+    expect(shownLabel("Data Center — Compute")).toBe("Data Center: Compute");
+    expect(rowLabel("Data Center — Networking", "Revenue")).toBe("Data Center: Networking");
+    expect(rowLabel("Vyalev — U.S.", "Neuroscience — U.S.")).toBe("Vyalev");
+    expect(rowLabel("Vyalev: U.S.", "Neuroscience: U.S.")).toBe("Vyalev");
+    expect(shownLabel("Revenue 2024–2025")).toBe("Revenue 2024–2025");
+  });
+  it("titles a list of loose lines with a colon", () => {
+    expect(groupTitle({ id: "x", cat: "segment", met: "revenue", unit: "usd", label: "", root: null, rows: [] })).toBe("Revenue: other segment lines");
   });
 });

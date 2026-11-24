@@ -377,14 +377,14 @@ export function splitGeoColumns(facts: IrFact[]): IrFact[] {
     if (!splitDocs.has(docOf(f))) return f;
     const g = geoOfBreakdown(f.breakdown);
     if (!g || g === "Worldwide") return f;
-    return { ...f, label: `${f.label} — ${g}`, parent: f.parent ? `${f.parent} — ${g}` : null };
+    return { ...f, label: `${f.label}: ${g}`, parent: f.parent ? `${f.parent}: ${g}` : null };
   });
 }
 
 /**
  * KPI tables often print a period-end count next to the change in the period under one label
  * ("Customer relationships": 31,339 and net additions 370). The period-end value is the line;
- * flows under the same label become their own "— net change" line so the two never mix.
+ * flows under the same label become their own ": net change" line so the two never mix.
  */
 export function splitStockAndFlow(facts: IrFact[]): IrFact[] {
   const lk = (f: IrFact, label: string) => `${f.category}|${f.metric}|${f.unit}|${normLabel(label)}`;
@@ -401,7 +401,7 @@ export function splitStockAndFlow(facts: IrFact[]): IrFact[] {
     const own = mixed.has(lk(f, f.label));
     const par = !!f.parent && mixed.has(lk(f, f.parent));
     if (!own && !par) return f;
-    return { ...f, ...(own ? { label: `${f.label} — net change` } : {}), ...(par ? { parent: `${f.parent} — net change` } : {}) };
+    return { ...f, ...(own ? { label: `${f.label}: net change` } : {}), ...(par ? { parent: `${f.parent}: net change` } : {}) };
   });
 }
 
@@ -1145,7 +1145,7 @@ export function splitDoubleBreakdowns(series: IrSeries[], qv?: Map<string, Map<s
       if (ends.every((e) => Math.abs(sumOf(sub, e) - total.cells[e].v) <= tol(e))) split = kids.filter((_, i) => !(mask & (1 << i)));
     }
     if (!split) continue;
-    const alt: IrSeries = { ...total, key: `${total.key}#alt`, label: `${total.label} — second breakdown`, cells: { ...total.cells }, annual: { ...total.annual } };
+    const alt: IrSeries = { ...total, key: `${total.key}#alt`, label: `${total.label}: second breakdown`, cells: { ...total.cells }, annual: { ...total.annual } };
     series.push(alt);
     if (qv?.has(total.key)) qv.set(alt.key, qv.get(total.key)!);
     if (fv?.has(total.key)) fv.set(alt.key, fv.get(total.key)!);

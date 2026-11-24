@@ -6,7 +6,7 @@ import { DASH, IR } from "@/components/ir/typography";
 import { openIrCell } from "@/components/ir/breakdowns";
 import { useSource } from "@/components/source/source-context";
 import { useUnitScale } from "@/hooks/use-preference";
-import { fmtIr } from "@/lib/ir/display";
+import { fmtIr, shownLabel } from "@/lib/ir/display";
 import { fiscalCalendar, fiscalLabel } from "@/lib/ir/periods";
 import { buildMap, type MapLine, type MapTile, type MapZone, type Tone } from "@/lib/ir/map";
 import type { IrPayload } from "@/lib/ir/payload";
@@ -259,7 +259,7 @@ export function IrFinancialMap({ ticker, payload }: { ticker: string; payload: I
           {focus ? (
             <>
               <p className="eyebrow">{tile?.title}</p>
-              <p className="mt-1 font-medium">{focus.label}</p>
+              <p className="mt-1 font-medium">{shownLabel(focus.label)}</p>
               <p className={cn("mt-2", IR.stat)}>
                 {pick != null && focus.values[pick] != null ? fmtIr(focus.values[pick]!, focus.unit, scale) : focus.latest != null ? fmtIr(focus.latest, focus.unit, scale) : DASH}
               </p>

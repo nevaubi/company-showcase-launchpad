@@ -487,3 +487,32 @@ describe("checks are read off the page (review C2)", () => {
     expect(tidyPayload(payload(series, groups, checks)).checks.filter((c) => c.k === "dc")).toEqual([]);
   });
 });
+
+// Shot review p5-shots M2: NVDA's IR kit payload, table "Revenue by market platform" (group root "Revenue"):
+// "OEM and Other" printed without a parent and "OEM & Other" under the total, both 126M for the quarter
+// ended 26 Jan 2025 (values as stored).
+describe("p5-ir4: lines of one table whose names differ only by & and and are one line", () => {
+  const nvda = () => {
+    const root = line("product|revenue|total|usd|", "Revenue", { "2024-10-27": 35_082_000_000, "2025-01-26": 39_331_000_000, "2025-04-27": 44_062_000_000 }, { cat: "product", total: true, bd: "Revenue by market platform" });
+    const a = line("product|revenue|oem and other|usd|total", "OEM and Other", { "2025-01-26": 126_000_000, "2025-04-27": 111_000_000, "2026-01-25": 161_000_000 }, { cat: "product", bd: "Revenue by Market Platform" });
+    const b = line("product|revenue|oem other|usd|total", "OEM & Other", {}, { cat: "product", parent: root.k, bd: "Revenue by markets" });
+    b.q = { "2024-10-27": { v: 97_000_000, d: 1, e: "2024-10-27" }, "2025-01-26": { v: 126_000_000, d: 1, e: "2025-01-26" } };
+    const gaming = line("product|revenue|gaming|usd|total", "Gaming", { "2024-10-27": 3_279_000_000, "2025-01-26": 2_544_000_000 }, { cat: "product", parent: root.k, bd: "Revenue by market platform" });
+    return payload([root, a, b, gaming], [table(root.k, root.k, [gaming.k, a.k, b.k], { cat: "product" })]);
+  };
+
+  it("folds them into one row under the total, each cell keeping its own source", () => {
+    const out = tidyPayload(nvda());
+    const oem = out.series.filter((s) => /^oem/i.test(s.label));
+    expect(oem).toHaveLength(1);
+    expect(oem[0].parent).toBe("product|revenue|total|usd|");
+    expect(Object.fromEntries(Object.entries(oem[0].q).map(([e, c]) => [e, [c.v, c.d]]))).toEqual({ "2024-10-27": [97_000_000, 1], "2025-01-26": [126_000_000, 0], "2025-04-27": [111_000_000, 0], "2026-01-25": [161_000_000, 0] });
+    expect(out.groups.find((g) => g.root === "product|revenue|total|usd|")!.rows.filter((r) => /oem/.test(r.k))).toHaveLength(1);
+  });
+
+  it("two such lines that print different values for one period stay two rows", () => {
+    const p = nvda();
+    p.series[2].q["2025-01-26"] = { v: 120_000_000, d: 1, e: "2025-01-26" };
+    expect(tidyPayload(p).series.filter((s) => /^oem/i.test(s.label))).toHaveLength(2);
+  });
+});
