@@ -14,7 +14,12 @@ const withTimeout = <T,>(p: PromiseLike<T>, ms: number, what: string) =>
 export async function runWatchdog(budgetMs = 1500): Promise<Record<string, unknown>> {
   const started = Date.now();
   const readMs = Math.max(500, budgetMs - 300);
-  const rpc = supabaseAdmin.rpc as unknown as (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  // Called on the client, never through a detached reference: the client's rpc reads `this.rest`, and a
+  // bare `const rpc = supabaseAdmin.rpc` threw "Cannot read properties of undefined (reading 'rest')" on
+  // every production run, so the watchdog never read anything and never alerted.
+  type RpcAnswer = PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  const rpc = (fn: string, args?: Record<string, unknown>): RpcAnswer =>
+    (supabaseAdmin as unknown as { rpc(fn: string, args?: Record<string, unknown>): RpcAnswer }).rpc(fn, args);
   const [fresh, health, states] = await withTimeout(
     Promise.all([
       rpc("data_freshness"),

@@ -165,7 +165,14 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
 
   const client = {
     from: (table: string) => builder(table),
-    rpc: async (fn: string, args?: Record<string, unknown>) => ({ data: opts.rpc?.[fn]?.(args) ?? null, error: opts.rpc?.[fn] ? null : { message: `no rpc ${fn}` } }),
+    // The real client's rpc is a method that reads `this.rest`. Kept that way here, so code that
+    // detaches it (`const rpc = client.rpc`) fails in tests exactly as it does in production.
+    rest: {
+      rpc: async (fn: string, args?: Record<string, unknown>) => ({ data: opts.rpc?.[fn]?.(args) ?? null, error: opts.rpc?.[fn] ? null : { message: `no rpc ${fn}` } }),
+    },
+    rpc(fn: string, args?: Record<string, unknown>) {
+      return this.rest.rpc(fn, args);
+    },
     storage: { from: () => ({ download: async () => ({ data: null, error: { message: "no storage" } }) }) },
   };
   const state = (job: string) => t("job_state").find((r) => r.job === job) as { job: string; cursor: number; paused_reason: string | null; updated_at: string } | undefined;
