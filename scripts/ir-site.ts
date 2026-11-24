@@ -5,7 +5,9 @@
  *   bun scripts/ir-site.ts [--tickers=AAPL,MSFT] [--max=200] [--concurrency=3]
  */
 import { COVERAGE } from "@/lib/coverage";
+import { coverageDetails } from "@/lib/coverage-details.server";
 import { collectIr } from "@/lib/jobs/ir.server";
+import { siteIsGuarded } from "@/lib/ir/source-guard";
 import { args, dbGate, log } from "./lib/supa";
 
 const want = args.tickers?.split(",");
@@ -17,6 +19,11 @@ let stored = 0;
 async function worker() {
   while (next < companies.length) {
     const c = companies[next++];
+    // The site listed for this company is another company's (reviewed list, source-guard.ts): collecting it would store their files.
+    if (siteIsGuarded(c.ticker, c.ir || coverageDetails(c.ticker).ir)) {
+      log(`${c.ticker.padEnd(5)} site: skipped, the listed IR site is another company's`);
+      continue;
+    }
     await dbGate("ir-site");
     const t0 = Date.now();
     try {

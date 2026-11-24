@@ -23,12 +23,30 @@ import { configStrike, configStrikeKey, failureAction, noteAttempt, type Attempt
 export { failureAction, type FailureAction } from "./runner-failure";
 import { closedMessage, providerStates, providerTrip, providerTripError } from "@/lib/jobs/provider-health.server";
 import { routeDecision, type ProviderId } from "@/lib/jobs/provider-health";
+import { GUARD_STATUS, guardedSourceOf, hasGuardedSources } from "@/lib/ir/source-guard";
 import { args, dbGate, dbLatency, log, sb, sleep } from "./supa";
 
 export interface RunnerItem {
   id: string;
   ticker: string;
   label: string;
+  /** the file's source URL when the claim already has it (otherwise looked up for guarded tickers) */
+  source_url?: string | null;
+}
+
+/**
+ * The reviewed wrong-source entry (source-guard.ts) that refuses a claimed IR document, or null.
+ * Only tickers with a listed wrong source cost one lookup by id.
+ */
+export async function refusedClaim(item: RunnerItem): Promise<string | null> {
+  if (!hasGuardedSources(item.ticker)) return null;
+  let url = item.source_url;
+  if (url === undefined) {
+    const { data, error } = await sb.from("ir_documents").select("source_url").eq("id", item.id).maybeSingle();
+    if (error) throw new Error(error.message);
+    url = (data?.source_url as string | null | undefined) ?? null;
+  }
+  return guardedSourceOf(item.ticker, url)?.owner ?? null;
 }
 
 export interface RunUsage {
@@ -197,6 +215,23 @@ export async function runBatch<T extends RunnerItem>(o: RunnerOpts<T>) {
         if (o.idleMinutes == null && active === 0) return;
         if (Date.now() - lastWork > (o.idleMinutes ?? 0) * 60_000 && active === 0) return;
         await sleep(30_000);
+        continue;
+      }
+      // Files of another company (reviewed list) are never read: mark them so they leave the queue.
+      let refusedBy: string | null = null;
+      try {
+        refusedBy = await refusedClaim(item);
+      } catch (e) {
+        reserved--;
+        await o.release(item, null).then(undefined, () => undefined);
+        log(`${o.job}: guard lookup failed (${(e as Error).message.slice(0, 120)}) — item released, retrying in 15s`);
+        await sleep(15_000);
+        continue;
+      }
+      if (refusedBy) {
+        reserved--;
+        await o.release(item, GUARD_STATUS).then(undefined, () => undefined);
+        log(`${item.ticker} ${item.id}: not read, file of ${refusedBy}`);
         continue;
       }
       lastWork = Date.now();

@@ -18,6 +18,7 @@
  *   bun scripts/ir-docling.ts --tickers=CVS,MCK [--phase=dates|files] [--workers=4] [--threads=4] [--force] [--no-docling] [--python=/tmp/dvenv/bin/python]
  * --phase=dates runs step 1 only (seconds per company, so reading can start); --phase=files the rest.
  */
+import { withoutGuardedDocs } from "@/lib/ir/source-guard";
 import { spawn, execFileSync, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
@@ -156,7 +157,8 @@ async function docsOf(ticker: string): Promise<Doc[]> {
     await dbGate("ir-docling");
     const { data, error } = await sb.from("ir_documents").select("id, ticker, kind, ext, path, rendition_path, title, source_url, filed, accn, pages, extract_status").eq("ticker", ticker).range(from, from + 999);
     if (error) throw new Error(error.message);
-    out.push(...((data ?? []) as Doc[]));
+    // Files of another company (reviewed list, source-guard.ts) are never prepared for reading.
+    out.push(...withoutGuardedDocs(ticker, (data ?? []) as Doc[]));
     if ((data ?? []).length < 1000) return out;
   }
 }

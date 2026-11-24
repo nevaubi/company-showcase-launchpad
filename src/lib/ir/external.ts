@@ -1,6 +1,7 @@
 // Converts the partner corpus's IR rows (kpi_definitions, kpi_values, ir_documents) into the IR
 // page payload. Pure: no network, shared by the server function and tests.
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadDoc, PayloadGroup, PayloadPart, PayloadSeries } from "@/lib/ir/payload";
+import { guardedSourceOf, hasGuardedSources } from "@/lib/ir/source-guard";
 
 export interface ExtDef {
   kpi_id: string;
@@ -65,7 +66,11 @@ const secParts = (url: string) => {
   return m ? { accn: `${m[1]}-${m[2]}-${m[3]}`, doc: m[4] } : { accn: null, doc: null };
 };
 
-export function buildExternalPayload(ticker: string, defs: ExtDef[], values: ExtValue[], docs: ExtDoc[]): IrPayload {
+export function buildExternalPayload(ticker: string, defs: ExtDef[], allValues: ExtValue[], allDocs: ExtDoc[]): IrPayload {
+  // Figures read from files the reviewed list shows to be another company's never reach the page.
+  const refused = hasGuardedSources(ticker) ? new Set(allDocs.filter((d) => guardedSourceOf(ticker, d.url)).map((d) => d.id)) : new Set<string>();
+  const docs = refused.size ? allDocs.filter((d) => !refused.has(d.id)) : allDocs;
+  const values = refused.size ? allValues.filter((v) => !refused.has(v.source_id)) : allValues;
   const docIdx = new Map<string, number>();
   const outDocs: PayloadDoc[] = [];
   const docById = new Map(docs.map((d) => [d.id, d]));

@@ -6,7 +6,9 @@
  *   bun scripts/ir-site-daily.ts
  */
 import { COVERAGE } from "@/lib/coverage";
+import { coverageDetails } from "@/lib/coverage-details.server";
 import { collectIr } from "@/lib/jobs/ir.server";
+import { siteIsGuarded } from "@/lib/ir/source-guard";
 import { firecrawlUsage } from "@/lib/web.server";
 import { dbGate, log, sb } from "./lib/supa";
 import { canSpend, IR_SITE_DAILY_CREDITS, IR_SITE_PAUSE_REASON, IR_SITE_PROBE_MS, irSiteOrder, isCreditError } from "./lib/ir-site-plan";
@@ -47,9 +49,16 @@ let companies = 0;
 let rotated = 0;
 for (const t of order) {
   if (!canSpend(used)) { log(`ir-site: daily cap reached (${used}/${IR_SITE_DAILY_CREDITS} credits)`); break; }
+  const c = byTicker.get(t)!;
+  // The site listed for this company is another company's (reviewed list, source-guard.ts): collecting it would store their files.
+  if (siteIsGuarded(t, c.ir || coverageDetails(t).ir)) {
+    log(`${t.padEnd(5)} site: skipped, the listed IR site is another company's`);
+    if (!(recent ?? []).some((r) => r.ticker === t)) { rotated++; await put("ir-site", { cursor: (rotationCursor + rotated) % COVERAGE.length }); }
+    continue;
+  }
   const before = firecrawlUsage.calls;
   try {
-    const r = await collectIr(byTicker.get(t)!, "site", 25);
+    const r = await collectIr(c, "site", 25);
     stored += r.stored; companies++;
     log(`${t.padEnd(5)} site: ${r.stored} files stored (${firecrawlUsage.calls - before} credits)`);
     await put(`ir-site-seen:${t}`, { cursor: r.stored });

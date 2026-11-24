@@ -2,6 +2,7 @@ import { requireAppAccess } from "@/lib/app-access-middleware";
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import type { IrPayload } from "@/lib/ir/payload";
+import { guardedDocIds, withoutGuardedCells, withoutGuardedDocs } from "@/lib/ir/source-guard";
 import type { StoreRef } from "@/lib/ir/store";
 
 const tickerSchema = z.string().regex(/^[A-Z.]{1,6}$/);
@@ -79,8 +80,13 @@ export const getIrData = createServerFn({ method: "GET" })
         return null;
       }
     };
-    const [docs, loaded, images, external] = await Promise.all([loadDocs(), loadSeries(), countImages(), loadExternal()]);
+    const [allDocs, loaded, images, external] = await Promise.all([loadDocs(), loadSeries(), countImages(), loadExternal()]);
     let { series, payload } = loaded;
+    // Files the reviewed list shows to be another company's are not listed, and figures read from
+    // them are dropped from payloads built before the guard existed (source-guard.ts).
+    const refused = guardedDocIds(data.ticker, allDocs as { id: string; source_url: string | null }[]);
+    const docs = refused.size ? allDocs.filter((d) => !refused.has(String(d.id))) : allDocs;
+    if (payload && refused.size) payload = withoutGuardedCells(payload, refused);
     if (external && external.series.length && external.series.length >= (payload?.series.length ?? 0)) {
       const documents = docs.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) }));
       const bytes = new TextEncoder().encode(JSON.stringify({ payload: external, builtAt: external.builtAt, documents, images, pending: 0, source: "partner" }));
@@ -130,7 +136,8 @@ export const getIrImages = createServerFn({ method: "GET" })
       out.push(...(page ?? []));
       if (!page || page.length < 1000) break;
     }
-    return out.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
+    const kept = withoutGuardedDocs(data.ticker, out as { source_url?: string | null }[]) as typeof out;
+    return kept.map(({ rendition_path, ...d }) => ({ ...d, viewable: !!rendition_path || /^html?$/.test(String(d.ext ?? "")) })) as unknown as IrDocRow[];
   });
 
 export interface IrDocRow {

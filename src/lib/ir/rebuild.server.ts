@@ -2,6 +2,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { IrFact, LabelMapEntry } from "@/lib/ir/kpis";
 import { buildPayload, type IrPayload } from "@/lib/ir/payload";
+import { guardedDocIds, hasGuardedSources, withoutGuardedFacts } from "@/lib/ir/source-guard";
 
 export const FACT_COLUMNS = "id, document_id, document_kind, category, metric, breakdown, parent, label, is_total, period_start, period_end, months, value, unit, accn, doc, filed, locator, method";
 
@@ -49,8 +50,17 @@ export async function loadLabelMap(ticker: string): Promise<Record<string, Label
   return rows.length ? Object.fromEntries(rows.map((r) => [r.raw_key, r.canonical])) : undefined;
 }
 
+/** Ids of this company's stored documents that the reviewed wrong-source list refuses. */
+export async function refusedDocs(ticker: string): Promise<Set<string>> {
+  if (!hasGuardedSources(ticker)) return new Set();
+  const docs = await pages<{ id: string; source_url: string | null }>((a, b) => supabaseAdmin.from("ir_documents").select("id, source_url").eq("ticker", ticker).order("id").range(a, b) as never);
+  return guardedDocIds(ticker, docs);
+}
+
 export async function rebuildCompany(ticker: string, opts: { dry?: boolean } = {}): Promise<IrPayload | null> {
-  const [facts, map] = await Promise.all([loadFacts(ticker), loadLabelMap(ticker)]);
+  const [stored, map, refused] = await Promise.all([loadFacts(ticker), loadLabelMap(ticker), refusedDocs(ticker)]);
+  // Figures read from files of another company (reviewed list, source-guard.ts) never enter the series.
+  const facts = withoutGuardedFacts(stored, refused);
   if (!facts.length) return null;
   const payload = buildPayload(ticker, facts, map);
   if (!opts.dry) {
