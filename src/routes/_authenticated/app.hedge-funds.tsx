@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { mostUnusual, readAuctions, seriesStats, zLabel, type Point } from "@/lib/hedge/core";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery, type HfPayload, type HfSeries } from "@/lib/hedge/query";
+import { fmtHf, yoyText } from "@/lib/hedge/format";
 import { fmtSigned } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/app/hedge-funds")({
@@ -27,21 +28,6 @@ export const Route = createFileRoute("/_authenticated/app/hedge-funds")({
 });
 
 const group = (s: HfSeries) => s.name.split(":")[0].trim();
-
-export function fmtHf(v: number, unit: string) {
-  if (/dollars/i.test(unit)) {
-    const a = Math.abs(v);
-    return a >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : a >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : a >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${v.toLocaleString()}`;
-  }
-  if (/percent/i.test(unit)) return `${v.toFixed(Math.abs(v) < 10 ? 2 : 1)}%`;
-  if (unit === "ratio") return `${v.toFixed(2)}×`;
-  return v.toLocaleString(undefined, { maximumFractionDigits: 2 });
-}
-
-function yoyText(s: ReturnType<typeof seriesStats>, unit: string) {
-  if (!s?.yoy) return null;
-  return s.yoy.pct != null ? `${fmtSigned(s.yoy.pct, 1)}% y/y` : `${s.yoy.abs! >= 0 ? "+" : ""}${unit === "ratio" ? s.yoy.abs!.toFixed(2) : fmtHf(s.yoy.abs!, unit)} y/y`;
-}
 
 const TABS = [
   { id: "overview", label: "Leverage & crowding" },
