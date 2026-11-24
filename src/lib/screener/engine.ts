@@ -635,25 +635,33 @@ export function fmtField(f: FieldDef | undefined, v: unknown, compact = false): 
   if (v == null || v === "") return "\u2013";
   if (typeof v === "boolean") return v ? "Yes" : "No";
   if (typeof v !== "number" || !Number.isFinite(v)) return String(v);
-  const s = v < 0 ? MINUS : "";
   const a = Math.abs(v);
   const trim = (x: string) => (compact ? x.replace(/\.0+(?=\D*$)/, "").replace(/(\.\d*?)0+(?=\D*$)/, "$1") : x);
+  // No sign on a value that rounds to zero ("0.0%", not "−0.0%").
+  const sg = (t: string) => `${v < 0 && /[1-9]/.test(t) ? MINUS : ""}${t}`;
   const u = f?.u;
   if (u === "usd") {
-    if (a >= 1e12) return `${s}$${trim(grp(a / 1e12, 2))}T`;
-    if (a >= 1e9) return `${s}$${trim(grp(a / 1e9, 1))}B`;
-    if (a >= 1e6) return `${s}$${grp(a / 1e6, 0)}M`;
-    if (a >= 1e4) return `${s}$${grp(a / 1e3, 0)}K`;
-    return `${s}$${trim(grp(a, 2))}`;
+    // Trillions only from 999.95B up, so nothing prints as $1,000.0B; share prices keep cents (NVR $5,468.04).
+    if (a >= 999.95e9) return sg(`$${trim(grp(a / 1e12, 2))}T`);
+    if (a >= 1e9) return sg(`$${trim(grp(a / 1e9, 1))}B`);
+    if (a >= 1e6) return sg(`$${grp(a / 1e6, 0)}M`);
+    if (a >= 1e5) return sg(`$${grp(a / 1e3, 0)}K`);
+    return sg(`$${trim(grp(a, 2))}`);
   }
-  if (u === "pct") return `${s}${trim(grp(a * 100, 1))}%`;
-  if (u === "pctl") return `${s}${Math.round(a * 100)}th`;
-  if (u === "x") return `${s}${trim(grp(a, 1))}\u00d7`;
-  if (u === "corr") return `${s}${a.toFixed(2)}`;
-  if (u === "days") return `${s}${Math.round(a)}d`;
-  if (u === "score") return `${s}${trim(grp(a, a >= 10 ? 0 : 1))}`;
-  if (Number.isInteger(v) || a >= 1000) return `${s}${grp(a, 0)}`;
-  return `${s}${trim(grp(a, a < 10 ? 2 : 1))}`;
+  if (u === "pct") return sg(`${trim(grp(a * 100, 1))}%`);
+  if (u === "pctl") return sg(ordinal(Math.round(a * 100)));
+  if (u === "x") return sg(`${trim(grp(a, 1))}\u00d7`);
+  if (u === "corr") return sg(a.toFixed(2));
+  if (u === "days") return sg(`${Math.round(a)}d`);
+  if (u === "score") return sg(Number.isInteger(a) ? grp(a, 0) : trim(grp(a, a >= 10 ? 0 : 1)));
+  if (Number.isInteger(v) || a >= 1000) return sg(grp(a, 0));
+  return sg(trim(grp(a, a < 10 ? 2 : 1)));
+}
+/** 1st, 2nd, 3rd, 4th, 11th, 12th, 13th, 21st. */
+export function ordinal(n: number): string {
+  const t = n % 100;
+  const sfx = t >= 11 && t <= 13 ? "th" : n % 10 === 1 ? "st" : n % 10 === 2 ? "nd" : n % 10 === 3 ? "rd" : "th";
+  return `${n}${sfx}`;
 }
 const OPTXT: Record<string, string> = {
   ">": ">",

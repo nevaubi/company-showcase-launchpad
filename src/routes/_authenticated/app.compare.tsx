@@ -17,6 +17,7 @@ import { fmtField, type Row as SRow } from "@/lib/screener/engine";
 import type { Cell, CompanyDataset, DerivedPart, Statement } from "@/lib/financials/types";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { alignAnnual } from "@/lib/screener/annual";
 
 const search = z.object({ t: z.string().optional() });
 
@@ -128,7 +129,7 @@ function Compare() {
     [t],
   );
   const setTickers = (next: string[]) =>
-    navigate({ search: { t: next.length ? next.join(",") : undefined }, replace: true });
+    navigate({ search: { t: next.length ? next.join(",") : undefined }, replace: true, resetScroll: false });
   const { F, rows, uni } = useScreenRows(true);
   const byTk = useMemo(() => new Map(rows.map((r) => [r.ticker, r])), [rows]);
   const [q, setQ] = useState("");
@@ -623,22 +624,25 @@ function RevenueHistory({
 }: {
   tickers: string[];
   color: (t: string) => string;
-  uni: { ticker: string; f?: { revenueHistory: [string, number][] } }[];
+  uni: { ticker: string; fiscalYearEnd?: string | null; f?: { revenueHistory: [string, number][] } }[];
 }) {
-  const hist = tickers.map((tk) => ({
-    tk,
-    h: uni.find((c) => c.ticker === tk)?.f?.revenueHistory ?? [],
-  }));
-  const n = Math.max(0, ...hist.map((x) => x.h.length));
-  if (!n) return null;
-  // Column labels from the company with the longest history; others are aligned to their latest year.
-  const longest = hist.reduce((a, b) => (b.h.length > a.h.length ? b : a)).h;
-  const sameYears = hist.every(({ h }) => h.length === 0 || h.at(-1)?.[0] === longest.at(-1)?.[0]);
+  const table = alignAnnual(
+    tickers.map((tk) => {
+      const c = uni.find((x) => x.ticker === tk);
+      return { ticker: tk, fiscalYearEnd: c?.fiscalYearEnd, history: c?.f?.revenueHistory ?? [] };
+    }),
+  );
+  if (!table.years.length) return null;
+  const ends = [...new Set(table.rows.map((r) => r.yearEnd).filter(Boolean))];
   return (
     <div data-section="Annual revenue">
     <Panel
       title="Annual revenue"
-      subtitle={sameYears ? "Last ten fiscal years from 10-K filings; fiscal years end in different months" : "Last ten fiscal years from 10-K filings, aligned on each company's latest year"}
+      subtitle={
+        table.sameYearEnd
+          ? `Fiscal years from 10-K filings${ends[0] ? `, all ending in ${ends[0]}` : ""}; a dash where a company filed no year`
+          : "Fiscal years from 10-K filings, placed under the calendar year each one ended; each company's year-end is under its name"
+      }
       collapse={false}
     >
       <div className="overflow-x-auto scrollbar-thin">
@@ -648,12 +652,9 @@ function RevenueHistory({
               <th className="px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 Company
               </th>
-              {Array.from({ length: n }, (_, i) => (
-                <th
-                  key={i}
-                  className="px-3 py-2 text-right text-[11px] font-medium text-muted-foreground"
-                >
-                  {sameYears ? longest[i]?.[0] : i === n - 1 ? "Latest FY" : `FY \u2212${n - 1 - i}`}
+              {table.years.map((y) => (
+                <th key={y} className="px-3 py-2 text-right text-[11px] font-medium text-muted-foreground">
+                  {table.sameYearEnd ? `FY${y}` : `Ended ${y}`}
                 </th>
               ))}
               <th className="px-3 py-2 text-right text-[11px] font-medium text-muted-foreground">
@@ -662,38 +663,31 @@ function RevenueHistory({
             </tr>
           </thead>
           <tbody>
-            {hist.map(({ tk, h }) => {
-              const pad = Array.from({ length: n - h.length }, () => null);
-              const first = h.find(([, v]) => v > 0),
-                last = h.at(-1);
-              const yrs = first && last ? h.length - 1 - h.indexOf(first) : 0;
-              const cagr =
-                first && last && yrs > 0 && last[1] > 0
-                  ? (last[1] / first[1]) ** (1 / yrs) - 1
-                  : null;
-              return (
-                <tr key={tk} className="border-b last:border-0">
-                  <td className="px-3 py-1.5">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="size-2 shrink-0 rounded-full" style={{ background: color(tk) }} aria-hidden />
-                      <TickerMark ticker={tk} />
-                    </span>
+            {table.rows.map(({ ticker: tk, yearEnd, cells, cagr }) => (
+              <tr key={tk} className="border-b last:border-0">
+                <td className="px-3 py-1.5">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="size-2 shrink-0 rounded-full" style={{ background: color(tk) }} aria-hidden />
+                    <TickerMark ticker={tk} />
+                    {!table.sameYearEnd && yearEnd && (
+                      <span className="text-[11px] text-muted-foreground">FY ends {yearEnd}</span>
+                    )}
+                  </span>
+                </td>
+                {cells.map((x, i) => (
+                  <td
+                    key={table.years[i]}
+                    className={`num px-3 py-1.5 text-right tabular-nums${x ? "" : " text-muted-foreground"}`}
+                    title={x ? `${x.label}, ended ${fmtDate(x.end)}` : `No fiscal year ended in ${table.years[i]}`}
+                  >
+                    {x ? fmtUsd(x.value) : "\u2013"}
                   </td>
-                  {[...pad, ...h].map((x, i) => (
-                    <td
-                      key={i}
-                      className="num px-3 py-1.5 text-right tabular-nums"
-                      title={x ? x[0] : undefined}
-                    >
-                      {x ? fmtUsd(x[1]) : ""}
-                    </td>
-                  ))}
-                  <td className="num px-3 py-1.5 text-right tabular-nums">
-                    {cagr == null ? "–" : `${cagr < 0 ? "\u2212" : ""}${Math.abs(cagr * 100).toFixed(1)}%`}
-                  </td>
-                </tr>
-              );
-            })}
+                ))}
+                <td className="num px-3 py-1.5 text-right tabular-nums">
+                  {cagr == null ? "\u2013" : `${cagr < 0 ? "\u2212" : ""}${Math.abs(cagr * 100).toFixed(1)}%`}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptySpec, fmtField, run, validate, type FieldDef, type Row, type Spec } from "./engine";
-import { buildFilter, decodeSpec, encodeSpec, fieldGroups, filterImpact, formatInput, parseInput, toCsv } from "./present";
-import { SERIES_FIELDS, seriesAsOf, withSeries } from "./series";
+import { applicable, buildFilter, decodeSpec, encodeSpec, fieldGroups, filterImpact, searchAlone, formatInput, parseInput, readShared, screenSearch, SHARE_MAX, toCsv } from "./present";
+import { SERIES_FIELDS, seriesAsOf, seriesRange, withSeries } from "./series";
 
 const fields: FieldDef[] = [
   { id: "price", g: "px", n: "Price", u: "usd", d: "Last close" },
@@ -69,6 +69,27 @@ describe("filterImpact", () => {
     expect(imp.map((x) => [x.alone, x.without])).toEqual([[1, 2], [2, 1]]);
     expect(imp[0].text).toBe("Operating margin > 25%");
   });
+
+  it("counts with the find text applied, so removing a filter never promises rows the search hides", () => {
+    const spec: Spec = { ...emptySpec(), filters: [{ field: "om", op: ">", value: 0.25 }] };
+    expect(run(rows, spec, F, "zzz").rows).toHaveLength(0);
+    expect(filterImpact(rows, spec, F, "zzz").map((x) => x.without)).toEqual([0]);
+    expect(searchAlone(rows, spec, F, "zzz")).toBe(0);
+    expect(searchAlone(rows, spec, F, "AAA")).toBe(1);
+  });
+});
+
+describe("applicable", () => {
+  it("sets aside filters and a sort on fields that are not loaded instead of failing every row", () => {
+    const spec: Spec = { ...emptySpec(), filters: [{ field: "dv20", op: ">", value: 1e8 }, { field: "om", op: ">", value: 0.25 }], sort: { field: "short_vol5", dir: "desc" } };
+    const a = applicable(spec, F);
+    expect(a.missing).toEqual([0]);
+    expect(a.spec.filters).toEqual([{ field: "om", op: ">", value: 0.25 }]);
+    expect(a.spec.sort).toBeNull();
+    expect(run(rows, a.spec, F).rows.length).toBeGreaterThan(0);
+    const ok: Spec = { ...emptySpec(), filters: [{ field: "om", op: ">", value: 0.1 }] };
+    expect(applicable(ok, F).spec).toBe(ok);
+  });
 });
 
 describe("toCsv", () => {
@@ -111,5 +132,48 @@ describe("series fields", () => {
     expect(withSeries(rows[0], undefined)).toBe(rows[0]);
     expect(seriesAsOf([{ end_date: "2026-11-19" }, { end_date: "2026-11-20" }])).toBe("2026-11-20");
     expect(SERIES_FIELDS.map((f) => f.id)).toEqual(["dv20", "short_vol5"]);
+  });
+});
+
+describe("shared screen links", () => {
+  it("never throws on the values the router can hand over", () => {
+    expect(screenSearch({})).toEqual({});
+    expect(screenSearch({ screen: 123 })).toEqual({ screen: "123" });
+    expect(screenSearch({ screen: true })).toEqual({ screen: "true" });
+    expect(screenSearch({ screen: { a: 1 } })).toEqual({ screen: '{"a":1}' });
+    expect(screenSearch({ screen: "x".repeat(20_000) }).screen).toHaveLength(20_000);
+  });
+  it("opens a long ticker list that fits, and resets with a reason when it does not", () => {
+    const tickers = Array.from({ length: 500 }, (_, i) => `T${i.toString().padStart(4, "0")}`);
+    const code = encodeSpec({ ...emptySpec(), tickers } as Spec);
+    expect(code.length).toBeGreaterThan(4000);
+    expect(code.length).toBeLessThan(SHARE_MAX);
+    const ok = readShared(code);
+    expect(ok.ok && (ok.raw.tickers as string[]).length).toBe(500);
+    const long = readShared("A".repeat(SHARE_MAX + 1));
+    expect(long.ok).toBe(false);
+    expect(!long.ok && long.notice).toMatch(/too long/);
+    for (const bad of ["123", "true", '{"a":1}', "abc"]) expect(readShared(bad).ok).toBe(false);
+  });
+});
+
+describe("seriesRange", () => {
+  it("states the oldest and newest scan date", () => {
+    expect(seriesRange([{ end_date: "2026-11-23" }, { end_date: "2026-11-16" }, { end_date: "2026-11-20" }])).toEqual({ from: "2026-11-16", to: "2026-11-23" });
+    expect(seriesRange([])).toBeNull();
+  });
+});
+
+describe("fmtField edge cases", () => {
+  it("keeps cents on high share prices, never prints a signed zero, and writes ordinals and whole scores", () => {
+    expect(fmtField(F.get("price"), 5468.04)).toBe("$5,468.04");
+    expect(fmtField(F.get("mcap"), 999.97e9)).toBe("$1.00T");
+    expect(fmtField(F.get("om"), -0.0001)).toBe("0.0%");
+    expect(fmtField(F.get("om"), -0.018)).toBe("−1.8%");
+    const pctl: FieldDef = { id: "r", g: "x", n: "Rank", u: "pctl", d: "" };
+    expect([0.01, 0.02, 0.03, 0.11, 0.21].map((v) => fmtField(pctl, v))).toEqual(["1st", "2nd", "3rd", "11th", "21st"]);
+    const score: FieldDef = { id: "s", g: "x", n: "Score", u: "score", d: "" };
+    expect(fmtField(score, 7)).toBe("7");
+    expect(fmtField(score, 7.25)).toBe("7.3");
   });
 });

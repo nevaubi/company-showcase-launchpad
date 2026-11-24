@@ -39,9 +39,12 @@ export function columnScale(k: MatrixKpi, values: number[]): ColumnScale {
 /** A value in its column's scale, without the unit the head already states. */
 export function fmtInScale(v: number | null | undefined, s: ColumnScale): string {
   if (v == null || !Number.isFinite(v)) return "–";
-  const x = v / s.div;
-  const d = s.div === 1 && s.head === "count" ? 0 : Math.abs(x) >= 1000 ? 0 : s.decimals;
-  return `${v < 0 ? MINUS : ""}${fix(Math.abs(x), d)}`;
+  const x = Math.abs(v / s.div);
+  let d = s.div === 1 && s.head === "count" ? 0 : x >= 1000 ? 0 : s.decimals;
+  // A small amount in a scaled column ($45M under $B) keeps two significant digits instead of printing 0.0.
+  if (s.div > 1 && x > 0 && x < 1) d = Math.min(6, Math.max(d, 1 - Math.floor(Math.log10(x))));
+  const t = fix(x, d);
+  return `${v < 0 && /[1-9]/.test(t) ? MINUS : ""}${t}`;
 }
 
 /** Year-over-year change: percentage points for rates, percent for amounts. */
@@ -68,3 +71,42 @@ export function modalPeriod(points: (MatrixPoint | null | undefined)[]): string 
 
 /** Short period label for a cell ("Q2 2026" → "Q2 26", "FY2025" → "FY25"). */
 export const shortPeriod = (label: string) => label.replace(/(19|20)(\d{2})(?!\d)/, "$2");
+
+const DAY = 864e5;
+
+/** The period end most points in a column carry (ties go to the later end). */
+export function modalEnd(points: (MatrixPoint | null | undefined)[]): string | null {
+  const n = new Map<string, number>();
+  for (const p of points) if (p) n.set(p[0], (n.get(p[0]) ?? 0) + 1);
+  let best: string | null = null;
+  let bc = -1;
+  for (const [end, c] of n) if (c > bc || (c === bc && best != null && end > best)) [best, bc] = [end, c];
+  return best;
+}
+
+/** Days from which a period end counts as a different period than the column's (quarter ends drift by a few days). */
+export const OFF_PERIOD_DAYS = 45;
+/** Days after which a value is marked as old. */
+export const STALE_MARK_DAYS = 200;
+
+/**
+ * The small label a cell carries, or null when it is the column's own period and recent.
+ * A cell is an exception when its fiscal label differs from the column's or its period ended more than
+ * 45 days from the column's most common end (a "Q3 2026" that ended in March under a September "Q3 2026").
+ * An old value always carries its label, so the stale colour is never lost.
+ */
+export function periodMark(
+  p: MatrixPoint,
+  col: { period: string | null; end: string | null },
+  now = Date.now(),
+): { text: string; stale: boolean } | null {
+  const stale = (now - Date.parse(p[0])) / DAY > STALE_MARK_DAYS;
+  const labelOff = col.period != null && p[2] !== col.period;
+  const endOff = col.end != null && Math.abs(Date.parse(p[0]) - Date.parse(col.end)) / DAY > OFF_PERIOD_DAYS;
+  if (!labelOff && !endOff && !stale) return null;
+  if (labelOff || !endOff) return { text: shortPeriod(p[2]), stale };
+  // Same label, different end: name the month the period ended.
+  const d = new Date(p[0]);
+  const text = `${d.toLocaleString("en-US", { month: "short", timeZone: "UTC" })} ${String(d.getUTCFullYear()).slice(2)}`;
+  return { text, stale };
+}

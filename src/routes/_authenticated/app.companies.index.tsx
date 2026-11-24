@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { memo, useMemo, useState, type KeyboardEvent } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { memo, useMemo, useState, type FocusEvent, type KeyboardEvent } from "react";
 import { ArrowDown, ArrowUp, Search, Star } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { TickerMark } from "@/components/app/ticker";
@@ -16,7 +16,7 @@ import { useToggleFollow } from "@/lib/workspace";
 import { useSessionState } from "@/lib/use-session-state";
 import { cn } from "@/lib/utils";
 import { fmtField, type FieldDef } from "@/lib/screener/engine";
-import { ROW_H, useWindowRange } from "@/lib/screener/window";
+import { ROW_H, useRowFocus, useWindowRange } from "@/lib/screener/window";
 
 export const Route = createFileRoute("/_authenticated/app/companies/")({
   head: () => ({
@@ -65,16 +65,20 @@ interface CRow {
   filed: { form: string; filed: string } | null;
 }
 
+// Fixed column widths (table-layout: fixed): the table's width no longer depends on which rows the window
+// has rendered, so it fits, and keeps its page-level sticky head, from a 976 px wrapper (1280 px screens) up.
+const W: Record<string, number> = { follow: 36, ticker: 192, sector: 112, price: 72, chg: 64, mcap: 76, revenueTTM: 72, growth: 64, gm: 64, pe: 76, fcf: 64, filed: 84 };
+const COMPANY_TABLE_W = Object.values(W).reduce((a, b) => a + b, 0);
 const COLS: { k: SortKey; l: string; title: string; first?: 1 | -1 }[] = [
   { k: "price", l: "Price", title: "Live price where quoted, otherwise the last close" },
   { k: "chg", l: "Day", title: "Change from the previous close" },
-  { k: "mcap", l: "Market cap", title: "Price × shares outstanding from the latest 10-K or 10-Q cover page" },
+  { k: "mcap", l: "Mkt cap", title: "Price × shares outstanding from the latest 10-K or 10-Q cover page" },
   { k: "revenueTTM", l: "Revenue", title: "Sum of the last four reported quarters (SEC filings)" },
   { k: "growth", l: "Rev. YoY", title: "Latest quarter vs the same quarter a year earlier" },
   { k: "gm", l: "Gross mgn", title: "Gross profit / revenue, trailing four quarters" },
   { k: "pe", l: "P/E", title: "Price / diluted EPS, trailing four quarters; empty when EPS is not positive", first: 1 },
-  { k: "fcf", l: "FCF yield", title: "Free cash flow (trailing four quarters) / market cap" },
-  { k: "filed", l: "Last filing", title: "Latest 10-K or 10-Q" },
+  { k: "fcf", l: "FCF yld", title: "Free cash flow (trailing four quarters) / market cap" },
+  { k: "filed", l: "Filed", title: "Latest 10-K or 10-Q; year on hover" },
 ];
 
 function Companies() {
@@ -149,22 +153,17 @@ function Companies() {
   }, [rows, sort, sector, group, groupOk, following, q, follow]);
 
   const [start, end] = useWindowRange(body, sorted.length);
+  const nav = useMemo(() => {
+    const at = new Map(sorted.map((r, i) => [r.ticker, i]));
+    return { keys: sorted.map((r) => r.ticker), pos: (k: string) => at.get(k) ?? 0 };
+  }, [sorted]);
+  const focus = useRowFocus(body, nav.keys, nav.pos, "fu:companies:focus");
+  const firstKey = sorted[start]?.ticker;
+  const openRow = useMemo(() => (t: string) => void navigate({ to: "/app/companies/$ticker", params: { ticker: t } }), [navigate]);
   const head = cn("border-b bg-card", fits && `sticky ${STICKY} z-20`);
   const toggleSort = (k: SortKey, first: 1 | -1 = -1) => setSort((s) => ({ key: k, dir: s.key === k ? (-s.dir as 1 | -1) : first }));
   const filtersOn = q || sector !== "All" || group !== "All" || following;
-  const SortHead = ({ k, children, title, className, first }: { k: SortKey; children: React.ReactNode; title?: string; className?: string; first?: 1 | -1 }) => (
-    <th scope="col" aria-sort={sort.key === k ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn(head, "px-3 py-1.5 align-bottom", className)}>
-      <button
-        type="button"
-        title={title}
-        onClick={() => toggleSort(k, first)}
-        className={cn("inline-flex items-center gap-1 rounded-sm text-[11px] font-medium leading-4 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort.key === k ? "text-foreground" : "text-muted-foreground")}
-      >
-        {children}
-        {sort.key === k && (sort.dir === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
-      </button>
-    </th>
-  );
+  const shCtx: SortCtx = { sort, head, toggleSort };
 
   return (
     <div>
@@ -236,21 +235,29 @@ function Companies() {
         </div>
       )}
       <section data-section="Company list" className="min-w-0 rounded-md border bg-card shadow-paper">
-        <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")}>
-          <table className={cn("border-separate border-spacing-0 text-[13px] leading-5", fits ? "w-full" : "w-max min-w-full")}>
+        <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")} style={{ overflowAnchor: "none" }}>
+          <table className="w-full table-fixed border-separate border-spacing-0 text-[13px] leading-5" style={{ minWidth: COMPANY_TABLE_W }}>
+            <colgroup>
+              <col style={{ width: W.follow }} />
+              <col style={{ width: W.ticker }} />
+              <col style={{ width: W.sector }} />
+              {COLS.map((c) => (
+                <col key={c.k} style={{ width: W[c.k] }} />
+              ))}
+            </colgroup>
             <thead>
               <tr>
-                <th scope="col" className={cn(head, "w-9 px-0 py-1.5")}>
+                <th scope="col" className={cn(head, "px-0 py-1.5")}>
                   <span className="sr-only">Follow</span>
                 </th>
-                <SortHead k="ticker" first={1} className={cn("left-0 z-30 min-w-56 border-r text-left", !fits && "sticky")}>
+                <SortHead ctx={shCtx} k="ticker" first={1} className={cn("left-0 z-30 border-r px-3 text-left", !fits && "sticky")}>
                   Company
                 </SortHead>
-                <SortHead k="sector" first={1} className="text-left" title="Industry group; sector on hover. Sorts by sector, then group">
+                <SortHead ctx={shCtx} k="sector" first={1} className="text-left" title="Industry group; sector on hover. Sorts by sector, then group">
                   Group
                 </SortHead>
                 {COLS.map((c) => (
-                  <SortHead key={c.k} k={c.k} title={c.title} first={c.first} className={c.k === "filed" ? "text-left" : "text-right"}>
+                  <SortHead ctx={shCtx} key={c.k} k={c.k} title={c.title} first={c.first} className={c.k === "filed" ? "text-left" : "text-right"}>
                     {c.l}
                   </SortHead>
                 ))}
@@ -271,7 +278,7 @@ function Companies() {
                 </tr>
               )}
               {sorted.slice(start, end).map((r) => (
-                <CompanyRow key={r.ticker} r={r} sticky={!fits} sortKey={sort.key} followed={follow.isFollowed(r.ticker)} pending={follow.pending} onFollow={follow.toggle} onOpen={(t) => navigate({ to: "/app/companies/$ticker", params: { ticker: t } })} />
+                <CompanyRow key={r.ticker} r={r} sticky={!fits} sortKey={sort.key} followed={follow.isFollowed(r.ticker)} pending={follow.pending} onFollow={follow.toggle} onOpen={openRow} tab={focus.tabIndex(r.ticker, firstKey)} onRowFocus={focus.onFocus} onRowBlur={focus.onBlur} onRowKey={focus.onKey} />
               ))}
               {end < sorted.length && (
                 <tr aria-hidden style={{ height: (sorted.length - end) * ROW_H }}>
@@ -296,22 +303,13 @@ function Companies() {
   );
 }
 
-function rowKeys(e: KeyboardEvent<HTMLTableRowElement>, open: () => void) {
-  if (e.target !== e.currentTarget) return;
-  if (e.key === "Enter") return open();
-  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  e.preventDefault();
-  const el = (e.key === "ArrowDown" ? e.currentTarget.nextElementSibling : e.currentTarget.previousElementSibling) as HTMLElement | null;
-  if (el?.dataset.row) el.focus();
-}
-
-const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pending, onFollow, onOpen }: { r: CRow; sticky: boolean; sortKey: SortKey; followed: boolean; pending: boolean; onFollow: (t: string) => void; onOpen: (t: string) => void }) {
+const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pending, onFollow, onOpen, tab, onRowFocus, onRowBlur, onRowKey }: { r: CRow; sticky: boolean; sortKey: SortKey; followed: boolean; pending: boolean; onFollow: (t: string) => void; onOpen: (t: string) => void; tab: number; onRowFocus: (key: string) => void; onRowBlur: (e: FocusEvent<HTMLElement>) => void; onRowKey: (e: KeyboardEvent<HTMLElement>, key: string, open: () => void) => void }) {
   const num = (k: SortKey, text: string, extra?: string) => (
-    <td className={cn("num whitespace-nowrap border-b px-3 py-1 text-right group-hover:bg-secondary", sortKey === k && "font-medium", extra)}>{text}</td>
+    <td className={cn("num overflow-hidden text-ellipsis whitespace-nowrap border-b px-2 py-1 text-right group-hover:bg-secondary", sortKey === k && "font-medium", extra)}>{text}</td>
   );
   return (
-    <tr data-row tabIndex={0} onClick={() => onOpen(r.ticker)} onKeyDown={(e) => rowKeys(e, () => onOpen(r.ticker))} aria-label={`${r.ticker} ${r.name}`} className="group h-[29px] cursor-pointer focus-visible:outline-none focus-visible:[&>td]:bg-highlight-soft [&>td]:transition-colors [&>td]:duration-150">
-      <td className="w-9 border-b px-1 text-center group-hover:bg-secondary">
+    <tr data-row data-key={r.ticker} tabIndex={tab} onClick={() => onOpen(r.ticker)} onFocus={() => onRowFocus(r.ticker)} onBlur={onRowBlur} onKeyDown={(e) => onRowKey(e, r.ticker, () => onOpen(r.ticker))} aria-label={`${r.ticker} ${r.name}`} className="group h-[29px] cursor-pointer focus-visible:outline-none focus-visible:[&>td]:bg-highlight-soft [&>td]:transition-colors [&>td]:duration-150">
+      <td className="border-b px-1 text-center group-hover:bg-secondary">
         <button
           type="button"
           disabled={pending}
@@ -319,6 +317,7 @@ const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pend
             e.stopPropagation();
             onFollow(r.ticker);
           }}
+          tabIndex={tab}
           aria-pressed={followed}
           aria-label={followed ? `Unfollow ${r.ticker}` : `Follow ${r.ticker}`}
           className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -326,10 +325,13 @@ const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pend
           <Star className={cn("size-3.5", followed && "fill-chart-2 text-chart-2")} />
         </button>
       </td>
-      <td className={cn("left-0 z-10 w-56 max-w-56 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary", sticky && "sticky")}>
-        <TickerMark ticker={r.ticker} name={r.name} link={false} logoSrc={r.logo} className="min-w-0" />
+      <td className={cn("left-0 z-10 overflow-hidden border-b border-r bg-card px-3 py-1 group-hover:bg-secondary", sticky && "sticky")}>
+        {/* A real link (open in a new tab, the assistant can follow it) outside the tab order: the row is the tab stop. */}
+        <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }} tabIndex={-1} onClick={(e) => e.stopPropagation()} className="flex min-w-0 rounded-sm hover:underline">
+          <TickerMark ticker={r.ticker} name={r.name} link={false} logoSrc={r.logo} className="min-w-0" />
+        </Link>
       </td>
-      <td className="max-w-40 truncate whitespace-nowrap border-b px-3 py-1 text-[11px] text-muted-foreground group-hover:bg-secondary" title={`${r.sector} · ${r.group}`}>
+      <td className="truncate whitespace-nowrap border-b px-2 py-1 text-[11px] text-muted-foreground group-hover:bg-secondary" title={`${r.sector} · ${r.group}`}>
         {r.group}
       </td>
       {num("price", fmtField(F_USD, r.price))}
@@ -340,10 +342,10 @@ const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pend
       {num("gm", fmtField(F_PCT, r.gm))}
       {num("pe", fmtField(F_X, r.pe))}
       {num("fcf", fmtField(F_PCT, r.fcf))}
-      <td className={cn("whitespace-nowrap border-b px-3 py-1 text-[11px] text-muted-foreground group-hover:bg-secondary", sortKey === "filed" && "text-foreground")}>
+      <td className={cn("overflow-hidden whitespace-nowrap border-b px-2 py-1 text-[11px] text-muted-foreground group-hover:bg-secondary", sortKey === "filed" && "text-foreground")} title={r.filed ? `${r.filed.form} filed ${fmtDate(r.filed.filed)}` : undefined}>
         {r.filed ? (
           <>
-            <span className="font-medium text-foreground">{r.filed.form}</span> {fmtDate(r.filed.filed, { month: "short", day: "numeric", year: "2-digit" })}
+            <span className="font-medium text-foreground">{r.filed.form}</span> {fmtDate(r.filed.filed, { month: "short", day: "numeric" })}
           </>
         ) : (
           "–"
@@ -352,3 +354,23 @@ const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pend
     </tr>
   );
 });
+
+type SortCtx = { sort: { key: SortKey; dir: 1 | -1 }; head: string; toggleSort: (k: SortKey, first?: 1 | -1) => void };
+
+// A module-level component, so sorting re-renders the head button instead of remounting it (focus stays on it).
+function SortHead({ ctx, k, children, title, className, first }: { ctx: SortCtx; k: SortKey; children: React.ReactNode; title?: string; className?: string; first?: 1 | -1 }) {
+  const { sort, head, toggleSort } = ctx;
+  return (
+    <th scope="col" aria-sort={sort.key === k ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn(head, "px-2 py-1.5 align-bottom", className)}>
+      <button
+        type="button"
+        title={title}
+        onClick={() => toggleSort(k, first)}
+        className={cn("inline-flex items-center gap-1 rounded-sm text-[11px] font-medium leading-4 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort.key === k ? "text-foreground" : "text-muted-foreground")}
+      >
+        {children}
+        {sort.key === k && (sort.dir === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
+      </button>
+    </th>
+  );
+}

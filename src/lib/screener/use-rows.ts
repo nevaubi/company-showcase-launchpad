@@ -11,7 +11,7 @@ import {
   type Row,
   type ScreenerFile,
 } from "./engine";
-import { SERIES_FIELDS, seriesAsOf, withSeries, type SeriesRow } from "./series";
+import { SERIES_FIELDS, seriesAsOf, seriesRange, withSeries, type SeriesRow } from "./series";
 import { getScreenSeries } from "./series.functions";
 
 export const screenerFileQuery = {
@@ -66,5 +66,8 @@ export function useScreenRows(includeBasic = true) {
     return [...rich, ...extra];
   }, [file.data, uni.data, quotes.data, series.data, includeBasic]);
   const seriesDate = useMemo(() => seriesAsOf(series.data ?? []), [series.data]);
-  return { file, uni, F, rows, seriesDate };
+  const seriesSpan = useMemo(() => seriesRange(series.data ?? []), [series.data]);
+  /** The series query has answered (rows or an error), so the field map is final. */
+  const seriesSettled = series.isFetched || series.isError;
+  return { file, uni, F, rows, seriesDate, seriesSpan, seriesSettled };
 }

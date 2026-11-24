@@ -1,7 +1,6 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { memo, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { memo, useEffect, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Check, Columns3, CornerDownLeft, Download, Link2, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
-import { z } from "zod";
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
@@ -40,8 +39,12 @@ import {
 } from "@/lib/screener/engine";
 import {
   buildFilter,
-  decodeSpec,
   encodeSpec,
+  applicable,
+  readShared,
+  searchAlone,
+  screenSearch,
+  SHARE_MAX,
   fieldGroups,
   filterImpact,
   formatInput,
@@ -52,13 +55,14 @@ import {
   toCsv,
   type FieldGroup,
 } from "@/lib/screener/present";
-import { SERIES_FIELD_IDS } from "@/lib/screener/series";
-import { ROW_H, useWindowRange } from "@/lib/screener/window";
+import { SERIES_FIELD_IDS, SERIES_FIELDS } from "@/lib/screener/series";
+import { ROW_H, useRowFocus, useWindowRange } from "@/lib/screener/window";
 
-const search = z.object({ screen: z.string().max(4000).optional() });
+/** Field names for chips of filters whose field is not loaded (the liquidity fields come from a separate query). */
+const NAMES = new Map(SERIES_FIELDS.map((f) => [f.id, f]));
 
 export const Route = createFileRoute("/_authenticated/app/screener")({
-  validateSearch: (s) => search.parse(s),
+  validateSearch: (s: Record<string, unknown>) => screenSearch(s),
   head: () => ({
     meta: [
       { title: "Screener · FiledUnder" },
@@ -81,7 +85,11 @@ const EXAMPLES = [
   "Companies like COST but cheaper",
 ];
 
-const isSpec = (v: unknown): v is Spec => !!v && typeof v === "object" && Array.isArray((v as Spec).filters);
+// A stored screen must carry every list the page reads (an old or hand-written one without `sectors` crashed it).
+const isSpec = (v: unknown): v is Spec =>
+  !!v &&
+  typeof v === "object" &&
+  Object.entries(emptySpec()).every(([k, d]) => !Array.isArray(d) || Array.isArray((v as Record<string, unknown>)[k]));
 const STICKY = "top-[var(--sticky-top,3.5rem)]";
 const COLSET_NAMES = Object.keys(COLSETS);
 const GROUP_LABEL: Record<string, string> = { sector: "Sector", industry: "Industry", mcap_bucket: "Size" };
@@ -98,7 +106,8 @@ function Screener() {
   const [agent, setAgent] = useState<{ error?: string; warnings?: string[]; errors?: string[]; model?: string; prompt?: string } | null>(null);
   const [history, setHistory] = useState<{ prompt: string; spec: Spec }[]>([]);
   const [copied, setCopied] = useState(false);
-  const { file, F, rows, seriesDate } = useScreenRows(basic);
+  const [notice, setNotice] = useState<string | null>(null);
+  const { file, F, rows, seriesSpan, seriesSettled } = useScreenRows(basic);
 
   const fields = useMemo(() => [...F.values()], [F]);
   const groups = useMemo(() => fieldGroups(fields, file.data?.groups ?? []), [fields, file.data]);
@@ -113,21 +122,42 @@ function Screener() {
   );
 
   // A shared link (?screen=) replaces the current screen once the catalogue is known, then leaves the address.
-  const adopted = useRef(false);
+  // The code last adopted, so a second shared link opened while the screener is mounted is adopted too.
+  const adopted = useRef<string | null>(null);
   useEffect(() => {
-    if (!shared || adopted.current || !fields.length || !rows.length) return;
-    adopted.current = true;
-    const v = validate(decodeSpec(shared), cat);
-    setSpec({ ...v.spec, explanation: "Opened from a shared screen link." });
-    setAgent(v.errors.length ? { errors: v.errors, prompt: "Shared screen" } : null);
+    // Wait for the series query too, so a link that names dv20 or short_vol5 is not stripped of them.
+    if (shared === undefined) {
+      adopted.current = null;
+      return;
+    }
+    if (adopted.current === shared || !fields.length || !rows.length || !seriesSettled) return;
+    adopted.current = shared;
+    const got = readShared(shared);
+    if (got.ok) {
+      const v = validate(got.raw, cat);
+      setSpec({ ...v.spec, explanation: "Opened from a shared screen link." });
+      setAgent(v.errors.length ? { errors: v.errors, prompt: "Shared screen" } : null);
+      setNotice(null);
+    } else {
+      setSpec(emptySpec());
+      setAgent(null);
+      setNotice(got.notice);
+    }
     void navigate({ to: "/app/screener", search: {}, replace: true, resetScroll: false });
-  }, [shared, fields.length, rows.length, cat, setSpec, navigate]);
+  }, [shared, fields.length, rows.length, seriesSettled, cat, setSpec, navigate]);
 
-  const res = useMemo(() => (rows.length ? run(rows, spec, F, q) : null), [rows, spec, F, q]);
+  // Filters on fields that are not in the catalogue right now are shown but not applied.
+  const live = useMemo(() => applicable(spec, F), [spec, F]);
+  const res = useMemo(() => (rows.length ? run(rows, live.spec, F, q) : null), [rows, live.spec, F, q]);
   const cols = (spec.columns.length ? spec.columns : (COLSETS[colset] ?? COLSETS.Overview)).filter((id) => F.has(id));
   const impact = useMemo(
-    () => (res && !res.rows.length && spec.filters.length ? filterImpact(rows, spec, F) : null),
-    [res, rows, spec, F],
+    () => {
+      if (!res || res.rows.length || !live.spec.filters.length) return null;
+      // Impact indexes refer to the applied filters; map them back to the screen's own filter list.
+      const orig = spec.filters.flatMap((_, i) => (live.missing.includes(i) ? [] : [i]));
+      return filterImpact(rows, live.spec, F, q).map((x) => ({ ...x, i: orig[x.i] }));
+    },
+    [res, rows, spec.filters, live, F, q],
   );
 
   async function ask(e?: FormEvent, text?: string) {
@@ -195,13 +225,19 @@ function Screener() {
       ...(grouped ? { groupOf: grouped.key, groupLabel: spec.group_by?.startsWith("quintile:") ? "Quintile" : GROUP_LABEL[spec.group_by!] } : {}),
     });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    a.href = URL.createObjectURL(new Blob(["\uFEFF", text], { type: "text/csv;charset=utf-8" }));
     a.download = `screen-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    const href = a.href;
+    setTimeout(() => URL.revokeObjectURL(href), 10_000);
   };
   const copyLink = async () => {
-    const url = `${location.origin}/app/screener?screen=${encodeSpec(spec)}`;
+    const code = encodeSpec(spec);
+    if (code.length > SHARE_MAX) {
+      setNotice(`This screen is too long to share as a link (${code.length.toLocaleString()} characters, limit ${SHARE_MAX.toLocaleString()}); shorten its ticker list first.`);
+      return;
+    }
+    const url = `${location.origin}/app/screener?screen=${code}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -229,7 +265,7 @@ function Screener() {
         title="Screener"
         description={
           file.data
-            ? `${rows.length.toLocaleString()} companies · prices ${file.data.asof.prices ? fmtDate(file.data.asof.prices) : "–"}, live where quoted · latest quarter ${file.data.asof.facts ? fmtDate(file.data.asof.facts) : "–"}${seriesDate ? ` · liquidity ${fmtDate(seriesDate)}` : ""}`
+            ? `${rows.length.toLocaleString()} companies · prices ${file.data.asof.prices ? fmtDate(file.data.asof.prices) : "–"}, live where quoted · latest quarter ${file.data.asof.facts ? fmtDate(file.data.asof.facts) : "–"}${seriesSpan ? ` · liquidity ${seriesSpan.from === seriesSpan.to ? fmtDate(seriesSpan.to) : `${fmtDate(seriesSpan.from)} to ${fmtDate(seriesSpan.to)}`}` : ""}`
             : undefined
         }
       />
@@ -303,7 +339,17 @@ function Screener() {
 
         {isActive(spec) && (
           <div className="flex flex-wrap items-center gap-1.5" aria-label="Active criteria">
-            {spec.filters.map((f, i) => (
+            {spec.filters.map((f, i) =>
+              live.missing.includes(i) ? (
+                <span key={`${f.field}-${i}`} title="This field is not available right now, so the filter is not applied. It applies again once the field loads." className="inline-flex h-7 items-center rounded-md border border-dashed text-xs text-muted-foreground">
+                  <span className="pl-2 pr-1">
+                    {filterText(f, NAMES)} · unavailable, not applied
+                  </span>
+                  <button type="button" aria-label={`Remove ${filterText(f, NAMES)}`} onClick={() => removeFilter(i)} className="grid h-full w-6 place-items-center rounded-r-md hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ) : (
               <span key={`${f.field}-${i}`} className="inline-flex h-7 items-center rounded-md border bg-secondary/60 text-xs">
                 <FilterPopover groups={groups} count={countFor} initial={f} onSave={(nf) => setFilter(i, nf)}>
                   <button type="button" title={`${F.get(f.field)?.d ?? ""}\nClick to edit`} className="h-full rounded-l-md pl-2 pr-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -314,7 +360,8 @@ function Screener() {
                   <X className="size-3" />
                 </button>
               </span>
-            ))}
+              ),
+            )}
             {[
               ...spec.sectors.map((x) => ({ t: `Sector: ${x}`, rm: (s: Spec) => ({ ...s, sectors: s.sectors.filter((y) => y !== x) }) })),
               ...spec.exclude_sectors.map((x) => ({ t: `Not ${x}`, rm: (s: Spec) => ({ ...s, exclude_sectors: s.exclude_sectors.filter((y) => y !== x) }) })),
@@ -340,6 +387,11 @@ function Screener() {
           </div>
         )}
 
+        {notice && (
+          <p role="status" className="mt-2 text-[11px] text-muted-foreground">
+            {notice}
+          </p>
+        )}
         {agent?.error && (
           <p role="alert" className="text-[13px] text-negative">
             {agent.error}
@@ -417,7 +469,7 @@ function Screener() {
             {res.rows.length ? (
               <ResultsTable rows={res.rows} grouped={grouped?.groups ?? null} cols={cols} F={F} spec={spec} sim={res.sim} sortBy={sortBy} onOpen={openCompany} />
             ) : (
-              <NoResults impact={impact} q={q} onRemove={removeFilter} onClearQuery={() => setQ("")} onReset={reset} />
+              <NoResults impact={impact} q={q} qAlone={res && q ? searchAlone(rows, live.spec, F, q) : null} onRemove={removeFilter} onClearQuery={() => setQ("")} onReset={reset} />
             )}
             <p className="border-t px-3 py-2 text-[11px] leading-4 text-muted-foreground">
               Fundamentals from SEC filings (trailing four quarters unless named); prices daily, with valuation moved to the live quote where one is available; dollar volume and short volume from the daily setup feed. Rows marked “basic” carry SEC fundamentals only. Hover a column head for its definition and source; open a company for every underlying filing value.
@@ -443,16 +495,6 @@ function groupRows(rows: Row[], key: (r: Row) => string): [string, Row[]][] {
 /* ---------- results table ---------- */
 
 type Item = { kind: "group"; label: string; rows: Row[] } | { kind: "row"; r: Row };
-
-function moveFocus(e: KeyboardEvent<HTMLTableRowElement>, open: () => void) {
-  if (e.key === "Enter") return open();
-  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-  e.preventDefault();
-  let el: Element | null = e.currentTarget;
-  do el = e.key === "ArrowDown" ? el.nextElementSibling : el.previousElementSibling;
-  while (el && !(el as HTMLElement).dataset.row);
-  (el as HTMLElement | null)?.focus({ preventScroll: false });
-}
 
 function ResultsTable({
   rows,
@@ -480,10 +522,26 @@ function ResultsTable({
     [grouped, rows],
   );
   const [start, end] = useWindowRange(body, items.length);
+  const nav = useMemo(() => {
+    const keys: string[] = [];
+    const at = new Map<string, number>();
+    items.forEach((it, i) => {
+      if (it.kind === "row") {
+        keys.push(it.r.ticker);
+        at.set(it.r.ticker, i);
+      }
+    });
+    return { keys, pos: (k: string) => at.get(k) ?? 0 };
+  }, [items]);
+  const focus = useRowFocus(body, nav.keys, nav.pos, "fu:screener:focus");
+  const firstRendered = items.slice(start, end).find((it) => it.kind === "row");
+  const firstKey = firstRendered?.kind === "row" ? firstRendered.r.ticker : undefined;
   const span = cols.length + 1 + (sim ? 1 : 0);
   const head = cn("border-b bg-card", fits && `sticky ${STICKY} z-20`);
   return (
-    <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")}>
+    // overflow-anchor: none: rows are keyed by ticker, so after a sort the browser's scroll anchoring would
+    // follow a row that moved and shift the page (review H2: 6 of 60 sort clicks).
+    <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")} style={{ overflowAnchor: "none" }}>
       <table className={cn("border-separate border-spacing-0 text-[13px] leading-5", fits ? "w-full" : "w-max min-w-full")}>
         <thead>
           <tr>
@@ -527,7 +585,7 @@ function ResultsTable({
             it.kind === "group" ? (
               <GroupHead key={`g:${it.label}`} label={it.label} rows={it.rows} cols={cols} F={F} sim={sim} sticky={!fits} />
             ) : (
-              <ResultRow key={it.r.ticker} r={it.r} cols={cols} F={F} sim={sim} sticky={!fits} sortField={spec.sort?.field} onOpen={onOpen} />
+              <ResultRow key={it.r.ticker} r={it.r} cols={cols} F={F} sim={sim} sticky={!fits} sortField={spec.sort?.field} onOpen={onOpen} tab={focus.tabIndex(it.r.ticker, firstKey)} onRowFocus={focus.onFocus} onRowBlur={focus.onBlur} onRowKey={focus.onKey} />
             ),
           )}
           {end < items.length && (
@@ -549,6 +607,10 @@ const ResultRow = memo(function ResultRow({
   sticky,
   sortField,
   onOpen,
+  tab,
+  onRowFocus,
+  onRowBlur,
+  onRowKey,
 }: {
   r: Row;
   cols: string[];
@@ -557,19 +619,29 @@ const ResultRow = memo(function ResultRow({
   sticky: boolean;
   sortField?: string;
   onOpen: (t: string) => void;
+  tab: number;
+  onRowFocus: (key: string) => void;
+  onRowBlur: (e: FocusEvent<HTMLElement>) => void;
+  onRowKey: (e: KeyboardEvent<HTMLElement>, key: string, open: () => void) => void;
 }) {
   return (
     <tr
       data-row
-      tabIndex={0}
+      data-key={r.ticker}
+      tabIndex={tab}
       onClick={() => onOpen(r.ticker)}
-      onKeyDown={(e) => moveFocus(e, () => onOpen(r.ticker))}
+      onFocus={() => onRowFocus(r.ticker)}
+      onBlur={onRowBlur}
+      onKeyDown={(e) => onRowKey(e, r.ticker, () => onOpen(r.ticker))}
       aria-label={`${r.ticker} ${r.name}`}
       className="group h-[29px] cursor-pointer focus-visible:outline-none [&>td]:transition-colors [&>td]:duration-150 focus-visible:[&>td]:bg-highlight-soft"
     >
       <td className={cn("left-0 z-10 w-64 max-w-64 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary", sticky && "sticky")}>
         <span className="flex min-w-0 items-center gap-2" title={`${r.name} · ${r.sector} · ${r.industry}`}>
-          <TickerMark ticker={r.ticker} name={r.name} link={false} className="min-w-0" />
+          {/* A real link (open in a new tab, the assistant can follow it) outside the tab order: the row is the tab stop. */}
+          <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }} tabIndex={-1} onClick={(e) => e.stopPropagation()} className="min-w-0 rounded-sm hover:underline">
+            <TickerMark ticker={r.ticker} name={r.name} link={false} className="min-w-0" />
+          </Link>
           {r.basic && (
             <span className="shrink-0 rounded border px-1 text-[10px] leading-4 text-muted-foreground" title="SEC fundamentals only; no technicals, correlations or insider fields">
               basic
@@ -586,7 +658,7 @@ const ResultRow = memo(function ResultRow({
         return (
           <td
             key={id}
-            title={missing ? "Not computed for fundamentals-only rows" : filled ? "Computed from the company's SEC fundamentals (trailing four quarters) at the current price" : undefined}
+            title={missing ? "Not computed for fundamentals-only rows" : filled ? "Computed from the company's SEC fundamentals (trailing four quarters) at the current price" : SERIES_FIELD_IDS.has(id) && v != null && typeof r.series_asof === "string" ? `As of ${fmtDate(r.series_asof)}` : undefined}
             className={cn(
               "num whitespace-nowrap border-b px-3 py-1 text-right group-hover:bg-secondary",
               id === sortField && "font-medium",
@@ -629,9 +701,11 @@ function NoResults({
   onRemove,
   onClearQuery,
   onReset,
+  qAlone,
 }: {
   impact: ReturnType<typeof filterImpact> | null;
   q: string;
+  qAlone: number | null;
   onRemove: (i: number) => void;
   onClearQuery: () => void;
   onReset: () => void;
@@ -642,13 +716,13 @@ function NoResults({
       <p className="font-semibold">No companies pass every criterion.</p>
       {q && (
         <p className="text-muted-foreground">
-          The search “{q}” also narrows the list.{" "}
+          {qAlone === 0 ? `The search “${q}” matches no company on its own.` : `The search “${q}” also narrows the list.`}{" "}
           <button type="button" onClick={onClearQuery} className="text-link hover:underline">
             Clear the search
           </button>
         </p>
       )}
-      {impact?.length ? (
+      {impact?.length && qAlone !== 0 ? (
         <>
           <p className="text-muted-foreground">
             {best && best.without > 0
@@ -740,7 +814,7 @@ function FilterPopover({ groups, count, onSave, initial, children }: { groups: F
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0">
+      <PopoverContent align="start" collisionPadding={12} className="w-80 p-0">
         {open && (
           <FilterEditor
             groups={groups}
@@ -861,7 +935,7 @@ function PresetPopover({ onPick }: { onPick: (id: string) => void }) {
           Presets
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-96 p-1">
+      <PopoverContent align="start" collisionPadding={12} className="w-96 p-1">
         <div className="max-h-96 overflow-y-auto overscroll-contain scrollbar-thin">
           {PRESETS.map((p) => (
             <button
@@ -892,7 +966,7 @@ function ColumnsPopover({ groups, cols, setName, onSet, onCols }: { groups: Fiel
           <Columns3 /> {setName ?? "Custom"} · {cols.length}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent align="end" collisionPadding={12} className="w-80 p-0">
         <div className="border-b p-2">
           <p className="eyebrow mb-1.5">Column sets</p>
           <div role="radiogroup" aria-label="Column set" className="flex flex-wrap gap-1">
