@@ -35,6 +35,7 @@ export function figTarget(ticker: string, f: Figure, label: string, periodLabel:
     alts: f.cell?.alts,
     derived: f.cell?.derived ?? f.derived,
     approx: f.cell?.approx,
+    doc: f.doc ? { accn: f.doc.accn, doc: f.doc.doc, title: "Earnings release", quote: f.doc.quote, search: f.doc.quote } : undefined,
   };
 }
 
@@ -59,14 +60,16 @@ export function SourceNum({
 }) {
   const { open } = useSource();
   if (!f) return <span className={cn("num text-muted-foreground", className)}>–</span>;
-  const hasSource = !!(f.cell?.src || f.cell?.derived || f.derived);
+  const hasSource = !!(f.cell?.src || f.cell?.derived || f.derived || f.doc);
   const shown = text ?? fmtFig(f.v, unit);
-  if (!hasSource) return <span className={cn("num", className)}>{shown}</span>;
+  // Fourth-quarter EPS computed here (no filing states it as a quarter) carries a visible mark (earnings-H2).
+  const mark = f.q4 === "derived" ? <span aria-hidden className="ml-px align-super text-[10px] text-muted-foreground">{DERIVED_MARK}</span> : null;
+  if (!hasSource) return <span className={cn("num", className)}>{shown}{mark}</span>;
   return (
     <button
       type="button"
       onClick={() => open(figTarget(ticker, f, label, period, unit))}
-      title={`${label}, ${period}: open the source${f.derived || f.cell?.derived ? " and formula" : ""}`}
+      title={`${label}, ${period}${f.q4 === "derived" ? ", calculated: the 10-K states only the full year" : f.q4 === "release" ? ", as printed in the earnings release" : ""}: open the source${f.derived || f.cell?.derived ? " and formula" : ""}`}
       className={cn(
         "num rounded-sm tabular-nums decoration-dotted underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         (f.derived || f.cell?.derived) && "underline decoration-muted-foreground/50",
@@ -74,7 +77,20 @@ export function SourceNum({
       )}
     >
       {shown}
+      {mark}
     </button>
+  );
+}
+
+/** Mark beside a fourth-quarter EPS figure (or a change built on one) calculated from net income and shares. */
+export const DERIVED_MARK = "†";
+
+/** Footnote for tables that may show `DERIVED_MARK`. */
+export function DerivedQ4Note({ className }: { className?: string }) {
+  return (
+    <p className={cn("text-[11px] text-muted-foreground", className)}>
+      {DERIVED_MARK} Fourth-quarter EPS calculated: the 10-K reports only the full year, so it is Q4 net income ÷ Q4 weighted diluted shares, rounded to the cent. A dash where that does not reproduce the company's reported EPS.
+    </p>
   );
 }
 

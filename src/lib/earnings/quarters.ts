@@ -15,6 +15,21 @@ export interface Figure {
   cell?: Cell;
   /** Formula over reported cells when the figure is computed here. */
   derived?: { formula: string; parts: DerivedPart[] };
+  /**
+   * Set on fourth-quarter EPS, which no 10-K states as a quarter: "release" when the figure is the one
+   * printed in the quarter's earnings release, "derived" when it is computed here from net income and
+   * weighted diluted shares (earnings-H2). The page marks a derived figure as derived.
+   */
+  q4?: "release" | "derived";
+  /** The release document and the printed line, for a figure taken from a release. */
+  doc?: { accn: string; doc: string; quote?: string };
+}
+
+/** A per-share figure printed in an earnings release (the partner scorecard's GAAP diluted EPS), keyed by accession. */
+export interface ReleaseEps {
+  accn: string;
+  v: number;
+  quote?: string | null;
 }
 
 export type MetricKey = "revenue" | "profit" | "netIncome" | "eps" | "fcf";
@@ -66,6 +81,7 @@ export function partsOf(cell: Cell | undefined, label: string, sign: 1 | -1 = 1)
 function figPartsOf(f: Figure | null | undefined, label: string, sign: 1 | -1 = 1): DerivedPart[] {
   if (!f) return [];
   if (f.cell) return partsOf(f.cell, label, sign);
+  if (f.doc) return [{ accn: f.doc.accn, doc: f.doc.doc, concept: "Earnings release, printed figure", end: "", value: f.v, label, sign }];
   return (f.derived?.parts ?? []).map((p) => ({ ...p, sign: (p.sign * sign) as 1 | -1 }));
 }
 
@@ -94,6 +110,7 @@ export function growth(cur: Figure | null, prev: Figure | null, label: string, b
   if (Math.sign(cur.v) !== Math.sign(prev.v) && cur.v !== 0) return null;
   return {
     v: (cur.v - prev.v) / Math.abs(prev.v),
+    ...(cur.q4 === "derived" || prev.q4 === "derived" ? { q4: "derived" as const } : {}),
     derived: { formula: `${label} ÷ ${label.toLowerCase()} ${basis} − 1`, parts: [...figPartsOf(cur, `${label}, this quarter`), ...figPartsOf(prev, `${label}, ${basis}`, -1)] },
   };
 }
@@ -194,10 +211,74 @@ export interface QuarterInputs {
   dataset: CompanyDataset;
   reactions?: Reaction[];
   surprises?: Surprise[] | null;
+  /** GAAP diluted EPS printed in earnings releases, used for fourth quarters. */
+  releaseEps?: ReleaseEps[];
+}
+
+const close = (a: number, b: number) => Math.abs(a - b) <= 0.006 + 0.002 * Math.abs(b);
+
+/**
+ * Fourth-quarter diluted EPS computed from net income and weighted diluted shares. A 10-K states the year,
+ * not the quarter, so "year minus nine months" of EPS is off by a cent whenever the share count moved
+ * (Apple Q4 FY25 1.84 against 1.85 reported). Q4 weighted shares are 4 × the full-year average less the
+ * three quarterly averages (equal-length quarters). The result is used only when net income ÷ shares
+ * reproduces the reported diluted EPS, to the cent, for the full year and for every one of Q1 to Q3: that
+ * fails where EPS is earned on income after preferred dividends or participating securities (JPMorgan),
+ * and then the quarter has no EPS rather than a wrong one. Rounded to the cent, as EPS is reported.
+ */
+export function deriveQ4Eps(d: CompanyDataset, i: number): Figure | null {
+  const q = d.statements.quarterly.income;
+  const a = d.statements.annual?.income;
+  const p = q?.periods[i];
+  if (!q || !a || !p) return null;
+  const j = a.periods.findIndex((ap) => Math.abs(days(ap.end, p.end)) <= 5);
+  if (j < 0 || i < 3) return null;
+  const qni = row(q, "netIncome");
+  const qsh = row(q, "sharesDiluted");
+  const qeps = row(q, "epsDiluted");
+  const fni = row(a, "netIncome")?.cells[j];
+  const fsh = row(a, "sharesDiluted")?.cells[j];
+  const feps = row(a, "epsDiluted")?.cells[j];
+  const ni4 = qni?.cells[i];
+  if (!ni4 || !fni || !fsh?.src || !feps || !(fsh.v > 0) || !close(fni.v / fsh.v, feps.v)) return null;
+  const prior: { sh: Cell; label: string }[] = [];
+  for (let k = i - 3; k < i; k++) {
+    const pk = q.periods[k];
+    const ni = qni?.cells[k];
+    const sh = qsh?.cells[k];
+    const eps = qeps?.cells[k];
+    // Q1 to Q3 of the same fiscal year, each a reported quarter that reproduces its own EPS.
+    if (!pk || pk.fy !== p.fy || days(pk.end, p.end) > 290 || !ni || !sh?.src || !eps || eps.approx || !(sh.v > 0)) return null;
+    if (!close(ni.v / sh.v, eps.v)) return null;
+    prior.push({ sh, label: pk.label });
+  }
+  const shares = 4 * fsh.v - prior.reduce((s, x) => s + x.sh.v, 0);
+  if (!(shares > 0)) return null;
+  const v = Math.round((ni4.v / shares) * 100) / 100;
+  const fyLabel = a.periods[j].label;
+  return {
+    v,
+    q4: "derived",
+    derived: {
+      formula: `Q4 net income ÷ Q4 weighted diluted shares, where Q4 shares = 4 × the ${fyLabel} average − the Q1 to Q3 averages; rounded to the cent`,
+      parts: [
+        ...partsOf(ni4, "Net income, Q4"),
+        ...partsOf(fsh, `Weighted diluted shares, ${fyLabel} (× 4)`),
+        ...prior.flatMap((x) => partsOf(x.sh, `Weighted diluted shares, ${x.label}`, -1)),
+      ],
+    },
+  };
+}
+
+/** Fourth-quarter EPS: the release's printed figure when known, else derived (see `deriveQ4Eps`), else none. */
+function q4Eps(d: CompanyDataset, i: number, release: EarningsRelease | null, releaseEps: ReleaseEps[] | undefined): Figure | null {
+  const printed = release ? releaseEps?.find((r) => r.accn === release.accn && Number.isFinite(r.v)) : undefined;
+  if (release && printed) return { v: printed.v, q4: "release", doc: { accn: release.accn, doc: release.doc, quote: printed.quote ?? undefined } };
+  return deriveQ4Eps(d, i);
 }
 
 /** Every quarter in the dataset (oldest first) with its results, margins, growth, release, reaction and surprise. */
-export function quarterRecords({ dataset: d, reactions = [], surprises }: QuarterInputs): QuarterRecord[] {
+export function quarterRecords({ dataset: d, reactions = [], surprises, releaseEps }: QuarterInputs): QuarterRecord[] {
   const inc = d.statements.quarterly.income;
   const cf = d.statements.quarterly.cashflow;
   const periods = inc?.periods ?? [];
@@ -211,7 +292,9 @@ export function quarterRecords({ dataset: d, reactions = [], surprises }: Quarte
   const cfIndex = new Map((cf?.periods ?? []).map((p, j) => [p.key, j]));
   const byDate = new Map(reactions.map((r) => [r.date, r]));
 
+  const releases = periods.map((p) => releaseFor(p.end, d.earningsReleases, d.filings));
   const base = periods.map((p, i) => {
+    const epsCell = eps?.cells[i];
     const revenue = fig(rev?.cells[i]);
     const profit = fig(prof?.cells[i]);
     const netIncome = fig(ni?.cells[i]);
@@ -221,7 +304,8 @@ export function quarterRecords({ dataset: d, reactions = [], surprises }: Quarte
       revenue,
       profit,
       netIncome,
-      eps: fig(eps?.cells[i]),
+      // A fourth-quarter cell is the year minus nine months (approx): never shown as the reported figure.
+      eps: epsCell?.approx ? q4Eps(d, i, releases[i], releaseEps) : fig(epsCell),
       fcf: fcfAt(cf, cfIndex.get(p.key) ?? -1),
       grossMargin: ratio(gross, revenue, "Gross profit ÷ revenue", "Gross profit", "Revenue"),
       profitMargin: ratio(profit, revenue, `${pl.label} ÷ revenue`, pl.label, "Revenue"),
@@ -242,7 +326,7 @@ export function quarterRecords({ dataset: d, reactions = [], surprises }: Quarte
       if (gy) yoy[k] = gy;
       if (gq) qoq[k] = gq;
     }
-    const release = releaseFor(b.period.end, d.earningsReleases, d.filings);
+    const release = releases[i];
     return {
       ...b,
       yoy,

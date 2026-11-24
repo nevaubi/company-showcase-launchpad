@@ -237,3 +237,43 @@ describe("statements lagging several quarters (earnings-H1)", () => {
     expect(p?.surprise?.quarter).toBe("2026-09-30");
   });
 });
+
+describe("fourth-quarter EPS (earnings-H2)", () => {
+  const MSFT = load("MSFT");
+  const q4 = (d: CompanyDataset, label: string, releaseEps?: { accn: string; v: number; quote?: string }[]) =>
+    quarterRecords({ dataset: d, releaseEps }).find((r) => r.period.label === label)!;
+
+  // Releases: Apple 30 Oct 2025 "$1.85", NVIDIA 26 Feb 2025 "$0.89", Microsoft Jul 2026 "$4.81".
+  // The year-minus-nine-months cells are 1.84, 0.90 and 4.81.
+  it("derives Q4 EPS from net income and weighted diluted shares, matching the releases", () => {
+    for (const [d, label, want] of [
+      [AAPL, "Q4 FY25", 1.85],
+      [AAPL, "Q4 FY24", 0.97],
+      [NVDA, "Q4 FY25", 0.89],
+      [MSFT, "Q4 FY26", 4.81],
+    ] as const) {
+      const r = q4(d, label);
+      expect(r.eps?.v, label).toBe(want);
+      expect(r.eps?.q4).toBe("derived");
+      expect(r.eps?.cell).toBeUndefined();
+      expect(r.eps?.derived?.parts.length).toBeGreaterThanOrEqual(5);
+    }
+  });
+
+  it("shows no Q4 EPS where net income over shares does not reproduce reported EPS (preferred dividends)", () => {
+    // JPMorgan reported $4.63 for Q4 FY25; net income ÷ shares gives about $4.75.
+    expect(q4(JPM, "Q4 FY25").eps).toBeNull();
+    expect(q4(JPM, "Q4 FY25").yoy.eps).toBeUndefined();
+  });
+
+  it("uses the figure printed in the quarter's release when it is known", () => {
+    const rel = q4(AAPL, "Q4 FY25").release!;
+    const r = q4(AAPL, "Q4 FY25", [{ accn: rel.accn, v: 1.85, quote: "Diluted earnings per share was $1.85" }]);
+    expect(r.eps).toMatchObject({ v: 1.85, q4: "release", doc: { accn: rel.accn, doc: rel.doc } });
+  });
+
+  it("leaves reported quarters untouched", () => {
+    expect(q4(AAPL, "Q3 FY25").eps?.cell?.src).toBeDefined();
+    expect(q4(AAPL, "Q3 FY25").eps?.q4).toBeUndefined();
+  });
+});

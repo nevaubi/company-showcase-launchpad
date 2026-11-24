@@ -11,7 +11,7 @@ import type { EarningsPricing } from "@/lib/options/core";
 import type { NextEarnings } from "@/lib/company/catalysts";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fmtFig, MachineWritten, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
+import { DerivedQ4Note, fmtFig, MachineWritten, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
 import { Quiet, Section } from "./layout";
 import { HistoryCharts } from "./history-charts";
 
@@ -179,6 +179,7 @@ export function LatestQuarter({
               ))}
             </tbody>
           </table>
+          {[cur, prior, year].some((r) => r?.eps?.q4 === "derived") && <DerivedQ4Note className="border-t px-4 py-2" />}
         </div>
         <div className="grid min-w-0 grid-cols-2 content-start divide-x border-t lg:grid-cols-1 lg:divide-x-0 lg:divide-y lg:border-t-0 lg:border-b-0">
           <Stat
@@ -426,6 +427,7 @@ export function History({ ticker, quarters, profit }: { ticker: string; quarters
           </tbody>
         </table>
       </div>
+      {quarters.some((q) => q.eps?.q4 === "derived") && <DerivedQ4Note className="border-t px-4 py-2" />}
     </Section>
   );
 }
