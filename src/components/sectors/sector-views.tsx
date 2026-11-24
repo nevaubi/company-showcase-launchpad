@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { Fragment, useMemo } from "react";
 import { Segmented } from "@/components/app/segmented";
@@ -16,6 +16,7 @@ import {
   notesQuery,
   qLabel,
   type GroupFile,
+  type Note,
   type Overview,
 } from "@/lib/sectors/groups";
 import { noteWeek } from "@/lib/sectors/notes";
@@ -137,9 +138,13 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4w" |
  * sector's note (a sector page, or an industry page showing its sector's note). Renders nothing when
  * there is no current note, so the caller can give its neighbour the row.
  */
+type NoteFact = Note["facts"][string] | undefined;
+const isAgg = (f: NoteFact): f is NonNullable<NoteFact> & { ref: { type: "agg"; metric: string; q?: string } } => f?.ref?.type === "agg" && !!f.ref.metric;
+
 export function SectorNotes({ only, onlyName }: { only?: string; onlyName?: string }) {
   const q = useQuery(notesQuery);
   const navigate = useNavigate();
+  const matchRoute = useMatchRoute();
   const nw = useMemo(() => noteWeek(q.data?.notes, { only }), [q.data, only]);
   if (q.isLoading) return <Skeleton className="h-32" />;
   if (!nw.week || !nw.notes.length) return null;
@@ -163,6 +168,10 @@ export function SectorNotes({ only, onlyName }: { only?: string; onlyName?: stri
               {noteParts(n).map((p, i) =>
                 typeof p === "string" ? (
                   <Fragment key={i}>{p}</Fragment>
+                ) : !isAgg(n.facts[p.id]) && matchRoute({ to: "/app/sectors/$sector", params: { sector: n.sector } }) ? (
+                  <span key={i} title={p.label} className="num font-medium text-foreground">
+                    {p.text}
+                  </span>
                 ) : (
                   <button
                     key={i}
@@ -170,11 +179,14 @@ export function SectorNotes({ only, onlyName }: { only?: string; onlyName?: stri
                     title={p.label}
                     onClick={() => {
                       const f = n.facts[p.id];
-                      navigate({
-                        to: "/app/sectors/$sector",
-                        params: { sector: n.sector },
-                        search: f?.ref?.type === "agg" && f.ref.metric ? { m: f.ref.metric, q: f.ref.q } : {},
-                      });
+                      const agg = isAgg(f) ? { m: f.ref.metric, q: f.ref.q } : null;
+                      // On this sector's own page a figure only opens its breakdown: keep the view and the scroll position.
+                      const here = !!matchRoute({ to: "/app/sectors/$sector", params: { sector: n.sector } });
+                      if (here) {
+                        if (agg) navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, ...agg }) as never, resetScroll: false });
+                        return;
+                      }
+                      navigate({ to: "/app/sectors/$sector", params: { sector: n.sector }, search: agg ?? {} });
                     }}
                     className="num inline-flex h-7 items-center rounded-sm px-0.5 align-baseline font-medium text-foreground underline decoration-dotted underline-offset-2 hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >

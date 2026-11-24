@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Share } from "@/lib/sectors/stats";
+import { overviewState } from "@/lib/sectors/overview-state";
 
 export function Section({
   id,
@@ -155,6 +156,7 @@ export function Breadcrumb({ items }: { items: Crumb[] }) {
             <Link
               to={c.to}
               params={c.params as never}
+              search={c.to === "/app/sectors" ? (overviewState() as never) : undefined}
               className="rounded-sm transition-colors duration-150 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {c.label}

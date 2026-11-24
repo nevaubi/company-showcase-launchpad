@@ -8,6 +8,7 @@ import { RotationGraph, SectorNotes } from "@/components/sectors/sector-views";
 import { QuietLine, Section } from "@/components/sectors/ui";
 import { BOARD_SET_KEYS, BOARD_SORTS, boardSort, SPANS, type BoardSet } from "@/lib/sectors/board";
 import { overviewQuery, tapeQuery } from "@/lib/sectors/groups";
+import { rememberOverview } from "@/lib/sectors/overview-state";
 
 const pageSearch = z.object({
   /** Kept for old links (it used to pick a sector detail panel); ignored. */
@@ -38,6 +39,7 @@ export const Route = createFileRoute("/_authenticated/app/sectors")({
 
 function Sectors() {
   const s = Route.useSearch();
+  rememberOverview(s);
   const navigate = Route.useNavigate();
   const overview = useQuery(overviewQuery);
   const tape = useQuery(tapeQuery);
