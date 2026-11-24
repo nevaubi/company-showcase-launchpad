@@ -202,7 +202,13 @@ export function assessCurrency(d: CompanyDataset, opts: CurrencyOptions = {}): C
   const report = newer.find((n) => n.kind !== "release");
   const parts: string[] = [];
   if (report) {
-    const what = report.kind === "annual" ? `An annual report (${report.form}) for the year ended` : `A quarterly report (${report.form}) for the quarter ended`;
+    // A 10-KT covers a transition period (Ferguson: five months to 31 Dec 2025), not a fiscal year.
+    const what =
+      report.form === "10-KT"
+        ? `A transition report (10-KT) for the period ended`
+        : report.kind === "annual"
+          ? `An annual report (${report.form}) for the year ended`
+          : `A quarterly report (${report.form}) for the quarter ended`;
     parts.push(
       report.report
         ? `${what} ${dayLabel(report.report)} was filed on ${dayLabel(report.filed)} and is not in these tables yet.`

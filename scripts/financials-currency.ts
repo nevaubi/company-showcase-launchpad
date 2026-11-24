@@ -13,6 +13,7 @@
  *   no-xbrl            SEC lists the filing without XBRL
  *   not-in-companyfacts XBRL filing, but SEC's companyfacts carries none of its facts
  *   builder            companyfacts has the filing's facts, the builder drops the period
+ *   no-statements      the build holds no statements at all (only 10-Qs since listing, no 10-K yet)
  *
  *   bun scripts/financials-currency.ts --cache=DIR [--fetch] [--tickers=AAPL,XOM] [--build-at=2026-11-20T09:17:00Z]
  *     [--today=2026-11-23] [--json=FILE] [--builder=CHECKOUT]
@@ -193,7 +194,10 @@ async function check(c: (typeof COVERAGE)[number]): Promise<Row> {
   row.currency = { status: cur.status, text: cur.text, newer: cur.newer.map((n) => ({ kind: n.kind, form: n.form, filed: n.filed, ...(n.report ? { report: n.report } : {}) })) };
 
   const gap = cur.newer.find((n) => n.kind !== "release");
-  if (!gap) row.reason = cur.newer.length ? "release-only" : "current";
+  // No statements at all (the builder places fiscal years from 10-K facts; a company listed since its
+  // last 10-K has only 10-Qs): never "current".
+  if (cur.status === "unknown") row.reason = "no-statements";
+  else if (!gap) row.reason = cur.newer.length ? "release-only" : "current";
   else {
     const latest = [row.built.q, row.built.a].filter(Boolean).sort().at(-1) ?? "";
     const missing = periodic.filter((x) => x.report && days(latest, x.report) > 6).sort((a, b) => a.filed.localeCompare(b.filed));
