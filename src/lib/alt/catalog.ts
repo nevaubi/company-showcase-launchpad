@@ -40,29 +40,57 @@ export const DATASETS: Record<string, DatasetInfo> = {
   bank: { label: "Bank call reports", blurb: "Quarterly FDIC data for the main insured bank: deposits, loans, margin, charge-offs, capital", source: "FDIC", theme: "banking", measures: "Quarterly call-report line", cadence: "Quarterly" },
   deposits: { label: "Deposits by state", blurb: "Branch deposits each June 30 by state and metro area for all the company's insured banks", source: "FDIC", theme: "banking", measures: "Yearly deposits per state", cadence: "Yearly" },
   complaints: { label: "Consumer complaints", blurb: "CFPB complaints per year with product mix", source: "CFPB", theme: "banking", measures: "Complaints per year", cadence: "Daily" },
-  events: { label: "Corporate events", blurb: "8-K items: deals, acquisitions, new debt, restructurings, impairments, executive and auditor changes, restatements, cyber incidents", source: "SEC EDGAR", theme: "events", measures: "8-K item", cadence: "Daily" },
+  events: { label: "8-K filings", blurb: "8-K items: deals, acquisitions, new debt, restructurings, impairments, executive and auditor changes, restatements, cyber incidents", source: "SEC EDGAR", theme: "events", measures: "8-K item", cadence: "Daily" },
 };
 
 const MINUS = "−";
 
 /** One format for alt values: $1.2B, 3.4M, 12K, 2.50%, 0.84×, 85K lb; an en dash for missing. */
-export function fmtAlt(v: number | null | undefined, unit: string | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return "–";
-  const sign = v < 0 ? MINUS : "";
-  const a = Math.abs(v);
-  if (unit === "USD") return `${sign}$${a >= 1e12 ? `${(a / 1e12).toFixed(2)}T` : a >= 1e9 ? `${(a / 1e9).toFixed(1)}B` : a >= 1e6 ? `${(a / 1e6).toFixed(1)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(0)}K` : a.toFixed(0)}`;
-  if (unit === "%") return `${sign}${a.toFixed(2)}%`;
-  if (unit === "ratio") return `${sign}${a.toFixed(2)}×`;
-  if (unit === "lbs") return `${sign}${a >= 1e6 ? `${(a / 1e6).toFixed(1)}M` : a >= 1e4 ? `${(a / 1e3).toFixed(0)}K` : Math.round(a).toLocaleString("en-US")} lb`;
-  return `${sign}${a >= 1e6 ? `${(a / 1e6).toFixed(1)}M` : a >= 1e4 ? `${(a / 1e3).toFixed(0)}K` : Math.round(a * 100) / 100 === Math.round(a) ? Math.round(a).toLocaleString("en-US") : a.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+/**
+ * A number scaled to K/M/B/T with `digits` decimals, moving up a step when rounding would print
+ * 1000 of a unit ("$1.00T", not "$1000.0B").
+ */
+/** steps: [divisor, suffix, decimals, smallest value shown this way (defaults to the divisor)] */
+function scaled(a: number, steps: [number, string, number, number?][], small: (a: number) => string): string {
+  for (let i = 0; i < steps.length; i++) {
+    const [base, suffix, digits, from = base] = steps[i];
+    if (a < from) continue;
+    const txt = (a / base).toFixed(digits);
+    if (Number(txt) >= 1000 && i > 0) {
+      const [b2, s2, d2] = steps[i - 1];
+      return `${(a / b2).toFixed(d2)}${s2}`;
+    }
+    return `${txt}${suffix}`;
+  }
+  return small(a);
 }
 
-/** A signed change as a percentage ("+5.7%", "−12%"); one decimal under 10%. */
+/**
+ * An alt-data value with its unit: "$1.2B", "0.61%", "2,221 lb", "804K". A true minus sign, and no
+ * sign on a value that rounds to zero. Exported for every caller in the app (daily brief, overview,
+ * state deposits, the assistant), which take it as plain text.
+ */
+export function fmtAlt(v: number | null | undefined, unit: string | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "–";
+  const a = Math.abs(v);
+  let body: string;
+  if (unit === "USD") body = `$${scaled(a, [[1e12, "T", 2], [1e9, "B", 1], [1e6, "M", 1], [1e3, "K", 0]], (x) => x.toFixed(0))}`;
+  else if (unit === "%") body = `${a.toFixed(2)}%`;
+  else if (unit === "ratio") body = `${a.toFixed(2)}×`;
+  else if (unit === "lbs") body = `${scaled(a, [[1e6, "M", 1], [1e3, "K", 0, 1e4]], (x) => Math.round(x).toLocaleString("en-US"))} lb`;
+  else body = scaled(a, [[1e9, "B", 1], [1e6, "M", 1], [1e3, "K", 0, 1e4]], (x) => (Math.round(x * 100) / 100 === Math.round(x) ? Math.round(x).toLocaleString("en-US") : x.toLocaleString("en-US", { maximumFractionDigits: 2 })));
+  const zero = !/[1-9]/.test(body);
+  return `${v < 0 && !zero ? MINUS : ""}${body}`;
+}
+
+/** A signed change as a percentage ("+5.7%", "−12%"); one decimal under 10%; "0.0%" for no change. */
 export function fmtChange(c: number | null | undefined): string {
   if (c == null || !Number.isFinite(c)) return "–";
   if (c >= 10) return "> +999%";
   const p = Math.abs(c * 100);
-  return `${c < 0 ? MINUS : "+"}${p < 10 ? p.toFixed(1) : p.toFixed(0)}%`;
+  const txt = p < 10 ? p.toFixed(1) : p.toFixed(0);
+  if (!/[1-9]/.test(txt)) return "0.0%";
+  return `${c < 0 ? MINUS : "+"}${txt}%`;
 }
 
 /** A share as a percentage ("74%", "3.1%", "<0.1%"). */

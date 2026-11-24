@@ -2,9 +2,11 @@ import type { QueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { COVERAGE, coverageOf } from "@/lib/coverage";
 import { universeQuery } from "@/lib/data";
+import { isPartial } from "@/lib/alt/periods";
 import { ALT_NAMES, REFRESH_DATASET, sharedCores, tickerKeys, type CompanyKeys } from "@/lib/alt/contracts";
-import { SERIES_WATCH, seriesCandidates, confirmSeries, type UnusualItem } from "@/lib/alt/hub";
-import { BUCKET_RECOUNT, eventBuckets, screenAltRows, withScreenColumns, type EventBucket, type ScreenRowLike } from "@/lib/alt/screen";
+import { bucketCandidates, confirmCounts, confirmSeries, rangeCandidates, rankUnusual, type UnusualItem } from "@/lib/alt/hub";
+import { RANGE_RULES, RISE_LOOKBACK_DAYS, RISE_WINDOWS } from "@/lib/alt/history";
+import { screenAltRows, withScreenColumns, type EventBucket, type ScreenRowLike } from "@/lib/alt/screen";
 
 export interface AltRow {
   uid: string;
@@ -119,6 +121,40 @@ export const altLeadersQuery = (dataset: string, title: string) => ({
   staleTime: 10 * 60_000,
 });
 
+/**
+ * The leaderboard as a board of finished periods: a federal fiscal year still settling is replaced
+ * by the year before it (the reading a year earlier is that year), and a month still running by the
+ * company's latest finished month. Replaced rows carry no comparison, since the database computed
+ * those against the period in progress. `settledFrom` names the period that was replaced.
+ */
+export const altSettledLeadersQuery = (dataset: string, title: string) => ({
+  queryKey: ["alt_leaders_settled", dataset, title],
+  queryFn: async ({ client }: { client?: QueryClient }): Promise<(AltLeader & { settledFrom?: string })[]> => {
+    const today = new Date().toISOString().slice(0, 10);
+    const raw = client ? await client.ensureQueryData(altLeadersQuery(dataset, title)) : await altLeadersQuery(dataset, title).queryFn({ client });
+    const running = raw.filter((r) => isPartial(r, today) || (dataset === "attention" && r.date.slice(0, 7) >= today.slice(0, 7)));
+    const monthly = running.filter((r) => !r.meta?.fiscal_year).map((r) => r.ticker);
+    const prev = new Map<string, AltRow>();
+    for (const part of chunks(monthly, 60)) {
+      const rows = await readAltAll<AltRow>(ROW_COLUMNS, (q) => q.eq("dataset", dataset).eq("title", title).eq("kind", "series").in("ticker", part).lt("date", `${today.slice(0, 7)}-01`).gte("date", isoDaysAgo(70)).order("date", { ascending: false }).order("uid"), client);
+      for (const r of rows) if (!prev.has(r.ticker) && r.value != null && r.date && !isPartial(r, today)) prev.set(r.ticker, r);
+    }
+    const out: (AltLeader & { settledFrom?: string })[] = [];
+    for (const r of raw) {
+      if (!running.includes(r)) { out.push(r); continue; }
+      const from = r.date;
+      if (r.meta?.fiscal_year) {
+        if (r.prior_value != null && r.prior_date) out.push({ ...r, value: r.prior_value, date: r.prior_date, meta: { fiscal_year: Number(r.meta.fiscal_year) - 1 }, prior_value: null, prior_date: null, base_median: null, base_n: null, settledFrom: from });
+        continue;
+      }
+      const p = prev.get(r.ticker);
+      if (p) out.push({ ...r, value: p.value!, date: p.date!, meta: p.meta, source_url: p.source_url, prior_value: null, prior_date: null, base_median: null, base_n: null, settledFrom: from });
+    }
+    return out;
+  },
+  staleTime: 10 * 60_000,
+});
+
 /** Change vs a year earlier and the multiple of the company's own trailing-year median. */
 export function leaderStats(r: AltLeader) {
   const chg = r.prior_value ? r.value / r.prior_value - 1 : null;
@@ -128,7 +164,7 @@ export function leaderStats(r: AltLeader) {
 
 export const altCompanyQuery = (ticker: string) => ({
   queryKey: ["alt_data", ticker],
-  queryFn: async ({ client }: { client?: QueryClient }) => readAltAll("*", (q) => q.eq("ticker", ticker).order("date", { ascending: false }).order("uid"), client),
+  queryFn: async ({ client }: { client?: QueryClient }) => readAltAll(ROW_COLUMNS, (q) => q.eq("ticker", ticker).order("date", { ascending: false }).order("uid"), client),
   staleTime: 10 * 60_000,
 });
 
@@ -152,30 +188,86 @@ export function seriesByTitle(rows: AltRow[]) {
 
 export { fmtAlt } from "@/lib/alt/catalog";
 
-/**
- * Event counts per company × dataset in 90-day windows (last ~27 months). The database function counts
- * stored rows, misattributed ones included until the repair runs, so the datasets the screen judges
- * (BUCKET_RECOUNT) are recounted here from screened rows.
- */
-export const altBucketsQuery = () => ({
-  queryKey: ["alt_buckets"],
-  queryFn: async ({ client }: { client?: QueryClient }) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const from = new Date(Date.now() - 810 * 864e5).toISOString().slice(0, 10);
-    const [{ data, error }, screened] = await Promise.all([
-      supabase.rpc("alt_event_buckets"),
-      readAltAll<{ ticker: string; dataset: string; date: string | null }>(
-        "uid,ticker,dataset,kind,date,meta",
-        (q) => q.eq("kind", "event").in("dataset", [...BUCKET_RECOUNT]).gt("date", from).lte("date", today).order("uid"),
-        client,
-      ),
-    ]);
+/** Every row of `alt_event_buckets` (stored rows per company × dataset × 90-day window), paged in a stable order. */
+export async function eventBucketsAll(): Promise<EventBucket[]> {
+  const out: EventBucket[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await supabase.rpc("alt_event_buckets").order("ticker").order("dataset").order("bucket").range(from, from + 999);
     if (error) throw error;
-    const recount = new Set<string>(BUCKET_RECOUNT);
-    const rows = ((data ?? []) as EventBucket[]).filter((r) => !recount.has(r.dataset));
-    return [...rows, ...eventBuckets(screened, today)];
+    out.push(...((data ?? []) as EventBucket[]));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+const ROW_COLUMNS = "uid,ticker,dataset,kind,date,title,value,unit,meta,source,source_url";
+const isoDaysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+const chunks = <T,>(xs: T[], n: number) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+
+export interface UnusualNow {
+  items: UnusualItem[];
+  /** company × dataset pairs tested by the rise rule after the pre-screen */
+  tested: number;
+  /** company × dataset pairs with 3 or more rows in the latest 90 days but under a year of stored history before them */
+  short: number;
+  /** parts that could not be read (the rest is still shown) */
+  failed: string[];
+}
+
+/**
+ * What is unusual now, by the company tab's own rules. Counts: `alt_event_buckets` picks candidates
+ * (`bucketCandidates`), then each candidate's rows of the last RISE_LOOKBACK_DAYS go through
+ * `riseFlag`. Series: each range rule's leaderboard (paged) picks candidates (`rangeCandidates`),
+ * then their readings go through `rangeFlag`. A part that fails is named, not hidden.
+ */
+export const altUnusualQuery = () => ({
+  queryKey: ["alt_unusual"],
+  queryFn: async ({ client }: { client?: QueryClient }): Promise<UnusualNow> => {
+    const today = new Date().toISOString().slice(0, 10);
+    const items: UnusualItem[] = [];
+    const failed: string[] = [];
+    let tested = 0;
+    let short = 0;
+    try {
+      const buckets = await eventBucketsAll();
+      const cands = bucketCandidates(buckets);
+      tested = cands.length;
+      const firstBucket = new Map<string, number>();
+      const latest = new Map<string, number>();
+      for (const b of buckets) {
+        const k = `${b.ticker}|${b.dataset}`;
+        if (b.bucket < RISE_WINDOWS) firstBucket.set(k, Math.max(firstBucket.get(k) ?? -1, b.bucket));
+        if (b.bucket === 0) latest.set(k, Number(b.n));
+      }
+      for (const [k, n] of latest) if (n >= 3 && (firstBucket.get(k) ?? 0) < 5) short++;
+      const byDataset = new Map<string, string[]>();
+      for (const c of cands) (byDataset.get(c.dataset) ?? byDataset.set(c.dataset, []).get(c.dataset)!).push(c.ticker);
+      const since = isoDaysAgo(RISE_LOOKBACK_DAYS);
+      for (const [dataset, tickers] of byDataset) {
+        for (const part of chunks(tickers, 60)) {
+          const rows = await readAltAll<AltRow>(ROW_COLUMNS, (q) => q.eq("dataset", dataset).eq("kind", "event").in("ticker", part).gt("date", since).lte("date", today).order("uid"), client);
+          items.push(...confirmCounts(dataset, rows, today));
+        }
+      }
+    } catch {
+      failed.push("filing and record counts");
+    }
+    for (const rule of RANGE_RULES) {
+      try {
+        const leaders = client ? await client.ensureQueryData(altLeadersQuery(rule.dataset, rule.title)) : await altLeadersQuery(rule.dataset, rule.title).queryFn({ client });
+        const tickers = rangeCandidates(leaders, rule, today);
+        const since = isoDaysAgo(rule.readDays);
+        for (const part of chunks(tickers, 60)) {
+          const rows = await readAltAll<AltRow>(ROW_COLUMNS, (q) => q.eq("dataset", rule.dataset).eq("title", rule.title).eq("kind", "series").in("ticker", part).gte("date", since).order("uid"), client);
+          items.push(...confirmSeries(rows, rule, today));
+        }
+      } catch {
+        failed.push(rule.title);
+      }
+    }
+    return { items: rankUnusual(items), tested, short, failed };
   },
-  staleTime: 10 * 60_000,
+  staleTime: 30 * 60_000,
 });
 
 export const altSourceStatsQuery = () => ({
@@ -199,14 +291,17 @@ export const altCellQuery = (ticker: string, dataset: string, days = 90) => ({
   staleTime: 10 * 60_000,
 });
 
-/** Red-flag 8-K items and activist 13Ds in the last 90 days. */
+/** Days the material-filings list covers. */
+export const RED_FLAG_DAYS = 90;
+
+/** Red-flag 8-K items (`items`, the tab's list) and activist 13Ds in the last RED_FLAG_DAYS, every page. */
 export const altRedFlagsQuery = (items: string[]) => ({
   queryKey: ["alt_redflags", items.join(",")],
   queryFn: async ({ client }: { client?: QueryClient }) => {
-    const since = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+    const since = isoDaysAgo(RED_FLAG_DAYS);
     const [ev, own] = await Promise.all([
-      readAlt("*", (q) => q.eq("dataset", "events").in("meta->>item", items).gte("date", since).order("date", { ascending: false }).limit(300), client),
-      readAlt("*", (q) => q.eq("dataset", "ownership").eq("meta->>activist", "true").gte("date", since).order("date", { ascending: false }).limit(100), client),
+      readAltAll(ROW_COLUMNS, (q) => q.eq("dataset", "events").eq("kind", "event").in("meta->>item", items).gte("date", since).order("date", { ascending: false }).order("uid"), client),
+      readAltAll(ROW_COLUMNS, (q) => q.eq("dataset", "ownership").eq("kind", "event").eq("meta->>activist", "true").gte("date", since).order("date", { ascending: false }).order("uid"), client),
     ]);
     return [...own, ...ev];
   },
@@ -236,27 +331,4 @@ export const medicareStateQuery = (state: string) => ({
     return { latest, rows };
   },
   staleTime: 6 * 60 * 60_000,
-});
-
-/**
- * Series readings unusual for the company across all companies: the leaderboard pre-screens each
- * watched series, then the candidates' recent readings are tested with the company tab's rule.
- */
-export const altSeriesUnusualQuery = () => ({
-  queryKey: ["alt_series_unusual"],
-  queryFn: async ({ client }: { client?: QueryClient }) => {
-    const today = new Date().toISOString().slice(0, 10);
-    const since = new Date(Date.now() - 800 * 864e5).toISOString().slice(0, 10);
-    const out: UnusualItem[] = [];
-    for (const w of SERIES_WATCH) {
-      const { data, error } = await supabase.rpc("alt_series_leaders", { _dataset: w.dataset, _title: w.title });
-      if (error) throw error;
-      const tickers = seriesCandidates((data ?? []) as AltLeader[], w);
-      if (!tickers.length) continue;
-      const rows = await readAltAll<AltRow>("uid,ticker,dataset,kind,date,title,value,unit,meta,source,source_url", (q) => q.eq("dataset", w.dataset).eq("title", w.title).in("ticker", tickers).gte("date", since).order("uid"), client);
-      out.push(...confirmSeries(rows, w, today));
-    }
-    return out;
-  },
-  staleTime: 30 * 60_000,
 });

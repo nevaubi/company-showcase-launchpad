@@ -33,17 +33,19 @@ export function AltRecords({ rows, ticker, pageSize = 8, showTicker, series, emp
   const p = Math.min(page, pages - 1);
   const list = rows.slice(p * pageSize, p * pageSize + pageSize);
   const today = new Date().toISOString().slice(0, 10);
+  // no amount column for a dataset whose records carry none (it would only take width from titles)
+  const amounts = rows.some((r) => r.value != null);
   if (!rows.length) return empty ? <p className="px-3.5 py-3 text-[13px] text-muted-foreground">{empty}</p> : null;
   return (
     <div className="min-w-0">
       <div className="overflow-x-auto">
         <table className="w-full table-fixed text-[13px]">
           <colgroup>
-            <col className="w-[82px] sm:w-[96px]" />
-            {showTicker && <col className="w-[88px]" />}
+            <col className="w-[90px] sm:w-[96px]" />
+            {showTicker && <col className="w-[76px] sm:w-[88px]" />}
             <col />
-            <col className="w-[64px] sm:w-[84px]" />
-            <col className="w-[36px] sm:w-[72px]" />
+            {amounts && <col className="w-[64px] sm:w-[84px]" />}
+            <col className="w-[36px] sm:w-[84px]" />
           </colgroup>
           <tbody>
             {list.map((r) => {
@@ -59,7 +61,7 @@ export function AltRecords({ rows, ticker, pageSize = 8, showTicker, series, emp
                     <div className="flex min-w-0 items-center gap-1.5" title={[r.title, d].filter(Boolean).join(" · ")}>
                       {t?.text && <span className={cn("hidden shrink-0 rounded-[3px] sm:inline border px-1 text-[10px] leading-4 first-letter:uppercase", t.tone === "neg" ? "text-negative" : t.tone === "pos" ? "text-positive" : "text-muted-foreground")}>{t.text}</span>}
                       {r.source_url && !series ? (
-                        <a href={r.source_url} target="_blank" rel="noreferrer" className="group inline-flex min-w-0 shrink items-center gap-1 hover:underline">
+                        <a href={r.source_url} target="_blank" rel="noreferrer" className="group inline-flex min-h-7 min-w-0 shrink items-center gap-1 hover:underline">
                           <span className="truncate">{r.title}</span>
                           <ExternalLink className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
                         </a>
@@ -69,11 +71,13 @@ export function AltRecords({ rows, ticker, pageSize = 8, showTicker, series, emp
                       {d && <span className="hidden min-w-0 max-w-[40%] shrink-[3] truncate text-[11px] text-muted-foreground 2xl:inline">{d}</span>}
                     </div>
                   </td>
-                  <td className="num truncate pr-2 text-right">{r.value != null ? `${fmtAlt(r.value, r.unit === "units" || r.unit === "patients" ? null : r.unit)}${unitWord(r.unit)}` : ""}</td>
-                  <td className="pr-1 text-right max-sm:[&_button]:px-1 max-sm:[&_button]:text-[0px] sm:pr-2">{r.source_url && <EvidenceButton ticker={ticker ?? r.ticker} title={r.title} url={r.source_url} date={r.date ?? undefined} />}</td>
+                  {amounts && <td className="num truncate pr-2 text-right">{r.value != null ? `${fmtAlt(r.value, r.unit === "units" || r.unit === "patients" ? null : r.unit)}${unitWord(r.unit)}` : ""}</td>}
+                  <td className="pr-1 text-right [&_button]:h-6 [&_button]:px-1.5 max-sm:[&_button]:px-1 max-sm:[&_button]:text-[0px] sm:pr-2">{r.source_url && <EvidenceButton ticker={ticker ?? r.ticker} title={r.title} url={r.source_url} date={r.date ?? undefined} />}</td>
                 </tr>
               );
             })}
+            {/* a short last page keeps the full page height, so the pager stays under the cursor and the page does not move */}
+            {pages > 1 && Array.from({ length: pageSize - list.length }, (_, i) => <tr key={`pad${i}`} aria-hidden className="h-7 border-t border-transparent"><td colSpan={4 + (showTicker ? 1 : 0) - (amounts ? 0 : 1)} /></tr>)}
           </tbody>
         </table>
       </div>
