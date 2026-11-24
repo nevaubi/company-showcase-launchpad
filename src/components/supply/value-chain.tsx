@@ -12,7 +12,8 @@ import { Segmented, type SegOption } from "@/components/app/segmented";
 import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
 import { ClearIsolation } from "@/components/supply/supply-toolbar";
 import { BASIS_WORD, CHAIN_FLOWS, LINK_TYPE_LABEL, TIER_LABEL, type Chain, type ChainEdge, type ChainFlow, type ChainNode, type TaggedShare } from "@/lib/supply/chain";
-import { CHAIN, boxName, nameFits, edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
+import { CHAIN, edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
+import { boxLabel, boxTextWidth, displayName } from "@/lib/supply/name-fit";
 import { basisWords, type RevenueBasis, type RiskLink } from "@/lib/supply/core";
 import { chainEdgePath, chainPath, pathHops, type Isolated, type PathHop } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
@@ -291,7 +292,7 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
             onFocus={() => onPreview(focus ? null : chainPath(chain, n.key))} onBlur={() => onPreview(null)}
             style={{ left: p.x, top: p.y, width: p.w, height: p.h }}
             className={cn(
-              "absolute flex items-center gap-1.5 rounded-md border px-1.5 text-left text-xs transition-[opacity,box-shadow,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card motion-reduce:transition-none",
+              "absolute flex items-center gap-1 rounded-md border px-1 text-left text-xs transition-[opacity,box-shadow,border-color] duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card motion-reduce:transition-none",
               focus ? "border-ink bg-ink text-ink-foreground" : "bg-card shadow-paper hover:border-foreground/35 hover:shadow-lift",
               pressed && "border-foreground ring-1 ring-foreground",
               !on && "opacity-40",
@@ -301,20 +302,18 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
             <span className="min-w-0 flex-1">
               {compact ? (
                 <span className={cn("block truncate font-medium", n.ticker && "num")}>{n.ticker ?? n.name}</span>
-              ) : n.ticker && nameFits(boxName(n.name), p.w) ? (
-                <>
-                  <span className="block truncate font-medium leading-4">{boxName(n.name)}</span>
-                  <span className={cn("num block truncate text-[10px] leading-3", focus ? "opacity-80" : "text-muted-foreground")}>{n.ticker}</span>
-                </>
-              ) : n.ticker ? (
-                /* a name the box would cut leads with the ticker, so two boxes never read the same ("Hewle..." twice) */
-                <>
-                  <span className="num block truncate font-medium leading-4">{n.ticker}</span>
-                  <span className={cn("block truncate text-[10px] leading-3", focus ? "opacity-80" : "text-muted-foreground")}>{boxName(n.name)}</span>
-                </>
-              ) : (
-                <span className="line-clamp-2 font-medium leading-[15px] [overflow-wrap:anywhere]">{boxName(n.name)}</span>
-              )}
+              ) : (() => {
+                /* the short name: on one line with the ticker under it, else on up to three lines, cut only between words */
+                const f = boxLabel(displayName(n.name, n.ticker), n.ticker, boxTextWidth(p.w, sole.has(n.key)));
+                return (
+                  <>
+                    <span data-name="" className="block font-medium" style={{ fontSize: f.px, lineHeight: f.ticker ? "16px" : "12px" }}>
+                      {f.lines.map((l, i) => <span key={i} className="block overflow-hidden text-ellipsis whitespace-nowrap">{l}</span>)}
+                    </span>
+                    {f.ticker && n.ticker && <span className={cn("num block truncate text-[10px] leading-3", focus ? "opacity-80" : "text-muted-foreground")}>{n.ticker}</span>}
+                  </>
+                );
+              })()}
             </span>
             {sole.has(n.key) && <Lock className="size-3 shrink-0 text-negative" aria-hidden="true" />}
           </button>

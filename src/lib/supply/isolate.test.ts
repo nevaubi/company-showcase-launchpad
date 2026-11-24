@@ -211,3 +211,22 @@ describe("tables follow the isolation", () => {
     expect(isolatedHas(one, { key: kioxia.key, relation: "supplier" })).toBe(false);
   });
 });
+
+describe("an isolation opened from an address with another parameter (p7-map5 item 3)", () => {
+  /* the preview's hash router hands the page `iso=rel:supplier?x=1` when the address has `?x=1` before the hash; a shared
+     link with a tracking tag added after a second "?" arrives the same way. Before the fix rel: and node: read as nothing. */
+  it("reads the isolation and ignores what follows a stray ? or #", () => {
+    for (const [raw, want] of [
+      ["rel:supplier?x=1", { kind: "relation", relation: "supplier" }],
+      ["rel:customer?utm_source=newsletter&utm_medium=email", { kind: "relation", relation: "customer" }],
+      ["node:supplier:TSM?dark=1", { kind: "node", node: "supplier:TSM" }],
+      ["path:TSM>NVDA>HPE#evidence", { kind: "path", keys: ["TSM", "NVDA", "HPE"] }],
+    ] as const) expect(parseIsolation(raw)).toEqual(want);
+  });
+  it("the page's search schema strips the tail from every value, whichever comes last", () => {
+    const s = supplySearch.parse({ t: "NVDA?x=1", view: "chain?x=1", iso: "rel:supplier?x=1", sel: "supplier:TSM#a", extra: "1" });
+    expect(s).toMatchObject({ t: "NVDA", view: "chain", iso: "rel:supplier", sel: "supplier:TSM" });
+    expect(supplySearch.parse({ t: "NVDA", iso: "node:supplier:TSM" })).toMatchObject({ t: "NVDA", iso: "node:supplier:TSM" });
+    expect(supplySearch.parse({ depth: "2?x=1" }).depth).toBe(2);
+  });
+});

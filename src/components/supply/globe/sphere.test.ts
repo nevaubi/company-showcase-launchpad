@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OPENING_SETS } from './opening.fixture';
-import { anchorCentre, OPEN_MAX_LAT, angleBetween, baseScale, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, MAX_LAT, miller, MILLER_MAX, millerInv, project, RAD, toLonLat, toVec, openingCamera, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type WeightedPlace } from './sphere';
+import { anchorCentre, OPEN_MAX_LAT, tiesShare, angleBetween, baseScale, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, MAX_LAT, miller, MILLER_MAX, millerInv, project, RAD, toLonLat, toVec, openingCamera, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type WeightedPlace } from './sphere';
 
 const VP = { w: 774, h: 580 };
 const SANTA_CLARA: LonLat = [-121.955, 37.354], TAIPEI: LonLat = [121.5, 25.0], BOSTON: LonLat = [-71.06, 42.36];
@@ -59,6 +59,21 @@ describe('zoom and drag hold the place under the pointer', () => {
       expect(at.x).toBeCloseTo(pointer.x, 4); expect(at.y).toBeCloseTo(pointer.y, 4);
     }
   });
+  it('holds the pointed-at place when the centre is drawn off the middle (the opening view), measured from the drawn centre', () => {
+    const cam: Camera = { lon: 170, lat: 50, zoom: 1.36, ox: 0.005, oy: 0.158 }, pointer = { x: 520, y: 300 };
+    const v0 = makeView(cam, VP, false);
+    expect(v0.cy).toBeCloseTo(VP.h / 2 + 0.158 * VP.h, 6);
+    const place = unproject(v0, pointer.x, pointer.y) as LonLat;
+    for (const zoom of [1.7, 3, 8]) {
+      const c = anchorCentre(place, pointer.x - v0.cx, pointer.y - v0.cy, baseScale(VP, false) * zoom, false, cam.lon)!;
+      const at = project(makeView({ ...c, zoom, ox: cam.ox, oy: cam.oy }, VP, false), place[0], place[1]);
+      expect(at.x).toBeCloseTo(pointer.x, 4); expect(at.y).toBeCloseTo(pointer.y, 4);
+    }
+  });
+  it('flies the drawn centre with the camera, so an offset view is reached without a jump', () => {
+    const f = flight({ lon: 0, lat: 0, zoom: 2, ox: 0, oy: 0 }, { lon: 170, lat: 50, zoom: 1.36, ox: 0.04, oy: 0.16 }, false);
+    expect(f.at(0).oy).toBe(0); expect(f.at(1).oy).toBeCloseTo(0.16, 9); expect(f.at(0.5).oy).toBeCloseTo(0.08, 9);
+  });
   it('does the same on the flat map', () => {
     const cam: Camera = { lon: -40, lat: 20, zoom: 1.5 }, pointer = { x: 610, y: 150 };
     const place = unproject(makeView(cam, VP, true), pointer.x, pointer.y) as LonLat;
@@ -76,7 +91,9 @@ describe('zoom and drag hold the place under the pointer', () => {
 
 describe('camera limits', () => {
   it('keeps the globe off the poles and the flat map inside its top and bottom edges', () => {
-    expect(clampCamera({ lon: 200, lat: 89, zoom: 500 }, VP, false, 0.9, 60)).toEqual({ lon: -160, lat: MAX_LAT, zoom: 60 });
+    expect(clampCamera({ lon: 200, lat: 89, zoom: 500 }, VP, false, 0.9, 60)).toEqual({ lon: -160, lat: MAX_LAT, zoom: 60, ox: 0, oy: 0 });
+    /* a screen offset is kept on the globe, within half the frame */
+    expect(clampCamera({ lon: 0, lat: 0, zoom: 2, oy: 0.9 }, VP, false, 0.9, 60).oy).toBe(0.5);
     const c = clampCamera({ lon: 0, lat: 85, zoom: 2 }, VP, true, 1, 60), view = makeView(c, VP, true);
     /* the top edge of the frame is not above the top of the world */
     expect(unproject(view, VP.w / 2, 0)).not.toBeNull();
@@ -192,10 +209,11 @@ describe('openingCamera', () => {
     expect(cam.zoom).toBeGreaterThanOrEqual(1);
   });
 
-  it('frames a company whose ties are all in North America as fitCamera does, zoomed in on the continent', () => {
+  it('frames a company whose ties are all in North America from the centre fitCamera picks, zoomed in on the continent', () => {
     const cam = openingCamera(santaClara, us, vp, false);
     const fit = fitCamera([santaClara, ...us.map((p) => [p.lon, p.lat] as LonLat)], vp, false);
-    expect(cam).toEqual(fit);
+    expect(cam.lon).toBeCloseTo(fit.lon, 9); expect(cam.lat).toBeCloseTo(fit.lat, 9);
+    expect(cam.zoom).toBeGreaterThanOrEqual(fit.zoom);
     expect(cam.zoom).toBeGreaterThan(1.5);
     for (const p of us) expect(facing(cam, [p.lon, p.lat])).toBeGreaterThan(0.6);
   });
@@ -204,6 +222,10 @@ describe('openingCamera', () => {
     const auckland: LonLat = [174.76, -36.85];
     const ties = [P(178.44, -18.14, 2), P(-171.77, -13.83), P(-157.86, 21.31), P(166.67, -22.27)];
     const cam = openingCamera(auckland, ties, vp, false);
+    /* the box fills the frame's height (it was 0.10 to 0.77 with the company at its foot, 0.77) */
+    const v = makeView(cam, vp, false), ys = [auckland, ...ties.map((t) => [t.lon, t.lat] as LonLat)].map(([lon, lat]) => project(v, lon, lat).y / vp.h);
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(0.1 - 1e-6); expect(Math.max(...ys)).toBeLessThanOrEqual(0.9 + 1e-6);
+    expect(project(v, auckland[0], auckland[1]).y / vp.h).toBeLessThanOrEqual(5 / 6 + 1e-6);
     expect(Math.abs(lonDelta(180, cam.lon))).toBeLessThan(25);
     for (const p of [auckland, ...ties.map((t) => [t.lon, t.lat] as LonLat)]) expect(facing(cam, p)).toBeGreaterThan(0.6);
     expect(cam.zoom).toBeGreaterThan(1.2);
@@ -234,6 +256,52 @@ describe('openingCamera', () => {
       expect(cam.lat).toBeLessThan(70);
       expect(facing(cam, [-3.28, 54.06])).toBeGreaterThan(0.2);
       expect(facing(cam, [137.32, 36.38])).toBeGreaterThan(0.2);
+    });
+    /* review p5-shots M10: NVIDIA opened at the right edge with the south of the disc empty. The ties' box now fills
+       the frame: inside the inner 80% on both axes, the company inside the inner two thirds, the box's middle near the
+       frame's middle, and a larger share of the frame than before (shares measured on the old code: NVDA 29%, UTHR 22%,
+       ALGM 41%, CRUS 30%; NVDA's box was y 0.16 to 0.53 with NVIDIA at x 0.77, UTHR's 0.12 to 0.59) */
+    const before: Record<string, number> = { NVDA: 0.29, UTHR: 0.22, ALGM: 0.41, CRUS: 0.3 };
+    const screen = (t: string) => {
+      const { set, cam } = open(t), v = makeView(cam, kit, false);
+      const pts = [set.focus, ...set.ties.map(([lon, lat]) => [lon, lat] as LonLat)].map(([lon, lat]) => project(v, lon, lat)).filter((p) => p.z >= 0.15);
+      const xs = pts.map((p) => p.x / kit.w), ys = pts.map((p) => p.y / kit.h), f = project(v, set.focus[0], set.focus[1]);
+      return { cam, set, box: { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }, f: { x: f.x / kit.w, y: f.y / kit.h }, share: tiesShare(cam, [set.focus, ...set.ties.map(([lon, lat]) => [lon, lat] as LonLat)], kit) };
+    };
+    for (const t of ['NVDA', 'UTHR', 'ALGM', 'CRUS']) {
+      it(`${t} opens with its ties filling the frame and the company inside the inner two thirds`, () => {
+        const { box, f, share, cam } = screen(t);
+        const e = 1e-6;
+        expect(box.x0).toBeGreaterThanOrEqual(0.1 - e); expect(box.x1).toBeLessThanOrEqual(0.9 + e);
+        expect(box.y0).toBeGreaterThanOrEqual(0.1 - e); expect(box.y1).toBeLessThanOrEqual(0.9 + e);
+        expect(f.x).toBeGreaterThanOrEqual(1 / 6 - e); expect(f.x).toBeLessThanOrEqual(5 / 6 + e);
+        expect(f.y).toBeGreaterThanOrEqual(1 / 6 - e); expect(f.y).toBeLessThanOrEqual(5 / 6 + e);
+        expect(share).toBeGreaterThanOrEqual(before[t] - 0.01);
+        /* the box sits in the middle of the frame, within what the company band allows */
+        expect(Math.abs((box.y0 + box.y1) / 2 - 0.5)).toBeLessThan(0.08);
+        expect(Math.abs(cam.lat)).toBeLessThanOrEqual(OPEN_MAX_LAT + 1);
+      });
+    }
+    it('NVDA and UTHR fill clearly more of the frame than they did, by a vertical offset of the drawn centre', () => {
+      const nvda = screen('NVDA'), uthr = screen('UTHR');
+      expect(nvda.share).toBeGreaterThan(0.4);
+      expect(uthr.share).toBeGreaterThan(0.5);
+      /* the centre is kept at the latitude clamp and drawn below the middle, so the empty south leaves the frame */
+      expect(nvda.cam.oy).toBeGreaterThan(0.1);
+      expect(uthr.cam.oy).toBeGreaterThan(0.1);
+    });
+    it('keeps every place clear of the controls it is told about, stepping back if it must', () => {
+      const set = OPENING_SETS.UTHR, places = set.ties.map(([lon, lat, w, side]) => ({ lon, lat, w, side }));
+      const free = openingCamera(set.focus, places, kit, false, opts), v = makeView(free, kit, false);
+      /* a box over the place that lies lowest on screen, as the tab bar or the isolation bar would be */
+      const low = [set.focus, ...set.ties.map(([lon, lat]) => [lon, lat] as LonLat)].map(([lon, lat]) => project(v, lon, lat)).filter((p) => p.z >= 0.15).sort((a, b) => b.y - a.y)[0];
+      const bar = { x: 0, y: low.y - 20, w: kit.w, h: kit.h };
+      const cam = openingCamera(set.focus, places, kit, false, { ...opts, avoid: [bar] }), w = makeView(cam, kit, false);
+      for (const [lon, lat] of [set.focus, ...set.ties.map(([a, b]) => [a, b] as LonLat)]) {
+        const p = project(w, lon, lat);
+        if (p.z >= 0.15) expect(p.y).toBeLessThan(bar.y);
+      }
+      expect(cam.zoom).toBeLessThan(free.zoom);
     });
     it('NVDA keeps Asia and the United States on the near side, centred over the North Pacific', () => {
       const { cam } = open('NVDA');

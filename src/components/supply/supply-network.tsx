@@ -14,7 +14,8 @@ import { figure, LineSample, NodeHoverCard, RelationMark } from "./supply-marks"
 import type { GraphNode, HopNode, NodeRisk, Relation, ShockImpact } from "@/lib/supply/core";
 import type { IsolateProps } from "@/lib/supply/isolate-contract";
 import { groupTotals, NATURE_WORD, nodeFacts, type GroupTotals, type NodeFacts } from "@/lib/supply/describe";
-import { bandLegend, layoutNetwork, NET, type NetCard } from "@/lib/supply/network-layout";
+import { bandLegend, cardNameLines, layoutNetwork, NET, type NetCard } from "@/lib/supply/network-layout";
+import { displayName } from "@/lib/supply/name-fit";
 import { fmtCompactUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -95,6 +96,9 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
   );
   /* only the open card (or the one that is isolated) carries the isolate button, and only it gives up room for it */
   const iso = onIsolate != null && (picked || isolated);
+  /* the name: the short name of a covered company, on two lines when the layout gave the card the height, cut only between words */
+  const tall = placed && c.h > NET.card;
+  const shown = placed ? cardNameLines(n, c.w, !stacked).join(" ") : displayName(n.name, n.ticker);
   const what = impact ? SEVERITY[impact.severity] : nature ? `${nature}${facts.summary ? ` · ${facts.summary}` : ""}` : facts.summary ?? `${facts.statements} filing statement${facts.statements === 1 ? "" : "s"}`;
   return (
     <div style={style} data-card="" data-dim={dim || undefined}
@@ -135,7 +139,7 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
         ) : (
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-baseline gap-2">
-              <span className={cn("min-w-0 flex-1 truncate text-[13px] leading-[18px]", picked ? "font-semibold" : "font-medium")}>{n.name}</span>
+              <span data-name="" className={cn("min-w-0 flex-1 text-[13px] leading-[18px]", tall || !placed ? "line-clamp-2" : "truncate", picked ? "font-semibold" : "font-medium")}>{shown}</span>
               {/* in the flow columns the figure sits at the right of the name, so a column of cards reads like a column of numbers */}
               {!stacked && fig && <span className={cn("num shrink-0 text-[13px] leading-[18px]", fig.flow ? "font-medium" : "text-muted-foreground")}>{fig.value}</span>}
             </span>

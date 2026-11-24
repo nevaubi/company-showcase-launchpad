@@ -1,6 +1,7 @@
 // Pure layout for the supply-chain network view: suppliers on the left feed the company in the middle,
 // which feeds customers on the right. Partners and competitors are not flows, so they sit in a second row
 // under the company. Second-order names hang under the first-order name they belong to. No browser/Node APIs, so the geometry is unit-tested.
+import { displayName, fitLines } from "./name-fit";
 import { copies, isTradeLink, maxShare, statedAmounts, type GraphNode, type HopNode, type NodeRisk, type Relation, type RiskLink } from "./core";
 
 export interface NetCard {
@@ -57,9 +58,10 @@ export function bandLegend(basis: { supplier: Basis; customer: Basis }): string 
  * Geometry in px. Every first-order name gets the same `card` (two lines: name and figure, then ticker, product and flags),
  * whatever its relation, so figures and flags line up down a column and across the page; `child` is a second-order name.
  * `head` holds a group's name and count on one line and its totals on the next. `cellMin` is the narrowest a card in the
- * second row may get.
+ * second row may get. A group in which some name needs two lines (`cardNameLines`) gets `cardTall` for every card, so the
+ * grid stays even and no name is cut on one line.
  */
-export const NET = { head: 48, card: 44, child: 28, gap: 4, indent: 16, gutter: 56, rowGap: 36, groupGap: 24, cellMin: 172, pad: 4, minFocus: 112, maxFocus: 360, focusMin: 132, focusMax: 208, tMin: 2, tMax: 18 } as const;
+export const NET = { head: 48, card: 44, cardTall: 62, nameFont: 13, nameChrome: 52, figureRoom: 60, child: 28, gap: 4, indent: 16, gutter: 56, rowGap: 36, groupGap: 24, cellMin: 172, pad: 4, minFocus: 112, maxFocus: 360, focusMin: 132, focusMax: 208, tMin: 2, tMax: 18 } as const;
 
 const isHop2 = (n: GraphNode | HopNode): n is HopNode => (n as HopNode).hop === 2;
 const tradeNode = (n: GraphNode | HopNode) => (n.links as RiskLink[]).some(isTradeLink);
@@ -100,6 +102,18 @@ export interface NetworkInput {
   expanded?: ReadonlySet<Relation>;
 }
 
+/** Room for a first-order card's name: the card less its logo and padding, and less the figure where it sits beside the name. */
+export const cardNameWidth = (w: number, figureBeside: boolean) => w - NET.nameChrome - (figureBeside ? NET.figureRoom : 0);
+/** The lines a first-order card's name takes (at most two) at this width. */
+export function cardNameLines(node: Pick<GraphNode, "name" | "ticker">, w: number, figureBeside: boolean): string[] {
+  return fitLines(displayName(node.name, node.ticker), cardNameWidth(w, figureBeside), 2, NET.nameFont).lines;
+}
+/** The height every first-order card of a group gets: tall when any of its names needs a second line. In the flow columns the
+ * figure's room is kept beside every name, figure or not, so the card draws the lines the layout measured. */
+export function groupCardHeight(cards: NetCard[], w: number, figureBeside: boolean): number {
+  return cards.some((c) => cardNameLines(c.node, w, figureBeside).length > 1) ? NET.cardTall : NET.card;
+}
+
 export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expanded }: NetworkInput): NetLayout {
   const W = Math.max(560, Math.floor(width));
   /* the company column is narrower than the two flow columns, so long counterparty names keep their room */
@@ -122,11 +136,11 @@ export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expan
 
   /** One outer column: first-order cards with their second-order names indented underneath. Returns the y after the last row. */
   const column = (r: "supplier" | "customer", x: number): { shown: NetCard[]; end: number } => {
-    const all = first(r), shown = cut(all, r);
+    const all = first(r), shown = cut(all, r), h = groupCardHeight(shown, colW, true);
     let y = top;
     for (const c of shown) {
-      c.x = x; c.y = y; cards.push(c);
-      y += NET.card + NET.gap;
+      c.x = x; c.y = y; c.h = h; cards.push(c);
+      y += h + NET.gap;
       const children = kids(c.key, r);
       for (const k of children) {
         k.x = x + NET.indent; k.y = y; cards.push(k);
@@ -176,13 +190,13 @@ export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expan
     if (!all.length) return { end: rowY, cx: x0 };
     const gw = cols * cw + (cols - 1) * NET.gap;
     headers.push({ relation: r, x: x0, y: rowY, w: gw, shown: shown.length, total: all.length });
-    const y0 = rowY + NET.head + NET.gap;
-    const cell = (i: number) => ({ x: x0 + (i % cols) * (cw + NET.gap), y: y0 + Math.floor(i / cols) * (NET.card + NET.gap) });
-    shown.forEach((c, i) => { const at = cell(i); c.x = at.x; c.y = at.y; c.w = cw; c.h = NET.card; cards.push(c); });
+    const y0 = rowY + NET.head + NET.gap, h = groupCardHeight(shown, cw, false);
+    const cell = (i: number) => ({ x: x0 + (i % cols) * (cw + NET.gap), y: y0 + Math.floor(i / cols) * (h + NET.gap) });
+    shown.forEach((c, i) => { const at = cell(i); c.x = at.x; c.y = at.y; c.w = cw; c.h = h; cards.push(c); });
     let n = shown.length;
-    if (all.length > shown.length) { const at = cell(n); more.push({ relation: r, x: at.x, y: at.y, w: cw, h: NET.card, hidden: all.length - shown.length }); n++; }
+    if (all.length > shown.length) { const at = cell(n); more.push({ relation: r, x: at.x, y: at.y, w: cw, h, hidden: all.length - shown.length }); n++; }
     /* the connector from the company lands on the group's heading mark */
-    return { end: y0 + Math.ceil(n / cols) * (NET.card + NET.gap), cx: x0 + 4 };
+    return { end: y0 + Math.ceil(n / cols) * (h + NET.gap), cx: x0 + 4 };
   };
   const gp = group("partner", partners, 0, both ? partnerCols : total);
   const gc = group("competitor", competitors, both ? partnerCols * (cw + NET.gap) - NET.gap + NET.groupGap : 0, both ? total - partnerCols : total);

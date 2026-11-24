@@ -20,7 +20,7 @@ import { LOD, packTopology, pickRes, traceFlat, traceGlobe, type MapRes, type Pa
 import { adoptPicture, afterFrame, BEYOND, covers, pictureZoom, reuseBase } from './loop';
 import { paintMap, polysOf, tintEase } from './paint';
 import { areaKind, badgeText, labelText, markerBox, placeLabels, type Box, type LabelAsk, type LabelSide } from './labels';
-import { anchorCentre, angleBetween, baseScale, clamp, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, openingCamera, project, RAD, slerp, toLonLat, toVec, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type Vec3, type View, type WeightedPlace } from './sphere';
+import { anchorCentre, angleBetween, baseScale, centreAt, clamp, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, openingCamera, project, RAD, slerp, toLonLat, toVec, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type Vec3, type View, type WeightedPlace } from './sphere';
 
 export type { GlobeShape } from './cluster';
 export { clusterSlices } from './cluster';
@@ -379,7 +379,17 @@ export class GlobeEngine {
     if (!places.length) return;
     this.flyTo(fitCamera(places, { w: this.w, h: this.h }, this.flat, { pad: opts.pad ?? this.pad(), minZoom: this.minZoom, maxZoom: Math.min(opts.maxZoom ?? 22, this.maxZoom), single: 5 }), opts.ms);
   }
-  zoomBy(factor: number): void { this.zoomTo(this.cam.zoom * factor, null); }
+  /** Zoom in or out about the selected name, else the company, while it is in the frame; otherwise about the drawn centre. */
+  zoomBy(factor: number): void {
+    const key = this.scene.selected, p = key ? this.pointByKey.get(key) : undefined;
+    const place: LonLat | undefined = p ? [p.lon, p.lat] : this.homePlaces[0];
+    let at: { x: number; y: number } | null = null;
+    if (place) {
+      const q = project(this.view(), place[0], place[1]);
+      if (q.z > 0.05 && q.x >= 0 && q.x <= this.w && q.y >= 0 && q.y <= this.h) at = { x: q.x, y: q.y };
+    }
+    this.zoomTo(this.cam.zoom * factor, at);
+  }
   /**
    * Fly to a name so that it can be seen on its own. Its link to `anchorKey` (the company, or the name it hangs off) is
    * framed when the name stands clear at that zoom; a name in a crowd is approached until the crowd comes apart or opens.
@@ -394,7 +404,7 @@ export class GlobeEngine {
     /* keep the other end in the picture when it is still close by at that zoom */
     const near = from != null && angleBetween(from, at) * this.scaleAt(need) < Math.min(this.w, this.h) * 0.32;
     const [lon, lat] = near && from ? toLonLat(slerp(toVec(from[0], from[1]), toVec(at[0], at[1]), 0.5)) : at;
-    this.flyTo({ lon, lat, zoom: need });
+    this.flyTo({ lon, lat, zoom: need, ox: 0, oy: 0 });
   }
   /** The zoom at which a name (with any others at its exact spot, opened into a fan) stands clear of every other place. */
   private separateZoom(p: GlobePoint): number {
@@ -413,7 +423,7 @@ export class GlobeEngine {
     const [focus, ...rest] = this.homePlaces;
     if (!focus) { this.flyTo({ ...this.cam, zoom: 1 }, ms); return; }
     const places: WeightedPlace[] = rest.map(([lon, lat], i) => ({ lon, lat, w: this.homeWeights[i]?.w ?? 1, side: this.homeWeights[i]?.side }));
-    this.flyTo(openingCamera(focus, places, { w: this.w, h: this.h }, this.flat, { pad: this.pad(), minZoom: this.minZoom, maxZoom: Math.min(this.homeZoom, this.maxZoom), single: 5 }), ms);
+    this.flyTo(openingCamera(focus, places, { w: this.w, h: this.h }, this.flat, { pad: this.pad(), minZoom: this.minZoom, maxZoom: Math.min(this.homeZoom, this.maxZoom), single: 5, avoid: this.reserved }), ms);
   }
   /** Let go of the wheel and of one-finger panning (Escape, or the host's own reasons). */
   release(): void { this.setEngaged(false); }
@@ -424,7 +434,13 @@ export class GlobeEngine {
   /* ---------- camera ---------- */
   private get minZoom(): number { return this.flat ? MIN_ZOOM_FLAT : MIN_ZOOM_GLOBE; }
   private pad(): number { return Math.min(72, Math.max(36, Math.min(this.w, this.h) * 0.12)); }
-  private clamped(c: Camera, deepest = this.maxZoom): Camera { return clampCamera(c, { w: this.w, h: this.h }, this.flat, this.minZoom, Math.max(this.minZoom, deepest)); }
+  /** A camera within the limits; one that does not say where its centre is drawn keeps the current camera's offset. */
+  private clamped(c: Camera, deepest = this.maxZoom): Camera {
+    const at = c.ox === undefined && c.oy === undefined ? { ...c, ox: this.cam.ox, oy: this.cam.oy } : c;
+    return clampCamera(at, { w: this.w, h: this.h }, this.flat, this.minZoom, Math.max(this.minZoom, deepest));
+  }
+  /** Where the current camera's centre is drawn (the middle of the frame, moved by its offset on the globe). */
+  private mid(): { x: number; y: number } { return centreAt(this.cam, { w: this.w, h: this.h }, this.flat); }
   private view(): View { return makeView(this.cam, { w: this.w, h: this.h }, this.flat); }
   private scaleAt(zoom: number): number { return baseScale({ w: this.w, h: this.h }, this.flat) * zoom; }
   /** Zoom to a level, holding the place under (px, py) where it is; without a point the middle of the frame holds. */
@@ -432,7 +448,8 @@ export class GlobeEngine {
     const target = Math.log(clamp(zoom, this.minZoom, this.maxZoom));
     this.fly = null; this.spin = null;
     const place = at ? unproject(this.view(), at.x, at.y) : null;
-    this.zoomAnim = { target, place, px: at?.x ?? this.w / 2, py: at?.y ?? this.h / 2 };
+    const m = this.mid();
+    this.zoomAnim = { target, place, px: at?.x ?? m.x, py: at?.y ?? m.y };
     if (this.reduced) this.stepZoom(1e6);
     this.schedule();
   }
@@ -445,7 +462,7 @@ export class GlobeEngine {
     this.applyZoom(Math.exp(next), z.place, z.px, z.py);
   }
   private applyZoom(zoom: number, place: LonLat | null, px: number, py: number): void {
-    const centre = place ? anchorCentre(place, px - this.w / 2, py - this.h / 2, this.scaleAt(zoom), this.flat, this.cam.lon) : null;
+    const m = this.mid(), centre = place ? anchorCentre(place, px - m.x, py - m.y, this.scaleAt(zoom), this.flat, this.cam.lon) : null;
     this.cam = this.clamped({ lon: centre?.lon ?? this.cam.lon, lat: centre?.lat ?? this.cam.lat, zoom });
     this.dirtyBase = this.dirtyTop = true;
   }
@@ -501,6 +518,9 @@ export class GlobeEngine {
   private publish(): void {
     const view = `${this.cam.lon.toFixed(3)},${this.cam.lat.toFixed(3)},${this.cam.zoom.toFixed(3)},${this.flat ? 'flat' : 'globe'}`;
     if (this.canvas.dataset.view !== view) this.canvas.dataset.view = view;
+    /* where that centre is drawn, in CSS pixels from the canvas's top left (off the middle in the opening view) */
+    const m = this.mid(), centre = `${m.x.toFixed(1)},${m.y.toFixed(1)}`;
+    if (this.canvas.dataset.centre !== centre) this.canvas.dataset.centre = centre;
   }
 
   /* ---------- the map ---------- */
@@ -545,12 +565,12 @@ export class GlobeEngine {
   }
   private whole(v: View): boolean { return !v.flat && v.R <= Math.min(v.w, v.h) / 2; }
   private pictureKey(c: Camera, R: number): string {
-    return `${pickRes(R, { 50: maps[50] != null, 10: maps[10] != null })}|${c.lon.toFixed(4)},${c.lat.toFixed(4)},${c.zoom.toFixed(5)}`;
+    return `${pickRes(R, { 50: maps[50] != null, 10: maps[10] != null })}|${c.lon.toFixed(4)},${c.lat.toFixed(4)},${c.zoom.toFixed(5)},${(c.ox ?? 0).toFixed(4)},${(c.oy ?? 0).toFixed(4)}`;
   }
   /** Where the camera will be at a zoom, holding the place the wheel or pinch holds. */
   private cameraAtZoom(zoom: number): Camera {
-    const z = this.zoomAnim, place = z?.place ?? this.pinch?.place ?? null, px = z?.px ?? this.w / 2, py = z?.py ?? this.h / 2;
-    const centre = place ? anchorCentre(place, px - this.w / 2, py - this.h / 2, this.scaleAt(zoom), this.flat, this.cam.lon) : null;
+    const m = this.mid(), z = this.zoomAnim, place = z?.place ?? this.pinch?.place ?? null, px = z?.px ?? m.x, py = z?.py ?? m.y;
+    const centre = place ? anchorCentre(place, px - m.x, py - m.y, this.scaleAt(zoom), this.flat, this.cam.lon) : null;
     return this.clamped({ lon: centre?.lon ?? this.cam.lon, lat: centre?.lat ?? this.cam.lat, zoom });
   }
   /**
@@ -1169,7 +1189,7 @@ export class GlobeEngine {
         g.moved += Math.abs(dx) + Math.abs(dy); g.x = x; g.y = y;
         if (!g.active || g.moved <= 4) return;
         /* the place that was grabbed stays under the pointer; where north-up makes that impossible, turn by the pointer's travel and grab anew */
-        const R = this.scaleAt(this.cam.zoom), held = g.place ? anchorCentre(g.place, x - this.w / 2, y - this.h / 2, R, this.flat, this.cam.lon) : null;
+        const R = this.scaleAt(this.cam.zoom), m = this.mid(), held = g.place ? anchorCentre(g.place, x - m.x, y - m.y, R, this.flat, this.cam.lon) : null;
         const want = held ?? { lon: this.cam.lon - (dx / R / RAD) / Math.max(0.25, Math.cos(this.cam.lat * RAD)), lat: this.cam.lat + dy / R / RAD };
         this.cam = this.clamped({ ...want, zoom: this.cam.zoom });
         this.panned = true;

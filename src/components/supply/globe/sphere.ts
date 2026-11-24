@@ -8,7 +8,14 @@
 
 export type LonLat = [number, number];
 export type Vec3 = [number, number, number];
-export interface Camera { lon: number; lat: number; zoom: number }
+/**
+ * Where the map looks: the centre, the zoom and, on the globe, where that centre is drawn. `ox`/`oy` move the centre off
+ * the middle of the frame, as a share of its width and height (0.1 is a tenth of the frame to the right, or down). The
+ * opening view uses them to put the company and its ties in the middle of the frame when the centre that shows them all
+ * squarely is not their middle (a centre is kept within OPEN_MAX_LAT, so a set in the north would otherwise leave the
+ * south of the disc empty). Zoom, drag and spin keep them; the flat map has none.
+ */
+export interface Camera { lon: number; lat: number; zoom: number; ox?: number; oy?: number }
 export interface Viewport { w: number; h: number }
 
 export const RAD = Math.PI / 180;
@@ -64,16 +71,21 @@ export const baseScale = (vp: Viewport, flat: boolean) => (flat ? Math.max(vp.w 
 /** Keep a camera inside what can be shown: latitude within reach of the poles, the flat map never past its top or bottom. */
 export function clampCamera(cam: Camera, vp: Viewport, flat: boolean, minZoom: number, maxZoom: number): Camera {
   const zoom = clamp(cam.zoom, minZoom, maxZoom);
-  if (!flat) return { lon: wrapLon(cam.lon), lat: clamp(cam.lat, -MAX_LAT, MAX_LAT), zoom };
+  if (!flat) return { lon: wrapLon(cam.lon), lat: clamp(cam.lat, -MAX_LAT, MAX_LAT), zoom, ox: clamp(cam.ox ?? 0, -0.5, 0.5), oy: clamp(cam.oy ?? 0, -0.5, 0.5) };
   const s = baseScale(vp, true) * zoom, room = MILLER_MAX - vp.h / (2 * s);
   const my = room <= 0 ? 0 : clamp(miller(clamp(cam.lat, -89.9, 89.9) * RAD), -room, room);
   return { lon: wrapLon(cam.lon), lat: millerInv(my) / RAD, zoom };
 }
 
+/** Where a camera's centre is drawn: the middle of the frame, moved by the camera's offset on the globe. */
+export function centreAt(cam: Camera, vp: Viewport, flat: boolean): { x: number; y: number } {
+  return flat ? { x: vp.w / 2, y: vp.h / 2 } : { x: vp.w / 2 + (cam.ox ?? 0) * vp.w, y: vp.h / 2 + (cam.oy ?? 0) * vp.h };
+}
+
 export function makeView(cam: Camera, vp: Viewport, flat: boolean): View {
-  const l = cam.lon * RAD, p = cam.lat * RAD, sl = Math.sin(l), cl = Math.cos(l), sp = Math.sin(p), cp = Math.cos(p);
+  const l = cam.lon * RAD, p = cam.lat * RAD, sl = Math.sin(l), cl = Math.cos(l), sp = Math.sin(p), cp = Math.cos(p), c = centreAt(cam, vp, flat);
   return {
-    flat, w: vp.w, h: vp.h, cx: vp.w / 2, cy: vp.h / 2, R: baseScale(vp, flat) * cam.zoom, lon0: cam.lon, lat0: cam.lat, zoom: cam.zoom,
+    flat, w: vp.w, h: vp.h, cx: c.x, cy: c.y, R: baseScale(vp, flat) * cam.zoom, lon0: cam.lon, lat0: cam.lat, zoom: cam.zoom,
     e: [-sl, cl, 0], n: [-sp * cl, -sp * sl, cp], f: [cp * cl, cp * sl, sp], my0: miller(clamp(p, -89.9 * RAD, 89.9 * RAD)),
   };
 }
@@ -138,7 +150,11 @@ export function anchorCentre(place: LonLat, dx: number, dy: number, R: number, f
   return { lon: wrapLon(place[0] - dl / RAD), lat };
 }
 
-export interface FitOptions { /** free space kept round the places, px */ pad?: number; minZoom?: number; maxZoom?: number; /** zoom used when every place is the same spot */ single?: number }
+export interface ScreenBox { x: number; y: number; w: number; h: number }
+export interface FitOptions {
+  /** free space kept round the places, px */ pad?: number; minZoom?: number; maxZoom?: number; /** zoom used when every place is the same spot */ single?: number;
+  /** opening view: screen areas the host's controls cover, where no place may be drawn */ avoid?: ScreenBox[];
+}
 /**
  * The camera that takes in a set of places with room to spare. Globe: centred on their mean direction, zoomed until the
  * outermost still clears the padding; places spread over more than a hemisphere get the whole disc, centred on the first
@@ -163,7 +179,7 @@ export function fitCamera(places: LonLat[], vp: Viewport, flat: boolean, opts: F
     const scale = spanL < 1e-4 && spanM < 1e-4 ? base * single : Math.min(spanL > 0 ? (2 * halfW) / spanL : Infinity, spanM > 0 ? (2 * halfH) / spanM : Infinity);
     return { lon: wrapLon(centre[0] + (l0 + l1) / 2 / RAD), lat: millerInv((m0 + m1) / 2) / RAD, zoom: clamp(scale / base, minZoom, maxZoom) };
   }
-  const cam = { lon: centre[0], lat: clamp(centre[1], -62, 72), zoom: 1 };
+  const cam = { lon: centre[0], lat: clamp(centre[1], -62, 72), zoom: 1, ox: 0, oy: 0 };
   const view = makeView(cam, vp, false), p: Projected = { x: 0, y: 0, z: 0 };
   let mx = 0, my = 0, back = false;
   for (const [lon, lat] of ok) {
@@ -191,10 +207,11 @@ export const OPEN_MAX_LAT = 50;
 
 /**
  * The opening (and reset) view of the globe for a company and the names placed round it. When the whole set fits on the
- * near side (the company squarely in view, the centre within OPEN_MAX_LAT), it is the framing of fitCamera. When it spreads over more than a hemisphere (NVIDIA: its customers in North
- * America, its foundry, memory and assembly in Asia), the centre is the one that shows the most weight squarely, with the
- * company itself kept well inside the disc, instead of the company's own side with the rest left on the horizon. The zoom
- * then fits what faces the viewer. The flat map shows the whole set as fitCamera frames it.
+ * near side (the company squarely in view, the centre within OPEN_MAX_LAT), the centre is fitCamera's. When it spreads
+ * over more than a hemisphere (NVIDIA: its customers in North America, its foundry, memory and assembly in Asia), the centre
+ * is the one that shows the most weight squarely, with the company itself kept well inside the disc, instead of the
+ * company's own side with the rest left on the horizon. Either way frameOpening then sets the zoom and the screen offset
+ * that make what faces the viewer fill the frame. The flat map shows the whole set as fitCamera frames it.
  */
 export function openingCamera(focus: LonLat, places: WeightedPlace[], vp: Viewport, flat: boolean, opts: FitOptions = {}): Camera {
   const ok = places.filter((p) => Number.isFinite(p.lon) && Number.isFinite(p.lat) && p.w > 0);
@@ -203,14 +220,16 @@ export function openingCamera(focus: LonLat, places: WeightedPlace[], vp: Viewpo
   if (flat || !ok.length) return fit;
   /* the framing that fits everything, when it faces the company squarely enough and does not tilt toward a pole */
   const fitHolds = facing(fit.lon, fit.lat, focus[0], focus[1]) >= FOCUS_FACING && Math.abs(fit.lat) <= OPEN_MAX_LAT + 1;
-  if (fitHolds && all.every(([lon, lat]) => facing(fit.lon, fit.lat, lon, lat) >= 0.12)) return fit;
+  if (fitHolds && all.every(([lon, lat]) => facing(fit.lon, fit.lat, lon, lat) >= 0.12)) return frameOpening([fit.lon, fit.lat], focus, all.slice(1), vp, opts);
   /* the set wraps round the globe: search centres on a 5 degree grid for the most of every side in plain sight, each side
      scored as the share of its weight that faces the viewer, so forty customers at home do not outvote six suppliers abroad */
   const sideTotal = new Map<string, number>();
   for (const p of ok) sideTotal.set(p.side ?? '', (sideTotal.get(p.side ?? '') ?? 0) + p.w);
   /* first the fewest ties with an end behind the edge (a tie whose both ends a view can show is not left with one hidden),
      then the most weight in plain sight; the centre never tilts past OPEN_MAX_LAT, so the reader sees a globe they know */
-  let best: { lon: number; lat: number; hidden: number; score: number; near: number } | null = null;
+  type Centre = { lon: number; lat: number; hidden: number; score: number; near: number };
+  let best: Centre | null = null;
+  const grid: Centre[] = [];
   for (let lat = -OPEN_MAX_LAT; lat <= OPEN_MAX_LAT; lat += 5) {
     for (let lon = -180; lon < 180; lon += 5) {
       const zf = facing(lon, lat, focus[0], focus[1]);
@@ -221,19 +240,86 @@ export function openingCamera(focus: LonLat, places: WeightedPlace[], vp: Viewpo
         if (z < SHOWN_FACING) hidden++;
         score += (p.w / (sideTotal.get(p.side ?? '') as number)) * seen(z);
       }
+      grid.push({ lon, lat, hidden, score, near: zf });
       /* between equal views, the one closer to the company */
       if (!best || hidden < best.hidden || (hidden === best.hidden && (score > best.score + 1e-9 || (Math.abs(score - best.score) <= 1e-9 && zf > best.near)))) best = { lon, lat, hidden, score, near: zf };
     }
   }
   if (!best) return fit;
-  const shown = all.filter(([lon, lat]) => facing(best.lon, best.lat, lon, lat) >= 0.15);
-  const minZoom = opts.minZoom ?? 1, maxZoom = opts.maxZoom ?? 24, pad = opts.pad ?? 56;
-  const view = makeView({ lon: best.lon, lat: best.lat, zoom: 1 }, vp, false), pr: Projected = { x: 0, y: 0, z: 0 };
-  let mx = 0, my = 0;
-  for (const [lon, lat] of shown) { project(view, lon, lat, 0, pr); mx = Math.max(mx, Math.abs(pr.x - view.cx) / view.R); my = Math.max(my, Math.abs(pr.y - view.cy) / view.R); }
-  const halfW = Math.max(40, vp.w / 2 - pad), halfH = Math.max(40, vp.h / 2 - pad), base = baseScale(vp, false);
-  const R = Math.min(mx > 0 ? halfW / mx : Infinity, my > 0 ? halfH / my : Infinity);
-  return { lon: wrapLon(best.lon), lat: best.lat, zoom: clamp(Number.isFinite(R) ? R / base : minZoom, minZoom, maxZoom) };
+  /* among the centres that hide no more and show nearly as much (OPEN_SCORE_SLACK), the one whose framing fills the
+     frame most: a set that spans the Pacific is seen from a little farther round rather than drawn as a thin band */
+  const top = best;
+  let cam = frameOpening([top.lon, top.lat], focus, all, vp, opts), fill = tiesShare(cam, all, vp);
+  for (const g of grid) {
+    if (g === top || g.hidden > top.hidden || g.score < top.score * (1 - OPEN_SCORE_SLACK)) continue;
+    const c = frameOpening([g.lon, g.lat], focus, all, vp, opts), s = tiesShare(c, all, vp);
+    if (s > fill * 1.02) { cam = c; fill = s; }
+  }
+  return cam;
+}
+
+/** How much less weight in plain sight a centre may show than the best one and still be chosen for filling the frame better. */
+export const OPEN_SCORE_SLACK = 0.1;
+
+/** The share of the frame the box round these places covers in a view (the part of the box inside the frame; places behind the edge left out). */
+export function tiesShare(cam: Camera, places: LonLat[], vp: Viewport): number {
+  const view = makeView(cam, vp, false), pr: Projected = { x: 0, y: 0, z: 0 };
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const [lon, lat] of places) {
+    project(view, lon, lat, 0, pr);
+    if (pr.z < 0.15) continue;
+    x0 = Math.min(x0, pr.x); x1 = Math.max(x1, pr.x); y0 = Math.min(y0, pr.y); y1 = Math.max(y1, pr.y);
+  }
+  if (!(x1 >= x0)) return 0;
+  return (Math.max(0, Math.min(vp.w, x1) - Math.max(0, x0)) * Math.max(0, Math.min(vp.h, y1) - Math.max(0, y0))) / (vp.w * vp.h);
+}
+
+/** The opening view keeps the ties' region inside this share of the frame on each axis (the inner 80%)... */
+export const OPEN_INNER = 0.8;
+/** ...and the company inside this share (the inner two thirds), so it is never drawn against an edge. */
+export const OPEN_FOCUS = 2 / 3;
+
+/**
+ * The zoom and screen offset that make the company and the ties seen from `centre` fill the frame: their box spans as
+ * much of the inner OPEN_INNER of the frame as it can, the company stays inside the inner OPEN_FOCUS, and no place is
+ * drawn under the host's controls (`avoid`). The centre itself does not move, so what faces the viewer does not change:
+ * the box is put in the middle by drawing the centre off the middle of the frame (Camera.ox/oy).
+ */
+export function frameOpening(centre: LonLat, focus: LonLat, places: LonLat[], vp: Viewport, opts: FitOptions = {}): Camera {
+  const minZoom = opts.minZoom ?? 1, maxZoom = opts.maxZoom ?? 24, single = opts.single ?? 5, base = baseScale(vp, false);
+  const view = makeView({ lon: centre[0], lat: centre[1], zoom: 1 }, vp, false), pr: Projected = { x: 0, y: 0, z: 0 };
+  /* positions at zoom 1 in globe radii from the centre (x right, y down), for the company and what faces the viewer */
+  const at = (lon: number, lat: number) => { project(view, lon, lat, 0, pr); return pr.z >= 0.15 ? { u: (pr.x - view.cx) / view.R, v: (pr.y - view.cy) / view.R } : null; };
+  const f = at(focus[0], focus[1]) ?? { u: 0, v: 0 };
+  const shown = [f, ...places.map(([lon, lat]) => at(lon, lat)).filter((p): p is { u: number; v: number } => p != null)];
+  const u0 = Math.min(...shown.map((p) => p.u)), u1 = Math.max(...shown.map((p) => p.u)), v0 = Math.min(...shown.map((p) => p.v)), v1 = Math.max(...shown.map((p) => p.v));
+  const edge = (1 - OPEN_INNER) / 2, fEdge = (1 - OPEN_FOCUS) / 2;
+  /* the largest radius at which the box fits the inner frame and the company can still sit inside its own inner band */
+  const most = (span: number, lo: number, hi: number, c: number) => Math.min(
+    hi - lo > 1e-4 ? (OPEN_INNER * span) / (hi - lo) : Infinity,
+    c - lo > 1e-4 ? ((1 - edge - fEdge) * span) / (c - lo) : Infinity,
+    hi - c > 1e-4 ? ((1 - edge - fEdge) * span) / (hi - c) : Infinity,
+  );
+  const R0 = Math.min(most(vp.w, u0, u1, f.u), most(vp.h, v0, v1, f.v));
+  /* where the centre goes on one axis at radius R: the box in the middle, as far as the two bands allow */
+  const place = (span: number, R: number, lo: number, hi: number, c: number) => {
+    const from = Math.max(edge * span - R * lo, fEdge * span - R * c), to = Math.min((1 - edge) * span - R * hi, (1 - fEdge) * span - R * c);
+    const want = span / 2 - (R * (lo + hi)) / 2;
+    return from <= to ? clamp(want, from, to) : (from + to) / 2;
+  };
+  const camAt = (zoom: number): Camera => {
+    const R = base * zoom;
+    return { lon: wrapLon(centre[0]), lat: centre[1], zoom, ox: place(vp.w, R, u0, u1, f.u) / vp.w - 0.5, oy: place(vp.h, R, v0, v1, f.v) / vp.h - 0.5 };
+  };
+  let cam = camAt(clamp(Number.isFinite(R0) ? R0 / base : single, minZoom, maxZoom));
+  /* nothing under the controls: step back until every place is clear of them */
+  const avoid = opts.avoid ?? [];
+  const covered = (c: Camera) => {
+    const v = makeView(c, vp, false);
+    return shown.some(({ u, v: w }) => { const x = v.cx + v.R * u, y = v.cy + v.R * w; return avoid.some((b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h); });
+  };
+  for (let i = 0; i < 16 && avoid.length && covered(cam) && cam.zoom > minZoom; i++) cam = camAt(Math.max(minZoom, cam.zoom * 0.95));
+  return cam;
 }
 
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -255,9 +341,11 @@ export function flight(from: Camera, to: Camera, flat: boolean): { at: (t: numbe
     at: (t) => {
       const e = easeInOut(clamp(t, 0, 1));
       const zoom = Math.exp((1 - e) * (1 - e) * z0 + 2 * e * (1 - e) * ctrl + e * e * z1);
-      if (flat || turn < 1e-6) return { lon: wrapLon(from.lon + dLon * e), lat: from.lat + (to.lat - from.lat) * e, zoom };
+      /* the drawn centre moves with the flight, so a view that ends off the middle arrives there smoothly */
+      const ox = (from.ox ?? 0) + ((to.ox ?? 0) - (from.ox ?? 0)) * e, oy = (from.oy ?? 0) + ((to.oy ?? 0) - (from.oy ?? 0)) * e;
+      if (flat || turn < 1e-6) return { lon: wrapLon(from.lon + dLon * e), lat: from.lat + (to.lat - from.lat) * e, zoom, ox, oy };
       const [lon, lat] = toLonLat(slerp(a, b, e, tmp));
-      return { lon, lat, zoom };
+      return { lon, lat, zoom, ox, oy };
     },
   };
 }

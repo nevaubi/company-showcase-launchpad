@@ -12,17 +12,25 @@ export type SupplyOverlay = (typeof SUPPLY_OVERLAYS)[number];
 export const SUPPLY_TABS = ["evidence", "reactions", "changes", "shock", "exposure"] as const;
 export type SupplyTab = (typeof SUPPLY_TABS)[number];
 
+/**
+ * A value cut where a stray query or fragment begins. A link with an extra parameter in the wrong place (a tracking tag
+ * added with a second "?", or a query before the hash in a hash-routed copy) reaches the page as `iso=rel:supplier?x=1`;
+ * none of these values can contain "?" or "#", so what follows is not part of it.
+ */
+export const stripStray = (v: unknown) => (typeof v === "string" ? v.split(/[?#]/)[0] : v);
+const p = <T extends z.ZodTypeAny>(t: T) => z.preprocess(stripStray, t);
+
 /** Search params of /app/supply-chain. Each one is optional and a bad value is ignored, never an error page. */
 export const supplySearch = z.object({
-  t: z.string().max(10).optional().catch(undefined),
-  view: z.enum(SUPPLY_VIEWS).optional().catch(undefined),
+  t: p(z.string().max(10).optional()).catch(undefined),
+  view: p(z.enum(SUPPLY_VIEWS).optional()).catch(undefined),
   /** the selected name: "relation:TICKER" or "relation:Name" (see `selectionParam`), or a second-order node key */
-  sel: z.string().max(160).optional().catch(undefined),
-  overlay: z.enum(SUPPLY_OVERLAYS).optional().catch(undefined),
-  depth: z.coerce.number().int().min(1).max(2).optional().catch(undefined),
-  tab: z.enum(SUPPLY_TABS).optional().catch(undefined),
+  sel: p(z.string().max(160).optional()).catch(undefined),
+  overlay: p(z.enum(SUPPLY_OVERLAYS).optional()).catch(undefined),
+  depth: p(z.coerce.number().int().min(1).max(2).optional()).catch(undefined),
+  tab: p(z.enum(SUPPLY_TABS).optional()).catch(undefined),
   /** what is isolated: "rel:supplier", "node:supplier:TSM" or "path:ENTG>TSM>NVDA>HPE" (read by `parseIsolation`, isolate.ts) */
-  iso: z.string().max(400).optional().catch(undefined),
+  iso: p(z.string().max(400).optional()).catch(undefined),
 });
 export type SupplySearch = z.infer<typeof supplySearch>;
 

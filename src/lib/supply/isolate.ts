@@ -29,7 +29,8 @@ export function isolationParam(i: Isolation | null | undefined): string | undefi
 
 /** Reads `iso` back. Anything it cannot read is no isolation, never an error. */
 export function parseIsolation(raw: string | null | undefined): Isolation | null {
-  const s = raw?.trim();
+  /* a stray query or fragment after the value is not part of it (see stripStray, url-state.ts) */
+  const s = raw?.split(/[?#]/)[0].trim();
   if (!s) return null;
   const at = s.indexOf(":");
   if (at < 1) return null;
