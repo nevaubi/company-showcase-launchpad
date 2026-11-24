@@ -54,14 +54,14 @@ export function AltRecords({ rows, ticker, pageSize = 8, showTicker, series, emp
               const t = t0 && r.title.toLowerCase().startsWith(String(t0.text).toLowerCase()) ? null : t0;
               const d = series ? null : detail(r);
               return (
-                <tr key={r.uid} className="h-7 border-t first:border-t-0 hover:bg-secondary/40">
+                <tr key={r.uid} className="h-7 hover:bg-secondary/40 [&:not(:first-child)>td]:shadow-[inset_0_1px_0_var(--border)]">
                   <td className="num truncate pl-3 pr-1 text-[11px] text-muted-foreground sm:pl-3.5 sm:pr-2">{series ? seriesPeriod(r, today) : r.date}</td>
                   {showTicker && <td className="truncate pr-2"><TickerMark ticker={r.ticker} /></td>}
                   <td className="min-w-0 pr-2">
                     <div className="flex min-w-0 items-center gap-1.5" title={[r.title, d].filter(Boolean).join(" · ")}>
                       {t?.text && <span className={cn("hidden shrink-0 rounded-[3px] sm:inline border px-1 text-[10px] leading-4 first-letter:uppercase", t.tone === "neg" ? "text-negative" : t.tone === "pos" ? "text-positive" : "text-muted-foreground")}>{t.text}</span>}
                       {r.source_url && !series ? (
-                        <a href={r.source_url} target="_blank" rel="noreferrer" className="group inline-flex min-h-7 min-w-0 shrink items-center gap-1 hover:underline">
+                        <a href={r.source_url} target="_blank" rel="noreferrer" className="group inline-flex h-7 min-w-0 shrink items-center gap-1 hover:underline">
                           <span className="truncate">{r.title}</span>
                           <ExternalLink className="size-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
                         </a>
@@ -77,7 +77,7 @@ export function AltRecords({ rows, ticker, pageSize = 8, showTicker, series, emp
               );
             })}
             {/* a short last page keeps the full page height, so the pager stays under the cursor and the page does not move */}
-            {pages > 1 && Array.from({ length: pageSize - list.length }, (_, i) => <tr key={`pad${i}`} aria-hidden className="h-7 border-t border-transparent"><td colSpan={4 + (showTicker ? 1 : 0) - (amounts ? 0 : 1)} /></tr>)}
+            {pages > 1 && Array.from({ length: pageSize - list.length }, (_, i) => <tr key={`pad${i}`} aria-hidden className="h-7"><td colSpan={4 + (showTicker ? 1 : 0) - (amounts ? 0 : 1)} /></tr>)}
           </tbody>
         </table>
       </div>

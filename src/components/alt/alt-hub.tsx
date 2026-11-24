@@ -35,7 +35,7 @@ function Pager({ page, pages, total, size, onPage }: { page: number; pages: numb
 
 /** Empty rows that keep a paged table at its full page height, so paging never moves the pager or the page. */
 export function PadRows({ n, cols }: { n: number; cols: number }) {
-  return <>{Array.from({ length: Math.max(0, n) }, (_, i) => <tr key={`pad${i}`} aria-hidden className="h-7 border-b border-transparent last:border-0"><td colSpan={cols} /></tr>)}</>;
+  return <>{Array.from({ length: Math.max(0, n) }, (_, i) => <tr key={`pad${i}`} aria-hidden className="h-7"><td colSpan={cols} /></tr>)}</>;
 }
 
 const KIND_LABEL: Record<UnusualItem["kind"], string> = { rise: "Count above every earlier window", range: "Reading outside its own range" };
@@ -78,8 +78,8 @@ export function UnusualNow({ theme, find }: { theme: ThemeFilter; find: string }
                   <tbody>
                     {shown.map((i, n) => (
                       <Fragment key={`${i.ticker}|${i.dataset}|${i.text}`}>
-                        {(n === 0 || shown[n - 1].kind !== i.kind) && <tr className="h-7 border-b bg-secondary/30"><td colSpan={6} className="pl-3.5 text-[11px] text-muted-foreground">{KIND_LABEL[i.kind]}</td></tr>}
-                        <tr className="h-7 border-b last:border-0 hover:bg-secondary/40">
+                        {(n === 0 || shown[n - 1].kind !== i.kind) && <tr className="h-7 bg-secondary/30 [&>td]:shadow-[inset_0_-1px_0_var(--border)]"><td colSpan={6} className="pl-3.5 text-[11px] text-muted-foreground">{KIND_LABEL[i.kind]}</td></tr>}
+                        <tr className="h-7 [&>td]:shadow-[inset_0_-1px_0_var(--border)] last:[&>td]:shadow-none hover:bg-secondary/40">
                           <td className="truncate pl-3.5"><TickerMark ticker={i.ticker} /></td>
                           <td className="truncate text-[12px]">{DATASETS[i.dataset]?.label ?? i.dataset}</td>
                           <td className="truncate pr-2" title={`${i.text}. ${i.rule}`}><span className={cn("mr-1.5 text-[11px]", i.direction === "up" ? "text-warning" : "text-muted-foreground")}>{i.direction === "up" ? "▲" : "▼"}</span>{i.text}</td>
@@ -195,7 +195,7 @@ export function Leaders({ theme, find = "" }: { theme: ThemeFilter; find?: strin
               </thead>
               <tbody>
                 {rows.slice(p * size, p * size + size).map(({ r, chg, vsTypical, rank }) => (
-                  <tr key={r.ticker} className="h-7 border-b last:border-0 hover:bg-secondary/40">
+                  <tr key={r.ticker} className="h-7 [&>td]:shadow-[inset_0_-1px_0_var(--border)] last:[&>td]:shadow-none hover:bg-secondary/40">
                     <td className="num pl-3.5 text-right text-[11px] text-muted-foreground">{rank}</td>
                     <td className="pl-3"><TickerMark ticker={r.ticker} /></td>
                     <td className="num truncate text-[11px] text-muted-foreground" title={r.settledFrom ? `Newest reading (${r.settledFrom}) covers a period still running` : undefined}>{leaderPeriod(board.dataset, r, today)}</td>
@@ -265,7 +265,7 @@ export function Catalogue({ theme, selected, onSelect }: { theme: ThemeFilter; s
               const newest = newestFinished(d, s?.latest, today);
               const stale = !isCurrent(d, newest, today);
               return (
-                <tr key={d} className={cn("h-7 border-b last:border-0", selected === d ? "bg-secondary/60" : "hover:bg-secondary/40")}>
+                <tr key={d} className={cn("h-7 [&>td]:shadow-[inset_0_-1px_0_var(--border)] last:[&>td]:shadow-none", selected === d ? "bg-secondary/60" : "hover:bg-secondary/40")}>
                   <td className="pl-3.5">
                     <button type="button" onClick={() => onSelect(d)} aria-pressed={selected === d} className="text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" title={info.blurb}>{info.label}</button>
                   </td>

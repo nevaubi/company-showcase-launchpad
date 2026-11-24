@@ -368,10 +368,10 @@ export interface RangeRule {
 
 export const RANGE_RULES: RangeRule[] = [
   // a half-month without fails has no row, so the span is in days and a year of dataset history is required (stored since November 2024)
-  { dataset: "settlement", title: FTD_TITLE, what: "Fails to deliver averaged", days: 366, span: "the prior 12 months", minPrior: 12, factor: 5, minLatest: 5e6, sides: "up", readDays: 400, currentDays: 35 },
+  { dataset: "settlement", title: FTD_TITLE, what: "Fails to deliver averaged", days: 366, span: "the prior 12 months", minPrior: 12, factor: 5, minLatest: 5e6, sides: "up", readDays: 410, currentDays: 35 },
   { dataset: "attention", title: "Wikipedia pageviews", what: "Pageviews of", days: 735, span: "the prior 24 months", minPrior: 24, factor: 1.5, minLevel: 10_000, sides: "both", readDays: 800, currentDays: 62 },
-  { dataset: "bank", title: "Net charge-off rate", what: "Net charge-offs in the quarter ran at about", days: 1840, span: "the prior five years", minPrior: 16, factor: 2, minBeyond: 0.1, sides: "up", quarterOnly: true, readDays: 2030, currentDays: 155 },
-  { dataset: "bank", title: "Noncurrent loans / loans", what: "Noncurrent loans / loans at", days: 1840, span: "the prior five years", minPrior: 16, factor: 1.5, minBeyond: 0.1, sides: "up", readDays: 1940, currentDays: 155 },
+  { dataset: "bank", title: "Net charge-off rate", what: "Net charge-offs in the quarter ran at about", days: 1840, span: "the prior five years", minPrior: 16, factor: 2, minBeyond: 0.1, sides: "up", quarterOnly: true, readDays: 2100, currentDays: 155 },
+  { dataset: "bank", title: "Noncurrent loans / loans", what: "Noncurrent loans / loans at", days: 1840, span: "the prior five years", minPrior: 16, factor: 1.5, minBeyond: 0.1, sides: "up", readDays: 2000, currentDays: 155 },
 ];
 
 export const rangeRulesOf = (dataset: string) => RANGE_RULES.filter((r) => r.dataset === dataset);

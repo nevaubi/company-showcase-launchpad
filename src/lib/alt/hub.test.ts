@@ -101,6 +101,14 @@ describe("series: pre-screen and confirm on what the queries return", () => {
   });
 });
 
+describe("series: the hub reads as far back as the tab's rule looks", () => {
+  // the latest reading may be up to currentDays old and the rule compares the `days` before it; a
+  // rule on single quarters also needs the quarter before the oldest one to undo year-to-date rates
+  it.each(RANGE_RULES.map((r) => [r.title, r] as const))("%s", (_t, r) => {
+    expect(r.readDays).toBeGreaterThanOrEqual(r.days + r.currentDays + (r.quarterOnly ? 92 : 0));
+  });
+});
+
 describe("rankUnusual", () => {
   it("puts rises first and ranks each kind by its own strength", () => {
     const it = (ticker: string, kind: UnusualItem["kind"], strength: number): UnusualItem => ({ ticker, dataset: "events", kind, direction: "up", text: "", strength, date: null, rule: "", figure: { label: "", value: "", rows: [] } });
