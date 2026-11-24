@@ -81,8 +81,17 @@ export function CompanyHeader({
           office={headOffice(ticker, hq.data, profile?.address)}
         />
         <div className="col-span-full row-start-3 mt-3 flex min-w-0 flex-wrap items-end gap-x-8 gap-y-2">
-          <PriceBlock ticker={ticker} quote={quote} pending={quotePending} />
-          <QuoteFacts ticker={ticker} quote={quote} profile={profile} quotePending={quotePending} profilePending={profilePending} />
+          {/* past 40rem the price block has one width for any price under $1,000, so the facts start at the same
+              place on every company and do not move when the quote lands; below it the facts take their own row */}
+          <PriceBlock ticker={ticker} quote={quote} pending={quotePending} className="@min-[40rem]/hdr:min-w-[15rem]" />
+          <QuoteFacts
+            className="basis-full @min-[40rem]/hdr:basis-auto"
+            ticker={ticker}
+            quote={quote}
+            profile={profile}
+            quotePending={quotePending}
+            profilePending={profilePending}
+          />
           <div className="ml-auto flex min-h-8 items-center empty:hidden">
             <SinceVisitBadges ticker={ticker} />
           </div>
