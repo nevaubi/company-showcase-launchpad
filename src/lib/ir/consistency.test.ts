@@ -48,3 +48,27 @@ describe("calculated values against their formula", () => {
     expect(payload.series[0].q["2025-12-31"].flags).toBeUndefined();
   });
 });
+
+describe("quarters against the year use one filing version (review iracc H2)", () => {
+  // LKQ FY2025 revenue ($M, EDGAR): Q1 shows the 2026 recast 3,327 (first filed 3,463), Q2 shows the
+  // first-filed 3,642 (recast 3,513 in a 2026 10-Q), Q3 3,499, Q4 3,312; the 10-K year is 13,651.
+  // As recast throughout: 3,327 + 3,513 + 3,499 + 3,312 = 13,651, so the year is right.
+  it("does not flag a correct year when the shown quarters mix the original and the recast", () => {
+    const docs = [
+      { id: "a", accn: null, doc: null, kind: null, filed: "2025-04-24" },
+      { id: "b", accn: null, doc: null, kind: null, filed: "2025-07-24" },
+      { id: "c", accn: null, doc: null, kind: null, filed: "2026-04-23" },
+      { id: "d", accn: null, doc: null, kind: null, filed: "2026-07-23" },
+    ];
+    const q = {
+      [Q[0]]: c(3_327e6, { d: 2, alt: { v: 3_463e6, d: 0, kind: "restated" } }),
+      [Q[1]]: c(3_642e6, { d: 1, alt: { v: 3_513e6, d: 3, kind: "restated" } }),
+      [Q[2]]: c(3_499e6, { d: 2 }),
+      [Q[3]]: c(3_312e6, { d: 2 }),
+    } as Record<string, PayloadCell>;
+    const s: PayloadSeries = { k: "r", cat: "income", met: "revenue", label: "Revenue", parent: null, total: true, unit: "usd", q, y: { [Q[3]]: c(13_651e6, { d: 2 }) } };
+    const { payload, summary } = checkConsistency({ ...p([s], Q), docs });
+    expect(summary).toMatchObject({ years: 1, yearsFailed: 0 });
+    expect(payload.series[0].y[Q[3]].flags).toBeUndefined();
+  });
+});

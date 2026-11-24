@@ -42,6 +42,16 @@ function addsUp(sum: number, year: number, parts: number[]): boolean {
   return Math.abs(sum - year) <= Math.max(Math.abs(year) * 0.001, Math.min(2 * step, Math.abs(year) * 0.02)) + 1e-6;
 }
 
+/** A quarter's value as first or as last filed, from the cell and its other printing. */
+function pick(c: PayloadCell, which: "first" | "last", p: IrPayload): number {
+  if (!c.alt || c.alt.d == null) return c.v;
+  const at = (d: number | undefined) => (d != null ? p.docs[d]?.filed ?? null : null);
+  const a = at(c.d);
+  const b = at(c.alt.d);
+  if (!a || !b || a === b) return c.v;
+  return (which === "first") === (b < a) ? c.alt.v : c.v;
+}
+
 export function checkConsistency(p: IrPayload): { payload: IrPayload; summary: ConsistencySummary } {
   const summary: ConsistencySummary = { years: 0, yearsFailed: 0, formulas: 0, formulasFailed: 0 };
   const add = (c: PayloadCell, f: PayloadCellFlag): PayloadCell => ({ ...c, flags: [...(c.flags ?? []).filter((x) => x.k !== f.k), f] });
@@ -63,6 +73,12 @@ export function checkConsistency(p: IrPayload): { payload: IrPayload; summary: C
         const sum = parts.reduce((a, b) => a + b, 0);
         summary.years++;
         if (addsUp(sum, yc.v, parts)) continue;
+        // One version throughout: when a quarter also has another printing (a recast or the original),
+        // the sum is taken with every quarter as first filed, then with every quarter as last filed;
+        // the year is flagged only when neither adds up (review iracc H2: LKQ FY2025 mixed vintages).
+        const versions = (["first", "last"] as const).map((which) => cells.map((c) => pick(c!, which, p)));
+        const mixed = versions.some((vs) => vs.some((v, i) => v !== parts[i]));
+        if (mixed && versions.some((vs) => addsUp(vs.reduce((a, b) => a + b, 0), yc.v, vs))) continue;
         summary.yearsFailed++;
         edit("y", y, { k: "year", v: sum, why: `The four quarters add up to ${num(sum, s.unit)} (${parts.map((v) => num(v, s.unit)).join(" + ")}); the year prints ${num(yc.v, s.unit)}, ${num(yc.v - sum, s.unit)} apart.` });
       }
