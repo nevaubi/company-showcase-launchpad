@@ -244,10 +244,10 @@ function DayFeed({ search, set, sector, watched }: { search: Search; set: (s: Pa
             {p.rows.map((r) => {
               const f = r.filings[0];
               return (
-                <div role="row" key={r.key} className={cn(GRID, "group min-h-8 border-b px-3.5 py-1 transition-colors duration-150 last:border-0 hover:bg-secondary/50")}>
+                <div role="row" key={r.key} className={cn(GRID, "group min-h-8 border-b px-3.5 py-0.5 transition-colors duration-150 last:border-0 hover:bg-secondary/50")}>
                   <span role="cell" className="flex min-w-0 flex-col sm:block">
-                    <TickerMark ticker={r.ticker} name size="xs" className="max-w-full" />
-                    <button type="button" onClick={() => openRow(r)} className="flex min-w-0 items-center gap-2 pl-[26px] text-left sm:hidden">
+                    <TickerMark ticker={r.ticker} name size="xs" className="min-h-7 max-w-full" />
+                    <button type="button" onClick={() => openRow(r)} className="flex min-h-7 min-w-0 items-center gap-2 pl-[26px] text-left sm:hidden">
                       <FormChip form={r.form} />
                       <span className={cn("truncate", r.alert && "font-medium text-negative")}>{r.title}</span>
                     </button>
@@ -256,7 +256,7 @@ function DayFeed({ search, set, sector, watched }: { search: Search; set: (s: Pa
                     <FormChip form={r.form} />
                   </span>
                   <span role="cell" className="hidden min-w-0 sm:block">
-                    <button type="button" onClick={() => openRow(r)} className="flex w-full min-w-0 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <button type="button" onClick={() => openRow(r)} className="flex min-h-7 w-full min-w-0 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                       <span className={cn("truncate underline-offset-2 group-hover:underline", r.alert && "font-medium text-negative")}>{r.title}</span>
                       {r.detail && <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground md:inline">{r.detail}</span>}
                     </button>

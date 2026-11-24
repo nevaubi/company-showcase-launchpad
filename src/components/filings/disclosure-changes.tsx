@@ -88,10 +88,10 @@ export function DisclosureChanges({ scope, sectorOf, watched }: { scope: ChangeS
                     return (
                       <li key={`${key}-${n}`} className={cn("grid grid-cols-1 gap-1 px-3.5 py-2 transition-colors duration-150 hover:bg-secondary/50 sm:grid-cols-[10rem_minmax(0,1fr)] sm:gap-3", busy === key && "opacity-60")}>
                         <span className="flex min-w-0 items-center gap-2">
-                          <TickerMark ticker={h.ticker} size="xs" />
+                          <TickerMark ticker={h.ticker} size="xs" className="min-h-7" />
                           <span className="text-[11px] text-muted-foreground">{h.form}</span>
                         </span>
-                        <button type="button" onClick={() => void openHighlight(h)} className="min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        <button type="button" onClick={() => void openHighlight(h)} className="min-h-7 min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                           <span className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
                             <span className="font-medium text-foreground">{h.section}</span>
                             <span className={cn("rounded px-1.5 py-px", h.change === "added" && "bg-positive/10 text-positive", h.change === "removed" && "bg-negative/10 text-negative", h.change === "modified" && "bg-secondary")}>{CHANGE_LABEL[h.change]}</span>
@@ -125,7 +125,7 @@ export function DisclosureChanges({ scope, sectorOf, watched }: { scope: ChangeS
               {insights.map((r) => (
                 <li key={r.ticker} className="px-3.5 py-2">
                   <div className="flex min-w-0 items-center gap-2">
-                    <TickerMark ticker={r.ticker} size="xs" />
+                    <TickerMark ticker={r.ticker} size="xs" className="min-h-7" />
                     <span className="truncate text-[11px] text-muted-foreground">
                       {r.form} filed {fmtDate(r.filed, { month: "short", day: "numeric" })} · {r.n} items
                     </span>

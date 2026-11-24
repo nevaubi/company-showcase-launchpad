@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { Loader2, Search, X } from "lucide-react";
@@ -73,6 +73,10 @@ function Filings() {
   const set = (s: Partial<z.infer<typeof searchSchema>>, keepPage = false) =>
     navigate({ search: (prev) => ({ ...prev, ...(keepPage ? {} : { page: undefined }), ...s }), replace: true, resetScroll: false });
   const [text, setText] = useSearchText(search.q, (q) => set({ q }));
+  // The one deliberate exception to "a click never moves the page": paging from the bottom pager brings the top of the
+  // new page under the app header, because the reader asked to start reading it from the top. The top pager does not move.
+  const listTop = useRef<HTMLDivElement>(null);
+  const toListTop = () => requestAnimationFrame(() => listTop.current?.scrollIntoView({ block: "start" }));
 
   const live = useLiveFilings(ticker);
   const insider = useMemo(() => insiderFilings(company.data?.insiders ?? []), [company.data]);
@@ -113,7 +117,7 @@ function Filings() {
     <div className="grid grid-cols-1 gap-4">
       <KeyDocStrip ticker={ticker} cik={cik} keys={keys} rows={rows} />
 
-      <div data-section="Filing list" className="min-w-0">
+      <div data-section="Filing list" className="min-w-0" ref={listTop} style={{ scrollMarginTop: "calc(var(--sticky-top, 3.5rem) + 8px)" }}>
         <Panel
           collapse={false}
           bodyClassName="p-0"
@@ -191,7 +195,7 @@ function Filings() {
               )}
               {p.pages > 1 && (
                 <div className="flex justify-end border-t px-3.5 py-2">
-                  <Pager p={p} onPage={(n) => set({ page: n }, true)} label="Filing pages, bottom" />
+                  <Pager p={p} onPage={(n) => { set({ page: n }, true); toListTop(); }} label="Filing pages, bottom" />
                 </div>
               )}
             </>

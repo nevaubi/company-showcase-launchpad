@@ -74,7 +74,7 @@ export function KeyDocStrip({ ticker, cik, keys, rows }: { ticker: string; cik: 
     <KeyCard label={label}>
       {f && (
         <>
-          <button type="button" onClick={() => openFiling(open, ticker, f)} className="truncate text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" onClick={() => openFiling(open, ticker, f)} className="min-h-7 truncate text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             {f.form} · {period} {f.report ? fmtDate(f.report) : ""}
           </button>
           <p className="num text-[11px] text-muted-foreground">Filed {fmtDate(f.filed)}</p>
@@ -99,7 +99,7 @@ export function KeyDocStrip({ ticker, cik, keys, rows }: { ticker: string; cik: 
       <KeyCard label="Earnings release">
         {rel && (
           <>
-            <button type="button" onClick={() => void openRelease(open, ticker, cik, rel.release, rel.filing?.doc)} className="flex min-w-0 items-center gap-1.5 text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={() => void openRelease(open, ticker, cik, rel.release, rel.filing?.doc)} className="flex min-h-7 min-w-0 items-center gap-1.5 text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <Megaphone className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">{releaseIsExhibit(rel.release, rel.filing?.doc) ? "Exhibit 99.1" : "Earnings release"} · {fmtDate(rel.release.filed, { month: "short", year: "numeric" })}</span>
             </button>
@@ -123,7 +123,7 @@ export function KeyDocStrip({ ticker, cik, keys, rows }: { ticker: string; cik: 
       <KeyCard label="Proxy statement">
         {keys.proxy && (
           <>
-            <button type="button" onClick={() => openFiling(open, ticker, keys.proxy!)} className="truncate text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={() => openFiling(open, ticker, keys.proxy!)} className="min-h-7 truncate text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               DEF 14A · {fmtDate(keys.proxy.filed, { month: "short", year: "numeric" })}
             </button>
             <p className="num text-[11px] text-muted-foreground">Filed {fmtDate(keys.proxy.filed)}</p>
@@ -174,7 +174,7 @@ export function FilingRows({ ticker, cik, rows, all, releases, years }: { ticker
             const rel = releases.get(f.accn);
             const period = periodOf(f);
             return (
-              <div role="row" key={f.accn} className={cn(GRID, "group min-h-8 border-b px-3.5 py-1 transition-colors duration-150 last:border-0 hover:bg-secondary/50")}>
+              <div role="row" key={f.accn} className={cn(GRID, "group min-h-8 border-b px-3.5 py-0.5 transition-colors duration-150 last:border-0 hover:bg-secondary/50")}>
                 <span role="cell" className="num text-[12px] text-muted-foreground">
                   {fmtDate(f.filed, { month: "short", day: "numeric" })}
                 </span>
@@ -182,7 +182,7 @@ export function FilingRows({ ticker, cik, rows, all, releases, years }: { ticker
                   <FormChip form={f.form} />
                 </span>
                 <span role="cell" className="min-w-0">
-                  <button type="button" onClick={() => openFiling(open, ticker, f)} className="flex w-full min-w-0 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <button type="button" onClick={() => openFiling(open, ticker, f)} className="flex min-h-7 w-full min-w-0 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <FormChip form={f.form} className="sm:hidden" />
                     <span className={cn("truncate underline-offset-2 group-hover:underline", d.alert && "font-medium text-negative")}>{d.title}</span>
                     {d.detail && <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground md:inline">{d.detail}</span>}

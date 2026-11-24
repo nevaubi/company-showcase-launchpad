@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowRight, ChevronLeft, ChevronRight, GitCompareArrows, Search, ShieldCheck, Sparkles } from "lucide-react";
@@ -96,6 +96,17 @@ function RedlinePage() {
   const section = search.section ?? "all";
   const jumpTo = useRef<string | null>(null);
   const listTop = useRef<HTMLDivElement>(null);
+  // The filter row sticks just under the section bar (md and up), so the list needs the bar's live height.
+  const navObserver = useRef<ResizeObserver | null>(null);
+  const navBar = useCallback((el: HTMLDivElement | null) => {
+    navObserver.current?.disconnect();
+    navObserver.current = null;
+    if (!el) return;
+    const host = el.closest<HTMLElement>('[data-section="Changes"]');
+    const ro = new ResizeObserver(() => host?.style.setProperty("--redline-nav", `${el.offsetHeight}px`));
+    ro.observe(el);
+    navObserver.current = ro;
+  }, []);
   useEffect(() => { if (!jumpTo.current) setPage(1); }, [section, level, type, figures, text, from?.accn, to?.accn]);
 
   const r = q.data?.redline;
@@ -136,10 +147,13 @@ function RedlinePage() {
     setSearch({ section: undefined });
     setLevel("all"); setType("all"); setText(""); if (c.figuresOnly) setFigures(true);
   };
-  // Paging from the bottom of the list brings the top of the new page into view; paging from the top does not move the page.
+  // Two deliberate exceptions to "a click never moves the page": paging and "Next section" from the bottom of the list
+  // bring the top of the new list under the sticky toolbar, because the reader asked to start reading it from the top.
+  // The same controls at the top of the list do not move the page.
+  const toListTop = () => requestAnimationFrame(() => listTop.current?.scrollIntoView({ block: "start" }));
   const turn = (n: number, fromBottom: boolean) => {
     setPage(n);
-    if (fromBottom) requestAnimationFrame(() => listTop.current?.scrollIntoView({ block: "start" }));
+    if (fromBottom) toListTop();
   };
 
   if (company.isLoading) return <Skeleton className="h-96" />;
@@ -181,8 +195,9 @@ function RedlinePage() {
               title={section === "all" ? "All sections · changes ranked by materiality" : `${titles.get(section) ?? section} · changes ranked by materiality`}
               subtitle={`${visible.length.toLocaleString()} shown · ${from!.form} filed ${fmtDate(to!.filed)} against ${fmtDate(from!.filed)}${q.data!.stored ? "" : " · compared just now"}`}
             >
-              <div className="sticky top-[var(--sticky-top,3.5rem)] z-10 grid grid-cols-1 gap-2 border-b bg-card/95 px-3.5 py-2 backdrop-blur">
-                <div className="flex flex-wrap items-center gap-2">
+              {/* Section navigation and the pager stay in view while reading; the filters below stick with them from md up and
+                  scroll away at phone width, where a two-row sticky bar would cover a third of the screen. */}
+              <div ref={navBar} className="sticky top-[var(--sticky-top,3.5rem)] z-20 flex flex-wrap items-center gap-2 border-b bg-card/95 px-3.5 py-2 backdrop-blur">
                   {section !== "all" && (
                     <button type="button" onClick={() => setSearch({ section: undefined })} className="inline-flex h-7 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
                       <ChevronLeft className="size-3.5" /> All sections
@@ -199,17 +214,16 @@ function RedlinePage() {
                   </Select>
                   {prevKey && <button type="button" onClick={() => setSearch({ section: prevKey === "all" ? undefined : prevKey })} className="inline-flex h-7 max-w-48 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground" title="Previous section by amount of change"><ChevronLeft className="size-3.5 shrink-0" /><span className="truncate">{sectionLabel(prevKey)}</span></button>}
                   {nextKey && <button type="button" onClick={() => setSearch({ section: nextKey })} className="inline-flex h-7 max-w-48 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground" title="Next section by amount of change"><span className="truncate">{sectionLabel(nextKey)}</span><ChevronRight className="size-3.5 shrink-0" /></button>}
-                  <div className="relative ml-auto">
+                  <Pager p={pg} onPage={(n) => turn(n, false)} label="Change pages, top" className="ml-auto" />
+              </div>
+              <div className="z-10 flex flex-wrap items-center gap-2 border-b bg-card/95 px-3.5 py-2 backdrop-blur md:sticky md:top-[calc(var(--sticky-top,3.5rem)+var(--redline-nav,0px))]">
+                  <div className="relative">
                     <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                     <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Find words, e.g. tariff" className="h-7 w-48 pl-7 text-xs" aria-label="Search changes" />
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
                   <Segmented label="Materiality" size="xs" value={level} onChange={setLevel} options={[{ v: "high", l: "High" }, { v: "medium", l: "High + medium" }, { v: "all", l: "All" }]} />
                   <Segmented label="Change type" size="xs" value={type} onChange={setType} options={[{ v: "all", l: "Any change" }, { v: "added", l: "Added" }, { v: "removed", l: "Removed" }, { v: "changed", l: "Rewritten" }]} />
-                  <label className="flex items-center gap-2 text-[12px] text-muted-foreground"><Switch checked={figures} onCheckedChange={setFigures} aria-label="Show figure-only updates" /> Figure-only updates</label>
-                  <Pager p={pg} onPage={(n) => turn(n, false)} label="Change pages, top" className="ml-auto" />
-                </div>
+                  <label className="flex h-7 items-center gap-2 text-[12px] text-muted-foreground"><Switch checked={figures} onCheckedChange={setFigures} aria-label="Show figure-only updates" /> Figure-only updates</label>
               </div>
               {!visible.length ? (
                 <QuietLine className="py-6 text-center">{level !== "all" ? "Nothing at this materiality here. Try showing all levels." : "Nothing matches. Try another section or search."}</QuietLine>
@@ -218,7 +232,7 @@ function RedlinePage() {
                   {pg.rows.map((c) => <ChangeCard key={c.id} c={c} ticker={ticker} sectionTitle={titles.get(c.section) ?? c.section} from={r.from} to={r.to} highlighted={focus === c.id} />)}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3.5 py-2">
                     {nextKey ? (
-                      <button type="button" onClick={() => setSearch({ section: nextKey })} className="inline-flex h-7 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">Next section: {sectionLabel(nextKey)} <ChevronRight className="size-3.5" /></button>
+                      <button type="button" onClick={() => { setSearch({ section: nextKey }); toListTop(); }} className="inline-flex h-7 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">Next section: {sectionLabel(nextKey)} <ChevronRight className="size-3.5" /></button>
                     ) : <span />}
                     <Pager p={pg} onPage={(n) => turn(n, true)} label="Change pages, bottom" />
                   </div>
