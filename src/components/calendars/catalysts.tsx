@@ -25,6 +25,7 @@ import {
 import { usePortfolios } from "@/lib/portfolio/store";
 import { useWatchlist } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
+import { CompanyLogo } from "@/components/app/company-logo";
 
 const KIND_TONE: Record<CatalystKind, string> = {
   earnings: "bg-chart-1",
@@ -203,7 +204,8 @@ function EventList({ events, today }: { events: CatalystEvent[]; today: string }
                 <span className={cn("size-2 shrink-0 rounded-full", KIND_TONE[e.kind])} />
                 <span className="text-[10.5px] uppercase tracking-wide text-muted-foreground">{CATALYST_LABEL[e.kind]}</span>
                 {e.ticker ? (
-                  <Link to="/app/companies/$ticker" params={{ ticker: e.ticker }} className="font-medium hover:underline">
+                  <Link to="/app/companies/$ticker" params={{ ticker: e.ticker }} className="inline-flex min-w-0 items-center gap-1 font-medium hover:underline">
+                    <CompanyLogo ticker={e.ticker} size="2xs" decorative />
                     {e.title}
                   </Link>
                 ) : (

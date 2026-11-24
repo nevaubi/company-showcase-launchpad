@@ -166,7 +166,8 @@ export function KpiInsightsPanel({ ticker }: { ticker: string }) {
   const n = f.insights.length;
   return (
     <Panel
-      title="What the operating data says"
+      className="rounded-md border bg-card shadow-paper"
+      title={<span className="text-sm">What the operating data says</span>}
       subtitle={`${n ? `${n} insights written from` : "Strongest signals in"} the company's reported KPIs, guidance, federal contracts, lobbying and trading records · ${fmtRelative(f.generated)}`}
       collapse={false}
       bodyClassName="p-0"

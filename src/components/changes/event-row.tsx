@@ -5,6 +5,7 @@ import { fmtBaseRate, suspectStatedValue, TYPE_SHORT } from "@/lib/changes/core"
 import type { ChangeEvent, ChangeEvidence, ChangeTier } from "@/lib/changes/types";
 import { fmtCompactUsd, fmtDate, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { TickerMark } from "@/components/app/ticker";
 
 const TIER_BAR: Record<ChangeTier, string> = {
   high: "bg-foreground",
@@ -67,14 +68,7 @@ export function EventRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
           {showCompany && e.t && (
-            <Link
-              to="/app/companies/$ticker"
-              params={{ ticker: e.t }}
-              className="num text-[12px] font-semibold hover:underline"
-              title={e.name ?? undefined}
-            >
-              {e.t}
-            </Link>
+            <TickerMark ticker={e.t} size="2xs" className="self-center" />
           )}
           <span className={cn("text-[10px] uppercase tracking-wider", TIER_TEXT[e.tier])}>
             {e.tier} · {TYPE_SHORT[e.type]}

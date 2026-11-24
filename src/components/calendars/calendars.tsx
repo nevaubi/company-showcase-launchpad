@@ -40,6 +40,7 @@ import {
   type DivEvent,
   type EarnRow,
 } from "@/lib/calendars/rows";
+import { TickerMark } from "@/components/app/ticker";
 
 const th = "px-3 py-1.5 text-left text-[11px] font-medium text-muted-foreground whitespace-nowrap";
 const td = "px-3 py-1.5 align-top";
@@ -499,7 +500,7 @@ export function WeekAgenda({
                       onClick={() => (x.dec ? o.declaration(x.ticker, x.dec) : o.projected(x.row))}
                       className="flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[12px] hover:bg-secondary"
                     >
-                      <span className="font-medium">{x.ticker}</span>
+                      <TickerMark ticker={x.ticker} size="2xs" link={false} />
                       {x.kind === "projected" && (
                         <span className="text-[10px] text-muted-foreground">proj.</span>
                       )}
@@ -1195,8 +1196,7 @@ export function DividendsList({ d, day }: { d: CalData; day?: string }) {
                       onClick={() => (x.dec ? o.declaration(x.ticker, x.dec) : o.projected(x.row))}
                     >
                       <td className={td}>
-                        <span className="font-medium">{x.ticker}</span>
-                        <span className="ml-2 text-muted-foreground">{x.name}</span>
+                        <TickerMark ticker={x.ticker} name={x.name} link={false} />
                       </td>
                       <td className={cn(td, "num text-right")}>{fmtPerShare(x.amount, 4)}</td>
                       <td className={td}>
@@ -1263,7 +1263,7 @@ export function DividendsList({ d, day }: { d: CalData; day?: string }) {
                       {fmtDate(x.filed, { month: "short", day: "numeric" })}
                     </td>
                     <td className={cn(td, "whitespace-nowrap")}>
-                      <span className="font-medium">{r.ticker}</span>
+                      <TickerMark ticker={r.ticker} link={false} />
                       {x.kind === "special" && (
                         <span className="ml-1">
                           <Badge tone="warn">special</Badge>
@@ -1329,10 +1329,7 @@ export function DividendsList({ d, day }: { d: CalData; day?: string }) {
                     onClick={() => (dec ? o.declaration(r.ticker, dec) : o.projected(r))}
                   >
                     <td className={td}>
-                      <span className="font-medium">{r.ticker}</span>
-                      <span className="ml-2 text-muted-foreground">
-                        {d.uni.get(r.ticker)?.name ?? r.name}
-                      </span>
+                      <TickerMark ticker={r.ticker} name={d.uni.get(r.ticker)?.name ?? r.name ?? undefined} link={false} />
                     </td>
                     <td className={cn(td, "num text-right")}>{fmtPerShare(r.last?.amount, 4)}</td>
                     <td className={cn(td, "text-muted-foreground")}>{r.frequency}</td>

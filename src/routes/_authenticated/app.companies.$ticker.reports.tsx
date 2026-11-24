@@ -96,12 +96,12 @@ function ReportsTab() {
     preparedBy: myMember ? memberName(myMember) : me.data?.profile?.display_name ?? null,
   };
   const cov = coverage.data?.find((c) => c.ticker === ticker);
-  const setKind = (k: ReportKind) => navigate({ search: { kind: k, v: undefined }, replace: true });
+  const setKind = (k: ReportKind) => navigate({ search: { kind: k, v: undefined }, replace: true, resetScroll: false });
   const variants = rows.filter((r) => r.scope !== "shared");
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-px overflow-hidden border bg-border md:grid-cols-4" role="tablist" aria-label="Report type">
+    <div className="grid grid-cols-1 gap-3">
+      <div data-section="Report type" className="grid grid-cols-2 gap-px overflow-hidden rounded-[6px] border bg-border md:grid-cols-4" role="tablist" aria-label="Report type">
         {KIND_ORDER.map((k) => {
           const b = (list.data ?? []).find((r) => r.kind === k && r.scope === "shared" && r.variant === "base");
           const active = k === kind;
@@ -119,18 +119,18 @@ function ReportsTab() {
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-section="Report actions" className="flex flex-wrap items-center gap-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="max-w-full"><span className="truncate">{selected ? scopeLabel(selected, firm?.name) : "Standard"}</span><ChevronDown className="size-3" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-80">
             <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Versions of this {KINDS[kind].short.toLowerCase()}</DropdownMenuLabel>
-            <DropdownMenuItem onClick={() => navigate({ search: { kind, v: undefined }, replace: true })}>
-              <Check className={cn("size-4", selected?.id === base?.id ? "opacity-100" : "opacity-0")} /> Standard <span className="ml-auto text-[11px] text-muted-foreground">{base ? fmtDate(base.updated_at) : "—"}</span>
+            <DropdownMenuItem onClick={() => navigate({ search: { kind, v: undefined }, replace: true, resetScroll: false })}>
+              <Check className={cn("size-4", selected?.id === base?.id ? "opacity-100" : "opacity-0")} /> Standard <span className="ml-auto text-[11px] text-muted-foreground">{base ? fmtDate(base.updated_at) : "–"}</span>
             </DropdownMenuItem>
             {variants.map((r) => (
-              <DropdownMenuItem key={r.id} onClick={() => navigate({ search: { kind, v: r.id }, replace: true })}>
+              <DropdownMenuItem key={r.id} onClick={() => navigate({ search: { kind, v: r.id }, replace: true, resetScroll: false })}>
                 <Check className={cn("size-4", selected?.id === r.id ? "opacity-100" : "opacity-0")} />
                 <span className="min-w-0 flex-1 truncate">{scopeLabel(r, firm?.name)}</span>
                 <span className="text-[11px] text-muted-foreground">{r.status === "generating" ? "writing" : fmtDate(r.updated_at)}</span>
@@ -148,7 +148,7 @@ function ReportsTab() {
         )}
         <div className="ml-auto flex items-center gap-1">
           {selected && (selected.scope === "user" || (selected.scope === "firm" && can("analyst"))) && (
-            <Button variant="ghost" size="icon-sm" aria-label="Delete this version" onClick={() => { del.mutate(selected.id); navigate({ search: { kind, v: undefined }, replace: true }); }}><Trash2 /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label="Delete this version" onClick={() => { del.mutate(selected.id); navigate({ search: { kind, v: undefined }, replace: true, resetScroll: false }); }}><Trash2 /></Button>
           )}
           <Button variant="ghost" size="icon-sm" aria-label="Copy link to this report" onClick={() => { navigator.clipboard?.writeText(window.location.href); toast.success("Link copied"); }}><Link2 /></Button>
           <DownloadMenu content={content.data ?? null} brand={brand} />
@@ -157,14 +157,14 @@ function ReportsTab() {
 
       {kind === "memo" && firm && cov && selected?.scope === "shared" && can("analyst") && (
         <p className="border-l-2 border-highlight bg-highlight-soft/40 px-3 py-1.5 text-xs">
-          {firm.name} rates {ticker} <span className="font-medium">{RATING_LABEL[cov.rating as Rating] ?? cov.rating}</span>{cov.target_price ? ` with a $${cov.target_price} target` : ""}. <button className="font-medium underline" onClick={() => req.mutate({ ticker, kind, scope: "firm", firmId: firm.id, options: { stance: "balanced" } }, { onSuccess: (r) => navigate({ search: { kind, v: r.id }, replace: true }) })}>Write the firm memo</button> to frame it around your rating.
+          {firm.name} rates {ticker} <span className="font-medium">{RATING_LABEL[cov.rating as Rating] ?? cov.rating}</span>{cov.target_price ? ` with a $${cov.target_price} target` : ""}. <button className="font-medium underline" onClick={() => req.mutate({ ticker, kind, scope: "firm", firmId: firm.id, options: { stance: "balanced" } }, { onSuccess: (r) => navigate({ search: { kind, v: r.id }, replace: true, resetScroll: false }) })}>Write the firm memo</button> to frame it around your rating.
         </p>
       )}
       {stale && selected?.scope === "shared" && (
-        <p className="text-xs text-muted-foreground"><RefreshCw className={cn("mr-1 inline size-3", generating && "animate-spin")} />New filings or data since this was written{generating ? " — updating now; you're reading the previous version." : "."}</p>
+        <p className="text-xs text-muted-foreground"><RefreshCw className={cn("mr-1 inline size-3", generating && "animate-spin")} />New filings or data since this was written{generating ? ". Updating now; you're reading the previous version." : "."}</p>
       )}
 
-      <div className="mx-auto w-full max-w-[880px]">
+      <div data-section="Report" className="mx-auto w-full min-w-0 max-w-[880px]">
         {list.isLoading || (selected?.status === "ready" && content.isLoading) ? (
           <div className="space-y-3 border bg-card p-7"><Skeleton className="h-32" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-2/3" /><Skeleton className="h-48" /></div>
         ) : content.data ? (
@@ -188,9 +188,9 @@ function ReportsTab() {
         pending={req.isPending && req.variables?.scope !== "shared"}
         onGenerate={(options, scope) => {
           setCustomizing(false);
-          toast.message("Writing your version — about a minute");
+          toast.message("Writing your version, about a minute");
           req.mutate({ ticker, kind, scope, firmId: scope === "firm" ? firm?.id : null, options }, {
-            onSuccess: (r) => { if (r.status !== "failed") navigate({ search: { kind, v: r.id }, replace: true }); },
+            onSuccess: (r) => { if (r.status !== "failed") navigate({ search: { kind, v: r.id }, replace: true, resetScroll: false }); },
           });
         }}
       />
@@ -216,7 +216,7 @@ function Writing({ kind, name, startedAt }: { kind: ReportKind; name: string; st
       <p className="eyebrow">{KINDS[kind].label}</p>
       <p className="text-shimmer mt-1 text-lg font-semibold">Writing the {KINDS[kind].label.toLowerCase()} for {name}…</p>
       <p className="mt-1 text-sm text-muted-foreground">{KINDS[kind].description} Usually about a minute; it's saved for everyone once written.</p>
-      {t > 150 && <p className="mt-2 text-xs text-muted-foreground">Taking longer than usual — it will appear here, or show an error you can retry, in a moment.</p>}
+      {t > 150 && <p className="mt-2 text-xs text-muted-foreground">Taking longer than usual. It will appear here, or show an error you can retry, in a moment.</p>}
       <ol className="mt-5 space-y-2 text-sm">
         {STEPS.map((s, i) => (
           <li key={s} className={cn("flex items-center gap-2", i > step && "text-muted-foreground/60")}>

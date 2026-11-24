@@ -1,26 +1,30 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownRight, ArrowUpRight, FileText, Plus, X } from "lucide-react";
+import { X } from "lucide-react";
 import { toast } from "sonner";
+import { DataUnavailable } from "@/components/app/data-unavailable";
 import { PageHeader, Panel } from "@/components/app/page-header";
-import { CompanyLogo } from "@/components/app/company-logo";
+import { Segmented } from "@/components/app/segmented";
+import { TickerMark } from "@/components/app/ticker";
+import { IdeasTable } from "@/components/signals/ideas-table";
+import { CAPTION, NUM, SideTag, TD, TH } from "@/components/signals/parts";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useSource } from "@/components/source/source-context";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuotes } from "@/lib/data";
-import { fmtDate, fmtPct, fmtPrice, fmtInt, toneClass, toneOf } from "@/lib/format";
-import { paperReturn, SIGNAL_META, type BacktestStats, type Direction, type Idea, type SignalKind } from "@/lib/signals/core";
+import { paperReturn, type BacktestStats, type Direction, type Idea, type SignalKind } from "@/lib/signals/core";
+import { count, dayLong, nameOf, pct, price } from "@/lib/signals/format";
+import { ideasVerdict, IDEA_LIMITS, rankIdeas, READING_LABEL, ruleRecords, type RankedIdea } from "@/lib/signals/ideas";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/ideas")({
   head: () => ({
     meta: [
       { title: "Trade ideas · FiledUnder" },
-      { name: "description", content: "Long and short setups from filed fundamentals, valuation, insider buying and price trends, each with its historical hit rate and SEC sources." },
+      { name: "description", content: "Three-month ideas from filed fundamentals, valuation, insider buying and price trend, each with its rule's history against the S&P 500 and its SEC sources." },
       { property: "og:title", content: "Trade ideas · FiledUnder" },
-      { property: "og:description", content: "Source-backed trade setups with point-in-time hit rates and paper tracking." },
+      { property: "og:description", content: "Source-backed three-month ideas with each rule's history and paper tracking." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -67,21 +71,18 @@ const tradesQuery = {
   },
 };
 
-function Stat({ s, label }: { s: BacktestStats; label: string }) {
-  if (!s.n) return <span className="text-muted-foreground">{label}: not enough history</span>;
-  return (
-    <span>
-      {label}: <b className={toneClass[toneOf(s.avgExcess)]}>{fmtPct(s.avgExcess, 1, true)}</b> vs S&P over 3 mo, beat it {fmtPct(s.hitRate, 0)} of {fmtInt(s.n)} times
-    </span>
-  );
-}
+type View = "short" | "all";
+type Side = "all" | Direction;
 
 function IdeasPage() {
-  const { data, isLoading } = useQuery(signalsQuery);
+  const { data, isLoading, error, refetch } = useQuery(signalsQuery);
   const trades = useQuery(tradesQuery);
   const qc = useQueryClient();
-  const [dir, setDir] = useState<"all" | Direction>("all");
-  const ideas = useMemo(() => (data?.ideas ?? []).filter((i) => dir === "all" || i.direction === dir), [data, dir]);
+  const [view, setView] = useState<View>("short");
+  const [side, setSide] = useState<Side>("all");
+  const records = useMemo(() => ruleRecords(data?.pooled ?? {}), [data]);
+  const ranking = useMemo(() => rankIdeas((data?.ideas ?? []).filter((i) => side === "all" || i.direction === side), data?.pooled ?? {}), [data, side]);
+  const rows = view === "short" ? ranking.list : ranking.all;
   const quoteSyms = useMemo(() => [...new Set([...(data?.ideas ?? []).map((i) => i.ticker), ...(trades.data ?? []).map((t) => t.ticker)])], [data, trades.data]);
   const quotes = useQuotes(quoteSyms);
   const priceOf = (t: string) => quotes.data?.quotes.find((q) => q.symbol === t)?.price;
@@ -102,7 +103,7 @@ function IdeasPage() {
     },
     onSuccess: () => {
       toast.success("Added to your paper trades");
-      qc.invalidateQueries({ queryKey: ["paper_trades"] });
+      void qc.invalidateQueries({ queryKey: ["paper_trades"] });
     },
     onError: (e) => toast.error((e as Error).message),
   });
@@ -113,161 +114,166 @@ function IdeasPage() {
       const { error } = await supabase.from("paper_trades").update({ closed_price: p, closed_at: new Date().toISOString() }).eq("id", t.id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["paper_trades"] }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["paper_trades"] }),
     onError: (e) => toast.error((e as Error).message),
   });
 
+  const scanned = data?.ideas[0]?.asOf ?? data?.generatedAt;
+  // The scan is a published file: say how old it is, since stops and targets sit around the scan price.
+  const age = scanned ? Math.floor((Date.now() - new Date(`${scanned.slice(0, 10)}T12:00:00Z`).getTime()) / 86_400_000) : 0;
+  const hidden = ranking.all.length - ranking.list.length;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         eyebrow="Signals"
         title="Trade ideas"
-        description={`Setups found by fixed rules across ${data?.companies ?? "our"} covered companies. Each rule is replayed over 10 years using only data public at the time, so you can see how often it actually worked. Not investment advice.`}
+        description={`Three-month ideas from what companies file: valuation against their own history, revenue growth turning, insider buying, plus two price-trend rules, across ${data?.companies ?? "the"} curated companies. Short-term setups are a separate page: they hold days to weeks and use price and event rules. Not investment advice.`}
+        actions={scanned ? <span className="text-[11px] text-muted-foreground">Scanned with prices through {dayLong(scanned)}{age > 7 ? `, ${age} days ago` : ""}</span> : undefined}
       />
 
-      <Panel title="Your paper trades" subtitle="Track ideas with live prices — no money involved">
-        {trades.isLoading ? (
-          <Skeleton className="h-16" />
-        ) : !trades.data?.length ? (
-          <p className="text-sm text-muted-foreground">Nothing tracked yet. Press "Paper trade" on any idea below.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="py-1.5 pr-3">Ticker</th>
-                  <th className="pr-3">Side</th>
-                  <th className="pr-3">Opened</th>
-                  <th className="pr-3 text-right">Entry</th>
-                  <th className="pr-3 text-right">Stop / target</th>
-                  <th className="pr-3 text-right">Now</th>
-                  <th className="pr-3 text-right">Return</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {trades.data.map((t) => {
-                  const now = t.closed_price ?? priceOf(t.ticker);
-                  const r = now == null ? null : paperReturn(t.direction, t.entry_price, now);
-                  return (
-                    <tr key={t.id} className="border-t border-border">
-                      <td className="py-1.5 pr-3 font-medium">
-                        <Link to="/app/companies/$ticker" params={{ ticker: t.ticker }}>{t.ticker}</Link>
-                      </td>
-                      <td className="pr-3 capitalize">{t.direction}</td>
-                      <td className="pr-3">{fmtDate(t.entry_date)}</td>
-                      <td className="pr-3 text-right tabular-nums">{fmtPrice(t.entry_price)}</td>
-                      <td className="pr-3 text-right tabular-nums text-muted-foreground">{fmtPrice(t.stop)} / {fmtPrice(t.target)}</td>
-                      <td className="pr-3 text-right tabular-nums">{fmtPrice(now)}{t.closed_at ? " (closed)" : ""}</td>
-                      <td className={cn("pr-3 text-right tabular-nums font-medium", toneClass[toneOf(r)])}>{fmtPct(r, 1, true)}</td>
-                      <td className="text-right">
-                        {!t.closed_at && (
-                          <Button size="sm" variant="ghost" onClick={() => close.mutate(t)} disabled={close.isPending}>
-                            <X className="mr-1 h-3.5 w-3.5" /> Close
-                          </Button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      <Panel
+        title="Ideas"
+        subtitle="Held about three months, measured against the S&P 500"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Segmented<Side> label="Side" size="xs" value={side} onChange={setSide} options={[{ v: "all", l: "Any side" }, { v: "long", l: "Long" }, { v: "short", l: "Short" }]} />
+            <Segmented<View>
+              label="Which ideas to show"
+              size="xs"
+              value={view}
+              onChange={setView}
+              options={[
+                { v: "short", l: `Short list ${ranking.list.length}`, title: "Ideas resting on a rule that has made money against the S&P 500" },
+                { v: "all", l: `Every idea ${ranking.all.length}`, title: "Every idea the scan found" },
+              ]}
+            />
           </div>
-        )}
+        }
+        collapse={false}
+      >
+        <div data-section="Trade ideas" className="space-y-3">
+          {error ? (
+            <DataUnavailable compact title="Trade ideas could not load" error={error} onRetry={() => void refetch()} />
+          ) : isLoading || !data ? (
+            <Skeleton className="h-40" />
+          ) : (
+            <>
+              <div>
+                <p className="max-w-[60rem] text-[13px] font-medium leading-5">{ideasVerdict(records)}</p>
+                <p className={cn(CAPTION, "mt-0.5 max-w-[60rem]")}>
+                  {view === "short"
+                    ? `The short list keeps an idea only when one of its reasons comes from a rule that has made money against the S&P 500 over ${IDEA_LIMITS.minFirings} or more firings. More such reasons rank higher; a signal pointing the other way cancels one. At most ${IDEA_LIMITS.max} ideas, ${IDEA_LIMITS.perSector} per sector.${hidden > 0 ? ` ${hidden} more are under Every idea.` : ""}`
+                    : "Every idea the scan found, best-supported first. Ideas with a dash under Rules made rest only on rules that lost to the S&P 500 or have no history."}
+                  {age > 7 ? ` The scan is ${age} days old, so stops and targets sit around the scan price: check the latest price first.` : ""}
+                </p>
+              </div>
+              {rows.length ? (
+                <IdeasTable rows={rows} priceOf={priceOf} onTrack={(i: RankedIdea) => track.mutate(i)} busy={track.isPending || quotes.isLoading} />
+              ) : (
+                <p className="border-t pt-3 text-[13px] leading-5 text-muted-foreground">{view === "short" ? `No ${side === "all" ? "" : `${side} `}idea rests on a rule that has made money.` : "The scan found no ideas."}</p>
+              )}
+            </>
+          )}
+        </div>
       </Panel>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {(["all", "long", "short"] as const).map((d) => (
-          <Button key={d} size="sm" variant={dir === d ? "default" : "outline"} onClick={() => setDir(d)} className="capitalize">
-            {d === "all" ? "All ideas" : `${d}s`}
-          </Button>
-        ))}
-        {data && <span className="ml-auto text-xs text-muted-foreground">Scanned with prices through {fmtDate(data.ideas[0]?.asOf ?? data.generatedAt)}</span>}
-      </div>
-
-      {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-56" />)}</div>
-      ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {ideas.map((idea) => <IdeaCard key={idea.ticker} idea={idea} live={priceOf(idea.ticker)} onTrack={() => track.mutate(idea)} busy={track.isPending || quotes.isLoading} />)}
-        </div>
-      )}
-
       {data && (
-        <Panel title="How each rule has done" subtitle="Every firing since ~2016 across all covered companies, held 3 months, measured against the S&P 500 (SPY)">
-          <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
-            {(Object.keys(SIGNAL_META) as SignalKind[]).map((k) => (
-              <div key={k} className="min-w-0 rounded-md border border-border p-3">
-                <div className="font-medium">{SIGNAL_META[k].label} <span className="text-xs text-muted-foreground">({SIGNAL_META[k].dir})</span></div>
-                <div className="text-xs text-muted-foreground">{SIGNAL_META[k].rule}</div>
-                <div className="mt-1 text-xs"><Stat s={data.pooled[k] ?? { n: 0, avg: null, avgExcess: null, hitRate: null }} label="History" /></div>
-              </div>
-            ))}
+        <Panel title="How each rule has done" subtitle="Every past firing across the curated companies since about 2016, held three months, against the S&P 500 (SPY)" collapse={false}>
+          <div data-section="Rule record">
+            <div className="-mx-3.5 overflow-x-auto">
+              <table className="w-full min-w-[760px] border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th scope="col" className={cn(TH, "pl-3.5")}>Rule and when it fires</th>
+                    <th scope="col" className={TH}>Side</th>
+                    <th scope="col" className={cn(TH, "text-right")}>Fired</th>
+                    <th scope="col" className={cn(TH, "text-right")} title="Average three-month return against the S&P 500, in the rule's direction">Avg vs S&P 500</th>
+                    <th scope="col" className={cn(TH, "text-right")} title="Share of firings that beat the S&P 500">Beat it</th>
+                    <th scope="col" className={cn(TH, "text-right")} title="The 95% range a fair coin gives over that many independent firings">Coin flip gives</th>
+                    <th scope="col" className={cn(TH, "pr-3.5")}>Reading</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => (
+                    <tr key={r.kind} className="border-b last:border-b-0">
+                      <td className={cn(TD, "pl-3.5")}>
+                        <div>{r.label}</div>
+                        <div className={CAPTION}>{r.rule}</div>
+                      </td>
+                      <td className={TD}><SideTag side={r.dir === "long" ? 1 : -1} /></td>
+                      <td className={cn(TD, NUM)}>{r.n ? count(r.n) : "–"}</td>
+                      <td className={cn(TD, NUM, r.avgExcess == null ? "" : r.avgExcess > 0 ? "text-positive" : r.avgExcess < 0 ? "text-negative" : "")}>{pct(r.avgExcess, 1)}</td>
+                      <td className={cn(TD, NUM)}>{pct(r.hitRate, 0, false)}</td>
+                      <td className={cn(TD, NUM, "text-muted-foreground")}>{r.band == null || !r.n ? "–" : `${pct(0.5 - r.band, 0, false)} to ${pct(0.5 + r.band, 0, false)}`}</td>
+                      <td className={cn(TD, "whitespace-nowrap pr-3.5", r.reading === "edge" ? "" : "text-muted-foreground")}>{READING_LABEL[r.reading]}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className={cn(CAPTION, "mt-2 max-w-[60rem]")}>
+              The coin-flip range treats firings as independent. They are not: many companies fire in the same quarter, so the true range is wider and a rule needs to clear it by a margin. The file does not store the spread of returns, so the average has no error bar yet.
+            </p>
           </div>
         </Panel>
       )}
-    </div>
-  );
-}
 
-function IdeaCard({ idea, live, onTrack, busy }: { idea: Idea; live?: number; onTrack: () => void; busy: boolean }) {
-  const { open } = useSource();
-  const long = idea.direction === "long";
-  return (
-    <Panel
-      className="min-w-0"
-      title={
-        <Link to="/app/companies/$ticker" params={{ ticker: idea.ticker }} className="flex items-center gap-2">
-          <CompanyLogo ticker={idea.ticker} size="sm" />
-          <span>{idea.ticker}</span>
-          <span className="truncate text-sm font-normal text-muted-foreground">{idea.name}</span>
-        </Link>
-      }
-      actions={
-        <span className={cn("inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold uppercase", long ? "bg-positive/15 text-positive" : "bg-negative/15 text-negative")}>
-          {long ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}
-          {idea.direction} · {idea.signals.length} signal{idea.signals.length > 1 ? "s" : ""}
-        </span>
-      }
-    >
-      <div className="space-y-3 text-sm">
-        {idea.signals.map((s) => (
-          <div key={s.kind} className="rounded-md border border-border p-2.5">
-            <div className="font-medium">{SIGNAL_META[s.kind].label}</div>
-            <div className="text-muted-foreground">{s.detail}</div>
-            <div className="mt-1 space-y-0.5 text-xs">
-              <div><Stat s={s.stats} label="All companies" /></div>
-              <div><Stat s={s.own} label={idea.ticker} /></div>
+      <Panel title="Your paper trades" subtitle="Ideas and setups you chose to track at live prices. No money involved." collapse={false}>
+        <div data-section="Paper trades">
+          {trades.isLoading ? (
+            <Skeleton className="h-10" />
+          ) : !trades.data?.length ? (
+            <p className="text-[13px] leading-5 text-muted-foreground">Nothing tracked yet. Open an idea and press Paper trade.</p>
+          ) : (
+            <div className="-mx-3.5 overflow-x-auto">
+              <table className="w-full min-w-[720px] border-collapse">
+                <thead>
+                  <tr className="border-b">
+                    <th scope="col" className={cn(TH, "pl-3.5")}>Stock</th>
+                    <th scope="col" className={TH}>Side</th>
+                    <th scope="col" className={cn(TH, "text-right")}>Opened</th>
+                    <th scope="col" className={cn(TH, "text-right")}>Entry</th>
+                    <th scope="col" className={cn(TH, "text-right")}>Stop</th>
+                    <th scope="col" className={cn(TH, "text-right")}>Target</th>
+                    <th scope="col" className={cn(TH, "text-right")}>Now</th>
+                    <th scope="col" className={cn(TH, "text-right")}>Return</th>
+                    <th className={cn(TH, "pr-3.5")} aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {trades.data.map((t) => {
+                    const now = t.closed_price ?? priceOf(t.ticker);
+                    const r = now == null ? null : paperReturn(t.direction, t.entry_price, now);
+                    return (
+                      <tr key={t.id} className="border-b last:border-b-0">
+                        <td className={cn(TD, "max-w-[15rem] pl-3.5")}><TickerMark ticker={t.ticker} name={nameOf(t.ticker)} className="align-top" /></td>
+                        <td className={TD}><SideTag side={t.direction === "long" ? 1 : -1} /></td>
+                        <td className={cn(TD, NUM, "text-muted-foreground")}>{dayLong(t.entry_date)}</td>
+                        <td className={cn(TD, NUM)}>{price(t.entry_price)}</td>
+                        <td className={cn(TD, NUM)}>{price(t.stop)}</td>
+                        <td className={cn(TD, NUM)}>{price(t.target)}</td>
+                        <td className={cn(TD, NUM)}>
+                          {price(now)}
+                          {t.closed_at ? <span className="text-muted-foreground"> closed</span> : null}
+                        </td>
+                        <td className={cn(TD, NUM, "font-medium", r == null ? "" : r > 0 ? "text-positive" : r < 0 ? "text-negative" : "")}>{pct(r, 1)}</td>
+                        <td className={cn(TD, "py-0 pr-3.5 text-right")}>
+                          {!t.closed_at && (
+                            <Button size="xs" variant="ghost" onClick={() => close.mutate(t)} disabled={close.isPending}>
+                              <X aria-hidden /> Close
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-            {s.evidence.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {s.evidence.map((e, k) => (
-                  <button
-                    key={k}
-                    type="button"
-                    className="inline-flex items-center gap-1 rounded border border-border bg-muted/40 px-1.5 py-0.5 text-xs hover:bg-muted"
-                    onClick={() =>
-                      open({ ticker: idea.ticker, label: e.label, periodLabel: e.periodLabel, unit: e.unit, value: e.value, src: e.src, derived: e.derived, doc: e.doc })
-                    }
-                  >
-                    <FileText className="h-3 w-3" />
-                    {e.label}{e.periodLabel ? ` · ${e.periodLabel}` : ""}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-        <div className="grid grid-cols-4 gap-2 text-xs">
-          <div><div className="text-muted-foreground">Price</div><div className="tabular-nums font-medium">{fmtPrice(live ?? idea.price)}</div></div>
-          <div><div className="text-muted-foreground">Stop</div><div className="tabular-nums">{fmtPrice(idea.plan.stop)}</div></div>
-          <div><div className="text-muted-foreground">Target</div><div className="tabular-nums">{fmtPrice(idea.plan.target)}</div></div>
-          <div className="flex items-end justify-end">
-            <Button size="sm" variant="outline" onClick={onTrack} disabled={busy}><Plus className="mr-1 h-3.5 w-3.5" /> Paper trade</Button>
-          </div>
+          )}
         </div>
-        <p className="text-[11px] text-muted-foreground">Stop is 2× the 14-day average daily range from the scan price; target is twice that risk.</p>
-      </div>
-    </Panel>
+      </Panel>
+    </div>
   );
 }

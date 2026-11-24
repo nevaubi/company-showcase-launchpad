@@ -11,6 +11,7 @@ import { IndustryTemplate } from "@/components/financials/industry-template";
 import { AdjustedView } from "@/components/financials/adjusted-view";
 import { FilingDetailView } from "@/components/financials/filing-detail";
 import { ScaleToggle } from "@/components/financials/scale-toggle";
+import { StatementCurrency, useFiledStatements } from "@/components/financials/currency";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,6 +63,9 @@ function Financials() {
   const s = Route.useSearch();
   const navigate = Route.useNavigate();
   const company = useCompany(ticker);
+  // Statements plus any newer 10-Q/10-K read from SEC at view time (until the scheduled rebuild adds it).
+  const filed = useFiledStatements(company.data, ticker, { enabled: s.basis === "normalized" });
+  const data = filed.dataset;
   const [scale] = useUnitScale();
   const [charted, setCharted] = useState<Partial<Record<StatementKey, string[]>>>({});
   const [chartOpen, setChartOpen] = useState(true);
@@ -69,7 +73,7 @@ function Financials() {
   const gate = useFeatureGate();
   const set = (patch: Partial<z.infer<typeof pageSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true });
 
-  const filingsByAccn = useMemo(() => new Map((company.data?.filings ?? []).map((f) => [f.accn, f])), [company.data]);
+  const filingsByAccn = useMemo(() => new Map((data?.filings ?? []).map((f) => [f.accn, f])), [data]);
 
   const basisBar = (
     <Segmented
@@ -95,8 +99,8 @@ function Financials() {
 
   if (company.isError)
     return <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">Could not load {ticker}'s statements. Refresh to try again.</p>;
-  if (!company.data) return <Skeleton className="h-[600px]" />;
-  const st = company.data.statements[s.freq][s.statement];
+  if (!data) return <Skeleton className="h-[600px]" />;
+  const st = data.statements[s.freq][s.statement];
   const span = s.span === "all" ? undefined : Math.round(s.freq === "quarterly" ? Number(s.span) * 1.2 : Number(s.span));
   const available = new Set(st.rows.map((r) => r.key));
   const keys = (charted[s.statement] ?? DEFAULT_CHART[s.statement]).filter((k) => available.has(k));
@@ -120,7 +124,7 @@ function Financials() {
     setExporting(true);
     try {
       const { exportWorkbook } = await import("@/lib/export/xlsx");
-      await exportWorkbook(company.data!, s.freq, scale, span, wordmark.url);
+      await exportWorkbook(data, s.freq, scale, span, wordmark.url);
       toast.success("Excel model downloaded", { description: "Cover sheet, four styled statements with live formulas, and a Sources sheet linking every number to SEC.gov." });
     } catch (e) {
       console.error(e);
@@ -135,15 +139,16 @@ function Financials() {
 
   return (
     <div className="grid grid-cols-1 gap-4">
-      <div className="flex flex-wrap items-center gap-2">{basisBar}</div>
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-section="Statement controls" className="grid grid-cols-1 gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {basisBar}
         <div className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1 scrollbar-thin">
           {STATEMENTS.map((x) => (
             <button
               key={x.key}
               onClick={() => set({ statement: x.key })}
               className={cn(
-                "shrink-0 rounded-md px-3 py-1.5 text-sm transition-colors",
+                "shrink-0 rounded-md px-3 py-1.5 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 s.statement === x.key ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
               )}
             >
@@ -151,7 +156,8 @@ function Financials() {
             </button>
           ))}
         </div>
-        <div className="flex flex-wrap items-center gap-2 lg:ml-auto">
+      </div>
+        <div className="flex flex-wrap items-center gap-2">
           <Segmented label="Frequency" value={s.freq} onChange={(v) => set({ freq: v })} options={[{ v: "annual", l: "Annual" }, { v: "quarterly", l: "Quarterly" }]} />
           <Segmented
             label="Periods"
@@ -185,8 +191,12 @@ function Financials() {
         </div>
       </div>
 
+      {company.data && <StatementCurrency data={company.data} ticker={ticker} filed={filed} />}
+
       {keys.length > 0 && chartOpen ? (
-        <StatementChart statement={st} keys={keys} ticker={ticker} scale={scale} maxPeriods={span} onRemove={toggle} />
+        <div data-section="Statement chart" className="min-w-0">
+          <StatementChart statement={st} keys={keys} ticker={ticker} scale={scale} maxPeriods={span} onRemove={toggle} />
+        </div>
       ) : (
         <button onClick={() => setChartOpen(true)} className="rounded-lg border border-dashed bg-card/60 px-4 py-3 text-left text-xs text-muted-foreground hover:bg-card">
           Use the chart icon beside any line to plot it here.

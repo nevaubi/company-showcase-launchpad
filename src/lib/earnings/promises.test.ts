@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { credibility, vetPromises, type CallText, type RawPromise } from "./promises";
+import { credibility, groupPromises, latestGuidance, vetPromises, type CallText, type RawPromise } from "./promises";
 import { buildAlerts, unreadCount } from "../alerts/core";
 
 const calls: CallText[] = [
@@ -63,5 +63,18 @@ describe("supply alerts", () => {
   it("ignores links re-read today from an old filing", () => {
     const l = { id: "1", ticker: "NVDA", counterparty: "TSMC", relation: "supplier", detail: "", accn: "a", doc: "d", form: "10-K", filed: "2026-02-20", created_at: "2026-11-05T00:00:00Z", is_current: true };
     expect(buildAlerts({ tickers: ["NVDA"], since: "2026-10-06", filings: [], insiders: [], alt: [], ideas: [], links: [l] })).toHaveLength(0);
+  });
+});
+
+describe("groupPromises and latestGuidance", () => {
+  const p = (status: "kept" | "missed" | "partial" | "pending", callDate: string, category = "guidance") => ({ status, callDate, category });
+  it("orders groups pending, missed, partly kept, kept and drops empty ones", () => {
+    const g = groupPromises([p("kept", "2026-01-29"), p("pending", "2026-04-30"), p("kept", "2026-08-07"), p("pending", "2026-11-02")]);
+    expect(g.map((x) => x.status)).toEqual(["pending", "kept"]);
+    expect(g[0].items.map((x) => x.callDate)).toEqual(["2026-11-02", "2026-04-30"]);
+  });
+  it("takes guidance from the most recent call only", () => {
+    const ps = [p("pending", "2026-11-02"), p("pending", "2026-11-02", "product"), p("kept", "2026-08-07")];
+    expect(latestGuidance(ps)).toEqual([ps[0]]);
   });
 });

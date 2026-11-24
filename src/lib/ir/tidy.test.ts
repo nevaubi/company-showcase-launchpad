@@ -469,7 +469,8 @@ describe("speed on a bank-sized payload (review H3)", () => {
     tidyPayload(payload(series, groups));
     // Measured at ~1 s on a loaded 2-core box; the quadratic passes took 38–67 s on this shape.
     expect(performance.now() - t).toBeLessThan(10_000);
-  });
+    // The assertion above is the limit; vitest's default 5 s timeout failed it on a busy shared box (base too).
+  }, 20_000);
 });
 
 describe("checks are read off the page (review C2)", () => {

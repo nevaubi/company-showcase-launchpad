@@ -2,8 +2,8 @@
 // and on what basis. No browser/Node APIs. Coordinates come from the generated head-office file
 // (scripts/company-hq.ts); nothing here invents a location.
 import { canonCountry } from "./analytics";
-import { knownHomeCountry } from "./home-country";
-export { knownHomeCountry } from "./home-country";
+import { knownHomeCountry, US_STATES, usStateOfRegion } from "./home-country";
+export { knownHomeCountry, US_STATES, usState, usStateOfRegion } from "./home-country";
 import { normText, type GraphNode, type HopNode, type Relation, type RiskLink } from "./core";
 
 /** How exact a head-office position is: the city itself, or only the country. */
@@ -48,15 +48,35 @@ export type PlaceBasis =
   | "hq"
   /** head office of a covered company, country only */
   | "hq-country"
-  /** home country of a large, unmistakably named foreign company outside coverage */
+  /** home country of a large, unmistakably named foreign company (or a U.S. federal body) outside coverage */
   | "known-country"
   /** the one country the quoted filing sentence itself names */
-  | "filing-region";
+  | "filing-region"
+  /** the one U.S. state the quoted filing sentence itself names */
+  | "filing-state";
 export const BASIS_LABEL: Record<PlaceBasis, string> = {
   hq: "Head office",
   "hq-country": "Head-office country",
-  "known-country": "Home country of a well-known company (country level)",
+  "known-country": "Home country of a well-known name (country level)",
   "filing-region": "Country named in the quoted filing sentence",
+  "filing-state": "U.S. state named in the quoted filing sentence (state level)",
+};
+
+/**
+ * Geographic centre of each U.S. state, the District of Columbia and Puerto Rico: [latitude, longitude, width in km]
+ * (the width is the square root of the state's area). Used to name states on the map once it is close enough, and to
+ * place a counterparty the filing ties to exactly one state. Reference geography, not company data.
+ */
+export const US_STATE_PLACES: Record<string, [number, number, number]> = {
+  AL: [32.8, -86.8, 368], AK: [64.0, -152.0, 1313], AZ: [34.2, -111.7, 543], AR: [34.9, -92.4, 371], CA: [37.2, -119.4, 651], CO: [39.0, -105.5, 519],
+  CT: [41.6, -72.7, 120], DE: [39.0, -75.5, 80], DC: [38.9, -77.0, 13], FL: [28.6, -82.4, 413], GA: [32.7, -83.4, 392], HI: [20.3, -156.4, 168],
+  ID: [44.4, -114.6, 465], IL: [40.0, -89.2, 387], IN: [39.9, -86.3, 307], IA: [42.1, -93.5, 382], KS: [38.5, -98.4, 462], KY: [37.5, -85.3, 324],
+  LA: [31.1, -92.0, 368], ME: [45.4, -69.2, 303], MD: [39.0, -76.8, 179], MA: [42.3, -71.8, 165], MI: [44.3, -85.4, 500], MN: [46.3, -94.3, 475],
+  MS: [32.7, -89.7, 354], MO: [38.4, -92.5, 425], MT: [47.0, -109.6, 617], NE: [41.5, -99.8, 448], NV: [39.3, -116.6, 535], NH: [43.7, -71.6, 156],
+  NJ: [40.2, -74.7, 150], NM: [34.4, -106.1, 561], NY: [42.9, -75.5, 376], NC: [35.6, -79.4, 373], ND: [47.5, -100.5, 428], OH: [40.3, -82.8, 341],
+  OK: [35.6, -97.5, 425], OR: [43.9, -120.6, 505], PA: [40.9, -77.8, 345], PR: [18.2, -66.4, 117], RI: [41.7, -71.5, 63], SC: [33.9, -80.9, 288],
+  SD: [44.4, -100.2, 447], TN: [35.9, -86.4, 330], TX: [31.5, -99.3, 834], UT: [39.3, -111.7, 469], VT: [44.1, -72.7, 158], VA: [37.5, -78.9, 333],
+  WA: [47.4, -120.5, 430], WV: [38.6, -80.6, 251], WI: [44.6, -89.9, 412], WY: [43.0, -107.5, 503],
 };
 export const SOURCE_LABEL: Record<HqSource, string> = {
   sec: "SEC business address",
@@ -83,10 +103,15 @@ export interface Placed {
 export interface Unplaced { key: string; name: string; ticker: string | null; relation: Relation | "focus"; hop: 1 | 2; why: string }
 export type Centroid = (country: string) => [number, number] | null;
 
+/** True when the quoted sentence (normalised, padded with spaces) contains the word or phrase as a whole. */
+const namesIt = (quote: string, w: string) => new RegExp(`[^a-z]${normText(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^a-z]`).test(quote);
+
 /**
- * Countries a node's links are tied to, in canonical spelling, most often named first.
+ * Regions a node's links are tied to, in canonical spelling, most often named first.
  * `regions` is filled in by the model that reads the filing and is not checked on its own, so a region only counts
  * when the quoted sentence (which is verified word for word against the filing) names it too.
+ * This is also the test `regionsInQuote` (claims.ts) uses to decide which stored regions to keep, so it accepts any
+ * named region, a U.S. state included; `statedPlaces` is what tells a state from a country.
  */
 export function statedCountries(links: RiskLink[]): string[] {
   const tally = new Map<string, number>();
@@ -94,7 +119,7 @@ export function statedCountries(links: RiskLink[]): string[] {
     const quote = ` ${normText(l.quote ?? "")} `;
     const named = (l.regions ?? []).filter((raw) => {
       const c = canonCountry(raw);
-      return !!c && [raw, c].some((w) => new RegExp(`[^a-z]${normText(w).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[^a-z]`).test(quote));
+      return !!c && [raw, c].some((w) => namesIt(quote, w));
     });
     for (const c of new Set(named.map(canonCountry) as string[])) tally.set(c, (tally.get(c) ?? 0) + 1);
   }
@@ -102,9 +127,34 @@ export function statedCountries(links: RiskLink[]): string[] {
 }
 
 /**
+ * The same named regions, split into countries (canonical spelling) and U.S. states (two-letter codes), most often
+ * named first. A region that is a U.S. state is a state, never the country that shares its name: "Georgia" is the
+ * state unless the sentence points at the Caucasus (see `usStateOfRegion`).
+ */
+export function statedPlaces(links: RiskLink[]): { countries: string[]; states: string[] } {
+  const countries = new Map<string, number>(), states = new Map<string, number>();
+  for (const l of links) {
+    const quote = ` ${normText(l.quote ?? "")} `;
+    const c = new Set<string>(), s = new Set<string>();
+    for (const raw of l.regions ?? []) {
+      const state = usStateOfRegion(raw, l.quote);
+      if (state) { if (namesIt(quote, raw.replace(/^(the )?state of /i, ""))) s.add(state); continue; }
+      const canon = canonCountry(raw);
+      if (canon && [raw, canon].some((w) => namesIt(quote, w))) c.add(canon);
+    }
+    for (const x of c) countries.set(x, (countries.get(x) ?? 0) + 1);
+    for (const x of s) states.set(x, (states.get(x) ?? 0) + 1);
+  }
+  const ranked = (m: Map<string, number>) => [...m].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k]) => k);
+  return { countries: ranked(countries), states: ranked(states) };
+}
+
+/**
  * Position of one company or counterparty.
- * Order: head office on file, then the home country of a well-known foreign company (by full name, no ticker), then the single country the quoted filing sentence names.
- * A name tied to several countries, or to none we can draw, stays unplaced rather than being guessed.
+ * Order: head office on file, then the home country of a well-known foreign company (by full name, no ticker), then the
+ * one place the quoted filing sentences name: a single U.S. state (state level), several U.S. states (the United States,
+ * country level), or a single country. A name tied to places in more than one country, or to none we can draw, stays
+ * unplaced rather than being guessed.
  */
 export function placeOne(node: Pick<GraphNode, "name" | "ticker" | "links">, hq: Record<string, Hq>, centroid: Centroid): { lon: number; lat: number; place: string; country: string; basis: PlaceBasis; source?: HqSource } | { why: string } {
   const own = node.ticker ? hq[node.ticker] : undefined;
@@ -114,13 +164,23 @@ export function placeOne(node: Pick<GraphNode, "name" | "ticker" | "links">, hq:
     const at = centroid(known);
     if (at) return { lon: at[0], lat: at[1], place: known, country: known, basis: "known-country" };
   }
-  const stated = statedCountries(node.links as RiskLink[]);
-  const drawable = stated.filter((c) => centroid(c));
-  if (drawable.length === 1) {
-    const at = centroid(drawable[0]) as [number, number];
-    return { lon: at[0], lat: at[1], place: drawable[0], country: drawable[0], basis: "filing-region" };
+  const stated = statedPlaces(node.links as RiskLink[]);
+  const drawable = stated.countries.filter((c) => centroid(c)), abroad = drawable.filter((c) => c !== "United States");
+  const states = stated.states.filter((s) => US_STATE_PLACES[s]);
+  if (!abroad.length && states.length === 1) {
+    const [lat, lon] = US_STATE_PLACES[states[0]];
+    return { lon, lat, place: `${US_STATES[states[0]]}, U.S.`, country: "United States", basis: "filing-state" };
   }
-  if (drawable.length > 1) return { why: `filing names ${drawable.length} countries (${drawable.slice(0, 3).join(", ")}${drawable.length > 3 ? ", …" : ""})` };
+  /* every place named is in the United States (several states, or states and the country): country level */
+  const places = states.length ? [...abroad, "United States"] : drawable;
+  if (places.length === 1) {
+    const at = centroid(places[0]);
+    if (at) return { lon: at[0], lat: at[1], place: places[0], country: places[0], basis: "filing-region" };
+  }
+  if (places.length > 1) {
+    const named = [...abroad, ...states.map((s) => US_STATES[s]), ...(drawable.includes("United States") && !states.length ? ["United States"] : [])];
+    return { why: `filing names ${places.length} countries (${named.slice(0, 3).join(", ")}${named.length > 3 ? ", …" : ""})` };
+  }
   return { why: node.ticker ? "no head office on file" : "no location stated in the filing" };
 }
 
@@ -170,24 +230,6 @@ export function frameAll(points: [number, number][]): { lon: number; lat: number
 }
 
 /* ---------- address to gazetteer matching (used by scripts/company-hq.ts, tested here) ---------- */
-
-export const US_STATES: Record<string, string> = {
-  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California", CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia",
-  FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine",
-  MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada",
-  NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon",
-  PA: "Pennsylvania", PR: "Puerto Rico", RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
-  VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
-};
-const STATE_BY_NAME: Record<string, string> = Object.fromEntries(Object.entries(US_STATES).map(([code, name]) => [name.toLowerCase(), code]));
-/** Two-letter code of a U.S. state given its code or name; null when it is not one. */
-export function usState(raw: string | null | undefined): string | null {
-  const t = (raw ?? "").trim();
-  if (!t) return null;
-  const up = t.toUpperCase();
-  if (US_STATES[up]) return up;
-  return STATE_BY_NAME[t.toLowerCase()] ?? null;
-}
 
 /** Lower-case, accent-free city name with the usual abbreviations spelled out, so "ST. LOUIS" meets "Saint Louis". */
 export function cityKey(raw: string): string {

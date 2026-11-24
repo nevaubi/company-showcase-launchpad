@@ -1,34 +1,14 @@
-import { useCompanyInterest } from "@/lib/agents/client";
-import { createFileRoute, Link, notFound, Outlet, useRouterState } from "@tanstack/react-router";
-import {
-  ArrowUpRight,
-  Building,
-  Columns3,
-  FileText,
-  Globe,
-  MoreHorizontal,
-  Sparkles,
-  Star,
-} from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { requestResearch } from "@/lib/research/request";
-import { CompanyLogo } from "@/components/app/company-logo";
+import { createFileRoute, Link, notFound, Outlet } from "@tanstack/react-router";
+import { DataUnavailable } from "@/components/app/data-unavailable";
+import { CompanyHeader } from "@/components/company/header/company-header";
+import { cleanCompanyName } from "@/components/company/header/model";
+import { CompanyTabs } from "@/components/company/header/tabs";
+import { RestrictedBanner } from "@/components/firm/coverage-chip";
+import { useCoverage, useFirm } from "@/components/firm/firm-context";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useCompany, useQuotes } from "@/lib/data";
+import { useCompanyInterest } from "@/lib/agents/client";
 import { coverageOf } from "@/lib/coverage";
-import { fmtPct, fmtPrice, fmtSigned } from "@/lib/format";
-import { useToggleFollow } from "@/lib/workspace";
-import { useSource } from "@/components/source/source-context";
-import { CoverageChip, RestrictedBanner } from "@/components/firm/coverage-chip";
-import { cn } from "@/lib/utils";
-import { SinceVisitBadges } from "@/components/changes/company-changes";
+import { useCompany, useQuotes } from "@/lib/data";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
   beforeLoad: ({ params }) => {
@@ -36,16 +16,17 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
   },
   head: ({ params }) => {
     const c = coverageOf(params.ticker);
-    const t = `${params.ticker.toUpperCase()} · ${c?.shortName ?? "Company"} · FiledUnder`;
+    const name = c ? cleanCompanyName(c.shortName) : "Company";
+    const t = `${params.ticker.toUpperCase()} · ${name} · FiledUnder`;
     return {
       meta: [
         { title: t },
         {
           name: "description",
-          content: `${c?.shortName} financials, filings, segments and insider trades with source attribution.`,
+          content: `${name} financials, filings, segments and insider trades with source attribution.`,
         },
         { property: "og:title", content: t },
-        { property: "og:description", content: `${c?.shortName} research file on Filed Under.` },
+        { property: "og:description", content: `${name} research file on FiledUnder.` },
         { property: "og:type", content: "website" },
         { name: "twitter:card", content: "summary" },
       ],
@@ -63,322 +44,50 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
   ),
 });
 
-type Sub = { to: string; label: string; exact?: boolean };
-const TAB_GROUPS: { label: string; subs: Sub[] }[] = [
-  { label: "Overview", subs: [{ to: "/app/companies/$ticker", label: "Overview", exact: true }] },
-  { label: "Financials", subs: [{ to: "/app/companies/$ticker/financials", label: "Statements" }] },
-  {
-    label: "Valuation",
-    subs: [
-      { to: "/app/companies/$ticker/valuation", label: "Valuation" },
-      { to: "/app/companies/$ticker/estimates", label: "Estimates & analysts" },
-    ],
-  },
-  { label: "IR data", subs: [{ to: "/app/companies/$ticker/ir", label: "IR data" }] },
-  {
-    label: "Earnings",
-    subs: [
-      { to: "/app/companies/$ticker/earnings", label: "Results & promises" },
-      { to: "/app/companies/$ticker/calls", label: "Earnings calls" },
-    ],
-  },
-  {
-    label: "Filings",
-    subs: [
-      { to: "/app/companies/$ticker/filings", label: "Filings & IR" },
-      { to: "/app/companies/$ticker/redline", label: "Filing changes" },
-      { to: "/app/companies/$ticker/reports", label: "Reports" },
-    ],
-  },
-  {
-    label: "Ownership",
-    subs: [
-      { to: "/app/companies/$ticker/insiders", label: "Insiders & influence" },
-      { to: "/app/companies/$ticker/alt-data", label: "Alt data" },
-    ],
-  },
-];
-
-const edgarUrl = (cik: string | number) =>
-  `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${cik}&type=&dateb=&owner=include&count=40`;
-
+/**
+ * The company shell: header (identity, price, actions), the firm's restricted-list warning, then the
+ * tabs and the page under them. The pieces live in components/company/header; this file only gathers
+ * what they read. The coverage list answers at once, the dataset and the quote fill in after.
+ */
 function CompanyLayout() {
   const { ticker: raw } = Route.useParams();
-  useCompanyInterest(raw?.toUpperCase());
   const ticker = raw.toUpperCase();
+  useCompanyInterest(ticker);
+  const coverage = coverageOf(ticker);
   const company = useCompany(ticker);
-  const quote = useQuotes([ticker]);
-  const q = quote.data?.quotes[0];
-  const follow = useToggleFollow();
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const { open } = useSource();
-  const p = company.data?.profile;
-  const latest10K = company.data?.filings.find((f) => f.form === "10-K");
-  const latest10Q = company.data?.filings.find((f) => f.form === "10-Q");
-  const openFiling = (
-    f: { accn: string; doc: string; report?: string | null },
-    form: "10-K" | "10-Q",
-  ) =>
-    open({
-      ticker,
-      label:
-        form === "10-K"
-          ? `Annual report (${f.report?.slice(0, 4)})`
-          : `Quarterly report (${f.report})`,
-      unit: "usd",
-      value: 0,
-      doc: { accn: f.accn, doc: f.doc, title: `Latest Form ${form}` },
-    });
+  const quotes = useQuotes([ticker]);
+  const quote = quotes.data?.quotes[0];
+  const profile = company.data?.profile;
+  const name = cleanCompanyName(coverage?.shortName ?? profile?.name ?? ticker);
+  const { firm } = useFirm();
+  const firmCoverage = useCoverage(firm?.id);
+  const restricted = !!firm && !!firmCoverage.data?.find((r) => r.ticker === ticker)?.restricted;
 
   return (
     <div>
-      <div className="mb-3 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-2">
-        <CompanyLogo ticker={ticker} src={p?.logo} size="lg" />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1
-              className="truncate text-xl font-semibold leading-tight tracking-tight sm:text-2xl"
-              title={p?.name ? `SEC registrant: ${p.name}` : undefined}
-            >
-              {coverageOf(ticker)?.shortName ?? p?.name}
-            </h1>
-            <Badge variant="mono">
-              {p?.exchange ?? "—"}: {ticker}
-            </Badge>
-          </div>
-          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-            {p?.name &&
-              p.name.toLowerCase().replace(/[^a-z]/g, "") !==
-                (coverageOf(ticker)?.shortName ?? "").toLowerCase().replace(/[^a-z]/g, "") && (
-                // registrant name and HQ are desktop-only: on phones the header stays two lines above the price
-                <>
-                  <span className="num hidden text-[11px] uppercase sm:inline">{p.name}</span>
-                  <span aria-hidden className="hidden sm:inline">·</span>
-                </>
-              )}
-            <span>{p?.sector}</span>
-            <span aria-hidden>·</span>
-            <span>{p?.industry}</span>
-            {p && (
-              <>
-                <span aria-hidden className="hidden sm:inline">·</span>
-                <span className="hidden items-center gap-1 sm:inline-flex">
-                  <Building className="size-3.5" />
-                  {p.address.city.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())},{" "}
-                  {p.address.state}
-                </span>
-              </>
-            )}
-          </p>
-          <SinceVisitBadges ticker={ticker} />
-        </div>
-        <div className="col-span-2 grid min-w-0 grid-cols-1 items-center gap-2 sm:grid-cols-[auto_minmax(0,1fr)]">
-          {q ? (
-            <div className="flex shrink-0 items-baseline gap-2">
-              <p className="num text-2xl font-semibold">{fmtPrice(q.price)}</p>
-              <p className={cn("num text-sm", q.change >= 0 ? "text-positive" : "text-negative")}>
-                {fmtSigned(q.change)} ({fmtPct(q.changePct, 2, true)})
-              </p>
-            </div>
-          ) : (
-            <Skeleton className="h-8 w-32" />
-          )}
-          <div className="flex min-w-0 flex-wrap justify-start gap-1 sm:justify-end">
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() =>
-                requestResearch(
-                  `Build a sourced investment brief for ${ticker}: latest results, valuation, estimates, supply-chain risks and upcoming catalysts. Read the company pages and distinguish reported facts from estimates.`,
-                )
-              }
-            >
-              <Sparkles /> Research
-            </Button>
-            <Button
-              size="xs"
-              variant={follow.isFollowed(ticker) ? "secondary" : "outline"}
-              onClick={() => follow.toggle(ticker)}
-              disabled={follow.pending}
-            >
-              <Star className={cn(follow.isFollowed(ticker) && "fill-current")} />
-              {follow.isFollowed(ticker) ? "Following" : "Follow"}
-            </Button>
-            <Button size="xs" variant="outline" asChild className="hidden sm:inline-flex">
-              <Link to="/app/compare" search={{ t: ticker }}>
-                <Columns3 /> Compare
-              </Link>
-            </Button>
-            <CoverageChip ticker={ticker} price={q?.price ?? null} />
-            {/* Phone: the secondary actions live in one menu so the header stays one row */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button size="xs" variant="outline" className="sm:hidden" aria-label="More actions">
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem asChild>
-                  <Link to="/app/compare" search={{ t: ticker }}>
-                    <Columns3 /> Compare
-                  </Link>
-                </DropdownMenuItem>
-                {latest10K && (
-                  <DropdownMenuItem onSelect={() => openFiling(latest10K, "10-K")}>
-                    <FileText /> Latest 10-K
-                  </DropdownMenuItem>
-                )}
-                {latest10Q && (
-                  <DropdownMenuItem onSelect={() => openFiling(latest10Q, "10-Q")}>
-                    <FileText /> Latest 10-Q
-                  </DropdownMenuItem>
-                )}
-                {p && (
-                  <>
-                    <DropdownMenuItem asChild>
-                      <a href={p.investorRelations} target="_blank" rel="noreferrer">
-                        <Globe /> Investor relations <ArrowUpRight className="opacity-60" />
-                      </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <a href={edgarUrl(p.cik)} target="_blank" rel="noreferrer">
-                        EDGAR <ArrowUpRight className="opacity-60" />
-                      </a>
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {latest10K && (
-              <Button
-                size="xs"
-                variant="outline"
-                className="hidden sm:inline-flex"
-                onClick={() =>
-                  open({
-                    ticker,
-                    label: `Annual report (${latest10K.report?.slice(0, 4)})`,
-                    unit: "usd",
-                    value: 0,
-                    doc: { accn: latest10K.accn, doc: latest10K.doc, title: "Latest Form 10-K" },
-                  })
-                }
-              >
-                Latest 10-K
-              </Button>
-            )}
-            {latest10Q && (
-              <Button
-                size="xs"
-                variant="outline"
-                className="hidden sm:inline-flex"
-                onClick={() =>
-                  open({
-                    ticker,
-                    label: `Quarterly report (${latest10Q.report})`,
-                    unit: "usd",
-                    value: 0,
-                    doc: { accn: latest10Q.accn, doc: latest10Q.doc, title: "Latest Form 10-Q" },
-                  })
-                }
-              >
-                Latest 10-Q
-              </Button>
-            )}
-            {p && (
-              <>
-                <Button size="xs" variant="ghost" asChild className="hidden sm:inline-flex">
-                  <a href={p.investorRelations} target="_blank" rel="noreferrer">
-                    <Globe /> IR <ArrowUpRight className="opacity-60" />
-                  </a>
-                </Button>
-                <Button size="xs" variant="ghost" asChild className="hidden sm:inline-flex">
-                  <a href={edgarUrl(p.cik)} target="_blank" rel="noreferrer">
-                    EDGAR <ArrowUpRight className="opacity-60" />
-                  </a>
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
+      <CompanyHeader
+        ticker={ticker}
+        name={name}
+        coverage={coverage}
+        profile={profile}
+        filings={company.data?.filings}
+        profilePending={company.isPending}
+        quote={quote}
+        quotePending={!quote && quotes.isPending}
+        quoteExchange={quote && "exchange" in quote ? quote.exchange : undefined}
+      />
       <RestrictedBanner ticker={ticker} />
-
-      {(() => {
-        const here = pathname.replace(/\/$/, "");
-        const isSub = (t: Sub) => {
-          const u = t.to.replace("$ticker", ticker);
-          return t.exact ? here === u : here.startsWith(u);
-        };
-        const activeGroup = TAB_GROUPS.find((g) => g.subs.some(isSub)) ?? TAB_GROUPS[0];
-        return (
-          <div className="mb-4">
-            <nav
-              aria-label="Company research"
-              className="no-scrollbar -mx-4 flex items-center gap-1 overflow-x-auto border-b px-4 whitespace-nowrap sm:mx-0 sm:px-0 [&>*]:shrink-0"
-            >
-              {TAB_GROUPS.map((g) => (
-                <Link
-                  key={g.label}
-                  data-tour={`tab-${g.label}`}
-                  to={g.subs[0].to as "/app/companies/$ticker"}
-                  params={{ ticker }}
-                  aria-current={g === activeGroup ? "page" : undefined}
-                  className={`-mb-px border-b-2 px-3 py-2 text-sm transition-colors ${
-                    g === activeGroup
-                      ? "border-foreground font-medium text-foreground"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {g.label}
-                </Link>
-              ))}
-              <span className="ml-auto flex gap-1">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link to="/app/markets" search={{ symbol: ticker }}>
-                    Technicals <ArrowUpRight className="size-3" />
-                  </Link>
-                </Button>
-                <Button variant="ghost" size="sm" asChild>
-                  <Link to="/app/supply-chain" search={{ t: ticker }}>
-                    Supply chain <ArrowUpRight className="size-3" />
-                  </Link>
-                </Button>
-              </span>
-            </nav>
-            {activeGroup.subs.length > 1 && (
-              <div className="no-scrollbar mt-2 flex gap-1 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
-                {activeGroup.subs.map((t) => (
-                  <Link
-                    key={t.to}
-                    to={t.to as "/app/companies/$ticker"}
-                    params={{ ticker }}
-                    className={`rounded-md px-2.5 py-1 text-xs ${
-                      isSub(t)
-                        ? "bg-secondary font-medium text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {t.label}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {company.isError ? (
-        <div className="flex flex-wrap items-center gap-3 border-l-2 border-negative p-4">
-          <p className="text-sm text-negative">Company data is temporarily unavailable.</p>
-          <Button size="sm" variant="outline" onClick={() => company.refetch()}>
-            Retry
-          </Button>
-        </div>
-      ) : (
-        <div data-tour="company-body" className="min-w-0"><Outlet /></div>
-      )}
+      <CompanyTabs ticker={ticker} name={name} logoSrc={profile?.logo} quote={quote} restricted={restricted}>
+        {company.isError ? (
+          <DataUnavailable
+            title="Company data is temporarily unavailable"
+            error={company.error}
+            onRetry={() => company.refetch()}
+          />
+        ) : (
+          <Outlet />
+        )}
+      </CompanyTabs>
     </div>
   );
 }

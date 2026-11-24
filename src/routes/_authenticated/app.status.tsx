@@ -9,6 +9,7 @@ import { manifestQuery } from "@/lib/data";
 import { COVERAGE } from "@/lib/coverage";
 import { fmtDate, fmtInt, fmtRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { CompanyLogo } from "@/components/app/company-logo";
 
 export const Route = createFileRoute("/_authenticated/app/status")({
   head: () => ({
@@ -181,7 +182,8 @@ function IrCoverage() {
             {rows.map((r) => (
               <tr key={r.ticker} className="border-t border-border/60 hover:bg-muted/40">
                 <td className="px-3 py-1.5">
-                  <Link to="/app/companies/$ticker/ir" params={{ ticker: r.ticker }} className="font-medium hover:underline">
+                  <Link to="/app/companies/$ticker/ir" params={{ ticker: r.ticker }} className="inline-flex items-center gap-1.5 align-middle font-medium hover:underline">
+                    <CompanyLogo ticker={r.ticker} size="2xs" decorative />
                     {r.ticker}
                   </Link>
                   <span className="ml-2 text-muted-foreground">{NAMES.get(r.ticker) ?? ""}</span>

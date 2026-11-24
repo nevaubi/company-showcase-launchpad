@@ -1,28 +1,41 @@
-// Globe view of the supply-chain page. The company sits at its head office; every named supplier,
-// customer, partner and competitor that can be placed is drawn where it is based, with an arc for the
-// direction goods and services move. Countries are tinted by how often the filings tie the company to
-// them. Nothing is placed by guesswork: names without a known location are listed under the map.
+// Globe view of the supply-chain page. The company sits at its head office; every named supplier, customer,
+// partner and competitor that can be placed is drawn where it is based, as its logo, with an arc for the direction
+// goods and services move. Arc width follows the same stated dollars (or stated share) as the Network view's bands.
+// Countries are tinted by how often the filings tie the company to them. Nothing is placed by guesswork: names
+// without a known location are listed under the map.
+//
+// Isolation (suppliers only, customers only, one pathway) is owned by the page: this view draws the set it is given
+// (`isolate`), frames it, captions it and raises requests through `onIsolate` (legend chips, the selected name's bar,
+// Escape). See src/lib/supply/isolate-contract.ts.
+//
+// Wheel and touch never fight the page: a plain wheel scrolls the page until the map has been pressed (then it zooms
+// toward the pointer, and never hands a zoom limit on to the page) and again once the pointer leaves the map; Ctrl or
+// ⌘ + wheel and two fingers always zoom; one finger pans the page until a tap has engaged the map.
 // Browser-only (canvas): the route loads this file lazily inside <ClientOnly>.
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Globe2, Map as MapIcon, Minus, Plus, RotateCcw } from "lucide-react";
-import { logoUrl } from "@/components/app/company-logo";
+import { Crosshair, Globe2, Map as MapIcon, Minus, Plus, RotateCcw, Waypoints, X } from "lucide-react";
+import { CompanyLogo, logoUrl } from "@/components/app/company-logo";
 import { analyticsFile } from "@/lib/analytics-files";
 import { canonCountry, type CountryRow } from "@/lib/supply/analytics";
-import { maxShare, NOT_TRADE, type GraphNode, type HopNode, type NodeRisk, type Relation, type ShockImpact } from "@/lib/supply/core";
-import type { IsolateProps } from "@/lib/supply/isolate-contract";
-import { arcEnds, BASIS_LABEL, frameAll, placeGraph, readHq, SOURCE_LABEL, type Centroid, type Hq, type HqFile, type Placed } from "@/lib/supply/geo";
-import { nodeFacts, type NodeFacts } from "@/lib/supply/describe";
+import { maxShare, NOT_TRADE, type GraphNode, type HopNode, type NodeRisk, type Relation, type RiskLink, type ShockImpact } from "@/lib/supply/core";
+import type { IsolateProps, IsolateRequest } from "@/lib/supply/isolate-contract";
+import { arcEnds, BASIS_LABEL, placeGraph, readHq, SOURCE_LABEL, statedPlaces, US_STATE_PLACES, US_STATES, type Centroid, type Hq, type HqFile, type Placed } from "@/lib/supply/geo";
+import { isTradeNode, nodeFacts, type NodeFacts } from "@/lib/supply/describe";
+import { sideBasis, type Basis } from "@/lib/supply/network-layout";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { countryPlaces, GlobeEngine, type GlobeArc, type GlobeBadge, type GlobeBox, type GlobeFill, type GlobeHit, type GlobePalette, type GlobePoint } from "./globe/engine";
-import { externalLogo, impactOf, overlayHit, RELATION_COLOR, RELATION_DASH, RELATION_LABEL, RELATION_ORDER, RELATION_SHAPE, type Overlay } from "./supply-map-meta";
+import { flowWidth } from "./globe/arcs";
+import { countryPlaces, GlobeEngine, type GlobeArc, type GlobeBox, type GlobeFill, type GlobeHit, type GlobePalette, type GlobePoint, type GlobeRegionLabel } from "./globe/engine";
+import { externalLogo, impactOf, overlayHit, RELATION_COLOR, RELATION_DASH, RELATION_LABEL, RELATION_ONE, RELATION_ORDER, RELATION_SHAPE, type Overlay } from "./supply-map-meta";
 import { LineSample, NodeHoverCard, RelationMark } from "./supply-marks";
 
 export const hqQuery = { queryKey: ["analytics", "hq"], queryFn: () => analyticsFile<HqFile>("hq.json"), staleTime: 24 * 60 * 60_000 };
 
 /** Places too small to have a shape in the base map. */
 const SMALL: Record<string, [number, number]> = { Singapore: [103.82, 1.35], "Hong Kong": [114.17, 22.32], Luxembourg: [6.13, 49.61], Malta: [14.4, 35.9], Bermuda: [-64.75, 32.3], "Cayman Islands": [-81.25, 19.31], Macau: [113.55, 22.16] };
+/** U.S. state names for the map, written once it is close enough to hold them. */
+const STATE_LABELS: GlobeRegionLabel[] = Object.entries(US_STATE_PLACES).filter(([code]) => code !== "DC").map(([code, [lat, lon, km]]) => ({ name: US_STATES[code], short: code, lon, lat, size: km / 6371 }));
 
 /* ---------- colours: the canvas cannot read CSS variables, so resolve them to sRGB once per theme ---------- */
 type Rgb = [number, number, number];
@@ -53,9 +66,9 @@ function readTheme(): Theme {
   const dark = fg[0] + fg[1] + fg[2] > card[0] + card[1] + card[2];
   return {
     palette: {
-      ocean: rgb(mix(bg, c1, dark ? 0.1 : 0.05)), land: rgb(mix(card, fg, dark ? 0.06 : 0)), rim: rgb(mix(card, fg, dark ? 0.3 : 0.22)),
-      border: rgb(mix(card, fg, 0.3)), coast: rgb(mix(card, fg, 0.42)), ink: rgb(fg), ink2: rgb(muted), ink3: rgb(mix(muted, card, 0.3)),
-      grid: rgb(fg, 0.05), panel: rgb(card), accent: rgb(fg),
+      ocean: rgb(mix(bg, c1, dark ? 0.12 : 0.07)), land: rgb(mix(card, fg, dark ? 0.07 : 0)), rim: rgb(mix(card, fg, dark ? 0.32 : 0.24)),
+      border: rgb(mix(card, fg, dark ? 0.26 : 0.2)), coast: rgb(mix(card, fg, dark ? 0.42 : 0.36)), ink: rgb(fg), ink2: rgb(muted), ink3: rgb(mix(muted, card, 0.32)),
+      grid: rgb(fg, dark ? 0.07 : 0.06), panel: rgb(card), accent: rgb(fg), plate: rgb(r("var(--logo-plate)")),
     },
     relation: {
       customer: rgb(r(RELATION_COLOR.customer)), supplier: rgb(r(RELATION_COLOR.supplier)), partner: rgb(r(RELATION_COLOR.partner)),
@@ -83,7 +96,7 @@ export interface SupplyGlobeProps extends IsolateProps {
 
 type Tip =
   | { kind: "node"; x: number; y: number; name: string; facts: NodeFacts; place: string; basis: string; picked: boolean; shock: string | null }
-  | { kind: "point" | "country"; x: number; y: number; title: string; lines: string[]; marks?: { relation: Relation; name: string }[] };
+  | { kind: "point" | "country"; x: number; y: number; title: string; lines: string[]; marks?: { relation: Relation | "focus"; name: string }[] };
 type TipUpdate = Tip | null | ((t: Tip | null) => Tip | null);
 /** The hover card keeps its own state: a pointer move updates this small element, not the whole globe component. */
 const TipLayer = forwardRef<{ set: (t: TipUpdate) => void }, { size: () => { w: number; h: number } }>(function TipLayer({ size }, ref) {
@@ -100,7 +113,7 @@ const TipLayer = forwardRef<{ set: (t: TipUpdate) => void }, { size: () => { w: 
       <p className="text-[13px] font-semibold leading-snug">{shown.title}</p>
       {shown.marks && (
         <ul className="mt-1.5 flex flex-col gap-0.5">
-          {shown.marks.map((m, i) => <li key={i} className="flex min-w-0 items-center gap-1.5"><RelationMark relation={m.relation} size={8} /><span className="truncate">{m.name}</span></li>)}
+          {shown.marks.map((m, i) => <li key={i} className="flex min-w-0 items-center gap-1.5">{m.relation === "focus" ? <span className="size-2 shrink-0 rounded-full bg-foreground" /> : <RelationMark relation={m.relation} size={8} />}<span className="truncate">{m.name}</span></li>)}
         </ul>
       )}
       {shown.lines.map((l, i) => <p key={i} className={cn("text-muted-foreground", i === shown.lines.length - 1 && shown.lines.length > 1 ? "mt-1.5 border-t pt-1.5 text-foreground" : "mt-0.5")}>{l}</p>)}
@@ -109,22 +122,31 @@ const TipLayer = forwardRef<{ set: (t: TipUpdate) => void }, { size: () => { w: 
 });
 const SEVERITY: Record<ShockImpact["severity"], string> = { high: "High impact", medium: "Medium impact", low: "Low impact" };
 const rowWeight = (r: CountryRow) => r.links + r.hq + r.facilities * 1.5 + r.policy;
+const WIDTH_TEXT: Record<Basis, string> = { dollars: "the stated dollars", share: "the stated share", none: "" };
+const relationWord = (r: Relation | "focus") => (r === "focus" ? "this company" : RELATION_ONE[r].toLowerCase());
+const isHop = (n: GraphNode | HopNode): n is HopNode => (n as HopNode).hop === 2;
+/**
+ * Initials plate for a name without a ticker. The trailing space keeps the logo lookup from landing on a covered
+ * company whose ticker happens to spell the same letters: OpenAI is not Opendoor (OPEN), Hon Hai is not Honeywell (HON).
+ */
+const plateKey = (name: string) => `${name.replace(/[^A-Za-z0-9]/g, "").slice(0, 4).toUpperCase()} `;
 
-export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onSelect, overlay, risks, impacts, rows, country, onCountry }: SupplyGlobeProps) {
+export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onSelect, overlay, risks, impacts, rows, country, onCountry, isolate, isolateLabel, onIsolate }: SupplyGlobeProps) {
   const { data: hqFile, isLoading: hqLoading, isError: hqError, refetch: refetchHq } = useQuery(hqQuery);
   const hqMissing = !hqLoading && (hqError || !hqFile);
   const hq = useMemo(() => readHq(hqFile), [hqFile]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const baseRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GlobeEngine | null>(null);
   const [failed, setFailed] = useState(false);
   const [flat, setFlat] = useState(false);
   const [theme, setTheme] = useState<Theme | null>(null);
+  const [engaged, setEngaged] = useState(false);
+  const [wheelHint, setWheelHint] = useState(false);
   const tipRef = useRef<{ set: (t: TipUpdate) => void }>(null);
   const setTip = useCallback((t: TipUpdate) => tipRef.current?.set(t), []);
-  const [menu, setMenu] = useState<{ x: number; y: number; points: GlobePoint[] } | null>(null);
-  const [showAllUnplaced, setShowAllUnplaced] = useState(false);
-  const unplacedRef = useRef<HTMLDivElement>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; points: GlobePoint[]; title: string } | null>(null);
   /** set when the selection was made on the globe itself, so the camera is not moved under the pointer */
   const pickedHere = useRef(false);
 
@@ -143,13 +165,26 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
   const placedByKey = useMemo(() => new Map(placed.map((p) => [p.key, p])), [placed]);
   const nodeByKey = useMemo(() => new Map(nodes.map((n) => [n.key, n])), [nodes]);
   const rowByCountry = useMemo(() => new Map(rows.map((r) => [r.country, r])), [rows]);
+  const lit = useCallback((key: string) => !isolate || isolate.has(key), [isolate]);
+
+  /* what a link's width stands for on each side: the same choice the Network view makes for its bands */
+  const sides = useMemo(() => {
+    const out = {} as Record<Relation, { basis: Basis; max: number; value: (key: string) => number }>;
+    for (const r of RELATION_ORDER) {
+      const cards = graph.filter((n) => n.relation === r).map((n) => ({ key: n.key, dollars: risks[n.key]?.dollars ?? null, share: maxShare(n), trade: isTradeNode(n) }));
+      const basis: Basis = r === "supplier" || r === "customer" ? sideBasis(cards) : "none";
+      const values = new Map(cards.map((c) => [c.key, !c.trade ? 0 : basis === "dollars" ? c.dollars ?? 0 : basis === "share" ? c.share : 0]));
+      out[r] = { basis, max: Math.max(0, ...values.values()), value: (key) => values.get(key) ?? 0 };
+    }
+    return out;
+  }, [graph, risks]);
 
   /* ---------- engine lifetime ---------- */
   const handlers = useRef<{ onSelect: typeof onSelect; onCountry: typeof onCountry; country: string | null; placedByKey: typeof placedByKey; nodeByKey: typeof nodeByKey; risks: typeof risks; rowByCountry: typeof rowByCountry; canonOfAtlas: typeof canonOfAtlas; home: Hq | undefined; selected: string | null; impacts: typeof impacts }>(null as never);
   handlers.current = { onSelect, onCountry, country, placedByKey, nodeByKey, risks, rowByCountry, canonOfAtlas, home, selected, impacts };
   useEffect(() => {
-    const canvas = canvasRef.current, wrap = wrapRef.current;
-    if (!canvas || !wrap) return;
+    const canvas = canvasRef.current, base = baseRef.current, wrap = wrapRef.current;
+    if (!canvas || !base || !wrap) return;
     const local = (clientX: number, clientY: number) => { const r = wrap.getBoundingClientRect(); return { x: clientX - r.left, y: clientY - r.top }; };
     /** The hover card for one marker: the same card the Network view shows, plus where the name sits and why. */
     const describe = (p: GlobePoint, x: number, y: number): Tip => {
@@ -162,19 +197,26 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
       const shock = h.impacts ? (hit ? `${SEVERITY[hit.severity]}${hit.revenuePct != null ? `, ${(hit.revenuePct * 100).toFixed(1)}% of revenue at risk` : ""}` : "Not reached by the shock") : null;
       return { kind: "node", x, y, name: p.name, facts: nodeFacts(node, h.risks[p.key]), place: at.place, basis: `${BASIS_LABEL[at.basis]}${at.source ? `, ${SOURCE_LABEL[at.source]}` : ""}`, picked: h.selected === p.key, shock };
     };
+    const listed = (points: GlobePoint[]) => {
+      const byKey = handlers.current.nodeByKey;
+      return points.slice(0, 8).map((p) => ({ relation: (byKey.get(p.key)?.relation ?? "focus") as Relation | "focus", name: p.key === "focus" ? `${p.name} (this company)` : p.name }));
+    };
+    const more = (n: number) => (n > 8 ? [`and ${n - 8} more`] : []);
+    let hintTimer = 0;
     let engine: GlobeEngine;
     try {
-      engine = new GlobeEngine(canvas, {
+      engine = new GlobeEngine(canvas, base, {
         onHover: (hit: GlobeHit | null, cx, cy) => {
           if (!hit) { setTip((t) => (t?.kind === "country" ? t : null)); return; }
           const { x, y } = local(cx, cy);
           if (hit.kind === "point") { setTip(describe(hit.point, x, y)); return; }
-          const nodes = handlers.current.nodeByKey;
-          const marks = hit.points.slice(0, 8).map((p) => ({ relation: (nodes.get(p.key)?.relation ?? "supplier") as Relation, name: p.key === "focus" ? `${p.name} (this company)` : p.name }));
-          setTip({ kind: "point", x, y, title: `${hit.points.length} names here`, marks, lines: [...(hit.points.length > 8 ? [`and ${hit.points.length - 8} more`] : []), "Click to list them or zoom in"] });
+          const n = hit.points.length;
+          if (hit.kind === "cluster") setTip({ kind: "point", x, y, title: `${n} names here`, marks: listed(hit.points), lines: [...more(n), "Click to zoom in, or to list them"] });
+          else if (hit.kind === "arc") setTip({ kind: "point", x, y, title: `${n} links drawn as one`, marks: listed(hit.points), lines: [...more(n), "Click to list them; zoom in to separate them"] });
+          else setTip({ kind: "point", x, y, title: `${n} ${n === 1 ? "name" : "names"} beyond the horizon`, marks: listed(hit.points), lines: [...more(n), "Click to turn the globe to them"] });
         },
         onPick: (p) => { setMenu(null); if (p.key !== "focus") { pickedHere.current = handlers.current.selected !== p.key; handlers.current.onSelect(p.key); } },
-        onClusterMenu: (points, cx, cy) => { const { x, y } = local(cx, cy); setTip(null); setMenu({ x, y, points }); },
+        onClusterMenu: (points, cx, cy) => { const { x, y } = local(cx, cy); setTip(null); setMenu({ x, y, points, title: `${points.length} names here` }); },
         onMove: () => { setMenu(null); setTip(null); },
         onCountry: (name, kind, cx, cy) => {
           const h = handlers.current, canon = name ? h.canonOfAtlas.get(name) ?? null : null;
@@ -191,70 +233,76 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
           lines.push("Click for the region detail below");
           setTip({ kind: "country", x, y, title: canon, lines });
         },
+        onEngage: (on) => { setEngaged(on); if (on) setWheelHint(false); },
+        onWheelPassed: () => { setWheelHint(true); window.clearTimeout(hintTimer); hintTimer = window.setTimeout(() => setWheelHint(false), 1800); },
       });
     } catch {
       setFailed(true);
       return;
     }
     engineRef.current = engine;
+    engine.setRegions(STATE_LABELS);
     const ro = new ResizeObserver(() => engine.resize());
     ro.observe(wrap);
     const applyTheme = () => setTheme(readTheme());
     applyTheme();
     const mo = new MutationObserver(applyTheme);
     mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "style", "data-theme"] });
-    return () => { ro.disconnect(); mo.disconnect(); engine.destroy(); engineRef.current = null; };
-  }, []);
+    return () => { window.clearTimeout(hintTimer); ro.disconnect(); mo.disconnect(); engine.destroy(); engineRef.current = null; };
+  }, [setTip]);
 
   useEffect(() => { if (theme) engineRef.current?.setPalette(theme.palette); }, [theme]);
-  const viewRef = useRef<{ lon: number; lat: number; zoom: number } | null>(null);
-  useEffect(() => {
-    const engine = engineRef.current;
-    if (!engine) return;
-    engine.setFlat(flat);
-    /* the flat map shows the whole world at once, so centre it near the equator; the globe goes back to the company's side */
-    const v = viewRef.current;
-    if (v) { if (flat) engine.flyTo(v.lon, 14, 1, 500); else engine.flyTo(v.lon, v.lat, v.zoom, 500); }
-  }, [flat]);
 
   /* ---------- scene ---------- */
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !theme) return;
-    const points: GlobePoint[] = [], arcs: GlobeArc[] = [], badges: GlobeBadge[] = [];
+    const points: GlobePoint[] = [], arcs: GlobeArc[] = [];
     const flagged = (key: string) => overlayHit(overlay, risks[key]);
-    const dim = (p: Placed) => { const n = nodeByKey.get(p.key); return impacts != null && n != null && !impactOf(impacts, n); };
+    const outside = (p: Placed) => { const n = nodeByKey.get(p.key); return impacts != null && n != null && !impactOf(impacts, n); };
     if (home) {
-      points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 4200, active: true, lead: true, hollow: home.precision !== "city", logo: focus.ticker ? logoUrl(focus.ticker) : undefined, shape: "circle" });
+      const mark = focus.ticker ? logoUrl(focus.ticker) : undefined;
+      points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 1, lead: true, approx: home.precision !== "city", logo: mark, logoTrusted: !!mark, shape: "circle" });
     }
     for (const p of placed) {
-      const node = nodeByKey.get(p.key);
-      const share = node ? maxShare(node) : 0, isDim = dim(p), hot = selected === p.key;
+      if (p.relation === "focus") continue;
+      const node = nodeByKey.get(p.key), side = sides[p.relation];
+      const value = p.hop === 1 ? side.value(p.key) : 0, share = node ? maxShare(node) : 0;
+      const weight = value > 0 && side.max > 0 ? Math.sqrt(value / side.max) : 0;
+      const dim = !lit(p.key), faded = outside(p);
+      /* a covered company's bundled mark; otherwise a logo looked up by domain, good enough for its own badge */
+      const mark = p.ticker ? logoUrl(p.ticker) : undefined;
       points.push({
         key: p.key, name: p.name, hub: p.place, lon: p.lon, lat: p.lat,
-        color: theme.relation[p.relation], weight: p.hop === 2 ? 60 : 220 + Math.min(share, 40) * 55, active: true, faded: isDim,
-        logo: p.ticker ? logoUrl(p.ticker) ?? externalLogo(node?.domain ?? null, p.ticker) : externalLogo(node?.domain ?? null, null),
-        hollow: p.basis !== "hq", ring: flagged(p.key) ? theme.negative : undefined, shape: p.relation === "focus" ? "circle" : RELATION_SHAPE[p.relation],
+        color: theme.relation[p.relation], weight, faded, dim,
+        logo: mark ?? externalLogo(node?.domain ?? null, p.ticker), logoTrusted: !!mark,
+        approx: p.basis !== "hq", ring: flagged(p.key) ? theme.negative : undefined, shape: RELATION_SHAPE[p.relation],
+        /* the figure behind the width, written as the Network cards write it */
+        note: p.hop === 1 && value > 0 ? (share > 0 ? `${share}%` : side.basis === "dollars" ? fmtCompactUsd(value) : undefined) : undefined,
       });
       const from = p.hop === 2 && p.parent ? placedByKey.get(p.parent) : null;
-      const anchor: [number, number] | null = p.hop === 2 ? (from ? [from.lon, from.lat] : null) : home ? [home.lon, home.lat] : null;
-      if (!anchor || p.relation === "focus") continue;
-      const ends = arcEnds(p.relation, anchor, [p.lon, p.lat]);
+      const anchor = p.hop === 2 ? (from ? from.key : null) : home ? "focus" : null;
+      if (!anchor) continue;
+      const ends = arcEnds(p.relation, [0, 0], [1, 1]), toNode = ends.b[0] === 1;
       /* financing, acquisitions and regulators are ties, not flows: a thin dashed line with no direction marks */
       const notTrade = NOT_TRADE.has(risks[p.key]?.nature ?? "trade");
       arcs.push({
-        id: p.key, a: ends.a, b: ends.b, twoWay: notTrade ? false : ends.twoWay, plain: notTrade || ends.plain,
+        id: p.key, node: p.key, from: toNode ? anchor : p.key, to: toNode ? p.key : anchor,
+        twoWay: notTrade ? false : ends.twoWay, plain: notTrade || ends.plain,
         color: flagged(p.key) ? theme.negative : theme.relation[p.relation],
-        dash: notTrade ? [2, 4] : p.hop === 2 ? [2, 5] : RELATION_DASH[p.relation],
-        width: p.hop === 2 || notTrade ? 1 : 1.3 + Math.min(share, 40) / 9,
-        hot, dim: isDim || (selected != null && !hot),
+        dash: notTrade ? [2, 4] : RELATION_DASH[p.relation],
+        thin: p.hop === 2 || notTrade || ends.plain,
+        width: p.hop === 2 || notTrade ? 1 : flowWidth(value, side.max),
+        value: side.max > 0 ? value / side.max : 0,
+        dim: dim || (anchor !== "focus" && !lit(anchor)), faded,
       });
-      if (p.hop === 1 && share >= 10) badges.push({ lon: p.lon, lat: p.lat, text: `${Math.round(share)}%`, key: p.key });
     }
-    engine.setScene({ points, arcs, badges, selected });
-  }, [theme, home, focus, placed, placedByKey, nodeByKey, selected, overlay, risks, impacts]);
+    engine.setScene({ points, arcs, selected, maxValue: 1 });
+  }, [theme, home, focus, placed, placedByKey, nodeByKey, selected, overlay, risks, impacts, sides, lit]);
 
   /* ---------- country tint ---------- */
+  /* countries the filing sentences name as countries: "Georgia" in a row that only U.S.-state sentences produced is not tinted */
+  const statedAsCountry = useMemo(() => new Set(nodes.flatMap((n) => statedPlaces(n.links as RiskLink[]).countries)), [nodes]);
   useEffect(() => {
     const engine = engineRef.current;
     if (!engine || !theme) return;
@@ -263,38 +311,66 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
     for (const r of rows) {
       const atlas = places.get(r.country)?.atlas;
       if (!atlas || rowWeight(r) <= 0) continue;
-      const strength = 0.1 + 0.42 * Math.sqrt(rowWeight(r) / max);
-      fills.push({ name: atlas, color: rgb(r.hotspot ? theme.hotspot : theme.tint), alpha: r.country === country ? Math.min(0.85, strength + 0.3) : strength });
+      if (Object.values(US_STATES).includes(r.country) && !statedAsCountry.has(r.country) && r.hq + r.facilities + r.policy === 0) continue;
+      const strength = 0.08 + 0.2 * Math.sqrt(rowWeight(r) / max), picked = r.country === country;
+      fills.push({ name: atlas, color: rgb(r.hotspot ? theme.hotspot : theme.tint), alpha: picked ? Math.min(0.5, strength + 0.14) : strength, outline: picked });
     }
     engine.setFills(fills);
-  }, [theme, rows, places, country]);
+  }, [theme, rows, places, country, statedAsCountry]);
 
   /* ---------- camera ---------- */
+  /** Fly to a name: with the link to the company (or to the name it hangs off) in view when it stands clear, closer when it stands in a crowd. */
+  const revealRef = useRef<(at: Placed) => void>(() => undefined);
+  revealRef.current = (at) => engineRef.current?.reveal(at.key, at.hop === 2 && at.parent && placedByKey.has(at.parent) ? at.parent : home ? "focus" : undefined);
   const focusKey = focus.ticker ?? focus.name;
   const placedCount = placed.length;
+  /* the view the reset control, the 0 key and the first frame go to: the isolated names when there are some, otherwise the company and its direct links */
+  const homeView = useMemo(() => {
+    if (!home) return null;
+    const lit = isolate ? placed.filter((p) => isolate.has(p.key)) : [];
+    const shown = lit.length ? lit : placed.filter((p) => p.hop === 1);
+    return { places: [[home.lon, home.lat], ...shown.map((p) => [p.lon, p.lat])] as [number, number][], maxZoom: lit.length ? 9 : 7 };
+  }, [home, isolate, placed]);
+  const ready = theme != null;
+  useEffect(() => { if (homeView) engineRef.current?.setHome(homeView.places, homeView.maxZoom); }, [homeView, ready]);
+  const frameContext = useCallback((ms?: number) => engineRef.current?.reset(ms), []);
   useEffect(() => {
     const engine = engineRef.current;
-    if (!engine || !home) return;
-    /* open on the side of the globe that shows the most of this company's links */
-    const view = frameAll([[home.lon, home.lat], ...placed.filter((p) => p.hop === 1).map((p) => [p.lon, p.lat] as [number, number])]);
-    viewRef.current = view;
-    engine.setHome(view.lon, view.lat, view.zoom);
+    /* wait for the first scene (it needs the theme's colours), so a name picked before the map opened can be found */
+    if (!engine || !home || !ready) return;
     /* a name already selected (picked in another view, or before the head offices arrived) is framed instead of the overview */
     const at = selected ? placedByKey.get(selected) : null;
-    const anchor = at ? (at.hop === 2 && at.parent ? placedByKey.get(at.parent) ?? home : home) : null;
-    if (at && anchor) engine.frame([anchor.lon, anchor.lat], [at.lon, at.lat]);
-    else engine.flyTo(view.lon, view.lat, view.zoom, 900);
+    if (at) revealRef.current(at); else frameContext();
     setMenu(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recentre when the company changes or its links arrive, not on every re-layout
-  }, [focusKey, home?.lon, home?.lat, placedCount > 0]);
+  }, [focusKey, home?.lon, home?.lat, placedCount > 0, ready]);
   useEffect(() => {
     const engine = engineRef.current, at = selected ? placedByKey.get(selected) : null;
     if (pickedHere.current) { pickedHere.current = false; return; }
-    if (!engine || !at) return;
-    const anchor = at.hop === 2 && at.parent ? placedByKey.get(at.parent) : home;
-    if (anchor) engine.frame([anchor.lon, anchor.lat], [at.lon, at.lat]); else engine.flyTo(at.lon, at.lat, 3);
+    if (!engine || !at || !ready) return;
+    /* the scene effect above has already handed the engine this selection: fly once it is drawn */
+    revealRef.current(at);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- follow the selection, not every re-layout
   }, [selected]);
+  /* isolation: the camera fits the lit set, and goes back to the overview when it is cleared */
+  const litKey = isolate ? [...isolate].sort().join("|") : "";
+  const wasIsolated = useRef(false);
+  useEffect(() => {
+    if (!litKey && !wasIsolated.current) return;
+    wasIsolated.current = !!litKey;
+    frameContext();
+    setMenu(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refit when the isolated set changes, not when the layout does
+  }, [litKey]);
+  const flatMounted = useRef(false);
+  useEffect(() => {
+    const engine = engineRef.current;
+    if (!engine) return;
+    engine.setFlat(flat);
+    if (flatMounted.current) frameContext(500);
+    flatMounted.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only when the projection is switched
+  }, [flat]);
 
   const jump = (key: string) => { if (key) onSelect(key); };
   /* the list of names at one place behaves like a small dialog: focus moves in, Escape closes it, focus goes back to the map */
@@ -303,54 +379,94 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
   useEffect(() => { if (menu) menuRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true }); }, [menu]);
   const sorted = useMemo(() => [...placed].sort((a, b) => a.hop - b.hop || a.relation.localeCompare(b.relation) || a.name.localeCompare(b.name)), [placed]);
   const exact = placed.filter((p) => p.basis === "hq").length;
-  const shownUnplaced = showAllUnplaced ? unplaced : unplaced.slice(0, 18);
   const control = "grid size-8 place-items-center text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none";
+  const quiet = "inline-flex h-7 items-center gap-1.5 rounded-[4px] px-2 text-xs font-medium transition-colors duration-150 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none";
+
+  /* ---------- isolation: what this view can ask for ---------- */
+  const ask = useCallback((r: IsolateRequest) => { setMenu(null); onIsolate?.(r); }, [onIsolate]);
+  /** the relation whose names are exactly the lit set, when the isolation is "suppliers only" or the like */
+  const litRelation = useMemo(() => {
+    if (!isolate) return null;
+    for (const r of RELATION_ORDER) {
+      const keys = nodes.filter((n) => n.relation === r).map((n) => n.key);
+      if (keys.length && keys.every((k) => isolate.has(k)) && nodes.every((n) => n.relation === r || !isolate.has(n.key))) return r;
+    }
+    return null;
+  }, [isolate, nodes]);
+  const selNode = selected ? nodeByKey.get(selected) ?? null : null;
+  const selPlaced = selected ? placedByKey.get(selected) ?? null : null;
+  /** the pathway through the selected name, upstream to downstream: a second-order name brings the first-order name it hangs off */
+  const pathwayOf = (n: GraphNode | HopNode): IsolateRequest => {
+    if (!isHop(n)) return { kind: "node", key: n.key };
+    return { kind: "path", keys: n.relation === "customer" ? [n.parent, n.key] : [n.key, n.parent] };
+  };
+  const selIsolated = !!(selNode && isolate && isolate.has(selNode.key) && isolate.size <= 1 + (isHop(selNode) ? 1 : hop2.filter((h) => h.parent === selNode.key).length));
+  const litOnMap = isolate ? placed.filter((p) => isolate.has(p.key)).length : 0;
 
   /* names drawn on the canvas keep clear of the controls laid over it */
   const jumpRef = useRef<HTMLDivElement>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap || typeof ResizeObserver === "undefined") return;
     const measure = () => {
       const base = wrap.getBoundingClientRect();
       const boxes: GlobeBox[] = [];
-      for (const el of [jumpRef.current, controlsRef.current]) {
+      for (const el of [jumpRef.current, controlsRef.current, dockRef.current]) {
         if (!el) continue;
         const r = el.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
         boxes.push({ x: r.left - base.left - 4, y: r.top - base.top - 4, w: r.width + 8, h: r.height + 8 });
       }
       engineRef.current?.setReserved(boxes);
     };
     const ro = new ResizeObserver(measure);
     ro.observe(wrap);
-    if (jumpRef.current) ro.observe(jumpRef.current);
+    for (const el of [jumpRef.current, dockRef.current]) if (el) ro.observe(el);
     measure();
     return () => ro.disconnect();
   }, [failed]);
 
   const visibleRelations = RELATION_ORDER.filter((r) => visible.has(r));
+  const widthNote = (["supplier", "customer"] as const).filter((r) => visible.has(r) && sides[r].basis !== "none").map((r) => `${WIDTH_TEXT[sides[r].basis]} for ${RELATION_LABEL[r].toLowerCase()}`);
+  /* names that could not be placed, grouped by the reason, so the reason is stated once */
+  const unplacedGroups = useMemo(() => {
+    const groups = new Map<string, typeof unplaced>();
+    for (const u of unplaced) {
+      const reason = u.why.startsWith("filing names") ? "The filing ties the name to more than one country" : u.why === "no head office on file" ? "No head office on file" : "No location stated in the filing";
+      const list = groups.get(reason);
+      if (list) list.push(u); else groups.set(reason, [u]);
+    }
+    return [...groups].sort((a, b) => b[1].length - a[1].length);
+  }, [unplaced]);
 
   return (
-    <div data-section="Supply globe" className="flex flex-col">
-      <div ref={wrapRef} className="relative h-[440px] overflow-hidden sm:h-[580px]">
+    <div data-section="Supply globe" className="flex flex-col" onKeyDown={(e) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      /* Escape steps back once: the open list, then the isolation, then the hold on the wheel */
+      if (menu) { e.stopPropagation(); closeMenu(); } else if (isolate && onIsolate) { e.stopPropagation(); ask({ kind: "clear" }); } else engineRef.current?.release();
+    }}>
+      <div ref={wrapRef} data-engaged={engaged || undefined} className="relative h-[440px] overflow-hidden sm:h-[580px]">
         <p id="supply-globe-help" className="sr-only">
-          Arrow keys turn the map, plus and minus zoom, zero returns to the company. Use the list of names above the map to pick a company; the names that could not be placed are listed below it.
+          Arrow keys move the map, plus and minus zoom, zero returns to the company, Escape clears an isolation. The scroll wheel zooms after you press the map, or with Control held; it scrolls the page otherwise. Use the list of names above the map to pick a company; the names that could not be placed are listed below it.
         </p>
+        <canvas ref={baseRef} aria-hidden="true" className="pointer-events-none absolute inset-0 size-full" />
         <canvas
           ref={canvasRef}
           tabIndex={0}
           role="application"
           aria-roledescription="interactive map"
-          aria-label={`Map of ${focus.name}'s named supply-chain links: ${placed.length} placed, ${unplaced.length} not placed.`}
+          aria-label={`Map of ${focus.name}'s named supply-chain links: ${placed.length} placed, ${unplaced.length} not placed${isolate ? `. Isolated: ${isolateLabel ?? "a subset"}, ${litOnMap} on the map` : ""}.`}
           aria-describedby="supply-globe-help"
-          className="absolute inset-0 size-full touch-pan-y select-none focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+          className="absolute inset-0 size-full cursor-grab select-none focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
         />
+        <div aria-hidden="true" className={cn("pointer-events-none absolute inset-0 z-10 transition-shadow duration-150 motion-reduce:transition-none", engaged && "shadow-[inset_0_0_0_1.5px_var(--ring)]")} />
         {failed && <p className="absolute inset-0 grid place-items-center p-6 text-center text-sm text-muted-foreground">This browser could not start the map. The Network view shows the same links.</p>}
         {!failed && hqMissing && (
           <p role="alert" className="absolute inset-x-0 top-14 mx-auto flex w-fit max-w-[90%] items-center gap-2 rounded-md border bg-card px-3 py-2 text-center text-xs text-muted-foreground shadow-paper">
             Head-office positions could not be loaded, so nothing can be placed yet.
-            <button type="button" className="inline-flex min-h-6 items-center underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => void refetchHq()}>Retry</button>
+            <button type="button" className="inline-flex min-h-7 items-center underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => void refetchHq()}>Retry</button>
           </p>
         )}
         {!failed && !hqLoading && !hqMissing && !home && (
@@ -359,7 +475,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
           </p>
         )}
 
-        <div ref={jumpRef} className="absolute left-3 top-3 max-w-[calc(100%-5.5rem)]">
+        <div ref={jumpRef} className="absolute left-3 top-3 z-10 max-w-[calc(100%-5.5rem)]">
           <label className="sr-only" htmlFor="supply-globe-jump">Jump to a name on the map</label>
           <select id="supply-globe-jump" value={selected && placedByKey.has(selected) ? selected : ""} onChange={(e) => jump(e.target.value)}
             className="h-8 w-[240px] max-w-full rounded-md border bg-card px-2 text-xs shadow-paper transition-colors duration-150 hover:border-foreground/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -371,30 +487,60 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
           </select>
         </div>
 
-        <div ref={controlsRef} role="group" aria-label="Map controls" data-agent-controls className="absolute right-3 top-3 flex flex-col divide-y overflow-hidden rounded-md border bg-card shadow-paper">
-          <button type="button" className={control} aria-label="Zoom in" title="Zoom in (or Ctrl + scroll)" onClick={() => engineRef.current?.zoomBy(1.7)}><Plus className="size-3.5" /></button>
-          <button type="button" className={control} aria-label="Zoom out" title="Zoom out (or Ctrl + scroll)" onClick={() => engineRef.current?.zoomBy(1 / 1.7)}><Minus className="size-3.5" /></button>
-          <button type="button" className={control} aria-label="Back to the company" title="Back to the company" onClick={() => engineRef.current?.reset()}><RotateCcw className="size-3.5" /></button>
+        <div ref={controlsRef} role="group" aria-label="Map controls" data-agent-controls className="absolute right-3 top-3 z-10 flex flex-col divide-y overflow-hidden rounded-md border bg-card shadow-paper">
+          <button type="button" className={control} aria-label="Zoom in" title="Zoom in" onClick={() => engineRef.current?.zoomBy(1.8)}><Plus className="size-3.5" /></button>
+          <button type="button" className={control} aria-label="Zoom out" title="Zoom out" onClick={() => engineRef.current?.zoomBy(1 / 1.8)}><Minus className="size-3.5" /></button>
+          <button type="button" className={control} aria-label="Back to the company" title={isolate ? "Fit the isolated names" : "Back to the company and its direct links"} onClick={() => frameContext()}><RotateCcw className="size-3.5" /></button>
           <button type="button" className={control} aria-pressed={flat} aria-label={flat ? "Show as a globe" : "Show as a flat map"} title={flat ? "Show as a globe" : "Show as a flat map"} onClick={() => setFlat((f) => !f)}>
             {flat ? <Globe2 className="size-3.5" /> : <MapIcon className="size-3.5" />}
           </button>
         </div>
 
+        {/* what is isolated and what is selected, docked at the foot of the map so they never cover a name that was just clicked */}
+        <div ref={dockRef} className="absolute bottom-3 left-3 z-10 flex max-w-[calc(100%-1.5rem)] flex-col items-start gap-1.5">
+          {/* how the wheel and one finger behave right now: shown while the map holds them, and for a moment when a wheel passed over it */}
+          {(wheelHint || engaged) && (
+            <p aria-hidden="true" data-globe-hint="" className="pointer-events-none rounded-md border bg-card px-2 py-1 text-[11px] text-muted-foreground shadow-paper">
+              {engaged ? <><span className="hidden [@media(pointer:fine)]:inline">Scroll zooms the map. Move the pointer away to scroll the page.</span><span className="[@media(pointer:fine)]:hidden">Map is active. Tap outside it to scroll the page.</span></> : "Click the map to zoom with the wheel, or hold Ctrl."}
+            </p>
+          )}
+          {isolate && (
+            <div role="status" data-globe-isolated="" className="flex max-w-full items-center gap-1 rounded-md border bg-card py-0.5 pl-2.5 pr-0.5 text-xs shadow-paper">
+              <Waypoints aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
+              <span className="min-w-0 truncate"><span className="text-muted-foreground">Isolated: </span><span className="font-medium">{isolateLabel ?? "selected names"}</span><span className="num text-muted-foreground"> · {litOnMap} on the map</span></span>
+              {onIsolate && <button type="button" data-agent-click className={cn(quiet, "shrink-0")} onClick={() => ask({ kind: "clear" })}><X aria-hidden="true" className="size-3.5" />Show all</button>}
+            </div>
+          )}
+          {selNode && (
+            <div data-globe-selected="" className="flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md border bg-card py-0.5 pl-1.5 pr-0.5 text-xs shadow-paper">
+              <span className="flex min-w-0 items-center gap-1.5 py-1 pr-1">
+                <CompanyLogo ticker={selNode.ticker ?? plateKey(selNode.name)} src={externalLogo(selNode.domain, selNode.ticker)} size="xs" decorative />
+                <span className="min-w-0 truncate font-medium">{selNode.name}</span>
+                <span className="hidden shrink-0 text-muted-foreground sm:inline">{relationWord(selNode.relation)}{isHop(selNode) ? ", second order" : ""} · {selPlaced ? selPlaced.place : "not placed"}</span>
+              </span>
+              {onIsolate && (selIsolated
+                ? <button type="button" data-agent-click className={quiet} onClick={() => ask({ kind: "clear" })}><X aria-hidden="true" className="size-3.5" />Show all</button>
+                : <button type="button" data-agent-click className={quiet} onClick={() => ask(pathwayOf(selNode))}><Waypoints aria-hidden="true" className="size-3.5" />Isolate this pathway</button>)}
+              {selPlaced && <button type="button" data-agent-click className={quiet} aria-label={`Zoom to ${selNode.name}`} onClick={() => revealRef.current(selPlaced)}><Crosshair aria-hidden="true" className="size-3.5" />Zoom to</button>}
+            </div>
+          )}
+        </div>
+
         <TipLayer ref={tipRef} size={() => ({ w: wrapRef.current?.clientWidth ?? 600, h: wrapRef.current?.clientHeight ?? 500 })} />
         {menu && (
-          <div ref={menuRef} role="dialog" aria-label="Names at this place" onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); closeMenu(); } }} className="absolute z-30 w-64 rounded-md border bg-popover p-1.5 text-xs text-popover-foreground shadow-lift"
+          <div ref={menuRef} role="dialog" aria-label="Names at this place" className="absolute z-30 w-64 rounded-md border bg-popover p-1.5 text-xs text-popover-foreground shadow-lift"
             style={{ left: Math.max(8, Math.min(menu.x, (wrapRef.current?.clientWidth ?? 600) - 264)), top: Math.max(8, Math.min(menu.y, (wrapRef.current?.clientHeight ?? 500) - 48 - Math.min(menu.points.length, 10) * 30)) }}>
-            <p className="px-2 pb-1 pt-0.5 text-[11px] text-muted-foreground">{menu.points.length} names here</p>
+            <p className="px-2 pb-1 pt-0.5 text-[11px] text-muted-foreground">{menu.title}</p>
             <ul className="flex flex-col">
               {menu.points.slice(0, 10).map((p) => {
-                const rel = nodeByKey.get(p.key)?.relation;
+                const node = nodeByKey.get(p.key), rel = node?.relation;
                 return (
                   <li key={p.key}>
                     <button type="button" className="flex h-7 w-full items-center gap-2 rounded px-2 text-left transition-colors duration-150 hover:bg-accent focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                       onClick={() => { closeMenu(); if (p.key !== "focus") { pickedHere.current = selected !== p.key; onSelect(p.key); } }}>
-                      {rel && rel !== "focus" ? <RelationMark relation={rel} size={8} /> : <span className="size-2 shrink-0 rounded-full bg-foreground" />}
+                      <CompanyLogo ticker={(p.key === "focus" ? focus.ticker : node?.ticker) ?? plateKey(p.name)} src={node ? externalLogo(node.domain, node.ticker) : undefined} size="xs" decorative />
                       <span className="min-w-0 flex-1 truncate">{p.name}</span>
-                      {rel && rel !== "focus" && <span className="shrink-0 text-[11px] text-muted-foreground">{RELATION_LABEL[rel].slice(0, -1).toLowerCase()}</span>}
+                      {rel && rel !== "focus" ? <span className="inline-flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground"><RelationMark relation={rel} size={8} />{relationWord(rel)}</span> : <span className="shrink-0 text-[11px] text-muted-foreground">this company</span>}
                     </button>
                   </li>
                 );
@@ -407,38 +553,64 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
       </div>
 
       <div className="flex flex-col gap-2 border-t px-4 py-3 text-[11px] text-muted-foreground">
-        <ul aria-label="Map key" className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          {visibleRelations.map((r) => (
-            <li key={r} className="inline-flex items-center gap-1.5">
-              <RelationMark relation={r} size={10} /><LineSample relation={r} width={18} />
-              <span className="text-foreground">{RELATION_LABEL[r]}</span>
-            </li>
-          ))}
-          <li className="inline-flex items-center gap-1.5"><RelationMark relation="supplier" size={10} className="[&_path]:fill-muted-foreground [&_path]:stroke-muted-foreground" />head office</li>
-          <li className="inline-flex items-center gap-1.5"><RelationMark relation="supplier" size={10} hollow className="[&_path]:stroke-muted-foreground" />country only</li>
-          <li>arrows point the way goods and services move; partnerships run both ways</li>
-          {impacts && <li className="text-foreground">Shock view: names the simulated shock does not reach are drawn pale</li>}
-        </ul>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <ul aria-label={onIsolate ? "Map key. Press a relation to show only its names." : "Map key"} data-agent-controls className="flex flex-wrap items-center gap-1.5">
+            {visibleRelations.map((r) => {
+              const count = placed.filter((p) => p.relation === r).length, on = litRelation === r;
+              const body = <><RelationMark relation={r} size={10} /><LineSample relation={r} width={18} /><span className="text-foreground">{RELATION_LABEL[r]}</span><span className="num">{count}</span></>;
+              return (
+                <li key={r}>
+                  {onIsolate ? (
+                    <button type="button" data-globe-isolate={r} aria-pressed={on} disabled={!count} title={on ? "Show every relation again" : `Show ${RELATION_LABEL[r].toLowerCase()} only`}
+                      onClick={() => ask(on ? { kind: "clear" } : { kind: "relation", relation: r })}
+                      className={cn("inline-flex h-7 items-center gap-1.5 rounded-md border px-2 transition-colors duration-150 hover:border-foreground/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 motion-reduce:transition-none", on ? "border-foreground bg-accent" : "bg-card")}>
+                      {body}
+                    </button>
+                  ) : <span className="inline-flex h-7 items-center gap-1.5">{body}</span>}
+                </li>
+              );
+            })}
+          </ul>
+          <ul aria-label="Marker key" className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-2.5 rounded-[3px] border-[1.5px] border-muted-foreground" />at its head office</li>
+            <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="size-2.5 rounded-[3px] border-[1.5px] border-dashed border-muted-foreground" />country or state level</li>
+          </ul>
+        </div>
         <p>
-          <span className="tabular-nums text-foreground">{placed.length}</span> of <span className="tabular-nums">{placed.length + unplaced.length}</span> names on the map
-          {placed.length > 0 && <> · <span className="tabular-nums">{exact}</span> at their head office, <span className="tabular-nums">{placed.length - exact}</span> at country level</>}
+          Arrows point the way goods and services move; partnerships run both ways.
+          {widthNote.length > 0 && <> Line width follows {widthNote.join(" and ")}, as the bands in the Network view do; links that end in one cluster are drawn as one.</>}
+          {impacts && <span className="text-foreground"> Shock view: names the simulated shock does not reach are drawn pale.</span>}
+        </p>
+        <p>
+          <span className="num text-foreground">{placed.length}</span> of <span className="num">{placed.length + unplaced.length}</span> names on the map
+          {placed.length > 0 && <> · <span className="num">{exact}</span> at their head office, <span className="num">{placed.length - exact}</span> at country or state level</>}
           {hqFile?.generatedAt && <> · head offices as of {fmtDate(hqFile.generatedAt)}, source on hover</>}
         </p>
         {unplaced.length > 0 && (
-          <div ref={unplacedRef} role="group" aria-label="Names not placed on the map" className="flex flex-wrap items-center gap-1.5">
-            <span>Not placed, no single location on record:</span>
-            {shownUnplaced.map((u) => (
-              <button key={u.key} type="button" title={`${u.name}: ${u.why}`} aria-label={`${u.name}, ${u.relation === "focus" ? "this company" : RELATION_LABEL[u.relation].slice(0, -1).toLowerCase()}, not placed: ${u.why}. Open the filing evidence.`} aria-pressed={selected === u.key} onClick={() => onSelect(u.key)}
-                className={cn("inline-flex h-6 items-center gap-1.5 rounded border bg-card px-2 text-foreground shadow-paper transition-colors duration-150 hover:border-foreground/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none", selected === u.key && "border-foreground ring-1 ring-foreground")}>
-                {u.relation !== "focus" && <RelationMark relation={u.relation} size={8} />}{u.name}
-              </button>
+          <div role="group" aria-label="Names not placed on the map" data-globe-unplaced="" className="@container mt-1 border-t pt-2">
+            <p className="text-[13px] font-semibold text-foreground">Not placed <span className="num font-normal text-muted-foreground">{unplaced.length}</span></p>
+            <p className="mt-0.5">No single location is on record for these names, so they are listed instead of guessed. Each one opens its filing sentence.</p>
+            {unplacedGroups.map(([reason, list]) => (
+              <div key={reason} className="mt-2">
+                <p className="eyebrow">{reason} · {list.length}</p>
+                <ul className="mt-1 grid grid-cols-1 gap-x-5 @xl:grid-cols-2 @5xl:grid-cols-3">
+                  {list.map((u) => {
+                    const node = nodeByKey.get(u.key), named = u.why.startsWith("filing names") ? u.why.replace(/^filing names \d+ countries \(|\)$/g, "") : null;
+                    return (
+                      <li key={u.key} className="min-w-0 border-b border-border/60">
+                        <button type="button" aria-pressed={selected === u.key} aria-label={`${u.name}, ${relationWord(u.relation)}, not placed: ${u.why}. Open the filing evidence.`} onClick={() => onSelect(u.key)}
+                          className={cn("flex h-7 w-full min-w-0 items-center gap-2 rounded-[3px] px-1 text-left text-[13px] text-foreground transition-colors duration-150 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring motion-reduce:transition-none", selected === u.key && "bg-accent font-medium", !lit(u.key) && "opacity-50")}>
+                          <CompanyLogo ticker={u.ticker ?? plateKey(u.name)} src={node ? externalLogo(node.domain, node.ticker) : undefined} size="xs" decorative />
+                          <span className="min-w-0 flex-1 truncate" title={u.name}>{u.name}</span>
+                          {named && <span className="hidden max-w-[40%] shrink truncate text-[11px] text-muted-foreground sm:inline" title={named}>{named}</span>}
+                          {u.relation !== "focus" && <span className="inline-flex w-[6.75rem] shrink-0 items-center gap-1 whitespace-nowrap text-[11px] text-muted-foreground"><RelationMark relation={u.relation} size={8} />{relationWord(u.relation)}{u.hop === 2 ? ", 2nd order" : ""}</span>}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             ))}
-            {unplaced.length > shownUnplaced.length && <button type="button" className="inline-flex h-6 items-center underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onClick={() => {
-              setShowAllUnplaced(true);
-              /* keep keyboard focus: move it to the first name that was hidden */
-              const at = shownUnplaced.length;
-              requestAnimationFrame(() => unplacedRef.current?.querySelectorAll<HTMLButtonElement>("button")[at]?.focus());
-            }}>and {unplaced.length - shownUnplaced.length} more</button>}
           </div>
         )}
       </div>

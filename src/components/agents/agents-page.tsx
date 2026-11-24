@@ -55,6 +55,8 @@ import { friendlyError } from "@/lib/errors";
 import { fmtRelative } from "@/lib/format";
 import { useWatchlist } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
+import { CompanyLogo } from "@/components/app/company-logo";
+import { TickerMark } from "@/components/app/ticker";
 
 export type AgentsTab = "inbox" | "tasks" | "monitors" | "interests";
 
@@ -226,8 +228,9 @@ function InboxTab({
                     {(c.tickers ?? []).slice(0, 6).map((t) => (
                       <span
                         key={t}
-                        className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]"
+                        className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px]"
                       >
+                        <CompanyLogo ticker={t} size="2xs" decorative />
                         {t}
                       </span>
                     ))}
@@ -311,8 +314,9 @@ function InboxDetail({ card, onClose }: { card: InboxCard; onClose: () => void }
                   key={t}
                   to="/app/companies/$ticker"
                   params={{ ticker: t }}
-                  className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted/70"
+                  className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] hover:bg-muted/70"
                 >
+                  <CompanyLogo ticker={t} size="2xs" decorative />
                   {t}
                 </Link>
               ))}
@@ -1140,7 +1144,7 @@ function MonitorDialog({ draft: initial, onClose }: { draft: MonitorDraft; onClo
 
 // ───────────────────────────── Interests
 
-function Weights({ title, w }: { title: string; w: Record<string, number> }) {
+function Weights({ title, w, tickers = false }: { title: string; w: Record<string, number>; /** the keys are tickers: show each with its logo */ tickers?: boolean }) {
   const rows = Object.entries(w)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 15);
@@ -1156,7 +1160,11 @@ function Weights({ title, w }: { title: string; w: Record<string, number> }) {
         <ul className="mt-2 space-y-1">
           {rows.map(([k, v]) => (
             <li key={k} className="flex items-center gap-2 text-xs">
-              <span className="w-28 truncate font-mono">{k}</span>
+              {tickers ? (
+                <TickerMark ticker={k} size="2xs" link={false} className="w-28" />
+              ) : (
+                <span className="w-28 truncate font-mono">{k}</span>
+              )}
               <span className="h-1.5 flex-1 rounded bg-muted">
                 <span
                   className="block h-1.5 rounded bg-foreground/60"
@@ -1216,7 +1224,7 @@ function InterestsTab({ s }: { s: AgentsState }) {
           {it.updated_at ? `, updated ${fmtRelative(it.updated_at)}` : ""}.
         </p>
         <div className="mt-4 grid gap-6 sm:grid-cols-2">
-          <Weights title="Companies" w={it.weights.tickers} />
+          <Weights title="Companies" w={it.weights.tickers} tickers />
           <Weights title="Topics" w={it.weights.topics} />
           <Weights title="Sectors" w={it.weights.sectors} />
         </div>
