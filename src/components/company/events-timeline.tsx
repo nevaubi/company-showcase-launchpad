@@ -14,8 +14,9 @@ import { useSource } from "@/components/source/source-context";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtAlt, readAlt, type AltRow } from "@/lib/alt/query";
 import { buildTimeline, type EventKind, type TimelineEvent } from "@/lib/company/catalysts";
+import { openMarketTrades, roleLabel, tradeAmount } from "@/lib/company/insider-trades";
 import type { CompanyDataset } from "@/lib/financials/types";
-import { fmtCompactUsd, fmtDate } from "@/lib/format";
+import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const KIND_LABEL: Record<EventKind, string> = {
@@ -67,21 +68,16 @@ export function EventsTimeline({ ticker, data }: { ticker: string; data: Company
     for (const r of extra.data?.alt ?? []) ev.push({ date: r.date!, kind: "alt", title: `${ALT_LABEL[r.dataset] ?? r.dataset}: ${r.title}`, detail: r.value != null ? fmtAlt(r.value, r.unit) : undefined, url: r.source_url ?? undefined, tone: r.dataset === "recalls" ? "negative" : "neutral" });
     for (const s of extra.data?.sig ?? [])
       ev.push({ date: s.filed!.slice(0, 10), kind: "intel", label: s.source_kind === "transcript" ? "Earnings call" : s.source_kind === "web" ? "Web" : undefined, title: s.title, detail: s.detail ?? undefined, accn: s.accn ?? undefined, doc: s.doc ?? undefined, url: s.accn ? undefined : (s.url ?? undefined), tone: s.impact === "positive" ? "positive" : s.impact === "negative" ? "negative" : "neutral" });
-    for (const r of data.earningsReleases) ev.push({ date: r.filed, kind: "earnings", title: r.title || "Earnings release", accn: r.accn, doc: r.doc });
+    for (const r of data.earningsReleases) ev.push({ date: r.filed, kind: "earnings", title: (r.title || "Earnings release").replace(` · ${r.filed}`, ""), accn: r.accn, doc: r.doc });
     for (const f of data.filings) {
       const kind: EventKind | null = f.form === "10-K" ? "annual" : f.form === "10-Q" ? "quarterly" : f.form === "8-K" ? "8k" : f.form === "DEF 14A" ? "proxy" : null;
       if (!kind) continue;
-      ev.push({ date: f.filed, kind, title: f.desc || f.form, detail: f.items ? `Items ${f.items}` : f.report ? `Period ${fmtDate(f.report)}` : undefined, accn: f.accn, doc: f.doc });
+      ev.push({ date: f.filed, kind, title: f.desc || f.form, detail: f.items ? `Items ${f.items.split(/,\s*/).join(", ")}` : f.report ? `Period ${fmtDate(f.report)}` : undefined, accn: f.accn, doc: f.doc });
     }
-    // open-market insider trades, one row per filing
-    const byAccn = new Map<string, { t: (typeof data.insiders)[number]; usd: number }>();
-    for (const t of data.insiders) {
-      if (t.code !== "S" && t.code !== "P") continue;
-      byAccn.set(t.accn, { t, usd: (byAccn.get(t.accn)?.usd ?? 0) + t.shares * (t.price ?? 0) });
-    }
-    for (const { t, usd } of byAccn.values()) {
-      const buy = t.code === "P";
-      ev.push({ date: t.date, kind: buy ? "insider_buy" : "insider_sell", title: `${t.owner} ${buy ? "bought" : "sold"} ${fmtCompactUsd(usd)}`, detail: `${t.role}${t.plan10b5 ? " · 10b5-1 plan" : ""}`, tone: buy ? "positive" : "negative", accn: t.accn, doc: t.doc });
+    // open-market insider trades, one row per filing and kind, valued as the Ownership block values them
+    for (const t of openMarketTrades(data.insiders)) {
+      const buy = t.kind === "purchase";
+      ev.push({ date: t.date, kind: buy ? "insider_buy" : "insider_sell", title: `${t.owner} ${tradeAmount(t)}`, detail: `${roleLabel(t.role)}${t.plan10b5 ? " · 10b5-1 plan" : ""}`, tone: buy ? "positive" : "negative", accn: t.accn, doc: t.doc });
     }
     const kinds = FILTERS.find((f) => f.v === filter)?.kinds ?? [];
     return buildTimeline(kinds.length ? ev.filter((e) => kinds.includes(e.kind)) : ev, ROWS);

@@ -26,6 +26,7 @@ import {
   range52,
   stickyTopRem,
   TAB_GROUPS,
+  usableQuote,
   WIDE_ROOM_PX,
 } from "./model";
 
@@ -304,5 +305,18 @@ describe("filings and links", () => {
     expect(irUrl({ investorRelations: "javascript:alert(1)" })).toBeNull();
     expect(irUrl(undefined)).toBeNull();
     for (const t of FIXTURES) expect(irUrl(dataset(t).profile), t).toMatch(/^https:\/\//);
+  });
+});
+
+describe("a quote whose price is not a price (review M4: HCC printed $0.00 0.00 (0.00%))", () => {
+  const q = (price: number) => ({ price, change: 0, changePct: 0 });
+  it("is no quote when the price is zero, negative or not a number", () => {
+    for (const p of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) expect(usableQuote(q(p))).toBeUndefined();
+    expect(usableQuote(undefined)).toBeUndefined();
+    expect(usableQuote(null)).toBeUndefined();
+  });
+  it("keeps a real quote as it is", () => {
+    const real = q(104.5);
+    expect(usableQuote(real)).toBe(real);
   });
 });

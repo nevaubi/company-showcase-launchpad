@@ -5,6 +5,7 @@ import { Panel } from "@/components/app/page-header";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { useSource } from "@/components/source/source-context";
 import { companyQuery, useQuotes } from "@/lib/data";
+import { isPrice } from "./header/model";
 import { coverageOf } from "@/lib/coverage";
 import { latestYoY, ttm } from "@/lib/financials/metrics";
 import { ttmTarget } from "@/lib/financials/targets";
@@ -29,7 +30,8 @@ export function PeerTable({ ticker }: { ticker: string }) {
     const ni = ttm(q.income, "netIncome");
     const eps = ttm(q.income, "epsDiluted");
     const fcf = ttm(q.cashflow, "fcf");
-    const price = quotes.find((x) => x.symbol === t)?.price ?? null;
+    const raw = quotes.find((x) => x.symbol === t)?.price;
+    const price = isPrice(raw) ? raw : null;
     const mcap = price && d.profile.sharesOutstanding ? price * d.profile.sharesOutstanding : null;
     return {
       t,

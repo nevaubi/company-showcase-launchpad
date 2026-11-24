@@ -200,6 +200,19 @@ export interface QuoteLike {
   snapshot?: boolean;
 }
 
+/** A price is a positive finite number; zero, negative or NaN means the source had none. */
+export function isPrice(p: number | null | undefined): p is number {
+  return p != null && Number.isFinite(p) && p > 0;
+}
+
+/**
+ * The quote, or undefined when its price is not a price (a provider answering 0 for a symbol it does not know,
+ * a bad row). Everything downstream then shows its no-quote state instead of "$0.00".
+ */
+export function usableQuote<Q extends Pick<QuoteLike, "price">>(q: Q | null | undefined): Q | undefined {
+  return q && isPrice(q.price) ? q : undefined;
+}
+
 export interface PriceStatus {
   /** intraday: a price from today's session; close: a closing price; stored: the last stored close; quote: no time known */
   kind: "intraday" | "close" | "stored" | "quote";

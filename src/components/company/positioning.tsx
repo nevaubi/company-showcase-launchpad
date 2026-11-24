@@ -10,11 +10,10 @@ import { Button } from "@/components/ui/button";
 import { useSource } from "@/components/source/source-context";
 import { useNextEarnings } from "@/hooks/use-next-earnings";
 import { supabase } from "@/integrations/supabase/client";
+import { insiderSummary, insiderWindowCaption, fmtTradeUsd, roleLabel, tradeAmount } from "@/lib/company/insider-trades";
 import { optionsContext, shortTrend } from "@/lib/company/positioning";
-import { fmtFig } from "@/lib/company/read";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { fmtDate, fmtPrice } from "@/lib/format";
-import { insiderWindow, insiderWindowLabel } from "@/lib/insiders/window";
 import { cboeQuotePage, IV_RANK_MIN_DAYS } from "@/lib/options/core";
 import { optionsHistoryQuery } from "@/lib/options/data";
 import { cn } from "@/lib/utils";
@@ -56,44 +55,49 @@ function Fact({ label, value, sub }: { label: string; value: React.ReactNode; su
 
 function Insiders({ ticker, data }: { ticker: string; data: CompanyDataset }) {
   const { open } = useSource();
-  const w = useMemo(() => insiderWindow(data.insiders), [data.insiders]);
-  const trades = useMemo(() => data.insiders.filter((t) => t.code === "S" || t.code === "P").slice(0, 4), [data.insiders]);
-  const net = w.bought - w.sold;
+  // one set of trades for the totals and the list: the window's, or the latest on file when the window is empty
+  const s = useMemo(() => insiderSummary(data.insiders), [data.insiders]);
+  const net = s.bought - s.sold;
+  const n = s.inWindow.length;
   return (
     <div className="min-w-0 px-4 py-3" data-section="Insider activity">
-      <Head title="Insiders" note={`${insiderWindowLabel(w, fmtDate)} · ${w.filings} Form 4 filing${w.filings === 1 ? "" : "s"}`} />
-      <dl className="mt-2 grid grid-cols-3 gap-3">
-        <Fact label={`Sales${w.sales ? ` (${w.sales})` : ""}`} value={fmtFig(w.sold, "usd")} />
-        <Fact label={`Buys${w.buys ? ` (${w.buys})` : ""}`} value={fmtFig(w.bought, "usd")} />
-        <Fact label="Net" value={<span className={net > 0 ? "text-positive" : net < 0 ? "text-negative" : ""}>{net === 0 ? "$0" : `${net > 0 ? "+" : ""}${fmtFig(net, "usd")}`}</span>} />
-      </dl>
-      {trades.length > 0 ? (
-        <ul aria-label="Latest open-market trades" className="mt-2 divide-y divide-border/60 border-t border-border/60">
-          {trades.map((t, i) => (
-            <li key={`${t.accn}-${i}`}>
-              <button
-                type="button"
-                onClick={() => open({ ticker, label: `Form 4 · ${t.owner}`, periodLabel: t.date, unit: "usd", value: t.shares * (t.price ?? 0), doc: { accn: t.accn, doc: t.doc, form: "4", filed: t.filed, title: `${t.owner}, ${t.role}` } })}
-                className="flex w-full items-baseline gap-2 py-1 text-left text-[13px] leading-5 transition-colors duration-150 hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                title="Open the Form 4"
-              >
-                <span className="min-w-0 flex-1 truncate">
-                  {t.owner}
-                  <span className={cn("ml-1.5", IR.caption)}>{t.role}</span>
-                </span>
-                <span className={cn("num shrink-0 tabular-nums", t.code === "P" ? "text-positive" : "text-negative")}>
-                  {t.code === "P" ? "bought" : "sold"} {t.price ? fmtFig(t.shares * t.price, "usd") : `${t.shares.toLocaleString("en-US")} sh`}
-                </span>
-                <span className={cn("num w-[5.25rem] shrink-0 whitespace-nowrap text-right", IR.caption)}>{fmtDate(t.date)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      <Head title="Insiders" note={n ? `${insiderWindowCaption(s, fmtDate)} · ${n} trade${n === 1 ? "" : "s"}` : insiderWindowCaption(s, fmtDate)} />
+      {n > 0 ? (
+        <dl className="mt-2 grid grid-cols-3 gap-3">
+          <Fact label={`Sales${s.sales ? ` (${s.sales})` : ""}`} value={s.sales ? fmtTradeUsd(s.sold) : "None"} />
+          <Fact label={`Buys${s.purchases ? ` (${s.purchases})` : ""}`} value={s.purchases ? fmtTradeUsd(s.bought) : "None"} />
+          <Fact label="Net" value={<span className={net > 0 ? "text-positive" : net < 0 ? "text-negative" : ""}>{`${net > 0 ? "+" : ""}${fmtTradeUsd(net)}`}</span>} sub={s.unpriced ? `${s.unpriced} without a price, not valued` : undefined} />
+        </dl>
+      ) : (
+        <p className="mt-2 text-[13px] leading-5">No open-market trades in the last {s.days} days.</p>
+      )}
+      {s.list.length > 0 ? (
+        <>
+          <p className={cn("mt-2", IR.caption)}>{s.listTitle}</p>
+          <ul aria-label={s.listTitle} className="mt-1 divide-y divide-border/60 border-t border-border/60">
+            {s.list.map((t) => (
+              <li key={`${t.accn}-${t.kind}`}>
+                <button
+                  type="button"
+                  onClick={() => open({ ticker, label: `Form 4 · ${t.owner}`, periodLabel: t.date, unit: "usd", value: t.usd ?? 0, doc: { accn: t.accn, doc: t.doc, form: "4", filed: t.filed, title: `${t.owner}, ${t.role}` } })}
+                  className="flex w-full items-baseline gap-2 py-1 text-left text-[13px] leading-5 transition-colors duration-150 hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  title="Open the Form 4"
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {t.owner}
+                    <span className={cn("ml-1.5", IR.caption)}>{roleLabel(t.role)}</span>
+                  </span>
+                  <span className={cn("num shrink-0 tabular-nums", t.kind === "purchase" ? "text-positive" : "text-negative")}>{tradeAmount(t)}</span>
+                  <span className={cn("num w-[5.25rem] shrink-0 whitespace-nowrap text-right", IR.caption)}>{fmtDate(t.date)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : (
         <p className={cn("mt-2", IR.caption)}>No open-market purchase or sale on file.</p>
       )}
       <p className={cn("mt-1.5", IR.caption)}>
-        {trades.length > 0 ? "The latest open-market trades, whatever their date. " : ""}
         <Link to="/app/companies/$ticker/insiders" params={{ ticker }} className="text-link hover:underline">
           Ownership and every Form 4
         </Link>

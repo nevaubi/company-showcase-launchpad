@@ -3,6 +3,7 @@ import { TickerMark } from "@/components/app/ticker";
 import { IrPanel } from "@/components/ir/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuotes, useUniverse } from "@/lib/data";
+import { isPrice } from "./header/model";
 import { coverageOf } from "@/lib/coverage";
 import { METRICS, groupMedians, metricsOf, rankIn, type Metrics } from "@/lib/company/benchmarks";
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
@@ -42,7 +43,7 @@ export function SectorTable({ ticker }: { ticker: string }) {
 
   const model = useMemo(() => {
     if (!members) return null;
-    const px = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, q.price || null]));
+    const px = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, isPrice(q.price) ? q.price : null]));
     const of = (c: (typeof members.industry)[number]) => ({ c, m: metricsOf(c, px.get(c.ticker) ?? null) });
     const industry = members.industry.map(of);
     // the median row only where at least three members have the figure; with none, no row

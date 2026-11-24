@@ -37,7 +37,9 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
       subtitle={
         b
           ? `${b.title} · researched from ${b.sources.length} web sources · ${fmtRelative(b.generatedAt)}`
-          : "Searching transcripts, press releases and coverage…"
+          : q.isLoading || refreshing
+            ? "Searching transcripts, press releases and coverage…"
+            : "No call brief on file"
       }
       actions={
         <>

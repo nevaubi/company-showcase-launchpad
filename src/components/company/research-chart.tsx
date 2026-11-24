@@ -142,7 +142,9 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
       subtitle={
         view.data
           ? `${RANGES.find((r) => r.id === range)?.label} ${chg != null ? fmtPct(chg, 1, true) : ""} · daily closes through ${fmtDate(bars.at(-1)?.[0])}`
-          : "Loading…"
+          : view.isError
+            ? "Price history unavailable"
+            : "Loading…"
       }
       actions={
         <div className="flex rounded-md border bg-secondary/50 p-0.5">

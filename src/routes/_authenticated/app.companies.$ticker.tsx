@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound, Outlet } from "@tanstack/react-router";
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { CompanyHeader } from "@/components/company/header/company-header";
-import { cleanCompanyName } from "@/components/company/header/model";
+import { cleanCompanyName, usableQuote } from "@/components/company/header/model";
 import { CompanyNotices } from "@/components/company/header/notices";
 import { CompanyTabs } from "@/components/company/header/tabs";
 import { useCoverage, useFirm } from "@/components/firm/firm-context";
@@ -56,7 +56,8 @@ function CompanyLayout() {
   const coverage = coverageOf(ticker);
   const company = useCompany(ticker);
   const quotes = useQuotes([ticker]);
-  const quote = quotes.data?.quotes[0];
+  // a price of zero, below zero or not a number is no quote: the header shows "Price unavailable", not $0.00
+  const quote = usableQuote(quotes.data?.quotes[0]);
   const profile = company.data?.profile;
   const name = cleanCompanyName(coverage?.shortName ?? profile?.name ?? ticker);
   const { firm } = useFirm();
