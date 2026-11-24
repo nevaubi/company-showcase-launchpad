@@ -1,6 +1,6 @@
 import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Fragment, useMemo } from "react";
+import { Fragment, useMemo, type KeyboardEvent } from "react";
 import { Segmented } from "@/components/app/segmented";
 import { TickerMark } from "@/components/app/ticker";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -325,7 +325,24 @@ export function AggregateTrends({
               />
               <path d={show.map((i, k) => `${k ? "L" : "M"}${x(k)},${y(s.agg[i]!)}`).join("")} fill="none" stroke="var(--chart-1)" strokeWidth={1.8} />
               {show.map((i, k) => (
-                <g key={i} className={canBreak ? "cursor-pointer" : undefined} onClick={() => canBreak && onPick(metric, g.quarters[i])}>
+                <g
+                  key={i}
+                  className={canBreak ? "cursor-pointer outline-none [&:focus-visible>circle]:stroke-foreground [&:focus-visible>circle]:stroke-2" : undefined}
+                  onClick={() => canBreak && onPick(metric, g.quarters[i])}
+                  {...(canBreak
+                    ? {
+                        role: "button",
+                        tabIndex: 0,
+                        "aria-label": `${qLabel(g.quarters[i])}: ${fmtMetric(s.agg[i], unit)}, open the companies behind it`,
+                        onKeyDown: (e: KeyboardEvent) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            onPick(metric, g.quarters[i]);
+                          }
+                        },
+                      }
+                    : {})}
+                >
                   <rect x={x(k) - (W - m.l - m.r) / show.length / 2} y={m.t} width={(W - m.l - m.r) / show.length} height={H - m.t - m.b} fill="transparent" />
                   <circle cx={x(k)} cy={y(s.agg[i]!)} r={i === sel ? 4.5 : 2.5} fill="var(--chart-1)" stroke={i === sel ? "var(--background)" : undefined} />
                   <title>{`${qLabel(g.quarters[i])}: ${fmtMetric(s.agg[i], unit)} aggregate, ${fmtMetric(s.med[i], unit)} median · ${s.n[i]} companies`}</title>

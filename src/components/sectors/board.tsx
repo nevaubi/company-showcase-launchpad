@@ -733,7 +733,7 @@ export function DriverRow({ d, r, sectors }: { d: Tile; r: Summary; sectors?: bo
           "–"
         )}
       </td>
-      <td>{r?.spark?.length ? <Sparkline values={r.spark.map((o) => o[1])} tone="ink" className="h-5 w-20" /> : null}</td>
+      <td className={sectors ? undefined : "max-sm:hidden"}>{r?.spark?.length ? <Sparkline values={r.spark.map((o) => o[1])} tone="ink" className="h-5 w-20" /> : null}</td>
       {sectors && (
         <td className="truncate">
           {d.sectors!.map((s, i) => (
