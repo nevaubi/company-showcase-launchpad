@@ -98,7 +98,15 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
   const iso = onIsolate != null && (picked || isolated);
   /* the name: the short name of a covered company, on two lines when the layout gave the card the height, cut only between words */
   const tall = placed && c.h > NET.card;
-  const shown = placed ? cardNameLines(n, c.w, !stacked).join(" ") : displayName(n.name, n.ticker);
+  /* the layout keeps the figure's room beside every name of a flow column; a card with no figure there uses the whole line,
+     which can only need fewer lines than the layout measured */
+  const lines = placed ? cardNameLines(n, c.w, !stacked && !!fig) : null;
+  const shown = lines ? lines.join(" ") : displayName(n.name, n.ticker);
+  /* in the narrower second row a figure takes the line under the name. The ticker and product then get a line of their own when
+     the card has one to spare (a tall card whose name takes one line); otherwise they are left to the hover card and the spoken
+     label, never squeezed to a letter beside the figure */
+  const figLine = placed && stacked && !!fig;
+  const spare = figLine && tall && lines != null && lines.length === 1;
   const what = impact ? SEVERITY[impact.severity] : nature ? `${nature}${facts.summary ? ` · ${facts.summary}` : ""}` : facts.summary ?? `${facts.statements} filing statement${facts.statements === 1 ? "" : "s"}`;
   return (
     <div style={style} data-card="" data-dim={dim || undefined}
@@ -145,11 +153,17 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
             </span>
             <span className="flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-muted-foreground">
               {/* in the narrower second row the figure moves under the name, so the name keeps the whole width */}
-              {stacked && fig && <span className="shrink-0"><span className={cn("num", fig.flow ? "font-medium text-foreground" : "text-foreground/80")}>{fig.value}</span> {fig.unit}</span>}
-              <span className="min-w-0 flex-1 truncate">{n.ticker && <span className="num text-foreground/80">{n.ticker} · </span>}{what}</span>
+              {stacked && fig && <span className={figLine ? "min-w-0 flex-1 truncate" : "shrink-0"}><span className={cn("num", fig.flow ? "font-medium text-foreground" : "text-foreground/80")}>{fig.value}</span> {fig.unit}</span>}
+              {!figLine && <span className="min-w-0 flex-1 truncate">{n.ticker && <span className="num text-foreground/80">{n.ticker} · </span>}{what}</span>}
               {!stacked && fig && <span className="shrink-0">{fig.unit}</span>}
               {flags}
             </span>
+            {spare && (
+              <span className="min-w-0 truncate text-[11px] leading-4 text-muted-foreground">
+                {n.ticker && <span className="num text-foreground/80">{n.ticker} · </span>}
+                {what}
+              </span>
+            )}
           </span>
         )}
       </button>

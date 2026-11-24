@@ -79,6 +79,20 @@ describe("bundled company logos", () => {
     for (const t of LOGO_TILES.split(" ")) expect(logoUrl(t), t).toBe(`/logos/${t}.png`);
   });
 
+  it("no mark changes with the reader's system theme or carries active content", () => {
+    // The plate is always light. Cirrus Logic's own site icon turned white under a dark system theme
+    // and vanished on it.
+    const all = [...files, ...iconFiles.map((i) => `icons/${i}`)];
+    const svgs = all.filter((x) => x.endsWith(".svg"));
+    for (const f of svgs) {
+      const text = readFileSync(`public/logos/${f}`, "utf8");
+      expect(/prefers-color-scheme/i.test(text), f).toBe(false);
+      expect(/<script|\son[a-z]+\s*=|javascript:/i.test(text), f).toBe(false);
+      // a file editor's mail address in a comment is not ours to publish
+      expect(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z]{2,}/.test(text), f).toBe(false);
+    }
+  });
+
   it("has a mark for every covered company except those that show initials on purpose", () => {
     const missing = COVERAGE.map((c) => c.ticker).filter((t) => !logoUrl(t));
     expect(missing.sort()).toEqual([...INITIALS_ON_PURPOSE].sort());

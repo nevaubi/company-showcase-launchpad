@@ -109,9 +109,10 @@ export function cardNameLines(node: Pick<GraphNode, "name" | "ticker">, w: numbe
   return fitLines(displayName(node.name, node.ticker), cardNameWidth(w, figureBeside), 2, NET.nameFont).lines;
 }
 /** The height every first-order card of a group gets: tall when any of its names needs a second line. In the flow columns the
- * figure's room is kept beside every name, figure or not, so the card draws the lines the layout measured. */
+ * figure's room is kept beside the name of every card that can show a figure (`hasFigure`, which holds whenever the card's own
+ * figure rule does), so a card never needs more lines than the layout measured; a name with no figure has the whole line. */
 export function groupCardHeight(cards: NetCard[], w: number, figureBeside: boolean): number {
-  return cards.some((c) => cardNameLines(c.node, w, figureBeside).length > 1) ? NET.cardTall : NET.card;
+  return cards.some((c) => cardNameLines(c.node, w, figureBeside && hasFigure(c.node)).length > 1) ? NET.cardTall : NET.card;
 }
 
 export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expanded }: NetworkInput): NetLayout {
