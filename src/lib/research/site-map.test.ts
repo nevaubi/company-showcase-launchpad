@@ -47,7 +47,100 @@ describe("site map", () => {
     expect(ideas).toContain("against a coin flip, not as a forecast");
   });
 
+  const line = (map: string, path: string) => map.split("\n").find((l) => l.includes(`· ${path} ·`))!;
+
+  it("describes the rebuilt supply chain page and its globe as the code has them", () => {
+    const supply = line(siteMapText(), "/app/supply-chain");
+    for (const s of [
+      "Sections of this page): Map, Summary, Regions, Contracts, Market, Coverage",
+      "#supply-analysis, tabs Evidence, Exposure, Shock, Changes, Moves",
+      "Flag names on the map (Single source, 10%+ share, Hotspot, Dollar figure",
+      "Show (All links, Suppliers only, Customers only)",
+      "Isolate the pathway through A → B",
+      "iso=rel:supplier|rel:customer|rel:partner|rel:competitor",
+      "iso=node:supplier:TSM",
+      "iso=path:ENTG>TSM>NVDA>HPE",
+      "tab=evidence|exposure|shock|changes|reactions",
+      // globe
+      "a plain wheel zooms toward the pointer only after the map has been pressed",
+      "Ctrl or ⌘ + wheel or a pinch at any time",
+      "Show as a flat map or Show as a globe",
+      "\"Isolated: LABEL · N on the map\" with Show all",
+      "Isolate this pathway",
+    ])
+      expect(supply).toContain(s);
+    // the old overlay select and the "dollars overlay" wording are gone
+    expect(supply).not.toMatch(/dollars overlay|Chain evidence/);
+  });
+
+  it("describes technical analysis without presenting any condition as a signal to trade", () => {
+    const tech = line(siteMapText(), "/app/markets");
+    for (const s of [
+      "Price chart", "Technical read", "Evidence (tested conditions at Horizon 5, 20 or 60 days", "Levels and risk", "Volatility",
+      "Relative strength", "Short interest and flows", "Events.",
+      "Without a symbol, or with view=market, it opens the market view: Market breadth, Events across companies, Technical scan",
+      "Cross-section",
+      "\"No statistically reliable signal today\"",
+      "the test can detect only very large effects, so that verdict is not evidence that nothing is there",
+      "never a forecast, a buy or sell signal or advice",
+      "view=symbol|market",
+    ])
+      expect(tech).toContain(s);
+    expect(tech).not.toMatch(/Indicators|Market scan|Quant|default NVDA/);
+    const overview = siteMapText("NVDA").split("\n").find((l) => l.includes("· /app/companies/NVDA ·"))!;
+    expect(overview).toContain("Price (Price and technical read");
+    expect(overview).toContain("Levels and signals");
+    expect(overview).toContain("the Technicals link, which opens /app/markets?symbol=TICKER");
+  });
+
+  it("describes alt data with the renamed anchors and what Unusual now means", () => {
+    const map = siteMapText("LMT");
+    const hub = line(map, "/app/alt-data");
+    expect(hub).toContain("Alt data filters (Theme: All, Government, Products, Market, Banking, Corporate events; Filter by ticker), Unusual now, Leaderboard");
+    expect(hub).toContain("compares only periods a source has fully published");
+    expect(hub).toContain("An empty list (\"Nothing unusual right now\") is the normal result");
+    const tab = map.split("\n").find((l) => l.includes("/app/companies/LMT/alt-data"))!;
+    expect(tab).toContain("#alt-ds-DATASET");
+    expect(tab).toContain("8-K filings");
+    expect(tab).not.toMatch(/#alt-DATASET|Every event/);
+  });
+
+  it("describes the sector board and the shared sector and industry page", () => {
+    const sectors = line(siteMapText(), "/app/sectors");
+    for (const s of [
+      "Level (Sectors or Industries) and Columns (Overview, Fundamentals, Risk and signals)",
+      "Weekly notes (this week's notes only",
+      "/app/sectors/g/SLUG",
+      "Quarterly aggregates (Metric, Trend span)",
+      "Constituents (Company columns",
+      "level=industry, cols=fundamentals|risk",
+      "pw=6m|1y|2y",
+    ])
+      expect(sectors).toContain(s);
+    expect(sectors).not.toMatch(/scorecard|heatmap|deep dive|wk=/i);
+  });
+
+  it("carries the review fixes of filings, earnings, companies and IR data", () => {
+    const map = siteMapText("AAPL");
+    expect(map).toContain("Unusually large change for the top 5%, More change than usual, Typical amount of change, Less change than usual");
+    expect(map).toContain("Nothing on file for YEAR in this view");
+    expect(map).toContain("days=7|30|90, signal");
+    expect(map).toContain("Role not identified");
+    expect(map).toContain("No earnings release matched to this quarter");
+    expect(map).toContain("A value marked † is calculated");
+    expect(map).toContain("Machine-written");
+    expect(map).toContain("columns Price, Day, Mkt cap, Revenue, Rev. YoY, Gross mgn, P/E, FCF yld, Filed");
+    expect(map).toContain("heads read FY2025 when every company's year ends in December, Ended 2025");
+    expect(map).toContain("This shared link could not be read; showing the default screen.");
+    expect(map).toContain("only in a later filing (possibly recast)");
+    expect(map).toContain("the SEC check has not run yet");
+  });
+
   it("only lets the assistant open real app pages", () => {
+    expect(isAppPath("/app/sectors/Information%20Technology")).toBe(true);
+    expect(isAppPath("/app/sectors/g/hotels-restaurants-and-leisure")).toBe(true);
+    expect(isAppPath("/app/sectors/Nowhere")).toBe(false);
+    expect(isAppPath("/app/sectors/%E0%A4%A")).toBe(false);
     expect(isAppPath("/app/supply-chain?t=RTX")).toBe(true);
     expect(isAppPath("/app/companies/BRK.B/financials")).toBe(true);
     expect(isAppPath("/app/companies/NVDA")).toBe(true);

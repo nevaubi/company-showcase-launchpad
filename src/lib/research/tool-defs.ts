@@ -404,7 +404,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "get_quant_profile",
-    description: "The computed market profile of a stock: realized volatility and its percentile, beta, Sharpe, max drawdown, typical earnings move, factor fit, trend and volatility regime, technical state and active signals, the most and least correlated stocks over a year, FINRA short interest and days to cover, off-exchange volume share, special-situation flags (gaps, mean reversion, insider clusters and their base rates) and the 30-day brief. Use for risk, positioning, 'how does it trade', 'what moves with it' and before any trade idea.",
+    description: "The computed market profile of a stock: realized volatility and its percentile, beta, Sharpe, max drawdown, typical earnings move, factor fit, trend and volatility regime, technical state and recent chart events with their cross-company averages (these averages are not tested: the Technicals page, /app/markets?symbol=TICKER, finds most of them indistinguishable from the base rate, so give them as the record, never as a buy or sell signal; a condition is reliable only when that page's Evidence test calls it so, and since the test detects only very large effects on one stock, 'no reliable signal' is not evidence that nothing is there), the most and least correlated stocks over a year, FINRA short interest and days to cover, off-exchange volume share, special-situation flags (gaps, mean reversion, insider clusters and their base rates) and the 30-day brief. Use for risk, positioning, 'how does it trade', 'what moves with it' and before any trade idea.",
     parameters: obj({ ticker: str("Covered ticker") }, ["ticker"]),
     strict: true,
   },
@@ -618,7 +618,7 @@ export const TOOL_DEFS = [
   {
     type: "function",
     name: "go_to_path",
-    description: "Open any app page by its path from get_site_map, e.g. /app/screener or /app/companies/NVDA/insiders. Only real app pages open.",
+    description: "Open any app page by its path from get_site_map, e.g. /app/screener, /app/companies/NVDA/insiders, /app/markets?symbol=NVDA, /app/supply-chain?t=NVDA&view=chain&iso=path:TSM>NVDA>HPE or a sector page such as /app/sectors/Energy. Only real app pages open.",
     parameters: obj({ path: str("Path starting with /app"), why: str("One short line for the user") }, ["path", "why"]),
     strict: true,
   },

@@ -18,4 +18,21 @@ describe("tour steps", () => {
     expect(body("Segment & KPI data from IR documents")).not.toContain("must agree");
     expect(body("What changed in the filing")).toContain("The verdict comes first");
   });
+
+  it("describe the supply chain steps as their anchors now are", () => {
+    const step = (title: string) => TOUR_STEPS.find((s) => s.title === title)!;
+    const map = step("Supply-chain map");
+    expect(map.target).toBe("[data-tour='supply-stats']");
+    expect(map.body).toContain("This strip counts the named counterparties");
+    const views = step("Three ways to read the links");
+    expect(views.target).toBe("[data-tour='supply-views']");
+    expect(views.body).toContain("isolates that pathway");
+    expect(views.body).toContain("what is isolated");
+    const shock = step("Simulate a shock");
+    expect(shock.click).toBe("[data-tour='supply-shock']");
+    expect(shock.target).toBe("#supply-analysis");
+    // the Shock tab shocks one company; a country shock lives in the Regions section
+    expect(shock.body).toContain("pick a company and the size of the drop");
+    expect(shock.body).not.toMatch(/supplier or region/);
+  });
 });
