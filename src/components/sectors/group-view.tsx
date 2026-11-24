@@ -811,7 +811,7 @@ function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[
   // A whole sector adds the industry column; the weight column gives way so the table fits the page.
   const wide = isSector && !ind;
   const keys = (COL_SETS[set] as readonly string[]).filter((k) => !(wide && k === "w"));
-  const minW = 210 + (wide ? 186 : 0) + keys.reduce((s, k) => s + (k === "sig" ? 220 : k === "nh" || k === "em" || k === "vol" ? 84 : 68), 0);
+  const minW = 210 + (wide ? 150 : 0) + keys.reduce((s, k) => s + (k === "sig" ? 220 : k === "nh" || k === "em" || k === "vol" ? 84 : 68), 0);
   const [wrap, fits] = useFits<HTMLDivElement>(minW);
   const noSignalFile = set === "risk" && !rows.some((r) => r.inMarket);
   return (
@@ -873,7 +873,7 @@ function Constituents({ d, rows, search, setSearch }: { d: GroupFile; rows: Row[
                   <TickerMark ticker={r.tk} name={r.name} className="max-w-full" />
                 </td>
                 {wide && (
-                  <td className="max-w-[196px] truncate text-[12px] text-muted-foreground max-sm:hidden" title={r.industry}>
+                  <td className="max-w-[160px] truncate text-[12px] text-muted-foreground max-sm:hidden" title={r.industry}>
                     {r.industry}
                   </td>
                 )}
