@@ -87,11 +87,11 @@ function Earnings() {
     const sc = score.data;
     const printed = sc?.metrics.find((m) => m.id === "eps_gaap" && m.value != null && !m.unconfirmed && /dilut/i.test(`${m.label} ${m.quote ?? ""}`));
     const releaseEps = sc && printed?.value != null ? [{ accn: sc.accession, v: printed.value, quote: printed.quote }] : [];
-    const records = quarterRecords({ dataset: d, reactions, surprises, releaseEps });
+    const records = quarterRecords({ dataset: d, reactions, surprises, releaseEps, bars: prices.data?.bars });
     const recent = recentQuarters(records, 12);
     const pending = pendingRelease(records, d.earningsReleases, reactions, surprises, d.filings);
     return { records, recent, pending, profit: profitLine(d) };
-  }, [d, reactions, surprises, score.data]);
+  }, [d, reactions, surprises, score.data, prices.data]);
 
   const typical = useMemo(() => reactionSummary(reactions, 12), [reactions]);
   const lastReportedEnd = model?.pending?.surprise?.quarter ?? model?.recent[0]?.period.end ?? null;

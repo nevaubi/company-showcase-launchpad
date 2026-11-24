@@ -4,7 +4,7 @@
 // estimates provider has them, its EPS surprise records. Every value keeps the statement cell it
 // came from (a SourceRef or a derived formula), and every computed figure carries a formula whose
 // parts are those cells, so click-to-source works for all of it.
-import type { Cell, CompanyDataset, DerivedPart, EarningsRelease, Filing, Period, Row, Statement } from "@/lib/financials/types";
+import type { Bar, Cell, CompanyDataset, DerivedPart, EarningsRelease, Filing, Period, Row, Statement } from "@/lib/financials/types";
 import type { Reaction } from "@/lib/markets/core";
 import type { PeriodEstimate, Surprise } from "@/lib/estimates/core";
 
@@ -55,6 +55,36 @@ export interface QuarterRecord {
   reaction: Reaction | null;
   /** Estimates provider's EPS actual vs consensus for this quarter. */
   surprise: Surprise | null;
+  /** The two adjusted closes behind the reaction, so the move can be inspected (earnings-M4). */
+  window: ReactionWindow | null;
+}
+
+export interface ReactionWindow {
+  from: { date: string; close: number };
+  to: { date: string; close: number };
+}
+
+/**
+ * The closes `earningsReactions` measures: the adjusted close of the session before the release date and
+ * of the session after the first session on or after it. Null when the bars do not reach.
+ */
+export function reactionWindow(bars: Bar[] | undefined, filed: string): ReactionWindow | null {
+  if (!bars?.length) return null;
+  const d = filed.slice(0, 10);
+  const i = bars.findIndex((b) => b[0] >= d);
+  if (i <= 0 || i + 1 >= bars.length) return null;
+  const a = bars[i - 1];
+  const b = bars[i + 1];
+  return { from: { date: a[0], close: a[5] }, to: { date: b[0], close: b[5] } };
+}
+
+/** Change of a margin in percentage points, with both margins' parts (earnings-M4). */
+export function pointsChange(cur: Figure | null, prev: Figure | null, label: string, basis: string): Figure | null {
+  if (!cur || !prev) return null;
+  return {
+    v: cur.v - prev.v,
+    derived: { formula: `${label} this quarter − ${label[0].toLowerCase() + label.slice(1)} ${basis}, in percentage points`, parts: [...figPartsOf(cur, `${label}, this quarter`), ...figPartsOf(prev, `${label}, ${basis}`, -1)] },
+  };
 }
 
 export interface ProfitLine {
@@ -215,6 +245,8 @@ export interface QuarterInputs {
   surprises?: Surprise[] | null;
   /** GAAP diluted EPS printed in earnings releases, used for fourth quarters. */
   releaseEps?: ReleaseEps[];
+  /** The stock's daily bars, for the closes behind each reaction. */
+  bars?: Bar[];
 }
 
 const close = (a: number, b: number) => Math.abs(a - b) <= 0.006 + 0.002 * Math.abs(b);
@@ -280,7 +312,7 @@ function q4Eps(d: CompanyDataset, i: number, release: EarningsRelease | null, re
 }
 
 /** Every quarter in the dataset (oldest first) with its results, margins, growth, release, reaction and surprise. */
-export function quarterRecords({ dataset: d, reactions = [], surprises, releaseEps }: QuarterInputs): QuarterRecord[] {
+export function quarterRecords({ dataset: d, reactions = [], surprises, releaseEps, bars }: QuarterInputs): QuarterRecord[] {
   const inc = d.statements.quarterly.income;
   const cf = d.statements.quarterly.cashflow;
   const periods = inc?.periods ?? [];
@@ -336,6 +368,7 @@ export function quarterRecords({ dataset: d, reactions = [], surprises, releaseE
       qoq,
       release,
       reaction: release ? (byDate.get(release.filed.slice(0, 10)) ?? null) : null,
+      window: release && byDate.has(release.filed.slice(0, 10)) ? reactionWindow(bars, release.filed) : null,
       surprise: surpriseFor(b.period.end, surprises),
     };
   });

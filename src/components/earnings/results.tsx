@@ -3,7 +3,7 @@
 import { ExternalLink } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import type { Scorecard } from "@/lib/earnings/workflow";
-import { priorIndex, yearAgoIndex, type Figure, type PendingRelease, type ProfitLine, type QuarterRecord, type ReactionSummary } from "@/lib/earnings/quarters";
+import { pointsChange, priorIndex, yearAgoIndex, type Figure, type PendingRelease, type ProfitLine, type QuarterRecord, type ReactionSummary, type ReactionWindow } from "@/lib/earnings/quarters";
 import type { PeriodEstimate } from "@/lib/estimates/core";
 import type { EarningsRelease } from "@/lib/financials/types";
 import type { Reaction } from "@/lib/markets/core";
@@ -59,10 +59,8 @@ export function scoreRows(pl: ProfitLine): ScoreRow[] {
 function Change({ ticker, row, cur, base, label, period }: { ticker: string; row: ScoreRow; cur: QuarterRecord; base: QuarterRecord | null; label: string; period: string }) {
   if (!base) return <span className="num text-muted-foreground">–</span>;
   if (row.ratio) {
-    const a = row.get(cur);
-    const b = row.get(base);
-    const d = a && b ? a.v - b.v : null;
-    return <span className={cn("num", toneText(d))}>{signedPts(d)}</span>;
+    const pc = pointsChange(row.get(cur), row.get(base), row.label, label === "qoq" ? "the prior quarter" : "a year earlier");
+    return <SourceNum ticker={ticker} f={pc} label={`${row.label} change`} period={period} unit="pct" text={signedPts(pc?.v)} className={toneText(pc?.v)} />;
   }
   const g = row.growthKey ? (label === "qoq" ? cur.qoq[row.growthKey] : cur.yoy[row.growthKey]) : null;
   return <SourceNum ticker={ticker} f={g ?? null} label={`${row.label} change`} period={period} unit="pct" text={signedPct(g?.v)} className={toneText(g?.v)} />;
@@ -204,14 +202,21 @@ export function LatestQuarter({
               )
             }
           />
-          <ReactionStat ticker={ticker} reaction={cur.reaction} release={cur.release} />
+          <ReactionStat ticker={ticker} reaction={cur.reaction} release={cur.release} window={cur.window} />
         </div>
       </div>
     </Section>
   );
 }
 
-function ReactionStat({ ticker, reaction, release }: { ticker: string; reaction: Reaction | null; release: EarningsRelease | null }) {
+/** "Adjusted close $271.40 on 29 Oct → $262.24 on 31 Oct": the two prices behind a reaction (earnings-M4). */
+export function windowText(w: ReactionWindow | null | undefined): string | null {
+  if (!w) return null;
+  const d = (x: string) => fmtDate(x, { month: "short", day: "numeric", year: "numeric" });
+  return `Adjusted close $${w.from.close.toFixed(2)} on ${d(w.from.date)} to $${w.to.close.toFixed(2)} on ${d(w.to.date)}`;
+}
+
+function ReactionStat({ ticker, reaction, release, window: w }: { ticker: string; reaction: Reaction | null; release: EarningsRelease | null; window: ReactionWindow | null }) {
   return (
     <Stat
       className="bg-transparent"
@@ -222,6 +227,7 @@ function ReactionStat({ ticker, reaction, release }: { ticker: string; reaction:
           <>
             <span className={cn("num", toneText(reaction.excess))}>{signedPct(reaction.excess)}</span> vs S&amp;P 500 ·{" "}
             <span className={cn("num", toneText(reaction.drift20))}>{signedPct(reaction.drift20)}</span> over the next 20 sessions
+            {w && <span className="block">{windowText(w)}</span>}
             {release && (
               <>
                 {" · "}
@@ -410,7 +416,7 @@ export function History({ ticker, quarters, profit }: { ticker: string; quarters
                   )}
                   {hasReaction && (
                     <>
-                      <Td className="border-l" title={q.reaction ? `Release ${fmtDate(q.reaction.date)}` : undefined}>
+                      <Td className="border-l" title={q.reaction ? `Release ${fmtDate(q.reaction.date)}${q.window ? `. ${windowText(q.window)}` : ""}` : undefined}>
                         <span className={cn("num", toneText(q.reaction?.move))}>{signedPct(q.reaction?.move)}</span>
                       </Td>
                       <Td>

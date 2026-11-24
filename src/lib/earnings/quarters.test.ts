@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import type { CompanyDataset, Period } from "@/lib/financials/types";
 import type { Reaction } from "@/lib/markets/core";
-import { growth, nextConsensus, pendingRelease, priorIndex, quarterRecords, reactionSummary, recentQuarters, releaseFor, surpriseFor, yearAgoIndex, type Figure } from "./quarters";
+import { growth, nextConsensus, pendingRelease, pointsChange, priorIndex, quarterRecords, reactionWindow, reactionSummary, recentQuarters, releaseFor, surpriseFor, yearAgoIndex, type Figure } from "./quarters";
 
 const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(path.resolve(__dirname, `../../test/fixtures/companies/${t}.json`), "utf8")) as CompanyDataset);
 const AAPL = load("AAPL");
@@ -289,5 +289,26 @@ describe("fourth-quarter EPS (earnings-H2)", () => {
   it("leaves reported quarters untouched", () => {
     expect(q4(AAPL, "Q3 FY25").eps?.cell?.src).toBeDefined();
     expect(q4(AAPL, "Q3 FY25").eps?.q4).toBeUndefined();
+  });
+});
+
+describe("inspectable reactions and margin changes (earnings-M4)", () => {
+  it("returns the two adjusted closes the reaction is measured on", () => {
+    const bars: [string, number, number, number, number, number, number][] = [
+      ["2026-10-28", 1, 1, 1, 100, 99, 1],
+      ["2026-10-29", 1, 1, 1, 101, 100, 1],
+      ["2026-10-30", 1, 1, 1, 95, 94, 1],
+      ["2026-10-31", 1, 1, 1, 96, 95, 1],
+    ];
+    expect(reactionWindow(bars, "2026-10-30T16:30:00")).toEqual({ from: { date: "2026-10-29", close: 100 }, to: { date: "2026-10-31", close: 95 } });
+    expect(reactionWindow(bars, "2026-10-31")).toBeNull();
+  });
+  it("gives a margin change in points with both margins' statement parts", () => {
+    const r = quarterRecords({ dataset: AAPL }).find((x) => x.period.label === "Q3 FY26")!;
+    const y = quarterRecords({ dataset: AAPL }).find((x) => x.period.label === "Q3 FY25")!;
+    const pc = pointsChange(r.grossMargin, y.grossMargin, "Gross margin", "a year earlier")!;
+    expect(pc.v).toBeCloseTo(r.grossMargin!.v - y.grossMargin!.v, 12);
+    expect(pc.derived!.parts.length).toBe(4);
+    expect(pc.derived!.parts.filter((p) => p.sign === -1).length).toBe(2);
   });
 });
