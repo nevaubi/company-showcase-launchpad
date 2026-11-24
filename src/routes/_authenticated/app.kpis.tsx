@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { ArrowDown, ArrowUp, Check, Download, ListChecks } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
@@ -126,7 +126,6 @@ function KpiMatrix() {
   const qc = useQueryClient();
   const [wrap, fits] = useFits<HTMLDivElement>();
   const navigate = useNavigate();
-  const [hoverCol, setHoverCol] = useState<string | null>(null);
 
   const byTk = useMemo(
     () => new Map((uni.data?.companies ?? []).map((c) => [c.ticker, c])),
@@ -353,28 +352,8 @@ function KpiMatrix() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows]);
   const fmtMcap = (v: number | null) => (v == null ? DASH : v >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`);
-  const colHover = (c: string) => hoverCol === c && "bg-secondary/70";
 
-  const Th = ({ c, children, title, className, sub }: { c: string; children: React.ReactNode; title?: string; className?: string; sub?: React.ReactNode }) => (
-    <th
-      scope="col"
-      aria-sort={sort.c === c ? (sort.d === 1 ? "ascending" : "descending") : "none"}
-      onMouseEnter={() => setHoverCol(c)}
-      onMouseLeave={() => setHoverCol(null)}
-      className={cn("border-b bg-card px-3 py-1.5 text-right align-bottom", fits && `sticky ${STICKY} z-20`, className)}
-    >
-      <button
-        type="button"
-        title={title}
-        onClick={() => setSort((s) => ({ c, d: s.c === c ? (-s.d as 1 | -1) : c === "t" ? 1 : -1 }))}
-        className={cn("ml-auto flex max-w-36 items-end justify-end gap-1 rounded-sm text-right text-[11px] font-medium leading-4 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort.c === c ? "text-foreground" : "text-muted-foreground")}
-      >
-        <span className="whitespace-normal">{children}</span>
-        {sort.c === c && (sort.d === 1 ? <ArrowUp className="mb-0.5 size-3 shrink-0" /> : <ArrowDown className="mb-0.5 size-3 shrink-0" />)}
-      </button>
-      {sub && <span className="mt-0.5 block whitespace-nowrap text-[10px] font-normal leading-3 text-muted-foreground">{sub}</span>}
-    </th>
-  );
+  const thCtx: ThCtx = { sort, setSort, fits };
 
   if (tax.isError || latest.isError)
     return (
@@ -502,7 +481,8 @@ function KpiMatrix() {
             <p className={cn(IR.caption, "ml-auto")}>Units in each column head; a period label appears only where it differs from the column's.</p>
           </div>
           <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")}>
-            <table className={cn("border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max min-w-full")}>
+            <style>{["mcap", "revg", ...cols.map((c) => c.k.id)].map((id) => `[data-kpi-matrix][data-hover="${id}"] td[data-col="${id}"]{background-color:color-mix(in oklab,var(--secondary) 70%,transparent)}`).join("")}</style>
+            <table data-kpi-matrix className={cn("border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max min-w-full")}>
               <thead>
                 <tr>
                   <th scope="col" className={cn("left-0 z-30 min-w-56 border-b border-r bg-card px-3 py-1.5 text-left align-bottom", "sticky", fits && STICKY)}>
@@ -510,24 +490,24 @@ function KpiMatrix() {
                       Company
                     </button>
                   </th>
-                  <Th c="mcap" sub="live">
+                  <KpiTh ctx={thCtx} c="mcap" sub="live">
                     Market cap
-                  </Th>
-                  <Th c="revg" className="border-r" sub="TTM, %" title="Revenue growth, trailing four quarters vs the four before (SEC filings)">
+                  </KpiTh>
+                  <KpiTh ctx={thCtx} c="revg" className="border-r" sub="TTM, %" title="Revenue growth, trailing four quarters vs the four before (SEC filings)">
                     Revenue growth
-                  </Th>
+                  </KpiTh>
                   {cols.map(({ k, n }) => {
                     const meta = colMeta.get(k.id);
                     const unit = view === "change" ? (k.uclass === "pct" ? "pt" : "%") : meta?.scale.head;
                     return (
-                      <Th
+                      <KpiTh ctx={thCtx}
                         key={k.id}
                         c={k.id}
                         sub={[unit, meta?.period].filter(Boolean).join(" · ")}
                         title={`${k.name}\n${k.definition}\n${n} companies in this selection${k.higher_is_better === false ? "\nLower is better" : ""}`}
                       >
                         {k.name}
-                      </Th>
+                      </KpiTh>
                     );
                   })}
                 </tr>
@@ -542,8 +522,8 @@ function KpiMatrix() {
                     <td className="sticky left-0 z-10 w-64 max-w-64 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary" title={`${r.name} · ${r.ind}`}>
                       <TickerMark ticker={r.t} name={r.name} className="min-w-0" />
                     </td>
-                    <td className={cn("num whitespace-nowrap border-b px-3 py-1 text-right group-hover:bg-secondary", colHover("mcap"), sort.c === "mcap" && IR.strong)}>{fmtMcap(r.mcap)}</td>
-                    <td className={cn("num whitespace-nowrap border-b border-r px-3 py-1 text-right group-hover:bg-secondary", colHover("revg"), sort.c === "revg" && IR.strong)}>
+                    <td data-col="mcap" className={cn("num whitespace-nowrap border-b px-3 py-1 text-right group-hover:bg-secondary", sort.c === "mcap" && IR.strong)}>{fmtMcap(r.mcap)}</td>
+                    <td data-col="revg" className={cn("num whitespace-nowrap border-b border-r px-3 py-1 text-right group-hover:bg-secondary", sort.c === "revg" && IR.strong)}>
                       {r.revg == null ? DASH : `${r.revg < 0 ? "\u2212" : ""}${Math.abs(r.revg * 100).toFixed(1)}`}
                     </td>
                     {cols.map(({ k }) => {
@@ -551,14 +531,14 @@ function KpiMatrix() {
                       const meta = colMeta.get(k.id)!;
                       if (!c)
                         return (
-                          <td key={k.id} className={cn("num border-b px-3 py-1 text-right text-muted-foreground group-hover:bg-secondary", colHover(k.id))}>
+                          <td key={k.id} data-col={k.id} className="num border-b px-3 py-1 text-right text-muted-foreground group-hover:bg-secondary">
                             {DASH}
                           </td>
                         );
                       const h = heat ? heatOf.get(k.id)?.get(r.t) : undefined;
                       const mark = periodMark(c.p, meta);
                       return (
-                        <td key={k.id} className={cn("border-b p-0 text-right group-hover:bg-secondary", colHover(k.id))}>
+                        <td key={k.id} data-col={k.id} className="border-b p-0 text-right group-hover:bg-secondary">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -586,5 +566,43 @@ function KpiMatrix() {
         </div>
       )}
     </div>
+  );
+}
+
+type ThCtx = { sort: { c: string; d: 1 | -1 }; setSort: Dispatch<SetStateAction<{ c: string; d: 1 | -1 }>>; fits: boolean };
+
+// Column hover goes through the table's data-hover attribute and a CSS rule, not React state, so hovering
+// a head neither re-renders the matrix (771 ms at All companies) nor remounts the focused head button.
+const hoverOn = (c: string) => (e: React.MouseEvent<HTMLElement>) => {
+  const t = e.currentTarget.closest("table");
+  if (t) t.dataset.hover = c;
+};
+const hoverOff = (e: React.MouseEvent<HTMLElement>) => {
+  const t = e.currentTarget.closest("table");
+  if (t) delete t.dataset.hover;
+};
+
+function KpiTh({ ctx, c, children, title, className, sub }: { ctx: ThCtx; c: string; children: React.ReactNode; title?: string; className?: string; sub?: React.ReactNode }) {
+  const { sort, setSort, fits } = ctx;
+  return (
+    <th
+      scope="col"
+      data-col={c}
+      aria-sort={sort.c === c ? (sort.d === 1 ? "ascending" : "descending") : "none"}
+      onMouseEnter={hoverOn(c)}
+      onMouseLeave={hoverOff}
+      className={cn("border-b bg-card px-3 py-1.5 text-right align-bottom", fits && `sticky ${STICKY} z-20`, className)}
+    >
+      <button
+        type="button"
+        title={title}
+        onClick={() => setSort((s) => ({ c, d: s.c === c ? (-s.d as 1 | -1) : c === "t" ? 1 : -1 }))}
+        className={cn("ml-auto flex max-w-36 items-end justify-end gap-1 rounded-sm text-right text-[11px] font-medium leading-4 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort.c === c ? "text-foreground" : "text-muted-foreground")}
+      >
+        <span className="whitespace-normal">{children}</span>
+        {sort.c === c && (sort.d === 1 ? <ArrowUp className="mb-0.5 size-3 shrink-0" /> : <ArrowDown className="mb-0.5 size-3 shrink-0" />)}
+      </button>
+      {sub && <span className="mt-0.5 block whitespace-nowrap text-[10px] font-normal leading-3 text-muted-foreground">{sub}</span>}
+    </th>
   );
 }

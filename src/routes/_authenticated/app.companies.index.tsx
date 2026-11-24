@@ -156,19 +156,7 @@ function Companies() {
   const head = cn("border-b bg-card", fits && `sticky ${STICKY} z-20`);
   const toggleSort = (k: SortKey, first: 1 | -1 = -1) => setSort((s) => ({ key: k, dir: s.key === k ? (-s.dir as 1 | -1) : first }));
   const filtersOn = q || sector !== "All" || group !== "All" || following;
-  const SortHead = ({ k, children, title, className, first }: { k: SortKey; children: React.ReactNode; title?: string; className?: string; first?: 1 | -1 }) => (
-    <th scope="col" aria-sort={sort.key === k ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn(head, "px-2 py-1.5 align-bottom", className)}>
-      <button
-        type="button"
-        title={title}
-        onClick={() => toggleSort(k, first)}
-        className={cn("inline-flex items-center gap-1 rounded-sm text-[11px] font-medium leading-4 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort.key === k ? "text-foreground" : "text-muted-foreground")}
-      >
-        {children}
-        {sort.key === k && (sort.dir === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
-      </button>
-    </th>
-  );
+  const shCtx: SortCtx = { sort, head, toggleSort };
 
   return (
     <div>
@@ -255,14 +243,14 @@ function Companies() {
                 <th scope="col" className={cn(head, "px-0 py-1.5")}>
                   <span className="sr-only">Follow</span>
                 </th>
-                <SortHead k="ticker" first={1} className={cn("left-0 z-30 border-r px-3 text-left", !fits && "sticky")}>
+                <SortHead ctx={shCtx} k="ticker" first={1} className={cn("left-0 z-30 border-r px-3 text-left", !fits && "sticky")}>
                   Company
                 </SortHead>
-                <SortHead k="sector" first={1} className="text-left" title="Industry group; sector on hover. Sorts by sector, then group">
+                <SortHead ctx={shCtx} k="sector" first={1} className="text-left" title="Industry group; sector on hover. Sorts by sector, then group">
                   Group
                 </SortHead>
                 {COLS.map((c) => (
-                  <SortHead key={c.k} k={c.k} title={c.title} first={c.first} className={c.k === "filed" ? "text-left" : "text-right"}>
+                  <SortHead ctx={shCtx} key={c.k} k={c.k} title={c.title} first={c.first} className={c.k === "filed" ? "text-left" : "text-right"}>
                     {c.l}
                   </SortHead>
                 ))}
@@ -364,3 +352,23 @@ const CompanyRow = memo(function CompanyRow({ r, sticky, sortKey, followed, pend
     </tr>
   );
 });
+
+type SortCtx = { sort: { key: SortKey; dir: 1 | -1 }; head: string; toggleSort: (k: SortKey, first?: 1 | -1) => void };
+
+// A module-level component, so sorting re-renders the head button instead of remounting it (focus stays on it).
+function SortHead({ ctx, k, children, title, className, first }: { ctx: SortCtx; k: SortKey; children: React.ReactNode; title?: string; className?: string; first?: 1 | -1 }) {
+  const { sort, head, toggleSort } = ctx;
+  return (
+    <th scope="col" aria-sort={sort.key === k ? (sort.dir === 1 ? "ascending" : "descending") : "none"} className={cn(head, "px-2 py-1.5 align-bottom", className)}>
+      <button
+        type="button"
+        title={title}
+        onClick={() => toggleSort(k, first)}
+        className={cn("inline-flex items-center gap-1 rounded-sm text-[11px] font-medium leading-4 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort.key === k ? "text-foreground" : "text-muted-foreground")}
+      >
+        {children}
+        {sort.key === k && (sort.dir === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
+      </button>
+    </th>
+  );
+}
