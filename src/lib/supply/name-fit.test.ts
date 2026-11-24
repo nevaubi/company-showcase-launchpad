@@ -156,10 +156,33 @@ describe("boxLabel (chain boxes, 107 px wide at 1440 in the kit)", () => {
     }
   });
   it("cuts a name too long even for three lines after a whole word, and never inside one", () => {
-    const f = boxLabel("Taiwan Semiconductor Manufacturing", "TSM", room);
+    const f = boxLabel("Empresa Brasileira de Correios e Telegrafos", null, room);
     expect(f.cut).toBe(true);
     expect(f.lines[f.lines.length - 1].endsWith("…")).toBe(true);
-    const kept = f.lines.join(" ").slice(0, -1);
-    expect(["Taiwan", "Taiwan Semiconductor", "TSM"]).toContain(kept === "TS" ? "TSM" : kept);
+    const kept = f.lines.join(" ").slice(0, -1).trim();
+    expect("Empresa Brasileira de Correios e Telegrafos".startsWith(kept + " ")).toBe(true);
+  });
+  it("sets a name with a long word smaller rather than dropping the word", () => {
+    // "Semiconductor" is wider than the box at 11 and 10 px; at 9 px the whole name fits on three lines
+    expect(boxLabel("Taiwan Semiconductor Manufacturing", "TSM", room)).toEqual({
+      lines: ["Taiwan", "Semiconductor", "Manufacturing"],
+      px: 9,
+      ticker: false,
+      cut: false,
+    });
+  });
+  it("shows the ticker rather than the first word alone when a name cannot keep more", () => {
+    // in a box too narrow for "Semiconductor" at any size the name would read "Taiwan…"
+    const narrow = 56;
+    expect(boxLabel("Taiwan Semiconductor Manufacturing", "TSM", narrow)).toEqual({
+      lines: ["TSM"],
+      px: 12,
+      ticker: false,
+      cut: true,
+    });
+    // with no ticker the first word and an ellipsis is all there is
+    expect(boxLabel("Taiwan Semiconductor Manufacturing", null, narrow).lines.join(" ")).toBe(
+      "Taiwan…",
+    );
   });
 });

@@ -80,8 +80,8 @@ export function fitLines(text: string, width: number, maxLines: number, px: numb
   return { lines, cut: true, wordTooLong };
 }
 
-/** Font sizes a chain box tries for a name on more than one line, largest first, so a long single word ("NBCUniversal") is set smaller rather than broken. */
-export const BOX_SIZES = [11, 10] as const;
+/** Font sizes a chain box tries for a name on more than one line, largest first, so a long single word ("NBCUniversal", "Semiconductor") is set smaller rather than broken or dropped. */
+export const BOX_SIZES = [11, 10, 9] as const;
 /** Chain box text room: the box less its padding (4 + 4), the 20 px logo and its 4 px gap, the border, and the lock mark with its gap when shown. */
 export const boxTextWidth = (w: number, lock: boolean) => w - 34 - (lock ? 16 : 0);
 
@@ -98,6 +98,13 @@ export function boxLabel(name: string, ticker: string | null | undefined, width:
   const f = fitBox(name, width, 3);
   /* a name whose first word cannot be shown whole at any size is replaced by its ticker rather than broken inside a word */
   if (ticker && f.cut && f.lines.length === 1 && !f.lines[0].slice(0, -1).includes(" ") && !name.startsWith(f.lines[0].slice(0, -1) + " ") && f.lines[0].slice(0, -1) !== name.split(/\s+/)[0]) return { lines: [ticker], px: 12, ticker: false, cut: true };
+  /* a cut that keeps only the first word of a longer name ("Taiwan…" for Taiwan Semiconductor Manufacturing) says less than
+     the ticker does: the box shows the ticker, and the title and the spoken label keep the whole name */
+  if (ticker && f.cut) {
+    const kept = f.lines.join(" ").replace(/…$/, "").trim().split(/\s+/).filter(Boolean).length;
+    if (kept <= 1 && name.trim().split(/\s+/).length >= 2)
+      return { lines: [ticker], px: 12, ticker: false, cut: true };
+  }
   return { lines: f.lines, px: f.px, ticker: false, cut: f.cut };
 }
 
