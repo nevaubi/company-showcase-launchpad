@@ -1,84 +1,105 @@
 import { describe, expect, it } from "vitest";
-import { countVerdict, eventWindows, median, poissonLower, poissonUpper, revenueNear, seriesVerdict, trailingTwelveMonths, trailingYear, yearOnYear } from "./derive";
+import { binomialUpper, median, pLabel, quarterOnly, rangeVerdict, revenueNear, riseVerdict, trailingTwelveMonths, yearOnYear } from "./derive";
 
-describe("poisson tails", () => {
-  it("matches hand-computed values", () => {
-    // P(X ≥ 3 | 1) = 1 − e^-1 (1 + 1 + 1/2) = 0.0803
-    expect(poissonUpper(3, 1)).toBeCloseTo(0.0803, 4);
-    // P(X ≤ 0 | 4) = e^-4 = 0.0183
-    expect(poissonLower(0, 4)).toBeCloseTo(0.0183, 4);
-    expect(poissonUpper(0, 3)).toBe(1);
+describe("binomialUpper", () => {
+  it("matches hand-computed tails", () => {
+    // 1,0,1,0 then 4: T = 6 over 5 windows; P(X ≥ 4) = 15·.2⁴·.8² + 6·.2⁵·.8 + .2⁶
+    expect(binomialUpper(4, 6, 0.2)).toBeCloseTo(0.01696, 5);
+    // 3,3,0,0 then 6: T = 12
+    expect(binomialUpper(6, 12, 0.2)).toBeCloseTo(0.019405, 5);
+    expect(binomialUpper(0, 5, 0.3)).toBe(1);
+    expect(binomialUpper(6, 5, 0.3)).toBe(0);
+  });
+  it("stays finite for large totals", () => {
+    const p = binomialUpper(400, 2000, 0.1);
+    expect(p).toBeGreaterThan(0);
+    expect(p).toBeLessThan(1e-20);
   });
 });
 
-describe("countVerdict (event windows)", () => {
-  it("does not flag a flat series", () => {
-    expect(countVerdict([5, 5, 5, 5, 5, 5, 5, 5, 5]).status).toBe("normal");
+describe("riseVerdict (conditional test on whole windows)", () => {
+  it("leaves a flat series alone", () => {
+    expect(riseVerdict([5, 5, 5, 5, 5, 5, 5, 5, 5]).status).toBe("normal");
   });
-  it("does not flag a steady upward trend", () => {
-    // λ = 4.5 over the prior eight, P(X ≥ 9 | 4.5) = 0.040 > 0.005
-    const v = countVerdict([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-    expect(v.baseline).toBeCloseTo(4.5, 6);
-    expect(v.p).toBeCloseTo(0.04, 2);
+  it("does not flag a steady trend (9 after 1..8: p = 0.057)", () => {
+    const v = riseVerdict([1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(v.status).toBe("normal");
+    expect(v.p).toBeCloseTo(0.0567, 3);
   });
-  it("flags a jump far above a stable history", () => {
-    // λ = 2, P(X ≥ 12 | 2) ≈ 2.2e-6, z = (12 − 2)/max(0, √2, 1) = 7.07
-    const v = countVerdict([2, 2, 2, 2, 2, 2, 2, 2, 12]);
-    expect(v.status).toBe("spike");
-    expect(v.p).toBeLessThan(1e-5);
-    expect(v.z).toBeCloseTo(7.07, 2);
+  it("flags a jump far above every earlier window", () => {
+    const v = riseVerdict([2, 2, 2, 2, 2, 2, 2, 2, 12]);
+    expect(v.status).toBe("rise");
+    expect(v.p).toBeCloseTo(1.926e-5, 7);
+    expect([v.mean, v.max, v.prior]).toEqual([2, 2, 8]);
   });
-  it("treats a source that only started covering the company as new, not unusual", () => {
-    expect(countVerdict([0, 0, 0, 0, 0, 0, 0, 0, 34]).status).toBe("new");
+  it("treats the rate as estimated: 4 after 1,0,1,0 is not unusual (exact p = 0.017; a known-rate Poisson tail said 0.0018)", () => {
+    expect(riseVerdict([1, 0, 1, 0, 4]).status).toBe("normal");
   });
-  it("needs four windows of history", () => {
-    expect(countVerdict([0, 0, 0, 0, 0, 1, 1, 1, 9]).status).toBe("short");
-    expect(countVerdict([0, 0, 0, 0, 1, 1, 1, 1, 9]).status).toBe("spike");
+  it("needs a year of whole windows before the latest", () => {
+    expect(riseVerdict([0, 0, 0, 30]).status).toBe("short");
+    expect(riseVerdict([0, 0, 0, 0, 30]).status).toBe("rise");
   });
-  it("does not mistake a lumpy history for a quiet one", () => {
-    // λ = 5.25 but sd ≈ 6.4, so 14 is z ≈ 1.4: normal
-    expect(countVerdict([0, 15, 0, 12, 0, 14, 1, 0, 14]).status).toBe("normal");
+  it("is not beaten by one old burst: the latest must top every earlier window", () => {
+    expect(riseVerdict([0, 15, 0, 12, 0, 14, 1, 0, 14]).status).toBe("normal");
   });
-  it("flags a collapse from a busy rate", () => {
-    expect(countVerdict([9, 8, 10, 9, 11, 8, 10, 9, 0]).status).toBe("drop");
+  it("needs at least three units in the latest window", () => {
+    expect(riseVerdict([0, 0, 0, 0, 0, 0, 0, 0, 2]).status).toBe("normal");
   });
-  it("honours a shorter baseline", () => {
-    expect(countVerdict([30, 30, 1, 1, 1, 1, 1, 1, 8], { maxPrior: 5 }).baseline).toBe(1);
+  it("never flags a fall", () => {
+    expect(riseVerdict([9, 8, 10, 9, 11, 8, 10, 9, 0]).status).toBe("normal");
   });
-});
-
-describe("seriesVerdict (modified z)", () => {
-  it("does not flag a flat series", () => {
-    expect(seriesVerdict(Array(13).fill(1000), { log: true }).status).toBe("normal");
-  });
-  it("does not flag a steady 3% monthly climb", () => {
-    const xs = Array.from({ length: 13 }, (_, i) => 1000 * 1.03 ** i);
-    expect(seriesVerdict(xs, { log: true }).status).toBe("normal");
-  });
-  it("flags a reading many MADs above the median", () => {
-    const xs = [100, 110, 95, 105, 100, 98, 102, 107, 99, 101, 103, 97, 600];
-    const v = seriesVerdict(xs, { log: true });
-    expect(v.status).toBe("spike");
-    expect(v.median).toBe(100.5); // sorted prior: …100, 100, 101, 102…
-  });
-  it("needs eight earlier readings", () => {
-    expect(seriesVerdict([1, 2, 3, 4, 5, 6, 7, 900]).status).toBe("short");
-  });
-  it("works on a rate's own scale with a floor", () => {
-    const nco = [0.4, 0.42, 0.41, 0.43, 0.4, 0.41, 0.42, 0.4, 1.4];
-    expect(seriesVerdict(nco, { floor: 0.02 }).status).toBe("spike");
+  it("labels p without false precision", () => {
+    expect(pLabel(1.9e-5)).toBe("p < 0.0001");
+    expect(pLabel(0.00062)).toBe("p = 0.0006");
   });
 });
 
-describe("windows and trends", () => {
-  it("counts records per 90-day window back from today", () => {
-    expect(eventWindows(["2026-11-20", "2026-08-01", "2026-08-20", null, "2027-01-01"], "2026-11-23", 3)).toEqual([0, 2, 1]);
+describe("rangeVerdict (a reading against its own range)", () => {
+  const months = (vals: number[], from = 2024) => vals.map((value, i) => ({ date: `${from + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}-01`, value }));
+  const rule = { days: 735, minPrior: 24, factor: 1.5, minLevel: 10_000, sides: "both" as const };
+  it("flags a month at least 1.5× the highest of the prior 24", () => {
+    const v = rangeVerdict(months([...Array(24).fill(20_000).map((x, i) => x + i * 100), 40_000]), rule);
+    expect(v.status).toBe("above");
+    expect(v.hi!.value).toBe(22_300);
+    expect(v.ratio).toBeCloseTo(40_000 / 22_300, 6);
   });
-  it("compares the trailing year with the year before", () => {
-    const t = trailingYear([{ date: "2026-10-01", value: 5 }, { date: "2026-01-01", value: 3 }, { date: "2025-06-01", value: 4 }], "2026-11-23");
-    expect([t.count, t.prevCount, t.sum, t.prevSum, t.change]).toEqual([2, 1, 8, 4, 1]);
+  it("leaves a new high below the factor alone", () => {
+    expect(rangeVerdict(months([...Array(24).fill(20_000), 29_000]), rule).status).toBe("normal");
   });
+  it("leaves a steady trend alone", () => {
+    expect(rangeVerdict(months(Array.from({ length: 25 }, (_, i) => 20_000 * 1.02 ** i)), rule).status).toBe("normal");
+  });
+  it("flags a fall below the lowest ÷ factor on two-sided rules", () => {
+    expect(rangeVerdict(months([...Array(24).fill(20_000), 12_000]), rule).status).toBe("below");
+  });
+  it("needs the full span of earlier readings", () => {
+    expect(rangeVerdict(months([...Array(12).fill(20_000), 90_000]), rule).status).toBe("short");
+  });
+  it("skips series under the level floor", () => {
+    expect(rangeVerdict(months([...Array(24).fill(500), 5_000]), rule).status).toBe("normal");
+  });
+  it("needs an absolute move for rates", () => {
+    const q = ["2022", "2023", "2024", "2025"].flatMap((y) => ["03-31", "06-30", "09-30", "12-31"].map((d) => `${y}-${d}`)).map((date) => ({ date, value: 0.02 }));
+    const r2 = { days: 1840, minPrior: 16, factor: 2, minBeyond: 0.1, sides: "up" as const };
+    expect(rangeVerdict([...q, { date: "2026-03-31", value: 0.06 }], r2).status).toBe("normal");
+    expect(rangeVerdict([...q, { date: "2026-03-31", value: 0.4 }], r2).status).toBe("above");
+  });
+});
+
+describe("quarterOnly", () => {
+  it("turns year-to-date annualised rates into single quarters", () => {
+    const q = quarterOnly([
+      { date: "2026-03-31", value: 2.0 },
+      { date: "2026-06-30", value: 1.1 },
+      { date: "2026-09-30", value: 0.8 },
+      { date: "2025-12-31", value: 0.5 },
+    ]);
+    // Q2 = 2·1.1 − 1·2.0 = 0.2; Q3 = 3·0.8 − 2·1.1 = 0.2; 2025-Q4 needs 2025-Q3, which is not on file
+    expect(q.map((x) => [x.date, Number(x.value.toFixed(6))])).toEqual([["2026-03-31", 2], ["2026-06-30", 0.2], ["2026-09-30", 0.2]]);
+  });
+});
+
+describe("periods", () => {
   it("compares full years and keeps a partial year apart", () => {
     const rows = [
       { date: "2024-09-30", value: 100, meta: { fiscal_year: 2024 } },
@@ -90,7 +111,7 @@ describe("windows and trends", () => {
     expect(y.latest.value).toBe(150);
     expect(y.prior!.value).toBe(100);
     expect(y.change).toBe(0.5);
-    expect(y.partial!.value).toBe(120);
+    expect(y.partials.map((r) => r.value)).toEqual([120]);
   });
   it("compares quarters with the same quarter a year earlier", () => {
     const rows = ["2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31", "2026-03-31", "2026-06-30"].map((date, i) => ({ date, value: 10 + i }));

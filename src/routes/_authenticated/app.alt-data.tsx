@@ -42,8 +42,8 @@ function AltHub() {
       </div>
       <div data-section="Unusual now" className="min-w-0"><UnusualNow theme={theme} find={find} /></div>
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <div data-section="Leaderboard" className="min-w-0"><Leaders theme={theme} /></div>
-        <div data-section="Material filings" className="min-w-0"><MaterialFilings find={find} /></div>
+        <div data-section="Leaderboard" className="min-w-0"><Leaders theme={theme} find={find} /></div>
+        <div data-section="Material filings" className="min-w-0"><MaterialFilings theme={theme} find={find} /></div>
       </div>
       <div data-section="Datasets" className="min-w-0"><Catalogue theme={theme} selected={dataset} onSelect={(x) => navigate({ search: { d: x === dataset ? undefined : x }, resetScroll: false, replace: true })} /></div>
       {dataset && <div data-section="Dataset records" className="min-w-0"><DatasetFeed dataset={dataset} /></div>}

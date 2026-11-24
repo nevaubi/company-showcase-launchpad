@@ -14,11 +14,14 @@ import { MedicareByState } from "@/components/alt/medicare-by-state";
 import { PlantsTri } from "@/components/alt/plants-tri";
 import { CompanyPlantHazards } from "@/components/alt/plant-hazards";
 import { fmtAlt, fmtChange, fmtDay } from "@/lib/alt/catalog";
-import { BANK_RISK, buildCompanyAlt, type CompanyAlt, type DatasetView, type Figure, type Flag } from "@/lib/alt/company";
+import { BANK_RISK, bpChange, buildCompanyAlt, type CompanyAlt, type DatasetView, type Figure, type Flag } from "@/lib/alt/company";
 import { revenuePoints, yearOnYear } from "@/lib/alt/derive";
 import { altCompanyQuery, type AltRow } from "@/lib/alt/query";
 import { useCompany } from "@/lib/data";
 import { cn } from "@/lib/utils";
+
+/** In-page id of a dataset's panel (theme sections own the `alt-<theme>` ids). */
+const panelId = (dataset: string) => `alt-ds-${dataset}`;
 
 /** Section names kept from the previous layout so the assistant's anchors still resolve. */
 const SECTION_NAME: Record<string, string> = { medicare: "Medicare drugs", medicare_states: "Medicare drugs by state", tri: "Plants", deposits: "Deposits by state" };
@@ -82,7 +85,7 @@ function Figures({ ticker, figures }: { ticker: string; figures: Figure[] }) {
             {f.sub && <span className={cn("num block truncate text-[11px]", f.tone === "positive" ? "text-positive" : f.tone === "negative" ? "text-negative" : "text-muted-foreground")} title={f.sub}>{f.sub}</span>}
           </>
         );
-        const cls = cn("min-w-0 px-3.5 py-2 text-left", i % 2 === 1 && "sm:border-l", i > 0 && "border-t sm:border-t-0", i > 1 && "sm:border-t");
+        const cls = cn("flex min-w-0 flex-col justify-start px-3.5 py-2 text-left", i % 2 === 1 && "sm:border-l", i > 0 && "border-t sm:border-t-0", i > 1 && "sm:border-t");
         return t ? (
           <button key={f.label} type="button" onClick={() => open(t)} title={`Source: ${f.label}`} className={cn(cls, "transition-colors duration-150 hover:bg-secondary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>{body}</button>
         ) : (
@@ -92,6 +95,9 @@ function Figures({ ticker, figures }: { ticker: string; figures: Figure[] }) {
     </div>
   );
 }
+
+/** The badge a flagged dataset carries: what the rule found, in its own words. */
+export const flagBadge = (f: Flag) => (f.kind === "rise" ? "Unusual rise" : f.direction === "up" ? "Above its range" : "Below its range");
 
 function FlagLine({ flag, ticker, label }: { flag: Flag; ticker: string; label?: string }) {
   const up = flag.direction === "up";
@@ -125,7 +131,7 @@ function BankTable({ ticker, view }: { ticker: string; view: DatasetView }) {
             const s = view.rows.filter((x) => x.title === r.title && x.value != null && x.date).sort((a, b) => a.date!.localeCompare(b.date!));
             const y = yearOnYear(s, today);
             const isRate = r.unit === "%";
-            const delta = y?.prior ? (isRate ? `${y.latest.value! - y.prior.value! >= 0 ? "+" : "−"}${Math.abs(Math.round((y.latest.value! - y.prior.value!) * 100))} bp` : fmtChange(y.change)) : "–";
+            const delta = y?.prior ? (isRate ? bpChange(y.latest.value! - y.prior.value!) : fmtChange(y.change)) : "–";
             const risk = BANK_RISK.includes(r.title);
             const up = y?.prior ? y.latest.value! > y.prior.value! : null;
             return (
@@ -156,15 +162,16 @@ function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetVie
   const name = SECTION_NAME[view.dataset] ?? view.label;
   const series = view.dataset === "settlement" || view.dataset === "attention" || view.dataset === "complaints";
   return (
-    <div data-section={name} id={`alt-${view.dataset}`} className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]", (WIDE.has(view.dataset) || span) && "xl:col-span-2")}>
+    <div data-section={name} id={panelId(view.dataset)} className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]", (WIDE.has(view.dataset) || span) && "xl:col-span-2")}>
       <Panel
         collapse={false}
         className="h-full rounded-md border bg-card shadow-paper"
         bodyClassName="p-0"
-        title={<span className="flex items-center gap-2">{view.label}{view.flag && <span className={cn("rounded-[3px] px-1.5 text-[10px] font-medium leading-4", view.flag.direction === "up" ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground")}>{view.flag.direction === "up" ? "Unusually high" : "Unusually low"}</span>}</span>}
+        title={<span className="flex items-center gap-2">{view.label}{view.flag && <span className={cn("rounded-[3px] px-1.5 text-[10px] font-medium leading-4", view.flag.direction === "up" ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground")}>{flagBadge(view.flag)}</span>}</span>}
         subtitle={`${view.source} · latest ${fmtDay(view.latest)} · ${view.count.toLocaleString("en-US")} records`}
       >
         {!OWN_STATS.has(view.dataset) && <Figures ticker={ticker} figures={view.figures} />}
+        {view.coverage && <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">{view.coverage}</p>}
         {view.flag && <div className="border-b"><FlagLine flag={view.flag} ticker={ticker} /></div>}
         {view.chart && view.chart.points.length > 1 && (
           <div className="border-b px-3.5 pb-1 pt-2">
@@ -186,7 +193,7 @@ function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetVie
 function Summary({ ticker, alt }: { ticker: string; alt: CompanyAlt }) {
   const label = (d: string) => alt.views.find((v) => v.dataset === d)?.label ?? d;
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       <div data-section="What changed" className="min-w-0 rounded-md border bg-card shadow-paper">
         <header className="border-b px-3.5 py-2">
           <h2 className="text-[14px] font-semibold">What changed</h2>
@@ -206,7 +213,7 @@ function Summary({ ticker, alt }: { ticker: string; alt: CompanyAlt }) {
             {alt.themes.flatMap((t) => t.views.map((v, i) => (
               <tr key={v.dataset} className={cn("h-7", i === 0 ? "border-t first:border-t-0" : "")}>
                 <td className="w-[34%] truncate pl-3.5 text-[11px] text-muted-foreground" title={t.label}>{i === 0 ? t.short : ""}</td>
-                <td className="truncate"><SectionLink to={`alt-${v.dataset}`} className="hover:underline">{v.label}</SectionLink>{v.flag && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" aria-label="unusual" />}</td>
+                <td className="truncate"><SectionLink to={panelId(v.dataset)} className="hover:underline">{v.label}</SectionLink>{v.flag && <span className="ml-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" aria-label="unusual" />}</td>
                 <td className="num pr-3.5 text-right text-[11px] text-muted-foreground">{fmtDay(v.latest)}</td>
               </tr>
             )))}
@@ -236,14 +243,32 @@ export function AltCompanyTab({ ticker }: { ticker: string }) {
       {alt.themes.map((t) => (
         <section key={t.id} id={t.anchor} data-section={t.label} className="min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]">
           <h2 className="mb-3 text-[14px] font-semibold">{t.label}</h2>
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            {t.views.map((v, i) => {
-              // a lone half-width panel at the end of a theme takes the full row instead of leaving a hole
-              const half = t.views.filter((x) => !WIDE.has(x.dataset));
-              const span = !WIDE.has(v.dataset) && half.length % 2 === 1 && half[half.length - 1] === v;
-              return <DatasetPanel key={v.dataset} ticker={ticker} view={v} span={span && i >= 0} />;
-            })}
-          </div>
+          {(() => {
+            const active = t.views.filter((v) => !v.quiet);
+            const quiet = t.views.filter((v) => v.quiet);
+            // a lone half-width panel at the end of a theme takes the full row instead of leaving a hole
+            const half = active.filter((x) => !WIDE.has(x.dataset));
+            return (
+              <>
+                {active.length > 0 && (
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                    {active.map((v) => <DatasetPanel key={v.dataset} ticker={ticker} view={v} span={!WIDE.has(v.dataset) && half.length % 2 === 1 && half[half.length - 1] === v} />)}
+                  </div>
+                )}
+                {quiet.length > 0 && (
+                  <ul className={cn("rounded-md border bg-card text-[13px] shadow-paper", active.length > 0 && "mt-3")}>
+                    {quiet.map((v) => (
+                      <li key={v.dataset} id={panelId(v.dataset)} data-section={SECTION_NAME[v.dataset] ?? v.label} className="flex min-h-7 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)] flex-wrap items-center gap-x-2 border-b px-3.5 py-1 last:border-0">
+                        <span className="font-medium">{v.label}</span>
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{v.quiet}</span>
+                        <span className="num text-[11px] text-muted-foreground">{v.count.toLocaleString("en-US")} records · newest {fmtDay(v.latest)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
+            );
+          })()}
         </section>
       ))}
     </div>
