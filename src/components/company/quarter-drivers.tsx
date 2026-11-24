@@ -88,15 +88,24 @@ function DriverCard({ ticker, w, st }: { ticker: string; w: Why; st: Statement }
   );
 }
 
-/** `cards` are the result of `whyCards(data)`: the page computes them once to know whether the section exists. */
-export function QuarterDrivers({ ticker, data, cards }: { ticker: string; data: CompanyDataset; cards: Why[] }) {
+/**
+ * `cards` are the result of `viewDrivers` (the page computes them once to know whether the section exists). The
+ * title names the quarter explained; when the statements above run to a newer quarter (`newer`, read at view time
+ * without the detail a split needs), the subtitle says so (in the subtitle, so the section does not grow when the read lands).
+ */
+export function QuarterDrivers({ ticker, data, cards, newer }: { ticker: string; data: CompanyDataset; cards: Why[]; newer?: string | null }) {
   if (!cards.length) return null;
   const q = data.statements.quarterly;
+  const period = cards[0].metric.period;
   return (
     <IrPanel
       section="Why it moved"
-      title="Latest quarter: what moved"
-      subtitle={`${cards[0].metric.period} against the same quarter a year earlier · computed from the filings, no model`}
+      title={`${period}: what moved`}
+      subtitle={
+        newer
+          ? `${period} against the same quarter a year earlier. ${newer} was read at view time without the detail a split needs, so this explains ${period}.`
+          : `${period} against the same quarter a year earlier · computed from the filings, no model`
+      }
       bodyClassName="p-0"
     >
       <div className={cn("grid grid-cols-1 divide-y divide-border/60 lg:divide-x lg:divide-y-0", cards.length >= 3 ? "lg:grid-cols-3" : cards.length === 2 ? "lg:grid-cols-2" : "")}>

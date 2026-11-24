@@ -1,7 +1,8 @@
 // The Overview's financial analysis: headline levels, a rule-based read, and the tables of computed measures.
 // Everything is arithmetic on the statements (src/lib/company/analysis.ts) and fixed rules over the result
 // (src/lib/company/read.ts); no model writes any of it. Every number opens the filed figures behind it.
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Link } from "@tanstack/react-router";
 import { HoldHeight } from "@/components/company/hold-height";
 import { IrPanel } from "@/components/ir/panel";
@@ -145,7 +146,7 @@ function MeasureRow({ ticker, a, m, shared }: { ticker: string; a: FinancialAnal
   const points = [...m.history.map((h) => ({ label: h.label, value: h.fig?.v ?? null, text: h.fig ? fmtWithUnit(h.fig.v, m.unit) : undefined })), ...(m.now && a.basis === "ttm" && m.history.length ? [{ label: m.now.period, value: m.now.v, text: fmtWithUnit(m.now.v, m.unit) }] : [])];
   return (
     <tr data-measure={m.key} className="border-t border-border/60 transition-colors duration-150 hover:bg-secondary/60 motion-reduce:transition-none">
-      <th scope="row" className="truncate py-1 pl-4 pr-2 text-left align-top font-normal" title={[m.label, !shared ? unitLabel(m.unit, scale) : null, period].filter(Boolean).join(", ")}>
+      <th scope="row" className="break-words py-1 pl-4 pr-2 text-left align-top font-normal" title={[m.label, !shared ? unitLabel(m.unit, scale) : null, period].filter(Boolean).join(", ")}>
         <span>{tableLabel(m.key, m.label)}</span>
         {!shared && <span className={IR.caption}>, {rowUnitLabel(m.unit, scale)}</span>}
         {period && <span className={IR.caption}>*</span>}
@@ -201,7 +202,7 @@ function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; 
   return (
     <div data-group={g.id} className="mb-4 break-inside-avoid">
     <table className={cn("w-full table-fixed", IR.row)}>
-      {/* the fiscal-years spark gives way while two tables sit side by side under 1400 px, so the labels keep one line */}
+      {/* the fiscal-years spark gives way while two tables sit side by side under 1400 px, so the labels keep their width; a label that still does not fit wraps */}
       <colgroup>
         <col />
         <col className="w-16" />
@@ -212,18 +213,23 @@ function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; 
       </colgroup>
       <thead>
         <tr className={IR.caption}>
-          <th scope="col" className="truncate px-4 pb-1 pt-2 text-left font-normal">
+          {/* the group name wraps rather than being cut, and the period of the starred rows has its own line */}
+          <th scope="col" className="break-words px-4 pb-1 pt-2 text-left align-bottom font-normal">
             <span className={cn("text-foreground", IR.group)}>{g.title}</span>
             {shared && <span>, {unitLabel(shared)}</span>}
-            {otherPeriod && <span title={`Rows marked * cover ${otherPeriod}, not the table's period`}> · * {otherPeriod}</span>}
+            {otherPeriod && (
+              <span className="block" title={`Rows marked * cover ${otherPeriod}, not the table's period`}>
+                * {otherPeriod}
+              </span>
+            )}
           </th>
-          <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
+          <th scope="col" className="pb-1 pr-3 pt-2 text-right align-bottom font-normal">
             Latest
           </th>
-          <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
+          <th scope="col" className="pb-1 pr-3 pt-2 text-right align-bottom font-normal">
             Year ago
           </th>
-          <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
+          <th scope="col" className="pb-1 pr-3 pt-2 text-right align-bottom font-normal">
             Change
           </th>
           <th scope="col" className="hidden pb-1 pr-3 pt-2 text-right font-normal sm:table-cell" title={`Median of the last ${medianYears || 5} fiscal years that have a figure (a median needs three)`}>
@@ -247,6 +253,9 @@ function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; 
 
 /* ------------------------------------------------------------------ the section */
 
+/** Longest the key figures wait in their skeleton for a newer filing being read at view time. */
+const KEY_FIGURE_WAIT_MS = 2500;
+
 /**
  * `view` is what the page computes from (the statements extended at view time once the newer filing is read,
  * src/lib/company/currency-view.ts); `served` and `filed` feed the one currency line.
@@ -260,6 +269,16 @@ export function FinancialAnalysisSection({ ticker, served, view, filed }: { tick
   const prior = measures.find((m) => m.prior && m.now && m.now.period === a.current)?.prior?.period;
   const widest = measures.reduce<Measure["median"]>((best, m) => (m.median && (!best || m.median.n > best.n) ? m.median : best), null);
   const medianSpan = widest ? `${widest.from} to ${widest.to}` : null;
+  // the key figures stay in their skeleton while a newer filing is read (at most KEY_FIGURE_WAIT_MS), so they do not
+  // change under the reader a second after a cold load
+  const [waited, setWaited] = useState(false);
+  const reading = view.state === "reading";
+  useEffect(() => {
+    if (!reading) return;
+    const id = setTimeout(() => setWaited(true), KEY_FIGURE_WAIT_MS);
+    return () => clearTimeout(id);
+  }, [reading]);
+  const holdFigures = reading && !waited;
   if (!a.current) {
     return (
       <IrPanel section="Financial analysis" title="Financial analysis" subtitle="Computed from the statements">
@@ -286,11 +305,14 @@ export function FinancialAnalysisSection({ ticker, served, view, filed }: { tick
       >
         <StatementCurrency data={served} ticker={ticker} filed={filed} className="border-b px-4 py-2" />
         <NotYetIncluded ticker={ticker} filings={newer} />
-        <StatGrid className={cn("grid-cols-2 sm:grid-cols-3", a.keyFigures.length >= 5 ? "xl:grid-cols-5" : a.keyFigures.length === 4 ? "xl:grid-cols-4" : "")}>
-          {a.keyFigures.map((k) => (
-            <KeyTile key={k.key} ticker={ticker} k={k} />
-          ))}
-        </StatGrid>
+        <div className="relative" aria-busy={holdFigures || undefined}>
+          <StatGrid className={cn("grid-cols-2 sm:grid-cols-3", a.keyFigures.length >= 5 ? "xl:grid-cols-5" : a.keyFigures.length === 4 ? "xl:grid-cols-4" : "", holdFigures && "invisible")}>
+            {a.keyFigures.map((k) => (
+              <KeyTile key={k.key} ticker={ticker} k={k} />
+            ))}
+          </StatGrid>
+          {holdFigures && <Skeleton className="absolute inset-3" aria-label="Reading the newer filing" />}
+        </div>
       </IrPanel>
 
       <IrPanel

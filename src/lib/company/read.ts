@@ -129,7 +129,7 @@ export function financialRead(a: FinancialAnalysis): FinancialRead {
   /* ---- net income against revenue: the same rules for both kinds */
   const ng = get("netIncomeGrowth");
   if (ng?.now) {
-    if (ng.now.v <= R.profitMove.fall) add("profitDown", "concern", 2.5 + Math.min(1, -ng.now.v * 3), ["Net income fell ", n(ng, "now", { abs: true }), ` ${over}`, ...(g?.now ? [" while revenue changed ", n(g, "now")] : []), "."]);
+    if (ng.now.v <= R.profitMove.fall) add("profitDown", "concern", 2.5 + Math.min(1, -ng.now.v * 3), ["Net income fell ", n(ng, "now", { abs: true }), ` ${over}`, ...(g?.now ? [" while revenue ", ...change(g, "now")] : []), "."]);
     else if (g?.now && ng.now.v >= R.profitMove.strong && ng.now.v - g.now.v >= R.profitMove.lead) add("profitLead", "strength", 1.8 + Math.min(1.2, (ng.now.v - g.now.v) * 3), ["Net income grew ", n(ng, "now"), ` ${over}`, ...(g.now.v >= FLAT ? [", faster than revenue at ", n(g, "now")] : [" while revenue ", ...change(g, "now")]), "."]);
   }
 

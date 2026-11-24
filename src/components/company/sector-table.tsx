@@ -6,9 +6,10 @@ import { useQuotes, useUniverse } from "@/lib/data";
 import { coverageOf } from "@/lib/coverage";
 import { METRICS, groupMedians, metricsOf, rankIn, type Metrics } from "@/lib/company/benchmarks";
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
+import { fmtMultiple } from "@/lib/company/analysis-format";
 import { cn } from "@/lib/utils";
 
-const fmt = (v: number | null, kind: "usd" | "x" | "pct") => (v == null ? "–" : kind === "usd" ? fmtCompactUsd(v) : kind === "x" ? `${v.toFixed(1)}×` : fmtPct(v, 1));
+const fmt = (v: number | null, kind: "usd" | "x" | "pct") => (v == null ? "–" : kind === "usd" ? fmtCompactUsd(v) : kind === "x" ? fmtMultiple(v) : fmtPct(v, 1));
 
 /** The most industry members whose prices are requested: enough for a median, never the whole coverage list. */
 const INDUSTRY_CAP = 60;

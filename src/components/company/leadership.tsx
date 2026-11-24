@@ -194,7 +194,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                       <p className="truncate text-[11px] text-muted-foreground">{p.title}</p>
                       <Meta p={p} />
                       {p.committees?.length ? (
-                        <p className="truncate text-[11px] text-muted-foreground">
+                        <p className="text-[11px] leading-4 text-muted-foreground">
                           {p.committees.join(" · ")}
                         </p>
                       ) : null}

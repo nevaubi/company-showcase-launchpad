@@ -85,7 +85,7 @@ function OverviewSkeleton() {
  */
 const SECTIONS = {
   analysis: { id: "ov-analysis", label: "Financials" },
-  drivers: { id: "ov-drivers", label: "Latest quarter" },
+  drivers: { id: "ov-drivers", label: "Quarter drivers" },
   changed: { id: "ov-what-changed", label: "What changed" },
   price: { id: "ov-price", label: "Price" },
   earnings: { id: "ov-earnings", label: "Earnings" },
@@ -127,8 +127,8 @@ function OverviewBody({ ticker, data: served }: { ticker: string; data: CompanyD
   const q = data.statements.quarterly;
   const a = data.statements.annual;
   const p = data.profile;
-  // the served quarter's cards stay when a filing read at view time cannot be explained yet (no segments in a read)
-  const { cards: drivers, data: driverData } = useMemo(() => viewDrivers(served, data), [served, data]);
+  // the newest quarter's cards when they explain anything; the served quarter's otherwise, named as older (`newer`)
+  const { cards: drivers, data: driverData, newer: driversNewer } = useMemo(() => viewDrivers(served, data), [served, data]);
 
   const sections = useMemo(() => Object.values(SECTIONS).filter((s) => s.id !== SECTIONS.drivers.id || drivers.length > 0), [drivers.length]);
   // the pipeline's ranked list when it exists; the dated events otherwise, never both
@@ -147,7 +147,7 @@ function OverviewBody({ ticker, data: served }: { ticker: string; data: CompanyD
       {drivers.length > 0 && (
         <Section id={SECTIONS.drivers.id}>
           <HoldHeight phase={view.state}>
-            <QuarterDrivers ticker={ticker} cards={drivers} data={driverData} />
+            <QuarterDrivers ticker={ticker} cards={drivers} data={driverData} newer={driversNewer} />
           </HoldHeight>
         </Section>
       )}

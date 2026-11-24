@@ -64,24 +64,43 @@ describe("whyCards", () => {
 });
 
 describe("viewDrivers", () => {
-  it("keeps the served quarter's cards when statements read at view time explain fewer figures", () => {
+  it("keeps the served quarter's cards only when the read explains nothing, and names the newer quarter", () => {
     const served = load("JPM");
     const served_ = whyCards(served);
     expect(served_.length).toBeGreaterThan(0);
-    // a read brings statement lines without their segment breakdown, so revenue can no longer be split
-    const read: CompanyDataset = { ...served, segments: [] };
-    expect(whyCards(read).length).toBeLessThan(served_.length);
+    // a read that adds a newer quarter whose lines cannot be split: nothing explains it
+    const q = served.statements.quarterly;
+    const newer = { ...q.income.periods.at(-1)!, label: "Q9 FY99", end: "2099-12-31" };
+    const read: CompanyDataset = {
+      ...served,
+      segments: [],
+      statements: { ...served.statements, quarterly: { ...q, income: { ...q.income, periods: [...q.income.periods, newer], rows: [] }, cashflow: { ...q.cashflow, rows: [] } } },
+    };
+    expect(whyCards(read)).toHaveLength(0);
     const v = viewDrivers(served, read);
     expect(v.data).toBe(served);
     expect(v.cards.map((c) => [c.id, c.metric.period])).toEqual(served_.map((c) => [c.id, c.metric.period]));
+    expect(v.period).toBe(served_[0].metric.period);
+    expect(v.newer).toBe("Q9 FY99");
   });
 
-  it("uses the current statements when they explain as much, and the served ones when nothing was read", () => {
+  it("prefers the newer quarter's cards when they explain at least one figure, even fewer of them", () => {
     const served = load("AAPL");
-    expect(viewDrivers(served, served).data).toBe(served);
-    const copy: CompanyDataset = { ...served };
-    const v = viewDrivers(served, copy);
-    expect(v.data).toBe(copy);
-    expect(v.cards.length).toBe(whyCards(served).length);
+    const read: CompanyDataset = { ...served, segments: [] };
+    const now = whyCards(read);
+    expect(now.length).toBeGreaterThan(0);
+    expect(now.length).toBeLessThan(whyCards(served).length);
+    const v = viewDrivers(served, read);
+    expect(v.data).toBe(read);
+    expect(v.cards.map((c) => c.id)).toEqual(now.map((c) => c.id));
+    expect(v.newer).toBeNull();
+  });
+
+  it("uses the served statements when nothing was read", () => {
+    const served = load("AAPL");
+    const v = viewDrivers(served, served);
+    expect(v.data).toBe(served);
+    expect(v.newer).toBeNull();
+    expect(v.period).toBe(served.statements.quarterly.income.periods.at(-1)?.label);
   });
 });

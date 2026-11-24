@@ -125,3 +125,9 @@ export function tableLabel(key: string, label: string): string {
 export function rowUnitLabel(unit: MeasureUnit, scale: UsdScale = ""): string {
   return unit === "perShare" ? "$" : unitLabel(unit, scale);
 }
+
+/** A multiple with one decimal and a true minus: "12.3×", "−0.8×" (Peers and industry tables). */
+export function fmtMultiple(v: number): string {
+  const r = Math.abs(v).toFixed(1);
+  return `${v < 0 && Number(r) !== 0 ? "\u2212" : ""}${r}\u00d7`;
+}

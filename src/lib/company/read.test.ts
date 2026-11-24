@@ -275,3 +275,14 @@ describe("fmtFig", () => {
     expect(fmtFig(6.12, "quarters")).toBe("6.1 quarters");
   });
 });
+
+describe("profitDown wording", () => {
+  it("says revenue fell, not changed with a signed figure", () => {
+    const r = co(base({ revenue: step(100, 70), netIncome: step(10, 7) }));
+    const item = r.concerns.find((x) => x.id === "profitDown");
+    expect(item).toBeTruthy();
+    const text = readText(item!);
+    expect(text).toMatch(/while revenue fell \d/);
+    expect(text).not.toMatch(/changed/);
+  });
+});

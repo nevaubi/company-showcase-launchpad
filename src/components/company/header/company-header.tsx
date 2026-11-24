@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { analyticsFile } from "@/lib/analytics-files";
+import { useCompanyDetails } from "@/lib/company/details-query";
 import type { CoverageCompany } from "@/lib/coverage";
 import type { CompanyProfile, Filing } from "@/lib/financials/types";
 import type { HqFile } from "@/lib/supply/geo";
@@ -50,6 +51,8 @@ export function CompanyHeader({
   quoteExchange?: string;
 }) {
   const hq = useQuery(hqQuery);
+  // the IR address of a generated-list profile that lacks one (same query as the About section)
+  const details = useCompanyDetails(ticker, profile);
   return (
     <div data-section="Company header" className="@container/hdr mb-3">
       {/* @min-[56rem]/hdr: past this width the actions sit beside the name; below it they follow the price */}
@@ -91,7 +94,7 @@ export function CompanyHeader({
           profile={profile}
           filings={filings}
           pending={profilePending}
-          irHint={coverage?.ir}
+          irHint={coverage?.ir ?? details.data?.ir}
           price={quote?.price ?? null}
         />
       </div>

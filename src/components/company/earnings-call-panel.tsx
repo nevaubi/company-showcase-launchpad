@@ -65,7 +65,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
           <Skeleton className="h-24" />
           <Skeleton className="h-16" />
           <p className="text-[11px] text-muted-foreground">
-            Reading the call coverage — this takes 20–40 seconds the first time.
+            Reading the call coverage: this takes 20–40 seconds the first time.
           </p>
         </div>
       ) : !b ? (
@@ -131,7 +131,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
               ))}
             </ul>
             <p className="mt-2 text-[11px] text-muted-foreground">
-              AI summary of third-party web sources — verify against the company's filings.
+              AI summary of third-party web sources. Verify against the company's filings.
             </p>
           </div>
         </div>

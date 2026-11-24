@@ -96,3 +96,13 @@ describe("analysis table row labels (review company-L5)", () => {
     expect(tableLabel("grossMargin", "Gross margin")).toBe("Gross margin");
   });
 });
+
+describe("fmtMultiple", () => {
+  it("prints one decimal with a true minus and no negative zero", async () => {
+    const { fmtMultiple } = await import("./analysis-format");
+    expect(fmtMultiple(12.345)).toBe("12.3×");
+    expect(fmtMultiple(-0.8)).toBe("−0.8×");
+    expect(fmtMultiple(-0.04)).toBe("0.0×");
+    expect(fmtMultiple(-0.1)).not.toContain("-");
+  });
+});

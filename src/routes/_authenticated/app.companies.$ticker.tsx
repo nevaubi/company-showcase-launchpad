@@ -77,16 +77,17 @@ function CompanyLayout() {
         quoteExchange={quote && "exchange" in quote ? quote.exchange : undefined}
       />
       <CompanyTabs ticker={ticker} name={name} logoSrc={profile?.logo} quote={quote} restricted={restricted}>
-        <CompanyNotices ticker={ticker} />
-        {company.isError ? (
-          <DataUnavailable
-            title="Company data is temporarily unavailable"
-            error={company.error}
-            onRetry={() => company.refetch()}
-          />
-        ) : (
-          <Outlet />
-        )}
+        <CompanyNotices ticker={ticker}>
+          {company.isError ? (
+            <DataUnavailable
+              title="Company data is temporarily unavailable"
+              error={company.error}
+              onRetry={() => company.refetch()}
+            />
+          ) : (
+            <Outlet />
+          )}
+        </CompanyNotices>
       </CompanyTabs>
     </div>
   );

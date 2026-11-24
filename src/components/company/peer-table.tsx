@@ -9,6 +9,7 @@ import { coverageOf } from "@/lib/coverage";
 import { latestYoY, ttm } from "@/lib/financials/metrics";
 import { ttmTarget } from "@/lib/financials/targets";
 import { fmtCompactUsd, fmtPct } from "@/lib/format";
+import { fmtMultiple } from "@/lib/company/analysis-format";
 import { cn } from "@/lib/utils";
 
 /** Side-by-side TTM fundamentals for a company and its covered peers. Revenue cells open their filings. */
@@ -51,8 +52,8 @@ export function PeerTable({ ticker }: { ticker: string }) {
     { key: "growth", label: "Rev YoY", fmt: (v) => fmtPct(v, 1, true) },
     { key: "opm", label: "Op. margin", fmt: (v) => fmtPct(v), hide: "hidden md:table-cell" },
     { key: "npm", label: "Net margin", fmt: (v) => fmtPct(v) },
-    { key: "pe", label: "P/E", fmt: (v) => `${v.toFixed(1)}×` },
-    { key: "ps", label: "P/S", fmt: (v) => `${v.toFixed(1)}×`, hide: "hidden lg:table-cell" },
+    { key: "pe", label: "P/E", fmt: (v) => fmtMultiple(v) },
+    { key: "ps", label: "P/S", fmt: (v) => fmtMultiple(v), hide: "hidden lg:table-cell" },
     { key: "fcfy", label: "FCF yield", fmt: (v) => fmtPct(v), hide: "hidden lg:table-cell" },
   ];
   const best = (k: (typeof cols)[number]["key"]) => {
@@ -96,7 +97,7 @@ export function PeerTable({ ticker }: { ticker: string }) {
                       {v === undefined ? (
                         <span className="inline-block h-3 w-10 animate-pulse rounded bg-muted" />
                       ) : v == null ? (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">–</span>
                       ) : clickable ? (
                         <button className="hover:text-primary hover:underline" onClick={() => open(r.revT!)}>{c.fmt(v)}</button>
                       ) : (

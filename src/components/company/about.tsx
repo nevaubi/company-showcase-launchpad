@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useCompanyContext } from "@/lib/company/context-query";
+import { useCompanyDetails } from "@/lib/company/details-query";
+import { aboutFields, aboutSubtitle } from "@/lib/company/details";
 import { ceoSourceNote, commonsThumb, rankPeople, type Credit } from "@/lib/company/context";
 import { fiscalYearEndLabel, fmtCompact, fmtDate, titleCase } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
@@ -44,64 +46,95 @@ export function CreditNote({ credit, className }: { credit: Credit; className?: 
   );
 }
 
-/** The description in full, key facts and a strip of photos. Nothing is cut behind a button. */
+/**
+ * The description in full, key facts and a strip of photos. Nothing is cut behind a button. A profile of the
+ * generated coverage list that lacks its website, IR address, founding year or description takes them from the
+ * coverage details (`getCompanyDetails`); when there is still nothing for the left column, the facts take the width.
+ */
 export function AboutPanel({ ticker, data }: { ticker: string; data: CompanyDataset }) {
   const ctx = useCompanyContext(ticker);
   const p = data.profile;
+  const details = useCompanyDetails(ticker, p);
+  const f = aboutFields(p, details.data);
   const c = ctx.data;
   const paras = c?.description?.paragraphs ?? [];
   const proxyCeo = c?.people?.length ? rankPeople(c.people).ceo : undefined;
-  const facts: [string, React.ReactNode][] = [
-    ["Sector", p.sector],
-    ["Industry", p.industry],
-    ["Founded", p.founded],
-    ...(c?.facts.founders?.length ? ([["Founders", c.facts.founders.join(", ")]] as [string, string][]) : []),
-    ["Headquarters", `${titleCase(p.address.city)}, ${p.address.state}`],
-    ...(c?.facts.employees ? ([["Employees", `${fmtCompact(c.facts.employees.value, 0)}${c.facts.employees.asOf ? ` (${c.facts.employees.asOf.slice(0, 4)})` : ""}`]] as [string, string][]) : []),
-    ...(p.ceo ? ([["Chief executive", <CeoFact name={p.ceo} note={ceoSourceNote(p.ceo, data.insiders ?? [], proxyCeo?.name, fmtDate)} other={proxyCeo} />]] as [string, React.ReactNode][]) : []),
-    ["Fiscal year ends", fiscalYearEndLabel(p.fiscalYearEnd)],
-    ["Incorporated", p.stateOfIncorporation],
-    ["Exchange", `${p.exchange}: ${ticker}`],
-    ["SIC", `${p.sic} · ${titleCase(p.sicDescription)}`],
-    ["CIK", <span className="num text-[13px]">{p.cik}</span>],
-  ];
+  const ceo: React.ReactNode = p.ceo ? (
+    <CeoFact name={p.ceo} note={ceoSourceNote(p.ceo, data.insiders ?? [], proxyCeo?.name, fmtDate)} other={proxyCeo} />
+  ) : proxyCeo ? (
+    // no Form 4 names a chief executive: the proxy's, with its filing
+    <>
+      {proxyCeo.name}
+      <span className="block text-[11px] leading-4 text-muted-foreground">
+        Per the {proxyCeo.source.form} filed {fmtDate(proxyCeo.source.filed)}
+      </span>
+    </>
+  ) : null;
+  const facts = (
+    [
+      ["Sector", p.sector],
+      ["Industry", p.industry],
+      ["Founded", f.founded],
+      ["Founders", c?.facts.founders?.length ? c.facts.founders.join(", ") : null],
+      ["Headquarters", p.address?.city ? `${titleCase(p.address.city)}, ${p.address.state}` : null],
+      ["Employees", c?.facts.employees ? `${fmtCompact(c.facts.employees.value, 0)}${c.facts.employees.asOf ? ` (${c.facts.employees.asOf.slice(0, 4)})` : ""}` : null],
+      ["Chief executive", ceo],
+      ["Fiscal year ends", p.fiscalYearEnd ? fiscalYearEndLabel(p.fiscalYearEnd) : null],
+      ["Incorporated", p.stateOfIncorporation],
+      ["Exchange", `${p.exchange}: ${ticker}`],
+      ["SIC", p.sic ? `${p.sic} · ${titleCase(p.sicDescription)}` : null],
+      ["CIK", <span className="num text-[13px]">{p.cik}</span>],
+    ] as [string, React.ReactNode][]
+  ).filter(([, v]) => v !== null && v !== undefined && v !== "" && v !== 0);
+  // the left column waits for both reads (no column that appears later); with nothing in it the facts take the width
+  const pending = ctx.isLoading || (details.isLoading && details.fetchStatus !== "idle");
+  const fromProfile = f.description?.origin === "profile";
+  const left = pending || !!f.description || paras.length > 0 || !!f.website || !!f.ir;
 
   return (
-    <IrPanel section="About" title="About" subtitle={c?.description ? "Summary from Wikipedia · facts from SEC EDGAR" : "Facts from SEC EDGAR"} bodyClassName="p-4">
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <div className="min-w-0">
-          {ctx.isLoading ? (
-            <Skeleton className="h-40" />
-          ) : (
-            <>
-              {p.description && <p className="mb-2 text-sm font-semibold leading-5 tracking-tight">{p.description}</p>}
-              <div className="space-y-2 text-[13px] leading-5 text-foreground/90">
-                {paras.map((t, i) => (
-                  <p key={i}>{t}</p>
-                ))}
-              </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                {c?.description && (
-                  <a href={c.description.source} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
-                    Wikipedia <ArrowUpRight className="size-3" />
-                  </a>
-                )}
-                {/* Profiles of the generated coverage list can lack both addresses: a button with no address is not drawn. */}
-                {p.website && (
-                  <Button size="xs" variant="outline" asChild>
-                    <a href={p.website} target="_blank" rel="noreferrer">Website <ArrowUpRight /></a>
-                  </Button>
-                )}
-                {p.investorRelations && (
-                  <Button size="xs" variant="outline" asChild>
-                    <a href={p.investorRelations} target="_blank" rel="noreferrer">Investor relations <ArrowUpRight /></a>
-                  </Button>
-                )}
-              </div>
-            </>
+    <IrPanel section="About" title="About" subtitle={aboutSubtitle({ wikipedia: !!c?.description, description: f.description })} bodyClassName="p-4">
+      <div className={cn("grid grid-cols-1 gap-5", left && "lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]")}>
+        {left && (
+          <div className="min-w-0">
+            {pending ? (
+              <Skeleton className="h-40" />
+            ) : (
+              <>
+                {f.description && fromProfile && <p className="mb-2 text-sm font-semibold leading-5 tracking-tight">{f.description.text}</p>}
+                <div className="space-y-2 text-[13px] leading-5 text-foreground/90">
+                  {f.description && !fromProfile && !paras.length && <p>{f.description.text}</p>}
+                  {paras.map((t, i) => (
+                    <p key={i}>{t}</p>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  {c?.description && (
+                    <a href={c.description.source} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+                      Wikipedia <ArrowUpRight className="size-3" />
+                    </a>
+                  )}
+                  {/* a button with no address is not drawn */}
+                  {f.website && (
+                    <Button size="xs" variant="outline" asChild>
+                      <a href={f.website} target="_blank" rel="noreferrer">Website <ArrowUpRight /></a>
+                    </Button>
+                  )}
+                  {f.ir && (
+                    <Button size="xs" variant="outline" asChild>
+                      <a href={f.ir} target="_blank" rel="noreferrer">Investor relations <ArrowUpRight /></a>
+                    </Button>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        <dl
+          className={cn(
+            "grid h-fit grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-md border bg-secondary/30 px-4 py-3 text-[13px] leading-5",
+            !left && "sm:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] sm:gap-x-6 lg:grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)]",
           )}
-        </div>
-        <dl className="grid h-fit grid-cols-[auto_1fr] gap-x-4 gap-y-1 rounded-md border bg-secondary/30 px-4 py-3 text-[13px] leading-5">
+        >
           {facts.map(([k, v]) => (
             <div key={k} className="contents">
               <dt className="text-muted-foreground">{k}</dt>

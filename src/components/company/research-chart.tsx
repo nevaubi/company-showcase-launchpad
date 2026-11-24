@@ -242,7 +242,7 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
                         : "text-negative",
                   )}
                 >
-                  {p.value == null ? "—" : fmtPct(p.value, 1, true)}
+                  {p.value == null ? "–" : fmtPct(p.value, 1, true)}
                 </p>
                 <p className="num truncate text-[10px] text-muted-foreground">
                   {p.vsIndex == null ? "" : `${fmtPct(p.vsIndex, 1, true)} vs S&P`}
@@ -257,10 +257,10 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
             {[
               { k: "50-day avg", v: fmtPrice(read.sma50) },
               { k: "200-day avg", v: fmtPrice(read.sma200) },
-              { k: "RSI (14)", v: read.rsi14 != null ? read.rsi14.toFixed(0) : "—" },
+              { k: "RSI (14)", v: read.rsi14 != null ? read.rsi14.toFixed(0) : "–" },
               {
                 k: "Volume vs 90d",
-                v: read.volRatio != null ? `${(read.volRatio * 100).toFixed(0)}%` : "—",
+                v: read.volRatio != null ? `${(read.volRatio * 100).toFixed(0)}%` : "–",
               },
             ].map((s) => (
               <div key={s.k} className="bg-card px-3 py-2">

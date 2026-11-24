@@ -273,15 +273,30 @@ export function whyCards(d: CompanyDataset): Why[] {
   return [revenueWhy(d), operatingIncomeWhy(d), fcfWhy(d)].filter((w): w is Why => !!w);
 }
 
+/** What the Overview's quarter section explains, and whether that is older than the statements above it. */
+export interface ViewDrivers {
+  cards: Why[];
+  data: CompanyDataset;
+  /** The quarter the cards explain ("Q2 FY26"); null without cards. */
+  period: string | null;
+  /** The newest quarter of the statements on the page, when the cards explain an older one; null otherwise. */
+  newer: string | null;
+}
+
 /**
  * The cards the Overview shows once statements may be extended at view time. A filing read at view time brings its
- * statement lines but not its segment breakdown, so the newest quarter often cannot be explained yet. When the
- * extended statements explain fewer figures than the served ones, the served quarter's cards stay (each card names
- * its quarter), so the section neither empties nor changes height when the read lands.
+ * statement lines but not its segment breakdown, so the newest quarter can often be explained only in part. The
+ * newest quarter's cards are used whenever they explain at least one figure; only when they explain none do the
+ * served quarter's cards stay, and then `newer` names the quarter they do not explain, so the section never calls
+ * an older quarter the latest.
  */
-export function viewDrivers(served: CompanyDataset, current: CompanyDataset): { cards: Why[]; data: CompanyDataset } {
+export function viewDrivers(served: CompanyDataset, current: CompanyDataset): ViewDrivers {
+  const latest = current.statements.quarterly.income.periods.at(-1)?.label ?? null;
+  const out = (cards: Why[], data: CompanyDataset): ViewDrivers => {
+    const period = cards[0]?.metric.period ?? null;
+    return { cards, data, period, newer: period && latest && period !== latest ? latest : null };
+  };
   const now = whyCards(current);
-  if (current === served) return { cards: now, data: current };
-  const before = whyCards(served);
-  return before.length > now.length ? { cards: before, data: served } : { cards: now, data: current };
+  if (current === served || now.length > 0) return out(now, current);
+  return out(whyCards(served), served);
 }
