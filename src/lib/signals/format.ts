@@ -2,6 +2,7 @@
 // portfolio): one decimal convention per kind of figure, a true minus sign, an en dash for missing.
 import { coverageOf } from "@/lib/coverage";
 import type { Grade, LiveVerdict } from "./evidence";
+import { STRATEGY, type StrategyId } from "./strategies";
 
 export const DASH = "–";
 
@@ -83,6 +84,12 @@ export function nameOf(ticker: string): string | undefined {
 
 /** Holding period in trading days as people say it: 1 day, 5 days, 4 weeks. */
 export const holdLabel = (h: number) => (h === 1 ? "1 day" : h >= 20 ? `${Math.round(h / 5)} weeks` : `${h} days`);
+
+/** "Residual reversal, long, 1 week" for a variant key such as residual:L:5. */
+export function ruleNameOf(key: string): string {
+  const [st, side, h] = key.split(":");
+  return `${STRATEGY[st as StrategyId]?.label ?? st}, ${side === "S" ? "short" : "long"}, ${holdLabel(Number(h))}`;
+}
 
 export const GRADE_LABEL: Record<Grade, string> = {
   proven: "Proven",

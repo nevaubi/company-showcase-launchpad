@@ -13,9 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { supabase } from "@/integrations/supabase/client";
 import { EVIDENCE } from "@/lib/signals/evidence";
-import { luckLines, verdictLine } from "@/lib/signals/explain";
+import { emptyListLine, luckLines, verdictLine } from "@/lib/signals/explain";
 import { count, dayLong, num, pct } from "@/lib/signals/format";
-import { setupsQuery, sparksQuery, type SetupsData } from "@/lib/signals/queries";
+import { cn } from "@/lib/utils";
+import { barClosesQuery, setupsQuery, sparksQuery, type SetupsData } from "@/lib/signals/queries";
 import { DEFAULT_FILTERS, LIQUIDITY_FLOORS, RANK_LIMITS, rankSetups, type HoldFilter, type RankedSetup, type RankFilters, type SideFilter } from "@/lib/signals/rank";
 import { FAMILY_LABEL, type Family } from "@/lib/signals/strategies";
 import { defaultView, filtersActive, filtersOf, searchOf, SETUP_FAMILIES, setupsSearch, type SetupsSearch, type SetupView } from "@/lib/signals/url-state";
@@ -80,7 +81,7 @@ function SetupsPage() {
       <TodayPanel data={data} />
       <Panel id="scoreboard" className={SECTION_OFFSET} title="Scoreboard: every rule, backtest against live" subtitle="Sorted by how far each rule stands from luck. Open a row for its record, checks and regimes." collapse={false}>
         <div data-section="Strategy scoreboard">
-          <Scoreboard data={data} book={data.book} />
+          <Scoreboard data={data} book={data.book} sameLive={data.sameLive} />
         </div>
       </Panel>
       <MethodPanel data={data} />
@@ -130,6 +131,8 @@ function TodayPanel({ data }: { data: SetupsData }) {
   const view: SetupView = search.view ?? defaultView(ranking.list.length);
   const rows: RankedSetup[] = view === "short" ? ranking.list : view === "closest" ? ranking.closest : ranking.all.slice(0, ALL_LIMIT);
   const sparks = useQuery(sparksQuery(data.asOf, rows));
+  const bars = useQuery(barClosesQuery(rows));
+  const emptyShort = view === "short" && !ranking.list.length && !filtersActive(filters);
   const totals = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of ranking.all) m.set(r.key, (m.get(r.key) ?? 0) + 1);
@@ -156,10 +159,10 @@ function TodayPanel({ data }: { data: SetupsData }) {
     view === "short"
       ? ranking.list.length
         ? `Best first. At most ${RANK_LIMITS.perRule} signals per rule and per sector and one per stock, so one rule or one sector cannot fill the list.`
-        : "The short list is empty. Nothing is added to fill it: the closest rules are one click away."
+        : ""
       : view === "closest"
-        ? `Not on the short list. These ${rows.length} signals come from the rules closest to the bar, best-evidenced rule first, with the same limits (${RANK_LIMITS.perRule} per rule and sector, one per stock). Treat them as a watch list, not as evidence.`
-        : `Every live signal that passes the filters, one per stock and rule, best-evidenced rule first${ranking.all.length > ALL_LIMIT ? `. Showing the first ${ALL_LIMIT} of ${count(ranking.all.length)}: narrow with the filters` : ""}.`;
+        ? `A watch list, not suggestions: none of these rules is listed. Rules nearest the bar come first; none of them is past it. Inside a rule the most recent signals come first, not the best. No stop or target is shown for a rule that is not listed. At most ${RANK_LIMITS.perRule} per rule and sector, one per stock.`
+        : `Every live signal that passes the filters, one per stock and rule, rules nearest the bar first. Signals of rules that are not listed carry no stop or target${ranking.all.length > ALL_LIMIT ? `. Showing the first ${ALL_LIMIT} of ${count(ranking.all.length)}: narrow with the filters` : ""}.`;
 
   return (
     <Panel
@@ -175,7 +178,7 @@ function TodayPanel({ data }: { data: SetupsData }) {
           onChange={(v) => patch({ view: v })}
           options={[
             { v: "short", l: `Short list ${ranking.list.length}`, title: "Signals from rules that stand out from luck" },
-            { v: "closest", l: `Closest ${ranking.closest.length}`, title: "The next in line: rules with a positive record that do not clear the bar" },
+            { v: "closest", l: `Watch list ${ranking.closest.length}`, title: "Not listed: signals of the rules nearest the bar, none of them past it" },
             { v: "all", l: `All fired ${count(ranking.all.length)}`, title: "Every live signal that passes the filters" },
           ]}
         />
@@ -184,8 +187,12 @@ function TodayPanel({ data }: { data: SetupsData }) {
     >
       <div data-section="Today's setups" className="space-y-3">
         <div>
-          <p className="max-w-[60rem] text-[13px] font-medium leading-5">{verdictLine(data.book)}</p>
-          <p className="mt-0.5 max-w-[60rem] text-[11px] leading-4 text-muted-foreground">{note}</p>
+          {emptyShort ? (
+            <p className="max-w-[60rem] text-[13px] leading-5" data-testid="empty-short-list">{emptyListLine(data.book)}</p>
+          ) : (
+            <p className="max-w-[60rem] text-[13px] font-medium leading-5">{verdictLine(data.book)}</p>
+          )}
+          {note && <p className={cn("mt-0.5 max-w-[60rem] leading-5", view === "short" ? "text-[11px] text-muted-foreground" : "text-[13px]")}>{note}</p>}
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2" role="group" aria-label="Filters">
           <Segmented<SideFilter> label="Side" size="xs" value={filters.side} onChange={(v) => setFilters({ side: v })} options={SIDE_OPTIONS} />
@@ -212,15 +219,15 @@ function TodayPanel({ data }: { data: SetupsData }) {
         {data.liveError ? (
           <DataUnavailable compact title="Live signals could not load" hint={data.liveError} onRetry={() => void qc.invalidateQueries({ queryKey: setupsQuery.queryKey })} />
         ) : rows.length ? (
-          <SetupsList rows={rows} book={data.book} sparks={sparks.data} totals={view === "all" ? undefined : totals} onTrack={(r) => track.mutate(r)} tracking={track.isPending} />
+          <SetupsList rows={rows} book={data.book} sparks={sparks.data} bars={bars.data} sameLive={data.sameLive} totals={view === "all" ? undefined : totals} onTrack={(r) => track.mutate(r)} tracking={track.isPending} />
         ) : (
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t pt-3 text-[13px] leading-5 text-muted-foreground">
             {view === "short" && !filtersActive(filters) ? (
               <>
                 <span>No signal is listed today.</span>
                 {ranking.closest.length > 0 && (
-                  <Button size="xs" variant="outline" onClick={() => patch({ view: "closest" })}>
-                    See the {ranking.closest.length} closest
+                  <Button size="xs" variant="ghost" className="text-muted-foreground" onClick={() => patch({ view: "closest" })}>
+                    Watch list: {ranking.closest.length} signals of rules that are not listed
                   </Button>
                 )}
               </>
@@ -263,7 +270,7 @@ function MethodPanel({ data }: { data: SetupsData }) {
               <li key={l}>{l}</li>
             ))}
             <li>
-              A listed rule's average is shrunk toward zero before it is called an expected edge, and a rule goes on probation once {EVIDENCE.liveMinBlocks} or more live holding periods sit well below what its backtest allows. Backtest figures are estimates, not promises.
+              A listed rule's average is shrunk toward zero before it is called an expected edge. While the rules show no measurable spread of real edges, only the part of a record above what the best of {data.book.discovery.tested} worthless rules would show (t about {num(data.book.discovery.expectedBestT, 1)}) is kept, so a rule also needs that much to be listed. A rule goes on probation once {EVIDENCE.liveMinBlocks} or more independent holding periods with live signals sit well below what its backtest allows; trades entered on one day count once. Backtest figures are estimates, not promises.
             </li>
           </ul>
         </div>

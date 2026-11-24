@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Regime } from "./backtest";
 import { buildEvidence, type BlockStats, type EvidenceBook, type Grade, type VariantEvidence } from "./evidence";
-import { barsLookRight, compareSetups, crowd, DEFAULT_FILTERS, dollarVolumeOf, holdBucket, RANK_LIMITS, rankSetups, toSetup, type LiveSignal, type RankFilters } from "./rank";
+import { barsLookRight, compareSetups, crowd, DEFAULT_FILTERS, dollarVolumeOf, holdBucket, priceGap, RANK_LIMITS, rankSetups, toSetup, type LiveSignal, type RankFilters } from "./rank";
 import { parseVariantKey } from "./setups";
 import { STRATEGY } from "./strategies";
 import { realVariants } from "./variants-real.fixture";
@@ -20,7 +20,7 @@ function ev(key: string, grade: Grade, edge: number, t = 3.5, mean = 0.004): Var
   const k = parseVariantKey(key);
   return {
     key, ...k, family: STRATEGY[k.strategy].family, passed: grade === "proven", blocks: blocks(mean, t), tStored: t, p: 0.001, q: grade === "unproven" ? 0.7 : 0.03,
-    kept: 0.5, base: edge, regimes: [], regime: null, edge, live: { n: 0, avgNet: null, avgExSpy: null, hit: null, since: null, blocks: 0, band: null, z: null, verdict: "none" },
+    kept: 0.5, base: edge, regimes: [], regime: null, edge, live: { n: 0, avgNet: null, avgExSpy: null, hit: null, since: null, days: null, blocks: 0, periodMean: null, band: null, z: null, verdict: "none" },
     grade, reason: "",
   };
 }
@@ -207,7 +207,7 @@ describe("ranking", () => {
   });
 
   it("leaves a rule out of the next in line once its live record is well below zero", () => {
-    const losing: VariantEvidence = { ...ev("reversal:L:5", "unproven", 0, 2.1), live: { n: 400, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01", blocks: 11, band: 0.012, z: -3.2, verdict: "behind" } };
+    const losing: VariantEvidence = { ...ev("reversal:L:5", "unproven", 0, 2.1), live: { n: 400, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01", days: 11, blocks: 11, periodMean: -0.02, band: 0.012, z: -3.2, verdict: "behind" } };
     const more = [...signals, ...Array.from({ length: 6 }, (_, k) => sig(`REVL${k}`, "reversal:L:5", { sector: SECTORS[k] }))];
     const out = rankSetups(book([...variants, losing]), more);
     expect(out.closest.some((x) => x.key === "reversal:L:5")).toBe(false);
@@ -267,5 +267,15 @@ describe("the list on real statistics and on noise", () => {
     // Where the old page showed up to 150 rows of near misses, noise now fills well under one row a day on average.
     expect(nonEmpty).toBeLessThanOrEqual(9);
     expect(rows / 60).toBeLessThan(1.5);
+  });
+});
+
+describe("stored price against the market bar", () => {
+  it("flags a gap above 1% and nothing else", () => {
+    // SNEX on 20 Nov 2026: series 35.345 against a bar close of 36.63.
+    expect(priceGap(35.345, 36.63)).toBeCloseTo(35.345 / 36.63 - 1, 12);
+    expect(priceGap(36.8, 36.63)).toBeNull();
+    expect(priceGap(36.63, null)).toBeNull();
+    expect(priceGap(0, 36.63)).toBeNull();
   });
 });
