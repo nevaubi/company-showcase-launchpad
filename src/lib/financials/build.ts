@@ -1,7 +1,7 @@
 // Turns SEC "companyfacts" XBRL JSON into standardized, source-attributed
 // annual and quarterly statements. Pure functions: used by the ingest script
 // and covered by unit tests.
-import { BALANCE_LINES, CASHFLOW_LINES, INCOME_LINES, type LineDef } from "./schema";
+import { BALANCE_LINES, CASHFLOW_LINES, DEBT_EVIDENCE_CONCEPTS, INCOME_LINES, TOTAL_DEBT_CONCEPTS, type LineDef } from "./schema";
 import type { Cell, DerivedPart, Period, Row, SourceRef, Statement, StatementKey } from "./types";
 
 export interface RawFact {
@@ -681,14 +681,23 @@ function insertAfter(rows: Row[], afterKey: string, ...add: Row[]) {
   rows.splice(i >= 0 ? i + 1 : rows.length, 0, ...add);
 }
 
+/** Short-term borrowings that are never part of long-term debt: added to a long-term figure that includes current maturities. */
 const SHORT_BORROWINGS: LineDef = {
   key: "_stb",
   label: "Short-term borrowings",
   concepts: [],
-  components: ["CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings", "NotesPayableCurrent"],
+  components: ["CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings"],
   unit: "usd",
   kind: "stock",
 };
+/**
+ * Beside current maturities alone, current notes payable are a separate balance sheet line too. They
+ * are not added to a long-term figure that includes current maturities: there they are the current
+ * notes of that same debt (Autodesk's $499M, Omnicom's $1,399.5M, Andersen's $54.8M).
+ */
+const SHORT_BORROWINGS_AND_NOTES: LineDef = { ...SHORT_BORROWINGS, components: [...SHORT_BORROWINGS.components!, "NotesPayableCurrent"] };
+
+const TOTAL_DEBT_TAGGED: LineDef = { key: "_debtTagged", label: "Total debt", concepts: TOTAL_DEBT_CONCEPTS, unit: "usd", kind: "stock" };
 
 /** Long-term debt concepts that already include current maturities. */
 const INCLUDES_CURRENT = new Set(["us-gaap:LongTermDebt", "us-gaap:LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities"]);
@@ -721,32 +730,57 @@ function dropLoneNotesPayable(balance: Row[]) {
   s.cells = s.cells.map((c, i) => (c?.src?.concept === "us-gaap:NotesPayableCurrent" && !l?.cells[i] ? null : c));
 }
 
-/** Total debt = long-term + short-term debt, without double-counting current maturities or leaving out short-term borrowings. */
+/** Total debt from the balance sheet lines: long-term + short-term, without double-counting current maturities or leaving out short-term borrowings. */
+function debtFromLines(cf: CompanyFacts, l: Cell | null, s: Cell | null, end: string): Cell | null {
+  if (!l && !s) return null;
+  const atEnd = (f: RawFact) => !f.start && near(f.end, end, 4);
+  if (l && includesCurrent(cf, l, end)) {
+    // This figure already includes current maturities; add only short-term borrowings.
+    const label = "Long-term debt incl. current maturities";
+    const extra = pickCell(cf, SHORT_BORROWINGS, atEnd);
+    if (extra) return combine(l, extra, "add", [label, "Short-term borrowings"]);
+    return { v: l.v, derived: { formula: label, parts: partsFrom(l, label, 1) } };
+  }
+  // Current maturities alone (FedEx, Home Depot): short-term borrowings and commercial paper are separate lines.
+  const sbAll = s?.src && CURRENT_MATURITIES_ONLY.has(s.src.concept) ? pickCell(cf, SHORT_BORROWINGS_AND_NOTES, atEnd) : null;
+  // The same amount under a second concept is the same line (Goosehead: current maturities also tagged NotesPayableCurrent).
+  const sb = sbAll && sbAll.v !== s!.v ? sbAll : null;
+  const short = s && sb ? combine(s, sb, "add", ["Current maturities of long-term debt", "Short-term borrowings"]) : s;
+  const shortLabel = sb ? "(current maturities + short-term borrowings)" : "Short-term debt";
+  if (l && short) return combine(l, short, "add", ["Long-term debt", shortLabel]);
+  const only = (l ?? short)!;
+  const label = l ? "Long-term debt" : shortLabel;
+  return { v: only.v, derived: { formula: label, parts: partsFrom(only, label, 1) } };
+}
+
+/**
+ * Total debt for each period, or nothing when it cannot be established:
+ * - the sum of the balance sheet lines (debtFromLines) when there is one, unless the filing's own
+ *   tagged total (TOTAL_DEBT_CONCEPTS) shows the lines are only part of the debt: below three quarters
+ *   of it (Travelers FY2025: $300M of current debt against $9,267M of debt). A tagged total is not
+ *   preferred over complete lines, because filers also use these concepts for a debt note's subtotal:
+ *   FedEx tags $24,969M against $25,714M on its balance sheet, Home Depot $51,308M against $55,772M,
+ *   both without their short-term borrowings;
+ * - the tagged total when no line is tagged (Aflac's "Notes payable and lease obligations"), unless
+ *   another debt amount of the same date is larger, which makes it a subtotal as well;
+ * - nothing, so net debt and the debt ratios stay empty too, when the lines come to less than half of
+ *   another debt amount the filing tags for the same date (DEBT_EVIDENCE_CONCEPTS): a fragment.
+ */
 function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row {
   const ltd = rowOf(balance, "longTermDebt");
   const std = rowOf(balance, "shortTermDebt");
-  const cells = periods.map((p, i) => {
-    const l = ltd?.cells[i] ?? null;
-    const s = std?.cells[i] ?? null;
-    if (!l && !s) return null;
-    const borrowings = () => pickCell(cf, SHORT_BORROWINGS, (f) => !f.start && near(f.end, p.end, 4));
-    if (l && includesCurrent(cf, l, p.end)) {
-      // This figure already includes current maturities; add only short-term borrowings.
-      const label = "Long-term debt incl. current maturities";
-      const extra = borrowings();
-      if (extra) return combine(l, extra, "add", [label, "Short-term borrowings"]);
-      return { v: l.v, derived: { formula: label, parts: partsFrom(l, label, 1) } };
+  const cells = periods.map((p, i): Cell | null => {
+    const atEnd = (f: RawFact) => !f.start && near(f.end, p.end, 4);
+    const lines = debtFromLines(cf, ltd?.cells[i] ?? null, std?.cells[i] ?? null, p.end);
+    const evidence = Math.max(0, ...DEBT_EVIDENCE_CONCEPTS.map((c) => choose(factsFor(cf, c, "USD"), c, atEnd)?.fact.val ?? 0));
+    const tagged = firstConcept(cf, TOTAL_DEBT_TAGGED, atEnd);
+    if (tagged && (!lines || lines.v < tagged.fact.val * 0.75)) {
+      // A tagged total below another debt amount of the same date is a subtotal too: Super Micro tags its
+      // $3,977M of credit lines and term loans with it, beside $4,669M of convertible notes (Q1 FY27).
+      return evidence > tagged.fact.val * 1.1 ? null : reportedCell(tagged);
     }
-    // Current maturities alone (FedEx, Home Depot): short-term borrowings and commercial paper are separate lines.
-    const sbAll = s?.src && CURRENT_MATURITIES_ONLY.has(s.src.concept) ? borrowings() : null;
-    // The same amount under a second concept is the same line (Goosehead: current maturities also tagged NotesPayableCurrent).
-    const sb = sbAll && sbAll.v !== s!.v ? sbAll : null;
-    const short = s && sb ? combine(s, sb, "add", ["Current maturities of long-term debt", "Short-term borrowings"]) : s;
-    const shortLabel = sb ? "(current maturities + short-term borrowings)" : "Short-term debt";
-    if (l && short) return combine(l, short, "add", ["Long-term debt", shortLabel]);
-    const only = (l ?? short)!;
-    const label = l ? "Long-term debt" : shortLabel;
-    return { v: only.v, derived: { formula: label, parts: partsFrom(only, label, 1) } };
+    if (!lines) return null;
+    return evidence > lines.v * 2 ? null : lines;
   });
   return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells };
 }

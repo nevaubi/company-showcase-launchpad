@@ -165,7 +165,13 @@ export const BALANCE_LINES: LineDef[] = [
   usd(
     "shortTermInvestments",
     "Short-term investments",
-    ["MarketableSecuritiesCurrent", "ShortTermInvestments", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"],
+    [
+      "MarketableSecuritiesCurrent",
+      "ShortTermInvestments",
+      "AvailableForSaleSecuritiesDebtSecuritiesCurrent",
+      // NVIDIA tags its "Marketable securities" ($34,143M at 26 Jul 2026) with this concept from its FY2026 10-K on.
+      "DebtSecuritiesCurrent",
+    ],
     "stock",
   ),
   usd("receivables", "Accounts receivable", ["AccountsReceivableNetCurrent"], "stock"),
@@ -217,6 +223,10 @@ export const BALANCE_LINES: LineDef[] = [
     [
       "LongTermDebtNoncurrent",
       "LongTermDebtAndCapitalLeaseObligations",
+      // The noncurrent notes line ("less current portion"): Omnicom's $9,389.5M at 30 Sep 2026, Autodesk's
+      // $1,985M at 31 Jul 2026. Ahead of LongTermDebt, which these filers tag with the principal of all
+      // notes, current ones included.
+      "LongTermNotesPayable",
       "LongTermDebt",
       "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
       "LongTermDebtAndFinanceLeaseObligations",
@@ -278,6 +288,8 @@ export const CASHFLOW_LINES: LineDef[] = [
       "cop:PaymentToAcquireProductiveAssetsAndInvestments",
       "cop:CapitalExpendituresAndInvestments",
       "nee:CapitalExpendituresIndependentPowerInvestmentsAndNuclearFuelPurchases",
+      // Cigna's "Purchases of property and equipment, net" ($1,212M FY2025, 10-K 0001739940-26-000006).
+      "ci:PaymentsForProceedsFromPropertyPlantAndEquipment",
     ],
     "flow",
     { indent: 1 },
@@ -322,6 +334,34 @@ export const CASHFLOW_LINES: LineDef[] = [
     indent: 1,
   }),
   usd("cff", "Cash from financing", ["NetCashProvidedByUsedInFinancingActivities"], "flow", { bold: true }),
+];
+
+/**
+ * Total debt as the filing itself tags it, current and noncurrent together: Travelers' balance sheet
+ * "Debt" ($9,267M FY2025) and Aflac's "Notes payable and lease obligations" ($8,900M at 30 Sep 2026).
+ * Filers also use them for a debt note's subtotal, so they are used only when no debt line is tagged
+ * or the lines come to less than three quarters of them (totalDebtRow in build.ts).
+ */
+export const TOTAL_DEBT_CONCEPTS = ["DebtLongtermAndShorttermCombinedAmount", "DebtAndCapitalLeaseObligations"];
+
+/**
+ * Debt amounts a filing tags beside its balance sheet lines. A line sum below half of one of them
+ * is a fragment (Travelers' $300M current debt against $9,267M of debt), not a total.
+ */
+export const DEBT_EVIDENCE_CONCEPTS = [
+  "LongTermDebt",
+  "DebtInstrumentCarryingAmount",
+  "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
+  "NotesPayable",
+  "LongTermNotesPayable",
+  "SeniorNotes",
+  "SeniorLongTermNotes",
+  "ConvertibleNotesPayable",
+  // Super Micro's balance sheet line, beside credit lines it tags only with company extensions.
+  "ConvertibleLongTermNotesPayable",
+  "LongTermLineOfCredit",
+  "SecuredDebt",
+  "UnsecuredDebt",
 ];
 
 export const ALL_LINES = [...INCOME_LINES, ...BALANCE_LINES, ...CASHFLOW_LINES];

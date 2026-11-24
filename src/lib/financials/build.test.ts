@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildStatements, quarterEndAfter, type CompanyFacts, type RawFact } from "./build";
 import { fmtCell, scaled, unitLabel } from "../format";
+import debtFacts from "./fixtures/debt-facts.json";
 
 let n = 0;
 const fact = (start: string | undefined, end: string, val: number, form: string, filed: string, accn = `0000000001-26-${String(++n).padStart(6, "0")}`): RawFact => ({
@@ -441,5 +442,116 @@ describe("commercial paper beside short-term borrowings", () => {
   });
   it("still counts paper that is the only short-term line (Home Depot)", () => {
     expect(debt(buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 46_341)] }, LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 4_967)] }, CommercialPaper: { facts: [at("2025-12-31", 4_464)] } })))).toBe(55_772);
+  });
+});
+
+/**
+ * Reduced copies of the companies' SEC companyfacts (statement-relevant concepts only, cached 23 Nov 2026),
+ * checked against the balance sheets of the filings named in each case.
+ */
+describe("total debt, net debt and short-term investments on real filings", () => {
+  const FIXTURE = debtFacts as unknown as Record<string, CompanyFacts>;
+  const cellAt = (t: string, freq: "annual" | "quarterly", key: string, end: string) => {
+    const st = buildStatements(FIXTURE[t])[freq].balance;
+    const i = st.periods.findIndex((p) => p.end === end);
+    expect(i, `${t} ${end}`).toBeGreaterThanOrEqual(0);
+    return st.rows.find((r) => r.key === key)?.cells[i] ?? null;
+  };
+
+  it("does not add current notes to a long-term figure that already includes them (Autodesk Q2 FY27, 10-Q 0000769397-26-000061)", () => {
+    // Face: short-term borrowings 994 + current notes 499 + long-term notes 1,985 = $3,478M; LongTermDebt $2,500M is the principal of all notes.
+    const d = cellAt("ADSK", "quarterly", "totalDebt", "2026-07-31")!;
+    expect(d.v).toBe(3_478_000_000);
+    expect(d.derived?.parts.map((p) => p.concept).sort()).toEqual(["us-gaap:LongTermNotesPayable", "us-gaap:NotesPayableCurrent", "us-gaap:ShortTermBorrowings"]);
+  });
+
+  it("reads LongTermNotesPayable as long-term debt (Omnicom Q3 2026, 10-Q 0000029989-26-000026; FY2025, 10-K 0000029989-26-000006)", () => {
+    expect(cellAt("OMC", "quarterly", "totalDebt", "2026-09-30")!.v).toBeCloseTo(10_018_300_000, -3); // 568.3 + 60.5 + 9,389.5
+    expect(cellAt("OMC", "annual", "totalDebt", "2025-12-31")!.v).toBeCloseTo(9_116_500_000, -3); // 1,399.5 + 62 + 7,655
+    expect(cellAt("OMC", "quarterly", "longTermDebt", "2026-09-30")!.src?.concept).toBe("us-gaap:LongTermNotesPayable");
+  });
+
+  it("matches the face when current and long-term notes add up to LongTermDebt (Andersen Q3 2026, 10-Q 0002065708-26-000009)", () => {
+    expect(cellAt("ANDG", "quarterly", "totalDebt", "2026-09-30")!.v).toBe(287_713_000); // 54.8 + 232.9
+  });
+
+  it("still adds current notes beside a noncurrent line, which agrees with the tagged total (Waters FY2025, 10-K 0001193125-26-062604)", () => {
+    const d = cellAt("WAT", "annual", "totalDebt", "2025-12-31")!;
+    expect(d.v).toBe(1_407_000_000); // 460 + 947 (the 10-Q comparative, filed later, rounds the 10-K's 947.4)
+    expect(d.derived).toBeTruthy();
+  });
+
+  it("shows the balance sheet's own debt total when the lines are only part of it (Travelers FY2025, 10-K 0000086312-26-000065)", () => {
+    const d = cellAt("TRV", "annual", "totalDebt", "2025-12-31")!;
+    expect(d.v).toBe(9_267_000_000); // was $300M, DebtCurrent only
+    expect(d.src?.concept).toBe("us-gaap:DebtLongtermAndShorttermCombinedAmount");
+  });
+
+  it("reads debt and lease obligations as total debt (Aflac Q3 2026, 10-Q 0001628280-26-070776: notes payable and lease obligations)", () => {
+    const d = cellAt("AFL", "quarterly", "totalDebt", "2026-09-30")!;
+    expect(d.v).toBe(8_900_000_000);
+    expect(d.src?.concept).toBe("us-gaap:DebtAndCapitalLeaseObligations");
+  });
+
+  it("shows the tagged total when the lines are a fraction of it (GATX Q3 2026, 10-Q 0000040211-26-000096: 34.6 + 11,904.0)", () => {
+    const d = cellAt("GATX", "quarterly", "totalDebt", "2026-09-30")!;
+    expect(d.v).toBeCloseTo(11_938_600_000, -3); // was $34.6M, commercial paper only
+  });
+
+  it("leaves total debt and net debt empty when the tagged total is itself a subtotal (Super Micro Q1 FY27, 10-Q 0001375365-26-000027)", () => {
+    // Face: credit lines and term loans 1,962.7 + 2,014.4 (company extensions; $3,977.1M tagged as the combined amount) + convertible notes 4,668.9.
+    expect(cellAt("SMCI", "quarterly", "totalDebt", "2026-09-30")).toBeNull();
+    expect(cellAt("SMCI", "quarterly", "netDebt", "2026-09-30")).toBeNull();
+  });
+
+  it("counts current debt securities as short-term investments, so net debt has the right sign (NVIDIA Q2 FY27, 10-Q 0001045810-26-000075)", () => {
+    const sti = cellAt("NVDA", "quarterly", "shortTermInvestments", "2026-07-26")!;
+    expect(sti.v).toBe(34_143_000_000);
+    expect(sti.src?.concept).toBe("us-gaap:DebtSecuritiesCurrent");
+    const debt = cellAt("NVDA", "quarterly", "totalDebt", "2026-07-26")!;
+    const net = cellAt("NVDA", "quarterly", "netDebt", "2026-07-26")!;
+    expect(net.v).toBe(debt.v - 22_443_000_000 - 34_143_000_000);
+    expect(net.v).toBeLessThan(0);
+  });
+});
+
+describe("total debt that cannot be established", () => {
+  const at = (end: string, val: number) => fact(undefined, end, val, "10-K", "2026-02-20");
+  const base = { Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } };
+  it("is left empty, with net debt, when the lines found are a fragment of the debt the filing tags", () => {
+    const s = buildStatements(filer({ ...base, DebtCurrent: { facts: [at("2025-12-31", 300)] }, LongTermDebt: { facts: [at("2025-12-31", 9_000)] }, CashAndCashEquivalentsAtCarryingValue: { facts: [at("2025-12-31", 500)] } }));
+    const st = s.annual.balance;
+    const i = st.periods.findIndex((p) => p.key === "FY2025");
+    // LongTermDebt is read as the long-term line here, so the lines are complete: 9,000 incl. current.
+    expect(st.rows.find((r) => r.key === "totalDebt")?.cells[i]?.v).toBe(9_000);
+    const frag = buildStatements(filer({ ...base, DebtCurrent: { facts: [at("2025-12-31", 300)] }, DebtInstrumentCarryingAmount: { facts: [at("2025-12-31", 9_000)] }, CashAndCashEquivalentsAtCarryingValue: { facts: [at("2025-12-31", 500)] } }));
+    const fs = frag.annual.balance;
+    const j = fs.periods.findIndex((p) => p.key === "FY2025");
+    expect(fs.rows.find((r) => r.key === "totalDebt")?.cells[j] ?? null).toBeNull();
+    expect(fs.rows.find((r) => r.key === "netDebt")?.cells[j] ?? null).toBeNull();
+  });
+});
+
+describe("a tagged debt total below the balance sheet lines", () => {
+  const at = (end: string, val: number) => fact(undefined, end, val, "10-K", "2026-02-20");
+  it("keeps the lines when the tagged total is a debt note subtotal (FedEx FY2026: $24,969M tagged, $25,714M on the face)", () => {
+    const s = buildStatements(filer({ Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC }, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 23_293)] }, LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 1_676)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 745)] }, DebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 24_969)] } }));
+    const st = s.annual.balance;
+    expect(st.rows.find((r) => r.key === "totalDebt")!.cells[st.periods.findIndex((p) => p.key === "FY2025")]!.v).toBe(25_714);
+  });
+});
+
+describe("capital expenditure from company extensions", () => {
+  it("reads Cigna's net purchases of property and equipment (FY2025 $1,212M, 10-K 0001739940-26-000006)", () => {
+    const cf = filer({ Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } });
+    cf.facts.ci = {
+      PaymentsForProceedsFromPropertyPlantAndEquipment: {
+        units: { USD: [fact("2025-01-01", "2025-12-31", 1212, "10-K", "2026-02-26", "0001739940-26-000006"), fact("2024-01-01", "2024-12-31", 1406, "10-K", "2026-02-26", "0001739940-26-000006")] },
+      },
+    };
+    const a = buildStatements(cf).annual.cashflow;
+    const cell = a.rows.find((r) => r.key === "capex")!.cells[a.periods.findIndex((p) => p.key === "FY2025")]!;
+    expect(cell.v).toBe(1212);
+    expect(cell.src?.concept).toBe("ci:PaymentsForProceedsFromPropertyPlantAndEquipment");
   });
 });
