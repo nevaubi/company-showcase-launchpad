@@ -126,7 +126,7 @@ function MembersPanel() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-[12px] text-muted-foreground">{m.title || "—"}</TableCell>
+                    <TableCell className="text-[12px] text-muted-foreground">{m.title || "–"}</TableCell>
                     <TableCell>
                       {options.length && !(self && m.role === "owner" && owners <= 1) ? (
                         <Select value={m.role} onValueChange={(v) => setRole.mutate({ user: m.user_id, to: v as FirmRole })}>
@@ -225,7 +225,7 @@ async function copy(text: string) {
     await navigator.clipboard.writeText(text);
     toast.success("Invite link copied");
   } catch {
-    toast.error("Couldn't copy — select the link and copy it manually");
+    toast.error("Couldn't copy. Select the link and copy it manually");
   }
 }
 

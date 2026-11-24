@@ -17,9 +17,9 @@ export const Route = createFileRoute("/_authenticated/app/office/writer/$id")({
   head: () => ({
     meta: [
       { title: "Writer · FiledUnder" },
-      { name: "description", content: "Edit Word documents in Filed Under." },
+      { name: "description", content: "Edit Word documents in FiledUnder." },
       { property: "og:title", content: "Writer · FiledUnder" },
-      { property: "og:description", content: "Edit Word documents in Filed Under." },
+      { property: "og:description", content: "Edit Word documents in FiledUnder." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],

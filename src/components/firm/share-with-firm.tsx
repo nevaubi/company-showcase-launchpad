@@ -53,7 +53,7 @@ export function ShareWithFirm({ table, id, ownerId, firmId, invalidate }: {
         <SelectValue />
       </SelectTrigger>
       <SelectContent align="end">
-        <SelectItem value="private" className="text-xs">Private — only you</SelectItem>
+        <SelectItem value="private" className="text-xs">Private (only you)</SelectItem>
         {firms.map((f) => (
           <SelectItem key={f.id} value={f.id} className="text-xs">Shared with {f.name}</SelectItem>
         ))}

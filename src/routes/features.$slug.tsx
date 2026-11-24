@@ -65,7 +65,7 @@ function FeaturePage() {
         <h1 className="mt-4 font-display text-5xl leading-tight">{f.title}</h1>
         <p className="mt-5 max-w-2xl text-lg text-muted-foreground">{f.summary}</p>
         {SHOTS[f.slug] && (
-          <img src={SHOTS[f.slug]} alt={`${f.name} in Filed Under, shown on NVIDIA`} width={1200} height={630}
+          <img src={SHOTS[f.slug]} alt={`${f.name} in FiledUnder, shown on NVIDIA`} width={1200} height={630}
             className="mt-10 w-full rounded-xl border shadow-sm" loading="eager" />
         )}
         <ul className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">

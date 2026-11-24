@@ -33,7 +33,7 @@ export interface WorkerProgress {
     finishedLog: { t: string; at: string }[];
   } | null;
   universe: string[];
-  /** Filed Under office engine on Render (/health), null when unreachable */
+  /** FiledUnder office engine on Render (/health), null when unreachable */
   engine: { ok: boolean; version: string; sessions: number; users: number } | null;
 }
 

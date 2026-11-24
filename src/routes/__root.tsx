@@ -92,7 +92,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Every number in US equity research, filed under its source. Financials, filings, prices and macro with one-click attribution.",
       },
-      { name: "author", content: "Filed Under" },
+      { name: "author", content: "FiledUnder" },
       { property: "og:site_name", content: "FiledUnder" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

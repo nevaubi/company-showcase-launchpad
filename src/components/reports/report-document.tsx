@@ -164,7 +164,7 @@ export function ReportDocument({ content, brand, className }: { content: ReportC
       <BrandedCover
         branding={brand.branding}
         logo={brand.logo}
-        firmName={brand.firmName ?? "Filed Under"}
+        firmName={brand.firmName ?? "FiledUnder"}
         kicker={def.label}
         title={content.title}
         subtitle={content.subtitle}

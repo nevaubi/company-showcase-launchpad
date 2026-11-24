@@ -1,4 +1,4 @@
-// Earnings, economic, dividend and IPO calendars from the Filed Under pipeline:
+// Earnings, economic, dividend and IPO calendars from the FiledUnder pipeline:
 // estimates/index.json (scheduled earnings dates and consensus), macro/releases.json (the publishers' own release
 // schedules), calendars/dividends.json (8-K dividend declarations plus price-history cadence) and
 // calendars/ipos.json (EDGAR registration statements, effectiveness notices and final prospectuses).

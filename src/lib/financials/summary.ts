@@ -13,7 +13,7 @@ export function fundamentalsDigest(d: CompanyDataset, quarters = 6): string {
       .map((r) => {
         const vals = idx.map((i) => {
           const c = r!.cells[i];
-          if (!c) return "—";
+          if (!c) return "–";
           if (r!.unit === "pct") return `${(c.v * 100).toFixed(1)}%`;
           if (r!.unit === "usdPerShare") return c.v.toFixed(2);
           if (r!.unit === "ratio") return c.v.toFixed(2);
@@ -24,7 +24,7 @@ export function fundamentalsDigest(d: CompanyDataset, quarters = 6): string {
     return [head, ...rows].join("\n");
   };
   return [
-    `${d.profile.name} (${d.profile.ticker}) — ${d.profile.industry}. Fiscal year ends ${d.profile.fiscalYearEnd}.`,
+    `${d.profile.name} (${d.profile.ticker}): ${d.profile.industry}. Fiscal year ends ${d.profile.fiscalYearEnd}.`,
     "Income statement ($M unless noted):",
     pick(q.income, ["revenue", "grossProfit", "operatingIncome", "netIncome", "epsDiluted"]),
     "Cash flow:",

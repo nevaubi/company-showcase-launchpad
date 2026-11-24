@@ -1,4 +1,4 @@
-// Cross-section of covered companies and sector-peer correlations from the Filed Under quant pipeline
+// Cross-section of covered companies and sector-peer correlations from the FiledUnder quant pipeline
 // (etl/quant.py): quant/cross.json (one row per covered symbol on one as-of date, with sector ranks)
 // and quant/peers/{SYM}.json (252-day return correlations with the same-sector names).
 import { queryOptions } from "@tanstack/react-query";

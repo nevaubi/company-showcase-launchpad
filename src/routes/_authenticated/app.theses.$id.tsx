@@ -185,7 +185,7 @@ function ThesisDetail() {
           </div>
           <h1 className="mt-1 font-display text-[2.2rem] leading-tight">{th.title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Opened {fmtDate(opened)} · {daysOpen} days · horizon {th.horizon ?? "—"}
+            Opened {fmtDate(opened)} · {daysOpen} days · horizon {th.horizon ?? "–"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">

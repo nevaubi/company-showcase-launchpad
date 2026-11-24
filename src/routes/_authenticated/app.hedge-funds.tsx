@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { mostUnusual, readAuctions, seriesStats, zLabel, type Point } from "@/lib/hedge/core";
 import { allSeries, auctionsQuery, crowding, gauges, hedgeFundsQuery, type HfPayload, type HfSeries } from "@/lib/hedge/query";
+import { fmtSigned } from "@/lib/format";
 
 export const Route = createFileRoute("/_authenticated/app/hedge-funds")({
   head: () => ({
@@ -39,7 +40,7 @@ export function fmtHf(v: number, unit: string) {
 
 function yoyText(s: ReturnType<typeof seriesStats>, unit: string) {
   if (!s?.yoy) return null;
-  return s.yoy.pct != null ? `${s.yoy.pct >= 0 ? "+" : ""}${s.yoy.pct.toFixed(1)}% y/y` : `${s.yoy.abs! >= 0 ? "+" : ""}${unit === "ratio" ? s.yoy.abs!.toFixed(2) : fmtHf(s.yoy.abs!, unit)} y/y`;
+  return s.yoy.pct != null ? `${fmtSigned(s.yoy.pct, 1)}% y/y` : `${s.yoy.abs! >= 0 ? "+" : ""}${unit === "ratio" ? s.yoy.abs!.toFixed(2) : fmtHf(s.yoy.abs!, unit)} y/y`;
 }
 
 const TABS = [
@@ -56,7 +57,7 @@ function HedgeFunds() {
 
   return (
     <div>
-      <PageHeader eyebrow="Markets" title="Hedge funds & funding" description="Where leverage is building in the financial system — SEC Form PF, CFTC futures positioning, Fed dealer surveys and sponsored repo via the Office of Financial Research — plus every U.S. Treasury auction since 2010, graded for demand." />
+      <PageHeader eyebrow="Markets" title="Hedge funds & funding" description="Where leverage is building in the financial system: SEC Form PF, CFTC futures positioning, Fed dealer surveys and sponsored repo via the Office of Financial Research, plus every U.S. Treasury auction since 2010, graded for demand." />
       <div className="mb-4 flex flex-wrap gap-1.5">
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={cn("rounded-full border px-3 py-1 text-[12px]", t.id === tab ? "bg-foreground text-background" : "bg-card hover:bg-secondary")}>{t.label}</button>
@@ -82,14 +83,14 @@ function Overview({ p, onOpen }: { p: HfPayload; onOpen: (m: string) => void }) 
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <p className="eyebrow">Crowding composite</p>
-            <p className="mt-1 font-display text-[2.4rem] leading-none tabular-nums">{cr.score == null ? "—" : `${cr.score >= 0 ? "+" : ""}${cr.score.toFixed(2)}σ`}</p>
+            <p className="mt-1 font-display text-[2.4rem] leading-none tabular-nums">{cr.score == null ? "–" : `${fmtSigned(cr.score, 2)}σ`}</p>
             <p className="mt-1 text-[12px] text-muted-foreground">{zLabel(cr.score)} · average z-score of {cr.parts.filter((x) => x.z != null).length} leverage and funding gauges vs their own history (higher = more leverage)</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {cr.parts.map((x) => {
               const g = gs.find((g) => g.id === x.id)!;
               const v = x.z == null ? null : x.z * x.sign;
-              return <Badge key={x.id} variant="outline" className={cn("text-[10px]", v != null && v >= 1 && "border-negative text-negative", v != null && v <= -1 && "border-positive text-positive")}>{g.label.split("(")[0].trim()} {v == null ? "n/a" : `${v >= 0 ? "+" : ""}${v.toFixed(1)}σ`}</Badge>;
+              return <Badge key={x.id} variant="outline" className={cn("text-[10px]", v != null && v >= 1 && "border-negative text-negative", v != null && v <= -1 && "border-positive text-positive")}>{g.label.split("(")[0].trim()} {v == null ? "n/a" : `${fmtSigned(v, 1)}σ`}</Badge>;
             })}
           </div>
         </div>
@@ -111,7 +112,7 @@ function Overview({ p, onOpen }: { p: HfPayload; onOpen: (m: string) => void }) 
                 {st.latest[0]} · {yoyText(st, g.unit)} · {st.percentile.toFixed(0)}th pct
                 {st.record && <span className="ml-1 font-medium text-foreground">· record {st.record}</span>}
               </p>
-              <p className={cn("mt-0.5 text-[10px]", zz != null && zz >= 1 ? "text-negative" : zz != null && zz <= -1 ? "text-positive" : "text-muted-foreground")}>{zz == null ? "" : `${zLabel(st.z)} (${st.z! >= 0 ? "+" : ""}${st.z!.toFixed(1)}σ)`}</p>
+              <p className={cn("mt-0.5 text-[10px]", zz != null && zz >= 1 ? "text-negative" : zz != null && zz <= -1 ? "text-positive" : "text-muted-foreground")}>{zz == null ? "" : `${zLabel(st.z)} (${fmtSigned(st.z, 1)}σ)`}</p>
               <p className="mt-1 truncate text-[9px] text-muted-foreground">{g.formula ?? g.sources[0]}</p>
             </button>
           );
@@ -127,7 +128,7 @@ function Overview({ p, onOpen }: { p: HfPayload; onOpen: (m: string) => void }) 
                 <span className="min-w-0"><span className="line-clamp-2">{s.name}</span><span className="text-[10px] text-muted-foreground">{u.date} · {fmtHf(s.data[s.data.length - 1][1], s.unit)}</span></span>
                 <span className="shrink-0 text-right">
                   {u.record && <Badge variant="outline" className="mb-0.5 block text-[9px]">record {u.record}</Badge>}
-                  <span className={cn("block tabular-nums", u.z > 0 ? "text-negative" : "text-positive")}>{u.z >= 0 ? "+" : ""}{u.z.toFixed(1)}σ</span>
+                  <span className={cn("block tabular-nums", u.z > 0 ? "text-negative" : "text-positive")}>{fmtSigned(u.z, 1)}σ</span>
                 </span>
               </button>
             );
@@ -159,11 +160,11 @@ function Auctions() {
               <tr key={r.cusip + r.date} onClick={() => setTerm(`${r.term}|${r.type}`)} className="cursor-pointer border-b hover:bg-secondary">
                 <td className="px-3 py-1.5">{r.date}</td>
                 <td>{r.term} {r.type}{r.printedTerm !== r.term && <span className="text-[10px] text-muted-foreground"> (reopen)</span>}</td>
-                <td className="text-right">{r.rate != null ? `${r.rate.toFixed(3)}%` : "—"}</td>
-                <td className="text-right">{r.btc?.toFixed(2)}<span className="block text-[9px] text-muted-foreground">avg {r.avgBtc?.toFixed(2) ?? "—"}</span></td>
-                <td className="text-right">{r.indirect?.toFixed(1)}%<span className="block text-[9px] text-muted-foreground">avg {r.avgIndirect?.toFixed(1) ?? "—"}</span></td>
-                <td className="text-right">{r.dealer?.toFixed(1)}%<span className="block text-[9px] text-muted-foreground">avg {r.avgDealer?.toFixed(1) ?? "—"}</span></td>
-                <td className={cn("px-3 text-right font-medium", r.verdict === "strong" && "text-positive", r.verdict === "weak" && "text-negative")}>{r.verdict ?? "—"}{r.score != null && <span className="block text-[9px] font-normal text-muted-foreground">{r.score >= 0 ? "+" : ""}{r.score.toFixed(1)}</span>}</td>
+                <td className="text-right">{r.rate != null ? `${r.rate.toFixed(3)}%` : "–"}</td>
+                <td className="text-right">{r.btc?.toFixed(2)}<span className="block text-[9px] text-muted-foreground">avg {r.avgBtc?.toFixed(2) ?? "–"}</span></td>
+                <td className="text-right">{r.indirect?.toFixed(1)}%<span className="block text-[9px] text-muted-foreground">avg {r.avgIndirect?.toFixed(1) ?? "–"}</span></td>
+                <td className="text-right">{r.dealer?.toFixed(1)}%<span className="block text-[9px] text-muted-foreground">avg {r.avgDealer?.toFixed(1) ?? "–"}</span></td>
+                <td className={cn("px-3 text-right font-medium", r.verdict === "strong" && "text-positive", r.verdict === "weak" && "text-negative")}>{r.verdict ?? "–"}{r.score != null && <span className="block text-[9px] font-normal text-muted-foreground">{fmtSigned(r.score, 1)}</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -227,7 +228,7 @@ function Explorer({ p, sel, setSel }: { p: HfPayload; sel: string | null; setSel
             <p className="mt-0.5 text-[11px] text-muted-foreground">{cur.release} · {cur.freq} · {cur.unit} · {cur.data[0][0]} to {cur.data[cur.data.length - 1][0]}</p>
             <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4">
               <Stat k="Latest" v={fmtHf(st.latest[1], cur.unit)} />
-              <Stat k="vs history" v={st.z == null ? "—" : `${st.z >= 0 ? "+" : ""}${st.z.toFixed(1)}σ · ${st.percentile.toFixed(0)}th pct`} />
+              <Stat k="vs history" v={st.z == null ? "–" : `${fmtSigned(st.z, 1)}σ · ${st.percentile.toFixed(0)}th pct`} />
               <Stat k="High" v={`${fmtHf(st.high[1], cur.unit)} (${st.high[0]})`} />
               <Stat k="Low" v={`${fmtHf(st.low[1], cur.unit)} (${st.low[0]})`} />
             </div>

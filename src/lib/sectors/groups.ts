@@ -1,4 +1,4 @@
-// Sector and industry analysis built by the Filed Under sectors job (etl/sectors.py) from each company's
+// Sector and industry analysis built by the FiledUnder sectors job (etl/sectors.py) from each company's
 // filings, prices and the macro store, served through the partner data service:
 //   sectors.json            overview of every sector and industry, ETF rotation, SPY returns
 //   sectors/{slug}.json     one group: quarterly aggregates, valuation range, performance, macro, KPIs,

@@ -15,6 +15,7 @@ import {
   ttmSum,
   type Dossier,
 } from "./dossier";
+import { fmtSigned } from "@/lib/format";
 
 const INK: [number, number, number] = [26, 26, 26];
 const MUTED: [number, number, number] = [110, 106, 98];
@@ -142,7 +143,7 @@ export async function buildTearSheet(x: Dossier, jsPDFCtor?: typeof import("jspd
   const s = x.screen ?? ({} as Record<string, unknown>);
   const screenRef = reg.dataset(
     "screener",
-    `Filed Under screener${x.screenAsOf ? ` (prices as of ${x.screenAsOf})` : ""}: price × cover-page shares; multiples from the last four reported quarters`,
+    `FiledUnder screener${x.screenAsOf ? ` (prices as of ${x.screenAsOf})` : ""}: price × cover-page shares; multiples from the last four reported quarters`,
   );
   const priceRef = reg.dataset("price", `Daily closes, Yahoo Finance chart API${x.priceDate ? `, last close ${x.priceDate}` : ""}`);
 
@@ -154,7 +155,7 @@ export async function buildTearSheet(x: Dossier, jsPDFCtor?: typeof import("jspd
   text(doc, x.price != null ? `$${x.price.toFixed(2)}` : "n/a", PAGE_W - M, 26, { size: 15, bold: true, color: [250, 248, 244], align: "right" });
   text(
     doc,
-    `${x.changePct != null ? `${x.changePct > 0 ? "+" : ""}${x.changePct.toFixed(2)}% today · ` : ""}as of ${x.priceDate ?? "n/a"} · tear sheet ${x.generated.slice(0, 10)}`,
+    `${x.changePct != null ? `${fmtSigned(x.changePct, 2)}% today · ` : ""}as of ${x.priceDate ?? "n/a"} · tear sheet ${x.generated.slice(0, 10)}`,
     PAGE_W - M,
     38,
     { size: 6.5, color: [201, 197, 188], align: "right" },
@@ -392,7 +393,7 @@ export async function buildTearSheet(x: Dossier, jsPDFCtor?: typeof import("jspd
   }
   for (let pg = 1; pg <= pages; pg++) {
     doc.setPage(pg);
-    text(doc, `Filed Under · ${x.ticker} tear sheet · figures as reported in SEC filings unless noted; numbers refer to the source list · page ${pg} of ${pages}`, M, PAGE_H - 16, { size: 5.5, color: MUTED });
+    text(doc, `FiledUnder · ${x.ticker} tear sheet · figures as reported in SEC filings unless noted; numbers refer to the source list · page ${pg} of ${pages}`, M, PAGE_H - 16, { size: 5.5, color: MUTED });
   }
   const blob = doc.output("blob") as Blob;
   return { blob, pages, sources: sources.length, filename: `${x.ticker}-tear-sheet-${x.generated.slice(0, 10)}.pdf` };

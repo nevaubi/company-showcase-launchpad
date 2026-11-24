@@ -47,7 +47,7 @@ export function useRequestReport() {
     onSuccess: (row) => {
       qc.invalidateQueries({ queryKey: ["reports"] });
       if (row.status === "failed") toast.error(row.error ?? "The report couldn't be written");
-      else if (row.status === "ready" && row.error) toast.error(`Refresh failed — showing the previous version. ${row.error}`);
+      else if (row.status === "ready" && row.error) toast.error(`Refresh failed, so the previous version is shown. ${row.error}`);
     },
     onError: (e) => { qc.invalidateQueries({ queryKey: ["reports"] }); toast.error((e as Error).message); },
   });

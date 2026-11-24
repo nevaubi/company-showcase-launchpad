@@ -160,7 +160,7 @@ export function EarningsSeason() {
                         key={r.ticker}
                         to="/app/companies/$ticker/earnings"
                         params={{ ticker: r.ticker }}
-                        title={`${r.name}${r.is_estimate ? " · estimated date" : ""}${r.eps != null ? ` · consensus EPS ${r.eps.toFixed(2)}` : ""}${r.median_abs_move != null ? ` · typical move ±${(r.median_abs_move * 100).toFixed(1)}%` : ""}`}
+                        title={`${r.name}${r.is_estimate ? " · estimated date" : ""}${r.eps != null ? ` · consensus EPS ${num2(r.eps)}` : ""}${r.median_abs_move != null ? ` · typical move ±${(r.median_abs_move * 100).toFixed(1)}%` : ""}`}
                         className={cn("inline-flex h-7 items-center rounded-md border px-1.5 transition-colors duration-150 hover:bg-secondary", r.is_estimate && "border-dashed")}
                       >
                         <TickerMark ticker={r.ticker} link={false} />

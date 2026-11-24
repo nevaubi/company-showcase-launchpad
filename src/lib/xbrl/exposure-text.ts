@@ -131,5 +131,5 @@ export function bankStatesText(rows: DepositRow[], ticker: string): string | nul
   const total = mine.find((r) => r.date === latest && !r.meta?.state);
   const states = mine.filter((r) => r.date === latest && r.meta?.state).sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
   const metros = ((total?.meta?.metros ?? []) as { name: string; value: number; share: number }[]).slice(0, 6);
-  return `Branch deposits June ${latest.slice(0, 4)} (FDIC): ${total ? usd(total.value ?? 0) : "n/a"} in ${states.length} states — ${states.slice(0, 8).map((r) => `${r.meta.state} ${pct(r.meta.share, 1)} of the bank (${pct(r.meta.market_share, 1)} of the state)`).join(", ")}${metros.length ? `; largest metros: ${metros.map((m) => `${m.name} ${pct(m.share, 0)}`).join(", ")}` : ""} · ${total?.source_url ?? ""}`;
+  return `Branch deposits June ${latest.slice(0, 4)} (FDIC): ${total ? usd(total.value ?? 0) : "n/a"} in ${states.length} states: ${states.slice(0, 8).map((r) => `${r.meta.state} ${pct(r.meta.share, 1)} of the bank (${pct(r.meta.market_share, 1)} of the state)`).join(", ")}${metros.length ? `; largest metros: ${metros.map((m) => `${m.name} ${pct(m.share, 0)}`).join(", ")}` : ""} · ${total?.source_url ?? ""}`;
 }

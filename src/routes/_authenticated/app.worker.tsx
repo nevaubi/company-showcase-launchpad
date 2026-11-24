@@ -73,14 +73,14 @@ function WorkerPage() {
   if (q.isError) return <p className="p-6 text-sm text-muted-foreground">Couldn't load worker progress: {(q.error as Error).message}</p>;
   if (!q.data || !d) return <p className="p-6 text-sm text-muted-foreground">Loading live progress…</p>;
   const p = q.data;
-  const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : "—");
+  const pct = (a: number, b: number) => (b ? `${((100 * a) / b).toFixed(1)}%` : "–");
   return (
     <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4">
       <PageHeader title="Live worker" description="The always-on cloud worker reading every investor-relations file. Refreshes every 20 seconds from the database." />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {[
-          ["Worker", d.status, `heartbeat ${ago(p.loop?.heartbeat, p.now)} · up ${d.uptimeMin == null ? "—" : `${Math.round(d.uptimeMin)} min`}`],
-          ["Memory", p.loop?.memLimitGB ? `${(p.loop.memUsedGB ?? 0).toFixed(1)} / ${p.loop.memLimitGB.toFixed(0)} GB` : "—", "machine limit the worker sees"],
+          ["Worker", d.status, `heartbeat ${ago(p.loop?.heartbeat, p.now)} · up ${d.uptimeMin == null ? "–" : `${Math.round(d.uptimeMin)} min`}`],
+          ["Memory", p.loop?.memLimitGB ? `${(p.loop.memUsedGB ?? 0).toFixed(1)} / ${p.loop.memLimitGB.toFixed(0)} GB` : "–", "machine limit the worker sees"],
           ["Finished last hour", n(d.finishedHour), `${n(Object.keys(p.loop?.review ?? {}).length)} set aside for review`],
           ["Companies with figures", `${n(d.withFacts.length)} / ${n(d.withFiles.length)}`, pct(d.withFacts.length, d.withFiles.length)],
           ["Figures (live count)", n(d.totalFacts), `+${n(d.recentFacts)} last hour`],
@@ -89,7 +89,7 @@ function WorkerPage() {
           [
             "Read from release text",
             n(Object.values(p.text ?? {}).reduce((a, b) => a + b, 0)),
-            p.prose ? `${n(p.prose.read)} releases read · ${n(p.prose.waiting)} waiting${p.prose.working ? ` · ${n(p.prose.working)} now` : ""}` : "—",
+            p.prose ? `${n(p.prose.read)} releases read · ${n(p.prose.waiting)} waiting${p.prose.working ? ` · ${n(p.prose.working)} now` : ""}` : "–",
           ],
           [
             "OpenAI free allowance",
@@ -128,8 +128,8 @@ function WorkerPage() {
                     <td className="py-1"><Link to="/app/companies/$ticker/ir" params={{ ticker: t }} className="inline-flex items-center gap-1.5 align-middle font-medium hover:underline"><CompanyLogo ticker={t} size="2xs" decorative />{t}</Link></td>
                     <td className="num text-right">{n(p.docs[t]?.[1] ?? 0)} / {n(p.docs[t]?.[0] ?? 0)}</td>
                     <td className="num text-right">{n(p.facts[t] ?? 0)}</td>
-                    <td className="num text-right">{p.recent[t] ? `+${n(p.recent[t])}` : "—"}</td>
-                    <td className="text-right text-muted-foreground">{p.loop!.stage[t] ?? "—"}</td>
+                    <td className="num text-right">{p.recent[t] ? `+${n(p.recent[t])}` : "–"}</td>
+                    <td className="text-right text-muted-foreground">{p.loop!.stage[t] ?? "–"}</td>
                     <td className="num text-right">{p.loop!.resumes[t] ?? 0}</td>
                   </tr>
                 ))}
@@ -139,7 +139,7 @@ function WorkerPage() {
         </Panel>
         <Panel title="Worker log" className="min-w-0">
           <pre className="max-h-72 overflow-auto whitespace-pre-wrap text-[11px] leading-snug text-muted-foreground">
-            {(p.loop?.log ?? []).slice().reverse().join("\n") || "No log lines yet — they appear once the updated worker finishes its next step."}
+            {(p.loop?.log ?? []).slice().reverse().join("\n") || "No log lines yet. They appear once the updated worker finishes its next step."}
           </pre>
         </Panel>
       </div>
@@ -152,14 +152,14 @@ function WorkerPage() {
       </Panel>
       {d.status !== "running" && (
         <p className="rounded-md border border-warning/40 bg-warning/10 p-3 text-[12px] text-warning">
-          The worker hasn't checked in for over 10 minutes — it may be restarting or out of memory.
+          The worker hasn't checked in for over 10 minutes. It may be restarting or out of memory.
         </p>
       )}
       {Object.keys(p.loop?.review ?? {}).length > 0 && (
         <Panel title={`Set aside for review (${Object.keys(p.loop!.review).length})`} className="min-w-0">
           <ul className="grid grid-cols-1 gap-1 text-[12px] sm:grid-cols-2">
             {Object.entries(p.loop!.review).map(([t, why]) => (
-              <li key={t}><TickerMark ticker={t} size="2xs" link={false} /> <span className="text-muted-foreground">— {why}</span></li>
+              <li key={t}><TickerMark ticker={t} size="2xs" link={false} /> <span className="text-muted-foreground">{why}</span></li>
             ))}
           </ul>
         </Panel>

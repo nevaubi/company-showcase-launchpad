@@ -178,7 +178,7 @@ function ReportLibrary() {
                       <TableCell className="text-xs">{KINDS[r.kind].short}</TableCell>
                       <TableCell className="max-w-0">
                         <span className={cn("block truncate", r.status !== "ready" && "text-muted-foreground")}>
-                          {r.status === "generating" && !r.title ? <span className="text-shimmer">Writing…</span> : r.status === "failed" && !r.title ? <span className="text-negative">Couldn't write — {r.error}</span> : r.title}
+                          {r.status === "generating" && !r.title ? <span className="text-shimmer">Writing…</span> : r.status === "failed" && !r.title ? <span className="text-negative">Couldn't write: {r.error}</span> : r.title}
                         </span>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground"><span className="block truncate">{r.scope === "shared" ? "Standard" : `${r.scope === "firm" ? firm?.name ?? "Firm" : "Mine"} · ${optionsSummary(r.options)}`}</span></TableCell>

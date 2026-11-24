@@ -71,7 +71,7 @@ export function DataTable({ table, unit, caption }: { table: FigureTable; unit?:
           {table.rows.map((r, i) => (
             <tr key={i} className="border-b last:border-0">
               {r.map((v, j) => (
-                <td key={j} className={cn("px-2 py-1", numeric[j] && "num text-right tabular-nums")}>{typeof v === "number" ? fmtValue(v, j === 0 ? "" : unit, { digits: 2 }) : (v ?? "—")}</td>
+                <td key={j} className={cn("px-2 py-1", numeric[j] && "num text-right tabular-nums")}>{typeof v === "number" ? fmtValue(v, j === 0 ? "" : unit, { digits: 2 }) : (v ?? "–")}</td>
               ))}
             </tr>
           ))}

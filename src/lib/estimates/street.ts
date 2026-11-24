@@ -1,4 +1,4 @@
-// Estimates bundle built by the Filed Under estimates job (etl/estimates.py), served through the partner
+// Estimates bundle built by the FiledUnder estimates job (etl/estimates.py), served through the partner
 // data service as estimates/{T}.json: Yahoo Finance consensus by fiscal period with our own daily snapshots,
 // Benzinga analyst actions, ratings and price targets ("Powered by Benzinga Data"), provider EPS surprises
 // with SEC GAAP EPS alongside, and company guidance quoted from earnings releases.

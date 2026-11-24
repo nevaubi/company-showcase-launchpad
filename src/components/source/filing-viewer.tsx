@@ -464,7 +464,7 @@ function StatusPill({ status, loading }: { status: LocateStatus; loading: boolea
           <TriangleAlert className="size-3.5" />
           {status.page
             ? `Couldn't find the quoted line. Showing page ${status.page}`
-            : `${status.quote ? "Couldn't find the quoted passage" : "Couldn't pinpoint the value"} — showing the full document`}
+            : `${status.quote ? "Couldn't find the quoted passage" : "Couldn't pinpoint the value"}, so the full document is shown`}
         </span>
       );
     default:

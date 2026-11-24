@@ -1,4 +1,4 @@
-// As-filed statements from the SEC Financial Statement Data Sets, published by the Filed Under
+// As-filed statements from the SEC Financial Statement Data Sets, published by the FiledUnder
 // pipeline (etl/statements.py) and read through the partner data service:
 //   statements/{T}/index.json            every 10-K/10-Q since 2009 and the statements each one rendered
 //   statements/{T}/{accession}.json.gz   one filing: every statement's lines (pre.txt) and values (num.txt)

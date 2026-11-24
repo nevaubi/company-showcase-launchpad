@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/select";
 import { useSource } from "@/components/source/source-context";
 import { useWatchlist } from "@/lib/workspace";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtPct as fmtPctSigned } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import {
   addDays,
@@ -152,7 +152,7 @@ function useOpeners() {
               ? `${r.ticker} closed ${signedPct(r.last?.move, 2)} on ${r.last?.move_date} against the prior close, the first session after the 8-K filed ${r.last?.report?.filed}.`
               : `Median absolute one-day move after ${r.ticker}'s last ${r.reaction?.n} earnings releases: ${((r.reaction?.median_abs_move ?? 0) * 100).toFixed(2)}%.`,
           confidence:
-            "Computed by Filed Under from daily closes (Yahoo Finance chart API) around each 8-K Item 2.02 filing.",
+            "Computed by FiledUnder from daily closes (Yahoo Finance chart API) around each 8-K Item 2.02 filing.",
         },
       }),
     release: (x: MacroRelease) =>
@@ -202,7 +202,7 @@ function useOpeners() {
             .map(([d, a]) => `${d} $${a}`)
             .join(", ")}.`,
           confidence:
-            "Computed by Filed Under from the stored daily price history's dividend events.",
+            "Computed by FiledUnder from the stored daily price history's dividend events.",
         },
       }),
     ipoTerm: (
@@ -708,7 +708,7 @@ function groupBy<T>(rows: T[], key: (r: T) => string) {
 
 // ---------------------------------------------------------------- earnings
 const signedPct = (v: number | null | undefined, dp = 1) =>
-  v == null || !Number.isFinite(v) ? "–" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(dp)}%`;
+  fmtPctSigned(v, dp, true);
 const toneOf = (v: number | null | undefined) =>
   v == null ? "" : v > 0 ? "text-positive" : v < 0 ? "text-negative" : "";
 
@@ -1283,7 +1283,7 @@ export function DividendsList({ d, day }: { d: CalData; day?: string }) {
                       )}
                     >
                       {prior
-                        ? `${fmtPerShare(prior[1], 4)}${chg != null && Math.abs(chg) > 0.001 && x.kind !== "special" ? ` (${chg > 0 ? "+" : ""}${(chg * 100).toFixed(1)}%)` : ""}`
+                        ? `${fmtPerShare(prior[1], 4)}${chg != null && Math.abs(chg) > 0.001 && x.kind !== "special" ? ` (${fmtPctSigned(chg, 1, true)})` : ""}`
                         : "–"}
                     </td>
                     <td className={cn(td, "num whitespace-nowrap")}>

@@ -182,7 +182,7 @@ export function positionIn(v: number | null, low: number | null, high: number | 
 
 /** Rating mean on the 1 (strong buy) .. 5 (strong sell) scale → plain label. */
 export function ratingLabel(m: number | null): string {
-  if (m == null) return "—";
+  if (m == null) return "–";
   if (m <= 1.5) return "Strong buy";
   if (m <= 2.5) return "Buy";
   if (m <= 3.5) return "Hold";

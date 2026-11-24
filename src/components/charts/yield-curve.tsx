@@ -92,7 +92,7 @@ export function YieldCurveChart({ lines, height = 260, className }: { lines: Cur
             return (
               <p key={l.id} className="num flex items-center gap-1.5">
                 <span className="size-2 rounded-full" style={{ background: l.color }} />
-                {l.label}: {p ? `${p.value.toFixed(2)}%` : "—"}
+                {l.label}: {p ? `${p.value.toFixed(2)}%` : "–"}
               </p>
             );
           })}

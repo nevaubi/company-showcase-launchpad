@@ -18,7 +18,7 @@ const fmt = (v: number, unit: string) => {
 
 function tableText(t: DetailTable, d: FilingDetail): string[] {
   const head = t.periods.map((k) => detailPeriodLabel(d.periods[k])).join(" | ");
-  const line = (label: string, values: Record<string, { v: number }>, indent = "") => `${indent}${label}: ${t.periods.map((k) => (values[k] ? fmt(values[k].v, t.unit) : "—")).join(" | ")}`;
+  const line = (label: string, values: Record<string, { v: number }>, indent = "") => `${indent}${label}: ${t.periods.map((k) => (values[k] ? fmt(values[k].v, t.unit) : "–")).join(" | ")}`;
   const out = [`### ${t.title} [${head}]`];
   for (const r of t.rows) {
     if (Object.keys(r.values).length) out.push(line(r.label, r.values));
@@ -48,7 +48,7 @@ export function detailText(stored: StoredDetail, opts: { section?: DetailSection
     const m = d.segments;
     const k = m.periods[m.periods.length - 1];
     out.push(`### Segment P&L ${detailPeriodLabel(d.periods[k])} [${m.segments.map((s) => s.label).join(" | ")}]`);
-    for (const r of m.rows) out.push(`${r.label}: ${m.segments.map((s) => (r.values[s.member]?.[k] ? fmt(r.values[s.member][k].v, "USD") : "—")).join(" | ")}`);
+    for (const r of m.rows) out.push(`${r.label}: ${m.segments.map((s) => (r.values[s.member]?.[k] ? fmt(r.values[s.member][k].v, "USD") : "–")).join(" | ")}`);
   }
   if (want("concentration") && d.concentration.length) {
     out.push("### Concentration (share of the benchmark)");

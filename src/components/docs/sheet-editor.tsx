@@ -350,7 +350,7 @@ export function SheetEditor({ initial, onChange, readOnly = false }: { initial: 
             }
           }}
           className="num min-w-0 flex-1 bg-transparent text-[12.5px] outline-none"
-          placeholder='Type a value or formula — e.g. =FU("AAPL","revenue","FY2025","B")'
+          placeholder='Type a value or formula, e.g. =FU("AAPL","revenue","FY2025","B")'
         />
         {val instanceof FormulaError && <span className="truncate text-[11px] text-negative">{val.detail ?? val.code}</span>}
       </div>
@@ -445,7 +445,7 @@ export function SheetEditor({ initial, onChange, readOnly = false }: { initial: 
         </table>
       </div>
       <p className="border-t bg-card px-3 py-1.5 text-[10.5px] text-muted-foreground">
-        Functions: SUM, AVERAGE, MIN, MAX, MEDIAN, ROUND, IF, GROWTH(new,old), CAGR(first,last,years), PRICE("NVDA"), and <span className="num">FU("TICKER","metric","period",["M"|"B"])</span> for any reported SEC value — dotted cells are sourced; select one and click Source.
+        Functions: SUM, AVERAGE, MIN, MAX, MEDIAN, ROUND, IF, GROWTH(new,old), CAGR(first,last,years), PRICE("NVDA"), and <span className="num">FU("TICKER","metric","period",["M"|"B"])</span> for any reported SEC value. Dotted cells are sourced; select one and click Source.
       </p>
     </div>
   );

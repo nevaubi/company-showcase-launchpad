@@ -1,4 +1,4 @@
-// "What changed" events from the Filed Under pipeline (etl/changes.py): changes/feed.json (universe, 30 days,
+// "What changed" events from the FiledUnder pipeline (etl/changes.py): changes/feed.json (universe, 30 days,
 // ranked) and changes/{T}.json (one company, 90 days). Every event carries its evidence and a stable id.
 
 export type ChangeTier = "high" | "medium" | "low";

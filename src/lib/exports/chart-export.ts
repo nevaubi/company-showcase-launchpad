@@ -66,7 +66,7 @@ function buildFramedSvg(
   const chars = Math.max(30, Math.floor((w - 2 * pad) / 6.2));
   const titleLines = frame.title ? wrap(frame.title, Math.floor(chars * 0.75)) : [];
   const subLines = frame.subtitle ? wrap(frame.subtitle, chars) : [];
-  const foot = [frame.units ? `Units: ${frame.units}` : "", frame.source ? `Source: ${frame.source}` : "", "Filed Under"].filter(Boolean).join(" · ");
+  const foot = [frame.units ? `Units: ${frame.units}` : "", frame.source ? `Source: ${frame.source}` : "", "FiledUnder"].filter(Boolean).join(" · ");
   const footLines = wrap(foot, chars);
   let y = pad;
   const parts: string[] = [];

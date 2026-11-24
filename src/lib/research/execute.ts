@@ -149,7 +149,7 @@ export function flatUniverse(companies: UniverseEntry[]) {
 }
 
 const fmtMetric = (k: string, v: unknown) =>
-  typeof v !== "number" ? String(v ?? "—") : /Margin|Growth|Cagr|Intensity/.test(k) ? `${(v * 100).toFixed(1)}%` : k === "epsDiluted" ? `$${v.toFixed(2)}` : `$${(v / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M`;
+  typeof v !== "number" ? String(v ?? "–") : /Margin|Growth|Cagr|Intensity/.test(k) ? `${(v * 100).toFixed(1)}%` : k === "epsDiluted" ? `$${v.toFixed(2)}` : `$${(v / 1e6).toLocaleString("en-US", { maximumFractionDigits: 0 })}M`;
 
 // Tools that move the user's page run one at a time, in the order the model issued them. Issued together
 // they would otherwise scroll and mark at once and fight over the viewport.
@@ -712,7 +712,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
       const forms = (args.forms as string[] | null)?.map((f) => f.toUpperCase());
       const list = d.filings.filter((f) => !forms || forms.includes(f.form.toUpperCase())).slice(0, Math.min(40, Number(args.limit) || 15));
       return {
-        output: list.map((f) => `${f.accn} | ${f.form}${f.items ? ` items ${f.items}` : ""} | period ${f.report ?? "—"} | filed ${f.filed} | primary doc ${f.doc}`).join("\n") +
+        output: list.map((f) => `${f.accn} | ${f.form}${f.items ? ` items ${f.items}` : ""} | period ${f.report ?? "–"} | filed ${f.filed} | primary doc ${f.doc}`).join("\n") +
           (d.earningsReleases.length ? `\nEarnings press releases (8-K exhibit 99.1):\n${d.earningsReleases.slice(0, 6).map((r) => `${r.accn} | filed ${r.filed} | document ${r.doc}`).join("\n")}` : ""),
         summary: `${list.length} ${d.profile.ticker} filings`,
       };

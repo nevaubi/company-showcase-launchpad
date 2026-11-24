@@ -44,7 +44,7 @@ function tableBlock(t: ReportTable, brand: string, font: string): (Paragraph | T
       width: { size: 100, type: WidthType.PERCENTAGE },
       rows: [
         new TableRow({ tableHeader: true, children: [cell("", { head: true }), ...t.columns.map((c) => cell(c, { head: true, right: true }))] }),
-        ...t.rows.map((r) => new TableRow({ children: [cell(r.label, { bold: r.bold }), ...r.cells.map((c) => cell(c?.text ?? "—", { right: true, bold: r.bold, color: c?.tone === "negative" ? "B42318" : c?.tone === "positive" ? "067647" : undefined }))] })),
+        ...t.rows.map((r) => new TableRow({ children: [cell(r.label, { bold: r.bold }), ...r.cells.map((c) => cell(c?.text ?? "–", { right: true, bold: r.bold, color: c?.tone === "negative" ? "B42318" : c?.tone === "positive" ? "067647" : undefined }))] })),
       ],
     }),
     ...(t.note ? [new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: t.note, italics: true, size: 15, color: "777777", font })] })] : []),
@@ -107,7 +107,7 @@ export async function reportToDocx(
   const shade = { type: ShadingType.CLEAR, color: "auto", fill: hex(b.primary) };
 
   const cover: Paragraph[] = [
-    new Paragraph({ shading: shade, spacing: { after: 0 }, children: logo ? [logo] : [new TextRun({ text: brand.firmName ?? "Filed Under", bold: true, color: ink, font, size: 22 })] }),
+    new Paragraph({ shading: shade, spacing: { after: 0 }, children: logo ? [logo] : [new TextRun({ text: brand.firmName ?? "FiledUnder", bold: true, color: ink, font, size: 22 })] }),
     new Paragraph({ shading: shade, spacing: { before: 120 }, children: [new TextRun({ text: KINDS[content.kind].label.toUpperCase(), color: ink, font, size: 16, bold: true })] }),
     new Paragraph({ shading: shade, border: { top: { style: BorderStyle.SINGLE, size: 18, color: hex(b.accent), space: 6 } }, children: [new TextRun({ text: content.title, bold: true, color: ink, font, size: 40 })] }),
     new Paragraph({ shading: shade, children: [new TextRun({ text: content.subtitle, color: ink, font, size: 22 })] }),
@@ -147,16 +147,16 @@ export async function reportToDocx(
     if (!f) continue;
     body.push(new Paragraph({ spacing: { after: 40 }, children: [
       new TextRun({ text: `${n}. `, bold: true, size: 15, font }),
-      new TextRun({ text: `${readableDates(f.text)} — ${refCaption(f.ref)}`, size: 15, font, color: "333333" }),
+      new TextRun({ text: `${readableDates(f.text)} · ${refCaption(f.ref)}`, size: 15, font, color: "333333" }),
       ...(f.ref.kind === "web" ? [new TextRun({ text: ` ${f.ref.url}`, size: 14, font, color: "1D4ED8" })] : []),
     ] }));
   }
   body.push(new Paragraph({ spacing: { before: 240 }, children: [new TextRun({ text: b.disclaimer, size: 14, italics: true, font, color: "777777" })] }));
 
   const doc = new Document({
-    creator: brand.firmName ?? "Filed Under",
+    creator: brand.firmName ?? "FiledUnder",
     title: content.title,
-    description: `${KINDS[content.kind].label} — ${content.name} (${content.ticker})`,
+    description: `${KINDS[content.kind].label}: ${content.name} (${content.ticker})`,
     styles: { default: { document: { run: { font, size: 21 } } } },
     sections: [{
       properties: { page: { margin: { top: 900, bottom: 900, left: 1000, right: 1000 } } },

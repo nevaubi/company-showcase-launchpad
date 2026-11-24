@@ -39,7 +39,7 @@ export function useFeatureGate() {
     if (data && canUse(data.tier, feature)) return true;
     const need = feature === "exports" || feature === "alerts" ? "Research or Pro" : "Pro";
     toast(`This needs the ${need} plan`, {
-      description: data?.tier === "expired" ? "Your free trial has ended." : "Upgrade to unlock it.",
+      description: data?.tier === "expired" ? "Your free trial has ended." : "Upgrade to use it.",
       action: { label: "See plans", onClick: () => navigate({ to: "/app/billing" }) },
     });
     return false;

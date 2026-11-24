@@ -79,7 +79,7 @@ function AutopilotsPage() {
         }
       />
 
-      <Panel title="House autopilots" subtitle="Run by Filed Under on the same rules for everyone: a live forward test of the backtests" collapse={false}>
+      <Panel title="House autopilots" subtitle="Run by FiledUnder on the same rules for everyone: a live forward test of the backtests" collapse={false}>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-section="House autopilots">
           {house.map((b) => <BotCard key={b.id} bot={b} data={data} />)}
         </div>

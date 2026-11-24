@@ -1,5 +1,5 @@
 // Screener engine: the screen spec (filters, universe, sort, columns, grouping) and the code that applies
-// it. Ported from the Filed Under screener (public/pages/screenspec.js and screener.js) so a spec written
+// it. Ported from the FiledUnder screener (public/pages/screenspec.js and screener.js) so a spec written
 // by the screen agent behaves identically here. Data: screener.json from the partner data service (rich
 // rows, about 240 fields) plus basic rows built from the partner universe's SEC fundamentals for companies
 // screener.json does not carry yet.

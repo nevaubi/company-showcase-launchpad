@@ -312,7 +312,7 @@ interface TextRow {
   source_url: string | null;
 }
 
-const lbs = (v: number | null | undefined) => (v == null ? "—" : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M lb` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}K lb` : `${Math.round(v)} lb`);
+const lbs = (v: number | null | undefined) => (v == null ? "–" : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M lb` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}K lb` : `${Math.round(v)} lb`);
 
 /** One company's TRI footprint: yearly plants/releases/production index, latest states, largest plants and chemicals. */
 export function triText(rows: TextRow[], ticker: string, limit = 20): string {
@@ -322,8 +322,8 @@ export function triText(rows: TextRow[], ticker: string, limit = 20): string {
   const y = years[years.length - 1];
   const fac = get(TRI_FACILITIES, y)!;
   const lines = [
-    `${ticker} — EPA Toxics Release Inventory (plants as reported under parent ${(fac.meta.parents ?? []).join("; ")}). Production index = median of plants' reported production ratios (this year ÷ last year per chemical). <${fac.source_url}>`,
-    "BY YEAR: " + years.map((yr) => `${yr}: ${get(TRI_FACILITIES, yr)?.value ?? "—"} plants, ${lbs(get(TRI_RELEASES, yr)?.value)} released, production ${get(TRI_PRODUCTION, yr)?.value?.toFixed(3) ?? "—"}`).join(" | "),
+    `${ticker}: EPA Toxics Release Inventory (plants as reported under parent ${(fac.meta.parents ?? []).join("; ")}). Production index = median of plants' reported production ratios (this year ÷ last year per chemical). <${fac.source_url}>`,
+    "BY YEAR: " + years.map((yr) => `${yr}: ${get(TRI_FACILITIES, yr)?.value ?? "–"} plants, ${lbs(get(TRI_RELEASES, yr)?.value)} released, production ${get(TRI_PRODUCTION, yr)?.value?.toFixed(3) ?? "–"}`).join(" | "),
     `STATES ${y}: ` + (fac.meta.states ?? []).slice(0, 15).map((s: { state: string; facilities: number; releases: number }) => `${s.state} ${s.facilities} (${lbs(s.releases)})`).join(", "),
     `LARGEST PLANTS ${y}:`,
     ...((fac.meta.facilities ?? []) as TriFacility[]).slice(0, limit).map((f) => `${f.name}, ${f.city} ${f.state} · ${f.sector} · ${lbs(f.releases)} · ${f.chemicals} chemicals${f.ratio != null ? ` · production ratio ${f.ratio.toFixed(2)}` : ""} <${f.url}>`),

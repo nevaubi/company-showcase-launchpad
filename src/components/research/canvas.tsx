@@ -110,7 +110,7 @@ export function BrowserCard({ r, single }: { r: BrowserRun; single: boolean }) {
         )}
       </header>
       <div className="flex items-center gap-1.5 border-b bg-muted/40 px-2.5 py-1 font-mono text-[10.5px] text-muted-foreground">
-        <span className="min-w-0 flex-1 truncate">{r.currentUrl ?? (r.done ? "—" : "starting…")}</span>
+        <span className="min-w-0 flex-1 truncate">{r.currentUrl ?? (r.done ? "–" : "starting…")}</span>
         {r.currentUrl && (
           <a href={r.currentUrl} target="_blank" rel="noreferrer" className="shrink-0 hover:text-foreground" aria-label="Open page in a new tab">
             <ExternalLink className="size-3" />

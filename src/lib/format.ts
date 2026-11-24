@@ -31,7 +31,7 @@ function compact(a: number, digits: number, tDigits: number): string | null {
 }
 
 export function fmtCompactUsd(v: number | null | undefined, digits = 1): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   const a = Math.abs(v);
   const sign = v < 0 ? "−" : "";
   if (a === 0) return "$0";
@@ -40,7 +40,7 @@ export function fmtCompactUsd(v: number | null | undefined, digits = 1): string 
 }
 
 export function fmtCompact(v: number | null | undefined, digits = 1): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   const a = Math.abs(v);
   const sign = v < 0 ? "−" : "";
   const c = compact(a, digits, digits);
@@ -48,19 +48,19 @@ export function fmtCompact(v: number | null | undefined, digits = 1): string {
 }
 
 export function fmtPrice(v: number | null | undefined): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   return `$${n2.format(v)}`;
 }
 
 export function fmtPct(v: number | null | undefined, digits = 1, signed = false): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   const s = (v * 100).toFixed(digits);
   const out = signed && v > 0 ? `+${s}%` : `${s}%`;
   return out.replace("-", "−");
 }
 
 export function fmtSigned(v: number | null | undefined, digits = 2): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   return `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v).toFixed(digits)}`;
 }
 
@@ -146,7 +146,7 @@ export function fmtDate(
   d: string | null | undefined,
   opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric", year: "numeric" },
 ) {
-  if (!d) return "—";
+  if (!d) return "–";
   const date = d.length === 10 ? new Date(`${d}T12:00:00Z`) : new Date(d);
   if (Number.isNaN(date.getTime())) return d;
   return date.toLocaleDateString("en-US", { timeZone: "UTC", ...opts });
@@ -163,7 +163,7 @@ export function fmtRelative(d: string | Date): string {
 }
 
 export function fmtInt(v: number | null | undefined) {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   return n0.format(v);
 }
 
@@ -179,7 +179,7 @@ export const toneClass = {
 } as const;
 
 export function fiscalYearEndLabel(mmdd: string) {
-  if (!mmdd || mmdd.length !== 4) return "—";
+  if (!mmdd || mmdd.length !== 4) return "–";
   const m = Number(mmdd.slice(0, 2));
   const d = Number(mmdd.slice(2));
   return new Date(Date.UTC(2000, m - 1, d)).toLocaleDateString("en-US", {

@@ -144,7 +144,7 @@ function rowVal(d: FilingDetail, t: DetailTable, r: DetailRow, k: string): ExpVa
 /** The table's consolidated total in one period, else the sum of its rows (each a part). */
 function tableVal(d: FilingDetail, t: DetailTable, k: string): ExpVal | null {
   const tot = t.total?.[k];
-  if (tot) return { v: tot.v, parts: [refOf(d, t, k, tot, `${t.conceptLabel} — total`)] };
+  if (tot) return { v: tot.v, parts: [refOf(d, t, k, tot, `${t.conceptLabel}, total`)] };
   const rows = t.rows.map((r) => rowVal(d, t, r, k)).filter((x): x is ExpVal => !!x);
   if (!rows.length) return null;
   return { v: rows.reduce((n, x) => n + x.v, 0), parts: rows.flatMap((x) => x.parts) };

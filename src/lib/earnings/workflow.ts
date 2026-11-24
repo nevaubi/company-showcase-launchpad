@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { partnerFile } from "@/lib/data";
+import { fmtPct } from "@/lib/format";
 
 /** Earnings workflow files published by the pipeline (etl/earnings.py): preview packs, 8-K scorecards, season view. */
 
@@ -234,7 +235,7 @@ export const scoreQuery = (ticker: string) =>
   });
 
 export const pct = (v: number | null | undefined, d = 1) =>
-  v == null || !Number.isFinite(v) ? "–" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
+  fmtPct(v, d, true);
 
 /** Upcoming reports grouped by date, earliest first. */
 export function groupUpcoming(rows: SeasonUpcoming[], tickers?: Set<string>) {

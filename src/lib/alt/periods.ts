@@ -73,7 +73,7 @@ export function periodLabel(r: SeriesRowLike, today: string, yearly = true): str
 
 /** Label for "latest" lines: the period, and for a partial one the day it was read ("FY2027 YTD, as of 2026-11-20"). */
 export function asOfLabel(r: SeriesRowLike, today: string): string {
-  if (!r.date) return "—";
+  if (!r.date) return "–";
   if (!isPartial(r, today)) return r.meta?.fiscal_year ? `FY${r.meta.fiscal_year}` : r.date;
   const ended = typeof r.meta?.period_end === "string" ? r.meta.period_end < today : r.meta?.fiscal_year ? `${r.meta.fiscal_year}-09-30` < today : false;
   const asOf = typeof r.meta?.as_of === "string" ? r.meta.as_of.slice(0, 10) : r.date <= today && !ended ? r.date : null;

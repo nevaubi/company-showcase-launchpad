@@ -54,7 +54,7 @@ async function toLogoData(file: File): Promise<string> {
     c.height = Math.max(1, Math.round(h * scale));
     c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
     const data = c.toDataURL("image/png");
-    if (data.length > 380_000) throw new Error("That logo is too detailed — try a simpler PNG or SVG");
+    if (data.length > 380_000) throw new Error("That logo is too detailed. Try a simpler PNG or SVG");
     return data;
   } finally {
     URL.revokeObjectURL(url);
@@ -87,7 +87,7 @@ function BrandingPage() {
       qc.invalidateQueries({ queryKey: ["firms"] });
       qc.invalidateQueries({ queryKey: ["firm-logo", firm?.id] });
       setLogoData(undefined);
-      toast.success("Branding saved — new reports use it right away");
+      toast.success("Branding saved. New reports use it right away");
     },
     onError: (e) => toast.error(friendlyError(e)),
   });
@@ -171,7 +171,7 @@ function BrandingPage() {
             firmName={name}
             kicker="Company primer"
             title="NVIDIA Corporation (NVDA)"
-            subtitle="Accelerated computing platform — data center, gaming, professional visualization, automotive"
+            subtitle="Accelerated computing platform: data center, gaming, professional visualization, automotive"
             meta={<>Prepared {new Date().toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}{b.signature ? " · by Jane Doe, Senior Analyst" : ""}</>}
           />
           <div className="space-y-2 px-7 py-5 text-[12px] leading-relaxed">

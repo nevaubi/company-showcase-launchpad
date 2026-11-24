@@ -6,6 +6,7 @@
 import { displayBrand, type CmsRecord } from "./medicare";
 import { parseCsv } from "./csv";
 import { STATES } from "./sod";
+import { fmtPct } from "@/lib/format";
 
 export const GEO_PAGE = "https://data.cms.gov/provider-summary-by-type-of-service/medicare-part-d-prescribers/medicare-part-d-prescribers-by-geography-and-drug";
 export const GEO_TITLE_PREFIX = "Medicare Part D Prescribers - by Geography and Drug : ";
@@ -251,8 +252,8 @@ interface TextRow {
   source_url: string | null;
 }
 
-const usd = (v: number | null | undefined) => (v == null ? "—" : Math.abs(v) >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`);
-const pc = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "—" : `${(v * 100).toFixed(d)}%`);
+const usd = (v: number | null | undefined) => (v == null ? "–" : Math.abs(v) >= 1e9 ? `$${(v / 1e9).toFixed(2)}B` : Math.abs(v) >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : `$${Math.round(v / 1e3)}K`);
+const pc = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "–" : `${(v * 100).toFixed(d)}%`);
 
 /** One company's Part D costs by state: latest year's states (share, slice of the state, index, change) and drugs. */
 export function geoCompanyText(rows: TextRow[], ticker: string, limit = 15): string {
@@ -269,7 +270,7 @@ export function geoCompanyText(rows: TextRow[], ticker: string, limit = 15): str
     ...states.slice(0, limit).map((r) => {
       const o = then.get(r.meta.state);
       const g = o?.value ? (r.value ?? 0) / o.value - 1 : null;
-      return `${r.meta.state} ${usd(r.value)} · ${pc(r.meta.share)} of company · ${pc(r.meta.market_share, 2)} of the state's Part D · index ${r.meta.index?.toFixed(2) ?? "—"}${g != null && y0 !== y ? ` · ${g >= 0 ? "+" : ""}${(g * 100).toFixed(0)}% vs ${y0}` : ""} · top: ${(r.meta.drugs ?? []).map((d: GeoDrug) => `${d.brand} ${usd(d.value)}`).join(", ")} <${r.source_url}>`;
+      return `${r.meta.state} ${usd(r.value)} · ${pc(r.meta.share)} of company · ${pc(r.meta.market_share, 2)} of the state's Part D · index ${r.meta.index?.toFixed(2) ?? "–"}${g != null && y0 !== y ? ` · ${fmtPct(g, 0, true)} vs ${y0}` : ""} · top: ${(r.meta.drugs ?? []).map((d: GeoDrug) => `${d.brand} ${usd(d.value)}`).join(", ")} <${r.source_url}>`;
     }),
   ];
   const over = [...states].filter((r) => (r.meta.share ?? 0) >= 0.005).sort((a, b) => (b.meta.index ?? 0) - (a.meta.index ?? 0));
@@ -287,6 +288,6 @@ export function geoStateText(rows: TextRow[], state: string, latest: string | nu
   const all = rows[0].meta?.state_total as number | undefined;
   return [
     `Covered drug makers' Medicare Part D gross drug costs in ${STATES[state] ?? state}, ${latest?.slice(0, 4)} (prescriber state; before rebates)${all ? `; all Part D drug costs there ${usd(all)}` : ""}:`,
-    ...rows.slice(0, limit).map((r, i) => `${i + 1}. ${r.ticker} ${usd(r.value)} · ${pc(r.meta.market_share, 2)} of the state · ${pc(r.meta.share)} of the company · index ${r.meta.index?.toFixed(2) ?? "—"} · top: ${(r.meta.drugs ?? []).slice(0, 2).map((d: GeoDrug) => d.brand).join(", ")} <${r.source_url}>`),
+    ...rows.slice(0, limit).map((r, i) => `${i + 1}. ${r.ticker} ${usd(r.value)} · ${pc(r.meta.market_share, 2)} of the state · ${pc(r.meta.share)} of the company · index ${r.meta.index?.toFixed(2) ?? "–"} · top: ${(r.meta.drugs ?? []).slice(0, 2).map((d: GeoDrug) => d.brand).join(", ")} <${r.source_url}>`),
   ].join("\n");
 }

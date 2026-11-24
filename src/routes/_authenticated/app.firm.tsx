@@ -177,7 +177,7 @@ function useCreateFirm(onDone?: () => void) {
     onSuccess: async (id) => {
       setActive(id);
       await qc.invalidateQueries({ queryKey: ["firms"] });
-      toast.success("Firm created — invite your team next");
+      toast.success("Firm created. Invite your team next");
       onDone?.();
       navigate({ to: "/app/firm" });
     },

@@ -1,4 +1,4 @@
-// Executors for the assistant tools that read what the Filed Under pipeline has already computed: KPIs extracted
+// Executors for the assistant tools that read what the FiledUnder pipeline has already computed: KPIs extracted
 // from company documents (each value with its document, page and printed quote), KPI signals, earnings previews and
 // scorecards, correlation peers, short interest, special situations, the 30-day brief and the tables
 // parsed out of IR PDFs. These are the facts the pipeline spends hours producing; the assistant should start here
@@ -552,7 +552,7 @@ export async function getFinancials(qc: QueryClient, served: CompanyDataset, arg
   const header = `${d.profile.ticker} ${args.statement} (${freq}). Columns: ${periods.map(col).join(", ")}`;
   const body = rows.map((r) => {
     const vals = r.cells.slice(start).map((c) => {
-      if (!c) return "—";
+      if (!c) return "–";
       if (c.src) accns.add(c.src.accn);
       // A calculated value cites the filings of its parts (a derived fourth quarter: the 10-K and the Q3 10-Q).
       for (const part of c.derived?.parts ?? []) if (part.accn) accns.add(part.accn);
@@ -660,7 +660,7 @@ export async function computedDigest(qc: QueryClient, t: string): Promise<string
     safe(qc.fetchQuery(scoreQuery(t))),
   ]);
   const out: string[] = [
-    "FILED UNDER COMPUTED LAYER (drill in with get_kpis, get_kpi_signals, get_earnings_workup, search_doc_tables; get_quant_profile for the Technicals page's tested verdict):",
+    "FILEDUNDER COMPUTED LAYER (drill in with get_kpis, get_kpi_signals, get_earnings_workup, search_doc_tables; get_quant_profile for the Technicals page's tested verdict):",
   ];
   if (brief?.sentences?.length) out.push(`BRIEF: ${brief.sentences.map((s: { text: string }) => s.text).join(" ")}`);
   if (ki?.signals?.length)

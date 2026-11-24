@@ -1,5 +1,6 @@
 // Plain-language price read for the company chart. Pure; bars are [date, o, h, l, c, adjClose, vol].
 import { rsi, sma } from "@/lib/indicators";
+import { fmtPct } from "@/lib/format";
 
 type Bar = [string, number, number, number, number, number, number];
 
@@ -156,5 +157,5 @@ export function readTechnicals(bars: Bar[], index: Bar[]): TechRead {
 }
 
 function pct(x: number) {
-  return `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
+  return fmtPct(x, 1, true);
 }

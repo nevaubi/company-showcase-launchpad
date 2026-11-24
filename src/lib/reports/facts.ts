@@ -140,7 +140,7 @@ export function buildReportData(inp: ReportInputs): ReportData {
 
   // ---------- profile & filings ----------
   if (tenK) {
-    p.add("profile", `${d.profile.name} (${t}) — ${d.profile.sector} / ${d.profile.industry}; headquartered in ${d.profile.address.city}, ${d.profile.address.state}; fiscal year ends ${d.profile.fiscalYearEnd.slice(0, 2)}/${d.profile.fiscalYearEnd.slice(2)}${d.profile.ceo ? `; CEO ${d.profile.ceo}` : ""}.`,
+    p.add("profile", `${d.profile.name} (${t}), ${d.profile.sector} / ${d.profile.industry}; headquartered in ${d.profile.address.city}, ${d.profile.address.state}; fiscal year ends ${d.profile.fiscalYearEnd.slice(0, 2)}/${d.profile.fiscalYearEnd.slice(2)}${d.profile.ceo ? `; CEO ${d.profile.ceo}` : ""}.`,
       { kind: "filing", accn: tenK.accn, doc: tenK.doc, form: tenK.form, filed: tenK.filed, label: `Form 10-K filed ${tenK.filed}` });
     p.add("filings", `Latest annual report: Form 10-K filed ${tenK.filed} for the period ending ${tenK.report ?? "n/a"}.`,
       { kind: "filing", accn: tenK.accn, doc: tenK.doc, form: tenK.form, filed: tenK.filed, label: `Form 10-K filed ${tenK.filed}` });
@@ -336,17 +336,17 @@ export function buildReportData(inp: ReportInputs): ReportData {
         p.add("estimates", `Last 30 days of EPS estimate revisions for the ${name}: ${per.revisions.up30 ?? 0} up, ${per.revisions.down30 ?? 0} down.`, mref(`Revision count, ${name}`));
       }
       estRows.push({ label: name[0].toUpperCase() + name.slice(1), cells: [
-        { text: per.endDate ?? "—" },
+        { text: per.endDate ?? "–" },
         e.avg != null ? { text: perShare(e.avg), ref: p.ref(ids[0] ?? null) } : null,
         e.low != null && e.high != null ? { text: `${perShare(e.low)}–${perShare(e.high)}` } : null,
         r.avg != null ? { text: money(r.avg), ref: p.ref(ids[ids.length - 1] ?? null) } : null,
-        { text: e.analysts != null ? String(e.analysts) : "—" },
+        { text: e.analysts != null ? String(e.analysts) : "–" },
         rev30 != null ? { text: pct(rev30, true), tone: rev30 >= 0 ? "positive" : "negative" } : null,
       ] });
     }
     const tg = est.target;
     if (tg.mean != null) estIds.target = p.add("street", `Street price target: mean ${perShare(tg.mean)}${tg.median != null ? `, median ${perShare(tg.median)}` : ""}${tg.low != null ? `, low ${perShare(tg.low)}` : ""}${tg.high != null ? `, high ${perShare(tg.high)}` : ""}${tg.analysts ? ` (${tg.analysts} analysts)` : ""}.`, mref("Street price targets"));
-    if (est.rating.mean != null) p.add("street", `Average street rating ${est.rating.mean.toFixed(2)} on a 1 (strong buy) to 5 (sell) scale${est.rating.key ? ` — "${est.rating.key}"` : ""}.`, mref("Street rating"));
+    if (est.rating.mean != null) p.add("street", `Average street rating ${est.rating.mean.toFixed(2)} on a 1 (strong buy) to 5 (sell) scale${est.rating.key ? ` ("${est.rating.key}")` : ""}.`, mref("Street rating"));
     const MONTH_LABEL: Record<string, string> = { "0m": "this month", "-1m": "one month ago", "-2m": "two months ago", "-3m": "three months ago" };
     est.ratings.slice(0, 4).forEach((rm, k) => {
       if (!(rm.strongBuy + rm.buy + rm.hold + rm.sell + rm.strongSell)) return;
@@ -512,7 +512,7 @@ function segmentFacts(p: Pack, segs: SegmentFact[]): ReportTable[] {
     const rows: ReportTable["rows"] = [];
     for (const m of uniq) {
       const src: SourceRef = { accn: m.accn, concept: m.concept, start: m.start, end: m.end, value: m.value };
-      const id = p.add("segments", `Segment revenue for the fiscal year ended ${latestEnd} — ${m.label} (${label}): ${money(m.value)}, ${pct(m.value / total)} of the reported ${label.toLowerCase()} total.`, { kind: "sec", src, label: m.concept });
+      const id = p.add("segments", `Segment revenue for the fiscal year ended ${latestEnd}, ${m.label} (${label}): ${money(m.value)}, ${pct(m.value / total)} of the reported ${label.toLowerCase()} total.`, { kind: "sec", src, label: m.concept });
       const prev = annual.find((x) => x.axis === axis && x.member === m.member && x.end.slice(0, 4) === String(Number(fy) - 1));
       let yoy: string | null = null;
       if (prev && prev.value > 0) {

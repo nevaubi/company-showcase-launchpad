@@ -97,7 +97,7 @@ export function ThesisForm({
     onSuccess: (id) => {
       qc.invalidateQueries({ queryKey: ["theses"] });
       qc.invalidateQueries({ queryKey: ["thesis", id] });
-      toast.success(d.id ? "Thesis updated" : "Thesis saved — we'll track it against the price");
+      toast.success(d.id ? "Thesis updated" : "Thesis saved. We'll track it against the price");
       onOpenChange(false);
       if (!d.id) navigate({ to: "/app/theses/$id", params: { id } });
     },

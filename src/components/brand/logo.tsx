@@ -3,7 +3,7 @@ import wordmark from "@/assets/brand/wordmark.png.asset.json";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-/** The Filed Under mark: the serif "F" with its orange dot and baseline. */
+/** The FiledUnder mark: the serif "F" with its orange dot and baseline. */
 export function BrandMark({
   className,
   title = "FiledUnder",

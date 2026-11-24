@@ -112,7 +112,7 @@ export function SourcePanel() {
               <div>
                 <p className="flex items-center gap-1.5 text-xs font-medium">
                   <Sigma className="size-3.5" /> Calculated
-                  <span className="font-normal text-muted-foreground">— {target.derived.formula}</span>
+                  <span className="font-normal text-muted-foreground">({target.derived.formula})</span>
                 </p>
                 <ul className="mt-2 divide-y rounded-md border bg-card">
                   {target.derived.parts.map((p, i) => {

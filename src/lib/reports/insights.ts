@@ -233,7 +233,7 @@ export function buildInsights(c: InsightCtx): Insights {
       medians[k] = med;
       const { rank, of } = rankOf(sv, [sv, ...pv], def.better);
       const isVal = def.unit === "mult";
-      const gap = isVal && med > 0 ? ` — a ${pct(Math.abs(sv / med - 1))} ${sv >= med ? "premium" : "discount"} to the peer median` : def.unit === "pct" ? ` (${pp(sv - med)} versus the median)` : "";
+      const gap = isVal && med > 0 ? `, a ${pct(Math.abs(sv / med - 1))} ${sv >= med ? "premium" : "discount"} to the peer median` : def.unit === "pct" ? ` (${pp(sv - med)} versus the median)` : "";
       const better = def.better === "high" ? "highest" : "lowest";
       rankIds[k] = p.add("peers", `${t} ranks ${ordinal(rank)} of ${of} (1 = ${better}) on ${def.label} against ${peerNames}: ${fmtMetric(k, sv)} versus a peer median of ${fmtMetric(k, med)}${gap}.`,
         composite(`Peer comparison: ${def.label}`, `Rank among ${of} companies; median of ${pv.length} peers`, all.map((x) => fid.get(x.ticker)?.[k])), { v: sv - med }) ?? undefined;
@@ -249,7 +249,7 @@ export function buildInsights(c: InsightCtx): Insights {
     const implied = fit.a + fit.b * sp.x;
     const per10 = fit.b * 0.1;
     const xl = self.fin ? "return on equity" : "TTM revenue growth", yl = METRIC_DEF[yk].short;
-    const weak = fit.r2 < 0.15 ? " — too weak a relationship to read a premium or discount from" : fit.r2 < 0.35 ? " — a moderate relationship" : "";
+    const weak = fit.r2 < 0.15 ? ", too weak a relationship to read a premium or discount from" : fit.r2 < 0.35 ? ", a moderate relationship" : "";
     const meaningful = fit.r2 >= 0.15;
     // A weak fit says nothing about one company's premium, so no implied multiple is quoted or drawn.
     const gapTxt = meaningful && implied > 0 ? `; at ${t}'s ${pct(sp.x)} ${self.fin ? "ROE" : "growth"} the fit implies ${mult(implied)} versus ${mult(sp.y)} actual, a ${pct(Math.abs(sp.y / implied - 1))} ${sp.y >= implied ? "premium" : "discount"}` : "";
@@ -283,7 +283,7 @@ export function buildInsights(c: InsightCtx): Insights {
         ...order.map((co) => ({ label: `${co.ticker} · ${nameOf(co.ticker, co.name)}`, bold: co.ticker === t, cells: tcols.map((k) => cell(co, k)) })),
         { label: "Peer median", cells: tcols.map((k) => { const v = median(peers.map((x) => x.m[k]?.v).filter((x): x is number => x != null)); return v == null ? null : { text: fmtMetric(k, v) }; }) },
       ],
-      note: `TTM figures from each company's SEC filings (four quarters through each company's latest filing); multiples use dated share prices — ${t} as of ${inp.price?.asOf ?? "n/a"}, peers at their latest stored close.`,
+      note: `TTM figures from each company's SEC filings (four quarters through each company's latest filing); multiples use dated share prices: ${t} as of ${inp.price?.asOf ?? "n/a"}, peers at their latest stored close.`,
     });
   }
 
@@ -380,7 +380,7 @@ export function buildInsights(c: InsightCtx): Insights {
     if (ny && g != null && self.m.growth) {
       const cagr = self.m.cagr3?.v;
       const name = ny.code === "+1y" ? "next fiscal year" : "current fiscal year";
-      p.add("analysis", `Consensus implies ${name} revenue growth of ${pct(g, true)} versus ${pct(self.m.growth.v, true)} over the trailing four quarters${cagr != null ? ` and a 3-year CAGR of ${pct(cagr, true)}` : ""} — ${g > self.m.growth.v + 0.01 ? "an acceleration" : g < self.m.growth.v - 0.01 ? "a deceleration" : "roughly the current pace"}.`,
+      p.add("analysis", `Consensus implies ${name} revenue growth of ${pct(g, true)} versus ${pct(self.m.growth.v, true)} over the trailing four quarters${cagr != null ? ` and a 3-year CAGR of ${pct(cagr, true)}` : ""}, ${g > self.m.growth.v + 0.01 ? "an acceleration" : g < self.m.growth.v - 0.01 ? "a deceleration" : "roughly the current pace"}.`,
         composite("Consensus vs reported growth", "Consensus revenue growth compared with reported growth", [c.est.consensus.get(ny.code), fid.get(t)?.growth, fid.get(t)?.cagr3]), { v: g - self.m.growth.v });
     }
     const q0 = est.periods.find((x) => x.code === "0q");

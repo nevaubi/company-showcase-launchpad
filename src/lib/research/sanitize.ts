@@ -38,7 +38,7 @@ type Scalar = string | number | boolean | null;
 const isScalar = (v: unknown): v is Scalar => v == null || ["string", "number", "boolean"].includes(typeof v);
 
 function esc(v: Scalar) {
-  if (v == null) return "—";
+  if (v == null) return "–";
   if (typeof v === "number") return Math.abs(v) >= 1e4 ? v.toLocaleString("en-US", { maximumFractionDigits: 0 }) : String(+v.toFixed(4));
   return String(v).replace(/\|/g, "\\|").replace(/\n/g, " ");
 }

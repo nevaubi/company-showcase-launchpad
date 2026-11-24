@@ -60,7 +60,7 @@ describe("sanitizeAnswer", () => {
     const r = sanitizeAnswer(BARE_TABLE);
     expect(r.markdown).toContain("| ticker | pe | ev_sales |");
     expect(r.markdown).toContain("| NVDA | 48.2 | 25.1 |");
-    expect(r.markdown).toContain("| INTC | — | 2.1 |");
+    expect(r.markdown).toContain("| INTC | – | 2.1 |");
     expect(r.markdown).not.toContain('{"ticker"');
   });
 

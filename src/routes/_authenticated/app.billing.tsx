@@ -15,9 +15,9 @@ export const Route = createFileRoute("/_authenticated/app/billing")({
   head: () => ({
     meta: [
       { title: "Billing and plan · FiledUnder" },
-      { name: "description", content: "Your Filed Under plan, trial and AI usage." },
+      { name: "description", content: "Your FiledUnder plan, trial and AI usage." },
       { property: "og:title", content: "Billing and plan · FiledUnder" },
-      { property: "og:description", content: "Your Filed Under plan, trial and AI usage." },
+      { property: "og:description", content: "Your FiledUnder plan, trial and AI usage." },
       { name: "robots", content: "noindex" },
     ],
   }),
@@ -48,7 +48,7 @@ function BillingPage() {
   // Back from checkout: the webhook lands within seconds, so poll the plan briefly.
   useEffect(() => {
     if (!new URLSearchParams(window.location.search).has("checkout")) return;
-    toast.success("Payment received — activating your plan…");
+    toast.success("Payment received. Activating your plan…");
     let n = 0;
     const t = setInterval(() => {
       n++;
@@ -65,10 +65,10 @@ function BillingPage() {
     // Never move an approved person back to pending: that would remove their access.
     const { error } = await supabase.from("waitlist").update({ status: "pending" }).eq("user_id", u.user.id).neq("status", "approved");
     if (error) {
-      toast.error("Couldn't send the request — please use Contact us instead.");
+      toast.error("Couldn't send the request. Please use Contact us instead.");
       return;
     }
-    toast.success("Request sent — we'll review it and email you when your trial is ready.");
+    toast.success("Request sent. We'll review it and email you when your trial is ready.");
     qc.invalidateQueries({ queryKey: ["billing"] });
   };
   const openPortal = async () => {
@@ -115,10 +115,10 @@ function BillingPage() {
               <div>
                 <p className="font-medium">Approved trial</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Access is granted by approval. Request a trial and we'll review it — your trial starts when you accept.
+                  Access is granted by approval. Request a trial and we'll review it. Your trial starts when you accept.
                 </p>
                 {d.waitlistStatus === "pending" ? (
-                  <p className="mt-3 text-sm font-medium">Request received — we're reviewing it and will email you.</p>
+                  <p className="mt-3 text-sm font-medium">Request received. We're reviewing it and will email you.</p>
                 ) : d.waitlistStatus === "approved" ? (
                   <p className="mt-3 text-sm text-muted-foreground">
                     {d.tier === "expired" ? "To renew your access, use Contact us and we'll extend it." : "You're approved and have access."}

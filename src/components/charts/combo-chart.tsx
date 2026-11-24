@@ -217,7 +217,7 @@ export function ComboChart({
             <p key={s.id} className="flex items-center gap-1.5">
               <span className={cn("size-2 shrink-0", s.type === "bar" ? "rounded-sm" : "rounded-full")} style={{ background: s.color }} />
               <span className="truncate text-muted-foreground">{s.label}</span>
-              <span className="num ml-auto pl-3">{s.values[hover] == null ? "—" : s.format(s.values[hover]!)}</span>
+              <span className="num ml-auto pl-3">{s.values[hover] == null ? "–" : s.format(s.values[hover]!)}</span>
             </p>
           ))}
           {series.some((s) => s.onSelect) && <p className="mt-0.5 text-[10px] text-muted-foreground">Click a bar or point for its source</p>}

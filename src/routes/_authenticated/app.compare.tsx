@@ -15,7 +15,7 @@ import { companyQuery, pricesQuery, type Range } from "@/lib/data";
 import { useScreenRows } from "@/lib/screener/use-rows";
 import { fmtField, type Row as SRow } from "@/lib/screener/engine";
 import type { Cell, CompanyDataset, DerivedPart, Statement } from "@/lib/financials/types";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtSigned } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { alignAnnual } from "@/lib/screener/annual";
 
@@ -497,7 +497,7 @@ function Compare() {
                 <MultiLine
                   series={priceSeries}
                   label="Rebased price performance"
-                  format={(v) => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%`}
+                  format={(v) => `${fmtSigned(v, 0)}%`}
                   baseline={0}
                   xFormat={(x) => fmtDate(x, { month: "short", year: "2-digit" })}
                 />

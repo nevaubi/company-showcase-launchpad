@@ -271,7 +271,7 @@ function Research() {
                   Ask anything. <span className="hl">Every number cited.</span>
                 </h1>
                 <p className="mt-3 max-w-xl text-sm text-muted-foreground">
-                  The agent pulls statements and segments from SEC XBRL, reads 10-K, 10-Q and 8-K text, checks prices, insider trades and FRED, and searches the web — then shows you each source.
+                  The agent pulls statements and segments from SEC XBRL, reads 10-K, 10-Q and 8-K text, checks prices, insider trades and FRED, and searches the web, then shows you each source.
                 </p>
                 <div className="mt-8 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {SUGGESTIONS.map((s) => (
@@ -332,7 +332,7 @@ function Research() {
               </Button>
             )}
           </form>
-          <p className="mx-auto mt-1.5 max-w-3xl text-center text-[10.5px] text-muted-foreground">AI can make mistakes — open the cited filings to verify. Not investment advice.</p>
+          <p className="mx-auto mt-1.5 max-w-3xl text-center text-[10.5px] text-muted-foreground">AI can make mistakes. Open the cited filings to verify. Not investment advice.</p>
         </div>
       </section>
     </div>

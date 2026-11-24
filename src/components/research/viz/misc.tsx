@@ -6,6 +6,7 @@ import LoadingState from "@/components/ui/loading-state";
 import type { LeafSpec } from "@/lib/research/view-spec";
 import { cn } from "@/lib/utils";
 import { PALETTE, fmtValue, pctIsFraction } from "./format";
+import { fmtPct } from "@/lib/format";
 
 type Spec<T extends LeafSpec["type"]> = Extract<LeafSpec, { type: T }>;
 type Kpi = Spec<"kpis">["items"][number];
@@ -14,8 +15,7 @@ function Delta({ v }: { v: number | null | undefined }) {
   if (v == null) return null;
   return (
     <span className={cn("num font-medium tabular-nums", v > 0 ? "text-positive" : v < 0 ? "text-negative" : "text-muted-foreground")}>
-      {v > 0 ? "+" : ""}
-      {(v * 100).toFixed(1)}%
+      {fmtPct(v, 1, true)}
     </span>
   );
 }
@@ -149,7 +149,7 @@ export function TreemapView({ spec, height = 280 }: { spec: Spec<"treemap">; hei
             )}
             {w > 52 && h > 36 && (
               <text x={l.x0 + 5} y={l.y0 + 28} fontSize={10} fill="var(--muted-foreground)" className="tabular-nums">
-                {it.change != null ? `${it.change > 0 ? "+" : ""}${(it.change * 100).toFixed(1)}%` : fmtValue(it.value, spec.unit)}
+                {it.change != null ? fmtPct(it.change, 1, true) : fmtValue(it.value, spec.unit)}
               </text>
             )}
           </g>
@@ -161,7 +161,7 @@ export function TreemapView({ spec, height = 280 }: { spec: Spec<"treemap">; hei
 
 export function Sparkline({ values, width = 96, height = 22 }: { values: (number | null)[]; width?: number; height?: number }) {
   const xs = values.filter((v): v is number => v != null && Number.isFinite(v));
-  if (xs.length < 2) return <span className="text-muted-foreground">—</span>;
+  if (xs.length < 2) return <span className="text-muted-foreground">–</span>;
   const lo = Math.min(...xs), hi = Math.max(...xs);
   const pts = values
     .map((v, i) => (v == null ? null : `${((i / (values.length - 1)) * (width - 4) + 2).toFixed(1)},${(height - 2 - ((v - lo) / (hi - lo || 1)) * (height - 4)).toFixed(1)}`))
@@ -202,7 +202,7 @@ export function SparkTableView({ spec }: { spec: Spec<"sparktable"> }) {
               {spec.columns.map((c) => {
                 const v = r[c.key];
                 if (c.kind === "spark") return <td key={c.key} className="px-2 py-1 text-right"><Sparkline values={Array.isArray(v) ? v : []} /></td>;
-                if (c.kind === "text" || typeof v !== "number") return <td key={c.key} className={cn("px-2 py-1.5", c.kind !== "text" && "text-right")}>{Array.isArray(v) ? "" : (v ?? "—")}</td>;
+                if (c.kind === "text" || typeof v !== "number") return <td key={c.key} className={cn("px-2 py-1.5", c.kind !== "text" && "text-right")}>{Array.isArray(v) ? "" : (v ?? "–")}</td>;
                 const unit = c.kind === "num" || c.kind === "delta" ? (c.kind === "delta" ? "%" : "") : c.kind;
                 const [lo, hi] = range[c.key] ?? [0, 0];
                 const tone = c.kind === "delta" || (c.kind === "%" && lo < 0) ? (v > 0 ? "text-positive" : v < 0 ? "text-negative" : "") : "";

@@ -69,7 +69,7 @@ const btn = (onClick: () => void, text: string, cls?: string) => (
   </button>
 );
 const pts = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)}`;
-const dash = <span className="text-muted-foreground">—</span>;
+const dash = <span className="text-muted-foreground">–</span>;
 
 const C: Record<string, Col> = {
   report: { k: "report", label: "Report", title: "Next earnings date (calendar date, or projected from past timing)", get: (r) => r.report, cell: (r) => (r.report ? <span className="whitespace-nowrap">{fmtDate(r.report, { month: "short", day: "numeric" })}{r.reportEstimated ? <span className="text-muted-foreground"> est.</span> : null}</span> : dash) },
@@ -207,7 +207,7 @@ function OptionsHub() {
           <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
             <Stat label="Stocks with listed options" value={all.length.toLocaleString("en-US")} hint={`quotes from ${fmtDate(latest)}`} />
             <Stat label="Median implied vol · 30d" value={fmtPct(ivMed, 1)} />
-            <Stat label="Median skew · 25Δ" value={skewMed != null ? `${pts(skewMed)} pts` : "—"} hint="put IV − call IV" />
+            <Stat label="Median skew · 25Δ" value={skewMed != null ? `${pts(skewMed)} pts` : "–"} hint="put IV − call IV" />
             <Stat label="Reports in the next 4 weeks" value={String(nReports)} hint={days < 20 ? `IV rank after 20 days (${days} recorded)` : `${days} days recorded`} />
           </div>
           <div className="mb-3 flex flex-wrap items-center gap-3">

@@ -76,7 +76,7 @@ export const DEFAULT_BRANDING: Required<FirmBranding> = {
   font: "sans",
   disclaimer:
     "This report was prepared from public SEC filings and market data for internal research purposes. It is not investment advice. Figures cite their source filings; estimates and market data are labeled.",
-  footer: "Internal research — not for distribution",
+  footer: "Internal research, not for distribution",
   signature: true,
 };
 

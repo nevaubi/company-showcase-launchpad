@@ -99,7 +99,7 @@ export function EventRow({
         {suspect && (
           <p className="mt-0.5 text-[11px] text-warning">
             The filing states {fmtCompactUsd(e.metrics?.value as number, 2)} for {(e.metrics?.shares as number).toLocaleString("en-US")} shares (
-            {fmtPrice(suspect.perShare)} a share, {Math.round(suspect.shareOfMcap * 100)}% of the company's market value) — almost certainly a typo by the filer. Ranked as if the value were unknown.
+            {fmtPrice(suspect.perShare)} a share, {Math.round(suspect.shareOfMcap * 100)}% of the company's market value), almost certainly a typo by the filer. Ranked as if the value were unknown.
           </p>
         )}
         {!compact && base && <p className="mt-0.5 text-[11px] text-muted-foreground">{base}</p>}

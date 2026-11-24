@@ -13,7 +13,7 @@ export const KINDS: Record<ReportKind, KindDef> = {
     tables: ["financials", "segments-1", "segments-2", "peers", "valuation", "estimates"],
     sections: [
       { id: "summary", title: "Investment summary", brief: "4-6 bullets: what the company is, what drives the numbers now, the debate, and what matters next." },
-      { id: "business", title: "Business overview", brief: "How the company makes money — segments, mix, which segments drove growth and how the mix has shifted.", tables: ["segments-1", "segments-2"], charts: ["segment-mix", "segment-growth"] },
+      { id: "business", title: "Business overview", brief: "How the company makes money: segments, mix, which segments drove growth and how the mix has shifted.", tables: ["segments-1", "segments-2"], charts: ["segment-mix", "segment-growth"] },
       { id: "financials", title: "Financial profile", brief: "Multi-year growth, margin and cash-flow trajectory; the operating-margin bridge, incremental margins and seasonality; what changed recently.", tables: ["financials"], charts: ["revenue-annual", "margins-annual", "margin-bridge"] },
       { id: "capital", title: "Balance sheet & capital allocation", brief: "Cash, debt, coverage, cash conversion, capex intensity, buybacks, dividends, dilution and stock compensation.", charts: ["cash-flow", "capital-returns"] },
       { id: "peers", title: "Competitive positioning", brief: "How the company compares with its peers on growth, profitability, cash generation, valuation and share-price performance: where it ranks, how far from the median, what explains the gaps, and the growth-adjusted valuation.", tables: ["peers"], charts: ["peer-panel", "peer-scatter"] },
@@ -35,7 +35,7 @@ export const KINDS: Record<ReportKind, KindDef> = {
       { id: "watch", title: "What to watch", brief: "4-6 bullets: specific lines, margins, segments, seasonality and open management commitments to check.", tables: ["quarters"], charts: ["revenue-quarterly", "margins-quarterly"] },
       { id: "peers", title: "Read-across from peers", brief: "How the company's growth, margins and valuation compare with its peers' latest reported quarters, and what that positioning implies into the print.", tables: ["peers"], charts: ["peer-panel"] },
       { id: "history", title: "How the stock reacts", brief: "Historical earnings-day moves, direction hit rate, post-print drift, the surprise record and how the stock reacted to beats versus misses.", tables: ["reactions"], charts: ["reactions", "surprises"] },
-      { id: "scenarios", title: "Scenarios", brief: "Upside and downside paths — what each would require, using only cited numbers; anchor to street targets and the trading range.", charts: ["target-range"] },
+      { id: "scenarios", title: "Scenarios", brief: "Upside and downside paths: what each would require, using only cited numbers; anchor to street targets and the trading range.", charts: ["target-range"] },
       { id: "questions", title: "Questions for management", brief: "5-7 sharp questions tied to cited facts or open promises." },
     ],
   },

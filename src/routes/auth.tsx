@@ -23,7 +23,7 @@ export const Route = createFileRoute("/auth")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { title: "Sign in · FiledUnder" },
-      { name: "description", content: "Sign in to Filed Under or join the waitlist for source-linked equity research." },
+      { name: "description", content: "Sign in to FiledUnder or join the waitlist for source-linked equity research." },
       { property: "og:title", content: "Sign in · FiledUnder" },
       { property: "og:description", content: "Source-linked equity research. Sign in or join the waitlist." },
       { name: "robots", content: "noindex" },
@@ -48,9 +48,9 @@ function safeRedirect(r?: string) {
 function authMessage(err: unknown): string {
   const m = err instanceof Error ? err.message : String(err);
   if (/invalid login credentials/i.test(m)) return "That email and password don't match an account.";
-  if (/email not confirmed/i.test(m)) return "Confirm your email first — check your inbox for the link we sent.";
+  if (/email not confirmed/i.test(m)) return "Confirm your email first. Check your inbox for the link we sent.";
   if (/already registered|already exists/i.test(m)) return "An account with this email already exists. Sign in instead.";
-  if (/password should be at least|weak password/i.test(m)) return "Choose a stronger password — at least 8 characters, mixing letters and numbers.";
+  if (/password should be at least|weak password/i.test(m)) return "Choose a stronger password: at least 8 characters, mixing letters and numbers.";
   if (/pwned|leaked|compromised/i.test(m)) return "This password has appeared in a data breach. Please choose a different one.";
   if (/rate limit|too many/i.test(m)) return "Too many attempts. Wait a minute and try again.";
   if (/unable to validate email|invalid email/i.test(m)) return "Enter a valid email address.";
@@ -287,7 +287,7 @@ function AuthAside() {
           </tbody>
         </table>
         <p className="mt-6 max-w-md font-display text-3xl leading-tight">
-          “Every figure opens the filing it came from — scrolled to the line, highlighted.”
+          “Every figure opens the filing it came from, scrolled to the line and highlighted.”
         </p>
       </div>
       <p className="relative text-xs text-ink-muted">us-gaap:RevenueFromContractWithCustomerExcludingAssessedTax · accession 0000320193-25-000079</p>

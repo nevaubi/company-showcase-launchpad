@@ -8,7 +8,7 @@ const NUMFMT: Record<CellFormat, string | undefined> = {
 };
 const argb = (hex?: string) => (hex ? `FF${hex.replace("#", "").toUpperCase()}` : undefined);
 const hex = (a?: string) => (a && a.length >= 6 ? `#${a.slice(-6)}` : undefined);
-/** Formulas Excel can't evaluate (Filed Under data) are written as values with the formula in a note. */
+/** Formulas Excel can't evaluate (FiledUnder data) are written as values with the formula in a note. */
 const CUSTOM = /\b(FU|PRICE)\s*\(/i;
 
 export async function workbookToXlsx(wb: Workbook, value: (sheet: number, ref: string) => Scalar) {

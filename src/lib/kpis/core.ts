@@ -315,7 +315,7 @@ export function ranksIn(file: KpiGroupFile, metric: string, cq: string, better?:
 }
 
 export function fmtKpi(v: number | null | undefined, unit: KpiUnit, opts: { change?: boolean } = {}): string {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   const sign = opts.change && v > 0 ? "+" : "";
   const abs = Math.abs(v), neg = v < 0 ? "-" : "";
   const big = (x: number) => (x >= 1e12 ? `${(x / 1e12).toFixed(2)}T` : x >= 1e9 ? `${(x / 1e9).toFixed(x >= 1e11 ? 0 : 1)}B` : x >= 1e6 ? `${(x / 1e6).toFixed(x >= 1e8 ? 0 : 1)}M` : x >= 1e4 ? `${(x / 1e3).toFixed(0)}K` : x.toLocaleString("en-US", { maximumFractionDigits: x < 10 ? 2 : 0 }));
@@ -335,7 +335,7 @@ export function fmtKpi(v: number | null | undefined, unit: KpiUnit, opts: { chan
 }
 /** Change formatting: pp for percent units, % otherwise. */
 export function fmtChange(c: number | null, unit: KpiUnit): string {
-  if (c == null) return "—";
+  if (c == null) return "–";
   const sign = c > 0 ? "+" : "";
   if (unit === "pct") return `${sign}${(c * 100).toFixed(1)} pp`;
   if (unit === "pct100") return `${sign}${c.toFixed(Math.abs(c) < 10 ? 2 : 1)} pp`;

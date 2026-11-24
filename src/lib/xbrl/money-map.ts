@@ -73,7 +73,7 @@ function sourceTables(d: FilingDetail, periodKey: string) {
     if (nested) {
       for (const seg of t.rows) {
         if (AGGREGATE.test(seg.member) || AGGREGATE.test(seg.label)) continue;
-        for (const x of seg.sub ?? []) add(x.member, x.label, x.values[periodKey], `${seg.label} — ${x.label}`);
+        for (const x of seg.sub ?? []) add(x.member, x.label, x.values[periodKey], `${seg.label}, ${x.label}`);
       }
     } else for (const r of t.rows) add(r.member, r.label, r.values[periodKey], r.label);
     const list = [...rows.values()].sort((a, b) => b.v - a.v);
@@ -186,7 +186,7 @@ export function moneyMap(d: FilingDetail, prefer?: "product" | "geography"): Mon
       }
     }
     else if (segSum > total * 1.003) {
-      notes.push(`Segment revenue adds up to more than consolidated revenue — it includes sales between segments, eliminated in the total.`);
+      notes.push(`Segment revenue adds up to more than consolidated revenue: it includes sales between segments, eliminated in the total.`);
       const extra = segSum - total;
       nodes.push({ id: "src:interseg", label: "Sales between segments", col: 0, value: extra, kind: "other" });
       links.push({ from: "src:interseg", to: "rev", value: extra, derived: { formula: "Segment revenue − consolidated revenue", parts: [...segs.map((s) => part(s.label, revenueRow.concept, periodKey, revenueRow.values[s.member][periodKey])), ...(totalPart ? [{ ...totalPart, sign: -1 as const }] : [])] } });
@@ -221,7 +221,7 @@ export function moneyMap(d: FilingDetail, prefer?: "product" | "geography"): Mon
       for (const r of rows) {
         const v = r.values[s.member][periodKey];
         node3(`cost:${r.concept}`, r.label, "cost", v.v);
-        links.push({ from: `seg:${s.member}`, to: `cost:${r.concept}`, value: v.v, ref: part(`${s.label} — ${r.label}`, r.concept, periodKey, v) });
+        links.push({ from: `seg:${s.member}`, to: `cost:${r.concept}`, value: v.v, ref: part(`${s.label}, ${r.label}`, r.concept, periodKey, v) });
       }
       if (rest > rv.v * 0.002) {
         const id = rows.length ? "cost:other" : "cost:all";
@@ -230,11 +230,11 @@ export function moneyMap(d: FilingDetail, prefer?: "product" | "geography"): Mon
           from: `seg:${s.member}`,
           to: id,
           value: rest,
-          derived: { formula: `${s.label} revenue − ${profit!.label.toLowerCase()}${rows.length ? " − itemised costs" : ""}`, parts: [revPart, part(`${s.label} — ${profit!.label}`, profit!.concept, periodKey, pv, -1), ...rows.map((r) => part(`${s.label} — ${r.label}`, r.concept, periodKey, r.values[s.member][periodKey], -1))] },
+          derived: { formula: `${s.label} revenue − ${profit!.label.toLowerCase()}${rows.length ? " − itemised costs" : ""}`, parts: [revPart, part(`${s.label}, ${profit!.label}`, profit!.concept, periodKey, pv, -1), ...rows.map((r) => part(`${s.label}, ${r.label}`, r.concept, periodKey, r.values[s.member][periodKey], -1))] },
         });
       }
       node3("profit", profit!.label, "profit", pv.v);
-      links.push({ from: `seg:${s.member}`, to: "profit", value: pv.v, ref: part(`${s.label} — ${profit!.label}`, profit!.concept, periodKey, pv) });
+      links.push({ from: `seg:${s.member}`, to: "profit", value: pv.v, ref: part(`${s.label}, ${profit!.label}`, profit!.concept, periodKey, pv) });
     }
     if (segSum < total * 0.997) {
       const rest = total - segSum;

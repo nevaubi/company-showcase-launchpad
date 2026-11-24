@@ -1,4 +1,4 @@
-// Government and ownership records per company from the Filed Under government pipeline (etl/gov_pipeline.py):
+// Government and ownership records per company from the FiledUnder government pipeline (etl/gov_pipeline.py):
 // House periodic transaction reports, LDA lobbying, FEC PACs, Federal Register rules, public laws, USAspending,
 // congressional hearing transcripts, and from the flows file Schedule 13D/13G stakes and Form 13F holdings.
 import { queryOptions } from "@tanstack/react-query";

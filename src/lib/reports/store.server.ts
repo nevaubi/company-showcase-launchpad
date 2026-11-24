@@ -48,12 +48,12 @@ function slot(admin: Admin, a: EnsureArgs, variant: string) {
 async function checkLimits(admin: Admin, a: EnsureArgs, custom: boolean) {
   const since = new Date(Date.now() - 86400_000).toISOString();
   const { count: all } = await admin.from("report_runs").select("id", { count: "exact", head: true }).gte("created_at", since);
-  if ((all ?? 0) >= GLOBAL_DAILY_LIMIT) throw new ReportLimitError("The report desk has hit today's writing limit — existing reports stay available; new ones resume tomorrow");
+  if ((all ?? 0) >= GLOBAL_DAILY_LIMIT) throw new ReportLimitError("The report desk has hit today's writing limit. Existing reports stay available; new ones resume tomorrow");
   if (!a.userId) return;
   const q = admin.from("report_runs").select("id", { count: "exact", head: true }).eq("user_id", a.userId).gte("created_at", since);
   const { count } = await (custom ? q.neq("scope", "shared") : q.eq("scope", "shared"));
   const cap = custom ? LIMITS.custom : LIMITS.shared;
-  if ((count ?? 0) >= cap) throw new ReportLimitError(`You've written ${cap} ${custom ? "custom" : "standard"} reports in the last day — try again tomorrow`);
+  if ((count ?? 0) >= cap) throw new ReportLimitError(`You've written ${cap} ${custom ? "custom" : "standard"} reports in the last day. Try again tomorrow`);
 }
 
 /**

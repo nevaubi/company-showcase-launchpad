@@ -9,6 +9,7 @@ import { rowsFromFile, type Row as ScreenRow } from "@/lib/screener/engine";
 import { supplyLinksQuery } from "@/lib/supply/query";
 import type { RiskLink } from "@/lib/supply/core";
 import type { Bar, Cell, CompanyDataset, Filing, Statement } from "@/lib/financials/types";
+import { fmtPct } from "@/lib/format";
 
 export const edgarUrl = (cik: string | number, accn: string, doc?: string | null) =>
   `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${accn.replace(/-/g, "")}/${doc ?? ""}`;
@@ -176,7 +177,7 @@ export function fmtMoney(v: number | null | undefined, digits = 1): string {
 }
 
 export const fmtPctV = (v: number | null | undefined, d = 1, signed = false) =>
-  v == null || !Number.isFinite(v) ? "n/a" : `${signed && v > 0 ? "+" : ""}${(v * 100).toFixed(d)}%`;
+  v == null || !Number.isFinite(v) ? "n/a" : fmtPct(v, d, signed);
 
 export const fmtX = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "n/a" : `${v.toFixed(d)}x`);
 

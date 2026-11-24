@@ -43,7 +43,7 @@ export const Route = createFileRoute("/companies/$ticker")({
               name: `${name} (${t}) annual financials`,
               description: desc,
               url,
-              creator: { "@type": "Organization", name: "Filed Under", url: SITE },
+              creator: { "@type": "Organization", name: "FiledUnder", url: SITE },
               isBasedOn: "https://www.sec.gov/edgar",
               about: { "@type": "Corporation", name, tickerSymbol: t },
             }),
@@ -112,7 +112,7 @@ function PublicCompany() {
                     <td className="px-5 py-2.5">{l.label}</td>
                     {s.periods.map((p) => {
                       const v = l.values.find((x) => x.period === p);
-                      if (!v) return <td key={p} className="px-3 py-2.5 text-right text-muted-foreground">—</td>;
+                      if (!v) return <td key={p} className="px-3 py-2.5 text-right text-muted-foreground">–</td>;
                       const text = l.unit === "usd" ? fmtCompactUsd(v.value) : fmtValueLong(v.value, l.unit);
                       return (
                         <td key={p} className="num px-3 py-2.5 text-right">

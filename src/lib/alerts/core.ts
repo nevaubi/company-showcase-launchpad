@@ -46,7 +46,7 @@ export function buildAlerts(inp: AlertInputs): Alert[] {
     const items = (f.items ?? "").split(",").map((s) => ITEM_NAMES[s.trim()]).filter(Boolean);
     out.push({
       id: `f:${f.accn}`, ticker: f.ticker, kind: "filing", at: f.discovered_at,
-      title: `${f.form} filed${items.length ? ` — ${items.join(", ")}` : ""}`, detail: f.description ?? undefined,
+      title: `${f.form} filed${items.length ? `: ${items.join(", ")}` : ""}`, detail: f.description ?? undefined,
       filing: { accn: f.accn, doc: f.doc, form: f.form, filed: f.filed },
     });
   }

@@ -1,4 +1,4 @@
-// Shared Filed Under workbook styling: brand colours, fonts, number formats and sheet furniture.
+// Shared FiledUnder workbook styling: brand colours, fonts, number formats and sheet furniture.
 // Pure apart from the lazily imported exceljs module, so builders can run in the browser and tests.
 import type { Borders, Cell, Fill, Font, Row, Workbook, Worksheet } from "exceljs";
 import type { Scale } from "@/lib/format";
@@ -162,7 +162,7 @@ export function linkFormula(cell: Cell, text: string, url: string) {
 
 export function footer(ws: Worksheet, left: string) {
   ws.headerFooter = {
-    oddFooter: `&L&8${left.replace(/&/g, "&&")}&C&8Filed Under&R&8Page &P of &N`,
+    oddFooter: `&L&8${left.replace(/&/g, "&&")}&C&8FiledUnder&R&8Page &P of &N`,
   };
 }
 
@@ -199,7 +199,7 @@ export function cover(wb: Workbook, ws: Worksheet, info: CoverInfo) {
     ws.getRow(2).height = 24;
     r = 4;
   } else {
-    ws.getCell(r, 2).value = "FILED UNDER";
+    ws.getCell(r, 2).value = "FILEDUNDER";
     ws.getCell(r, 2).font = font({ bold: true, size: 11, color: { argb: C.ink } });
     r += 2;
   }

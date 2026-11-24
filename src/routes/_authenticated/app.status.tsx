@@ -30,19 +30,19 @@ const JOBS = [
     id: "prices",
     title: "Prices",
     source: "Yahoo Finance daily bars",
-    cadence: "Every 6 minutes during U.S. market hours, 10 symbols a run — each of the 99 symbols refreshes about hourly",
+    cadence: "Every 6 minutes during U.S. market hours, 10 symbols a run, so each of the 99 symbols refreshes about hourly",
   },
   {
     id: "sec",
     title: "SEC filings & Form 4s",
     source: "SEC EDGAR submissions + Form 4 XML",
-    cadence: "Every 6 minutes, 2 companies a run — each company is re-checked every ~4 hours",
+    cadence: "Every 6 minutes, 2 companies a run, so each company is re-checked every ~4 hours",
   },
   {
     id: "macro",
     title: "Economic data",
     source: "FRED mirror of BLS, BEA, Census, Fed, EIA; U.S. Treasury Fiscal Data",
-    cadence: "Every 10 minutes, 4 series a run — all 118 series refresh about every 5 hours",
+    cadence: "Every 10 minutes, 4 series a run, so all 118 series refresh about every 5 hours",
   },
   {
     id: "filing-cache",
@@ -155,7 +155,7 @@ function IrCoverage() {
           ["Read for tables", fmtInt(tot.read), `${fmtInt(tot.waiting)} waiting`],
           ["Slides & images read", fmtInt(tot.vision), "charts, scanned pages"],
           ["Data points", fmtInt(tot.points), "each linked to its cell"],
-          ["Quarterly tie-out", (() => { const ok = rows.reduce((n, r) => n + (r.tieQ ?? 0) * 1, 0); const n = rows.filter((r) => r.tieQ != null).length; return n ? `${Math.round((100 * ok) / n)}% avg` : "—"; })(), "totals = sum of parts"],
+          ["Quarterly tie-out", (() => { const ok = rows.reduce((n, r) => n + (r.tieQ ?? 0) * 1, 0); const n = rows.filter((r) => r.tieQ != null).length; return n ? `${Math.round((100 * ok) / n)}% avg` : "–"; })(), "totals = sum of parts"],
         ].map(([k, v, sub]) => (
           <div key={k}>
             <dt className="text-[11px] text-muted-foreground">{k}</dt>
@@ -191,18 +191,18 @@ function IrCoverage() {
                 <td className="num px-3 py-1.5 text-right">{fmtInt(r.docs)}</td>
                 <td className="num px-3 py-1.5 text-right text-muted-foreground">{(r.bytes / 1e6).toFixed(0)} MB</td>
                 <td className="num px-3 py-1.5 text-muted-foreground">
-                  {r.first_filed ? r.first_filed.slice(0, 4) : "—"}–{r.last_filed ? r.last_filed.slice(0, 4) : ""}
+                  {r.first_filed ? r.first_filed.slice(0, 4) : "–"}–{r.last_filed ? r.last_filed.slice(0, 4) : ""}
                 </td>
                 <td className="num px-3 py-1.5 text-right">{fmtInt(r.read)}</td>
                 <td className={cn("num px-3 py-1.5 text-right", r.waiting ? "text-foreground" : "text-muted-foreground")}>{fmtInt(r.waiting)}</td>
-                <td className="num px-3 py-1.5 text-right">{r.points ? fmtInt(r.points) : "—"}</td>
+                <td className="num px-3 py-1.5 text-right">{r.points ? fmtInt(r.points) : "–"}</td>
                 <td
                   className={cn(
                     "num px-3 py-1.5 text-right",
                     r.tieQ == null ? "text-muted-foreground" : r.tieQ >= 0.95 ? "text-positive" : r.tieQ >= 0.8 ? "text-foreground" : "text-warning",
                   )}
                 >
-                  {r.tieQ == null ? "—" : `${Math.round(r.tieQ * 100)}%`}
+                  {r.tieQ == null ? "–" : `${Math.round(r.tieQ * 100)}%`}
                 </td>
               </tr>
             ))}
@@ -334,7 +334,7 @@ function Status() {
                       {okRate != null && <p className="num text-[10px] text-muted-foreground">{Math.round(okRate * 100)}% ok · {day.length} runs in 24h</p>}
                     </>
                   ) : (
-                    <p className="text-[11px] text-muted-foreground">No runs recorded yet — schedules run on the published app.</p>
+                    <p className="text-[11px] text-muted-foreground">No runs recorded yet. Schedules run on the published app.</p>
                   )}
                 </div>
               </div>

@@ -219,7 +219,7 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
             <p key={s.id} className="flex items-center gap-1.5">
               <span className="size-2 rounded-full" style={{ background: s.color }} />
               <span className="text-muted-foreground">{s.label}</span>
-              <span className="num ml-auto pl-3 font-medium">{p ? (s.axis === "right" ? (rightFormat ?? yFormat) : yFormat)(p.value) : "—"}</span>
+              <span className="num ml-auto pl-3 font-medium">{p ? (s.axis === "right" ? (rightFormat ?? yFormat) : yFormat)(p.value) : "–"}</span>
             </p>
           ))}
         </div>

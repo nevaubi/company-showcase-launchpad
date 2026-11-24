@@ -123,7 +123,7 @@ function Dashboard() {
                 {!s.startsWith("^") && <span className="num shrink-0 text-[10px]">{s}</span>}
               </p>
               <p className="num text-sm font-medium" title={s.startsWith("^") ? "Index level" : `${s} share price`}>
-                {q ? (s.startsWith("^") ? q.price.toFixed(2) : fmtPrice(q.price)) : "—"}
+                {q ? (s.startsWith("^") ? q.price.toFixed(2) : fmtPrice(q.price)) : "–"}
               </p>
               <p className={cn("num text-[11px]", (q?.changePct ?? 0) >= 0 ? "text-positive" : "text-negative")}>{q ? fmtPct(q.changePct, 2, true) : ""}</p>
             </Link>

@@ -75,7 +75,7 @@ export function InsiderTable({ rows, showTicker = false }: { rows: InsiderRow[];
                 <tr
                   key={`${r.accn}-${i}`}
                   className="cursor-pointer border-b last:border-0 hover:bg-secondary/60"
-                  onClick={() => open({ ticker: r.ticker, label: `Form 4 · ${r.owner}`, periodLabel: fmtDate(r.date), unit: "usd", value: 0, doc: { accn: r.accn, doc: r.doc, title: `${r.owner} — ${r.role}` } })}
+                  onClick={() => open({ ticker: r.ticker, label: `Form 4 · ${r.owner}`, periodLabel: fmtDate(r.date), unit: "usd", value: 0, doc: { accn: r.accn, doc: r.doc, title: `${r.owner}, ${r.role}` } })}
                 >
                   <td className="num whitespace-nowrap px-4 py-2 text-xs">{fmtDate(r.date)}</td>
                   {showTicker && <td className="px-2 py-2"><TickerMark ticker={r.ticker} link={false} /></td>}
@@ -98,8 +98,8 @@ export function InsiderTable({ rows, showTicker = false }: { rows: InsiderRow[];
                     {r.acquired ? "+" : "−"}
                     {fmtInt(r.shares)}
                   </td>
-                  <td className="num px-2 py-2 text-right">{r.price ? fmtPrice(r.price) : "—"}</td>
-                  <td className="num px-2 py-2 text-right">{r.price ? fmtCompactUsd(r.shares * r.price) : "—"}</td>
+                  <td className="num px-2 py-2 text-right">{r.price ? fmtPrice(r.price) : "–"}</td>
+                  <td className="num px-2 py-2 text-right">{r.price ? fmtCompactUsd(r.shares * r.price) : "–"}</td>
                   <td className="num px-4 py-2 text-right text-muted-foreground">{fmtInt(r.ownedAfter)}</td>
                 </tr>
               ))}

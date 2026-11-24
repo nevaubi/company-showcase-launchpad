@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { signalsQuery, type SignalsFile } from "@/lib/technicals/data";
 import { describeBaseRate, SURVIVORSHIP_NOTE, type BaseRate } from "@/lib/situations/data";
 import { cn } from "@/lib/utils";
+import { fmtPct } from "@/lib/format";
 
 /** Base rate of one technical signal at one horizon, from the pooled history in tech/signals.json. */
 export function baseRateOf(sg: SignalsFile | undefined | null, signal: string, horizon = 60): BaseRate | null {
@@ -60,7 +61,7 @@ export function BaseRateBadge({
       )}
     >
       {compact && br?.excess != null
-        ? `${br.horizon}d ${br.excess >= 0 ? "+" : ""}${(br.excess * 100).toFixed(1)}% vs avg`
+        ? `${br.horizon}d ${fmtPct(br.excess, 1, true)} vs avg`
         : d.text}
     </span>
   );

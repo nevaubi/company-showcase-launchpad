@@ -55,7 +55,7 @@ export function displayUnits(def: Pick<MacroDef, "transform" | "units" | "fmt">)
 }
 
 export function fmtMacro(def: Pick<MacroDef, "transform" | "units" | "id" | "fmt">, v: number | null | undefined) {
-  if (v == null || !Number.isFinite(v)) return "—";
+  if (v == null || !Number.isFinite(v)) return "–";
   if (def.transform === "yoy") return `${v.toFixed(1)}%`.replace("-", "−");
   if (def.transform === "diff") return `${v >= 0 ? "+" : "−"}${Math.abs(Math.round(v)).toLocaleString()}k`;
   if (def.fmt) {

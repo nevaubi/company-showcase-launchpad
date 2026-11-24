@@ -7,8 +7,9 @@ import { DATASETS, fmtAlt, type AltRow } from "@/lib/alt/query";
 import { EvidenceButton } from "@/components/source/evidence-button";
 import { Button } from "@/components/ui/button";
 import { TickerMark } from "@/components/app/ticker";
+import { fmtPct } from "@/lib/format";
 
-const fmtD = (d: string | null) => (d ? new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—");
+const fmtD = (d: string | null) => (d ? new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "–");
 
 export function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
   const m = r.meta ?? {};
@@ -27,7 +28,7 @@ export function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
 export function detail(r: AltRow): string | null {
   const m = r.meta ?? {};
   if (r.dataset === "ownership") return (m.filers ?? []).slice(1).join(", ") || null;
-  if (r.dataset === "regulatory") return [(m.agencies ?? []).join(", "), m.abstract].filter(Boolean).join(" — ") || null;
+  if (r.dataset === "regulatory") return [(m.agencies ?? []).join(", "), m.abstract].filter(Boolean).join(": ") || null;
   if (r.dataset === "fda") return m.reason || null;
   if (r.dataset === "recalls") return m.summary || null;
   if (r.dataset === "trials") return [m.nct, (m.conditions ?? []).join(", "), m.primary_completion ? `primary completion ${m.primary_completion}` : null].filter(Boolean).join(" · ") || null;
@@ -122,7 +123,7 @@ export function MedicareDrugTable({ ticker, rows }: { ticker: string; rows: AltR
                 <td className="px-4 py-1.5"><span className="font-medium">{d.drug}</span>{d.generic && <span className="ml-1.5 text-[11px] text-muted-foreground">{d.generic.toLowerCase()}</span>}</td>
                 <td className="px-2 text-[11px] text-muted-foreground">{d.part}</td>
                 {cols.map((c) => <td key={c.key} className={cn("num px-2 text-right", c.ytd && "text-muted-foreground")}>{fmtAlt(d.cells.get(c.key)?.value ?? null, "USD")}</td>)}
-                <td className={cn("num px-2 text-right", chg == null ? "text-muted-foreground" : chg >= 0 ? "text-positive" : "text-negative")}>{chg == null ? "—" : `${chg >= 0 ? "+" : ""}${(chg * 100).toFixed(0)}%`}</td>
+                <td className={cn("num px-2 text-right", chg == null ? "text-muted-foreground" : chg >= 0 ? "text-positive" : "text-negative")}>{fmtPct(chg, 0, true)}</td>
                 <td className="px-4 text-right">{latest?.source_url && <EvidenceButton ticker={ticker} title={`Medicare ${d.part === "B" ? "Part B" : "Part D"} spending on ${d.drug}`} url={latest.source_url} date={latest.date ?? undefined} />}</td>
               </tr>
             );

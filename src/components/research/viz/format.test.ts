@@ -10,7 +10,7 @@ describe("viz formatting", () => {
     expect(fmtValue(0.04, "%", { sign: true })).toBe("+4.0%");
     expect(fmtValue(48.24, "x")).toBe("48.2x");
     expect(fmtValue(25.4, "bp")).toBe("25bp");
-    expect(fmtValue(null, "$")).toBe("—");
+    expect(fmtValue(null, "$")).toBe("–");
   });
 
   it("detects fraction-style percent series", () => {

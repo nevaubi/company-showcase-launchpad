@@ -13,9 +13,9 @@ export const Route = createFileRoute("/_authenticated/app/join/$token")({
   head: () => ({
     meta: [
       { title: "Join a firm · FiledUnder" },
-      { name: "description", content: "Accept an invitation to a Filed Under firm workspace." },
+      { name: "description", content: "Accept an invitation to a FiledUnder firm workspace." },
       { property: "og:title", content: "Join a firm · FiledUnder" },
-      { property: "og:description", content: "Accept an invitation to a Filed Under firm workspace." },
+      { property: "og:description", content: "Accept an invitation to a FiledUnder firm workspace." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },
@@ -73,7 +73,7 @@ function JoinPage() {
           <p className="eyebrow mt-3">Firm invitation</p>
           <h1 className="mt-1 text-xl font-semibold">Join {i.firm_name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            You're invited as <span className="font-medium text-foreground">{ROLE_LABEL[i.role as FirmRole]}</span> — {ROLE_HELP[i.role as FirmRole].toLowerCase()}.
+            You're invited as <span className="font-medium text-foreground">{ROLE_LABEL[i.role as FirmRole]}</span>: {ROLE_HELP[i.role as FirmRole].toLowerCase()}.
           </p>
           {i.accepted ? (
             <p className="mt-4 text-sm text-negative">This invite has already been used.</p>

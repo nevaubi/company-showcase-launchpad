@@ -21,7 +21,7 @@ export function SiteHeader({ className }: { className?: string }) {
   return (
     <header className={cn("sticky top-0 z-30 border-b border-transparent bg-background/80 backdrop-blur-md", className)}>
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-8 px-6">
-        <Link to="/" aria-label="Filed Under home">
+        <Link to="/" aria-label="FiledUnder home">
           <Logo />
         </Link>
         <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
@@ -108,7 +108,7 @@ export function SiteFooter() {
       </div>
       <div className="border-t">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 text-xs text-muted-foreground">
-          <span>© {new Date().getFullYear()} Filed Under · filedunder.ai</span>
+          <span>© {new Date().getFullYear()} FiledUnder · filedunder.ai</span>
           <span className="num">EDGAR · XBRL · iXBRL · FORM 4 · FRED</span>
         </div>
       </div>

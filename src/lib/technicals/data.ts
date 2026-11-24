@@ -1,4 +1,4 @@
-// Long daily history, per-symbol quant statistics and market-wide technical datasets from the Filed Under
+// Long daily history, per-symbol quant statistics and market-wide technical datasets from the FiledUnder
 // pipeline (etl/technicals.py, etl/quant.py), served through the partner data service.
 import { queryOptions } from "@tanstack/react-query";
 import { partnerFile } from "@/lib/data";

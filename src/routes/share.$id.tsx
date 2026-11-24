@@ -11,7 +11,7 @@ export const Route = createFileRoute("/share/$id")({
     return {
       meta: [
         { title: t },
-        { name: "description", content: loaderData?.subtitle ?? "A chart shared from Filed Under, with its source." },
+        { name: "description", content: loaderData?.subtitle ?? "A chart shared from FiledUnder, with its source." },
         { name: "robots", content: "noindex" },
         { property: "og:title", content: t },
         { property: "og:type", content: "website" },
@@ -39,7 +39,7 @@ function SharedPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="flex items-center gap-3 border-b px-4 py-3 lg:px-8">
-        <Link to="/" aria-label="Filed Under">
+        <Link to="/" aria-label="FiledUnder">
           <BrandMark className="h-6 w-auto text-foreground" />
         </Link>
         <span className="text-xs text-muted-foreground">Shared {s.created.slice(0, 10)}</span>
@@ -65,7 +65,7 @@ function SharedPage() {
           <p className="text-sm text-muted-foreground">This shared view could not be displayed.</p>
         )}
         <p className="mt-8 text-[11px] text-muted-foreground">
-          A read-only snapshot from Filed Under. Figures are as of the share date; follow the source line for the underlying filings and datasets.
+          A read-only snapshot from FiledUnder. Figures are as of the share date; follow the source line for the underlying filings and datasets.
         </p>
       </main>
     </div>

@@ -47,7 +47,7 @@ export interface IrExportOptions {
   scale: Scale;
   /** Describes what was exported, shown on the cover. */
   scope: string;
-  /** App origin for "Open in Filed Under" links. */
+  /** App origin for "Open in FiledUnder" links. */
   origin?: string;
   logo?: ArrayBuffer | null;
   /** Include the Data & sources sheet (default true). */
@@ -123,7 +123,7 @@ const tolOf = (unit: string, v: number) => (unit === "usd" ? Math.max(Math.abs(v
 export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workbook; stats: IrExportStats }> {
   const ExcelJS = await loadExcel();
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Filed Under";
+  wb.creator = "FiledUnder";
   wb.created = new Date();
   wb.calcProperties = { fullCalcOnLoad: true };
 
@@ -197,7 +197,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
     plan.cols.forEach((_, j) => (ws.getColumn(FIRST + j).width = 12.5));
     titleBlock(
       ws,
-      `${name} — ${plan.section.name}, ${FREQ_WORD[f].toLowerCase()}`,
+      `${name}: ${plan.section.name}, ${FREQ_WORD[f].toLowerCase()}`,
       `Dollar amounts shown in ${scaleWords(o.scale)}; cells hold full values. Blue = printed in a document, black = formula, green = formula using another sheet.`,
       last,
     );
@@ -236,7 +236,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
         unitCaption(unit, o.scale),
         `${lineCount} line${lineCount === 1 ? "" : "s"}`,
         real.length ? (real.every((c) => c.ok) ? "every total ties out" : `${real.filter((c) => c.ok).length} of ${real.length} totals tie out`) : null,
-        groupChecks.length > real.length ? "selected lines only — remainder shown as “Not itemized”" : null,
+        groupChecks.length > real.length ? "selected lines only; the remainder is shown as “Not itemized”" : null,
       ]
         .filter(Boolean)
         .join(" · ");
@@ -361,7 +361,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
             stats.formulas++;
           } else {
             x.value = chk.ok ? "✓" : chk.sum - chk.total;
-            x.note = `Filed Under matched ${chk.n} lines for this total${chk.sub?.length ? ` (subtracting ${chk.sub.join(", ")})` : ""} — including a line printed in a neighbouring table or the parts of a subtotal not printed this period — so this check is a stored result rather than a formula.`;
+            x.note = `FiledUnder matched ${chk.n} lines for this total${chk.sub?.length ? ` (subtracting ${chk.sub.join(", ")})` : ""}, including a line printed in a neighbouring table or the parts of a subtotal not printed this period, so this check is a stored result rather than a formula.`;
           }
           x.numFmt = numFmtFor(root.unit, o.scale, { decimals: true });
           x.font = font({ size: 9, bold: chk.ok, color: { argb: chk.ok ? C.positive : C.warning } });
@@ -388,7 +388,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
     const head = ["Sheet", "Breakdown", "Total line", "Period", "Period end", "Printed total", "Sum of parts", "Difference", "Parts", "Subtracted", "Status"];
     const widths = [20, 40, 40, 10, 12, 16, 16, 14, 7, 22, 26];
     widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
-    titleBlock(ws, `${name} — tie-out checks`, "Every printed total compared with the sum of its listed parts. Tolerance: 0.5% or $1.5 million, whichever is larger (rounding in the releases).", head.length);
+    titleBlock(ws, `${name}: tie-out checks`, "Every printed total compared with the sum of its listed parts. Tolerance: 0.5% or $1.5 million, whichever is larger (rounding in the releases).", head.length);
     const hr = ws.getRow(HEAD);
     head.forEach((h, i) => (hr.getCell(i + 1).value = h));
     inkHeader(hr, 1, head.length, { height: 18, align: (c) => (c >= 6 && c <= 9 ? "right" : "left") });
@@ -428,10 +428,10 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
     const ws = wb.addWorksheet("Data & sources");
     stats.sheets.push("Data & sources");
     prepareSheet(ws, { freezeRows: HEAD, tab: C.inkSoft });
-    const head = ["Sheet", "Breakdown", "Line", "Parent line", "Unit", "Period", "Period end", "Months", "Value", "How it was obtained", "Printed as", "Document", "Filed", "Accession", "Location in document", "Open in Filed Under", "SEC filing"];
+    const head = ["Sheet", "Breakdown", "Line", "Parent line", "Unit", "Period", "Period end", "Months", "Value", "How it was obtained", "Printed as", "Document", "Filed", "Accession", "Location in document", "Open in FiledUnder", "SEC filing"];
     const widths = [18, 34, 40, 30, 7, 9, 12, 8, 16, 44, 14, 22, 11, 22, 26, 18, 14];
     widths.forEach((w, i) => (ws.getColumn(i + 1).width = w));
-    titleBlock(ws, `${name} — data & sources`, "Long format for pivot tables and lookups. Values in full units (percentages as fractions). Links open the stored document at the exact cell.", head.length);
+    titleBlock(ws, `${name}: data & sources`, "Long format for pivot tables and lookups. Values in full units (percentages as fractions). Links open the stored document at the exact cell.", head.length);
     const hr = ws.getRow(HEAD);
     head.forEach((h, i) => (hr.getCell(i + 1).value = h));
     inkHeader(hr, 1, head.length, { height: 18, align: (c) => (c === 9 || c === 8 ? "right" : "left") });
@@ -512,8 +512,8 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
       ["Data updated", new Date(p.builtAt).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })],
       ["Scope", o.scope],
       ["Period types", o.freqs.map((f) => FREQ_WORD[f]).join(" and ")],
-      ["Dollar display", `${scaleWords(o.scale)} — cells hold full values, so formulas and pivots stay exact`],
-      ["Coverage", st.firstPeriod && st.lastPeriod ? `${periodLong(st.firstPeriod, "q").replace(/^Quarter ended /, "")} – ${periodLong(st.lastPeriod, "q").replace(/^Quarter ended /, "")}` : "—"],
+      ["Dollar display", `${scaleWords(o.scale)}; cells hold full values, so formulas and pivots stay exact`],
+      ["Coverage", st.firstPeriod && st.lastPeriod ? `${periodLong(st.firstPeriod, "q").replace(/^Quarter ended /, "")} – ${periodLong(st.lastPeriod, "q").replace(/^Quarter ended /, "")}` : "–"],
       ["In this workbook", `${stats.breakdowns.toLocaleString()} breakdowns · ${stats.values.toLocaleString()} values · ${stats.formulas.toLocaleString()} live formulas · ${stats.checks.toLocaleString()} tie-out checks`],
       ["Totals tie out (all data)", `Quarterly ${st.checksQ.total ? Math.round((st.checksQ.ok / st.checksQ.total) * 100) : 0}% (${st.checksQ.ok.toLocaleString()} of ${st.checksQ.total.toLocaleString()}) · annual ${st.checksFY.total ? Math.round((st.checksFY.ok / st.checksFY.total) * 100) : 0}% (${st.checksFY.ok.toLocaleString()} of ${st.checksFY.total.toLocaleString()})`],
       ["Source documents", `${st.documents.toLocaleString()} stored earnings releases, supplements, presentations and data files`],
@@ -521,8 +521,8 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
     legend: [
       { sample: "1,234.5", style: { color: { argb: C.input } }, text: "Printed in a company document (input). The Data & sources sheet links each one to the stored document at that cell." },
       { sample: "1,234.5", style: { italic: true, color: { argb: C.formula } }, text: "Calculated with a live formula from cells on the same sheet." },
-      { sample: "1,234.5", style: { italic: true, color: { argb: C.link } }, text: "Calculated with a live formula that uses another sheet — e.g. fourth quarter = full year (annual sheet) − first three quarters." },
-      { sample: "1,234.5", style: { italic: true, color: { argb: C.inkSoft } }, text: "Calculated by Filed Under from figures not in this workbook (e.g. nine-month year-to-date); the cell note shows the formula." },
+      { sample: "1,234.5", style: { italic: true, color: { argb: C.link } }, text: "Calculated with a live formula that uses another sheet, e.g. fourth quarter = full year (annual sheet) − first three quarters." },
+      { sample: "1,234.5", style: { italic: true, color: { argb: C.inkSoft } }, text: "Calculated by FiledUnder from figures not in this workbook (e.g. nine-month year-to-date); the cell note shows the formula." },
       { sample: "✓", style: { bold: true, color: { argb: C.positive } }, text: "Check row: the listed parts add up to the printed total (within rounding). A number is the difference when they don't." },
       { sample: "Not itemized", style: { italic: true, color: { argb: C.muted } }, text: "The release lists selected lines only; this row is the printed total minus the listed lines." },
       { sample: "[ + ]", style: { color: { argb: C.muted } }, text: "Use Excel's outline buttons in the left margin to collapse a breakdown to its totals." },
@@ -545,7 +545,7 @@ export async function buildIrWorkbook(o: IrExportOptions): Promise<{ wb: Workboo
       row.getCell(3).font = font({ size: 9, color: { argb: C.hyperlink }, underline: true });
       row.getCell(4).value = b.lines.filter((l) => l.kind === "line").length;
       const cks = b.root?.total ? pl.cols.map((e) => checkMap.get(`${b.root!.k}|${pl.freq}|${e}`)).filter((c): c is PayloadCheck => !!c && !c.partial) : [];
-      row.getCell(5).value = cks.length ? `${cks.filter((c) => c.ok).length} of ${cks.length}` : "—";
+      row.getCell(5).value = cks.length ? `${cks.filter((c) => c.ok).length} of ${cks.length}` : "–";
       row.getCell(5).font = font({ size: 9, color: { argb: cks.length && cks.every((c) => c.ok) ? C.positive : cks.length ? C.warning : C.muted } });
       const lastE = [...pl.cols].reverse().find((e) => b.lines.some((l) => cellsOf(l.s, pl.freq)[e]));
       row.getCell(6).value = lastE ? periodLabel(lastE, pl.freq) : "";

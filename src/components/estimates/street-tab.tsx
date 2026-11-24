@@ -76,7 +76,7 @@ function useOpeners(ticker: string, d: StreetBundle) {
         `period ending ${fmtDate(p.end)}`,
         field === "n" ? r.n : r[field],
         field === "n" ? "count" : metric === "eps" ? "usdPerShare" : "usd",
-        `${p.label} (fiscal period ending ${p.end}) ${name}: average ${f(r.avg)}, low ${f(r.low)}, high ${f(r.high)}, ${fCnt(r.n)} analysts; year-ago ${f(r.year_ago)}.${p.end_fixed ? ` Period end corrected by Filed Under: ${p.end_fixed}.` : ""}`,
+        `${p.label} (fiscal period ending ${p.end}) ${name}: average ${f(r.avg)}, low ${f(r.low)}, high ${f(r.high)}, ${fCnt(r.n)} analysts; year-ago ${f(r.year_ago)}.${p.end_fixed ? ` Period end corrected by FiledUnder: ${p.end_fixed}.` : ""}`,
       );
     };
     const action = (a: Action) =>
@@ -144,7 +144,7 @@ function useOpeners(ticker: string, d: StreetBundle) {
           url: doc?.url ?? "",
           quote,
           date: g.issued,
-          confidence: `Quoted from ${doc?.title ?? "the company's release"}; extracted by Filed Under.`,
+          confidence: `Quoted from ${doc?.title ?? "the company's release"}; extracted by FiledUnder.`,
         },
       });
     };
@@ -644,7 +644,7 @@ function RevisionChart({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpen
                       `snapshot ${fmtDate(p.s.as_of)}`,
                       p.v,
                       "usdPerShare",
-                      `Snapshot ${p.s.as_of}: ${PERIOD_NAME[s.c]} (period ending ${p.s.p[s.c]!.end}) consensus EPS ${fEps(p.v)} from ${fCnt(p.s.p[s.c]!.eps_n)} analysts, range ${fEps(p.s.p[s.c]!.eps_lo)} – ${fEps(p.s.p[s.c]!.eps_hi)}. Stored by Filed Under from Yahoo Finance.`,
+                      `Snapshot ${p.s.as_of}: ${PERIOD_NAME[s.c]} (period ending ${p.s.p[s.c]!.end}) consensus EPS ${fEps(p.v)} from ${fCnt(p.s.p[s.c]!.eps_n)} analysts, range ${fEps(p.s.p[s.c]!.eps_lo)} – ${fEps(p.s.p[s.c]!.eps_hi)}. Stored by FiledUnder from Yahoo Finance.`,
                     )
                   }
                 >
@@ -1393,7 +1393,7 @@ function Targets({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners> }
       `latest per firm since ${fmtDate(d.targets!.since)}`,
       k === "n" ? s.n : s[k],
       k === "n" ? "count" : "usd",
-      `${s.n} firms' latest price targets since ${d.targets!.since} (Benzinga): low ${fPx(s.low)}, median ${fPx(s.median)}, mean ${fPx(s.mean)}, high ${fPx(s.high)}. Calculated by Filed Under using split-adjusted targets; current price ${fPx(d.price?.close)} (close ${d.price?.date ?? "–"}).`,
+      `${s.n} firms' latest price targets since ${d.targets!.since} (Benzinga): low ${fPx(s.low)}, median ${fPx(s.median)}, mean ${fPx(s.mean)}, high ${fPx(s.high)}. Calculated by FiledUnder using split-adjusted targets; current price ${fPx(d.price?.close)} (close ${d.price?.date ?? "–"}).`,
     );
   return (
     <div id="st-targets" className="scroll-mt-20">
@@ -1450,7 +1450,7 @@ function Targets({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners> }
         <Note>
           Each firm's latest target and rating from the past 12 months; dropped coverage is
           excluded. Dots: green buy, grey hold, red sell; click one for the record. Rating labels
-          are each firm's own scale, grouped by Filed Under.
+          are each firm's own scale, grouped by FiledUnder.
         </Note>
       </Panel>
     </div>

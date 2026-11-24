@@ -1,5 +1,5 @@
 // Office engine tokens (server-only): short-lived RS256 JWTs scoped to one user
-// and one document. The Filed Under office engine verifies them against
+// and one document. The FiledUnder office engine verifies them against
 // /api/public/office/jwks (issuer, audience, tenant, scope).
 import { exportJWK, importPKCS8, SignJWT, type JWK } from "jose";
 

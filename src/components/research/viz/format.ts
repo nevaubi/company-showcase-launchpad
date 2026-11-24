@@ -20,7 +20,7 @@ export function compact(v: number, digits = 1) {
 }
 
 export function fmtValue(v: unknown, unit: Unit, opts: { fraction?: boolean; digits?: number; sign?: boolean } = {}) {
-  if (typeof v !== "number" || !Number.isFinite(v)) return v == null ? "—" : String(v);
+  if (typeof v !== "number" || !Number.isFinite(v)) return v == null ? "–" : String(v);
   const sign = opts.sign && v > 0 ? "+" : "";
   if (unit === "%") {
     const p = opts.fraction ?? Math.abs(v) <= 1.5 ? v * 100 : v;

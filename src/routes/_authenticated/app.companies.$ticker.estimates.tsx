@@ -65,7 +65,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/esti
 });
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
-const eps = (v: number | null) => (v == null ? "—" : `$${v.toFixed(2)}`);
+const eps = (v: number | null) => (v == null ? "–" : `$${v.toFixed(2)}`);
 
 function SourceNote({ asOf }: { asOf: string }) {
   return (
@@ -106,7 +106,7 @@ function EstimatesPage() {
         <Skeleton className="h-72" />
       </div>
     );
-  // Filed Under estimates bundle (our layout, every value sourced); the live Yahoo view stays as the fallback.
+  // FiledUnder estimates bundle (our layout, every value sourced); the live Yahoo view stays as the fallback.
   if (street.data)
     return <StreetTab ticker={ticker} d={street.data} live={q.data?.estimates ?? null} />;
   if (q.isLoading)
@@ -179,7 +179,7 @@ function Summary({ e }: { e: Estimates }) {
   return (
     <Panel
       title="Street view"
-      subtitle={`Consensus of ${e.target.analysts ?? "—"} analysts · updated ${fmtRelative(e.asOf)}`}
+      subtitle={`Consensus of ${e.target.analysts ?? "–"} analysts · updated ${fmtRelative(e.asOf)}`}
       actions={<SourceNote asOf={e.asOf} />}
     >
       <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-3 lg:grid-cols-6">
@@ -205,7 +205,7 @@ function Summary({ e }: { e: Estimates }) {
         />
         <Stat
           label="FY EPS 90-day revision"
-          value={rev90 == null ? "—" : fmtPct(rev90, 1, true)}
+          value={rev90 == null ? "–" : fmtPct(rev90, 1, true)}
           sub={y0?.endDate ? `FY ending ${fmtDate(y0.endDate)}` : undefined}
           tone={rev90 == null || Math.abs(rev90) < 0.001 ? undefined : rev90 > 0 ? "up" : "down"}
         />
@@ -216,7 +216,7 @@ function Summary({ e }: { e: Estimates }) {
         />
         <Stat
           label="Beat rate"
-          value={beats ? `${beats.beats}/${beats.n}` : "—"}
+          value={beats ? `${beats.beats}/${beats.n}` : "–"}
           sub={
             beats?.avgSurprise != null
               ? `Avg EPS surprise ${fmtPct(beats.avgSurprise, 1, true)}`
@@ -278,7 +278,7 @@ function RangeBar({ r, fmt }: { r: Range; fmt: (v: number | null) => string }) {
     <div className="min-w-[9rem]">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-mono tabular-nums">{fmt(r.avg)}</span>
-        <span className="text-[11px] text-muted-foreground">{r.analysts ?? "—"} ests</span>
+        <span className="text-[11px] text-muted-foreground">{r.analysts ?? "–"} ests</span>
       </div>
       <div className="relative mt-1 h-1.5 rounded-full bg-muted">
         {p != null && (
@@ -297,7 +297,7 @@ function RangeBar({ r, fmt }: { r: Range; fmt: (v: number | null) => string }) {
 }
 
 function Growth({ v }: { v: number | null }) {
-  if (v == null) return <span className="text-muted-foreground">—</span>;
+  if (v == null) return <span className="text-muted-foreground">–</span>;
   return (
     <span
       className={cn(
@@ -422,7 +422,7 @@ function Revisions({ e }: { e: Estimates }) {
                   <td className="px-2 py-2.5 text-right">
                     <span className="inline-flex items-center gap-0.5 font-mono tabular-nums">
                       <Arrow v={d} />
-                      {d == null ? "—" : fmtPct(d, 1, true)}
+                      {d == null ? "–" : fmtPct(d, 1, true)}
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono tabular-nums">
@@ -508,7 +508,7 @@ function SurprisePanel({ e }: { e: Estimates }) {
                     (s.surprisePct ?? 0) >= 0 ? "text-primary" : "text-destructive",
                   )}
                 >
-                  {s.surprisePct == null ? "—" : fmtPct(s.surprisePct, 1, true)}
+                  {s.surprisePct == null ? "–" : fmtPct(s.surprisePct, 1, true)}
                 </div>
               </div>
             ))}
@@ -823,12 +823,12 @@ function ActionRow({ a }: { a: AnalystAction }) {
             {a.toGrade}
           </>
         ) : (
-          a.toGrade || "—"
+          a.toGrade || "–"
         )}
       </td>
       <td className="px-4 py-2 text-right font-mono text-xs tabular-nums">
         {a.target == null ? (
-          "—"
+          "–"
         ) : (
           <>
             {a.priorTarget != null && a.priorTarget !== a.target && (

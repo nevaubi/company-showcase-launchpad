@@ -2,9 +2,10 @@
 import { earningsPricing, impliedMoveBy, ivRank, realizedVol, cboeQuotePage } from "./core";
 import type { OptionsBoardRow, OptionsRow } from "./data";
 import { boardIvRank, volumeRatio } from "./data";
+import { fmtSigned } from "@/lib/format";
 
 const pct = (x: number | null | undefined, d = 1) => (x == null || !Number.isFinite(x) ? "n/a" : `${(x * 100).toFixed(d)}%`);
-const pts = (x: number | null | undefined) => (x == null ? "n/a" : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)} vol pts`);
+const pts = (x: number | null | undefined) => (x == null ? "n/a" : `${fmtSigned(x * 100, 1)} vol pts`);
 const ratio = (x: number | null | undefined) => (x == null ? "n/a" : x.toFixed(2));
 
 export function optionsCompanyText(
@@ -32,7 +33,7 @@ export function optionsCompanyText(
     if (p)
       out.push(
         `- next report ${ctx.report.date}${ctx.report.estimated ? " (projected date)" : ""}: the ${p.point.e} expiry prices ±${pct(p.point.m)} (±$${(p.point.m * s.price).toFixed(2)})` +
-          (p.lag > 10 ? ` — that expiry is ${p.lag} days after the report, so it also prices ordinary movement` : "") +
+          (p.lag > 10 ? `; that expiry is ${p.lag} days after the report, so it also prices ordinary movement` : "") +
           (p.past ? `; the last ${p.past.n} reports moved a median ±${pct(p.past.median)} (mean ±${pct(p.past.mean)}), ${p.past.exceeded} of ${p.past.n} more than today's priced move` : ""),
       );
   }

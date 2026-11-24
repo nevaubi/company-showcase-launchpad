@@ -45,7 +45,7 @@ export function BotStatStrip({ capital, equity, closed, open }: { capital: numbe
       <Stat className="border-0" label="Win rate" value={fmtPct(s.hit, 0)} />
       <Stat className="border-0" label="Avg trade" value={fmtPct(s.avgTrade, 2, true)} tone={toneOf(s.avgTrade)} sub="after costs" />
       <Stat className="border-0" label="Max drawdown" value={fmtPct(s.maxDrawdown, 1)} tone={s.maxDrawdown && s.maxDrawdown < 0 ? "negative" : "neutral"} />
-      <Stat className="border-0" label="Sharpe" value={s.sharpe == null ? "—" : s.sharpe.toFixed(2)} sub={s.sharpe == null ? "after 20 days" : "annualised"} />
+      <Stat className="border-0" label="Sharpe" value={s.sharpe == null ? "–" : s.sharpe.toFixed(2)} sub={s.sharpe == null ? "after 20 days" : "annualised"} />
     </div>
   );
 }

@@ -27,7 +27,7 @@ async function getJson<T>(path: string): Promise<T> {
 }
 
 /**
- * Partner data service (Filed Under pipeline): serves the same dataset files, rebuilt on a
+ * Partner data service (FiledUnder pipeline): serves the same dataset files, rebuilt on a
  * schedule, to signed-in users only. Set VITE_PARTNER_DATA_URL to "off" to disable.
  */
 const PARTNER_DATA_URL =

@@ -93,7 +93,7 @@ function CoveragePage() {
         <div className="bg-background px-3 py-2">
           <p className="text-[10.5px] text-muted-foreground">Ratings</p>
           <div className="mt-1 flex flex-wrap gap-1">
-            {counts.length ? counts.map(([r, n]) => <Badge key={r} variant={RATING_TONE[r] === "positive" ? "positive" : RATING_TONE[r] === "negative" ? "negative" : "outline"}>{RATING_LABEL[r]} {n}</Badge>) : <span className="text-xs text-muted-foreground">—</span>}
+            {counts.length ? counts.map(([r, n]) => <Badge key={r} variant={RATING_TONE[r] === "positive" ? "positive" : RATING_TONE[r] === "negative" ? "negative" : "outline"}>{RATING_LABEL[r]} {n}</Badge>) : <span className="text-xs text-muted-foreground">–</span>}
           </div>
         </div>
       </div>
@@ -239,7 +239,7 @@ function CoverageTableRow({ row: r, name, sector, price, members, editable, admi
           </Select>
         ) : <Badge variant={RATING_TONE[r.rating] === "positive" ? "positive" : RATING_TONE[r.rating] === "negative" ? "negative" : "outline"}>{RATING_LABEL[r.rating]}</Badge>}
       </TableCell>
-      <TableCell className="num text-right text-[12.5px]">{price == null ? "—" : fmtPrice(price)}</TableCell>
+      <TableCell className="num text-right text-[12.5px]">{price == null ? "–" : fmtPrice(price)}</TableCell>
       <TableCell className="text-right">
         {editable ? (
           <Input
@@ -249,12 +249,12 @@ function CoverageTableRow({ row: r, name, sector, price, members, editable, admi
             onChange={(e) => setTarget(e.target.value.replace(/[^0-9.]/g, ""))}
             onBlur={commitTarget}
             onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-            placeholder="—"
+            placeholder="–"
             aria-label={`Target price for ${r.ticker}`}
           />
-        ) : <span className="num text-[12.5px]">{r.target_price ? fmtPrice(r.target_price) : "—"}</span>}
+        ) : <span className="num text-[12.5px]">{r.target_price ? fmtPrice(r.target_price) : "–"}</span>}
       </TableCell>
-      <TableCell className={cn("num text-right text-[12.5px]", u != null && (u >= 0 ? "text-positive" : "text-negative"))}>{u == null ? "—" : fmtPct(u, 1, true)}</TableCell>
+      <TableCell className={cn("num text-right text-[12.5px]", u != null && (u >= 0 ? "text-positive" : "text-negative"))}>{u == null ? "–" : fmtPct(u, 1, true)}</TableCell>
       <TableCell>
         {editable ? (
           <Select value={String(r.priority)} onValueChange={(v) => onSave({ priority: Number(v) })}>
@@ -280,7 +280,7 @@ function CoverageTableRow({ row: r, name, sector, price, members, editable, admi
 function RestrictedCell({ row: r, admin, onSave }: { row: CoverageRow; admin: boolean; onSave: (p: Partial<CoverageRow>) => void }) {
   const [reason, setReason] = useState(r.restricted_reason ?? "");
   if (!admin) {
-    return r.restricted ? <Badge variant="negative" title={r.restricted_reason ?? undefined}><Lock className="size-3" /> Restricted</Badge> : <span className="text-[12px] text-muted-foreground">—</span>;
+    return r.restricted ? <Badge variant="negative" title={r.restricted_reason ?? undefined}><Lock className="size-3" /> Restricted</Badge> : <span className="text-[12px] text-muted-foreground">–</span>;
   }
   return (
     <Popover onOpenChange={(o) => o && setReason(r.restricted_reason ?? "")}>
@@ -309,12 +309,12 @@ function NoteCell({ row: r, editable, onSave }: { row: CoverageRow; editable: bo
       <PopoverTrigger asChild>
         <Button variant="ghost" size="xs" className="max-w-44 justify-start text-muted-foreground" aria-label={`Note for ${r.ticker}`}>
           <MessageSquareText className="shrink-0" />
-          <span className="truncate">{r.note || (editable ? "Add note" : "—")}</span>
+          <span className="truncate">{r.note || (editable ? "Add note" : "–")}</span>
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80">
         {editable ? (
-          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={5} maxLength={2000} placeholder="Coverage note — saved when you close this" />
+          <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={5} maxLength={2000} placeholder="Coverage note, saved when you close this" />
         ) : <p className="whitespace-pre-wrap text-sm">{r.note || "No note."}</p>}
       </PopoverContent>
     </Popover>

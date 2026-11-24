@@ -3,6 +3,7 @@
 // how often they worked. Pure: shared by scripts/signals.ts, the app and tests.
 import type { Bar, Cell, CompanyDataset, DerivedPart, InsiderTrade, SourceRef } from "../financials/types";
 import { valuationHistory, type MultipleKey } from "../financials/valuation";
+import { fmtPct } from "@/lib/format";
 
 export type SignalKind = "cheap" | "rich" | "accel" | "decel" | "insiderBuy" | "pullback" | "breakdown";
 export type Direction = "long" | "short";
@@ -160,7 +161,7 @@ export function revenueGrowthTimeline(d: CompanyDataset): QuarterGrowth[] {
   return out.sort((a, b) => (a.available < b.available ? -1 : 1));
 }
 
-const pct1 = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
+const pct1 = (x: number) => fmtPct(x, 1, true);
 
 export function growthSignal(q: QuarterGrowth): Signal | null {
   const delta = q.growth - q.prevGrowth;
@@ -186,7 +187,7 @@ export function insiderSignal(trades: InsiderTrade[], date: string): Signal | nu
       value: b.shares,
       unit: "shares",
       periodLabel: b.date,
-      doc: { accn: b.accn, doc: b.doc, form: "4", filed: b.filed, title: `Form 4 — ${b.owner}` },
+      doc: { accn: b.accn, doc: b.doc, form: "4", filed: b.filed, title: `Form 4 · ${b.owner}` },
     })),
   };
 }

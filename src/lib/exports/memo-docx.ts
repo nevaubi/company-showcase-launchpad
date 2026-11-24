@@ -29,7 +29,7 @@ export async function buildMemoDocx(x: Dossier): Promise<MemoResult> {
   const p = d.profile;
   const reg = new SourceRegister(p.cik, new Map(d.filings.map((f) => [f.accn, f])));
   const s = x.screen ?? ({} as Record<string, unknown>);
-  const screenRef = reg.dataset("screener", `Filed Under screener${x.screenAsOf ? ` (prices as of ${x.screenAsOf})` : ""}: price × cover-page shares; multiples from the last four reported quarters`);
+  const screenRef = reg.dataset("screener", `FiledUnder screener${x.screenAsOf ? ` (prices as of ${x.screenAsOf})` : ""}: price × cover-page shares; multiples from the last four reported quarters`);
   const FONT = "Calibri";
 
   const sup = (n: number | null) => (n ? [new TextRun({ text: String(n), superScript: true, size: 14, color: "777777", font: FONT })] : []);
@@ -68,7 +68,7 @@ export async function buildMemoDocx(x: Dossier): Promise<MemoResult> {
     new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: `${p.name} (${x.ticker})`, font: "Georgia", size: 40, bold: true })] }),
     new Paragraph({
       spacing: { after: 200 },
-      children: [new TextRun({ text: `${[p.exchange, p.sector, p.industry].filter(Boolean).join(" · ")} · prepared ${x.generated.slice(0, 10)} from SEC filings and Filed Under datasets`, font: FONT, size: 18, color: "6E6A62" })],
+      children: [new TextRun({ text: `${[p.exchange, p.sector, p.industry].filter(Boolean).join(" · ")} · prepared ${x.generated.slice(0, 10)} from SEC filings and FiledUnder datasets`, font: FONT, size: 18, color: "6E6A62" })],
     }),
   );
 
@@ -184,7 +184,7 @@ export async function buildMemoDocx(x: Dossier): Promise<MemoResult> {
     );
   }
 
-  const document = new Document({ creator: "Filed Under", title: `${x.ticker} IC fact base`, sections: [{ properties: {}, children: body }] });
+  const document = new Document({ creator: "FiledUnder", title: `${x.ticker} IC fact base`, sections: [{ properties: {}, children: body }] });
   const blob = await Packer.toBlob(document);
   return { blob, filename: `${x.ticker}-ic-fact-base-${x.generated.slice(0, 10)}.docx`, sources: reg.list().length };
 }

@@ -45,7 +45,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/valu
 });
 
 const fmtMultiple = (kind: "x" | "pct", v: number | null | undefined) =>
-  v == null || !Number.isFinite(v) ? "—" : kind === "x" ? `${v >= 100 ? v.toFixed(0) : v.toFixed(1)}×` : `${(v * 100).toFixed(v < 0.1 ? 2 : 1)}%`;
+  v == null || !Number.isFinite(v) ? "–" : kind === "x" ? `${v >= 100 ? v.toFixed(0) : v.toFixed(1)}×` : `${(v * 100).toFixed(v < 0.1 ? 2 : 1)}%`;
 
 function Valuation() {
   const { ticker: raw } = Route.useParams();
@@ -133,7 +133,7 @@ function Valuation() {
       </div>
 
       <Panel
-        title={`${sel.label} — point in time`}
+        title={`${sel.label}, point in time`}
         subtitle={`${sel.help}. Each week uses only fundamentals already filed with the SEC (latest basis: ${latest.basis}).`}
       >
         <TimeSeriesChart
@@ -153,7 +153,7 @@ function Valuation() {
         <p className="mt-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
           <Info className="size-3.5" />
           {s.span}-year median {fmtMultiple(sel.kind, st.median)} · range {fmtMultiple(sel.kind, st.min)}–{fmtMultiple(sel.kind, st.max)} · now at the{" "}
-          {st.percentile == null ? "—" : `${ordinal(Math.round(st.percentile * 100))}`} percentile. Share counts are restated for stock splits.
+          {st.percentile == null ? "–" : `${ordinal(Math.round(st.percentile * 100))}`} percentile. Share counts are restated for stock splits.
         </p>
       </Panel>
 
@@ -338,7 +338,7 @@ function PeerMultiples({ ticker, bank }: { ticker: string; bank: boolean }) {
                     </Link>
                   </td>
                   <td className="num px-3 py-2 text-right">{r.price == null ? <Skeleton className="ml-auto h-4 w-12" /> : fmtPrice(r.price)}</td>
-                  <td className="num px-3 py-2 text-right">{r.m?.mcap ? fmtCompactUsd(r.m.mcap) : "—"}</td>
+                  <td className="num px-3 py-2 text-right">{r.m?.mcap ? fmtCompactUsd(r.m.mcap) : "–"}</td>
                   {cols.map((c) => (
                     <td key={c.key} className="num px-3 py-2 text-right">
                       {fmtMultiple(c.kind, r.m?.values[c.key])}

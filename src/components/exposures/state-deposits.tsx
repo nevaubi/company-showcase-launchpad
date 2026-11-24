@@ -15,6 +15,7 @@ import { useUniverse } from "@/lib/data";
 import { useSessionState } from "@/lib/use-session-state";
 import { cn } from "@/lib/utils";
 import { Stat } from "./region-exposures";
+import { fmtPct } from "@/lib/format";
 
 type Col = "value" | "market" | "branches" | "share" | "change" | "t";
 const pct = (v: number | null | undefined, d = 1) => (v == null || !Number.isFinite(v) ? "–" : `${(v * 100).toFixed(d)}%`);
@@ -164,7 +165,7 @@ export function StateDeposits() {
                     <td className="num border-b px-3 py-1 text-right tabular-nums group-hover:bg-secondary">{r.meta.branches?.toLocaleString()}</td>
                     <td className="num border-b px-3 py-1 text-right tabular-nums text-muted-foreground group-hover:bg-secondary">{pct(r.meta.share)}</td>
                     <td className={cn("num border-b px-3 py-1 text-right tabular-nums group-hover:bg-secondary", change != null && change < 0 && "text-negative", fresh && "text-muted-foreground")} title={prior != null ? `June ${Number(year) - 1}: ${fmtAlt(prior, "USD")}` : undefined}>
-                      {fresh ? "new" : change == null ? "–" : `${change >= 0 ? "+" : ""}${(change * 100).toFixed(1)}%`}
+                      {fresh ? "new" : change == null ? "–" : fmtPct(change, 1, true)}
                     </td>
                   </tr>
                 ))}

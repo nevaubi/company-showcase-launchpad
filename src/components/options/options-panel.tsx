@@ -16,7 +16,7 @@ import type { EarningsRelease } from "@/lib/financials/types";
 import { fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const pts = (x: number | null | undefined) => (x == null ? "—" : `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)} pts`);
+const pts = (x: number | null | undefined) => (x == null ? "–" : `${x >= 0 ? "+" : "−"}${Math.abs(x * 100).toFixed(1)} pts`);
 
 export function OptionsPanel({ ticker, next, releases }: { ticker: string; next: NextEarnings | null; releases: EarningsRelease[] | undefined }) {
   const q = useQuery(optionsHistoryQuery(ticker));
@@ -88,7 +88,7 @@ export function OptionsPanel({ ticker, next, releases }: { ticker: string; next:
             />
             <Tile
               label="Put/call open interest"
-              value={s.pc_oi != null ? s.pc_oi.toFixed(2) : "—"}
+              value={s.pc_oi != null ? s.pc_oi.toFixed(2) : "–"}
               hint={s.pc_vol != null ? `volume ${s.pc_vol.toFixed(2)} · ${(s.call_vol + s.put_vol).toLocaleString("en-US")} traded` : undefined}
               onClick={s.pc_oi != null ? () => open(ext("Put/call open interest", s.pc_oi!, "ratio", `${s.put_oi.toLocaleString("en-US")} puts ÷ ${s.call_oi.toLocaleString("en-US")} calls open`)) : undefined}
             />
@@ -254,7 +254,7 @@ function TermTable({ s, report, open, ext }: { s: OptionsRow; report: string | n
                 </span>
               </td>
               <td className="num hidden border-b px-2 py-1.5 text-right tabular-nums text-muted-foreground sm:table-cell">{(t.m * s.price).toFixed(2)}</td>
-              <td className="num border-b px-3.5 py-1.5 text-right tabular-nums">{t.iv != null ? fmtPct(t.iv, 1) : "—"}</td>
+              <td className="num border-b px-3.5 py-1.5 text-right tabular-nums">{t.iv != null ? fmtPct(t.iv, 1) : "–"}</td>
             </tr>
           ))}
         </tbody>

@@ -1,5 +1,5 @@
 // Excel model export: one sheet per statement with live formulas for calculated lines, plus a
-// Sources sheet that maps every number to its SEC filing. Styled with the shared Filed Under theme;
+// Sources sheet that maps every number to its SEC filing. Styled with the shared FiledUnder theme;
 // exceljs is loaded on demand so it never weighs on page loads.
 import type { CompanyDataset, Period, Row, Statement, StatementKey } from "@/lib/financials/types";
 import { coverageOf } from "@/lib/coverage";
@@ -109,7 +109,7 @@ function priorYearIndex(periods: Period[], i: number) {
 export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, scale: Scale, periods?: number, logo?: ArrayBuffer | null) {
   const ExcelJS = await loadExcel();
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Filed Under";
+  wb.creator = "FiledUnder";
   wb.created = new Date();
   wb.calcProperties = { fullCalcOnLoad: true };
   const ticker = d.profile.ticker;
@@ -141,7 +141,7 @@ export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, sca
     ws.getColumn(1).width = 48;
     ws.getColumn(2).width = 8;
     ps.forEach((_, j) => (ws.getColumn(FIRST + j).width = 13));
-    titleBlock(ws, `${name} — ${s.name}, ${freq}`, `Dollar amounts shown in ${scaleWords(scale)}; cells hold full values. Blue = reported in an SEC filing, black = formula, green = formula using another sheet.`, last);
+    titleBlock(ws, `${name}: ${s.name}, ${freq}`, `Dollar amounts shown in ${scaleWords(scale)}; cells hold full values. Blue = reported in an SEC filing, black = formula, green = formula using another sheet.`, last);
     ws.getRow(3).height = 6;
     const h1 = ws.getRow(HEAD);
     const h2 = ws.getRow(HEAD + 1);
@@ -218,7 +218,7 @@ export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, sca
   prepareSheet(src, { freezeRows: HEAD, tab: C.inkSoft });
   const head = ["Statement", "Line item", "Period", "Value (US$, as reported)", "Basis", "XBRL concept", "Fact period", "Form", "Filed", "Accession", "Filing"];
   [18, 36, 12, 22, 46, 48, 24, 8, 12, 22, 16].forEach((w, i) => (src.getColumn(i + 1).width = w));
-  titleBlock(src, `${name} — sources`, "Every reported value and every part of a calculated one, with the SEC filing it comes from.", head.length);
+  titleBlock(src, `${name}: sources`, "Every reported value and every part of a calculated one, with the SEC filing it comes from.", head.length);
   const hr = src.getRow(HEAD);
   head.forEach((h, i) => (hr.getCell(i + 1).value = h));
   inkHeader(hr, 1, head.length, { height: 18, align: (c) => (c === 4 ? "right" : "left") });
@@ -233,7 +233,7 @@ export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, sca
         for (const r of refs) {
           const f = filings.get(r.accn);
           const x = src.getRow(sr);
-          x.values = [s.name, row.label, p.label, r.value, cell.src ? "Reported" : `${cell.derived?.formula} — ${r.label}`, r.concept, r.start ? `${r.start} → ${r.end}` : r.end, f?.form ?? "", f?.filed ?? "", r.accn];
+          x.values = [s.name, row.label, p.label, r.value, cell.src ? "Reported" : `${cell.derived?.formula} (${r.label})`, r.concept, r.start ? `${r.start} → ${r.end}` : r.end, f?.form ?? "", f?.filed ?? "", r.accn];
           for (let i = 1; i <= head.length; i++) {
             x.getCell(i).font = font({ size: 9, color: { argb: i === 4 ? C.input : C.formula } });
             x.getCell(i).border = hairline;
@@ -251,13 +251,13 @@ export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, sca
   // Overview: facts, legend and linked contents.
   const next = cover(wb, ov, {
     title: name,
-    subtitle: `Standardized financial statements from SEC EDGAR XBRL filings — ${freq}`,
+    subtitle: `Standardized financial statements from SEC EDGAR XBRL filings, ${freq}`,
     logo,
     facts: [
       ["Exported", new Date().toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })],
       ["Dataset generated", new Date(d.generatedAt).toLocaleString("en-US", { dateStyle: "medium" })],
-      ["Periods", ps.length ? `${ps.length} ${freq === "annual" ? "fiscal years" : "quarters"} · ${ps[0].label} – ${ps[ps.length - 1].label}` : "—"],
-      ["Dollar display", `${scaleWords(scale)} — cells hold full values, so formulas stay exact; per-share values in dollars; ratios as decimals`],
+      ["Periods", ps.length ? `${ps.length} ${freq === "annual" ? "fiscal years" : "quarters"} · ${ps[0].label} – ${ps[ps.length - 1].label}` : "–"],
+      ["Dollar display", `${scaleWords(scale)}. Cells hold full values, so formulas stay exact; per-share values in dollars; ratios as decimals`],
       ["In this workbook", `${values.toLocaleString()} values · ${formulas.toLocaleString()} live formulas · ${(sr - HEAD - 1).toLocaleString()} source rows`],
       ["SEC CIK", d.profile.cik],
     ],
@@ -265,7 +265,7 @@ export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, sca
       { sample: "1,234", style: { color: { argb: C.input } }, text: "Reported in an SEC filing (input). The Sources sheet lists its accession, XBRL concept and period." },
       { sample: "1,234", style: { italic: true, color: { argb: C.formula } }, text: "Calculated with a live formula from lines on the same sheet." },
       { sample: "12.3%", style: { italic: true, color: { argb: C.link } }, text: "Calculated with a live formula that uses another sheet (margins, conversion, growth)." },
-      { sample: "1,234", style: { italic: true, color: { argb: C.inkSoft } }, text: "Calculated by Filed Under from facts outside this workbook (e.g. fourth quarter = full year − nine months)." },
+      { sample: "1,234", style: { italic: true, color: { argb: C.inkSoft } }, text: "Calculated by FiledUnder from facts outside this workbook (e.g. fourth quarter = full year − nine months)." },
     ],
   });
   let r = next + 1;
@@ -279,7 +279,7 @@ export async function buildFinancialsWorkbook(d: CompanyDataset, freq: Freq, sca
     for (let c = 2; c <= 6; c++) ov.getCell(r, c).border = hairline;
     r++;
   }
-  ov.getCell(r + 1, 2).value = "Filed Under · every number links to its SEC source";
+  ov.getCell(r + 1, 2).value = "FiledUnder · every number links to its SEC source";
   ov.getCell(r + 1, 2).font = font({ size: 8, italic: true, color: { argb: C.muted } });
   ov.getCell(r + 1, 2).fill = solid(C.paper);
   footer(ov, `${name} · Overview`);

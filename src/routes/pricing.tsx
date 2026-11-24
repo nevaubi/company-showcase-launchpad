@@ -9,7 +9,7 @@ export const Route = createFileRoute("/pricing")({
   head: () => ({
     meta: [
       { title: "Access & pricing · FiledUnder" },
-      { name: "description", content: "Filed Under is available by approved trial. Contact us for custom pricing for individuals, teams and institutions." },
+      { name: "description", content: "FiledUnder is available by approved trial. Contact us for custom pricing for individuals, teams and institutions." },
       { property: "og:title", content: "Access & pricing · FiledUnder" },
       { property: "og:description", content: "Approved trials and custom pricing. Every number links to its SEC source." },
       { property: "og:type", content: "website" },

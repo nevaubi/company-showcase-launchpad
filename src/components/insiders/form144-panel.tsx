@@ -91,13 +91,13 @@ export function Form144Panel({ ticker }: { ticker: string }) {
           />
           <Stat
             label="Under 10b5-1 plans"
-            value={s.d365.plan_share != null ? `${Math.round(s.d365.plan_share * 100)}%` : "—"}
+            value={s.d365.plan_share != null ? `${Math.round(s.d365.plan_share * 100)}%` : "–"}
             note={`of ${s.d365.n} notices in 12 months`}
           />
         </div>
         {badRows.length > 0 && (
           <p className="border-t px-3.5 py-2 text-[11px] text-warning">
-            {badRows.map((n) => `${n.person ?? "One filer"} stated ${fmtCompactUsd(n.value, 2)} for ${fmtInt(n.shares)} shares (${fmtPrice(n.value! / n.shares!)} a share)`).join("; ")} — almost certainly a typo in the filing, so {badRows.length === 1 ? "it is" : "they are"} left out of the totals above.
+            {badRows.map((n) => `${n.person ?? "One filer"} stated ${fmtCompactUsd(n.value, 2)} for ${fmtInt(n.shares)} shares (${fmtPrice(n.value! / n.shares!)} a share)`).join("; ")}: almost certainly a typo in the filing, so {badRows.length === 1 ? "it is" : "they are"} left out of the totals above.
           </p>
         )}
       </Panel>
@@ -147,7 +147,7 @@ export function Form144Panel({ ticker }: { ticker: string }) {
                 >
                   <td className="num whitespace-nowrap px-3.5 py-2">{fmtDate(n.filed)}</td>
                   <td className="max-w-[16rem] px-2 py-2">
-                    <span className="block truncate">{n.person ?? "—"}</span>
+                    <span className="block truncate">{n.person ?? "–"}</span>
                     <span className="block truncate text-[11px] text-muted-foreground">
                       {[n.relationship, n.how].filter(Boolean).join(" · ") || "Affiliate"}
                     </span>

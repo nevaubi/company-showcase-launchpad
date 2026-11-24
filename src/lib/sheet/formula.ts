@@ -1,5 +1,5 @@
 // A small spreadsheet formula engine: arithmetic, comparisons, ranges, common
-// functions, and FU()/PRICE() for pulling Filed Under data into cells.
+// functions, and FU()/PRICE() for pulling FiledUnder data into cells.
 
 export class FormulaError {
   constructor(public code: string, public detail?: string) {}

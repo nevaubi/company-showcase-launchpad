@@ -118,7 +118,7 @@ export async function buildModelWorkbook(d: CompanyDataset, o: { irKpis?: IrKpiF
   // Segments
   const seg = wb.addWorksheet("Segments");
   prepareSheet(seg, { freezeRows: HEAD, tab: C.positive });
-  titleBlock(seg, `${name} — segments`, "Segment facts tagged in XBRL filings (axis, member, metric, period), each with its filing.", 9);
+  titleBlock(seg, `${name}: segments`, "Segment facts tagged in XBRL filings (axis, member, metric, period), each with its filing.", 9);
   header(seg, [
     { h: "Breakdown", w: 26 },
     { h: "Member", w: 34 },
@@ -148,7 +148,7 @@ export async function buildModelWorkbook(d: CompanyDataset, o: { irKpis?: IrKpiF
   const kpis = o.irKpis ?? [];
   const kws = wb.addWorksheet("IR KPIs");
   prepareSheet(kws, { freezeRows: HEAD, tab: C.hyperlink });
-  titleBlock(kws, `${name} — investor-relations KPIs`, "Operating metrics read from press releases, supplements and presentations, with the source document.", 10);
+  titleBlock(kws, `${name}: investor-relations KPIs`, "Operating metrics read from press releases, supplements and presentations, with the source document.", 10);
   header(kws, [
     { h: "Category", w: 16 },
     { h: "Metric", w: 40 },
@@ -178,7 +178,7 @@ export async function buildModelWorkbook(d: CompanyDataset, o: { irKpis?: IrKpiF
   const fl = listFormulas(wb);
   const fws = wb.addWorksheet("Inputs & formulas");
   prepareSheet(fws, { freezeRows: HEAD, tab: C.inkSoft });
-  titleBlock(fws, `${name} — formulas`, "Every live formula in this workbook, where it is and what it computes. Blue cells elsewhere are reported inputs; their notes cite the filing.", 4);
+  titleBlock(fws, `${name}: formulas`, "Every live formula in this workbook, where it is and what it computes. Blue cells elsewhere are reported inputs; their notes cite the filing.", 4);
   header(fws, [
     { h: "Sheet", w: 20 },
     { h: "Cell", w: 8 },

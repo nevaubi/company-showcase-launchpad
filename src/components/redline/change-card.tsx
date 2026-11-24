@@ -83,7 +83,7 @@ export function ChangeCard({ c, ticker, sectionTitle, from, to, highlighted }: {
       <footer className="mt-2 flex flex-wrap items-center gap-1">
         {c.type !== "removed" && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => openIn(to, locatePhrase(t.after))}><FileSearch /> {to.form} {to.filed.slice(0, 4)}</Button>}
         {c.type !== "added" && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => openIn(from, locatePhrase(t.before))}><FileSearch /> {from.form} {from.filed.slice(0, 4)}</Button>}
-        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => requestResearch(`${ticker} ${to.form} filed ${to.filed} vs the ${from.form} filed ${from.filed} — ${sectionTitle}, ${TYPE_LABEL(c).toLowerCase()}${c.context ? ` under "${c.context.slice(0, 120)}"` : ""}. What does this change signal for investors, and is it reflected elsewhere (calls, estimates, peers)?\n\n"${snippet}${(text?.length ?? 0) > 600 ? "…" : ""}"`)}>
+        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => requestResearch(`${ticker} ${to.form} filed ${to.filed} vs the ${from.form} filed ${from.filed}: ${sectionTitle}, ${TYPE_LABEL(c).toLowerCase()}${c.context ? ` under "${c.context.slice(0, 120)}"` : ""}. What does this change signal for investors, and is it reflected elsewhere (calls, estimates, peers)?\n\n"${snippet}${(text?.length ?? 0) > 600 ? "…" : ""}"`)}>
           <Sparkles /> Ask the assistant
         </Button>
       </footer>

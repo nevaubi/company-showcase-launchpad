@@ -52,7 +52,7 @@ export function DocEditor({ initialHtml, title, ticker, onChange, readOnly = fal
       StarterKit.configure({ heading: { levels: [1, 2, 3] }, link: { openOnClick: true, autolink: true } }),
       Highlight,
       Typography,
-      Placeholder.configure({ placeholder: "Start writing — or ask the assistant to draft a section…" }),
+      Placeholder.configure({ placeholder: "Start writing, or ask the assistant to draft a section…" }),
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
@@ -193,10 +193,10 @@ function DataTableDialog({ open, onOpenChange, editor, defaultTicker }: { open: 
       const rows = p.metrics.map((k) => st.rows.find((r) => r.key === k)).filter(Boolean);
       const accns = new Set<string>();
       const body = rows
-        .map((r) => `<tr><td>${r!.label}</td>${r!.cells.slice(start).map((c) => (c?.src && accns.add(c.src.accn), `<td>${c ? fmtCell(c.v, r!.unit, "M") : "—"}</td>`)).join("")}</tr>`)
+        .map((r) => `<tr><td>${r!.label}</td>${r!.cells.slice(start).map((c) => (c?.src && accns.add(c.src.accn), `<td>${c ? fmtCell(c.v, r!.unit, "M") : "–"}</td>`)).join("")}</tr>`)
         .join("");
       const filings = d.filings.filter((f) => accns.has(f.accn)).slice(0, 4);
-      const html = `<table><tbody><tr><th>${ticker} · ${preset}${p.statement === "kpis" ? "" : " ($M)"}</th>${periods.map((x) => `<th>${x.label}</th>`).join("")}</tr>${body}</tbody></table><p><em>Source: ${filings.map((f) => `${f.form} filed ${fmtDate(f.filed)} (${f.accn})`).join("; ")}. Values from XBRL company facts via Filed Under.</em></p>`;
+      const html = `<table><tbody><tr><th>${ticker} · ${preset}${p.statement === "kpis" ? "" : " ($M)"}</th>${periods.map((x) => `<th>${x.label}</th>`).join("")}</tr>${body}</tbody></table><p><em>Source: ${filings.map((f) => `${f.form} filed ${fmtDate(f.filed)} (${f.accn})`).join("; ")}. Values from XBRL company facts via FiledUnder.</em></p>`;
       editor.chain().focus().insertContent(html).run();
       onOpenChange(false);
     } catch (e) {

@@ -1,5 +1,6 @@
 // Pure helpers over "what changed" events: labels, filters, day grouping, since-last-visit counts and the digest.
 import type { ChangeEvent, ChangeTier, ChangeType } from "./types";
+import { fmtPct } from "@/lib/format";
 
 export const TYPE_LABEL: Record<ChangeType, string> = {
   filing_change: "Filing changes",
@@ -238,7 +239,7 @@ export function digestText(d: Digest, appUrl = ""): string {
 export function fmtBaseRate(b: ChangeEvent["base_rate"]): string | null {
   if (!b || b.excess == null) return null;
   const p = (v: number | null) =>
-    v == null ? "n/a" : `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+    v == null ? "n/a" : fmtPct(v, 1, true);
   return `After similar events since ${b.since?.slice(0, 4) ?? "2008"}, the ${b.horizon_days}-day return averaged ${p(b.excess)} versus an average stock-day (95% range ${p(b.excess_ci[0])} to ${p(b.excess_ci[1])}, n=${(b.n ?? 0).toLocaleString("en-US")}), ${b.verdict}. Past frequencies, not a forecast.`;
 }
 

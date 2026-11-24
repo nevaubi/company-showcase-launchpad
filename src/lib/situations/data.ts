@@ -2,6 +2,7 @@
 // them into preset screens and a custom builder. The "aligned" count is a count of components, not a score.
 import { queryOptions } from "@tanstack/react-query";
 import { partnerFile } from "@/lib/data";
+import { fmtPct } from "@/lib/format";
 
 export type SitDir = "bullish" | "bearish" | "neutral";
 
@@ -204,7 +205,7 @@ export function leadValue(row: SitRow, comp: string): number | null {
 /** "Similar setups: 60-day excess +3.0% [0.7 to 5.3], n=107k, 2008-2026" and a tone from the CI. */
 export function describeBaseRate(br: Pick<BaseRate, "excess" | "ci" | "n" | "first" | "last" | "horizon"> | null | undefined) {
   if (!br || br.excess == null) return null;
-  const p = (v: number) => `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+  const p = (v: number) => fmtPct(v, 1, true);
   const q = (v: number) => (v * 100).toFixed(1);
   const n = br.n == null ? "" : br.n >= 1e6 ? `${(br.n / 1e6).toFixed(1)}M` : br.n >= 1000 ? `${Math.round(br.n / 1000)}k` : `${br.n}`;
   const yrs = br.first && br.last ? `, ${br.first.slice(0, 4)}-${br.last.slice(0, 4)}` : "";

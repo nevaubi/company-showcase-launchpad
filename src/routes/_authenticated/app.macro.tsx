@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_authenticated/app/macro")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { title: "Macro · FiledUnder" },
-      { name: "description", content: "120 U.S. government economic series — rates, inflation, labor, growth, fiscal, energy — with percentiles, comparisons and an AI macro brief." },
+      { name: "description", content: "120 U.S. government economic series (rates, inflation, labor, growth, fiscal, energy) with percentiles, comparisons and an AI macro brief." },
       { property: "og:title", content: "Macro · FiledUnder" },
       { property: "og:description", content: "120 U.S. government economic series with percentiles, comparisons and an AI macro brief." },
     ],
@@ -70,7 +70,7 @@ function Macro() {
         const r = sm?.get(d.id);
         if (!r || r.latest == null) return [];
         const pct = r.pct10y != null ? `; ${ordinal(Math.round(r.pct10y * 100))} percentile of 10 years` : "";
-        return [{ id: d.id, title: `${d.title} (${displayUnits(d)}) — ${d.agency}`.slice(0, 140), latest: fmtMacro(d, r.latest), date: r.date ?? "", change: `${changeText(d, r)}; 1Y ago ${fmtMacro(d, r.yearAgo)}${pct}`.slice(0, 160) }];
+        return [{ id: d.id, title: `${d.title} (${displayUnits(d)}), ${d.agency}`.slice(0, 140), latest: fmtMacro(d, r.latest), date: r.date ?? "", change: `${changeText(d, r)}; 1Y ago ${fmtMacro(d, r.yearAgo)}${pct}`.slice(0, 160) }];
       });
       const asOf = readings.map((r) => r.date).sort().at(-1) ?? new Date().toISOString().slice(0, 10);
       return getMacroBrief({ data: { asOf, readings } });
@@ -209,7 +209,7 @@ function YieldCurvePanel() {
 
 /** Where a reading sits in its ten-year range, coloured by whether "high" is good or bad for risk assets. */
 function PercentileBar({ def, s }: { def: MacroDef; s: MacroSummary }) {
-  if (s.pct10y == null) return <span className="text-muted-foreground/50">—</span>;
+  if (s.pct10y == null) return <span className="text-muted-foreground/50">–</span>;
   const p = s.pct10y;
   const tone = def.rising == null ? "bg-foreground" : (def.rising === "good") === p >= 0.5 ? "bg-positive" : "bg-negative";
   return (
@@ -281,7 +281,7 @@ function MacroMonitor({
                         <PercentileBar def={d} s={s} />
                       </td>
                       <td className={cn("num px-3 py-2 text-right text-[11px]", s.z5y == null ? "text-muted-foreground" : Math.abs(s.z5y) >= 1.5 ? "font-semibold" : "")}>
-                        {s.z5y == null ? "—" : `${s.z5y >= 0 ? "+" : "−"}${Math.abs(s.z5y).toFixed(1)}`}
+                        {s.z5y == null ? "–" : `${s.z5y >= 0 ? "+" : "−"}${Math.abs(s.z5y).toFixed(1)}`}
                       </td>
                       <td className="px-3 py-1">
                         <Sparkline values={s.spark.map((o) => o[1])} tone="ink" className="h-6 w-28" />
@@ -335,7 +335,7 @@ function SeriesDetail({
   return (
     <Panel
       title={def.title}
-      subtitle={`${displayUnits(def)} · ${def.frequency} · ${def.agency}${vs ? ` — vs ${vs.title} (right axis)` : ""}`}
+      subtitle={`${displayUnits(def)} · ${def.frequency} · ${def.agency}${vs ? ` · vs ${vs.title} (right axis)` : ""}`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <select

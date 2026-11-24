@@ -1054,7 +1054,7 @@ export function Government({ ticker, gov }: { ticker: string; gov: GovFile }) {
                     “{q.text}”
                     {q.speaker && (
                       <span className="ml-1 text-[11px]">
-                        — {q.speaker}
+                        {q.speaker}
                         {q.speaker_party ? ` (${partyShort(q.speaker_party)})` : ""}
                       </span>
                     )}

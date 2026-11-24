@@ -4,7 +4,7 @@ import { groupUpcoming, pct } from "./workflow";
 describe("earnings workflow helpers", () => {
   it("formats signed percentages", () => {
     expect(pct(0.1234)).toBe("+12.3%");
-    expect(pct(-0.05, 0)).toBe("-5%");
+    expect(pct(-0.05, 0)).toBe("−5%");
     expect(pct(null)).toBe("–");
   });
   it("groups upcoming reports by date and filters to a ticker set", () => {

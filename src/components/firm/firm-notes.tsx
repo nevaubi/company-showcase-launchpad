@@ -58,7 +58,7 @@ export function FirmNotes({ ticker }: { ticker: string }) {
     <Panel title={<span className="inline-flex items-center gap-1.5"><Users className="size-3.5" /> Team notes</span>} subtitle={`Shared with ${firm.name}`}>
       {can("analyst") && (
         <form className="mb-3 space-y-1.5" onSubmit={(e) => { e.preventDefault(); if (body.trim()) add.mutate(); }}>
-          <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} maxLength={8000} placeholder={`Note on ${ticker} for the team — channel checks, call takeaways, model changes…`}
+          <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={2} maxLength={8000} placeholder={`Note on ${ticker} for the team: channel checks, call takeaways, model changes…`}
             onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && body.trim()) add.mutate(); }} />
           <div className="flex items-center justify-between">
             <span className="text-[11px] text-muted-foreground">⌘↵ to post</span>

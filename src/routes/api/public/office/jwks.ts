@@ -1,4 +1,4 @@
-// Public keys (no secrets) the office engine uses to verify Filed Under tokens.
+// Public keys (no secrets) the office engine uses to verify FiledUnder tokens.
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/public/office/jwks")({
