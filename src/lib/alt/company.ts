@@ -1,10 +1,15 @@
 // One company's alt data, turned into what the tab, the Overview snapshot and the assistant show:
 // per dataset a few headline figures (each with the rows it came from), a chartable series, the
 // rows for its table, and an unusual-change verdict against the company's own history. Pure.
+//
+// What the stored rows can support is decided once, in `history.ts`: a count over a window is
+// shown only where the stored history covers that window (otherwise what is on file, labelled
+// "since <day>"), the rise rule compares only windows collected the same way, and a reading for a
+// period still running is never compared or tested.
 import { DATASETS, THEMES, fmtAlt, fmtChange, fmtShare, type AltTheme } from "@/lib/alt/catalog";
-import { countVerdict, daysBetween, eventWindows, recency, revenueNear, seriesVerdict, trailingTwelveMonths, trailingYear, yearOnYear, addDays, type CountVerdict, type RevenuePoint, type SeriesVerdict } from "@/lib/alt/derive";
+import { addDays, daysBetween, quarterOnly, rangeVerdict, recency, revenueNear, riseVerdict, pLabel, trailingTwelveMonths, yearOnYear, type RevenuePoint } from "@/lib/alt/derive";
+import { countSupport, dayLabel, rangeRulesOf, rowsOf, settled, trailingCount, wholeWindows, type CountSupport, type RangeRule, type TrailingCount } from "@/lib/alt/history";
 import { isPartial, periodLabel } from "@/lib/alt/periods";
-import { BASELINE_WINDOWS, NO_SIGNAL } from "@/lib/alt/signals";
 
 export interface CompanyAltRow {
   uid: string;
@@ -35,18 +40,26 @@ export interface Figure {
   revenue?: RevenuePoint;
   /** how it was computed, in words */
   formula?: string;
+  /** the amount behind `value`, for materiality checks (USD, count, pounds...) */
+  num?: number;
 }
 
 export interface Flag {
   dataset: string;
+  /** "rise": a count over 90 days against earlier whole windows; "range": a series reading against its own range */
+  kind: "rise" | "range";
   direction: "up" | "down";
-  /** "14 8-K items in the last 90 days, 3.1 per 90 days before" */
+  /** "5 8-K filings in the last 90 days; at most 2 in any of the prior 8 windows" */
   text: string;
-  /** |z| against the company's own history (count z for events, modified z for series); larger is more unusual */
-  score: number;
+  /** how strong, within its kind only: −log10 p for a rise, the ratio to the range edge for a range reading */
+  strength: number;
   date: string | null;
   rows: CompanyAltRow[];
   rule: string;
+  /** the flagged reading itself, so a tile carrying the flag shows what the flag is about */
+  figure: Figure;
+  /** counts per whole 90-day window, oldest first (rise flags) */
+  history?: number[];
 }
 
 export interface ChartPoint {
@@ -69,6 +82,10 @@ export interface DatasetView {
   table: CompanyAltRow[];
   flag?: Flag;
   rows: CompanyAltRow[];
+  /** what the stored history covers, when it is less than the source holds */
+  coverage?: string;
+  /** nothing recent or material: the tab shows one quiet line instead of a panel */
+  quiet?: string;
 }
 
 export interface CompanyAlt {
@@ -80,7 +97,7 @@ export interface CompanyAlt {
   latest: string | null;
 }
 
-/** 8-K items that rarely appear and usually matter. */
+/** 8-K items that rarely appear and usually matter (the tab, the hub and the assistant use this one list). */
 export const RED_FLAG_8K: Record<string, string> = {
   "1.03": "Bankruptcy", "1.05": "Cyber incident", "2.04": "Debt acceleration", "2.05": "Restructuring costs", "2.06": "Impairment",
   "3.01": "Listing notice", "4.01": "Auditor change", "4.02": "Restatement",
@@ -88,13 +105,15 @@ export const RED_FLAG_8K: Record<string, string> = {
 
 const ACTIVE_TRIAL = new Set(["RECRUITING", "ACTIVE_NOT_RECRUITING", "ENROLLING_BY_INVITATION", "NOT_YET_RECRUITING"]);
 const BANK_ORDER = ["Total deposits", "Total assets", "Net loans & leases", "Net income (YTD)", "Net interest margin", "Net charge-off rate", "Noncurrent loans / loans", "Return on assets", "CET1 ratio"];
-/** Bank ratios where a rise is bad news, tested for unusual moves on their own scale. */
+/** Bank ratios where a rise is bad news. */
 export const BANK_RISK = ["Net charge-off rate", "Noncurrent loans / loans"];
 
 const byDateDesc = (a: CompanyAltRow, b: CompanyAltRow) => (b.date ?? "").localeCompare(a.date ?? "") || a.uid.localeCompare(b.uid);
-const tone = (c: number | null | undefined, goodUp = true): Figure["tone"] => (c == null || Math.abs(c) < 0.005 ? undefined : (c > 0) === goodUp ? "positive" : "negative");
+const tone = (c: number | null | undefined, goodUp = true): Figure["tone"] => (c == null || Math.abs(c) < 0.0005 ? undefined : (c > 0) === goodUp ? "positive" : "negative");
 const vs = (c: number | null, label: string) => (c == null ? undefined : `${fmtChange(c)} vs ${label}`);
 const plural = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const subOf = (...parts: (string | null | undefined | false)[]) => parts.filter(Boolean).join(" · ") || undefined;
 
 function seriesOf(rows: CompanyAltRow[], title: string) {
   return rows.filter((r) => r.kind === "series" && r.title === title && r.value != null && r.date).sort((a, b) => a.date!.localeCompare(b.date!));
@@ -104,58 +123,87 @@ function chartOf(rows: CompanyAltRow[], today: string, yearly: boolean, max: num
   return rows.slice(-max).map((r) => ({ label: periodLabel(r, today, yearly), value: r.value!, partial: isPartial(r, today), row: r }));
 }
 
-/** A count rule over 90-day windows of the given event rows. */
-export function eventFlag(dataset: string, events: CompanyAltRow[], today: string, noun: string): Flag | undefined {
-  if (NO_SIGNAL.has(dataset) || !events.length) return undefined;
-  const v: CountVerdict = countVerdict(eventWindows(events.map((r) => r.date), today), { maxPrior: BASELINE_WINDOWS[dataset] });
-  if (v.status !== "spike" && v.status !== "drop") return undefined;
-  const recent = events.filter((r) => r.date && daysBetween(r.date, today) >= 0 && daysBetween(r.date, today) < 90).sort(byDateDesc);
+/* ---------------- counts and the rise rule ---------------- */
+
+/** A count over the trailing window, worded by what the stored history covers. */
+function countFigure<T extends CompanyAltRow>(t: TrailingCount<T>, label: string, units: number, opts: { sub?: string; tone?: Figure["tone"]; rows?: T[]; change?: boolean } = {}): Figure {
+  const before = t.before ? t.before.length : null;
+  const change = opts.change !== false && t.whole && before ? units / before - 1 : null;
   return {
-    dataset,
-    direction: v.status === "spike" ? "up" : "down",
-    text: `${plural(v.recent, noun)} in the last 90 days, ${v.baseline.toFixed(1)} per 90 days over the prior ${v.prior * 3} months`,
-    score: Math.abs(v.z),
-    date: recent[0]?.date ?? null,
-    rows: recent,
-    rule: `Poisson tail p = ${v.p < 0.0001 ? v.p.toExponential(1) : v.p.toFixed(4)} against the company's own rate (flag below 0.005, at least 3 records, z ≥ 3)`,
+    label: `${label}, ${t.span}`,
+    value: units.toLocaleString("en-US"),
+    sub: subOf(opts.sub, vs(change, "prior 12 months")),
+    tone: opts.tone,
+    rows: opts.rows ?? rowsOf(t.units),
+    num: units,
   };
 }
 
-/** The series rule on the latest full reading of one series. */
-export function seriesFlag(dataset: string, series: CompanyAltRow[], today: string, opts: { log?: boolean; window: number; floor?: number; minValue?: number; upOnly?: boolean; what: string }): Flag | undefined {
-  const full = series.filter((r) => !isPartial(r, today));
-  const last = full[full.length - 1];
-  if (!last || (opts.minValue != null && Math.abs(last.value!) < opts.minValue)) return undefined;
-  const v: SeriesVerdict = seriesVerdict(full.map((r) => r.value!), { log: opts.log, window: opts.window, floor: opts.floor });
-  if (v.status !== "spike" && v.status !== "drop") return undefined;
-  if (opts.upOnly && v.status === "drop") return undefined;
-  const unit = last.unit;
-  const ratio = opts.log && v.median > 0 ? ` (${(v.latest / v.median).toFixed(1)}× its median)` : "";
+/** Where a count's stored history starts, when that is later than the window shown. */
+const coverageOf = (s: CountSupport<CompanyAltRow>, t: TrailingCount<CompanyAltRow>) => (!t.whole && s.since ? `Stored history starts ${dayLabel(s.since)}: counts cover what is on file since then.` : undefined);
+
+/**
+ * The rise rule on one dataset's watched streams (`riseVerdict` over `wholeWindows`). Flags a rise
+ * only; returns nothing when fewer than a year of whole windows precede the latest one.
+ */
+export function riseFlag(dataset: string, rows: CompanyAltRow[], today: string): Flag | undefined {
+  const s = countSupport(dataset, rows, { watched: true });
+  if (s.none) return undefined;
+  const w = wholeWindows(s, today);
+  if (w.counts.length < 2) return undefined;
+  const v = riseVerdict(w.counts);
+  if (v.status !== "rise") return undefined;
+  const [one, many] = s.noun;
+  const evidence = rowsOf(w.latest).sort(byDateDesc);
   return {
     dataset,
-    direction: v.status === "spike" ? "up" : "down",
-    text: `${opts.what} ${fmtAlt(v.latest, unit)} on ${last.date}, against a median of ${fmtAlt(v.median, unit)} over the prior ${v.prior} readings${ratio}`,
-    score: Math.abs(v.z),
+    kind: "rise",
+    direction: "up",
+    text: `${plural(v.recent, one, many)} in the last 90 days; at most ${v.max} in any of the ${v.prior} earlier 90-day windows (mean ${v.mean.toFixed(1)})`,
+    strength: -Math.log10(Math.max(v.p, 1e-12)),
+    date: evidence[0]?.date ?? null,
+    rows: evidence,
+    history: w.counts,
+    rule: `More than every earlier window and at least twice their mean; if all ${v.prior + 1} windows shared one rate, a count this high would land in the latest with ${pLabel(v.p)} (exact conditional test, flag below 0.001). Windows after the first stored record only${s.lagDays >= 30 ? `; the latest ${s.lagDays} days may not all be published yet` : ""}.`,
+    figure: { label: `${cap(many)}, last 90 days`, value: v.recent.toLocaleString("en-US"), sub: `Most in an earlier 90 days: ${v.max}`, rows: evidence, num: v.recent, asOf: today },
+  };
+}
+
+/** The readings a range rule compares: finished periods, single quarters for year-to-date rates. */
+function rangeReadings(rule: RangeRule, series: CompanyAltRow[], today: string): { date: string; value: number; from: CompanyAltRow[] }[] {
+  const done = settled(series, today);
+  return rule.quarterOnly ? quarterOnly(done) : done.map((r) => ({ date: r.date!, value: r.value!, from: [r] }));
+}
+
+/** A range rule on the latest finished reading, only when that reading is the newest the source can have published. */
+export function rangeFlag(rule: RangeRule, series: CompanyAltRow[], today: string): Flag | undefined {
+  const readings = rangeReadings(rule, series, today);
+  const last = readings[readings.length - 1];
+  if (!last || daysBetween(last.date, today) > rule.currentDays) return undefined;
+  const v = rangeVerdict(readings, rule);
+  if (v.status !== "above" && v.status !== "below") return undefined;
+  const unit = last.from[0].unit;
+  const up = v.status === "above";
+  const edge = up ? v.hi! : v.lo!;
+  const period = rule.dataset === "attention" ? last.date.slice(0, 7) : rule.dataset === "settlement" ? `the half-month ending ${last.date}` : `the quarter ending ${last.date}`;
+  const times = Number.isFinite(v.ratio) ? `${v.ratio.toFixed(1)}×` : "far";
+  const word = rule.quarterOnly ? "single-quarter rate" : "reading";
+  const rows = [...last.from, ...v.prior.flatMap((r) => r.from)].filter((r, i, a) => a.indexOf(r) === i);
+  return {
+    dataset: rule.dataset,
+    kind: "range",
+    direction: up ? "up" : "down",
+    text: `${rule.what} ${fmtAlt(last.value, unit)} in ${period}: ${times} ${up ? "the highest" : "below the lowest"} ${word} of ${rule.span} (${fmtAlt(edge.value, unit)}, ${edge.date.slice(0, rule.dataset === "attention" ? 7 : 10)})`,
+    strength: Number.isFinite(v.ratio) ? v.ratio : 99,
     date: last.date,
-    rows: [last, ...full.slice(-1 - opts.window, -1)],
-    rule: `Modified z-score ${v.z.toFixed(1)} on a ${opts.log ? "log" : "linear"} scale (flag at |z| ≥ 3.5, at least 8 prior readings)`,
+    rows,
+    rule: `${up ? "Above" : "Below"} its own range: ${up ? `at least ${rule.factor}× the highest` : `at most the lowest ÷ ${rule.factor}`} of the ${v.prior.length} ${word}s in ${rule.span}${rule.minBeyond ? ` and ${rule.minBeyond} points beyond it` : ""}${rule.minLatest ? `, and at least ${fmtAlt(rule.minLatest, unit)}` : ""}${rule.minLevel ? `; only for series whose median is at least ${fmtAlt(rule.minLevel, unit)}` : ""}${rule.quarterOnly ? "; the year-to-date rate is turned into single quarters first" : ""}.`,
+    figure: { label: `${rule.title}, ${rule.dataset === "attention" ? last.date.slice(0, 7) : last.date}${rule.quarterOnly ? " quarter" : ""}`, value: fmtAlt(last.value, unit), sub: `${up ? "Highest" : "Lowest"} of ${rule.span}: ${fmtAlt(edge.value, unit)}`, rows, num: last.value, asOf: last.date },
   };
 }
 
-function scaleFigure(label: string, amount: number, period: CompanyAltRow, rows: CompanyAltRow[], revenue: RevenuePoint[], what: string): Figure | null {
-  const end = typeof period.meta?.period_end === "string" ? period.meta.period_end : period.date!;
-  const rev = revenueNear(revenue, end);
-  if (!rev) return null;
-  return {
-    label,
-    value: fmtShare(amount / rev.value),
-    sub: `${fmtAlt(amount, "USD")} of ${fmtAlt(rev.value, "USD")} revenue (FY ending ${rev.end})`,
-    asOf: periodLabel(period, end),
-    rows,
-    revenue: rev,
-    formula: `${what} ÷ annual revenue reported for the fiscal year ending ${rev.end}`,
-  };
-}
+const strongest = (flags: (Flag | undefined)[]) => (flags.filter(Boolean) as Flag[]).sort((a, b) => b.strength - a.strength)[0];
+const seriesFlags = (dataset: string, rows: CompanyAltRow[], today: string) => strongest(rangeRulesOf(dataset).map((r) => rangeFlag(r, seriesOf(rows, r.title), today)));
 
 /* ---------------- per dataset ---------------- */
 
