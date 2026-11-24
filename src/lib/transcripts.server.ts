@@ -48,7 +48,7 @@ export async function loadTranscript(co: Co, rawUrl: string): Promise<{ transcri
   const { cached } = await import("@/lib/ai.server");
   const slug = url.split("/").slice(-4).join("/");
   return cached(
-    `transcript:v2:${slug}`,
+    `transcript:v3:${slug}`,
     60 * 86400_000,
     async () => {
       const { firecrawlScrape } = await import("@/lib/web.server");

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { FileSearch, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSource } from "@/components/source/source-context";
@@ -50,17 +49,20 @@ export function ChangeCard({ c, ticker, sectionTitle, from, to, highlighted }: {
   highlighted?: boolean;
 }) {
   const { open } = useSource();
-  const [expanded, setExpanded] = useState(false);
   const t = textsOf(c);
   const text = c.type === "removed" ? t.before : t.after;
-  const long = (text?.length ?? 0) > 700;
   const ops: Op[] = c.ops ?? [{ t: c.type === "added" ? "+" : "-", s: text ?? "" }];
   const openIn = (f: FilingRef, phrase: string | undefined) =>
     open({ ticker, label: `${sectionTitle} · ${TYPE_LABEL(c)}`, unit: "usd", value: 0, doc: { accn: f.accn, doc: f.doc, form: f.form, filed: f.filed, title: `${f.form} filed ${f.filed}`, search: phrase } });
   const snippet = (text ?? "").slice(0, 600);
 
   return (
-    <article id={`change-${c.id}`} className={cn("scroll-mt-24 border-b px-3.5 py-3 transition-colors", highlighted && "bg-highlight-soft/50")}>
+    <article
+      id={`change-${c.id}`}
+      // Lands under the app's sticky bars and the page's own section bar (set by the Filing changes page).
+      style={{ scrollMarginTop: "calc(var(--sticky-top, 3.5rem) + var(--redline-nav, 3rem) + 8px)" }}
+      className={cn("border-b px-3.5 py-3 transition-colors", highlighted && "bg-highlight-soft/50")}
+    >
       <header className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
         <span className={cn("num inline-flex items-center gap-1 rounded border px-1.5 py-px font-semibold uppercase tracking-wide", LEVEL_CLS[c.level])} title="Materiality score (0–100)">
           {c.level} <span className="font-normal opacity-80">{c.score}</span>
@@ -75,8 +77,8 @@ export function ChangeCard({ c, ticker, sectionTitle, from, to, highlighted }: {
         </div>
       )}
       <div className={cn("mt-2", c.isHeading && "font-semibold")}>
-        <DiffText ops={ops} clamp={long && !expanded} />
-        {long && <button type="button" className="mt-1 text-xs font-medium text-link hover:underline" onClick={() => setExpanded((x) => !x)}>{expanded ? "Show less" : "Show the whole paragraph"}</button>}
+        {/* The whole paragraph, always: a changed paragraph is the page's primary content and is never cut. */}
+        <DiffText ops={ops} clamp={false} />
       </div>
       <footer className="mt-2 flex flex-wrap items-center gap-1">
         {c.type !== "removed" && <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => openIn(to, locatePhrase(t.after))}><FileSearch /> {to.form} {to.filed.slice(0, 4)}</Button>}

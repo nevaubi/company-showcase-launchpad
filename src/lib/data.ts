@@ -1,6 +1,6 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
+import { appendStoredBars } from "@/lib/append-bars";
 import type {
-  Bar,
   CompanyDataset,
   Filing,
   InsiderTrade,
@@ -349,21 +349,13 @@ async function storedDailyBars(symbol: string): Promise<PriceSeries> {
       .from("market_bars")
       .select("date, open, high, low, close, adj_close, volume")
       .eq("symbol", symbol)
-      .gt("date", last)
+      // The bundle's last day is fetched too: it is the bar both sources hold, which puts the stored
+      // rows' adjusted closes on the bundle's basis (a dividend in between would leave a step).
+      .gte("date", last)
       .order("date")
       .limit(500);
-    if (data?.length) {
-      const extra: Bar[] = data.map((r) => [
-        r.date,
-        r.open ?? r.close,
-        r.high ?? r.close,
-        r.low ?? r.close,
-        r.close,
-        r.adj_close ?? r.close,
-        Number(r.volume ?? 0),
-      ]);
-      return { ...s, bars: [...s.bars, ...extra], source: "snapshot" };
-    }
+    const extra = appendStoredBars(s.bars, data ?? []);
+    if (extra.length) return { ...s, bars: [...s.bars, ...extra], source: "snapshot" };
   } catch {
     /* snapshot only */
   }
