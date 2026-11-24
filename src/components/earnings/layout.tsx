@@ -54,7 +54,7 @@ export function PageNav({ sections, label = "On this page" }: { sections: { id: 
             setActive(s.id);
           }}
           className={cn(
-            "inline-flex h-7 shrink-0 items-center rounded-md border px-2.5 text-[12px] whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "inline-flex h-7 shrink-0 items-center rounded-md border px-2.5 text-[11px] whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             active === s.id ? "border-foreground/25 bg-secondary text-foreground" : "border-transparent text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
           )}
         >

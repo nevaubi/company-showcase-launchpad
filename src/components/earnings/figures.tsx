@@ -35,6 +35,7 @@ export function figTarget(ticker: string, f: Figure, label: string, periodLabel:
     alts: f.cell?.alts,
     derived: f.cell?.derived ?? f.derived,
     approx: f.cell?.approx,
+    doc: f.doc ? { accn: f.doc.accn, doc: f.doc.doc, title: "Earnings release", quote: f.doc.quote, search: f.doc.quote } : undefined,
   };
 }
 
@@ -59,25 +60,42 @@ export function SourceNum({
 }) {
   const { open } = useSource();
   if (!f) return <span className={cn("num text-muted-foreground", className)}>–</span>;
-  const hasSource = !!(f.cell?.src || f.cell?.derived || f.derived);
+  const hasSource = !!(f.cell?.src || f.cell?.derived || f.derived || f.doc);
   const shown = text ?? fmtFig(f.v, unit);
-  if (!hasSource) return <span className={cn("num", className)}>{shown}</span>;
+  // Fourth-quarter EPS computed here (no filing states it as a quarter) carries a visible mark (earnings-H2).
+  const mark = f.q4 === "derived" ? <span aria-hidden className="ml-px align-super text-[10px] text-muted-foreground">{DERIVED_MARK}</span> : null;
+  if (!hasSource) return <span className={cn("num", className)}>{shown}{mark}</span>;
   return (
     <button
       type="button"
       onClick={() => open(figTarget(ticker, f, label, period, unit))}
-      title={`${label}, ${period}: open the source${f.derived || f.cell?.derived ? " and formula" : ""}`}
+      title={`${label}, ${period}${f.q4 === "derived" ? ", calculated: the 10-K states only the full year" : f.q4 === "release" ? ", as printed in the earnings release" : ""}: open the source${f.derived || f.cell?.derived ? " and formula" : ""}`}
       className={cn(
-        "num rounded-sm tabular-nums decoration-dotted underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        // A 28 px hit area around the 20 px figure without changing the row height (earnings-L1).
+        "num relative rounded-sm tabular-nums decoration-dotted before:absolute before:-inset-y-1 before:-inset-x-1 before:content-[''] underline-offset-2 transition-colors duration-150 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         (f.derived || f.cell?.derived) && "underline decoration-muted-foreground/50",
         className,
       )}
     >
       {shown}
+      {mark}
     </button>
   );
 }
 
+/** Mark beside a fourth-quarter EPS figure (or a change built on one) calculated from net income and shares. */
+export const DERIVED_MARK = "†";
+
+/** Footnote for tables that show `DERIVED_MARK`, or a dash for a fourth-quarter EPS that is withheld. */
+export function DerivedQ4Note({ derived, withheld, className }: { derived: boolean; withheld: boolean; className?: string }) {
+  if (!derived && !withheld) return null;
+  return (
+    <p className={cn("text-[11px] text-muted-foreground", className)}>
+      {derived && <>{DERIVED_MARK} Fourth-quarter EPS calculated: the 10-K reports only the full year, so it is Q4 net income ÷ Q4 weighted diluted shares, rounded to the cent. </>}
+      {withheld && <>A dash for fourth-quarter EPS: the 10-K reports only the full year, and net income ÷ shares does not reproduce this company's reported EPS (preferred dividends, a share split restated in some quarters only, or similar), so no quarterly figure is shown.</>}
+    </p>
+  );
+}
 export function Stat({ label, value, hint, className }: { label: ReactNode; value: ReactNode; hint?: ReactNode; className?: string }) {
   return (
     <div className={cn("min-w-0 bg-card px-4 py-2.5", className)}>
@@ -85,5 +103,23 @@ export function Stat({ label, value, hint, className }: { label: ReactNode; valu
       <div className="mt-0.5 text-[18px] font-semibold leading-6 tracking-tight">{value}</div>
       {hint && <div className="mt-0.5 text-[11px] leading-4 text-muted-foreground">{hint}</div>}
     </div>
+  );
+}
+
+/**
+ * Visible mark beside any text or grade a language model wrote (earnings-H3, M6): what wrote it and a
+ * link to the source it was written from, so it is never read as the company's words or a computed figure.
+ */
+export function MachineWritten({ by, href, sourceLabel = "Source" }: { by: string; href?: string; sourceLabel?: string }) {
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted-foreground">
+      <span className="rounded-sm border px-1 py-px font-mono text-[10px] tracking-wide uppercase">Machine-written</span>
+      <span>{by}</span>
+      {href && (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:text-foreground hover:underline">
+          {sourceLabel}
+        </a>
+      )}
+    </span>
   );
 }

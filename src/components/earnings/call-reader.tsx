@@ -1,6 +1,7 @@
 // The Earnings calls tab below the call picker: summary and key numbers, themes against the previous
 // call, the analyst questions, then the transcript with section, speaker and search controls that never
 // move the page. Analytics are pure in src/lib/transcripts/; this file only lays them out.
+import { MachineWritten } from "./figures";
 import { Link } from "@tanstack/react-router";
 import { Fragment, useDeferredValue, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bot, ChevronDown, ChevronUp, Search, X } from "lucide-react";
@@ -12,7 +13,7 @@ import { coverageOf } from "@/lib/coverage";
 import { fmtDate } from "@/lib/format";
 import type { EarningsTranscript } from "@/lib/transcripts.functions";
 import { gist, talkShare } from "@/lib/transcripts/analyze";
-import { callFigures, callTone, checkTakeaways, exchanges, firmTicker, topicShift, type ToneScore, type TopicTrend } from "@/lib/transcripts/insights";
+import { callFigures, callTone, checkSummary, checkTakeaways, exchanges, firmTicker, topicShift, type ToneScore, type TopicTrend } from "@/lib/transcripts/insights";
 import type { TranscriptTurn } from "@/lib/transcripts/parse";
 import { cn } from "@/lib/utils";
 import { PageNav, Quiet, Section, SECTION_SCROLL_MARGIN, jumpTo } from "./layout";
@@ -20,7 +21,7 @@ import { PageNav, Quiet, Section, SECTION_SCROLL_MARGIN, jumpTo } from "./layout
 type SectionKey = "all" | "prepared" | "qa";
 type Patch = { call?: string; section?: SectionKey; speaker?: string | undefined };
 
-const KIND_LABEL = { management: "Management", analyst: "Analyst", operator: "Operator" } as const;
+const KIND_LABEL = { management: "Management", analyst: "Analyst", operator: "Operator", unidentified: "Role not identified" } as const;
 const SECTIONS = [
   { id: "call-summary", label: "Summary" },
   { id: "call-themes", label: "Themes" },
@@ -85,6 +86,7 @@ export function CallReader({
       ),
     [t, topics],
   );
+  const summary = useMemo(() => (t.digest?.summary ? checkSummary(t, t.digest.summary) : null), [t]);
   const takeaways = useMemo(() => (t.digest?.takeaways.length ? checkTakeaways(t, t.digest.takeaways) : null), [t]);
   // The page's takeaways carry labels ("iPhone revenue") the bare sentences lack; when enough of them check
   // out against the call they are the key numbers, otherwise the figures management stated stand in.
@@ -103,26 +105,40 @@ export function CallReader({
   const hits = re ? visible.reduce((n, x) => n + (x.text.match(re)?.length ?? 0), 0) : 0;
 
   /**
-   * Filters change how much transcript there is. When the toolbar is stuck at the top, keep it there and
-   * show the start of the filtered list; otherwise leave the page where it is. Either way the controls do
-   * not move under the pointer.
+   * Filters change how much transcript there is. When the toolbar is stuck at the top, keep the reader's
+   * place: the first turn showing under the toolbar stays at the same height if the new filter still shows
+   * it (widening to "Full call" from turn 24 stays at turn 24, earnings-L4); otherwise the start of the
+   * filtered list comes up under the toolbar. When the toolbar is not stuck the page stays where it is.
    */
+  const placeTurn = useRef<{ id: string; top: number } | null>(null);
   const filter = (p: Patch) => {
     const top = toolbar.current?.getBoundingClientRect().top ?? null;
     const stuck = top != null && top <= parseFloat(getComputedStyle(toolbar.current!).top || "0") + 1;
     anchor.current = stuck ? top : null;
+    placeTurn.current = null;
+    if (stuck && toolbar.current) {
+      const below = toolbar.current.getBoundingClientRect().bottom;
+      const first = [...(body.current?.querySelectorAll<HTMLElement>("[id^='turn-']") ?? [])].find((el) => el.getBoundingClientRect().bottom > below + 4);
+      if (first) placeTurn.current = { id: first.id, top: first.getBoundingClientRect().top };
+    }
     setHit(0);
     set(p);
   };
   useLayoutEffect(() => {
     if (anchor.current == null) return;
-    const sec = document.getElementById("call-transcript");
-    if (sec && toolbar.current) {
-      const stickTop = parseFloat(getComputedStyle(toolbar.current).top || "0");
-      const y = sec.getBoundingClientRect().top + window.scrollY - stickTop + 1;
-      if (window.scrollY > y) window.scrollTo({ top: y, behavior: "auto" });
+    const kept = placeTurn.current ? document.getElementById(placeTurn.current.id) : null;
+    if (kept && placeTurn.current) {
+      window.scrollTo({ top: window.scrollY + kept.getBoundingClientRect().top - placeTurn.current.top, behavior: "auto" });
+    } else {
+      const sec = document.getElementById("call-transcript");
+      if (sec && toolbar.current) {
+        const stickTop = parseFloat(getComputedStyle(toolbar.current).top || "0");
+        const y = sec.getBoundingClientRect().top + window.scrollY - stickTop + 1;
+        if (window.scrollY > y) window.scrollTo({ top: y, behavior: "auto" });
+      }
     }
     anchor.current = null;
+    placeTurn.current = null;
   }, [section, speaker]);
 
   /** Move to match k (explicit: Enter, next or previous). Typing never scrolls. */
@@ -198,10 +214,20 @@ export function CallReader({
       >
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="min-w-0 lg:border-r">
-            {t.digest?.summary && (
+            {summary && (
               <div className="border-b px-4 py-3">
-                <p className="text-[13px] leading-5">{t.digest.summary}</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">Summary published with the transcript by The Motley Fool, not the company's words.</p>
+                <p className="text-[13px] leading-5">{summary.text}</p>
+                <p className="mt-1">
+                  <MachineWritten
+                    by={`Summary The Motley Fool publishes with the transcript and says is written partly by language models; not the company's words. ${
+                      summary.removed
+                        ? `${summary.removed} ${summary.removed === 1 ? "sentence" : "sentences"} with a number not found in management's words removed.`
+                        : "Every number in it was found in management's words."
+                    }`}
+                    href={t.url}
+                    sourceLabel="Transcript page"
+                  />
+                </p>
               </div>
             )}
             {!showTakeaways && (
@@ -232,7 +258,10 @@ export function CallReader({
             {showTakeaways && takeaways && (
               <div>
                 <div className="px-4 pt-3 pb-1">
-                  <h3 className="eyebrow">Key numbers, checked against the call</h3>
+                  <h3 className="eyebrow">Publisher's takeaways</h3>
+                  <p className="mt-1">
+                    <MachineWritten by="Written partly by language models at The Motley Fool." href={t.url} sourceLabel="Transcript page" />
+                  </p>
                 </div>
                 <ul className="grid grid-cols-1 gap-x-6 px-4 pb-3 md:grid-cols-2">
                   {takeaways.kept.map((k, n) => (
@@ -240,7 +269,7 @@ export function CallReader({
                       {k.label && <span className="font-medium">{k.label}: </span>}
                       {k.text}
                       {k.i != null && (
-                        <button type="button" onClick={() => jumpTurn(k.i!)} className="ml-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
+                        <button type="button" onClick={() => jumpTurn(k.i!)} className="relative ml-1 text-[11px] before:absolute before:-inset-y-1 before:inset-x-0 before:content-[''] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
                           said here
                         </button>
                       )}
@@ -248,8 +277,9 @@ export function CallReader({
                   ))}
                 </ul>
                 <p className="px-4 pb-3 text-[11px] text-muted-foreground">
-                  The Motley Fool's takeaways, kept only when every figure in them was said by management on the call
-                  {takeaways.dropped ? `; ${takeaways.dropped} left out because a figure in them was not.` : "."}
+                  Shown when every number in them (amounts, rates and counts; 76.0% and 76% count as one) appears in a sentence management said that also names the item. The wording is not checked.
+                  {takeaways.notFound ? ` ${takeaways.notFound} left out because a number in ${takeaways.notFound === 1 ? "it" : "them"} was not found that way.` : ""}
+                  {takeaways.noFigure ? ` ${takeaways.noFigure} left out because ${takeaways.noFigure === 1 ? "it states" : "they state"} no number to check.` : ""}
                 </p>
               </div>
             )}
@@ -270,6 +300,12 @@ export function CallReader({
                   <span className="size-2 rounded-full bg-chart-3" /> Analysts
                 </dt>
                 <dd className="num text-right">{pct(share.analyst)}</dd>
+                {share.unidentified > 0 && (
+                  <>
+                    <dt className="text-muted-foreground">Role not identified</dt>
+                    <dd className="num text-right">{pct(share.unidentified)}</dd>
+                  </>
+                )}
                 <dt className="text-muted-foreground">Prepared remarks</dt>
                 <dd className="num text-right">{share.prepared > 0 ? pct(share.prepared) : "–"}</dd>
               </dl>
@@ -281,6 +317,7 @@ export function CallReader({
                   <tr>
                     <th className="pb-1 text-left font-normal" />
                     <th className="pb-1 text-right font-normal">Net tone</th>
+                    <th className="pb-1 text-right font-normal">Scored</th>
                     <th className="pb-1 text-right font-normal">Hedging</th>
                     {prevTone && <th className="pb-1 text-right font-normal">Prior call</th>}
                   </tr>
@@ -291,7 +328,8 @@ export function CallReader({
                       <th scope="row" className="text-left font-normal">
                         {k === "prepared" ? "Prepared" : "Answers"}
                       </th>
-                      <td className="num text-right">{net(tone[k])}</td>
+                      <td className={cn("num text-right", tone[k].positive + tone[k].negative < 30 && "text-muted-foreground")}>{net(tone[k])}</td>
+                      <td className="num text-right text-muted-foreground">{(tone[k].positive + tone[k].negative).toLocaleString("en-US")}</td>
                       <td className="num text-right">{tone[k].hedgeRate.toFixed(1)}</td>
                       {prevTone && <td className="num text-right text-muted-foreground">{net(prevTone[k])}</td>}
                     </tr>
@@ -299,7 +337,7 @@ export function CallReader({
                 </tbody>
               </table>
               <p className="mt-1.5 text-[11px] leading-4 text-muted-foreground">
-                Net tone: positive minus negative words over both, from a fixed finance word list (after Loughran and McDonald), −1 to +1. Hedging: words like may, could, approximately per 1,000 words.
+                Net tone: positive minus negative words over both, from a fixed finance word list (after Loughran and McDonald), −1 to +1; a positive word just after "not" or "no" counts as negative. Scored: the words counted, greyed under 30 and a dash under 10. Hedging: words like may, could, approximately per 1,000 words.
               </p>
             </div>
           </div>
@@ -359,12 +397,12 @@ export function CallReader({
                     {prev && (
                       <>
                         <td className="num px-2 py-1 text-right text-muted-foreground">{r.prevRate == null ? "–" : r.prevRate.toFixed(1)}</td>
-                        <td className={cn("px-2 py-1 text-left text-[12px]", r.trend && TREND[r.trend].cls)}>{r.trend ? TREND[r.trend].label : "–"}</td>
+                        <td className={cn("px-2 py-1 text-left text-[11px]", r.trend && TREND[r.trend].cls)}>{r.trend ? TREND[r.trend].label : "–"}</td>
                       </>
                     )}
                     <td className="py-1 pl-2 pr-4 text-right">
                       {r.count > 0 && (
-                        <button type="button" onClick={() => findTerm(r.term)} className="rounded-sm px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
+                        <button type="button" onClick={() => findTerm(r.term)} className="relative rounded-sm px-1.5 py-0.5 text-[11px] before:absolute before:-inset-y-1 before:inset-x-0 before:content-[''] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
                           Find in transcript
                         </button>
                       )}
@@ -415,7 +453,7 @@ export function CallReader({
                         <FirmMark firm={e.firm} />
                       </span>
                     </td>
-                    <td className="max-w-[28rem] px-2 py-1.5 text-[12px] leading-5 text-muted-foreground">{e.gist}</td>
+                    <td className="max-w-[28rem] px-2 py-1.5 text-[11px] leading-5 text-muted-foreground">{e.gist}</td>
                     <td className="px-2 py-1.5 text-[11px]">
                       {e.topics.length ? (
                         <span className="flex flex-wrap gap-1">
@@ -445,7 +483,7 @@ export function CallReader({
 
       {/* ───────── Transcript */}
       <section id="call-transcript" data-section="Transcript" className={cn("min-w-0 border-y bg-card", SECTION_SCROLL_MARGIN)}>
-        <div ref={toolbar} data-section="Transcript controls" className="sticky top-[calc(var(--sticky-top,3.5rem)+2.75rem)] z-10 flex flex-wrap items-center gap-2 border-b bg-card/95 px-4 py-2 backdrop-blur">
+        <div ref={toolbar} data-section="Transcript controls" className="z-10 max-sm:static sm:sticky sm:top-[calc(var(--sticky-top,3.5rem)+2.75rem)] flex flex-wrap items-center gap-2 border-b bg-card/95 px-4 py-2 backdrop-blur">
           <Segmented
             label="Section"
             value={section}
@@ -456,7 +494,7 @@ export function CallReader({
               { v: "qa", l: "Q&A" },
             ]}
           />
-          <label className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+          <label className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="sr-only sm:not-sr-only">Speaker</span>
             <select
               value={speaker ?? ""}
@@ -465,7 +503,7 @@ export function CallReader({
               aria-label="Show one speaker"
             >
               <option value="">Everyone</option>
-              {(["management", "analyst"] as const).map((k) => (
+              {(["management", "analyst", "unidentified"] as const).filter((k) => people.some((sp) => sp.kind === k)).map((k) => (
                 <optgroup key={k} label={KIND_LABEL[k]}>
                   {people
                     .filter((sp) => sp.kind === k)
@@ -521,7 +559,7 @@ export function CallReader({
         </div>
 
         <div ref={body} className="divide-y">
-          {visible.length === 0 && <p className="px-4 py-10 text-center text-sm text-muted-foreground">Nothing in this section.</p>}
+          {visible.length === 0 && <p className="px-4 py-10 text-center text-[13px] text-muted-foreground">Nothing in this section.</p>}
           {visible.map((x, idx) => {
             const prevTurn = visible[idx - 1];
             const showQa = section === "all" && !speaker && x.section === "qa" && prevTurn?.section === "prepared";
@@ -546,7 +584,7 @@ export function CallReader({
 }
 
 function Turn({ x, role, mark }: { x: TranscriptTurn; role?: EarningsTranscript["speakers"][number]; mark: (s: string) => ReactNode }) {
-  const sub = x.kind === "analyst" ? (role?.firm ?? "Analyst") : x.kind === "operator" ? null : role?.role;
+  const sub = x.kind === "analyst" ? (role?.firm ?? "Analyst") : x.kind === "operator" ? null : x.kind === "unidentified" ? "Role not identified" : role?.role;
   return (
     <article id={`turn-${x.i}`} className={cn("scroll-mt-[calc(var(--sticky-top,3.5rem)+6.5rem)] px-4 py-3", x.kind === "analyst" && "bg-secondary/40", x.kind === "operator" && "py-2")}>
       <header className="mb-1 flex min-w-0 items-center gap-2">

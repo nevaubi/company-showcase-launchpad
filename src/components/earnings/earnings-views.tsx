@@ -45,7 +45,7 @@ export function EarningsSeason() {
   if (season.isLoading)
     return <LoadingState label="Loading the earnings season" variant="Dots" className="mt-8" />;
   if (season.error || !season.data)
-    return <p className="mt-8 text-sm text-muted-foreground">{friendlyError(season.error)}</p>;
+    return <p className="mt-8 text-[13px] text-muted-foreground">{friendlyError(season.error)}</p>;
   const s = season.data;
   const filter = scope === "mine" ? mine : undefined;
   const upcoming = groupUpcoming(s.upcoming, filter).slice(0, 14);
@@ -85,22 +85,22 @@ export function EarningsSeason() {
             <thead className="text-muted-foreground">
               <tr className="text-left">
                 <th className="pb-1 font-normal">Sector</th>
-                <th className="pb-1 text-right font-normal">n</th>
-                <th className="pb-1 text-right font-normal">Beat</th>
-                <th className="pb-1 text-right font-normal">Med. surprise</th>
-                <th className="pb-1 text-right font-normal">Med. move</th>
+                <th className="pb-1 pl-3 text-right font-normal">Reports</th>
+                <th className="pb-1 pl-3 text-right font-normal">Beat</th>
+                <th className="pb-1 pl-3 text-right font-normal">Med. surprise</th>
+                <th className="pb-1 pl-3 text-right font-normal">Med. move</th>
               </tr>
             </thead>
             <tbody>
               {s.sectors.map((x) => (
                 <tr key={x.sector} className="border-t border-border/60">
                   <td className="py-1 pr-2">{x.sector}</td>
-                  <td className="py-1 text-right">{x.n}</td>
-                  <td className="py-1 text-right">{Math.round(x.beat_rate * 100)}%</td>
-                  <td className={cn("py-1 text-right", tone(x.median_surprise))}>
+                  <td className="num py-1 pl-3 text-right">{x.n}</td>
+                  <td className="num py-1 pl-3 text-right">{Math.round(x.beat_rate * 100)}%</td>
+                  <td className={cn("num py-1 pl-3 text-right", tone(x.median_surprise))}>
                     {pct(x.median_surprise)}
                   </td>
-                  <td className={cn("py-1 text-right", tone(x.median_move))}>
+                  <td className={cn("num py-1 pl-3 text-right", tone(x.median_move))}>
                     {pct(x.median_move)}
                   </td>
                 </tr>
@@ -109,11 +109,11 @@ export function EarningsSeason() {
           </table>
         </Section>
         <Section title="Does a beat move the stock?" note={d.basis}>
-          <dl className="grid grid-cols-2 gap-3 text-sm tabular-nums">
+          <dl className="grid grid-cols-2 gap-3 text-[13px] tabular-nums">
             <div>
               <dt className="text-[11px] text-muted-foreground">Beats</dt>
               <dd>
-                {d.beats.n} reports, median move {pct(d.beats.median_move)}
+                {d.beats.n} {d.beats.n === 1 ? "report" : "reports"}, median move {pct(d.beats.median_move)}
               </dd>
             </div>
             <div>
@@ -125,7 +125,7 @@ export function EarningsSeason() {
             <div>
               <dt className="text-[11px] text-muted-foreground">Misses</dt>
               <dd>
-                {d.misses.n} reports, median move {pct(d.misses.median_move)}
+                {d.misses.n} {d.misses.n === 1 ? "report" : "reports"}, median move {pct(d.misses.median_move)}
               </dd>
             </div>
             <div>

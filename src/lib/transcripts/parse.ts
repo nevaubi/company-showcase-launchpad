@@ -3,7 +3,11 @@
 // markdown): inline "**Name:** text" turns, and "**Name** -- _Role_" headers followed by
 // paragraphs with "Prepared Remarks" / "Questions & Answers" headings.
 
-export type SpeakerKind = "management" | "analyst" | "operator";
+/**
+ * Who a speaker is. "unidentified" when neither the call's participant list, a stated role, the
+ * operator's introductions nor the speaker's place in the call establishes it: shown as such, never guessed.
+ */
+export type SpeakerKind = "management" | "analyst" | "operator" | "unidentified";
 
 export interface TranscriptSpeaker {
   name: string;
@@ -165,35 +169,78 @@ export function parseTranscript(markdown: string): ParsedTranscript {
   const turnsRaw = raw.filter((t) => t.paras.length);
   const firms = firmsFromOperator(turnsRaw.map((t) => ({ speaker: t.speaker, text: t.paras.join(" ") })));
 
-  // Who is who: explicit roles ("-- Analyst"), the participants list, then operator-named analysts.
+  // Who is who, most certain first: explicit roles ("-- Analyst"), the participants list (exact name,
+  // then surname, because pages spell names differently: "Jensen Huang" listed, "Jen-Hsun Huang" speaking),
+  // the operator's introductions, then the speaker's place in the call (anyone who speaks in the prepared
+  // remarks or answers an analyst belongs to the company). Whoever is left is unidentified.
   const roleOf = new Map<string, string | null>();
   for (const t of turnsRaw) if (t.role && !roleOf.get(t.speaker)) roleOf.set(t.speaker, t.role);
-  const kindOf = (name: string): SpeakerKind => {
+  const mgmtSurnames = new Set<string>();
+  const analystSurnames = new Set<string>();
+  for (const [name, role] of participants) (/analyst/i.test(role) ? analystSurnames : mgmtSurnames).add(surnameOf(name));
+  for (const name of firms.keys()) analystSurnames.add(surnameOf(name));
+  const certain = (name: string): SpeakerKind | null => {
     if (/^operator$/i.test(name)) return "operator";
     const role = roleOf.get(name) ?? participants.get(name) ?? null;
     if (role && /analyst/i.test(role)) return "analyst";
     if (participants.has(name)) return "management";
     if (firms.has(name)) return "analyst";
     if (role) return "management";
-    return participants.size ? "analyst" : "management";
+    const sn = surnameOf(name);
+    const m = mgmtSurnames.has(sn);
+    const a = analystSurnames.has(sn);
+    if (m && !a) return "management";
+    if (a && !m) return "analyst";
+    return null;
   };
+  const decided = new Map<string, SpeakerKind | null>();
+  for (const t of turnsRaw) if (!decided.has(t.speaker)) decided.set(t.speaker, certain(t.speaker));
 
   let qaStart: number | null = null;
+  if (explicitQa) {
+    const k = turnsRaw.findIndex((t) => t.section === "qa");
+    qaStart = k >= 0 ? k : null;
+  } else {
+    // The first analyst: a known one, or a speaker the operator has just introduced by name who is not
+    // known to be management ("take our first from Erik Woodring with Morgan Stanley").
+    const firstAnalyst = turnsRaw.findIndex((t, i) => {
+      const k = decided.get(t.speaker);
+      if (k === "analyst") return true;
+      if (k != null || i === 0 || decided.get(turnsRaw[i - 1].speaker) !== "operator") return false;
+      const sn = surnameOf(t.speaker);
+      return sn.length > 1 && turnsRaw[i - 1].paras.join(" ").toLowerCase().includes(sn);
+    });
+    if (firstAnalyst >= 0) {
+      // Q&A opens with the operator introducing the first analyst.
+      qaStart = firstAnalyst > 0 && decided.get(turnsRaw[firstAnalyst - 1].speaker) === "operator" ? firstAnalyst - 1 : firstAnalyst;
+    }
+  }
+  const byPlace = new Map<string, SpeakerKind>();
+  const firmAlias = new Map<string, string>();
+  const speaking = new Set(turnsRaw.map((t) => t.speaker));
+  turnsRaw.forEach((t, i) => {
+    if (decided.get(t.speaker) != null || byPlace.get(t.speaker) === "management") return;
+    const prevKind = i > 0 ? decided.get(turnsRaw[i - 1].speaker) : null;
+    if (qaStart == null || i < qaStart) byPlace.set(t.speaker, "management");
+    else if (qaStart != null && i >= qaStart && prevKind === "analyst") byPlace.set(t.speaker, "management");
+    else if (qaStart != null && i >= qaStart && prevKind === "operator") {
+      // The operator has just introduced a questioner ("Our next question is from Krish Sankar from TD
+      // Cowen", "We will now go to Ben Bollin of Cleveland Research"), who speaks next, sometimes under a
+      // fuller name ("Sreekrishnan Sankarnarayanan"). A closing remark introduces nobody.
+      const intro = turnsRaw[i - 1].paras.join(" ");
+      if (/conclud|end of (the|today)|thank you for (joining|participating|attending)|disconnect/i.test(intro)) return;
+      byPlace.set(t.speaker, "analyst");
+      const named = [...firms.keys()].filter((n) => intro.includes(n) && !speaking.has(n));
+      if (named.length === 1 && !firmAlias.has(t.speaker)) firmAlias.set(t.speaker, firms.get(named[0])!);
+    }
+  });
+  const kindOf = (name: string): SpeakerKind => decided.get(name) ?? byPlace.get(name) ?? "unidentified";
+
   const turns: TranscriptTurn[] = turnsRaw.map((t, i) => {
     const kind = kindOf(t.speaker);
     const text = t.paras.join("\n\n");
     return { i, speaker: t.speaker, kind, section: "prepared", text, words: wordCount(text) };
   });
-  if (explicitQa) {
-    const k = turnsRaw.findIndex((t) => t.section === "qa");
-    qaStart = k >= 0 ? k : null;
-  } else {
-    const firstAnalyst = turns.findIndex((t) => t.kind === "analyst");
-    if (firstAnalyst >= 0) {
-      // Q&A opens with the operator introducing the first analyst.
-      qaStart = firstAnalyst > 0 && turns[firstAnalyst - 1].kind === "operator" ? firstAnalyst - 1 : firstAnalyst;
-    }
-  }
   if (qaStart != null) for (let i = qaStart; i < turns.length; i++) turns[i].section = "qa";
 
   const bySpeaker = new Map<string, TranscriptSpeaker>();
@@ -204,7 +251,7 @@ export function parseTranscript(markdown: string): ParsedTranscript {
         .set(t.speaker, {
           name: t.speaker,
           role: cleanRole(roleOf.get(t.speaker) ?? participants.get(t.speaker) ?? null),
-          firm: firms.get(t.speaker) ?? firmFromRole(roleOf.get(t.speaker) ?? null),
+          firm: firms.get(t.speaker) ?? firmAlias.get(t.speaker) ?? firmFromRole(roleOf.get(t.speaker) ?? null),
           kind: t.kind,
           turns: 0,
           words: 0,
@@ -213,9 +260,18 @@ export function parseTranscript(markdown: string): ParsedTranscript {
     s.turns++;
     s.words += t.words;
   }
-  const order: Record<SpeakerKind, number> = { management: 0, analyst: 1, operator: 2 };
+  const order: Record<SpeakerKind, number> = { management: 0, analyst: 1, unidentified: 2, operator: 3 };
   const speakers = [...bySpeaker.values()].sort((a, b) => order[a.kind] - order[b.kind] || b.words - a.words);
   return { speakers, turns, words: turns.reduce((s, t) => s + t.words, 0), qaStart, digest: digestFrom(markdown) };
+}
+
+/** Lower-case surname for matching spellings of one person ("Jen-Hsun Huang" and "Jensen Huang"), ignoring suffixes. */
+function surnameOf(name: string): string {
+  const w = name
+    .replace(/,?\s+(jr|sr|ii|iii|iv)\.?$/i, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  return (w[w.length - 1] ?? "").toLowerCase().replace(/[^a-z\u00e0-\u024f-]/g, "");
 }
 
 /** "_Barclays -- Analyst_" → "Barclays" */

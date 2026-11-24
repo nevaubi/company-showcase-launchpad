@@ -4,7 +4,7 @@
 // estimates provider has them, its EPS surprise records. Every value keeps the statement cell it
 // came from (a SourceRef or a derived formula), and every computed figure carries a formula whose
 // parts are those cells, so click-to-source works for all of it.
-import type { Cell, CompanyDataset, DerivedPart, EarningsRelease, Period, Row, Statement } from "@/lib/financials/types";
+import type { Bar, Cell, CompanyDataset, DerivedPart, EarningsRelease, Filing, Period, Row, Statement } from "@/lib/financials/types";
 import type { Reaction } from "@/lib/markets/core";
 import type { PeriodEstimate, Surprise } from "@/lib/estimates/core";
 
@@ -15,6 +15,21 @@ export interface Figure {
   cell?: Cell;
   /** Formula over reported cells when the figure is computed here. */
   derived?: { formula: string; parts: DerivedPart[] };
+  /**
+   * Set on fourth-quarter EPS, which no 10-K states as a quarter: "release" when the figure is the one
+   * printed in the quarter's earnings release, "derived" when it is computed here from net income and
+   * weighted diluted shares (earnings-H2). The page marks a derived figure as derived.
+   */
+  q4?: "release" | "derived";
+  /** The release document and the printed line, for a figure taken from a release. */
+  doc?: { accn: string; doc: string; quote?: string };
+}
+
+/** A per-share figure printed in an earnings release (the partner scorecard's GAAP diluted EPS), keyed by accession. */
+export interface ReleaseEps {
+  accn: string;
+  v: number;
+  quote?: string | null;
 }
 
 export type MetricKey = "revenue" | "profit" | "netIncome" | "eps" | "fcf";
@@ -34,12 +49,44 @@ export interface QuarterRecord {
   yoy: Partial<Record<MetricKey, Figure>>;
   /** Change against the immediately preceding quarter. */
   qoq: Partial<Record<MetricKey, Figure>>;
-  /** The earnings release that reported this quarter (first Item 2.02 8-K filed after the quarter end, within 100 days). */
+  /** The earnings release that reported this quarter (see `releaseFor`); null when it cannot be established. */
   release: EarningsRelease | null;
   /** The stock's reaction to that release. */
   reaction: Reaction | null;
   /** Estimates provider's EPS actual vs consensus for this quarter. */
   surprise: Surprise | null;
+  /** The two adjusted closes behind the reaction, so the move can be inspected (earnings-M4). */
+  window: ReactionWindow | null;
+  /** Fourth quarter whose EPS is not shown: not in a release we hold and not reproducible from net income and shares. */
+  q4EpsWithheld: boolean;
+}
+
+export interface ReactionWindow {
+  from: { date: string; close: number };
+  to: { date: string; close: number };
+}
+
+/**
+ * The closes `earningsReactions` measures: the adjusted close of the session before the release date and
+ * of the session after the first session on or after it. Null when the bars do not reach.
+ */
+export function reactionWindow(bars: Bar[] | undefined, filed: string): ReactionWindow | null {
+  if (!bars?.length) return null;
+  const d = filed.slice(0, 10);
+  const i = bars.findIndex((b) => b[0] >= d);
+  if (i <= 0 || i + 1 >= bars.length) return null;
+  const a = bars[i - 1];
+  const b = bars[i + 1];
+  return { from: { date: a[0], close: a[5] }, to: { date: b[0], close: b[5] } };
+}
+
+/** Change of a margin in percentage points, with both margins' parts (earnings-M4). */
+export function pointsChange(cur: Figure | null, prev: Figure | null, label: string, basis: string): Figure | null {
+  if (!cur || !prev) return null;
+  return {
+    v: cur.v - prev.v,
+    derived: { formula: `${label} this quarter − ${label[0].toLowerCase() + label.slice(1)} ${basis}, in percentage points`, parts: [...figPartsOf(cur, `${label}, this quarter`), ...figPartsOf(prev, `${label}, ${basis}`, -1)] },
+  };
 }
 
 export interface ProfitLine {
@@ -66,6 +113,7 @@ export function partsOf(cell: Cell | undefined, label: string, sign: 1 | -1 = 1)
 function figPartsOf(f: Figure | null | undefined, label: string, sign: 1 | -1 = 1): DerivedPart[] {
   if (!f) return [];
   if (f.cell) return partsOf(f.cell, label, sign);
+  if (f.doc) return [{ accn: f.doc.accn, doc: f.doc.doc, concept: "Earnings release, printed figure", end: "", value: f.v, label, sign }];
   return (f.derived?.parts ?? []).map((p) => ({ ...p, sign: (p.sign * sign) as 1 | -1 }));
 }
 
@@ -86,15 +134,18 @@ export function ratio(a: Figure | null, b: Figure | null, formula: string, aLabe
 }
 
 /**
- * Growth from `prev` to `cur`: (cur − prev) ÷ |prev|. Null when the base is zero or missing, or when the
- * sign flips (a loss turning into a profit has no meaningful percentage).
+ * Growth from `prev` to `cur`: cur ÷ prev − 1. Null when the base is zero, negative or missing, or when
+ * the current value is negative (a profit turning into a loss has no meaningful percentage).
  */
 export function growth(cur: Figure | null, prev: Figure | null, label: string, basis: string): Figure | null {
-  if (!cur || !prev || prev.v === 0) return null;
-  if (Math.sign(cur.v) !== Math.sign(prev.v) && cur.v !== 0) return null;
+  // A negative base (a loss, cash burn) has no percentage that reads the way "÷ … − 1" says (earnings-M3).
+  if (!cur || !prev || !(prev.v > 0)) return null;
+  if (cur.v < 0) return null;
+  const lower = /^[A-Z][a-z]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label;
   return {
     v: (cur.v - prev.v) / Math.abs(prev.v),
-    derived: { formula: `${label} ÷ ${label.toLowerCase()} ${basis} − 1`, parts: [...figPartsOf(cur, `${label}, this quarter`), ...figPartsOf(prev, `${label}, ${basis}`, -1)] },
+    ...(cur.q4 === "derived" || prev.q4 === "derived" ? { q4: "derived" as const } : {}),
+    derived: { formula: `${label} ÷ ${lower} ${basis} − 1`, parts: [...figPartsOf(cur, `${label}, this quarter`), ...figPartsOf(prev, `${label}, ${basis}`, -1)] },
   };
 }
 
@@ -118,15 +169,43 @@ export function priorIndex(periods: Period[], i: number): number {
   return g >= 75 && g <= 105 ? k : -1;
 }
 
-/** The release that reported a quarter: the first earnings release filed after its end, within 100 days. */
-export function releaseFor(end: string, releases: EarningsRelease[]): EarningsRelease | null {
-  let best: EarningsRelease | null = null;
-  for (const r of releases) {
-    const g = days(end, r.filed.slice(0, 10));
-    if (g <= 0 || g > 100) continue;
-    if (!best || r.filed < best.filed) best = r;
+const PERIODIC_FORMS = new Set(["10-Q", "10-K", "10-QT", "10-KT"]);
+
+/**
+ * Filing date of the periodic report (original 10-Q or 10-K, not an amendment) whose report period ends
+ * within five days of `end`: the document whose statements hold that quarter. Null when the filing list
+ * has none (it is not filed yet, or the list does not reach back that far).
+ */
+export function periodicFiledFor(end: string, filings: Filing[] | null | undefined): string | null {
+  let best: string | null = null;
+  for (const f of filings ?? []) {
+    if (!PERIODIC_FORMS.has(f.form) || !f.report) continue;
+    if (Math.abs(days(f.report, end)) > 5) continue;
+    const filed = f.filed.slice(0, 10);
+    if (!best || filed < best) best = filed;
   }
   return best;
+}
+
+/**
+ * The release that reported a quarter. Companies often file more than one Item 2.02 8-K a quarter
+ * (Tesla's deliveries report, AbbVie's and EOG's pre-announcements), so position in the list says
+ * nothing. When the periodic report holding the quarter is known, the release is the last one filed
+ * after the quarter end and no later than that report (the results release precedes or accompanies the
+ * 10-Q/10-K). Without that report, a release is matched only when it is the single one within 100 days
+ * of the quarter end; two or more candidates leave the quarter unmatched rather than guessed.
+ */
+export function releaseFor(end: string, releases: EarningsRelease[], filings?: Filing[] | null): EarningsRelease | null {
+  const periodic = periodicFiledFor(end, filings);
+  const cands = releases.filter((r) => {
+    const filed = r.filed.slice(0, 10);
+    const g = days(end, filed);
+    if (g <= 0) return false;
+    return periodic ? filed <= periodic && g <= 120 : g <= 100;
+  });
+  if (!cands.length) return null;
+  if (periodic) return cands.reduce((a, b) => (b.filed > a.filed ? b : a));
+  return cands.length === 1 ? cands[0] : null;
 }
 
 /** The provider's surprise record for a quarter: its "quarter" date within 31 days of the period end (calendar vs fiscal ends). */
@@ -166,10 +245,76 @@ export interface QuarterInputs {
   dataset: CompanyDataset;
   reactions?: Reaction[];
   surprises?: Surprise[] | null;
+  /** GAAP diluted EPS printed in earnings releases, used for fourth quarters. */
+  releaseEps?: ReleaseEps[];
+  /** The stock's daily bars, for the closes behind each reaction. */
+  bars?: Bar[];
+}
+
+const close = (a: number, b: number) => Math.abs(a - b) <= 0.006 + 0.002 * Math.abs(b);
+
+/**
+ * Fourth-quarter diluted EPS computed from net income and weighted diluted shares. A 10-K states the year,
+ * not the quarter, so "year minus nine months" of EPS is off by a cent whenever the share count moved
+ * (Apple Q4 FY25 1.84 against 1.85 reported). Q4 weighted shares are 4 × the full-year average less the
+ * three quarterly averages (equal-length quarters). The result is used only when net income ÷ shares
+ * reproduces the reported diluted EPS, to the cent, for the full year and for every one of Q1 to Q3: that
+ * fails where EPS is earned on income after preferred dividends or participating securities (JPMorgan),
+ * and then the quarter has no EPS rather than a wrong one. Rounded to the cent, as EPS is reported.
+ */
+export function deriveQ4Eps(d: CompanyDataset, i: number): Figure | null {
+  const q = d.statements.quarterly.income;
+  const a = d.statements.annual?.income;
+  const p = q?.periods[i];
+  if (!q || !a || !p) return null;
+  const j = a.periods.findIndex((ap) => Math.abs(days(ap.end, p.end)) <= 5);
+  if (j < 0 || i < 3) return null;
+  const qni = row(q, "netIncome");
+  const qsh = row(q, "sharesDiluted");
+  const qeps = row(q, "epsDiluted");
+  const fni = row(a, "netIncome")?.cells[j];
+  const fsh = row(a, "sharesDiluted")?.cells[j];
+  const feps = row(a, "epsDiluted")?.cells[j];
+  const ni4 = qni?.cells[i];
+  if (!ni4 || !fni || !fsh?.src || !feps || !(fsh.v > 0) || !close(fni.v / fsh.v, feps.v)) return null;
+  const prior: { sh: Cell; label: string }[] = [];
+  for (let k = i - 3; k < i; k++) {
+    const pk = q.periods[k];
+    const ni = qni?.cells[k];
+    const sh = qsh?.cells[k];
+    const eps = qeps?.cells[k];
+    // Q1 to Q3 of the same fiscal year, each a reported quarter that reproduces its own EPS.
+    if (!pk || pk.fy !== p.fy || days(pk.end, p.end) > 290 || !ni || !sh?.src || !eps || eps.approx || !(sh.v > 0)) return null;
+    if (!close(ni.v / sh.v, eps.v)) return null;
+    prior.push({ sh, label: pk.label });
+  }
+  const shares = 4 * fsh.v - prior.reduce((s, x) => s + x.sh.v, 0);
+  if (!(shares > 0)) return null;
+  const v = Math.round((ni4.v / shares) * 100) / 100;
+  const fyLabel = a.periods[j].label;
+  return {
+    v,
+    q4: "derived",
+    derived: {
+      formula: `Q4 net income ÷ Q4 weighted diluted shares, where Q4 shares = 4 × the ${fyLabel} average − the Q1 to Q3 averages; rounded to the cent`,
+      parts: [
+        ...partsOf(ni4, "Net income, Q4"),
+        ...partsOf(fsh, `Weighted diluted shares, ${fyLabel} (× 4)`),
+        ...prior.flatMap((x) => partsOf(x.sh, `Weighted diluted shares, ${x.label}`, -1)),
+      ],
+    },
+  };
+}
+
+/** Fourth-quarter EPS: the release's printed figure when known, else derived (see `deriveQ4Eps`), else none. */
+function q4Eps(d: CompanyDataset, i: number, release: EarningsRelease | null, releaseEps: ReleaseEps[] | undefined): Figure | null {
+  const printed = release ? releaseEps?.find((r) => r.accn === release.accn && Number.isFinite(r.v)) : undefined;
+  if (release && printed) return { v: printed.v, q4: "release", doc: { accn: release.accn, doc: release.doc, quote: printed.quote ?? undefined } };
+  return deriveQ4Eps(d, i);
 }
 
 /** Every quarter in the dataset (oldest first) with its results, margins, growth, release, reaction and surprise. */
-export function quarterRecords({ dataset: d, reactions = [], surprises }: QuarterInputs): QuarterRecord[] {
+export function quarterRecords({ dataset: d, reactions = [], surprises, releaseEps, bars }: QuarterInputs): QuarterRecord[] {
   const inc = d.statements.quarterly.income;
   const cf = d.statements.quarterly.cashflow;
   const periods = inc?.periods ?? [];
@@ -183,7 +328,10 @@ export function quarterRecords({ dataset: d, reactions = [], surprises }: Quarte
   const cfIndex = new Map((cf?.periods ?? []).map((p, j) => [p.key, j]));
   const byDate = new Map(reactions.map((r) => [r.date, r]));
 
+  const releases = periods.map((p) => releaseFor(p.end, d.earningsReleases, d.filings));
   const base = periods.map((p, i) => {
+    const epsCell = eps?.cells[i];
+    const epsFig = epsCell?.approx ? q4Eps(d, i, releases[i], releaseEps) : fig(epsCell);
     const revenue = fig(rev?.cells[i]);
     const profit = fig(prof?.cells[i]);
     const netIncome = fig(ni?.cells[i]);
@@ -193,8 +341,11 @@ export function quarterRecords({ dataset: d, reactions = [], surprises }: Quarte
       revenue,
       profit,
       netIncome,
-      eps: fig(eps?.cells[i]),
-      fcf: fcfAt(cf, cfIndex.get(p.key) ?? -1),
+      // A fourth-quarter cell is the year minus nine months (approx): never shown as the reported figure.
+      eps: epsFig,
+      q4EpsWithheld: !!epsCell?.approx && !epsFig,
+      // Operating cash flow less capex says nothing useful about a bank or insurer (earnings-M2).
+      fcf: pl.key === "operatingIncome" ? fcfAt(cf, cfIndex.get(p.key) ?? -1) : null,
       grossMargin: ratio(gross, revenue, "Gross profit ÷ revenue", "Gross profit", "Revenue"),
       profitMargin: ratio(profit, revenue, `${pl.label} ÷ revenue`, pl.label, "Revenue"),
       netMargin: ratio(netIncome, revenue, "Net income ÷ revenue", "Net income", "Revenue"),
@@ -214,13 +365,14 @@ export function quarterRecords({ dataset: d, reactions = [], surprises }: Quarte
       if (gy) yoy[k] = gy;
       if (gq) qoq[k] = gq;
     }
-    const release = releaseFor(b.period.end, d.earningsReleases);
+    const release = releases[i];
     return {
       ...b,
       yoy,
       qoq,
       release,
       reaction: release ? (byDate.get(release.filed.slice(0, 10)) ?? null) : null,
+      window: release && byDate.has(release.filed.slice(0, 10)) ? reactionWindow(bars, release.filed) : null,
       surprise: surpriseFor(b.period.end, surprises),
     };
   });
@@ -233,39 +385,63 @@ export function recentQuarters(records: QuarterRecord[], n = 12): QuarterRecord[
 }
 
 export interface PendingRelease {
+  /** The newest of the releases filed after the statements' latest quarter. */
   release: EarningsRelease;
-  /** The quarter the statements end with; the release reports a later one. */
+  /** How many Item 2.02 releases were filed after the statements' latest quarter (and its periodic report). */
+  count: number;
+  /** The quarter the statements end with. */
   throughEnd: string;
   throughLabel: string;
   reaction: Reaction | null;
+  /** The provider's EPS record for the quarter that release reports: its quarter end within 100 days before the release. */
   surprise: Surprise | null;
 }
 
 /**
- * An earnings release newer than every quarter in the statements: the company has reported a quarter
- * whose figures the dataset does not hold yet (they arrive with the 10-Q or 10-K, or when the read-time
- * release layer adds them). Null when the statements are current.
+ * Earnings releases filed after every quarter the statements hold: the company has reported results
+ * whose figures the dataset does not have yet. A release counts only when it is filed after the latest
+ * quarter's end, after the release matched to it and after the 10-Q/10-K that holds it, so a second
+ * Item 2.02 filing inside the same quarter is never taken for a newer quarter. Which quarter each
+ * release reports is not stated here (a company can file several a quarter); the caller names only
+ * the count and the newest date. Null when the statements are current.
  */
-export function pendingRelease(records: QuarterRecord[], releases: EarningsRelease[], reactions: Reaction[] = [], surprises?: Surprise[] | null): PendingRelease | null {
+export function pendingRelease(
+  records: QuarterRecord[],
+  releases: EarningsRelease[],
+  reactions: Reaction[] = [],
+  surprises?: Surprise[] | null,
+  filings?: Filing[] | null,
+): PendingRelease | null {
   const latest = [...records].reverse().find((r) => r.revenue || r.profit || r.netIncome);
   if (!latest) return null;
   const used = new Set(records.map((r) => r.release?.accn).filter(Boolean));
+  const periodic = periodicFiledFor(latest.period.end, filings);
   const newer = releases
-    .filter((r) => !used.has(r.accn) && days(latest.period.end, r.filed.slice(0, 10)) > 0 && (!latest.release || r.filed > latest.release.filed))
+    .filter((r) => {
+      const filed = r.filed.slice(0, 10);
+      if (used.has(r.accn) || days(latest.period.end, filed) <= 0) return false;
+      if (latest.release && r.filed <= latest.release.filed) return false;
+      if (periodic && filed <= periodic) return false;
+      return true;
+    })
     .sort((a, b) => b.filed.localeCompare(a.filed));
   const rel = newer[0];
   if (!rel) return null;
-  // The provider's record for the quarter after the latest statement quarter (about three months later).
-  const after = (surprises ?? []).filter((s) => {
-    const g = days(latest.period.end, s.quarter);
-    return g >= 60 && g <= 125 && s.quarter < rel.filed.slice(0, 10);
-  });
+  const relDate = rel.filed.slice(0, 10);
+  const minEnd = latest.period.end;
+  let surprise: Surprise | null = null;
+  for (const s of surprises ?? []) {
+    if (!s.quarter || s.quarter >= relDate || days(minEnd, s.quarter) <= 20) continue;
+    if (days(s.quarter, relDate) > 100) continue;
+    if (!surprise || s.quarter > surprise.quarter) surprise = s;
+  }
   return {
     release: rel,
+    count: newer.length,
     throughEnd: latest.period.end,
     throughLabel: latest.period.label,
-    reaction: reactions.find((r) => r.date === rel.filed.slice(0, 10)) ?? null,
-    surprise: after[0] ?? null,
+    reaction: reactions.find((r) => r.date === relDate) ?? null,
+    surprise,
   };
 }
 

@@ -83,11 +83,15 @@ function Earnings() {
   const surprises = est.data?.estimates?.surprises;
   const model = useMemo(() => {
     if (!d) return null;
-    const records = quarterRecords({ dataset: d, reactions, surprises });
+    // GAAP diluted EPS printed in the newest release (partner scorecard), for a fourth quarter it reports.
+    const sc = score.data;
+    const printed = sc?.metrics.find((m) => m.id === "eps_gaap" && m.value != null && !m.unconfirmed && /dilut/i.test(`${m.label} ${m.quote ?? ""}`));
+    const releaseEps = sc && printed?.value != null ? [{ accn: sc.accession, v: printed.value, quote: printed.quote }] : [];
+    const records = quarterRecords({ dataset: d, reactions, surprises, releaseEps, bars: prices.data?.bars });
     const recent = recentQuarters(records, 12);
-    const pending = pendingRelease(records, d.earningsReleases, reactions, surprises);
+    const pending = pendingRelease(records, d.earningsReleases, reactions, surprises, d.filings);
     return { records, recent, pending, profit: profitLine(d) };
-  }, [d, reactions, surprises]);
+  }, [d, reactions, surprises, score.data, prices.data]);
 
   const typical = useMemo(() => reactionSummary(reactions, 12), [reactions]);
   const lastReportedEnd = model?.pending?.surprise?.quarter ?? model?.recent[0]?.period.end ?? null;
@@ -112,7 +116,7 @@ function Earnings() {
       </div>
     );
   if (!d || !model)
-    return <p className="py-10 text-center text-sm text-muted-foreground">Couldn't load this company's statements. Try again in a moment.</p>;
+    return <p className="py-10 text-center text-[13px] text-muted-foreground">Couldn't load this company's statements. Try again in a moment.</p>;
 
   return (
     <div className="grid grid-cols-1 gap-5">

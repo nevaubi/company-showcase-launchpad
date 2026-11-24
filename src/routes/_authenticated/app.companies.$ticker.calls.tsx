@@ -48,8 +48,9 @@ function Calls() {
   const ticker = raw.toUpperCase();
   const s = Route.useSearch();
   const navigate = Route.useNavigate();
-  // View state only: never reset the scroll position.
-  const set = (patch: Partial<CallsSearch>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
+  // View state only: never reset the scroll position. Switching calls is a history entry, so Back returns
+  // to the previous call (earnings-L4); filters within a call replace the entry.
+  const set = (patch: Partial<CallsSearch>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: !("call" in patch), resetScroll: false });
   const co = coverageOf(ticker);
 
   const listFn = useServerFn(listEarningsCalls);
@@ -86,8 +87,8 @@ function Calls() {
     return (
       <section data-section="Earnings calls" className="flex flex-col items-center gap-3 border-y bg-card/40 py-12 text-center">
         <Mic className="size-6 text-muted-foreground" />
-        <p className="text-sm font-medium">No earnings call transcripts found for {co?.shortName ?? ticker}</p>
-        <p className="max-w-md text-xs text-muted-foreground">{calls.data?.error ?? calls.error?.message ?? "Try again in a moment."}</p>
+        <p className="text-[13px] font-medium">No earnings call transcripts found for {co?.shortName ?? ticker}</p>
+        <p className="max-w-md text-[11px] text-muted-foreground">{calls.data?.error ?? calls.error?.message ?? "Try again in a moment."}</p>
         <Button size="sm" variant="outline" onClick={() => calls.refetch()}>
           <RefreshCw /> Try again
         </Button>
@@ -110,13 +111,13 @@ function Calls() {
                 c.url === url ? "bg-ink text-ink-foreground" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
               )}
             >
-              <span className="num block text-[12px] font-semibold leading-tight">{c.quarter ?? "Call"}</span>
+              <span className="num block text-[11px] font-semibold leading-tight">{c.quarter ?? "Call"}</span>
               <span className="block text-[11px] leading-tight opacity-75">{c.date ? fmtDate(c.date, { month: "short", day: "numeric", year: "numeric" }) : ""}</span>
             </button>
           ))}
         </div>
         {url && (
-          <a href={url} target="_blank" rel="noreferrer" className="ml-auto flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground hover:underline">
+          <a href={url} target="_blank" rel="noreferrer" className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline">
             Transcript via The Motley Fool <ExternalLink className="size-3" />
           </a>
         )}
@@ -124,14 +125,14 @@ function Calls() {
 
       {tr.isLoading ? (
         <div className="grid grid-cols-1 gap-3">
-          <p className="text-xs text-muted-foreground">Reading the transcript…</p>
+          <p className="text-[11px] text-muted-foreground">Reading the transcript…</p>
           <Skeleton className="h-56" />
           <Skeleton className="h-96" />
         </div>
       ) : !t ? (
         <section data-section="Transcript" className="flex flex-col items-center gap-3 border-y bg-card/40 py-12 text-center">
-          <p className="text-sm font-medium">Couldn't load this transcript</p>
-          <p className="max-w-md text-xs text-muted-foreground">{tr.data?.error || tr.error ? friendlyError(tr.data?.error ?? tr.error) : null}</p>
+          <p className="text-[13px] font-medium">Couldn't load this transcript</p>
+          <p className="max-w-md text-[11px] text-muted-foreground">{tr.data?.error || tr.error ? friendlyError(tr.data?.error ?? tr.error) : null}</p>
           <div className="flex gap-2">
             <Button size="sm" variant="outline" onClick={() => tr.refetch()}>
               <RefreshCw /> Try again

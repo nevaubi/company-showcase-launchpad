@@ -3,15 +3,15 @@
 import { ExternalLink } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import type { Scorecard } from "@/lib/earnings/workflow";
-import { priorIndex, yearAgoIndex, type Figure, type PendingRelease, type ProfitLine, type QuarterRecord, type ReactionSummary } from "@/lib/earnings/quarters";
+import { pointsChange, priorIndex, yearAgoIndex, type Figure, type PendingRelease, type ProfitLine, type QuarterRecord, type ReactionSummary, type ReactionWindow } from "@/lib/earnings/quarters";
 import type { PeriodEstimate } from "@/lib/estimates/core";
 import type { EarningsRelease } from "@/lib/financials/types";
 import type { Reaction } from "@/lib/markets/core";
-import type { EarningsPricing } from "@/lib/options/core";
+import { REPORT_EXPIRY_LAG, type EarningsPricing } from "@/lib/options/core";
 import type { NextEarnings } from "@/lib/company/catalysts";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { fmtFig, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
+import { DerivedQ4Note, fmtFig, MachineWritten, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
 import { Quiet, Section } from "./layout";
 import { HistoryCharts } from "./history-charts";
 
@@ -59,10 +59,8 @@ export function scoreRows(pl: ProfitLine): ScoreRow[] {
 function Change({ ticker, row, cur, base, label, period }: { ticker: string; row: ScoreRow; cur: QuarterRecord; base: QuarterRecord | null; label: string; period: string }) {
   if (!base) return <span className="num text-muted-foreground">–</span>;
   if (row.ratio) {
-    const a = row.get(cur);
-    const b = row.get(base);
-    const d = a && b ? a.v - b.v : null;
-    return <span className={cn("num", toneText(d))}>{signedPts(d)}</span>;
+    const pc = pointsChange(row.get(cur), row.get(base), row.label, label === "qoq" ? "the prior quarter" : "a year earlier");
+    return <SourceNum ticker={ticker} f={pc} label={`${row.label} change`} period={period} unit="pct" text={signedPts(pc?.v)} className={toneText(pc?.v)} />;
   }
   const g = row.growthKey ? (label === "qoq" ? cur.qoq[row.growthKey] : cur.yoy[row.growthKey]) : null;
   return <SourceNum ticker={ticker} f={g ?? null} label={`${row.label} change`} period={period} unit="pct" text={signedPct(g?.v)} className={toneText(g?.v)} />;
@@ -179,6 +177,7 @@ export function LatestQuarter({
               ))}
             </tbody>
           </table>
+          <DerivedQ4Note derived={[cur, prior, year].some((r) => r?.eps?.q4 === "derived")} withheld={[cur, prior, year].some((r) => r?.q4EpsWithheld)} className="border-t px-4 py-2" />
         </div>
         <div className="grid min-w-0 grid-cols-2 content-start divide-x border-t lg:grid-cols-1 lg:divide-x-0 lg:divide-y lg:border-t-0 lg:border-b-0">
           <Stat
@@ -203,14 +202,24 @@ export function LatestQuarter({
               )
             }
           />
-          <ReactionStat ticker={ticker} reaction={cur.reaction} release={cur.release} />
+          <ReactionStat ticker={ticker} reaction={cur.reaction} release={cur.release} window={cur.window} />
         </div>
       </div>
     </Section>
   );
 }
 
-function ReactionStat({ ticker, reaction, release }: { ticker: string; reaction: Reaction | null; release: EarningsRelease | null }) {
+/** Longest straddle (snapshot to expiry, days) set beside the typical reaction: two weeks around the report. */
+const MAX_SPAN = 14;
+
+/** "Adjusted close $271.40 on 29 Oct → $262.24 on 31 Oct": the two prices behind a reaction (earnings-M4). */
+export function windowText(w: ReactionWindow | null | undefined): string | null {
+  if (!w) return null;
+  const d = (x: string) => fmtDate(x, { month: "short", day: "numeric", year: "numeric" });
+  return `Adjusted close $${w.from.close.toFixed(2)} on ${d(w.from.date)} to $${w.to.close.toFixed(2)} on ${d(w.to.date)}`;
+}
+
+function ReactionStat({ ticker, reaction, release, window: w }: { ticker: string; reaction: Reaction | null; release: EarningsRelease | null; window: ReactionWindow | null }) {
   return (
     <Stat
       className="bg-transparent"
@@ -229,6 +238,7 @@ function ReactionStat({ ticker, reaction, release }: { ticker: string; reaction:
                 </ReleaseLink>
               </>
             )}
+            {w && <span className="mt-0.5 block">{windowText(w)}</span>}
           </>
         ) : release ? (
           "Not enough price history around the release"
@@ -252,10 +262,14 @@ function PendingNote({ ticker, cik, pending, score, companyName }: { ticker: str
     <div data-section="Newest release" className="border-b bg-secondary/40 px-4 py-2.5">
       <p className="text-[13px]">
         <span className="font-medium">
-          {companyName} reported {sc?.quarter_end ? `the quarter ended ${fmtDate(sc.quarter_end)}` : `the quarter after ${pending.throughLabel}`} on {fmtDate(r.filed)}.
+          {sc?.quarter_end
+            ? `${companyName} reported the quarter ended ${fmtDate(sc.quarter_end)} on ${fmtDate(r.filed)}.`
+            : pending.count > 1
+              ? `${companyName} has filed ${pending.count} earnings releases since ${pending.throughLabel}, the latest on ${fmtDate(r.filed)}.`
+              : `${companyName} filed an earnings release on ${fmtDate(r.filed)}, after ${pending.throughLabel}.`}
         </span>{" "}
         <span className="text-muted-foreground">
-          Its statements are not in these tables yet; they run through the quarter ended {fmtDate(pending.throughEnd)}.{" "}
+          {sc?.quarter_end ? "Its statements are not in these tables yet; they" : "These tables"} run through the quarter ended {fmtDate(pending.throughEnd)}.{" "}
         </span>
         <ReleaseLink ticker={ticker} r={r} className="text-[13px]">
           Open the release
@@ -405,7 +419,7 @@ export function History({ ticker, quarters, profit }: { ticker: string; quarters
                   )}
                   {hasReaction && (
                     <>
-                      <Td className="border-l" title={q.reaction ? `Release ${fmtDate(q.reaction.date)}` : undefined}>
+                      <Td className="border-l" title={q.reaction ? `Release ${fmtDate(q.reaction.date)}${q.window ? `. ${windowText(q.window)}` : ""}` : undefined}>
                         <span className={cn("num", toneText(q.reaction?.move))}>{signedPct(q.reaction?.move)}</span>
                       </Td>
                       <Td>
@@ -422,6 +436,7 @@ export function History({ ticker, quarters, profit }: { ticker: string; quarters
           </tbody>
         </table>
       </div>
+      <DerivedQ4Note derived={quarters.some((q) => q.eps?.q4 === "derived")} withheld={quarters.some((q) => q.q4EpsWithheld)} className="border-t px-4 py-2" />
     </Section>
   );
 }
@@ -462,6 +477,10 @@ export function NextReport({
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const daysTo = next ? Math.round((Date.parse(next.date) - Date.parse(today)) / 86_400_000) : null;
+  // The options figure sits beside the typical reaction only when it prices mainly the report: an expiry
+  // within REPORT_EXPIRY_LAG days after it, quoted no more than MAX_SPAN days before that expiry (earnings-M1).
+  const span = pricing && pricedAsOf ? Math.round((Date.parse(pricing.point.e) - Date.parse(pricedAsOf)) / 86_400_000) : null;
+  const pricingNear = !!pricing && pricing.lag <= REPORT_EXPIRY_LAG && span != null && span <= MAX_SPAN;
   return (
     <Section
       id="next"
@@ -492,11 +511,25 @@ export function NextReport({
         />
         <Stat
           label="Move priced by options"
-          value={pricing ? <span className="num">±{(pricing.point.m * 100).toFixed(1)}%</span> : <span className="text-muted-foreground">–</span>}
+          value={
+            pricingNear ? (
+              <span className="num">±{(pricing!.point.m * 100).toFixed(1)}%</span>
+            ) : (
+              <span className="text-muted-foreground">–</span>
+            )
+          }
           hint={
-            pricing
-              ? `At-the-money straddle to ${fmtDate(pricing.point.e)}${pricing.lag > 7 ? `, ${pricing.lag} days after the report` : ""}${pricedAsOf ? ` · Cboe ${fmtDate(pricedAsOf, { month: "short", day: "numeric" })}` : ""}`
-              : "No listed expiry covers the report yet, or no options snapshot"
+            // An expiry weeks after the report also prices ordinary movement, so it is not set beside
+            // the typical reaction (earnings-M1); the options panel below still shows it.
+            pricingNear
+              ? `At-the-money straddle to ${fmtDate(pricing!.point.e)}, the ${span} days from the Cboe close of ${fmtDate(pricedAsOf!, { month: "short", day: "numeric" })}${
+                  pricing!.lag > 0 ? `, ${pricing!.lag} ${pricing!.lag === 1 ? "day" : "days"} after the report` : ""
+                }`
+              : pricing && pricing.lag > REPORT_EXPIRY_LAG
+                ? `No expiry close to the report yet: the nearest, ${fmtDate(pricing.point.e)}, is ${pricing.lag} days after it`
+                : pricing && span != null
+                  ? `Options price ±${(pricing.point.m * 100).toFixed(1)}% to ${fmtDate(pricing.point.e)}, but that spans ${span} days of ordinary trading, not mainly the report`
+                : "No listed expiry covers the report yet, or no options snapshot"
           }
         />
         <Stat
@@ -520,14 +553,17 @@ export function NextReport({
       </div>
       {guidance.length > 0 && (
         <div className="border-t px-4 py-3">
-          <h3 className="eyebrow mb-2">Guidance on the {guidance[0].callQuarter ?? fmtDate(guidance[0].callDate)} call</h3>
+          <h3 className="eyebrow mb-1">Guidance on the {guidance[0].callQuarter ?? fmtDate(guidance[0].callDate)} call</h3>
+          <p className="mb-2">
+            <MachineWritten by="Quotes checked word for word against the transcript; the line under each is a model's summary." href={guidance[0].url} sourceLabel="Transcript" />
+          </p>
           <ul className="grid gap-2">
             {guidance.map((g, i) => (
               <li key={i} className="grid gap-0.5 text-[13px]">
-                <span className="font-medium">{g.summary}</span>
-                <a href={g.url} target="_blank" rel="noopener noreferrer" className="border-l-2 border-border pl-2 text-[11px] text-muted-foreground italic hover:text-foreground">
+                <a href={g.url} target="_blank" rel="noopener noreferrer" className="border-l-2 border-border pl-2 italic hover:text-foreground">
                   “{g.quote}” <ExternalLink className="inline size-3 not-italic" />
                 </a>
+                <span className="pl-2 text-[11px] text-muted-foreground">{g.summary}</span>
               </li>
             ))}
           </ul>
@@ -535,7 +571,10 @@ export function NextReport({
       )}
       {listenFor.length > 0 && (
         <div className="border-t px-4 py-3">
-          <h3 className="eyebrow mb-2">Listen for</h3>
+          <h3 className="eyebrow mb-1">Suggested questions</h3>
+          <p className="mb-2">
+            <MachineWritten by="Suggested by a language model from the release and past calls." />
+          </p>
           <ol className="list-decimal space-y-1 pl-4 text-[13px]">
             {listenFor.map((t, i) => (
               <li key={i}>{t}</li>

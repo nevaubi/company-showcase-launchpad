@@ -77,6 +77,12 @@ describe("topicShift", () => {
 });
 
 describe("callTone", () => {
+  it("reads a negated positive word as negative and the month May as no hedge (earnings-L3)", () => {
+    const t = callTone(call([turn(0, "CEO", "management", "prepared", "Demand was not strong. In May we shipped. We may see a record.")]));
+    expect(t.prepared.positive).toBe(1);
+    expect(t.prepared.negative).toBe(1);
+    expect(t.prepared.hedge).toBe(1);
+  });
   it("counts the word list in management's words by section", () => {
     const t = callTone(cur);
     // prepared: "record" +1; "headwind", "constrained" −2
@@ -102,15 +108,15 @@ describe("exchanges", () => {
 });
 
 describe("checkTakeaways", () => {
-  it("keeps a takeaway only when its figures were said on the call", () => {
+  it("keeps a takeaway only when its figures were said on the call; one with no figure is not shown as checked", () => {
     const r = checkTakeaways(cur, [
       { label: "Revenue", text: "$114.5 billion, representing 12% growth." },
       { label: "Diluted EPS", text: "$2.10, rising 14%." },
       { label: "Supply", text: "Constrained through the holidays." },
     ]);
-    expect(r.kept.map((k) => k.label)).toEqual(["Revenue", "Supply"]);
+    expect(r.kept.map((k) => k.label)).toEqual(["Revenue"]);
     expect(r.kept[0].i).toBe(0);
-    expect(r.dropped).toBe(1);
+    expect(r).toMatchObject({ dropped: 2, notFound: 1, noFigure: 1 });
   });
 });
 
