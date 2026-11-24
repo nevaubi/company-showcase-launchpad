@@ -245,38 +245,153 @@ export function exchanges(t: ParsedTranscript, topics: string[], gistOf: (text: 
   });
 }
 
-// ───────────────────────── The page's takeaways, checked against the call
+// ───────────────────────── Machine-written text, checked against the call
+
+/** A number stated in text, normalised: "76.0%" and "76%" are one figure, "$2.5 billion" is 2.5e9 dollars. */
+export interface StatedNumber {
+  raw: string;
+  value: number;
+  unit: "usd" | "pct" | "pp" | "bp" | "count";
+}
+
+const NUM =
+  /(\$\s?)?(?<![A-Za-z\d.,])(\d{1,3}(?:,\d{3})+|\d+)(\.\d+)?(?:\s?(%|percent\b|percentage points?\b|basis points?\b|bps\b|trillion\b|billion\b|million\b|thousand\b|bn\b|mm\b|[bmkt]\b))?/gi;
+const SCALE: Record<string, number> = { trillion: 1e12, t: 1e12, billion: 1e9, bn: 1e9, b: 1e9, million: 1e6, mm: 1e6, m: 1e6, thousand: 1e3, k: 1e3 };
+
+/**
+ * Every number in a sentence, with or without a dollar sign or percent: bare counts ("650,000 accounts",
+ * "over 2.5 billion devices") are figures too. Years (1990 to 2049 with no unit), quarter and fiscal-year
+ * names ("Q4", "FY26") and numbers that are part of a word ("10-K", "1st") are not.
+ */
+export function numbersIn(s: string): StatedNumber[] {
+  const out: StatedNumber[] = [];
+  for (const m of s.matchAll(NUM)) {
+    const [raw, dollar, int, frac = "", unitRaw] = m;
+    const after = s.slice((m.index ?? 0) + raw.length);
+    const u = unitRaw?.toLowerCase().replace(/\s+/g, " ");
+    if (!u && /^(?:-?[A-Za-z]|st\b|nd\b|rd\b|th\b)/.test(after)) continue;
+    const base = Number(int.replace(/,/g, "") + frac);
+    if (!Number.isFinite(base)) continue;
+    if (!dollar && !u && !frac && !int.includes(",") && base >= 1990 && base <= 2049) continue;
+    let unit: StatedNumber["unit"] = dollar ? "usd" : "count";
+    let value = base;
+    if (u === "%" || u === "percent") unit = "pct";
+    else if (u?.startsWith("percentage point")) unit = "pp";
+    else if (u?.startsWith("basis point") || u === "bps") unit = "bp";
+    else if (u) value = base * (SCALE[u] ?? 1);
+    out.push({ raw: raw.trim(), value, unit });
+  }
+  return out;
+}
+
+const sameNumber = (a: StatedNumber, b: StatedNumber) => {
+  // Dollars and bare amounts are interchangeable ("revenue of 102.5 billion"); rates keep their unit.
+  const money = (u: StatedNumber["unit"]) => u === "usd" || u === "count";
+  const unitOk = a.unit === b.unit || (money(a.unit) && money(b.unit));
+  return unitOk && Math.abs(a.value - b.value) <= 1e-9 * Math.max(1, Math.abs(a.value));
+};
+
+const STOP = new Set(
+  "that this with from have were been about over under than more less into also their there which while what when where will would could should quarter quarters year years fiscal compared versus prior period periods company management total overall approximately around nearly roughly billion million thousand trillion percent basis points point increase increased increasing decrease decreased decreasing growth growing grew reached reaching record high higher lower down level levels across during driven double digits digit".split(
+    " ",
+  ),
+);
+
+/** Content words used to tie a figure to what it is about ("Services gross margin" → services, gross, margin). */
+export function keyWords(s: string): string[] {
+  return [...new Set((s.toLowerCase().match(/[a-z][a-z-]{3,}/g) ?? []).map((w) => w.replace(/(?:ies|es|s)$/, "")).filter((w) => w.length >= 4 && !STOP.has(w)))];
+}
+
+interface SaidSentence {
+  turn: number;
+  nums: StatedNumber[];
+  words: Set<string>;
+}
+
+function managementSentences(t: ParsedTranscript): SaidSentence[] {
+  const out: SaidSentence[] = [];
+  for (const x of t.turns) {
+    if (x.kind !== "management") continue;
+    for (const sen of sentencesOf(x.text)) {
+      const nums = numbersIn(sen);
+      if (nums.length) out.push({ turn: x.i, nums, words: new Set(keyWords(sen)) });
+    }
+  }
+  return out;
+}
+
+export type ClaimStatus = "checked" | "not-found" | "no-figure";
+
+export interface CheckedClaim {
+  label: string;
+  text: string;
+  status: ClaimStatus;
+  /** Turn where management said the first figure, when found. */
+  i: number | null;
+}
+
+/**
+ * Check machine-written statements against what management said. A statement is "checked" when every
+ * number in it (dollar amounts, rates and bare counts alike) appears in a management sentence that also
+ * contains one of the statement's key words: the label's when it has one ("Services gross margin"),
+ * otherwise the statement's own. "not-found" when any number is missing; "no-figure" when it states none.
+ */
+export function checkClaims(t: ParsedTranscript, items: { label: string; text: string }[]): CheckedClaim[] {
+  const said = managementSentences(t);
+  return items.map((it) => {
+    // The publisher's stock-move tag ("(NVDA +32.09%)") is page furniture, not a claim about the call.
+    const nums = numbersIn(it.text.replace(/\([A-Z][A-Z.]{0,5}\s?[+\u2212-]\d+(?:\.\d+)?%\)/g, ""));
+    if (!nums.length) return { label: it.label, text: it.text, status: "no-figure", i: null };
+    const keys = keyWords(it.label || it.text);
+    let first: number | null = null;
+    for (const n of nums) {
+      const hit = said.find((x) => x.nums.some((m) => sameNumber(n, m)) && (!keys.length || keys.some((k) => x.words.has(k))));
+      if (!hit) return { label: it.label, text: it.text, status: "not-found", i: null };
+      first ??= hit.turn;
+    }
+    return { label: it.label, text: it.text, status: "checked", i: first };
+  });
+}
 
 export interface CheckedTakeaway {
   label: string;
   text: string;
-  /** Turn where management said the figures, when found. */
+  /** Turn where management said the figures. */
   i: number | null;
 }
 
-const numKey = (f: string) => f.toLowerCase().replace(/percent/, "%").replace(/[\s,$]/g, "");
+/**
+ * The publisher's takeaways that pass `checkClaims`. Only checked ones are kept: a takeaway with a number
+ * not found that way, or with no number at all, is left out and counted.
+ */
+export function checkTakeaways(
+  t: ParsedTranscript,
+  items: { label: string; text: string }[],
+): { kept: CheckedTakeaway[]; dropped: number; notFound: number; noFigure: number } {
+  const r = checkClaims(t, items);
+  const kept = r.filter((x) => x.status === "checked").map(({ label, text, i }) => ({ label, text, i }));
+  const notFound = r.filter((x) => x.status === "not-found").length;
+  const noFigure = r.filter((x) => x.status === "no-figure").length;
+  return { kept, dropped: notFound + noFigure, notFound, noFigure };
+}
 
 /**
- * Keep a third-party takeaway only when every figure it states appears in what management said on the
- * call (same number and unit). Takeaways without a figure are kept as text. Returns the kept ones and how
- * many were left out.
+ * The publisher's summary, sentence by sentence: sentences with a number not found in management's words
+ * are removed. Sentences without a number are kept (the block stays labelled machine-written). Null when
+ * fewer than half of the sentences stating a number check, since what is left would misrepresent the call.
  */
-export function checkTakeaways(t: ParsedTranscript, items: { label: string; text: string }[]): { kept: CheckedTakeaway[]; dropped: number } {
-  const mgmt = t.turns.filter((x) => x.kind === "management");
-  const said = mgmt.map((x) => new Set(figuresIn(x.text).map(numKey)));
-  const all = new Set(said.flatMap((s) => [...s]));
-  const kept: CheckedTakeaway[] = [];
-  let dropped = 0;
-  for (const it of items) {
-    const figs = figuresIn(it.text).map(numKey);
-    if (figs.some((f) => !all.has(f))) {
-      dropped++;
-      continue;
-    }
-    const at = figs.length ? mgmt.findIndex((_, k) => figs.every((f) => said[k].has(f))) : -1;
-    kept.push({ label: it.label, text: it.text, i: at >= 0 ? mgmt[at].i : figs.length ? (mgmt[said.findIndex((s) => s.has(figs[0]))]?.i ?? null) : null });
-  }
-  return { kept, dropped };
+export function checkSummary(t: ParsedTranscript, summary: string): { text: string; removed: number; checked: number } | null {
+  const sens = sentencesOf(summary);
+  const r = checkClaims(
+    t,
+    sens.map((text) => ({ label: "", text })),
+  );
+  const withNums = r.filter((x) => x.status !== "no-figure");
+  const checked = withNums.filter((x) => x.status === "checked").length;
+  if (withNums.length && checked * 2 < withNums.length) return null;
+  const keep = r.filter((x) => x.status !== "not-found");
+  if (!keep.length) return null;
+  return { text: keep.map((x) => x.text).join(" "), removed: r.length - keep.length, checked };
 }
 
 // ───────────────────────── Analyst firms that are covered companies

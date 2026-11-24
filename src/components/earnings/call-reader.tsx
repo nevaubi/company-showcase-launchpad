@@ -13,7 +13,7 @@ import { coverageOf } from "@/lib/coverage";
 import { fmtDate } from "@/lib/format";
 import type { EarningsTranscript } from "@/lib/transcripts.functions";
 import { gist, talkShare } from "@/lib/transcripts/analyze";
-import { callFigures, callTone, checkTakeaways, exchanges, firmTicker, topicShift, type ToneScore, type TopicTrend } from "@/lib/transcripts/insights";
+import { callFigures, callTone, checkSummary, checkTakeaways, exchanges, firmTicker, topicShift, type ToneScore, type TopicTrend } from "@/lib/transcripts/insights";
 import type { TranscriptTurn } from "@/lib/transcripts/parse";
 import { cn } from "@/lib/utils";
 import { PageNav, Quiet, Section, SECTION_SCROLL_MARGIN, jumpTo } from "./layout";
@@ -86,6 +86,7 @@ export function CallReader({
       ),
     [t, topics],
   );
+  const summary = useMemo(() => (t.digest?.summary ? checkSummary(t, t.digest.summary) : null), [t]);
   const takeaways = useMemo(() => (t.digest?.takeaways.length ? checkTakeaways(t, t.digest.takeaways) : null), [t]);
   // The page's takeaways carry labels ("iPhone revenue") the bare sentences lack; when enough of them check
   // out against the call they are the key numbers, otherwise the figures management stated stand in.
@@ -199,11 +200,19 @@ export function CallReader({
       >
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="min-w-0 lg:border-r">
-            {t.digest?.summary && (
+            {summary && (
               <div className="border-b px-4 py-3">
-                <p className="text-[13px] leading-5">{t.digest.summary}</p>
+                <p className="text-[13px] leading-5">{summary.text}</p>
                 <p className="mt-1">
-                  <MachineWritten by="Summary The Motley Fool publishes with the transcript and says is written partly by language models; not the company's words." href={t.url} sourceLabel="Transcript page" />
+                  <MachineWritten
+                    by={`Summary The Motley Fool publishes with the transcript and says is written partly by language models; not the company's words. ${
+                      summary.removed
+                        ? `${summary.removed} ${summary.removed === 1 ? "sentence" : "sentences"} with a number not found in management's words removed.`
+                        : "Every number in it was found in management's words."
+                    }`}
+                    href={t.url}
+                    sourceLabel="Transcript page"
+                  />
                 </p>
               </div>
             )}
@@ -254,8 +263,9 @@ export function CallReader({
                   ))}
                 </ul>
                 <p className="px-4 pb-3 text-[11px] text-muted-foreground">
-                  Kept when every dollar amount and percentage in them also appears in management's words on the call; other numbers and the wording are not checked
-                  {takeaways.dropped ? `. ${takeaways.dropped} left out because such a figure was not found.` : "."}
+                  Shown when every number in them (amounts, rates and counts; 76.0% and 76% count as one) appears in a sentence management said that also names the item. The wording is not checked.
+                  {takeaways.notFound ? ` ${takeaways.notFound} left out because a number was not found that way.` : ""}
+                  {takeaways.noFigure ? ` ${takeaways.noFigure} left out because they state no number to check.` : ""}
                 </p>
               </div>
             )}
