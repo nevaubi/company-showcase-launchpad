@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RiskLink } from "./core";
-import { buildChain, type TaggedShare } from "./chain";
+import { buildChain, supplierShareBasis, type TaggedShare } from "./chain";
 
 const L = (id: string, ticker: string, counterparty: string, counterparty_ticker: string | null, relation: RiskLink["relation"], extra: Partial<RiskLink> = {}): RiskLink => ({
   id, ticker, counterparty, counterparty_ticker, counterparty_domain: null, relation, detail: "", share_pct: null, quote: "q", accn: `a-${id}`, doc: "d.htm", form: "10-K", filed: "2026-02-01", ...extra,
@@ -105,5 +105,37 @@ describe("chain filters", () => {
     const ms = c.edges.find((e) => e.key === "NVDA>MSFT")!;
     expect(ms.types.sort()).toEqual(["cloud", "end_customer"]);
     expect(ms.products.sort()).toEqual(["Azure capacity", "data center GPUs"]);
+  });
+
+  it("a share of revenue sizes the link: a receivables balance, however large or old, never replaces it", () => {
+    // Fabrinet: NVIDIA 16.3% of fiscal 2026 revenue (sentence and tag), 25.5% of receivables a year earlier (tag)
+    const fn: RiskLink[] = [L("f1", "FN", "NVIDIA Corporation", "NVDA", "customer", { share_pct: 16.3 })];
+    const tags: TaggedShare[] = [
+      { ticker: "FN", counterparty: "NVDA", kind: "customer", benchmark: "revenue", label: "NVIDIA Corporation", pct: 0.163, accn: "t1", form: "10-K", filed: "2026-08-18", period_end: "2026-06-26", element_id: null },
+      { ticker: "FN", counterparty: "NVDA", kind: "customer", benchmark: "receivables", label: "NVIDIA Corporation", pct: 0.255, accn: "t1", form: "10-K", filed: "2026-08-18", period_end: "2025-06-27", element_id: null },
+    ];
+    const e = buildChain("NVDA", fn, tags, { ...names, FN: "Fabrinet" }, { FN: 5_137_428_000 }).edges.find((x) => x.key === "FN>NVDA")!;
+    expect(e.share).toBe(16.3);
+    expect(e.basis).toBe("revenue");
+    expect(e.dollars).toBeCloseTo(0.163 * 5_137_428_000, 0);
+    expect(e.evidence).toHaveLength(3);
+    // with nothing but the receivables fact, that is what the link shows, and it carries no dollars
+    const only = buildChain("NVDA", [], [tags[1]], { ...names, FN: "Fabrinet" }, { FN: 5_137_428_000 }).edges.find((x) => x.key === "FN>NVDA")!;
+    expect(only.share).toBe(25.5);
+    expect(only.basis).toBe("receivables");
+    expect(only.dollars).toBeNull();
+  });
+  it("a reseller's share of its own sales from one supplier is not called a share of purchases", () => {
+    const quote = "sales of Apple Inc. products and services comprised approximately 12% of our total revenue for fiscal years 2025";
+    const snx: RiskLink[] = [L("s1", "SNX", "Apple Inc.", "AAPL", "supplier", { share_pct: 12, quote }), L("s2", "AAPL", "Synnex", "SNX", "customer")];
+    const tag: TaggedShare = { ticker: "SNX", counterparty: "AAPL", kind: "supplier", benchmark: "revenue", label: "Apple, Inc.", pct: 0.12, accn: "t2", form: "10-K", filed: "2026-01-27", period_end: "2025-11-30", element_id: null };
+    const chain = buildChain("AAPL", snx, [tag], { AAPL: "Apple", SNX: "TD Synnex" }, { SNX: 60e9 });
+    const e = chain.edges.find((x) => x.key === "AAPL>SNX")!;
+    expect(e.share).toBe(12);
+    expect(e.basis).toBe("buyer_revenue");
+    expect(e.dollars).toBeNull();
+    expect(supplierShareBasis("purchases from this supplier were 31% of our total inventory purchases")).toBe("purchases");
+    expect(supplierShareBasis("one vendor accounted for 18% of cost of goods sold")).toBe("purchases");
+    expect(supplierShareBasis("represented 14%")).toBe("purchases");
   });
 });
