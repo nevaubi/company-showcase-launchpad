@@ -1,0 +1,661 @@
+{
+ "about": "Sourced corrections to src/lib/coverage-details.server.ts applied by scripts/expand-coverage.ts. Each names its evidence: SEC submissions for the CIK, or the company's own 8-K exhibit (accession and the words quoted from it). A description of another entity or of a former name is replaced by the generator's SEC-built fallback sentence, never by written text; a website no filing states is removed rather than replaced. A correction whose old value no longer matches is reported and not applied.",
+ "corrections": [
+  {
+   "ticker": "HCC",
+   "cik": "1691303",
+   "field": "website",
+   "old": "http://www.tmhcc.com",
+   "new": "https://www.warriormetcoal.com",
+   "source": "tmhcc.com came with Tokio Marine HCC's record (another company, see the description), not WARRIOR MET COAL, INC.'s. 8-K 0001193125-26-447189 (filed 2026-11-04), EX-99 exhibit prints www.warriormetcoal.com"
+  },
+  {
+   "ticker": "AGO",
+   "cik": "1273813",
+   "field": "website",
+   "old": "https://www.bluemountaincapital.com",
+   "new": "https://www.assuredguaranty.com",
+   "source": "bluemountaincapital.com came with Assured Investment Management's record (see the description), not ASSURED GUARANTY LTD's. 8-K 0001273813-26-000082 (filed 2026-11-05), EX-99 exhibit prints assuredguaranty.com"
+  },
+  {
+   "ticker": "IPGP",
+   "cik": "1111928",
+   "field": "website",
+   "old": "http://www.ntoire-polus.ru/",
+   "new": "https://www.ipgphotonics.com",
+   "source": "ntoire-polus.ru shares no word with IPG PHOTONICS CORP and is not an address its releases give. 8-K 0001111928-26-000178 (filed 2026-11-03), EX-99 exhibit prints ipgphotonics.com"
+  },
+  {
+   "ticker": "GLXY",
+   "cik": "1859392",
+   "field": "website",
+   "old": "http://www.galaxyfm.co.uk",
+   "new": "https://www.galaxy.com",
+   "source": "galaxyfm.co.uk came with the encyclopedia record of a UK radio station (see the description), not Galaxy Digital Inc.; not an address its releases give. 8-K 0001859392-26-000074 (filed 2026-07-24), EX-99 exhibit prints galaxy.com"
+  },
+  {
+   "ticker": "CNX",
+   "cik": "1070412",
+   "field": "website",
+   "old": "https://www.consolenergy.com/",
+   "new": null,
+   "source": "consolenergy.com is the site of CONSOL Energy Inc., now SEC CIK 1710366 (Core Natural Resources, Inc.; former name CONSOL Energy Inc.), a separate registrant; CNX's 8-Ks 0001070412-26-000064/-056/-045 print no site of its own, so no website rather than another company's"
+  },
+  {
+   "ticker": "MSI",
+   "cik": "68505",
+   "field": "website",
+   "old": "http://www.motorola.com/",
+   "new": "https://www.motorolasolutions.com",
+   "source": "motorola.com is not an address the registrant's releases give; they give motorolasolutions.com. 8-K 0000068505-26-000041 (filed 2026-11-04), EX-99 exhibit prints www.motorolasolutions.com/investors"
+  },
+  {
+   "ticker": "TT",
+   "cik": "1466258",
+   "field": "website",
+   "old": "http://www.ingersollrand.com",
+   "new": "https://www.tranetechnologies.com",
+   "source": "ingersollrand.com carries the former name (Ingersoll-Rand plc until 2020-02-24), now the name of another covered company, Ingersoll Rand Inc. (IR). 8-K 0001466258-26-000001 (filed 2026-10-29), EX-99 exhibit prints www.tranetechnologies.com"
+  },
+  {
+   "ticker": "QNT",
+   "cik": "2110105",
+   "field": "website",
+   "old": "http://cambridgequantum.com/",
+   "new": "https://www.quantinuum.com",
+   "source": "cambridgequantum.com is not an address the registrant's releases give. 8-K 0001628280-26-071000 (filed 2026-11-05), EX-99 exhibit prints quantinuum.com"
+  },
+  {
+   "ticker": "HOS",
+   "cik": "866829",
+   "field": "website",
+   "old": "http://www.helixesg.com/",
+   "new": "http://www.hornbeckoffshore.com",
+   "source": "helixesg.com carries the former name (HELIX ENERGY SOLUTIONS GROUP INC until 2026-08-31; CAL DIVE INTERNATIONAL INC until 2006-03-06). 8-K 0001193125-26-447885 (filed 2026-11-05), EX-99 exhibit prints www.hornbeckoffshore.com"
+  },
+  {
+   "ticker": "ZD",
+   "cik": "1084048",
+   "field": "website",
+   "old": "http://www.j2global.com",
+   "new": "https://www.ziffdavis.com",
+   "source": "j2global.com carries the former name (J2 GLOBAL, INC. until 2021-10-04; J2 GLOBAL COMMUNICATIONS INC until 2011-11-08; JFAX COM INC until 2000-12-21). 8-K 0001084048-26-000048 (filed 2026-11-06), EX-99 exhibit prints www.ziffdavis.com"
+  },
+  {
+   "ticker": "EPAC",
+   "cik": "6955",
+   "field": "website",
+   "old": "http://www.actuant.com/",
+   "new": "https://www.enerpactoolgroup.com",
+   "source": "actuant.com carries the former name (ACTUANT CORP until 2020-01-28; APPLIED POWER INC until 2001-01-05). 8-K 0001171843-26-006921 (filed 2026-10-28), EX-99 exhibit prints www.enerpactoolgroup.com"
+  },
+  {
+   "ticker": "HTO",
+   "cik": "766829",
+   "field": "website",
+   "old": "https://www.sjwgroup.com/",
+   "new": "https://www.h2o-america.com",
+   "source": "sjwgroup.com carries the former name (SJW GROUP until 2025-05-01; SJW CORP until 2016-11-02). 8-K 0001628280-26-067295 (filed 2026-10-26), EX-99 exhibit prints www.h2o-america.com"
+  },
+  {
+   "ticker": "WOR",
+   "cik": "108516",
+   "field": "website",
+   "old": "https://worthingtonindustries.com/Home",
+   "new": "https://worthingtonenterprises.com",
+   "source": "worthingtonindustries.com carries the former name (WORTHINGTON INDUSTRIES INC until 2023-11-20). 8-K 0001193125-26-429531 (filed 2026-10-23), EX-99 exhibit prints worthingtonenterprises.com"
+  },
+  {
+   "ticker": "WKC",
+   "cik": "789460",
+   "field": "website",
+   "old": "https://www.wfscorp.com/",
+   "new": "https://www.worldfuel.com",
+   "source": "wfscorp.com is not printed in any of the four newest releases; the newest (Oct 2026) prints worldfuel.com. 8-K 0000789460-26-000054 (filed 2026-10-29), EX-99 exhibit prints www.worldfuel.com"
+  },
+  {
+   "ticker": "MLKN",
+   "cik": "66382",
+   "field": "website",
+   "old": "https://www.hermanmiller.com/",
+   "new": "https://www.millerknoll.com",
+   "source": "hermanmiller.com carries the former name (HERMAN MILLER INC until 2021-10-29; MILLER HERMAN INC until 2019-11-05). 8-K 0000066382-26-000150 (filed 2026-09-22), EX-99 exhibit prints www.millerknoll.com/investor-relations/news-"
+  },
+  {
+   "ticker": "AORT",
+   "cik": "784199",
+   "field": "website",
+   "old": "http://www.cryolife.com",
+   "new": "https://www.artivion.com",
+   "source": "cryolife.com carries the former name (CRYOLIFE INC until 2022-01-06). 8-K 0001628280-26-071029 (filed 2026-11-05), EX-99 exhibit prints artivion.com"
+  },
+  {
+   "ticker": "BFH",
+   "cik": "1101215",
+   "field": "website",
+   "old": "http://www.alliancedata.com",
+   "new": "https://www.breadfinancial.com",
+   "source": "alliancedata.com carries the former name (ALLIANCE DATA SYSTEMS CORP until 2022-03-23). 8-K 0001101215-26-000102 (filed 2026-11-10), EX-99 exhibit prints breadfinancial.com"
+  },
+  {
+   "ticker": "SGI",
+   "cik": "1206264",
+   "field": "website",
+   "old": "http://www.tempursealy.com",
+   "new": "https://www.somnigroup.com",
+   "source": "tempursealy.com carries the former name (TEMPUR SEALY INTERNATIONAL, INC. until 2025-02-14; TEMPUR PEDIC INTERNATIONAL INC until 2013-06-04; TWI HOLDINGS INC until 2003-11-25). 8-K 0001206264-26-000129 (filed 2026-11-09), EX-99 exhibit prints somnigroup.com"
+  },
+  {
+   "ticker": "AYI",
+   "cik": "1144215",
+   "field": "website",
+   "old": "http://www.acuitybrands.com",
+   "new": "https://www.acuityinc.com",
+   "source": "acuitybrands.com carries the former name (ACUITY BRANDS INC until 2025-04-17; L&C SPINCO INC until 2001-10-29). 8-K 0001144215-26-000047 (filed 2026-10-01), EX-99 exhibit prints acuityinc.com"
+  },
+  {
+   "ticker": "RS",
+   "cik": "861884",
+   "field": "website",
+   "old": "http://www.rsac.com/",
+   "new": "https://www.reliance.com",
+   "source": "rsac.com (Reliance Steel & Aluminum Co.) is not printed in the newest releases; they print reliance.com. 8-K 0001171843-26-006744 (filed 2026-10-21), EX-99 exhibit prints reliance.com"
+  },
+  {
+   "ticker": "FHN",
+   "cik": "36966",
+   "field": "website",
+   "old": "http://www.fhnc.com/",
+   "new": "https://www.firsthorizon.com",
+   "source": "fhnc.com carries the former name (FIRST HORIZON NATIONAL CORP until 2020-11-25; FIRST TENNESSEE NATIONAL CORP until 2004-04-22). 8-K 0000036966-26-000178 (filed 2026-10-15), EX-99 exhibit prints www.firsthorizon.com"
+  },
+  {
+   "ticker": "BKH",
+   "cik": "1130464",
+   "field": "website",
+   "old": "https://ir.blackhillscorp.com/",
+   "new": "https://ir.brighthorizonenergy.com",
+   "source": "ir.blackhillscorp.com carries the former name (BLACK HILLS CORP /SD/ until 2026-11-16; BLACK HILLS HOLDING CORP until 2000-12-26); the first release under the new name prints this address. 8-K 0001104659-26-127601 (filed 2026-11-16), EX-99 exhibit prints ir.brighthorizonenergy.com"
+  },
+  {
+   "ticker": "P",
+   "cik": "1474432",
+   "field": "website",
+   "old": "https://www.purestorage.com/",
+   "new": "https://www.everpuredata.com",
+   "source": "purestorage.com carries the former name (PURE Storage, Inc. until 2026-01-09; Pure Storage, Inc. until 2026-01-09; Os76, Inc. until 2009-11-06). 8-K 0001474432-26-000110 (filed 2026-11-18), EX-99 exhibit prints www.everpuredata.com"
+  },
+  {
+   "ticker": "EXE",
+   "cik": "895126",
+   "field": "website",
+   "old": "http://www.chk.com/",
+   "new": "https://www.expandenergy.com",
+   "source": "chk.com carries the former name (CHESAPEAKE ENERGY CORP until 2024-09-26). 8-K 0000895126-26-000067 (filed 2026-10-27), EX-99 exhibit prints expandenergy.com"
+  },
+  {
+   "ticker": "GL",
+   "cik": "320335",
+   "field": "website",
+   "old": "http://www.torchmarkcorp.com",
+   "new": "https://investors.globelifeinsurance.com",
+   "source": "torchmarkcorp.com carries the former name (TORCHMARK CORP until 2019-08-02). 8-K 0000320335-26-000224 (filed 2026-10-21), EX-99 exhibit prints investors.globelifeinsurance.comFinancial Reports an…\""
+  },
+  {
+   "ticker": "DOC",
+   "cik": "765880",
+   "field": "website",
+   "old": "http://www.hcpi.com",
+   "new": "https://www.healthpeak.com",
+   "source": "hcpi.com carries the former name (HCP, INC. until 2019-10-01; HEALTH CARE PROPERTY INVESTORS INC until 2007-09-10). 8-K 0001628280-26-068878 (filed 2026-11-02), EX-99 exhibit prints www.healthpeak.com/corporate-impact"
+  },
+  {
+   "ticker": "KDP",
+   "cik": "1418135",
+   "field": "website",
+   "old": "http://www.drpeppersnapplegroup.com/",
+   "new": "https://www.keurigdrpepper.com",
+   "source": "drpeppersnapplegroup.com carries the former name (Dr Pepper Snapple Group, Inc. until 2018-07-02; CSAB Inc. until 2007-11-13). 8-K 0001418135-26-000064 (filed 2026-11-03), EX-99 exhibit prints www.keurigdrpepper.com"
+  },
+  {
+   "ticker": "VMRK",
+   "cik": "906107",
+   "field": "website",
+   "old": "https://www.equityapartments.com/",
+   "new": "https://www.vivmarkresidential.com",
+   "source": "equityapartments.com carries the former brand (EQUITY RESIDENTIAL until 2026-08-12; EQUITY RESIDENTIAL PROPERTIES TRUST until 2002-10-30). 8-K 0001193125-26-462316 (filed 2026-11-16), EX-99 exhibit prints www.vivmarkresidential.com"
+  },
+  {
+   "ticker": "SNX",
+   "cik": "1177394",
+   "field": "website",
+   "old": "https://www.synnexcorp.com/",
+   "new": "https://www.tdsynnex.com",
+   "source": "synnexcorp.com is the pre-merger Synnex site; the releases print TDSYNNEX.com. 8-K 0001628280-26-063314 (filed 2026-09-24), EX-99 exhibit prints tdsynnex.com"
+  },
+  {
+   "ticker": "DINO",
+   "cik": "1915657",
+   "field": "website",
+   "old": "http://www.hollyfrontier.com/",
+   "new": "https://investor.hfsinclair.com",
+   "source": "hollyfrontier.com carries the former name (). 8-K 0001915657-26-000071 (filed 2026-10-28), EX-99 exhibit prints investor.hfsinclair.com/investor-relations/event"
+  },
+  {
+   "ticker": "NXT",
+   "cik": "1852131",
+   "field": "website",
+   "old": "https://www.nextracker.com/",
+   "new": "https://www.nextpower.com",
+   "source": "nextracker.com carries the former name (Nextracker Inc. until 2025-10-30; Nextracker LLC until 2022-09-23). 8-K 0001852131-26-000055 (filed 2026-10-28), EX-99 exhibit prints www.nextpower.com"
+  },
+  {
+   "ticker": "FBIN",
+   "cik": "1519751",
+   "field": "website",
+   "old": "http://www.fbhs.com/",
+   "new": "https://www.fbin.com",
+   "source": "fbhs.com carries the former name (Fortune Brands Home & Security, Inc. until 2022-12-14; Fortune Brands Home & Security LLC until 2011-08-22). 8-K 0001193125-26-453599 (filed 2026-11-09), EX-99 exhibit prints www.fbin.com"
+  },
+  {
+   "ticker": "ESI",
+   "cik": "1590714",
+   "field": "website",
+   "old": "http://platformspecialtyproducts.com/",
+   "new": "https://www.elementsolutionsinc.com",
+   "source": "platformspecialtyproducts.com carries the former name (Platform Specialty Products Corp until 2019-01-28). 8-K 0001590714-26-000069 (filed 2026-10-21), EX-99 exhibit prints www.elementsolutionsinc.com"
+  },
+  {
+   "ticker": "AX",
+   "cik": "1299709",
+   "field": "website",
+   "old": "http://www.bofiholding.com/",
+   "new": "https://investors.axosfinancial.com",
+   "source": "bofiholding.com carries the former name (BofI Holding, Inc. until 2018-09-12). 8-K 0001299709-26-000081 (filed 2026-10-29), EX-99 exhibit prints investors.axosfinancial.com"
+  },
+  {
+   "ticker": "LRN",
+   "cik": "1157408",
+   "field": "website",
+   "old": "http://www.k12.com/",
+   "new": "https://www.stridelearning.com",
+   "source": "k12.com carries the former name (K12 INC until 2020-12-15). 8-K 0001171843-26-006722 (filed 2026-10-20), EX-99 exhibit prints stridelearning.com"
+  },
+  {
+   "ticker": "BBT",
+   "cik": "1108134",
+   "field": "website",
+   "old": "http://www.berkshirebank.com/",
+   "new": "https://www.beaconfinancialcorporation.com",
+   "source": "berkshirebank.com carries the former name (BERKSHIRE HILLS BANCORP INC until 2025-08-25). 8-K 0001171843-26-006743 (filed 2026-10-21), EX-99 exhibit prints www.beaconfinancialcorporation.com"
+  },
+  {
+   "ticker": "IVT",
+   "cik": "1307748",
+   "field": "website",
+   "old": "http://www.inlandamerican.com",
+   "new": "https://www.inventrustproperties.com",
+   "source": "inlandamerican.com carries the former name (Inland American Real Estate Trust, Inc. until 2015-04-13). 8-K 0001307748-26-000209 (filed 2026-10-27), EX-99 exhibit prints inventrustproperties.com"
+  },
+  {
+   "ticker": "PENN",
+   "cik": "921738",
+   "field": "website",
+   "old": "http://www.pngaming.com/",
+   "new": "https://www.pennentertainment.com",
+   "source": "pngaming.com carries the former name (PENN NATIONAL GAMING INC until 2022-06-15). 8-K 0000921738-26-000026 (filed 2026-11-05), EX-99 exhibit prints www.pennentertainment.com"
+  },
+  {
+   "ticker": "PRDO",
+   "cik": "1046568",
+   "field": "website",
+   "old": "http://www.careered.com/",
+   "new": "https://www.perdoceoed.com",
+   "source": "careered.com carries the former name (CAREER EDUCATION CORP until 2019-12-18). 8-K 0001193125-26-449720 (filed 2026-11-05), EX-99 exhibit prints www.perdoceoed.com"
+  },
+  {
+   "ticker": "ENOV",
+   "cik": "1420800",
+   "field": "website",
+   "old": "http://www.colfaxcorp.com",
+   "new": "https://www.enovis.com",
+   "source": "colfaxcorp.com carries the former name (Colfax CORP until 2022-03-18). 8-K 0001420800-26-000052 (filed 2026-11-05), EX-99 exhibit prints www.enovis.com"
+  },
+  {
+   "ticker": "UPBD",
+   "cik": "933036",
+   "field": "website",
+   "old": "https://www.rentacenter.com",
+   "new": "https://www.upbound.com",
+   "source": "rentacenter.com carries the former name (RENT A CENTER INC DE until 2023-02-15; RENTERS CHOICE INC until 1998-10-16). 8-K 0001193125-26-437037 (filed 2026-10-29), EX-99 exhibit prints upbound.com"
+  },
+  {
+   "ticker": "AGNT",
+   "cik": "1495932",
+   "field": "website",
+   "old": "https://expworldholdings.com/",
+   "new": "https://www.agntinc.com",
+   "source": "expworldholdings.com carries the former name (EXP World Holdings, Inc. until 2026-06-01; eXp World Holdings, Inc. until 2026-06-01; EXP Realty International Corp until 2016-04-27; Desert Canadians Ltd. until 2013-08-20). 8-K 0001104659-26-090334 (filed 2026-08-04), EX-99 exhibit prints www.agntinc.com"
+  },
+  {
+   "ticker": "UHAL",
+   "cik": "4457",
+   "field": "website",
+   "old": "https://www.amerco.com/",
+   "new": "https://investors.uhaul.com",
+   "source": "amerco.com carries the former name (AMERCO /NV/ until 2022-12-16). 8-K 0001193125-26-447346 (filed 2026-11-04), EX-99 exhibit prints investors.uhaul.com"
+  },
+  {
+   "ticker": "SYRE",
+   "cik": "1636282",
+   "field": "website",
+   "old": "http://aegleabio.com",
+   "new": "https://spyre.com",
+   "source": "aegleabio.com carries the former name (Aeglea BioTherapeutics, Inc. until 2023-11-24). 8-K 0001636282-26-000132 (filed 2026-11-03), EX-99 exhibit prints spyre.com"
+  },
+  {
+   "ticker": "DNTH",
+   "cik": "1690585",
+   "field": "website",
+   "old": "http://www.magentatx.com/",
+   "new": "https://www.dianthustx.com",
+   "source": "magentatx.com carries the former name (Magenta Therapeutics, Inc. until 2023-09-08). 8-K 0001690585-26-000039 (filed 2026-11-04), EX-99 exhibit prints www.dianthustx.com"
+  },
+  {
+   "ticker": "SPB",
+   "cik": "109177",
+   "field": "website",
+   "old": "http://www.hrggroup.com/",
+   "new": "https://investor.spectrumbrands.com",
+   "source": "hrggroup.com carries the former name (HRG GROUP, INC. until 2018-07-02; HARBINGER GROUP INC. until 2015-03-09; ZAPATA CORP until 2009-12-22). 8-K 0000950103-26-017312 (filed 2026-11-12), EX-99 exhibit prints investor.spectrumbrands.com/proposed-acquisition-hel"
+  },
+  {
+   "ticker": "STZ",
+   "cik": "16918",
+   "field": "website",
+   "old": "https://cbrands.mx",
+   "new": "https://www.cbrands.com",
+   "source": "cbrands.mx is the Mexican country site; the registrant's releases give www.cbrands.com. 8-K 0000016918-26-000039 (filed 2026-10-06), EX-99 exhibit prints www.cbrands.com"
+  },
+  {
+   "ticker": "NXPI",
+   "cik": "1413447",
+   "field": "website",
+   "old": "https://www.nxp.jp",
+   "new": "https://www.nxp.com",
+   "source": "nxp.jp is the Japanese country site; the registrant's releases give www.nxp.com. 8-K 0001413447-26-000057 (filed 2026-10-27), EX-99 exhibit prints www.nxp.com"
+  },
+  {
+   "ticker": "WING",
+   "cik": "1636222",
+   "field": "website",
+   "old": "https://wingstop.com.mx/",
+   "new": "https://www.wingstop.com",
+   "source": "wingstop.com.mx is the Mexican country site; the registrant's releases give wingstop.com. 8-K 0001628280-26-067723 (filed 2026-10-28), EX-99 exhibit prints wingstop.com"
+  },
+  {
+   "ticker": "SW",
+   "cik": "2005951",
+   "field": "website",
+   "old": "http://www.smurfitkappa.com/",
+   "new": "https://www.smurfitwestrock.com",
+   "source": "smurfitkappa.com is not an address the registrant's releases give. 8-K 0001104659-26-119345 (filed 2026-10-28), EX-99 exhibit prints www.smurfitwestrock.com"
+  },
+  {
+   "ticker": "ROP",
+   "cik": "882835",
+   "field": "website",
+   "old": "http://www.roperind.com/",
+   "new": "https://www.ropertech.com",
+   "source": "roperind.com carries the former name (ROPER TECHNOLOGIES INC until 2026-11-13; ROPER INDUSTRIES INC until 2015-04-24; ROPER INDUSTRIES INC /DE/ until 2008-05-14). 8-K 0000882835-26-000042 (filed 2026-10-22), EX-99 exhibit prints www.ropertech.com"
+  },
+  {
+   "ticker": "MOD",
+   "cik": "67347",
+   "field": "website",
+   "old": null,
+   "new": "https://www.modexussolutions.com",
+   "source": "the field was empty; the registrant's release under its new name (MODINE MANUFACTURING CO until 2026-11-04) states its site. 8-K 0001104659-26-129392 (filed 2026-11-18), EX-99 exhibit prints www.modexussolutions.com"
+  },
+  {
+   "ticker": "BEN",
+   "cik": "38777",
+   "field": "ir",
+   "old": "https://www.franklin-electric.com/investors",
+   "new": "https://investors.franklintempleton.com",
+   "source": "franklin-electric.com carries the name of another covered company, Franklin Electric Co. (FELE), and is not an address FRANKLIN TEMPLETON INC's releases give. 8-K 0000038777-26-000287 (filed 2026-11-06), EX-99 exhibit prints franklintempleton.com, investors.franklintempleton.com"
+  },
+  {
+   "ticker": "FOXA",
+   "cik": "1754301",
+   "field": "ir",
+   "old": "https://investor.ridefox.com",
+   "new": null,
+   "source": "investor.ridefox.com is Fox Factory Holding Corp.'s investor site (its own 8-K 0001424929-26-000065: \"Company’s website at https://investor.ridefox.com\"), not FOX CORP's; FOX's 8-K 0001193125-26-451888 gives only its website (\"please visit www.foxcorporation.com\"), so no IR address rather than another company's"
+  },
+  {
+   "ticker": "STE",
+   "cik": "1757898",
+   "field": "ir",
+   "old": "https://steris.org.in",
+   "new": "https://www.steris-ir.com",
+   "source": "steris.org.in is not the address the registrant's releases give for investor relations. 8-K 0001628280-26-070220 (filed 2026-11-04), EX-99 exhibit prints www.steris-ir.com"
+  },
+  {
+   "ticker": "WSM",
+   "cik": "719955",
+   "field": "ir",
+   "old": "https://investor.williams.com",
+   "new": "http://ir.williams-sonomainc.com",
+   "source": "investor.williams.com belongs to The Williams Companies (its own 8-K 0001193125-26-387359 prints www.williams.com), not WILLIAMS SONOMA INC. 8-K 0000719955-26-000244 (filed 2026-11-19), EX-99 exhibit prints ir.williams-sonomainc.com/events"
+  },
+  {
+   "ticker": "ON",
+   "cik": "1097864",
+   "field": "ir",
+   "old": "https://sonal.co.in/investor-relations",
+   "new": null,
+   "source": "sonal.co.in is an Indian company's site, not ON SEMICONDUCTOR CORP's; its 8-K 0001140361-26-041580 says investor relations are on its website http://www.onsemi.com, already the website field, so no separate IR address"
+  },
+  {
+   "ticker": "HCC",
+   "cik": "1691303",
+   "field": "founded",
+   "old": 1974,
+   "new": null,
+   "source": "Removed: came with Tokio Marine HCC's record (another company); no SEC fact gives the registrant's year."
+  },
+  {
+   "ticker": "AGO",
+   "cik": "1273813",
+   "field": "founded",
+   "old": 2003,
+   "new": null,
+   "source": "Removed: came with Assured Investment Management's record (another company); no SEC fact checked for the registrant's year."
+  },
+  {
+   "ticker": "FTI",
+   "cik": "1681459",
+   "field": "founded",
+   "old": 2000,
+   "new": null,
+   "source": "Removed: came with FMC Technologies, Inc.'s record (separate registrant CIK 1135152)."
+  },
+  {
+   "ticker": "CHRD",
+   "cik": "1486159",
+   "field": "founded",
+   "old": 1980,
+   "new": null,
+   "source": "Removed: came with Whiting Petroleum's record (separate registrant CIK 1255474)."
+  },
+  {
+   "ticker": "HWM",
+   "cik": "4281",
+   "field": "founded",
+   "old": 2016,
+   "new": null,
+   "source": "Removed: came with Arconic Corporation's record (separate registrant CIK 1790982)."
+  },
+  {
+   "ticker": "HCC",
+   "cik": "1691303",
+   "field": "description",
+   "old": "Tokio Marine HCC is an international insurance group with offices across the United States, the United Kingdom, Spain, and Ireland.",
+   "new": "Warrior Met Coal is a U.S.-listed metals & mining company headquartered in Brookwood, AL (SEC SIC 1220: Silver Ores).",
+   "source": "Fallback sentence: the description describes Tokio Marine HCC, another company (SEC registrant for CIK 1691303: WARRIOR MET COAL, INC.). Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1691303: business address BROOKWOOD, AL; SIC 1220), read 24 Nov 2026."
+  },
+  {
+   "ticker": "AGO",
+   "cik": "1273813",
+   "field": "description",
+   "old": "Assured Investment Management was an institutional asset management firm with a heritage in credit strategies, managing approximately $15.2 billion as of its defunct status in July 2023. Secondaries Investors referred to AIM as \"one of the world's most prominent hedge funds\".",
+   "new": "Assured Guaranty is a U.S.-listed insurance company headquartered in Hamilton Bermuda, D0 (SEC SIC 6351: Surety Insurance).",
+   "source": "Fallback sentence: the description describes Assured Investment Management, an asset manager, in the past tense; not ASSURED GUARANTY LTD. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1273813: business address HAMILTON BERMUDA, D0; SIC 6351), read 24 Nov 2026."
+  },
+  {
+   "ticker": "DGII",
+   "cik": "854775",
+   "field": "description",
+   "old": "Digi XBee is the brand name of a popular family of form factor compatible wireless connectivity modules from Digi International.",
+   "new": "Digi International is a U.S.-listed communications equipment company headquartered in Hopkins, MN (SEC SIC 3576: Computer Communications Equipment).",
+   "source": "Fallback sentence: the description describes the Digi XBee product family, not the registrant DIGI INTERNATIONAL INC. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 854775: business address HOPKINS, MN; SIC 3576), read 24 Nov 2026."
+  },
+  {
+   "ticker": "GLXY",
+   "cik": "1859392",
+   "field": "description",
+   "old": "Galaxy Digital was a radio station broadcasting through the digital platform across the United Kingdom and was owned by Global Radio. It primarily broadcast in areas where Galaxy was not represented on FM, such as London, Leicester, Nottingham, and Derbyshire.",
+   "new": "Galaxy Digital is a U.S.-listed investment banking & brokerage company headquartered in New York, NY (SEC SIC 6211: Security Brokers, Dealers & Flotation Companies).",
+   "source": "Fallback sentence: the description describes a UK radio station named Galaxy Digital, not Galaxy Digital Inc. (SEC CIK 1859392). Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1859392: business address NEW YORK, NY; SIC 6211), read 24 Nov 2026."
+  },
+  {
+   "ticker": "FTI",
+   "cik": "1681459",
+   "field": "description",
+   "old": "FMC Technologies, Inc. was a North American company that produced equipment for the exploration and production of hydrocarbons. FMC Technologies was incorporated in 2000 when FMC Corporation divested its machinery businesses.",
+   "new": "TechnipFMC is a U.S.-listed energy equipment & services company headquartered in Newcastle Upon Tyne, X0 (SEC SIC 3533: Oil & Gas Field Machinery & Equipment).",
+   "source": "Fallback sentence: the description describes FMC Technologies, Inc., a separate SEC registrant (CIK 1135152), in the past tense. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1681459: business address NEWCASTLE UPON TYNE, X0; SIC 3533), read 24 Nov 2026."
+  },
+  {
+   "ticker": "CHRD",
+   "cik": "1486159",
+   "field": "description",
+   "old": "Whiting Petroleum Corporation was a company engaged in hydrocarbon exploration primarily in the Bakken Formation and Three Forks Shale. It was organized in Delaware with its operational headquarters in Denver, Colorado.",
+   "new": "Chord Energy is a U.S.-listed oil & gas exploration & production company headquartered in Houston, TX (SEC SIC 1311: Crude Petroleum & Natural Gas).",
+   "source": "Fallback sentence: the description describes Whiting Petroleum Corporation, a separate SEC registrant (CIK 1255474, now Whiting Holdings LLC), in the past tense. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1486159: business address HOUSTON, TX; SIC 1311), read 24 Nov 2026."
+  },
+  {
+   "ticker": "HWM",
+   "cik": "4281",
+   "field": "description",
+   "old": "Arconic Corporation is an American industrial company specializing in lightweight metals engineering and manufacturing.",
+   "new": "Howmet Aerospace is a U.S.-listed machinery company headquartered in Pittsburgh, PA (SEC SIC 3350: Rolling Drawing & Extruding Of  Nonferrous Metals).",
+   "source": "Fallback sentence: the description describes Arconic Corporation, a separate SEC registrant (CIK 1790982); the registrant's own former name was Arconic Inc.. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 4281: business address PITTSBURGH, PA; SIC 3350), read 24 Nov 2026."
+  },
+  {
+   "ticker": "CNX",
+   "cik": "1070412",
+   "field": "description",
+   "old": "Consol Energy Inc. is an American energy company with interests in coal headquartered in the suburb of Cecil Township, in the Southpointe complex, just outside Pittsburgh, Pennsylvania. It employs more than 1,600 people.",
+   "new": "CNX Resources is a U.S.-listed oil & gas exploration & production company headquartered in Canonsburg, PA (SEC SIC 1311: Crude Petroleum & Natural Gas).",
+   "source": "Fallback sentence: the description describes CONSOL Energy Inc., the coal company now SEC CIK 1710366 (Core Natural Resources, Inc.), a separate registrant. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1070412: business address CANONSBURG, PA; SIC 1311), read 24 Nov 2026."
+  },
+  {
+   "ticker": "HPQ",
+   "cik": "47217",
+   "field": "description",
+   "old": "The Hewlett-Packard Company, commonly shortened to Hewlett-Packard or HP, was an American multinational information technology company. It was founded by Bill Hewlett and David Packard in 1939 in a one-car garage in Palo Alto, California.",
+   "new": "HP is a U.S.-listed technology hardware & storage company headquartered in Palo Alto, CA (SEC SIC 3570: Computer & Office Equipment).",
+   "source": "Fallback sentence: the description speaks of the former name in the past tense (\"was\"): HEWLETT PACKARD CO until 2015-10-23. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 47217: business address PALO ALTO, CA; SIC 3570), read 24 Nov 2026."
+  },
+  {
+   "ticker": "KDP",
+   "cik": "1418135",
+   "field": "description",
+   "old": "Dr Pepper Snapple Group was an American multinational soft drink company based in Plano, Texas. The company originated as Cadbury Schweppes Americas Beverages, a division of Cadbury Schweppes.",
+   "new": "Keurig Dr Pepper is a U.S.-listed food, beverage & tobacco company headquartered in Frisco, TX (SEC SIC 2080: Beverages).",
+   "source": "Fallback sentence: the description speaks of the former name in the past tense (\"was\"): Dr Pepper Snapple Group, Inc. until 2018-07-02; CSAB Inc. until 2007-11-13. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1418135: business address FRISCO, TX; SIC 2080), read 24 Nov 2026."
+  },
+  {
+   "ticker": "MSI",
+   "cik": "68505",
+   "field": "description",
+   "old": "Motorola, Inc. was an American multinational telecommunications company based in Schaumburg, Illinois. It was founded by brothers Paul and Joseph Galvin in 1928 as Galvin Manufacturing Corporation and was renamed Motorola in 1947.",
+   "new": "Motorola Solutions is a U.S.-listed communications equipment company headquartered in Chicago, IL (SEC SIC 3663: Radio & Tv Broadcasting & Communications Equipment).",
+   "source": "Fallback sentence: the description speaks of Motorola, Inc. in the past tense (\"was\"); the registrant is Motorola Solutions, Inc.. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 68505: business address CHICAGO, IL; SIC 3663), read 24 Nov 2026."
+  },
+  {
+   "ticker": "SNX",
+   "cik": "1177394",
+   "field": "description",
+   "old": "Synnex was an American multinational corporation that provided information technology services to businesses. It merged with competitor Tech Data to form TD Synnex. It was founded in 1980 by Robert T. Huang and based in Fremont, California.",
+   "new": "Synnex is a U.S.-listed electronic equipment & components company headquartered in Clearwater, FL (SEC SIC 5045: Wholesale-Computers & Peripheral Equipment & Software).",
+   "source": "Fallback sentence: the description speaks of Synnex in the past tense (\"was\"); the registrant is TD SYNNEX CORP. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1177394: business address CLEARWATER, FL; SIC 5045), read 24 Nov 2026."
+  },
+  {
+   "ticker": "BBT",
+   "cik": "1108134",
+   "field": "description",
+   "old": "Berkshire Bank was an American bank based in Boston, Massachusetts that operated branches in New England, and New York; it was the third largest regional bank headquartered in Massachusetts. After a merger with Brookline Bancorp, the new entity is called Beacon Bank.",
+   "new": "Beacon Financial is a U.S.-listed banks company headquartered in Boston, MA (SEC SIC 6036: Savings Institutions, Not Federally Chartered).",
+   "source": "Fallback sentence: the description speaks of Berkshire Bank in the past tense (\"was\"): BERKSHIRE HILLS BANCORP INC until 2025-08-25. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1108134: business address BOSTON, MA; SIC 6036), read 24 Nov 2026."
+  },
+  {
+   "ticker": "ZD",
+   "cik": "1084048",
+   "field": "description",
+   "old": "J2 Global, Inc. was an American technology holding company based in Los Angeles, California. The company provided Internet services through two divisions: Business Cloud Services and Digital Media.",
+   "new": "Ziff Davis is a U.S.-listed interactive media & services company headquartered in New York, NY (SEC SIC 4822: Telegraph & Other Message Communications).",
+   "source": "Fallback sentence: the description speaks of the former name in the past tense (\"was\"): J2 GLOBAL, INC. until 2021-10-04; J2 GLOBAL COMMUNICATIONS INC until 2011-11-08; JFAX COM INC until 2000-12-21. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1084048: business address NEW YORK, NY; SIC 4822), read 24 Nov 2026."
+  },
+  {
+   "ticker": "SPB",
+   "cik": "109177",
+   "field": "description",
+   "old": "HRG Group, Inc., formerly Harbinger Group Inc. and Zapata Corporation, was a holding company based in Rochester, New York, having originated from an oil company started by a group including former U.S. president George H. W. Bush. In 2009, it was renamed the Harbinger Group Inc.",
+   "new": "Spectrum Brands Holdings is a U.S.-listed consumer staples retail company headquartered in Middleton, WI (SEC SIC 3690: Miscellaneous Electrical Machinery, Equipment & Supplies).",
+   "source": "Fallback sentence: the description speaks of the former name in the past tense (\"was\"): HRG GROUP, INC. until 2018-07-02; HARBINGER GROUP INC. until 2015-03-09; ZAPATA CORP until 2009-12-22. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 109177: business address MIDDLETON, WI; SIC 3690), read 24 Nov 2026."
+  },
+  {
+   "ticker": "SLS",
+   "cik": "1390478",
+   "field": "description",
+   "old": "Galena Biopharma, Inc. was a publicly traded pharmaceutical company based in San Ramon, California. The company was founded in Worcester, Massachusetts.",
+   "new": "SELLAS Life Sciences Group is a U.S.-listed pharmaceuticals company headquartered in New York, NY (SEC SIC 2834: Pharmaceutical Preparations).",
+   "source": "Fallback sentence: the description speaks of the former name in the past tense (\"was\"): GALENA BIOPHARMA, INC. until 2017-12-15; Galena Biopharma, Inc. until 2017-12-15; RXI PHARMACEUTICALS CORP until 2011-09-21. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1390478: business address NEW YORK, NY; SIC 2834), read 24 Nov 2026."
+  },
+  {
+   "ticker": "BKH",
+   "cik": "1130464",
+   "field": "description",
+   "old": "Black Hills Corporation is an American diversified energy company that is an electric and gas utility in South Dakota, Montana, Wyoming, Colorado, Arkansas, Kansas, Nebraska, and Iowa. The company sells power throughout the American West. The company is based in Rapid City, South Dakota.",
+   "new": "Bright Horizon Energy is a U.S.-listed electric utilities company headquartered in Rapid City, SD (SEC SIC 4911: Electric Services).",
+   "source": "Fallback sentence: the description names only the former name and never the current one: BLACK HILLS CORP /SD/ until 2026-11-16; BLACK HILLS HOLDING CORP until 2000-12-26. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 1130464: business address RAPID CITY, SD; SIC 4911), read 24 Nov 2026."
+  },
+  {
+   "ticker": "HOS",
+   "cik": "866829",
+   "field": "description",
+   "old": "Helix Energy Solutions Inc., known as Cal Dive International prior to 2006, is an American oil and gas services company headquartered in Houston, Texas. The company is a global provider of offshore services in well intervention and ROV operations of new and existing oil and gas fields.",
+   "new": "Hornbeck Offshore is a U.S.-listed energy equipment & services company headquartered in Covington, LA (SEC SIC 1389: Oil & Gas Field Services, Nec).",
+   "source": "Fallback sentence: the description names only the former name and never the current one: HELIX ENERGY SOLUTIONS GROUP INC until 2026-08-31; CAL DIVE INTERNATIONAL INC until 2006-03-06. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 866829: business address COVINGTON, LA; SIC 1389), read 24 Nov 2026."
+  },
+  {
+   "ticker": "MOD",
+   "cik": "67347",
+   "field": "description",
+   "old": "Modine Manufacturing is a U.S.-listed machinery company headquartered in Racine, WI (SEC SIC 3714: Motor Vehicle Parts & Accessories).",
+   "new": "Modexus is a U.S.-listed machinery company headquartered in Racine, WI (SEC SIC 3585: Air-Cond & Warm Air Heatg Equip & Comm & Indl Refrig Equip).",
+   "source": "Fallback sentence: the description the generator's fallback sentence under the former name: MODINE MANUFACTURING CO until 2026-11-04. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 67347: business address RACINE, WI; SIC 3585), read 24 Nov 2026."
+  },
+  {
+   "ticker": "RVTY",
+   "cik": "31791",
+   "field": "description",
+   "old": "PerkinElmer, Inc., previously styled Perkin-Elmer, is an American global corporation that was founded in 1937 and originally focused on precision optics.",
+   "new": "Revvity is a U.S.-listed life sciences tools & services company headquartered in Waltham, MA (SEC SIC 3826: Laboratory Analytical Instruments).",
+   "source": "Fallback sentence: the description names only the former name and never the current one: PERKINELMER INC until 2023-04-14; EG&G INC until 1999-07-26. Replaced by the generator's SEC-built sentence (data.sec.gov submissions for CIK 31791: business address WALTHAM, MA; SIC 3826), read 24 Nov 2026."
+  }
+ ]
+}
