@@ -567,13 +567,15 @@ export class GlobeEngine {
       });
     }
     const clusters = clusterSpots(spots);
-    /* a cluster that zooming cannot pull apart (its names share a spot, or stand closer than the deepest zoom separates) opens into a fan once the map is close */
+    /* a cluster that zooming cannot pull apart (its names share a spot, or stand closer than the deepest zoom separates)
+       opens into a fan once the map is close, and at any zoom when it holds the selected name, so that name is always seen */
     const taken = clusters.map((c) => ({ x: c.x, y: c.y, r: c.r }));
-    const local = R >= 900, deepest = baseScale({ w, h }, flat) * this.maxZoom;
+    const local = R >= 900, deepest = baseScale({ w, h }, flat) * this.maxZoom, selected = this.scene.selected;
     clusters.forEach((c, ci) => {
       const members = c.members.map((s) => s.item), lead = members[0];
       if (members.length === 1) { const m: Mark = { id: `p:${lead.key}`, x: c.x, y: c.y, r: c.r, members, place: this.vecByKey.get(lead.key) as Vec3, kind: 'single' }; marks.push(m); of.set(lead.key, m); return; }
-      const stuck = local && members.length <= 28 && members.every((m) => angleBetween([m.lon, m.lat], [lead.lon, lead.lat]) * deepest < STUCK_PX);
+      const wanted = local || (selected != null && members.some((m) => m.key === selected));
+      const stuck = wanted && members.length <= 28 && members.every((m) => angleBetween([m.lon, m.lat], [lead.lon, lead.lat]) * deepest < STUCK_PX);
       if (stuck) {
         const fan = fanOffsets(lead.lead ? members.length - 1 : members.length, FAN_D, lead.lead ? badgeRadius(1, true) + 3 : 0);
         const fits = c.x - fan.reach > 4 && c.y - fan.reach > 4 && c.x + fan.reach < w - 4 && c.y + fan.reach < h - 4;
@@ -902,7 +904,8 @@ export class GlobeEngine {
       const gap = slices.length > 1 ? 0.07 : 0;
       ctx.beginPath(); ctx.arc(m.x, m.y, r - band / 2, sl.a0 + gap, sl.a1 - gap); ctx.strokeStyle = sl.color; ctx.stroke();
     }
-    const inner = r - band - 1.5, size = Math.round(inner * 1.5 * dpr), tile = lead.logo && lead.logoTrusted ? this.atlas.tile(lead.logo, size) : null;
+    /* the face is cut to a few sizes (steps of four device pixels) so the logo sheets stay few */
+    const inner = r - band - 1.5, size = 4 * Math.round((inner * 1.5 * dpr) / 4), tile = lead.logo && lead.logoTrusted ? this.atlas.tile(lead.logo, size) : null;
     ctx.fillStyle = pal.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (tile) {
       const s = size / dpr, x = Math.round((m.x - s / 2) * dpr) / dpr, y = Math.round((m.y - s / 2) * dpr) / dpr;
@@ -1085,7 +1088,8 @@ export class GlobeEngine {
     on(document, 'pointerdown', (e) => { if (this.engaged && !(wrap as HTMLElement).contains(e.target as Node)) this.setEngaged(false); }, { capture: true });
     /* an engaged map, and any two-finger gesture, keeps the page from scrolling under it */
     on(el, 'touchmove', (e) => { if ((this.touchEngaged || e.touches.length > 1) && e.cancelable) e.preventDefault(); }, { passive: false });
-    on(el, 'wheel', (e) => {
+    /* on the whole frame, the controls laid over the map included, so the wheel behaves the same wherever it is turned inside it */
+    on(wrap as HTMLElement, 'wheel', (e) => {
       /* Ctrl or ⌘ + wheel (which is also what a trackpad pinch sends) always zooms; a plain wheel zooms only after a press on the map, and otherwise scrolls the page */
       const key = e.ctrlKey || e.metaKey;
       if (!key && !this.engaged) { this.cb.onWheelPassed?.(); return; }
