@@ -2,6 +2,7 @@
 // map (stated exposure, the shock simulation, what changed since the last annual report, earnings sympathy moves).
 // Every list follows what is isolated on the map. Nothing here scrolls the page: a click only changes what is shown.
 import type { ReactNode } from "react";
+import { logoKey } from "@/lib/supply/logo-key";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight, FileText, Focus, Globe2, Link2, Lock, Zap } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
@@ -32,7 +33,7 @@ export const isSupplyTab = (v: unknown): v is SupplyTab => typeof v === "string"
 const chip = "inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[11px] leading-4";
 const sourceButton = "inline-flex min-h-7 shrink-0 items-center gap-1 rounded bg-highlight-soft px-2 text-[11px] font-medium text-foreground transition-colors duration-150 hover:bg-highlight hover:text-highlight-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none";
 const quietButton = "inline-flex min-h-7 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none";
-const logoOf = (n: Pick<GraphNode, "ticker" | "name">) => n.ticker ?? n.name.slice(0, 4).toUpperCase();
+const logoOf = (n: Pick<GraphNode, "ticker" | "name">) => logoKey(n);
 
 type OpenLink = (l: RiskLink, label: string) => void;
 
@@ -293,7 +294,7 @@ export function ShockPanel({ src, sources, names, shock, onShock, onSrc, impacts
         <ul className="divide-y border-y">
           {rows.slice(0, 30).map((i) => (
             <li key={i.key} className={cn("flex items-start gap-2 py-1.5", i.severity === "high" && "bg-negative-soft/60")}>
-              <CompanyLogo ticker={i.ticker ?? i.name.slice(0, 4).toUpperCase()} size="xs" decorative className="mt-0.5" />
+              <CompanyLogo ticker={logoKey(i)} size="xs" decorative className="mt-0.5" />
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline gap-2"><span className="min-w-0 truncate text-[13px] font-medium">{i.name}</span><span className="ml-auto shrink-0 text-[11px] text-muted-foreground">{i.hop === 1 ? "direct" : `${i.hop} steps`} · {i.severity}</span></span>
                 <span className="block text-xs">

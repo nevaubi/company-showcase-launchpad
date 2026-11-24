@@ -1,5 +1,6 @@
 // The stat strip at the top of the supply-chain page: six figures in one row of equal cells (three rows of two on a
-// phone). Every cell has the same height whatever it holds, so nothing below it moves when the company changes.
+// phone). Every cell has the same height whatever it holds (a label line, the figure, two lines of sentence), so nothing below
+// it moves when the company changes.
 import type { ReactNode } from "react";
 import { Globe2, Lock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,11 +30,12 @@ export interface SupplyStatsProps {
 
 function Cell({ label, icon, value, hint, title, loading }: { label: string; icon?: ReactNode; value: ReactNode; hint: string; title?: string; loading: boolean }) {
   return (
-    <div className="flex h-[68px] min-w-0 flex-col justify-center bg-card px-3">
+    <div className="flex h-[84px] min-w-0 flex-col justify-start bg-card px-3 py-2">
       <p className="flex items-center gap-1 truncate text-[11px] leading-4 text-muted-foreground">{icon}{label}</p>
       {/* a zero while the records are still loading reads as "none", so hold a placeholder until they arrive */}
       {loading ? <Skeleton className="my-0.5 h-5 w-16" /> : <p className="num truncate text-lg font-semibold leading-6">{value}</p>}
-      <p className="truncate text-[11px] leading-4 text-muted-foreground" title={loading ? undefined : title ?? hint}>{loading ? "Loading records" : hint}</p>
+      {/* the sentence wraps to a second line: the words that say whose figure it is never live only in the tooltip */}
+      <p className="line-clamp-2 text-[11px] leading-4 text-muted-foreground" title={loading ? undefined : title ?? hint}>{loading ? "Loading records" : hint}</p>
     </div>
   );
 }

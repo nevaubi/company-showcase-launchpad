@@ -3,6 +3,7 @@
 // the drawing lists each link of the pathway with its stated figure and a button that opens the sentence, and the
 // evidence panel and the table of links follow. Wide screens draw columns; phones get the same tiers as a list.
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { logoKey } from "@/lib/supply/logo-key";
 import { ArrowRight, FileText, Focus, Lock, Search, ShieldCheck, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,6 @@ export type ChainSize = "share" | "dollars";
 const shareText = (e: Pick<ChainEdge, "share" | "basis">) => (e.share != null ? `${e.share}% of ${e.basis ? BASIS_WORD[e.basis] : "an unstated base"}` : null);
 /** The one figure a link is labelled with, by what the lines are sized on. */
 const tagOf = (e: ChainEdge, size: ChainSize) => (size === "dollars" ? (e.dollars != null ? fmtCompactUsd(e.dollars) : null) : e.share != null ? `${e.share}%` : null);
-const logoKey = (n: Pick<ChainNode, "ticker" | "name">) => n.ticker ?? n.name.slice(0, 4).toUpperCase();
 const FLOW_OPTIONS = CHAIN_FLOWS.map((f) => ({ v: f.v, l: f.label, title: f.hint }));
 
 function useWidth<T extends HTMLElement>() {
@@ -177,9 +177,10 @@ function StripNode({ n }: { n: ChainNode }) {
 function PathRow({ label, hops, size, hint, short: narrow = false, onOpenText, onOpenTag }: { label: string; hops: PathHop[]; size: ChainSize; hint: string; short?: boolean; onOpenText: OpenText; onOpenTag: OpenTag }) {
   const short = narrow || hops.length > 2;
   return (
-    <div className="grid h-7 min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] items-center gap-2">
+    <div className="grid min-h-7 min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] items-center gap-2">
       <span className="eyebrow truncate">{label}</span>
-      {hops.length === 0 ? <p className="truncate text-[11px] leading-4 text-muted-foreground" title={hint}>{hint}</p> : (
+      {/* the only instruction for isolating a pathway on a phone: it wraps, never cut */}
+      {hops.length === 0 ? <p className="min-w-0 text-[11px] leading-4 text-muted-foreground">{hint}</p> : (
         <ol aria-label={`${label} pathway`} className="flex min-w-0 items-center gap-1.5 overflow-hidden">
           {hops.map((h, i) => {
             const e = h.edge;

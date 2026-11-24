@@ -69,6 +69,7 @@ export function RegionRiskRegister({ ticker, name, links, signals, revenue, sele
     return tb - ta;
   }), [rows, by]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const count = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
   return (
     <Panel title={`Region risk register · ${name}`} collapse={false} className="min-w-0">
       {!rows.length ? <p className="text-xs text-muted-foreground">No country outside the U.S. is tied to {ticker} in its filings yet.</p> : (<>
@@ -106,8 +107,8 @@ export function RegionRiskRegister({ ticker, name, links, signals, revenue, sele
                     <td className="px-2"><GovBar v={s?.ruleOfLaw ?? null} label="Rule of law" /></td>
                     <td className="px-2"><GovBar v={s?.regulatory ?? null} label="Regulatory quality" /></td>
                     <td className="num px-2 text-right">{s?.gdpGrowth != null ? `${s.gdpGrowth.toFixed(1).replace("-", "−")}%` : <span className="text-muted-foreground">–</span>}</td>
-                    <td className="whitespace-nowrap px-2 text-[11px] text-muted-foreground">
-                      {[r.links && `${r.links} links`, r.hq && `${r.hq} based there`, r.singleSource && `${r.singleSource} single source`, r.facilities && `${r.facilities} sites`, r.policy && `${r.policy} policy`, r.risks && `${r.risks} risk`].filter(Boolean).join(" · ")}
+                    <td className="px-2 text-[11px] text-muted-foreground">
+                      {[r.links && count(r.links, "link"), r.hq && `${r.hq} based there`, r.singleSource && `${r.singleSource} single source`, r.facilities && count(r.facilities, "site"), r.policy && `${r.policy} policy`, r.risks && count(r.risks, "risk")].filter(Boolean).join(" · ")}
                     </td>
                     <td className="num pl-2 text-right">{r.dollars ? fmtCompactUsd(r.dollars) : <span className="text-muted-foreground">–</span>}</td>
                   </tr>

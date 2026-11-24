@@ -39,6 +39,6 @@ describe("exposure from a stated share (supply-globe-M4)", () => {
   });
   it("a figure the sentence states is stated, and a mix says both", () => {
     expect(exposureWords([{ from: "flow" }]).label).toBe("Stated exposure");
-    expect(exposureWords([{ from: "flow" }, { from: "share", period: "annual" }])).toMatchObject({ label: "Stated and estimated exposure", note: "1 estimated" });
+    expect(exposureWords([{ from: "flow" }, { from: "share", period: "annual" }])).toMatchObject({ label: "Exposure (stated, est.)", note: "1 estimated" });
   });
 });

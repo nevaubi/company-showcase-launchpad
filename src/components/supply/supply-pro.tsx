@@ -6,8 +6,8 @@ import { CheckCheck, FileText, Sparkles } from "lucide-react";
 import { Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSupplyNote } from "@/lib/supply.functions";
-import { concentrationBasis, dependencyScore, type Confidence, type ProLink } from "@/lib/supply/core";
-import { scoreScope } from "@/lib/supply/strip";
+import { dependencyScore, type Confidence, type ProLink } from "@/lib/supply/core";
+import { scoreReading, scoreScope, unnamedCustomerShare } from "@/lib/supply/strip";
 import { cn } from "@/lib/utils";
 
 export const CONF_LABEL: Record<Confidence, string> = {
@@ -69,32 +69,29 @@ export function SupplyNotePanel({ ticker, byId, onOpen }: { ticker: string; byId
   );
 }
 
-/** Fragility score with its three filing-based components. */
-export function DependencyCard({ ticker, name, all }: { ticker: string; name?: string; all: ProLink[] }) {
+/** Fragility score with its three filing-based components; a part without inputs reads "not scored", never 0. */
+export function DependencyCard({ ticker, name, all, hotspots = [], hotspotsFromLinks = false }: { ticker: string; name?: string; all: ProLink[]; hotspots?: string[]; hotspotsFromLinks?: boolean }) {
   const d = useMemo(() => dependencyScore(ticker, all), [ticker, all]);
   const { data: sig } = useQuery(signalsQuery(ticker));
-  const unnamed = (sig ?? []).filter((s) => s.kind === "concentration" && s.pct != null && concentrationBasis(s.quote) === "revenue").sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
-  const tone = d.score >= 50 ? "text-negative" : d.score >= 25 ? "text-foreground" : "text-positive";
+  const r = useMemo(() => scoreReading(d, name ?? ticker, unnamedCustomerShare(sig ?? []), { hotspots, fromLinks: hotspotsFromLinks }), [d, name, ticker, sig, hotspots, hotspotsFromLinks]);
+  const tone = r.value == null ? "text-muted-foreground" : r.value >= 50 ? "text-negative" : r.value >= 25 ? "text-foreground" : "text-positive";
   return (
     <Panel title="Dependency score" collapse={false} className="min-w-0">
       <div className="flex items-baseline gap-2">
-        <span className={cn("num text-lg font-semibold leading-6", tone)}>{d.score}</span>
-        <span className="text-[11px] text-muted-foreground">of 100 · higher is more fragile</span>
+        <span className={cn("num text-lg font-semibold leading-6", tone)}>{r.value ?? "–"}</span>
+        <span className="text-[11px] text-muted-foreground">{r.sub}</span>
       </div>
       <div className="mt-3 space-y-2.5">
-        {d.parts.map((p) => (
+        {r.parts.map((p) => (
           <div key={p.label}>
-            <div className="flex justify-between text-xs"><span className="font-medium">{p.label}</span><span className="num">{p.points}/{p.max}</span></div>
-            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground/70" style={{ width: `${(p.points / p.max) * 100}%` }} /></div>
+            <div className="flex justify-between text-xs"><span className="font-medium">{p.label}</span><span className={cn("num", p.points == null && "text-muted-foreground")}>{p.points == null ? "not scored" : `${p.points}/${p.max}`}</span></div>
+            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-muted">{p.points != null && <div className="h-full rounded-full bg-foreground/70" style={{ width: `${(p.points / p.max) * 100}%` }} />}</div>
             <p className="mt-0.5 text-[11px] text-muted-foreground">{p.why}</p>
           </div>
         ))}
       </div>
       <p className="mt-3 text-[11px] text-muted-foreground">{scoreScope(name ?? ticker)}</p>
-      <p className="mt-1.5 text-[11px] text-muted-foreground">Customer HHI {d.customerHhi.toLocaleString()} · {d.statedCustomerPct}% of revenue tied to named customers</p>
-      {unnamed && d.statedCustomerPct < (unnamed.pct ?? 0) && (
-        <p className="mt-1.5 rounded bg-highlight-soft px-2 py-1 text-[11px]">The filing also states an unnamed customer at {unnamed.pct}% of revenue{unnamed.period ? ` (${unnamed.period})` : ""}. It is not counted above because no name is given; the sentence is under Contracts and calls.</p>
-      )}
+      {r.customerPct > 0 && <p className="mt-1.5 text-[11px] text-muted-foreground">Customer HHI {r.customerHhi.toLocaleString()} · {r.customerPct}% of revenue tied to customers with a stated share{r.unnamed ? ", one of them unnamed" : ""}</p>}
     </Panel>
   );
 }

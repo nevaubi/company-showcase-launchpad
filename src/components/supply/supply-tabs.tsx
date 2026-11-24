@@ -1,6 +1,7 @@
 // Two of the lists beside the supply-chain map: what changed between two annual reports, and how linked stocks moved
 // around the company's earnings releases. Both follow what is isolated on the map.
 import { useMemo, useState } from "react";
+import { logoKey } from "@/lib/supply/logo-key";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { FileText } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
@@ -43,7 +44,7 @@ export function ChangesTab({ ticker, name, isolated, onOpen }: { ticker: string;
           {shown.map((c) => (
             <li key={c.kind + c.key} className="flex items-start gap-2 py-1.5">
               <RelationMark relation={c.relation} size={8} className="mt-1.5" />
-              <CompanyLogo ticker={c.ticker ?? c.name.slice(0, 4).toUpperCase()} size="xs" decorative className="mt-0.5" />
+              <CompanyLogo ticker={logoKey(c)} size="xs" decorative className="mt-0.5" />
               <span className="min-w-0 flex-1">
                 <span className="flex items-baseline gap-2">
                   <span className="min-w-0 truncate text-[13px] font-medium">{c.name}</span>

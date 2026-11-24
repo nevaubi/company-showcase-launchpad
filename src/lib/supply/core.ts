@@ -139,6 +139,19 @@ export function sharePeriod(c: Pick<SupplyLink, "form" | "quote">): SharePeriod 
 }
 const PERIOD_RANK: Record<SharePeriod, number> = { annual: 2, interim: 1, quarter: 0 };
 
+/** The share a link is quoted at everywhere on the page: a 10-K's annual share wins over a 10-Q's, then the larger. */
+export interface StatedShare { pct: number; period: SharePeriod; link: RiskLink }
+export function statedShare(l: RiskLink): StatedShare | null {
+  let best: StatedShare | null = null;
+  for (const c of copies(l)) if (c.share_pct != null && c.share_pct > 0) {
+    const period = sharePeriod(c);
+    if (!best || PERIOD_RANK[period] > PERIOD_RANK[best.period] || (PERIOD_RANK[period] === PERIOD_RANK[best.period] && c.share_pct > best.pct)) best = { pct: c.share_pct, period, link: c };
+  }
+  return best;
+}
+/** Words for a share's period beside the figure: nothing for a year, else what the 10-Q covers. */
+export const periodWords = (p: SharePeriod | undefined): string => (p === "quarter" ? " in a 10-Q quarter" : p === "interim" ? " year to date in a 10-Q" : "");
+
 export interface LinkDollars {
   dollars: number;
   from: "flow" | "share";
@@ -161,13 +174,8 @@ export function linkDollarsFrom(l: RiskLink, revenue: Record<string, number | un
   const rev = revenue[l.ticker];
   if (l.relation !== "customer" || !rev) return null;
   /* a 10-K's annual share is the one that matches twelve months of revenue: it wins over a 10-Q's quarter share whatever their sizes */
-  for (const c of copies(l)) if (c.share_pct != null && c.share_pct > 0) {
-    const d = (c.share_pct / 100) * rev;
-    const period = sharePeriod(c);
-    const rank = PERIOD_RANK[period], bestRank = best?.period ? PERIOD_RANK[best.period] : -1;
-    if (!best || rank > bestRank || (rank === bestRank && d > best.dollars)) best = { dollars: d, from: "share", link: c, period };
-  }
-  return best;
+  const sh = statedShare(l);
+  return sh ? { dollars: (sh.pct / 100) * rev, from: "share", link: sh.link, period: sh.period } : null;
 }
 
 /** Dollar value a link represents (see `linkDollarsFrom`); null when the filings give neither a flow nor a customer share. */
@@ -478,13 +486,17 @@ export interface Dependency {
 export function dependencyScore(ticker: string, all: ProLink[]): Dependency {
   const own = all.filter((l) => l.ticker === ticker);
   const shares = new Map<string, number>();
-  for (const l of own) if (l.relation === "customer" && l.share_pct != null) {
+  let topPeriod: SharePeriod | undefined;
+  for (const l of own) if (l.relation === "customer") {
+    const sh = statedShare(l);
+    if (!sh) continue;
     const k = entityKey(l.counterparty, l.counterparty_ticker);
-    shares.set(k, Math.max(shares.get(k) ?? 0, l.share_pct));
+    if (sh.pct > (shares.get(k) ?? 0)) shares.set(k, sh.pct);
   }
   const s = [...shares.values()];
   const hhi = s.reduce((a, x) => a + x * x, 0);
   const top = Math.max(0, ...s);
+  for (const l of own) if (l.relation === "customer") { const sh = statedShare(l); if (sh && sh.pct === top) { topPeriod = sh.period; break; } }
   const statedPct = Math.min(100, s.reduce((a, x) => a + x, 0));
   // a flag stated in either of a link's 10-K and 10-Q copies counts, once
   const flag = (l: ProLink, k: "single_source" | "dependency") => copies(l).some((c) => !!c[k]);
@@ -500,7 +512,7 @@ export function dependencyScore(ticker: string, all: ProLink[]): Dependency {
     score: cPts + sPts + gPts, customerHhi: Math.round(hhi), topCustomerPct: top, statedCustomerPct: statedPct,
     singleSource: single, statedDependencies: stated, hotspotLinks: hotLinks.length, hotspots,
     parts: [
-      { label: "Customer concentration", points: cPts, max: 40, why: top ? `largest named customer ${top}% of revenue; ${s.length} customers with stated shares` : "no customer shares stated" },
+      { label: "Customer concentration", points: cPts, max: 40, why: top ? `largest named customer ${top}% of revenue${periodWords(topPeriod)}; ${s.length} ${s.length === 1 ? "customer" : "customers"} with a stated share` : "no customer shares stated" },
       { label: "Single-source inputs", points: sPts, max: 30, why: `${single} supplier/partner ${single === 1 ? "tie" : "ties"} the filing calls sole, single or exclusive source${stated ? `; ${stated} other stated ${stated === 1 ? "dependency" : "dependencies"} not counted` : ""}` },
       { label: "Geopolitical exposure", points: gPts, max: 30, why: hotspots.length ? `${hotLinks.length} links tied to ${hotspots.join(", ")}` : "no hotspot regions tied to links" },
     ],

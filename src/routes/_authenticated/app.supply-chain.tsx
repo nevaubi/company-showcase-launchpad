@@ -28,7 +28,7 @@ import { fmtDate } from "@/lib/format";
 import { countryExposure } from "@/lib/supply/analytics";
 import { countryOf } from "@/lib/supply/place-kind";
 import { buildChain, type ChainFlow, type TaggedShare } from "@/lib/supply/chain";
-import { focusGraph, nodeRisk, RELATIONS, secondOrder, simulateShock, type GraphNode, type ProLink, type Relation, type RiskLink } from "@/lib/supply/core";
+import { focusGraph, nodeRisk, RELATIONS, secondOrder, simulateShock, statedRegions, type GraphNode, type ProLink, type Relation, type RiskLink } from "@/lib/supply/core";
 import { exposureSummary } from "@/lib/supply/describe";
 import { isolationParam, nextIsolation, nodeId, parseIsolation, resolveIsolation, type IsolateContext } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
@@ -178,7 +178,7 @@ function SupplyChainPage() {
   };
 
   /* countries only: a U.S. state counts as the United States, a supranational region ("Europe") is not offered as a country */
-  const countryList = useMemo(() => [...new Set([...(all as ProLink[]).flatMap((l) => (l.regions ?? []).map((r) => countryOf(r, l.quote ?? ""))), ...(signals ?? []).map((x) => countryOf(x.country, x.title))])].filter((c): c is string => !!c), [all, signals]);
+  const countryList = useMemo(() => [...new Set([...(all as ProLink[]).flatMap((l) => statedRegions(l).map((r) => countryOf(r, l.quote ?? ""))), ...(signals ?? []).map((x) => countryOf(x.country, x.title))])].filter((c): c is string => !!c), [all, signals]);
   const src = shockSrc ?? ticker;
   const impacts = useMemo(() => (tab === "shock" ? simulateShock(src, shock / 100, all, names, revenue) : []), [tab, src, shock, all, names, revenue]);
   const impactMap = useMemo(() => (tab === "shock" ? new Map(impacts.map((i) => [i.key, i])) : null), [tab, impacts]);
@@ -369,11 +369,11 @@ function SupplyChainPage() {
 
       <section id="supply-summary" data-section="Summary" aria-label="Summary" className={cn("mt-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]", ANCHOR)}>
         <SupplyNotePanel ticker={ticker} byId={byId} onOpen={(l) => openLink(l, `${l.counterparty} · ${l.relation}`)} />
-        <DependencyCard ticker={ticker} name={focusName} all={all as ProLink[]} />
+        <DependencyCard ticker={ticker} name={focusName} all={all as ProLink[]} hotspots={hotspotRegions} hotspotsFromLinks={summary.hotspots.length > 0} />
         <ConcentrationHistory ticker={ticker} name={focusName} />
       </section>
 
-      <section id="supply-regions" data-section="Regions" aria-label="Regions" className={cn("mt-5 grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]", ANCHOR)}>
+      <section id="supply-regions" data-section="Regions" aria-label="Regions" className={cn("mt-5 grid grid-cols-1 items-start gap-4", ANCHOR)}>
         <div className="grid min-w-0 grid-cols-1 gap-4">
           <RegionRiskRegister ticker={ticker} name={focusName} links={all as ProLink[]} signals={signals ?? []} revenue={revenue} selected={regionCountry} onCountry={setCountry} />
           <RegionShockPanel country={regionCountry ?? "Taiwan"} onCountry={setCountry} countries={countryList} links={all as ProLink[]} signals={signals ?? []} revenue={revenue} names={names} onPick={(tk) => go(tk, regionCountry ?? "Taiwan")} current={ticker} />

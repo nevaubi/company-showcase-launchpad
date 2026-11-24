@@ -6,6 +6,7 @@
 // the open card then carries an isolate button that keeps that name lit and dims the rest through `onIsolate`
 // (unopened cards keep their whole width for the name).
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { logoKey } from "@/lib/supply/logo-key";
 import { AlertTriangle, Focus, Globe2, Link2, Lock } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
 import { externalLogo, impactOf, overlayHit, RELATION_COLOR, RELATION_DASH, RELATION_LABEL, RELATION_ORDER, type Overlay } from "./supply-map-meta";
@@ -121,7 +122,7 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
         )}
       >
         <span className={cn("shrink-0", outside && "opacity-60")}>
-          <CompanyLogo ticker={n.ticker ?? n.name.slice(0, 4).toUpperCase()} src={externalLogo(n.domain, n.ticker)} size={child ? "xs" : "sm"} decorative />
+          <CompanyLogo ticker={logoKey(n)} src={externalLogo(n.domain, n.ticker)} size={child ? "xs" : "sm"} decorative />
         </span>
         {child ? (
           <>
