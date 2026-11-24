@@ -3,10 +3,13 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COVERAGE } from "@/lib/coverage";
 import { LOGO_FILES, LOGO_TILES } from "@/lib/logos.generated";
-import { isTile, logoManifest, logoTiles, pngCorners, render } from "../../../scripts/logo-manifest";
-import { isLogoTile, logoUrl } from "./company-logo";
+import { build, inkRatio, isTile, logoManifest, logoWide, pngCorners, WIDE_RATIO, type Measured } from "../../../scripts/logo-manifest";
+import { isLogoTile, isWideLogo, logoChoice, logoIconUrl, logoUrl, widePlate } from "./company-logo";
 
-const files = readdirSync("public/logos");
+/** the marks themselves: public/logos also holds sources.json, aspect.json and the icons folder */
+const files = readdirSync("public/logos").filter((f) => /\.(svg|png|jpe?g|webp)$/i.test(f));
+const aspect = JSON.parse(readFileSync("public/logos/aspect.json", "utf8")) as Record<string, Measured>;
+const iconFiles = readdirSync("public/logos/icons");
 const bytes = (f: string) => new Uint8Array(readFileSync(`public/logos/${f}`));
 
 describe("bundled company logos", () => {
@@ -19,9 +22,8 @@ describe("bundled company logos", () => {
   const INITIALS_ON_PURPOSE = ["HNGE", "WAT", "XXI"];
 
   it("the generated manifest matches public/logos (rerun bun scripts/logo-manifest.ts after adding a logo)", () => {
-    const manifest = logoManifest(files);
-    expect(readFileSync("src/lib/logos.generated.ts", "utf8")).toBe(render(manifest, logoTiles(manifest, bytes)));
-  });
+    expect(readFileSync("src/lib/logos.generated.ts", "utf8")).toBe(build());
+  }, 60_000); // reads and hashes every file: slow on a loaded machine
 
   it("resolves every listed ticker to a file that exists", () => {
     const onDisk = new Set(files);
@@ -84,7 +86,7 @@ describe("bundled company logos", () => {
 
   it("never gives two companies the same file (a shared file is a placeholder or a borrowed mark)", () => {
     const byHash = new Map<string, string[]>();
-    for (const f of files.filter((n) => n !== "sources.json")) {
+    for (const f of files) {
       const h = createHash("sha1").update(bytes(f)).digest("hex");
       byHash.set(h, [...(byHash.get(h) ?? []), f]);
     }
@@ -93,7 +95,7 @@ describe("bundled company logos", () => {
 
   it("records where every bundled mark came from", () => {
     const sources = JSON.parse(readFileSync("public/logos/sources.json", "utf8")) as Record<string, { file: string; source: string; url: string }>;
-    const marks = files.filter((f) => f !== "sources.json");
+    const marks = files;
     expect(Object.keys(sources).length).toBe(marks.length);
     for (const f of marks) {
       const entry = sources[f.slice(0, f.lastIndexOf("."))];
@@ -102,5 +104,70 @@ describe("bundled company logos", () => {
     }
     // the seven marks added in round 3 come from each company's own site, never a logo directory
     for (const t of ["ADAM", "BRVE", "CSQR", "IOND", "MSGK", "STDN", "USLM"]) expect(sources[t].url, t).toMatch(/^https:\/\//);
+  });
+});
+
+describe("wide marks", () => {
+  it("measures every bundled file, from its current bytes (remeasure after adding or replacing a mark)", () => {
+    for (const f of files) expect(aspect[f]?.sha256, f).toBe(createHash("sha256").update(bytes(f)).digest("hex"));
+  }, 60_000);
+
+  it("lists Lockheed Martin's wordmark as wide and the near-square marks of Apple, Microsoft and Intel as not", () => {
+    expect(isWideLogo("LMT")).toBe(true);
+    expect(inkRatio(aspect["LMT.svg"])).toBeGreaterThan(5);
+    for (const t of ["AAPL", "MSFT", "INTC"]) expect(isWideLogo(t), t).toBe(false);
+    // Intel's wordmark sits just under the line, which is why the line is where it is
+    expect(inkRatio(aspect["INTC.svg"])).toBeLessThan(WIDE_RATIO);
+  });
+
+  it("uses the ink box, not the file's canvas: a wordmark padded onto a square canvas is still wide", () => {
+    const m = (box: number, crop: [number, number, number, number]): Measured => ({ sha256: "", box, crop });
+    const manifest = { svg: ["PAD", "SQ"] };
+    const wide = logoWide(manifest, { "PAD.svg": m(1, [0, 0.4, 1, 0.6]), "SQ.svg": m(4, [0.375, 0, 0.625, 1]) });
+    expect(wide).toEqual(["PAD:5.00:0:40:100:60"]);
+  });
+
+  it("gives a wide mark a wide plate in the large sizes, sized from the manifest", () => {
+    const lmt = logoChoice("LMT", "lg");
+    expect(lmt.kind).toBe("wide");
+    if (lmt.kind !== "wide") return;
+    expect(lmt.plate).toBe(3);
+    // 48 px plate, 6 px padding, 1 px border: the ink box is 34 px tall at most and 3 x 34 wide at most
+    expect(widePlate(48, 6, lmt.ratio)).toEqual({ width: 116, inkW: 102, inkH: Math.round(102 / lmt.ratio) });
+    expect(widePlate(48, 6, 2.8)).toEqual({ width: 109, inkW: 95, inkH: 34 });
+    expect(logoChoice("AAPL", "xl")).toEqual({ kind: "mark", url: "/logos/AAPL.svg", tile: false });
+  });
+
+  it("draws in small tiles the company's own square icon, else the letters, and never the squeezed wordmark", () => {
+    // a square mark is drawn as it is
+    expect(logoChoice("AAPL", "xs")).toEqual({ kind: "mark", url: "/logos/AAPL.svg", tile: false });
+    // a wide mark with a collected site icon
+    expect(logoChoice("LMT", "sm")).toMatchObject({ kind: "icon", url: "/logos/icons/LMT.png" });
+    // a wide mark without one (oracle.com refused the request): letters
+    expect(isWideLogo("ORCL")).toBe(true);
+    expect(logoIconUrl("ORCL")).toBeUndefined();
+    for (const size of ["2xs", "xs", "sm", "md"] as const) expect(logoChoice("ORCL", size)).toEqual({ kind: "letters" });
+    // outside coverage the caller's URL is still used
+    expect(logoChoice("NOT-COVERED", "sm", "https://example.com/x.png")).toEqual({ kind: "mark", url: "https://example.com/x.png", tile: false });
+  });
+
+  it("keeps only square icons of at least 64 px, each recorded with the page that declared it and its hash", () => {
+    const sources = JSON.parse(readFileSync("public/logos/sources.json", "utf8")) as Record<string, { icon?: { file: string; page: string; url: string; px: [number, number]; sha256: string } }>;
+    expect(iconFiles.length).toBeGreaterThan(100);
+    const seen = new Set<string>();
+    for (const f of iconFiles) {
+      const t = f.slice(0, -4);
+      expect(isWideLogo(t), `${t} has an icon but no wide mark`).toBe(true);
+      const info = pngCorners(new Uint8Array(readFileSync(`public/logos/icons/${f}`)));
+      expect(info, f).not.toBeNull();
+      expect(info!.width, f).toBe(info!.height);
+      expect(info!.width, f).toBeGreaterThanOrEqual(64);
+      const icon = sources[t]?.icon;
+      expect(icon?.file, f).toBe(`icons/${f}`);
+      expect(icon!.page, f).toMatch(/^https?:\/\//);
+      expect(icon!.sha256, f).toBe(createHash("sha256").update(readFileSync(`public/logos/icons/${f}`)).digest("hex"));
+      expect(seen.has(icon!.sha256), `${f} shares its bytes with another icon`).toBe(false);
+      seen.add(icon!.sha256);
+    }
   });
 });

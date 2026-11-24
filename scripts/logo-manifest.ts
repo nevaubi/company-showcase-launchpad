@@ -3,6 +3,12 @@
 // their own background (a "tile") and should fill the plate instead of sitting inside its padding.
 // Run from the repo root after adding or replacing a logo: bun scripts/logo-manifest.ts
 // `--check` exits 1 when the written file no longer matches the folder (used by the unit test's message).
+// The drawn shape of each mark comes from public/logos/aspect.json (sha256, the file's own width/height,
+// and its ink box), measured by rasterising every file (SVG through rsvg-convert at 256 px height,
+// raster files as they are) and trimming transparent and near-white margins. After adding or replacing
+// a file, measure it again the same way; a file whose bytes no longer match its measurement is treated
+// as square and named in a warning, and the unit test fails until it is measured.
+import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
 
@@ -160,7 +166,53 @@ export function logoTiles(manifest: Record<string, string[]>, read: (file: strin
   return (manifest.png ?? []).filter((t) => isTile(pngCorners(read(`${t}.png`)))).sort();
 }
 
-export function render(manifest: Record<string, string[]>, tiles: string[] = []): string {
+/* ---------- shapes: how wide each mark is drawn ---------- */
+
+/**
+ * A mark at least this many times wider than tall (measured on its ink, see public/logos/aspect.json) is a
+ * wide mark. Chosen from a contact sheet of the marks between 2.0 and 3.6 drawn in the app's 28 and 20 px
+ * tiles: below about 2.6 a short wordmark (ABM, aes, affirm, SIMON) still reads as a word in a 28 px
+ * tile; from about 2.6 the letters fall under 8 px and blur into a grey bar (Yelp, AGCO, Rocket Lab,
+ * Intuitive Machines, American Water, Lockheed Martin).
+ */
+export const WIDE_RATIO = 2.6;
+
+/** One measured file: sha256 of its bytes, the file's own width/height, and the ink box as fractions (left, top, right, bottom). */
+export type Measured = { sha256: string; box: number; crop: [number, number, number, number] };
+
+/** Width/height of what is drawn: the ink box of the file, in the file's own proportions. */
+export const inkRatio = (m: Measured) => (m.box * (m.crop[2] - m.crop[0])) / Math.max(1e-6, m.crop[3] - m.crop[1]);
+
+/**
+ * Wide marks as "TICKER:ratio:left:top:right:bottom" (ratio to two decimals, ink box in whole percent of the
+ * file's box, rounded outwards so no ink is cut), sorted. `aspect` maps a file name to its measurement.
+ */
+export function logoWide(manifest: Record<string, string[]>, aspect: Record<string, Measured>): string[] {
+  const out: string[] = [];
+  for (const [ext, list] of Object.entries(manifest))
+    for (const t of list) {
+      const m = aspect[`${t}.${ext}`];
+      if (!m) continue;
+      const r = inkRatio(m);
+      if (r < WIDE_RATIO) continue;
+      const [l, top, right, bottom] = m.crop;
+      out.push([t, r.toFixed(2), Math.floor(l * 100), Math.floor(top * 100), Math.ceil(right * 100), Math.ceil(bottom * 100)].join(":"));
+    }
+  return out.sort();
+}
+
+/** Tickers with a square icon in public/logos/icons (the company's own site icon, for small tiles), sorted. */
+export function logoIcons(files: string[]): string[] {
+  return files.filter((f) => /^[A-Z0-9.-]+\.png$/.test(f)).map((f) => f.slice(0, -4)).sort();
+}
+
+export function render(
+  manifest: Record<string, string[]>,
+  tiles: string[] = [],
+  wide: string[] = [],
+  icons: string[] = [],
+  iconTiles: string[] = [],
+): string {
   const total = Object.values(manifest).reduce((n, l) => n + l.length, 0);
   const lines = Object.entries(manifest).map(([ext, list]) => `  ${JSON.stringify(ext)}:\n    ${JSON.stringify(list.join(" "))},`);
   return [
@@ -173,15 +225,52 @@ export function render(manifest: Record<string, string[]>, tiles: string[] = [])
     `// ${tiles.length} marks that paint their own square background: they fill the logo plate instead of sitting inside its padding.`,
     `export const LOGO_TILES =\n  ${JSON.stringify(tiles.join(" "))};`,
     "",
+    `// ${wide.length} wide marks (ink at least ${WIDE_RATIO} times wider than tall), as TICKER:ratio:left:top:right:bottom,`,
+    "// the ink box in percent of the file's own box. Large plates widen to the ratio; small tiles do not draw them.",
+    `export const LOGO_WIDE =\n  ${JSON.stringify(wide.join(" "))};`,
+    "",
+    `// ${icons.length} square icons from the companies' own websites (public/logos/icons), drawn in small tiles for wide marks.`,
+    `export const LOGO_ICONS =\n  ${JSON.stringify(icons.join(" "))};`,
+    "",
+    `// ${iconTiles.length} of those icons paint their own square background.`,
+    `export const LOGO_ICON_TILES =\n  ${JSON.stringify(iconTiles.join(" "))};`,
+    "",
   ].join("\n");
 }
 
+/** Files whose measurement in aspect.json is missing or was taken from other bytes. */
+export function staleMeasurements(manifest: Record<string, string[]>, aspect: Record<string, Measured>, sha: (file: string) => string): string[] {
+  const out: string[] = [];
+  for (const [ext, list] of Object.entries(manifest))
+    for (const t of list) {
+      const f = `${t}.${ext}`;
+      if (aspect[f]?.sha256 !== sha(f)) out.push(f);
+    }
+  return out.sort();
+}
+
+/** Everything the generated file holds, from the folder on disk. */
+export function build(dir = DIR): string {
+  const manifest = logoManifest(readdirSync(dir));
+  const read = (f: string) => readFileSync(`${dir}/${f}`);
+  const aspect = JSON.parse(readFileSync(`${dir}/aspect.json`, "utf8")) as Record<string, Measured>;
+  const stale = staleMeasurements(manifest, aspect, (f) => createHash("sha256").update(read(f)).digest("hex"));
+  if (stale.length)
+    console.warn(`not measured or changed since measured (drawn as square until remeasured): ${stale.join(" ")}`);
+  const fresh = Object.fromEntries(Object.entries(aspect).filter(([f]) => !stale.includes(f)));
+  let iconFiles: string[] = [];
+  try {
+    iconFiles = readdirSync(`${dir}/icons`);
+  } catch {
+    iconFiles = [];
+  }
+  const icons = logoIcons(iconFiles);
+  const iconTiles = icons.filter((t) => isTile(pngCorners(read(`icons/${t}.png`))));
+  return render(manifest, logoTiles(manifest, read), logoWide(manifest, fresh), icons, iconTiles);
+}
+
 if (import.meta.main) {
-  const manifest = logoManifest(readdirSync(DIR));
-  const text = render(
-    manifest,
-    logoTiles(manifest, (f) => readFileSync(`${DIR}/${f}`)),
-  );
+  const text = build();
   if (process.argv.includes("--check")) {
     let current = "";
     try {
