@@ -76,3 +76,45 @@ export function placeLabels(asks: LabelAsk[], obstacles: Box[], frame: { w: numb
 
 /** The box a round marker takes. Give `r` with the marker's rings included: a name asked for with the same `r` clears it on every side. */
 export const markerBox = (x: number, y: number, r: number): Box => ({ x: x - r, y: y - r, w: 2 * r, h: 2 * r });
+
+/**
+ * Shapes the base map carries beside the countries that are a territory of one (Puerto Rico, the Falklands, New
+ * Caledonia, the French southern lands). They are named in the quiet style of a U.S. state, never in a country's capitals.
+ * Greenland is drawn and named as a country, as the map's own data has it.
+ */
+export const TERRITORY_SHAPES: ReadonlySet<string> = new Set(['Puerto Rico', 'Falkland Is.', 'Fr. S. Antarctic Lands', 'New Caledonia']);
+export type AreaKind = 'country' | 'region';
+/** How a map shape is named: a country in spaced capitals, a state or territory as written. */
+export const areaKind = (atlasName: string): AreaKind => (TERRITORY_SHAPES.has(atlasName) ? 'region' : 'country');
+/** The text drawn for a label of this kind: country names and shared places (hubs) in capitals, states, territories and company names as written. */
+export const labelText = (kind: string, text: string): string => (kind === 'country' || kind === 'hub' ? text.toUpperCase() : text);
+
+const NAME_TAILS = new Set(['inc', 'corp', 'corporation', 'co', 'company', 'ltd', 'limited', 'llc', 'plc', 'sa', 'ag', 'nv', 'se', 'group', 'holdings', 'holding', 'the', 'and', '&', 'of']);
+/**
+ * What a logo badge shows on its plate while its logo is missing, loading or failed: the ticker when it has one (up to
+ * five letters), otherwise the initials of the first two words of the name that are not a legal form ("Hon Hai Precision
+ * Industry Co., Ltd." is HH), or the first two letters of a one-word name. Never empty while the name has a letter.
+ */
+export function badgeText(name: string, ticker?: string | null): string {
+  const t = (ticker ?? '').trim().toUpperCase();
+  if (t && t.length <= 5 && /^[A-Z0-9.-]+$/.test(t)) return t;
+  const words = name.split(/[\s,./()-]+/).filter((w) => /[\p{L}\p{N}]/u.test(w) && !NAME_TAILS.has(w.toLowerCase()));
+  if (!words.length) return name.trim().slice(0, 2).toUpperCase();
+  if (words.length === 1) return Array.from(words[0]).slice(0, 2).join('').toUpperCase();
+  return (Array.from(words[0])[0] + Array.from(words[1])[0]).toUpperCase();
+}
+
+/**
+ * Share of a drawn logo tile's pixels that differ from its plate (RGBA rows as getImageData returns them). A logo that
+ * loads but draws nothing (an SVG without a size, a white mark on a white plate) scores near zero and is treated as
+ * missing, so the badge shows its letters instead of an empty plate.
+ */
+export function inkShare(data: ArrayLike<number>, plate: readonly [number, number, number], tolerance = 28): number {
+  let ink = 0, n = 0;
+  for (let i = 0; i + 3 < data.length; i += 4) {
+    if (data[i + 3] < 8) continue;
+    n++;
+    if (Math.abs(data[i] - plate[0]) + Math.abs(data[i + 1] - plate[1]) + Math.abs(data[i + 2] - plate[2]) > tolerance) ink++;
+  }
+  return n ? ink / n : 0;
+}

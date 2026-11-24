@@ -17,9 +17,9 @@ import { arcLift, arcSegments, arrowHead, bundleArcs, cutEnd, cutStart, distance
 import { LogoAtlas } from './atlas';
 import { badgeRadius, clusterSlices, clusterSpots, fanOffsets, rimGroups, type GlobeShape, type Spot } from './cluster';
 import { LOD, packTopology, pickRes, polygonsByName, traceFlat, traceGlobe, traceGraticule, type MapRes, type PackedGeo } from './geometry';
-import { markerBox, placeLabels, type Box, type LabelAsk, type LabelSide } from './labels';
-import { afterFrame } from './loop';
-import { anchorCentre, angleBetween, baseScale, clamp, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, project, RAD, slerp, toLonLat, toVec, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type Vec3, type View } from './sphere';
+import { afterFrame, reuseBase } from './loop';
+import { areaKind, badgeText, labelText, markerBox, placeLabels, type Box, type LabelAsk, type LabelSide } from './labels';
+import { anchorCentre, angleBetween, baseScale, clamp, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, openingCamera, project, RAD, slerp, toLonLat, toVec, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type Vec3, type View, type WeightedPlace } from './sphere';
 
 export type { GlobeShape } from './cluster';
 export { clusterSlices } from './cluster';
@@ -35,6 +35,8 @@ export interface GlobePoint {
   logo?: string;
   /** the logo is known to be the company's own mark (not a favicon looked up by domain): only such a logo stands for a whole cluster */
   logoTrusted?: boolean;
+  /** the ticker, written on the badge's plate while its logo is missing, loading or failed */
+  mark?: string;
   /** the place is only known to country or state level: drawn with a broken ring */
   approx?: boolean;
   /** the company the scene is about: largest badge, never folded into another name's cluster */
@@ -78,7 +80,7 @@ export interface GlobeFill { name: string; color: string; alpha: number; /** out
 export interface GlobeRegionLabel { name: string; short?: string; lon: number; lat: number; size: number }
 /** A screen rectangle (CSS px, relative to the canvas) that labels must keep clear of: controls laid over the map. */
 export interface GlobeBox { x: number; y: number; w: number; h: number }
-export interface GlobePalette { ocean: string; land: string; border: string; coast: string; ink: string; ink2: string; ink3: string; grid: string; panel: string; accent: string; /** hairline round the globe's disc */ rim: string; /** plate behind logos */ plate: string }
+export interface GlobePalette { ocean: string; land: string; border: string; coast: string; ink: string; ink2: string; ink3: string; grid: string; panel: string; accent: string; /** hairline round the globe's disc */ rim: string; /** plate behind logos */ plate: string; /** letters on a plate whose logo is missing */ plateInk?: string }
 export type GlobeHit =
   | { kind: 'point'; point: GlobePoint; x: number; y: number }
   | { kind: 'cluster'; points: GlobePoint[]; x: number; y: number }
@@ -179,9 +181,9 @@ export const countryPlaces = (): { name: string; at: [number, number] }[] => cou
 
 /* ---------- drawing helpers ---------- */
 const SANS = '"Geist", ui-sans-serif, system-ui, sans-serif', MONO = '"Geist Mono", ui-monospace, monospace';
-const FONT = { name: `500 11px ${SANS}`, picked: `600 12px ${SANS}`, hub: `600 10px ${SANS}`, country: `600 10px ${SANS}`, region: `500 9.5px ${SANS}`, count: `600 10px ${MONO}`, note: `500 10px ${MONO}` } as const;
+const FONT = { name: `500 11px ${SANS}`, picked: `600 12px ${SANS}`, hub: `600 10px ${SANS}`, country: `600 10px ${SANS}`, region: `italic 500 10px ${SANS}`, count: `600 10px ${MONO}`, note: `500 10px ${MONO}` } as const;
 type FontKind = keyof typeof FONT;
-const SPACING: Record<FontKind, number> = { name: 0, picked: 0, hub: 0.6, country: 1, region: 0.7, count: 0, note: 0 };
+const SPACING: Record<FontKind, number> = { name: 0, picked: 0, hub: 0.6, country: 1, region: 0.2, count: 0, note: 0 };
 const LINE: Record<FontKind, number> = { name: 13, picked: 15, hub: 12, country: 12, region: 11, count: 12, note: 12 };
 type Ctx = CanvasRenderingContext2D & { letterSpacing?: string };
 
@@ -239,6 +241,8 @@ export class GlobeEngine {
   private regions: GlobeRegionLabel[] = [];
   private homePlaces: LonLat[] = [];
   private homeZoom = 7;
+  /** weight and side of each home place after the first (the company), for the opening view */
+  private homeWeights: { w: number; side?: string }[] = [];
   private reserved: GlobeBox[] = [];
   private overCountry: string | null = null;
   /* what the last frame drew, for hit testing */
@@ -253,6 +257,10 @@ export class GlobeEngine {
   /* frame loop */
   private raf = 0;
   private dirtyBase = true;
+  /** something other than the camera changed the map since it was last traced */
+  private baseStale = true;
+  /** the view the base canvas was last fully traced at */
+  private snapView: View | null = null;
   private dirtyTop = true;
   private last = 0;
   private lastTop = 0;
@@ -321,7 +329,7 @@ export class GlobeEngine {
   /** Screen areas covered by the host's controls: names are not written under them. */
   setReserved(boxes: GlobeBox[]): void { this.reserved = boxes; this.invalidate(); }
   /** The places reset() frames (the company and its direct links, or the isolated names), and how close it may go for them. */
-  setHome(places: LonLat[], maxZoom = 7): void { this.homePlaces = places; this.homeZoom = maxZoom; }
+  setHome(places: LonLat[], maxZoom = 7, weights: { w: number; side?: string }[] = []): void { this.homePlaces = places; this.homeZoom = maxZoom; this.homeWeights = weights; }
   setFlat(flat: boolean): void {
     if (flat === this.flat) return;
     /* keep the same part of the world in the middle and about the same amount of it in view */
@@ -385,7 +393,12 @@ export class GlobeEngine {
     return (reach + 30) / nearest / baseScale({ w: this.w, h: this.h }, this.flat);
   }
   /** Back to the home view (see setHome). */
-  reset(ms?: number): void { if (this.homePlaces.length) this.fit(this.homePlaces, { maxZoom: this.homeZoom, ms }); else this.flyTo({ ...this.cam, zoom: 1 }, ms); }
+  reset(ms?: number): void {
+    const [focus, ...rest] = this.homePlaces;
+    if (!focus) { this.flyTo({ ...this.cam, zoom: 1 }, ms); return; }
+    const places: WeightedPlace[] = rest.map(([lon, lat], i) => ({ lon, lat, w: this.homeWeights[i]?.w ?? 1, side: this.homeWeights[i]?.side }));
+    this.flyTo(openingCamera(focus, places, { w: this.w, h: this.h }, this.flat, { pad: this.pad(), minZoom: this.minZoom, maxZoom: Math.min(this.homeZoom, this.maxZoom), single: 5 }), ms);
+  }
   /** Let go of the wheel and of one-finger panning (Escape, or the host's own reasons). */
   release(): void { this.setEngaged(false); }
   get zoom(): number { return this.cam.zoom; }
@@ -423,7 +436,7 @@ export class GlobeEngine {
 
   /* ---------- frame loop ---------- */
   private schedule(): void { if (!this.raf && !this.destroyed) this.raf = requestAnimationFrame(this.tick); }
-  private invalidate(base = false): void { if (base) this.dirtyBase = true; this.dirtyTop = true; this.schedule(); }
+  private invalidate(base = false): void { if (base) { this.dirtyBase = true; this.baseStale = true; } this.dirtyTop = true; this.schedule(); }
   private tick = (now: number): void => {
     this.raf = 0;
     const dt = Math.min(64, now - (this.last || now));
@@ -450,7 +463,7 @@ export class GlobeEngine {
     if (flowing) { this.clock += dt; if (now - this.lastTop >= 32) this.dirtyTop = true; }
     try {
       if (showing && this.palette && this.w > 1) {
-        if (this.dirtyBase) { this.dirtyBase = false; this.drawBase(); }
+        if (this.dirtyBase) { this.dirtyBase = false; this.paintBase(); }
         if (this.dirtyTop) { this.dirtyTop = false; this.lastTop = now; this.draw(); }
       }
     } finally {
@@ -487,8 +500,41 @@ export class GlobeEngine {
   /* the tinted country under the pointer, if any: only those answer a moving pointer */
   private tintOf(name: string | null): GlobeFill | undefined { return name ? this.fills.find((f) => f.name === name) : undefined; }
 
-  private drawBase(): void {
-    const ctx = this.bctx, pal = this.palette as GlobePalette, { w, h } = this, view = this.view(), { cx, cy, R } = view;
+  /**
+   * The map for this frame: during a wheel or pinch zoom, the last traced map moved and scaled about the place the zoom
+   * holds (see reuseBase) by a CSS transform on its canvas, which the compositor applies without drawing anything;
+   * otherwise a full trace at the camera's view, with the transform taken off in the same frame.
+   */
+  private paintBase(): void {
+    const view = this.view(), was = this.snapView;
+    const zooming = !!(this.zoomAnim || this.pinch) && !this.fly;
+    if (was && !this.baseStale && was.flat === view.flat && was.w === view.w && was.h === view.h) {
+      const ratio = view.R / was.R, whole = !was.flat && was.R <= Math.min(was.w, was.h) / 2;
+      if (reuseBase({ zooming, stale: false, ratio, whole })) {
+        /* hold the place the zoom holds: where it was in the traced map, where it is now */
+        const place = this.zoomAnim?.place ?? this.pinch?.place ?? null;
+        let ax = was.cx, ay = was.cy, bx = view.cx, by = view.cy;
+        if (place) {
+          const p0 = project(was, place[0], place[1]), p1 = project(view, place[0], place[1]);
+          if (p0.z > 0 && p1.z > 0) { ax = p0.x; ay = p0.y; bx = p1.x; by = p1.y; }
+        }
+        this.setBaseTransform(`matrix(${ratio},0,0,${ratio},${bx - ratio * ax},${by - ratio * ay})`);
+        return;
+      }
+    }
+    this.drawBase(view);
+    this.setBaseTransform('');
+    this.baseStale = false;
+    this.snapView = view;
+  }
+  private setBaseTransform(t: string): void {
+    const st = this.base.style;
+    if (st.transformOrigin !== '0px 0px') st.transformOrigin = '0 0';
+    if (st.transform !== t) st.transform = t;
+  }
+
+  private drawBase(view: View): void {
+    const ctx = this.bctx, pal = this.palette as GlobePalette, { w, h } = this, { cx, cy, R } = view;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     /* flat sea, no glow or shading: the land and the links carry the picture */
@@ -642,7 +688,7 @@ export class GlobeEngine {
     for (const m of rim) obstacles.push(markerBox(m.x, m.y, m.r + 2));
     const asks: LabelAsk[] = [], texts = new Map<string, { kind: FontKind; text: string; note?: string }>();
     const ask = (id: string, kind: FontKind, text: string, x: number, y: number, r: number, priority: number, area = false, note?: string) => {
-      const shown = kind === 'hub' || kind === 'country' || kind === 'region' ? text.toUpperCase() : text;
+      const shown = labelText(kind, text);
       const width = this.textWidth(kind, shown) + (note ? 5 + this.textWidth('note', note) : 0);
       texts.set(id, { kind, text: shown, note });
       asks.push({ id, w: width, h: LINE[kind], x, y, r, priority, area });
@@ -663,22 +709,25 @@ export class GlobeEngine {
       ask(`n:${lead.key}`, picked ? 'picked' : 'name', lead.name, m.x, m.y, ringed(m), pri, false, lead.note);
     }
     const pr = { x: 0, y: 0, z: 0 }, R = view.R, tinted = new Set(this.fills.map((f) => f.name));
+    const regionNames = new Set(this.regions.map((g) => g.name));
     for (const l of countryLabels()) {
       const span = l.size * R;
-      if (span > 2.4 * Math.max(w, h)) continue;
-      const tw = this.textWidth('country', l.name.toUpperCase());
+      /* a territory the host already names as a region (Puerto Rico) is named once, in that style */
+      if (span > 2.4 * Math.max(w, h) || regionNames.has(l.name)) continue;
+      const kind = areaKind(l.atlas);
+      const tw = this.textWidth(kind, labelText(kind, l.name));
       if (span < tw * 0.85) continue;
       project(view, l.at[0], l.at[1], 0, pr);
       if (pr.z < 0.25 || pr.x < 0 || pr.y < 0 || pr.x > w || pr.y > h) continue;
       /* a country's name may sit a line or two off its middle when a badge stands there, within about a third of the country's size */
-      ask(`a:${l.atlas}`, 'country', l.name, pr.x, pr.y, span * 0.3, (tinted.has(l.atlas) ? 500 : 120) + Math.min(100, l.size * 100), true);
+      ask(`a:${l.atlas}`, kind, l.name, pr.x, pr.y, span * 0.3, (tinted.has(l.atlas) ? 500 : 120) + Math.min(100, l.size * 100), true);
     }
     for (const g of this.regions) {
       const span = g.size * R;
       if (span < 34 || span > 2.4 * Math.max(w, h)) continue;
       project(view, g.lon, g.lat, 0, pr);
       if (pr.z < 0.25 || pr.x < 0 || pr.y < 0 || pr.x > w || pr.y > h) continue;
-      const full = this.textWidth('region', g.name.toUpperCase());
+      const full = this.textWidth('region', g.name);
       const text = span >= full * 1.15 ? g.name : g.short && span >= 44 ? g.short : null;
       if (text) ask(`g:${g.name}`, 'region', text, pr.x, pr.y, span * 0.25, 60 + Math.min(40, g.size * 100), true);
     }
@@ -696,7 +745,10 @@ export class GlobeEngine {
       ctx.strokeText(t.text, left, y);
       ctx.globalAlpha = 1;
       ctx.fillStyle = area ? pal.ink3 : t.kind === 'hub' ? pal.ink2 : pal.ink;
+      /* a state or territory reads a step quieter than a country: as written, in italics, lighter */
+      if (t.kind === 'region') ctx.globalAlpha = 0.78;
       ctx.fillText(t.text, left, y);
+      ctx.globalAlpha = 1;
       if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
       if (t.note) {
         const x = left + this.textWidth(t.kind, t.text) + 5;
@@ -905,6 +957,24 @@ export class GlobeEngine {
         const gx = x + s - 0.5, gy = y + s - 0.5;
         shapePath(ctx, p.shape ?? 'circle', gx, gy, 3.4); ctx.fillStyle = p.color; ctx.fill(); ctx.strokeStyle = pal.panel; ctx.lineWidth = 1.5; ctx.stroke();
       }
+    } else if (p.logo || p.mark) {
+      /* a logo badge whose mark is missing, still loading or failed: the same plate in the same place, with the ticker or
+         initials on it, so the logo can arrive without anything moving and no badge is ever an empty plate */
+      const x = Math.round((m.x - r) * dpr) / dpr, y = Math.round((m.y - r) * dpr) / dpr, s = size / dpr, text = badgeText(p.name, p.mark);
+      ctx.beginPath(); ctx.roundRect(x - 2.5, y - 2.5, s + 5, s + 5, corner + 2.5); ctx.fillStyle = pal.panel; ctx.fill();
+      ctx.beginPath(); ctx.roundRect(x, y, s, s, corner); ctx.fillStyle = pal.plate; ctx.fill();
+      const px = Math.max(7, Math.min(13, s * (text.length <= 2 ? 0.42 : text.length === 3 ? 0.34 : 0.27)));
+      ctx.font = `600 ${px}px ${MONO}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+      ctx.fillStyle = pal.plateInk ?? pal.ink2; ctx.fillText(text, x + s / 2, y + s / 2 + 0.5, s - 3);
+      ctx.beginPath(); ctx.roundRect(x - 0.75, y - 0.75, s + 1.5, s + 1.5, corner + 0.75);
+      ctx.strokeStyle = p.lead ? pal.ink : p.color; ctx.lineWidth = p.lead ? 2 : 1.5;
+      if (p.approx) ctx.setLineDash([3, 2]);
+      ctx.stroke(); ctx.setLineDash([]);
+      if (!p.lead) {
+        const gx = x + s - 0.5, gy = y + s - 0.5;
+        shapePath(ctx, p.shape ?? 'circle', gx, gy, 3.4); ctx.fillStyle = p.color; ctx.fill(); ctx.strokeStyle = pal.panel; ctx.lineWidth = 1.5; ctx.stroke();
+      }
     } else {
       const q = p.lead ? r * 0.8 : r * 0.62;
       shapePath(ctx, p.shape ?? 'circle', m.x, m.y, q + 2); ctx.fillStyle = pal.panel; ctx.fill();
@@ -1071,7 +1141,12 @@ export class GlobeEngine {
     });
     const release = (e: PointerEvent, cancelled: boolean) => {
       this.pointers.delete(e.pointerId);
-      if (this.pinch) { if (this.pointers.size < 2) this.pinch = null; if (this.pointers.size === 0) this.gesture = null; return; }
+      if (this.pinch) {
+        /* the pinch rests: trace the map again at full detail */
+        if (this.pointers.size < 2) { this.pinch = null; this.dirtyBase = this.dirtyTop = true; this.schedule(); }
+        if (this.pointers.size === 0) this.gesture = null;
+        return;
+      }
       const g = this.gesture;
       if (!g || g.id !== e.pointerId) return;
       this.gesture = null;

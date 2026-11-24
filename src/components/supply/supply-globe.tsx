@@ -68,7 +68,7 @@ function readTheme(): Theme {
     palette: {
       ocean: rgb(mix(bg, c1, dark ? 0.12 : 0.07)), land: rgb(mix(card, fg, dark ? 0.07 : 0)), rim: rgb(mix(card, fg, dark ? 0.32 : 0.24)),
       border: rgb(mix(card, fg, dark ? 0.26 : 0.2)), coast: rgb(mix(card, fg, dark ? 0.42 : 0.36)), ink: rgb(fg), ink2: rgb(muted), ink3: rgb(mix(muted, card, 0.32)),
-      grid: rgb(fg, dark ? 0.07 : 0.06), panel: rgb(card), accent: rgb(fg), plate: rgb(r("var(--logo-plate)")),
+      grid: rgb(fg, dark ? 0.07 : 0.06), panel: rgb(card), accent: rgb(fg), plate: rgb(r("var(--logo-plate)")), plateInk: rgb(r("var(--logo-plate-foreground)"), 0.78),
     },
     relation: {
       customer: rgb(r(RELATION_COLOR.customer)), supplier: rgb(r(RELATION_COLOR.supplier)), partner: rgb(r(RELATION_COLOR.partner)),
@@ -262,7 +262,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
     const outside = (p: Placed) => { const n = nodeByKey.get(p.key); return impacts != null && n != null && !impactOf(impacts, n); };
     if (home) {
       const mark = focus.ticker ? logoUrl(focus.ticker) : undefined;
-      points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 1, lead: true, approx: home.precision !== "city", logo: mark, logoTrusted: !!mark, shape: "circle" });
+      points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 1, lead: true, approx: home.precision !== "city", logo: mark, logoTrusted: !!mark, mark: focus.ticker ?? undefined, shape: "circle" });
     }
     for (const p of placed) {
       if (p.relation === "focus") continue;
@@ -275,7 +275,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
       points.push({
         key: p.key, name: p.name, hub: p.place, lon: p.lon, lat: p.lat,
         color: theme.relation[p.relation], weight, faded, dim,
-        logo: mark ?? externalLogo(node?.domain ?? null, p.ticker), logoTrusted: !!mark,
+        logo: mark ?? externalLogo(node?.domain ?? null, p.ticker), logoTrusted: !!mark, mark: p.ticker ?? undefined,
         approx: p.basis !== "hq", ring: flagged(p.key) ? theme.negative : undefined, shape: RELATION_SHAPE[p.relation],
         /* the figure behind the width, written as the Network cards write it */
         note: p.hop === 1 && value > 0 ? (share > 0 ? `${share}%` : side.basis === "dollars" ? fmtCompactUsd(value) : undefined) : undefined,
@@ -328,11 +328,17 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
   const homeView = useMemo(() => {
     if (!home) return null;
     const lit = isolate ? placed.filter((p) => isolate.has(p.key)) : [];
-    const shown = lit.length ? lit : placed.filter((p) => p.hop === 1);
-    return { places: [[home.lon, home.lat], ...shown.map((p) => [p.lon, p.lat])] as [number, number][], maxZoom: lit.length ? 9 : 7 };
-  }, [home, isolate, placed]);
+    const shown = (lit.length ? lit : placed.filter((p) => p.hop === 1)).filter((p) => p.relation !== "focus");
+    /* a name with a stated figure counts more for the opening view; each side (suppliers, customers, ...) counts alike */
+    const weight = (p: Placed) => { const side = p.relation === "focus" ? undefined : sides[p.relation], v = p.hop === 1 && side ? side.value(p.key) : 0, max = side?.max ?? 0; return 1 + (v > 0 && max > 0 ? 2 * Math.sqrt(v / max) : 0); };
+    return {
+      places: [[home.lon, home.lat], ...shown.map((p) => [p.lon, p.lat])] as [number, number][],
+      weights: shown.map((p) => ({ w: weight(p), side: p.relation })),
+      maxZoom: lit.length ? 9 : 7,
+    };
+  }, [home, isolate, placed, sides]);
   const ready = theme != null;
-  useEffect(() => { if (homeView) engineRef.current?.setHome(homeView.places, homeView.maxZoom); }, [homeView, ready]);
+  useEffect(() => { if (homeView) engineRef.current?.setHome(homeView.places, homeView.maxZoom, homeView.weights); }, [homeView, ready]);
   const frameContext = useCallback((ms?: number) => engineRef.current?.reset(ms), []);
   useEffect(() => {
     const engine = engineRef.current;

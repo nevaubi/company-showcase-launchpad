@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { labelSpot, markerBox, placeLabels, type Box, type LabelAsk } from './labels';
+import { areaKind, badgeText, inkShare, labelSpot, labelText, markerBox, placeLabels, type Box, type LabelAsk } from './labels';
 
 const FRAME = { w: 400, h: 300 };
 const ask = (p: Partial<LabelAsk> & { id: string }): LabelAsk => ({ w: 60, h: 13, x: 200, y: 150, r: 10, priority: 1, ...p });
@@ -69,5 +69,44 @@ describe('label placement', () => {
     expect(labelSpot('left', 100, 100, 10, 40, 12)).toEqual([46, 94]);
     expect(labelSpot('below', 100, 100, 10, 40, 12)).toEqual([80, 113]);
     expect(labelSpot('above', 100, 100, 10, 40, 12)).toEqual([80, 75]);
+  });
+});
+
+describe('area labels', () => {
+  it('names a U.S. state or a territory as written, never in the capitals of a country (review supply-globe-M5: ALASKA)', () => {
+    expect(labelText('region', 'Alaska')).toBe('Alaska');
+    expect(labelText('region', 'Hawaii')).toBe('Hawaii');
+    expect(labelText('country', 'Canada')).toBe('CANADA');
+    expect(areaKind('Puerto Rico')).toBe('region');
+    expect(areaKind('Falkland Is.')).toBe('region');
+  });
+  it('keeps Greenland and real countries in the country style', () => {
+    expect(areaKind('Greenland')).toBe('country');
+    expect(areaKind('Mexico')).toBe('country');
+    expect(labelText(areaKind('Greenland'), 'Greenland')).toBe('GREENLAND');
+  });
+});
+
+describe('badge letters', () => {
+  it('shows the ticker of a covered company whose logo is missing or still loading', () => {
+    expect(badgeText('ServiceNow, Inc.', 'NOW')).toBe('NOW');
+    expect(badgeText('Ambarella, Inc.', 'amba')).toBe('AMBA');
+  });
+  it('falls back to initials past legal forms, never an empty plate', () => {
+    expect(badgeText('Hon Hai Precision Industry Co., Ltd.')).toBe('HH');
+    expect(badgeText('The Boeing Company')).toBe('BO');
+    expect(badgeText('Everpure')).toBe('EV');
+    expect(badgeText('Taiwan Semiconductor Manufacturing Company Limited', 'TOOLONGX')).toBe('TS');
+    expect(badgeText('Inc.')).not.toBe('');
+  });
+});
+
+describe('inkShare', () => {
+  const tile = (pixels: [number, number, number, number][]) => pixels.flat();
+  it('reads a tile that is only plate as blank', () => {
+    expect(inkShare(tile([[255, 255, 255, 255], [254, 255, 253, 255], [0, 0, 0, 0]]), [255, 255, 255])).toBe(0);
+  });
+  it('reads a drawn mark as ink', () => {
+    expect(inkShare(tile([[255, 255, 255, 255], [20, 80, 60, 255], [20, 80, 60, 255], [255, 255, 255, 255]]), [255, 255, 255])).toBe(0.5);
   });
 });

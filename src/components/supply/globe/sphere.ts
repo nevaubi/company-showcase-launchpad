@@ -176,6 +176,54 @@ export function fitCamera(places: LonLat[], vp: Viewport, flat: boolean, opts: F
   return { ...cam, zoom: clamp(R / base, minZoom, maxZoom) };
 }
 
+/** A place with how much it counts for the opening view (a stated figure counts more than a bare mention). */
+export interface WeightedPlace { lon: number; lat: number; w: number; /** the side it is on (suppliers, customers, ...): each side counts as much as any other, however many names it has */ side?: string }
+/** How squarely a place faces a globe centred on (lon, lat): 1 at the centre, 0 on the horizon. */
+const facing = (cLon: number, cLat: number, lon: number, lat: number) => Math.cos(angleBetween([cLon, cLat], [lon, lat]));
+/** Credit a place gets for how well it can be seen: none near the horizon, where it is foreshortened into a sliver, full within about 50 degrees of the centre. */
+const seen = (z: number) => clamp((z - 0.15) / 0.5, 0, 1);
+/** The company itself must face the viewer at least this squarely (about 65 degrees from the centre). */
+const FOCUS_FACING = 0.42;
+
+/**
+ * The opening (and reset) view of the globe for a company and the names placed round it. When the whole set fits on the
+ * near side, it is the framing of fitCamera. When it spreads over more than a hemisphere (NVIDIA: its customers in North
+ * America, its foundry, memory and assembly in Asia), the centre is the one that shows the most weight squarely, with the
+ * company itself kept well inside the disc, instead of the company's own side with the rest left on the horizon. The zoom
+ * then fits what faces the viewer. The flat map shows the whole set as fitCamera frames it.
+ */
+export function openingCamera(focus: LonLat, places: WeightedPlace[], vp: Viewport, flat: boolean, opts: FitOptions = {}): Camera {
+  const ok = places.filter((p) => Number.isFinite(p.lon) && Number.isFinite(p.lat) && p.w > 0);
+  const all: LonLat[] = [focus, ...ok.map((p) => [p.lon, p.lat] as LonLat)];
+  const fit = fitCamera(all, vp, flat, opts);
+  if (flat || !ok.length) return fit;
+  if (all.every(([lon, lat]) => facing(fit.lon, fit.lat, lon, lat) >= 0.12)) return fit;
+  /* the set wraps round the globe: search centres on a 5 degree grid for the most of every side in plain sight, each side
+     scored as the share of its weight that faces the viewer, so forty customers at home do not outvote six suppliers abroad */
+  const sideTotal = new Map<string, number>();
+  for (const p of ok) sideTotal.set(p.side ?? '', (sideTotal.get(p.side ?? '') ?? 0) + p.w);
+  let best: { lon: number; lat: number; score: number; near: number } | null = null;
+  for (let lat = -60; lat <= 72; lat += 5) {
+    for (let lon = -180; lon < 180; lon += 5) {
+      const zf = facing(lon, lat, focus[0], focus[1]);
+      if (zf < FOCUS_FACING) continue;
+      let score = seen(zf);
+      for (const p of ok) score += (p.w / (sideTotal.get(p.side ?? '') as number)) * seen(facing(lon, lat, p.lon, p.lat));
+      /* between equal views, the one closer to the company */
+      if (!best || score > best.score + 1e-9 || (Math.abs(score - best.score) <= 1e-9 && zf > best.near)) best = { lon, lat, score, near: zf };
+    }
+  }
+  if (!best) return fit;
+  const shown = all.filter(([lon, lat]) => facing(best.lon, best.lat, lon, lat) >= 0.15);
+  const minZoom = opts.minZoom ?? 1, maxZoom = opts.maxZoom ?? 24, pad = opts.pad ?? 56;
+  const view = makeView({ lon: best.lon, lat: best.lat, zoom: 1 }, vp, false), pr: Projected = { x: 0, y: 0, z: 0 };
+  let mx = 0, my = 0;
+  for (const [lon, lat] of shown) { project(view, lon, lat, 0, pr); mx = Math.max(mx, Math.abs(pr.x - view.cx) / view.R); my = Math.max(my, Math.abs(pr.y - view.cy) / view.R); }
+  const halfW = Math.max(40, vp.w / 2 - pad), halfH = Math.max(40, vp.h / 2 - pad), base = baseScale(vp, false);
+  const R = Math.min(mx > 0 ? halfW / mx : Infinity, my > 0 ? halfH / my : Infinity);
+  return { lon: wrapLon(best.lon), lat: best.lat, zoom: clamp(Number.isFinite(R) ? R / base : minZoom, minZoom, maxZoom) };
+}
+
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 /**
  * A flight between two views: the centre travels the great circle, zoom moves on a log scale and, on a long hop between
@@ -207,8 +255,16 @@ export function wheelPixels(deltaY: number, deltaMode: number): number {
   const px = deltaMode === 1 ? deltaY * 18 : deltaMode === 2 ? deltaY * 360 : deltaY;
   return clamp(px, -240, 240);
 }
-/** Zoom factor for a wheel travel: one mouse notch (about 100 px) is a fifth closer or farther. */
-export const wheelFactor = (pixels: number) => Math.exp(-pixels * 0.0018);
+/** Zoom factor for one mouse notch (about 100 px of travel) and the most any single wheel event may change the zoom by. */
+export const NOTCH_ZOOM = 1.25;
+export const MAX_EVENT_ZOOM = 1.3;
+const WHEEL_K = Math.log(NOTCH_ZOOM) / 100;
+/**
+ * Zoom factor for a wheel travel: a notch of 100 px is 1.25 times closer or farther, a notch reported larger (120, 150 px,
+ * or lines and pages) no more than 1.3 times, so ten notches take the map ten to fourteen times in and never past a region into
+ * empty land. Small trackpad steps stay in proportion to their travel.
+ */
+export const wheelFactor = (pixels: number) => clamp(Math.exp(-pixels * WHEEL_K), 1 / MAX_EVENT_ZOOM, MAX_EVENT_ZOOM);
 
 /**
  * The farthest zoom worth offering for a set of places: far enough in that the two closest distinct places stand far

@@ -2,9 +2,13 @@
 // needs, onto a shared sheet (plate, padding and all); every frame after that is a plain copy of those pixels, so
 // logos stay crisp at any zoom and pixel ratio and cost almost nothing while the globe moves. Browser-only.
 
+import { inkShare } from './labels';
+
 export interface AtlasTile { sheet: HTMLCanvasElement; sx: number; sy: number; size: number }
 
 interface Sheet { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; size: number; cols: number; rows: number; slots: Map<string, number> }
+
+const sameOrigin = (url: string) => url.startsWith('/') || (typeof location !== 'undefined' && url.startsWith(location.origin));
 
 export class LogoAtlas {
   private images = new Map<string, HTMLImageElement | 'loading' | 'failed'>();
@@ -73,8 +77,18 @@ export class LogoAtlas {
       ctx.fillStyle = this.plate; ctx.fillRect(x, y, size, size);
       const iw = img.naturalWidth || room, ih = img.naturalHeight || room, k = Math.min(room / iw, room / ih), w = iw * k, h = ih * k;
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-      try { ctx.drawImage(img, x + pad + (room - w) / 2, y + pad + (room - h) / 2, w, h); } catch { this.images.set(url, 'failed'); }
+      let drawn = true;
+      try { ctx.drawImage(img, x + pad + (room - w) / 2, y + pad + (room - h) / 2, w, h); } catch { drawn = false; }
       ctx.restore();
+      /* a mark that loaded but drew nothing counts as missing, so its badge shows letters instead of a bare plate (only
+         same-origin marks can be read back: a logo from another site taints the sheet's pixels for reading) */
+      if (drawn && sameOrigin(url)) {
+        try {
+          const px = ctx.getImageData(x, y, size, size).data, at = (Math.floor(size / 2) * size + 1) * 4;
+          drawn = inkShare(px, [px[at], px[at + 1], px[at + 2]]) >= 0.004;
+        } catch { /* unreadable: keep it */ }
+      }
+      if (!drawn) { this.images.set(url, 'failed'); return null; }
     }
     return { sheet: s.canvas, sx: (slot % s.cols) * size, sy: Math.floor(slot / s.cols) * size, size };
   }

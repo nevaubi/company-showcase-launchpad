@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { anchorCentre, angleBetween, baseScale, clampCamera, deepestZoom, fitCamera, flight, makeView, MAX_LAT, miller, MILLER_MAX, millerInv, project, RAD, toLonLat, toVec, unproject, wheelFactor, wheelPixels, type Camera, type LonLat } from './sphere';
+import { anchorCentre, angleBetween, baseScale, clampCamera, deepestZoom, fitCamera, flight, lonDelta, makeView, MAX_LAT, miller, MILLER_MAX, millerInv, project, RAD, toLonLat, toVec, openingCamera, unproject, wheelFactor, wheelPixels, type Camera, type LonLat, type WeightedPlace } from './sphere';
 
 const VP = { w: 774, h: 580 };
 const SANTA_CLARA: LonLat = [-121.955, 37.354], TAIPEI: LonLat = [121.5, 25.0], BOSTON: LonLat = [-71.06, 42.36];
@@ -147,7 +147,74 @@ describe('flights and wheel', () => {
     expect(wheelPixels(3, 1)).toBe(54);
     expect(wheelPixels(1, 2)).toBe(240);
     expect(wheelPixels(-4000, 0)).toBe(-240);
-    expect(wheelFactor(-100)).toBeCloseTo(1.197, 2);
+    expect(wheelFactor(-100)).toBeCloseTo(1.25, 3);
     expect(wheelFactor(100) * wheelFactor(-100)).toBeCloseTo(1);
+  });
+  it('keeps every mouse notch between 1.25 and 1.3 times, so ten notches stay within fourteen times in', () => {
+    /* review supply-globe-M2: notches of 120 and 150 px, as Chrome and Playwright send them */
+    for (const px of [100, 120, 150, 200, 240]) {
+      const f = wheelFactor(-wheelPixels(px, 0));
+      expect(f).toBeGreaterThanOrEqual(1.25 - 1e-9);
+      expect(f).toBeLessThanOrEqual(1.3 + 1e-9);
+    }
+    expect(wheelFactor(-wheelPixels(3, 1))).toBeLessThanOrEqual(1.3);
+    expect(wheelFactor(-wheelPixels(1, 2))).toBeCloseTo(1.3, 6);
+    expect(Math.pow(wheelFactor(-150), 10)).toBeLessThan(14);
+    /* a trackpad step of 4 px is a small step, not a notch */
+    expect(wheelFactor(-4)).toBeLessThan(1.01);
+  });
+});
+
+describe('openingCamera', () => {
+  const vp = { w: 1100, h: 580 };
+  const facing = (c: Camera, [lon, lat]: LonLat) => Math.cos(angleBetween([c.lon, c.lat], [lon, lat]));
+  const P = (lon: number, lat: number, w = 1, side = 'customer'): WeightedPlace => ({ lon, lat, w, side });
+  /* NVIDIA as the review found it: head office in Santa Clara, customers across the United States, suppliers in Asia */
+  const santaClara: LonLat = [-121.96, 37.35];
+  const asia = [P(120.97, 24.8, 3, 's'), P(127.0, 37.26, 2, 's'), P(127.44, 37.27, 2, 's'), P(121.46, 25.01, 1, 's'), P(121.56, 25.03, 1, 's'), P(100.5, 13.75, 1, 's')];
+  const us = [P(-122.12, 47.67, 2), P(-122.18, 37.48), P(-122.33, 47.6, 2), P(-122.08, 37.39), P(-97.68, 30.5), P(-95.4, 29.8), P(-87.9, 42.2), P(-71.1, 42.36), P(-74, 40.7), P(-73.6, 45.5), P(-80.2, 25.8), P(-84.4, 33.7)];
+  /* and the far ones: Ubisoft in Paris, the Brazilian post office */
+  const far = [P(2.35, 48.85), P(-47.9, -15.8)];
+
+  it('turns NVIDIA so its Asian suppliers face the viewer, not the horizon, with the company still in view (review supply-globe-M1)', () => {
+    const all = [...asia, ...us, ...far];
+    const old = fitCamera([santaClara, ...all.map((p) => [p.lon, p.lat] as LonLat)], vp, false);
+    /* the old framing: TSMC sat on the far horizon */
+    expect(facing(old, [120.97, 24.8])).toBeLessThan(0.3);
+    const cam = openingCamera(santaClara, all, vp, false);
+    for (const p of asia.slice(0, 5)) expect(facing(cam, [p.lon, p.lat])).toBeGreaterThan(0.3);
+    /* Fabrinet in Bangkok, the farthest west, is on the near side too */
+    expect(facing(cam, [100.5, 13.75])).toBeGreaterThan(0);
+    expect(facing(cam, santaClara)).toBeGreaterThanOrEqual(0.42);
+    /* the centre lies over the Pacific, between the two sides */
+    expect(cam.lon > 150 || cam.lon < -140).toBe(true);
+    expect(cam.zoom).toBeGreaterThanOrEqual(1);
+  });
+
+  it('frames a company whose ties are all in North America as fitCamera does, zoomed in on the continent', () => {
+    const cam = openingCamera(santaClara, us, vp, false);
+    const fit = fitCamera([santaClara, ...us.map((p) => [p.lon, p.lat] as LonLat)], vp, false);
+    expect(cam).toEqual(fit);
+    expect(cam.zoom).toBeGreaterThan(1.5);
+    for (const p of us) expect(facing(cam, [p.lon, p.lat])).toBeGreaterThan(0.6);
+  });
+
+  it('centres ties on both sides of the date line on the date line, not on the far side of the world', () => {
+    const auckland: LonLat = [174.76, -36.85];
+    const ties = [P(178.44, -18.14, 2), P(-171.77, -13.83), P(-157.86, 21.31), P(166.67, -22.27)];
+    const cam = openingCamera(auckland, ties, vp, false);
+    expect(Math.abs(lonDelta(180, cam.lon))).toBeLessThan(25);
+    for (const p of [auckland, ...ties.map((t) => [t.lon, t.lat] as LonLat)]) expect(facing(cam, p)).toBeGreaterThan(0.6);
+    expect(cam.zoom).toBeGreaterThan(1.2);
+  });
+
+  it('keeps the company inside the disc even when every tie lies on the other side of the world', () => {
+    const cam = openingCamera(santaClara, [P(100.5, 13.75, 5), P(77.2, 28.6, 5), P(55.3, 25.2, 5)], vp, false);
+    expect(facing(cam, santaClara)).toBeGreaterThanOrEqual(0.42);
+  });
+
+  it('leaves the flat map to fitCamera, which shows the whole set', () => {
+    const all = [...asia, ...us];
+    expect(openingCamera(santaClara, all, vp, true)).toEqual(fitCamera([santaClara, ...all.map((p) => [p.lon, p.lat] as LonLat)], vp, true));
   });
 });
