@@ -59,7 +59,7 @@ export function AsReported({ ticker }: { ticker: string }) {
     reps[0];
 
   return (
-    <div className="grid gap-3">
+    <div className="grid content-start gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <select
           aria-label="Filing"

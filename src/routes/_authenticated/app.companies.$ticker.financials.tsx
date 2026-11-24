@@ -1,6 +1,6 @@
 import { useFeatureGate } from "@/hooks/use-plan";
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { z } from "zod";
 import { Download, FileSpreadsheet, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -71,32 +71,11 @@ function Financials() {
   const [chartOpen, setChartOpen] = useState(true);
   const [exporting, setExporting] = useState(false);
   const gate = useFeatureGate();
-  // Nothing a control does may move the page: a shorter statement (Cash flow after Balance sheet)
-  // would shorten the page under a reader scrolled near its end, and the browser would pull the view
-  // up. The page keeps its height until the reader scrolls back up past where they clicked.
-  const page = useRef<HTMLDivElement>(null);
-  const release = useRef<(() => void) | null>(null);
-  useEffect(() => () => release.current?.(), []);
-  const holdHeight = () => {
-    const el = page.current;
-    if (!el || typeof window === "undefined") return;
-    // Measure before releasing an earlier hold, so a second click keeps the height already held.
-    const h = el.offsetHeight;
-    release.current?.();
-    el.style.minHeight = `${h}px`;
-    const y = window.scrollY;
-    const onScroll = () => {
-      if (window.scrollY < y - 8) release.current?.();
-    };
-    release.current = () => {
-      el.style.minHeight = "";
-      window.removeEventListener("scroll", onScroll);
-      release.current = null;
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-  };
+  // A shorter statement or view never pulls the page up: the app shell's scroll floor keeps the page
+  // as tall as where the reader is (src/components/app/scroll-floor.ts). No height is held here. A
+  // height pinned on this page outlived the view it was measured on and spread the next view's rows
+  // down the page, which is also why both grids below pack their rows at the top (content-start).
   const set = (patch: Partial<z.infer<typeof pageSearch>>) => {
-    holdHeight();
     void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
   };
 
@@ -118,7 +97,7 @@ function Financials() {
   );
   if (s.basis !== "normalized")
     return (
-      <div className="grid grid-cols-1 gap-4">
+      <div className="grid grid-cols-1 content-start gap-4">
         <div className="flex flex-wrap items-center gap-2">{basisBar}</div>
         {s.basis === "reported" ? <AsReported ticker={ticker} /> : s.basis === "template" ? <IndustryTemplate ticker={ticker} /> : s.basis === "detail" ? <FilingDetailView ticker={ticker} /> : <AdjustedView ticker={ticker} />}
       </div>
@@ -165,7 +144,7 @@ function Financials() {
   const view: StatementView = s.statement === "kpis" ? "values" : s.view;
 
   return (
-    <div ref={page} className="grid grid-cols-1 content-start gap-4">
+    <div className="grid grid-cols-1 content-start gap-4">
       <div data-section="Statement controls" className="grid grid-cols-1 gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {basisBar}

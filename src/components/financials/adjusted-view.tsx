@@ -104,7 +104,7 @@ export function AdjustedView({ ticker }: { ticker: string }) {
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid content-start gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm text-muted-foreground">Company non-GAAP measures from earnings releases and presentations, beside GAAP from the filed statements.</p>
         <Segmented className="lg:ml-auto" label="Frequency" value={K} onChange={setK} options={[{ v: "Q", l: "Quarterly" }, { v: "A", l: "Annual" }]} />

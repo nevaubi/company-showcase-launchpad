@@ -158,7 +158,7 @@ function Filings() {
           </button>
         )}
       </div>
-      <HoldHeight hold={view} className="grid min-w-0 grid-cols-1 gap-4">
+      <HoldHeight hold={view} className="grid min-w-0 grid-cols-1 content-start gap-4">
       {view === "filings" ? (
         <DayFeed search={search} set={set} sector={sector} watched={watched} />
       ) : (

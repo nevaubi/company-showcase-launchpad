@@ -92,7 +92,7 @@ export function Segmented<T extends string>({
         return o.title ? (
           <Tooltip key={o.v} delayDuration={400}>
             <TooltipTrigger asChild>{btn}</TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">
+            <TooltipContent side="bottom" className="max-w-xs text-xs text-pretty">
               {o.title}
             </TooltipContent>
           </Tooltip>

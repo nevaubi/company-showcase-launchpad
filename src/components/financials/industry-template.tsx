@@ -183,7 +183,7 @@ export function IndustryTemplate({ ticker }: { ticker: string }) {
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid content-start gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm">
           <span className="font-medium">{TEMPLATE_NAME[tpl]} template</span>
@@ -284,7 +284,7 @@ function MappingTable({
     }
   }
   return (
-    <div className="grid gap-2">
+    <div className="grid content-start gap-2">
       <button
         onClick={() => setOpenList((v) => !v)}
         className="w-fit text-xs text-link hover:underline"

@@ -126,7 +126,8 @@ function PinnedIdentity({
  * The company page's navigation and the frame of the page under it.
  *
  * One strip holds the seven groups and, after a rule, the two links that leave the company page; the
- * pages of the active group sit in a second row under their group. The block is sticky under the app
+ * pages of the active group sit in a second row that starts at the left edge of the page, like every
+ * row under it (placed under their own group they read as an indent). The block is sticky under the app
  * header, so it is the same element before and after it pins: nothing is duplicated and nothing shifts.
  * Once pinned, a compact identity (logo, name, ticker, price, change) fades in: beside the tabs when
  * there is room, otherwise in a slim row above them. `--sticky-top` on the page body is the bottom edge
@@ -271,7 +272,6 @@ export function CompanyTabs({
     edge.start || edge.end
       ? `linear-gradient(to right, ${edge.start ? "transparent, #000 1.5rem" : "#000, #000"}, ${edge.end ? "#000 calc(100% - 1.5rem), transparent" : "#000"})`
       : undefined;
-  const before = TAB_GROUPS.slice(0, TAB_GROUPS.indexOf(group));
 
   return (
     <>
@@ -347,16 +347,6 @@ export function CompanyTabs({
         </div>
         {hasSubs && (
           <nav aria-label={`${group.label} pages`} className="no-scrollbar relative flex h-8 items-center overflow-x-auto">
-            {/* the groups before the active one, laid out unseen, put the pages under their group; it gives way first when room is short */}
-            {!edge.start && !edge.end && before.length > 0 && (
-              <span aria-hidden className="invisible flex h-0 min-w-0 shrink overflow-hidden">
-                {before.map((g) => (
-                  <span key={g.label} data-label={g.label} className={cn(TAB, "h-0")}>
-                    {g.label}
-                  </span>
-                ))}
-              </span>
-            )}
             {group.subs.map((s) => {
               const on = s === sub;
               return (

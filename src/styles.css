@@ -27,6 +27,9 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  /* What a flat Panel (bg-card/40) looks like on the page, as an opaque colour: for a pinned table column
+     inside one, which must hide what scrolls under it without standing out from the rest of its row. */
+  --color-panel: color-mix(in srgb, var(--card) 40%, var(--background));
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -322,6 +325,7 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-panel: color-mix(in srgb, var(--card) 40%, var(--background));
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);

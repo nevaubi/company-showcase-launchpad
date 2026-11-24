@@ -94,7 +94,7 @@ export function FilingDetailView({ ticker }: { ticker: string }) {
   const filings = [q.data.annual, q.data.quarterly].filter(Boolean) as FilingDetail[];
 
   return (
-    <div className="grid grid-cols-1 gap-3" data-section="Filing detail">
+    <div className="grid grid-cols-1 content-start gap-3" data-section="Filing detail">
       <div className="flex flex-wrap items-center gap-2">
         {filings.length > 1 && (
           <Segmented
@@ -244,7 +244,7 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
       <tr key={`${parent}/${r.member}`} className="group">
         <th
           scope="row"
-          className={cn("sticky left-0 z-10 min-w-40 max-w-72 border-b bg-card px-3 py-1 text-left font-normal group-hover:bg-secondary", depth || r.former ? "text-muted-foreground" : "", depth ? "pl-7" : "")}
+          className={cn("sticky left-0 z-10 min-w-40 max-w-72 border-b bg-panel px-3 py-1 text-left font-normal group-hover:bg-secondary", depth || r.former ? "text-muted-foreground" : "", depth ? "pl-7" : "")}
           title={r.former ? `${r.label}: reported only in earlier filings (renamed, merged or no longer broken out)` : r.member}
         >
           <span className="line-clamp-2">{r.label}</span>
@@ -281,7 +281,7 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
         <table className="w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
-              <th className="sticky left-0 z-10 border-b bg-card px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">{t.axisLabel}</th>
+              <th className="sticky left-0 z-10 border-b bg-panel px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">{t.axisLabel}</th>
               {t.periods.map((k) => (
                 <th key={k} data-latest={k === latest ? "" : undefined} className="num whitespace-nowrap border-b px-3 py-1.5 text-right text-[11px] font-semibold">
                   {detailPeriodLabel(d.periods[k])}
@@ -304,7 +304,7 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
             {t.rows.flatMap((r) => [rowFor(r, 0), ...(r.sub ?? []).map((s) => rowFor(s, 1, r.member))])}
             {t.total && Object.keys(t.total).length > 0 && (
               <tr className="font-medium">
-                <th scope="row" className="sticky left-0 z-10 border-t-2 border-t-foreground/70 bg-card px-3 py-1 text-left">Consolidated total</th>
+                <th scope="row" className="sticky left-0 z-10 border-t-2 border-t-foreground/70 bg-panel px-3 py-1 text-left">Consolidated total</th>
                 {t.periods.map((k) => (
                   <ValueCell key={k} className="border-t-2 border-t-foreground/70" v={t.total![k]} text={t.total![k] ? fmtValue(t.total![k].v, t.unit, scale) : ""} onOpen={() => open(`${t.conceptLabel}, total`, k, t.total![k], t.concept, t.unit)} />
                 ))}
@@ -331,7 +331,7 @@ function RatioRow({ segs, period, d, ticker, num, den, label, note, what, first 
   const line = first ? "border-t-2 border-t-foreground/70" : "border-t";
   return (
     <tr className="font-medium">
-      <th scope="row" className={cn("sticky left-0 z-10 bg-card px-3 py-1 text-left", line)} title={`${num.label} ÷ ${den.label}`}>
+      <th scope="row" className={cn("sticky left-0 z-10 bg-panel px-3 py-1 text-left", line)} title={`${num.label} ÷ ${den.label}`}>
         {label} <span className="text-[11px] font-normal text-muted-foreground">· {note}</span>
       </th>
       {segs.map((s) => {
@@ -394,7 +394,7 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
-              <th className="sticky left-0 z-10 min-w-56 border-b bg-card px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">Line</th>
+              <th className="sticky left-0 z-10 min-w-56 border-b bg-panel px-3 py-1.5 text-left text-[11px] font-normal text-muted-foreground">Line</th>
               {segs.map((s) => {
                 const share = revenue && totalRev > 0 ? (revenue.values[s.member]?.[period]?.v ?? 0) / totalRev : null;
                 return (
@@ -426,7 +426,7 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
                   </tr>
                 ),
                 <tr key={r.concept} className="group">
-                  <th scope="row" className="sticky left-0 z-10 max-w-80 border-b bg-card px-3 py-1 text-left font-normal group-hover:bg-secondary" title={r.concept}>
+                  <th scope="row" className="sticky left-0 z-10 max-w-80 border-b bg-panel px-3 py-1 text-left font-normal group-hover:bg-secondary" title={r.concept}>
                     <span className="line-clamp-2">{r.label}</span>
                   </th>
                   {segs.map((s) => {

@@ -315,14 +315,16 @@ function Headline({
     },
   ];
   return (
+    /* Hairlines are the 1 px gaps of the grid showing the rule colour, so no row ends on a doubled or
+       a stray line at any width; the seventh tile fills what is left of the last row. */
     <section
       aria-label={`${ticker} street summary`}
-      className="grid grid-cols-2 border-y bg-card/40 sm:grid-cols-4 xl:grid-cols-7"
+      className="grid grid-cols-2 gap-px border-y bg-border sm:grid-cols-4 xl:grid-cols-7"
     >
       {cells.map((c) => (
         <div
           key={c.l}
-          className="min-w-0 border-b border-r px-3.5 py-2.5 last:border-r-0 xl:border-b-0"
+          className="min-w-0 bg-panel px-3.5 py-2.5 last:col-span-2 xl:last:col-span-1"
         >
           <p className="text-[11px] text-muted-foreground">{c.l}</p>
           {c.on ? (
@@ -403,7 +405,7 @@ function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
         <table className="w-full min-w-[760px] text-[13px]">
           <thead className="text-left">
             <tr className="border-b">
-              <th className={cn(th, "sticky left-0 z-10 bg-card")}>Period</th>
+              <th className={cn(th, "sticky left-0 z-10 bg-panel")}>Period</th>
               <th className={th}>EPS · low – high</th>
               <th className={cn(th, "text-right")}>Year ago</th>
               <th className={cn(th, "text-right")}>Growth</th>
@@ -418,7 +420,7 @@ function Consensus({ d, o }: { d: StreetBundle; o: ReturnType<typeof useOpeners>
                 gr = growth(p.revenue.avg, p.revenue.year_ago);
               return (
                 <tr key={p.code} className="border-b align-top last:border-0">
-                  <td className="sticky left-0 z-10 bg-card px-3 py-2.5 whitespace-nowrap shadow-[1px_0_0_var(--border)] sm:shadow-none">
+                  <td className="sticky left-0 z-10 bg-panel px-3 py-2.5 whitespace-nowrap shadow-[1px_0_0_var(--border)] sm:shadow-none">
                     <p className="font-medium">{p.label}</p>
                     <p className="text-[11px] text-muted-foreground">
                       ends {fmtDate(p.end)}
