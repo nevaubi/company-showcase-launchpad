@@ -1,7 +1,7 @@
 // Shared presentation pieces of the Technicals views, following the app-wide system written down in
 // components/ir/typography.ts: 14 px/600 section titles, 13 px rows and numbers, 11 px captions, tabular
 // right-aligned figures with a true minus sign, 28 px rows, hairline borders, colour only where it encodes data.
-import { useEffect, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
@@ -10,10 +10,14 @@ export const T = {
   section: "text-sm font-semibold tracking-tight",
   group: "text-[13px] font-semibold leading-5",
   caption: "text-[11px] leading-4 text-muted-foreground",
-  th: "px-3 py-1.5 text-left align-bottom text-[11px] font-normal leading-4 text-muted-foreground",
-  thNum: "px-3 py-1.5 text-right align-bottom text-[11px] font-normal leading-4 text-muted-foreground whitespace-nowrap",
-  td: "px-3 py-1 text-[13px] leading-5",
-  num: "num px-3 py-1 text-right text-[13px] leading-5 tabular-nums whitespace-nowrap",
+  // cells are tighter on phones so the columns that matter fit without sideways scrolling; the first and
+  // last cell keep the panel's 12 px inset
+  th: "px-2 py-1.5 text-left align-bottom text-[11px] font-normal leading-4 text-muted-foreground first:pl-3 last:pr-3 sm:px-3",
+  thNum: "px-2 py-1.5 text-right align-bottom text-[11px] font-normal leading-4 text-muted-foreground whitespace-nowrap first:pl-3 last:pr-3 sm:px-3",
+  td: "px-2 py-1 text-[13px] leading-5 first:pl-3 last:pr-3 sm:px-3",
+  num: "num px-2 py-1 text-right text-[13px] leading-5 tabular-nums whitespace-nowrap first:pl-3 last:pr-3 sm:px-3",
+  /** a column that is dropped on phones (its figures stay in the row's sheet or tooltip) */
+  wide: "hidden sm:table-cell",
   row: "border-b last:border-0",
   /** a control inside a table cell or sentence: quiet until hovered, visible focus */
   cellButton:
@@ -76,10 +80,16 @@ export const Note = ({ children, className }: { children: ReactNode; className?:
   <p className={cn("border-t px-3 py-2 text-[11px] leading-4 text-muted-foreground", className)}>{children}</p>
 );
 
-/** Table wrapper: wide tables scroll sideways inside their own box, never the page. */
-export const TableWrap = ({ children, min }: { children: ReactNode; min?: number }) => (
+/**
+ * Table wrapper: a wide table scrolls sideways inside its own box, never the page. `min` is the least width
+ * the full table needs; it applies from the `sm` breakpoint up, because on phones the tables drop their
+ * secondary columns (T.wide) and should fit the screen.
+ */
+export const TableWrap = ({ children, min, always }: { children: ReactNode; min?: number; /** keep the minimum width on phones too */ always?: boolean }) => (
   <div className="scrollbar-thin overflow-x-auto">
-    <div style={min ? { minWidth: min } : undefined}>{children}</div>
+    <div style={min ? ({ "--table-min": `${min}px` } as CSSProperties) : undefined} className={min ? (always ? "min-w-[var(--table-min)]" : "sm:min-w-[var(--table-min)]") : undefined}>
+      {children}
+    </div>
   </div>
 );
 

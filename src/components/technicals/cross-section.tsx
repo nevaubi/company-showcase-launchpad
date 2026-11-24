@@ -10,6 +10,8 @@ import { methodsQuery } from "@/lib/technicals/data";
 import { cn } from "@/lib/utils";
 import { Note, T as S, TechPanel } from "./ui";
 
+/** Axis values are round numbers: "+30.0%" reads as "+30%". */
+const axis = (s: string) => s.replace(/\.0+(?=%|$)/, "");
 function val(r: CrossRow | undefined, k: string): number | null {
   const v = r?.[k];
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -124,7 +126,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
                   <g key={`y${t}`}>
                     <line x1={m.l} x2={W - m.r} y1={Math.round(py(t)) + 0.5} y2={Math.round(py(t)) + 0.5} stroke="var(--border)" shapeRendering="crispEdges" />
                     <text x={m.l - 6} y={py(t) + 3} textAnchor="end" className="num fill-muted-foreground text-[10px]">
-                      {METRICS[yk].fmt(t)}
+                      {axis(METRICS[yk].fmt(t))}
                     </text>
                   </g>
                 ))}
@@ -132,7 +134,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
                   <g key={`x${t}`}>
                     <line x1={Math.round(px(t)) + 0.5} x2={Math.round(px(t)) + 0.5} y1={H - m.b} y2={H - m.b + 4} stroke="var(--border)" shapeRendering="crispEdges" />
                     <text x={px(t)} y={H - m.b + 15} textAnchor="middle" className="num fill-muted-foreground text-[10px]">
-                      {METRICS[xk].fmt(t)}
+                      {axis(METRICS[xk].fmt(t))}
                     </text>
                   </g>
                 ))}
@@ -163,7 +165,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
                       cy={py(val(p, yk)!)}
                       r={mine ? 5.5 : hover?.sym === p.sym ? 4.5 : 3}
                       fill={mine ? "var(--foreground)" : inSec ? "var(--chart-1)" : "var(--muted-foreground)"}
-                      fillOpacity={mine ? 1 : inSec ? 0.8 : 0.3}
+                      fillOpacity={mine ? 1 : inSec ? 0.85 : 0.5}
                       stroke={mine ? "var(--card)" : "none"}
                       strokeWidth={mine ? 2 : 0}
                       className="cursor-pointer"
@@ -216,7 +218,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
               </span>
             )}
             <span className="flex items-center gap-1.5">
-              <i className="inline-block size-2 rounded-full bg-muted-foreground/40" /> {sector ? "Other covered companies" : "Covered companies"}
+              <i className="inline-block size-2 rounded-full bg-muted-foreground/50" /> {sector ? "Other covered companies" : "Covered companies"}
             </span>
             {pts.length >= 10 && <span>Dashed line: least-squares fit</span>}
             <span>A point opens that company</span>

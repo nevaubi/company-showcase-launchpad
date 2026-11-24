@@ -7,7 +7,7 @@ import { fmtDate, ordinal } from "@/lib/format";
 import { optionsHistoryQuery } from "@/lib/options/data";
 import type { Technicals } from "@/lib/technicals/analysis";
 import { METRICS, peersQuery, rowsOf, type CrossFile, type CrossRow } from "@/lib/technicals/cross";
-import { impliedMove, MEAN_ABS_NORMAL, weekdaysBetween } from "@/lib/technicals/measures";
+import { impliedMove, MEAN_ABS_NORMAL, weekdaysBetween, type LevelRow } from "@/lib/technicals/measures";
 import { fmtUsd } from "@/lib/technicals/read";
 import { cn } from "@/lib/utils";
 import { f2, Note, pc, PercentileBar, pp, signTone, T as S, TableWrap, TechPanel } from "./ui";
@@ -22,7 +22,7 @@ function Facts({ rows }: { rows: [label: ReactNode, value: ReactNode, basis?: Re
       <tbody>
         {rows.map(([l, v, b], i) => (
           <tr key={i} className={S.row}>
-            <td className={cn(S.td, "text-muted-foreground")}>{l}</td>
+            <td className={cn(S.td, "text-muted-foreground sm:whitespace-nowrap")}>{l}</td>
             <td className={cn(S.num, "font-medium")}>{v}</td>
             <td className={cn(S.td, "hidden text-[11px] text-muted-foreground sm:table-cell")}>{b}</td>
           </tr>
@@ -52,6 +52,16 @@ const Split = ({ children, wideLeft, single, className }: { children: ReactNode;
 );
 
 /* ---------- levels and risk ---------- */
+/** Shorter names for the ladder; the full description is the row's tooltip. */
+const LEVEL_LABEL: Record<string, string> = {
+  "VWAP from the last earnings release": "VWAP since earnings",
+  "VWAP from the 52-week low": "VWAP since the 52-week low",
+};
+/** One line of basis for a level: the band its swing points span, or the anchor. */
+const levelBasis = (l: LevelRow) =>
+  l.band
+    ? `${l.touches} swing points, ${f2(l.band[0])} to ${f2(l.band[1])}`
+    : l.detail.replace("Volume-weighted average price since", "Since").replace("; filled at this price", "");
 export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boolean }) {
   const M = T?.measures;
   return (
@@ -64,7 +74,7 @@ export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boo
         )
       ) : (
         <>
-          <Split wideLeft>
+          <Split>
             <div>
               <SubTitle caption="high to low; distance from the close in percent and in average true ranges (ATR)">Price ladder</SubTitle>
               <TableWrap min={440}>
@@ -97,12 +107,12 @@ export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boo
                           placed = true;
                         }
                         out.push(
-                          <tr key={i} className={S.row}>
-                            <td className={S.td}>{l.label}</td>
+                          <tr key={i} className={S.row} title={l.detail}>
+                            <td className={cn(S.td, "sm:whitespace-nowrap")}>{LEVEL_LABEL[l.label] ?? l.label}</td>
                             <td className={S.num}>{f2(l.price)}</td>
                             <td className={S.num}>{pp(l.distance)}</td>
                             <td className={S.num}>{l.atrs == null ? "–" : f2(l.atrs, 1)}</td>
-                            <td className={cn(S.td, "hidden text-[11px] text-muted-foreground md:table-cell")}>{l.detail}</td>
+                            <td className={cn(S.td, "hidden max-w-[13rem] truncate whitespace-nowrap text-[11px] text-muted-foreground md:table-cell")}>{levelBasis(l)}</td>
                           </tr>,
                         );
                       });
@@ -119,7 +129,7 @@ export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boo
                 rows={[
                   ["ATR (14)", f2(M.risk.atr), `${pc(M.volatility.atrPct, 1)} of the close`],
                   [`Stop ${M.risk.stopAtrs} ATR below the close`, f2(M.risk.stopLevel), `${pp(M.risk.stopPct != null ? -M.risk.stopPct : null)} from the close`],
-                  [`Position that risks ${pc(M.risk.riskFraction)} of an account`, pc(M.risk.positionPct, 1), `${pc(M.risk.riskFraction)} ÷ ${pc(M.risk.stopPct, 1)}`],
+                  [`Size for a ${pc(M.risk.riskFraction)} account risk`, pc(M.risk.positionPct, 1), `${pc(M.risk.riskFraction)} ÷ ${pc(M.risk.stopPct, 1)} to the stop`],
                   ["Fall exceeded 1 day in 20", pp(M.risk.var95 != null ? -M.risk.var95 : null), "5th percentile of daily returns"],
                   ["Largest one-day fall", pp(M.risk.worstDay), M.risk.worstDate ? fmtDate(M.risk.worstDate) : ""],
                   ["Drawdown now", pp(M.drawdown.current), M.drawdown.sessionsUnder ? `${M.drawdown.sessionsUnder} sessions below the ${fmtDate(M.drawdown.peakDate, { month: "short", day: "numeric" })} high` : "at a new high"],
@@ -162,7 +172,9 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
   const iv = opt.data?.find((r) => r.iv30 != null);
   // the latest snapshot that carries a term structure (expiry by expiry)
   const snap = opt.data?.find((r) => r.term.length > 0);
-  const term = (snap?.term ?? []).filter((t) => t.d > 0 && t.d <= 200 && t.m > 0).slice(0, 6);
+  // one expiry per horizon: the first at or after 1, 7, 14, 30, 60, 90 and 180 calendar days
+  const priced = (snap?.term ?? []).filter((t) => t.d > 0 && t.m > 0);
+  const term = [...new Set([1, 7, 14, 30, 60, 90, 180].map((d) => priced.find((t) => t.d >= d)).filter((t): t is NonNullable<typeof t> => !!t))];
   const rv = M?.volatility.rv21;
   return (
     <TechPanel
@@ -186,21 +198,30 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
         <>
           <Split>
             <div>
-              <SubTitle caption="one standard deviation: about two outcomes in three fall inside if volatility holds">Expected move</SubTitle>
+              <SubTitle caption="one standard deviation, from realised volatility and from option prices: about two outcomes in three fall inside if volatility holds">Expected move</SubTitle>
               <TableWrap min={400}>
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b">
                       <th className={S.th}>Horizon</th>
-                      <th className={S.thNum}>From realised volatility</th>
-                      <th className={S.thNum}>Price range</th>
-                      <th className={S.thNum}>From option prices</th>
+                      <th className={S.thNum} title="From the 21-day realised volatility">
+                        Realised
+                      </th>
+                      <th className={S.thNum} title="The close less and plus the realised figure">
+                        Price range
+                      </th>
+                      <th className={S.thNum} title="From the 30-day implied volatility of listed options">
+                        Options
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {M.volatility.expected.map((e) => (
                       <tr key={e.sessions} className={S.row}>
-                        <td className={S.td}>{e.sessions === 5 ? "1 week (5 sessions)" : "1 month (21 sessions)"}</td>
+                        <td className={cn(S.td, "whitespace-nowrap")}>
+                          {e.sessions === 5 ? "1 week" : "1 month"}
+                          <span className="hidden text-muted-foreground sm:inline"> ({e.sessions} sessions)</span>
+                        </td>
                         <td className={cn(S.num, "font-medium")}>±{pc(e.pct, 1)}</td>
                         <td className={S.num}>
                           {f2(e.low)} to {f2(e.high)}
@@ -230,20 +251,20 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                       <th className={S.thNum}>Now</th>
                       <th className={S.thNum}>Percentile</th>
                       <th className={cn(S.th, "hidden sm:table-cell")} />
-                      <th className={S.thNum}>Median</th>
+                      <th className={cn(S.thNum, S.wide)}>Median</th>
                       <th className={S.thNum}>10th to 90th</th>
                     </tr>
                   </thead>
                   <tbody>
                     {M.volatility.cone.map((z) => (
                       <tr key={z.n} className={S.row}>
-                        <td className={S.td}>{z.n} sessions</td>
+                        <td className={cn(S.td, "whitespace-nowrap")}>{z.n} sessions</td>
                         <td className={cn(S.num, "font-medium")}>{pc(z.current, 1)}</td>
                         <td className={S.num}>{pct(z.pct)}</td>
                         <td className={cn(S.td, "hidden w-20 sm:table-cell")}>
                           <PercentileBar value={z.pct} />
                         </td>
-                        <td className={S.num}>{pc(z.p50, 1)}</td>
+                        <td className={cn(S.num, S.wide)}>{pc(z.p50, 1)}</td>
                         <td className={S.num}>
                           {pc(z.p10, 0)} to {pc(z.p90, 0)}
                         </td>
@@ -270,7 +291,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                       <th className={S.thNum} title="Variance of q-day returns ÷ (q × variance of 1-day returns): 1 for a random walk">
                         Variance ratio
                       </th>
-                      <th className={S.thNum} title="Lo-MacKinlay statistic, valid when volatility changes over time">
+                      <th className={cn(S.thNum, S.wide)} title="Lo-MacKinlay statistic, valid when volatility changes over time">
                         z
                       </th>
                       <th className={S.thNum}>p</th>
@@ -280,9 +301,9 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                   <tbody>
                     {M.walk.rows.map((r) => (
                       <tr key={r.q} className={S.row}>
-                        <td className={S.td}>{r.q} days</td>
+                        <td className={cn(S.td, "whitespace-nowrap")}>{r.q} days</td>
                         <td className={cn(S.num, "font-medium")}>{f2(r.vr)}</td>
-                        <td className={S.num}>{f2(r.z)}</td>
+                        <td className={cn(S.num, S.wide)}>{f2(r.z)}</td>
                         <td className={S.num}>{f2(r.p, 3)}</td>
                         <td className={cn(S.td, "whitespace-nowrap text-[11px] text-muted-foreground")}>{r.p < 0.05 ? (r.vr > 1 ? "moves continued" : "moves reversed") : "as a random walk"}</td>
                       </tr>
@@ -307,7 +328,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                       <thead>
                         <tr className="border-b">
                           <th className={S.th}>Expiry</th>
-                          <th className={S.thNum} title="Weekdays from the snapshot to the expiry">
+                          <th className={cn(S.thNum, S.wide)} title="Weekdays from the snapshot to the expiry">
                             Sessions
                           </th>
                           <th className={S.thNum} title="At-the-money straddle ÷ share price: the average size of the move the market prices by expiry">
@@ -328,7 +349,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                           return (
                             <tr key={t.e} className={S.row}>
                               <td className={cn(S.td, "num whitespace-nowrap")}>{fmtDate(t.e)}</td>
-                              <td className={S.num}>{n || "–"}</td>
+                              <td className={cn(S.num, S.wide)}>{n || "–"}</td>
                               <td className={cn(S.num, "font-medium")}>±{pc(t.m, 1)}</td>
                               <td className={S.num}>{real != null ? `±${pc(real, 1)}` : "–"}</td>
                               <td className={S.num}>{real ? `${f2(t.m / real)}×` : "–"}</td>
@@ -464,18 +485,19 @@ export function RelativePanel({
                         Beta
                       </th>
                       <th className={S.thNum}>Correlation</th>
-                      <th className={S.thNum} title="Share of its daily variance the benchmark explains">
+                      <th className={cn(S.thNum, S.wide)} title="Share of its daily variance the benchmark explains">
                         R²
                       </th>
                       <th className={S.thNum} title="Annualised volatility of the part the benchmark does not explain">
-                        Own volatility
+                        Own vol<span className="hidden sm:inline">atility</span>
+                        <span className="sm:hidden">.</span>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {M.momentum.vs.map((b) => (
                       <tr key={b.sym} className={S.row}>
-                        <td className={S.td}>
+                        <td className={cn(S.td, "whitespace-nowrap")}>
                           {b.sym} <span className="text-[11px] text-muted-foreground">{b.kind === "market" ? "market" : "sector"}</span>
                         </td>
                         <td className={cn(S.num, "font-medium")}>
@@ -483,7 +505,7 @@ export function RelativePanel({
                           <span className="font-normal text-muted-foreground"> ± {f2(b.seBeta)}</span>
                         </td>
                         <td className={S.num}>{f2(b.corr)}</td>
-                        <td className={S.num}>{f2(b.r2)}</td>
+                        <td className={cn(S.num, S.wide)}>{f2(b.r2)}</td>
                         <td className={S.num}>{pc(b.idioVol, 1)}</td>
                       </tr>
                     ))}
@@ -623,7 +645,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
               <th className={S.thNum} title="The same window minus SPY">
                 vs SPY
               </th>
-              <th className={S.thNum} title="Size of the move in units of its normal two-day volatility: the daily volatility of the 60 sessions before × √2">
+              <th className={cn(S.thNum, S.wide)} title="Size of the move in units of its normal two-day volatility: the daily volatility of the 60 sessions before × √2">
                 σ
               </th>
               <th className={S.thNum} title="Return over the 20 sessions after the reaction window">
@@ -647,7 +669,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
                 </td>
                 <td className={cn(S.num, "font-medium", signTone(r.move))}>{pp(r.move)}</td>
                 <td className={cn(S.num, signTone(r.excess))}>{pp(r.excess)}</td>
-                <td className={S.num}>{f2(r.sigma, 1)}</td>
+                <td className={cn(S.num, S.wide)}>{f2(r.sigma, 1)}</td>
                 <td className={cn(S.num, signTone(r.drift20))}>{pp(r.drift20)}</td>
               </tr>
             ))}
@@ -657,7 +679,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
                 ±{pc(R.stats.avgAbsMove, 1)}
               </td>
               <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgExcess)}</td>
-              <td className={cn(S.num, "font-semibold")}>{f2(R.stats.avgSigma, 1)}</td>
+              <td className={cn(S.num, S.wide, "font-semibold")}>{f2(R.stats.avgSigma, 1)}</td>
               <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgDrift20)}</td>
             </tr>
           </tbody>
@@ -684,7 +706,7 @@ function ChartEvents({ T, count }: { T: Technicals; count: number }) {
               <th className={S.th}>Event</th>
               <th className={S.thNum}>+5 days</th>
               <th className={S.thNum}>+20 days</th>
-              <th className={S.thNum}>+60 days</th>
+              <th className={cn(S.thNum, S.wide)}>+60 days</th>
             </tr>
           </thead>
           <tbody>
@@ -693,7 +715,7 @@ function ChartEvents({ T, count }: { T: Technicals; count: number }) {
                 <td className={cn(S.td, "num whitespace-nowrap")}>{fmtDate(e.date)}</td>
                 <td className={S.td}>{e.name}</td>
                 {[5, 20, 60].map((h) => (
-                  <td key={h} className={cn(S.num, signTone(e.fwd[h]))}>
+                  <td key={h} className={cn(S.num, h === 60 && S.wide, signTone(e.fwd[h]))}>
                     {e.fwd[h] == null ? <span className="text-muted-foreground">open</span> : pp(e.fwd[h])}
                   </td>
                 ))}

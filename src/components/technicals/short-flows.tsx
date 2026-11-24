@@ -101,6 +101,8 @@ export function ShortAndFlows({ symbol, placeholder }: { symbol: string; placeho
   const ftd60 = ftd.filter((r) => r[0] >= new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10));
   const ftdMax = ftd60.reduce((m, r) => (r[1] > m[1] ? r : m), ftd60[0] ?? ["", 0, 0, ""]);
   const siMax = Math.max(1, ...si.map((x) => x.short ?? 0));
+  // two charts sit side by side only when there are two and no short-interest panel beside them
+  const charts = (alt.data?.short_volume ? 1 : 0) + (offSeries[0].points.length > 0 ? 1 : 0);
   const stats: [string, string, () => void][] = last
     ? [
         ["Shares short", fmtSh(last.short), () => openSi(last, "Short interest", last.short, "shares")],
@@ -193,7 +195,7 @@ export function ShortAndFlows({ symbol, placeholder }: { symbol: string; placeho
           </Note>
         </TechPanel>
       )}
-      <div className={cn("grid grid-cols-1 content-start gap-4 [&>*]:min-w-0", si.length === 0 && "xl:grid-cols-2")}>
+      <div className={cn("grid grid-cols-1 content-start gap-4 [&>*]:min-w-0", si.length === 0 && charts === 2 && "xl:grid-cols-2")}>
         {alt.data?.short_volume && (
           <TechPanel section="Short-sale volume" title="Short-sale share of off-exchange volume" subtitle="FINRA Reg SHO daily files, last 120 sessions">
             <div className="px-3 py-2">

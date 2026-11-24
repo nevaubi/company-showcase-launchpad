@@ -45,7 +45,8 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
   }, [el]);
 
   const hasRight = series.some((s) => s.axis === "right");
-  const margin = { top: 12, right: endLabels ? 74 : hasRight ? 48 : 12, bottom: 24, left: 44 };
+  // With end labels and a right axis together, the axis values sit outside the labels so the two never overlap.
+  const margin = { top: 12, right: endLabels ? (hasRight ? 122 : 74) : hasRight ? 48 : 12, bottom: 24, left: 44 };
   const iw = width - margin.left - margin.right;
   const ih = height - margin.top - margin.bottom;
 
@@ -143,7 +144,7 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
           {zeroLine && <line x1={0} x2={iw} y1={Math.round(y(0)) + 0.5} y2={Math.round(y(0)) + 0.5} stroke="var(--foreground)" strokeOpacity={0.5} shapeRendering="crispEdges" />}
           {hasRight &&
             yR.ticks(5).map((t) => (
-              <text key={`r${t}`} x={iw + 8} y={yR(t)} dy="0.32em" className="fill-muted-foreground font-mono text-[10px]">
+              <text key={`r${t}`} x={iw + (endLabels ? 82 : 8)} y={yR(t)} dy="0.32em" className="fill-muted-foreground font-mono text-[10px]">
                 {(rightFormat ?? yFormat)(t)}
               </text>
             ))}

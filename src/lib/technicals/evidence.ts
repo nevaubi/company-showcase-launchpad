@@ -205,7 +205,7 @@ export function evidence(B: Bars, opt: EvidenceOptions = {}): Evidence {
     for (let i = cond.from; i < n; i++) days += cond.flag[i];
     const cases: Partial<Record<Horizon, number[]>> = {};
     for (const h of EVIDENCE.horizons) {
-      if (!cells[h]) continue;
+      // listed even when there are too few to test, so the page can show how few
       const list: number[] = [];
       let prev = -Infinity;
       // the same greedy rule as countIndependent, over bars whose forward window is complete

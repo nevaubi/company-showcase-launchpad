@@ -45,7 +45,9 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
     setCalc({
       title: `${symbol}: ${r.name}`,
       value: c ? `${pp(c.test.excess, 2)} over ${h} days` : undefined,
-      sub: c ? `${c.test.nEff} independent cases (${c.test.n.toLocaleString("en-US")} days), t ${f2(c.test.t)}, p ${f2(c.test.p, 3)}${c.q != null ? `, q ${f2(c.q, 3)}` : ""}` : `${r.days.toLocaleString("en-US")} days since ${fmtDate(E!.sample.from)}`,
+      sub: c
+        ? `${c.test.nEff} independent cases (${c.test.n.toLocaleString("en-US")} days), t ${f2(c.test.t)}, p ${f2(c.test.p, 3)}${c.q != null ? `, q ${f2(c.q, 3)}` : ""}`
+        : `${r.cases[h]?.length ?? 0} independent cases (${r.days.toLocaleString("en-US")} days) since ${fmtDate(E!.sample.from)}: too few to test`,
       formula: `${r.text}. Forward return: total-return index ${h} trading days later divided by its value on the day, minus 1. Excess: the average log return after the condition minus the average over every ${h}-day window in the same sample. The cases listed are at least ${h} sessions apart, so their windows do not overlap.`,
       cols: ["Day", "Close", `After ${h} days`, "Return"],
       rows: bars
@@ -74,13 +76,14 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
     const t = c?.test;
     return (
       <tr className={cn(S.row, "transition-colors duration-150 hover:bg-highlight-soft/50 motion-reduce:transition-none", !r.active && "text-muted-foreground")}>
-        <td className={cn(S.td, "max-w-[18rem]")}>
-          <button type="button" data-agent-click onClick={() => open(r)} title={`${r.text}. Select for the cases.`} className={cn(S.cellButton, "truncate text-left", r.active && "font-medium text-foreground")}>
+        <td className={cn(S.td, "sm:max-w-[18rem]")}>
+          <button type="button" data-agent-click onClick={() => open(r)} title={`${r.text}. Select for the cases.`} className={cn(S.cellButton, "text-left sm:truncate", r.active && "font-medium text-foreground")}>
             {r.name}
           </button>
+          {r.active && <span className="block text-[11px] leading-4 text-muted-foreground sm:hidden">{today(r)}</span>}
         </td>
-        <td className={cn(S.td, "whitespace-nowrap", r.active ? "text-foreground" : "")}>{today(r)}</td>
-        <td className={S.num}>
+        <td className={cn(S.td, S.wide, "whitespace-nowrap", r.active ? "text-foreground" : "")}>{today(r)}</td>
+        <td className={cn(S.num, S.wide)}>
           {t ? (
             <>
               {t.nEff}
@@ -88,12 +91,12 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
             </>
           ) : (
             <>
-              {r.days ? `<${EVIDENCE.minReport}` : "0"}
+              {r.cases[h]?.length ?? 0}
               <span className="text-muted-foreground"> / {r.days.toLocaleString("en-US")}</span>
             </>
           )}
         </td>
-        <td className={S.num}>
+        <td className={cn(S.num, S.wide)}>
           {t ? (
             <>
               {pc(t.hit)}
@@ -104,10 +107,10 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
           )}
         </td>
         <td className={cn(S.num, v.reliable && "font-medium", v.reliable && signTone(t?.excess))}>{t ? pp(t.excess, 2) : "–"}</td>
-        <td className={S.num}>{t?.ci ? `${pp(t.ci[0])} to ${pp(t.ci[1])}` : "–"}</td>
-        <td className={S.num}>{t ? f2(t.t) : "–"}</td>
-        <td className={S.num}>{c?.q != null ? f2(c.q, c.q < 0.1 ? 3 : 2) : "–"}</td>
-        <td className={cn(S.td, "whitespace-nowrap")} title={c?.pooled?.ci ? `${v.title}. Across tracked companies: ${pp(c.pooled.ci[0])} to ${pp(c.pooled.ci[1])}.` : v.title}>
+        <td className={cn(S.num, S.wide)}>{t?.ci ? `${pp(t.ci[0])} to ${pp(t.ci[1])}` : "–"}</td>
+        <td className={cn(S.num, S.wide)}>{t ? f2(t.t) : "–"}</td>
+        <td className={cn(S.num, S.wide)}>{c?.q != null ? f2(c.q, c.q < 0.1 ? 3 : 2) : "–"}</td>
+        <td className={cn(S.td, "sm:whitespace-nowrap")} title={c?.pooled?.ci ? `${v.title}. Across tracked companies: ${pp(c.pooled.ci[0])} to ${pp(c.pooled.ci[1])}.` : v.title}>
           {v.reliable ? <Tag tone={t!.excess > 0 ? "positive" : "negative"}>{v.text}</Tag> : <span className="text-[11px] text-muted-foreground">{v.text}</span>}
         </td>
       </tr>
@@ -154,23 +157,23 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
               <thead>
                 <tr className="border-b">
                   <th className={S.th}>Condition</th>
-                  <th className={S.th}>In force</th>
-                  <th className={S.thNum} title="Non-overlapping cases / days the condition held">
+                  <th className={cn(S.th, S.wide)}>In force</th>
+                  <th className={cn(S.thNum, S.wide)} title="Non-overlapping cases / days the condition held">
                     Cases / days
                   </th>
-                  <th className={S.thNum} title={`Share of ${h}-day windows that ended higher: after the condition / all days`}>
+                  <th className={cn(S.thNum, S.wide)} title={`Share of ${h}-day windows that ended higher: after the condition / all days`}>
                     Up share / base
                   </th>
                   <th className={S.thNum} title={`Average ${h}-day log return after the condition minus the all-days average`}>
-                    Excess, {h} days
+                    Excess<span className="hidden sm:inline">, {h} days</span>
                   </th>
-                  <th className={S.thNum} title="Block-bootstrap interval of the excess">
+                  <th className={cn(S.thNum, S.wide)} title="Block-bootstrap interval of the excess">
                     95% interval
                   </th>
-                  <th className={S.thNum} title="Excess divided by its Hodrick standard error">
+                  <th className={cn(S.thNum, S.wide)} title="Excess divided by its Hodrick standard error">
                     t
                   </th>
-                  <th className={S.thNum} title="p-value adjusted for everything tested on this symbol (Benjamini-Hochberg)">
+                  <th className={cn(S.thNum, S.wide)} title="p-value adjusted for everything tested on this symbol (Benjamini-Hochberg)">
                     q
                   </th>
                   <th className={S.th}>Verdict</th>
@@ -210,6 +213,7 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
               </tbody>
             </table>
           </TableWrap>
+          <p className={cn("border-t px-3 py-1.5 sm:hidden", S.caption)}>Select a condition for its cases, hit rate, interval and q.</p>
           <Note>
             Returns are total returns (dividends reinvested) over the next {h} trading days; the excess is measured in log terms against every {h}-day window in the same sample. Standard errors follow
             Hodrick (1992), so overlapping windows and long-lived conditions do not overstate the evidence; the interval is a block bootstrap. A condition is called reliable only with at least{" "}
