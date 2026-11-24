@@ -5,6 +5,7 @@
 import { decide, parseReason, PROVIDER_IDS, providerIdOf, type CircuitRow } from "./provider-health";
 import { SOURCES } from "./freshness";
 import { HTTP_JOBS } from "./reaper";
+import type { HealthRow } from "./job-health";
 import type { JobHealthRow, StateRow } from "./watchdog";
 
 export interface ProviderStatus {
@@ -59,7 +60,7 @@ export function openAlerts(rows: readonly StateRow[]): AlertStatus[] {
     .sort((a, b) => a.since.localeCompare(b.since));
 }
 
-export interface JobStatus extends JobHealthRow {
+export interface JobStatus extends HealthRow {
   label: string;
   kind: "http" | "worker";
   /** share of runs with no recorded finish, 0 to 1 */
@@ -70,7 +71,8 @@ export interface JobStatus extends JobHealthRow {
 const inMarketHours = (d: Date) => d.getUTCDay() >= 1 && d.getUTCDay() <= 5 && d.getUTCHours() >= 13 && d.getUTCHours() <= 22;
 
 /** Job health rows, labelled, problems first (failing, then unfinished, then silent), then by name. */
-export function jobStatus(rows: readonly JobHealthRow[], nowMs: number): JobStatus[] {
+export function jobStatus(rows: readonly HealthRow[], nowMs: number, unread: readonly string[] = []): JobStatus[] {
+  const notRead = new Set(unread);
   const src = new Map(SOURCES.map((s) => [s.job, s]));
   const rank = { failing: 0, unfinished: 1, silent: 2 } as const;
   const out: JobStatus[] = rows.map((r) => {
@@ -79,7 +81,7 @@ export function jobStatus(rows: readonly JobHealthRow[], nowMs: number): JobStat
     const unfinishedShare = runs ? Number(r.unfinished) / runs : 0;
     const loop = r.job.startsWith("loop:");
     const silentLimit = s && 3 * s.everyMin <= 24 * 60 && !(s.marketHours && !inMarketHours(new Date(nowMs))) ? 3 * s.everyMin * 60_000 : null;
-    const silent = silentLimit != null && (!r.last_run || nowMs - Date.parse(r.last_run) > silentLimit);
+    const silent = silentLimit != null && !notRead.has(r.job) && (!r.last_run || nowMs - Date.parse(r.last_run) > silentLimit);
     const problem = r.job !== "freshness" && Number(r.fail_streak) >= (loop ? 2 : 5) ? "failing" : runs >= 20 && unfinishedShare >= 0.3 ? "unfinished" : silent ? "silent" : null;
     return { ...r, runs, unfinished: Number(r.unfinished), failed: Number(r.failed), fail_streak: Number(r.fail_streak), label: s?.label ?? r.job, kind: HTTP_JOBS.includes(r.job) ? "http" : "worker", unfinishedShare, problem };
   });

@@ -432,6 +432,22 @@ async function maybeAltSlow() {
   });
 }
 
+// ---------- options when Cboe refuses the app server ----------
+/**
+ * Every 10 minutes: `options-snapshot.ts --night` decides itself (src/lib/jobs/options-worker.ts)
+ * whether tonight's snapshot needs the worker (the app job is blocked or not collecting), resumes
+ * from `options-worker` and records its own pause. Network-bound and paced, so it runs beside the
+ * other side jobs.
+ */
+let optioning = false;
+let lastOptions = 0;
+function maybeOptions() {
+  if (optioning || Date.now() - lastOptions < 10 * 60_000 || process.env.OPTIONS_WORKER === "0") return;
+  optioning = true;
+  lastOptions = Date.now();
+  void run("options-night", "scripts/options-snapshot.ts", ["--night", "--minutes=50"], `${OUT}/options.log`).finally(() => { optioning = false; });
+}
+
 // ---------- data-advance check ----------
 /** Hourly (spec P1-4): freshness-check.ts keeps its own persisted schedule and remedy receipts. */
 let lastFreshness = 0;
@@ -883,6 +899,7 @@ for (;;) {
   maybeReports();
   maybeFilingSteps();
   maybeFreshness();
+  maybeOptions();
   await maybeAnalytics().catch((e) => log(`analytics check failed: ${(e as Error).message}`));
   await maybeCanon();
   await maybeAltSlow();

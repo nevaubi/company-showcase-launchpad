@@ -5,6 +5,7 @@
  */
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { dataFreshness } from "@/lib/jobs/data-freshness";
+import { readJobHealth, type HealthClient } from "@/lib/jobs/job-health.server";
 import { REMEDY_KEYS } from "@/lib/jobs/remediation";
 import { alerts, dbDownKey, dbReadFailure, digestSubject, planAlerts, DIGEST_KEY, type JobHealthRow, type StateRow } from "@/lib/jobs/watchdog";
 
@@ -20,22 +21,24 @@ export async function runWatchdog(budgetMs = 1500): Promise<Record<string, unkno
   type RpcAnswer = PromiseLike<{ data: unknown; error: { message: string } | null }>;
   const rpc = (fn: string, args?: Record<string, unknown>): RpcAnswer =>
     (supabaseAdmin as unknown as { rpc(fn: string, args?: Record<string, unknown>): RpcAnswer }).rpc(fn, args);
+  // Job health from job_health() or, while migration 0066 is not applied, from job_runs (job-health.server.ts).
   const [fresh, health, states] = await withTimeout(
     Promise.all([
       rpc("data_freshness"),
-      rpc("job_health", { _hours: 24 }),
+      readJobHealth({ rpc, from: (t: string) => supabaseAdmin.from(t as never) } as HealthClient, { hours: 24, budgetMs: readMs - 100 }),
       supabaseAdmin.from("job_state").select("job, cursor, paused_reason, updated_at").or('job.like."provider:*",job.like."alert:*",job.like."remedy:*",job.like."registrant-drift:*",job.eq.options-backoff,job.eq.alert-digest').limit(1000),
     ]),
     readMs,
     "watchdog reads",
   );
   if (fresh.error) throw new Error(`data_freshness: ${fresh.error.message}`);
-  if (health.error) throw new Error(`job_health: ${health.error.message}`);
+  // A job health read that failed (or timed out) does not end the run: freshness and job_state are
+  // still judged, every job counts as not read (never "no run in 24 h"), and the result says why.
   if (states.error) throw new Error(`job_state: ${states.error.message}`);
   const now = Date.now();
   const rows = (states.data ?? []) as StateRow[];
-  const jobs = ((health.data ?? []) as JobHealthRow[]).map((j) => ({ ...j, runs: Number(j.runs), unfinished: Number(j.unfinished), failed: Number(j.failed), fail_streak: Number(j.fail_streak) }));
-  const active = alerts({ freshness: dataFreshness((fresh.data ?? []) as { key: string; newest: string | null }[], new Date(now)), jobs, states: rows }, now, REMEDY_KEYS);
+  const jobs: JobHealthRow[] = health.rows;
+  const active = alerts({ freshness: dataFreshness((fresh.data ?? []) as { key: string; newest: string | null }[], new Date(now)), jobs, states: rows, unread: health.unread }, now, REMEDY_KEYS);
   const plan = planAlerts(active, rows, now);
 
   // Send first. Episodes are marked sent only when the digest reached the outbox: an email_log row
@@ -66,7 +69,7 @@ export async function runWatchdog(budgetMs = 1500): Promise<Record<string, unkno
     const { error } = await supabaseAdmin.from("job_state").delete().in("job", plan.close);
     if (error) throw new Error(error.message);
   }
-  return { active: active.map((a) => a.key), opened: rowsToWrite.filter((r) => r.job.startsWith("alert:") && /^open:/.test(r.paused_reason ?? "")).map((r) => r.job), closed: plan.close, emailed: delivered ? plan.send.map((a) => a.key) : [], ...(plan.send.length && !delivered ? { held: plan.send.map((a) => a.key) } : {}), sent, ms: Date.now() - started };
+  return { health: health.error ? `not read: ${health.error.slice(0, 160)}` : health.source, ...(health.unread.length ? { unread: health.unread } : {}), active: active.map((a) => a.key), opened: rowsToWrite.filter((r) => r.job.startsWith("alert:") && /^open:/.test(r.paused_reason ?? "")).map((r) => r.job), closed: plan.close, emailed: delivered ? plan.send.map((a) => a.key) : [], ...(plan.send.length && !delivered ? { held: plan.send.map((a) => a.key) } : {}), sent, ms: Date.now() - started };
 }
 
 /**

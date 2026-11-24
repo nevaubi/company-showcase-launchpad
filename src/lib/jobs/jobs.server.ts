@@ -10,7 +10,7 @@ import { archiveUrl, fetchSec } from "@/lib/sec.server";
 import type { Json } from "@/integrations/supabase/types";
 import { secAltRows, type SubmissionBlock } from "@/lib/alt/sec-forms";
 import { storeForm4 } from "@/lib/jobs/form4.server";
-import { claimSlice, commitSlice, outcomeOf, runBudgetMs, sliceKey, unitTimeoutMs, type Claim, type SliceOutcome } from "@/lib/jobs/slice";
+import { budgetCut, claimSlice, commitSlice, outcomeOf, runBudgetMs, sliceKey, unitTimeoutMs, type Claim, type SliceOutcome } from "@/lib/jobs/slice";
 import { fairOrder, nextTailOffset } from "@/lib/jobs/priority";
 import { loadJobRank } from "@/lib/jobs/priority.server";
 import { backoffRow, blockStreak, chainStatus, judgeSlice, OPTIONS_BACKOFF_KEY, OPTIONS_PROBE, optionsNight, type ChainResult } from "@/lib/jobs/options-run";
@@ -103,7 +103,9 @@ export async function runJob(job: JobName): Promise<{ ok: boolean; items: number
   try {
     result = await JOBS[job]();
   } catch (e) {
-    result = { ok: false, items: 0, detail: { error: (e as Error).message } };
+    const message = (e as Error).message;
+    // The run's own time budget ran out (nothing answered in time): it resumes next run, not a failure.
+    result = budgetCut(message) ? { ok: true, items: 0, detail: { outcome: "cut", note: message } } : { ok: false, items: 0, detail: { error: message } };
   }
   if (run) {
     await supabaseAdmin
@@ -549,20 +551,29 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
     const done: string[] = [];
     let broken = 0;
     let next = 0;
+    // Batch position of the first company the run's budget cut short: the cursor stops there.
+    let firstCut = Infinity;
+    const cut: string[] = [];
     await Promise.all([0, 1].map(async () => {
       while (next < batch.length && left()) {
-        const c = batch[next++];
+        const i = next++;
+        const c = batch[i];
         const r = await syncCompany(c, since, { form4: true, deadline: left.end });
-        filings += r.filings; trades += r.trades; errors.push(...r.errors); done.push(c.ticker);
+        filings += r.filings; trades += r.trades; errors.push(...r.errors);
+        if (r.cut) {
+          cut.push(r.cut);
+          firstCut = Math.min(firstCut, i);
+        } else done.push(c.ticker);
         if (r.failed) broken++;
       }
     }));
-    // `next` companies were started (in order) and all of them finished.
-    const outcome: SliceOutcome = next === 0 ? "failed" : outcomeOf(next, broken);
-    await commit("sec", cl, outcome, ranked.length, step, next);
+    // `next` companies were started (in order) and all of them finished; a budget cut is not a failure.
+    const advance = Math.min(next, firstCut);
+    const outcome: SliceOutcome = advance === 0 ? (cut.length || (next === 0 && !left()) ? "cut" : "failed") : outcomeOf(advance, broken);
+    await commit("sec", cl, outcome, ranked.length, step, advance);
     // A lost earnings-event write always fails the run, so the failure shows in job health.
     const earningsLost = errors.some((e) => e.includes(" earnings events: "));
-    return { ok: outcome === "done" && !earningsLost && errors.length < Math.max(1, done.length), items: filings + trades, detail: { ...sliceDetail(cl, outcome, ranked.length), companies: done, notStarted: batch.slice(next).map((c) => c.ticker), filings, trades, errors } };
+    return { ok: (outcome === "done" || outcome === "cut") && !earningsLost && errors.length < Math.max(1, done.length), items: filings + trades, detail: { ...sliceDetail(cl, outcome, ranked.length), companies: done, notStarted: batch.slice(next).map((c) => c.ticker), filings, trades, errors, ...(cut.length ? { cut } : {}) } };
   },
 
   /** Refresh the local copy of partner company/price files and universe.json, one file per call. */
@@ -640,8 +651,9 @@ export async function syncCompany(
   c: CoverageCompany,
   since: string,
   opts: { form4: boolean; deadline?: number },
-): Promise<{ filings: number; trades: number; errors: string[]; failed: boolean }> {
-  const out = { filings: 0, trades: 0, errors: [] as string[], failed: false };
+): Promise<{ filings: number; trades: number; errors: string[]; failed: boolean; cut: string | null }> {
+  // `cut`: the run's time budget ran out inside this company (it is read again next run, not failed).
+  const out = { filings: 0, trades: 0, errors: [] as string[], failed: false, cut: null as string | null };
   const sec = { deadline: opts.deadline };
   try {
     // Every CIK of the company (current registrant first, then former ones, e.g. XOM 2115436 and
@@ -712,12 +724,16 @@ export async function syncCompany(
         const r = await storeForm4(supabaseAdmin, { accn: f.accn, ticker: c.ticker, cik: f.cik, filed: f.filed, report: f.report, doc: f.doc }, sec);
         out.trades += r.trades;
       } catch (e) {
-        out.errors.push(`${c.ticker} ${f.accn}: ${(e as Error).message}`);
+        if (budgetCut((e as Error).message)) out.cut ??= `${c.ticker} ${f.accn}: ${(e as Error).message}`;
+        else out.errors.push(`${c.ticker} ${f.accn}: ${(e as Error).message}`);
       }
     }
   } catch (e) {
-    out.errors.push(`${c.ticker}: ${(e as Error).message}`);
-    out.failed = true;
+    if (budgetCut((e as Error).message)) out.cut = `${c.ticker}: ${(e as Error).message}`;
+    else {
+      out.errors.push(`${c.ticker}: ${(e as Error).message}`);
+      out.failed = true;
+    }
   }
   return out;
 }

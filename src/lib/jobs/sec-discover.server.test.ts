@@ -44,6 +44,23 @@ describe("sec-discover day pass", () => {
     expect((r.detail as Record<string, unknown>).tries).toBe(0);
     expect(mocks.db.state("sec-discover-day")!.paused_reason).toBe(`tries 0 on ${day} (6 left, run 4)`);
   });
+  // Production 24 Nov: 45 of 534 runs recorded as failed with "SEC EDGAR responded with an error (run budget spent)".
+  it("a company the budget cut short is reported as cut, not as a failed run; a real SEC error still fails", async () => {
+    mocks.db = fakeSupabase({ job_state: [{ job: "sec-discover", cursor: 2, paused_reason: null, updated_at: "x" }, { job: "sec-discover-day", cursor: code, paused_reason: null, updated_at: "x" }] });
+    mocks.syncCompany.mockResolvedValueOnce({ filings: 1, trades: 0, errors: [], failed: false, cut: null });
+    mocks.syncCompany.mockResolvedValueOnce({ filings: 0, trades: 0, errors: [], failed: false, cut: "ADP: SEC EDGAR responded with an error (run budget spent) for https://data.sec.gov/submissions/CIK0000008670.json" });
+    let n = 0;
+    const r = await runDiscovery(() => n++ < 2);
+    const d = r.detail as Record<string, unknown>;
+    expect(r.ok).toBe(true);
+    expect(d.outcome).toBe("cut");
+    expect(d.errors).toEqual([]);
+    expect(d.resolved).toHaveLength(1);
+    mocks.db = fakeSupabase({ job_state: [{ job: "sec-discover", cursor: 2, paused_reason: null, updated_at: "x" }, { job: "sec-discover-day", cursor: code, paused_reason: null, updated_at: "x" }] });
+    mocks.syncCompany.mockResolvedValueOnce({ filings: 0, trades: 0, errors: ["ADP: SEC EDGAR responded 503 (run budget spent) for https://data.sec.gov/x"], failed: true, cut: null });
+    n = 0;
+    expect((await runDiscovery(() => n++ < 1)).ok).toBe(false);
+  });
   it("an idle day run repairs missing earnings events from stored 2.02 8-Ks", async () => {
     const today = new Date().toISOString().slice(0, 10);
     const filed = new Date(Date.now() - 3 * 86400_000).toISOString().slice(0, 10);

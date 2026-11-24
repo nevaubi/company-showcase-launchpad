@@ -67,7 +67,15 @@ export function claimSlice(cursor: number | null | undefined, tries: number | nu
   return { start, attempt, skipped, cursorNow, triesCursor: encodeTries({ start, tries: attempt }), wrapped };
 }
 
-export type SliceOutcome = "done" | "failed" | "blocked";
+/** `cut`: the run's time budget ran out before the slice finished; like `blocked`, no try is charged. */
+export type SliceOutcome = "done" | "failed" | "blocked" | "cut";
+
+/**
+ * An error that only says the run's own time budget ran out: nothing was tried, or the last try got
+ * no answer before the deadline. The work resumes next run, so it is not a failure. An answer from
+ * the source (any HTTP status, e.g. "responded 503 (run budget spent)") stays a failure.
+ */
+export const budgetCut = (message: string) => /responded with an error(?: \(no answer in \d+ ms\))? \(run budget spent\)/.test(message);
 
 export interface Commit {
   /** cursor to write, or null to leave it */
@@ -87,7 +95,7 @@ export function commitSlice(claim: Pick<Claim, "start" | "attempt">, outcome: Sl
     const wrapped = next >= total;
     return { cursor: wrapped ? 0 : next, triesCursor: 0, wrapped };
   }
-  if (outcome === "blocked") return { cursor: null, triesCursor: encodeTries({ start: claim.start, tries: claim.attempt - 1 }), wrapped: false };
+  if (outcome === "blocked" || outcome === "cut") return { cursor: null, triesCursor: encodeTries({ start: claim.start, tries: claim.attempt - 1 }), wrapped: false };
   return { cursor: null, triesCursor: encodeTries({ start: claim.start, tries: claim.attempt }), wrapped: false };
 }
 

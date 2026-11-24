@@ -17,6 +17,8 @@ export const STEP_LIMITS_MS: Record<string, number> = {
   "medicare-states": 2 * 3600_000,
   tri: 2 * 3600_000,
   reactions: 3600_000,
+  // options-snapshot.ts --night stops itself after 50 min (it resumes next pass)
+  "options-night": 3600_000,
   prose: 2 * 3600_000,
   verify: 3600_000,
   reports: 15 * 60_000,

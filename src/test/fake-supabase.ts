@@ -23,6 +23,60 @@ const KEYS: Record<string, string[]> = {
   insider_buys: ["accn", "owner"],
 };
 
+/**
+ * CHECK constraints the real tables have (from drizzle/migrations and production's pg_constraint),
+ * enforced on insert, upsert and update so a test cannot pass with a value the database refuses
+ * (the IR release collector wrote `retry`/`error` into ir_release_scan.status for a day that way).
+ * Key: table, then column, then the allowed values (null is allowed when the column is nullable).
+ */
+export const CHECKS: Record<string, Record<string, { name: string; allowed: readonly unknown[]; nullable?: boolean }>> = {
+  ir_release_scan: { status: { name: "ir_release_scan_status_check", allowed: ["done", "partial", "empty"] } },
+  email_log: { status: { name: "email_log_status_check", allowed: ["queued", "waiting_sender", "sent", "suppressed", "failed"] } },
+  reports: { status: { name: "reports_status_check", allowed: ["generating", "ready", "failed"] }, kind: { name: "reports_kind_check", allowed: ["primer", "preview", "recap", "memo"] }, scope: { name: "reports_scope_check", allowed: ["shared", "firm", "user"] } },
+  filing_redlines: { form: { name: "filing_redlines_form_check", allowed: ["10-K", "10-Q"] } },
+  waitlist: { status: { name: "waitlist_status_check", allowed: ["pending", "approved", "declined"] } },
+  waitlist_requests: { status: { name: "waitlist_requests_status_check", allowed: ["pending", "approved", "declined"] } },
+  report_runs: { status: { name: "report_runs_status_check", allowed: ["running", "ready", "failed"] }, source: { name: "report_runs_source_check", allowed: ["app", "pregen"] } },
+  supply_links: { relation: { name: "supply_links_relation_check", allowed: ["customer", "supplier", "partner", "competitor"] } },
+  openai_allowance: { tier: { name: "openai_allowance_tier_check", allowed: ["large", "mini", "paid_large", "paid_mini"] } },
+};
+
+/** The Postgres error for the first row that breaks a declared CHECK constraint, or null. */
+export function checkViolation(table: string, rows: Record<string, unknown>[], checks = CHECKS): string | null {
+  const cols = checks[table];
+  if (!cols) return null;
+  for (const r of rows)
+    for (const [col, c] of Object.entries(cols)) {
+      if (!(col in r)) continue;
+      const v = r[col];
+      if (v == null) {
+        if (!c.nullable) return `null value in column "${col}" of relation "${table}" violates not-null constraint`;
+      } else if (!c.allowed.includes(v)) return `new row for relation "${table}" violates check constraint "${c.name}"`;
+    }
+  return null;
+}
+
+/** `a:detail->>error` style projections in a select list (other columns return whole rows). */
+function projection(cols: string | undefined): ((r: Row) => Row) | null {
+  if (!cols || !cols.includes("->")) return null;
+  const parts = cols.split(",").map((c) => c.trim()).filter(Boolean);
+  return (r) => {
+    const out: Row = {};
+    for (const p of parts) {
+      const m = /^(?:([a-z_]+):)?([a-z_]+)(?:(->>?)([a-z_]+))?$/.exec(p);
+      if (!m) continue;
+      const [, alias, col, arrow, key] = m;
+      if (!arrow) out[alias ?? col] = r[col];
+      else {
+        const base = r[col] as Record<string, unknown> | null | undefined;
+        const v = base && typeof base === "object" ? base[key] : undefined;
+        out[alias ?? key] = v === undefined ? null : arrow === "->>" && v !== null && typeof v !== "string" ? (typeof v === "object" ? JSON.stringify(v) : String(v)) : v;
+      }
+    }
+    return out;
+  };
+}
+
 const likeRe = (p: string) => new RegExp(`^${p.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/[%*]/g, ".*")}$`);
 
 export interface Write {
@@ -31,7 +85,11 @@ export interface Write {
   value: unknown;
 }
 
-export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Record<string, (args?: Record<string, unknown>) => unknown>; failUpsert?: (table: string) => string | null } = {}) {
+export function fakeSupabase(
+  seed: Record<string, Row[]> = {},
+  opts: { rpc?: Record<string, (args?: Record<string, unknown>) => unknown>; failUpsert?: (table: string) => string | null; checks?: typeof CHECKS } = {},
+) {
+  const checks = opts.checks ?? CHECKS;
   const tables: Record<string, Row[]> = {};
   for (const [k, v] of Object.entries(seed)) tables[k] = v.map((r) => ({ ...r }));
   const writes: Write[] = [];
@@ -49,6 +107,7 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
     let single: "one" | "maybe" | null = null;
     let countHead = false;
     let returning = false;
+    let project: ((r: Row) => Row) | null = null;
 
     const run = () => {
       const rows = t(table);
@@ -63,12 +122,14 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
         // PostgREST answers at most 1,000 rows per request (review R15: the fake used to hide this).
         out = out.slice(0, 1000);
         if (single) return out.length ? { data: { ...out[0] }, error: null } : single === "one" ? { data: null, error: { message: "no rows" } } : { data: null, error: null };
-        return { data: out.map((r) => ({ ...r })), error: null };
+        return { data: out.map((r) => (project ? project(r) : { ...r })), error: null };
       }
       if (op === "insert" || op === "upsert") {
         const fail = op === "upsert" ? opts.failUpsert?.(table) : null;
         if (fail) return { data: null, error: { message: fail } };
         const list = (Array.isArray(payload) ? payload : [payload!]).map((r) => ({ ...r }));
+        const bad = checkViolation(table, list, checks);
+        if (bad) return { data: null, error: { code: "23514", message: bad } };
         writes.push({ table, op, value: Array.isArray(payload) ? list : list[0] });
         const keys = upsertOpts.onConflict ? upsertOpts.onConflict.split(",") : (KEYS[table] ?? ["id"]);
         const out: Row[] = [];
@@ -89,6 +150,8 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
       }
       if (op === "update") {
         const hit = rows.filter((r) => filters.every((f) => f(r)));
+        const bad = checkViolation(table, [payload as Row], checks);
+        if (bad) return { data: null, error: { code: "23514", message: bad } };
         for (const r of hit) Object.assign(r, payload);
         writes.push({ table, op, value: payload });
         return { data: returning ? hit.map((r) => ({ ...r })) : null, error: null };
@@ -100,8 +163,9 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
     };
 
     const q: Record<string, unknown> = {
-      select(_cols?: string, o?: { count?: string; head?: boolean }) {
+      select(cols?: string, o?: { count?: string; head?: boolean }) {
         if (op !== "select") returning = true;
+        else project = projection(cols);
         if (o?.head) countHead = true;
         return q;
       },
@@ -139,7 +203,13 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
       gte: (c: string, v: unknown) => (filters.push((r) => r[c] != null && String(r[c]) >= String(v)), q),
       like: (c: string, p: string) => (filters.push((r) => typeof r[c] === "string" && likeRe(p).test(r[c] as string)), q),
       is: (c: string, v: unknown) => (filters.push((r) => (r[c] ?? null) === v), q),
-      not: (c: string, o: string, v: unknown) => (filters.push((r) => (o === "is" ? (r[c] ?? null) !== v : true)), q),
+      not: (c: string, o: string, v: unknown) => {
+        if (o === "in") {
+          const list = String(v).replace(/^\(|\)$/g, "").split(",").map((x) => x.replace(/^"|"$/g, ""));
+          filters.push((r) => !list.includes(String(r[c])));
+        } else filters.push((r) => (o === "is" ? (r[c] ?? null) !== v : true));
+        return q;
+      },
       or: (expr: string) => {
         const parts = expr.split(/,(?=[a-z_]+\.)/).map((p) => {
           const m = /^([a-z_]+)\.(not\.is|like|eq)\.(.*)$/.exec(p);
@@ -168,7 +238,11 @@ export function fakeSupabase(seed: Record<string, Row[]> = {}, opts: { rpc?: Rec
     // The real client's rpc is a method that reads `this.rest`. Kept that way here, so code that
     // detaches it (`const rpc = client.rpc`) fails in tests exactly as it does in production.
     rest: {
-      rpc: async (fn: string, args?: Record<string, unknown>) => ({ data: opts.rpc?.[fn]?.(args) ?? null, error: opts.rpc?.[fn] ? null : { message: `no rpc ${fn}` } }),
+      // A function the database does not have answers as PostgREST does (migration not applied).
+      rpc: async (fn: string, args?: Record<string, unknown>): Promise<{ data: unknown; error: { code?: string; message: string } | null }> =>
+        opts.rpc?.[fn]
+          ? { data: opts.rpc[fn](args) ?? null, error: null }
+          : { data: null, error: { code: "PGRST202", message: `Could not find the function public.${fn}${args ? `(${Object.keys(args).join(", ")})` : " without parameters"} in the schema cache` } },
     },
     rpc(fn: string, args?: Record<string, unknown>) {
       return this.rest.rpc(fn, args);

@@ -48,6 +48,28 @@ describe("watchdog run", () => {
     expect(r2.closed).toContain("alert:worker-heartbeat");
     expect(mocks.db.state("alert:worker-heartbeat")).toBeUndefined();
   });
+  // Production 24 Nov: job_health() is not installed, so every run ended in "Could not find the function" and sent nothing.
+  it("judges jobs from job_runs when job_health() is missing, and emails the stuck collector once", async () => {
+    const runs = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, job: "ir-docs", started_at: ago(5 + 5 * i), finished_at: ago(5 + 5 * i), ok: false, detail: { error: 'new row for relation "ir_release_scan" violates check constraint "ir_release_scan_status_check"' } }));
+    mocks.db = fakeSupabase({ job_runs: runs }, { rpc: { data_freshness: () => [{ key: "worker_heartbeat", newest: ago(1) }] } });
+    const r = await runWatchdog(1500);
+    expect(r.error).toBeUndefined();
+    expect(r.health).toBe("job_runs");
+    expect(r.emailed).toContain("job-failing:ir-docs");
+    expect(mocks.queueEmailRecorded).toHaveBeenCalledTimes(1);
+    mocks.queueEmailRecorded.mockClear();
+    expect((await runWatchdog(1500)).emailed).toEqual([]);
+    expect(mocks.queueEmailRecorded).not.toHaveBeenCalled();
+  });
+  it("a job_health() error does not end the run: freshness is still judged and no job is called silent", async () => {
+    mocks.db = fakeSupabase({}, { rpc: { data_freshness: () => [{ key: "worker_heartbeat", newest: ago(45) }], job_health: () => [] } });
+    const rest = mocks.db.client.rest;
+    mocks.db.client.rest = { rpc: async (fn: string, args?: Record<string, unknown>) => (fn === "job_health" ? { data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } } : rest.rpc(fn, args)) };
+    const r = await runWatchdog(1500);
+    expect(r.health).toMatch(/^not read: canceling statement/);
+    expect(r.emailed).toContain("worker-heartbeat");
+    expect((r.active as string[]).some((k) => k.startsWith("job-silent:"))).toBe(false);
+  });
   // Review R5: before this, episodes were marked sent whatever the send returned.
   it.each([
     ["no admin recipients", [] as string[], { status: "sent", recorded: true }],

@@ -56,6 +56,7 @@ export async function resolve(missing: (DiscoveredFiling & { ticker: string })[]
   let filings = 0;
   let synced = 0;
   const errors: string[] = [];
+  const cut: string[] = [];
   const pace = opts.paceMs ?? RESOLVE_PACE_MS;
   for (const t of tickers) {
     if (synced >= maxCompanies || !left()) break;
@@ -63,9 +64,11 @@ export async function resolve(missing: (DiscoveredFiling & { ticker: string })[]
     const r = await syncCompany(BY_TICKER.get(t)!, daysAgo(45), { form4: false, deadline: opts.deadline });
     synced++;
     filings += r.filings; errors.push(...r.errors);
-    if (!r.errors.length) done.push(t);
+    // A company the run's budget cut short is resolved again next run: reported as cut, not as an error.
+    if (r.cut) cut.push(r.cut);
+    else if (!r.errors.length) done.push(t);
   }
-  return { earnings: earn.length, companies: tickers.length, resolved: done, filings, errors };
+  return { earnings: earn.length, companies: tickers.length, resolved: done, filings, errors, ...(cut.length ? { cut, outcome: "cut" as const } : {}) };
 }
 
 /**

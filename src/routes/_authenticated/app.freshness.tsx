@@ -34,6 +34,20 @@ const TONE: Record<DataStatus, string> = { fresh: "text-positive", stale: "text-
 const PROVIDER_LABEL: Record<ProviderStatus["state"], string> = { closed: "Healthy", probe: "Probe due", open: "Closed" };
 const PROVIDER_TONE: Record<ProviderStatus["state"], string> = { closed: "text-positive", probe: "text-warning", open: "text-negative" };
 const CLASS_LABEL: Record<string, string> = { quota: "out of credit", config: "configuration", rate: "rate limited", transient: "unreachable", allowance: "free allowance spent" };
+/** One quiet line when job health is computed from job_runs (job_health() not in the database). */
+function healthNote(h: { unread: string[]; partial: string[] }) {
+  const parts = ["Computed from job_runs: the database function job_health() is not installed (migration 0066)."];
+  if (h.partial.length) parts.push(`Counts for ${h.partial.join(", ")} are over the newest 1,000 runs.`);
+  if (h.unread.length) parts.push(`Not read in time: ${h.unread.join(", ")}.`);
+  return parts.join(" ");
+}
+
+/** Failed runs that were answers, not failures: the provider had no data, or the run's time budget ran out. */
+function answered(j: { empty?: number; cut?: number }) {
+  const bits = [j.empty ? `${j.empty} with no data from the provider` : null, j.cut ? `${j.cut} cut short by the run budget` : null].filter(Boolean);
+  return bits.length ? `Not counted as failed: ${bits.join(", ")}` : null;
+}
+
 const PROBLEM_LABEL = { failing: "Failing", unfinished: "Cut off", silent: "Silent" } as const;
 
 const when = (s: string | null) => (s ? new Date(s).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "None");
@@ -181,6 +195,16 @@ export function FreshnessView({ data, loading, error }: { data?: FreshnessData; 
 
       <div data-section="Jobs">
         <Panel title="Jobs, last 24 hours" subtitle="Failing: 5 failed runs in a row (2 for worker steps). Cut off: 30% or more of runs never finished. Silent: no run for 3 times its cadence." bodyClassName="p-0" collapse={false}>
+          {data?.health?.error ? (
+            <p data-section="Job health source" className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
+              Job health could not be read: {data.health.error}
+            </p>
+          ) : null}
+          {data?.health?.source === "job_runs" && (
+            <p data-section="Job health source" className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">
+              {healthNote(data.health)}
+            </p>
+          )}
           {jobs == null ? (
             <Unavailable />
           ) : (
@@ -206,7 +230,14 @@ export function FreshnessView({ data, loading, error }: { data?: FreshnessData; 
                   <Td className={j.problem ? (j.problem === "failing" ? "text-negative" : "text-warning") : "text-muted-foreground"}>{j.problem ? PROBLEM_LABEL[j.problem] : "Ok"}</Td>
                   <Td className="num text-right">{j.runs}</Td>
                   <Td className={cn("num hidden text-right sm:table-cell", j.unfinishedShare >= 0.3 ? "text-warning" : "text-muted-foreground")}>{j.unfinished ? `${j.unfinished} (${pct(j.unfinishedShare)})` : "0"}</Td>
-                  <Td className="num hidden text-right text-muted-foreground md:table-cell">{j.failed}</Td>
+                  <Td className="num hidden text-right text-muted-foreground md:table-cell">
+                    {j.failed}
+                    {answered(j) && (
+                      <span className="ml-1 text-[11px]" title={answered(j) ?? undefined}>
+                        +{(j.empty ?? 0) + (j.cut ?? 0)}
+                      </span>
+                    )}
+                  </Td>
                   <Td className={cn("num hidden text-right md:table-cell", j.fail_streak ? "text-negative" : "text-muted-foreground")}>{j.fail_streak}</Td>
                   <Td className="num text-right text-muted-foreground">{ago(j.last_ok, nowMs)}</Td>
                 </tr>

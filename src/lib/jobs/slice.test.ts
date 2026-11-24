@@ -52,3 +52,17 @@ describe("commit-after-work slices", () => {
     expect(runBudgetMs({ JOB_RUN_BUDGET_MS: "x" })).toBe(3500);
   });
 });
+
+describe("budget cuts (sec-discover recorded them as failed runs)", () => {
+  it("tells the run's own deadline from an answer the source gave", async () => {
+    const { budgetCut, commitSlice } = await import("./slice");
+    expect(budgetCut("SEC EDGAR responded with an error (run budget spent) for https://data.sec.gov/submissions/CIK0000008670.json")).toBe(true);
+    expect(budgetCut("SEC EDGAR responded with an error (no answer in 3417 ms) (run budget spent) for https://www.sec.gov/cgi-bin/browse-edgar")).toBe(true);
+    expect(budgetCut("SEC EDGAR responded 429 (run budget spent) for https://data.sec.gov/x")).toBe(false);
+    expect(budgetCut("SEC EDGAR responded 503 for https://data.sec.gov/x")).toBe(false);
+    expect(budgetCut("daily index 2026-11-22: HTTP 503")).toBe(false);
+    // a cut slice holds its place without charging a try
+    expect(commitSlice({ start: 8, attempt: 2 }, "cut", 100, 4)).toEqual({ cursor: null, triesCursor: 8 * 10 + 1, wrapped: false });
+    expect(commitSlice({ start: 8, attempt: 2 }, "failed", 100, 4).triesCursor).toBe(8 * 10 + 2);
+  });
+});

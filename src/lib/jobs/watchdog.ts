@@ -61,6 +61,8 @@ export interface WatchdogInput {
   jobs: JobHealthRow[];
   /** `provider:*`, `options-backoff`, `remedy:*`, `registrant-drift:*` rows */
   states: StateRow[];
+  /** jobs whose runs could not be read (job health computed from job_runs): never judged silent */
+  unread?: readonly string[];
 }
 
 export const HEARTBEAT_MAX_MIN = 20;
@@ -123,7 +125,9 @@ export function alerts(input: WatchdogInput, nowMs: number, remedies: RemedyKeys
   }
   // Silent scheduled jobs (only cadences the 24 h window can judge).
   const byJob = new Map(input.jobs.map((j) => [j.job, j]));
+  const unread = new Set(input.unread ?? []);
   for (const s of SOURCES) {
+    if (unread.has(s.job)) continue;
     const limitMin = 3 * s.everyMin;
     if (limitMin > 24 * 60) continue;
     if (s.marketHours && !(inMarketHours(now) && inMarketHours(new Date(nowMs - limitMin * 60_000)))) continue;
