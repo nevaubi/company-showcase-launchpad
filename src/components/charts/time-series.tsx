@@ -46,7 +46,11 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
 
   const hasRight = series.some((s) => s.axis === "right");
   // With end labels and a right axis together, the axis values sit outside the labels so the two never overlap.
-  const margin = { top: 12, right: endLabels ? (hasRight ? 122 : 74) : hasRight ? 48 : 12, bottom: 24, left: 44 };
+  // End labels get the room their own text needs (value in 10 px mono, name in 9 px), up to a third of the
+  // width; a name longer than that is shortened with an ellipsis and shown whole on hover.
+  const endRoom = endLabels ? endLabelRoom(series, yFormat, rightFormat, width) : 0;
+  const nameChars = Math.max(6, Math.floor((endRoom - 6) / NAME_GLYPH));
+  const margin = { top: 12, right: endLabels ? endRoom + (hasRight ? 48 : 0) : hasRight ? 48 : 12, bottom: 24, left: 44 };
   const iw = width - margin.left - margin.right;
   const ih = height - margin.top - margin.bottom;
 
@@ -144,13 +148,13 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
           {zeroLine && <line x1={0} x2={iw} y1={Math.round(y(0)) + 0.5} y2={Math.round(y(0)) + 0.5} stroke="var(--foreground)" strokeOpacity={0.5} shapeRendering="crispEdges" />}
           {hasRight &&
             yR.ticks(5).map((t) => (
-              <text key={`r${t}`} x={iw + (endLabels ? 82 : 8)} y={yR(t)} dy="0.32em" className="fill-muted-foreground font-mono text-[10px]">
+              <text key={`r${t}`} x={iw + (endLabels ? endRoom + 8 : 8)} y={yR(t)} dy="0.32em" className="fill-muted-foreground font-mono text-[10px]">
                 {(rightFormat ?? yFormat)(t)}
               </text>
             ))}
           {xTicks.map((t) => (
             <text key={+t} x={x(t)} y={ih + 16} textAnchor="middle" className="fill-muted-foreground font-mono text-[10px]">
-              {d3.utcFormat(iwSpanYears(x) > 3 ? "%Y" : "%b %y")(t)}
+              {d3.utcFormat(iwSpanYears(x) > 3 ? "%Y" : "%b ’%y")(t)}
             </text>
           ))}
           {series.map((s) => (
@@ -174,7 +178,8 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
                   {(e.s.axis === "right" ? (rightFormat ?? yFormat) : yFormat)(e.p.value)}
                 </text>
                 <text dy="0.32em" dx={0} y={11} className="fill-muted-foreground text-[9px]">
-                  {e.s.label.length > 12 ? e.s.label.slice(0, 11) + "…" : e.s.label}
+                  <title>{e.s.label}</title>
+                  {e.s.label.length > nameChars ? e.s.label.slice(0, nameChars - 1) + "…" : e.s.label}
                 </text>
               </g>
             ))}
@@ -221,6 +226,21 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
       )}
     </div>
   );
+}
+
+/** Width of a 10 px mono digit and of a 9 px proportional letter (set for wide letters), in px. */
+const VALUE_GLYPH = 6.2;
+const NAME_GLYPH = 5.6;
+
+function endLabelRoom(series: Props["series"], yFormat: (v: number) => string, rightFormat: ((v: number) => string) | undefined, width: number) {
+  let need = 0;
+  for (const s of series) {
+    const p = s.points[s.points.length - 1];
+    if (!p) continue;
+    const value = (s.axis === "right" ? (rightFormat ?? yFormat) : yFormat)(p.value);
+    need = Math.max(need, value.length * VALUE_GLYPH, s.label.length * NAME_GLYPH);
+  }
+  return Math.round(Math.min(Math.max(56, need + 10), Math.max(56, width / 3)));
 }
 
 function iwSpanYears(x: d3.ScaleTime<number, number>) {
