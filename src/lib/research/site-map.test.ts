@@ -93,6 +93,60 @@ describe("site map", () => {
     expect(overview).toContain("the Technicals link, which opens /app/markets?symbol=TICKER");
   });
 
+  it("carries tonight's header, Overview, supply, globe, technicals and IR changes as the code has them", () => {
+    const map = siteMapText("NVDA");
+    const overview = map.split("\n").find((l) => l.includes("· /app/companies/NVDA ·"))!;
+    for (const s of [
+      // header: the IR site is the last item of the Filings menu; notices under the tabs
+      "Research (asks the assistant for a sourced brief)",
+      "EDGAR filing index and, last, Investor relations site",
+      "More actions",
+      "Company notices: the firm's restricted-list warning and Since your last visit",
+      // Overview: view-time statements, Alt data section, read rules, narrow columns
+      "Alt data (Alt data snapshot, titled Alternative data",
+      "All alt data",
+      "revenue returning to growth",
+      "Holder yield column",
+      "1400 px",
+      "Reading the newer filing from SEC.",
+      "the panels keep their height",
+      "the served quarter's cards stay",
+    ])
+      expect(overview).toContain(s);
+    expect(overview).not.toMatch(/IR site,/);
+    const statements = map.split("\n").find((l) => l.includes("· /app/companies/NVDA/financials ·"))!;
+    expect(statements).toContain("The Overview and the assistant's get_financials use the same read");
+    expect(statements).toContain("about 25 MB");
+    expect(statements).not.toContain("the Overview and get_financials use the scheduled build only");
+
+    const supply = line(map, "/app/supply-chain");
+    for (const s of [
+      "Stated exposure, which reads Estimated exposure or Stated and estimated exposure",
+      "Shares of 10% or more",
+      "Single-source inputs",
+      "Hotspots in link sentences, or Hotspots in filings and calls",
+      "is 2nd order, not drawn at Direct\" with a Show 2nd order button (sets depth=2)",
+      "one wheel notch zooms about 1.25 times",
+      "opens centred between its sides",
+      "a U.S. state counts toward the United States",
+      "The Dependency score counts the company's own 10-K and 10-Q only",
+    ])
+      expect(supply).toContain(s);
+    expect(supply).not.toMatch(/Concentrated, 10% or more|Disclosed exposure|Hotspot regions/);
+
+    const tech = line(map, "/app/markets");
+    expect(tech).toContain("Log excess");
+    expect(tech).toContain("Across companies column");
+    expect(tech).toContain("Not detectable on SYM's own history, but reliable across companies");
+    expect(tech).toContain("would have an even chance of showing up as reliable");
+    expect(tech).toContain("on phones 5D, 2Y and 10Y are left out");
+
+    const ir = map.split("\n").find((l) => l.includes("· /app/companies/NVDA/ir ·"))!;
+    expect(ir).toContain("the check runs when they arrive");
+    expect(ir).toContain("1,000 or 1,000,000 times it");
+    expect(ir).toContain("calculated values were checked against the figures they use");
+  });
+
   it("describes alt data with the renamed anchors and what Unusual now means", () => {
     const map = siteMapText("LMT");
     const hub = line(map, "/app/alt-data");

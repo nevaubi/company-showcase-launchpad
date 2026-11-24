@@ -7,3 +7,5 @@
 - Flat map is Miller's cylindrical projection: it repeats sideways and pans like a street map, so nothing re-projects while it moves.
 - Links are bundled per pair of markers and style (`bundleArcs`); width is the host's value on the Network view's square-root scale (`flowWidth`). More than a dozen links leaving the frame are cut to stubs.
 - The canvas publishes its view at rest in `data-view="lon,lat,zoom,globe|flat"` for tests and the assistant.
+- Opening and reset camera: `openingCamera` (`sphere.ts`): the `fitCamera` framing when everything fits on the near side; when the company's places spread over more than a hemisphere, the centre that shows the most weight with the company well inside the disc. One wheel notch is 1.25× (`wheelFactor`, at most 1.3× an event).
+- During a wheel or pinch zoom the last traced map is moved and scaled by a CSS transform (`reuseBase` in `loop.ts`, within `RETRACE_RATIO` of the traced scale); the frame after the gesture always traces again, so the map is sharp at rest.

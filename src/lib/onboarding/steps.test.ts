@@ -24,6 +24,8 @@ describe("tour steps", () => {
     const map = step("Supply-chain map");
     expect(map.target).toBe("[data-tour='supply-stats']");
     expect(map.body).toContain("This strip counts the named counterparties");
+    expect(map.body).toContain("shares of 10% or more, the company's own single-source inputs");
+    expect(map.body).not.toMatch(/10%\+ shares|single sources,/);
     const views = step("Three ways to read the links");
     expect(views.target).toBe("[data-tour='supply-views']");
     expect(views.body).toContain("isolates that pathway");

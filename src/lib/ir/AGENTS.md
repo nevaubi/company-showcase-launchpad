@@ -33,3 +33,5 @@
 - IR tidy folds lines only on evidence: identical printed values (never "close"), the line that stays keeps its own cells and sources, and a cousin fold must make its total add up without breaking any period. Checks are recomputed from the parts shown; a period that can't be read off the page is unchecked, never "adds up". Passes look lines up by key or value (no pairwise scans); the page runs the tidy in `ir-page.worker.ts`.
 
 - Period heads (`periods.ts` `fiscalLabel`/`uniqueHeads`): a fiscal year number only for December year-ends; otherwise "FY ending <month>" and "Q<n>" over the month, per era, off-grid periods by month, never two identical heads.
+
+- Rule 7 of `suspect.ts`: a figure whose other printing, or a same-named line of the same table, is 1,000× or 1,000,000× it (within 0.5%, the slip being the side farther from the company's usual quarter figures) is held, with the same document's other figures of the line and its parts. An IR page shown before the company's statements arrive is checked when they do (`checkLate` in `unpack.ts`, through `checkLateIrPage`), gaining holds and flags without moving any figure.

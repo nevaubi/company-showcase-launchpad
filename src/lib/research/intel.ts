@@ -21,7 +21,7 @@ import type { BenchSeries } from "@/lib/technicals/measures";
 import { pooledFamily, POOLED_REASON_TEXT, type PooledRow } from "@/lib/technicals/pooled";
 import { fmtNum, fmtPct } from "@/lib/technicals/read";
 import { nameList, verdictSummary } from "@/lib/technicals/verdict";
-import { flowsQuery, histQuery, quantReadQuery, signalsQuery, statesQuery } from "@/lib/technicals/data";
+import { flowsQuery, histQuery, signalsQuery, statesQuery } from "@/lib/technicals/data";
 import { crossQuery, peersQuery } from "@/lib/technicals/cross";
 import { situationQuery } from "@/lib/situations/data";
 import { briefQuery } from "@/lib/insights/brief";
@@ -646,16 +646,21 @@ export async function searchDocTables(qc: QueryClient, args: Record<string, unkn
 
 /* ---------------------------------------------------------------- dossier additions */
 
-/** The computed layer in a few lines, appended to get_company_dossier so the first call already sees it. */
+/**
+ * The computed layer in a few lines, appended to get_company_dossier so the first call already sees it. It carries no
+ * technical read: the pipeline's model-written quant read has no test behind it (the Technicals page dropped it), and the
+ * page's tested verdict needs ten years of prices, so it is left to get_quant_profile, which computes it as the page does.
+ */
 export async function computedDigest(qc: QueryClient, t: string): Promise<string[]> {
-  const [ki, brief, sit, read, score] = await Promise.all([
+  const [ki, brief, sit, score] = await Promise.all([
     safe(qc.fetchQuery(kpiInsightsQuery(t))),
     safe(qc.fetchQuery(briefQuery(t))),
     safe(qc.fetchQuery(situationQuery(t))),
-    safe(qc.fetchQuery(quantReadQuery(t))),
     safe(qc.fetchQuery(scoreQuery(t))),
   ]);
-  const out: string[] = ["FILED UNDER COMPUTED LAYER (drill in with get_kpis, get_kpi_signals, get_earnings_workup, get_quant_profile, search_doc_tables):"];
+  const out: string[] = [
+    "FILED UNDER COMPUTED LAYER (drill in with get_kpis, get_kpi_signals, get_earnings_workup, search_doc_tables; get_quant_profile for the Technicals page's tested verdict):",
+  ];
   if (brief?.sentences?.length) out.push(`BRIEF: ${brief.sentences.map((s: { text: string }) => s.text).join(" ")}`);
   if (ki?.signals?.length)
     out.push(
@@ -667,7 +672,6 @@ export async function computedDigest(qc: QueryClient, t: string): Promise<string
     );
   if (score) out.push(`LATEST RESULTS SCORECARD: filed ${score.filed}, quarter ${score.quarter_end ?? "?"}, ${score.metrics.length} metrics, ${score.guidance.length} guidance items <${score.filing_url}>`);
   if (sit) out.push(`SITUATIONS: ${Object.entries(sit.components ?? {}).map(([k, c]) => `${k}: ${(c as { headline?: string; dir?: string }).headline ?? ""} (${(c as { dir?: string }).dir ?? "?"})`).join("; ")}`);
-  if (read) out.push(`QUANT: ${read.sentences.map((s: { text: string }) => s.text).join(" ")}`);
   if (out.length <= 1) return [];
   // Keep the digest short so the dossier's filings and accession numbers stay inside the clip.
   const text = out.join("\n");
