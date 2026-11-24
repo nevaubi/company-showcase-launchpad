@@ -5,6 +5,8 @@ import { fmtDate } from "@/lib/format";
 import type { Technicals } from "@/lib/technicals/analysis";
 import { GROUP_LABEL, type Bars, type ConditionGroup } from "@/lib/technicals/conditions";
 import { EVIDENCE, REASON_TEXT, type EvidenceCell, type EvidenceRow, type Horizon } from "@/lib/technicals/evidence";
+import { POOLED_REASON_TEXT, type PooledRow } from "@/lib/technicals/pooled";
+import { detectableText, pooledFor } from "@/lib/technicals/verdict";
 import { cn } from "@/lib/utils";
 import { CalcSheet, f2, Note, pc, pp, signTone, T as S, TableWrap, Tag, TechPanel, type Calc } from "./ui";
 
@@ -25,6 +27,13 @@ function verdictOf(c: EvidenceCell | undefined) {
   return { text: short[c.reason] ?? c.reason, title: REASON_TEXT[c.reason] };
 }
 
+/** The cross-company verdict of a pooled row, in the same few words as the stock's own. */
+function pooledVerdict(p: PooledRow) {
+  if (p.verdict === "reliable") return { text: (p.excess ?? 0) > 0 ? "reliable: higher after" : "reliable: lower after", reliable: true };
+  const short: Record<string, string> = { small: "small sample", base: "no clear difference", cost: "smaller than costs", unstable: "not stable over time" };
+  return { text: short[p.reason] ?? p.reason, reliable: false };
+}
+
 const today = (r: EvidenceRow) =>
   !r.active ? "–" : r.kind === "state" ? `since ${fmtDate(r.atDate, { month: "short", day: "numeric" })}` : r.sessionsAgo === 0 ? "today" : `${r.sessionsAgo} session${r.sessionsAgo === 1 ? "" : "s"} ago`;
 
@@ -37,7 +46,9 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
   const [calc, setCalc] = useState<Calc | null>(null);
   const h = +hz as Horizon;
   const E = T?.evidence;
-  const hasPooled = !!E?.rows.some((r) => EVIDENCE.horizons.some((x) => r.cells[x]?.pooled));
+  const P = T?.pooled ?? null;
+  const hasPooled = !!P;
+  const detect = E ? detectableText(E, symbol) : null;
 
   const open = (r: EvidenceRow) => {
     const c = r.cells[h];
@@ -60,9 +71,12 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
             ? `${x} days: excess ${pp(k.test.excess, 2)} (standard error ${pc(k.test.se, 2)}, interval ${k.test.ci ? `${pp(k.test.ci[0])} to ${pp(k.test.ci[1])}` : "–"}); average ${pp(k.test.mean, 2)} against ${pp(k.test.meanAll, 2)} for all days; up ${pc(k.test.hit)} of the time against ${pc(k.test.hitAll)}; halves ${pp(k.test.halves[0])} and ${pp(k.test.halves[1])}; ${REASON_TEXT[k.reason].toLowerCase()}.`
             : `${x} days: too few cases.`;
         }),
-        c?.pooled
-          ? `Across tracked companies the same event has ${c.pooled.n.toLocaleString("en-US")} occurrences with a ${h}-day excess of ${pp(c.pooled.excess, 2)}${c.pooled.ci ? ` (95% interval ${pp(c.pooled.ci[0])} to ${pp(c.pooled.ci[1])})` : ""}.`
-          : "",
+        (() => {
+          const p = pooledFor(P, r.key, h);
+          if (!P) return "The cross-company record is not available right now.";
+          if (!p) return r.kind === "state" ? "No cross-company record: the pipeline pools chart events only." : `No cross-company record at ${h} days.`;
+          return `Across ${p.symbols.toLocaleString("en-US")} covered companies, a separate line of evidence: ${p.n.toLocaleString("en-US")} events in ${p.months} months, average ${pp(p.mean, 2)} against ${pp(p.base, 2)} on all days, excess ${pp(p.excess, 2)}${p.ci ? ` (95% interval ${pp(p.ci[0])} to ${pp(p.ci[1])}, months clustered)` : ""}${p.q != null ? `, q ${f2(p.q, 3)}` : ""}: ${POOLED_REASON_TEXT[p.reason].toLowerCase()}. An average across companies, not a forecast for ${symbol}.`;
+        })(),
         (r.cases[h]?.length ?? 0) > 60 ? `Showing the latest 60 of ${r.cases[h]!.length} cases.` : "",
       ]
         .filter(Boolean)
@@ -108,10 +122,26 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
         </td>
         <td className={cn(S.num, v.reliable && "font-medium", v.reliable && signTone(t?.excess))}>{t ? pp(t.excess, 2) : "–"}</td>
         <td className={cn(S.num, S.wide)}>{t?.ci ? `${pp(t.ci[0])} to ${pp(t.ci[1])}` : "–"}</td>
-        <td className={cn(S.num, S.wide)}>{t ? f2(t.t) : "–"}</td>
         <td className={cn(S.num, S.wide)}>{c?.q != null ? f2(c.q, c.q < 0.1 ? 3 : 2) : "–"}</td>
-        <td className={cn(S.td, "sm:whitespace-nowrap")} title={c?.pooled?.ci ? `${v.title}. Across tracked companies: ${pp(c.pooled.ci[0])} to ${pp(c.pooled.ci[1])}.` : v.title}>
+        <td className={cn(S.td, "sm:whitespace-nowrap")} title={v.title}>
           {v.reliable ? <Tag tone={t!.excess > 0 ? "positive" : "negative"}>{v.text}</Tag> : <span className="text-[11px] text-muted-foreground">{v.text}</span>}
+        </td>
+        <td className={cn(S.td, S.wide, "whitespace-nowrap border-l")}>
+          {(() => {
+            const p = pooledFor(P, r.key, h);
+            if (!p) return <span className="text-[11px] text-muted-foreground">{!P ? "not available" : "no record"}</span>;
+            const pv = pooledVerdict(p);
+            return (
+              <span className="inline-flex items-baseline gap-1.5" title={`${p.n.toLocaleString("en-US")} events across ${p.symbols.toLocaleString("en-US")} companies${p.ci ? `, 95% interval ${pp(p.ci[0])} to ${pp(p.ci[1])}` : ""}${p.q != null ? `, q ${f2(p.q, 3)}` : ""}`}>
+                <span className={cn("num text-[13px]", pv.reliable && "font-medium", pv.reliable && signTone(p.excess))}>{pp(p.excess, 2)}</span>
+                {pv.reliable ? (
+                  <Tag tone={(p.excess ?? 0) > 0 ? "positive" : "negative"}>{pv.text}</Tag>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">{p.q != null ? `q ${f2(p.q, 2)}` : pv.text}</span>
+                )}
+              </span>
+            );
+          })()}
         </td>
       </tr>
     );
@@ -152,12 +182,12 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
         </p>
       ) : (
         <>
-          <TableWrap min={820}>
+          <TableWrap min={900}>
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b">
                   <th className={S.th}>Condition</th>
-                  <th className={cn(S.th, S.wide)}>In force</th>
+                  <th className={cn(S.th, S.wide, "w-28")}>In force</th>
                   <th className={cn(S.thNum, S.wide)} title="Non-overlapping cases / days the condition held">
                     Cases / days
                   </th>
@@ -165,18 +195,18 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
                     Up share / base
                   </th>
                   <th className={S.thNum} title={`Average ${h}-day log return after the condition minus the all-days average`}>
-                    Excess<span className="hidden sm:inline">, {h} days</span>
+                    Log excess
                   </th>
                   <th className={cn(S.thNum, S.wide)} title="Block-bootstrap interval of the excess">
                     95% interval
-                  </th>
-                  <th className={cn(S.thNum, S.wide)} title="Excess divided by its Hodrick standard error">
-                    t
                   </th>
                   <th className={cn(S.thNum, S.wide)} title="p-value adjusted for everything tested on this symbol (Benjamini-Hochberg)">
                     q
                   </th>
                   <th className={S.th}>Verdict</th>
+                  <th className={cn(S.th, S.wide, "border-l")} title={`The same condition across every covered company (chart events only; states have no record): excess over ${h} days and its q, adjusted for every event and horizon`}>
+                    Across companies
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -214,11 +244,19 @@ export function EvidencePanel({ symbol, T, bars, loading }: { symbol: string; T:
             </table>
           </TableWrap>
           <p className={cn("border-t px-3 py-1.5 sm:hidden", S.caption)}>Select a condition for its cases, hit rate, interval and q.</p>
+          {detect && (
+            <p className={cn("border-t px-3 py-2 text-[13px] leading-5")}>
+              <span className="font-medium">What the test can see. </span>
+              {detect} Real single-stock effects are usually far smaller, so on one stock the usual answer is no clear difference; the column on the right is the second line of evidence, the
+              same condition pooled across covered companies (chart events only), with its own q adjusted across every event and horizon. Select a row for both records.
+            </p>
+          )}
           <Note>
-            Returns are total returns (dividends reinvested) over the next {h} trading days; the excess is measured in log terms against every {h}-day window in the same sample. Standard errors follow
-            Hodrick (1992), so overlapping windows and long-lived conditions do not overstate the evidence; the interval is a block bootstrap. A condition is called reliable only with at least{" "}
-            {EVIDENCE.minIndependent} non-overlapping cases, q at or under {pc(EVIDENCE.fdr)}, an interval that excludes zero, an excess above {pc(EVIDENCE.cost, 1)} trading cost, the same sign in both
-            halves of the history{hasPooled ? ", and the same finding across tracked companies where those statistics exist" : ""}. On simulated price histories with nothing to find, this procedure
+            Returns are total returns (dividends reinvested) over the next {h} trading days; the excess is the average log return after the condition minus the average over every {h}-day window in the same sample (log terms, so it is not directly comparable with the
+            up share, which counts simple returns). Standard errors follow
+            Hodrick (1992), so overlapping windows and long-lived conditions do not overstate the evidence; the interval resamples the same daily terms in blocks of at least {h} sessions, so it is a check on the shape of the distribution, not a second test. A condition is called reliable only with at least{" "}
+            {EVIDENCE.minIndependent} non-overlapping cases, q at or under {pc(EVIDENCE.fdr)}, an interval that excludes zero, a difference from days without the condition above {pc(EVIDENCE.cost, 1)} trading cost, the same sign in both
+            halves of the history{hasPooled ? ", and no contradiction from the cross-company record where one exists" : ""}. On simulated price histories with nothing to find, this procedure
             shows a signal for fewer than 5 in 100. Past frequencies, not forecasts.
           </Note>
         </>

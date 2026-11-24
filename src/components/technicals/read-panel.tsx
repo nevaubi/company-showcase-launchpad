@@ -8,7 +8,7 @@ import { CalcSheet, Note, T as S, TechPanel, type Calc } from "./ui";
 
 const toCalc = (sym: string, s: ReadSentence): Calc => ({
   title: `${sym}: ${s.table.title}`,
-  sub: s.text,
+  sub: s.aside ? `${s.text} ${s.aside}` : s.text,
   formula: s.table.formula,
   cols: s.table.cols,
   rows: s.table.rows,
@@ -38,6 +38,7 @@ function Sentence({ s, onOpen, lead }: { s: ReadSentence; onOpen: () => void; le
           <span className="ml-1.5 whitespace-nowrap text-[11px] text-link opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100 motion-reduce:transition-none">
             figures
           </span>
+          {s.aside && <span className="mt-0.5 block text-[11px] font-normal leading-4 text-muted-foreground">{s.aside}</span>}
         </span>
       </button>
     </li>

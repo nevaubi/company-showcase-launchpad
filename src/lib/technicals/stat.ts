@@ -89,6 +89,37 @@ export function tTwoSided(t: number, dof: number): number {
   return incBeta(dof / (dof + t * t), dof / 2, 0.5);
 }
 /**
+ * Exact two-sided binomial p-value: the probability, under Binomial(n, p0), of an outcome no more likely than
+ * k (the "minimum likelihood" rule scipy's binomtest uses, with the same small relative tolerance).
+ */
+export function binomTwoSided(k: number, n: number, p0: number): number {
+  if (!(n > 0) || !(p0 > 0 && p0 < 1)) return NaN;
+  const lp = (j: number) => logGamma(n + 1) - logGamma(j + 1) - logGamma(n - j + 1) + j * Math.log(p0) + (n - j) * Math.log(1 - p0);
+  const at = lp(k);
+  let sum = 0;
+  for (let j = 0; j <= n; j++) {
+    const l = lp(j);
+    if (l <= at + 1e-7) sum += Math.exp(l);
+  }
+  return Math.min(1, sum);
+}
+/**
+ * Critical value of Student-t: the c > 0 with tTwoSided(c, dof) = p (bisection; tTwoSided falls as c grows).
+ * tCritical(0.05, ∞-like dof) ≈ 1.96.
+ */
+export function tCritical(p: number, dof: number): number {
+  if (!(p > 0 && p < 1) || !(dof > 0)) return NaN;
+  let lo = 0;
+  let hi = 1;
+  while (tTwoSided(hi, dof) > p && hi < 1e6) hi *= 2;
+  for (let k = 0; k < 200 && hi - lo > 1e-10 * hi; k++) {
+    const mid = (lo + hi) / 2;
+    if (tTwoSided(mid, dof) > p) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+/**
  * Upper regularised incomplete gamma function Q(a, x) = Γ(a, x) ÷ Γ(a): the series for P(a, x) below
  * x = a + 1, the continued fraction (modified Lentz) above, so the far tail keeps its relative accuracy.
  */
@@ -425,6 +456,8 @@ export function countIndependent(flag: ArrayLike<number>, from: number, last: nu
 
 /** Block length (sessions) of the bootstrap over daily contributions. */
 export const BOOT_BLOCK = 10;
+/** Block length for an h-day test: at least BOOT_BLOCK, and never shorter than the window, whose terms are autocorrelated up to h lags. */
+export const bootBlock = (h: number) => Math.max(BOOT_BLOCK, h);
 
 /**
  * Do h-day forward returns after a condition differ from the stock's own all-days average?
@@ -441,7 +474,7 @@ export const BOOT_BLOCK = 10;
  * or the level of volatility. t = effect / SE; the p-value uses Student-t with (independent occurrences − 1)
  * degrees of freedom, which widens it when cases are few.
  *
- * Interval: the same daily terms are resampled in blocks of BOOT_BLOCK sessions (circular block bootstrap),
+ * Interval: the same daily terms are resampled in blocks of max(BOOT_BLOCK, h) sessions (circular block bootstrap),
  * so it reflects fat tails and volatility clustering without assuming a normal distribution.
  */
 export function forwardTest(
@@ -516,7 +549,7 @@ export function forwardTest(
     t,
     dof,
     p: tTwoSided(t, dof),
-    ci: B > 0 ? blockBootstrapSum(w, BOOT_BLOCK, B, opt.seed ?? 1, n) : null,
+    ci: B > 0 ? blockBootstrapSum(w, bootBlock(h), B, opt.seed ?? 1, n) : null,
     meanLog: sum / n,
     meanAllLog: base.meanLog,
     mean: simple / n,
@@ -570,7 +603,7 @@ export function forwardInterval(
   B: number,
   seed: number,
 ): [number, number] | null {
-  return blockBootstrapSum(dailyTerms(F, logRet, flag, test.from, test.n), BOOT_BLOCK, B, seed, test.n);
+  return blockBootstrapSum(dailyTerms(F, logRet, flag, test.from, test.n), bootBlock(F.h), B, seed, test.n);
 }
 
 /**

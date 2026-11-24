@@ -128,7 +128,7 @@ export function useTechnicals(symbol: string) {
   const universe = useMemo(() => universeRank(cross.data, symbol), [cross.data, symbol]);
 
   const input = useMemo<AnalysisInput | null>(
-    () => (history && benchReady ? { sym: symbol, bars: history.bars, bench, releases, pooled: pooled.data?.signals ?? null, universe } : null),
+    () => (history && benchReady ? { sym: symbol, bars: history.bars, bench, releases, pooled: pooled.data?.signals ?? null, pooledBase: pooled.data?.base ?? null, universe } : null),
     [history, benchReady, symbol, bench, releases, pooled.data, universe],
   );
   const analysis = useQuery({

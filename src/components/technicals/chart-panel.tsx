@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Segmented } from "@/components/app/segmented";
 import { PriceChart, type ChartMarker, type ChartPane, type Overlay } from "@/components/charts/price-chart";
 import { useSource } from "@/components/source/source-context";
@@ -15,6 +15,23 @@ import type { SymbolHistory } from "./use-technicals";
 
 export const CHART_RANGES = ["1d", "5d", "1mo", "3mo", "6mo", "ytd", "1y", "2y", "5y", "10y", "max"] as const;
 export type ChartRange = (typeof CHART_RANGES)[number];
+/** Ranges left out of the selector at phone width so it fits on one line (still reachable through the address). */
+const PHONE_HIDDEN = new Set<ChartRange>(["5d", "2y", "10y"]);
+
+/** True below Tailwind's sm breakpoint (640 px). */
+function usePhone() {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mq = window.matchMedia("(max-width: 639.98px)");
+    const on = () => setPhone(mq.matches);
+    on();
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return phone;
+}
+
 const RANGE_LABEL: Record<ChartRange, string> = { "1d": "1D", "5d": "5D", "1mo": "1M", "3mo": "3M", "6mo": "6M", ytd: "YTD", "1y": "1Y", "2y": "2Y", "5y": "5Y", "10y": "10Y", max: "Max" };
 const INTRADAY: Partial<Record<ChartRange, Interval>> = { "1d": "5m", "5d": "15m" };
 
@@ -116,6 +133,7 @@ export function ChartPanel({
   const { open } = useSource();
 
   const intraday = INTRADAY[range];
+  const phone = usePhone();
   const live = usePrices(symbol, (intraday ? range : "1mo") as Range, intraday ?? "1d", !!intraday);
   const compareOptions = [symbol !== "SPY" ? "SPY" : null, sectorEtf && sectorEtf !== symbol ? sectorEtf : null, symbol !== "QQQ" ? "QQQ" : null].filter((x): x is string => !!x);
   const compareSym = !intraday && compareOptions.includes(prefs.compare) ? prefs.compare : "";
@@ -165,7 +183,13 @@ export function ChartPanel({
       }
       actions={
         <>
-          <Segmented size="xs" label="Range" value={range} onChange={onRange} options={CHART_RANGES.map((r) => ({ v: r, l: RANGE_LABEL[r] }))} />
+          <Segmented
+            size="xs"
+            label="Range"
+            value={range}
+            onChange={onRange}
+            options={CHART_RANGES.filter((r) => !phone || !PHONE_HIDDEN.has(r) || r === range).map((r) => ({ v: r, l: RANGE_LABEL[r] }))}
+          />
           <Segmented size="xs" label="Chart type" value={prefs.mode} onChange={(v) => set("mode", v)} options={[{ v: "candles", l: "Candles" }, { v: "line", l: "Line" }]} />
           <Segmented size="xs" label="Price scale" value={prefs.scale} onChange={(v) => set("scale", v)} options={[{ v: "linear", l: "Linear", title: "Equal distances are equal price changes" }, { v: "log", l: "Log", title: "Equal distances are equal percentage changes" }]} />
         </>

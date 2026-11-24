@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { fmtDate, ordinal } from "@/lib/format";
 import { optionsHistoryQuery } from "@/lib/options/data";
 import type { Technicals } from "@/lib/technicals/analysis";
+import type { Horizon } from "@/lib/technicals/evidence";
 import { METRICS, peersQuery, rowsOf, type CrossFile, type CrossRow } from "@/lib/technicals/cross";
 import { impliedMove, MEAN_ABS_NORMAL, weekdaysBetween, type LevelRow } from "@/lib/technicals/measures";
 import { fmtUsd } from "@/lib/technicals/read";
@@ -173,7 +174,8 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
   // the latest snapshot that carries a term structure (expiry by expiry)
   const snap = opt.data?.find((r) => r.term.length > 0);
   // one expiry per horizon: the first at or after 1, 7, 14, 30, 60, 90 and 180 calendar days
-  const priced = (snap?.term ?? []).filter((t) => t.d > 0 && t.m > 0);
+  // an expiry on or before the page's last close has already passed for the reader: left out
+  const priced = (snap?.term ?? []).filter((t) => t.d > 0 && t.m > 0 && (!T || t.e > T.asOf));
   const term = [...new Set([1, 7, 14, 30, 60, 90, 180].map((d) => priced.find((t) => t.d >= d)).filter((t): t is NonNullable<typeof t> => !!t))];
   const rv = M?.volatility.rv21;
   return (
@@ -294,8 +296,12 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                       <th className={cn(S.thNum, S.wide)} title="Lo-MacKinlay statistic, valid when volatility changes over time">
                         z
                       </th>
-                      <th className={S.thNum}>p</th>
-                      <th className={S.th}>Reading</th>
+                      <th className={S.thNum} title="Nominal p-value of this horizon alone">
+                        p
+                      </th>
+                      <th className={S.th} title="Read from the p-value adjusted for the horizons tested together (Šidák), the same rule as the sentence below">
+                        Reading
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -305,7 +311,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                         <td className={cn(S.num, "font-medium")}>{f2(r.vr)}</td>
                         <td className={cn(S.num, S.wide)}>{f2(r.z)}</td>
                         <td className={S.num}>{f2(r.p, 3)}</td>
-                        <td className={cn(S.td, "whitespace-nowrap text-[11px] text-muted-foreground")}>{r.p < 0.05 ? (r.vr > 1 ? "moves continued" : "moves reversed") : "as a random walk"}</td>
+                        <td className={cn(S.td, "whitespace-nowrap text-[11px] text-muted-foreground")}>{1 - (1 - r.p) ** M.walk.rows.length < 0.05 ? (r.vr > 1 ? "moves continued" : "moves reversed") : r.p < 0.05 ? "nominal only" : "as a random walk"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -648,7 +654,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
               <th className={cn(S.thNum, S.wide)} title="Size of the move in units of its normal two-day volatility: the daily volatility of the 60 sessions before × √2">
                 σ
               </th>
-              <th className={S.thNum} title="Return over the 20 sessions after the reaction window">
+              <th className={S.thNum} title={`Return over the 20 sessions after the reaction window; every 20-day window of the history averaged ${pp(R.drift.test?.meanAll)}`}>
                 Next 20 days
               </th>
             </tr>
@@ -680,14 +686,45 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
               </td>
               <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgExcess)}</td>
               <td className={cn(S.num, S.wide, "font-semibold")}>{f2(R.stats.avgSigma, 1)}</td>
-              <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgDrift20)}</td>
+              <td className={cn(S.num, "font-semibold")}>{pp(R.drift.test?.mean ?? R.stats.avgDrift20)}</td>
             </tr>
+            {R.drift.test && (
+              <tr className="border-t">
+                <td className={cn(S.td, "text-muted-foreground")} colSpan={2}>
+                  Base rate: every 20-day window
+                </td>
+                <td className={S.num} />
+                <td className={cn(S.num, S.wide)} />
+                <td className={cn(S.num, "text-muted-foreground")}>{pp(R.drift.test.meanAll)}</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </TableWrap>
       <p className={cn("px-3 py-2", S.caption)}>
-        Up after {pc(R.stats.upRate)} of releases; the following 20 days continued the reaction's direction {pc(R.stats.continuation)} of the time. The bottom row averages every release: the size of
-        the move, then the signed averages.{R.rows.length > 12 ? ` The latest 12 of ${R.rows.length} are listed.` : ""}
+        {(() => {
+          const D = R.drift;
+          const t = D.test;
+          const clear = t != null && t.p < 0.05;
+          return (
+            <>
+              Up after {pc(R.stats.upRate)} of releases. {t ? (
+                <>
+                  The 20 days after the reaction window averaged {pp(t.mean)} against {pp(t.meanAll)} for every 20-day window of the history (log excess {pp(t.excess, 2)}, t {f2(t.t)}, p{" "}
+                  {f2(t.p, 2)}, Hodrick standard error over {t.nEff} releases): {clear ? "different from the usual 20 days in this single test, which is not adjusted for the others on the page" : "no clear difference from the usual 20 days"}.{" "}
+                </>
+              ) : null}
+              {D.expected != null ? (
+                <>
+                  They continued the reaction's direction {D.continued} times in {D.n} ({pc(D.n ? D.continued / D.n : null)}); if the next 20 days had nothing to do with the reaction, about{" "}
+                  {pc(D.expected)} would (binomial p {f2(D.p, 2)}).{" "}
+                </>
+              ) : null}
+              The bottom rows average every release: the size of the move, then the signed averages, and the base rate under them.
+              {R.rows.length > 12 ? ` The latest 12 of ${R.rows.length} are listed.` : ""}
+            </>
+          );
+        })()}
       </p>
     </div>
   );
@@ -721,6 +758,21 @@ function ChartEvents({ T, count }: { T: Technicals; count: number }) {
                 ))}
               </tr>
             ))}
+            {log.length > 0 && (
+              <tr className="border-t bg-secondary/40">
+                <td className={cn(S.td, "text-muted-foreground")} colSpan={2}>
+                  Base rate: every window
+                </td>
+                {[5, 20, 60].map((h) => {
+                  const base = T.evidence.rows.map((r) => r.cells[h as Horizon]?.test.meanAll).find((v) => v != null);
+                  return (
+                    <td key={h} className={cn(S.num, h === 60 && S.wide, "text-muted-foreground")}>
+                      {pp(base)}
+                    </td>
+                  );
+                })}
+              </tr>
+            )}
             {!log.length && (
               <tr>
                 <td colSpan={5} className={cn("px-3 py-3", S.caption)}>
@@ -732,8 +784,8 @@ function ChartEvents({ T, count }: { T: Technicals; count: number }) {
         </table>
       </TableWrap>
       <p className={cn("px-3 py-2", S.caption)}>
-        Total return over the sessions after each event. One event says little: whether a type of event has been followed by anything unusual is tested in Evidence, over every occurrence and
-        against the base rate. Open: the window has not ended yet.
+        Total return over the sessions after each event; the last row is the average over every window of the tested sample. One event says little: whether a type of event has been followed by
+        anything unusual is tested in Evidence, over every occurrence, against that base rate and across covered companies. Open: the window has not ended yet.
       </p>
     </div>
   );

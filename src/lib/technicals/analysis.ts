@@ -7,6 +7,9 @@ import TA from "./ta";
 import { indicators, type Bars } from "./conditions";
 import { evidence, EVIDENCE, type Evidence, type PooledSignals } from "./evidence";
 import { measures, type BenchSeries, type Measures } from "./measures";
+import type { SignalsFile } from "./data";
+import { pooledFamily, type PooledRow } from "./pooled";
+import { binomTwoSided, ForwardReturns, forwardTest, type ForwardTest } from "./stat";
 import { technicalRead, type ReadContext, type ReadSentence } from "./read";
 
 export interface AnalysisInput {
@@ -18,6 +21,8 @@ export interface AnalysisInput {
   releases?: { filed: string; accn: string; doc: string }[];
   /** tech/signals.json `signals`: cross-company forward returns after each event */
   pooled?: PooledSignals | null;
+  /** tech/signals.json `base`: the all-days rate behind each pooled excess (needed for the cross-company verdicts) */
+  pooledBase?: SignalsFile["base"] | null;
   universe?: ReadContext["universe"];
   /** See EvidenceOptions.intervals */
   intervals?: "all" | "candidates";
@@ -41,11 +46,56 @@ export interface Technicals {
   bars: number;
   measures: Measures;
   evidence: Evidence;
+  /** The cross-company record of each chart event and horizon (pooled.ts); null when the file is not available */
+  pooled: PooledRow[] | null;
   read: ReadSentence[];
-  reactions: { rows: Reaction[]; stats: ReactionStats } | null;
+  reactions: { rows: Reaction[]; stats: ReactionStats; drift: DriftTest } | null;
   events: EventLogRow[];
   /** Milliseconds the computation took */
   ms: number;
+}
+
+/**
+ * What followed the releases, tested like any other condition: the release windows' ends are a flag series,
+ * and the 20-day return after them is compared with every 20-day window of the history (Hodrick standard
+ * error, Student-t). The continuation share is compared with what independence would give: if the next 20
+ * days had nothing to do with the reaction, a share up × up-share of all windows + (1 − up) × (1 − up-share)
+ * would continue it; the p-value is an exact two-sided binomial test.
+ */
+export interface DriftTest {
+  h: number;
+  test: ForwardTest | null;
+  /** Releases with a complete 20-day window, how many continued the reaction's direction, and the share independence predicts */
+  n: number;
+  continued: number;
+  expected: number | null;
+  p: number | null;
+}
+
+export function driftTest(B: Bars, rows: Reaction[], h = 20): DriftTest {
+  const n = B.c.length;
+  const flag = new Uint8Array(n);
+  const ends: { end: number; move: number }[] = [];
+  for (const r of rows) {
+    const i = B.d.findIndex((d) => d >= r.date);
+    if (i <= 0 || i + 1 + h >= n) continue;
+    flag[i + 1] = 1;
+    ends.push({ end: i + 1, move: r.move });
+  }
+  const logRet = new Float64Array(n);
+  for (let i = 1; i < n; i++) logRet[i] = Math.log(B.tr[i] / B.tr[i - 1]);
+  const F = new ForwardReturns(B.tr, h);
+  const test = ends.length ? forwardTest(F, logRet, flag, 0) : null;
+  let continued = 0;
+  let up = 0;
+  for (const e of ends) {
+    const fwd = B.tr[e.end + h] / B.tr[e.end] - 1;
+    if (Math.sign(fwd) === Math.sign(e.move)) continued++;
+    if (e.move > 0) up++;
+  }
+  const m = ends.length;
+  const expected = test && m ? (up / m) * test.hitAll + (1 - up / m) * (1 - test.hitAll) : null;
+  return { h, test, n: m, continued, expected, p: expected != null ? binomTwoSided(continued, m, expected) : null };
 }
 
 /** Fewer bars than this and nothing is computed (the 200-day average alone needs 200). */
@@ -68,6 +118,11 @@ export function analyze(input: AnalysisInput): Technicals | null {
   });
   const E = evidence(B, { indicators: I, pooled: input.pooled, seed: input.sym, intervals: input.intervals });
 
+  const pooled =
+    input.pooled && input.pooledBase
+      ? pooledFamily({ signals: input.pooled as SignalsFile["signals"], base: input.pooledBase })
+      : null;
+
   let reactions: Technicals["reactions"] = null;
   if (releases.length) {
     // Bars in the price-file shape; the adjusted close carries the total-return index.
@@ -76,7 +131,7 @@ export function analyze(input: AnalysisInput): Technicals | null {
     const spy = input.bench?.find((b) => b.kind === "market");
     const spyBars: Bar[] | undefined = spy?.d.map((d, i) => [d, spy.tr[i], spy.tr[i], spy.tr[i], spy.tr[i], spy.tr[i], 0]);
     const rows = earningsReactions(bars, releases, spyBars).filter((r) => r.date >= B.d[0]);
-    if (rows.length) reactions = { rows, stats: reactionStats(rows) };
+    if (rows.length) reactions = { rows, stats: reactionStats(rows), drift: driftTest(B, rows) };
   }
 
   const events: EventLogRow[] = [...I.events]
@@ -95,7 +150,8 @@ export function analyze(input: AnalysisInput): Technicals | null {
     bars: n,
     measures: M,
     evidence: E,
-    read: technicalRead(M, E, { universe: input.universe }),
+    pooled,
+    read: technicalRead(M, E, { universe: input.universe, sym: input.sym, pooled }),
     reactions,
     events,
     ms: Math.round(now() - t0),

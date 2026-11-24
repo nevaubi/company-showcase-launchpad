@@ -1,9 +1,14 @@
 // The technical read: five short sentences (trend, momentum, stretch, volatility, volume) and a verdict,
 // assembled only from the computed measures and the evidence layer. Every sentence lists the figures it uses
 // and carries the table behind them; a sentence is left out when its figures are missing.
-import { EVIDENCE, reliableToday, type Evidence } from "./evidence";
+import { EVIDENCE, isTested, type Evidence, type Horizon } from "./evidence";
 import type { Measures } from "./measures";
+import type { PooledRow } from "./pooled";
 import { fin } from "./stat";
+import { detectableText, nameList, pooledFor, verdictSummary } from "./verdict";
+
+/** The horizon the verdict table's cross-company column shows (the Evidence section's default). */
+const PRIMARY_H: Horizon = 20;
 
 export interface ReadFigure {
   label: string;
@@ -21,6 +26,8 @@ export interface ReadSentence {
   key: "trend" | "momentum" | "stretch" | "volatility" | "volume" | "verdict";
   label: string;
   text: string;
+  /** A second, quieter line under the sentence (the verdict's "what the bar can see") */
+  aside?: string;
   /** Direction the data points, for a quiet marker (not a recommendation): 1 up, -1 down, 0 neither */
   tone: 1 | -1 | 0;
   figures: ReadFigure[];
@@ -51,6 +58,10 @@ const abs = (v: number, d = 1) => `${Math.abs(v * 100).toFixed(d)}%`;
 export interface ReadContext {
   /** Percentile of the 12-1 month return among covered companies, when the cross-section file is available */
   universe?: { momPct: number; names: number; asOf: string } | null;
+  /** The symbol, for the verdict's wording */
+  sym?: string;
+  /** Cross-company rows (pooled.ts); null when tech/signals.json is not available */
+  pooled?: PooledRow[] | null;
 }
 
 export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): ReadSentence[] {
@@ -236,16 +247,10 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
   const lq = M.liquidity;
   if (lq.hasVolume && fin(lq.relVol) && fin(lq.upVolShare)) {
     const move = mo.r21;
-    const lean = lq.upVolShare - 0.5;
-    const read =
-      Math.abs(lean) < 0.05 || !fin(move)
-        ? "volume is balanced between up and down days"
-        : Math.sign(lean) === Math.sign(move)
-          ? `volume has leaned with the ${move > 0 ? "rise" : "fall"} of ${abs(move)} over the month`
-          : `volume has leaned against the ${move > 0 ? "rise" : "fall"} of ${abs(move)} over the month`;
+    // Only the measured share: whether volume "leans" with a move is not tested here, so it is not read into.
     const text =
       `The last session traded ${fmtNum(lq.relVol)}× the average of the 20 before it; ` +
-      `${fmtPct(lq.upVolShare, 0, false)} of the last 20 sessions' volume came on up days: ${read}.`;
+      `${fmtPct(lq.upVolShare, 0, false)} of the last 20 sessions' volume came on up days.`;
     out.push({
       key: "volume",
       label: "Volume",
@@ -273,57 +278,105 @@ export function technicalRead(M: Measures, E: Evidence, ctx: ReadContext = {}): 
   }
 
   /* ---- verdict ---- */
+  const sym = ctx.sym ?? "this stock";
+  const V = verdictSummary(E, ctx.pooled);
   const active = E.rows.filter((r) => r.active);
-  const today = reliableToday(E);
   const sampleNote = `${E.tested} tests on ${E.sample.bars.toLocaleString("en-US")} sessions since ${fmtDay(E.sample.from)}`;
+  const detect = detectableText(E, sym);
   if (E.tested > 0 || active.length) {
+    const few = V.untested.length
+      ? `${nameList(V.untested.map((r) => r.name))} ${V.untested.length === 1 ? "is" : "are"} also in force but ${V.untested.length === 1 ? "has" : "have"} too few cases to test`
+      : "";
     let text: string;
-    if (today.length) {
-      const best = today[0];
+    if (V.outcome === "own") {
+      const best = V.own[0];
       const t = best.cell.test;
-      const more = new Set(today.map((x) => x.row.key)).size - 1;
+      const more = new Set(V.own.map((x) => x.row.key)).size - 1;
       text =
-        `${best.row.name} has been followed by ${fmtPct(t.excess)} ${t.excess > 0 ? "more" : "less"} than its usual ${best.h}-day return ` +
+        `${best.row.name} has been followed on ${sym}'s own history by ${fmtPct(t.excess)} ${t.excess > 0 ? "more" : "less"} than its usual ${best.h}-day return ` +
         `(${t.nEff} independent cases, interval ${t.ci ? `${fmtPct(t.ci[0])} to ${fmtPct(t.ci[1])}` : "–"}), and it holds today` +
         (more > 0 ? `; ${more} more condition${more === 1 ? "" : "s"} in force also pass every check.` : ".");
-    } else {
+    } else if (V.outcome === "pooled") {
+      const best = V.pooled[0];
+      const p = best.p;
+      const ownCell = best.own;
       text =
-        `No statistically reliable signal today: ${active.length ? `none of the ${active.length} condition${active.length === 1 ? "" : "s"} in force` : "no tested condition is in force that"} ` +
-        `has been followed by returns distinguishable from its own base rate (${sampleNote}).`;
+        `Not detectable on ${sym}'s own history, but reliable across companies: ${best.row.name} has been followed across ${p.symbols.toLocaleString("en-US")} covered companies by an average of ` +
+        `${fmtPct(p.excess)} ${(p.excess ?? 0) > 0 ? "more" : "less"} than all days over ${p.h} days (${p.n.toLocaleString("en-US")} events, interval ${p.ci ? `${fmtPct(p.ci[0])} to ${fmtPct(p.ci[1])}` : "–"}, q ${fmtNum(p.q, 3)}). ` +
+        `That is an average across companies, not a forecast for ${sym}; on ${sym} alone it has been ${ownCell ? `${fmtPct(ownCell.test.excess)} (${ownCell.reason === "small" || ownCell.reason === "few" ? "too few cases to test" : "no clear difference"})` : "too rare to test"}.`;
+    } else {
+      const ownPart = V.tested.length
+        ? `none of the ${V.tested.length} tested condition${V.tested.length === 1 ? "" : "s"} in force has been followed by returns distinguishable from ${sym}'s own base rate`
+        : active.length
+          ? `no condition in force has enough cases to test on ${sym}'s own history (${nameList(V.untested.map((r) => r.name))})`
+          : "no tested condition is in force";
+      const pooledPart = !V.pooledAvailable
+        ? "the cross-company record is not available right now"
+        : V.pooledChecked.length
+          ? `none of the ${V.pooledChecked.length} in force with a cross-company record is reliable across covered companies`
+          : active.length
+            ? "none of the conditions in force has a cross-company record (those exist for chart events only)"
+            : "";
+      text =
+        `No statistically reliable signal today: ${ownPart}` +
+        (few && V.tested.length ? `; ${few}` : "") +
+        (pooledPart ? `, and ${pooledPart}` : "") +
+        ` (${sampleNote}).`;
     }
+    const lead = V.outcome === "own" ? V.own[0].cell.test.excess : V.outcome === "pooled" ? (V.pooled[0].p.excess ?? 0) : 0;
     out.push({
       key: "verdict",
       label: "Evidence",
       text,
-      tone: today.length ? (today[0].cell.test.excess > 0 ? 1 : -1) : 0,
-      figures: today.length
-        ? [
-            { label: "Excess", value: fmtPct(today[0].cell.test.excess) },
-            { label: "Horizon", value: `${today[0].h} days` },
-            { label: "Independent cases", value: String(today[0].cell.test.nEff) },
-            ...(today[0].cell.test.ci
-              ? [{ label: "95% interval", value: `${fmtPct(today[0].cell.test.ci[0])} to ${fmtPct(today[0].cell.test.ci[1])}` }]
-              : []),
-            { label: "q", value: fmtNum(today[0].cell.q, 3) },
-          ]
-        : [
-            { label: "In force", value: String(active.length) },
-            { label: "Tests", value: String(E.tested) },
-            { label: "Reliable", value: "0" },
-          ],
+      aside: detect ?? undefined,
+      tone: lead > 0 ? 1 : lead < 0 ? -1 : 0,
+      figures:
+        V.outcome === "own"
+          ? [
+              { label: "Excess", value: fmtPct(V.own[0].cell.test.excess) },
+              { label: "Horizon", value: `${V.own[0].h} days` },
+              { label: "Independent cases", value: String(V.own[0].cell.test.nEff) },
+              ...(V.own[0].cell.test.ci
+                ? [{ label: "95% interval", value: `${fmtPct(V.own[0].cell.test.ci[0])} to ${fmtPct(V.own[0].cell.test.ci[1])}` }]
+                : []),
+              { label: "q", value: fmtNum(V.own[0].cell.q, 3) },
+            ]
+          : V.outcome === "pooled"
+            ? [
+                { label: "Across companies", value: fmtPct(V.pooled[0].p.excess) },
+                { label: "Horizon", value: `${V.pooled[0].p.h} days` },
+                { label: "Events", value: V.pooled[0].p.n.toLocaleString("en-US") },
+                { label: "Companies", value: V.pooled[0].p.symbols.toLocaleString("en-US") },
+                { label: "q", value: fmtNum(V.pooled[0].p.q, 3) },
+              ]
+            : [
+                { label: "In force", value: String(active.length) },
+                { label: "Tested", value: String(V.tested.length) },
+                { label: "Tests", value: String(E.tested) },
+                { label: "Reliable", value: "0" },
+              ],
       table: {
         title: "Conditions in force today",
-        formula: `Each condition is tested at ${EVIDENCE.horizons.join(", ")} trading days against its own all-days return. Reliable means: at least ${EVIDENCE.minIndependent} non-overlapping cases, a false-discovery rate of ${EVIDENCE.fdr * 100}% across everything tested (Benjamini-Hochberg), a bootstrap interval that excludes zero, an effect above ${EVIDENCE.cost * 100}% trading cost, the same sign in both halves of the history, and support from the cross-company statistics where they exist.`,
-        cols: ["Condition", "Since", ...EVIDENCE.horizons.map((h) => `${h}-day excess`), "Verdict"],
-        rows: active.map((r) => [
-          r.name,
-          r.kind === "state" ? fmtDay(r.atDate) : `${fmtDay(r.atDate)} (${r.sessionsAgo} sessions ago)`,
-          ...EVIDENCE.horizons.map((h) => {
-            const c = r.cells[h];
-            return c ? `${fmtPct(c.test.excess)} (t ${fmtNum(c.test.t, 1, true)})` : "too few";
-          }),
-          EVIDENCE.horizons.some((h) => r.cells[h]?.verdict === "reliable") ? "reliable" : "context",
-        ]),
+        formula:
+          `Two separate lines of evidence. On ${sym}'s own history each condition is tested at ${EVIDENCE.horizons.join(", ")} trading days against its own all-days return. Reliable means: at least ${EVIDENCE.minIndependent} non-overlapping cases, a false-discovery rate of ${EVIDENCE.fdr * 100}% across everything tested (Benjamini-Hochberg), a bootstrap interval that excludes zero, an effect above ${EVIDENCE.cost * 100}% trading cost against days without the condition, the same sign in both halves of the history, and no contradiction from the cross-company statistics where they exist. ` +
+          `Across companies, the pipeline pools every covered company's chart events (standard errors clustered by month) and the same rules are applied, with one false-discovery adjustment over every event and horizon; states have no cross-company record.` +
+          (detect ? ` ${detect}` : ""),
+        cols: ["Condition", "Since", ...EVIDENCE.horizons.map((h) => `${h}-day log excess`), `Across companies, ${PRIMARY_H} days`, "Verdict"],
+        rows: active.map((r) => {
+          const p = pooledFor(ctx.pooled, r.key, PRIMARY_H);
+          const ownReliable = EVIDENCE.horizons.some((h) => r.cells[h]?.verdict === "reliable");
+          const poolReliable = EVIDENCE.horizons.some((h) => pooledFor(ctx.pooled, r.key, h)?.verdict === "reliable");
+          return [
+            r.name,
+            r.kind === "state" ? fmtDay(r.atDate) : `${fmtDay(r.atDate)} (${r.sessionsAgo} sessions ago)`,
+            ...EVIDENCE.horizons.map((h) => {
+              const c = r.cells[h];
+              return c ? `${fmtPct(c.test.excess)} (t ${fmtNum(c.test.t, 1, true)}${c.q == null ? ", not tested: small sample" : ""})` : "too few";
+            }),
+            p ? `${fmtPct(p.excess)} (${p.n.toLocaleString("en-US")} events${p.q != null ? `, q ${fmtNum(p.q, 2)}` : ""})` : !ctx.pooled ? "not available" : "no record",
+            ownReliable ? "reliable on its own history" : poolReliable ? "reliable across companies" : isTested(r) ? "no clear difference" : "too few to test",
+          ];
+        }),
         note: sampleNote,
       },
     });

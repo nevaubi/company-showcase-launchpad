@@ -95,10 +95,10 @@ describe("analysis on real histories, against an independent calculation", () =>
     expect(T).not.toBeNull();
     const v = T!.read.find((s) => s.key === "verdict")!;
     expect(v.text).not.toMatch(/No statistically reliable/);
-    expect(v.text).toMatch(/has been followed by [+−][\d.]+% (more|less) than its usual (5|20|60)-day return \(\d+ independent cases, interval /);
+    expect(v.text).toMatch(/has been followed on SIM's own history by [+−][\d.]+% (more|less) than its usual (5|20|60)-day return \(\d+ independent cases, interval /);
     expect(v.tone).not.toBe(0);
     expect(v.figures.map((f) => f.label)).toEqual(expect.arrayContaining(["Excess", "Horizon", "Independent cases", "q"]));
-    expect(v.table.rows.some((r) => r[r.length - 1] === "reliable")).toBe(true);
+    expect(v.table.rows.some((r) => r[r.length - 1] === "reliable on its own history")).toBe(true);
   });
 
   it("builds the earnings-reaction history from the 8-K releases", () => {

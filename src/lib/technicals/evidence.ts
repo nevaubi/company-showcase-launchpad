@@ -16,6 +16,8 @@ import {
   ForwardReturns,
   forwardTest,
   hashSeed,
+  median,
+  tCritical,
   type ForwardTest,
 } from "./stat";
 
@@ -106,6 +108,14 @@ export interface Evidence {
   /** Tests in the multiple-testing family */
   tested: number;
   reliable: { key: string; h: Horizon }[];
+  /**
+   * What the bar can see: by horizon, the smallest average excess (log terms) a condition would need on this
+   * history for an even chance of being called reliable. For each cell in the family it is the critical t of the
+   * Benjamini-Hochberg step a single discovery has to clear (two-sided p = fdr ÷ tests, dof = independent cases
+   * − 1) times the cell's Hodrick standard error; the figure is the median over the horizon's cells. A true
+   * effect of that size lands above the bar about half the time. null when the horizon has no cell in the family.
+   */
+  detectable: Record<Horizon, number | null>;
   /** First and last bar used, and how many sessions that is */
   sample: { from: string; to: string; bars: number };
 }
@@ -186,7 +196,9 @@ export function evidence(B: Bars, opt: EvidenceOptions = {}): Evidence {
     if (!fam) reason = "small";
     else if (!fam.pass) reason = "base";
     else if (!t.ci || (t.ci[0] <= 0 && t.ci[1] >= 0)) reason = "interval";
-    else if (Math.abs(t.excess) <= EVIDENCE.cost) reason = "cost";
+    // The cost hurdle applies to the contrast with days without the condition (excess ÷ (1 − share of days
+    // flagged)): the excess against all days shrinks toward zero for common states.
+    else if (Math.abs(contrast(t)) <= EVIDENCE.cost) reason = "cost";
     else if (
       t.halves[0] == null ||
       t.halves[1] == null ||
@@ -231,6 +243,14 @@ export function evidence(B: Bars, opt: EvidenceOptions = {}): Evidence {
       cases,
     };
   });
+  const detectable = {} as Record<Horizon, number | null>;
+  for (const h of EVIDENCE.horizons) {
+    const need = family
+      .filter((d) => d.h === h)
+      .map((d) => tCritical(EVIDENCE.fdr / family.length, d.test.dof) * d.test.se)
+      .filter(Number.isFinite);
+    detectable[h] = need.length ? median(need) : null;
+  }
   const reliable: { key: string; h: Horizon }[] = [];
   for (const r of rows)
     for (const h of EVIDENCE.horizons) if (r.cells[h]?.verdict === "reliable") reliable.push({ key: r.key, h });
@@ -238,6 +258,7 @@ export function evidence(B: Bars, opt: EvidenceOptions = {}): Evidence {
     rows,
     tested: family.length,
     reliable,
+    detectable,
     sample: {
       from: B.d[Math.min(EVIDENCE.start, n - 1)] ?? "",
       to: B.d[n - 1] ?? "",
@@ -245,6 +266,15 @@ export function evidence(B: Bars, opt: EvidenceOptions = {}): Evidence {
     },
   };
 }
+
+/** Average excess after the condition against days without it: excess ÷ (1 − share of days flagged). */
+export function contrast(t: Pick<ForwardTest, "excess" | "n" | "nAll">): number {
+  const share = t.n / t.nAll;
+  return share < 1 ? t.excess / (1 - share) : t.excess;
+}
+
+/** Whether a row has at least one test in the multiple-testing family (enough independent cases to be tested). */
+export const isTested = (r: EvidenceRow) => EVIDENCE.horizons.some((h) => r.cells[h]?.q != null);
 
 /** Conditions in force today that pass every check, strongest (smallest q) first. */
 export function reliableToday(E: Evidence): { row: EvidenceRow; h: Horizon; cell: EvidenceCell }[] {

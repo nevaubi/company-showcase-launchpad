@@ -69,7 +69,9 @@ function asOf(t: string | undefined) {
 }
 
 const BAR =
-  "sticky top-[var(--sticky-top,3.5rem)] z-10 -mx-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background/95 px-4 py-1.5 backdrop-blur lg:-mx-6 lg:px-6";
+  // Sticky from the small breakpoint up; at phone width the section links wrap instead of scrolling inside the
+  // bar, and a two- or three-line bar would cover too much of the screen to stay pinned.
+  "relative sm:sticky sm:top-[var(--sticky-top,3.5rem)] z-10 -mx-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background/95 px-4 py-1.5 backdrop-blur lg:-mx-6 lg:px-6";
 
 type SearchPatch = Partial<{ symbol: string; range: ChartRange; view: View }>;
 
@@ -87,7 +89,9 @@ function Markets() {
 /** No symbol chosen: the market-wide view on its own, with the picker to open a symbol. */
 function MarketHome({ onPick }: { onPick: (symbol: string) => void }) {
   return (
-    <div className="grid grid-cols-1 gap-4">
+    // No scroll anchoring inside the page: tables whose rows change height with a control (the Evidence horizon)
+    // would otherwise make the browser shift the scroll position to keep a row in place.
+    <div className="grid grid-cols-1 gap-4 [overflow-anchor:none]">
       <PageHeader
         className="mb-0"
         eyebrow="Markets"
@@ -96,7 +100,7 @@ function MarketHome({ onPick }: { onPick: (symbol: string) => void }) {
         actions={<SymbolPicker symbol={null} onPick={onPick} />}
       />
       <div data-section="Technicals navigation" className={BAR}>
-        <SectionNav items={MARKET_NAV} className="flex-1" />
+        <SectionNav items={MARKET_NAV} className="flex-1 basis-full flex-wrap sm:basis-0 sm:flex-nowrap" />
       </div>
       <MarketView symbol={null} onPick={onPick} />
     </div>
@@ -113,7 +117,9 @@ function SymbolPage({ symbol, range, view, setSearch }: { symbol: string; range:
   const nav = view === "market" ? MARKET_NAV : SYMBOL_NAV.filter((n) => n.id !== "flows" || !!covered);
 
   return (
-    <div className="grid grid-cols-1 gap-4">
+    // No scroll anchoring inside the page: tables whose rows change height with a control (the Evidence horizon)
+    // would otherwise make the browser shift the scroll position to keep a row in place.
+    <div className="grid grid-cols-1 gap-4 [overflow-anchor:none]">
       <PageHeader
         className="mb-0"
         eyebrow="Markets"
@@ -165,7 +171,7 @@ function SymbolPage({ symbol, range, view, setSearch }: { symbol: string; range:
             { v: "market", l: "Market", title: "Breadth, events across tracked companies and a scan" },
           ]}
         />
-        <SectionNav key={view} items={nav} className="flex-1" />
+        <SectionNav key={view} items={nav} className="flex-1 basis-full flex-wrap sm:basis-0 sm:flex-nowrap" />
       </div>
 
       {view === "market" ? (
