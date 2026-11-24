@@ -21,6 +21,16 @@ export const SUPPLY_SECTIONS = [
 ] as const;
 export type SupplySectionId = (typeof SUPPLY_SECTIONS)[number]["id"];
 
+/**
+ * Which region the reader is in: the last one whose top has passed `line` (a little under the sticky bars), the first
+ * while none has. `tops` are viewport positions in page order.
+ */
+export function currentSection(tops: number[], line: number): number {
+  let at = 0;
+  tops.forEach((t, i) => { if (t <= line) at = i; });
+  return at;
+}
+
 /** Height of the app header, the fallback for `--sticky-top`. */
 export const APP_HEADER = 56;
 /** Height of the section links that stay under the app header. */
@@ -73,6 +83,14 @@ export function nextFollow(prev: FollowState, m: FollowMeasure, top: number = PA
   if (m.dir > 0 && m.panelTop + m.panelHeight <= m.viewportHeight - margin) return { mode: "bottom", offset: prev.offset };
   if (m.dir < 0 && m.panelTop >= top) return FOLLOW_START;
   return prev;
+}
+
+/**
+ * Whether the reader has scrolled past the panel's column (its end is above the line the panel is held at). Nothing
+ * about the column may change then: whatever makes it taller or shorter moves what the reader is looking at.
+ */
+export function columnBehind(cellBottom: number, top: number = PANEL_TOP): boolean {
+  return cellBottom <= top;
 }
 
 /**

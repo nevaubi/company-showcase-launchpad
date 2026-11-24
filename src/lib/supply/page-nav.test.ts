@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { APP_HEADER, COMPANY_NAV, fitsBeside, FOLLOW_START, followRoom, nextFollow, offscreen, PANEL_TOP, SUPPLY_SECTIONS, VIEW_NAV, type FollowState } from "./page-nav";
+import { APP_HEADER, columnBehind, COMPANY_NAV, currentSection, fitsBeside, FOLLOW_START, followRoom, nextFollow, offscreen, PANEL_TOP, SUPPLY_SECTIONS, type FollowState, VIEW_NAV } from "./page-nav";
 
 const ROOT = join(__dirname, "../../..");
 const ROUTE = "src/routes/_authenticated/app.supply-chain.tsx";
@@ -102,5 +102,21 @@ describe("the evidence panel follows the reader", () => {
     expect(followRoom(PANEL_TOP - 600, 900)).toBe(1500);
     // nothing followed yet: only its own height
     expect(followRoom(330, 900)).toBe(900);
+  });
+  it("leaves the column alone once the reader is past it, so a company picked further down the page moves nothing", () => {
+    expect(columnBehind(-2500)).toBe(true);
+    expect(columnBehind(PANEL_TOP)).toBe(true);
+    expect(columnBehind(PANEL_TOP + 1)).toBe(false);
+    expect(columnBehind(900)).toBe(false);
+  });
+});
+
+describe("currentSection", () => {
+  it("is the first region at the top of the page, then the last one whose top passed the line, also after a jump", () => {
+    expect(currentSection([520, 1900, 2600], 160)).toBe(0);
+    expect(currentSection([-300, 1100, 1800], 160)).toBe(0);
+    expect(currentSection([-1500, -100, 600], 160)).toBe(1);
+    expect(currentSection([-4000, -2600, -1900], 160)).toBe(2);
+    expect(currentSection([], 160)).toBe(0);
   });
 });

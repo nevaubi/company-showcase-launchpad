@@ -3,7 +3,8 @@
 // Band width is the stated dollars (or the stated share when no dollars are given), so the picture doubles
 // as the flow view. Every name is one fixed card (logo, name, ticker, what it supplies or buys, the stated figure
 // and its flags), so a column reads like a table. A card opens the filing sentences behind it through `onSelect`;
-// its isolate button keeps that name lit and dims the rest through `onIsolate`.
+// the open card then carries an isolate button that keeps that name lit and dims the rest through `onIsolate`
+// (unopened cards keep their whole width for the name).
 import { memo, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { AlertTriangle, Focus, Globe2, Link2, Lock } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
@@ -12,13 +13,12 @@ import { figure, LineSample, NodeHoverCard, RelationMark } from "./supply-marks"
 import type { GraphNode, HopNode, NodeRisk, Relation, ShockImpact } from "@/lib/supply/core";
 import type { IsolateProps } from "@/lib/supply/isolate-contract";
 import { groupTotals, NATURE_WORD, nodeFacts, type GroupTotals, type NodeFacts } from "@/lib/supply/describe";
-import { layoutNetwork, NET, type Basis, type NetCard } from "@/lib/supply/network-layout";
+import { bandLegend, layoutNetwork, NET, type NetCard } from "@/lib/supply/network-layout";
 import { fmtCompactUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 const COMPACT_BELOW = 620;
 const TIP_W = 288;
-const BASIS_TEXT: Record<Basis, string> = { dollars: "stated revenue, purchases or contract value (or stated share × revenue)", share: "the stated share", none: "nothing: no flows stated, bands are equal" };
 const SINGULAR: Record<Relation, string> = { supplier: "supplier", customer: "customer", partner: "partner", competitor: "competitor" };
 const SEVERITY: Record<ShockImpact["severity"], string> = { high: "High impact", medium: "Medium impact", low: "Low impact" };
 
@@ -92,10 +92,12 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
       {impact && <AlertTriangle aria-hidden="true" className="size-3 shrink-0 text-negative" />}
     </>
   );
+  /* only the open card (or the one that is isolated) carries the isolate button, and only it gives up room for it */
+  const iso = onIsolate != null && (picked || isolated);
   const what = impact ? SEVERITY[impact.severity] : nature ? `${nature}${facts.summary ? ` · ${facts.summary}` : ""}` : facts.summary ?? `${facts.statements} filing statement${facts.statements === 1 ? "" : "s"}`;
   return (
     <div style={style} data-card="" data-dim={dim || undefined}
-      className={cn("group/card transition-opacity duration-150 motion-reduce:transition-none", placed ? "absolute" : "relative w-full", dim && "opacity-45 hover:opacity-100 focus-within:opacity-100")}>
+      className={cn("transition-opacity duration-150 motion-reduce:transition-none", placed ? "absolute" : "relative w-full", dim && "opacity-45 hover:opacity-100 focus-within:opacity-100")}>
       <button
         type="button"
         data-rel={child ? undefined : c.relation}
@@ -110,7 +112,7 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
         className={cn(
           "flex h-full w-full min-w-0 items-center rounded-md border text-left transition-[box-shadow,border-color,background-color] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-card motion-reduce:transition-none",
           child ? "gap-1.5 pl-1.5" : "gap-2 pl-2",
-          onIsolate ? "pr-8" : "pr-2",
+          iso ? "pr-8" : "pr-2",
           outside ? "border-dashed bg-transparent text-muted-foreground" : "bg-card shadow-paper hover:border-foreground/35 hover:shadow-lift",
           child && !outside && "border-dashed",
           picked && "border-foreground bg-accent shadow-lift ring-1 ring-foreground",
@@ -146,13 +148,11 @@ const Card = memo(function Card({ c, facts, risk, impact, outside, picked, flagg
           </span>
         )}
       </button>
-      {onIsolate && (
+      {iso && (
         <button type="button" aria-pressed={isolated} aria-label={isolated ? `Stop isolating ${n.name}` : `Isolate ${n.name}`} title={isolated ? "Show everything again" : "Isolate: keep this name lit and dim the rest"}
-          onClick={() => onIsolate(c.key)}
-          className={cn(
-            "absolute right-0.5 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded text-muted-foreground transition-[opacity,color,background-color] duration-150 hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
-            isolated ? "text-foreground opacity-100" : picked ? "opacity-100" : "pointer-events-none opacity-0 group-focus-within/card:pointer-events-auto group-focus-within/card:opacity-100 group-hover/card:pointer-events-auto group-hover/card:opacity-100",
-          )}>
+          onClick={() => onIsolate?.(c.key)}
+          className={cn("absolute right-0.5 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+            isolated ? "bg-secondary text-foreground" : "text-muted-foreground")}>
           <Focus className="size-3.5" aria-hidden="true" />
         </button>
       )}
@@ -250,12 +250,16 @@ export function SupplyNetwork({ focus, graph, hop2, visible, selected, onSelect,
     );
   };
 
+  /* The key says what the marks mean and nothing about what is selected, isolated or shocked: it sits above the
+     evidence on a phone, so it must not change height when a tab or an isolate button is pressed there. */
   const legend = (
     <div data-section="Network legend" className="mt-3 flex flex-col gap-1.5 border-t px-1 pt-2.5 text-[11px] leading-4 text-muted-foreground">
       <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <svg aria-hidden="true" width={30} height={12} className="shrink-0 text-muted-foreground"><path d="M1 3H29" stroke="currentColor" strokeWidth={1.5} opacity={0.6} /><path d="M1 8.5H29" stroke="currentColor" strokeWidth={5} opacity={0.6} /></svg>
-        <span><span className="font-medium text-foreground">Band width</span> shows, for suppliers, {BASIS_TEXT[layout.basis.supplier]}; for customers, {BASIS_TEXT[layout.basis.customer]}.</span>
+        <span>{bandLegend(layout.basis)}</span>
       </p>
+      {/* said to a screen reader; sighted readers have the line above the map */}
+      <p className="sr-only" role="status">{isolate != null ? `Isolated: ${isolateLabel ?? "a selection"}. Dimmed names are outside it.` : ""}</p>
       <ul className="flex flex-wrap items-center gap-x-4 gap-y-1" aria-label="Line styles">
         {RELATION_ORDER.filter((r) => visible.has(r)).map((r) => (
           <li key={r} className="inline-flex items-center gap-1.5"><LineSample relation={r} />{r === "supplier" ? "supplies the company" : r === "customer" ? "buys from the company" : r === "partner" ? "partnership" : "competition"}</li>
@@ -263,8 +267,6 @@ export function SupplyNetwork({ focus, graph, hop2, visible, selected, onSelect,
         {layout.bands.some((b) => b.muted) && <li className="inline-flex items-center gap-1.5"><svg aria-hidden="true" width={22} height={8}><path d="M1 4H21" stroke="currentColor" strokeWidth={1.5} strokeDasharray="2 4" /></svg>financing, acquisition or regulator: not a flow</li>}
         {hop2.length > 0 && <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="inline-block h-3 w-5 rounded-sm border border-dashed border-foreground/50" />second-order link</li>}
         <li className="inline-flex items-center gap-1.5"><Link2 aria-hidden="true" className="size-3" />stated dependency</li>
-        {impacts && <li className="text-foreground">Shock view: solid cards are reached by the simulated shock, dashed cards are not</li>}
-        {isolate != null && <li className="text-foreground">Isolated: {isolateLabel ?? "a selection"}. Dimmed names are outside it</li>}
       </ul>
     </div>
   );

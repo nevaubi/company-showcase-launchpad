@@ -110,6 +110,16 @@ export function MapToolbar(p: MapToolbarProps) {
   );
 }
 
+/** The control that ends an isolation. Esc does the same; the key is shown where there is room. */
+export function ClearIsolation({ label, onClear, className }: { label: string; onClear: () => void; className?: string }) {
+  return (
+    <button type="button" onClick={onClear} aria-label={`Clear isolation: ${label}`}
+      className={cn("inline-flex h-7 shrink-0 items-center gap-1 rounded border bg-card px-2 text-xs shadow-paper transition-colors duration-150 hover:border-foreground/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none", className)}>
+      <X className="size-3" aria-hidden="true" />Clear<kbd className="num ml-0.5 hidden rounded border px-1 text-[10px] text-muted-foreground sm:inline">Esc</kbd>
+    </button>
+  );
+}
+
 /** The right end of the canvas header: what is isolated and how to clear it, or a one-line hint when nothing is. */
 export function IsolationStatus({ label, note, hint, onClear }: { label: string | null; note?: string | null; hint: ReactNode; onClear: () => void }) {
   if (!label) return <p className="min-w-0 truncate text-[11px] text-muted-foreground">{hint}</p>;
@@ -117,10 +127,7 @@ export function IsolationStatus({ label, note, hint, onClear }: { label: string 
     <p data-section="Isolation" className="flex min-w-0 items-center gap-2 text-xs">
       <span className="eyebrow shrink-0">Isolated</span>
       <span className="min-w-0 truncate font-medium" title={note ? `${label}. ${note}` : label}>{label}{note && <span className="font-normal text-muted-foreground"> · {note}</span>}</span>
-      <button type="button" onClick={onClear} aria-label={`Clear isolation: ${label}`}
-        className="inline-flex h-7 shrink-0 items-center gap-1 rounded border bg-card px-2 text-xs shadow-paper transition-colors duration-150 hover:border-foreground/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
-        <X className="size-3" aria-hidden="true" />Clear<kbd className="num ml-0.5 hidden rounded border px-1 text-[10px] text-muted-foreground sm:inline">Esc</kbd>
-      </button>
+      <ClearIsolation label={label} onClear={onClear} />
     </p>
   );
 }

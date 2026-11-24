@@ -42,6 +42,16 @@ export interface NetLayout {
   basis: { supplier: Basis; customer: Basis };
 }
 export type Basis = "dollars" | "share" | "none";
+const BASIS_WORDS: Record<Exclude<Basis, "none">, string> = { dollars: "stated revenue, purchases or contract value (or a stated share × revenue)", share: "the stated share" };
+/** What band width means on each side of the company, as the legend says it. It depends on the filings alone, never on what is selected. */
+export function bandLegend(basis: { supplier: Basis; customer: Basis }): string {
+  const { supplier: s, customer: c } = basis;
+  if (s === "none" && c === "none") return "No flow or share is stated, so every band has the same width.";
+  if (s === "none") return `Customer bands show ${BASIS_WORDS[c as Exclude<Basis, "none">]}. No supplier flow is stated, so supplier bands are equal.`;
+  if (c === "none") return `Supplier bands show ${BASIS_WORDS[s]}. No customer flow is stated, so customer bands are equal.`;
+  if (s === c) return `Band width shows ${BASIS_WORDS[s]}.`;
+  return `Supplier bands show ${BASIS_WORDS[s]}; customer bands show ${BASIS_WORDS[c]}.`;
+}
 
 /**
  * Geometry in px. Every first-order name gets the same `card` (two lines: name and figure, then ticker, product and flags),
@@ -49,7 +59,7 @@ export type Basis = "dollars" | "share" | "none";
  * `head` holds a group's name and count on one line and its totals on the next. `cellMin` is the narrowest a card in the
  * second row may get.
  */
-export const NET = { head: 48, card: 44, child: 28, gap: 4, indent: 16, gutter: 64, rowGap: 36, groupGap: 24, cellMin: 172, pad: 4, minFocus: 112, maxFocus: 360, focusMin: 148, focusMax: 208, tMin: 2, tMax: 18 } as const;
+export const NET = { head: 48, card: 44, child: 28, gap: 4, indent: 16, gutter: 56, rowGap: 36, groupGap: 24, cellMin: 172, pad: 4, minFocus: 112, maxFocus: 360, focusMin: 132, focusMax: 208, tMin: 2, tMax: 18 } as const;
 
 const isHop2 = (n: GraphNode | HopNode): n is HopNode => (n as HopNode).hop === 2;
 const tradeNode = (n: GraphNode | HopNode) => (n.links as RiskLink[]).some(isTradeLink);
@@ -93,7 +103,7 @@ export interface NetworkInput {
 export function layoutNetwork({ graph, hop2, visible, risks, width, limit, expanded }: NetworkInput): NetLayout {
   const W = Math.max(560, Math.floor(width));
   /* the company column is narrower than the two flow columns, so long counterparty names keep their room */
-  const focusW = Math.round(Math.min(NET.focusMax, Math.max(NET.focusMin, W * 0.2)));
+  const focusW = Math.round(Math.min(NET.focusMax, Math.max(NET.focusMin, W * 0.18)));
   const colW = Math.floor((W - 2 * NET.gutter - focusW) / 2);
   const xLeft = 0, xMid = colW + NET.gutter, xRight = W - colW;
   const top = NET.head + NET.gap;

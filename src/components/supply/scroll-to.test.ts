@@ -75,6 +75,35 @@ describe("holdInPlace", () => {
     expect(scrollBy).toHaveBeenCalledTimes(1);
   });
 
+  it("ends when the window moves and the hold did not move it (the scrollbar, a section link), and never corrects after", () => {
+    const row = el(document.body);
+    tops.set(row, 400);
+    let y = 1200;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => y);
+    scrollBy.mockImplementation(({ top }: { top: number }) => { y += top; });
+    holdInPlace(row);
+    tops.set(row, 460);
+    frame();
+    expect(scrollBy).toHaveBeenCalledTimes(1); // its own correction is not mistaken for the reader
+    tops.set(row, 400);
+    frame();
+    y += 300; // the reader drags the scrollbar
+    tops.set(row, 100);
+    frame();
+    frame();
+    expect(scrollBy).toHaveBeenCalledTimes(1);
+    expect(frames).toHaveLength(0);
+  });
+
+  it("turns the browser's scroll anchoring off while it holds and gives it back after", () => {
+    const row = el(document.body);
+    document.documentElement.style.overflowAnchor = "";
+    const end = holdInPlace(row);
+    expect(document.documentElement.style.overflowAnchor).toBe("none");
+    end();
+    expect(document.documentElement.style.overflowAnchor).toBe("");
+  });
+
   it("does nothing without a pressed element, or when nothing of it survives", () => {
     holdInPlace(null);
     expect(frames).toHaveLength(0);
