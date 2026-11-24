@@ -114,7 +114,8 @@ export function CompanyContext({
       {office && (
         // the head office is the first thing to go on a phone-width header
         <MetaItem className="hidden @min-[30rem]/hdr:block">
-          <span className="inline-flex items-center gap-1" title={`Head office: ${office.place} (${office.basis})`}>
+          {/* align-top: an inline flex box that starts with an icon would otherwise sit on the icon's bottom edge and make the line 2 px taller */}
+          <span className="inline-flex items-center gap-1 align-top" title={`Head office: ${office.place} (${office.basis})`}>
             <Building2 aria-hidden className="size-3.5 shrink-0" />
             <span className="sr-only">Head office: </span>
             {office.place}

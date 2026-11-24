@@ -313,6 +313,20 @@ export function changeTone(change: number | null | undefined): "positive" | "neg
   return change > 0 ? "positive" : "negative";
 }
 
+/* ---------- late arrivals ---------- */
+
+/** One input of a figure the header shows: on screen, still on its way, or known not to exist. */
+export type PartState = "ready" | "pending" | "missing";
+export const partState = (have: boolean, pending: boolean): PartState => (have ? "ready" : pending ? "pending" : "missing");
+
+/**
+ * True while a figure that is not there yet can still arrive: an input is on its way and none is known
+ * to be missing. Its place is then held, so nothing moves when it lands; a figure that cannot arrive is
+ * left out instead of leaving a gap.
+ */
+export const awaiting = (value: unknown, parts: PartState[]): boolean =>
+  value == null && parts.includes("pending") && !parts.includes("missing");
+
 /* ---------- filings ---------- */
 
 const ANNUAL = new Set(["10-K", "20-F", "40-F"]);
