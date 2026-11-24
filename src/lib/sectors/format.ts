@@ -41,6 +41,13 @@ export function pts(v: number | null | undefined): string {
   return `${v < 0 ? MINUS : "+"}${body} pt`;
 }
 
+/** A plain ratio such as a beta or a correlation: 1.084 → "1.08", −0.3 → "−0.30". */
+export function ratio(v: number | null | undefined, digits = 2): string {
+  if (!ok(v)) return MISSING;
+  const body = Math.abs(v).toFixed(digits);
+  return `${v < 0 && Number(body) !== 0 ? MINUS : ""}${body}`;
+}
+
 /** Whole count with thousands separators. */
 export const count = (v: number | null | undefined) => (ok(v) ? Math.round(v).toLocaleString("en-US") : MISSING);
 

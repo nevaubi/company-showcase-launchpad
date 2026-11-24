@@ -3,20 +3,28 @@ import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { PageHeader } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MacroContext, RelativePanels, SectorBoard } from "@/components/sectors/board";
+import { FundCorrelation, MacroContext, RelativePanels, SectorBoard } from "@/components/sectors/board";
 import { RotationGraph, SectorNotes } from "@/components/sectors/sector-views";
 import { QuietLine, Section } from "@/components/sectors/ui";
-import { BOARD_SORTS, SPANS, type BoardSort } from "@/lib/sectors/board";
+import { BOARD_SET_KEYS, BOARD_SORTS, boardSort, SPANS, type BoardSet } from "@/lib/sectors/board";
 import { overviewQuery, tapeQuery } from "@/lib/sectors/groups";
 
 const pageSearch = z.object({
   /** Kept for old links (it used to pick a sector detail panel); ignored. */
   sector: z.string().max(40).optional().catch(undefined),
   level: z.enum(["sector", "industry"]).optional().catch(undefined),
+  /** Column set of the board: overview (default), fundamentals, or risk and signals. */
+  cols: z.enum(BOARD_SET_KEYS.filter((k) => k !== "overview") as [string, ...string[]]).optional().catch(undefined),
   sort: z.enum(BOARD_SORTS as unknown as [string, ...string[]]).optional().catch(undefined),
   dir: z.enum(["asc", "desc"]).optional().catch(undefined),
   span: z.enum(SPANS.map((s) => s.v) as unknown as [string, ...string[]]).optional().catch(undefined),
   tail: z.enum(["4w", "10w"]).optional().catch(undefined),
+  /** Week of the notes shown (a Monday); the newest when absent. */
+  wk: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional()
+    .catch(undefined),
 });
 
 export const Route = createFileRoute("/_authenticated/app/sectors")({
@@ -42,6 +50,8 @@ function Sectors() {
   const set = (patch: Partial<z.infer<typeof pageSearch>>) =>
     navigate({ search: (p) => ({ ...p, ...patch }), replace: true, resetScroll: false });
   const level = (s.level ?? "sector") as "sector" | "industry";
+  const cols = (s.cols ?? "overview") as BoardSet;
+  const bs = boardSort(cols, s.sort, s.dir);
   return (
     <div className="grid grid-cols-1 gap-5">
       <PageHeader
@@ -54,12 +64,15 @@ function Sectors() {
         <SectorBoard
           ov={overview.data}
           tape={tape.data?.idx ?? null}
-          tapeAsOf={tape.data?.asOf ?? null}
+          tapeFile={tape.data?.file ?? null}
+          tapePending={tape.isPending}
           level={level}
-          sort={(s.sort ?? "r3M") as BoardSort}
-          dir={s.dir ?? "desc"}
+          set={cols}
+          sort={bs.sort}
+          dir={bs.dir}
           onSort={(k, d) => set({ sort: k, dir: d })}
-          onLevel={(l) => set({ level: l === "sector" ? undefined : l, sort: s.sort === "sector" ? undefined : s.sort })}
+          onLevel={(l) => set({ level: l === "sector" ? undefined : l })}
+          onSet={(c) => set({ cols: c === "overview" ? undefined : c, sort: undefined, dir: undefined })}
         />
       ) : overview.isError ? (
         <Section name="Sector board" title="Sectors compared">
@@ -70,9 +83,10 @@ function Sectors() {
       )}
       <RelativePanels span={(s.span ?? "6M") as "3M" | "6M" | "1Y"} onSpan={(v) => set({ span: v === "6M" ? undefined : v })} />
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        {overview.data ? <RotationGraph ov={overview.data} tail={s.tail ?? "4w"} onTail={(t) => set({ tail: t === "4w" ? undefined : t })} /> : <div />}
-        <SectorNotes />
+        {overview.data ? <RotationGraph ov={overview.data} tail={s.tail ?? "4w"} onTail={(t) => set({ tail: t === "4w" ? undefined : t })} /> : null}
+        <FundCorrelation />
       </div>
+      <SectorNotes week={s.wk} onWeek={(w) => set({ wk: w })} />
       <MacroContext />
     </div>
   );
