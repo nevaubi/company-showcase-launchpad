@@ -71,6 +71,7 @@ function CompanyLayout() {
         coverage={coverage}
         profile={profile}
         filings={company.data?.filings}
+        profilePending={company.isPending}
         quote={quote}
         quotePending={!quote && quotes.isPending}
         quoteExchange={quote && "exchange" in quote ? quote.exchange : undefined}

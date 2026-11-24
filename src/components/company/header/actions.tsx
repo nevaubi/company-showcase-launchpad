@@ -24,7 +24,7 @@ const reportLabel = (f: Filing) =>
   f.form === "10-Q" ? `Quarterly report (${f.report ?? f.filed})` : `Annual report (${(f.report ?? f.filed).slice(0, 4)})`;
 
 /** Menu rows shared by the desktop "Filings" menu and the phone "More" menu. */
-function FilingItems({ ticker, cik, filings }: { ticker: string; cik: string; filings: Filing[] | undefined }) {
+function FilingItems({ ticker, cik, filings, pending }: { ticker: string; cik: string; filings: Filing[] | undefined; pending: boolean }) {
   const { open } = useSource();
   const { annual, quarterly } = latestReports(filings);
   const openReport = (f: Filing) =>
@@ -49,7 +49,7 @@ function FilingItems({ ticker, cik, filings }: { ticker: string; cik: string; fi
       )}
       {!annual && !quarterly && (
         <DropdownMenuItem disabled>
-          <FileText /> {filings ? "No annual or quarterly report on file" : "Loading filings"}
+          <FileText /> {filings ? "No annual or quarterly report on file" : pending ? "Loading filings" : "Filing list unavailable right now"}
         </DropdownMenuItem>
       )}
       <DropdownMenuItem asChild>
@@ -72,13 +72,18 @@ function FilingItems({ ticker, cik, filings }: { ticker: string; cik: string; fi
  * What can be done with the company, in order of weight: Research (primary), Follow (toggle), the
  * firm's coverage when there is one, then a quiet group: Compare, a Filings menu (latest annual and
  * quarterly report, the filings tab, EDGAR) and the investor-relations site. On phones the quiet group
- * folds into one "More" menu.
+ * folds into one "More" menu, placed before the coverage chip so a long chip wraps, not the menu button.
+ *
+ * The IR address comes with the dataset (the curated list knows it at once): until the dataset answers
+ * its place is held, so the row does not shuffle sideways when the link arrives.
  */
 export function CompanyActions({
   ticker,
   cik,
   profile,
   filings,
+  pending,
+  irHint,
   price,
   className,
 }: {
@@ -86,12 +91,43 @@ export function CompanyActions({
   cik: string;
   profile: CompanyProfile | undefined;
   filings: Filing[] | undefined;
+  /** the company dataset has not answered yet */
+  pending: boolean;
+  /** IR address from the coverage list, when it has one */
+  irHint?: string;
   price: number | null;
   className?: string;
 }) {
   const follow = useToggleFollow();
   const followed = follow.isFollowed(ticker);
-  const ir = irUrl(profile);
+  const ir = irUrl(profile) ?? irUrl({ investorRelations: irHint ?? "" });
+  const irHeld = !ir && pending;
+  const more = (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <Button size="xs" variant="outline" className="sm:hidden" aria-label="More actions">
+          <Ellipsis />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-64">
+        <DropdownMenuItem asChild>
+          <Link to="/app/compare" search={{ t: ticker }}>
+            <Columns3 /> Compare
+          </Link>
+        </DropdownMenuItem>
+        {ir && (
+          <DropdownMenuItem asChild>
+            <a href={ir} target="_blank" rel="noreferrer">
+              <Globe /> Investor relations site
+              <span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <FilingItems ticker={ticker} cik={cik} filings={filings} pending={pending} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
   return (
     <div
       role="group"
@@ -113,6 +149,7 @@ export function CompanyActions({
         <Star className={cn(followed && "fill-current")} />
         {followed ? "Following" : "Follow"}
       </Button>
+      {more}
       <CoverageChip ticker={ticker} price={price} />
 
       <span aria-hidden className="mx-1 hidden h-4 w-px bg-border sm:block" />
@@ -129,41 +166,20 @@ export function CompanyActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-64">
-          <FilingItems ticker={ticker} cik={cik} filings={filings} />
+          <FilingItems ticker={ticker} cik={cik} filings={filings} pending={pending} />
         </DropdownMenuContent>
       </DropdownMenu>
-      {ir && (
+      {ir ? (
         <Button size="xs" variant="ghost" asChild className="hidden sm:inline-flex">
           <a href={ir} target="_blank" rel="noreferrer" title="Investor relations site (opens in a new tab)">
             <Globe /> IR site <ArrowUpRight className="-ml-0.5 opacity-60" />
           </a>
         </Button>
-      )}
-
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          <Button size="xs" variant="outline" className="sm:hidden" aria-label="More actions">
-            <Ellipsis />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="min-w-64">
-          <DropdownMenuItem asChild>
-            <Link to="/app/compare" search={{ t: ticker }}>
-              <Columns3 /> Compare
-            </Link>
-          </DropdownMenuItem>
-          {ir && (
-            <DropdownMenuItem asChild>
-              <a href={ir} target="_blank" rel="noreferrer">
-                <Globe /> Investor relations site
-                <span className="sr-only"> (opens in a new tab)</span>
-              </a>
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuSeparator />
-          <FilingItems ticker={ticker} cik={cik} filings={filings} />
-        </DropdownMenuContent>
-      </DropdownMenu>
+      ) : irHeld ? (
+        <Button size="xs" variant="ghost" disabled aria-hidden className="hidden sm:inline-flex">
+          <Globe /> IR site <ArrowUpRight className="-ml-0.5 opacity-60" />
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -23,8 +23,9 @@ const hqQuery = {
  * One grid. On a wide page: mark, name and actions on the first line, the context line under the name
  * running the full width, then the price with its facts and what is new since the last visit. On a
  * narrow page the actions drop under the price. Name, sector and industry come from the coverage list,
- * so they are on screen before the dataset and the quote arrive; every later piece fills a place that
- * is already reserved.
+ * so they are on screen before the dataset and the quote arrive. What arrives later either fills a place
+ * that is held for it (price, price facts, the IR link) or is added at the end of its line (head office,
+ * since-visit badges), so nothing already on screen moves.
  */
 export function CompanyHeader({
   ticker,
@@ -32,6 +33,7 @@ export function CompanyHeader({
   coverage,
   profile,
   filings,
+  profilePending,
   quote,
   quotePending,
   quoteExchange,
@@ -41,6 +43,8 @@ export function CompanyHeader({
   coverage: CoverageCompany | undefined;
   profile: CompanyProfile | undefined;
   filings: Filing[] | undefined;
+  /** the company dataset has not answered yet (false once it has loaded or failed) */
+  profilePending: boolean;
   quote: QuoteLike | undefined;
   quotePending: boolean;
   quoteExchange?: string;
@@ -64,6 +68,8 @@ export function CompanyHeader({
           cik={profile?.cik ?? coverage?.cik ?? ""}
           profile={profile}
           filings={filings}
+          pending={profilePending}
+          irHint={coverage?.ir}
           price={quote?.price ?? null}
         />
         <CompanyContext
@@ -76,7 +82,7 @@ export function CompanyHeader({
         />
         <div className="col-span-full row-start-3 mt-3 flex min-w-0 flex-wrap items-end gap-x-8 gap-y-2">
           <PriceBlock ticker={ticker} quote={quote} pending={quotePending} />
-          <QuoteFacts ticker={ticker} quote={quote} profile={profile} />
+          <QuoteFacts ticker={ticker} quote={quote} profile={profile} quotePending={quotePending} profilePending={profilePending} />
           <div className="ml-auto flex min-h-8 items-center empty:hidden">
             <SinceVisitBadges ticker={ticker} />
           </div>

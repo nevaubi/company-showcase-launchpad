@@ -4,7 +4,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { CompanyProfile } from "@/lib/financials/types";
 import { fmtCompact, fmtCompactUsd, fmtDate, fmtPct, fmtPrice, fmtSigned } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { changeTone, marketCap, priceStatus, range52, type QuoteLike } from "./model";
+import { awaiting, changeTone, marketCap, partState, priceStatus, range52, type QuoteLike } from "./model";
 
 const TONE = { positive: "text-positive", negative: "text-negative", flat: "text-muted-foreground" } as const;
 const CAPTION = "text-[11px] leading-4 text-muted-foreground";
@@ -58,7 +58,7 @@ export function PriceBlock({
           <>
             <p className={CAPTION}>Price unavailable</p>
             <p className="flex h-8 items-baseline gap-2 whitespace-nowrap">
-              <span className="num text-2xl font-semibold leading-8 text-muted-foreground">–</span>
+              <span aria-hidden className="num text-2xl leading-8 text-muted-foreground/70">–</span>
               <span className="text-[13px] text-muted-foreground">No quote or stored close right now</span>
             </p>
           </>
@@ -113,23 +113,51 @@ function RangeMeter({ low, high, position, price }: { low: number; high: number;
  * Price-centred facts from what the header has already loaded: market value (last price times the
  * cover-page share count, opening that count's filing) and where the price sits in its 52-week range.
  * Fundamentals stay on the Overview.
+ *
+ * A fact whose inputs are still on their way holds its place with a skeleton, so the row keeps its
+ * shape while the quote and the dataset arrive; a fact that cannot be shown is left out.
  */
 export function QuoteFacts({
   ticker,
   quote,
   profile,
+  quotePending = false,
+  profilePending = false,
   className,
 }: {
   ticker: string;
   quote: QuoteLike | undefined;
   profile: CompanyProfile | undefined;
+  /** the quote request has not answered yet */
+  quotePending?: boolean;
+  /** the company dataset has not answered yet */
+  profilePending?: boolean;
   className?: string;
 }) {
   const { open } = useSource();
   const shares = profile?.sharesOutstanding ?? null;
   const cap = marketCap(quote?.price, shares);
   const range = range52(quote?.price, quote?.low52, quote?.high52);
-  if (!quote || (cap == null && !range)) return null;
+  const quoteState = partState(!!quote, quotePending);
+  const capWaiting = awaiting(cap, [quoteState, partState(shares != null, profilePending)]);
+  const rangeWaiting = awaiting(range, [quoteState]);
+  if (!quote || (cap == null && !range)) {
+    if (!capWaiting && !rangeWaiting) return null;
+    return (
+      <dl data-section="Price facts" aria-busy className={cn("flex min-w-0 flex-wrap gap-x-6 gap-y-1", className)}>
+        {capWaiting && (
+          <Fact label="Market cap">
+            <Skeleton className="h-3 w-12" />
+          </Fact>
+        )}
+        {rangeWaiting && (
+          <Fact label="52-week range">
+            <Skeleton className="h-3 w-[11.875rem] sm:w-[12.875rem]" />
+          </Fact>
+        )}
+      </dl>
+    );
+  }
   const asOf = profile?.sharesOutstandingAsOf ? fmtDate(profile.sharesOutstandingAsOf) : null;
   const capTarget: SourceTarget | null =
     cap != null && shares && profile?.sharesOutstandingAccn
@@ -157,7 +185,12 @@ export function QuoteFacts({
       : null;
   const capTitle = `Last price × ${shares ? fmtCompact(shares, 2) : ""} shares on the latest filing cover page${asOf ? ` (${asOf})` : ""}`;
   return (
-    <dl data-section="Price facts" className={cn("flex min-w-0 flex-wrap gap-x-6 gap-y-1", className)}>
+    <dl data-section="Price facts" aria-busy={capWaiting || undefined} className={cn("flex min-w-0 flex-wrap gap-x-6 gap-y-1", className)}>
+      {capWaiting && (
+        <Fact label="Market cap">
+          <Skeleton className="h-3 w-12" />
+        </Fact>
+      )}
       {cap != null && (
         <Fact label="Market cap" title={capTitle}>
           {capTarget ? (
