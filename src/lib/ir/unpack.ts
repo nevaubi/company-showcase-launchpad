@@ -16,8 +16,24 @@ export async function unpackIrPage(gz: ArrayBuffer, statements?: CheckStatements
   // Payloads built before the merge pass (or from the partner corpus) get it here: one table per subject.
   const tidied = tidyPayload(data.payload);
   const t2 = now();
-  const { payload: checked, summary: consistency } = checkConsistency(tidied);
-  const { payload, check } = crossCheckSec(checked, statements);
+  // A failure in the read-time checks never blanks the page: the tidied payload is shown and the
+  // checks line says the check did not run (review iracc M3).
+  let checked = tidied;
+  let consistency: IrPageData["consistency"];
+  try {
+    ({ payload: checked, summary: consistency } = checkConsistency(tidied));
+  } catch (e) {
+    console.warn("IR consistency check failed", e);
+  }
+  let payload = checked;
+  let check: ReturnType<typeof crossCheckSec>["check"] = null;
+  try {
+    ({ payload, check } = crossCheckSec(checked, statements));
+  } catch (e) {
+    console.warn("IR SEC cross-check failed", e);
+    payload = checked;
+    check = null;
+  }
   const t3 = now();
   return {
     ...data,

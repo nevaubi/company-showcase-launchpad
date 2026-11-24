@@ -170,7 +170,7 @@ const find = (m: Map<string, Ref>, e: string) => {
 };
 
 const fmt = (v: number, unit: string) => {
-  if (unit === "usdPerShare") return `$${v.toFixed(2)}`;
+  if (unit === "usdPerShare") return `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`;
   const a = Math.abs(v);
   const s = a >= 1e9 ? `$${(a / 1e9).toFixed(a >= 1e11 ? 1 : 2)}B` : a >= 1e6 ? `$${(a / 1e6).toFixed(a >= 1e8 ? 0 : 1)}M` : `$${Math.round(a).toLocaleString("en-US")}`;
   return v < 0 ? `−${s}` : s;
@@ -197,7 +197,7 @@ export function sourceOf(ref: Ref, kind: "q" | "y", e: string, yearEnds: Iterabl
   if (kind === "q" && ref.derived && [...yearEnds].some((y) => near(y, e))) return "the 10-K year less the first nine months";
   if (ref.derived) return `the statements' calculation (${ref.derived})`;
   const yr = accnYear(ref.accn);
-  if (laterFiling(ref, kind, e)) return `a ${filingOf(kind)} filed in ${yr}, after this period's own filing`;
+  if (laterFiling(ref, kind, e)) return `a ${filingOf(kind)} filed in ${yr} (after this period's own filing)`;
   return `the ${filingOf(kind)}${ref.accn ? ` (${ref.accn})` : ""}`;
 }
 
@@ -280,17 +280,20 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
             continue;
           }
           // A same-signed figure is compared when it is within 10% of the filing's, or when it is the
-          // period's largest candidate and none agrees; a smaller line of the same name (a segment's
+          // period's largest candidate, none agrees and it is within half to twice the filing's (LKQ's
+          // "Total Revenue" table totals a segment at 43% of revenue); a smaller line of the same name (a segment's
           // net interest income) is not compared, unless it is the filing's figure at another unit.
           const r = ref.v !== 0 ? Math.abs(v) / Math.abs(ref.v) : 1;
-          const eligible = opposite || Math.abs(r - 1) <= 0.1 || (Math.abs(c.v) === top && !anyAgrees);
+          const eligible = opposite || Math.abs(r - 1) <= 0.1 || (Math.abs(c.v) === top && !anyAgrees && r >= 0.5 && r <= 2);
           const unitOff = ref.v !== 0 && v !== 0 && s.unit !== "usdPerShare" && (() => {
             const k = Math.log10(r);
             const n = Math.round(k / 3) * 3;
             return n !== 0 && Math.abs(k - n) < 0.01;
           })();
-          if (!eligible && !unitOff) continue;
           const bad = contradiction(v, ref.v, s.unit, kind, e, side, src.charAt(0).toUpperCase() + src.slice(1));
+          // the largest figure is also compared when the filing places it in another period (a year,
+          // an annualized figure, the neighbouring quarter)
+          if (!eligible && !unitOff && !(bad && Math.abs(c.v) === top && !anyAgrees)) continue;
           if (bad && !opposite) {
             hold.set(keyOf(s.k, kind, e), `${bad} (${ref.accn ?? "SEC filing"})`);
             items.push({ ...base, status: "held", why: bad });

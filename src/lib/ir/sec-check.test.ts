@@ -222,7 +222,7 @@ describe("review fixes: sign first, real sources, other measures", () => {
     const p = payload([series("r", "Total Revenue", { "2025-03-31": cell(3_463_000_000) }, { bd: "Revenue by product" })]);
     const { payload: out, check } = crossCheckSec(p, st("revenue", { "2025-03-31": 3_327_000_000 }, "0001065696-26-000020"));
     expect(check!.items[0].status).toBe("later");
-    expect(check!.items[0].why).toMatch(/filed in 2026, after this period's own filing; that filing may have recast/);
+    expect(check!.items[0].why).toMatch(/filed in 2026 \(after this period's own filing\); that filing may have recast/);
     expect(check!.flagged).toBe(0);
     expect(out.series[0].q["2025-03-31"].flags).toBeUndefined();
     // the same figure from the period's own 10-Q (filed 2025) is a plain disagreement, named by accession
@@ -251,5 +251,13 @@ describe("review fixes: sign first, real sources, other measures", () => {
   it("M2 UNFI 'Loss per diluted share' 0.35 carries its sign in the label and agrees with −0.35", () => {
     const p = payload([series("e", "Loss per diluted share (EPS)", { "2024-11-02": cell(0.35) }, { unit: "usdPerShare" })]);
     expect(crossCheckSec(p, st("epsDiluted", { "2024-11-02": -0.35 }, "0001020859-24-000050")).check!.items[0].status).toBe("agree");
+  });
+});
+
+describe("review fixes: a segment total is not the consolidated line", () => {
+  it("LKQ Q2 2026 'Total Revenue' 1,466M in the 'Total Revenue' table (43% of the 10-Q's 3,408M) is not compared", () => {
+    const p = payload([series("t", "Total Revenue", { "2026-06-30": cell(1_466_000_000) }, { bd: "Total Revenue" })]);
+    const st: CheckStatements = { quarterly: { periods: [{ end: "2026-06-30" }], rows: [{ key: "revenue", cells: [{ v: 3_408_000_000, src: { accn: "0001065696-26-000044" } }] }] } };
+    expect(crossCheckSec(p, st).check!.checked).toBe(0);
   });
 });

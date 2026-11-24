@@ -242,12 +242,21 @@ interface Ctx {
   yearEnds?: Set<string>;
 }
 
+const TRAILING = /\b(last|trailing|latest) (twelve|12) months\b|\b(ttm|ltm)\b/i;
+/** Whether a line is a trailing-twelve-month figure (by its printed name or its table's). */
+export function trailing(s: Pick<PayloadSeries, "label" | "bd" | "sc">): boolean {
+  return TRAILING.test(`${s.label} ${s.bd ?? ""} ${s.sc ?? ""}`);
+}
+
 /**
  * Copy b's cells into a where a has none (a printed cell beats a calculated one), then retire b.
  * With `keep`, a's own cells are never replaced: b only fills periods a does not print. Folds that rest
  * on the two lines printing identical numbers use it, so a printed total is never overwritten by a part.
  */
 function absorb(c: Ctx, a: PayloadSeries, b: PayloadSeries, keep = false) {
+  // A trailing-twelve-month line is its own measure: never folded into the plain line (review iracc H1;
+  // the label matcher drops parentheses, so "Net income (last twelve months)" read as "Net income").
+  if (trailing(a) !== trailing(b)) return;
   // The merged line takes the company's current name, unless that name says nothing on its own.
   const latest = (s: PayloadSeries) => [...periodsOf(s)].sort().at(-1) ?? "";
   const label = latest(b) > latest(a) && labelTokens(b.label).length && labelTokens(b.label).length >= Math.min(2, labelTokens(a.label).length) ? b.label : !labelTokens(a.label).length ? b.label : a.label;
