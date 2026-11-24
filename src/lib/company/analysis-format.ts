@@ -88,3 +88,40 @@ export function changeTone(d: number | null, better: Measure["better"], unit: Me
   if (Math.abs(d) < eps) return null;
   return d > 0 === (better === "high") ? "positive" : "negative";
 }
+
+/**
+ * Row labels for the analysis tables, short enough that a row stays one line at 1280 px (two tables side by side).
+ * The full label stays the row's title and is what the source panel and the financial read use.
+ */
+const SHORT: Record<string, string> = {
+  revenueYoY: "Revenue, quarter y/y",
+  revenueSeq: "Revenue, quarter q/q",
+  returnedToFcf: "Payout, of free cash flow",
+  totalPayout: "Payout, of net income",
+  niiToAssets: "NII to average assets",
+  niiShare: "NII to revenue",
+  buybacksNetOfSbc: "Buybacks less stock comp",
+  shareChange: "Diluted shares, y/y",
+  cashRunway: "Cash runway",
+  receivablesGrowth: "Receivables, y/y",
+  inventoryGrowth: "Inventories, y/y",
+  loanGrowth: "Net loans, y/y",
+  depositGrowth: "Deposits, y/y",
+  provisionToLoans: "Provisions to loans",
+  payout: "Dividend payout",
+  capexIntensity: "Capex to revenue",
+  sbcIntensity: "Stock comp to revenue",
+  fcfConversion: "FCF to net income",
+  dividendPerShare: "Dividends per share",
+  fcfPerShare: "FCF per share",
+  roic: "Return on inv. capital",
+  accruals: "Accruals to assets",
+};
+export const TABLE_LABEL_MAX = 25;
+export function tableLabel(key: string, label: string): string {
+  return SHORT[key] ?? label;
+}
+/** The unit after a row label; a per-share row already says "per share", so its unit is just "$". */
+export function rowUnitLabel(unit: MeasureUnit, scale: UsdScale = ""): string {
+  return unit === "perShare" ? "$" : unitLabel(unit, scale);
+}

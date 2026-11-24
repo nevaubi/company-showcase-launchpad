@@ -3,7 +3,7 @@ import { IrPanel } from "@/components/ir/panel";
 import { Badge } from "@/components/ui/badge";
 import { useSource } from "@/components/source/source-context";
 import { useCompanyContext } from "@/lib/company/context-query";
-import { commonsThumb, rankPeople, tenureYears, type Person } from "@/lib/company/context";
+import { commonsThumb, peopleSources, rankPeople, tenureYears, type Person } from "@/lib/company/context";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { CreditNote } from "./about";
@@ -98,7 +98,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
   const src = [...new Set(people.map((p) => p.source.form))].join(" & ");
 
   return (
-    <IrPanel section="Management and board" title="Management and board" subtitle={`From the latest ${src} · click anyone for the passage that names them`} bodyClassName="p-4">
+    <IrPanel section="Management and board" title="Management and board" subtitle={`From ${peopleSources(people, fmtDate) ?? `the latest ${src}`} · click anyone for the passage that names them`} bodyClassName="p-4">
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
         <div className="min-w-0">
           <p className="eyebrow mb-3">Management</p>
@@ -194,7 +194,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                       <p className="truncate text-[11px] text-muted-foreground">{p.title}</p>
                       <Meta p={p} />
                       {p.committees?.length ? (
-                        <p className="truncate text-[10.5px] text-muted-foreground">
+                        <p className="truncate text-[11px] text-muted-foreground">
                           {p.committees.join(" · ")}
                         </p>
                       ) : null}

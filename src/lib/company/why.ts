@@ -272,3 +272,16 @@ export function fcfWhy(d: CompanyDataset): Why | null {
 export function whyCards(d: CompanyDataset): Why[] {
   return [revenueWhy(d), operatingIncomeWhy(d), fcfWhy(d)].filter((w): w is Why => !!w);
 }
+
+/**
+ * The cards the Overview shows once statements may be extended at view time. A filing read at view time brings its
+ * statement lines but not its segment breakdown, so the newest quarter often cannot be explained yet. When the
+ * extended statements explain fewer figures than the served ones, the served quarter's cards stay (each card names
+ * its quarter), so the section neither empties nor changes height when the read lands.
+ */
+export function viewDrivers(served: CompanyDataset, current: CompanyDataset): { cards: Why[]; data: CompanyDataset } {
+  const now = whyCards(current);
+  if (current === served) return { cards: now, data: current };
+  const before = whyCards(served);
+  return before.length > now.length ? { cards: before, data: served } : { cards: now, data: current };
+}

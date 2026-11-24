@@ -13,7 +13,11 @@ const fmt = (v: number | null, kind: "usd" | "x" | "pct") => (v == null ? "–" 
 /** The most industry members whose prices are requested: enough for a median, never the whole coverage list. */
 const INDUSTRY_CAP = 60;
 /** The universe snapshot divides net income by equity at the period end; the analysis above uses average equity. */
-const LABEL: Partial<Record<(typeof METRICS)[number]["key"], string>> = { roe: "ROE, period-end", growth: "Revenue growth, qtr", cagr5: "Revenue, 5Y CAGR", leverage: "Net debt / EBITDA" };
+// Short heads that wrap to at most two lines, so twelve figures fit beside the company at 1280 px; what each one
+// means in full (latest quarter, period-end equity) is in the panel's subtitle.
+const LABEL: Partial<Record<(typeof METRICS)[number]["key"], string>> = { roe: "Return on equity", growth: "Revenue growth", cagr5: "Revenue 5Y CAGR", leverage: "Net debt / EBITDA", evEbitda: "EV / EBITDA", shYield: "Holder yield" };
+/** Shareholder yield is the least used figure here: it gives way below 1400 px so the rest fit without scrolling. */
+const NARROW_HIDDEN: Partial<Record<(typeof METRICS)[number]["key"], string>> = { shYield: "hidden min-[1400px]:table-cell", leverage: "max-[1399px]:pr-4" };
 
 /**
  * The company against its named peers and its industry median, with its rank in the industry. Prices are requested
@@ -73,12 +77,14 @@ export function SectorTable({ ticker }: { ticker: string }) {
         )
       ) : (
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="research-table min-w-[960px]">
+          <table className="research-table min-w-[760px]">
             <thead>
-              <tr className="border-b bg-secondary/40 text-left text-[10.5px] uppercase tracking-wide text-muted-foreground">
-                <th className="sticky left-0 z-10 bg-secondary/95 px-4 py-2 font-medium">Company</th>
+              <tr className="border-b bg-secondary/40 text-left text-[11px] text-muted-foreground">
+                <th className="sticky left-0 z-10 bg-secondary px-4 py-1.5 align-bottom font-medium">Company</th>
                 {METRICS.map((m) => (
-                  <th key={m.key} className="px-2 py-2 text-right font-medium">{LABEL[m.key] ?? m.label}</th>
+                  <th key={m.key} className={cn("px-1.5 py-1.5 text-right align-bottom font-medium leading-tight whitespace-normal last:pr-4", NARROW_HIDDEN[m.key])}>
+                    {LABEL[m.key] ?? m.label}
+                  </th>
                 ))}
               </tr>
             </thead>
@@ -91,10 +97,10 @@ export function SectorTable({ ticker }: { ticker: string }) {
                 <tr key={r.id} className="border-t bg-secondary/20">
                   <td className="sticky left-0 z-10 bg-card px-4 py-1.5">
                     <p className="font-medium">{r.label}</p>
-                    <p className="truncate text-[10.5px] text-muted-foreground">{r.sub}</p>
+                    <p className="max-w-48 truncate text-[11px] text-muted-foreground" title={r.sub}>{r.sub}</p>
                   </td>
                   {METRICS.map((m) => (
-                    <td key={m.key} className="num px-2 py-1.5 text-right text-muted-foreground">{fmt(r.m[m.key], m.kind)}</td>
+                    <td key={m.key} className={cn("num px-1.5 py-1.5 text-right text-muted-foreground last:pr-4", NARROW_HIDDEN[m.key])}>{fmt(r.m[m.key], m.kind)}</td>
                   ))}
                 </tr>
               ))}
@@ -118,7 +124,7 @@ function Row({ ticker, m, highlight, sector, base }: { ticker: string; m: Metric
         const v = m[x.key];
         const better = b != null && v != null && x.key !== "mcap" ? (x.better === "high" ? v > b : v < b) : null;
         return (
-          <td key={x.key} className="num px-2 py-1.5 text-right align-top">
+          <td key={x.key} className={cn("num px-1.5 py-1.5 text-right align-top last:pr-4", NARROW_HIDDEN[x.key])}>
             <span className={cn("block", highlight && "font-semibold", better === true && "text-positive", better === false && "text-muted-foreground")}>{fmt(v, x.kind)}</span>
             {r && r.of > 1 && (
               <span title={`Rank ${r.rank} of ${r.of} in the industry`} className={cn("mt-0.5 inline-block rounded px-1 py-px text-[10px]", r.rank <= Math.ceil(r.of / 3) ? "bg-positive/15 text-positive" : r.rank > Math.floor((2 * r.of) / 3) ? "bg-negative/10 text-negative" : "bg-secondary text-muted-foreground")}>

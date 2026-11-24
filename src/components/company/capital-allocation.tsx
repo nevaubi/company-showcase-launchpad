@@ -119,7 +119,7 @@ export function CapitalAllocation({ data, ticker, years = 10, className }: { dat
             ))}
           </div>
         </div>
-        <dl className="grid grid-cols-2 content-start gap-x-4 gap-y-3 text-[12px] lg:grid-cols-1">
+        <dl className="grid grid-cols-2 content-start gap-x-4 gap-y-3 text-[13px] lg:grid-cols-1">
           <div>
             <dt className="text-muted-foreground">Operating cash, {model.periods.length} yrs</dt>
             <dd className="num text-lg font-medium">{fmtCompactUsd(model.cfoTotal)}</dd>
@@ -127,20 +127,20 @@ export function CapitalAllocation({ data, ticker, years = 10, className }: { dat
           <div>
             <dt className="text-muted-foreground">Returned to shareholders</dt>
             <dd className="num text-lg font-medium">
-              {fmtCompactUsd(returned)} <span className="text-xs text-muted-foreground">{model.cfoTotal > 0 ? fmtPct(returned / model.cfoTotal, 0) : ""} of CFO</span>
+              {fmtCompactUsd(returned)} <span className="text-[11px] text-muted-foreground">{model.cfoTotal > 0 ? fmtPct(returned / model.cfoTotal, 0) : ""} of CFO</span>
             </dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Reinvested (capex + M&A)</dt>
             <dd className="num text-lg font-medium">
-              {fmtCompactUsd(reinvested)} <span className="text-xs text-muted-foreground">{model.cfoTotal > 0 ? fmtPct(reinvested / model.cfoTotal, 0) : ""} of CFO</span>
+              {fmtCompactUsd(reinvested)} <span className="text-[11px] text-muted-foreground">{model.cfoTotal > 0 ? fmtPct(reinvested / model.cfoTotal, 0) : ""} of CFO</span>
             </dd>
           </div>
           {model.shareChange != null && (
             <div>
               <dt className="text-muted-foreground">Diluted share count</dt>
               <dd className={cn("num text-lg font-medium", model.shareChange < 0 ? "text-positive" : model.shareChange > 0.02 ? "text-negative" : "")}>
-                {fmtPct(model.shareChange, 1, true)} <span className="text-xs text-muted-foreground">split-adjusted</span>
+                {fmtPct(model.shareChange, 1, true)} <span className="text-[11px] text-muted-foreground">split-adjusted</span>
               </dd>
             </div>
           )}

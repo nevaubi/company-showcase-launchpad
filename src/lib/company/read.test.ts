@@ -102,7 +102,7 @@ describe("financialRead: rule thresholds", () => {
   it("growth slowing or picking up: the latest quarter against twelve months, five points apart", () => {
     const slowing = co(base({ revenue: [100, 100, 100, 100, 130, 125, 115, 108], netIncome: fill(10), operatingIncome: fill(20) }));
     expect(ids(slowing).concerns).toContain("slowing");
-    expect(sentence(slowing, "slowing")).toBe("Growth slowed: revenue in the latest quarter changed 8.0% on a year earlier, against 19.5% over twelve months.");
+    expect(sentence(slowing, "slowing")).toBe("Growth slowed: revenue in the latest quarter rose 8.0% on a year earlier, against growth of 19.5% over twelve months.");
     const faster = co(base({ revenue: [100, 100, 100, 100, 100, 102, 106, 112], netIncome: fill(10), operatingIncome: fill(20) }));
     expect(ids(faster).strengths).toContain("accelerating");
   });
@@ -198,6 +198,61 @@ describe("financialRead: rule thresholds", () => {
     expect(r.concerns).toHaveLength(4);
     expect(r.concerns.map((x) => x.weight)).toEqual([...r.concerns.map((x) => x.weight)].sort((x, y) => y - x));
     expect(r.concerns[0].id).toBe("decline");
+  });
+});
+
+/* ---- every rule that compares with revenue, read with revenue falling, flat and growing (review company-H3) */
+describe("financialRead: true for negative, zero and positive growth", () => {
+  const flat = (r: FinancialRead) => [...r.strengths, ...r.concerns].map(readText);
+  const twelve = [1, 2, 3, 4].map((q) => period(2023, q)).concat(eightQuarters);
+
+  it("a decline that eases in the latest quarter is not called growth and is not a strength", () => {
+    // reviewer's case A: −20% over twelve months, −10% in the latest quarter
+    const r = co(base({ revenue: [100, 100, 100, 100, 76, 77, 77, 90], netIncome: fill(10), operatingIncome: fill(20) }));
+    expect(ids(r).strengths).not.toContain("accelerating");
+    expect(ids(r).strengths).not.toContain("returnToGrowth");
+    expect(sentence(r, "decline")).toBe("Revenue fell 20.0% over the trailing twelve months.");
+    for (const t of flat(r)) expect(t).not.toMatch(/picked up|rose −|grew −/);
+  });
+
+  it("a quarter that grows after a falling year is a return to growth, stated with both figures", () => {
+    const r = co(base({ revenue: [100, 100, 100, 100, 90, 90, 90, 104], netIncome: fill(10), operatingIncome: fill(20) }));
+    expect(ids(r).strengths).toContain("returnToGrowth");
+    expect(sentence(r, "returnToGrowth")).toBe("Revenue returned to growth: the latest quarter rose 4.0% on a year earlier, while twelve-month revenue fell 6.5%.");
+  });
+
+  it("growth that turns into a falling quarter says the quarter fell", () => {
+    const r = co(base({ revenue: [100, 100, 100, 100, 131, 125, 115, 95], netIncome: fill(10), operatingIncome: fill(20) }));
+    expect(sentence(r, "slowing")).toBe("Growth slowed: revenue in the latest quarter fell 5.0% on a year earlier, against growth of 16.5% over twelve months.");
+  });
+
+  it("net income ahead of falling or flat revenue says revenue fell or was flat (reviewer's case B)", () => {
+    const down = co(base({ revenue: step(100, 92), netIncome: step(10, 12), operatingIncome: fill(20) }));
+    expect(sentence(down, "profitLead")).toBe("Net income grew 20.0% over the trailing twelve months while revenue fell 8.0%.");
+    const level = co(base({ revenue: fill(100), netIncome: step(10, 12), operatingIncome: fill(20) }));
+    expect(sentence(level, "profitLead")).toBe("Net income grew 20.0% over the trailing twelve months while revenue was flat at 0.0%.");
+    expect(ids(level).concerns).not.toContain("decline");
+  });
+
+  it("receivables and inventories growing while revenue falls say revenue fell", () => {
+    const rec = co(base({ revenue: step(100, 92), netIncome: fill(10), operatingIncome: fill(20) }), { receivables: step(40, 46.4) });
+    expect(sentence(rec, "receivables")).toMatch(/^Receivables grew 16\.0% over a year while revenue fell 8\.0%; days sales outstanding went from \d+ days to \d+ days\.$/);
+    const inv = co(base({ revenue: step(100, 92), netIncome: fill(10), operatingIncome: fill(20), costOfRevenue: fill(50) }), { inventory: step(20, 26) });
+    expect(sentence(inv, "inventory")).toBe("Inventories grew 30.0% over a year while revenue fell 8.0%.");
+  });
+
+  it("a decline after a growing year says what the year before did", () => {
+    const r = read(company({ quarters: twelve, q: { income: { revenue: [...fill(100, 4), ...fill(110, 4), ...fill(99, 4)], netIncome: fill(10, 12), operatingIncome: fill(20, 12) } } }));
+    expect(sentence(r, "decline")).toBe("Revenue fell 10.0% over the trailing twelve months, after it grew 10.0% a year earlier.");
+  });
+
+  it("no sentence calls a negative figure a rise, growth or a widening, across falling, flat and growing revenue", () => {
+    for (const rev of [step(100, 80), step(100, 92), fill(100), step(100, 108), step(100, 125), [100, 100, 100, 100, 76, 77, 77, 90], [100, 100, 100, 100, 131, 125, 115, 95]])
+      for (const ni of [step(10, 7), fill(10), step(10, 13)]) {
+        const r = co(base({ revenue: rev, netIncome: ni, operatingIncome: fill(20), costOfRevenue: fill(50) }), { receivables: step(40, 47), inventory: step(20, 26) });
+        for (const t of flat(r)) expect(t).not.toMatch(/(rose|grew|picked up|widened|narrowed|faster than revenue at) −/);
+        if (rev[7] <= rev[3]) expect(ids(r).strengths).not.toContain("accelerating");
+      }
   });
 });
 

@@ -9,7 +9,7 @@ import { DASH, IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { useSource } from "@/components/source/source-context";
 import { analyze, figTarget, medianTarget, vsPrior, type Fig, type FinancialAnalysis, type KeyFigure, type Measure, type MeasureGroup, type MeasureUnit } from "@/lib/company/analysis";
-import { changeTone, fmtChange, fmtValue, fmtWithUnit, groupUnit, rowValues, unitLabel, usdScale } from "@/lib/company/analysis-format";
+import { changeTone, fmtChange, fmtValue, fmtWithUnit, groupUnit, rowUnitLabel, rowValues, tableLabel, unitLabel, usdScale } from "@/lib/company/analysis-format";
 import { financialRead, fmtFig, READ_RULES, type ReadItem } from "@/lib/company/read";
 import { stillMissing, type StatementView } from "@/lib/company/currency-view";
 import type { NewerFiling } from "@/lib/company/staleness";
@@ -145,13 +145,10 @@ function MeasureRow({ ticker, a, m, shared }: { ticker: string; a: FinancialAnal
   const points = [...m.history.map((h) => ({ label: h.label, value: h.fig?.v ?? null, text: h.fig ? fmtWithUnit(h.fig.v, m.unit) : undefined })), ...(m.now && a.basis === "ttm" && m.history.length ? [{ label: m.now.period, value: m.now.v, text: fmtWithUnit(m.now.v, m.unit) }] : [])];
   return (
     <tr data-measure={m.key} className="border-t border-border/60 transition-colors duration-150 hover:bg-secondary/60 motion-reduce:transition-none">
-      <th scope="row" className="py-1 pl-4 pr-2 text-left align-top font-normal">
-        <span>{m.label}</span>
-        {(!shared || period) && (
-          <span className={cn("whitespace-nowrap", IR.caption)}>
-            , {[!shared ? unitLabel(m.unit, scale) : null, period].filter(Boolean).join(" · ")}
-          </span>
-        )}
+      <th scope="row" className="truncate py-1 pl-4 pr-2 text-left align-top font-normal" title={[m.label, !shared ? unitLabel(m.unit, scale) : null, period].filter(Boolean).join(", ")}>
+        <span>{tableLabel(m.key, m.label)}</span>
+        {!shared && <span className={IR.caption}>, {rowUnitLabel(m.unit, scale)}</span>}
+        {period && <span className={IR.caption}>*</span>}
         {!m.now && m.note && <span className={cn("block", IR.caption)}>Not shown: {m.note}.</span>}
       </th>
       <td className={cn("py-1 pr-3 align-top font-medium", IR.num)}>{cell(m.now, "current")}</td>
@@ -170,7 +167,7 @@ function MeasureRow({ ticker, a, m, shared }: { ticker: string; a: FinancialAnal
           </span>
         )}
       </td>
-      <td className="hidden py-1 pr-4 align-top sm:table-cell">
+      <td className="hidden py-1 pr-4 align-top sm:table-cell xl:hidden min-[1400px]:table-cell">
         <div className="flex h-5 items-center justify-end">
           <Spark points={points} name={`${m.label} by fiscal year`} />
         </div>
@@ -198,22 +195,27 @@ function DuPontLine({ ticker, a }: { ticker: string; a: FinancialAnalysis }) {
 function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; g: MeasureGroup }) {
   const shared = groupUnit(g);
   const medianYears = Math.max(0, ...g.measures.map((m) => m.median?.n ?? 0));
+  // rows whose figure covers another period than the table's (the latest quarter in a twelve-month table) are
+  // marked, and the period is said once in the table's head rather than in every label
+  const otherPeriod = [...new Set(g.measures.flatMap((m) => (m.now && m.now.period !== a.current ? [m.now.period] : [])))].join(", ") || null;
   return (
     <div data-group={g.id} className="mb-4 break-inside-avoid">
     <table className={cn("w-full table-fixed", IR.row)}>
+      {/* the fiscal-years spark gives way while two tables sit side by side under 1400 px, so the labels keep one line */}
       <colgroup>
         <col />
         <col className="w-16" />
         <col className="w-16" />
         <col className="w-16" />
         <col className="hidden w-16 sm:table-column" />
-        <col className="hidden w-[5.5rem] sm:table-column" />
+        <col className="hidden w-[5.5rem] sm:table-column xl:hidden min-[1400px]:table-column" />
       </colgroup>
       <thead>
         <tr className={IR.caption}>
-          <th scope="col" className="px-4 pb-1 pt-2 text-left font-normal">
+          <th scope="col" className="truncate px-4 pb-1 pt-2 text-left font-normal">
             <span className={cn("text-foreground", IR.group)}>{g.title}</span>
             {shared && <span>, {unitLabel(shared)}</span>}
+            {otherPeriod && <span title={`Rows marked * cover ${otherPeriod}, not the table's period`}> · * {otherPeriod}</span>}
           </th>
           <th scope="col" className="pb-1 pr-3 pt-2 text-right font-normal">
             Latest
@@ -227,7 +229,7 @@ function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; 
           <th scope="col" className="hidden pb-1 pr-3 pt-2 text-right font-normal sm:table-cell" title={`Median of the last ${medianYears || 5} fiscal years that have a figure (a median needs three)`}>
             Median
           </th>
-          <th scope="col" className="hidden pb-1 pr-4 pt-2 text-right font-normal sm:table-cell" title="Each fiscal year, then the latest figure as the dot">
+          <th scope="col" className="hidden pb-1 pr-4 pt-2 text-right font-normal sm:table-cell xl:hidden min-[1400px]:table-cell" title="Each fiscal year, then the latest figure as the dot">
             Fiscal years
           </th>
         </tr>
@@ -266,8 +268,9 @@ export function FinancialAnalysisSection({ ticker, served, view, filed }: { tick
     );
   }
   return (
-    <>
-      <HoldHeight phase={view.state}>
+    // One hold for the three panels: the read usually lengthens the currency line in Key figures and shortens the
+    // Financial read, so holding their sum (not each panel) keeps every section below where it was.
+    <HoldHeight phase={view.state} className="gap-3 *:flex-none">
       <IrPanel
         section="Key figures"
         title="Key figures"
@@ -289,9 +292,7 @@ export function FinancialAnalysisSection({ ticker, served, view, filed }: { tick
           ))}
         </StatGrid>
       </IrPanel>
-      </HoldHeight>
 
-      <HoldHeight phase={view.state}>
       <IrPanel
         section="Financial read"
         title="Financial read"
@@ -309,9 +310,7 @@ export function FinancialAnalysisSection({ ticker, served, view, filed }: { tick
           At most {READ_RULES.perSide} per side, heaviest rule first. It is a reading aid, not advice.
         </p>
       </IrPanel>
-      </HoldHeight>
 
-      <HoldHeight phase={view.state}>
       <IrPanel
         section="Financial analysis"
         title="Financial analysis"
@@ -324,7 +323,6 @@ export function FinancialAnalysisSection({ ticker, served, view, filed }: { tick
           ))}
         </div>
       </IrPanel>
-      </HoldHeight>
-    </>
+    </HoldHeight>
   );
 }

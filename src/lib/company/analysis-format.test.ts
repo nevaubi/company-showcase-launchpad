@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Measure, MeasureGroup } from "./analysis";
-import { changeTone, fmtChange, fmtValue, fmtWithUnit, groupUnit, unitLabel, usdScale } from "./analysis-format";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { hydrateDataset } from "@/lib/financials/dataset";
+import type { CompanyDataset } from "@/lib/financials/types";
+import { analyze } from "./analysis";
+import { changeTone, fmtChange, fmtValue, fmtWithUnit, groupUnit, rowUnitLabel, TABLE_LABEL_MAX, tableLabel, unitLabel, usdScale } from "./analysis-format";
 
 describe("analysis table formatting", () => {
   it("prints bare numbers with one convention per unit", () => {
@@ -66,5 +71,28 @@ describe("analysis table formatting", () => {
     expect(changeTone(0.02, null, "pct")).toBeNull();
     expect(changeTone(0.0002, "high", "pct")).toBeNull();
     expect(changeTone(null, "high", "pct")).toBeNull();
+  });
+});
+
+describe("analysis table row labels (review company-L5)", () => {
+  const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(path.resolve(__dirname, `../../test/fixtures/companies/${t}.json`), "utf8")) as CompanyDataset);
+  it("every row label with its unit fits one line of the label column at 1280 px", () => {
+    for (const t of ["AAPL", "NVDA", "MSFT", "GOOGL", "META", "JPM", "BAC", "C", "GS", "MS", "WFC"]) {
+      const a = analyze(load(t));
+      for (const g of a.groups)
+        for (const m of g.measures) {
+          const text = tableLabel(m.key, m.label);
+          expect(text.length, `${t} ${m.key}: ${text}`).toBeLessThanOrEqual(TABLE_LABEL_MAX);
+          const shared = groupUnit(g);
+          // the row's own unit, when the table has none in common, is short ("%", "×", "$B", "$", "days")
+          if (!shared) expect(rowUnitLabel(m.unit, "B").length, `${t} ${m.key}`).toBeLessThanOrEqual(8);
+        }
+    }
+  });
+  it("a per-share row's unit is a plain dollar sign", () => {
+    expect(rowUnitLabel("perShare")).toBe("$");
+    expect(rowUnitLabel("pct")).toBe("%");
+    expect(tableLabel("revenueYoY", "Revenue, latest quarter, year on year")).toBe("Revenue, quarter y/y");
+    expect(tableLabel("grossMargin", "Gross margin")).toBe("Gross margin");
   });
 });

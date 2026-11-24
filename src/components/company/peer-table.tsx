@@ -70,7 +70,7 @@ export function PeerTable({ ticker }: { ticker: string }) {
       <div className="overflow-x-auto scrollbar-thin">
         <table className="research-table">
           <thead>
-            <tr className="border-b text-left text-[10.5px] uppercase tracking-wide text-muted-foreground">
+            <tr className="border-b text-left text-[10px] uppercase tracking-wide text-muted-foreground">
               <th className="px-4 py-2 font-medium">Company</th>
               {cols.map((c) => (
                 <th key={c.key} className={cn("px-2 py-2 text-right font-medium whitespace-nowrap", c.hide)}>{c.label}</th>

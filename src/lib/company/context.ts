@@ -194,3 +194,24 @@ export function commonsThumb(url: string, width: 250 | 500 | 960 | 1280): string
   if (!/wikimedia\.org\/wikipedia\/commons\/thumb\//.test(url)) return url;
   return url.replace("//thumb.wikimedia.org/", "//upload.wikimedia.org/").replace(/\/\d+px-([^/?]+)/, `/${width}px-$1`);
 }
+
+/** The filings the people list was read from, newest per form: "the DEF 14A filed Jan 8, 2026 and the 10-K filed Oct 31, 2025". */
+export function peopleSources(people: Person[], fmt: (iso: string) => string): string | null {
+  const newest = new Map<string, string>();
+  for (const p of people) if ((newest.get(p.source.form) ?? "") < p.source.filed) newest.set(p.source.form, p.source.filed);
+  const parts = [...newest].sort((a, b) => b[1].localeCompare(a[1])).map(([form, filed]) => `the ${form} filed ${fmt(filed)}`);
+  return parts.length ? parts.join(" and ") : null;
+}
+
+const surname = (n: string) => n.trim().split(/\s+/).filter((w) => !/^(jr|sr|ii|iii|iv)\.?$/i.test(w)).at(-1)?.toLowerCase().replace(/[^a-z]/g, "") ?? "";
+
+/**
+ * The profile's chief executive comes from Form 4 filings (scripts/ingest.ts: the latest insider report whose role is
+ * chief executive), the people list from the proxy or 10-K. When the two name different people the page states where
+ * each comes from and when, and does not guess which is current. Null when they agree or either is missing.
+ */
+export function ceoSourceNote(profileCeo: string, insiders: { owner: string; role: string; filed: string }[], proxyCeo: string | undefined, fmt: (iso: string) => string): string | null {
+  if (!profileCeo || !proxyCeo || surname(profileCeo) === surname(proxyCeo)) return null;
+  const own = insiders.filter((t) => surname(t.owner) === surname(profileCeo) && /chief executive|\bceo\b/i.test(t.role)).map((t) => t.filed).sort().at(-1);
+  return own ? `Form 4 filed ${fmt(own)}` : "Form 4 filings";
+}

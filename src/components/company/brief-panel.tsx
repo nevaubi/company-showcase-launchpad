@@ -5,7 +5,7 @@ import { briefQuery, type BriefFact } from "@/lib/insights/brief";
 import { fmtRelative, humanizeDates } from "@/lib/format";
 
 const chip =
-  "num ml-0.5 rounded bg-secondary px-1 align-super text-[9.5px] text-muted-foreground hover:text-foreground";
+  "num ml-0.5 rounded bg-secondary px-1 align-super text-[10px] text-muted-foreground hover:text-foreground";
 
 function FactLink({ ticker, f, n }: { ticker: string; f: BriefFact; n: number }) {
   const l = f.link;

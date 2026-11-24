@@ -85,7 +85,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
               {b.highlights.map((h) => (
                 <div key={h.label} className="min-w-0 border-l-2 border-highlight pl-2">
                   <dt className="eyebrow">{h.label}</dt>
-                  <dd className="text-[12.5px] leading-snug">{h.detail}</dd>
+                  <dd className="text-[13px] leading-snug">{h.detail}</dd>
                 </div>
               ))}
             </dl>
@@ -93,7 +93,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
           {b.guidance.length > 0 && (
             <div className="px-4 pt-3">
               <p className="eyebrow">Guidance & outlook</p>
-              <ul className="mt-1 list-disc space-y-1 pl-4 text-[12.5px]">
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-[13px]">
                 {b.guidance.map((g) => (
                   <li key={g}>{g}</li>
                 ))}
@@ -103,7 +103,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
           {b.analystQuestions.length > 0 && (
             <div className="px-4 pt-3">
               <p className="eyebrow">What analysts pressed on</p>
-              <ul className="mt-1 list-disc space-y-1 pl-4 text-[12.5px] text-muted-foreground">
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-[13px] text-muted-foreground">
                 {b.analystQuestions.map((g) => (
                   <li key={g}>{g}</li>
                 ))}
@@ -119,7 +119,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
                     href={s.url}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center gap-1 truncate text-[12px] hover:underline"
+                    className="flex items-center gap-1 truncate text-[13px] hover:underline"
                   >
                     <ExternalLink className="size-3 shrink-0" />
                     <span className="truncate">{s.title}</span>
@@ -130,7 +130,7 @@ export function EarningsCallPanel({ ticker }: { ticker: string }) {
                 </li>
               ))}
             </ul>
-            <p className="mt-2 text-[10.5px] text-muted-foreground">
+            <p className="mt-2 text-[11px] text-muted-foreground">
               AI summary of third-party web sources — verify against the company's filings.
             </p>
           </div>

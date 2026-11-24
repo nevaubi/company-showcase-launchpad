@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { hydrateDataset } from "@/lib/financials/dataset";
 import type { CompanyDataset } from "@/lib/financials/types";
-import { fcfWhy, operatingIncomeWhy, revenueWhy, whyCards } from "./why";
+import { fcfWhy, operatingIncomeWhy, revenueWhy, viewDrivers, whyCards } from "./why";
 
 const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(path.resolve(__dirname, `../../test/fixtures/companies/${t}.json`), "utf8")) as CompanyDataset);
 const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
@@ -60,5 +60,28 @@ describe("whyCards", () => {
     const w = fcfWhy(load("MSFT"))!;
     expect(w.insight.drivers.map((x) => x.label).sort()).toEqual(["Capital spending", "Cash from operations"]);
     expect(sum(w.insight.drivers.map((x) => x.delta))).toBeCloseTo(w.metric.value - w.metric.previous, 0);
+  });
+});
+
+describe("viewDrivers", () => {
+  it("keeps the served quarter's cards when statements read at view time explain fewer figures", () => {
+    const served = load("JPM");
+    const served_ = whyCards(served);
+    expect(served_.length).toBeGreaterThan(0);
+    // a read brings statement lines without their segment breakdown, so revenue can no longer be split
+    const read: CompanyDataset = { ...served, segments: [] };
+    expect(whyCards(read).length).toBeLessThan(served_.length);
+    const v = viewDrivers(served, read);
+    expect(v.data).toBe(served);
+    expect(v.cards.map((c) => [c.id, c.metric.period])).toEqual(served_.map((c) => [c.id, c.metric.period]));
+  });
+
+  it("uses the current statements when they explain as much, and the served ones when nothing was read", () => {
+    const served = load("AAPL");
+    expect(viewDrivers(served, served).data).toBe(served);
+    const copy: CompanyDataset = { ...served };
+    const v = viewDrivers(served, copy);
+    expect(v.data).toBe(copy);
+    expect(v.cards.length).toBe(whyCards(served).length);
   });
 });

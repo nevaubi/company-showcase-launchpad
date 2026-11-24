@@ -229,7 +229,7 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
           <div className="grid grid-cols-4 border-t @min-[650px]:grid-cols-7">
             {perf.map((p) => (
               <div key={p.label} className="min-w-0 border-r px-3 py-2 last:border-r-0">
-                <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                   {p.label}
                 </p>
                 <p
@@ -264,14 +264,14 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
               },
             ].map((s) => (
               <div key={s.k} className="bg-card px-3 py-2">
-                <p className="text-[10.5px] text-muted-foreground">{s.k}</p>
+                <p className="text-[11px] text-muted-foreground">{s.k}</p>
                 <p className="num text-sm font-medium">{s.v}</p>
               </div>
             ))}
           </div>
           {read.pos52 != null && (
             <div className="border-b px-3 py-3">
-              <div className="flex justify-between text-[10.5px] text-muted-foreground">
+              <div className="flex justify-between text-[11px] text-muted-foreground">
                 <span>52-wk low {fmtPrice(read.lo52)}</span>
                 <span>high {fmtPrice(read.hi52)}</span>
               </div>
@@ -299,14 +299,14 @@ export function ResearchChart({ ticker, data }: { ticker: string; data: CompanyD
                     <Minus className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
                   )}
                   <div className="min-w-0">
-                    <p className="text-[12.5px] font-medium">{i.title}</p>
-                    <p className="text-[11.5px] leading-snug text-muted-foreground">{i.detail}</p>
+                    <p className="text-[13px] font-medium">{i.title}</p>
+                    <p className="text-[11px] leading-snug text-muted-foreground">{i.detail}</p>
                   </div>
                 </li>
               ))
             )}
           </ul>
-          <p className="border-t px-3 py-2 text-[10.5px] text-muted-foreground">
+          <p className="border-t px-3 py-2 text-[11px] text-muted-foreground">
             Rules-based read of past prices, not a forecast.
           </p>
         </div>

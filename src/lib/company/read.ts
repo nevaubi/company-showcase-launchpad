@@ -91,6 +91,13 @@ const med = (m: Measure): string => fmtFig(m.median!.v, m.unit);
 /** "five-year median", or the number of fiscal years the median really covers. */
 const medianOf = (m: Measure): string => `${["", "one", "two", "three", "four", "five"][m.median!.n] ?? m.median!.n}-year median`;
 const sentence = (bits: Bit[]): ReadPart[] => bits.map((b) => (typeof b === "string" ? { text: b } : b));
+/** Under this a change prints as 0.0%, so it is called flat rather than a rise or a fall. */
+const FLAT = 0.0005;
+/** A change in words that is true for either sign: "grew 4.0%", "fell 8.0%" (the figure shown unsigned), "was flat at 0.0%". */
+const change = (m: Measure, which: "now" | "prior", up = "grew"): Bit[] => {
+  const v = m[which]!.v;
+  return Math.abs(v) < FLAT ? ["was flat at ", n(m, which)] : v > 0 ? [`${up} `, n(m, which)] : ["fell ", n(m, which, { abs: true })];
+};
 
 export function financialRead(a: FinancialAnalysis): FinancialRead {
   const out: ReadItem[] = [];
@@ -106,11 +113,16 @@ export function financialRead(a: FinancialAnalysis): FinancialRead {
   if (g?.now) {
     const strong = bank ? R.bank.growthStrong : R.growthStrong;
     if (g.now.v >= strong) add("growth", "strength", 2 + Math.min(2, g.now.v * 4), ["Revenue grew ", n(g, "now"), ` ${over}`, ...(g.prior ? [", against ", n(g, "prior"), " a year earlier"] : []), "."]);
-    else if (g.now.v < 0) add("decline", "concern", 3 + Math.min(1, -g.now.v * 5), ["Revenue fell ", n(g, "now", { abs: true }), ` ${over}`, ...(g.prior ? [", after ", n(g, "prior"), " a year earlier"] : []), "."]);
+    else if (g.now.v <= -FLAT) add("decline", "concern", 3 + Math.min(1, -g.now.v * 5), ["Revenue fell ", n(g, "now", { abs: true }), ` ${over}`, ...(g.prior ? [", after it ", ...change(g, "prior"), " a year earlier"] : []), "."]);
     if (gq?.now && a.basis === "ttm") {
       const gap = gq.now.v - g.now.v;
-      if (gap <= -R.growthShift && g.now.v > 0) add("slowing", "concern", 1.5 + Math.min(1.5, -gap * 5), ["Growth slowed: revenue in the latest quarter changed ", n(gq, "now"), " on a year earlier, against ", n(g, "now"), " over twelve months."]);
-      else if (gap >= R.growthShift) add("accelerating", "strength", 1.5 + Math.min(1.5, gap * 5), ["Growth picked up: revenue in the latest quarter rose ", n(gq, "now"), " on a year earlier, against ", n(g, "now"), " over twelve months."]);
+      // Slowing is read only for a growing company, picking up only when the quarter itself grew: a decline that
+      // eases (−10% in the quarter against −20% over the year) is not a strength and gets no sentence of its own.
+      if (gap <= -R.growthShift && g.now.v > 0) add("slowing", "concern", 1.5 + Math.min(1.5, -gap * 5), ["Growth slowed: revenue in the latest quarter ", ...change(gq, "now", "rose"), " on a year earlier, against growth of ", n(g, "now"), " over twelve months."]);
+      else if (gap >= R.growthShift && gq.now.v >= FLAT) {
+        if (g.now.v > 0) add("accelerating", "strength", 1.5 + Math.min(1.5, gap * 5), ["Growth picked up: revenue in the latest quarter rose ", n(gq, "now"), " on a year earlier, against ", n(g, "now"), " over twelve months."]);
+        else add("returnToGrowth", "strength", 1.5 + Math.min(1.5, gq.now.v * 5), ["Revenue returned to growth: the latest quarter rose ", n(gq, "now"), " on a year earlier, while twelve-month revenue ", ...change(g, "now"), "."]);
+      }
     }
   }
 
@@ -118,7 +130,7 @@ export function financialRead(a: FinancialAnalysis): FinancialRead {
   const ng = get("netIncomeGrowth");
   if (ng?.now) {
     if (ng.now.v <= R.profitMove.fall) add("profitDown", "concern", 2.5 + Math.min(1, -ng.now.v * 3), ["Net income fell ", n(ng, "now", { abs: true }), ` ${over}`, ...(g?.now ? [" while revenue changed ", n(g, "now")] : []), "."]);
-    else if (g?.now && ng.now.v >= R.profitMove.strong && ng.now.v - g.now.v >= R.profitMove.lead) add("profitLead", "strength", 1.8 + Math.min(1.2, (ng.now.v - g.now.v) * 3), ["Net income grew ", n(ng, "now"), ` ${over}, faster than revenue at `, n(g, "now"), "."]);
+    else if (g?.now && ng.now.v >= R.profitMove.strong && ng.now.v - g.now.v >= R.profitMove.lead) add("profitLead", "strength", 1.8 + Math.min(1.2, (ng.now.v - g.now.v) * 3), ["Net income grew ", n(ng, "now"), ` ${over}`, ...(g.now.v >= FLAT ? [", faster than revenue at ", n(g, "now")] : [" while revenue ", ...change(g, "now")]), "."]);
   }
 
   /* ---- share count and payouts: the same rules for both kinds */
@@ -156,7 +168,7 @@ export function financialRead(a: FinancialAnalysis): FinancialRead {
     const dep = get("depositGrowth");
     if (dep?.now) {
       if (dep.now.v >= R.bank.depositGrowth) add("deposits", "strength", 1.2, ["Deposits grew ", n(dep, "now"), " over a year."]);
-      else if (dep.now.v < 0) add("depositsLower", "concern", 1.5, ["Deposits fell ", n(dep, "now", { abs: true }), " over a year."]);
+      else if (dep.now.v <= -FLAT) add("depositsLower", "concern", 1.5, ["Deposits fell ", n(dep, "now", { abs: true }), " over a year."]);
     }
     const tp = get("totalPayout");
     if (tp?.now && tp.now.v > 1) add("payoutOver", "concern", 1.2, ["Dividends and repurchases were ", n(tp, "now"), " of net income."]);
@@ -183,7 +195,7 @@ export function financialRead(a: FinancialAnalysis): FinancialRead {
       else if (d <= -R.marginVsMedian) add("marginBelowMedian", "concern", 1.5, [`${om.label} of `, n(om, "now"), ` is ${points(d)} below its ${medianOf(om)} of ${med(om)}.`]);
     }
     const gm = get("grossMargin");
-    if (gm?.now && gm.prior && gm.now.v - gm.prior.v <= -R.marginDrop) add("grossMarginDown", "concern", 1.8 + Math.min(1.5, (gm.prior.v - gm.now.v) * 20), ["Gross margin narrowed to ", n(gm, "now"), " from ", n(gm, "prior"), " a year earlier."]);
+    if (gm?.now && gm.prior && gm.now.v - gm.prior.v <= -R.marginDrop) add("grossMarginDown", "concern", 1.8 + Math.min(1.5, (gm.prior.v - gm.now.v) * 20), [`Gross margin ${gm.now.v >= 0 && gm.prior.v >= 0 ? "narrowed" : "worsened"} to `, n(gm, "now"), " from ", n(gm, "prior"), " a year earlier."]);
 
     /* ---- returns */
     const ric = get("roic");
@@ -234,13 +246,13 @@ export function financialRead(a: FinancialAnalysis): FinancialRead {
       add("receivables", "concern", 1.5 + Math.min(1.5, rec.now.v - g.now.v), [
         "Receivables grew ",
         n(rec, "now"),
-        " over a year while revenue grew ",
-        n(g, "now"),
+        " over a year while revenue ",
+        ...change(g, "now"),
         ...(dso?.now && dso.prior ? ["; days sales outstanding went from ", n(dso, "prior"), " to ", n(dso, "now")] : []),
         ".",
       ]);
     const inv = get("inventoryGrowth");
-    if (inv?.now && g?.now && inv.now.v > 0.1 && inv.now.v - g.now.v >= R.workingCapitalGap && share(a.facts.inventory) >= R.inventoryShare) add("inventory", "concern", 1.5 + Math.min(1.5, inv.now.v - g.now.v), ["Inventories grew ", n(inv, "now"), " over a year while revenue grew ", n(g, "now"), "."]);
+    if (inv?.now && g?.now && inv.now.v > 0.1 && inv.now.v - g.now.v >= R.workingCapitalGap && share(a.facts.inventory) >= R.inventoryShare) add("inventory", "concern", 1.5 + Math.min(1.5, inv.now.v - g.now.v), ["Inventories grew ", n(inv, "now"), " over a year while revenue ", ...change(g, "now"), "."]);
 
     /* ---- stock compensation and what is paid out */
     const sbc = get("sbcIntensity");

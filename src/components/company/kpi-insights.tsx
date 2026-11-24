@@ -43,7 +43,7 @@ export function KpiSpark({ chart, className }: { chart: KpiChart; className?: st
         )}
         <path d={path(main)} fill="none" className="stroke-foreground" strokeWidth="1.6" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
       </svg>
-      <figcaption className="mt-0.5 flex flex-wrap gap-x-3 text-[10.5px] text-muted-foreground">
+      <figcaption className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
         <span>
           <span className="mr-1 inline-block h-0.5 w-3 bg-foreground align-middle" />
           {chart.name}
@@ -128,11 +128,11 @@ export function KpiInsightCards({ f, limit = 6, compact = false }: { f: KpiInsig
         return (
           <li key={i} className="min-w-0 bg-card px-3.5 py-3">
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="rounded bg-secondary px-1.5 py-px text-[10.5px] text-muted-foreground">{KIND_LABEL[c.kind] ?? c.kind}</span>
-              {!c.model && <span className="text-[10.5px] text-muted-foreground">detected in code</span>}
+              <span className="rounded bg-secondary px-1.5 py-px text-[11px] text-muted-foreground">{KIND_LABEL[c.kind] ?? c.kind}</span>
+              {!c.model && <span className="text-[11px] text-muted-foreground">detected in code</span>}
             </div>
             <h3 className="mt-1 text-[13px] leading-snug font-medium">{c.title}</h3>
-            {c.model && <p className="mt-0.5 text-[12.5px] leading-relaxed text-foreground/90">{c.text}</p>}
+            {c.model && <p className="mt-0.5 text-[13px] leading-relaxed text-foreground/90">{c.text}</p>}
             {chart && <KpiSpark chart={chart} className="mt-2" />}
             <div className="mt-1.5">
               <button type="button" className="text-[11px] text-link hover:underline" onClick={() => setOpenIdx(expanded ? null : i)} aria-expanded={expanded}>
@@ -141,9 +141,9 @@ export function KpiInsightCards({ f, limit = 6, compact = false }: { f: KpiInsig
               {(expanded || !c.model) && (
                 <ul className="mt-1 space-y-1.5 border-l-2 pl-2">
                   {facts.map((x) => (
-                    <li key={x.id} className="text-[11.5px] leading-snug text-muted-foreground">
+                    <li key={x.id} className="text-[11px] leading-snug text-muted-foreground">
                       <span className="text-foreground/85">{x.text}</span>
-                      <div className="mt-0.5 text-[10.5px]">
+                      <div className="mt-0.5 text-[11px]">
                         <SourceLinks ticker={f.ticker} label={c.title} sources={x.sources} />
                       </div>
                     </li>

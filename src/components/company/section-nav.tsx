@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { currentSection, markedSection, type NavPin } from "@/lib/company/section-nav";
 import { cn } from "@/lib/utils";
 
 /**
@@ -15,9 +16,12 @@ function stickyLine(nav: HTMLElement | null): number {
 }
 
 export function SectionNav({ sections }: { sections: { id: string; label: string }[] }) {
-  const [active, setActive] = useState(sections[0]?.id);
+  const [active, setActive] = useState<string | undefined>(sections[0]?.id);
   const [present, setPresent] = useState<string>(() => sections.map((s) => s.id).join(" "));
   const [nav, setNav] = useState<HTMLElement | null>(null);
+  // the chip the reader clicked, held while the smooth scroll runs and while the page stays where it landed
+  const pin = useRef<NavPin | null>(null);
+  const settle = useRef<{ timer: number; done: () => void } | null>(null);
   useEffect(() => {
     if (typeof window === "undefined") return;
     let frame = 0;
@@ -25,11 +29,11 @@ export function SectionNav({ sections }: { sections: { id: string; label: string
       frame = 0;
       const line = stickyLine(nav);
       const shown = sections.filter((s) => (document.getElementById(s.id)?.offsetHeight ?? 0) > 0);
-      let current = shown[0]?.id;
-      for (const s of shown) if (document.getElementById(s.id)!.getBoundingClientRect().top - line <= 0) current = s.id;
+      const tops = shown.map((s) => ({ id: s.id, top: document.getElementById(s.id)!.getBoundingClientRect().top }));
       const atEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-      if (atEnd && shown.length && window.scrollY > 0) current = shown[shown.length - 1].id;
-      setActive(current);
+      const marked = markedSection(pin.current, window.scrollY, currentSection(tops, line, { end: atEnd, scrolled: window.scrollY > 0 }));
+      pin.current = marked.pin;
+      setActive(marked.id);
       setPresent(shown.map((s) => s.id).join(" "));
     };
     const onScroll = () => {
@@ -47,6 +51,11 @@ export function SectionNav({ sections }: { sections: { id: string; label: string
       window.removeEventListener("resize", onScroll);
       seen?.disconnect();
       if (frame) cancelAnimationFrame(frame);
+      if (settle.current) {
+        window.clearTimeout(settle.current.timer);
+        window.removeEventListener("scrollend", settle.current.done);
+        settle.current = null;
+      }
     };
   }, [sections, nav]);
   const shown = new Set(present.split(" "));
@@ -63,11 +72,27 @@ export function SectionNav({ sections }: { sections: { id: string; label: string
             e.preventDefault();
             const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
             // an explicit jump the reader asked for: move the page to the section, under the sticky rows
-            window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - stickyLine(nav), behavior: reduce ? "auto" : "smooth" });
+            if (settle.current) {
+              window.clearTimeout(settle.current.timer);
+              window.removeEventListener("scrollend", settle.current.done);
+            }
+            pin.current = { id: s.id, y: null };
+            // the jump has ended at `scrollend` (or, where the browser has no such event, after a smooth scroll's
+            // length); from then on the pin holds only while the page stays at that position
+            const done = () => {
+              if (settle.current?.done !== done) return;
+              window.clearTimeout(settle.current.timer);
+              window.removeEventListener("scrollend", done);
+              settle.current = null;
+              if (pin.current?.id === s.id) pin.current = { id: s.id, y: window.scrollY };
+            };
+            settle.current = { timer: window.setTimeout(done, 1200), done };
+            window.addEventListener("scrollend", done);
             setActive(s.id);
+            window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - stickyLine(nav), behavior: reduce ? "auto" : "smooth" });
           }}
           className={cn(
-            "inline-flex min-h-7 shrink-0 items-center rounded-full border px-2.5 text-[12px] whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+            "inline-flex min-h-7 shrink-0 items-center rounded-full border px-2.5 text-[13px] whitespace-nowrap transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
             active === s.id ? "border-foreground/30 bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
           )}
         >

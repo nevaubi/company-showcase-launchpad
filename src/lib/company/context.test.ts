@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bestWindows, nameIn, numberIn, photoFromMarkdown, rankPeople, usableImage, type Person } from "./context";
+import { bestWindows, ceoSourceNote, nameIn, numberIn, peopleSources, photoFromMarkdown, rankPeople, usableImage, type Person } from "./context";
 
 const src = { accn: "a", doc: "d", form: "10-K", filed: "2026-01-01" };
 const p = (name: string, title: string, group: Person["group"], extra: Partial<Person> = {}): Person => ({ name, title, group, quote: name, source: src, ...extra });
@@ -45,5 +45,27 @@ describe("company context", () => {
   it("prefers the dense section over the table-of-contents mention", () => {
     const t = "Executive Officers ..... 12\n" + "x".repeat(500) + "Executive Officers\nJane Roe Age 50 since 2019. John Doe Age 60 since 2015.";
     expect(bestWindows(t, /Executive Officers/i, 200, /\bage\b/, 1)[0]).toContain("Jane Roe");
+  });
+});
+
+describe("people sources and the chief executive's source", () => {
+  const fmt = (d: string) => d;
+  const person = (name: string, title: string, form: string, filed: string): Person => ({ name, title, group: "executive", quote: name, source: { accn: "a", doc: "d", form, filed } }) as Person;
+  it("names each filing the people come from, newest per form, newest first", () => {
+    const people = [person("Tim Cook", "Chief Executive Officer", "DEF 14A", "2026-01-08"), person("Kevan Parekh", "Chief Financial Officer", "10-K", "2025-10-31"), person("Jeff Williams", "COO", "DEF 14A", "2025-01-10")];
+    expect(peopleSources(people, fmt)).toBe("the DEF 14A filed 2026-01-08 and the 10-K filed 2025-10-31");
+    expect(peopleSources([], fmt)).toBeNull();
+  });
+  it("states the Form 4 behind the profile's chief executive only when the proxy names someone else", () => {
+    const insiders = [
+      { owner: "John Ternus", role: "Chief Executive Officer", filed: "2026-09-02" },
+      { owner: "John Ternus", role: "Chief Executive Officer, Director", filed: "2026-10-29" },
+      { owner: "John Ternus", role: "SVP Hardware Engineering", filed: "2026-11-01" },
+    ];
+    expect(ceoSourceNote("John Ternus", insiders, "Tim Cook", fmt)).toBe("Form 4 filed 2026-10-29");
+    expect(ceoSourceNote("John Ternus", [], "Tim Cook", fmt)).toBe("Form 4 filings");
+    expect(ceoSourceNote("Timothy D Cook", insiders, "Tim Cook", fmt)).toBeNull();
+    expect(ceoSourceNote("Jamie Dimon", insiders, undefined, fmt)).toBeNull();
+    expect(ceoSourceNote("", insiders, "Tim Cook", fmt)).toBeNull();
   });
 });

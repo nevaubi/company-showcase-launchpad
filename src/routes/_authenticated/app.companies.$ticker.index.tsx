@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useCompany } from "@/lib/data";
 import { getNarratives } from "@/lib/ai.functions";
 import { companyChangesQuery } from "@/lib/changes/data";
-import { whyCards } from "@/lib/company/why";
+import { viewDrivers } from "@/lib/company/why";
 import { coverageOf } from "@/lib/coverage";
 import { friendlyError } from "@/lib/errors";
 import { fmtDate, fmtRelative } from "@/lib/format";
@@ -127,7 +127,8 @@ function OverviewBody({ ticker, data: served }: { ticker: string; data: CompanyD
   const q = data.statements.quarterly;
   const a = data.statements.annual;
   const p = data.profile;
-  const drivers = useMemo(() => whyCards(data), [data]);
+  // the served quarter's cards stay when a filing read at view time cannot be explained yet (no segments in a read)
+  const { cards: drivers, data: driverData } = useMemo(() => viewDrivers(served, data), [served, data]);
 
   const sections = useMemo(() => Object.values(SECTIONS).filter((s) => s.id !== SECTIONS.drivers.id || drivers.length > 0), [drivers.length]);
   // the pipeline's ranked list when it exists; the dated events otherwise, never both
@@ -146,7 +147,7 @@ function OverviewBody({ ticker, data: served }: { ticker: string; data: CompanyD
       {drivers.length > 0 && (
         <Section id={SECTIONS.drivers.id}>
           <HoldHeight phase={view.state}>
-            <QuarterDrivers ticker={ticker} cards={drivers} data={data} />
+            <QuarterDrivers ticker={ticker} cards={drivers} data={driverData} />
           </HoldHeight>
         </Section>
       )}
