@@ -254,9 +254,84 @@ describe("review fixes: sign first, real sources, other measures", () => {
 });
 
 describe("review fixes: a segment total is not the consolidated line", () => {
-  it("LKQ Q2 2026 'Total Revenue' 1,466M in the 'Total Revenue' table (43% of the 10-Q's 3,408M) is not compared", () => {
-    const p = payload([series("t", "Total Revenue", { "2026-06-30": cell(1_466_000_000) }, { bd: "Total Revenue" })]);
+  it("LKQ Q2 2026 'Total Revenue' 1,466M (43% of the 10-Q's 3,408M): skipped in a table that splits the company, flagged in one that does not", () => {
     const st: CheckStatements = { quarterly: { periods: [{ end: "2026-06-30" }], rows: [{ key: "revenue", cells: [{ v: 3_408_000_000, src: { accn: "0001065696-26-000044" } }] }] } };
-    expect(crossCheckSec(p, st).check!.checked).toBe(0);
+    const part = payload([series("t", "Total Revenue", { "2026-06-30": cell(1_466_000_000) }, { bd: "Revenue by geography" })]);
+    expect(crossCheckSec(part, st).check!.checked).toBe(0);
+    // a table named "Total Revenue" does not say it is a part: the figure is compared and carries both numbers
+    const whole = payload([series("t", "Total Revenue", { "2026-06-30": cell(1_466_000_000) }, { bd: "Total Revenue" })]);
+    const r = crossCheckSec(whole, st);
+    expect(r.check!.items[0]).toMatchObject({ status: "flagged", sec: 3_408_000_000 });
+    expect(r.payload.series[0].q["2026-06-30"].flags?.[0]).toMatchObject({ k: "sec", v: 3_408_000_000 });
+  });
+});
+
+// The reviewer's KEY rows (p3-ir C1-C3: SQL 2026-11-24, values, documents and dates as stored) and the
+// statements the app's buildStatements makes from KEY's EDGAR companyfacts (fetched 2026-11-24;
+// accessions as there); only the cells the check reads are copied.
+describe("p3-ir review: no wrong KEY figure passes unmarked", () => {
+  // [value, accession] or [value, null] for a quarter the statements derive (10-K year less nine months)
+  const keySt = (key: string, q: Record<string, [number, string | null]>): CheckStatements => ({
+    quarterly: { periods: Object.keys(q).map((end) => ({ end })), rows: [{ key, cells: Object.values(q).map(([v, accn]) => (accn ? { v, src: { accn, concept: "us-gaap:X" } } : { v, derived: "FY total − 9M YTD" })) }] },
+    annual: { periods: [], rows: [] },
+  });
+
+  it("C1 provision Q4 2025 39M (a deck chart's Q4 2024 bar) against the 10-K's 108M is held, not skipped for being under half", () => {
+    // deck 255026d2 stored the chart's five bars under 2025-12-31; the shown vintage is 39M
+    const c = cell(39_000_000, { alt: { v: 107_000_000, kind: "conflict", d: 1 } });
+    const p = payload([series("pv", "Provision for credit losses", { "2025-12-31": c }, { cat: "cost", met: "cost", total: false, bd: "Credit quality" })]);
+    const st = keySt("provisionCreditLosses", { "2024-12-31": [39_000_000, null], "2025-03-31": [118_000_000, "0001628280-26-030507"], "2025-06-30": [138_000_000, "0001628280-26-052671"], "2025-09-30": [107_000_000, "0000091576-26-000023"], "2025-12-31": [108_000_000, null] });
+    const { payload: out, check } = crossCheckSec(p, st);
+    expect(check!.items[0]).toMatchObject({ status: "held", ir: 39_000_000, sec: 108_000_000 });
+    expect(check!.items[0].why).toMatch(/SEC figure for the quarter ending 2024-12-31/);
+    expect(out.series[0].q["2025-12-31"]).toBeUndefined();
+    expect(out.series[0].held?.q?.["2025-12-31"]).toMatchObject({ v: 39_000_000, w: "suspect" });
+  });
+
+  it("C1 the same chart bar that matches no other quarter is still flagged, never skipped", () => {
+    const p = payload([series("pv", "Provision for credit losses", { "2025-12-31": cell(39_000_000) }, { cat: "cost", met: "cost", total: false, bd: "Credit quality" })]);
+    const { check } = crossCheckSec(p, keySt("provisionCreditLosses", { "2025-12-31": [108_000_000, null] }));
+    expect(check!.items[0]).toMatchObject({ status: "flagged", sec: 108_000_000 });
+  });
+
+  it("C2 NII Q1 2025 1,223M (a bridge chart's bar) is flagged although another line of the period agrees with the filing's 1,096M (a 2026 comparative)", () => {
+    const p = payload([
+      series("a", "Net interest income", { "2025-03-31": cell(1_223_000_000) }, { bd: "Income statement" }),
+      series("b", "Net interest income (GAAP)", { "2025-03-31": cell(1_096_000_000) }, { bd: "Pre-provision net revenue" }),
+    ]);
+    const { payload: out, check } = crossCheckSec(p, keySt("netInterestIncome", { "2025-03-31": [1_096_000_000, "0001628280-26-030507"] }));
+    const byK = Object.fromEntries(check!.items.map((x) => [x.k, x.status]));
+    expect(byK).toEqual({ a: "flagged", b: "agree" });
+    expect(out.series[0].q["2025-03-31"].flags?.[0]).toMatchObject({ k: "sec", v: 1_096_000_000 });
+  });
+
+  it("C2 the same bar nested under the income statement's Revenue (real parent) is compared too", () => {
+    const p = payload([
+      series("rev", "Revenue", {}, { bd: "Income statement" }),
+      series("a", "Net interest income", { "2025-03-31": cell(1_223_000_000) }, { parent: "rev", total: false, bd: "Income statement" }),
+      series("b", "Net interest income (GAAP)", { "2025-03-31": cell(1_096_000_000) }, { bd: "Pre-provision net revenue" }),
+    ]);
+    const { check } = crossCheckSec(p, keySt("netInterestIncome", { "2025-03-31": [1_096_000_000, "0001628280-26-030507"] }));
+    expect(Object.fromEntries(check!.items.map((x) => [x.k, x.status]))).toEqual({ a: "flagged", b: "agree" });
+  });
+
+  it("C2 a segment's line of the same name beside an agreeing one is still not compared", () => {
+    const p = payload([
+      series("a", "Net interest income", { "2025-03-31": cell(800_000_000) }, { bd: "Net interest income by segment" }),
+      series("b", "Net interest income", { "2025-03-31": cell(1_096_000_000) }, { bd: "Income statement" }),
+    ]);
+    const { check } = crossCheckSec(p, keySt("netInterestIncome", { "2025-03-31": [1_096_000_000, "0001628280-26-030507"] }));
+    expect(check!.items.map((x) => [x.k, x.status])).toEqual([["b", "agree"]]);
+  });
+
+  it("C3 Consumer Bank revenue 3.6B (trailing twelve months) against a later 10-Q's 1,895M is flagged: a recast does not move a figure 90%", () => {
+    const p = payload([series("r", "Revenue", { "2025-09-30": cell(3_600_000_000) }, { bd: "Consumer banking" })]);
+    const { payload: out, check } = crossCheckSec(p, keySt("revenue", { "2025-09-30": [1_895_000_000, "0000091576-26-000023"] }));
+    expect(check!.items[0]).toMatchObject({ status: "flagged", ir: 3_600_000_000, sec: 1_895_000_000 });
+    expect(check!.items[0].why).toMatch(/filed in 2026 .* gives \$1\.90B; this figure is \$3\.60B \(\+90\.0%\)\. A recast does not move a figure this far\./);
+    expect(out.series[0].q["2025-09-30"].flags?.[0]).toMatchObject({ k: "sec", v: 1_895_000_000 });
+    // within 15% a later comparative still reads as a possible recast
+    const near = payload([series("r", "Revenue", { "2025-09-30": cell(2_050_000_000) }, { bd: "Consumer banking" })]);
+    expect(crossCheckSec(near, keySt("revenue", { "2025-09-30": [1_895_000_000, "0000091576-26-000023"] })).check!.items[0].status).toBe("later");
   });
 });

@@ -47,3 +47,29 @@ describe("parts whose parent label is printed by several tables", () => {
     expect(byLabel("Noninterest income", "Asset Management Group segment results").parent).not.toBe(consolidated.k);
   });
 });
+
+// Real VSAT rows (ir_kpi_facts, SQL 2026-11-24, category segment, 3-month "Total revenue(s)" since 2025):
+// the segment table's total (one segment, about 460M) and the consolidated total (about 1,160M) were one line.
+describe("p3-ir C4: a segment table's total is not folded into the consolidated total of the same name", () => {
+  const rows: [string, string, string, string, number][] = [
+    ["bea91f83", "Revenue by segment", "Total Revenue", "2025-03-31", 454_300_000],
+    ["119e1659", "Revenue by business line", "Total revenues", "2025-06-30", 1_171_054_000],
+    ["5bfe090d", "Revenue by segment", "Total revenue", "2025-12-31", 459_700_000],
+    ["bea91f83", "Revenue by segment", "Total Revenue", "2026-03-31", 465_200_000],
+    ["119e1659", "Revenue by business line", "Total revenues", "2026-06-30", 1_156_543_000],
+  ];
+  const facts = rows.map(([d, bd, label, e, v], i) => ({ id: `f${i}`, document_id: d, document_kind: "press-release", category: "segment", metric: "revenue", breakdown: bd, parent: null, label, unit: "usd", is_total: true, period_start: null, period_end: e, months: 3, value: v, accn: null, doc: null, filed: e, method: "table", locator: { t: 0, r: i, c: 1 } }) as never);
+  it("keeps the two levels in two lines", () => {
+    const p = buildPayload("VSAT", facts);
+    const lines = p.series.filter((s) => /total revenue/i.test(s.label));
+    const levels = lines.map((s) => Object.values(s.q).map((c) => c.v).sort((a, b) => a - b));
+    expect(levels).toHaveLength(2);
+    expect(levels).toContainEqual([454_300_000, 459_700_000, 465_200_000]);
+    expect(levels).toContainEqual([1_156_543_000, 1_171_054_000]);
+  });
+  it("still joins one line printed by two tables at one level", () => {
+    const same = rows.map((r, i) => (r[1] === "Revenue by segment" ? ([r[0], r[1], r[2], r[3], [1_120_000_000, 0, 1_150_000_000, 1_160_000_000][i]] as typeof r) : r));
+    const p = buildPayload("VSAT", same.map(([d, bd, label, e, v], i) => ({ ...(facts[i] as object), document_id: d, breakdown: bd, label, period_end: e, value: v }) as never));
+    expect(p.series.filter((s) => /total revenue/i.test(s.label))).toHaveLength(1);
+  });
+});

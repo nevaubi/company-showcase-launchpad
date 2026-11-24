@@ -7,9 +7,13 @@
 // An IR line counts as one of them when its printed name says so, its unit fits, and nothing in its
 // name, table or scope marks it as a part of the company (a segment, a business), another basis
 // (adjusted, non-GAAP, managed, fully taxable equivalent, annualized, FFO/AFFO, trailing twelve
-// months, guidance) or another measure. Each such figure is checked on its own against the filing's line: no line shields another. A same-signed
-// figure less than half or more than twice the filing's is taken as another line of the same name
-// (a segment's "Net interest income") and not compared.
+// months, guidance) or another measure. Each such figure is checked on its own against the filing's line: no line shields another. Only a part of
+// the company may skip the comparison: a line nested under another (not a total) or printed in a table
+// whose name says it splits the company (by segment, subsidiary, geography, product...). Such a
+// same-signed figure is taken as another line of the same name (a segment's "Net interest income")
+// when it is more than 10% off while another line agrees, or less than half or more than twice the
+// filing's. Every other figure is compared whatever its size: a consolidated table's figure far from
+// the filing's is a misread (a chart's other bar, another period), never passed in silence.
 //
 // Sign first: a figure whose sign differs from the filing's never agrees and is always marked,
 // whatever its size. A label that names a loss ("Net loss", "Loss per share") carries the sign, so
@@ -202,7 +206,7 @@ export function sourceOf(ref: Ref, kind: "q" | "y", e: string, yearEnds: Iterabl
 }
 
 /** Why a disagreement is a contradicted unit, sign or period (held), or null (flagged). */
-function contradiction(ir: number, sec: number, unit: string, kind: "q" | "y", e: string, side: SecSide, f: string): string | null {
+function contradiction(ir: number, sec: number, unit: string, kind: "q" | "y", e: string, side: SecSide, f: string, reach = 100): string | null {
   if (sec !== 0 && ir !== 0 && unit !== "usdPerShare") {
     const k = Math.log10(Math.abs(ir / sec));
     const n = Math.round(k / 3) * 3;
@@ -216,7 +220,7 @@ function contradiction(ir: number, sec: number, unit: string, kind: "q" | "y", e
     if (Math.abs(sec) > 0 && Math.abs(ir / sec - 4) < 0.08) return `${fmt(ir, unit)} is about four times the ${fmt(sec, unit)} from ${f}: an annualized or full-year figure in a quarter column`;
     for (const [k, x] of side.q) {
       const days = Math.abs(ms(k) - ms(e)) / DAY;
-      if (days > 20 && days < 100 && agrees(ir, x.v, unit) && !agrees(sec, x.v, unit)) return `${fmt(ir, unit)} is the SEC figure for the quarter ending ${k}; ${f} gives ${fmt(sec, unit)} for this one`;
+      if (days > 20 && days < reach && agrees(ir, x.v, unit) && !agrees(sec, x.v, unit)) return `${fmt(ir, unit)} is the SEC figure for the quarter ending ${k}; ${f} gives ${fmt(sec, unit)} for this one`;
     }
   } else {
     const q = find(side.q, e);
@@ -227,6 +231,23 @@ function contradiction(ir: number, sec: number, unit: string, kind: "q" | "y", e
 
 const keyOf = (k: string, kind: "q" | "y", e: string) => `${k}|${kind}|${e}`;
 
+/** Largest gap (as a share of the filing's figure) a later filing's recast may explain. */
+export const RECAST_LIMIT = 0.15;
+
+const PART_TABLE = /\b(by|per) (reportable )?(segment|subsidiar|utilit|operating compan|compan|geograph|region|countr|offering|product|service|business|division|brand|channel|market|categor|source|line of business|lines of business|unit)|\b(subsidiar(y|ies)|segments?|business lines?|lines of business|divisions?)\b/i;
+
+/**
+ * Whether a line is a part of the company: printed in a table whose name splits the company, or nested
+ * under another line without being its total, unless that line is itself a consolidated standard line
+ * (KEY's "Net interest income" under "Revenue" in its income statement is the bank's whole NII).
+ */
+export function partOf(s: PayloadSeries, byKey?: Map<string, PayloadSeries>): boolean {
+  if (PART_TABLE.test(`${s.bd ?? ""} ${s.sc ?? ""}`)) return true;
+  if (!s.parent || s.total) return false;
+  const par = byKey?.get(s.parent);
+  return !(par && stdLineOf(par) && !PART_TABLE.test(`${par.bd ?? ""} ${par.sc ?? ""}`));
+}
+
 /**
  * Cross-checks the payload against the statements. Returns a new payload: held figures moved to
  * `held` (with any calculated value that uses them, and the tie-out checks they touch), flagged
@@ -235,6 +256,7 @@ const keyOf = (k: string, kind: "q" | "y", e: string) => `${k}|${kind}|${e}`;
 export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefined): { payload: IrPayload; check: SecCheck | null } {
   if (!st || (!st.quarterly && !st.annual)) return { payload: p, check: null };
   const candidates = new Map<StdLine, PayloadSeries[]>();
+  const byKey = new Map(p.series.map((s) => [s.k, s]));
   for (const s of p.series) {
     const line = stdLineOf(s);
     if (line) candidates.set(line, [...(candidates.get(line) ?? []), s]);
@@ -283,14 +305,18 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
           // period's largest candidate, none agrees and it is within half to twice the filing's (LKQ's
           // "Total Revenue" table totals a segment at 43% of revenue); a smaller line of the same name (a segment's
           // net interest income) is not compared, unless it is the filing's figure at another unit.
+          // Only a part of the company (see partOf) may skip: a consolidated table's figure is always compared.
           const r = ref.v !== 0 ? Math.abs(v) / Math.abs(ref.v) : 1;
-          const eligible = opposite || Math.abs(r - 1) <= 0.1 || (Math.abs(c.v) === top && !anyAgrees && r >= 0.5 && r <= 2);
+          const whole = !partOf(s, byKey);
+          const eligible = opposite || whole || Math.abs(r - 1) <= 0.1 || (Math.abs(c.v) === top && !anyAgrees && r >= 0.5 && r <= 2);
           const unitOff = ref.v !== 0 && v !== 0 && s.unit !== "usdPerShare" && (() => {
             const k = Math.log10(r);
             const n = Math.round(k / 3) * 3;
             return n !== 0 && Math.abs(k - n) < 0.01;
           })();
-          const bad = contradiction(v, ref.v, s.unit, kind, e, side, src.charAt(0).toUpperCase() + src.slice(1));
+          // a compared figure of a consolidated table that is the filing's figure for another quarter up to
+          // two years away (a chart's bars stored under one date) is held; elsewhere only a neighbour counts
+          const bad = contradiction(v, ref.v, s.unit, kind, e, side, src.charAt(0).toUpperCase() + src.slice(1), whole ? 740 : 100);
           // the largest figure is also compared when the filing places it in another period (a year,
           // an annualized figure, the neighbouring quarter)
           if (!eligible && !unitOff && !(bad && Math.abs(c.v) === top && !anyAgrees)) continue;
@@ -316,12 +342,17 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
           const alt = c.alt && agrees(c.alt.v, ref.v, s.unit) ? ` ${c.alt.kind === "restated" ? "An earlier" : "Another"} document prints ${fmt(c.alt.v, s.unit)}, which agrees.` : "";
           const derived = c.f ? ` The figure is calculated: ${c.f.formula}.` : "";
           const diff = `${pct != null ? ` (${pct > 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}%)` : ""}`;
-          if (laterFiling(ref, kind, e) && !ref.derived) {
+          // A recast moves a figure by percent, not by multiples: a later filing's comparative excuses a
+          // gap of at most RECAST_LIMIT, and none when another line of the period agrees with it (the
+          // company's own printing then matches the filing, so the gap is not a recast).
+          const later = laterFiling(ref, kind, e) && !ref.derived;
+          if (later && Math.abs(r - 1) <= RECAST_LIMIT && !anyAgrees) {
             const why = `The SEC figure, ${fmt(ref.v, s.unit)}, comes from ${src}; that filing may have recast the period, and the figure as first filed is not in the statements. This figure is ${fmt(c.v, s.unit)}${diff}.${alt}`;
             items.push({ ...base, status: "later", why });
             continue;
           }
-          const why = `${src.charAt(0).toUpperCase() + src.slice(1)} gives ${fmt(ref.v, s.unit)}; this figure is ${fmt(c.v, s.unit)}${diff}.${alt}${derived}`;
+          const tooFar = !later ? "" : anyAgrees ? " Another line of this period agrees with that filing." : " A recast does not move a figure this far.";
+          const why = `${src.charAt(0).toUpperCase() + src.slice(1)} gives ${fmt(ref.v, s.unit)}; this figure is ${fmt(c.v, s.unit)}${diff}.${tooFar}${alt}${derived}`;
           flag.set(keyOf(s.k, kind, e), { k: "sec", why, v: ref.v });
           items.push({ ...base, status: "flagged", why });
         }

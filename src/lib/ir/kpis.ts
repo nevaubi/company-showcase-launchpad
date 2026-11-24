@@ -127,6 +127,53 @@ export const rawKey = (f: Pick<IrFact, "category" | "metric" | "unit" | "label" 
 /** A line is its dimension, label and the total it rolls into (the same label can appear in two tables). */
 const seriesKey = (f: Pick<IrFact, "category" | "metric" | "label" | "unit" | "parent">) => `${f.category}|${f.metric}|${normLabel(f.label)}|${f.unit}|${normLabel(f.parent ?? "")}`;
 const docOf = (f: IrFact) => f.document_id ?? f.accn ?? "doc";
+
+/** Ratio of levels past which two tables' same-named lines are not one line (a quarter-on-quarter move stays well under it). */
+export const LEVEL_SPLIT = 2.2;
+
+/**
+ * Same-named lines of different tables that are not the same line although no period carries two
+ * values (review p3-ir C4: Viasat's segment-table "Total revenue", about 460M a quarter, beside the
+ * consolidated "Total revenues", about 1,150M): each table's figures are compared with the other
+ * table's figures of the same length ending within 100 days, and when the median ratio is at least
+ * LEVEL_SPLIT the two differ by a constant factor, so the line keeps its table scope. Returns the
+ * series keys to split.
+ */
+export function levelSplits(facts: IrFact[]): Set<string> {
+  const by = new Map<string, Map<string, IrFact[]>>();
+  for (const f of facts) {
+    if (!f.value || !(f.months === 3 || f.months === 12)) continue;
+    const sc = scopeName(f.breakdown) || "unscoped";
+    const k = seriesKey(f);
+    let m = by.get(k);
+    if (!m) by.set(k, (m = new Map()));
+    m.set(sc, [...(m.get(sc) ?? []), f]);
+  }
+  const out = new Set<string>();
+  const t = (d: string) => Date.parse(`${d.slice(0, 10)}T00:00:00Z`);
+  for (const [k, m] of by) {
+    if (m.size < 2) continue;
+    const scopes = [...m.values()];
+    pairs: for (let i = 0; i < scopes.length; i++)
+      for (let j = i + 1; j < scopes.length; j++) {
+        const ratios: number[] = [];
+        for (const a of scopes[i])
+          for (const b of scopes[j]) {
+            if (a.months !== b.months || Math.sign(a.value) !== Math.sign(b.value)) continue;
+            if (Math.abs(t(a.period_end) - t(b.period_end)) > 100 * 86_400_000) continue;
+            const r = Math.abs(a.value) / Math.abs(b.value);
+            ratios.push(r >= 1 ? r : 1 / r);
+          }
+        if (!ratios.length) continue;
+        ratios.sort((x, y) => x - y);
+        if (ratios[Math.floor(ratios.length / 2)] >= LEVEL_SPLIT) {
+          out.add(k);
+          break pairs;
+        }
+      }
+  }
+  return out;
+}
 const FLOW_UNITS = new Set(["usd", "count", "other"]);
 /** Lines that can't be negative: a negative derived value means mismatched vintages, not data. */
 const NONNEG_METRICS = new Set(["revenue", "units", "users", "volume", "backlog", "assets", "deposits", "loans", "aum", "headcount", "stores"]);
@@ -589,6 +636,7 @@ export function buildIrSeries(
     if (prev == null) firstVal.set(ck, f.value);
     else if (Math.abs(prev - f.value) > Math.max(Math.abs(prev) * 0.001, 1)) conflicts.add(seriesKey(f));
   }
+  for (const k of levelSplits(facts)) conflicts.add(k);
   const scopeOf = (f: IrFact) => (conflicts.has(seriesKey(f)) ? scopeName(f.breakdown) || "unscoped" : null);
   for (const f of facts) {
     const scope = scopeOf(f);
