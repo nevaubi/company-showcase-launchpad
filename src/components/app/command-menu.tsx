@@ -45,6 +45,7 @@ import { useUniverse } from "@/lib/data";
 import { useToggleFollow } from "@/lib/workspace";
 import { BENCHMARKS } from "@/lib/coverage";
 import { groupByHub, HUB_GROUPS, type NavPath } from "@/lib/nav";
+import { TickerMark } from "@/components/app/ticker";
 
 /** Icon and search words for each page; labels and grouping come from the navigation in nav.ts. */
 const PAGE_META: Record<string, { icon: typeof Building2; keywords: string }> = {
@@ -186,7 +187,7 @@ export function CommandMenu({
                 run(() => navigate({ to: "/app/companies/$ticker", params: { ticker: c.ticker } }))
               }
             >
-              <CompanyLogo ticker={c.ticker} src={c.logo} size="xs" />
+              <CompanyLogo ticker={c.ticker} size="xs" decorative />
               <span className="num font-medium">{c.ticker}</span>
               <span className="truncate text-muted-foreground">{c.name}</span>
             </CommandItem>
@@ -200,7 +201,7 @@ export function CommandMenu({
               onSelect={() => run(() => follow.toggle(c.ticker))}
             >
               <Star className={follow.isFollowed(c.ticker) ? "fill-current" : ""} />
-              {follow.isFollowed(c.ticker) ? "Unfollow" : "Follow"} {c.ticker}
+              {follow.isFollowed(c.ticker) ? "Unfollow" : "Follow"} <TickerMark ticker={c.ticker} link={false} />
             </CommandItem>
           ))}
         </CommandGroup>

@@ -139,6 +139,11 @@
   "source": "Filed Under partner corpus",
   "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/AD.png"
  },
+ "ADAM": {
+  "file": "ADAM.png",
+  "source": "www.adamasreit.com site icon",
+  "url": "https://www.adamasreit.com/~/media/00D159D0F0FA4D50B9CF86BC3A8A005C.png"
+ },
  "ADBE": {
   "file": "ADBE.svg",
   "source": "Adobe Corporate Horizontal Red HEX.svg",
@@ -1314,6 +1319,11 @@
   "source": "Dutch Bros Coffee wordmark.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/2/20/Dutch_Bros_Coffee_wordmark.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
  },
+ "BRVE": {
+  "file": "BRVE.png",
+  "source": "www.braveheart.bio header mark",
+  "url": "https://cdn.prod.website-files.com/68da8c38a9be35eb571d1ef2/68f8e9a687be7e9c6325bf1a_BH%20heart.png"
+ },
  "BRX": {
   "file": "BRX.png",
   "source": "Filed Under partner corpus",
@@ -2138,6 +2148,11 @@
   "file": "CSL.svg",
   "source": "Carlisle Companies logo new.svg",
   "url": "https://upload.wikimedia.org/wikipedia/commons/8/8c/Carlisle_Companies_logo_new.svg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original"
+ },
+ "CSQR": {
+  "file": "CSQR.png",
+  "source": "www.csquare.com logo (margins trimmed)",
+  "url": "https://www.csquare.com/hubfs/Centersquare%20website/csquare-logo.png"
  },
  "CSR": {
   "file": "CSR.png",
@@ -4279,6 +4294,11 @@
   "source": "Filed Under partner corpus",
   "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/INVX.png"
  },
+ "IOND": {
+  "file": "IOND.png",
+  "source": "ionicdigital.com header logo (symbol only)",
+  "url": "https://ionicdigital.com/wp-content/uploads/2026/02/Ionic-digital-logo-orange-icon-1.png"
+ },
  "IONS": {
   "file": "IONS.svg",
   "source": "Ionis Pharmaceuticals.svg",
@@ -5488,6 +5508,11 @@
   "file": "MSGE.png",
   "source": "Filed Under partner corpus",
   "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/MSGE.png"
+ },
+ "MSGK": {
+  "file": "MSGK.png",
+  "source": "www.msgknicks.com site icon",
+  "url": "https://www.msgknicks.com/wp-content/uploads/2026/10/MSGKFavicon-300x300.png"
  },
  "MSI": {
   "file": "MSI.svg",
@@ -7694,6 +7719,11 @@
   "source": "Filed Under partner corpus",
   "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/STC.png"
  },
+ "STDN": {
+  "file": "STDN.svg",
+  "source": "www.standardnuclear.com header symbol (inline SVG, set in black)",
+  "url": "https://www.standardnuclear.com/"
+ },
  "STE": {
   "file": "STE.svg",
   "source": "(re-resolving)",
@@ -8423,6 +8453,11 @@
   "file": "USFD.png",
   "source": "Filed Under partner corpus",
   "url": "https://apxfeteebnspwyajlxfh.supabase.co/storage/v1/object/public/public-data/logos/USFD.png"
+ },
+ "USLM": {
+  "file": "USLM.png",
+  "source": "www.uslm.com page banner (seal cut out)",
+  "url": "https://www.uslm.com/images/banner_new.jpg"
  },
  "USPH": {
   "file": "USPH.png",
