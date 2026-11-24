@@ -1,17 +1,15 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ExternalLink } from "lucide-react";
-import { Bar, BarChart, CartesianGrid, Cell, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { DATASETS, fmtAlt, type AltRow } from "@/lib/alt/query";
-import { isPartial, periodLabel } from "@/lib/alt/periods";
 import { EvidenceButton } from "@/components/source/evidence-button";
 import { Button } from "@/components/ui/button";
 
 const fmtD = (d: string | null) => (d ? new Date(d + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "—");
 
-function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
+export function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
   const m = r.meta ?? {};
   if (r.dataset === "ownership") return { text: m.activist ? "13D · activist" : "13G · passive", tone: m.activist ? "neg" : undefined };
   if (r.dataset === "events") return { text: m.category, tone: ["restatement", "impairment", "cyber", "audit", "listing"].includes(m.category) ? "neg" : undefined };
@@ -25,7 +23,7 @@ function tag(r: AltRow): { text: string; tone?: "neg" | "pos" } | null {
   return null;
 }
 
-function detail(r: AltRow): string | null {
+export function detail(r: AltRow): string | null {
   const m = r.meta ?? {};
   if (r.dataset === "ownership") return (m.filers ?? []).slice(1).join(", ") || null;
   if (r.dataset === "regulatory") return [(m.agencies ?? []).join(", "), m.abstract].filter(Boolean).join(" — ") || null;
@@ -76,31 +74,6 @@ export function AltEventList({ rows, showTicker, max = 200 }: { rows: AltRow[]; 
   );
 }
 
-export function AltSeriesChart({ rows, bar }: { rows: AltRow[]; bar?: boolean }) {
-  // Partial periods (flagged, or dated after today) get their own label and a lighter bar, so a
-  // partial year never reads as a drop; fiscal years are labelled FY, not by the calendar year.
-  const data = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
-    return rows.flatMap((r) => (r.date ? [{ d: periodLabel(r, today, !!bar), v: r.value, ytd: isPartial(r, today) }] : []));
-  }, [rows, bar]);
-  const unit = rows[0]?.unit ?? null;
-  const Chart = bar ? BarChart : LineChart;
-  return (
-    <ResponsiveContainer width="100%" height={180}>
-      <Chart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke="var(--border)" vertical={false} />
-        <XAxis dataKey="d" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} minTickGap={24} />
-        <YAxis width={56} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} tickFormatter={(v) => fmtAlt(v, unit)} />
-        <Tooltip formatter={(v: number) => fmtAlt(v, unit)} contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", fontSize: 12 }} />
-        {bar ? (
-          <Bar dataKey="v">
-            {data.map((p) => <Cell key={p.d} fill="var(--chart-1)" fillOpacity={p.ytd ? 0.4 : 1} />)}
-          </Bar>
-        ) : <Line dataKey="v" stroke="var(--chart-1)" dot={false} strokeWidth={1.5} />}
-      </Chart>
-    </ResponsiveContainer>
-  );
-}
 
 /** Per-drug Medicare spending: one row per drug, the last full years plus the latest partial year. */
 export function MedicareDrugTable({ ticker, rows }: { ticker: string; rows: AltRow[] }) {
