@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptySpec, fmtField, run, validate, type FieldDef, type Row, type Spec } from "./engine";
-import { buildFilter, decodeSpec, encodeSpec, fieldGroups, filterImpact, formatInput, parseInput, toCsv } from "./present";
+import { buildFilter, decodeSpec, encodeSpec, fieldGroups, filterImpact, formatInput, parseInput, readShared, screenSearch, SHARE_MAX, toCsv } from "./present";
 import { SERIES_FIELDS, seriesAsOf, withSeries } from "./series";
 
 const fields: FieldDef[] = [
@@ -111,5 +111,27 @@ describe("series fields", () => {
     expect(withSeries(rows[0], undefined)).toBe(rows[0]);
     expect(seriesAsOf([{ end_date: "2026-11-19" }, { end_date: "2026-11-20" }])).toBe("2026-11-20");
     expect(SERIES_FIELDS.map((f) => f.id)).toEqual(["dv20", "short_vol5"]);
+  });
+});
+
+describe("shared screen links", () => {
+  it("never throws on the values the router can hand over", () => {
+    expect(screenSearch({})).toEqual({});
+    expect(screenSearch({ screen: 123 })).toEqual({ screen: "123" });
+    expect(screenSearch({ screen: true })).toEqual({ screen: "true" });
+    expect(screenSearch({ screen: { a: 1 } })).toEqual({ screen: '{"a":1}' });
+    expect(screenSearch({ screen: "x".repeat(20_000) }).screen).toHaveLength(20_000);
+  });
+  it("opens a long ticker list that fits, and resets with a reason when it does not", () => {
+    const tickers = Array.from({ length: 500 }, (_, i) => `T${i.toString().padStart(4, "0")}`);
+    const code = encodeSpec({ ...emptySpec(), tickers } as Spec);
+    expect(code.length).toBeGreaterThan(4000);
+    expect(code.length).toBeLessThan(SHARE_MAX);
+    const ok = readShared(code);
+    expect(ok.ok && (ok.raw.tickers as string[]).length).toBe(500);
+    const long = readShared("A".repeat(SHARE_MAX + 1));
+    expect(long.ok).toBe(false);
+    expect(!long.ok && long.notice).toMatch(/too long/);
+    for (const bad of ["123", "true", '{"a":1}', "abc"]) expect(readShared(bad).ok).toBe(false);
   });
 });

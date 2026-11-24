@@ -200,6 +200,34 @@ export function encodeSpec(spec: Spec): string {
   return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
+/** Longest screen code a shared link carries; longer codes are refused when copying and ignored when opening. */
+export const SHARE_MAX = 8000;
+
+/**
+ * Route search for the screener. Never throws: the router parses `?screen=123` as a number and
+ * `?screen={"a":1}` as an object, so every value is turned back into text and judged inside the page.
+ */
+export function screenSearch(s: Record<string, unknown>): { screen?: string } {
+  const v = s.screen;
+  if (v === undefined || v === null || v === "") return {};
+  if (typeof v === "string") return { screen: v };
+  if (typeof v === "number" || typeof v === "boolean") return { screen: String(v) };
+  try {
+    return { screen: JSON.stringify(v) ?? "" };
+  } catch {
+    return { screen: "" };
+  }
+}
+
+/** What opening a shared code should do: adopt the decoded object, or reset with a one-line reason. */
+export function readShared(code: string): { ok: true; raw: Record<string, unknown> } | { ok: false; notice: string } {
+  if (code.length > SHARE_MAX)
+    return { ok: false, notice: `This shared link is too long to open (${code.length.toLocaleString()} characters); showing the default screen.` };
+  const raw = decodeSpec(code);
+  if (!raw) return { ok: false, notice: "This shared link could not be read; showing the default screen." };
+  return { ok: true, raw: raw as Record<string, unknown> };
+}
+
 /** The raw object inside a screen code, or null when it is not one (validate it before use). */
 export function decodeSpec(code: string): unknown {
   try {

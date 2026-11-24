@@ -66,5 +66,7 @@ export function useScreenRows(includeBasic = true) {
     return [...rich, ...extra];
   }, [file.data, uni.data, quotes.data, series.data, includeBasic]);
   const seriesDate = useMemo(() => seriesAsOf(series.data ?? []), [series.data]);
-  return { file, uni, F, rows, seriesDate };
+  /** The series query has answered (rows or an error), so the field map is final. */
+  const seriesSettled = series.isFetched || series.isError;
+  return { file, uni, F, rows, seriesDate, seriesSettled };
 }

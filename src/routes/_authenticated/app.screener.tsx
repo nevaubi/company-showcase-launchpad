@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { memo, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, Check, Columns3, CornerDownLeft, Download, Link2, Loader2, Plus, Search, Sparkles, X } from "lucide-react";
-import { z } from "zod";
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
@@ -40,8 +39,10 @@ import {
 } from "@/lib/screener/engine";
 import {
   buildFilter,
-  decodeSpec,
   encodeSpec,
+  readShared,
+  screenSearch,
+  SHARE_MAX,
   fieldGroups,
   filterImpact,
   formatInput,
@@ -55,10 +56,8 @@ import {
 import { SERIES_FIELD_IDS } from "@/lib/screener/series";
 import { ROW_H, useWindowRange } from "@/lib/screener/window";
 
-const search = z.object({ screen: z.string().max(4000).optional() });
-
 export const Route = createFileRoute("/_authenticated/app/screener")({
-  validateSearch: (s) => search.parse(s),
+  validateSearch: (s: Record<string, unknown>) => screenSearch(s),
   head: () => ({
     meta: [
       { title: "Screener · FiledUnder" },
@@ -81,7 +80,11 @@ const EXAMPLES = [
   "Companies like COST but cheaper",
 ];
 
-const isSpec = (v: unknown): v is Spec => !!v && typeof v === "object" && Array.isArray((v as Spec).filters);
+// A stored screen must carry every list the page reads (an old or hand-written one without `sectors` crashed it).
+const isSpec = (v: unknown): v is Spec =>
+  !!v &&
+  typeof v === "object" &&
+  Object.entries(emptySpec()).every(([k, d]) => !Array.isArray(d) || Array.isArray((v as Record<string, unknown>)[k]));
 const STICKY = "top-[var(--sticky-top,3.5rem)]";
 const COLSET_NAMES = Object.keys(COLSETS);
 const GROUP_LABEL: Record<string, string> = { sector: "Sector", industry: "Industry", mcap_bucket: "Size" };
@@ -98,7 +101,8 @@ function Screener() {
   const [agent, setAgent] = useState<{ error?: string; warnings?: string[]; errors?: string[]; model?: string; prompt?: string } | null>(null);
   const [history, setHistory] = useState<{ prompt: string; spec: Spec }[]>([]);
   const [copied, setCopied] = useState(false);
-  const { file, F, rows, seriesDate } = useScreenRows(basic);
+  const [notice, setNotice] = useState<string | null>(null);
+  const { file, F, rows, seriesDate, seriesSettled } = useScreenRows(basic);
 
   const fields = useMemo(() => [...F.values()], [F]);
   const groups = useMemo(() => fieldGroups(fields, file.data?.groups ?? []), [fields, file.data]);
@@ -115,13 +119,22 @@ function Screener() {
   // A shared link (?screen=) replaces the current screen once the catalogue is known, then leaves the address.
   const adopted = useRef(false);
   useEffect(() => {
-    if (!shared || adopted.current || !fields.length || !rows.length) return;
+    // Wait for the series query too, so a link that names dv20 or short_vol5 is not stripped of them.
+    if (shared === undefined || adopted.current || !fields.length || !rows.length || !seriesSettled) return;
     adopted.current = true;
-    const v = validate(decodeSpec(shared), cat);
-    setSpec({ ...v.spec, explanation: "Opened from a shared screen link." });
-    setAgent(v.errors.length ? { errors: v.errors, prompt: "Shared screen" } : null);
+    const got = readShared(shared);
+    if (got.ok) {
+      const v = validate(got.raw, cat);
+      setSpec({ ...v.spec, explanation: "Opened from a shared screen link." });
+      setAgent(v.errors.length ? { errors: v.errors, prompt: "Shared screen" } : null);
+      setNotice(null);
+    } else {
+      setSpec(emptySpec());
+      setAgent(null);
+      setNotice(got.notice);
+    }
     void navigate({ to: "/app/screener", search: {}, replace: true, resetScroll: false });
-  }, [shared, fields.length, rows.length, cat, setSpec, navigate]);
+  }, [shared, fields.length, rows.length, seriesSettled, cat, setSpec, navigate]);
 
   const res = useMemo(() => (rows.length ? run(rows, spec, F, q) : null), [rows, spec, F, q]);
   const cols = (spec.columns.length ? spec.columns : (COLSETS[colset] ?? COLSETS.Overview)).filter((id) => F.has(id));
@@ -198,10 +211,16 @@ function Screener() {
     a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
     a.download = `screen-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
-    URL.revokeObjectURL(a.href);
+    const href = a.href;
+    setTimeout(() => URL.revokeObjectURL(href), 10_000);
   };
   const copyLink = async () => {
-    const url = `${location.origin}/app/screener?screen=${encodeSpec(spec)}`;
+    const code = encodeSpec(spec);
+    if (code.length > SHARE_MAX) {
+      setNotice(`This screen is too long to share as a link (${code.length.toLocaleString()} characters, limit ${SHARE_MAX.toLocaleString()}); shorten its ticker list first.`);
+      return;
+    }
+    const url = `${location.origin}/app/screener?screen=${code}`;
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
@@ -340,6 +359,11 @@ function Screener() {
           </div>
         )}
 
+        {notice && (
+          <p role="status" className="mt-2 text-[11px] text-muted-foreground">
+            {notice}
+          </p>
+        )}
         {agent?.error && (
           <p role="alert" className="text-[13px] text-negative">
             {agent.error}
