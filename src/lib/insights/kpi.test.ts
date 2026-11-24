@@ -80,5 +80,10 @@ describe("kpi insights helpers", () => {
     expect(fmtChartValue(43, "count")).toBe("43");
     expect(fmtChartValue(6.8, "x")).toBe("6.80");
     expect(fmtChartValue(8295, "count")).toBe("8,295");
+    expect(fmtChartValue(-1.5e9, "USD")).toBe("−$1.50B");
+    expect(fmtChartValue(-2.4e6, "usd")).toBe("−$2.4M");
+    expect(fmtChartValue(-3.2, "%")).toBe("−3.2%");
+    expect(fmtChartValue(-0.6, "x")).toBe("−0.60");
+    expect(fmtChartValue(-0.04, "%")).toBe("0.0%");
   });
 });

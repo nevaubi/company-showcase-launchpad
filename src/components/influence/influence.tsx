@@ -16,15 +16,18 @@ import {
 const usd = (v: number | null | undefined) => {
   if (v == null || !Number.isFinite(v)) return "–";
   const a = Math.abs(v);
-  return a >= 1e12
-    ? `$${(v / 1e12).toFixed(2)}T`
-    : a >= 1e9
-      ? `$${(v / 1e9).toFixed(1)}B`
-      : a >= 1e6
-        ? `$${(v / 1e6).toFixed(1)}M`
-        : a >= 1e3
-          ? `$${(v / 1e3).toFixed(0)}K`
-          : `$${v.toFixed(0)}`;
+  const body =
+    a >= 1e12
+      ? `${(a / 1e12).toFixed(2)}T`
+      : a >= 1e9
+        ? `${(a / 1e9).toFixed(1)}B`
+        : a >= 1e6
+          ? `${(a / 1e6).toFixed(1)}M`
+          : a >= 1e3
+            ? `${(a / 1e3).toFixed(0)}K`
+            : a.toFixed(0);
+  // a negative amount (a de-obligation) reads "−$1.2M", never "$-1.2M"
+  return `${v < 0 && /[1-9]/.test(body) ? "−" : ""}$${body}`;
 };
 const sh = (v: number | null | undefined) => {
   if (v == null || !Number.isFinite(v)) return "–";

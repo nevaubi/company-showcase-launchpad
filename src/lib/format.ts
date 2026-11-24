@@ -47,9 +47,13 @@ export function fmtCompact(v: number | null | undefined, digits = 1): string {
   return c ? `${sign}${c}` : `${sign}${a.toFixed(0)}`;
 }
 
+/** The minus for a printed magnitude ("−$5.00", never "$-5.00"): none when every printed digit is zero. */
+const minus = (v: number, digits: string) => (v < 0 && /[1-9]/.test(digits) ? "−" : "");
+
 export function fmtPrice(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "–";
-  return `$${n2.format(v)}`;
+  const body = n2.format(Math.abs(v));
+  return `${minus(v, body)}$${body}`;
 }
 
 export function fmtPct(v: number | null | undefined, digits = 1, signed = false): string {
@@ -133,13 +137,21 @@ export function scaleCaption(scale: Scale) {
 }
 
 export function fmtValueLong(v: number, unit: Unit | string): string {
-  if (unit === "usd") return `$${n0.format(v)}`;
-  if (unit === "usdPerShare") return `$${n2.format(v)} per share`;
-  if (unit === "shares") return `${n0.format(v)} shares`;
   if (unit === "pct") return fmtPct(v, 2);
-  if (unit === "ratio") return `${v.toFixed(2)}×`;
-  if (unit === "days") return `${n0.format(v)} days`;
-  return n2.format(v);
+  const a = Math.abs(v);
+  const body =
+    unit === "usd" || unit === "shares" || unit === "days"
+      ? n0.format(a)
+      : unit === "ratio"
+        ? a.toFixed(2)
+        : n2.format(a);
+  const sign = minus(v, body);
+  if (unit === "usd") return `${sign}$${body}`;
+  if (unit === "usdPerShare") return `${sign}$${body} per share`;
+  if (unit === "shares") return `${sign}${body} shares`;
+  if (unit === "ratio") return `${sign}${body}×`;
+  if (unit === "days") return `${sign}${body} days`;
+  return `${sign}${body}`;
 }
 
 export function fmtDate(
@@ -236,5 +248,7 @@ export const ordinal = (n: number) => {
  * to Nov 4, 2026". Only whole ISO dates are touched, so accession numbers and ids are left alone.
  */
 export function humanizeDates(text: string): string {
-  return text.replace(/(?<![\w-])(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?![\w-])/g, (m) => fmtDate(m));
+  return text.replace(/(?<![\w-])(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(?![\w-])/g, (m) =>
+    fmtDate(m),
+  );
 }

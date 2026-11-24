@@ -16,7 +16,7 @@ import { usePrices } from "@/lib/data";
 import { beatStats } from "@/lib/estimates/core";
 import { getEstimates } from "@/lib/estimates.functions";
 import type { Bar, CompanyDataset } from "@/lib/financials/types";
-import { fmtDate } from "@/lib/format";
+import { fmtDate, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { StatGrid } from "./stat-grid";
 
@@ -112,7 +112,7 @@ export function EarningsSection({ ticker, data }: { ticker: string; data: Compan
             {lastSurprise ? (
               <>
                 <p className={cn("mt-0.5 truncate", IR.stat)}>
-                  ${lastSurprise.actual!.toFixed(2)} <span className="text-[13px] font-normal text-muted-foreground">against ${lastSurprise.estimate!.toFixed(2)}</span>
+                  {fmtPrice(lastSurprise.actual)} <span className="text-[13px] font-normal text-muted-foreground">against {fmtPrice(lastSurprise.estimate)}</span>
                 </p>
                 <p className={cn("mt-0.5", IR.caption)}>
                   {lastSurprise.surprisePct != null && <span className={cn("num", tone(lastSurprise.surprisePct))}>{signedPct(lastSurprise.surprisePct)}</span>} quarter to {fmtDate(lastSurprise.quarter)}

@@ -3,7 +3,7 @@ import { ChartColumnBig } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import { Sparkline } from "@/components/charts/sparkline";
 import type { Cell, Period, Row, Statement } from "@/lib/financials/types";
-import { fmtCell, fmtDate, scaled, unitLabel, type Scale } from "@/lib/format";
+import { fmtCell, fmtDate, fmtValueLong, scaled, unitLabel, type Scale } from "@/lib/format";
 import { rowLabel } from "./row-label";
 import { cagr } from "@/lib/financials/metrics";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -303,7 +303,7 @@ export function StatementTable({
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-xs text-xs">
                             {scale === "full" || row.unit !== "usd" ? null : (
-                              <p className="num mb-0.5">${Math.round(cell.v).toLocaleString("en-US")}</p>
+                              <p className="num mb-0.5">{fmtValueLong(cell.v, "usd")}</p>
                             )}
                             {cell.src ? (
                               <>

@@ -176,7 +176,11 @@ export interface IndexFilter {
   withInsights: boolean;
 }
 
-export function filterIndex(rows: KpiIndexRow[], f: IndexFilter, watch: Set<string>): KpiIndexRow[] {
+export function filterIndex(
+  rows: KpiIndexRow[],
+  f: IndexFilter,
+  watch: Set<string>,
+): KpiIndexRow[] {
   const q = f.q.trim().toLowerCase();
   return rows.filter(
     (r) =>
@@ -202,13 +206,25 @@ export function orderedRows(idx: KpiIndexFile | undefined): KpiIndexRow[] {
 /** Format a chart value for a tooltip in the chart's unit. */
 export function fmtChartValue(v: number, unit?: string | null): string {
   const u = (unit ?? "").toLowerCase();
-  if (u === "%" || u === "pct") return `${v.toFixed(1)}%`;
-  if (u === "usd") {
-    const a = Math.abs(v);
-    if (a >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
-    if (a >= 1e6) return `$${(v / 1e6).toFixed(1)}M`;
-    return `$${v.toLocaleString()}`;
+  const a = Math.abs(v);
+  // a true minus before the currency mark ("−$1.50B", never "$-1.50B"); none when the printed digits are all zero
+  const sign = (digits: string) => (v < 0 && /[1-9]/.test(digits) ? "−" : "");
+  if (u === "%" || u === "pct") {
+    const body = a.toFixed(1);
+    return `${sign(body)}${body}%`;
   }
-  if (Number.isInteger(v) || Math.abs(v) >= 100) return v.toLocaleString(undefined, { maximumFractionDigits: 0 });
-  return v.toFixed(2);
+  if (u === "usd") {
+    const body =
+      a >= 1e9
+        ? `${(a / 1e9).toFixed(2)}B`
+        : a >= 1e6
+          ? `${(a / 1e6).toFixed(1)}M`
+          : a.toLocaleString("en-US");
+    return `${sign(body)}$${body}`;
+  }
+  const body =
+    Number.isInteger(v) || a >= 100
+      ? a.toLocaleString("en-US", { maximumFractionDigits: 0 })
+      : a.toFixed(2);
+  return `${sign(body)}${body}`;
 }

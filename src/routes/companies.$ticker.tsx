@@ -4,6 +4,7 @@ import { ArrowUpRight, FileText } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
 import { Button } from "@/components/ui/button";
 import { fmtCompactUsd, fmtValueLong } from "@/lib/format";
+import { rowLabel } from "@/components/financials/row-label";
 import { getPublicCompany } from "@/lib/public-company.functions";
 import { FEATURED_TICKERS, publicPeers } from "@/lib/public-company";
 
@@ -109,7 +110,7 @@ function PublicCompany() {
               <tbody>
                 {s.lines.map((l) => (
                   <tr key={l.key} className="border-b last:border-0">
-                    <td className="px-5 py-2.5">{l.label}</td>
+                    <td className="px-5 py-2.5">{rowLabel(l.label)}</td>
                     {s.periods.map((p) => {
                       const v = l.values.find((x) => x.period === p);
                       if (!v) return <td key={p} className="px-3 py-2.5 text-right text-muted-foreground">–</td>;

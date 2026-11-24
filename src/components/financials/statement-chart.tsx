@@ -2,7 +2,7 @@ import { X } from "lucide-react";
 import { ComboChart, CHART_COLORS, type ComboSeries } from "@/components/charts/combo-chart";
 import { useSource } from "@/components/source/source-context";
 import type { Row, Statement } from "@/lib/financials/types";
-import { fmtCell, scaled, unitLabel, type Scale } from "@/lib/format";
+import { fmtCell, fmtPrice, scaled, unitLabel, type Scale } from "@/lib/format";
 
 /** Charts the rows a user picked from a statement table; bars and points open the SEC source. */
 export function StatementChart({
@@ -67,7 +67,7 @@ export function StatementChart({
         categories={periods.map((p) => p.label)}
         series={series}
         height={230}
-        leftFormat={(v) => (leftUnit === "pct" ? `${(v * 100).toFixed(0)}%` : leftUnit === "ratio" ? `${v.toFixed(1)}×` : leftUnit === "usdPerShare" ? `$${v.toFixed(2)}` : compactAxis(v))}
+        leftFormat={(v) => (leftUnit === "pct" ? `${(v * 100).toFixed(0)}%` : leftUnit === "ratio" ? `${v.toFixed(1)}×` : leftUnit === "usdPerShare" ? fmtPrice(v) : compactAxis(v))}
         rightFormat={(v) => {
           const u = rows.find((r) => series.find((s) => s.id === r.key)?.axis === "right")?.unit;
           return u === "pct" ? `${(v * 100).toFixed(0)}%` : u === "ratio" ? `${v.toFixed(1)}×` : u === "days" ? `${v.toFixed(0)}d` : v.toFixed(2);

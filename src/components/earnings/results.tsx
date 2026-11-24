@@ -9,7 +9,7 @@ import type { EarningsRelease } from "@/lib/financials/types";
 import type { Reaction } from "@/lib/markets/core";
 import { REPORT_EXPIRY_LAG, type EarningsPricing } from "@/lib/options/core";
 import type { NextEarnings } from "@/lib/company/catalysts";
-import { fmtCompactUsd, fmtDate } from "@/lib/format";
+import { fmtCompactUsd, fmtDate, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DerivedQ4Note, fmtFig, MachineWritten, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
 import { Quiet, Section } from "./layout";
@@ -218,7 +218,7 @@ export function LatestQuarter({
             value={
               cur.surprise?.actual != null && cur.surprise.estimate != null ? (
                 <span className="num">
-                  ${cur.surprise.actual.toFixed(2)} <span className="text-[13px] font-normal text-muted-foreground">vs ${cur.surprise.estimate.toFixed(2)}</span>
+                  {fmtPrice(cur.surprise.actual)} <span className="text-[13px] font-normal text-muted-foreground">vs {fmtPrice(cur.surprise.estimate)}</span>
                 </span>
               ) : (
                 <span className="text-muted-foreground">–</span>
@@ -375,7 +375,7 @@ function PendingNote({
           <div>
             <dt className="inline">EPS vs the Street, {q} </dt>
             <dd className="num inline text-foreground">
-              ${pending.surprise.actual.toFixed(2)} vs ${pending.surprise.estimate.toFixed(2)},{" "}
+              {fmtPrice(pending.surprise.actual)} vs {fmtPrice(pending.surprise.estimate)},{" "}
               <span className={toneText(pending.surprise.surprisePct)}>{signedPct(pending.surprise.surprisePct)}</span>
             </dd>
           </div>
@@ -572,12 +572,12 @@ export function NextReport({
         />
         <Stat
           label={consensus?.endDate ? `Street EPS · quarter to ${fmtDate(consensus.endDate, { month: "short", year: "numeric" })}` : "Street EPS"}
-          value={consensus?.eps.avg != null ? <span className="num">${consensus.eps.avg.toFixed(2)}</span> : <span className="text-muted-foreground">–</span>}
+          value={consensus?.eps.avg != null ? <span className="num">{fmtPrice(consensus.eps.avg)}</span> : <span className="text-muted-foreground">–</span>}
           hint={
             consensus ? (
               <>
                 {consensus.eps.analysts != null && `${consensus.eps.analysts} analysts`}
-                {consensus.eps.yearAgo != null && ` · year ago $${consensus.eps.yearAgo.toFixed(2)}`}
+                {consensus.eps.yearAgo != null && ` · year ago ${fmtPrice(consensus.eps.yearAgo)}`}
                 {consensus.revenue.avg != null && ` · revenue ${fmtCompactUsd(consensus.revenue.avg)}`}
               </>
             ) : (

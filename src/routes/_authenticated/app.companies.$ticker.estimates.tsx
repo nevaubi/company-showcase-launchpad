@@ -65,7 +65,7 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker/esti
 });
 
 const daysAgo = (n: number) => new Date(Date.now() - n * 86400_000).toISOString().slice(0, 10);
-const eps = (v: number | null) => (v == null ? "–" : `$${v.toFixed(2)}`);
+const eps = (v: number | null) => (v == null ? "–" : fmtPrice(v));
 
 function SourceNote({ asOf }: { asOf: string }) {
   return (
