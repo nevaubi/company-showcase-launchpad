@@ -80,16 +80,27 @@ export function StatementTable({
 
   // When the table fits, it does not scroll sideways, so its head can stick to the page; otherwise it
   // scrolls inside its own wrapper and opens on the latest period (not on the trend columns).
+  // The trend sparkline column is the first thing dropped when the periods do not fit (AAPL 10Y at
+  // 1280 px), so the default view keeps its head pinned to the page; it returns when there is room.
   const [fits, setFits] = useState(true);
+  // 0: every column; 1: no trend sparkline; 2: no trend and no CAGR/YoY column.
+  const [drop, setDrop] = useState(0);
+  const showTrend = drop === 0;
+  const showGrowth = drop < 2;
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el) return;
-    const check = () => setFits(el.scrollWidth <= el.clientWidth + 1);
+    const check = () => {
+      const over = el.scrollWidth - el.clientWidth;
+      if (over > 1 && drop < 2) return setDrop(drop + 1);
+      if (drop > 0 && over <= 1 && el.clientWidth - el.scrollWidth >= (drop === 2 ? GROWTH_W : TREND_W)) return setDrop(drop - 1);
+      setFits(over <= 1);
+    };
     check();
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [rows, periods.length]);
+  }, [rows, periods.length, drop]);
   useEffect(() => {
     const el = scroller.current;
     const th = lastHead.current;
@@ -157,7 +168,7 @@ export function StatementTable({
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
-              <th className={cn("sticky left-0 z-30 w-44 min-w-44 border-b border-r bg-card px-3 py-2 text-left align-bottom sm:w-auto sm:min-w-72 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}>
+              <th className={cn("sticky left-0 z-30 w-44 min-w-44 border-b border-r bg-card px-3 py-2 text-left align-bottom sm:w-56 sm:min-w-56 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}>
                 <span className="eyebrow">Line item</span>
                 {tableUnit && <span className="num ml-2 text-[11px] font-normal text-muted-foreground">{unitLabel(tableUnit, scale)}</span>}
               </th>
@@ -168,7 +179,7 @@ export function StatementTable({
                   <th
                     key={p.key}
                     ref={i === periods.length - 1 ? lastHead : undefined}
-                    className={cn("z-20 border-b bg-card px-3 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]", read && "bg-highlight-soft")}
+                    className={cn("z-20 border-b bg-card px-2.5 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]", read && "bg-highlight-soft")}
                   >
                     <span className="num block text-[11px] font-semibold">{p.label}</span>
                     <span className="num block text-[11px] font-normal text-muted-foreground">{fmtDate(p.end, { month: "short", year: "2-digit" })}</span>
@@ -189,12 +200,16 @@ export function StatementTable({
                   </th>
                 );
               })}
-              <th className={cn("z-20 border-b border-l bg-card px-3 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
-                <span className="eyebrow">{freq === "annual" ? "CAGR" : "YoY"}</span>
-              </th>
-              <th className={cn("z-20 border-b bg-card px-3 py-2 text-left align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
-                <span className="eyebrow">Trend</span>
-              </th>
+              {showGrowth && (
+                <th className={cn("z-20 border-b border-l bg-card px-3 py-2 text-right align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
+                  <span className="eyebrow">{freq === "annual" ? "CAGR" : "YoY"}</span>
+                </th>
+              )}
+              {showTrend && (
+                <th className={cn("z-20 border-b bg-card px-3 py-2 text-left align-bottom", fits && "sticky top-[var(--sticky-top,3.5rem)]")}>
+                  <span className="eyebrow">Trend</span>
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -207,12 +222,12 @@ export function StatementTable({
                   <th
                     scope="row"
                     className={cn(
-                      "sticky left-0 z-10 max-w-44 border-b border-r bg-card px-2 py-1.5 text-left font-normal transition-colors group-hover:bg-secondary sm:max-w-none",
+                      "sticky left-0 z-10 max-w-44 border-b border-r bg-card px-2 py-1.5 text-left font-normal transition-colors group-hover:bg-secondary sm:max-w-56",
                       row.bold && "font-semibold",
                       isCharted && "bg-highlight-soft",
                     )}
                   >
-                    <span className={cn("flex items-center gap-1.5", row.indent && "pl-4 text-foreground/80")}>
+                    <span className={cn("flex items-center gap-1.5 sm:max-w-48", row.indent && "pl-4 text-foreground/80")}>
                       {onToggleChart ? (
                         <button
                           type="button"
@@ -237,7 +252,7 @@ export function StatementTable({
                     const key = `${row.label}|${periods[i].label}`;
                     if (!cell)
                       return (
-                        <td key={i} className="num border-b px-3 py-1.5 text-right text-muted-foreground/50 group-hover:bg-secondary/60">
+                        <td key={i} className="num border-b px-2.5 py-1.5 text-right text-muted-foreground/50 group-hover:bg-secondary/60">
                           —
                         </td>
                       );
@@ -256,7 +271,7 @@ export function StatementTable({
                               data-tour="fin-cell"
                               onClick={() => onCell(row, i, cell)}
                               className={cn(
-                                "num relative block w-full px-3 py-1.5 text-right tabular-nums transition-colors hover:bg-highlight-soft focus-visible:bg-highlight-soft focus-visible:outline-none",
+                                "num relative block w-full px-2.5 py-1.5 text-right tabular-nums transition-colors hover:bg-highlight-soft focus-visible:bg-highlight-soft focus-visible:outline-none",
                                 row.bold && "font-medium",
                                 cell.v < 0 && row.unit !== "pct" && "text-negative",
                                 cell.derived && "italic text-foreground/85",
@@ -300,7 +315,7 @@ export function StatementTable({
                       </td>
                     );
                   })}
-                  <td className="border-b border-l px-3 py-1.5 text-right group-hover:bg-secondary/60">
+                  {showGrowth && <td className="border-b border-l px-3 py-1.5 text-right group-hover:bg-secondary/60">
                     {trend ? (
                       <Tooltip delayDuration={300}>
                         <TooltipTrigger asChild>
@@ -314,10 +329,12 @@ export function StatementTable({
                     ) : (
                       <span className="text-muted-foreground/40">—</span>
                     )}
-                  </td>
-                  <td className="border-b px-3 py-1 group-hover:bg-secondary/60">
-                    <Sparkline values={vals.filter((v) => Number.isFinite(v))} className="h-5 w-20" />
-                  </td>
+                  </td>}
+                  {showTrend && (
+                    <td className="border-b px-3 py-1 group-hover:bg-secondary/60">
+                      <Sparkline values={vals.filter((v) => Number.isFinite(v))} className="h-5 w-20" />
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -327,6 +344,11 @@ export function StatementTable({
     </div>
   );
 }
+
+/** Width of the trend column (80 px sparkline and 24 px padding). */
+const TREND_W = 104;
+/** Width of the CAGR/YoY column. */
+const GROWTH_W = 68;
 
 /** Plain CSV: one column per period, numbers scaled to the chosen unit without separators. */
 export function statementToCsv(statement: Statement, scale: Scale) {

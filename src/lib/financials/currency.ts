@@ -12,9 +12,13 @@
 //   counts as newer only when filed after the newest report the statements include (the one whose
 //   period of report is the latest period, else the newest one an income or cash flow cell cites).
 // - An earnings release is newer when it was filed on a later day than every periodic report above
-//   and at least 85 days after the latest period known (statements or a newer report): the next
-//   quarter cannot have been released earlier, and a release about the latest quarter, which often
-//   arrives the same day as the 10-Q, a day after it, or before it, never counts.
+//   and after the end of the period that follows the latest one known (statements or a newer
+//   report): more than 98 days later, the longest fiscal quarter (14 weeks). Results for a period
+//   cannot be released before it ends, and a release about the latest quarter, which often arrives
+//   the same day as the 10-Q, a day after it, or before it, never counts, even from a late filer
+//   whose 10-Q and 8-K come near day 90 (Buckle, Driven Brands, Hub Group).
+// - Every missing periodic report is named, oldest first (Clorox: its FY2026 10-K and the later
+//   10-Q). A company with no statements but periodic reports on file gets its newest one named.
 import type { Cell, CompanyDataset, Filing, Period, Statement } from "./types";
 
 const DAY = 86_400_000;
@@ -22,7 +26,8 @@ const t = (d: string) => Date.parse(`${d.slice(0, 10)}T00:00:00Z`);
 const days = (a: string, b: string) => Math.round((t(b) - t(a)) / DAY);
 
 const PERIODIC = /^(10-K|10-KT|10-Q|10-QT)$/;
-const NEXT_RELEASE_MIN_DAYS = 85;
+/** A release counts as the next period's only when filed after that period could have ended. */
+const NEXT_PERIOD_MAX_DAYS = 98;
 const END_TOLERANCE = 6;
 
 export type CurrencyKind = "annual" | "quarterly" | "release";
@@ -49,6 +54,8 @@ export interface Currency {
   included?: CurrencyFiling;
   /** Newer filings not in the statements, newest first: at most one annual, one quarterly, one release */
   newer: CurrencyFiling[];
+  /** Every periodic report the statements miss, oldest first (newer holds only the newest of each kind) */
+  missing?: CurrencyFiling[];
   /** One plain sentence (two when behind) for the page */
   text: string;
 }
@@ -144,18 +151,10 @@ export function assessCurrency(d: CompanyDataset, opts: CurrencyOptions = {}): C
   const quarter = latestPeriod(qStatements);
   const year = latestPeriod(aStatements);
   const latestEnd = [quarter?.end, year?.end].filter(Boolean).sort().at(-1);
-  if (!latestEnd) return { status: "unknown", newer: [], text: "No statements have been built for this company yet." };
-
   const cik = d.profile.cik;
-  const toFiling = (f: Filing, kind: CurrencyKind): CurrencyFiling => ({
-    kind,
-    form: f.form,
-    accn: f.accn,
-    filed: f.filed,
-    ...(f.report ? { report: f.report } : {}),
-    ...(f.doc ? { doc: f.doc } : {}),
-    url: filingUrl(filingCik(f.accn, cik, opts.ciks), f.accn, f.doc),
-  });
+  if (!latestEnd) return noStatements(d, cik, opts);
+
+  const toFiling = (f: Filing, kind: CurrencyKind) => asCurrencyFiling(f, kind, cik, opts);
 
   const cited = new Set([...citedAtLatest([Q.income, Q.cashflow]), ...citedAtLatest([A.income, A.cashflow])]);
   const ends = new Set([...qStatements, ...aStatements].flatMap((s) => s.periods.map((p) => p.end)));
@@ -174,13 +173,21 @@ export function assessCurrency(d: CompanyDataset, opts: CurrencyOptions = {}): C
   // are in the tables (Clorox: FY2027 Q1 placed, the FY2026 10-K absent from SEC companyfacts).
   const yearEnds = A.income.periods.map((p) => p.end);
   const annualMissing = (f: Filing) => !!f.report && !!year && days(year.end, f.report) > END_TOLERANCE && !yearEnds.some((e) => Math.abs(days(e, f.report!)) <= END_TOLERANCE);
-  const annual = periodic.find((f) => f.form.startsWith("10-K") && (isNewer(f) || annualMissing(f)));
-  const quarterly = periodic.find((f) => f.form.startsWith("10-Q") && isNewer(f));
-  const newestPeriodicFiled = [includedFiled, annual?.filed ?? "", quarterly?.filed ?? ""].sort().at(-1) ?? "";
-  const latestKnown = [latestEnd, annual?.report ?? "", quarterly?.report ?? ""].sort().at(-1)!;
+  const isMissing = (f: Filing) => (f.form.startsWith("10-K") ? isNewer(f) || annualMissing(f) : isNewer(f));
+  const annual = periodic.find((f) => f.form.startsWith("10-K") && isMissing(f));
+  const quarterly = periodic.find((f) => f.form.startsWith("10-Q") && isMissing(f));
+  // Every missing report, one per period of report (the newest filing for it), oldest first.
+  const byPeriod = new Map<string, Filing>();
+  for (const f of periodic) if (isMissing(f)) {
+    const key = `${f.form.startsWith("10-K") ? "K" : "Q"}|${f.report ?? f.accn}`;
+    if (!byPeriod.has(key)) byPeriod.set(key, f);
+  }
+  const missingFilings = [...byPeriod.values()].sort((a, b) => (a.report ?? a.filed).localeCompare(b.report ?? b.filed) || a.filed.localeCompare(b.filed));
+  const newestPeriodicFiled = [includedFiled, ...missingFilings.map((f) => f.filed)].sort().at(-1) ?? "";
+  const latestKnown = [latestEnd, ...missingFilings.map((f) => f.report ?? "")].sort().at(-1)!;
   const release = [...d.earningsReleases]
     .sort((a, b) => b.filed.localeCompare(a.filed))
-    .find((r) => r.filed > newestPeriodicFiled && days(latestKnown, r.filed) >= NEXT_RELEASE_MIN_DAYS);
+    .find((r) => r.filed > newestPeriodicFiled && days(latestKnown, r.filed) > NEXT_PERIOD_MAX_DAYS);
 
   const newer: CurrencyFiling[] = [];
   if (annual) newer.push(toFiling(annual, "annual"));
@@ -195,31 +202,66 @@ export function assessCurrency(d: CompanyDataset, opts: CurrencyOptions = {}): C
       : `Statements run through the quarter ended ${dayLabel(quarter.end)}.`;
 
   const included = inc ? toFiling(inc, inc.form.startsWith("10-K") ? "annual" : "quarterly") : undefined;
+  const missing = missingFilings.map((f) => toFiling(f, f.form.startsWith("10-K") ? "annual" : "quarterly"));
   if (!newer.length) {
     const tail = included ? ` The latest report on file is the ${included.form} filed on ${dayLabel(included.filed)}.` : "";
-    return { status: "current", quarter: pick(quarter), year: pick(year), included, newer, text: `${through}${tail}` };
+    return { status: "current", quarter: pick(quarter), year: pick(year), included, newer, missing, text: `${through}${tail}` };
   }
   const report = newer.find((n) => n.kind !== "release");
+  const newestMissingFiled = missing.map((m) => m.filed).sort().at(-1) ?? "";
   const parts: string[] = [];
-  if (report) {
-    // A 10-KT covers a transition period (Ferguson: five months to 31 Dec 2025), not a fiscal year.
-    const what =
-      report.form === "10-KT"
-        ? `A transition report (10-KT) for the period ended`
-        : report.kind === "annual"
-          ? `An annual report (${report.form}) for the year ended`
-          : `A quarterly report (${report.form}) for the quarter ended`;
+  if (missing.length === 1) {
+    const m = missing[0];
     parts.push(
-      report.report
-        ? `${what} ${dayLabel(report.report)} was filed on ${dayLabel(report.filed)} and is not in these tables yet.`
-        : `A newer ${report.form} was filed on ${dayLabel(report.filed)} and is not in these tables yet.`,
+      m.report
+        ? `${capital(reportWhat(m, "A"))} ${dayLabel(m.report)} was filed on ${dayLabel(m.filed)} and is not in these tables yet.`
+        : `A newer ${m.form} was filed on ${dayLabel(m.filed)} and is not in these tables yet.`,
     );
+  } else if (missing.length > 1) {
+    const each = missing.map((m) => (m.report ? `${reportWhat(m, "the")} ${dayLabel(m.report)}, filed on ${dayLabel(m.filed)}` : `a ${m.form} filed on ${dayLabel(m.filed)}`));
+    parts.push(`${capital(COUNT[missing.length] ?? String(missing.length))} reports are not in these tables yet: ${list(each)}.`);
   }
-  if (release && (!report || release.filed > report.filed))
+  if (release && (!report || release.filed > newestMissingFiled))
     parts.push(
       report
         ? `Results for a later period were released on ${dayLabel(release.filed)} (Form 8-K).`
         : `Results for the next period were released on ${dayLabel(release.filed)} (Form 8-K); the tables add them from the 10-Q or 10-K once it is filed.`,
     );
-  return { status: "behind", quarter: pick(quarter), year: pick(year), included, newer, text: `${through} ${parts.join(" ")}` };
+  return { status: "behind", quarter: pick(quarter), year: pick(year), included, newer, missing, text: `${through} ${parts.join(" ")}` };
+}
+
+const COUNT = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"];
+const capital = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+const list = (xs: string[]) => (xs.length <= 1 ? (xs[0] ?? "") : `${xs.slice(0, -1).join(", ")} and ${xs.at(-1)}`);
+
+/** "an annual report (10-K) for the year ended" (article "A"), or "the annual report ..." (article "the"). */
+function reportWhat(m: CurrencyFiling, article: "A" | "the"): string {
+  // A 10-KT covers a transition period (Ferguson: five months to 31 Dec 2025), not a fiscal year.
+  if (m.form === "10-KT") return `${article === "A" ? "a" : "the"} transition report (10-KT) for the period ended`;
+  if (m.kind === "annual") return `${article === "A" ? "an" : "the"} annual report (${m.form}) for the year ended`;
+  return `${article === "A" ? "a" : "the"} quarterly report (${m.form}) for the quarter ended`;
+}
+
+function asCurrencyFiling(f: Filing, kind: CurrencyKind, cik: string, opts: CurrencyOptions): CurrencyFiling {
+  return {
+    kind,
+    form: f.form,
+    accn: f.accn,
+    filed: f.filed,
+    ...(f.report ? { report: f.report } : {}),
+    ...(f.doc ? { doc: f.doc } : {}),
+    url: filingUrl(filingCik(f.accn, cik, opts.ciks), f.accn, f.doc),
+  };
+}
+
+/** No statements yet: say so, and name the newest periodic report on file when there is one (MWH: 10-Qs only). */
+function noStatements(d: CompanyDataset, cik: string, opts: CurrencyOptions): Currency {
+  const head = "No statements have been built for this company yet.";
+  const f = d.filings.filter((x) => PERIODIC.test(x.form)).sort((a, b) => b.filed.localeCompare(a.filed) || b.accn.localeCompare(a.accn))[0];
+  if (!f) return { status: "unknown", newer: [], text: head };
+  const m = asCurrencyFiling(f, f.form.startsWith("10-K") ? "annual" : "quarterly", cik, opts);
+  const n = d.filings.filter((x) => PERIODIC.test(x.form)).length;
+  const what = m.report ? `${reportWhat(m, "the")} ${dayLabel(m.report)}, filed on ${dayLabel(m.filed)}` : `the ${m.form} filed on ${dayLabel(m.filed)}`;
+  const text = `${head} ${n === 1 ? "One periodic report is" : `${capital(COUNT[n] ?? String(n))} periodic reports are`} on file; the newest is ${what}.`;
+  return { status: "unknown", newer: [m], missing: [m], text };
 }

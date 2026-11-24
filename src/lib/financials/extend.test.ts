@@ -118,3 +118,51 @@ describe("factsFromInline precision", () => {
     expect(cf.facts["us-gaap"].WeightedAverageNumberOfDilutedSharesOutstanding.units.shares.map((x) => x.val)).toEqual([395_500_000]);
   });
 });
+
+// Real filings (review finding M7): JPMorgan served through Q3 2025, its FY2025 10-K read at view
+// time with the Q3 2025 10-Q. The documents are 12.9 MB and 11.5 MB, so they stay outside the repo:
+// the round's EDGAR corpus and this unit's own fetch. The test runs where they are present.
+import { existsSync, readFileSync } from "node:fs";
+import { hydrateDataset } from "./dataset";
+import type { Statement } from "./types";
+const JPM_K = "/home/claude/fu/round3/reports/currency_data/edgar/docs/0001628280-26-008131/jpm-20251231.htm";
+const JPM_Q3 = "/home/claude/work/r3/fin-read/docs/0001628280-25-048859/jpm-20250930.htm";
+describe.skipIf(!existsSync(JPM_K) || !existsSync(JPM_Q3))("JPMorgan 10-K read at view time (M7)", () => {
+  const full = hydrateDataset(JSON.parse(readFileSync("src/test/fixtures/companies/JPM.json", "utf8")) as CompanyDataset);
+  const cut = (s: Statement, end: string): Statement => {
+    const n = s.periods.filter((p) => p.end <= end).length;
+    return { periods: s.periods.slice(0, n), rows: s.rows.map((r) => ({ ...r, cells: r.cells.slice(0, n) })) };
+  };
+  const servedThroughQ3 = (filings: Filing[]): CompanyDataset => ({
+    ...full,
+    filings,
+    statements: {
+      annual: Object.fromEntries(Object.entries(full.statements.annual).map(([k, s]) => [k, cut(s, "2024-12-31")])) as CompanyDataset["statements"]["annual"],
+      quarterly: Object.fromEntries(Object.entries(full.statements.quarterly).map(([k, s]) => [k, cut(s, "2025-09-30")])) as CompanyDataset["statements"]["quarterly"],
+    },
+  });
+  const k = full.filings.find((f) => f.accn === "0001628280-26-008131")!;
+  const q3 = full.filings.find((f) => f.accn === "0001628280-25-048859")!;
+  const reads = [
+    { filing: q3, html: readFileSync(JPM_Q3, "utf8") },
+    { filing: k, html: readFileSync(JPM_K, "utf8") },
+  ];
+
+  for (const [name, filings] of [
+    ["with its full filing list", full.filings.filter((f) => f.accn !== k.accn)],
+    // The served cells for Q1 to Q3 2025 cite later 10-Qs (latest filing to disclose them); a list
+    // that lacks those accessions used to drop the facts, so the year's quarters could not be placed.
+    ["with a filing list that lacks the accessions its cells cite", full.filings.filter((f) => f.filed < "2026-02-13")],
+  ] as const)
+    it(`adds FY2025 and its derived fourth quarter (${name})`, () => {
+      const ext = extendStatements(servedThroughQ3([...filings]), reads);
+      expect(ext.added.map((a) => [a.form, a.annual, a.quarterly])).toEqual([["10-K", ["FY2025"], ["FY2025Q4"]]]);
+      const inc = ext.dataset.statements.quarterly.income;
+      const i = inc.periods.findIndex((p) => p.key === "FY2025Q4");
+      const nii = inc.rows.find((r) => r.key === "netInterestIncome")!.cells[i]!;
+      // Same figure and rule as the scheduled build: FY2025 less the nine months to 30 Sep 2025.
+      const built = full.statements.quarterly.income;
+      expect(nii.v).toBe(built.rows.find((r) => r.key === "netInterestIncome")!.cells[built.periods.findIndex((p) => p.key === "FY2025Q4")]!.v);
+      expect(nii.derived?.parts.map((p) => p.accn).sort()).toEqual([q3.accn, k.accn].sort());
+    });
+});

@@ -2,7 +2,7 @@
 // newer report or release exists, plus (on the Financials tab) the read-time extension that adds a
 // newer 10-Q/10-K straight from the filing's inline XBRL.
 import { useMemo } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, CircleDot, ExternalLink } from "lucide-react";
 import { getFilingDocument } from "@/lib/sec.functions";
 import { companyCiks, coverageOf } from "@/lib/coverage";
@@ -19,13 +19,65 @@ const ciksOf = (ticker: string, d: CompanyDataset) => {
 
 /** At most this many filings are read at view time (Citigroup lacks three 10-Qs in SEC companyfacts). */
 const MAX_READS = 4;
+/**
+ * Download budget for one view, in characters of primary document (about 25 MB). Filings are read
+ * newest first; the next one is read only while the documents so far plus the largest one read
+ * stays within it (Citigroup: one 14.6 MB 10-Q of three; JPMorgan: its 12.9 MB 10-K and the 11.5 MB
+ * Q3 10-Q its fourth quarter needs).
+ */
+export const READ_BUDGET = 25 * 1024 * 1024;
 
-/** Filings the extension reads: every report the statements miss, plus the Q3 10-Q a new 10-K's fourth quarter needs. */
+const DAY = 86_400_000;
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / DAY);
+
+/** The third-quarter 10-Q of a 10-K's year: its period of report ends 60 to 120 days before the year's. */
+function thirdQuarterOf(d: CompanyDataset, k: Filing): Filing | undefined {
+  if (!k.report) return undefined;
+  return d.filings
+    .filter((f) => f.form === "10-Q" && f.report && f.doc && f.ixbrl !== false)
+    .filter((f) => { const n = daysBetween(f.report!, k.report!); return n >= 60 && n <= 120; })
+    .sort((a, b) => b.filed.localeCompare(a.filed))[0];
+}
+
+/**
+ * Filings the extension reads, oldest first: every report the statements miss (the newest four),
+ * plus, for each missing 10-K, the Q3 10-Q its fourth quarter is derived from (the year less the
+ * first nine months, as the builder does). `currency` is kept for callers.
+ */
 export function readPlan(d: CompanyDataset, currency: Currency): Filing[] {
+  void currency;
   const missing = missingReports(d).filter((f) => f.ixbrl !== false && f.doc).slice(-MAX_READS);
   if (!missing.length) return [];
-  const support = missing.some((f) => f.form.startsWith("10-K")) && currency.included?.form === "10-Q" ? d.filings.find((f) => f.accn === currency.included!.accn) : undefined;
-  return support && !missing.some((f) => f.accn === support.accn) ? [support, ...missing] : missing;
+  const out = [...missing];
+  for (const k of missing.filter((f) => f.form.startsWith("10-K"))) {
+    const q3 = thirdQuarterOf(d, k);
+    if (q3 && !out.some((f) => f.accn === q3.accn)) out.push(q3);
+  }
+  return out.sort((a, b) => a.filed.localeCompare(b.filed));
+}
+
+/** Reading order: newest missing filing first, each 10-K followed by the Q3 10-Q it needs. */
+function readOrder(plan: Filing[], d: CompanyDataset): { filing: Filing; supportOf?: string }[] {
+  const missing = new Set(missingReports(d).map((f) => f.accn));
+  const main = plan.filter((f) => missing.has(f.accn)).sort((a, b) => b.filed.localeCompare(a.filed));
+  const out: { filing: Filing; supportOf?: string }[] = [];
+  for (const f of main) {
+    out.push({ filing: f });
+    if (!f.form.startsWith("10-K")) continue;
+    const q3 = thirdQuarterOf(d, f);
+    const p = q3 && plan.find((x) => x.accn === q3.accn && !missing.has(x.accn));
+    if (p) out.push({ filing: p, supportOf: f.accn });
+  }
+  return out;
+}
+
+export interface UnreadFiling {
+  accn: string;
+  form: string;
+  filed: string;
+  report?: string;
+  /** budget: left for the scheduled rebuild to keep the view light; failed: SEC or the size limit refused it */
+  reason: "budget" | "failed";
 }
 
 export interface FiledStatements {
@@ -38,6 +90,10 @@ export interface FiledStatements {
   extension: Extension | undefined;
   reading: boolean;
   failed: boolean;
+  /** Missing filings this view did not read (download budget, or the document could not be fetched) */
+  unread?: UnreadFiling[];
+  /** Characters of primary document downloaded for this view */
+  bytes?: number;
 }
 
 /** The company's statements with any newer 10-Q/10-K read from SEC at view time. */
@@ -46,43 +102,63 @@ export function useFiledStatements(d: CompanyDataset | undefined, ticker: string
   const ciks = useMemo(() => (d ? ciksOf(ticker, d) : []), [d, ticker]);
   const served = useMemo(() => (d ? assessCurrency(d, { ciks }) : undefined), [d, ciks]);
   const plan = useMemo(() => (enabled && d && served && served.status === "behind" ? readPlan(d, served) : []), [enabled, d, served]);
-  const docs = useQueries({
-    queries: plan.map((f) => {
-      const cik = filingCik(f.accn, d!.profile.cik, ciks);
-      return {
-        queryKey: ["filing-doc", cik, f.accn, f.doc],
-        queryFn: () => getFilingDocument({ data: { cik, accn: f.accn, doc: f.doc } }),
-        staleTime: Infinity,
-        gcTime: 10 * 60_000,
-        retry: 1,
-      };
-    }),
-  });
-  const ready = plan.length > 0 && docs.every((q) => q.isSuccess);
+  const qc = useQueryClient();
+  // One query reads the filings one after another, newest first, within READ_BUDGET; a document
+  // that fails (over the server's size limit, SEC refused) is listed and the others still count.
   const ext = useQuery({
     queryKey: ["filed-statements", ticker, d?.generatedAt, plan.map((f) => f.accn).join(",")],
-    enabled: ready,
-    queryFn: () =>
-      extendInBrowser(
-        d!,
-        plan.map((f, i): { filing: FiledReport; html: string } => ({
-          filing: { accn: f.accn, form: f.form, filed: f.filed, report: f.report, doc: f.doc },
-          html: (docs[i].data as { html: string }).html,
-        })),
-      ),
+    enabled: plan.length > 0,
+    queryFn: async () => {
+      const reads: { filing: FiledReport; html: string }[] = [];
+      const unread: UnreadFiling[] = [];
+      const skipped = new Set<string>();
+      let spent = 0;
+      let largest = 0;
+      for (const { filing: f, supportOf } of readOrder(plan, d!)) {
+        const note = (reason: UnreadFiling["reason"]) => unread.push({ accn: f.accn, form: f.form, filed: f.filed, ...(f.report ? { report: f.report } : {}), reason });
+        if (supportOf && skipped.has(supportOf)) continue;
+        if (spent > 0 && spent + largest > READ_BUDGET) {
+          skipped.add(f.accn);
+          if (!supportOf) note("budget");
+          continue;
+        }
+        const cik = filingCik(f.accn, d!.profile.cik, ciks);
+        try {
+          const doc = await qc.fetchQuery({
+            queryKey: ["filing-doc", cik, f.accn, f.doc],
+            queryFn: () => getFilingDocument({ data: { cik, accn: f.accn, doc: f.doc } }),
+            staleTime: Infinity,
+            gcTime: 10 * 60_000,
+            retry: 1,
+          });
+          const html = (doc as { html: string }).html;
+          spent += html.length;
+          largest = Math.max(largest, html.length);
+          reads.push({ filing: { accn: f.accn, form: f.form, filed: f.filed, report: f.report, doc: f.doc }, html });
+        } catch {
+          skipped.add(f.accn);
+          if (!supportOf) note("failed");
+        }
+      }
+      const extension = reads.length ? await extendInBrowser(d!, reads) : undefined;
+      return { extension, unread: unread.sort((a, b) => a.filed.localeCompare(b.filed)), bytes: spent };
+    },
     staleTime: Infinity,
     retry: false,
   });
-  const extended = ext.data && ext.data.added.length ? ext.data : undefined;
+  const extended = ext.data?.extension && ext.data.extension.added.length ? ext.data.extension : undefined;
   const dataset = extended?.dataset ?? d;
   const current = useMemo(() => (extended ? assessCurrency(extended.dataset, { ciks }) : served), [extended, served, ciks]);
+  const unread = ext.data?.unread ?? [];
   return {
     dataset,
     served,
     current,
     extension: extended,
-    reading: plan.length > 0 && !ext.isFetched && !docs.some((q) => q.isError),
-    failed: docs.some((q) => q.isError) || ext.isError,
+    reading: plan.length > 0 && !ext.isFetched,
+    failed: ext.isError || (!extended && unread.some((u) => u.reason === "failed")),
+    unread,
+    bytes: ext.data?.bytes ?? 0,
   };
 }
 
@@ -98,7 +174,25 @@ export function readSentence(d: CompanyDataset, ext: Extension): string {
   const forms = [...new Set(ext.added.map((a) => a.form))];
   const dates = ext.added.map((a) => dayLabel(a.filed));
   const one = labels.length === 1;
-  return `${one ? "The" : ""}${one ? ` ${labels[0]} column is` : `${labels.length} columns (${list(labels)}) are`} read at view time from the ${list(forms)}${ext.added.length > 1 ? "s" : ""} filed on ${list(dates)}; the scheduled rebuild has not added ${one ? "it" : "them"} yet.`;
+  // A 10-K's fourth quarter is calculated: the year less the nine months its Q3 10-Q reported.
+  const q4 = ext.added
+    .filter((a) => a.form.startsWith("10-K"))
+    .flatMap((a) => a.quarterly.map((k) => d.statements.quarterly.income.periods.find((p) => p.key === k)?.label ?? k));
+  const derived = q4.length ? ` ${list(q4)} ${q4.length === 1 ? "is" : "are"} derived: the year less the first nine months.` : "";
+  return `${one ? "The" : ""}${one ? ` ${labels[0]} column is` : `${labels.length} columns (${list(labels)}) are`} read at view time from the ${list(forms)}${ext.added.length > 1 ? "s" : ""} filed on ${list(dates)}; the scheduled rebuild has not added ${one ? "it" : "them"} yet.${derived}`;
+}
+
+/** Sentence for missing filings this view did not read. */
+export function unreadSentence(unread: UnreadFiling[]): string {
+  if (!unread.length) return "";
+  const name = (u: UnreadFiling) => `the ${u.form} filed on ${dayLabel(u.filed)}`;
+  const budget = unread.filter((u) => u.reason === "budget");
+  const failed = unread.filter((u) => u.reason === "failed");
+  const parts: string[] = [];
+  const cap = (x: string) => x.charAt(0).toUpperCase() + x.slice(1);
+  if (budget.length) parts.push(`${cap(list(budget.map(name)))} ${budget.length === 1 ? "was" : "were"} not read here, to keep the page light; the scheduled rebuild will add ${budget.length === 1 ? "it" : "them"}.`);
+  if (failed.length) parts.push(`${cap(list(failed.map(name)))} could not be read here; the scheduled rebuild will add ${failed.length === 1 ? "it" : "them"}.`);
+  return parts.join(" ");
 }
 
 /**
@@ -111,6 +205,7 @@ export function StatementCurrency({ data, ticker, filed, className }: { data: Co
   const c = filed?.current ?? own;
   const ext = filed?.extension;
   const read = ext && filed?.dataset ? readSentence(filed.dataset, ext) : "";
+  const unread = filed?.unread?.length ? unreadSentence(filed.unread) : "";
   const link = ext
     ? (() => {
         const a = ext.added.at(-1)!;
@@ -134,7 +229,8 @@ export function StatementCurrency({ data, ticker, filed, className }: { data: Co
         {read && <> {read}</>}
         {(behind || !read) && rest && <> {rest}</>}
         {filed?.reading && <span className="text-muted-foreground/80"> Reading the newer filing from SEC.</span>}
-        {filed?.failed && !ext && <span className="text-muted-foreground/80"> The newer filing could not be read here, so the tables show the scheduled build only.</span>}
+        {unread && <span className="text-muted-foreground/80"> {unread}</span>}
+        {filed?.failed && !ext && !unread && <span className="text-muted-foreground/80"> The newer filing could not be read here, so the tables show the scheduled build only.</span>}
         {link && (
           <>
             {" "}

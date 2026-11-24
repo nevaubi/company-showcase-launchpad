@@ -98,8 +98,13 @@ export function factsFromDataset(d: CompanyDataset): CompanyFacts {
   const byAccn = new Map(d.filings.map((f) => [f.accn, f]));
   const take = (unit: string, r: { accn: string; concept: string; start?: string; end: string; value: number }) => {
     const f = byAccn.get(r.accn);
-    if (!f || !/^10-[KQ]/.test(f.form) || !Number.isFinite(r.value)) return;
-    add(cf, r.concept, unit, { ...(r.start ? { start: r.start } : {}), end: r.end, val: r.value, accn: r.accn, form: f.form, filed: f.filed });
+    if (!Number.isFinite(r.value) || (f && !/^10-[KQ]/.test(f.form))) return;
+    // A cited fact whose filing is not in the list (a trimmed filing list) still counts: statement
+    // cells cite only 10-K/10-Q facts, and a year-long duration can only come from a 10-K. Without
+    // it the builder cannot place the year's quarters, and a 10-K read here adds no fourth quarter.
+    const yearLong = !!r.start && Math.abs(Date.parse(r.end) - Date.parse(r.start)) > 300 * 86_400_000;
+    const form = f?.form ?? (yearLong ? "10-K" : "10-Q");
+    add(cf, r.concept, unit, { ...(r.start ? { start: r.start } : {}), end: r.end, val: r.value, accn: r.accn, form, filed: f?.filed ?? r.end });
   };
   for (const freq of ["annual", "quarterly"] as const)
     for (const key of ["income", "balance", "cashflow"] as const)

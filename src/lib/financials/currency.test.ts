@@ -210,3 +210,61 @@ describe("annual report missing behind later quarters", () => {
     );
   });
 });
+
+describe("review findings M5, M6, L2 (AAPL fixture as served)", () => {
+  const load = (t: string) => hydrateDataset(JSON.parse(readFileSync(`src/test/fixtures/companies/${t}.json`, "utf8")) as CompanyDataset);
+
+  it("does not call a late filer's 8-K about the latest quarter the next period's results (M5)", () => {
+    // Statements through 27 Jun 2026. Its 10-Q is filed late (24 Sep, day 89) and the 8-K about the same
+    // quarter follows on 25 Sep (day 90): the next quarter had not even ended.
+    const d = load("AAPL");
+    d.filings = d.filings
+      .filter((f) => !(f.form.startsWith("10-") && f.filed >= "2026-07-01" && f.report !== "2026-06-27"))
+      .map((f) => (f.report === "2026-06-27" && f.form === "10-Q" ? { ...f, filed: "2026-09-24" } : f));
+    d.earningsReleases = [{ accn: "0000320193-26-000090", filed: "2026-09-25", doc: "ex99.htm", title: "Earnings release" }];
+    const c = assessCurrency(d);
+    expect(c.status).toBe("current");
+    expect(c.text).not.toContain("next period");
+    // The same 8-K filed after the next quarter could have ended (14-week quarter: day 99) counts.
+    d.earningsReleases = [{ accn: "0000320193-26-000091", filed: "2026-10-04", doc: "ex99.htm", title: "Earnings release" }];
+    expect(assessCurrency(d).newer.map((n) => n.kind)).toEqual(["release"]);
+  });
+
+  it("names both the missing 10-K and the later 10-Q, oldest first (M6)", () => {
+    const d = load("AAPL");
+    d.filings = [
+      { accn: "0000320193-27-000005", form: "10-Q", filed: "2027-01-30", report: "2026-12-26", doc: "aapl-20261226.htm" },
+      { accn: "0000320193-26-000026", form: "10-K", filed: "2026-11-03", report: "2026-09-26", doc: "aapl-20260926.htm" },
+      ...d.filings.filter((f) => f.filed < "2026-11-03"),
+    ];
+    d.earningsReleases = [];
+    const c = assessCurrency(d);
+    expect(c.status).toBe("behind");
+    expect(c.missing?.map((m) => m.form)).toEqual(["10-K", "10-Q"]);
+    expect(c.text).toBe(
+      "Statements run through the quarter ended 27 Jun 2026. Two reports are not in these tables yet: the annual report (10-K) for the year ended 26 Sep 2026, filed on 3 Nov 2026 and the quarterly report (10-Q) for the quarter ended 26 Dec 2026, filed on 30 Jan 2027.",
+    );
+  });
+
+  it("names Citigroup's three missing 10-Qs", () => {
+    const c = assessCurrency(load("C"));
+    expect(c.missing?.map((m) => m.report)).toEqual(["2026-03-31", "2026-06-30", "2026-09-30"].filter((r) => c.missing!.some((m) => m.report === r)));
+    expect(c.missing!.length).toBeGreaterThanOrEqual(2);
+    expect(c.text).toMatch(/reports are not in these tables yet: the quarterly report \(10-Q\) for the quarter ended 31 Mar 2026/);
+  });
+
+  it("says periodic reports are on file when no statements exist (L2, MWH-like)", () => {
+    const d = dataset({ quarters: [], years: [], qAccns: [], aAccns: [], releases: [] });
+    d.filings = [
+      { accn: "0000000001-26-000007", form: "10-Q", filed: "2026-11-10", report: "2026-09-30", doc: "q3.htm" },
+      { accn: "0000000001-26-000006", form: "10-Q", filed: "2026-08-12", report: "2026-06-30", doc: "q2.htm" },
+      { accn: "0000000001-26-000005", form: "8-K", filed: "2026-08-01", doc: "e.htm" },
+    ];
+    const c = assessCurrency(d);
+    expect(c.status).toBe("unknown");
+    expect(c.text).toBe("No statements have been built for this company yet. Two periodic reports are on file; the newest is the quarterly report (10-Q) for the quarter ended 30 Sep 2026, filed on 10 Nov 2026.");
+    expect(c.newer[0].url).toBe("https://www.sec.gov/Archives/edgar/data/1/000000000126000007/q3.htm");
+    d.filings = [];
+    expect(assessCurrency(d).text).toBe("No statements have been built for this company yet.");
+  });
+});

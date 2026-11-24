@@ -1,6 +1,6 @@
 import { useFeatureGate } from "@/hooks/use-plan";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { Download, FileSpreadsheet, Info, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -71,7 +71,34 @@ function Financials() {
   const [chartOpen, setChartOpen] = useState(true);
   const [exporting, setExporting] = useState(false);
   const gate = useFeatureGate();
-  const set = (patch: Partial<z.infer<typeof pageSearch>>) => navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
+  // Nothing a control does may move the page: a shorter statement (Cash flow after Balance sheet)
+  // would shorten the page under a reader scrolled near its end, and the browser would pull the view
+  // up. The page keeps its height until the reader scrolls back up past where they clicked.
+  const page = useRef<HTMLDivElement>(null);
+  const release = useRef<(() => void) | null>(null);
+  useEffect(() => () => release.current?.(), []);
+  const holdHeight = () => {
+    const el = page.current;
+    if (!el || typeof window === "undefined") return;
+    // Measure before releasing an earlier hold, so a second click keeps the height already held.
+    const h = el.offsetHeight;
+    release.current?.();
+    el.style.minHeight = `${h}px`;
+    const y = window.scrollY;
+    const onScroll = () => {
+      if (window.scrollY < y - 8) release.current?.();
+    };
+    release.current = () => {
+      el.style.minHeight = "";
+      window.removeEventListener("scroll", onScroll);
+      release.current = null;
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+  };
+  const set = (patch: Partial<z.infer<typeof pageSearch>>) => {
+    holdHeight();
+    void navigate({ search: (prev) => ({ ...prev, ...patch }), replace: true, resetScroll: false });
+  };
 
   const filingsByAccn = useMemo(() => new Map((data?.filings ?? []).map((f) => [f.accn, f])), [data]);
 
@@ -138,7 +165,7 @@ function Financials() {
   const view: StatementView = s.statement === "kpis" ? "values" : s.view;
 
   return (
-    <div className="grid grid-cols-1 gap-4">
+    <div ref={page} className="grid grid-cols-1 content-start gap-4">
       <div data-section="Statement controls" className="grid grid-cols-1 gap-2">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {basisBar}
