@@ -35,6 +35,7 @@ import { fundamentalsDigest } from "@/lib/financials/summary";
 import type { StatementKey } from "@/lib/financials/types";
 import { fmtCell, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { TickerMark } from "@/components/app/ticker";
 
 type Mode = "continue" | "summarize" | "rewrite" | "draft" | "critique";
 
@@ -222,7 +223,7 @@ function DataTableDialog({ open, onOpenChange, editor, defaultTicker }: { open: 
               <SelectContent>
                 {COVERAGE.map((c) => (
                   <SelectItem key={c.ticker} value={c.ticker}>
-                    {c.ticker} · {c.shortName}
+                    <TickerMark ticker={c.ticker} name link={false} />
                   </SelectItem>
                 ))}
               </SelectContent>

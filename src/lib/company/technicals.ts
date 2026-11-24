@@ -76,9 +76,15 @@ export function readTechnicals(bars: Bar[], index: Bar[]): TechRead {
   const m50 = last(s50);
   const m200 = last(s200);
   const rsi14 = last(r);
-  const vol20 = bars.slice(-20).reduce((s, b) => s + b[6], 0) / Math.min(20, bars.length);
-  const vol90 = bars.slice(-90).reduce((s, b) => s + b[6], 0) / Math.min(90, bars.length);
-  const volRatio = vol90 ? vol20 / vol90 : null;
+  // Averages run over sessions that carry a volume: a stored bar without one is a gap in the record, not a quiet day,
+  // and counting it as zero makes the recent average look heavy or light for no reason.
+  const avgVolume = (n: number): number | null => {
+    const vs = bars.slice(-n).map((b) => b[6]).filter((v) => v > 0);
+    return vs.length >= Math.ceil(Math.min(n, bars.length) / 2) ? vs.reduce((s, v) => s + v, 0) / vs.length : null;
+  };
+  const vol20 = avgVolume(20);
+  const vol90 = avgVolume(90);
+  const volRatio = vol20 != null && vol90 != null && vol90 > 0 ? vol20 / vol90 : null;
 
   let cross: TechRead["cross"] = null;
   for (let i = closes.length - 1; i > Math.max(200, closes.length - 504); i--) {

@@ -14,6 +14,7 @@ import { auctionsQuery, crowding, gauges, hedgeFundsQuery, allSeries } from "@/l
 import { mostUnusual, readAuctions, seriesStats } from "@/lib/hedge/core";
 import { fmtAlt, readAlt, type AltRow } from "@/lib/alt/query";
 import { cn } from "@/lib/utils";
+import { TickerMark } from "@/components/app/ticker";
 
 interface Fact {
   id: string;
@@ -204,14 +205,7 @@ export function DailyBrief({ tickers }: { tickers: string[] }) {
                   {it.urgency === "high" && <Badge className="text-[10px]">high priority</Badge>}
                   <span className="text-[13px] font-medium">{it.title}</span>
                   {it.tickers.map((t) => (
-                    <Link
-                      key={t}
-                      to="/app/companies/$ticker"
-                      params={{ ticker: t }}
-                      className="text-[11px] underline"
-                    >
-                      {t}
-                    </Link>
+                    <TickerMark key={t} ticker={t} size="2xs" />
                   ))}
                 </div>
                 <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">{it.body}</p>

@@ -1,47 +1,41 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { SectionNav } from "@/components/company/section-nav";
-import { WhyCards } from "@/components/company/why-cards";
-import { friendlyError } from "@/lib/errors";
-import { useMemo } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { FileText, Loader2, Newspaper, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
-import { Panel, Stat } from "@/components/app/page-header";
-import { BarChart } from "@/components/charts/bar-chart";
-import { TimeSeriesChart } from "@/components/charts/time-series";
-import { useSource } from "@/components/source/source-context";
+import { Newspaper, TrendingDown, TrendingUp } from "lucide-react";
+import { IrPanel } from "@/components/ir/panel";
+import { IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
+import type { SourceTarget } from "@/components/source/source-context";
 import { useCompany, usePrices, useQuotes } from "@/lib/data";
 import { getNarratives } from "@/lib/ai.functions";
-import { cellTarget, ratioTarget, ttmTarget } from "@/lib/financials/targets";
-import { latestYoY, ttm } from "@/lib/financials/metrics";
-import { alignByDate, annualizedVol, beta, maxDrawdown, returns } from "@/lib/indicators";
-import {
-  fmtCompactUsd,
-  fmtDate,
-  fmtPct,
-  fmtPrice,
-  fmtRelative,
-  SEC_FORM_LABEL,
-} from "@/lib/format";
+import { companyChangesQuery } from "@/lib/changes/data";
+import { whyCards } from "@/lib/company/why";
+import { coverageOf } from "@/lib/coverage";
+import { friendlyError } from "@/lib/errors";
+import { fmtDate, fmtRelative } from "@/lib/format";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { cn } from "@/lib/utils";
-import { ResearchChart } from "@/components/company/research-chart";
-import { CompanyIndicators } from "@/components/technicals/deep-views";
-import { AboutPanel } from "@/components/company/about";
-import { LeadershipPanel } from "@/components/company/leadership";
-import { SectorTable } from "@/components/company/sector-table";
-import { RelatedCompanies } from "@/components/company/related";
-import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
-import { CatalystsTimeline, SetupPanel } from "@/components/company/overview-extras";
-import { FilingInsightsPanel } from "@/components/company/filing-insights";
-import { BriefPanel } from "@/components/company/brief-panel";
 import { WhatChangedPanel } from "@/components/changes/company-changes";
+import { AboutPanel } from "@/components/company/about";
+import { BriefPanel } from "@/components/company/brief-panel";
+import { EarningsCallPanel } from "@/components/company/earnings-call-panel";
+import { EarningsSection } from "@/components/company/earnings-section";
+import { EventsTimeline } from "@/components/company/events-timeline";
+import { FilingChangesPanel } from "@/components/company/filing-insights";
+import { FinancialAnalysisSection, type PriceContext } from "@/components/company/financial-analysis";
 import { KpiInsightsPanel } from "@/components/company/kpi-insights";
-import { coverageOf } from "@/lib/coverage";
+import { LeadershipPanel } from "@/components/company/leadership";
+import { LevelsAndSignals } from "@/components/company/levels-signals";
+import { PositioningPanel } from "@/components/company/positioning";
+import { QuarterDrivers } from "@/components/company/quarter-drivers";
+import { KeyRelationshipsPanel } from "@/components/company/relationships";
+import { ReportedKpis } from "@/components/company/reported-kpis";
+import { ResearchChart } from "@/components/company/research-chart";
+import { SectionNav } from "@/components/company/section-nav";
+import { SectorTable } from "@/components/company/sector-table";
 import { FirmNotes } from "@/components/firm/firm-notes";
-import { insiderWindow, insiderWindowLabel } from "@/lib/insiders/window";
+import { CompanyIndicators } from "@/components/technicals/deep-views";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   head: ({ params }) => ({
@@ -73,297 +67,157 @@ function Overview() {
 
 function OverviewSkeleton() {
   return (
-    <div className="grid grid-cols-1 gap-4">
-      <div className="grid grid-cols-2 gap-px border-b bg-border md:grid-cols-4 xl:grid-cols-8">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-20" />
-        ))}
-      </div>
+    <div className="grid grid-cols-1 gap-3">
+      <Skeleton className="h-9" />
+      <Skeleton className="h-28" />
+      <Skeleton className="h-40" />
       <Skeleton className="h-96" />
     </div>
   );
 }
 
-const OVERVIEW_SECTIONS = [
-  { id: "ov-why", label: "Why it moved" },
-  { id: "ov-what-changed", label: "What changed" },
-  { id: "ov-price", label: "Price" },
-  { id: "ov-operating", label: "Operating data" },
-  { id: "ov-changes", label: "Filing changes" },
-  { id: "ov-setup", label: "Setup & catalysts" },
-  { id: "ov-about", label: "About" },
-  { id: "ov-news", label: "News & calls" },
-  { id: "ov-filings", label: "Filings & insiders" },
-];
-// collapsible section headers match the Panel title style
-const SUMMARY =
-  "flex cursor-pointer list-none items-center gap-2 text-[13px] font-semibold tracking-tight before:text-[10px] before:text-muted-foreground before:content-['▸'] [[open]>&]:before:content-['▾']";
+/**
+ * The page in a researcher's order: how the business is doing (the numbers, then what moved them), what changed
+ * lately, the stock and its next report, what the company is and who it depends on, what it reports beyond the
+ * statements, who owns and trades it, and how it compares. One nav; every section is on the page in full.
+ */
+const SECTIONS = {
+  analysis: { id: "ov-analysis", label: "Financials" },
+  drivers: { id: "ov-drivers", label: "Latest quarter" },
+  changed: { id: "ov-what-changed", label: "What changed" },
+  price: { id: "ov-price", label: "Price" },
+  earnings: { id: "ov-earnings", label: "Earnings" },
+  about: { id: "ov-about", label: "Business" },
+  relationships: { id: "ov-relationships", label: "Relationships" },
+  operating: { id: "ov-operating", label: "Operating data" },
+  ownership: { id: "ov-ownership", label: "Ownership" },
+  peers: { id: "ov-peers", label: "Peers" },
+  news: { id: "ov-news", label: "News" },
+} as const;
+
+/** A section of the page: the nav jumps to its id, and it stacks its panels with the page's one gap. */
+function Section({ id, children, className }: { id: string; children: ReactNode; className?: string }) {
+  return (
+    <section id={id} className={cn("grid min-w-0 scroll-mt-28 grid-cols-1 gap-3", className)}>
+      {children}
+    </section>
+  );
+}
 
 function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }) {
   const year = usePrices(ticker, "1y");
-  const spy = usePrices("SPY", "1y");
   const quote = useQuotes([ticker]).data?.quotes[0];
-  const { open } = useSource();
+  const changes = useQuery(companyChangesQuery(ticker));
   const q = data.statements.quarterly;
   const a = data.statements.annual;
   const p = data.profile;
+  const drivers = useMemo(() => whyCards(data), [data]);
 
-  const price = quote?.price ?? year.data?.bars.at(-1)?.[4] ?? null;
-  const shares = p.sharesOutstanding;
-  const mcap = price && shares ? price * shares : null;
-  const epsTTM = ttm(q.income, "epsDiluted");
-  const revT = ttmTarget(ticker, q.income, "revenue", "Revenue");
-  const niT = ttmTarget(ticker, q.income, "netIncome", "Net income");
-  const fcfT = ttmTarget(ticker, q.cashflow, "fcf", "Free cash flow");
-  const gpT = ttmTarget(ticker, q.income, "grossProfit", "Gross profit");
-  const epsT = ttmTarget(ticker, q.income, "epsDiluted", "Diluted EPS");
-  const gmT =
-    gpT && revT
-      ? ratioTarget(ticker, "Gross margin (TTM)", revT.periodLabel ?? "", gpT, revT)
-      : null;
-  const niiT = ttmTarget(ticker, q.income, "netInterestIncome", "Net interest income");
-  const yoy = latestYoY(q.income, "revenue");
-  const lastQ = q.income.periods.length - 1;
-
-  const stats = useMemo(() => {
-    const bars = year.data?.bars ?? [];
-    const closes = bars.map((b) => b[4]);
-    const hi = bars.length ? Math.max(...bars.map((b) => b[2])) : null;
-    const lo = bars.length ? Math.min(...bars.map((b) => b[3])) : null;
-    let b: number | null = null;
-    if (spy.data && bars.length) {
-      const al = alignByDate(
-        bars.map((x) => [x[0], x[5]] as [string, number]),
-        spy.data.bars.map((x) => [x[0], x[5]] as [string, number]),
-      );
-      b = beta(returns(al.a), returns(al.b));
-    }
-    const ret1y = closes.length > 1 ? closes[closes.length - 1] / closes[0] - 1 : null;
-    return {
-      hi,
-      lo,
-      beta: b,
-      vol: closes.length > 20 ? annualizedVol(returns(closes)) : null,
-      mdd: closes.length ? maxDrawdown(closes) : null,
-      ret1y,
-    };
-  }, [year.data, spy.data]);
-
-  const sharesTarget =
-    shares && p.sharesOutstandingAccn
-      ? {
-          ticker,
-          label: "Shares outstanding (cover page)",
-          periodLabel: p.sharesOutstandingAsOf
-            ? `as of ${fmtDate(p.sharesOutstandingAsOf)}`
-            : undefined,
-          unit: "shares",
-          value: shares,
-          src: {
-            accn: p.sharesOutstandingAccn,
-            concept: "dei:EntityCommonStockSharesOutstanding",
-            end: p.sharesOutstandingAsOf ?? "",
+  // the last price: the live quote, else the last stored close with its date
+  const lastBar = year.data?.bars.at(-1);
+  const price: PriceContext | null = useMemo(() => {
+    const live = quote?.price || null;
+    const px = live ?? lastBar?.[4] ?? null;
+    if (!px) return null;
+    const shares = p.sharesOutstanding;
+    const sharesTarget: SourceTarget | null =
+      shares && p.sharesOutstandingAccn
+        ? {
+            ticker,
+            label: "Shares outstanding (cover page)",
+            periodLabel: p.sharesOutstandingAsOf ? `as of ${fmtDate(p.sharesOutstandingAsOf)}` : undefined,
+            unit: "shares",
             value: shares,
-          },
-        }
-      : null;
+            src: { accn: p.sharesOutstandingAccn, concept: "dei:EntityCommonStockSharesOutstanding", end: p.sharesOutstandingAsOf ?? "", value: shares },
+          }
+        : null;
+    return { price: px, asOf: live ? null : (lastBar?.[0]?.slice(0, 10) ?? null), shares: shares ?? null, sharesTarget };
+  }, [quote?.price, lastBar, p.sharesOutstanding, p.sharesOutstandingAccn, p.sharesOutstandingAsOf, ticker]);
+
+  const sections = useMemo(() => Object.values(SECTIONS).filter((s) => s.id !== SECTIONS.drivers.id || drivers.length > 0), [drivers.length]);
+  // the pipeline's ranked list when it exists; the dated events otherwise, never both
+  const ranked = changes.isLoading || !!changes.data;
+  const lastQ = q.income.periods.at(-1);
 
   return (
     <div className="grid grid-cols-1 gap-3">
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        <Stat
-          label="Market cap"
-          value={fmtCompactUsd(mcap)}
-          sub={shares ? `${(shares / 1e9).toFixed(2)}B shares` : "—"}
-          target={sharesTarget}
-        />
-        <Stat
-          label="P/E (TTM)"
-          value={price && epsTTM ? `${(price / epsTTM).toFixed(1)}×` : "—"}
-          sub={epsTTM ? `EPS ${fmtPrice(epsTTM)}` : undefined}
-          target={epsT}
-        />
-        <Stat
-          label="Revenue (TTM)"
-          value={fmtCompactUsd(revT?.value)}
-          sub={yoy != null ? `${fmtPct(yoy, 1, true)} YoY (latest qtr)` : undefined}
-          tone={yoy != null && yoy >= 0 ? "positive" : "negative"}
-          target={revT}
-        />
-        <Stat
-          label="Free cash flow (TTM)"
-          value={fmtCompactUsd(fcfT?.value)}
-          sub={fcfT && mcap ? `${fmtPct(fcfT.value / mcap)} FCF yield` : undefined}
-          tone={fcfT && fcfT.value < 0 ? "negative" : "neutral"}
-          target={fcfT}
-        />
-      </div>
-      <details className="border-b pb-2">
-        <summary className="cursor-pointer text-xs text-muted-foreground">
-          More metrics · profitability, range & risk
-        </summary>
-        <div className="grid grid-cols-2 gap-2 pt-2 md:grid-cols-4">
-          <Stat
-            label="Net income (TTM)"
-            value={fmtCompactUsd(niT?.value)}
-            sub={niT && revT ? `${fmtPct(niT.value / revT.value)} margin` : undefined}
-            target={niT}
-          />
-          {gmT || !niiT ? (
-            <Stat label="Gross margin (TTM)" value={fmtPct(gmT?.value)} target={gmT} />
-          ) : (
-            <Stat
-              label="Net interest income (TTM)"
-              value={fmtCompactUsd(niiT.value)}
-              sub={revT ? `${fmtPct(niiT.value / revT.value)} of revenue` : undefined}
-              target={niiT}
-            />
-          )}
-          <Stat
-            label="52-week range"
-            value={stats.lo != null ? `${stats.lo.toFixed(0)}–${stats.hi?.toFixed(0)}` : "—"}
-            sub={stats.ret1y != null ? `${fmtPct(stats.ret1y, 1, true)} over 1Y` : undefined}
-            tone={stats.ret1y != null && stats.ret1y >= 0 ? "positive" : "negative"}
-          />
-          <Stat
-            label="Beta vs S&P 500"
-            value={stats.beta != null ? stats.beta.toFixed(2) : "—"}
-            sub={stats.vol != null ? `${fmtPct(stats.vol, 0)} ann. vol` : undefined}
-          />
+      <SectionNav sections={sections} />
+
+      <Section id={SECTIONS.analysis.id}>
+        <FinancialAnalysisSection ticker={ticker} data={data} price={price} />
+      </Section>
+
+      {drivers.length > 0 && (
+        <Section id={SECTIONS.drivers.id}>
+          <QuarterDrivers ticker={ticker} cards={drivers} data={data} />
+        </Section>
+      )}
+
+      <Section id={SECTIONS.changed.id}>
+        <BriefPanel ticker={ticker} />
+        {ranked ? (
+          <div data-section="What changed" className="min-w-0">
+            <WhatChangedPanel ticker={ticker} />
+          </div>
+        ) : (
+          <EventsTimeline ticker={ticker} data={data} />
+        )}
+        <FilingChangesPanel ticker={ticker} filings={data.filings} />
+      </Section>
+
+      <Section id={SECTIONS.price.id}>
+        <div data-section="Price and technical read" className="min-w-0">
+          <ResearchChart ticker={ticker} data={data} />
         </div>
-      </details>
+        <LevelsAndSignals ticker={ticker} />
+        <div id="ov-indicators" data-section="Indicator board" className="min-w-0 scroll-mt-28">
+          <CompanyIndicators ticker={ticker} />
+        </div>
+      </Section>
 
-      <SectionNav sections={OVERVIEW_SECTIONS} />
+      <Section id={SECTIONS.earnings.id} className="xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+        <EarningsSection ticker={ticker} data={data} />
+        <div data-section="Latest earnings call" className="min-w-0">
+          <EarningsCallPanel ticker={ticker} />
+        </div>
+      </Section>
 
-      <BriefPanel ticker={ticker} />
-
-      <div id="ov-why" className="scroll-mt-24">
-        <WhyCards data={data} />
-      </div>
-
-      <div id="ov-what-changed" className="scroll-mt-24" data-section="What changed">
-        <WhatChangedPanel ticker={ticker} />
-      </div>
-
-      <div id="ov-price" className="scroll-mt-24">
-        <ResearchChart ticker={ticker} data={data} />
-      </div>
-
-      <div id="ov-indicators" className="scroll-mt-24">
-        <CompanyIndicators ticker={ticker} />
-      </div>
-
-      <div id="ov-operating" className="scroll-mt-24" data-section="operating-insights">
-        <KpiInsightsPanel ticker={ticker} />
-      </div>
-
-      <div id="ov-changes" className="scroll-mt-24">
-        <FilingInsightsPanel ticker={ticker} />
-      </div>
-
-      <div
-        id="ov-setup"
-        className="grid scroll-mt-24 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]"
-      >
-        <SetupPanel ticker={ticker} data={data} price={price} />
-        <CatalystsTimeline ticker={ticker} data={data} />
-      </div>
-
-      <FirmNotes ticker={ticker} />
-
-      <div id="ov-about" className="scroll-mt-24">
+      <Section id={SECTIONS.about.id}>
         <AboutPanel ticker={ticker} data={data} />
-      </div>
-      <details className="border-y py-3">
-        <summary className={SUMMARY}>Management & board</summary>
-        <div className="pt-3">
-          <LeadershipPanel ticker={ticker} />
-        </div>
-      </details>
-      <details className="border-y py-3">
-        <summary className={SUMMARY}>Sector & peer fundamentals</summary>
-        <div className="pt-3">
-          <SectorTable ticker={ticker} />
-        </div>
-      </details>
+        <LeadershipPanel ticker={ticker} />
+      </Section>
 
-      <div
-        id="ov-news"
-        className="grid scroll-mt-24 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-      >
+      <Section id={SECTIONS.relationships.id}>
+        <KeyRelationshipsPanel ticker={ticker} />
+      </Section>
+
+      <Section id={SECTIONS.operating.id}>
+        <ReportedKpis ticker={ticker} />
+        <div data-section="operating-insights" className="min-w-0">
+          <KpiInsightsPanel ticker={ticker} />
+        </div>
+      </Section>
+
+      {/* Named spot for the alt-data snapshot (built by the alt unit, mounted by the lead):
+          put <AltSnapshot ticker={ticker} /> inside this element and add { id: "ov-alt", label: "Alt data" }
+          to SECTIONS after `operating`. While it is empty it takes no space. */}
+      <section id="ov-alt" data-section="Alt data snapshot" data-slot="alt-snapshot" className="min-w-0 scroll-mt-28 empty:hidden" />
+
+      <Section id={SECTIONS.ownership.id}>
+        <PositioningPanel ticker={ticker} data={data} />
+      </Section>
+
+      <Section id={SECTIONS.peers.id}>
+        <SectorTable ticker={ticker} />
+      </Section>
+
+      <Section id={SECTIONS.news.id}>
         <NarrativesPanel ticker={ticker} name={p.name} />
-        <EarningsCallPanel ticker={ticker} />
-      </div>
+        <FirmNotes ticker={ticker} />
+      </Section>
 
-      <details className="border-y py-3">
-        <summary className={SUMMARY}>Financial trends · revenue, profitability & margins</summary>
-        <div className="grid grid-cols-1 gap-3 pt-3 lg:grid-cols-2">
-          <RevenueBars ticker={ticker} data={data} />
-          <MarginLines data={data} />
-        </div>
-      </details>
-
-      <div
-        id="ov-filings"
-        className="grid scroll-mt-24 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.9fr)]"
-      >
-        <Panel
-          title="Recent filings"
-          actions={
-            <Button size="xs" variant="ghost" asChild>
-              <Link to="/app/companies/$ticker/filings" params={{ ticker }}>
-                All filings
-              </Link>
-            </Button>
-          }
-          bodyClassName="p-0"
-        >
-          <ul className="divide-y">
-            {data.filings
-              .filter((f) => ["10-K", "10-Q", "8-K", "DEF 14A"].includes(f.form))
-              .slice(0, 8)
-              .map((f) => (
-                <li key={f.accn}>
-                  <button
-                    onClick={() =>
-                      open({
-                        ticker,
-                        label: SEC_FORM_LABEL[f.form] ?? f.form,
-                        periodLabel: f.report ?? f.filed,
-                        unit: "usd",
-                        value: 0,
-                        doc: { accn: f.accn, doc: f.doc, title: f.desc },
-                      })
-                    }
-                    className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-secondary"
-                  >
-                    <Badge variant="outline" className="w-14 justify-center">
-                      {f.form}
-                    </Badge>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px]">
-                        {f.items?.includes("2.02")
-                          ? "Results of operations"
-                          : (SEC_FORM_LABEL[f.form] ?? f.desc)}
-                      </span>
-                      <span className="block text-[11px] text-muted-foreground">
-                        {f.report ? `Period ${fmtDate(f.report)} · ` : ""}filed {fmtDate(f.filed)}
-                      </span>
-                    </span>
-                    <FileText className="size-3.5 text-muted-foreground" />
-                  </button>
-                </li>
-              ))}
-          </ul>
-        </Panel>
-
-        <InsiderSummary ticker={ticker} data={data} price={price} />
-        <RelatedCompanies ticker={ticker} />
-      </div>
-      <p className="text-[11px] text-muted-foreground">
-        Fundamentals through {q.income.periods[lastQ]?.label} (
-        {fmtDate(q.income.periods[lastQ]?.end)}) and {a.income.periods.at(-1)?.label}. Dataset
-        generated {fmtDate(data.generatedAt)}. Click any figure to open its filing.
+      <p className={IR.caption} data-section="As of">
+        Statements through {lastQ ? `${lastQ.label} (quarter ended ${fmtDate(lastQ.end)})` : "no quarter yet"} and {a.income.periods.at(-1)?.label ?? "no fiscal year yet"}. Dataset built {fmtDate(data.generatedAt)}. Click any figure to open the filing behind it.
       </p>
     </div>
   );
@@ -379,61 +233,52 @@ function NarrativesPanel({ ticker, name }: { ticker: string; name: string }) {
   const news = q.data?.news ?? [];
   const byId = new Map(news.map((n) => [n.id, n]));
   return (
-    <Panel
-      title={
-        <span className="flex items-center gap-1.5">
-          <Sparkles className="size-3.5" /> Trending narratives
-        </span>
-      }
+    <IrPanel
+      section="News narratives"
+      title="News narratives"
       subtitle={
         q.data
-          ? `AI-clustered from ${news.length} recent ${q.data.via === "web" ? "articles found by web search" : "headlines"} · ${fmtRelative(q.data.cachedAt)}`
-          : "Clustering recent headlines…"
+          ? `Grouped by a model from ${news.length} recent ${q.data.via === "web" ? "articles found by web search" : "headlines"} · ${fmtRelative(q.data.cachedAt)} · each narrative links its headlines`
+          : q.isError
+            ? "Not available just now"
+            : "Grouping recent headlines"
       }
       bodyClassName="p-0"
     >
       {q.isLoading ? (
         <div className="space-y-3 p-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} className="h-16" />
+            <Skeleton key={i} className="h-12" />
           ))}
         </div>
       ) : q.isError ? (
-        <div className="p-4 text-sm text-muted-foreground">
-          Couldn't build narratives right now. {friendlyError(q.error)}
+        <div className="px-4 py-3 text-[13px] text-muted-foreground">
+          The narratives could not be built just now. {friendlyError(q.error)}
           <Button size="xs" variant="outline" className="ml-2" onClick={() => q.refetch()}>
             Retry
           </Button>
         </div>
       ) : (
-        <div>
-          <ul className="divide-y">
+        <div className="grid grid-cols-1 divide-y lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] lg:divide-x lg:divide-y-0">
+          <ul className="divide-y divide-border/60">
             {(q.data?.narratives ?? []).map((n) => (
-              <li key={n.title} className="px-4 py-3">
-                <p className="flex items-start gap-2 text-[13px] font-semibold">
+              <li key={n.title} className="px-4 py-2">
+                <p className="flex items-start gap-2 text-[13px] font-semibold leading-5">
                   {n.sentiment === "bullish" ? (
-                    <TrendingUp className="mt-0.5 size-3.5 shrink-0 text-positive" />
+                    <TrendingUp className="mt-0.5 size-3.5 shrink-0 text-positive" aria-label="Positive for the stock" />
                   ) : n.sentiment === "bearish" ? (
-                    <TrendingDown className="mt-0.5 size-3.5 shrink-0 text-negative" />
+                    <TrendingDown className="mt-0.5 size-3.5 shrink-0 text-negative" aria-label="Negative for the stock" />
                   ) : (
-                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-chart-2" />
+                    <span className="mt-1.5 size-2 shrink-0 rounded-full bg-muted-foreground" aria-label="Neutral" />
                   )}
                   {n.title}
                 </p>
-                <p className="mt-1 pl-5.5 text-[13px] leading-relaxed text-muted-foreground">
-                  {n.summary}
-                </p>
-                <div className="mt-1.5 flex flex-wrap gap-1.5 pl-5.5">
+                <p className="mt-0.5 pl-5.5 text-[13px] leading-5 text-muted-foreground">{n.summary}</p>
+                <div className="mt-1 flex flex-wrap gap-1.5 pl-5.5">
                   {n.headlineIds.slice(0, 3).map((id) => {
                     const h = byId.get(id);
                     return h ? (
-                      <a
-                        key={id}
-                        href={h.link}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="max-w-full truncate rounded border bg-card px-1.5 py-0.5 text-[10.5px] text-muted-foreground hover:text-foreground"
-                      >
+                      <a key={id} href={h.link} target="_blank" rel="noreferrer" className="max-w-full truncate rounded border bg-card px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
                         {h.publisher}: {h.title}
                       </a>
                     ) : null;
@@ -441,19 +286,20 @@ function NarrativesPanel({ ticker, name }: { ticker: string; name: string }) {
                 </div>
               </li>
             ))}
+            {(q.data?.narratives ?? []).length === 0 && <li className="px-4 py-3 text-[13px] text-muted-foreground">No narrative could be grouped from the recent headlines.</li>}
           </ul>
           {news.length > 0 && (
-            <div className="border-t px-4 py-3">
+            <div className="min-w-0 px-4 py-2">
               <p className="eyebrow flex items-center gap-1.5">
                 <Newspaper className="size-3" /> Latest headlines
               </p>
-              <ul className="mt-2 space-y-1.5">
+              <ul className="mt-1.5 space-y-1.5">
                 {news.slice(0, 6).map((n) => (
-                  <li key={n.id} className="text-[12.5px]">
+                  <li key={n.id} className="text-[13px] leading-5">
                     <a href={n.link} target="_blank" rel="noreferrer" className="hover:underline">
                       {n.title}
                     </a>
-                    <span className="ml-1.5 text-[11px] text-muted-foreground">
+                    <span className={cn("ml-1.5", IR.caption)}>
                       {n.publisher} · {fmtRelative(n.publishedAt)}
                     </span>
                   </li>
@@ -463,161 +309,6 @@ function NarrativesPanel({ ticker, name }: { ticker: string; name: string }) {
           )}
         </div>
       )}
-    </Panel>
-  );
-}
-
-function RevenueBars({ ticker, data }: { ticker: string; data: CompanyDataset }) {
-  const { open } = useSource();
-  const st = data.statements.quarterly.income;
-  const rev = st.rows.find((r) => r.key === "revenue");
-  const ni = st.rows.find((r) => r.key === "netIncome");
-  const n = st.periods.length;
-  const idx = Array.from({ length: Math.min(12, n) }, (_, i) => n - Math.min(12, n) + i);
-  const bars = idx.map((i) => ({
-    key: st.periods[i].key,
-    label: st.periods[i].label.replace(" FY", "'"),
-    parts: [{ id: "Revenue", value: rev?.cells[i]?.v ?? 0, color: "var(--chart-1)" }],
-  }));
-  const niBars = idx.map((i) => ({
-    key: st.periods[i].key,
-    label: st.periods[i].label.replace(" FY", "'"),
-    parts: [{ id: "Net income", value: ni?.cells[i]?.v ?? 0, color: "var(--chart-2)" }],
-  }));
-  return (
-    <Panel
-      title="Revenue and net income"
-      subtitle="Quarterly · click a bar for its filing"
-      bodyClassName="grid gap-2 p-3"
-    >
-      <BarChart
-        data={bars}
-        height={170}
-        yFormat={(v) => fmtCompactUsd(v, 0)}
-        onSelect={(d) => {
-          const i = st.periods.findIndex((p) => p.key === d.key);
-          const t = cellTarget(ticker, st, "revenue", i);
-          if (t) open(t);
-        }}
-      />
-      <BarChart
-        data={niBars}
-        height={130}
-        yFormat={(v) => fmtCompactUsd(v, 0)}
-        onSelect={(d) => {
-          const i = st.periods.findIndex((p) => p.key === d.key);
-          const t = cellTarget(ticker, st, "netIncome", i);
-          if (t) open(t);
-        }}
-      />
-    </Panel>
-  );
-}
-
-function MarginLines({ data }: { data: CompanyDataset }) {
-  const k = data.statements.quarterly.kpis;
-  const take = (key: string) => {
-    const r = k.rows.find((x) => x.key === key);
-    return k.periods
-      .map((p, i) => ({ date: new Date(`${p.end}T00:00:00Z`), value: r?.cells[i]?.v }))
-      .filter(
-        (x): x is { date: Date; value: number } => x.value != null && Number.isFinite(x.value),
-      )
-      .slice(-24);
-  };
-  const series = [
-    { id: "gm", label: "Gross", color: "var(--chart-1)", points: take("grossMargin") },
-    { id: "om", label: "Operating", color: "var(--chart-2)", points: take("operatingMargin") },
-    { id: "nm", label: "Net", color: "var(--chart-3)", points: take("netMargin") },
-  ].filter((s) => s.points.length > 1);
-  return (
-    <Panel title="Margins" subtitle="Quarterly, last six years · from the KPI table">
-      <TimeSeriesChart series={series} height={300} yFormat={(v) => `${(v * 100).toFixed(0)}%`} />
-    </Panel>
-  );
-}
-
-function InsiderSummary({
-  ticker,
-  data,
-  price,
-}: {
-  ticker: string;
-  data: CompanyDataset;
-  price: number | null;
-}) {
-  const { open } = useSource();
-  // The same 90-day window the summary above and the ownership page use, so the totals agree.
-  const w = insiderWindow(data.insiders);
-  const sold = w.sold;
-  const bought = w.bought;
-  const recent = data.insiders.slice(0, 6);
-  return (
-    <Panel
-      title="Insider activity"
-      subtitle={`${insiderWindowLabel(w, fmtDate)} · ${w.filings} Form 4 filing${w.filings === 1 ? "" : "s"}`}
-      actions={
-        <Button size="xs" variant="ghost" asChild>
-          <Link to="/app/companies/$ticker/insiders" params={{ ticker }}>
-            Details
-          </Link>
-        </Button>
-      }
-      bodyClassName="p-0"
-    >
-      <div className="grid grid-cols-2 border-b">
-        <div className="border-r px-4 py-3">
-          <p className="text-[11px] text-muted-foreground">
-            Open-market sales{w.sales > 0 ? ` · ${w.sales}` : ""}
-          </p>
-          <p className="num text-lg font-medium text-negative">{fmtCompactUsd(sold)}</p>
-        </div>
-        <div className="px-4 py-3">
-          <p className="text-[11px] text-muted-foreground">
-            Open-market buys{w.buys > 0 ? ` · ${w.buys}` : ""}
-          </p>
-          <p className="num text-lg font-medium text-positive">{fmtCompactUsd(bought)}</p>
-        </div>
-      </div>
-      <ul className="divide-y">
-        {recent.map((t, i) => (
-          <li key={`${t.accn}-${i}`}>
-            <button
-              onClick={() =>
-                open({
-                  ticker,
-                  label: `Form 4 · ${t.owner}`,
-                  periodLabel: t.date,
-                  unit: "usd",
-                  value: 0,
-                  doc: { accn: t.accn, doc: t.doc, title: `${t.owner} — ${t.role}` },
-                })
-              }
-              className="flex w-full items-center gap-3 px-4 py-2 text-left text-[12.5px] transition-colors hover:bg-secondary"
-            >
-              <span
-                className={cn(
-                  "num w-5 text-center font-semibold",
-                  t.acquired ? "text-positive" : "text-negative",
-                )}
-              >
-                {t.code}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate">{t.owner}</span>
-                <span className="block truncate text-[11px] text-muted-foreground">{t.role}</span>
-              </span>
-              <span className="num text-right text-[11px]">
-                {t.shares.toLocaleString()} sh
-                <span className="block text-muted-foreground">
-                  {t.price ? fmtPrice(t.price) : "—"}
-                </span>
-              </span>
-            </button>
-          </li>
-        ))}
-      </ul>
-      {price == null && <Loader2 className="hidden" />}
-    </Panel>
+    </IrPanel>
   );
 }

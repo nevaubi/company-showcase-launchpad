@@ -1,5 +1,5 @@
 // What the supply-chain page keeps in its address, so a copied link reopens the same picture: the company, the view,
-// the selected name, the risk overlay, the depth and the analysis tab. Values are validated and an unknown value is
+// the selected name, the risk overlay, the depth, the analysis tab and what is isolated (see isolate.ts). Values are validated and an unknown value is
 // dropped (the page falls back to its saved or default state) rather than breaking the page. Pure, no browser/Node APIs.
 import { z } from "zod";
 import { entityKey } from "./entity";
@@ -21,6 +21,8 @@ export const supplySearch = z.object({
   overlay: z.enum(SUPPLY_OVERLAYS).optional().catch(undefined),
   depth: z.coerce.number().int().min(1).max(2).optional().catch(undefined),
   tab: z.enum(SUPPLY_TABS).optional().catch(undefined),
+  /** what is isolated: "rel:supplier", "node:supplier:TSM" or "path:ENTG>TSM>NVDA>HPE" (read by `parseIsolation`, isolate.ts) */
+  iso: z.string().max(400).optional().catch(undefined),
 });
 export type SupplySearch = z.infer<typeof supplySearch>;
 
@@ -60,6 +62,7 @@ export function supplyHref(s: SupplySearch): string {
   if (s.overlay && s.overlay !== "none") q.set("overlay", s.overlay);
   if (s.depth === 2) q.set("depth", "2");
   if (s.tab && s.tab !== "evidence") q.set("tab", s.tab);
+  if (s.iso) q.set("iso", s.iso);
   const qs = q.toString();
   return qs ? `/app/supply-chain?${qs}` : "/app/supply-chain";
 }

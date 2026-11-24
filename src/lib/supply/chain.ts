@@ -29,9 +29,13 @@ export interface ChainEdge {
   from: string;
   /** Buyer node key. */
   to: string;
-  /** Largest stated share, in percent, with what it is a share of. */
+  /**
+   * Stated share, in percent, with what it is a share of. A share of the seller's revenue or of the buyer's purchases
+   * measures the flow itself and always wins over a share of receivables or of the buyer's own revenue; within the same
+   * kind the largest stated share is kept.
+   */
   share: number | null;
-  basis: "revenue" | "receivables" | "purchases" | null;
+  basis: ShareBasis | null;
   /** Largest dollar figure stated or implied (share of the seller's revenue × that revenue). */
   dollars: number | null;
   /** Where the dollar figure comes from: a flow the quote states (revenue, purchases, contract value), or a stated share × the seller's revenue. */
@@ -44,6 +48,28 @@ export interface ChainEdge {
   /** What changes hands, as the quotes name it, most cited first. */
   products: string[];
   evidence: ChainEvidence[];
+}
+
+/**
+ * What a stated share is a share of: the seller's revenue (a customer share), the buyer's purchases (a supplier share),
+ * the seller's receivables, or the buyer's own revenue (a reseller stating how much of its sales come from one
+ * supplier's products, which is not what it pays that supplier).
+ */
+export type ShareBasis = "revenue" | "purchases" | "receivables" | "buyer_revenue";
+export const BASIS_WORD: Record<ShareBasis, string> = { revenue: "revenue", purchases: "purchases", receivables: "receivables", buyer_revenue: "the buyer's revenue" };
+/** Shares that measure the flow between the two companies. */
+const isFlowShare = (b: ShareBasis | null) => b === "revenue" || b === "purchases";
+/** Whether a newly read share replaces the one an edge already holds. */
+const betterShare = (pct: number, basis: ShareBasis, e: Pick<ChainEdge, "share" | "basis">) =>
+  e.share == null || (isFlowShare(basis) && !isFlowShare(e.basis)) || (isFlowShare(basis) === isFlowShare(e.basis) && pct > e.share);
+/**
+ * What a supplier link's stated share measures, read from its sentence: a share of what the filer buys, unless the
+ * sentence puts it against the filer's own sales ("products from X were 12% of our revenue").
+ */
+export function supplierShareBasis(quote: string): ShareBasis {
+  const q = quote.toLowerCase();
+  if (/purchas|procure|cost of (goods|sales|revenue)|inventory|raw material|supply of|supplied/.test(q)) return "purchases";
+  return /\b(revenues?|net sales|total sales|sales)\b/.test(q) ? "buyer_revenue" : "purchases";
 }
 
 /** What kind of flow to draw: everything, or one family of stated relationship types. */
@@ -169,9 +195,11 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
     bump(t.products, pl.product);
     for (const c of copies(l)) {
       if (c.single_source) e.sole = true;
-      if (c.share_pct != null && c.share_pct > (e.share ?? 0)) {
+      if (c.share_pct == null || !(c.share_pct > 0)) continue;
+      const basis: ShareBasis = l.relation === "customer" ? "revenue" : supplierShareBasis(c.quote ?? "");
+      if (betterShare(c.share_pct, basis, e)) {
         e.share = c.share_pct;
-        e.basis = l.relation === "customer" ? "revenue" : "purchases";
+        e.basis = basis;
       }
     }
     const d = linkDollarsFrom(l, revenue);
@@ -189,11 +217,12 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
     const e = f.kind === "customer" ? edge(me, cp) : edge(cp, me);
     e.evidence.push({ kind: "tag", fact: f });
     saw(e, f.ticker);
-    const pct = f.pct * 100;
-    const basis = f.kind === "supplier" ? "purchases" : f.benchmark === "receivables" ? "receivables" : "revenue";
-    // A revenue share beats a receivables share of the same size: it is the one that sizes the flow.
-    if (pct > (e.share ?? 0) || (basis === "revenue" && e.basis === "receivables")) {
-      e.share = Math.round(pct * 10) / 10;
+    const pct = Math.round(f.pct * 1000) / 10;
+    // a supplier fact tagged against revenue is the filer's own sales of that supplier's products, not what it pays the supplier
+    const basis: ShareBasis = f.kind === "supplier" ? (f.benchmark === "revenue" ? "buyer_revenue" : "purchases") : f.benchmark === "receivables" ? "receivables" : "revenue";
+    // a share of revenue or purchases sizes the flow: a receivables balance, often from an earlier period, never replaces it
+    if (betterShare(pct, basis, e)) {
+      e.share = pct;
       e.basis = basis;
     }
     const rev = revenue[f.ticker];
@@ -286,7 +315,7 @@ export function chainText(c: Chain, max = 40): string {
       .map((ev) => (ev.kind === "text" ? `${ev.link.ticker} ${ev.link.form} ${ev.link.accn}` : `${ev.fact.ticker} ${ev.fact.form} ${ev.fact.accn} XBRL-tagged "${ev.fact.label}" ${(ev.fact.pct * 100).toFixed(1)}% of ${ev.fact.benchmark}`))
       .join("; ");
     const what = [...e.types.map(LINK_TYPE_LABEL), ...e.products].join(", ");
-    return `[${TIER_LABEL(t)} → ${TIER_LABEL(t + 1)}] ${nm(e.from)} sells to ${nm(e.to)}${what ? ` (${what})` : ""}${e.share != null ? ` | ${e.share}% of ${e.basis}` : ""}${e.dollars != null ? ` | ≈$${(e.dollars / 1e6).toFixed(0)}M` : ""}${e.sole ? " | SINGLE SOURCE" : ""}${e.confirmed ? " | both filings state it" : ""} | per ${src}`;
+    return `[${TIER_LABEL(t)} → ${TIER_LABEL(t + 1)}] ${nm(e.from)} sells to ${nm(e.to)}${what ? ` (${what})` : ""}${e.share != null ? ` | ${e.share}% of ${e.basis ? BASIS_WORD[e.basis] : "an unstated base"}` : ""}${e.dollars != null ? ` | ≈$${(e.dollars / 1e6).toFixed(0)}M` : ""}${e.sole ? " | SINGLE SOURCE" : ""}${e.confirmed ? " | both filings state it" : ""} | per ${src}`;
   });
   return `VALUE CHAIN (goods flow left to right; tiers ${c.tiers.join(", ")}; ${c.nodes.length - 1} companies):\n${lines.join("\n")}${c.edges.length > max ? `\n…${c.edges.length - max} more edges` : ""}`;
 }

@@ -12,6 +12,7 @@ import { COVERAGE } from "@/lib/coverage";
 import { fmtRelative } from "@/lib/format";
 import { ShareWithFirm } from "@/components/firm/share-with-firm";
 import { useFirm } from "@/components/firm/firm-context";
+import { TickerMark } from "@/components/app/ticker";
 
 export const Route = createFileRoute("/_authenticated/app/docs/$id")({
   head: () => ({
@@ -152,7 +153,7 @@ function DocPage() {
             <SelectItem value="none">No company</SelectItem>
             {COVERAGE.map((c) => (
               <SelectItem key={c.ticker} value={c.ticker}>
-                {c.ticker} · {c.shortName}
+                <TickerMark ticker={c.ticker} name size="2xs" link={false} />
               </SelectItem>
             ))}
           </SelectContent>

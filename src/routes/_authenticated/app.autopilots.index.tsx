@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bot, Pause, Play, Plus } from "lucide-react";
+import { Pause, Play, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
-import { Empty, PageHeader, Panel } from "@/components/app/page-header";
+import { DataUnavailable } from "@/components/app/data-unavailable";
+import { PageHeader, Panel } from "@/components/app/page-header";
 import { Sparkline } from "@/components/charts/sparkline";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,8 +18,9 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { supabase } from "@/integrations/supabase/client";
 import { usePlan } from "@/hooks/use-plan";
 import { AUTOPILOT_LIMIT } from "@/lib/billing/plans";
-import { fmtDate, fmtPct } from "@/lib/format";
+import { fmtPct } from "@/lib/format";
 import { botStats, BotRulesSchema, type BotRules } from "@/lib/signals/bots";
+import { dayLong, pct } from "@/lib/signals/format";
 import { botsQuery, setupsQuery, type BotRow, type BotsList } from "@/lib/signals/queries";
 import { FAMILY_LABEL } from "@/lib/signals/strategies";
 import { isNearMiss } from "@/lib/signals/setups";
@@ -42,7 +44,7 @@ export const Route = createFileRoute("/_authenticated/app/autopilots/")({
 
 function AutopilotsPage() {
   const { variant } = Route.useSearch();
-  const { data, isLoading, error } = useQuery(botsQuery);
+  const { data, isLoading, error, refetch } = useQuery(botsQuery);
   const { data: plan } = usePlan();
   const [uid, setUid] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -54,7 +56,7 @@ function AutopilotsPage() {
     if (variant) setCreating(true);
   }, [variant]);
 
-  if (error) return <p className="text-sm text-muted-foreground">Autopilots could not load: {(error as Error).message}</p>;
+  if (error) return <DataUnavailable title="Autopilots could not load" error={error} onRetry={() => void refetch()} />;
   if (isLoading || !data) return <div className="space-y-3"><Skeleton className="h-16" /><Skeleton className="h-48" /><Skeleton className="h-48" /></div>;
   const house = data.bots.filter((b) => !b.user_id);
   const mine = data.bots.filter((b) => b.user_id && b.user_id === uid);
@@ -66,18 +68,18 @@ function AutopilotsPage() {
       <PageHeader
         eyebrow="Signals"
         title="Paper autopilots"
-        description="Automatic paper trading of the strategies on the Setups page. After each close an autopilot queues that day's signals, fills them at the next open and closes them after the tested holding period — or at a stop or target if you choose — tracked against the S&P 500. Paper only; no real orders."
+        description="Automatic paper trading of the rules on the Setups page. After each close an autopilot queues that day's signals, fills them at the next open and closes them after the tested holding period, or at a stop or target if you choose. Results are tracked against the S&P 500. Paper only: no real orders."
         actions={
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            {lastRun && <span className="text-muted-foreground">Updated through {fmtDate(lastRun)} · runs after every close</span>}
-            <Button size="sm" className="h-8" onClick={() => setCreating(true)} disabled={!limit}>
-              <Plus className="mr-1 h-3.5 w-3.5" /> New autopilot
+          <>
+            {lastRun && <span className="text-[11px] text-muted-foreground">Updated through {dayLong(lastRun)} · runs after every close</span>}
+            <Button size="xs" onClick={() => setCreating(true)} disabled={!limit}>
+              <Plus aria-hidden /> New autopilot
             </Button>
-          </div>
+          </>
         }
       />
 
-      <Panel title="House autopilots" subtitle="Run by Filed Under on the same rules for everyone — a live forward test of the backtests" collapse={false}>
+      <Panel title="House autopilots" subtitle="Run by Filed Under on the same rules for everyone: a live forward test of the backtests" collapse={false}>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-section="House autopilots">
           {house.map((b) => <BotCard key={b.id} bot={b} data={data} />)}
         </div>
@@ -85,8 +87,8 @@ function AutopilotsPage() {
 
       <Panel
         title="Your autopilots"
-        subtitle={limit ? `${mine.length} of ${limit} on your plan` : "Autopilots are locked after the free trial — choose a plan to create or resume them"}
-        actions={!limit && <Button asChild size="sm" variant="outline" className="h-7"><Link to="/app/billing">See plans</Link></Button>}
+        subtitle={limit ? `${mine.length} of ${limit} on your plan` : "Autopilots are locked after the free trial. Choose a plan to create or resume them."}
+        actions={!limit && <Button asChild size="xs" variant="outline"><Link to="/app/billing">See plans</Link></Button>}
         collapse={false}
       >
         {mine.length ? (
@@ -94,10 +96,14 @@ function AutopilotsPage() {
             {mine.map((b) => <BotCard key={b.id} bot={b} data={data} own />)}
           </div>
         ) : (
-          <Empty title="No autopilots yet" icon={<Bot className="h-6 w-6 text-muted-foreground" />}>
-            Pick strategies from the scoreboard, set position sizes and exits, and it will paper-trade every signal from the next close on.
-            {limit > 0 && <div className="mt-3"><Button size="sm" onClick={() => setCreating(true)}><Plus className="mr-1 h-3.5 w-3.5" /> New autopilot</Button></div>}
-          </Empty>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[13px] leading-5 text-muted-foreground" data-section="Your autopilots">
+            <span>None yet. Pick rules from the setups scoreboard, set position sizes and exits, and an autopilot paper-trades every signal from the next close on.</span>
+            {limit > 0 && (
+              <Button size="xs" variant="outline" onClick={() => setCreating(true)}>
+                <Plus aria-hidden /> New autopilot
+              </Button>
+            )}
+          </div>
         )}
       </Panel>
 
@@ -135,31 +141,41 @@ function BotCard({ bot, data, own }: { bot: BotRow; data: BotsList; own?: boolea
   });
   const tone = (v: number | null) => (v ? (v > 0 ? "text-positive" : "text-negative") : "");
   return (
-    <div className="flex min-w-0 flex-col rounded-md border bg-card p-3.5">
+    <div className="flex min-w-0 flex-col rounded-md border bg-card p-3.5 shadow-paper">
       <div className="flex items-start justify-between gap-2">
-        <Link to="/app/autopilots/$botId" params={{ botId: bot.id }} className="min-w-0 font-medium hover:underline">{bot.name}</Link>
-        <span className={cn("shrink-0 rounded border px-1.5 py-0.5 text-[10px]", bot.status === "active" ? "text-positive" : "text-muted-foreground")}>{bot.status === "active" ? "Running" : "Paused"}</span>
+        <Link to="/app/autopilots/$botId" params={{ botId: bot.id }} className="min-w-0 text-[13px] font-semibold leading-5 underline-offset-2 hover:underline">{bot.name}</Link>
+        <span className={cn("inline-flex h-[18px] shrink-0 items-center rounded border px-1.5 text-[11px] leading-none", bot.status === "active" ? "border-positive/50 text-positive" : "text-muted-foreground")}>{bot.status === "active" ? "Running" : "Paused"}</span>
       </div>
-      <p className="mt-0.5 line-clamp-2 min-h-8 text-xs text-muted-foreground">{bot.description || rulesSummary(bot.rules)[0]}</p>
-      <div className="mt-3 grid grid-cols-4 gap-2 text-xs tabular-nums">
-        <div><div className="text-[10px] text-muted-foreground">Return</div><div className={cn("font-semibold", tone(s.totalReturn))}>{fmtPct(s.totalReturn, 2, true)}</div></div>
-        <div><div className="text-[10px] text-muted-foreground">vs S&P</div><div className={tone(s.excess)}>{fmtPct(s.excess, 2, true)}</div></div>
-        <div><div className="text-[10px] text-muted-foreground">Trades</div><div title={`${s.trades} closed, ${openN} open, ${queuedN} queued for the next open`}>{s.trades}<span className="text-muted-foreground">{openN ? ` · ${openN} open` : ""}{queuedN ? ` · ${queuedN} queued` : ""}</span></div></div>
-        <div><div className="text-[10px] text-muted-foreground">Win rate</div><div>{fmtPct(s.hit, 0)}</div></div>
+      <p className="mt-0.5 line-clamp-2 min-h-8 text-[11px] leading-4 text-muted-foreground">{bot.description || rulesSummary(bot.rules)[0]}</p>
+      <div className="mt-3 grid grid-cols-4 gap-2">
+        <CardFact label="Return"><span className={cn("font-medium", tone(s.totalReturn))}>{pct(s.totalReturn)}</span></CardFact>
+        <CardFact label="vs S&P 500"><span className={tone(s.excess)}>{pct(s.excess)}</span></CardFact>
+        <CardFact label="Trades"><span title={`${s.trades} closed, ${openN} open, ${queuedN} queued for the next open`}>{s.trades}<span className="text-muted-foreground">{openN ? ` · ${openN} open` : ""}{queuedN ? ` · ${queuedN} queued` : ""}</span></span></CardFact>
+        <CardFact label="Win rate">{pct(s.hit, 0, false)}</CardFact>
       </div>
       <div className="mt-3 flex h-10 items-center">
         {eq.length > 1 ? <Sparkline values={eq.map((e) => e.equity)} className="h-10 w-full" /> : <span className="text-[11px] text-muted-foreground">Equity curve appears after the second trading day</span>}
       </div>
-      <div className="mt-2 text-[11px] text-muted-foreground">Since {fmtDate(bot.started_on)} · max drawdown {fmtPct(s.maxDrawdown, 1)}</div>
+      <div className="mt-2 text-[11px] leading-4 text-muted-foreground">Since {dayLong(bot.started_on)} · worst fall from a peak {pct(s.maxDrawdown, 1, false)}</div>
       {bot.last_error && <p className="mt-2 text-[11px] text-negative">{bot.last_error}</p>}
       <div className="mt-3 flex items-center gap-2">
-        <Button asChild size="sm" variant="outline" className="h-7"><Link to="/app/autopilots/$botId" params={{ botId: bot.id }}>Positions & trades</Link></Button>
+        <Button asChild size="xs" variant="outline"><Link to="/app/autopilots/$botId" params={{ botId: bot.id }}>Positions and trades</Link></Button>
         {own && (
-          <Button size="sm" variant="ghost" className="h-7" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
-            {bot.status === "active" ? <><Pause className="mr-1 h-3.5 w-3.5" /> Pause</> : <><Play className="mr-1 h-3.5 w-3.5" /> Resume</>}
+          <Button size="xs" variant="ghost" onClick={() => toggle.mutate()} disabled={toggle.isPending}>
+            {bot.status === "active" ? <><Pause aria-hidden /> Pause</> : <><Play aria-hidden /> Resume</>}
           </Button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** A caption over a figure on an autopilot card; figures stay on one line in tabular digits. */
+function CardFact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-[11px] leading-4 text-muted-foreground">{label}</div>
+      <div className="whitespace-nowrap text-[13px] tabular-nums leading-5">{children}</div>
     </div>
   );
 }
@@ -189,7 +205,7 @@ function CreateDialog({ uid, prefill, onClose, atLimit, limit }: { uid: string; 
       return data.id;
     },
     onSuccess: (id) => {
-      toast.success("Autopilot created — it starts with tonight's signals");
+      toast.success("Autopilot created. It starts with tonight's signals.");
       qc.invalidateQueries({ queryKey: ["autopilots"] });
       onClose();
       navigate({ to: "/app/autopilots/$botId", params: { botId: id } });
@@ -222,7 +238,7 @@ function CreateDialog({ uid, prefill, onClose, atLimit, limit }: { uid: string; 
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">
-              {rules.select === "proven" ? "Only signals from strategies that pass all eight checks, and only in market regimes where they've worked. It may sit in cash for long stretches." : rules.select === "watch" ? "Adds the near misses: positive after costs out of sample (t ≥ 1.5) but not proven." : "Trades every signal from your selection regardless of its backtest — useful to watch a rule live."}
+              {rules.select === "proven" ? "Only signals from strategies that pass all eight checks, and only in market regimes where they've worked. It may sit in cash for long stretches." : rules.select === "watch" ? "Adds the near misses: positive after costs out of sample (t ≥ 1.5) but not proven." : "Trades every signal from your selection regardless of its backtest. Useful to watch a rule live."}
             </p>
           </div>
           {rules.select === "family" && (

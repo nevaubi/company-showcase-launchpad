@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
+import { coverageOf } from "@/lib/coverage";
 import { Segmented } from "@/components/app/segmented";
 import { Switch } from "@/components/ui/switch";
 import { useSource } from "@/components/source/source-context";
@@ -97,7 +98,7 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
       </button>
     </th>
   );
-  const none = <td className="border-b px-2.5 py-1.5 text-right text-muted-foreground group-hover:bg-secondary">—</td>;
+  const none = <td className="border-b px-2.5 py-1.5 text-right text-muted-foreground group-hover:bg-secondary">–</td>;
   const usdCell = (r: Row, label: string, v: ExpVal | undefined, signed = false) =>
     !v ? (
       none
@@ -126,21 +127,21 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
         {kinds.length > 2 && <Segmented label="Kind of insurer" value={kinds.some((k) => k.v === kind) ? kind : "all"} onChange={setKind} options={kinds} />}
         <p className="text-[11px] text-muted-foreground">Latest fiscal year, from each insurer's 10-K.</p>
         {nOthers > 0 && (
-          <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+          <label className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
             <Switch checked={others} onCheckedChange={setOthers} aria-label="Include other companies with premium revenue" /> Other companies with premiums ({nOthers})
           </label>
         )}
       </div>
-      <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border bg-border sm:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border sm:grid-cols-4">
         <Stat label="Insurers" value={String(rows.length)} />
         <Stat label="Premiums earned, combined" value={fmtCompactUsd(totalEarned)} hint={med.growth != null ? `median growth ${fmtPct(med.growth, 1, true)}` : undefined} />
         <Stat label="Median loss & benefit ratio" value={fmtPct(med.loss, 1)} hint="losses and benefits ÷ premiums earned" />
         <Stat label="Prior-year reserves" value={`${released} released · ${strengthened} added`} hint={med.dev != null ? `median ${fmtPct(med.dev, 1, true)} of premiums` : undefined} />
       </div>
       {!rows.length ? (
-        <p className="rounded-lg border bg-card p-6 text-sm text-muted-foreground">No insurer of this kind has been read yet.</p>
+        <p className="rounded-md border bg-card p-6 text-sm text-muted-foreground">No insurer of this kind has been read yet.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card shadow-paper">
+        <div className="overflow-hidden rounded-md border bg-card shadow-paper">
           <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full min-w-[900px] border-separate border-spacing-0 text-[13px]">
               <thead>
@@ -168,7 +169,7 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
                   <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.dev, 1, true)}</td>
                   <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{fmtPct(med.acq, 1)}</td>
                   <td className="border-b bg-secondary/60" />
-                  <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{med.res != null ? `${med.res.toFixed(2)}×` : "—"}</td>
+                  <td className="num border-b bg-secondary/60 px-2.5 py-1 text-right text-[11px] tabular-nums text-muted-foreground">{med.res != null ? `${med.res.toFixed(2)}×` : "–"}</td>
                 </tr>
               </thead>
               <tbody>
@@ -177,14 +178,14 @@ export function InsurerBooks({ index }: { index: ExposureIndex }) {
                   const since = i.earnedPrior ? fmtDate(i.earnedPrior.end, { month: "short", year: "numeric" }) : "";
                   return (
                     <tr key={r.ticker} className="group">
-                      <td className="sticky left-0 z-10 max-w-52 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary">
+                      <td className="sticky left-0 z-10 max-w-52 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary">
                         <span className="flex items-center gap-2" title={r.industry}>
                           <CompanyLogo ticker={r.ticker} className="size-5" />
                           <Link to="/app/companies/$ticker/financials" params={{ ticker: r.ticker }} search={{ basis: "detail" }} className="num font-medium hover:underline">
                             {r.ticker}
                           </Link>
-                          <span className="hidden truncate text-xs text-muted-foreground sm:inline" title={`${r.name} · fiscal year ended ${fmtDate(i.end)}`}>
-                            {r.name}
+                          <span className="hidden truncate text-[13px] text-muted-foreground sm:inline" title={`${r.name} · fiscal year ended ${fmtDate(i.end)}`}>
+                            {coverageOf(r.ticker)?.shortName ?? r.name}
                           </span>
                         </span>
                       </td>

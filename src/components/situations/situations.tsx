@@ -32,6 +32,8 @@ import {
 import { useWatchlist } from "@/lib/workspace";
 import { fmtCompactUsd, fmtDate, fmtPrice, fmtRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { TickerMark } from "@/components/app/ticker";
+import { CompanyLogo } from "@/components/app/company-logo";
 
 const th = "px-3 py-2 text-[11px] font-medium text-muted-foreground whitespace-nowrap";
 const td = "px-3 py-1.5 align-top";
@@ -337,15 +339,7 @@ export function SituationsView({
                   onClick={() => setOpen(r.t)}
                 >
                   <td className={td}>
-                    <Link
-                      to="/app/companies/$ticker"
-                      params={{ ticker: r.t }}
-                      onClick={(e) => e.stopPropagation()}
-                      className="num font-medium text-link hover:underline"
-                    >
-                      {r.t}
-                    </Link>
-                    <span className="ml-1.5 text-muted-foreground">{r.n}</span>
+                    <TickerMark ticker={r.t} name={r.n ?? undefined} className="text-link" />
                   </td>
                   <td className={cn(td, "whitespace-nowrap text-muted-foreground")}>{r.s ?? "–"}</td>
                   <td className={cn(td, "num text-right tabular-nums")}>{r.mcap ? fmtCompactUsd(r.mcap) : "–"}</td>
@@ -383,7 +377,8 @@ export function SituationsView({
           {open && (
             <>
               <SheetHeader>
-                <SheetTitle>
+                <SheetTitle className="flex items-center gap-2">
+                  <CompanyLogo ticker={open} size="sm" decorative />
                   <Link to="/app/companies/$ticker" params={{ ticker: open }} className="text-link hover:underline">
                     {open}
                   </Link>{" "}

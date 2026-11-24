@@ -225,3 +225,221 @@ describe("Q4 derivation across a later restatement", () => {
     expect(cell.v).toBe(140); // 480 − 340, not 480 − 250
   });
 });
+
+// Causes found by checking the builder against filings' own statements (round 3 accuracy sample).
+describe("headline lines against the filed statements", () => {
+  const at = (end: string, val: number) => fact(undefined, end, val, "10-K", "2026-02-20");
+  const fy25 = (s: ReturnType<typeof buildStatements>, stmt: "income" | "balance" | "cashflow", key: string) => {
+    const st = s.annual[stmt];
+    return st.rows.find((r) => r.key === key)?.cells[st.periods.findIndex((p) => p.key === "FY2025")] ?? null;
+  };
+  const base = { Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } };
+
+  it("does not add short-term debt a long-term figure already includes (Chevron FY2025: tag choice)", () => {
+    // CVX tags $39,781M as both LongTermDebtAndCapitalLeaseObligations and …IncludingCurrentMaturities; DebtCurrent $10,918M
+    // is gross short-term debt before $9,941M was reclassified into long-term. Face: 977 + 39,781 = 40,758.
+    const s = buildStatements(filer({
+      ...base,
+      LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 39_781)] },
+      LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: { facts: [at("2025-12-31", 39_781)] },
+      DebtCurrent: { facts: [at("2025-12-31", 10_918)] },
+      ShortTermBorrowings: { facts: [at("2025-12-31", 977)] },
+    }));
+    const d = fy25(s, "balance", "totalDebt")!;
+    expect(d.v).toBe(40_758);
+    expect(d.derived?.parts.map((p) => p.concept)).toEqual(["us-gaap:LongTermDebtAndCapitalLeaseObligations", "us-gaap:ShortTermBorrowings"]);
+  });
+
+  it("adds short-term borrowings beside current maturities (FedEx FY2026, Home Depot: tag choice)", () => {
+    // FDX: current portion 1,676 + short-term borrowings 745 + long-term 23,293 = 25,714 (we showed 24,969).
+    const s = buildStatements(filer({
+      ...base,
+      LongTermDebtNoncurrent: { facts: [at("2025-12-31", 23_293)] },
+      LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 1_676)] },
+      ShortTermBorrowings: { facts: [at("2025-12-31", 745)] },
+    }));
+    const d = fy25(s, "balance", "totalDebt")!;
+    expect(d.v).toBe(25_714);
+    expect(d.derived?.parts.map((p) => p.value)).toEqual([23_293, 1_676, 745]);
+  });
+
+  it("reads notes payable and loans as debt (Oracle: tag choice, total debt was the current part only)", () => {
+    const s = buildStatements(filer({
+      ...base,
+      LongTermNotesAndLoans: { facts: [at("2025-12-31", 117_712)] },
+      NotesPayableCurrent: { facts: [at("2025-12-31", 7_625)] },
+    }));
+    expect(fy25(s, "balance", "totalDebt")!.v).toBe(125_337);
+  });
+
+  it("reads Deere's long-term borrowings from its company extension (company extension)", () => {
+    const cf = filer({ ...base, DebtCurrent: { facts: [at("2025-12-31", 13_796)] } });
+    cf.facts.de = { LongTermDebtAndFinanceLeasesNoncurrent: { units: { USD: [at("2025-12-31", 43_544)] } } };
+    const d = fy25(buildStatements(cf), "balance", "totalDebt")!;
+    expect(d.v).toBe(57_340);
+    expect(d.derived?.parts[0].concept).toBe("de:LongTermDebtAndFinanceLeasesNoncurrent");
+  });
+
+  it("drops a segment-measure 'operating income' when the statement runs straight to pretax (MetLife FY2025: tag choice)", () => {
+    const y = (v: number) => [fact("2025-01-01", "2025-12-31", v, "10-K", "2026-02-19")];
+    const s = buildStatements(filer({
+      Revenues: { facts: y(77_084) },
+      BenefitsLossesAndExpenses: { facts: y(72_423) },
+      IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest: { facts: y(4_661) },
+      OperatingIncomeLoss: { facts: y(6_137) }, // "Total consolidated adjusted earnings" in the segment note
+      NetIncomeLoss: { facts: y(3_379) },
+    }));
+    expect(fy25(s, "income", "operatingIncome")).toBeNull();
+    expect(fy25(s, "income", "pretaxIncome")!.v).toBe(4_661);
+  });
+
+  it("keeps operating income when costs and expenses lead to it, not to pretax income", () => {
+    const y = (v: number) => [fact("2025-01-01", "2025-12-31", v, "10-K", "2026-02-19")];
+    const s = buildStatements(filer({
+      Revenues: { facts: y(1_000) },
+      CostsAndExpenses: { facts: y(800) },
+      OperatingIncomeLoss: { facts: y(200) },
+      IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest: { facts: y(180) },
+    }));
+    expect(fy25(s, "income", "operatingIncome")!.v).toBe(200);
+  });
+
+  it("takes a utility's total operating revenues over its contract-revenue note figure (Duke FY2025: tag choice)", () => {
+    const y = (v: number) => [fact("2025-01-01", "2025-12-31", v, "10-K", "2026-02-26")];
+    const s = buildStatements(filer({
+      RegulatedAndUnregulatedOperatingRevenue: { facts: y(32_237) },
+      RevenueFromContractWithCustomerIncludingAssessedTax: { facts: y(31_741) },
+      OperatingIncomeLoss: { facts: y(6_000) },
+    }));
+    expect(fy25(s, "income", "revenue")!.src?.concept).toBe("us-gaap:RegulatedAndUnregulatedOperatingRevenue");
+    expect(fy25(s, "income", "revenue")!.v).toBe(32_237);
+  });
+});
+
+describe("52/53-week retail calendars (fiscal calendar)", () => {
+  const add = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+  it("places 12/12/12/16-week quarters before the 10-K (Costco: Q2 and Q3 were missing all year)", () => {
+    const y0 = "2024-09-02", y1 = "2025-08-31", s1 = "2025-09-01";
+    const rev = [
+      fact(y0, y1, 1000, "10-K", "2025-10-08"),
+      fact(s1, add(s1, 83), 230, "10-Q", "2025-12-15"), // 12 weeks
+      fact(add(s1, 84), add(s1, 167), 240, "10-Q", "2026-03-10"),
+      fact(s1, add(s1, 167), 470, "10-Q", "2026-03-10"), // 24 weeks: 168 days
+      fact(add(s1, 168), add(s1, 251), 250, "10-Q", "2026-06-02"),
+      fact(s1, add(s1, 251), 720, "10-Q", "2026-06-02"), // 36 weeks: 252 days
+    ];
+    const q = buildStatements(filer({ Revenues: { facts: rev } })).quarterly.income;
+    expect(q.periods.filter((p) => p.fy === 2026).map((p) => [p.key, p.end])).toEqual([
+      ["FY2026Q1", add(s1, 83)],
+      ["FY2026Q2", add(s1, 167)],
+      ["FY2026Q3", add(s1, 251)],
+    ]);
+    expect(q.rows.find((r) => r.key === "revenue")!.cells.slice(-3).map((c) => c?.v)).toEqual([230, 240, 250]);
+  });
+
+  it("places a 16-week first quarter (Kroger, Albertsons: no quarters at all before)", () => {
+    const s0 = "2025-02-02", e0 = "2026-01-31";
+    const rev = [
+      fact(s0, add(s0, 111), 450, "10-Q", "2025-06-20"), // 16 weeks
+      fact(add(s0, 112), add(s0, 195), 340, "10-Q", "2025-09-12"),
+      fact(s0, add(s0, 195), 790, "10-Q", "2025-09-12"), // 28 weeks: 196 days
+      fact(add(s0, 196), add(s0, 279), 345, "10-Q", "2025-12-05"),
+      fact(s0, add(s0, 279), 1135, "10-Q", "2025-12-05"), // 40 weeks: 280 days
+      fact(s0, e0, 1480, "10-K", "2026-04-01"),
+      fact("2024-02-04", "2025-02-01", 1400, "10-K", "2025-04-01"),
+    ];
+    const q = buildStatements(filer({ Revenues: { facts: rev } })).quarterly.income;
+    expect(q.rows.find((r) => r.key === "revenue")!.cells.slice(-4).map((c) => c?.v)).toEqual([450, 340, 345, 345]);
+  });
+});
+
+describe("years in progress beyond the last 10-K (fiscal calendar)", () => {
+  it("places the next year's quarters when a 10-K is missing from companyfacts (Clorox FY2026)", () => {
+    const rev = [
+      fact("2024-07-01", "2025-06-30", 700, "10-K", "2025-08-10"),
+      fact("2023-07-01", "2024-06-30", 690, "10-K", "2024-08-10"),
+      fact("2025-07-01", "2025-09-30", 170, "10-Q", "2025-11-03"),
+      fact("2025-07-01", "2025-12-31", 350, "10-Q", "2026-02-03"),
+      fact("2025-10-01", "2025-12-31", 180, "10-Q", "2026-02-03"),
+      fact("2025-07-01", "2026-03-31", 520, "10-Q", "2026-04-30"),
+      fact("2026-01-01", "2026-03-31", 170, "10-Q", "2026-04-30"),
+      // no FY2026 10-K facts; the FY2027 Q1 10-Q:
+      fact("2026-07-01", "2026-09-30", 175, "10-Q", "2026-11-02"),
+    ];
+    const q = buildStatements(filer({ Revenues: { facts: rev } })).quarterly.income;
+    expect(q.periods.slice(-2).map((p) => [p.key, p.end])).toEqual([["FY2026Q3", "2026-03-31"], ["FY2027Q1", "2026-09-30"]]);
+    expect(q.rows.find((r) => r.key === "revenue")!.cells.at(-1)?.v).toBe(175);
+  });
+
+  it("starts the new year after a transition period 10-KT (Ferguson: July year end to December)", () => {
+    const rev = [
+      fact("2023-08-01", "2024-07-31", 290, "10-K", "2024-09-20"),
+      fact("2024-08-01", "2025-07-31", 300, "10-K", "2025-09-20"),
+      fact("2025-08-01", "2025-10-31", 80, "10-Q", "2025-12-09"),
+      fact("2025-08-01", "2025-12-31", 130, "10-KT", "2026-02-27"), // five-month transition period
+      fact("2026-01-01", "2026-03-31", 75, "10-Q", "2026-05-05"),
+      fact("2026-04-01", "2026-06-30", 82, "10-Q", "2026-08-10"),
+      fact("2026-01-01", "2026-06-30", 157, "10-Q", "2026-08-10"),
+      fact("2026-07-01", "2026-09-30", 84, "10-Q", "2026-11-09"),
+      fact("2026-01-01", "2026-09-30", 241, "10-Q", "2026-11-09"),
+    ];
+    const q = buildStatements(filer({ Revenues: { facts: rev } })).quarterly.income;
+    expect(q.periods.slice(-3).map((p) => [p.key, p.end])).toEqual([["FY2026Q1", "2026-03-31"], ["FY2026Q2", "2026-06-30"], ["FY2026Q3", "2026-09-30"]]);
+    expect(q.rows.find((r) => r.key === "revenue")!.cells.slice(-3).map((c) => c?.v)).toEqual([75, 82, 84]);
+  });
+});
+
+describe("debt lines tagged twice", () => {
+  const at = (end: string, val: number) => fact(undefined, end, val, "10-K", "2026-02-20");
+  const base = { Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } };
+  const debt = (s: ReturnType<typeof buildStatements>) => {
+    const st = s.annual.balance;
+    return st.rows.find((r) => r.key === "totalDebt")!.cells[st.periods.findIndex((p) => p.key === "FY2025")]!;
+  };
+  it("counts one amount tagged under two concepts once (Con Edison: CommercialPaper and NotesPayableCurrent)", () => {
+    const s = buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 26_844)] }, CommercialPaper: { facts: [at("2025-12-31", 392)] }, NotesPayableCurrent: { facts: [at("2025-12-31", 392)] }, LongTermDebtCurrent: { facts: [at("2025-12-31", 250)] } }));
+    expect(debt(s).v).toBe(26_844 + 250 + 392);
+  });
+  it("does not add commercial paper inside a larger short-term borrowings total (PepsiCo)", () => {
+    const s = buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: { facts: [at("2025-12-31", 42_658)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 9_223)] }, CommercialPaper: { facts: [at("2025-12-31", 4_800)] } }));
+    expect(debt(s).v).toBe(51_881);
+  });
+  it("keeps current maturities when plain LongTermDebt is the noncurrent line (IDACORP)", () => {
+    const s = buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 3_331_038)] }, LongTermDebt: { facts: [at("2025-12-31", 3_331_038)] }, LongTermDebtCurrent: { facts: [at("2025-12-31", 116_300)] } }));
+    expect(debt(s).v).toBe(3_447_338);
+  });
+});
+
+describe("commercial paper beside short-term borrowings", () => {
+  const at = (end: string, val: number) => fact(undefined, end, val, "10-K", "2026-02-20");
+  const base = { Revenues: { facts: REVENUE }, OperatingIncomeLoss: { facts: OPINC } };
+  const debt = (s: ReturnType<typeof buildStatements>) => {
+    const st = s.annual.balance;
+    return st.rows.find((r) => r.key === "totalDebt")!.cells[st.periods.findIndex((p) => p.key === "FY2025")]!.v;
+  };
+  it("is not added on top of the borrowings line (FedEx FY2026: $750M paper, $745M borrowings)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 23_293)] }, LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 1_676)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 745)] }, CommercialPaper: { facts: [at("2025-12-31", 750)] } })))).toBe(25_714);
+  });
+  it("is not added after paper was reclassified to long-term (Chevron FY2025)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 39_781)] }, LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities: { facts: [at("2025-12-31", 39_781)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 977)] }, CommercialPaper: { facts: [at("2025-12-31", 4_642)] } })))).toBe(40_758);
+  });
+  it("does not add other short-term borrowings that are part of the borrowings total (Citigroup 2009, JPMorgan 2016)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 364_019)] }, ShortTermBorrowings: { facts: [at("2025-12-31", 68_879)] }, CommercialPaper: { facts: [at("2025-12-31", 10_223)] }, OtherShortTermBorrowings: { facts: [at("2025-12-31", 58_656)] } })))).toBe(364_019 + 68_879);
+  });
+  it("still counts other short-term borrowings when there is no borrowings total (NextEra)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtNoncurrent: { facts: [at("2025-12-31", 80_000)] }, CommercialPaper: { facts: [at("2025-12-31", 3_000)] }, OtherShortTermBorrowings: { facts: [at("2025-12-31", 1_500)] } })))).toBe(84_500);
+  });
+  it("does not turn a lone NotesPayableCurrent note figure into debt (Meta FY2015)", () => {
+    const s = buildStatements(filer({ ...base, NotesPayableCurrent: { facts: [at("2025-12-31", 201)] } }));
+    const st = s.annual.balance;
+    const i = st.periods.findIndex((p) => p.key === "FY2025");
+    expect(st.rows.find((r) => r.key === "shortTermDebt")?.cells[i] ?? null).toBeNull();
+    expect(st.rows.find((r) => r.key === "totalDebt")?.cells[i] ?? null).toBeNull();
+  });
+  it("counts NotesPayableCurrent beside long-term debt (Oracle)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermNotesAndLoans: { facts: [at("2025-12-31", 92_568)] }, NotesPayableCurrent: { facts: [at("2025-12-31", 7_271)] } })))).toBe(99_839);
+  });
+  it("still counts paper that is the only short-term line (Home Depot)", () => {
+    expect(debt(buildStatements(filer({ ...base, LongTermDebtAndCapitalLeaseObligations: { facts: [at("2025-12-31", 46_341)] }, LongTermDebtAndCapitalLeaseObligationsCurrent: { facts: [at("2025-12-31", 4_967)] }, CommercialPaper: { facts: [at("2025-12-31", 4_464)] } })))).toBe(55_772);
+  });
+});

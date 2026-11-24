@@ -1,11 +1,13 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Download } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Download, ListChecks } from "lucide-react";
 import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
-import { CompanyLogo } from "@/components/app/company-logo";
+import { TickerMark } from "@/components/app/ticker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { columnScale, fmtChange, fmtInScale, modalPeriod, shortPeriod, type ColumnScale } from "@/lib/kpis/matrix";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
@@ -64,7 +66,9 @@ interface Latest {
 }
 
 const STALE_DAYS = 548;
-const MAX_COLS = 10;
+const MAX_COLS = 12;
+const DEFAULT_COLS = 8;
+const STICKY = "top-[var(--sticky-top,3.5rem)]";
 
 function fmtK(v: number | null | undefined, k: TaxKpi) {
   if (v == null || !Number.isFinite(v)) return DASH;
@@ -121,6 +125,8 @@ function KpiMatrix() {
   const { open } = useSource();
   const qc = useQueryClient();
   const [wrap, fits] = useFits<HTMLDivElement>();
+  const navigate = useNavigate();
+  const [hoverCol, setHoverCol] = useState<string | null>(null);
 
   const byTk = useMemo(
     () => new Map((uni.data?.companies ?? []).map((c) => [c.ticker, c])),
@@ -171,7 +177,7 @@ function KpiMatrix() {
   const cols = (
     picked.length
       ? picked.map((id) => ranked.find((x) => x.k.id === id)).filter(Boolean)
-      : ranked.slice(0, 6)
+      : ranked.slice(0, DEFAULT_COLS)
   ) as { k: TaxKpi; n: number }[];
 
   const rows = useMemo(() => {
@@ -336,37 +342,37 @@ function KpiMatrix() {
     URL.revokeObjectURL(a.href);
   };
 
-  const Th = ({
-    c,
-    children,
-    title,
-    className,
-  }: {
-    c: string;
-    children: React.ReactNode;
-    title?: string;
-    className?: string;
-  }) => (
+  // One unit and scale per column, and the period most companies in it report.
+  const colMeta = useMemo(() => {
+    const m = new Map<string, { scale: ColumnScale; period: string | null }>();
+    for (const { k } of cols) {
+      const pts = rows.map((r) => r.cells[k.id]?.p ?? null);
+      m.set(k.id, { scale: columnScale(k, pts.filter(Boolean).map((p) => p![1])), period: modalPeriod(pts) });
+    }
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+  const fmtMcap = (v: number | null) => (v == null ? DASH : v >= 1e12 ? `$${(v / 1e12).toFixed(2)}T` : v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`);
+  const colHover = (c: string) => hoverCol === c && "bg-secondary/70";
+
+  const Th = ({ c, children, title, className, sub }: { c: string; children: React.ReactNode; title?: string; className?: string; sub?: React.ReactNode }) => (
     <th
+      scope="col"
       aria-sort={sort.c === c ? (sort.d === 1 ? "ascending" : "descending") : "none"}
-      className={cn(
-        "border-b bg-card px-3 py-2 text-right align-bottom",
-        fits && "sticky top-14 z-20",
-        className,
-      )}
+      onMouseEnter={() => setHoverCol(c)}
+      onMouseLeave={() => setHoverCol(null)}
+      className={cn("border-b bg-card px-3 py-1.5 text-right align-bottom", fits && `sticky ${STICKY} z-20`, className)}
     >
       <button
         type="button"
         title={title}
-        onClick={() =>
-          setSort((s) => ({ c, d: s.c === c ? (-s.d as 1 | -1) : c === "t" ? 1 : -1 }))
-        }
-        className="inline-flex items-center gap-1 rounded-sm text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => setSort((s) => ({ c, d: s.c === c ? (-s.d as 1 | -1) : c === "t" ? 1 : -1 }))}
+        className={cn("ml-auto flex max-w-36 items-end justify-end gap-1 rounded-sm text-right text-[11px] font-medium leading-4 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort.c === c ? "text-foreground" : "text-muted-foreground")}
       >
-        {children}
-        {sort.c === c &&
-          (sort.d === 1 ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />)}
+        <span className="whitespace-normal">{children}</span>
+        {sort.c === c && (sort.d === 1 ? <ArrowUp className="mb-0.5 size-3 shrink-0" /> : <ArrowDown className="mb-0.5 size-3 shrink-0" />)}
       </button>
+      {sub && <span className="mt-0.5 block whitespace-nowrap text-[10px] font-normal leading-3 text-muted-foreground">{sub}</span>}
     </th>
   );
 
@@ -384,18 +390,16 @@ function KpiMatrix() {
         />
       </div>
     );
+  const families = [...new Set(ranked.map((x) => x.k.family))];
+  const scopeName = scope === "all" ? "all companies" : scope.slice(4);
   return (
     <div>
       <PageHeader
         eyebrow="Companies"
         title="KPI matrix"
-        description={
-          latest.data
-            ? `Operating KPIs read from company releases and mapped to common definitions · built ${fmtDate(latest.data.generated.slice(0, 10))}`
-            : undefined
-        }
+        description={latest.data ? `Operating KPIs read from company releases and mapped to common definitions · built ${fmtDate(latest.data.generated.slice(0, 10))}` : undefined}
       />
-      <div data-section="KPI matrix controls" data-agent-controls className="mb-2 flex flex-wrap items-center gap-2">
+      <div data-section="KPI matrix controls" data-agent-controls className="mb-3 flex flex-wrap items-center gap-2">
         <Select
           value={scope}
           onValueChange={(v) => {
@@ -403,7 +407,7 @@ function KpiMatrix() {
             setPicked([]);
           }}
         >
-          <SelectTrigger aria-label="Companies" className="h-8 w-64 text-xs">
+          <SelectTrigger aria-label="Companies" className="h-8 w-56 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -420,188 +424,152 @@ function KpiMatrix() {
             ))}
           </SelectContent>
         </Select>
-        <Segmented
-          size="xs"
-          label="Period"
-          value={K}
-          onChange={setK}
-          options={[
-            { v: "q", l: "Latest quarter" },
-            { v: "a", l: "Latest year" },
-          ]}
-        />
-        <Segmented
-          size="xs"
-          label="Show"
-          value={view}
-          onChange={setView}
-          options={[
-            { v: "value", l: "Value" },
-            { v: "change", l: "Change YoY" },
-          ]}
-        />
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button size="sm" variant="outline" className="h-8 text-xs" aria-label="Choose KPIs" disabled={!ranked.length}>
+              <ListChecks /> KPIs · {cols.length}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-96 p-0">
+            <div className="flex items-center justify-between gap-2 border-b px-3 py-2">
+              <p className="text-[11px] text-muted-foreground">
+                Up to {MAX_COLS} columns · count = companies in {scopeName} reporting it
+              </p>
+              <Button size="xs" variant="ghost" onClick={() => setPicked([])}>
+                Most reported
+              </Button>
+            </div>
+            <div role="group" aria-label="KPIs shown as columns" className="max-h-96 overflow-y-auto overscroll-contain p-1 scrollbar-thin">
+              {families.map((fam) => (
+                <div key={fam} className="py-1">
+                  <p className="eyebrow px-2 py-1">{fam}</p>
+                  {ranked
+                    .filter((x) => x.k.family === fam)
+                    .map(({ k, n }) => {
+                      const on = cols.some((c) => c.k.id === k.id);
+                      return (
+                        <button
+                          key={k.id}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => togglePick(k.id)}
+                          title={k.definition}
+                          className="flex min-h-7 w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          <span className={cn("grid size-3.5 shrink-0 place-items-center rounded-sm border", on && "border-foreground bg-foreground text-background")}>{on && <Check className="size-3" />}</span>
+                          <span className="min-w-0 flex-1 truncate">{k.name}</span>
+                          <span className="num text-[11px] text-muted-foreground">{n}</span>
+                        </button>
+                      );
+                    })}
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
+        <Segmented size="xs" label="Period" value={K} onChange={setK} options={[{ v: "q", l: "Latest quarter" }, { v: "a", l: "Latest year" }]} />
+        <Segmented size="xs" label="Show" value={view} onChange={setView} options={[{ v: "value", l: "Value" }, { v: "change", l: "Change YoY" }]} />
         <label className={cn("flex items-center gap-1.5", IR.caption)}>
-          <Switch
-            checked={hideStale}
-            onCheckedChange={setHideStale}
-            aria-label="Hide stale values"
-          />{" "}
-          Hide values older than 18 months
+          <Switch checked={hideStale} onCheckedChange={setHideStale} aria-label="Hide stale values" /> Last 18 months only
         </label>
         <label className={cn("flex items-center gap-1.5", IR.caption)}>
-          <Switch checked={heat} onCheckedChange={setHeat} aria-label="Shade by rank" /> Shade by
-          rank
+          <Switch checked={heat} onCheckedChange={setHeat} aria-label="Shade by rank" /> Shade by rank
         </label>
-        <Button
-          size="xs"
-          variant="outline"
-          className="ml-auto"
-          onClick={csv}
-          disabled={!sorted.length}
-        >
+        <Button size="sm" variant="outline" className="ml-auto h-8 text-xs" onClick={csv} disabled={!sorted.length}>
           <Download /> CSV
         </Button>
-      </div>
-      <div role="group" aria-label="KPIs shown as columns" data-agent-controls className="mb-3 flex flex-wrap gap-1.5">
-        {ranked.slice(0, 24).map(({ k, n }) => {
-          const on = cols.some((c) => c.k.id === k.id);
-          return (
-            <button
-              key={k.id}
-              type="button"
-              onClick={() => togglePick(k.id)}
-              aria-pressed={on}
-              title={k.definition}
-              className={cn(
-                "rounded-md border px-2 py-0.5 text-[11px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
-                on
-                  ? "border-foreground bg-foreground text-background"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground",
-              )}
-            >
-              {k.name} <span className="opacity-60">{n}</span>
-            </button>
-          );
-        })}
       </div>
 
       {!tax.data || !latest.data ? (
         <Skeleton className="h-[480px]" />
       ) : !cols.length ? (
         <p className="rounded-md border bg-card p-4 text-[13px] text-muted-foreground shadow-paper">
-          No standardized KPIs for this selection{hideStale ? " in the last 18 months" : ""}.
+          No standardized KPIs for {scopeName}
+          {hideStale ? " in the last 18 months. Turn off “Last 18 months only” or pick a wider set of companies." : ". Pick a wider set of companies."}
         </p>
       ) : (
         <div data-section="KPI matrix" className="rounded-md border bg-card shadow-paper">
-          <div ref={wrap} className={cn("relative rounded-t-md", !fits && "overflow-x-auto scrollbar-thin")}>
-            <table className={cn("min-w-full border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max")}>
+          <div className="flex flex-wrap items-baseline gap-x-3 border-b px-3 py-2">
+            <p className="text-[13px]">
+              <span className="num font-semibold">{sorted.length}</span>
+              <span className="text-muted-foreground">
+                {" "}
+                {sorted.length === 1 ? "company" : "companies"} · {cols.length} KPIs · {K === "q" ? "latest quarter" : "latest fiscal year"} {view === "change" ? "change vs a year earlier" : "values"}
+              </span>
+            </p>
+            <p className={cn(IR.caption, "ml-auto")}>Units in each column head; a period label appears only where it differs from the column's.</p>
+          </div>
+          <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")}>
+            <table className={cn("border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max min-w-full")}>
               <thead>
                 <tr>
-                  <th className={cn("sticky left-0 z-30 min-w-60 border-b border-r bg-card px-3 py-2 text-left", fits && "top-14")}>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSort((s) => ({ c: "t", d: s.c === "t" ? (-s.d as 1 | -1) : 1 }))
-                      }
-                      className={cn(IR.eyebrow, "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
-                    >
+                  <th scope="col" className={cn("left-0 z-30 min-w-56 border-b border-r bg-card px-3 py-1.5 text-left align-bottom", "sticky", fits && STICKY)}>
+                    <button type="button" onClick={() => setSort((s) => ({ c: "t", d: s.c === "t" ? (-s.d as 1 | -1) : 1 }))} className={cn(IR.eyebrow, "rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
                       Company
                     </button>
                   </th>
-                  <Th c="mcap">Market cap</Th>
-                  <Th
-                    c="revg"
-                    className="border-r"
-                    title="Revenue growth, trailing four quarters vs the four before (SEC filings)"
-                  >
+                  <Th c="mcap" sub="live">
+                    Market cap
+                  </Th>
+                  <Th c="revg" className="border-r" sub="TTM, %" title="Revenue growth, trailing four quarters vs the four before (SEC filings)">
                     Revenue growth
                   </Th>
-                  {cols.map(({ k, n }) => (
-                    <Th
-                      key={k.id}
-                      c={k.id}
-                      title={`${k.name}\n${k.definition}\n${n} companies in this selection${k.higher_is_better === false ? "\nLower is better" : ""}`}
-                    >
-                      <span className="max-w-36 whitespace-normal text-right leading-tight">
+                  {cols.map(({ k, n }) => {
+                    const meta = colMeta.get(k.id);
+                    const unit = view === "change" ? (k.uclass === "pct" ? "pt" : "%") : meta?.scale.head;
+                    return (
+                      <Th
+                        key={k.id}
+                        c={k.id}
+                        sub={[unit, meta?.period].filter(Boolean).join(" · ")}
+                        title={`${k.name}\n${k.definition}\n${n} companies in this selection${k.higher_is_better === false ? "\nLower is better" : ""}`}
+                      >
                         {k.name}
-                      </span>
-                    </Th>
-                  ))}
+                      </Th>
+                    );
+                  })}
                 </tr>
               </thead>
               <tbody>
                 {sorted.map((r) => (
-                  <tr key={r.t} className="group [&>*]:transition-colors [&>*]:duration-150">
-                    <td className="sticky left-0 z-10 max-w-72 border-b border-r bg-card px-3 py-1.5 group-hover:bg-secondary">
-                      <span className="flex items-center gap-2">
-                        <CompanyLogo ticker={r.t} className="size-5" />
-                        <Link
-                          to="/app/companies/$ticker"
-                          params={{ ticker: r.t }}
-                          className="num font-medium hover:underline"
-                        >
-                          {r.t}
-                        </Link>
-                        <span
-                          className={cn("truncate", IR.caption)}
-                          title={`${r.name} · ${r.ind}`}
-                        >
-                          {r.name}
-                        </span>
-                      </span>
+                  <tr
+                    key={r.t}
+                    onClick={() => navigate({ to: "/app/companies/$ticker", params: { ticker: r.t } })}
+                    className="group cursor-pointer [&>*]:transition-colors [&>*]:duration-150"
+                  >
+                    <td className="sticky left-0 z-10 w-64 max-w-64 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary" title={`${r.name} · ${r.ind}`}>
+                      <TickerMark ticker={r.t} name={r.name} className="min-w-0" />
                     </td>
-                    <td className="num border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary">
-                      {r.mcap
-                        ? r.mcap >= 1e12
-                          ? `$${(r.mcap / 1e12).toFixed(2)}T`
-                          : `$${(r.mcap / 1e9).toFixed(1)}B`
-                        : DASH}
-                    </td>
-                    <td
-                      className={cn(
-                        "num border-b border-r px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary",
-                        (r.revg ?? 0) < 0 && "text-negative",
-                      )}
-                    >
-                      {r.revg == null ? DASH : `${r.revg < 0 ? "−" : ""}${Math.abs(r.revg * 100).toFixed(1)}%`}
+                    <td className={cn("num whitespace-nowrap border-b px-3 py-1 text-right group-hover:bg-secondary", colHover("mcap"), sort.c === "mcap" && IR.strong)}>{fmtMcap(r.mcap)}</td>
+                    <td className={cn("num whitespace-nowrap border-b border-r px-3 py-1 text-right group-hover:bg-secondary", colHover("revg"), sort.c === "revg" && IR.strong)}>
+                      {r.revg == null ? DASH : `${r.revg < 0 ? "\u2212" : ""}${Math.abs(r.revg * 100).toFixed(1)}`}
                     </td>
                     {cols.map(({ k }) => {
                       const c = r.cells[k.id];
+                      const meta = colMeta.get(k.id)!;
                       if (!c)
                         return (
-                          <td
-                            key={k.id}
-                            className="num border-b px-3 py-1.5 text-right text-muted-foreground group-hover:bg-secondary"
-                          >
+                          <td key={k.id} className={cn("num border-b px-3 py-1 text-right text-muted-foreground group-hover:bg-secondary", colHover(k.id))}>
                             {DASH}
                           </td>
                         );
                       const h = heat ? heatOf.get(k.id)?.get(r.t) : undefined;
                       const stale = age(c.p[0]) > 200;
+                      const off = c.p[2] !== meta.period;
                       return (
-                        <td key={k.id} className="border-b p-0 text-right group-hover:bg-secondary">
+                        <td key={k.id} className={cn("border-b p-0 text-right group-hover:bg-secondary", colHover(k.id))}>
                           <button
                             type="button"
-                            onClick={() => void openCell(r.t, k, c.kpiId, c.p)}
-                            title={`${c.p[2]} (period ending ${fmtDate(c.p[0])}) · ${fmtChg(c.p[3], k) || "no prior-year value"}\nClick for the release it was read from`}
-                            className="num block w-full px-3 py-1.5 text-right tabular-nums hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
-                            style={
-                              h != null
-                                ? {
-                                    background: `color-mix(in oklab, ${h > 0 ? "var(--positive)" : "var(--negative)"} ${Math.round(Math.abs(h) * 16)}%, transparent)`,
-                                  }
-                                : undefined
-                            }
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void openCell(r.t, k, c.kpiId, c.p);
+                            }}
+                            title={`${k.name} · ${c.p[2]} (period ending ${fmtDate(c.p[0])})\n${fmtK(c.p[1], k)} · change ${fmtChg(c.p[3], k) || "not reported a year earlier"}\nClick for the release it was read from`}
+                            className={cn("num flex w-full items-baseline justify-end gap-1.5 whitespace-nowrap px-3 py-1 tabular-nums hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", sort.c === k.id && IR.strong)}
+                            style={h != null ? { background: `color-mix(in oklab, ${h > 0 ? "var(--positive)" : "var(--negative)"} ${Math.round(Math.abs(h) * 14)}%, transparent)` } : undefined}
                           >
-                            {view === "change" ? fmtChg(c.p[3], k) || DASH : fmtK(c.p[1], k)}
-                            <span
-                              className={cn(
-                                "block text-[11px] text-muted-foreground",
-                                stale && "text-negative",
-                              )}
-                            >
-                              {c.p[2]}
-                            </span>
+                            {off && <span className={cn("text-[10px] font-normal", stale ? "text-negative" : "text-muted-foreground")}>{shortPeriod(c.p[2])}</span>}
+                            {view === "change" ? fmtChange(c.p[3], k) : fmtInScale(c.p[1], meta.scale)}
                           </button>
                         </td>
                       );
@@ -612,11 +580,7 @@ function KpiMatrix() {
             </table>
           </div>
           <p className={cn("border-t px-3 py-2", IR.caption)}>
-            Each column is one standardized KPI; each company's value is its own reported series
-            mapped to that definition (series on a different reporting basis are never joined).
-            Periods are the company's fiscal periods; red period labels are older than about six
-            months. Change is percentage points for rates and percent for amounts. Shading ranks
-            within the column. Click a value for the release it was read from.
+            Each column is one standardized KPI; each company's value is its own reported series mapped to that definition (series on a different reporting basis are never joined). Periods are the company's fiscal periods; a label in red is older than about six months. Change is percentage points for rates and percent for amounts. Shading ranks within the column. Click a value for the release it was read from, or a row for the company.
           </p>
         </div>
       )}
