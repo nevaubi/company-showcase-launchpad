@@ -488,7 +488,9 @@ function KpiMatrix() {
           {hideStale ? " in the last 18 months. Turn off “Last 18 months only” or pick a wider set of companies." : ". Pick a wider set of companies."}
         </p>
       ) : (
-        <div data-section="KPI matrix" className="rounded-md border bg-card shadow-paper">
+        // overflow-anchor: none: rows are keyed by ticker, so when the period or the columns change the browser's
+        // scroll anchoring would follow a row to its new place and move the page (measured 152 px on Latest year).
+        <div data-section="KPI matrix" className="rounded-md border bg-card shadow-paper" style={{ overflowAnchor: "none" }}>
           <div className="flex flex-wrap items-baseline gap-x-3 border-b px-3 py-2">
             <p className="text-[13px]">
               <span className="num font-semibold">{sorted.length}</span>
