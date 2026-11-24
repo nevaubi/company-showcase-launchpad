@@ -37,6 +37,12 @@ describe("layoutChain", () => {
   it("orders a far tier by where its parents sit, so pathways do not cross needlessly", () => {
     expect(box("T2b").y).toBeLessThan(box("T2a").y);
   });
+  it("beside the evidence panel (a 736 px frame) five tiers keep the gutter a share label needs and a two-line box", () => {
+    const beside = layoutChain(chain, 736);
+    const s = beside.boxes.get("S1")!, f = beside.boxes.get("F")!;
+    expect(f.x - (s.x + s.w)).toBeGreaterThanOrEqual(CHAIN.gutterMin);
+    expect(beside.boxW).toBeGreaterThanOrEqual(CHAIN.compact);
+  });
   it("keeps names readable in a narrow frame and survives an empty chain", () => {
     const narrow = layoutChain(chain, 640);
     expect(narrow.boxW).toBeGreaterThanOrEqual(CHAIN.boxMin);
