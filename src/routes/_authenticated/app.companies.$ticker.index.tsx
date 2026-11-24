@@ -34,7 +34,6 @@ import { ResearchChart } from "@/components/company/research-chart";
 import { SectionNav } from "@/components/company/section-nav";
 import { SectorTable } from "@/components/company/sector-table";
 import { FirmNotes } from "@/components/firm/firm-notes";
-import { CompanyIndicators } from "@/components/technicals/deep-views";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   head: ({ params }) => ({
@@ -95,7 +94,7 @@ const SECTIONS = {
 } as const;
 
 /**
- * Panels owned by other units (the ranked changes, the indicator board, firm notes) are drawn with the older flat
+ * Panels owned by other units (the ranked changes, firm notes) are drawn with the older flat
  * panel; this gives them the same finish as the rest of the page without touching their files.
  */
 const FRAMED = "min-w-0 [&>section]:rounded-md [&>section]:border [&>section]:bg-card [&>section]:shadow-paper";
@@ -155,9 +154,6 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
           <ResearchChart ticker={ticker} data={data} />
         </div>
         <LevelsAndSignals ticker={ticker} />
-        <div id="ov-indicators" data-section="Indicator board" className={cn(FRAMED, "scroll-mt-28")}>
-          <CompanyIndicators ticker={ticker} />
-        </div>
       </Section>
 
       <Section id={SECTIONS.earnings.id} className="xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
