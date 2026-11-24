@@ -1,6 +1,7 @@
 // Pure analytics for the supply-chain page: country exposure, region shocks, concentration history,
 // link freshness and ecosystem baskets. No browser/Node APIs — shared by app and tests.
 import { knownHomeCountry } from "./home-country";
+import { countryOf } from "./place-kind";
 import { copies, entityKey, HOTSPOTS, linkDollars, statedRegions, type ProLink, type SupplyLink } from "./core";
 
 const ALIAS: Record<string, string> = {
@@ -26,6 +27,9 @@ export function canonCountry(raw: string | null | undefined): string | null {
 export function counterpartyCountry(name: string): string | null {
   return knownHomeCountry(name);
 }
+
+/** The row's own sentences (10-K and 10-Q copies), the evidence that decides an ambiguous place name such as "Georgia". */
+const evidenceOf = (l: SupplyLink) => copies(l as ProLink).map((c) => c.quote ?? "").join(" ");
 
 export const isHotspot = (country: string) => HOTSPOTS.some((h) => country.toLowerCase().includes(h));
 
@@ -56,7 +60,9 @@ export function countryExposure(links: ProLink[], signals: SignalLite[], revenue
   // one row per link (10-K and 10-Q copies were merged by dedupeCurrent); regions are only those its sentences name
   for (const l of links) {
     const sole = copies(l).some((c) => !!c.single_source);
-    for (const raw of new Set(statedRegions(l).map(canonCountry).filter(Boolean) as string[])) {
+    // a U.S. state counts toward the United States; a supranational region ("Europe") is not a country row
+    const ev = evidenceOf(l);
+    for (const raw of new Set(statedRegions(l).map((r) => countryOf(r, ev)).filter(Boolean) as string[])) {
       const r = row(raw);
       r.links++; r._c.add(l.ticker);
       if (sole) r.singleSource++;
@@ -66,7 +72,7 @@ export function countryExposure(links: ProLink[], signals: SignalLite[], revenue
     if (hq) { const r = row(hq); r.hq++; r._c.add(l.ticker); if (sole) r.singleSource++; }
   }
   for (const s of signals) {
-    const c = canonCountry(s.country);
+    const c = countryOf(s.country, s.title);
     if (!c) continue;
     const r = row(c);
     r._c.add(s.ticker);
@@ -108,7 +114,8 @@ export function regionShock(country: string, links: ProLink[], signals: SignalLi
     return h;
   };
   for (const l of links) {
-    const stated = statedRegions(l).some((r) => canonCountry(r) === c);
+    const ev = evidenceOf(l);
+    const stated = statedRegions(l).some((r) => countryOf(r, ev) === c);
     const sole = copies(l).some((x) => !!x.single_source);
     if (!stated) {
       if (l.relation === "competitor" || counterpartyCountry(l.counterparty) !== c) continue;
@@ -126,7 +133,7 @@ export function regionShock(country: string, links: ProLink[], signals: SignalLi
     if (h.examples.length < 3) h.examples.push(`${l.relation}: ${l.counterparty}`);
   }
   for (const s of signals) {
-    if (canonCountry(s.country) !== c) continue;
+    if (countryOf(s.country, s.title) !== c) continue;
     const h = hit(s.ticker);
     if (s.kind === "facility") h.facilities++;
     else if (s.kind === "policy") h.policy++;

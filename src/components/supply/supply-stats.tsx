@@ -5,6 +5,7 @@ import { Globe2, Lock } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { freshness } from "@/lib/supply/analytics";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
+import type { StripCell } from "@/lib/supply/strip";
 
 export interface SupplyStatsProps {
   loading: boolean;
@@ -15,13 +16,12 @@ export interface SupplyStatsProps {
   exposureTotal: number;
   exposureNames: number;
   otherFigures: number;
-  concentrated: number;
-  topShare: number | null;
-  single: number;
-  dependency: number;
-  hotspots: string[];
-  /** hotspots come from the link sentences themselves, or only from the company's other filings and calls */
-  hotspotsFromLinks: boolean;
+  /** whether the exposure is stated, estimated from shares, or both (`exposureWords`, strip.ts) */
+  exposureWords: { label: string; note: string | null; title: string };
+  /** the dependency cells, each naming its direction and party (`src/lib/supply/strip.ts`) */
+  shares: StripCell;
+  single: StripCell;
+  hotspots: StripCell;
   /** filing dates of the statements, for the freshness tally */
   filed: string[];
   today: string;
@@ -49,16 +49,12 @@ export function SupplyStats(p: SupplyStatsProps) {
   return (
     <div data-tour="supply-stats" data-section="Supply stats" className="mb-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border bg-border shadow-paper sm:grid-cols-3 lg:grid-cols-6">
       <Cell loading={p.loading} label="Named counterparties" value={p.names} hint={`${plural(p.statements, "filing statement")}`} />
-      <Cell loading={p.loading} label="Disclosed exposure" value={p.exposureNames ? fmtCompactUsd(p.exposureTotal) : "–"}
-        hint={p.exposureNames ? `from ${plural(p.exposureNames, "name")}${p.otherFigures ? ` · ${p.otherFigures} not added` : ""}` : p.otherFigures ? `no stated flow · ${p.otherFigures} not added` : "no stated flow or share"}
-        title={`Each name once: its largest stated flow, or its stated share × SEC revenue. ${others}`.trim()} />
-      <Cell loading={p.loading} label="Concentrated, 10% or more" value={p.concentrated} hint={p.topShare != null ? `largest stated share ${p.topShare}%` : "no share of 10% or more stated"} />
-      <Cell loading={p.loading} label="Single source" icon={<Lock className="size-3 shrink-0" aria-hidden="true" />} value={p.single}
-        hint={p.dependency ? `plus ${plural(p.dependency, "stated dependency", "stated dependencies")}` : "sole-source wording"}
-        title="Names a filing calls a sole, single or exclusive source. A stated dependency is wording that the company relies on a name without calling it the only one." />
-      <Cell loading={p.loading} label="Hotspot regions" icon={<Globe2 className="size-3 shrink-0" aria-hidden="true" />} value={p.hotspots.length}
-        hint={p.hotspots.length ? `${p.hotspots.slice(0, 2).join(", ")}${p.hotspots.length > 2 ? ` +${p.hotspots.length - 2}` : ""}` : "none named in filings or calls"}
-        title={p.hotspots.length ? `${p.hotspots.join(", ")}${p.hotspotsFromLinks ? ", named in the link sentences" : ", named in the company's filings and calls"}` : undefined} />
+      <Cell loading={p.loading} label={p.exposureWords.label} value={p.exposureNames ? fmtCompactUsd(p.exposureTotal) : "–"}
+        hint={p.exposureNames ? `from ${plural(p.exposureNames, "name")}${p.exposureWords.note ? ` · ${p.exposureWords.note}` : ""}${p.otherFigures ? ` · ${p.otherFigures} not added` : ""}` : p.otherFigures ? `no stated flow · ${p.otherFigures} not added` : "no stated flow or share"}
+        title={`${p.exposureWords.title} ${others}`.trim()} />
+      <Cell loading={p.loading} label={p.shares.label} value={p.shares.value} hint={p.shares.hint} title={p.shares.title} />
+      <Cell loading={p.loading} label={p.single.label} icon={<Lock className="size-3 shrink-0" aria-hidden="true" />} value={p.single.value} hint={p.single.hint} title={p.single.title} />
+      <Cell loading={p.loading} label={p.hotspots.label} icon={<Globe2 className="size-3 shrink-0" aria-hidden="true" />} value={p.hotspots.value} hint={p.hotspots.hint} title={p.hotspots.title} />
       <Cell loading={p.loading} label="Newest filing read" value={newest ? fmtDate(newest) : "–"} hint={p.filed.length ? `${tally.fresh} fresh · ${tally.aging} aging · ${tally.stale} stale` : "no statements yet"}
         title="Age of the filing behind each statement: fresh up to 200 days, aging up to 400, stale after." />
     </div>

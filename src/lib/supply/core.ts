@@ -131,9 +131,19 @@ export const NOT_TRADE: ReadonlySet<string> = new Set(["financial", "corporate",
 export const isTradeLink = (l: Pick<RiskLink, "nature">): boolean => !l.nature || !NOT_TRADE.has(l.nature);
 
 /** Where a link's dollar value comes from: a stated flow (revenue, purchases, contract value) or a stated share × SEC revenue. */
+/** What period a stated share covers: a 10-K's year, a 10-Q's quarter ("three months"), or a 10-Q's year to date. */
+export type SharePeriod = "annual" | "quarter" | "interim";
+export function sharePeriod(c: Pick<SupplyLink, "form" | "quote">): SharePeriod {
+  if (!/10-Q/i.test(c.form ?? "")) return "annual";
+  return /\b(three|six|nine)[- ]months?\b/i.test(c.quote ?? "") && !/\bthree[- ]months?\b/i.test(c.quote ?? "") ? "interim" : "quarter";
+}
+const PERIOD_RANK: Record<SharePeriod, number> = { annual: 2, interim: 1, quarter: 0 };
+
 export interface LinkDollars {
   dollars: number;
   from: "flow" | "share";
+  /** for an estimate from a share: the period the share covers (the revenue it multiplies is always the last twelve months) */
+  period?: SharePeriod;
   /** the row whose sentence states it (the link itself or one of its copies) */
   link: RiskLink;
 }
@@ -150,9 +160,12 @@ export function linkDollarsFrom(l: RiskLink, revenue: Record<string, number | un
   if (best) return best;
   const rev = revenue[l.ticker];
   if (l.relation !== "customer" || !rev) return null;
+  /* a 10-K's annual share is the one that matches twelve months of revenue: it wins over a 10-Q's quarter share whatever their sizes */
   for (const c of copies(l)) if (c.share_pct != null && c.share_pct > 0) {
     const d = (c.share_pct / 100) * rev;
-    if (!best || d > best.dollars) best = { dollars: d, from: "share", link: c };
+    const period = sharePeriod(c);
+    const rank = PERIOD_RANK[period], bestRank = best?.period ? PERIOD_RANK[best.period] : -1;
+    if (!best || rank > bestRank || (rank === bestRank && d > best.dollars)) best = { dollars: d, from: "share", link: c, period };
   }
   return best;
 }

@@ -50,6 +50,11 @@ export interface IsolateContext {
   hop2: HopNode[];
   /** the chain as drawn (Chain view). Without it a pathway is matched against the names on the map only. */
   chain?: Chain | null;
+  /** names by entity key (ticker, else the normalised name) for a pathway's label, so Chain, Network and Globe say the same
+      words whether or not they draw the name: the covered universe and the second-order names at any depth */
+  names?: Record<string, string>;
+  /** how many tiers the map draws (Network and Globe); a pathway through a tier beyond it says so in `needsDepth` */
+  mapDepth?: 1 | 2;
 }
 
 const isHop2 = (n: GraphNode | HopNode): n is HopNode => (n as HopNode).hop === 2;
@@ -195,6 +200,8 @@ export interface Isolated {
   path: string[];
   /** why the chain is left whole, when it is */
   chainNote: string | null;
+  /** set on the map views when the pathway names a tier the current depth does not draw: the depth that draws it, and the name there */
+  needsDepth: { depth: 2; name: string } | null;
 }
 
 const ONLY: Record<Relation, string> = { supplier: "Suppliers only", customer: "Customers only", partner: "Partners only", competitor: "Competitors only" };
@@ -207,7 +214,7 @@ export function resolveIsolation(isolation: Isolation | null | undefined, ctx: I
   const all: (GraphNode | HopNode)[] = [...ctx.graph, ...ctx.hop2];
   const lit = new Set<string>();
   const within = (nodes: Set<string>) => new Set((chain?.edges ?? []).filter((e) => nodes.has(e.from) && nodes.has(e.to)).map((e) => e.key));
-  const base = { isolation, lit, relation: null, node: null as string | null, chainNodes: null, chainEdges: null, path: [] as string[], chainNote: null } satisfies Partial<Isolated>;
+  const base = { isolation, lit, relation: null, node: null as string | null, chainNodes: null, chainEdges: null, path: [] as string[], chainNote: null, needsDepth: null } satisfies Partial<Isolated>;
 
   if (isolation.kind === "relation") {
     const r = isolation.relation;
@@ -242,10 +249,19 @@ export function resolveIsolation(isolation: Isolation | null | undefined, ctx: I
     return { ...base, label, chainNodes: nodes, chainEdges: within(nodes), path };
   }
 
-  const st = steps(isolation.keys, ctx);
+  const F_NAME = ctx.focusName ?? ctx.names?.[F] ?? F;
+  /* one name per key whatever the view: the universe and second-order names first, then what the chain or map draws */
+  const known = (id: string): string | null =>
+    id === F ? F_NAME : (ctx.names?.[id] ?? chain?.nodes.find((x) => x.key === id)?.name ?? all.find((x) => nodeId(x) === id)?.name ?? null);
+  /* a key that names nothing anywhere (a mistyped or stale address) is dropped before anything is labelled */
+  const resolves = (raw: string) => {
+    const k = raw.trim();
+    return k === "focus" || all.some((x) => x.key === k) || !!chain?.nodes.some((n) => n.key === k) || known(k) != null || known(k.toUpperCase()) != null;
+  };
+  const st = steps(isolation.keys.filter(resolves), ctx);
   const keys = orderedKeys(st, F);
   if (!keys.length) return null;
-  const nameOf = (id: string) => chain?.nodes.find((x) => x.key === id)?.name ?? all.find((x) => nodeId(x) === id)?.name ?? (id === F ? (ctx.focusName ?? F) : id);
+  const nameOf = (id: string) => known(id) ?? id;
   for (const side of [-1, 1] as const) {
     const s1 = st.find((s) => s.side === side && s.depth === 1);
     const first = s1 && ctx.graph.find((n) => sideOf(n.relation) === side && nodeId(n) === s1.id);
@@ -258,9 +274,15 @@ export function resolveIsolation(isolation: Isolation | null | undefined, ctx: I
   /* the same places in the chain: a name counts only at the tier the pathway gives it */
   const at = keys.indexOf(F);
   const inChain = chain ? keys.filter((k, i) => i === at || chain.nodes.some((n) => n.key === k && n.tier === i - at)) : [];
-  if (!lit.size && inChain.length < 2) return null;
   const label = `${nameOf(keys[0])} to ${nameOf(keys[keys.length - 1])}`;
-  if (!chain) return { ...base, label, path: keys };
+  if (!chain) {
+    /* a second-order name on a map that draws one tier: lit as far as the map goes, and the status offers the deeper map */
+    const deep = ctx.mapDepth === 1 ? st.find((s) => s.depth === 2) : undefined;
+    const needsDepth = deep ? { depth: 2 as const, name: nameOf(deep.id) } : null;
+    if (!lit.size && !needsDepth) return null;
+    return { ...base, label, path: keys, needsDepth };
+  }
+  if (!lit.size && inChain.length < 2) return null;
   if (inChain.length < 2) return { ...base, label, path: keys, chainNote: "This pathway is not in the chain as drawn" };
   const pairs = new Set(inChain.slice(1).map((k, i) => `${inChain[i]}>${k}`));
   return { ...base, label, chainNodes: new Set(inChain), chainEdges: new Set(chain.edges.filter((e) => pairs.has(e.key)).map((e) => e.key)), path: inChain };

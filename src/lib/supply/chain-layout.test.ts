@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Chain, ChainNode } from "./chain";
-import { CHAIN, boxName, edgePath, edgeWidth, layoutChain } from "./chain-layout";
+import { CHAIN, boxName, edgePath, edgeWidth, layoutChain, nameFits } from "./chain-layout";
 
 const n = (key: string, tier: number, via: string | null): ChainNode => ({ key, name: key, ticker: key, tier, via });
 const chain: Chain = {
@@ -86,5 +86,13 @@ describe("boxName", () => {
     expect(boxName("NVIDIA Corporation", "NVIDIA")).toBe("NVIDIA");
     expect(boxName("Inc.")).toBe("Inc.");
     expect(boxName("Amkor Technology")).toBe("Amkor Technology");
+  });
+});
+
+describe("chain box names (supply-globe-L3)", () => {
+  it("a name the box would cut is reported as not fitting, a short one fits", () => {
+    expect(nameFits(boxName("Hewlett Packard Enterprise Company"), 120)).toBe(false);
+    expect(nameFits(boxName("HP Inc."), 120)).toBe(true);
+    expect(nameFits("TSMC", 96)).toBe(true);
   });
 });

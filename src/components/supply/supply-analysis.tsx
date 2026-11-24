@@ -14,6 +14,7 @@ import { requestResearch } from "@/lib/research/request";
 import { confidence, mirrors, type GraphNode, type HopNode, type NodeRisk, type ProLink, type Relation, type RiskLink, type ShockImpact, type StatedAmount } from "@/lib/supply/core";
 import { KIND_WORD, NATURE_WORD, nodeFacts, type ExposureRow } from "@/lib/supply/describe";
 import { isolatedHas, type Isolated } from "@/lib/supply/isolate";
+import { estimateWords } from "@/lib/supply/strip";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
 import { SUPPLY_TABS, type SupplyTab } from "@/lib/supply/url-state";
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
@@ -216,15 +217,15 @@ export function ExposureList({ focusName, exposure, others, names, isolated, onO
         <p className="text-sm text-muted-foreground">{exposure.length ? `No name inside what is isolated (${isolated?.label}) carries a stated flow or share.` : `${focusName}'s filings put no revenue, purchase or contract figure, and no customer share, on a named counterparty.`}</p>
       ) : (
         <div>
-          <p className="mb-1 flex items-baseline justify-between gap-2 text-xs text-muted-foreground"><span>Each name once, at its largest stated flow or share × SEC revenue</span><span className="num shrink-0 text-[13px] font-semibold text-foreground">{fmtCompactUsd(total)}</span></p>
+          <p className="mb-1 flex items-baseline justify-between gap-2 text-xs text-muted-foreground"><span>Each name once, at its largest stated flow, or estimated as a stated share × SEC revenue</span><span className="num shrink-0 text-[13px] font-semibold text-foreground">{fmtCompactUsd(total)}</span></p>
           <ul className="divide-y border-y">
-            {rows.map(({ n, l, d, from }) => (
+            {rows.map(({ n, l, d, from, period }) => (
               <li key={n.key} className="flex items-center gap-2 py-1.5">
                 <RelationMark relation={n.relation as Relation} size={8} />
                 <CompanyLogo ticker={logoOf(n)} src={externalLogo(n.domain, n.ticker)} size="xs" decorative />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{n.name}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">{from === "flow" ? `stated ${KIND_WORD[l.amount_kind ?? "other"]}` : l.share_pct != null ? `${l.share_pct}% of ${names[l.ticker] ?? l.ticker}'s revenue × SEC revenue` : n.relation}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{from === "flow" ? `stated ${KIND_WORD[l.amount_kind ?? "other"]}` : l.share_pct != null ? estimateWords(l.share_pct, period, names[l.ticker] ?? l.ticker) : n.relation}</span>
                 </span>
                 <span className="num shrink-0 text-[13px] font-medium">{fmtCompactUsd(d)}</span>
                 <button type="button" onClick={() => onOpen(l, `${n.name} · exposure`)} aria-label={`Source for ${n.name}`} className={quietButton}><FileText className="size-3" aria-hidden="true" />Source</button>

@@ -11,7 +11,7 @@ import { Segmented, type SegOption } from "@/components/app/segmented";
 import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
 import { ClearIsolation } from "@/components/supply/supply-toolbar";
 import { BASIS_WORD, CHAIN_FLOWS, LINK_TYPE_LABEL, TIER_LABEL, type Chain, type ChainEdge, type ChainFlow, type ChainNode, type TaggedShare } from "@/lib/supply/chain";
-import { CHAIN, boxName, edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
+import { CHAIN, boxName, nameFits, edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
 import type { RiskLink } from "@/lib/supply/core";
 import { chainEdgePath, chainPath, pathHops, type Isolated, type PathHop } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
@@ -297,10 +297,16 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
             <span className="min-w-0 flex-1">
               {compact ? (
                 <span className={cn("block truncate font-medium", n.ticker && "num")}>{n.ticker ?? n.name}</span>
-              ) : n.ticker ? (
+              ) : n.ticker && nameFits(boxName(n.name), p.w) ? (
                 <>
                   <span className="block truncate font-medium leading-4">{boxName(n.name)}</span>
                   <span className={cn("num block truncate text-[10px] leading-3", focus ? "opacity-80" : "text-muted-foreground")}>{n.ticker}</span>
+                </>
+              ) : n.ticker ? (
+                /* a name the box would cut leads with the ticker, so two boxes never read the same ("Hewle..." twice) */
+                <>
+                  <span className="num block truncate font-medium leading-4">{n.ticker}</span>
+                  <span className={cn("block truncate text-[10px] leading-3", focus ? "opacity-80" : "text-muted-foreground")}>{boxName(n.name)}</span>
                 </>
               ) : (
                 <span className="line-clamp-2 font-medium leading-[15px]">{boxName(n.name)}</span>

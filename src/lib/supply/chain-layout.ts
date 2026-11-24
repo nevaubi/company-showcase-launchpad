@@ -49,6 +49,15 @@ export function boxName(name: string, shortName?: string | null): string {
   return t || name.trim();
 }
 
+/** Room for text in a chain box of width `w`: the 20 px logo, its gap, the padding and the lock mark taken off. */
+const BOX_CHROME = 48;
+/** Average advance of a 12 px medium sans character, rounded up so a borderline name counts as cut. */
+const CHAR_PX = 6.9;
+/** Whether a name fits on one line of a chain box without being cut. */
+export function nameFits(name: string, w: number): boolean {
+  return name.length * CHAR_PX <= w - BOX_CHROME;
+}
+
 export type ChainSizeBasis = "share" | "dollars";
 /** What a line's width shows: the stated share, or dollars on a square-root scale so one very large flow does not flatten the rest. Unsized links get the thinnest line. */
 export function edgeWidth(e: Pick<ChainEdge, "share" | "dollars">, basis: ChainSizeBasis, maxDollars: number): { width: number; sized: boolean } {

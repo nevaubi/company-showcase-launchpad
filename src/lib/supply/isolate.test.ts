@@ -106,6 +106,29 @@ describe("what an isolation lights", () => {
     expect(keys(s.lit)).toEqual([tsm.key]);
     expect(s.path).toEqual(["ENTG", "TSM", "NVDA"]);
   });
+  it("a pathway through a second-order name has the same label in Chain, Network and Globe, at either depth (supply-globe-M6)", () => {
+    const names = { ENTG: "Entegris", TSM: "TSMC", NVDA: "NVIDIA" };
+    const entg = hop(tsm, "Entegris, Inc.", "ENTG");
+    const iso: Isolation = { kind: "path", keys: ["ENTG", "TSM", "NVDA"] };
+    const inChain = resolveIsolation(iso, { ...withChain, names })!;
+    const depth1 = resolveIsolation(iso, { ...map, names, mapDepth: 1 })!;
+    const depth2 = resolveIsolation(iso, { ...map, hop2: [...hop2, entg], names, mapDepth: 2 })!;
+    expect(inChain.label).toBe("Entegris to NVIDIA");
+    expect(depth1.label).toBe(inChain.label);
+    expect(depth2.label).toBe(inChain.label);
+    // the map at depth 1 does not draw Entegris: it says so and names the depth that does
+    expect(depth1.needsDepth).toEqual({ depth: 2, name: "Entegris" });
+    expect(keys(depth1.lit)).toEqual([tsm.key]);
+    expect(depth2.needsDepth).toBeNull();
+    expect(keys(depth2.lit)).toEqual([entg.key, tsm.key].sort());
+    expect(inChain.needsDepth).toBeNull();
+  });
+  it("a key that resolves to nothing is dropped before labelling (supply-globe-L2)", () => {
+    const s = resolveIsolation({ kind: "path", keys: ["TSM", "NVDA", "HPE?dark=1"] }, withChain)!;
+    expect(s.label).toBe("TSMC to NVIDIA");
+    expect(s.path).toEqual(["TSM", "NVDA"]);
+    expect(resolveIsolation({ kind: "path", keys: ["TSM", "NVDA", "HPE?dark=1"] }, map)!.label).toBe("TSMC to NVIDIA");
+  });
   it("names the page does not show isolate nothing", () => {
     expect(resolveIsolation({ kind: "node", node: "supplier:Samsung" }, withChain)).toBeNull();
     expect(resolveIsolation({ kind: "path", keys: ["XXXX", "NVDA"] }, withChain)).toBeNull();

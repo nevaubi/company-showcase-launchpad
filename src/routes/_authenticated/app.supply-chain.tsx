@@ -9,7 +9,7 @@ import { useSource } from "@/components/source/source-context";
 import { CompanyPicker } from "@/components/supply/company-picker";
 import { FollowPanel } from "@/components/supply/follow-panel";
 import { OffscreenCue, type Cue } from "@/components/supply/off-screen-cue";
-import { holdInPlace } from "@/components/supply/scroll-to";
+import { holdInPlace, releaseReserve } from "@/components/supply/scroll-to";
 import { SectionNav } from "@/components/supply/section-nav";
 import { ExposureList, isSupplyTab, litImpactKeys, NameList, NodeEvidence, ShockPanel, SupplyAnalysis } from "@/components/supply/supply-analysis";
 import { RELATION_ONE, type Overlay } from "@/components/supply/supply-map-meta";
@@ -25,12 +25,14 @@ import { ChainEvidence, ChainTable, ValueChain, type ChainSize } from "@/compone
 import { COVERAGE } from "@/lib/coverage";
 import { useUniverse } from "@/lib/data";
 import { fmtDate } from "@/lib/format";
-import { canonCountry, countryExposure } from "@/lib/supply/analytics";
+import { countryExposure } from "@/lib/supply/analytics";
+import { countryOf } from "@/lib/supply/place-kind";
 import { buildChain, type ChainFlow, type TaggedShare } from "@/lib/supply/chain";
-import { focusGraph, maxShare, nodeRisk, RELATIONS, secondOrder, simulateShock, type GraphNode, type ProLink, type Relation, type RiskLink } from "@/lib/supply/core";
+import { focusGraph, nodeRisk, RELATIONS, secondOrder, simulateShock, type GraphNode, type ProLink, type Relation, type RiskLink } from "@/lib/supply/core";
 import { exposureSummary } from "@/lib/supply/describe";
-import { isolationParam, nextIsolation, parseIsolation, resolveIsolation, type IsolateContext } from "@/lib/supply/isolate";
+import { isolationParam, nextIsolation, nodeId, parseIsolation, resolveIsolation, type IsolateContext } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
+import { concentrationCell, exposureWords, hotspotCell, singleSourceCell, stripFacts } from "@/lib/supply/strip";
 import { COMPANY_NAV, SUPPLY_SECTIONS, VIEW_NAV } from "@/lib/supply/page-nav";
 import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
 import { resolveSelection, selectionParam, SUPPLY_OVERLAYS, SUPPLY_VIEWS, supplySearch, type SupplySearch, type SupplyTab, type SupplyView } from "@/lib/supply/url-state";
@@ -137,7 +139,15 @@ function SupplyChainPage() {
 
   /* ---------- isolation: kept in the address, resolved against what the page shows, followed by every view and list ---------- */
   const isolation = useMemo(() => parseIsolation(search.iso), [search.iso]);
-  const isoCtx: IsolateContext = useMemo(() => ({ focus: ticker, focusName, graph, hop2, chain }), [ticker, focusName, graph, hop2, chain]);
+  /* a pathway's words come from one table in every view: second-order names (at any depth), then the covered universe */
+  const isPath = search.iso?.startsWith("path:") ?? false;
+  const pathNames = useMemo(() => {
+    if (!isPath) return undefined;
+    const out: Record<string, string> = {};
+    for (const h of hop2.length ? hop2 : secondOrder(ticker, graph, all, names)) out[nodeId(h)] = h.name;
+    return { ...out, ...names };
+  }, [isPath, hop2, ticker, graph, all, names]);
+  const isoCtx: IsolateContext = useMemo(() => ({ focus: ticker, focusName, graph, hop2, chain, names: pathNames, mapDepth: depth }), [ticker, focusName, graph, hop2, chain, pathNames, depth]);
   const isolated = useMemo(() => resolveIsolation(isolation, isoCtx), [isolation, isoCtx]);
   const onIsolate = useCallback((request: IsolateRequest) => {
     const next = nextIsolation(isolation, request, isoCtx);
@@ -167,7 +177,8 @@ function SupplyChainPage() {
     else if (s !== "other" && s !== show) onIsolate({ kind: "relation", relation: s });
   };
 
-  const countryList = useMemo(() => [...new Set([...(all as ProLink[]).flatMap((l) => (l.regions ?? []).map((r) => canonCountry(r)!)), ...(signals ?? []).map((x) => canonCountry(x.country)!)])].filter(Boolean), [all, signals]);
+  /* countries only: a U.S. state counts as the United States, a supranational region ("Europe") is not offered as a country */
+  const countryList = useMemo(() => [...new Set([...(all as ProLink[]).flatMap((l) => (l.regions ?? []).map((r) => countryOf(r, l.quote ?? ""))), ...(signals ?? []).map((x) => countryOf(x.country, x.title))])].filter((c): c is string => !!c), [all, signals]);
   const src = shockSrc ?? ticker;
   const impacts = useMemo(() => (tab === "shock" ? simulateShock(src, shock / 100, all, names, revenue) : []), [tab, src, shock, all, names, revenue]);
   const impactMap = useMemo(() => (tab === "shock" ? new Map(impacts.map((i) => [i.key, i])) : null), [tab, impacts]);
@@ -177,18 +188,14 @@ function SupplyChainPage() {
   const summary = useMemo(() => {
     const vals = graph.map((n) => risks[n.key]).filter(Boolean);
     const { exposure, others, total } = exposureSummary(graph, revenue);
-    const top = Math.max(0, ...graph.map(maxShare));
     return {
-      single: vals.filter((r) => r.singleSource).length,
-      dependency: vals.filter((r) => r.dependency).length,
-      conc: vals.filter((r) => r.concentrated).length,
-      topShare: top >= 10 ? top : null,
       hotspots: [...new Set(vals.flatMap((r) => r.hotspots))],
       exposure,
       others,
       total,
     };
   }, [risks, graph, revenue]);
+  const strip = useMemo(() => stripFacts(ticker, graph, all as ProLink[], names), [ticker, graph, all, names]);
   // What the globe tints: every country the company's links and signals tie it to.
   const exposureRows = useMemo(
     () => countryExposure((all as ProLink[]).filter((l) => l.ticker === ticker || l.counterparty_ticker === ticker), (signals ?? []).filter((x) => x.ticker === ticker), revenue)
@@ -219,7 +226,7 @@ function SupplyChainPage() {
   /* what the reader last pressed, by pointer or by keyboard (Enter in a search field presses no button: nothing is held) */
   const press = (e: { target: EventTarget }) => { pressed.current = e.target instanceof Element ? e.target.closest("button, a, [role='option']") : null; };
   const endHold = useRef<() => void>(() => {});
-  useEffect(() => () => endHold.current(), []);
+  useEffect(() => () => { endHold.current(); releaseReserve(); }, []);
   const go = useCallback((tk: string, keepCountry: string | null = null) => {
     endHold.current();
     endHold.current = holdInPlace(pressed.current);
@@ -255,6 +262,8 @@ function SupplyChainPage() {
   const shockNote = tab === "shock" && view === "network" ? `Shock on ${names[src] ?? src}: dashed cards are not reached` : null;
   const status = (
     <IsolationStatus label={isolated?.label ?? null} onClear={clearIsolation}
+      note={isolated?.needsDepth ? `${isolated.needsDepth.name} is 2nd order, not drawn at Direct` : null}
+      action={isolated?.needsDepth ? { label: "Show 2nd order", onClick: () => setDepth(2) } : null}
       hint={shockNote ?? (view === "globe" ? "Click a marker to read its filing sentences" : "Click a card to read its filing sentences")} />
   );
   const lit = isolated ? graph.filter((n) => isolated.lit.has(n.key) || isolated.relation === n.relation) : graph;
@@ -275,12 +284,10 @@ function SupplyChainPage() {
         exposureTotal={summary.total}
         exposureNames={summary.exposure.length}
         otherFigures={summary.others.length}
-        concentrated={summary.conc}
-        topShare={summary.topShare}
-        single={summary.single}
-        dependency={summary.dependency}
-        hotspots={hotspotRegions}
-        hotspotsFromLinks={summary.hotspots.length > 0}
+        exposureWords={exposureWords(summary.exposure)}
+        shares={concentrationCell(strip, focusName)}
+        single={singleSourceCell(strip, focusName)}
+        hotspots={hotspotCell(hotspotRegions, summary.hotspots.length > 0, focusName)}
         filed={statements.map((l) => l.filed)}
         today={today}
       />
@@ -362,7 +369,7 @@ function SupplyChainPage() {
 
       <section id="supply-summary" data-section="Summary" aria-label="Summary" className={cn("mt-5 grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]", ANCHOR)}>
         <SupplyNotePanel ticker={ticker} byId={byId} onOpen={(l) => openLink(l, `${l.counterparty} · ${l.relation}`)} />
-        <DependencyCard ticker={ticker} all={all as ProLink[]} />
+        <DependencyCard ticker={ticker} name={focusName} all={all as ProLink[]} />
         <ConcentrationHistory ticker={ticker} name={focusName} />
       </section>
 

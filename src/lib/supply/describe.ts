@@ -1,6 +1,6 @@
 // What the hover card, the cards and the group headers of the supply-chain views say about a name.
 // Pure (no browser/Node APIs) so the Network and Globe views describe a counterparty the same way.
-import { copies, isTradeLink, linkDollarsFrom, nodeNature, statedAmounts, type GraphNode, type HopNode, type NodeRisk, type Relation, type RiskLink, type StatedAmount } from "./core";
+import { copies, isTradeLink, linkDollarsFrom, nodeNature, statedAmounts, type GraphNode, type HopNode, type NodeRisk, type Relation, type RiskLink, type SharePeriod, type StatedAmount } from "./core";
 import type { AmountKind, LinkNature } from "./claims";
 
 /** What a stated amount is, in plain words. */
@@ -113,7 +113,7 @@ export function groupTotals(nodes: Linked[]): GroupTotals {
 export const isTradeNode = (n: Pick<GraphNode, "links">): boolean => (n.links as RiskLink[]).some(isTradeLink);
 
 /** One name's dollar exposure and the sentence it comes from. */
-export interface ExposureRow { n: GraphNode; l: RiskLink; d: number; from: "flow" | "share" }
+export interface ExposureRow { n: GraphNode; l: RiskLink; d: number; from: "flow" | "share"; period?: SharePeriod }
 /**
  * What the "Disclosed $ exposure" tile and the Exposure tab show: each name once, at its largest stated flow (revenue,
  * purchases, contract value) or stated customer share × SEC revenue, largest first, and apart from it every other stated
@@ -125,7 +125,7 @@ export function exposureSummary(graph: GraphNode[], revenue: Record<string, numb
     let best: ExposureRow | null = null;
     for (const l of n.links as RiskLink[]) {
       const x = linkDollarsFrom(l, revenue);
-      if (x && (!best || x.dollars > best.d)) best = { n, l: x.link, d: x.dollars, from: x.from };
+      if (x && (!best || x.dollars > best.d)) best = { n, l: x.link, d: x.dollars, from: x.from, period: x.period };
     }
     if (best) exposure.push(best);
   }

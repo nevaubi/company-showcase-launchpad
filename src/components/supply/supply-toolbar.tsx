@@ -121,12 +121,18 @@ export function ClearIsolation({ label, onClear, className }: { label: string; o
 }
 
 /** The right end of the canvas header: what is isolated and how to clear it, or a one-line hint when nothing is. */
-export function IsolationStatus({ label, note, hint, onClear }: { label: string | null; note?: string | null; hint: ReactNode; onClear: () => void }) {
+export function IsolationStatus({ label, note, hint, onClear, action }: { label: string | null; note?: string | null; hint: ReactNode; onClear: () => void; action?: { label: string; onClick: () => void } | null }) {
   if (!label) return <p className="min-w-0 truncate text-[11px] text-muted-foreground">{hint}</p>;
   return (
     <p data-section="Isolation" className="flex min-w-0 items-center gap-2 text-xs">
       <span className="eyebrow shrink-0">Isolated</span>
       <span className="min-w-0 truncate font-medium" title={note ? `${label}. ${note}` : label}>{label}{note && <span className="font-normal text-muted-foreground"> · {note}</span>}</span>
+      {action && (
+        <button type="button" onClick={action.onClick}
+          className="h-7 shrink-0 rounded px-1.5 text-[11px] font-medium text-foreground underline-offset-2 transition-colors duration-150 hover:bg-muted hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {action.label}
+        </button>
+      )}
       <ClearIsolation label={label} onClear={onClear} />
     </p>
   );

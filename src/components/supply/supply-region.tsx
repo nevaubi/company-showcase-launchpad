@@ -8,7 +8,8 @@ import { useSource } from "@/components/source/source-context";
 import { signalsQuery, type Signal } from "@/components/supply/supply-intel";
 import { getCountryScores, getRegionDossier } from "@/lib/supply-region.functions";
 import { agreementTerms, markTerms, termCount, type CountryScore, type RiskTier } from "@/lib/supply/region";
-import { canonCountry, countryExposure, type SignalLite } from "@/lib/supply/analytics";
+import { countryExposure, type SignalLite } from "@/lib/supply/analytics";
+import { countryOf } from "@/lib/supply/place-kind";
 import { quoteLink, signalConfidence } from "@/lib/supply/counterparty";
 import type { ProLink } from "@/lib/supply/core";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
@@ -136,7 +137,7 @@ export function RegionDossierPanel({ ticker, name, country, theme }: { ticker: s
     retry: 1,
   });
   const { data: sig } = useQuery(signalsQuery(ticker));
-  const own = useMemo(() => (sig ?? []).filter((s) => canonCountry(s.country) === c).sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? "")), [sig, c]);
+  const own = useMemo(() => (sig ?? []).filter((s) => countryOf(s.country, s.title ?? "") === c).sort((a, b) => (b.filed ?? "").localeCompare(a.filed ?? "")), [sig, c]);
   const openSig = useOpenSignal();
   const s = data?.score;
 

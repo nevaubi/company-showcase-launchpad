@@ -7,6 +7,7 @@ import { Panel } from "@/components/app/page-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getSupplyNote } from "@/lib/supply.functions";
 import { concentrationBasis, dependencyScore, type Confidence, type ProLink } from "@/lib/supply/core";
+import { scoreScope } from "@/lib/supply/strip";
 import { cn } from "@/lib/utils";
 
 export const CONF_LABEL: Record<Confidence, string> = {
@@ -69,7 +70,7 @@ export function SupplyNotePanel({ ticker, byId, onOpen }: { ticker: string; byId
 }
 
 /** Fragility score with its three filing-based components. */
-export function DependencyCard({ ticker, all }: { ticker: string; all: ProLink[] }) {
+export function DependencyCard({ ticker, name, all }: { ticker: string; name?: string; all: ProLink[] }) {
   const d = useMemo(() => dependencyScore(ticker, all), [ticker, all]);
   const { data: sig } = useQuery(signalsQuery(ticker));
   const unnamed = (sig ?? []).filter((s) => s.kind === "concentration" && s.pct != null && concentrationBasis(s.quote) === "revenue").sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
@@ -89,7 +90,8 @@ export function DependencyCard({ ticker, all }: { ticker: string; all: ProLink[]
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[11px] text-muted-foreground">Customer HHI {d.customerHhi.toLocaleString()} · {d.statedCustomerPct}% of revenue tied to named customers</p>
+      <p className="mt-3 text-[11px] text-muted-foreground">{scoreScope(name ?? ticker)}</p>
+      <p className="mt-1.5 text-[11px] text-muted-foreground">Customer HHI {d.customerHhi.toLocaleString()} · {d.statedCustomerPct}% of revenue tied to named customers</p>
       {unnamed && d.statedCustomerPct < (unnamed.pct ?? 0) && (
         <p className="mt-1.5 rounded bg-highlight-soft px-2 py-1 text-[11px]">The filing also states an unnamed customer at {unnamed.pct}% of revenue{unnamed.period ? ` (${unnamed.period})` : ""}. It is not counted above because no name is given; the sentence is under Contracts and calls.</p>
       )}
