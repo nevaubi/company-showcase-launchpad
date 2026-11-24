@@ -14,6 +14,9 @@ import { CrossScatter } from "./cross-section";
 import { fmtQ } from "@/lib/technicals/labels";
 import { f2, Note, pc, pp, signTone, T as S, TableWrap, Tag, TechPanel, type NavItem } from "./ui";
 
+/** Captions written by the pipeline still spell the brand as two words; the page prints one. */
+const brand = (s: string | null | undefined) => (s ?? "").replace(/\bFiled Under\b/g, "FiledUnder");
+
 export const MARKET_NAV: NavItem[] = [
   { id: "breadth", label: "Breadth" },
   { id: "pooled", label: "Events across companies" },
@@ -122,7 +125,7 @@ function BreadthPanel({ breadth, loading }: { breadth: BreadthFile | null; loadi
             </div>
           </div>
           <Note>
-            {breadth.caveat} {breadth.source}.
+            {brand(breadth.caveat)} {brand(breadth.source)}.
           </Note>
         </>
       )}
@@ -303,7 +306,7 @@ function PooledPanel({
           <Note>
             An event counts only when its q is at most {EVIDENCE.fdr} across the {tested} event-horizon pairs with at least {EVIDENCE.minPooled} events, the excess is larger than a{" "}
             {pc(EVIDENCE.cost, 1)} round-trip cost, and the sign holds in each period the pipeline reports. That is a difference across tracked companies as a group, not an edge in any one name:
-            the symbol view tests each stock against its own history. Fired counts read each company's latest three events. {SG.method} {SG.caveats.join(" ")} As of {fmtDate(SG.as_of)}.
+            the symbol view tests each stock against its own history. Fired counts read each company's latest three events. {brand(SG.method)} {brand(SG.caveats.join(" "))} As of {fmtDate(SG.as_of)}.
           </Note>
         </>
       )}

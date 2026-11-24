@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-/** Full-text search over the Filed Under IR document store (pipeline /api/app-docsearch, Postgres FTS). */
+/** Full-text search over the FiledUnder IR document store (pipeline /api/app-docsearch, Postgres FTS). */
 const PARTNER_DATA_URL =
   (import.meta.env.VITE_PARTNER_DATA_URL as string | undefined) ??
   "https://filedunderai.vercel.app/api/app-data";

@@ -11,7 +11,7 @@ import { FAMILY_LABEL, STRATEGY, type Family } from "@/lib/signals/strategies";
 
 const MAX = 9000;
 const pct = (v: number | null | undefined) => fmtPct(v ?? null, 2, true);
-const num = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "—" : v.toFixed(d));
+const num = (v: number | null | undefined, d = 2) => (v == null || !Number.isFinite(v) ? "–" : v.toFixed(d));
 const label = (v: { strategy: string; side: 1 | -1; horizon: number }) => `${STRATEGY[v.strategy as keyof typeof STRATEGY]?.label ?? v.strategy} (${v.side > 0 ? "long" : "short"}, ${v.horizon}d)`;
 
 export interface SetupsArgs {

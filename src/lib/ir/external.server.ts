@@ -1,4 +1,4 @@
-// Read-only access to the partner Filed Under corpus (its published, publicly readable tables).
+// Read-only access to the partner FiledUnder corpus (its published, publicly readable tables).
 import { buildExternalPayload, type ExtDef, type ExtDoc, type ExtValue } from "@/lib/ir/external";
 import type { IrPayload } from "@/lib/ir/payload";
 

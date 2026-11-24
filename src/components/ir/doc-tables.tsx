@@ -129,7 +129,7 @@ export function DocTables({ ticker, embedded }: { ticker: string; embedded?: boo
   const [shown, setShown] = useState(6);
 
   if (idx.isLoading) return <Skeleton className="h-40" />;
-  if (!docs.length) return embedded ? <p className="px-4 py-4 text-[13px] text-muted-foreground">{idx.isError ? "Parsed tables come from the Filed Under document service, which could not be reached." : "No document tables have been parsed for this company yet."}</p> : null;
+  if (!docs.length) return embedded ? <p className="px-4 py-4 text-[13px] text-muted-foreground">{idx.isError ? "Parsed tables come from the FiledUnder document service, which could not be reached." : "No document tables have been parsed for this company yet."}</p> : null;
   const f = file.data;
 
   return (

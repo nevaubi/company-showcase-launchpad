@@ -81,7 +81,7 @@ export function IrLibrary({
   ticker: string;
   documents: IrDocRow[];
   images?: number;
-  /** Filed Under pipeline store documents (ir/{T}.json); rows already in the app library are skipped. */
+  /** FiledUnder pipeline store documents (ir/{T}.json); rows already in the app library are skipped. */
   store?: StoreDoc[];
 }) {
   const storeById = useMemo(() => new Map(store.map((d) => [`${STORE_PREFIX}${d.id}`, d])), [store]);
@@ -184,7 +184,7 @@ export function IrLibrary({
       <div className={cn("flex flex-wrap items-center gap-2 border-b px-4 py-2", IR.caption)}>
         <span>
           {(files.length + images).toLocaleString()} files stored permanently{images ? ` (${images.toLocaleString()} slide images)` : ""}
-          {extra.length ? `, ${extra.length.toLocaleString()} from the Filed Under document store` : ""} · {(total / 1e6).toFixed(1)} MB · {read.toLocaleString()} read for figures
+          {extra.length ? `, ${extra.length.toLocaleString()} from the FiledUnder document store` : ""} · {(total / 1e6).toFixed(1)} MB · {read.toLocaleString()} read for figures
           {copies.size ? ` · ${[...copies.values()].reduce((n, c) => n + c.length, 0).toLocaleString()} duplicate copies shown under the copy that was read` : ""}
         </span>
         <div data-agent-controls className="ml-auto flex flex-wrap items-center gap-2">

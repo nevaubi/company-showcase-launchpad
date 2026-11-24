@@ -3,7 +3,7 @@ import { partnerFile } from "@/lib/data";
 import type { IrDocRow } from "@/lib/ir.functions";
 
 /**
- * The Filed Under pipeline's IR document store (about 162k releases, decks, supplements and transcripts collected
+ * The FiledUnder pipeline's IR document store (about 162k releases, decks, supplements and transcripts collected
  * from EDGAR exhibits and company IR sites). The index is ir/{T}.json; originals and extracted text are served as
  * short-lived signed URLs (irstore/<object path>) so large files download straight from storage.
  */
