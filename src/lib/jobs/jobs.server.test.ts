@@ -448,6 +448,21 @@ describe("sec walk: Form 4 parsing and earnings events", () => {
     await runJob("sec");
     expect(mocks.db.state("sec")!.cursor).toBe(4);
   });
+  it("a slice whose first company outruns the whole run budget is charged a try and passed over after three, not repeated for good", async () => {
+    mocks.db = fakeSupabase({ job_state: [st("sec", 0)] });
+    // Every read ends on the run's own deadline: no company finishes, and the first one had the whole budget.
+    mocks.fetchSec.mockRejectedValue(new Error("SEC EDGAR responded with an error (run budget spent) for https://data.sec.gov/submissions/CIK0000000001.json"));
+    for (let i = 0; i < 3; i++) {
+      const r = await runJob("sec");
+      expect(r.ok).toBe(false);
+      expect(r.detail.cut).toEqual(expect.arrayContaining([expect.stringContaining("run budget spent")]));
+      expect(mocks.db.state("sec")!.cursor).toBe(0);
+    }
+    submissions([]);
+    const r = await runJob("sec");
+    expect(r.detail.skipped).toMatch(/slice at 0 skipped after 3 tries/);
+    expect(mocks.db.state("sec")!.cursor).toBe(8);
+  });
 });
 
 describe("sec walk: a company that changed registrant (XOM)", () => {

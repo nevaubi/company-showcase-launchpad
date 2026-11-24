@@ -567,9 +567,13 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
         if (r.failed) broken++;
       }
     }));
-    // `next` companies were started (in order) and all of them finished; a budget cut is not a failure.
+    // `next` companies were started (in order) and all of them finished; a budget cut is not a failure,
+    // and the cursor stops at the first company that was cut. With nothing finished: a run that had no
+    // budget left to start anything is cut (no try charged); a run whose first company outran a whole
+    // budget is charged a try as before, so a company that can never be read in time is passed over
+    // after three runs instead of holding every company behind it.
     const advance = Math.min(next, firstCut);
-    const outcome: SliceOutcome = advance === 0 ? (cut.length || (next === 0 && !left()) ? "cut" : "failed") : outcomeOf(advance, broken);
+    const outcome: SliceOutcome = advance === 0 ? (next === 0 && !left() ? "cut" : "failed") : outcomeOf(advance, broken);
     await commit("sec", cl, outcome, ranked.length, step, advance);
     // A lost earnings-event write always fails the run, so the failure shows in job health.
     const earningsLost = errors.some((e) => e.includes(" earnings events: "));
