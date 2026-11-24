@@ -241,3 +241,12 @@ export function yearTotals(rows: { filed: string | null }[]): Map<string, number
 
 /** Year header count: "34", or "15 of 34" when the page shows only part of the year. */
 export const yearCount = (onPage: number, total: number | undefined) => (total == null || total === onPage ? onPage.toLocaleString() : `${onPage.toLocaleString()} of ${total.toLocaleString()}`);
+
+/**
+ * Threads listed before "Show registration reviews": periodic-report reviews and any thread with a reply round. When
+ * none qualifies, every thread is listed, so the tab count (the length of this list) always matches what is shown.
+ */
+export function defaultThreads<T extends { periodic: boolean; rounds: number }>(threads: T[]): T[] {
+  const main = threads.filter((t) => t.periodic || t.rounds > 0);
+  return main.length ? main : threads;
+}

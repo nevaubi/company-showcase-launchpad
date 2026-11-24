@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import aapl from "@/test/fixtures/companies/AAPL.json";
 import jpm from "@/test/fixtures/companies/JPM.json";
-import { canCompare, countByFamily, dedupeFilings, groupByYear, insiderFilings, latestKeyDocs, paginate, scopeFilings, yearsOf, type ListFiling } from "./list";
+import { canCompare, defaultThreads, countByFamily, dedupeFilings, groupByYear, insiderFilings, latestKeyDocs, paginate, scopeFilings, yearsOf, type ListFiling } from "./list";
 
 const A = aapl.filings as ListFiling[];
 const J = jpm.filings as ListFiling[];
@@ -69,5 +69,13 @@ describe("company filing list", () => {
     expect(n.desc).toContain("Open-market sale");
     expect(n.desc).toContain("10b5-1 plan");
     expect(countByFamily(f).ownership).toBe(f.length);
+  });
+});
+
+describe("defaultThreads (L4)", () => {
+  it("lists reviewed periodic reports and replied threads, or every thread when none qualifies", () => {
+    const a = { periodic: true, rounds: 0 }, b = { periodic: false, rounds: 2 }, c = { periodic: false, rounds: 0 };
+    expect(defaultThreads([a, b, c])).toEqual([a, b]);
+    expect(defaultThreads([c, c])).toHaveLength(2);
   });
 });

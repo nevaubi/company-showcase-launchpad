@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { defaultThreads } from "@/lib/filings/list";
 import { commentsQuery, type ReviewThread } from "@/lib/filings/review";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -113,7 +114,7 @@ export function CommentLetters({ ticker, embedded = false }: { ticker: string; e
   const q = useQuery(commentsQuery(ticker));
   const [all, setAll] = useState(false);
   if (q.isLoading) return <Skeleton className={embedded ? "m-3.5 h-24" : "h-40"} />;
-  const threads = (q.data?.threads ?? []).filter((t) => all || t.periodic || t.rounds > 0);
+  const threads = all ? (q.data?.threads ?? []) : defaultThreads(q.data?.threads ?? []);
   const more = q.data && q.data.threads.length > threads.length ? (
     <button onClick={() => setAll(true)} className="rounded px-2 py-1 text-xs text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
       Show registration reviews

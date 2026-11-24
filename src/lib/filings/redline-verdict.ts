@@ -169,3 +169,17 @@ export function verdictSentence(v: Verdict): string {
   ].filter(Boolean);
   return `${who ? `Driven by ${who}` : "Spread across sections"}${facts.length ? `: ${facts.join(", ")}` : ""}.`;
 }
+
+/**
+ * Caption for the default comparison base. A 10-Q is compared with the same quarter a year earlier when that report is
+ * on file (period ends 325 to 405 days apart, the window `defaultBase` uses); otherwise `defaultBase` falls back to the
+ * previous 10-Q, and the caption must say so.
+ */
+export function baseCaption(form: string, to: { report?: string | null }, base: { report?: string | null }): string {
+  if (form !== "10-Q") return "Prior annual report";
+  if (to.report && base.report) {
+    const days = (Date.parse(to.report) - Date.parse(base.report)) / 86400_000;
+    if (Math.abs(days - 365) < 40) return "Same quarter a year earlier";
+  }
+  return "Previous quarterly report (no report for the same quarter a year earlier on file)";
+}

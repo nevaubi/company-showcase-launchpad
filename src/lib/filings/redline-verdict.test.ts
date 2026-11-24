@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Change, Redline, SectionStats } from "@/lib/redline/core";
-import { gradeShare, LEVEL_LABEL, notComparedSentence, redlineVerdict, verdictSentence } from "./redline-verdict";
+import { baseCaption, gradeShare, LEVEL_LABEL, notComparedSentence, redlineVerdict, verdictSentence } from "./redline-verdict";
 
 const sec = (key: string, title: string, o: Partial<SectionStats> = {}): SectionStats => ({ key, title, added: 0, removed: 0, changed: 0, figuresOnly: 0, unchanged: 0, moved: 0, wordsAdded: 0, wordsRemoved: 0, high: 0, medium: 0, found: "both", ...o });
 let n = 0;
@@ -90,5 +90,13 @@ describe("verdict on real stored comparisons", () => {
     const g = gradeShare("10-K", 236 / 597, 236);
     expect(g.level).toBe("typical");
     expect(g.basis).toBe("Less change than 6 in 10 annual reports");
+  });
+});
+
+describe("baseCaption (L8)", () => {
+  it("names the same quarter a year earlier only when the base really is a year earlier", () => {
+    expect(baseCaption("10-Q", { report: "2026-06-27" }, { report: "2025-06-28" })).toBe("Same quarter a year earlier");
+    expect(baseCaption("10-Q", { report: "2024-03-30" }, { report: "2023-12-30" })).toMatch(/^Previous quarterly report/);
+    expect(baseCaption("10-K", { report: "2026-09-26" }, { report: "2025-09-27" })).toBe("Prior annual report");
   });
 });

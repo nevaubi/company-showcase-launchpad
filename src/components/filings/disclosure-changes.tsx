@@ -19,6 +19,8 @@ export interface ChangeScope {
   watch: boolean;
   q: string;
   days: number;
+  /** A signal word ("all" for any), as the old feed's Signal select offered. */
+  signal: string;
 }
 
 export function DisclosureChanges({ scope, sectorOf, watched }: { scope: ChangeScope; sectorOf: (t: string) => string | undefined; watched: Set<string> }) {
@@ -31,7 +33,7 @@ export function DisclosureChanges({ scope, sectorOf, watched }: { scope: ChangeS
   const keep = (t: string, form: string, filed: string, words: string) =>
     filed >= since && (scope.form === "all" || form === scope.form) && (scope.sector === "all" || sectorOf(t) === scope.sector) && (!scope.watch || watched.has(t)) && (!q || t.toLowerCase() === q || words.toLowerCase().includes(q));
   const rows = useMemo(
-    () => filterHighlights(idx.data?.recent ?? [], { form: scope.form, sector: scope.sector, signal: "all", days: scope.days, q: scope.q }, sectorOf, new Date().toISOString().slice(0, 10)).filter((h) => !scope.watch || watched.has(h.ticker)),
+    () => filterHighlights(idx.data?.recent ?? [], { form: scope.form, sector: scope.sector, signal: scope.signal, days: scope.days, q: scope.q }, sectorOf, new Date().toISOString().slice(0, 10)).filter((h) => !scope.watch || watched.has(h.ticker)),
     [idx.data, scope, sectorOf, watched],
   );
   const byDay = useMemo(() => {

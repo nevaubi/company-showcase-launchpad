@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChangeCard, TYPE_LABEL } from "@/components/redline/change-card";
 import { Pager, QuietLine } from "@/components/filings/parts";
 import { paginate } from "@/lib/filings/list";
-import { LEVEL_LABEL, notComparedSentence, redlineVerdict, verdictSentence, type Verdict } from "@/lib/filings/redline-verdict";
+import { baseCaption, LEVEL_LABEL, notComparedSentence, redlineVerdict, verdictSentence, type Verdict } from "@/lib/filings/redline-verdict";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/lib/data";
 import { coverageOf, historyCik } from "@/lib/coverage";
@@ -175,7 +175,7 @@ function RedlinePage() {
           <ArrowRight className="size-3.5 rotate-180 text-muted-foreground" />
           <FilingSelect label="against" value={from?.accn} options={filings.filter((f) => to && f.filed < to.filed)} onChange={(v) => setSearch({ from: v })} />
         </div>
-        {from && base && from.accn === base.accn && <span className="text-[11px] text-muted-foreground">{form === "10-Q" ? "Same quarter a year earlier" : "Prior annual report"}</span>}
+        {from && to && base && from.accn === base.accn && <span className="text-[11px] text-muted-foreground">{baseCaption(form, to, base)}</span>}
       </div>
 
       {q.isLoading ? (

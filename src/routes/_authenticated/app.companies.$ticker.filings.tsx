@@ -19,7 +19,7 @@ import { useCompany } from "@/lib/data";
 import { searchFilings } from "@/lib/sec.functions";
 import { commentsQuery } from "@/lib/filings/review";
 import { FAMILIES } from "@/lib/filings/kinds";
-import { countByFamily, edgarListUrl, insiderFilings, latestKeyDocs, listCoverage, liveToList, LIST_KINDS, mergeFilings, isKeyFiling, paginate, yearTotals as totalsByYear, scopeFilings, yearsOf, type ListKind, type LiveFilingRow } from "@/lib/filings/list";
+import { countByFamily, defaultThreads, edgarListUrl, insiderFilings, latestKeyDocs, listCoverage, liveToList, LIST_KINDS, mergeFilings, isKeyFiling, paginate, yearTotals as totalsByYear, scopeFilings, yearsOf, type ListKind, type LiveFilingRow } from "@/lib/filings/list";
 import { supabase } from "@/integrations/supabase/client";
 import { fmtDate } from "@/lib/format";
 
@@ -91,7 +91,8 @@ function Filings() {
   const keyCount = useMemo(() => rows.filter((r) => isKeyFiling(r, cikOf)).length, [rows, cikOf]);
   const yearTotals = useMemo(() => totalsByYear(scoped), [scoped]);
   const irCount = useMemo(() => (ir.data ? scopeIrDocs(ir.data, null, "").length : null), [ir.data]);
-  const letterCount = letters.data?.n_threads ?? letters.data?.threads.length ?? 0;
+  // Count the threads the tab lists by default; registration reviews sit behind "Show registration reviews".
+  const letterCount = letters.data ? defaultThreads(letters.data.threads).length : 0;
 
   if (!company.data) return <Skeleton className="h-[600px]" />;
   const cik = String(Number(company.data.profile.cik));

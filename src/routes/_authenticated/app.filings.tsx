@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { COVERAGE, coverageOf } from "@/lib/coverage";
+import { redlineIndexQuery, signalCounts } from "@/lib/filings/feed";
 import { byImportance, FEED_COLUMNS, familyCounts, feedRows, filterFeed, indexUrl, type FeedFamily, type FeedFiling, type FeedRow } from "@/lib/filings/daily";
 import { paginate } from "@/lib/filings/list";
 import { fmtDate } from "@/lib/format";
@@ -39,6 +40,7 @@ const searchSchema = z.object({
   page: z.coerce.number().int().min(1).max(1000).optional().catch(undefined),
   form: z.enum(["all", "10-K", "10-Q"]).optional().catch(undefined),
   days: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional().catch(undefined),
+  signal: z.string().max(40).optional().catch(undefined),
 });
 type Search = z.infer<typeof searchSchema>;
 
@@ -162,10 +164,11 @@ function Filings() {
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">
+            <SignalSelect value={search.signal ?? "all"} onChange={(v) => set({ signal: v === "all" ? undefined : v })} />
             <Segmented label="Form" size="xs" value={search.form ?? "all"} onChange={(v) => set({ form: v === "all" ? undefined : v })} options={[{ v: "all", l: "10-K and 10-Q" }, { v: "10-K", l: "10-K" }, { v: "10-Q", l: "10-Q" }]} />
             <Segmented label="Window" size="xs" value={String(search.days ?? 30) as "7" | "30" | "90"} onChange={(v) => set({ days: Number(v) === 30 ? undefined : (Number(v) as 7 | 90) })} options={[{ v: "7", l: "7 days" }, { v: "30", l: "30 days" }, { v: "90", l: "90 days" }]} />
           </div>
-          <DisclosureChanges scope={{ form: search.form ?? "all", sector, watch: !!search.watch, q: search.q ?? "", days: search.days ?? 30 }} sectorOf={stableSector} watched={watched} />
+          <DisclosureChanges scope={{ form: search.form ?? "all", sector, watch: !!search.watch, q: search.q ?? "", days: search.days ?? 30, signal: search.signal ?? "all" }} sectorOf={stableSector} watched={watched} />
         </>
       )}
       </HoldHeight>
@@ -283,5 +286,28 @@ function DayFeed({ search, set, sector, watched }: { search: Search; set: (s: Pa
         )}
       </Panel>
     </div>
+  );
+}
+
+/** Signal words found in the changed passages, with passage counts, so a reader can keep only, say, "guidance" changes. */
+function SignalSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const idx = useQuery(redlineIndexQuery);
+  const signals = useMemo(() => signalCounts(idx.data?.recent ?? []), [idx.data]);
+  if (!signals.length) return null;
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger aria-label="Signal" className="h-7 w-48 text-xs">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all" className="text-xs">All signals</SelectItem>
+        {signals.map((s) => (
+          <SelectItem key={s.signal} value={s.signal} className="text-xs">
+            {s.signal} · {s.n.toLocaleString()}
+          </SelectItem>
+        ))}
+        {value !== "all" && !signals.some((s) => s.signal === value) && <SelectItem value={value} className="text-xs">{value} · 0</SelectItem>}
+      </SelectContent>
+    </Select>
   );
 }
