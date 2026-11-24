@@ -196,4 +196,17 @@ describe("annual report missing behind later quarters", () => {
       "Statements run through the quarter ended 30 Sep 2026. An annual report (10-K) for the year ended 30 Jun 2026 was filed on 8 Aug 2026 and is not in these tables yet.",
     );
   });
+  it("calls a 10-KT a transition report for a period, not a year (Ferguson)", () => {
+    const quarters = [q("FY2026Q3", "2026-09-30", 2026, 3)];
+    const years = [{ key: "FY2025", label: "FY2025", fy: 2025, start: "2024-08-01", end: "2025-07-31" }];
+    const filings: Filing[] = [
+      { accn: "0002011641-26-000030", form: "10-Q", filed: "2026-11-09", report: "2026-09-30", doc: "q3.htm" },
+      { accn: "0002011641-26-000006", form: "10-KT", filed: "2026-02-27", report: "2025-12-31", doc: "kt.htm" },
+    ];
+    const c = assessCurrency(dataset({ cik: "0002011641", quarters, years, filings, releases: [], qAccns: ["0002011641-26-000030"], aAccns: ["0002011641-25-000010"] }));
+    expect(c.newer.map((n) => [n.kind, n.form])).toEqual([["annual", "10-KT"]]);
+    expect(c.text).toBe(
+      "Statements run through the quarter ended 30 Sep 2026. A transition report (10-KT) for the period ended 31 Dec 2025 was filed on 27 Feb 2026 and is not in these tables yet.",
+    );
+  });
 });
