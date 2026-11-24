@@ -13,13 +13,14 @@ import { STD_LABEL, type SecCheck, type SecItem } from "@/lib/ir/sec-check";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const STATUS: Record<SecItem["status"], string> = { agree: "agrees", held: "held", flagged: "differs", released: "agrees, shown again" };
-const ORDER: Record<SecItem["status"], number> = { held: 0, flagged: 1, released: 2, agree: 3 };
+const STATUS: Record<SecItem["status"], string> = { agree: "agrees", held: "held", flagged: "differs", released: "agrees, shown again", later: "later filing only" };
+const ORDER: Record<SecItem["status"], number> = { held: 0, flagged: 1, later: 2, released: 3, agree: 4 };
 
 export function IrChecksLine({ ticker, payload, check, consistency, timings, late }: { ticker: string; payload: IrPayload; check?: SecCheck | null; consistency?: ConsistencySummary; late?: boolean; timings?: { unpackMs: number; tidyMs: number; checkMs: number } }) {
   const { open } = useSource();
   const items = useMemo(() => [...(check?.items ?? [])].sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.line.localeCompare(b.line) || b.e.localeCompare(a.e)), [check]);
   const byKey = useMemo(() => new Map(payload.series.map((s) => [s.k, s])), [payload]);
+  const shown = useMemo(() => payload.series.reduce((n, s) => n + Object.keys(s.q).length + Object.keys(s.y).length, 0), [payload]);
   const years = consistency?.years ?? 0;
   const formulas = consistency?.formulas ?? 0;
   if (!check?.checked && !years && !formulas && check !== null) return null;
@@ -38,13 +39,14 @@ export function IrChecksLine({ ticker, payload, check, consistency, timings, lat
   return (
     <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-4 py-2", IR.caption)} data-section="IR checks" data-timings={timings ? JSON.stringify(timings) : undefined}>
       {check === null ? (
-        <span>{late ? "Not checked against SEC filings on this load: the company's statements were still loading." : "Not checked against SEC filings: the company's statements could not be loaded."}</span>
+        <span>{late ? "The SEC check has not run yet: the company's statements were still loading, so no figure here is checked or marked." : "Not checked against SEC filings: the company's statements could not be loaded, so no figure here is checked or marked."}</span>
       ) : check && check.checked > 0 ? (
         <span className="text-foreground">
           {check.held + check.flagged > 0 && <span aria-hidden className="mr-1.5 inline-block size-1.5 rounded-full bg-warning align-middle" />}
-          {check.checked.toLocaleString()} figure{check.checked === 1 ? "" : "s"} checked against SEC filings: {check.agree.toLocaleString()} agree
+          {check.checked.toLocaleString()} of {shown.toLocaleString()} figures are also in the 10-Q/10-K: {check.agree.toLocaleString()} agree
           {check.held > 0 && `, ${check.held} held`}
           {check.flagged > 0 && `, ${check.flagged} differ`}
+          {(check.later ?? 0) > 0 && `, ${check.later} only in a later filing (possibly recast)`}
           {check.released > 0 && ` (${check.released} the unit guard had held, shown again)`}
         </span>
       ) : (
@@ -62,7 +64,7 @@ export function IrChecksLine({ ticker, payload, check, consistency, timings, lat
           <PopoverContent align="start" className="max-h-[70vh] w-[min(36rem,calc(100vw-2rem))] overflow-auto p-0">
             <div className="border-b px-3 py-2">
               <p className={IR.group}>Checked against the 10-Q and 10-K</p>
-              <p className={IR.caption}>Held figures are kept out of totals and charts; differing figures stay, marked at the figure. Equal within 0.05%, or at the precision the release prints.</p>
+              <p className={IR.caption}>Held figures are kept out of totals and charts; differing figures stay, marked at the figure. Same sign, and equal within 0.5% (per share: one cent or 1%), or at the precision a round figure prints. A figure that differs only from a later filing's comparative is not counted as differing.</p>
             </div>
             <table className="w-full text-[13px]">
               <thead className={IR.caption}>

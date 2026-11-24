@@ -26,7 +26,7 @@ const payload = (s: PayloadSeries[]): IrPayload => ({
   stats: { series: s.length, groups: s.length, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } },
 });
 const statements = (key: string, q: Record<string, number>, y: Record<string, number> = {}): CheckStatements => ({
-  quarterly: { periods: Object.keys(q).map((end) => ({ end })), rows: [{ key, cells: Object.values(q).map((v) => ({ v, src: { accn: "0000000000-26-000001", concept: "us-gaap:X" } })) }] },
+  quarterly: { periods: Object.keys(q).map((end) => ({ end })), rows: [{ key, cells: Object.values(q).map((v) => ({ v, src: { accn: "TEST-ACCN", concept: "us-gaap:X" } })) }] },
   annual: { periods: Object.keys(y).map((end) => ({ end })), rows: [{ key, cells: Object.values(y).map((v) => ({ v })) }] },
 });
 
@@ -54,9 +54,10 @@ describe("agreement tolerances", () => {
   it("accepts equal figures and figures equal at their printed precision only", () => {
     expect(agrees(7_685_000_000, 7_685_000_000, "usd")).toBe(true);
     expect(agrees(7_700_000_000, 7_685_000_000, "usd")).toBe(true); // AMD "7.7 billion" in a sentence
-    expect(agrees(7_658_000_000, 7_685_000_000, "usd")).toBe(false);
+    expect(agrees(7_658_000_000, 7_685_000_000, "usd")).toBe(true); // 0.35%: within the 0.5% total tolerance
+    expect(agrees(7_640_000_000, 7_685_000_000, "usd")).toBe(false);
     expect(agrees(4.63, 4.63, "usdPerShare")).toBe(true);
-    expect(agrees(4.6, 4.63, "usdPerShare")).toBe(true);
+    expect(agrees(4.6, 4.63, "usdPerShare")).toBe(true); // within 1%
     expect(agrees(4.58, 4.63, "usdPerShare")).toBe(false);
   });
 });
@@ -105,15 +106,15 @@ describe("cross-check against the SEC statements", () => {
     const c = out.series[0].q["2024-07-28"];
     expect(c.v).toBe(20_217_000_000);
     expect(c.flags?.[0]).toMatchObject({ k: "sec", v: 18_642_000_000 });
-    expect(c.flags?.[0].why).toBe("The 10-Q reports $18.64B; this figure is $20.22B (+8.4%).");
+    expect(c.flags?.[0].why).toBe("The 10-Q (TEST-ACCN) gives $18.64B; this figure is $20.22B (+8.4%).");
   });
 
-  it("explains a plain net income a little above the filing's (noncontrolling interests; PNC Q2 2026, real values)", () => {
+  it("adds no noncontrolling-interest note without evidence for it (review M5; PNC Q2 2026, real values)", () => {
     const [ir] = realValues("std-lines-b06.txt", "PNC", "ni", "2026-06-30", 3);
     const p = payload([series("ni", "Net income", { "2026-06-30": cell(ir) }, { bd: "Consolidated Financial Highlights" })]);
     const { check } = crossCheckSec(p, statements("netIncome", { "2026-06-30": 2_040_000_000 }));
     expect(check?.items[0]).toMatchObject({ status: "flagged", ir: 2_055_000_000 });
-    expect(check?.items[0].why).toMatch(/noncontrolling interests/);
+    expect(check?.items[0].why).not.toMatch(/noncontrolling interests/);
   });
 
   it("leaves periods the filing doesn't carry unchecked, and checks nothing without statements", () => {
@@ -124,7 +125,7 @@ describe("cross-check against the SEC statements", () => {
 
   it("restated: says when another printing of the figure agrees with the filing", () => {
     // The release shows the newer printing; the 10-Q matches the value first printed (alt).
-    const c = cell(25_100_000_000, { alt: { v: 24_995_000_000, kind: "restated", d: 1 } });
+    const c = cell(25_300_000_000, { alt: { v: 24_995_000_000, kind: "restated", d: 1 } });
     const p = payload([series("nii", "Net interest income", { "2025-12-31": c }, { parent: "x", total: false })]);
     const { check } = crossCheckSec(p, statements("netInterestIncome", { "2025-12-31": 24_995_000_000 }));
     expect(check?.items[0].status).toBe("flagged");
@@ -169,5 +170,86 @@ describe("cross-check against the SEC statements", () => {
       else expect(out.series[0].held?.q?.[e]?.v).toBe(q[e].v);
     }
     expect(check?.released).toBe(heldBefore.filter((e) => q[e].v === sec[ends.indexOf(e)]).length);
+  });
+});
+
+// Fix pass (review iracc C1, C2, H3, H4, M2): real companies and periods, values from the reviewer's
+// independent run (/home/claude/work/r3/review-iracc/r2/summary.txt: IR rows through tidy against
+// EDGAR companyfacts put through buildStatements).
+describe("review fixes: sign first, real sources, other measures", () => {
+  const st = (key: string, q: Record<string, number>, accn = "0001065696-26-000056", y: Record<string, number> = {}, derived?: string): CheckStatements => ({
+    quarterly: { periods: Object.keys(q).map((end) => ({ end })), rows: [{ key, cells: Object.values(q).map((v) => ({ v, ...(derived ? { derived } : { src: { accn, concept: "us-gaap:X" } }) })) }] },
+    annual: { periods: Object.keys(y).map((end) => ({ end })), rows: [{ key, cells: Object.values(y).map((v) => ({ v, src: { accn, concept: "us-gaap:X" } })) }] },
+  });
+
+  it("C1 VSAT Q1 FY26: a wrongly signed larger line no longer shields the next one (+47.7M against a −56.4M loss)", () => {
+    const p = payload([
+      series("a", "Net income (loss) attributable to Viasat, Inc.", { "2025-06-30": cell(56_434_000) }, { bd: "Net income attributable to parent" }),
+      series("b", "Net income (loss)", { "2025-06-30": cell(47_724_000) }, { bd: "Net income" }),
+    ]);
+    const { payload: out, check } = crossCheckSec(p, st("netIncome", { "2025-06-30": -56_434_000 }, "0001193125-25-170000"));
+    const b = check!.items.find((x) => x.k === "b")!;
+    expect(check!.items.find((x) => x.k === "a")!.status).toBe("held");
+    expect(b.status).toBe("flagged");
+    expect(b.why).toMatch(/a loss; this figure, \$47\.7M, has the opposite sign/);
+    expect(out.series.find((s) => s.k === "b")!.q["2025-06-30"].flags?.some((f) => f.k === "sec")).toBe(true);
+    expect(check!.agree).toBe(0);
+  });
+
+  it("C1 LKQ Q3 2026: +18M and +19M net income and 0.06 EPS against the 10-Q's −27M and −0.10 are all marked", () => {
+    const p = payload([
+      series("h", "Net (loss) income", { "2026-09-30": cell(27_000_000) }, { bd: "Net income" }),
+      series("r1", "Net (loss) income attributable to LKQ stockholders", { "2026-09-30": cell(18_000_000) }, { bd: "Net income reconciliation" }),
+      series("r2", "Net (loss) income", { "2026-09-30": cell(19_000_000) }, { bd: "Net income reconciliation" }),
+    ]);
+    const { check } = crossCheckSec(p, st("netIncome", { "2026-09-30": -27_000_000 }));
+    expect(check!.items.map((x) => [x.k, x.status])).toEqual([["h", "held"], ["r1", "flagged"], ["r2", "flagged"]]);
+    const eps = payload([series("e", "Diluted (loss) earnings per share: Reported", { "2026-09-30": cell(0.06) }, { unit: "usdPerShare", bd: "EPS" })]);
+    expect(crossCheckSec(eps, st("epsDiluted", { "2026-09-30": -0.1 })).check!.items[0].status).toBe("flagged");
+  });
+
+  it("C2 HPQ Q4 FY25 EPS: the comparison figure is named as the 10-K year less nine months, and one cent is not a disagreement", () => {
+    const p = payload([series("e", "GAAP diluted net earnings per share", { "2025-10-31": cell(0.84) }, { unit: "usdPerShare", bd: "Earnings per share" })]);
+    const { check } = crossCheckSec(p, st("epsDiluted", { "2025-10-31": 0.83 }, "", { "2025-10-31": 2.65 }, "FY − Q1 − Q2 − Q3"));
+    expect(check!.items[0].status).toBe("agree");
+    expect(check!.items[0].why).toMatch(/10-K year less the first nine months/);
+    // LULU Q4: 6.14 against a derived 6.09 is within 1%
+    const l = payload([series("e", "Diluted earnings per share", { "2026-02-01": cell(6.14) }, { unit: "usdPerShare" })]);
+    expect(crossCheckSec(l, st("epsDiluted", { "2026-02-01": 6.09 }, "", { "2026-02-01": 14.6 }, "FY − Q1 − Q2 − Q3")).check!.items[0].status).toBe("agree");
+  });
+
+  it("C2 LKQ Q1 2025 revenue: a comparative from a 2026 filing (recast) is not called a 10-Q disagreement", () => {
+    const p = payload([series("r", "Total Revenue", { "2025-03-31": cell(3_463_000_000) }, { bd: "Revenue by product" })]);
+    const { payload: out, check } = crossCheckSec(p, st("revenue", { "2025-03-31": 3_327_000_000 }, "0001065696-26-000020"));
+    expect(check!.items[0].status).toBe("later");
+    expect(check!.items[0].why).toMatch(/filed in 2026, after this period's own filing; that filing may have recast/);
+    expect(check!.flagged).toBe(0);
+    expect(out.series[0].q["2025-03-31"].flags).toBeUndefined();
+    // the same figure from the period's own 10-Q (filed 2025) is a plain disagreement, named by accession
+    const own = crossCheckSec(p, st("revenue", { "2025-03-31": 3_327_000_000 }, "0001065696-25-000028")).check!.items[0];
+    expect(own.status).toBe("flagged");
+    expect(own.why).toMatch(/^The 10-Q \(0001065696-25-000028\) gives \$3\.33B/);
+  });
+
+  it("H3 Realty Income FFO/AFFO, LKQ guidance and trailing-twelve-month lines are never compared with GAAP lines", () => {
+    expect(stdLineOf(series("a", "FFO per diluted share", {}, { unit: "usdPerShare" }))).toBeNull();
+    expect(stdLineOf(series("a", "Diluted", {}, { unit: "usdPerShare", bd: "AFFO" }))).toBeNull();
+    expect(stdLineOf(series("a", "Net income", {}, { bd: "Forecasted FY 2025 Net Income" }))).toBeNull();
+    expect(stdLineOf(series("a", "Total Net Revenues (Last twelve months)", {}))).toBeNull();
+    expect(stdLineOf(series("a", "Net income", {}, { bd: "GAAP net income" }))).toBe("netIncome");
+  });
+
+  it("H4 tolerances: opposite signs never agree; EPS within one cent or 1%; totals within 0.5%", () => {
+    expect(agrees(300_000, -150_000, "usd")).toBe(false);
+    expect(agrees(2, 2.45, "usdPerShare")).toBe(false);
+    expect(agrees(0.84, 0.83, "usdPerShare")).toBe(true);
+    expect(agrees(4.7e9, 4.692e9, "usd")).toBe(true);
+    expect(agrees(346_000_000, 350_000_000, "usd")).toBe(false);
+    expect(agrees(3_463_000_000, 3_465_000_000, "usd")).toBe(true);
+  });
+
+  it("M2 UNFI 'Loss per diluted share' 0.35 carries its sign in the label and agrees with −0.35", () => {
+    const p = payload([series("e", "Loss per diluted share (EPS)", { "2024-11-02": cell(0.35) }, { unit: "usdPerShare" })]);
+    expect(crossCheckSec(p, st("epsDiluted", { "2024-11-02": -0.35 }, "0001020859-24-000050")).check!.items[0].status).toBe("agree");
   });
 });
