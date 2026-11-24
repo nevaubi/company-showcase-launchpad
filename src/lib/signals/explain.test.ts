@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildEvidence } from "./evidence";
 import { evidenceLine, liveLine, luckLines, recordLine, verdictLine } from "./explain";
-import { count, dayLong, dayShort, holdLabel, monthLabel, nameOf, niceTicks, num, pct, price, tidyDetail, usdCompact } from "./format";
+import { count, dayLong, dayShort, holdLabel, monthLabel, nameOf, niceTicks, num, pct, pctTone, price, tidyDetail, usdCompact } from "./format";
 import { DEFAULT_FILTERS } from "./rank";
 import { defaultView, filtersActive, filtersOf, searchOf, setupsSearch } from "./url-state";
 import { realVariants } from "./variants-real.fixture";
@@ -14,6 +14,12 @@ describe("figures as the pages print them", () => {
     expect(pct(-0.103, 1, false)).toBe("−10.3%");
     // A loss too small to show is not printed as a negative zero.
     expect(pct(-0.00001)).toBe("0.00%");
+    // And it takes no colour: the colour follows the sign that is printed.
+    expect(pctTone(-0.00001)).toBe("");
+    expect(pctTone(-0.0032)).toBe("text-negative");
+    expect(pctTone(0.0067)).toBe("text-positive");
+    expect(pctTone(0.004, 0)).toBe("");
+    expect(pctTone(null)).toBe("");
     expect(pct(null)).toBe("–");
     expect(num(-0.03)).toBe("−0.03");
     expect(num(1.966, 2)).toBe("1.97");

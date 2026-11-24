@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { adjustedT, REGIMES } from "@/lib/signals/backtest";
 import { EVIDENCE, LISTED, type EvidenceBook, type Grade, type VariantEvidence } from "@/lib/signals/evidence";
 import { evidenceLine, liveLine } from "@/lib/signals/explain";
-import { count, holdLabel, monthLabel, num, pct, VERDICT_LABEL } from "@/lib/signals/format";
+import { count, holdLabel, monthLabel, num, pct, pctTone, VERDICT_LABEL } from "@/lib/signals/format";
 import { gateChecks, type PairSetup, type SetupsFile, type VariantMeta } from "@/lib/signals/setups";
 import { FAMILY_LABEL, STRATEGY, type Family } from "@/lib/signals/strategies";
 import { cn } from "@/lib/utils";
@@ -97,7 +97,6 @@ export function Scoreboard({ data, book }: { data: SetupsFile; book: EvidenceBoo
               const { v, e } = r;
               const b = e.blocks, l = e.live;
               const isOpen = open === v.key;
-              const tone = (x: number | null | undefined) => (x == null || x === 0 ? "" : x > 0 ? "text-positive" : "text-negative");
               return (
                 <Fragment key={v.key}>
                   <tr data-agent-click aria-expanded={isOpen} onClick={() => setOpen(isOpen ? null : v.key)} className={cn("cursor-pointer border-b transition-colors duration-150 hover:bg-highlight-soft/40", isOpen && "bg-highlight-soft/30")}>
@@ -120,12 +119,12 @@ export function Scoreboard({ data, book }: { data: SetupsFile; book: EvidenceBoo
                       <SideTag side={v.side} /> <span className="text-muted-foreground">{holdLabel(v.horizon)}</span>
                     </td>
                     <td className={cn(TD, NUM)}>{count(v.outSample.n)}</td>
-                    <td className={cn(TD, NUM, tone(b?.mean))}>{pct(b?.mean)}</td>
+                    <td className={cn(TD, NUM, pctTone(b?.mean))}>{pct(b?.mean)}</td>
                     <td className={cn(TD, NUM)}>{b ? `${b.positive}/${b.months}` : "–"}</td>
                     <td className={cn(TD, NUM)}>{num(b?.t, 2)}</td>
                     <td className={cn(TD, NUM, b && e.q <= EVIDENCE.watchFdr ? "" : "text-muted-foreground")}>{b ? pct(e.q, 0, false) : "–"}</td>
                     <td className={cn(TD, NUM, "border-l")}>{l.n ? count(l.n) : "–"}</td>
-                    <td className={cn(TD, NUM, l.n ? tone(l.avgNet) : "")}>{l.n ? pct(l.avgNet) : "–"}</td>
+                    <td className={cn(TD, NUM, l.n ? pctTone(l.avgNet) : "")}>{l.n ? pct(l.avgNet) : "–"}</td>
                     <td className={cn(TD, NUM)}>{l.n ? pct(l.hit, 0, false) : "–"}</td>
                     <td className={cn(TD, "max-w-[15rem] truncate pr-3.5")} title={e.reason || undefined}>
                       {e.grade === "unproven" ? <span className="text-muted-foreground">{e.reason}</span> : <GradeTag grade={e.grade} />}
@@ -188,7 +187,7 @@ function VariantDetail({ v, e, data, book }: Row & { data: SetupsFile; book: Evi
                 <tr>
                   <th scope="row" className={cn(CAPTION, "pr-3 text-left font-normal")}>Avg net a trade</th>
                   {v.years.map((y) => (
-                    <td key={y.year} className={cn("num px-2 text-right text-[13px] leading-5", y.avgNet == null ? "" : y.avgNet > 0 ? "text-positive" : y.avgNet < 0 ? "text-negative" : "")}>{pct(y.avgNet)}</td>
+                    <td key={y.year} className={cn("num px-2 text-right text-[13px] leading-5", pctTone(y.avgNet))}>{pct(y.avgNet)}</td>
                   ))}
                 </tr>
                 <tr>
