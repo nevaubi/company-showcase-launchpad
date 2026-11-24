@@ -25,8 +25,6 @@ export function SectionNav({ sections }: { sections: readonly { id: string; labe
     window.addEventListener("resize", onScroll);
     return () => { cancelAnimationFrame(frame); window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); };
   }, [sections]);
-  return () => io.disconnect();
-  }, [sections]);
   return (
     <nav aria-label="Sections of this page" data-agent-controls className="sticky top-[var(--sticky-top,3.5rem)] z-10 mb-3 border-b bg-background">
       <ul className="flex h-10 items-center gap-0.5 text-xs">
