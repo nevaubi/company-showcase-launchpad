@@ -141,26 +141,10 @@ export function QuoteFacts({
   const quoteState = partState(!!quote, quotePending);
   const capWaiting = awaiting(cap, [quoteState, partState(shares != null, profilePending)]);
   const rangeWaiting = awaiting(range, [quoteState]);
-  if (!quote || (cap == null && !range)) {
-    if (!capWaiting && !rangeWaiting) return null;
-    return (
-      <dl data-section="Price facts" aria-busy className={cn("flex min-w-0 flex-wrap gap-x-6 gap-y-1", className)}>
-        {capWaiting && (
-          <Fact label="Market cap">
-            <Skeleton className="h-3 w-12" />
-          </Fact>
-        )}
-        {rangeWaiting && (
-          <Fact label="52-week range">
-            <Skeleton className="h-3 w-[11.875rem] sm:w-[12.875rem]" />
-          </Fact>
-        )}
-      </dl>
-    );
-  }
+  if (cap == null && !range && !capWaiting && !rangeWaiting) return null;
   const asOf = profile?.sharesOutstandingAsOf ? fmtDate(profile.sharesOutstandingAsOf) : null;
   const capTarget: SourceTarget | null =
-    cap != null && shares && profile?.sharesOutstandingAccn
+    cap != null && quote && shares && profile?.sharesOutstandingAccn
       ? {
           ticker,
           label: "Market cap",
@@ -185,14 +169,15 @@ export function QuoteFacts({
       : null;
   const capTitle = `Last price × ${shares ? fmtCompact(shares, 2) : ""} shares on the latest filing cover page${asOf ? ` (${asOf})` : ""}`;
   return (
-    <dl data-section="Price facts" aria-busy={capWaiting || undefined} className={cn("flex min-w-0 flex-wrap gap-x-6 gap-y-1", className)}>
+    <dl data-section="Price facts" aria-busy={capWaiting || rangeWaiting || undefined} className={cn("flex min-w-0 flex-wrap gap-x-6 gap-y-1", className)}>
+      {/* one keyed slot per fact, so a placeholder turns into its value in place */}
       {capWaiting && (
-        <Fact label="Market cap">
+        <Fact key="cap" label="Market cap">
           <Skeleton className="h-3 w-12" />
         </Fact>
       )}
       {cap != null && (
-        <Fact label="Market cap" title={capTitle}>
+        <Fact key="cap" label="Market cap" title={capTitle}>
           {capTarget ? (
             <button
               type="button"
@@ -207,8 +192,14 @@ export function QuoteFacts({
           )}
         </Fact>
       )}
-      {range && (
+      {rangeWaiting && (
+        <Fact key="range" label="52-week range">
+          <Skeleton className="h-3 w-[11.875rem] sm:w-[12.875rem]" />
+        </Fact>
+      )}
+      {range && quote && (
         <Fact
+          key="range"
           label="52-week range"
           title={`52-week low ${fmtPrice(range.low)}, high ${fmtPrice(range.high)}. The last price is ${Math.round(range.position * 100)}% of the way up. From the quote provider.`}
         >
