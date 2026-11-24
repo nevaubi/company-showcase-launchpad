@@ -471,6 +471,18 @@ describe("total debt, net debt and short-term investments on real filings", () =
     expect(cellAt("OMC", "quarterly", "longTermDebt", "2026-09-30")!.src?.concept).toBe("us-gaap:LongTermNotesPayable");
   });
 
+  it("adds current notes to a plain LongTermDebt when the filing's notes total says it is the noncurrent line (Biogen Q1 2025, 10-Q 0000875045-25-000018)", () => {
+    // LongTermDebt 4,548.7 + NotesPayableCurrent 1,749.1 = NotesPayable 6,297.8.
+    expect(cellAt("BIIB", "quarterly", "totalDebt", "2025-03-31")!.v).toBeCloseTo(6_297_800_000, -3);
+  });
+
+  it("falls back to LongTermDebt when the noncurrent notes line is only part of the debt (BKV Q3 2024: zero notes, $190M of debt)", () => {
+    expect(cellAt("BKV", "quarterly", "totalDebt", "2024-09-30")!.v).toBe(190_000_000);
+    // Treace: $88.7M of notes against $196.0M of LongTermDebt (Q3 2026), $90.8M + $4.1M against $136.7M (FY2025).
+    expect(cellAt("TRLV", "quarterly", "totalDebt", "2026-09-30")!.v).toBeGreaterThanOrEqual(196_008_000);
+    expect(cellAt("TRLV", "annual", "totalDebt", "2025-12-31")!.v).toBeGreaterThanOrEqual(136_741_000);
+  });
+
   it("matches the face when current and long-term notes add up to LongTermDebt (Andersen Q3 2026, 10-Q 0002065708-26-000009)", () => {
     expect(cellAt("ANDG", "quarterly", "totalDebt", "2026-09-30")!.v).toBe(287_713_000); // 54.8 + 232.9
   });

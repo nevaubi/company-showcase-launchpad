@@ -697,6 +697,9 @@ const SHORT_BORROWINGS: LineDef = {
  */
 const SHORT_BORROWINGS_AND_NOTES: LineDef = { ...SHORT_BORROWINGS, components: [...SHORT_BORROWINGS.components!, "NotesPayableCurrent"] };
 
+/** Totals that show whether current notes payable sit outside a plain LongTermDebt figure. */
+const NOTES_TOTALS = ["NotesPayable", "DebtInstrumentCarryingAmount", ...TOTAL_DEBT_CONCEPTS];
+
 const TOTAL_DEBT_TAGGED: LineDef = { key: "_debtTagged", label: "Total debt", concepts: TOTAL_DEBT_CONCEPTS, unit: "usd", kind: "stock" };
 
 /** Long-term debt concepts that already include current maturities. */
@@ -735,11 +738,20 @@ function debtFromLines(cf: CompanyFacts, l: Cell | null, s: Cell | null, end: st
   if (!l && !s) return null;
   const atEnd = (f: RawFact) => !f.start && near(f.end, end, 4);
   if (l && includesCurrent(cf, l, end)) {
+    // Plain LongTermDebt is sometimes the noncurrent line after all: Biogen tags $4,548.7M of it beside
+    // $1,749.1M of current notes and a $6,297.8M NotesPayable total (Q1 2025). The current notes are added
+    // only when the filing's own total says so.
+    const npc = l.src?.concept === "us-gaap:LongTermDebt" ? choose(factsFor(cf, "NotesPayableCurrent", "USD"), "NotesPayableCurrent", atEnd) : undefined;
+    const npcTotal = npc && NOTES_TOTALS.some((c) => {
+      const t = choose(factsFor(cf, c, "USD"), c, atEnd);
+      return !!t && Math.abs(t.fact.val - (l.v + npc.fact.val)) <= Math.abs(t.fact.val) * 0.005;
+    });
+    const lt = npc && npcTotal ? combine(l, reportedCell(npc), "add", ["Long-term debt", "Current notes payable"])! : l;
     // This figure already includes current maturities; add only short-term borrowings.
-    const label = "Long-term debt incl. current maturities";
+    const label = npcTotal ? "(long-term debt + current notes payable)" : "Long-term debt incl. current maturities";
     const extra = pickCell(cf, SHORT_BORROWINGS, atEnd);
-    if (extra) return combine(l, extra, "add", [label, "Short-term borrowings"]);
-    return { v: l.v, derived: { formula: label, parts: partsFrom(l, label, 1) } };
+    if (extra) return combine(lt, extra, "add", [label, "Short-term borrowings"]);
+    return npcTotal ? lt : { v: l.v, derived: { formula: label, parts: partsFrom(l, label, 1) } };
   }
   // Current maturities alone (FedEx, Home Depot): short-term borrowings and commercial paper are separate lines.
   const sbAll = s?.src && CURRENT_MATURITIES_ONLY.has(s.src.concept) ? pickCell(cf, SHORT_BORROWINGS_AND_NOTES, atEnd) : null;
@@ -779,8 +791,18 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
       // $3,977M of credit lines and term loans with it, beside $4,669M of convertible notes (Q1 FY27).
       return evidence > tagged.fact.val * 1.1 ? null : reportedCell(tagged);
     }
-    if (!lines) return null;
-    return evidence > lines.v * 2 ? null : lines;
+    // The noncurrent notes line can be only part of the long-term debt: Treace tags $90.8M of
+    // LongTermNotesPayable and $4.1M of current notes beside $136.7M of LongTermDebt (FY2025), BKV a zero
+    // beside $190M (Q3 2024). When LongTermDebt, which includes current maturities, is more than a tenth
+    // above the notes, it is the long-term figure.
+    const l = ltd?.cells[i];
+    if (l?.src?.concept === "us-gaap:LongTermNotesPayable") {
+      const whole = choose(factsFor(cf, "LongTermDebt", "USD"), "LongTermDebt", atEnd);
+      const notes = l.v + (choose(factsFor(cf, "NotesPayableCurrent", "USD"), "NotesPayableCurrent", atEnd)?.fact.val ?? 0);
+      const alt = whole && whole.fact.val > notes * 1.1 ? debtFromLines(cf, reportedCell(whole), null, p.end) : null;
+      if (alt && evidence <= alt.v * 2) return alt;
+    }
+    return lines && evidence <= lines.v * 2 ? lines : null;
   });
   return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells };
 }
