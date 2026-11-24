@@ -1,81 +1,97 @@
 import { useMemo } from "react";
-import { Link } from "@tanstack/react-router";
-import { Layers } from "lucide-react";
-import { Panel } from "@/components/app/page-header";
-import { CompanyLogo } from "@/components/app/company-logo";
+import { TickerMark } from "@/components/app/ticker";
+import { IrPanel } from "@/components/ir/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuotes, useUniverse } from "@/lib/data";
-import { COVERAGE_TICKERS, coverageOf } from "@/lib/coverage";
+import { coverageOf } from "@/lib/coverage";
 import { METRICS, medians, metricsOf, rankIn, type Metrics } from "@/lib/company/benchmarks";
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const fmt = (v: number | null, kind: "usd" | "x" | "pct") => (v == null ? "—" : kind === "usd" ? fmtCompactUsd(v) : kind === "x" ? `${v.toFixed(1)}×` : fmtPct(v, 1));
+const fmt = (v: number | null, kind: "usd" | "x" | "pct") => (v == null ? "–" : kind === "usd" ? fmtCompactUsd(v) : kind === "x" ? `${v.toFixed(1)}×` : fmtPct(v, 1));
 
-/** Company vs peers and industry / sector / coverage medians, with its rank in the sector. */
+/** The most industry members whose prices are requested: enough for a median, never the whole coverage list. */
+const INDUSTRY_CAP = 60;
+/** The universe snapshot divides net income by equity at the period end; the analysis above uses average equity. */
+const LABEL: Partial<Record<(typeof METRICS)[number]["key"], string>> = { roe: "ROE, period-end", growth: "Revenue growth, qtr", cagr5: "Revenue, 5Y CAGR", leverage: "Net debt / EBITDA" };
+
+/**
+ * The company against its named peers and its industry median, with its rank in the industry. Prices are requested
+ * for the company, its peers and its industry (tens of tickers), not for every covered company.
+ */
 export function SectorTable({ ticker }: { ticker: string }) {
   const u = useUniverse();
-  const quotes = useQuotes(COVERAGE_TICKERS);
   const co = coverageOf(ticker);
+  const members = useMemo(() => {
+    const all = u.data?.companies ?? [];
+    const self = all.find((c) => c.ticker === ticker);
+    if (!self || !co) return null;
+    const industry = all.filter((c) => c.industry === self.industry);
+    const peers = (co.peers ?? []).map((t) => all.find((c) => c.ticker === t)).filter((c): c is (typeof all)[number] => !!c).slice(0, 5);
+    // the largest by trailing revenue stand for the industry when it is bigger than the cap
+    const ranked = [...industry].sort((a, b) => (b.f?.ttm?.revenue ?? 0) - (a.f?.ttm?.revenue ?? 0)).slice(0, INDUSTRY_CAP);
+    return { self, peers, industry: ranked, industrySize: industry.length };
+  }, [u.data, ticker, co]);
+  const symbols = useMemo(() => (members ? [...new Set([ticker, ...members.peers.map((c) => c.ticker), ...members.industry.map((c) => c.ticker)])] : [ticker]), [members, ticker]);
+  const quotes = useQuotes(symbols);
 
   const model = useMemo(() => {
-    if (!u.data || !co) return null;
-    const px = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, q.price]));
-    const all = u.data.companies.map((c) => ({ c, m: metricsOf(c, px.get(c.ticker) ?? null) }));
-    const self = all.find((x) => x.c.ticker === ticker);
-    if (!self) return null;
-    const sector = all.filter((x) => x.c.sector === self.c.sector);
-    const industry = all.filter((x) => x.c.industry === self.c.industry);
-    const peers = (co.peers ?? []).map((t) => all.find((x) => x.c.ticker === t)).filter((x): x is (typeof all)[number] => !!x).slice(0, 5);
+    if (!members) return null;
+    const px = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, q.price || null]));
+    const of = (c: (typeof members.industry)[number]) => ({ c, m: metricsOf(c, px.get(c.ticker) ?? null) });
+    const industry = members.industry.map(of);
     return {
-      self,
-      sector,
-      peers,
-      rows: [
-        { id: "ind", label: `Industry median`, sub: `${self.c.industry} · ${industry.length}`, m: medians(industry.map((x) => x.m)) },
-        { id: "sec", label: `Sector median`, sub: `${self.c.sector} · ${sector.length}`, m: medians(sector.map((x) => x.m)) },
-        { id: "all", label: "Coverage median", sub: `${all.length} companies`, m: medians(all.map((x) => x.m)) },
-      ],
-      asOf: self.c.f?.asOf,
+      self: of(members.self),
+      industry,
+      peers: members.peers.map(of),
+      rows: [{ id: "ind", label: "Industry median", sub: `${members.self.industry} · ${industry.length}${members.industrySize > industry.length ? ` largest of ${members.industrySize}` : industry.length === 1 ? " company" : " companies"}`, m: medians(industry.map((x) => x.m)) }],
+      asOf: members.self.f?.asOf,
     };
-  }, [u.data, quotes.data, ticker, co]);
+  }, [members, quotes.data]);
 
   return (
-    <Panel
-      title={
-        <span className="flex items-center gap-1.5">
-          <Layers className="size-3.5" /> Sector & industry comparison
-        </span>
+    <IrPanel
+      section="Peers"
+      title="Peers and industry"
+      subtitle={
+        model
+          ? `Universe snapshot: trailing twelve months from SEC filings${model.asOf ? ` through ${fmtDate(model.asOf)}` : ""}, at the last price · revenue growth is the latest quarter on a year earlier · return on equity uses period-end equity, so it differs from the average-equity figure in the analysis · rank is within the industry`
+          : u.isLoading
+            ? "Loading"
+            : "Universe snapshot"
       }
-      subtitle={model ? `Trailing twelve months from SEC filings${model.asOf ? ` through ${fmtDate(model.asOf)}` : ""} · live prices` : "Loading…"}
       bodyClassName="p-0"
     >
       {!model ? (
-        <Skeleton className="m-4 h-60" />
+        u.isLoading ? (
+          <Skeleton className="m-4 h-40" />
+        ) : (
+          <p className="px-4 py-3 text-[13px] text-muted-foreground">{ticker} is not in the universe snapshot yet, so there is no peer comparison to show.</p>
+        )
       ) : (
         <div className="overflow-x-auto scrollbar-thin">
-          <table className="research-table min-w-[1100px]">
+          <table className="research-table min-w-[960px]">
             <thead>
               <tr className="border-b bg-secondary/40 text-left text-[10.5px] uppercase tracking-wide text-muted-foreground">
                 <th className="sticky left-0 z-10 bg-secondary/95 px-4 py-2 font-medium">Company</th>
                 {METRICS.map((m) => (
-                  <th key={m.key} className="px-3 py-2 text-right font-medium">{m.label}</th>
+                  <th key={m.key} className="px-2 py-2 text-right font-medium">{LABEL[m.key] ?? m.label}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              <Row ticker={ticker} label={coverageOf(ticker)?.shortName ?? ticker} m={model.self.m} highlight sector={model.sector.map((x) => x.m)} />
+              <Row ticker={ticker} m={model.self.m} highlight sector={model.industry.map((x) => x.m)} />
               {model.peers.map((p) => (
-                <Row key={p.c.ticker} ticker={p.c.ticker} label={coverageOf(p.c.ticker)?.shortName ?? p.c.name} m={p.m} base={model.self.m} />
+                <Row key={p.c.ticker} ticker={p.c.ticker} m={p.m} base={model.self.m} />
               ))}
               {model.rows.map((r) => (
                 <tr key={r.id} className="border-t bg-secondary/20">
-                  <td className="sticky left-0 z-10 bg-card px-4 py-2">
+                  <td className="sticky left-0 z-10 bg-card px-4 py-1.5">
                     <p className="font-medium">{r.label}</p>
                     <p className="truncate text-[10.5px] text-muted-foreground">{r.sub}</p>
                   </td>
                   {METRICS.map((m) => (
-                    <td key={m.key} className="num px-3 py-2 text-right text-muted-foreground">{fmt(r.m[m.key], m.kind)}</td>
+                    <td key={m.key} className="num px-2 py-1.5 text-right text-muted-foreground">{fmt(r.m[m.key], m.kind)}</td>
                   ))}
                 </tr>
               ))}
@@ -83,19 +99,15 @@ export function SectorTable({ ticker }: { ticker: string }) {
           </table>
         </div>
       )}
-    </Panel>
+    </IrPanel>
   );
 }
 
-function Row({ ticker, label, m, highlight, sector, base }: { ticker: string; label: string; m: Metrics; highlight?: boolean; sector?: Metrics[]; base?: Metrics }) {
+function Row({ ticker, m, highlight, sector, base }: { ticker: string; m: Metrics; highlight?: boolean; sector?: Metrics[]; base?: Metrics }) {
   return (
     <tr className={cn("border-t", highlight ? "bg-primary/5" : "hover:bg-secondary/40")}>
-      <td className={cn("sticky left-0 z-10 px-4 py-2", highlight ? "bg-card" : "bg-card")}>
-        <Link to="/app/companies/$ticker" params={{ ticker }} className="flex items-center gap-2">
-          <CompanyLogo ticker={ticker} size="xs" />
-          <span className={cn("truncate", highlight && "font-semibold")}>{label}</span>
-          <span className="num text-[10.5px] text-muted-foreground">{ticker}</span>
-        </Link>
+      <td className="sticky left-0 z-10 bg-card px-4 py-1.5">
+        <TickerMark ticker={ticker} name nameFirst link={!highlight} className={highlight ? "font-semibold" : undefined} />
       </td>
       {METRICS.map((x) => {
         const r = sector ? rankIn(m[x.key], sector.map((s) => s[x.key]), x.better) : null;
@@ -103,10 +115,10 @@ function Row({ ticker, label, m, highlight, sector, base }: { ticker: string; la
         const v = m[x.key];
         const better = b != null && v != null && x.key !== "mcap" ? (x.better === "high" ? v > b : v < b) : null;
         return (
-          <td key={x.key} className="num px-3 py-2 text-right">
-            <span className={cn(highlight && "font-semibold", better === true && "text-positive", better === false && "text-muted-foreground")}>{fmt(v, x.kind)}</span>
+          <td key={x.key} className="num px-2 py-1.5 text-right align-top">
+            <span className={cn("block", highlight && "font-semibold", better === true && "text-positive", better === false && "text-muted-foreground")}>{fmt(v, x.kind)}</span>
             {r && r.of > 1 && (
-              <span className={cn("ml-1.5 rounded px-1 py-px text-[9.5px]", r.rank <= Math.ceil(r.of / 3) ? "bg-positive/15 text-positive" : r.rank > Math.floor((2 * r.of) / 3) ? "bg-negative/10 text-negative" : "bg-secondary text-muted-foreground")}>
+              <span title={`Rank ${r.rank} of ${r.of} in the industry`} className={cn("mt-0.5 inline-block rounded px-1 py-px text-[10px]", r.rank <= Math.ceil(r.of / 3) ? "bg-positive/15 text-positive" : r.rank > Math.floor((2 * r.of) / 3) ? "bg-negative/10 text-negative" : "bg-secondary text-muted-foreground")}>
                 #{r.rank}/{r.of}
               </span>
             )}

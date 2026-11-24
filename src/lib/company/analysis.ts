@@ -66,8 +66,8 @@ export interface KeyFigure {
   unit: "usd" | "perShare";
   now: Fig | null;
   prior: Fig | null;
-  /** the trailing-twelve-month value at each of the last eight quarter ends, oldest first (balances: the quarter-end value) */
-  run: (number | null)[];
+  /** the trailing-twelve-month value at each of the last eight quarter ends, oldest first (balances: the quarter-end value); fiscal years when the analysis is annual */
+  run: { label: string; v: number | null }[];
 }
 
 export interface FinancialAnalysis {
@@ -422,10 +422,10 @@ export function analyze(d: CompanyDataset): FinancialAnalysis {
       m("netIncomeGrowth", "Net income", "pct", "high", growth(netIncome, "Net income")),
       m("epsGrowth", "Diluted EPS", "pct", "high", growth(eps, "Diluted EPS")),
       ...(bank ? [] : [m("fcfGrowth", "Free cash flow", "pct", "high", growth(fcf, "Free cash flow"))]),
-      quarterly("revenueYoY", "Revenue, latest quarter on a year earlier", "Revenue", "year"),
-      quarterly("revenueSeq", "Revenue, latest quarter on the one before", "Revenue", "quarter"),
-      compound("revenueCagr3", "Revenue, 3-year compound rate", revenue, 3, "Revenue"),
-      compound("revenueCagr5", "Revenue, 5-year compound rate", revenue, 5, "Revenue"),
+      quarterly("revenueYoY", "Revenue, latest quarter, year on year", "Revenue", "year"),
+      quarterly("revenueSeq", "Revenue, latest quarter, on the prior quarter", "Revenue", "quarter"),
+      compound("revenueCagr3", "Revenue, 3-year compound", revenue, 3, "Revenue"),
+      compound("revenueCagr5", "Revenue, 5-year compound", revenue, 5, "Revenue"),
     ],
   };
 
@@ -440,7 +440,7 @@ export function analyze(d: CompanyDataset): FinancialAnalysis {
         calc(s.at, "Shareholders' equity ÷ shares outstanding at the period end", [s.bal("equity", "Shareholders' equity"), s.bal("sharesOutstanding", "Shares outstanding")], ([e, n]) => (n > 0 ? e / n : null)),
       ),
       m("dividendPerShare", "Dividends declared per share", "perShare", "high", flow("income", "dividendsPerShare", "Dividends per share")),
-      m("shareChange", "Diluted share count, change over a year", "pct", "low", (s) => {
+      m("shareChange", "Diluted shares, change over a year", "pct", "low", (s) => {
         const p = s.prev();
         return p ? calc(s.label, `Diluted shares (weighted): ${s.label} ÷ ${p.label} − 1`, [sharesLast(s), sharesLast(p)], ([a, b]) => (b > 0 ? a / b - 1 : null)) : null;
       }),
@@ -454,11 +454,11 @@ export function analyze(d: CompanyDataset): FinancialAnalysis {
     measures: [
       m("buybacks", "Share repurchases", "usd", null, buybacks),
       m("dividends", "Dividends paid", "usd", null, dividends),
-      m("payout", "Dividends as a share of net income", "pct", null, (s) => calc(s.label, "Dividends paid ÷ net income", [dividends(s), netIncome(s)], ([dv, n]) => (n > 0 ? dv / n : null))),
+      m("payout", "Dividend payout (of net income)", "pct", null, (s) => calc(s.label, "Dividends paid ÷ net income", [dividends(s), netIncome(s)], ([dv, n]) => (n > 0 ? dv / n : null))),
       ...(bank
-        ? [m("totalPayout", "Dividends and repurchases as a share of net income", "pct", null, (s) => calc(s.label, "(Dividends paid + share repurchases) ÷ net income", [netIncome(s)], ([n], [b, dv]) => (n > 0 && b + dv > 0 ? (b + dv) / n : null), [buybacks(s), dividends(s)]))]
+        ? [m("totalPayout", "Returned to holders (of net income)", "pct", null, (s) => calc(s.label, "(Dividends paid + share repurchases) ÷ net income", [netIncome(s)], ([n], [b, dv]) => (n > 0 && b + dv > 0 ? (b + dv) / n : null), [buybacks(s), dividends(s)]))]
         : [
-            m("returnedToFcf", "Dividends and repurchases as a share of free cash flow", "pct", null, (s) =>
+            m("returnedToFcf", "Returned to holders (of free cash flow)", "pct", null, (s) =>
               calc(s.label, "(Dividends paid + share repurchases) ÷ free cash flow", [fcf(s)], ([f], [b, dv]) => (f > 0 && b + dv > 0 ? (b + dv) / f : null), [buybacks(s), dividends(s)]),
             ),
             m("buybacksNetOfSbc", "Repurchases less stock compensation", "usd", null, (s) => calc(s.label, "Share repurchases − stock-based compensation", [buybacks(s), minus(s.flow("cashflow", "sbc", "Stock-based compensation"))], ([b, c]) => b - c)),
@@ -499,12 +499,12 @@ export function analyze(d: CompanyDataset): FinancialAnalysis {
         measures: [
           m("efficiency", "Efficiency ratio", "pct", "low", over(nonInterestExpense, revenue, "Noninterest expense ÷ revenue")),
           m("netMargin", "Net margin", "pct", "high", over(netIncome, revenue, "Net income ÷ revenue")),
-          m("niiShare", "Net interest income as a share of revenue", "pct", null, over(nii, revenue, "Net interest income ÷ revenue")),
+          m("niiShare", "Net interest income to revenue", "pct", null, over(nii, revenue, "Net interest income ÷ revenue")),
           m("niiToAssets", "Net interest income to average assets", "pct", "high", (s) => calc(s.label, "Net interest income ÷ average total assets", [nii(s), avgAssets(s)], ([n, a]) => (a > 0 ? n / a : null))),
-          m("provisionToLoans", "Provision for credit losses to average net loans", "pct", "low", (s) =>
+          m("provisionToLoans", "Provisions to average net loans", "pct", "low", (s) =>
             calc(s.label, "Provision for credit losses ÷ average loans net of allowance", [provision(s), average("loans", "Loans, net of allowance")(s)], ([p, l]) => (l > 0 ? p / l : null)),
           ),
-          m("provisionToRevenue", "Provision for credit losses as a share of revenue", "pct", "low", (s) => calc(s.label, "Provision for credit losses ÷ revenue", [provision(s), revenue(s)], ([p, r]) => (r > 0 ? p / r : null))),
+          m("provisionToRevenue", "Provisions to revenue", "pct", "low", (s) => calc(s.label, "Provision for credit losses ÷ revenue", [provision(s), revenue(s)], ([p, r]) => (r > 0 ? p / r : null))),
         ],
       },
       {
@@ -607,8 +607,8 @@ export function analyze(d: CompanyDataset): FinancialAnalysis {
         measures: [
           m("fcfConversion", "Free cash flow to net income", "pct", "high", (s) => calc(s.label, "Free cash flow ÷ net income", [fcf(s), netIncome(s)], ([f, n]) => (n > 0 ? f / n : null))),
           m("accruals", "Accruals to average assets", "pct", "low", (s) => calc(s.label, "(Net income − cash from operations) ÷ average total assets", [netIncome(s), minus(cfo(s)), avgAssets(s)], ([n, c, a]) => (a > 0 ? (n - c) / a : null))),
-          m("capexIntensity", "Capital expenditures as a share of revenue", "pct", null, over(capex, revenue, "Capital expenditures ÷ revenue")),
-          m("sbcIntensity", "Stock compensation as a share of revenue", "pct", "low", over(sbc, revenue, "Stock-based compensation ÷ revenue")),
+          m("capexIntensity", "Capital expenditures to revenue", "pct", null, over(capex, revenue, "Capital expenditures ÷ revenue")),
+          m("sbcIntensity", "Stock compensation to revenue", "pct", "low", over(sbc, revenue, "Stock-based compensation ÷ revenue")),
           m("dso", "Days sales outstanding", "days", "low", (s) => calc(s.label, "Accounts receivable ÷ revenue × 365", [s.bal("receivables", "Accounts receivable"), revenue(s)], ([a, r]) => (r > 0 ? (a / r) * 365 : null))),
           m("inventoryDays", "Inventory days", "days", "low", (s) => calc(s.label, "Inventories ÷ cost of revenue × 365", [s.bal("inventory", "Inventories"), cogs(s)], ([a, c]) => (c > 0 ? (a / c) * 365 : null))),
           m("receivablesGrowth", "Receivables, change over a year", "pct", null, yearChange("receivables", "Accounts receivable")),
@@ -634,18 +634,18 @@ export function analyze(d: CompanyDataset): FinancialAnalysis {
   }
 
   /* ---- headline levels with their run over the last eight quarter ends */
-  const runOf = (def: Def): (number | null)[] => {
+  const runOf = (def: Def): KeyFigure["run"] => {
     if (qi < 0) return [];
-    const out: (number | null)[] = [];
+    const out: KeyFigure["run"] = [];
     for (let i = Math.max(0, qi - 7); i <= qi; i++) {
       const s = ttmSpan(Q, A, i);
-      out.push(s ? (def(s)?.v ?? null) : null);
+      out.push({ label: ps[i].label, v: s ? (def(s)?.v ?? null) : null });
     }
     return out;
   };
   const level = (key: string, label: string, def: Def, unit: KeyFigure["unit"] = "usd"): KeyFigure => {
     const before = cur?.prev() ?? null;
-    return { key, label, unit, now: cur ? def(cur) : null, prior: before ? def(before) : null, run: cur?.kind === "ttm" ? runOf(def) : years.map((y) => def(y)?.v ?? null) };
+    return { key, label, unit, now: cur ? def(cur) : null, prior: before ? def(before) : null, run: cur?.kind === "ttm" ? runOf(def) : years.map((y) => ({ label: y.label, v: def(y)?.v ?? null })) };
   };
   const keyFigures = (
     bank
@@ -707,6 +707,23 @@ export function figTarget(ticker: string, label: string, fig: Fig, unit: Measure
     return { ...base, src };
   }
   return { ...base, derived: { formula: fig.formula, parts: fig.parts } };
+}
+
+/**
+ * What the source panel opens for a measure's median: the fiscal years it covers with each year's value, and the
+ * filed numbers behind every one of them. `fmt` writes a value in the measure's unit.
+ */
+export function medianTarget(ticker: string, x: Measure, fmt: (v: number) => string): SourceTarget | null {
+  if (!x.median) return null;
+  const years = x.history.filter((h) => h.fig).slice(-5);
+  return {
+    ticker,
+    label: `${x.label}, median of ${x.median.n} fiscal years`,
+    periodLabel: `${x.median.from} to ${x.median.to}`,
+    unit: TARGET_UNIT[x.unit],
+    value: x.median.v,
+    derived: { formula: `Median of ${years.map((h) => `${h.label} ${fmt(h.fig!.v)}`).join(", ")}`, parts: mergeParts(years.map((h) => h.fig!)) },
+  };
 }
 
 /** How far the current figure sits from its five-year median, in the measure's own unit (points for percentages). */
