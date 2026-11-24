@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptySpec, fmtField, run, validate, type FieldDef, type Row, type Spec } from "./engine";
 import { applicable, buildFilter, decodeSpec, encodeSpec, fieldGroups, filterImpact, searchAlone, formatInput, parseInput, readShared, screenSearch, SHARE_MAX, toCsv } from "./present";
-import { SERIES_FIELDS, seriesAsOf, seriesRange, withSeries } from "./series";
+import { SERIES_COLUMNS, SERIES_FIELDS, seriesAsOf, seriesRange, withSeries } from "./series";
 
 const fields: FieldDef[] = [
   { id: "price", g: "px", n: "Price", u: "usd", d: "Last close" },
@@ -43,6 +43,39 @@ describe("filter builder", () => {
     expect(parseInput(F.get("pe")!, "2B")).toBeNull();
     expect(parseInput(F.get("om")!, "abc")).toBeNull();
     for (const [id, v] of [["om", 0.152], ["mcap", 2.5e9], ["pe", 17.5]] as const) expect(parseInput(F.get(id)!, formatInput(F.get(id)!, v))).toBeCloseTo(v);
+  });
+  it("accepts the plain variants a person types", () => {
+    const pctl: FieldDef = { id: "rs", g: "px", n: "Relative strength", u: "pctl", d: "" };
+    const days: FieldDef = { id: "dte", g: "ev", n: "Days to earnings", u: "days", d: "" };
+    expect(parseInput(F.get("om")!, "15.")).toBeCloseTo(0.15);
+    expect(parseInput(F.get("om")!, "+15")).toBeCloseTo(0.15);
+    expect(parseInput(F.get("om")!, ".5")).toBeCloseTo(0.005);
+    expect(parseInput(F.get("mcap")!, "2.5 bn")).toBe(2.5e9);
+    expect(parseInput(F.get("mcap")!, "300mm")).toBe(3e8);
+    expect(parseInput(F.get("mcap")!, "1.2 tn")).toBe(1.2e12);
+    expect(parseInput(F.get("mcap")!, "$ 40 B")).toBe(4e10);
+    expect(parseInput(pctl, "20th")).toBeCloseTo(0.2);
+    expect(parseInput(pctl, "1st")).toBeCloseTo(0.01);
+    expect(parseInput(days, "30d")).toBe(30);
+    expect(parseInput(days, "30 days")).toBe(30);
+    expect(parseInput(F.get("pe")!, "20th")).toBeNull();
+    expect(parseInput(F.get("om")!, "30d")).toBeNull();
+    expect(parseInput(F.get("om")!, "1.2.3")).toBeNull();
+    expect(parseInput(F.get("om")!, "+-3")).toBeNull();
+    expect(parseInput(F.get("om")!, ".")).toBeNull();
+  });
+  it("writes a stored value back without changing it", () => {
+    const back = (id: string, v: number) => parseInput(F.get(id)!, formatInput(F.get(id)!, v));
+    expect(formatInput(F.get("mcap")!, 1_234_567_890)).toBe("1,234,567,890");
+    expect(back("mcap", 1_234_567_890)).toBe(1_234_567_890);
+    expect(formatInput(F.get("mcap")!, 2.5e9)).toBe("2.5B");
+    expect(formatInput(F.get("mcap")!, 7.5e8)).toBe("750M");
+    expect(formatInput(F.get("mcap")!, -3.25e12)).toBe("-3.25T");
+    expect(back("mcap", 987_654_321_012)).toBe(987_654_321_012);
+    expect(back("om", 0.1234567)).toBe(0.1234567);
+    expect(formatInput(F.get("om")!, 0.15)).toBe("15");
+    expect(back("pe", 17.123456)).toBe(17.123456);
+    expect(back("price", 12.345)).toBe(12.345);
   });
   it("builds filters the engine accepts and explains bad input", () => {
     const a = buildFilter(F.get("om")!, ">", "20");
@@ -124,7 +157,7 @@ describe("screen codes", () => {
 
 describe("series fields", () => {
   it("adds dollar volume and short-volume share as stored and drops impossible values", () => {
-    const s = { ticker: "AAA", end_date: "2026-11-20", dv20: 3.2e9, r5: 0, r21: 0, vol60: 0.02, above200: true, near_high: false, short5: 0.48 };
+    const s = { ticker: "AAA", end_date: "2026-11-20", dv20: 3.2e9, short5: 0.48 };
     const r = withSeries(rows[0], s);
     expect(r.dv20).toBe(3.2e9);
     expect(r.short_vol5).toBe(0.48);
@@ -132,6 +165,9 @@ describe("series fields", () => {
     expect(withSeries(rows[0], undefined)).toBe(rows[0]);
     expect(seriesAsOf([{ end_date: "2026-11-19" }, { end_date: "2026-11-20" }])).toBe("2026-11-20");
     expect(SERIES_FIELDS.map((f) => f.id)).toEqual(["dv20", "short_vol5"]);
+  });
+  it("asks the server only for the columns the screener reads", () => {
+    expect([...SERIES_COLUMNS]).toEqual(["ticker", "end_date", "dv20", "short5"]);
   });
 });
 

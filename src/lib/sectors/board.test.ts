@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boardRows, boardSort, relativeSeries, sharedQuarter, signalShare, sortBoard, withoutTapeRow } from "./board";
+import { BOARD_DROP, BOARD_SETS, boardRows, boardSort, fitBoard, relativeSeries, sharedQuarter, signalShare, sortBoard, withoutTapeRow } from "./board";
 import { tapeIndex, type MemberTape } from "./breadth";
 import type { GroupSummary, Overview } from "./groups";
 import { byUnit, mult, pct, pts, ratio, usd } from "./format";
@@ -170,5 +170,46 @@ describe("why a file did not load", () => {
     expect(loadFailure(new Error("Data service returned 503"))).toBe("service");
     expect(loadFailure(new Error("Data service returned no response"))).toBe("service");
     expect(loadFailure(undefined)).toBe("service");
+  });
+});
+
+describe("fitBoard", () => {
+  // Widths as the board draws them (board.tsx).
+  const W: Record<string, number> = { mcap: 72, r1W: 56, r1M: 56, r3M: 56, rYTD: 56, r1Y: 56, a200: 80, nh: 80, rev: 62, om: 62, roic: 62, pe: 56, pep: 84 };
+  const over = BOARD_SETS.overview.map((k) => ({ k, w: W[k] }));
+  const risk = BOARD_SETS.risk.map((k, i) => ({ k, w: [76, 64, 88, 88, 70, 96, 96, 70, 70][i] }));
+  const sum = (cols: { w: number }[]) => cols.reduce((s, c) => s + c.w, 0);
+
+  it("keeps every column when the board fits or is not measured yet", () => {
+    expect(fitBoard(over, BOARD_DROP.overview, "r3M", 1200, 212)).toEqual(over);
+    expect(fitBoard(over, BOARD_DROP.overview, "r3M", 0, 212)).toEqual(over);
+  });
+
+  it("drops the least useful columns until a laptop-width board fits", () => {
+    // 1280 px window: the wrapper is about 990 px wide.
+    const sectors = fitBoard(over, BOARD_DROP.overview, "r3M", 990, 212);
+    expect(212 + sum(sectors)).toBeLessThanOrEqual(990);
+    expect(sectors.map((c) => c.k)).toEqual(["mcap", "r1M", "r3M", "r1Y", "a200", "nh", "rev", "om", "roic", "pe", "pep"]);
+    const industries = fitBoard(over, BOARD_DROP.overview, "r3M", 990, 310);
+    expect(310 + sum(industries)).toBeLessThanOrEqual(990);
+    expect(industries.map((c) => c.k)).not.toContain("pep");
+  });
+
+  it("never drops the column the board is sorted by", () => {
+    const cols = fitBoard(over, BOARD_DROP.overview, "rYTD", 990, 310);
+    expect(cols.map((c) => c.k)).toContain("rYTD");
+    expect(310 + sum(cols)).toBeLessThanOrEqual(990);
+  });
+
+  it("keeps the sorted column on the first screen of a phone", () => {
+    // 400 px phone: wrapper about 368 px, name column 172 px.
+    const o = fitBoard(over, BOARD_DROP.overview, "r3M", 368, 172);
+    const at = (cols: { k: string; w: number }[], k: string) => 172 + sum(cols.slice(0, cols.findIndex((c) => c.k === k) + 1));
+    expect(at(o, "r3M")).toBeLessThanOrEqual(368);
+    const r = fitBoard(risk, BOARD_DROP.risk, "vol", 368, 172);
+    expect(at(r, "vol")).toBeLessThanOrEqual(368);
+    expect(r[0].k).toBe("vol");
+    const p = fitBoard(over, BOARD_DROP.overview, "pe", 368, 172);
+    expect(at(p, "pe")).toBeLessThanOrEqual(368);
   });
 });

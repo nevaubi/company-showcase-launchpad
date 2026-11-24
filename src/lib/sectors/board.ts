@@ -161,6 +161,38 @@ export function boardSort(set: BoardSet, sort: string | undefined, dir: SortDir 
   return { sort: SET_DEFAULT[set], dir: "desc" };
 }
 
+/**
+ * Columns each set gives up first when the board does not fit its wrapper (below about 1400 px), least
+ * useful first. A board that fits needs no sideways scroller, so its head can stick to the page.
+ */
+export const BOARD_DROP: Record<BoardSet, readonly BoardSort[]> = {
+  overview: ["r1W", "rYTD", "pep", "nh", "roic", "om"],
+  fundamentals: ["nm", "ps", "fcfm", "ni", "nde", "gm"],
+  risk: ["top5", "bull", "bear", "disp"],
+};
+
+/**
+ * The board's columns at a wrapper width of `avail` px with a name column of `nameW` px: drop columns in
+ * `drop` order (never the sorted one) until the table fits. When it still does not fit (a phone), the
+ * wrapper scrolls sideways; if the sorted column would then start off screen it moves to the front, so the
+ * column the rows are ordered by is always in view. An unmeasured wrapper (0) keeps every column.
+ */
+export function fitBoard<C extends { k: BoardSort; w: number }>(cols: readonly C[], drop: readonly BoardSort[], sort: BoardSort, avail: number, nameW: number): C[] {
+  let out = [...cols];
+  if (!(avail > 0)) return out;
+  const total = () => nameW + out.reduce((s, c) => s + c.w, 0);
+  for (const k of drop) {
+    if (total() <= avail) break;
+    if (k !== sort) out = out.filter((c) => c.k !== k);
+  }
+  if (total() > avail && sort !== "name") {
+    const i = out.findIndex((c) => c.k === sort);
+    const right = nameW + out.slice(0, i + 1).reduce((s, c) => s + c.w, 0);
+    if (i > 0 && right > avail) out = [out[i], ...out.slice(0, i), ...out.slice(i + 1)];
+  }
+  return out;
+}
+
 /** Share of the members in the markets file with at least one live chart signal. */
 export const signalShare = (r: Pick<BoardRow, "signals" | "covered">) => (r.signals && r.covered ? r.signals.companies / r.covered : null);
 

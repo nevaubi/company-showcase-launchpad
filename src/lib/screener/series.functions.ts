@@ -1,14 +1,14 @@
 import { createServerFn } from "@tanstack/react-start";
 import { requireAppAccess } from "@/lib/app-access-middleware";
-import type { SeriesRow } from "./series";
+import { SERIES_COLUMNS, type SeriesRow } from "./series";
 
-const COLUMNS = "ticker, end_date, dv20, r5, r21, vol60, above200, near_high, short5";
+const COLUMNS = SERIES_COLUMNS.join(", ");
 const PAGE = 1000;
 const TTL_MS = 30 * 60_000;
 let cached: { rows: SeriesRow[]; at: number } | null = null;
 
 /**
- * Scalar columns of every `setup_series` row (about 1,800 rows, no close arrays) for the screener's
+ * The columns of every `setup_series` row the screener uses (about 1,800 rows, no close arrays) for its
  * liquidity and short-volume fields. The table is service-role only, so it is read here behind
  * requireAppAccess. Cached per server instance for 30 minutes; the setup job rewrites it once a day.
  */

@@ -25,6 +25,7 @@ import { kpiFileQuery, kpiItems, type KpiValue } from "@/lib/statements/filed";
 import { useSessionState } from "@/lib/use-session-state";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useWindowRange } from "@/lib/screener/window";
 import { useFits } from "@/components/ir/panel";
 import { DASH, IR } from "@/components/ir/typography";
 
@@ -69,6 +70,8 @@ const STALE_DAYS = 548;
 const MAX_COLS = 12;
 const DEFAULT_COLS = 8;
 const STICKY = "top-[var(--sticky-top,3.5rem)]";
+/** Matrix row height in px (28 px of content and padding, 1 px rule); the windowing below counts on it. */
+const KPI_ROW_H = 29;
 
 function fmtK(v: number | null | undefined, k: TaxKpi) {
   if (v == null || !Number.isFinite(v)) return DASH;
@@ -224,6 +227,8 @@ function KpiMatrix() {
       return sort.d * (x - y);
     });
   }, [rows, sort, view]);
+  const [body, setBody] = useState<HTMLTableSectionElement | null>(null);
+  const [start, end] = useWindowRange(body, sorted.length, KPI_ROW_H);
 
   // Heat: rank within each column, direction from the taxonomy.
   const heatOf = useMemo(() => {
@@ -520,15 +525,25 @@ function KpiMatrix() {
                   })}
                 </tr>
               </thead>
-              <tbody>
-                {sorted.map((r) => (
+              {/* Rows are windowed against the page scroll (fixed KPI_ROW_H rows, spacers above and below), so a sort at
+                  "All companies" renders about a hundred rows instead of every one. */}
+              <tbody ref={setBody}>
+                {start > 0 && (
+                  <tr aria-hidden style={{ height: start * KPI_ROW_H }}>
+                    <td colSpan={cols.length + 3} />
+                  </tr>
+                )}
+                {sorted.slice(start, end).map((r) => (
                   <tr
                     key={r.t}
                     onClick={() => navigate({ to: "/app/companies/$ticker", params: { ticker: r.t } })}
+                    style={{ height: KPI_ROW_H }}
                     className="group cursor-pointer [&>*]:transition-colors [&>*]:duration-150"
                   >
-                    <td className="sticky left-0 z-10 w-64 max-w-64 border-b border-r bg-card px-3 py-1 group-hover:bg-secondary" title={`${r.name} · ${r.ind}`}>
-                      <TickerMark ticker={r.t} name={r.name} className="min-w-0" />
+                    <td className="sticky left-0 z-10 w-64 max-w-64 border-b border-r bg-card px-3 py-0 group-hover:bg-secondary" title={`${r.name} · ${r.ind}`}>
+                      <span className="flex h-5 min-w-0 items-center">
+                        <TickerMark ticker={r.t} name={r.name} className="min-w-0" />
+                      </span>
                     </td>
                     <td data-col="mcap" className={cn("num whitespace-nowrap border-b px-3 py-1 text-right group-hover:bg-secondary", sort.c === "mcap" && IR.strong)}>{fmtMcap(r.mcap)}</td>
                     <td data-col="revg" className={cn("num whitespace-nowrap border-b border-r px-3 py-1 text-right group-hover:bg-secondary", sort.c === "revg" && IR.strong)}>
@@ -554,7 +569,7 @@ function KpiMatrix() {
                               void openCell(r.t, k, c.kpiId, c.p);
                             }}
                             title={`${k.name} · ${c.p[2]} (period ending ${fmtDate(c.p[0])})\n${fmtK(c.p[1], k)} · change ${fmtChg(c.p[3], k) || "not reported a year earlier"}\nClick for the release it was read from`}
-                            className={cn("num flex w-full items-baseline justify-end gap-1.5 whitespace-nowrap px-3 py-1 tabular-nums hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", sort.c === k.id && IR.strong)}
+                            className={cn("num flex h-7 w-full items-baseline justify-end gap-1.5 overflow-hidden whitespace-nowrap px-3 py-1 tabular-nums hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", sort.c === k.id && IR.strong)}
                             style={h != null ? { background: `color-mix(in oklab, ${h > 0 ? "var(--positive)" : "var(--negative)"} ${Math.round(Math.abs(h) * 14)}%, transparent)` } : undefined}
                           >
                             {mark && <span className={cn("text-[10px] font-normal", mark.stale ? "text-negative" : "text-muted-foreground")}>{mark.text}</span>}
@@ -565,6 +580,11 @@ function KpiMatrix() {
                     })}
                   </tr>
                 ))}
+                {end < sorted.length && (
+                  <tr aria-hidden style={{ height: (sorted.length - end) * KPI_ROW_H }}>
+                    <td colSpan={cols.length + 3} />
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

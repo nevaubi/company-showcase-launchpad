@@ -4,16 +4,14 @@
 // rebuild. Pure: the server function in series.functions.ts only selects the stored columns.
 import type { FieldDef, Row } from "./engine";
 
-/** One stored `setup_series` row, scalar columns only (the close arrays stay on the server). */
+/** The `setup_series` columns the screener reads (no close arrays, nothing it does not show). */
+export const SERIES_COLUMNS = ["ticker", "end_date", "dv20", "short5"] as const;
+
+/** One stored `setup_series` row, the columns in SERIES_COLUMNS. */
 export interface SeriesRow {
   ticker: string;
   end_date: string;
   dv20: number | null;
-  r5: number | null;
-  r21: number | null;
-  vol60: number | null;
-  above200: boolean | null;
-  near_high: boolean | null;
   short5: number | null;
 }
 

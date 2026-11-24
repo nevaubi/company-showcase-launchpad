@@ -6,8 +6,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 export const ROW_H = 29;
 const OVERSCAN = 30;
 
-/** Which of `count` fixed-height rows below `el`'s top are near the viewport. */
-export function useWindowRange(el: HTMLElement | null, count: number) {
+/** Which of `count` fixed-height rows (`rowH` px each) below `el`'s top are near the viewport. */
+export function useWindowRange(el: HTMLElement | null, count: number, rowH = ROW_H) {
   const [range, setRange] = useState<[number, number]>([0, Math.min(count, 80)]);
   useEffect(() => {
     if (!el) return;
@@ -15,8 +15,8 @@ export function useWindowRange(el: HTMLElement | null, count: number) {
     const calc = () => {
       raf = 0;
       const top = el.getBoundingClientRect().top;
-      const first = Math.max(0, Math.floor(-top / ROW_H) - OVERSCAN);
-      const last = Math.min(count, Math.ceil((window.innerHeight - top) / ROW_H) + OVERSCAN);
+      const first = Math.max(0, Math.floor(-top / rowH) - OVERSCAN);
+      const last = Math.min(count, Math.ceil((window.innerHeight - top) / rowH) + OVERSCAN);
       setRange((r) => (r[0] === first && r[1] === Math.max(first, last) ? r : [first, Math.max(first, last)]));
     };
     const on = () => {
@@ -30,7 +30,7 @@ export function useWindowRange(el: HTMLElement | null, count: number) {
       window.removeEventListener("resize", on);
       if (raf) cancelAnimationFrame(raf);
     };
-  }, [el, count]);
+  }, [el, count, rowH]);
   return range;
 }
 

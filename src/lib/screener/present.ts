@@ -55,38 +55,62 @@ export function inputUnit(f: FieldDef): string {
 
 /**
  * A typed value in the field's display unit read back as the stored value: percentages are typed as
- * percent ("15" means 15%), dollars accept K/M/B/T suffixes, a leading minus or true minus is negative.
- * Returns null for anything that is not a number.
+ * percent ("15" means 15%), dollars and counts accept K/M/B/T suffixes (also "bn", "mn", "mm", "tn"), a
+ * percentile may carry its ordinal ("20th"), days may carry "d" or "days", multiples "x". A leading plus,
+ * a minus or a true minus, a trailing point ("15.") and a leading one (".5") are read as a person means
+ * them. Returns null for anything that is not a number.
  */
 export function parseInput(f: FieldDef, text: string): number | null {
-  let t = text.trim().replace(/−/g, "-").replace(/[,\s$%×]/g, "");
-  if (f.u === "x") t = t.replace(/x$/i, "");
-  const m = /^(-?\d*\.?\d+)([kmbt])?$/i.exec(t);
+  let t = text.trim().replace(/−/g, "-").replace(/[,\s$%×]/g, "").toLowerCase();
+  if (f.u === "x") t = t.replace(/x$/, "");
+  else if (f.u === "pctl") t = t.replace(/(st|nd|rd|th)$/, "");
+  else if (f.u === "days") t = t.replace(/(days?|d)$/, "");
+  const m = /^([-+]?)(\d+\.?\d*|\.\d+)(k|m|mm|mn|b|bn|t|tn)?$/.exec(t);
   if (!m) return null;
-  let v = Number(m[1]);
+  let v = Number(m[2]) * (m[1] === "-" ? -1 : 1);
   if (!Number.isFinite(v)) return null;
-  const suf = m[2]?.toLowerCase();
+  const suf = m[3];
   if (suf) {
     if (f.u !== "usd" && f.u !== "num") return null;
-    v *= { k: 1e3, m: 1e6, b: 1e9, t: 1e12 }[suf as "k" | "m" | "b" | "t"];
+    v *= { k: 1e3, m: 1e6, mm: 1e6, mn: 1e6, b: 1e9, bn: 1e9, t: 1e12, tn: 1e12 }[suf as "k"];
   }
   if (f.u === "pct" || f.u === "pctl") v /= 100;
   return v;
 }
 
-/** A stored value written the way parseInput reads it back. */
+/** Shortest decimal that reads back as exactly `v` (no float noise such as 0.30000000000000004). */
+const exact = (v: number) => {
+  for (let p = 1; p <= 17; p++) {
+    const s = String(Number(v.toPrecision(p)));
+    if (Number(s) === v) return s;
+  }
+  return String(v);
+};
+
+/**
+ * A stored value written the way parseInput reads it back, without changing it: dollars take a T/B/M
+ * suffix only when the scaled figure has at most three decimals, else the whole number with thousands
+ * separators; percentages are written in percent to as many digits as they hold.
+ */
 export function formatInput(f: FieldDef, v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "";
-  if (f.u === "pct" || f.u === "pctl") return String(+(v * 100).toFixed(4));
+  if (f.u === "pct" || f.u === "pctl") {
+    const p = exact(v * 100);
+    return parseInput(f, p) === v ? p : String(v * 100);
+  }
   if (f.u === "usd") {
     const a = Math.abs(v);
     const s = v < 0 ? "-" : "";
-    if (a >= 1e12) return `${s}${+(a / 1e12).toFixed(3)}T`;
-    if (a >= 1e9) return `${s}${+(a / 1e9).toFixed(3)}B`;
-    if (a >= 1e6) return `${s}${+(a / 1e6).toFixed(3)}M`;
-    return String(+v.toFixed(2));
+    for (const [div, suf] of [[1e12, "T"], [1e9, "B"], [1e6, "M"]] as const) {
+      if (a < div) continue;
+      const scaled = exact(a / div);
+      const dec = scaled.split(".")[1]?.length ?? 0;
+      if (dec <= 3 && parseInput(f, `${s}${scaled}${suf}`) === v) return `${s}${scaled}${suf}`;
+    }
+    const whole = exact(v);
+    return Number.isInteger(v) && Math.abs(v) < 1e21 ? v.toLocaleString("en-US", { maximumFractionDigits: 0 }) : whole;
   }
-  return String(+v.toFixed(4));
+  return exact(v);
 }
 
 /** A filter from the builder's inputs, or the reason it cannot be made. */

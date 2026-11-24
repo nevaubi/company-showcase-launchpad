@@ -14,7 +14,9 @@ import { fmtDate, ordinal } from "@/lib/format";
 import { marketsQuery } from "@/lib/markets/query";
 import { cn } from "@/lib/utils";
 import {
+  BOARD_DROP,
   BOARD_SETS,
+  fitBoard,
   boardRows,
   relativeSeries,
   sharedQuarter,
@@ -225,7 +227,7 @@ const kinds = (r: BoardRow, bias: "bullish" | "bearish") =>
     .map((k) => `${k.label} ${k.n}`)
     .join(" · ") || undefined;
 
-/** Name column: 172 px on a phone (the rest scrolls beside it), the full width from about 540 px up. */
+/** Name column: 180 px on a phone (the rest scrolls beside it; "Communication Services" fits), the full width from about 540 px up. */
 const NAME_W = { sector: 212, industry: 310 };
 
 export function SectorBoard({
@@ -258,10 +260,20 @@ export function SectorBoard({
   const members = useMemo(() => baseMembers(ov, COVERAGE), [ov]);
   const all = useMemo(() => boardRows(ov, level, members.list, tape, market.data), [ov, level, members, tape, market.data]);
   const rows = useMemo(() => sortBoard(all, sort, dir), [all, sort, dir]);
-  const cols = COLS[set];
   const ind = level === "industry";
+  const [wrap, avail] = useWidth<HTMLDivElement>();
+  // The name column as the table's min-width draws it: clamp(180px, 100vw - 228px, NAME_W).
+  const nameW = typeof window === "undefined" ? NAME_W[level] : Math.min(NAME_W[level], Math.max(180, window.innerWidth - 228));
+  const cols = useMemo(() => {
+    // Each column carries the group it sits in, so a dropped or moved column never takes a group label away.
+    let g = "";
+    const tagged = COLS[set].map((c) => ({ ...c, grp: (g = c.group ?? g) }));
+    const fit = fitBoard(tagged, BOARD_DROP[set], sort, avail, nameW);
+    return fit.map((c, i) => ({ ...c, group: i === 0 || fit[i - 1].grp !== c.grp ? c.grp || (i === 0 ? undefined : " ") : undefined }));
+  }, [set, sort, avail, nameW]);
+  const hidden = COLS[set].filter((c) => !cols.some((x) => x.k === c.k)).map((c) => c.label);
   const rest = cols.reduce((s, c) => s + c.w, 0);
-  const [wrap, fits] = useFits<HTMLDivElement>(rest + NAME_W[level]);
+  const fits = avail >= rest + nameW;
   const q = sharedQuarter(all);
   const th = { sort, dir, onSort };
   const ctx: Ctx = { pending: tapePending, marketPending: set === "risk" && market.isPending };
@@ -280,7 +292,9 @@ export function SectorBoard({
       id="board"
       name="Sector board"
       title={ind ? "Industries compared" : "Sectors compared"}
-      caption={`${rows.length} ${ind ? "industries" : "sectors"} · ${members.list.length.toLocaleString("en-US")} covered companies · click a column to sort, a name to open it${ind ? " · the code after each industry is its sector's fund" : ""}`}
+      caption={`${rows.length} ${ind ? "industries" : "sectors"} · ${members.list.length.toLocaleString("en-US")} covered companies · click a column to sort, a name to open it${ind ? " · the code after each industry is its sector's fund" : ""}${
+        hidden.length ? ` · ${hidden.join(", ")} on a wider window` : ""
+      }`}
       actions={
         <>
           <Segmented size="xs" label="Columns" value={set} onChange={onSet} options={(Object.keys(BOARD_SETS) as BoardSet[]).map((s) => ({ v: s, l: SET_LABEL[s] }))} />
@@ -298,7 +312,7 @@ export function SectorBoard({
       }
     >
       <div ref={wrap} className={cn(!fits && "overflow-x-auto scrollbar-thin")}>
-        <table className="w-full table-fixed border-separate border-spacing-0 text-[13px]" style={{ minWidth: `calc(${rest}px + clamp(172px, 100vw - 228px, ${NAME_W[level]}px))` }}>
+        <table className="w-full table-fixed border-separate border-spacing-0 text-[13px]" style={{ minWidth: `calc(${rest}px + clamp(180px, 100vw - 228px, ${NAME_W[level]}px))` }}>
           <colgroup>
             <col />
             {cols.map((c) => (

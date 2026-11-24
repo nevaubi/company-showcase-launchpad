@@ -772,25 +772,50 @@ function NoResults({
 
 function FieldPicker({ groups, onPick, selected, multi }: { groups: FieldGroup[]; onPick: (f: FieldDef) => void; selected?: Set<string>; multi?: boolean }) {
   const [q, setQ] = useState("");
+  const list = useRef<HTMLDivElement>(null);
   const shown = groups.map((g) => ({ ...g, fields: g.fields.filter((f) => matchField(f, q)) })).filter((g) => g.fields.length);
+  const moveFocus = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp" && e.key !== "Home" && e.key !== "End") return;
+    const items = [...(list.current?.querySelectorAll<HTMLButtonElement>("button") ?? [])];
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (i < 0 || !items.length) return;
+    e.preventDefault();
+    const next = e.key === "Home" ? 0 : e.key === "End" ? items.length - 1 : i + (e.key === "ArrowDown" ? 1 : -1);
+    if (next < 0) e.currentTarget.parentElement?.querySelector<HTMLInputElement>("input")?.focus();
+    else items[Math.min(next, items.length - 1)]?.focus();
+  };
   return (
     <div>
       <div className="relative border-b p-2">
         <Search className="pointer-events-none absolute left-4 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />
-        <Input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search fields" aria-label="Search fields" className="h-8 pl-7 text-xs" />
+        <Input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== "ArrowDown") return;
+            e.preventDefault();
+            list.current?.querySelector<HTMLButtonElement>("button")?.focus();
+          }}
+          placeholder="Search fields"
+          aria-label="Search fields"
+          className="h-8 pl-7 text-xs"
+        />
       </div>
-      <div className="max-h-80 overflow-y-auto overscroll-contain p-1 scrollbar-thin">
+      {/* Plain buttons (toggle buttons when several can be chosen), grouped by field group; Tab or the arrow keys move between them. */}
+      <div ref={list} onKeyDown={moveFocus} className="max-h-80 overflow-y-auto overscroll-contain p-1 scrollbar-thin">
         {shown.map((g) => (
-          <div key={g.id} className="py-1">
-            <p className="eyebrow px-2 py-1">{g.n}</p>
+          <div key={g.id} role="group" aria-labelledby={`fp-${g.id}`} className="py-1">
+            <p id={`fp-${g.id}`} className="eyebrow px-2 py-1">
+              {g.n}
+            </p>
             {g.fields.map((f) => {
               const on = selected?.has(f.id);
               return (
                 <button
                   key={f.id}
                   type="button"
-                  role={multi ? "menuitemcheckbox" : undefined}
-                  aria-checked={multi ? !!on : undefined}
+                  aria-pressed={multi ? !!on : undefined}
                   onClick={() => onPick(f)}
                   title={f.d}
                   className="flex min-h-7 w-full items-center gap-2 rounded px-2 py-1 text-left text-xs hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
