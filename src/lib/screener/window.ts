@@ -104,7 +104,9 @@ export function useRowFocus(body: HTMLElement | null, keys: string[], pos: (key:
         const t = e.currentTarget;
         // A row removed by the window keeps its claim on focus; focus moved elsewhere gives it up.
         setTimeout(() => {
-          if (t.isConnected) had.current = false;
+          // Moving to the next row blurs this one first: keep the claim while focus is still on a row of this list.
+          const inList = !!live.current.body?.contains(document.activeElement);
+          if (t.isConnected && !inList) had.current = false;
         }, 0);
       },
       onKey: (e: React.KeyboardEvent<HTMLElement>, key: string, open: () => void) => {

@@ -482,8 +482,15 @@ function KpiMatrix() {
             <p className={cn(IR.caption, "ml-auto")}>Units in each column head; a period label appears only where it differs from the column's.</p>
           </div>
           <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")}>
-            <style>{["mcap", "revg", ...cols.map((c) => c.k.id)].map((id) => `[data-kpi-matrix][data-hover="${id}"] td[data-col="${id}"]{background-color:color-mix(in oklab,var(--secondary) 70%,transparent)}`).join("")}</style>
             <table data-kpi-matrix className={cn("border-separate border-spacing-0", IR.row, fits ? "w-full" : "w-max min-w-full")}>
+              <colgroup>
+                <col />
+                <col data-col="mcap" />
+                <col data-col="revg" />
+                {cols.map(({ k }) => (
+                  <col key={k.id} data-col={k.id} />
+                ))}
+              </colgroup>
               <thead>
                 <tr>
                   <th scope="col" className={cn("left-0 z-30 min-w-56 border-b border-r bg-card px-3 py-1.5 text-left align-bottom", "sticky", fits && STICKY)}>
@@ -572,15 +579,18 @@ function KpiMatrix() {
 
 type ThCtx = { sort: { c: string; d: 1 | -1 }; setSort: Dispatch<SetStateAction<{ c: string; d: 1 | -1 }>>; fits: boolean };
 
-// Column hover goes through the table's data-hover attribute and a CSS rule, not React state, so hovering
-// a head neither re-renders the matrix (771 ms at All companies) nor remounts the focused head button.
+// Column hover tints the column's <col> directly, not React state and not a table-wide selector, so hovering
+// a head neither re-renders the matrix (771 ms at All companies) nor restyles every cell, and a focused head
+// button keeps focus.
+const HOVER_BG = "color-mix(in oklab, var(--secondary) 70%, transparent)";
+const colOf = (e: React.MouseEvent<HTMLElement>, c: string) => e.currentTarget.closest("table")?.querySelector<HTMLElement>(`col[data-col="${c}"]`);
 const hoverOn = (c: string) => (e: React.MouseEvent<HTMLElement>) => {
-  const t = e.currentTarget.closest("table");
-  if (t) t.dataset.hover = c;
+  const col = colOf(e, c);
+  if (col) col.style.backgroundColor = HOVER_BG;
 };
-const hoverOff = (e: React.MouseEvent<HTMLElement>) => {
-  const t = e.currentTarget.closest("table");
-  if (t) delete t.dataset.hover;
+const hoverOff = (c: string) => (e: React.MouseEvent<HTMLElement>) => {
+  const col = colOf(e, c);
+  if (col) col.style.backgroundColor = "";
 };
 
 function KpiTh({ ctx, c, children, title, className, sub }: { ctx: ThCtx; c: string; children: React.ReactNode; title?: string; className?: string; sub?: React.ReactNode }) {
@@ -591,7 +601,7 @@ function KpiTh({ ctx, c, children, title, className, sub }: { ctx: ThCtx; c: str
       data-col={c}
       aria-sort={sort.c === c ? (sort.d === 1 ? "ascending" : "descending") : "none"}
       onMouseEnter={hoverOn(c)}
-      onMouseLeave={hoverOff}
+      onMouseLeave={hoverOff(c)}
       className={cn("border-b bg-card px-3 py-1.5 text-right align-bottom", fits && `sticky ${STICKY} z-20`, className)}
     >
       <button

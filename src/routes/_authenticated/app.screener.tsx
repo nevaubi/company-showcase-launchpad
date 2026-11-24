@@ -122,11 +122,16 @@ function Screener() {
   );
 
   // A shared link (?screen=) replaces the current screen once the catalogue is known, then leaves the address.
-  const adopted = useRef(false);
+  // The code last adopted, so a second shared link opened while the screener is mounted is adopted too.
+  const adopted = useRef<string | null>(null);
   useEffect(() => {
     // Wait for the series query too, so a link that names dv20 or short_vol5 is not stripped of them.
-    if (shared === undefined || adopted.current || !fields.length || !rows.length || !seriesSettled) return;
-    adopted.current = true;
+    if (shared === undefined) {
+      adopted.current = null;
+      return;
+    }
+    if (adopted.current === shared || !fields.length || !rows.length || !seriesSettled) return;
+    adopted.current = shared;
     const got = readShared(shared);
     if (got.ok) {
       const v = validate(got.raw, cat);
