@@ -343,7 +343,7 @@ const SC = {
 const PAGE = 50;
 const TREND_LABEL: Record<string, string> = { up: "Up", down: "Down", mixed: "Mixed" };
 
-function ScanPanel({ states, loading, symbol, onPick }: { states: { as_of: string; rows: StateRow[] } | null; loading: boolean; symbol: string; onPick: (s: string) => void }) {
+function ScanPanel({ states, loading, symbol, onPick }: { states: { as_of: string; rows: StateRow[] } | null; loading: boolean; symbol: string | null; onPick: (s: string) => void }) {
   const [sort, setSort] = useState<{ k: keyof StateRow; d: 1 | -1 }>({ k: "r63", d: -1 });
   const [filter, setFilter] = useState<ScanFilter>("all");
   const [page, setPage] = useState(0);
@@ -485,8 +485,12 @@ function ScanPanel({ states, loading, symbol, onPick }: { states: { as_of: strin
 const PAGER_BTN =
   "inline-flex h-7 items-center rounded border px-2 text-xs transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none";
 
-/** The market-wide view: breadth, what chart events have meant across tracked companies, a sortable scan and the cross-section. */
-export function MarketView({ symbol, onPick }: { symbol: string; onPick: (s: string) => void }) {
+/**
+ * The market-wide view: breadth, what chart events have meant across tracked companies, a sortable scan and
+ * the cross-section. `symbol` is the symbol the page has open, picked out in the scan and the scatter; null
+ * when none is chosen.
+ */
+export function MarketView({ symbol, onPick }: { symbol: string | null; onPick: (s: string) => void }) {
   const SG = useQuery(signalsQuery);
   const states = useQuery(statesQuery);
   const breadth = useQuery(breadthQuery);

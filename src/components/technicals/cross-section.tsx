@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Segmented } from "@/components/app/segmented";
+import { TickerMark } from "@/components/app/ticker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { coverageOf } from "@/lib/coverage";
 import { fmtDate } from "@/lib/format";
 import { crossQuery, METRICS, niceTicks, ols, quantileSorted, rowsOf, SCATTER_KEYS, type CrossRow } from "@/lib/technicals/cross";
 import { methodsQuery } from "@/lib/technicals/data";
@@ -34,7 +34,7 @@ function useWidth<T extends HTMLElement>() {
  * Any two measures against each other for every covered company on one as-of date, with the open symbol
  * and its sector picked out. A point opens that company.
  */
-export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: string) => void }) {
+export function CrossScatter({ symbol, onPick }: { symbol: string | null; onPick: (s: string) => void }) {
   const X = useQuery(crossQuery);
   const methods = useQuery(methodsQuery);
   const [xk, setXk] = useState("vol60");
@@ -193,9 +193,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
             {W > 0 && pts.length <= 1 && <p className={cn("px-1 py-6", S.caption)}>Too few companies have both measures to plot.</p>}
             {hover && (
               <div className="pointer-events-none absolute right-3 top-1 rounded-md border bg-popover px-2.5 py-1.5 text-[11px] leading-4 shadow-sm">
-                <p className="font-medium">
-                  <span className="num">{hover.sym}</span> <span className="font-normal text-muted-foreground">{coverageOf(hover.sym)?.shortName ?? ""}</span>
-                </p>
+                <TickerMark ticker={hover.sym} name link={false} className="max-w-56" />
                 <p className="text-muted-foreground">{hover.sector}</p>
                 <p className="num">
                   {METRICS[yk].label} {METRICS[yk].fmt(val(hover, yk))}
