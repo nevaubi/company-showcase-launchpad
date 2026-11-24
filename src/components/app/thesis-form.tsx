@@ -1,3 +1,4 @@
+import { CompanyLogo } from "@/components/app/company-logo";
 import { useEffect, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -129,7 +130,12 @@ export function ThesisForm({
                 <SelectContent>
                   {COVERAGE.map((c) => (
                     <SelectItem key={c.ticker} value={c.ticker}>
-                      {c.ticker} · {c.shortName}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <CompanyLogo ticker={c.ticker} size="xs" decorative />
+                        <span className="truncate">
+                          {c.ticker} · {c.shortName}
+                        </span>
+                      </span>
                     </SelectItem>
                   ))}
                 </SelectContent>

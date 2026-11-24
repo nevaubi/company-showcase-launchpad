@@ -1,3 +1,4 @@
+import { CompanyLogo } from "@/components/app/company-logo";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ function CompaniesIndex() {
                 {list.map((c) => (
                   <li key={c.ticker}>
                     <Link to="/companies/$ticker" params={{ ticker: c.ticker }} className="flex items-center gap-3 px-5 py-2.5 text-sm hover:bg-muted/50">
+                      <CompanyLogo ticker={c.ticker} size="xs" decorative />
                       <span className="num w-14 font-medium">{c.ticker}</span>
                       <span className="min-w-0 flex-1 truncate text-muted-foreground">{c.name}</span>
                     </Link>

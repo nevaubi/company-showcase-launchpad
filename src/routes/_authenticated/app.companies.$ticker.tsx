@@ -2,8 +2,8 @@ import { createFileRoute, Link, notFound, Outlet } from "@tanstack/react-router"
 import { DataUnavailable } from "@/components/app/data-unavailable";
 import { CompanyHeader } from "@/components/company/header/company-header";
 import { cleanCompanyName } from "@/components/company/header/model";
+import { CompanyNotices } from "@/components/company/header/notices";
 import { CompanyTabs } from "@/components/company/header/tabs";
-import { RestrictedBanner } from "@/components/firm/coverage-chip";
 import { useCoverage, useFirm } from "@/components/firm/firm-context";
 import { Button } from "@/components/ui/button";
 import { useCompanyInterest } from "@/lib/agents/client";
@@ -45,8 +45,8 @@ export const Route = createFileRoute("/_authenticated/app/companies/$ticker")({
 });
 
 /**
- * The company shell: header (identity, price, actions), the firm's restricted-list warning, then the
- * tabs and the page under them. The pieces live in components/company/header; this file only gathers
+ * The company shell: header (identity, price, actions), then the tabs and the page under them, which opens
+ * with the firm's restricted-list warning and the since-visit row when the reader has them. The pieces live in components/company/header; this file only gathers
  * what they read. The coverage list answers at once, the dataset and the quote fill in after.
  */
 function CompanyLayout() {
@@ -76,8 +76,8 @@ function CompanyLayout() {
         quotePending={!quote && quotes.isPending}
         quoteExchange={quote && "exchange" in quote ? quote.exchange : undefined}
       />
-      <RestrictedBanner ticker={ticker} />
       <CompanyTabs ticker={ticker} name={name} logoSrc={profile?.logo} quote={quote} restricted={restricted}>
+        <CompanyNotices ticker={ticker} />
         {company.isError ? (
           <DataUnavailable
             title="Company data is temporarily unavailable"

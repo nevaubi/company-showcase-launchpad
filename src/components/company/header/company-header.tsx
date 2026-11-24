@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { SinceVisitBadges } from "@/components/changes/company-changes";
 import { analyticsFile } from "@/lib/analytics-files";
 import type { CoverageCompany } from "@/lib/coverage";
 import type { CompanyProfile, Filing } from "@/lib/financials/types";
@@ -24,8 +23,9 @@ const hqQuery = {
  * running the full width, then the price with its facts and what is new since the last visit. On a
  * narrow page the actions drop under the price. Name, sector and industry come from the coverage list,
  * so they are on screen before the dataset and the quote arrive. What arrives later either fills a place
- * that is held for it (price, price facts, the IR link) or is added at the end of its line (head office,
- * since-visit badges), so nothing already on screen moves.
+ * that is held for it (price, price facts) or is added where it pushes nothing (head office at the end of
+ * its line, the firm's coverage chip on the free side of the actions). The restricted-list warning and the
+ * since-visit row are not here: they open the page body under the tabs (`CompanyNotices`).
  */
 export function CompanyHeader({
   ticker,
@@ -62,16 +62,6 @@ export function CompanyHeader({
           legalName={profile?.name}
           exchange={exchangeLabel(profile?.exchange, quoteExchange)}
         />
-        <CompanyActions
-          className="col-span-full row-start-4 mt-3 @min-[56rem]/hdr:col-span-1 @min-[56rem]/hdr:col-start-3 @min-[56rem]/hdr:row-start-1 @min-[56rem]/hdr:mt-0 @min-[56rem]/hdr:justify-end @min-[56rem]/hdr:self-center @min-[56rem]/hdr:pl-6"
-          ticker={ticker}
-          cik={profile?.cik ?? coverage?.cik ?? ""}
-          profile={profile}
-          filings={filings}
-          pending={profilePending}
-          irHint={coverage?.ir}
-          price={quote?.price ?? null}
-        />
         <CompanyContext
           className="col-start-2 row-start-2 @min-[56rem]/hdr:col-span-2"
           name={name}
@@ -92,10 +82,18 @@ export function CompanyHeader({
             quotePending={quotePending}
             profilePending={profilePending}
           />
-          <div className="ml-auto flex min-h-8 items-center empty:hidden">
-            <SinceVisitBadges ticker={ticker} />
-          </div>
         </div>
+        {/* after the identity and the price in the page order, so the keyboard reads the header as it is laid out */}
+        <CompanyActions
+          className="col-span-full row-start-4 mt-3 @min-[56rem]/hdr:col-span-1 @min-[56rem]/hdr:col-start-3 @min-[56rem]/hdr:row-start-1 @min-[56rem]/hdr:mt-0 @min-[56rem]/hdr:justify-end @min-[56rem]/hdr:self-center @min-[56rem]/hdr:pl-6"
+          ticker={ticker}
+          cik={profile?.cik ?? coverage?.cik ?? ""}
+          profile={profile}
+          filings={filings}
+          pending={profilePending}
+          irHint={coverage?.ir}
+          price={quote?.price ?? null}
+        />
       </div>
     </div>
   );

@@ -11,7 +11,7 @@ import { fmtPct, fmtPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 /** Firm coverage status for a company header: rating, target, analyst; quick edit for analysts. */
-export function CoverageChip({ ticker, price }: { ticker: string; price: number | null }) {
+export function CoverageChip({ ticker, price, className }: { ticker: string; price: number | null; className?: string }) {
   const { firm, can, userId } = useFirm();
   const coverage = useCoverage(firm?.id);
   const members = useFirmMembers(firm?.id);
@@ -22,7 +22,7 @@ export function CoverageChip({ ticker, price }: { ticker: string; price: number 
   if (!row) {
     if (!can("analyst")) return null;
     return (
-      <Button size="xs" variant="outline" onClick={() => save.mutate({ ticker, create: true, patch: { analyst_id: userId } })} disabled={save.isPending} title={`Add to ${firm.name} coverage`}>
+      <Button size="xs" variant="outline" className={className} onClick={() => save.mutate({ ticker, create: true, patch: { analyst_id: userId } })} disabled={save.isPending} title={`Add to ${firm.name} coverage`}>
         <Plus /> Cover
       </Button>
     );
@@ -33,7 +33,7 @@ export function CoverageChip({ ticker, price }: { ticker: string; price: number 
   return (
     <Popover onOpenChange={(o) => o && setTarget(row.target_price?.toString() ?? "")}>
       <PopoverTrigger asChild>
-        <Button size="xs" variant="outline" className={cn(tone === "positive" && "text-positive", tone === "negative" && "text-negative", row.restricted && "border-negative")} title={`${firm.name} coverage`}>
+        <Button size="xs" variant="outline" className={cn(className, tone === "positive" && "text-positive", tone === "negative" && "text-negative", row.restricted && "border-negative")} title={`${firm.name} coverage`}>
           {row.restricted ? <Lock /> : <BriefcaseBusiness />}
           {RATING_LABEL[row.rating]}
           {row.target_price ? <span className="num text-muted-foreground">PT {fmtPrice(row.target_price)}</span> : null}
@@ -78,7 +78,7 @@ export function RestrictedBanner({ ticker }: { ticker: string }) {
   return (
     <div role="alert" className="mb-3 flex items-center gap-2 border-l-2 border-negative bg-negative-soft/50 px-3 py-2 text-[13px]">
       <Lock className="size-4 shrink-0 text-negative" />
-      <p><span className="font-semibold text-negative">Restricted list.</span> {firm.name} has restricted {ticker}{row.restricted_reason ? ` — ${row.restricted_reason}` : ""}. Check with compliance before trading or publishing research.</p>
+      <p><span className="font-semibold text-negative">Restricted list.</span> {firm.name} has restricted {ticker}{row.restricted_reason ? `: ${row.restricted_reason}` : ""}. Check with compliance before trading or publishing research.</p>
     </div>
   );
 }

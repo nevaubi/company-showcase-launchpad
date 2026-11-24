@@ -9,6 +9,7 @@ import { countByType, filterEvents, newSince, rankEvents, TYPE_SHORT } from "@/l
 import { companyChangesQuery, useCompanyVisit } from "@/lib/changes/data";
 import type { ChangeTier } from "@/lib/changes/types";
 import { fmtRelative } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { EventRow } from "./event-row";
 
 type View = "ranked" | "latest";
@@ -99,7 +100,7 @@ export function WhatChangedPanel({ ticker }: { ticker: string }) {
 }
 
 /** "Since your last visit" counts under the company header. */
-export function SinceVisitBadges({ ticker }: { ticker: string }) {
+export function SinceVisitBadges({ ticker, className }: { ticker: string; className?: string }) {
   const q = useQuery(companyChangesQuery(ticker));
   const visit = useCompanyVisit(ticker, true);
   if (!q.data || !visit.ready || !visit.since) return null;
@@ -109,7 +110,7 @@ export function SinceVisitBadges({ ticker }: { ticker: string }) {
   const high = fresh.filter((e) => e.tier === "high").length;
   return (
     <p
-      className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground"
+      className={cn("flex min-h-7 flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground", className)}
       data-section="Since your last visit"
     >
       <span className="font-medium text-foreground">Since your last visit</span>

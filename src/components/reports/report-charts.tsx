@@ -4,6 +4,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ExternalLink, X } from "lucide-react";
 import { scaleBand, scaleLinear } from "d3";
+import { logoUrl } from "@/components/app/company-logo";
 import { useSource } from "@/components/source/source-context";
 import { refCaption, refTarget, readableDates } from "@/lib/reports/present";
 import type { ChartPoint, ChartSeries, ChartUnit, Fact, ReportChart } from "@/lib/reports/types";
@@ -298,7 +299,9 @@ function HBar({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "hbar" }>
 function Peers({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "peers" }>; ctx: Ctx; w: number }) {
   const narrow = w < 560;
   const metrics = narrow ? chart.metrics.slice(0, 4) : chart.metrics;
-  const labelW = narrow ? 70 : 150, rowH = 21, headH = 30;
+  const logos = chart.rows.some((r) => logoUrl(r.ticker));
+  const labelW = narrow ? (logos ? 84 : 70) : 150, rowH = 21, headH = 30;
+  const nameChars = logos ? 14 : 16;
   const colW = (w - labelW) / Math.max(1, metrics.length);
   const H = headH + chart.rows.length * rowH + 4;
   if (w < 40) return null;
@@ -337,13 +340,21 @@ function Peers({ chart, ctx, w }: { chart: Extract<ReportChart, { type: "peers" 
           </g>
         );
       })}
-      {chart.rows.map((r, i) => (
-        <g key={r.ticker}>
-          {r.self && <rect x={0} y={headH + i * rowH + 1} width={w} height={rowH - 2} rx={2} style={{ fill: C.brand, opacity: 0.06, pointerEvents: "none" }} />}
-          <text x={4} y={headH + i * rowH + rowH / 2} dy="0.32em" style={{ fill: C.ink, fontSize: FONT, fontWeight: r.self ? 700 : 500 }}>{r.ticker}</text>
-          {!narrow && <text x={46} y={headH + i * rowH + rowH / 2} dy="0.32em" style={{ fill: C.muted, fontSize: FONT - 1 }}>{r.name.length > 16 ? `${r.name.slice(0, 15)}…` : r.name}</text>}
-        </g>
-      ))}
+      {chart.rows.map((r, i) => {
+        // each company's mark beside its symbol; the symbols keep one column, so a row without a logo file
+        // shows its label alone in the same place
+        const logo = logoUrl(r.ticker);
+        const lx = logos ? 22 : 4;
+        const cy = headH + i * rowH + rowH / 2;
+        return (
+          <g key={r.ticker}>
+            {r.self && <rect x={0} y={headH + i * rowH + 1} width={w} height={rowH - 2} rx={2} style={{ fill: C.brand, opacity: 0.06, pointerEvents: "none" }} />}
+            {logo && <image href={logo} x={4} y={cy - 7} width={14} height={14} preserveAspectRatio="xMidYMid meet" aria-hidden />}
+            <text x={lx} y={cy} dy="0.32em" style={{ fill: C.ink, fontSize: FONT, fontWeight: r.self ? 700 : 500 }}>{r.ticker}</text>
+            {!narrow && <text x={lx + 42} y={cy} dy="0.32em" style={{ fill: C.muted, fontSize: FONT - 1 }}>{r.name.length > nameChars ? `${r.name.slice(0, nameChars - 1)}…` : r.name}</text>}
+          </g>
+        );
+      })}
     </svg>
   );
 }

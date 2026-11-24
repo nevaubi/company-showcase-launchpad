@@ -24,7 +24,20 @@ const reportLabel = (f: Filing) =>
   f.form === "10-Q" ? `Quarterly report (${f.report ?? f.filed})` : `Annual report (${(f.report ?? f.filed).slice(0, 4)})`;
 
 /** Menu rows shared by the desktop "Filings" menu and the phone "More" menu. */
-function FilingItems({ ticker, cik, filings, pending }: { ticker: string; cik: string; filings: Filing[] | undefined; pending: boolean }) {
+function FilingItems({
+  ticker,
+  cik,
+  filings,
+  pending,
+  ir,
+}: {
+  ticker: string;
+  cik: string;
+  filings: Filing[] | undefined;
+  pending: boolean;
+  /** the investor-relations site, when the company has one */
+  ir: string | null;
+}) {
   const { open } = useSource();
   const { annual, quarterly } = latestReports(filings);
   const openReport = (f: Filing) =>
@@ -64,18 +77,28 @@ function FilingItems({ ticker, cik, filings, pending }: { ticker: string; cik: s
           <span className="sr-only"> (opens sec.gov in a new tab)</span>
         </a>
       </DropdownMenuItem>
+      {ir ? (
+        <DropdownMenuItem asChild>
+          <a href={ir} target="_blank" rel="noreferrer">
+            <Globe /> Investor relations site
+            <span className="sr-only"> (opens in a new tab)</span>
+          </a>
+        </DropdownMenuItem>
+      ) : pending ? (
+        <DropdownMenuItem disabled>
+          <Globe /> Loading investor relations site
+        </DropdownMenuItem>
+      ) : null}
     </>
   );
 }
 
 /**
  * What can be done with the company, in order of weight: Research (primary), Follow (toggle), the
- * firm's coverage when there is one, then a quiet group: Compare, a Filings menu (latest annual and
- * quarterly report, the filings tab, EDGAR) and the investor-relations site. On phones the quiet group
- * folds into one "More" menu, placed before the coverage chip so a long chip wraps, not the menu button.
- *
- * The IR address comes with the dataset (the curated list knows it at once): until the dataset answers
- * its place is held, so the row does not shuffle sideways when the link arrives.
+ * firm's coverage when there is one, then a quiet group: Compare and a Filings menu (latest annual and
+ * quarterly report, the filings tab, EDGAR, and last the investor-relations site). On phones the quiet
+ * group folds into one "More" menu. The IR address may only come with the dataset, and many companies
+ * have none, so it lives inside the menu: its arrival or absence changes nothing in the row.
  */
 export function CompanyActions({
   ticker,
@@ -101,7 +124,6 @@ export function CompanyActions({
   const follow = useToggleFollow();
   const followed = follow.isFollowed(ticker);
   const ir = irUrl(profile) ?? irUrl({ investorRelations: irHint ?? "" });
-  const irHeld = !ir && pending;
   const more = (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
@@ -115,16 +137,8 @@ export function CompanyActions({
             <Columns3 /> Compare
           </Link>
         </DropdownMenuItem>
-        {ir && (
-          <DropdownMenuItem asChild>
-            <a href={ir} target="_blank" rel="noreferrer">
-              <Globe /> Investor relations site
-              <span className="sr-only"> (opens in a new tab)</span>
-            </a>
-          </DropdownMenuItem>
-        )}
         <DropdownMenuSeparator />
-        <FilingItems ticker={ticker} cik={cik} filings={filings} pending={pending} />
+        <FilingItems ticker={ticker} cik={cik} filings={filings} pending={pending} ir={ir} />
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -135,6 +149,10 @@ export function CompanyActions({
       data-section="Company actions"
       className={cn("flex min-w-0 flex-wrap items-center gap-1.5", className)}
     >
+      {/* The coverage chip answers after the firm's list does. On a wide header the row is right-aligned and the chip
+          comes first, on its free left side; on a narrower one the row starts at the left and the chip goes last. Either
+          way its arrival pushes none of the buttons already on screen. */}
+      <CoverageChip ticker={ticker} price={price} className="order-last @min-[56rem]/hdr:order-none" />
       <Button size="xs" onClick={() => requestResearch(researchPrompt(ticker))} title="Ask the assistant for a sourced brief">
         <Sparkles /> Research
       </Button>
@@ -150,7 +168,6 @@ export function CompanyActions({
         {followed ? "Following" : "Follow"}
       </Button>
       {more}
-      <CoverageChip ticker={ticker} price={price} />
 
       <span aria-hidden className="mx-1 hidden h-4 w-px bg-border sm:block" />
 
@@ -166,20 +183,9 @@ export function CompanyActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-64">
-          <FilingItems ticker={ticker} cik={cik} filings={filings} pending={pending} />
+          <FilingItems ticker={ticker} cik={cik} filings={filings} pending={pending} ir={ir} />
         </DropdownMenuContent>
       </DropdownMenu>
-      {ir ? (
-        <Button size="xs" variant="ghost" asChild className="hidden sm:inline-flex">
-          <a href={ir} target="_blank" rel="noreferrer" title="Investor relations site (opens in a new tab)">
-            <Globe /> IR site <ArrowUpRight className="-ml-0.5 opacity-60" />
-          </a>
-        </Button>
-      ) : irHeld ? (
-        <Button size="xs" variant="ghost" disabled aria-hidden className="hidden sm:inline-flex">
-          <Globe /> IR site <ArrowUpRight className="-ml-0.5 opacity-60" />
-        </Button>
-      ) : null}
     </div>
   );
 }

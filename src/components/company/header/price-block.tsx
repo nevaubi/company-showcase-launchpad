@@ -141,7 +141,10 @@ export function QuoteFacts({
   const quoteState = partState(!!quote, quotePending);
   const capWaiting = awaiting(cap, [quoteState, partState(shares != null, profilePending)]);
   const rangeWaiting = awaiting(range, [quoteState]);
-  if (cap == null && !range && !capWaiting && !rangeWaiting) return null;
+  // With no quote at all the facts keep their slots with a quiet dash: the slots were held while the quote was
+  // asked for, and on a narrow page they are a row of their own, so removing them would pull the tabs up.
+  const noQuote = !quote && !quotePending;
+  if (cap == null && !range && !capWaiting && !rangeWaiting && !noQuote) return null;
   const asOf = profile?.sharesOutstandingAsOf ? fmtDate(profile.sharesOutstandingAsOf) : null;
   const capTarget: SourceTarget | null =
     cap != null && quote && shares && profile?.sharesOutstandingAccn
@@ -192,9 +195,19 @@ export function QuoteFacts({
           )}
         </Fact>
       )}
+      {noQuote && cap == null && !capWaiting && (
+        <Fact key="cap" label="Market cap" title="No price from the quote provider, so no market cap">
+          <span className="num text-[13px] leading-5 text-muted-foreground">–</span>
+        </Fact>
+      )}
       {rangeWaiting && (
         <Fact key="range" label="52-week range">
           <Skeleton className="h-3 w-[11.875rem] sm:w-[12.875rem]" />
+        </Fact>
+      )}
+      {noQuote && !rangeWaiting && (
+        <Fact key="range" label="52-week range" title="No price from the quote provider">
+          <span className="num text-[13px] leading-5 text-muted-foreground">–</span>
         </Fact>
       )}
       {range && quote && (

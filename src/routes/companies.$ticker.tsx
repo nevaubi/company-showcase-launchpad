@@ -1,3 +1,4 @@
+import { CompanyLogo } from "@/components/app/company-logo";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { ArrowUpRight, FileText } from "lucide-react";
 import { SiteFooter, SiteHeader } from "@/components/site/site-chrome";
@@ -165,7 +166,8 @@ function PublicCompany() {
             <h2 className="border-b px-5 py-4 text-base font-semibold">Similar companies</h2>
             <div className="flex flex-wrap gap-2 p-5">
               {publicPeers(s.ticker).map((c) => (
-                <Link key={c.ticker} to="/companies/$ticker" params={{ ticker: c.ticker }} className="rounded border px-2.5 py-1 text-sm hover:bg-muted/50">
+                <Link key={c.ticker} to="/companies/$ticker" params={{ ticker: c.ticker }} className="inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-sm hover:bg-muted/50">
+                  <CompanyLogo ticker={c.ticker} size="xs" decorative />
                   <span className="num font-medium">{c.ticker}</span> <span className="text-muted-foreground">{c.name}</span>
                 </Link>
               ))}

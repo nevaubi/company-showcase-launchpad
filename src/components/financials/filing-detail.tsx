@@ -1,3 +1,4 @@
+import { TickerMark } from "@/components/app/ticker";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -512,9 +513,7 @@ function NamedBy({ ticker }: { ticker: string }) {
       <ul className="divide-y text-[13px]">
         {q.data.map((r) => (
           <li key={`${r.ticker}-${r.kind}-${r.benchmark}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3.5 py-2">
-            <Link to="/app/companies/$ticker" params={{ ticker: r.ticker }} className="font-semibold hover:underline">
-              {r.ticker}
-            </Link>
+            <TickerMark ticker={r.ticker} className="hover:underline" />
             <span className="text-muted-foreground">
               reports {r.label} as a {r.kind} at {BENCH[r.benchmark as ConcentrationRow["benchmark"]] ?? "share"}
             </span>

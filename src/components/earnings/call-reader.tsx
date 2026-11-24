@@ -99,6 +99,21 @@ export function CallReader({
   const body = useRef<HTMLDivElement>(null);
   const toolbar = useRef<HTMLDivElement>(null);
   const anchor = useRef<number | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  /* The transcript toolbar sticks right under the call's section nav: its height is measured (41 px at one line,
+     more when it wraps) into --call-nav, so no strip of text shows between the two. */
+  useLayoutEffect(() => {
+    const host = root.current;
+    const nav = host?.querySelector<HTMLElement>('nav[data-section="Page sections"]');
+    if (!host) return;
+    if (!nav) return void host.style.setProperty("--call-nav", "0px");
+    if (typeof ResizeObserver === "undefined") return;
+    const set = () => host.style.setProperty("--call-nav", `${nav.offsetHeight}px`);
+    set();
+    const ro = new ResizeObserver(set);
+    ro.observe(nav);
+    return () => ro.disconnect();
+  }, []);
 
   const visible = t.turns.filter((x) => (section === "all" || x.section === section) && (!speaker || x.speaker === speaker));
   const re = useMemo(() => (q.length >= 2 ? new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi") : null), [q]);
@@ -195,7 +210,7 @@ export function CallReader({
   const prevLabel = prev ? `${prev.quarter ?? "previous"} call (${fmtDate(prev.date)})` : null;
 
   return (
-    <div className="grid grid-cols-1 gap-5">
+    <div ref={root} className="grid grid-cols-1 gap-5">
       <PageNav sections={SECTIONS} label="Call sections" />
 
       {/* ───────── Summary */}
@@ -483,7 +498,7 @@ export function CallReader({
 
       {/* ───────── Transcript */}
       <section id="call-transcript" data-section="Transcript" className={cn("min-w-0 border-y bg-card", SECTION_SCROLL_MARGIN)}>
-        <div ref={toolbar} data-section="Transcript controls" className="z-10 max-sm:static sm:sticky sm:top-[calc(var(--sticky-top,3.5rem)+2.75rem)] flex flex-wrap items-center gap-2 border-b bg-card/95 px-4 py-2 backdrop-blur">
+        <div ref={toolbar} data-section="Transcript controls" className="z-10 max-sm:static sm:sticky sm:top-[calc(var(--sticky-top,3.5rem)+var(--call-nav,41px))] flex flex-wrap items-center gap-2 border-b bg-card/95 px-4 py-2 backdrop-blur">
           <Segmented
             label="Section"
             value={section}
