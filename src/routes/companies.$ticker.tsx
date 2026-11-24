@@ -97,9 +97,19 @@ function PublicCompany() {
         <section className="mt-10 min-w-0 rounded-xl border bg-card">
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-b px-5 py-4">
             <h2 className="text-base font-semibold">Annual results</h2>
-            <p className="text-xs text-muted-foreground">Click any number to open the SEC filing it came from.</p>
+            {s.lines.length > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Click any number to open the SEC filing it came from.
+              </p>
+            )}
           </div>
-          <div className="overflow-x-auto">
+          {s.lines.length === 0 && (
+            <p className="px-5 py-6 text-sm text-muted-foreground">
+              No annual report with tagged statements is on file for {s.name} yet. Its recent
+              filings are listed below.
+            </p>
+          )}
+          <div className="overflow-x-auto" hidden={s.lines.length === 0}>
             <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b text-xs text-muted-foreground">

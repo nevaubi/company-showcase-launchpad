@@ -9,8 +9,9 @@ export const getPublicCompany = createServerFn({ method: "GET" })
     const ticker = data.ticker.toUpperCase();
     if (!isPublicTicker(ticker)) return null;
     const { loadDataset } = await import("@/lib/reports/inputs.server");
+    const { coverageDetails } = await import("@/lib/coverage-details.server");
     try {
-      return buildPublicSnapshot(await loadDataset(ticker));
+      return buildPublicSnapshot(await loadDataset(ticker), 5, coverageDetails(ticker));
     } catch (e) {
       console.error("public company load failed", ticker, e);
       return null;

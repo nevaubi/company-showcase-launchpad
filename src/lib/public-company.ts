@@ -4,7 +4,12 @@ import type { CompanyDataset, Statement, StatementKey } from "@/lib/financials/t
 import { COVERAGE } from "@/lib/coverage";
 
 /** Every covered company has a public, indexable snapshot page. */
-export const PUBLIC_COMPANIES = COVERAGE.map((c) => ({ ticker: c.ticker, name: c.shortName, sector: c.sector, industry: c.industry }));
+export const PUBLIC_COMPANIES = COVERAGE.map((c) => ({
+  ticker: c.ticker,
+  name: c.shortName,
+  sector: c.sector,
+  industry: c.industry,
+}));
 export const PUBLIC_TICKERS = PUBLIC_COMPANIES.map((c) => c.ticker);
 const NAMES = new Map(PUBLIC_COMPANIES.map((c) => [c.ticker, c.name]));
 const BY_T = new Map(PUBLIC_COMPANIES.map((c) => [c.ticker, c]));
@@ -12,7 +17,10 @@ const BY_T = new Map(PUBLIC_COMPANIES.map((c) => [c.ticker, c]));
 export function publicPeers(ticker: string, n = 8) {
   const me = BY_T.get(ticker.toUpperCase());
   if (!me) return [];
-  return PUBLIC_COMPANIES.filter((c) => c.ticker !== me.ticker && c.industry === me.industry).slice(0, n);
+  return PUBLIC_COMPANIES.filter((c) => c.ticker !== me.ticker && c.industry === me.industry).slice(
+    0,
+    n,
+  );
 }
 /** Featured on the index and as quick links. */
 export const FEATURED_TICKERS = ["NVDA", "AAPL", "BAC"];
@@ -21,17 +29,46 @@ export function isPublicTicker(t: string): boolean {
   return NAMES.has(t.toUpperCase());
 }
 
-export interface PublicSource { form: string; filed: string | null; accn: string; concept: string; url: string }
-export interface PublicLine { key: string; label: string; unit: string; values: { period: string; value: number; source: PublicSource | null; derived: string | null }[] }
-export interface PublicFiling { form: string; filed: string; desc: string | null; url: string }
+export interface PublicSource {
+  form: string;
+  filed: string | null;
+  accn: string;
+  concept: string;
+  url: string;
+}
+export interface PublicLine {
+  key: string;
+  label: string;
+  unit: string;
+  values: { period: string; value: number; source: PublicSource | null; derived: string | null }[];
+}
+export interface PublicFiling {
+  form: string;
+  filed: string;
+  desc: string | null;
+  url: string;
+}
 export interface PublicSnapshot {
-  ticker: string; name: string; exchange: string; sector: string; industry: string;
-  city: string | null; description: string | null; logo: string | null;
-  periods: string[]; lines: PublicLine[]; filings: PublicFiling[];
+  ticker: string;
+  name: string;
+  exchange: string;
+  sector: string;
+  industry: string;
+  city: string | null;
+  description: string | null;
+  logo: string | null;
+  periods: string[];
+  lines: PublicLine[];
+  filings: PublicFiling[];
 }
 
 const LINES: [StatementKey, string][] = [
-  ["income", "revenue"], ["income", "netIncome"], ["income", "epsDiluted"], ["cashflow", "cfo"], ["cashflow", "fcf"], ["balance", "totalAssets"],
+  ["income", "revenue"],
+  ["income", "netIncome"],
+  ["income", "epsDiluted"],
+  ["cashflow", "cfo"],
+  ["cashflow", "fcf"],
+  ["balance", "totalAssets"],
 ];
 
 export function secDocUrl(cik: string, accn: string, doc?: string): string {
@@ -39,8 +76,18 @@ export function secDocUrl(cik: string, accn: string, doc?: string): string {
   return doc ? `${base}/${doc}` : `${base}/`;
 }
 
-export function buildPublicSnapshot(d: CompanyDataset, years = 5): PublicSnapshot {
+/**
+ * `details` are the server-only coverage details: a profile of the generated list carries no description until the
+ * partner's next build, so the page takes it from there. Sector and industry come from the coverage list, the
+ * same source as the app's own pages, never from a stale profile.
+ */
+export function buildPublicSnapshot(
+  d: CompanyDataset,
+  years = 5,
+  details?: { description?: string },
+): PublicSnapshot {
   const p = d.profile;
+  const listed = BY_T.get(p.ticker);
   const byAccn = new Map(d.filings.map((f) => [f.accn, f]));
   const annual = d.statements.annual as Record<StatementKey, Statement>;
   const periods = annual.income.periods.slice(-years);
@@ -55,7 +102,13 @@ export function buildPublicSnapshot(d: CompanyDataset, years = 5): PublicSnapsho
       if (!c || !Number.isFinite(c.v)) return [];
       const f = c.src ? byAccn.get(c.src.accn) : undefined;
       const source = c.src
-        ? { form: f?.form ?? "10-K", filed: f?.filed ?? null, accn: c.src.accn, concept: c.src.concept, url: secDocUrl(p.cik, c.src.accn, c.src.doc ?? f?.doc) }
+        ? {
+            form: f?.form ?? "10-K",
+            filed: f?.filed ?? null,
+            accn: c.src.accn,
+            concept: c.src.concept,
+            url: secDocUrl(p.cik, c.src.accn, c.src.doc ?? f?.doc),
+          }
         : null;
       return [{ period: per.label, value: c.v, source, derived: c.derived?.formula ?? null }];
     });
@@ -67,13 +120,25 @@ export function buildPublicSnapshot(d: CompanyDataset, years = 5): PublicSnapsho
     .filter((f) => ["10-K", "10-Q", "8-K", "DEF 14A"].includes(f.form))
     .sort((a, b) => (a.filed < b.filed ? 1 : -1))
     .slice(0, 6)
-    .map((f) => ({ form: f.form, filed: f.filed, desc: f.desc ?? null, url: secDocUrl(p.cik, f.accn, f.doc) }));
+    .map((f) => ({
+      form: f.form,
+      filed: f.filed,
+      desc: f.desc ?? null,
+      url: secDocUrl(p.cik, f.accn, f.doc),
+    }));
   const addr = (p as { address?: { city?: string; state?: string } }).address;
   return {
-    ticker: p.ticker, name: NAMES.get(p.ticker) ?? p.name, exchange: p.exchange, sector: p.sector, industry: p.industry,
+    ticker: p.ticker,
+    name: NAMES.get(p.ticker) ?? p.name,
+    exchange: p.exchange,
+    sector: listed?.sector ?? p.sector,
+    industry: listed?.industry ?? p.industry,
     city: addr?.city ? `${addr.city}${addr.state ? `, ${addr.state}` : ""}` : null,
-    description: (p as { description?: string }).description ?? null,
+    description:
+      (p as { description?: string }).description?.trim() || details?.description?.trim() || null,
     logo: (p as { logo?: string }).logo ?? null,
-    periods: periods.map((x) => x.label), lines, filings,
+    periods: periods.map((x) => x.label),
+    lines,
+    filings,
   };
 }
