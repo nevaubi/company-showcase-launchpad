@@ -100,7 +100,26 @@ function TileCard({ tile, onOpen, scale }: { tile: MapTile; onOpen: () => void; 
 
 export function IrFinancialMap({ ticker, payload }: { ticker: string; payload: IrPayload }) {
   const map = useMemo(() => buildMap(payload), [payload]);
-  const [view, setView] = useState<View>({});
+  const [view, setViewState] = useState<View>({});
+  /* One view leaves before the next mounts (AnimatePresence mode="wait"). Without a hold the panel collapses for a moment and
+     the browser's scroll anchoring follows the collapse: pressing a tile moved the page by hundreds of px. The stage keeps the
+     height it has until the next view is in place (or, when the press changed nothing, for a moment). */
+  const stage = useRef<HTMLDivElement>(null);
+  const release = () => {
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (stage.current) stage.current.style.minHeight = "";
+      }),
+    );
+  };
+  const setView: typeof setViewState = (next) => {
+    const el = stage.current;
+    if (el) {
+      el.style.minHeight = `${el.offsetHeight}px`;
+      window.setTimeout(release, 600);
+    }
+    setViewState(next);
+  };
   const [pick, setPick] = useState<number | null>(null);
   const [scale] = useUnitScale();
   const { open } = useSource();
@@ -154,7 +173,7 @@ export function IrFinancialMap({ ticker, payload }: { ticker: string; payload: I
       subtitle={`${map.lines.toLocaleString()} lines over ${q.length} quarters, ${pl(q[0])} to ${pl(q[q.length - 1])} · ${map.weaker} breakdown${map.weaker === 1 ? "" : "s"} mixed or weaker`}
     >
       <div ref={root} tabIndex={-1} className="grid min-w-0 grid-cols-1 outline-none lg:grid-cols-[minmax(0,1fr)_260px]">
-        <div className="min-w-0 border-b p-3 lg:border-r lg:border-b-0">
+        <div ref={stage} className="min-w-0 border-b p-3 lg:border-r lg:border-b-0">
           <nav aria-label="Map level" data-agent-controls className="mb-3 flex flex-wrap items-center gap-1 text-[13px]">
             <button type="button" className={cn("rounded px-1.5 py-0.5 hover:bg-muted", !zone && "font-semibold")} onClick={() => (setView({}), setPick(null))}>
               {ticker}
@@ -188,7 +207,7 @@ export function IrFinancialMap({ ticker, payload }: { ticker: string; payload: I
             )}
           </nav>
 
-          <AnimatePresence mode="wait">
+          <AnimatePresence mode="wait" onExitComplete={release}>
             {!zone && (
               <motion.div key="all" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="grid grid-cols-1 gap-3 md:grid-cols-2" role="group" aria-label="Zones" data-agent-controls>
                 {map.zones.map((z) => (

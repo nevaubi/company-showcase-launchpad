@@ -38,6 +38,7 @@ import { AssistantPanel } from "@/components/research/assistant-panel";
 import { CommandMenu } from "@/components/app/command-menu";
 import { AlertsBell } from "@/components/app/alerts-bell";
 import { CompanyLogo } from "@/components/app/company-logo";
+import { useScrollFloor } from "@/components/app/scroll-floor";
 import { useQuotes, useUniverse } from "@/lib/data";
 import { fmtPct, fmtPrice } from "@/lib/format";
 import {
@@ -114,6 +115,9 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
 
   const menuButton = useRef<HTMLButtonElement>(null);
   const drawer = useRef<HTMLElement>(null);
+  /* the page never gets shorter than where the reader is, so a tab or filter that shows less never pulls it up */
+  const mainRegion = useRef<HTMLElement>(null);
+  useScrollFloor(mainRegion);
   const drawerWasOpen = useRef(false);
   // A route change closes the phone drawer; if it was open, focus goes back to the Menu button.
   useEffect(() => {
@@ -358,7 +362,7 @@ function ShellInner({ children, isAdmin }: { children: ReactNode; isAdmin: boole
               <kbd className="num hidden rounded border px-1 text-xs opacity-70 md:inline">⌘J</kbd>
             </Button>
           </header>
-          <main className="px-4 pb-12 pt-4 lg:px-6">
+          <main ref={mainRegion} className="px-4 pb-12 pt-4 lg:px-6">
             <HubTabs pathname={pathname} />
             <TrialBanner />
             {children}
