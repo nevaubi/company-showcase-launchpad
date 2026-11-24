@@ -60,7 +60,7 @@ describe("site map", () => {
       "iso=rel:supplier|rel:customer|rel:partner|rel:competitor",
       "iso=node:supplier:TSM",
       "iso=path:ENTG>TSM>NVDA>HPE",
-      "tab=evidence|exposure|shock|changes|reactions",
+      "tab=evidence|reactions|changes|shock|exposure",
       // globe
       "a plain wheel zooms toward the pointer only after the map has been pressed",
       "Ctrl or ⌘ + wheel or a pinch at any time",
