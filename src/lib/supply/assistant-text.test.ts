@@ -20,7 +20,7 @@ describe("supplyNodeLine", () => {
     expect(line("SB Energy")).toContain("stated guarantee $105B, not a flow");
     expect(line("SB Energy")).toContain("open: /app/supply-chain?t=NVDA&sel=partner%3ASB+Energy+Corp.");
     expect(line("Microsoft")).toContain("stated share 19%");
-    expect(line("Microsoft")).toContain("≈$38B (share × SEC revenue)");
+    expect(line("Microsoft")).toContain("≈$38B (share × SEC 12-month revenue)");
   });
   it("tells sole source from a stated dependency and lists only named regions", () => {
     const k = line("Kioxia");

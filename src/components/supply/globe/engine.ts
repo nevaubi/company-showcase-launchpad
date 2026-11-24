@@ -36,6 +36,8 @@ export interface GlobePoint {
   logo?: string;
   /** the logo is known to be the company's own mark (not a favicon looked up by domain): only such a logo stands for a whole cluster */
   logoTrusted?: boolean;
+  /** the logo paints its own square background: it fills the plate edge to edge instead of sitting inside its padding */
+  logoFill?: boolean;
   /** the ticker, written on the badge's plate while its logo is missing, loading or failed */
   mark?: string;
   /** the place is only known to country or state level: drawn with a broken ring */
@@ -988,7 +990,7 @@ export class GlobeEngine {
   private drawBadge(m: Mark, pal: GlobePalette): void {
     const ctx = this.ctx, p = m.members[0], picked = this.scene.selected === p.key, hot = this.hover === m.id, r = m.r, dpr = this.dpr;
     ctx.globalAlpha = p.faded && !picked && !hot ? 0.35 : 1;
-    const size = Math.round(2 * r * dpr), tile = p.logo ? this.atlas.tile(p.logo, size) : null;
+    const size = Math.round(2 * r * dpr), tile = p.logo ? this.atlas.tile(p.logo, size, p.logoFill) : null;
     const corner = Math.max(2, r * 0.34);
     if (tile) {
       /* whole device pixels, so the logo is copied, not resampled */
@@ -1047,7 +1049,7 @@ export class GlobeEngine {
       ctx.beginPath(); ctx.arc(m.x, m.y, r - band / 2, sl.a0 + gap, sl.a1 - gap); ctx.strokeStyle = sl.color; ctx.stroke();
     }
     /* the face is cut to a few sizes (steps of four device pixels) so the logo sheets stay few */
-    const inner = r - band - 1.5, size = 4 * Math.round((inner * 1.5 * dpr) / 4), tile = lead.logo && lead.logoTrusted ? this.atlas.tile(lead.logo, size) : null;
+    const inner = r - band - 1.5, size = 4 * Math.round((inner * 1.5 * dpr) / 4), tile = lead.logo && lead.logoTrusted ? this.atlas.tile(lead.logo, size, lead.logoFill) : null;
     ctx.fillStyle = pal.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     if (tile) {
       const s = size / dpr, x = Math.round((m.x - s / 2) * dpr) / dpr, y = Math.round((m.y - s / 2) * dpr) / dpr;

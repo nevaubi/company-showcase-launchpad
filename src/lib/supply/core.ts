@@ -152,11 +152,48 @@ export function statedShare(l: RiskLink): StatedShare | null {
 /** Words for a share's period beside the figure: nothing for a year, else what the 10-Q covers. */
 export const periodWords = (p: SharePeriod | undefined): string => (p === "quarter" ? " in a 10-Q quarter" : p === "interim" ? " year to date in a 10-Q" : "");
 
+/**
+ * A company's revenue for its latest fiscal year, as the universe states it: `latestFY` ("FY2026" or "2026"), `revenueFY`,
+ * and `fiscalYearEnd` ("0328") when the universe has it.
+ */
+export interface FiscalRevenue { fy: string; revenue: number; yearEnd?: string | null }
+export type FiscalBook = Record<string, FiscalRevenue | undefined>;
+
+/** The year in a fiscal-year label: "FY2026" and "2026" both read 2026. */
+const fyYear = (fy: string): number | null => { const m = /(\d{4})/.exec(fy); return m ? Number(m[1]) : null; };
+const DAY = 86_400_000;
+/**
+ * The company's latest fiscal year when a 10-K's annual share describes it, else null (a 10-Q, an older 10-K, or a year that
+ * cannot be told: such a share is multiplied by the last twelve months, and says so). A year is named by the calendar year
+ * it ends in. With the year's end date known, the 10-K must be filed within 200 days after it; without it, the newest year the
+ * sentence names (no later than the filing) must be that year ("for fiscal years 2026, 2025 and 2024" reads 2026).
+ */
+export function fiscalMatch(c: Pick<SupplyLink, "form" | "filed" | "quote">, fiscal: FiscalRevenue | undefined): FiscalRevenue | null {
+  if (!fiscal || !(fiscal.revenue > 0) || !/10-K/i.test(c.form ?? "")) return null;
+  const y = fyYear(fiscal.fy), filedAt = Date.parse(c.filed ?? "");
+  if (y == null || !Number.isFinite(filedAt)) return null;
+  const filedYear = new Date(filedAt).getUTCFullYear();
+  if (y !== filedYear && y !== filedYear - 1) return null;
+  if (fiscal.yearEnd && /^\d{4}$/.test(fiscal.yearEnd)) {
+    const end = Date.UTC(y, Number(fiscal.yearEnd.slice(0, 2)) - 1, Number(fiscal.yearEnd.slice(2)));
+    return filedAt > end && filedAt - end <= 200 * DAY ? fiscal : null;
+  }
+  const years = [...(c.quote ?? "").matchAll(/\b(19|20)\d{2}\b/g)].map((m) => Number(m[0])).filter((n) => n <= filedYear);
+  return years.length && Math.max(...years) === y ? fiscal : null;
+}
+
+/** What revenue an estimate from a share is multiplied by. */
+export type RevenueBasis = { kind: "fy"; fy: string; revenue: number } | { kind: "ttm"; revenue: number };
+/** Words for a basis beside a figure: "FY2026 revenue" or "12-month revenue". */
+export const basisWords = (b: RevenueBasis | undefined): string => (b?.kind === "fy" ? `${/^FY/i.test(b.fy) ? b.fy.toUpperCase() : `FY${b.fy}`} revenue` : "12-month revenue");
+
 export interface LinkDollars {
   dollars: number;
   from: "flow" | "share";
-  /** for an estimate from a share: the period the share covers (the revenue it multiplies is always the last twelve months) */
+  /** for an estimate from a share: the period the share covers */
   period?: SharePeriod;
+  /** for an estimate from a share: the revenue it is multiplied by (a 10-K's year, else the last twelve months) */
+  basis?: RevenueBasis;
   /** the row whose sentence states it (the link itself or one of its copies) */
   link: RiskLink;
 }
@@ -166,7 +203,7 @@ export interface LinkDollars {
  * stated customer share × the filer's revenue. A stated amount that is not a flow (guarantee, investment, financing,
  * commitment, settlement, balance) and an amount the sentence does not state never count, and ties that are not trade have none.
  */
-export function linkDollarsFrom(l: RiskLink, revenue: Record<string, number | undefined>): LinkDollars | null {
+export function linkDollarsFrom(l: RiskLink, revenue: Record<string, number | undefined>, fiscal?: FiscalBook): LinkDollars | null {
   if (!isTradeLink(l)) return null;
   let best: LinkDollars | null = null;
   for (const c of copies(l)) if (c.flow_usd != null && c.flow_usd > 0 && (!best || c.flow_usd > best.dollars)) best = { dollars: c.flow_usd, from: "flow", link: c };
@@ -175,12 +212,16 @@ export function linkDollarsFrom(l: RiskLink, revenue: Record<string, number | un
   if (l.relation !== "customer" || !rev) return null;
   /* a 10-K's annual share is the one that matches twelve months of revenue: it wins over a 10-Q's quarter share whatever their sizes */
   const sh = statedShare(l);
-  return sh ? { dollars: (sh.pct / 100) * rev, from: "share", link: sh.link, period: sh.period } : null;
+  if (!sh) return null;
+  /* an annual share describes its fiscal year: multiplied by that year's revenue when the universe has it (p3-sup-L2) */
+  const fy = sh.period === "annual" ? fiscalMatch(sh.link, fiscal?.[l.ticker]) : null;
+  const basis: RevenueBasis = fy ? { kind: "fy", fy: fy.fy, revenue: fy.revenue } : { kind: "ttm", revenue: rev };
+  return { dollars: (sh.pct / 100) * basis.revenue, from: "share", link: sh.link, period: sh.period, basis };
 }
 
 /** Dollar value a link represents (see `linkDollarsFrom`); null when the filings give neither a flow nor a customer share. */
-export function linkDollars(l: RiskLink, revenue: Record<string, number | undefined>): number | null {
-  return linkDollarsFrom(l, revenue)?.dollars ?? null;
+export function linkDollars(l: RiskLink, revenue: Record<string, number | undefined>, fiscal?: FiscalBook): number | null {
+  return linkDollarsFrom(l, revenue, fiscal)?.dollars ?? null;
 }
 
 /** A dollar figure a sentence states, with what it is. Flows widen bands and count as exposure; the rest are only shown. */
@@ -227,10 +268,10 @@ export interface NodeRisk {
   nature: LinkNature;
 }
 
-export function nodeRisk(links: RiskLink[], revenue: Record<string, number | undefined>): NodeRisk {
+export function nodeRisk(links: RiskLink[], revenue: Record<string, number | undefined>, fiscal?: FiscalBook): NodeRisk {
   const rows = links.flatMap((l) => copies(l));
   const regions = [...new Set(links.flatMap(statedRegions))];
-  const dollars = links.map((l) => linkDollars(l, revenue)).filter((d): d is number => d != null);
+  const dollars = links.map((l) => linkDollars(l, revenue, fiscal)).filter((d): d is number => d != null);
   const singleSource = rows.some((l) => !!l.single_source);
   return {
     singleSource,

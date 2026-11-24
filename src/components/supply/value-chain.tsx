@@ -13,11 +13,14 @@ import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
 import { ClearIsolation } from "@/components/supply/supply-toolbar";
 import { BASIS_WORD, CHAIN_FLOWS, LINK_TYPE_LABEL, TIER_LABEL, type Chain, type ChainEdge, type ChainFlow, type ChainNode, type TaggedShare } from "@/lib/supply/chain";
 import { CHAIN, boxName, nameFits, edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
-import type { RiskLink } from "@/lib/supply/core";
+import { basisWords, type RevenueBasis, type RiskLink } from "@/lib/supply/core";
 import { chainEdgePath, chainPath, pathHops, type Isolated, type PathHop } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+
+/** Beside a figure from a share: which revenue it multiplies, short ("share × FY2026", "share × 12 mo"). */
+const basisShort = (b: RevenueBasis | null | undefined) => (b?.kind === "fy" ? `share × ${basisWords(b).replace(/ revenue$/, "")}` : "share × 12 mo");
 
 export type ChainSize = "share" | "dollars";
 
@@ -310,7 +313,7 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
                   <span className={cn("block truncate text-[10px] leading-3", focus ? "opacity-80" : "text-muted-foreground")}>{boxName(n.name)}</span>
                 </>
               ) : (
-                <span className="line-clamp-2 font-medium leading-[15px]">{boxName(n.name)}</span>
+                <span className="line-clamp-2 font-medium leading-[15px] [overflow-wrap:anywhere]">{boxName(n.name)}</span>
               )}
             </span>
             {sole.has(n.key) && <Lock className="size-3 shrink-0 text-negative" aria-hidden="true" />}
@@ -373,7 +376,7 @@ function EdgeChips({ e }: { e: ChainEdge }) {
   return (
     <div className="mt-1.5 flex flex-wrap gap-1 text-[11px]">
       {share && <span className="num rounded bg-muted px-1.5 py-0.5">{share}</span>}
-      {e.dollars != null && <span className="num rounded bg-muted px-1.5 py-0.5" title={e.dollarsFrom === "stated" ? "Revenue, purchase or contract figure the sentence states" : "Stated share × the seller's revenue (last 12 months)"}>≈ {fmtCompactUsd(e.dollars)} {e.dollarsFrom === "stated" ? "stated" : "share × revenue"}</span>}
+      {e.dollars != null && <span className="num rounded bg-muted px-1.5 py-0.5" title={e.dollarsFrom === "stated" ? "Revenue, purchase or contract figure the sentence states" : `Stated share × the seller's ${basisWords(e.dollarsBasis ?? undefined)}`}>≈ {fmtCompactUsd(e.dollars)} {e.dollarsFrom === "stated" ? "stated" : basisShort(e.dollarsBasis)}</span>}
       {e.confirmed && <span className="inline-flex items-center gap-1 rounded bg-positive-soft px-1.5 py-0.5 text-positive"><ShieldCheck className="size-3" aria-hidden="true" />Both filings state it</span>}
       {e.sole && <span className="inline-flex items-center gap-1 rounded bg-negative-soft px-1.5 py-0.5 text-negative"><Lock className="size-3" aria-hidden="true" />Single source</span>}
     </div>
@@ -467,7 +470,7 @@ type EdgeSort = "dollars" | "share" | "evidence";
 const SORT_LABEL: Record<EdgeSort, string> = { share: "Share", dollars: "≈ Dollars", evidence: "Filings" };
 const SORT_TITLE: Record<EdgeSort, string> = {
   share: "The share a filing states, and what it is a share of",
-  dollars: "Dollars the sentence states, or a stated share of the seller's revenue over the last 12 months",
+  dollars: "Dollars the sentence states, or a stated share of the seller's revenue: a 10-K's share times that fiscal year, else the last 12 months",
   evidence: "How many filings state the link. The button opens the first.",
 };
 const SORT_OPTIONS: SegOption<EdgeSort>[] = [{ v: "dollars", l: "Dollars" }, { v: "share", l: "Share" }, { v: "evidence", l: "Filings" }];
@@ -506,8 +509,10 @@ export function ChainTable({ chain, names, revenue, isolated, onIsolate, onOpenT
     if (e.dollars == null) return undefined;
     if (e.dollarsFrom === "stated") return "Revenue, purchase or contract figure stated in the filing sentence";
     const seller = node(e.from).ticker;
-    const rev = seller ? revenue[seller] : undefined;
-    return rev && e.share != null ? `${e.share}% of revenue × ${fmtCompactUsd(rev)} ${names[seller as string] ?? seller} revenue (last 12 months)` : "Stated share × the seller's revenue (last 12 months)";
+    const b = e.dollarsBasis ?? undefined;
+    const rev = b?.revenue ?? (seller ? revenue[seller] : undefined);
+    const when = b?.kind === "fy" ? `(${basisWords(b).replace(/ revenue$/, "")})` : "(last 12 months)";
+    return rev && e.share != null ? `${e.share}% of revenue × ${fmtCompactUsd(rev)} ${names[seller as string] ?? seller} revenue ${when}` : `Stated share × the seller's revenue ${when}`;
   };
   const th = "border-b px-2 py-1.5 font-medium";
   /* the arrow keeps its place when it is not shown, so sorting never changes a header's width or height */
@@ -528,7 +533,7 @@ export function ChainTable({ chain, names, revenue, isolated, onIsolate, onOpenT
     <section className="@container min-w-0 border-y bg-card/40" data-section="Chain links" aria-label="Links in the chain">
       <header className="border-b px-3.5 py-2">
         <h2 className="truncate text-[13px] font-semibold leading-5 tracking-tight">Links in the chain</h2>
-        <p className="truncate text-[11px] leading-4 text-muted-foreground" title="A dollar figure is one the sentence states, or a stated share of the seller's revenue over the last 12 months">
+        <p className="truncate text-[11px] leading-4 text-muted-foreground" title="A dollar figure is one the sentence states, or a stated share of the seller's revenue: a 10-K's share times that fiscal year, else the last 12 months">
           {litEdges ? <><span className="num">{litRows}</span> of <span className="num">{rows.length}</span> links lit</> : <><span className="num">{rows.length}</span> links</>}
           {" · "}<span className="num">{quantified}</span> with a dollar figure
         </p>
@@ -575,7 +580,7 @@ export function ChainTable({ chain, names, revenue, isolated, onIsolate, onOpenT
                   {e.share != null ? <>{e.share}%<span className="ml-1 font-sans text-[11px] leading-4 text-muted-foreground @[640px]:ml-0 @[640px]:block">of {e.basis ? BASIS_WORD[e.basis] : "an unstated base"}</span></> : <span className="text-muted-foreground">–</span>}
                 </td>
                 <td className={cn("num col-span-2 col-start-2 row-start-3 mt-1 min-w-0 text-right @[640px]:mt-0 @[640px]:px-2 @[640px]:py-1.5", e.dollars == null ? "hidden" : "block", CELL)} title={formula(e)}>
-                  {e.dollars != null ? <><span className="@[640px]:hidden">≈ </span>{fmtCompactUsd(e.dollars)}<span className="ml-1 whitespace-nowrap font-sans text-[11px] leading-4 text-muted-foreground @[640px]:ml-0 @[640px]:block">{e.dollarsFrom === "stated" ? "stated flow" : "share × revenue"}</span></> : <span className="text-muted-foreground">–</span>}
+                  {e.dollars != null ? <><span className="@[640px]:hidden">≈ </span>{fmtCompactUsd(e.dollars)}<span className="ml-1 whitespace-nowrap font-sans text-[11px] leading-4 text-muted-foreground @[640px]:ml-0 @[640px]:block">{e.dollarsFrom === "stated" ? "stated flow" : basisShort(e.dollarsBasis)}</span></> : <span className="text-muted-foreground">–</span>}
                 </td>
                 <td className={cn("col-start-2 row-start-1 block @[640px]:px-1 @[640px]:py-1 @[640px]:text-right", CELL)}>
                   <button type="button" onClick={() => openFirst(e, label, onOpenText, onOpenTag)} aria-label={`Open the source: ${label}, ${e.evidence.length} ${e.evidence.length === 1 ? "filing" : "filings"}`} title={e.evidence.length === 1 ? "Open the filing that states it" : `Open the first of ${e.evidence.length} filings that state it`}

@@ -2,7 +2,7 @@
 // Built from every quoted supply link (either company's filing) plus XBRL-tagged customer/supplier
 // concentration facts, so each edge carries the evidence that states it. Goods flow left to right
 // (seller → buyer). Pure: no React, no fetching.
-import { copies, entityKey, isTradeLink, linkDollarsFrom, type ProLink, type RiskLink } from "./core";
+import { copies, entityKey, isTradeLink, linkDollarsFrom, type FiscalBook, type ProLink, type RevenueBasis, type RiskLink } from "./core";
 
 /** One tagged concentration fact (xbrl_concentration row) naming a covered counterparty. */
 export interface TaggedShare {
@@ -40,6 +40,8 @@ export interface ChainEdge {
   dollars: number | null;
   /** Where the dollar figure comes from: a flow the quote states (revenue, purchases, contract value), or a stated share × the seller's revenue. */
   dollarsFrom: "stated" | "share" | null;
+  /** For a figure from a share: the revenue it multiplies (a 10-K's fiscal year, else the last twelve months). */
+  dollarsBasis?: RevenueBasis | null;
   sole: boolean;
   /** Both companies' own filings state the relationship. */
   confirmed: boolean;
@@ -134,6 +136,8 @@ export interface ChainOptions {
   /** Most parties in any one tier beyond the first. */
   perTier?: number;
   flow?: ChainFlow;
+  /** Latest fiscal-year revenue by ticker: a 10-K's annual share is multiplied by its own year's revenue. */
+  fiscal?: FiscalBook;
   /** Keep only links whose stated product or detail contains this text. */
   product?: string;
 }
@@ -145,7 +149,7 @@ const byWeight = (a: ChainEdge, b: ChainEdge) => {
 };
 
 /** Every seller → buyer edge stated anywhere, merged per pair. */
-export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Record<string, string>, revenue: Record<string, number | undefined>, flow: ChainFlow = "all", product = "", side: ChainSide = "down"): { edges: Map<string, ChainEdge>; label: Map<string, { name: string; ticker: string | null }> } {
+export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Record<string, string>, revenue: Record<string, number | undefined>, flow: ChainFlow = "all", product = "", side: ChainSide = "down", fiscal?: FiscalBook): { edges: Map<string, ChainEdge>; label: Map<string, { name: string; ticker: string | null }> } {
   const edges = new Map<string, ChainEdge>();
   const label = new Map<string, { name: string; ticker: string | null }>();
   const node = (name: string, ticker: string | null) => {
@@ -202,10 +206,11 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
         e.basis = basis;
       }
     }
-    const d = linkDollarsFrom(l, revenue);
+    const d = linkDollarsFrom(l, revenue, fiscal);
     if (d != null && d.dollars > (e.dollars ?? 0)) {
       e.dollars = d.dollars;
       e.dollarsFrom = d.from === "flow" ? "stated" : "share";
+      e.dollarsBasis = d.basis ?? null;
     }
   }
   for (const f of tagged) {
@@ -231,6 +236,7 @@ export function chainEdges(links: RiskLink[], tagged: TaggedShare[], names: Reco
       if (d > (e.dollars ?? 0)) {
         e.dollars = d;
         e.dollarsFrom = "share";
+        e.dollarsBasis = { kind: "ttm", revenue: rev };
       }
     }
   }
@@ -254,9 +260,9 @@ export function buildChain(focus: string, links: RiskLink[], tagged: TaggedShare
   const first = opts.first ?? 8, perNode = opts.perNode ?? 3, perTier = opts.perTier ?? 10;
   const f = focus.toUpperCase();
   const flow = opts.flow ?? "all", product = opts.product ?? "";
-  const down = chainEdges(links, tagged, names, revenue, flow, product, "down");
+  const down = chainEdges(links, tagged, names, revenue, flow, product, "down", opts.fiscal);
   // unfiltered, both sides see the same edges: build them once
-  const upE = flow === "all" && !product.trim() ? down : chainEdges(links, tagged, names, revenue, flow, product, "up");
+  const upE = flow === "all" && !product.trim() ? down : chainEdges(links, tagged, names, revenue, flow, product, "up", opts.fiscal);
   const label = new Map([...upE.label, ...down.label]);
   const out = new Map<string, ChainEdge[]>();
   const into = new Map<string, ChainEdge[]>();

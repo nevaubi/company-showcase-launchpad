@@ -24,6 +24,7 @@ import { externalLogo, impactKey, RELATION_ONE } from "./supply-map-meta";
 import { figure, RelationMark } from "./supply-marks";
 import { DeepVerify, FreshnessBadge } from "./supply-plus";
 import { ConfidenceBadge } from "./supply-pro";
+import { quoteShown } from "@/lib/supply/quote-cut";
 
 const TAB_LABEL: Record<SupplyTab, string> = { evidence: "Evidence", exposure: "Exposure", shock: "Shock", changes: "Changes", reactions: "Moves" };
 /** Reading order of the tabs: what a selection opens first, then the figures, then the what-ifs and history. */
@@ -136,7 +137,7 @@ export function NodeEvidence({ sel, focusName, risk, names, covered, all, today,
               </div>
               {mirrors(l, all).slice(0, 1).map((m) => (
                 <button key={m.id} type="button" onClick={() => onOpen(m as RiskLink, `${names[m.ticker] ?? m.ticker} confirms`)} className="mt-2 block rounded text-left text-[11px] leading-4 text-positive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  {names[m.ticker] ?? m.ticker}'s {m.form} confirms: “{m.quote.slice(0, 110)}{m.quote.length > 110 ? "…" : ""}”
+                  {names[m.ticker] ?? m.ticker}'s {m.form} confirms: “{quoteShown(m.quote, 110)}”
                 </button>
               ))}
               {(l.corroboration ?? []).length > 0 && (
@@ -147,7 +148,7 @@ export function NodeEvidence({ sel, focusName, risk, names, covered, all, today,
                       <span className="inline-flex items-center gap-1 font-medium text-foreground"><FileText className="size-3" aria-hidden="true" />{c.form}, filed {fmtDate(c.filed)}</span>
                       {c.share_pct != null && <span className="num"> · {c.share_pct}%</span>}
                       {c.amount_usd != null && c.amount_usd > 0 && <span className="num"> · {fmtCompactUsd(c.amount_usd)} {KIND_WORD[c.amount_kind ?? "other"]}</span>}
-                      <span className="block italic">“{c.quote.slice(0, 140)}{c.quote.length > 140 ? "…" : ""}”</span>
+                      <span className="block italic">“{quoteShown(c.quote, 140)}”</span>
                     </button>
                   ))}
                 </div>
@@ -220,13 +221,13 @@ export function ExposureList({ focusName, exposure, others, names, isolated, onO
         <div>
           <p className="mb-1 flex items-baseline justify-between gap-2 text-xs text-muted-foreground"><span>Each name once, at its largest stated flow, or estimated as a stated share × SEC revenue</span><span className="num shrink-0 text-[13px] font-semibold text-foreground">{fmtCompactUsd(total)}</span></p>
           <ul className="divide-y border-y">
-            {rows.map(({ n, l, d, from, period }) => (
+            {rows.map(({ n, l, d, from, period, basis }) => (
               <li key={n.key} className="flex items-center gap-2 py-1.5">
                 <RelationMark relation={n.relation as Relation} size={8} />
                 <CompanyLogo ticker={logoOf(n)} src={externalLogo(n.domain, n.ticker)} size="xs" decorative />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{n.name}</span>
-                  <span className="block truncate text-[11px] text-muted-foreground">{from === "flow" ? `stated ${KIND_WORD[l.amount_kind ?? "other"]}` : l.share_pct != null ? estimateWords(l.share_pct, period, names[l.ticker] ?? l.ticker) : n.relation}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">{from === "flow" ? `stated ${KIND_WORD[l.amount_kind ?? "other"]}` : l.share_pct != null ? estimateWords(l.share_pct, period, names[l.ticker] ?? l.ticker, basis) : n.relation}</span>
                 </span>
                 <span className="num shrink-0 text-[13px] font-medium">{fmtCompactUsd(d)}</span>
                 <button type="button" onClick={() => onOpen(l, `${n.name} · exposure`)} aria-label={`Source for ${n.name}`} className={quietButton}><FileText className="size-3" aria-hidden="true" />Source</button>

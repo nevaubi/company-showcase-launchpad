@@ -15,7 +15,8 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Crosshair, Globe2, Map as MapIcon, Minus, Plus, RotateCcw, Waypoints, X } from "lucide-react";
-import { CompanyLogo, logoUrl } from "@/components/app/company-logo";
+import { CompanyLogo } from "@/components/app/company-logo";
+import { badgeLogo } from "./badge-logo";
 import { analyticsFile } from "@/lib/analytics-files";
 import { canonCountry, type CountryRow } from "@/lib/supply/analytics";
 import { maxShare, NOT_TRADE, type GraphNode, type HopNode, type NodeRisk, type Relation, type RiskLink, type ShockImpact } from "@/lib/supply/core";
@@ -261,8 +262,8 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
     const flagged = (key: string) => overlayHit(overlay, risks[key]);
     const outside = (p: Placed) => { const n = nodeByKey.get(p.key); return impacts != null && n != null && !impactOf(impacts, n); };
     if (home) {
-      const mark = focus.ticker ? logoUrl(focus.ticker) : undefined;
-      points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 1, lead: true, approx: home.precision !== "city", logo: mark, logoTrusted: !!mark, mark: focus.ticker ?? undefined, shape: "circle" });
+      const b = badgeLogo(focus.ticker, undefined);
+      points.push({ key: "focus", name: focus.name, hub: home.place, lon: home.lon, lat: home.lat, color: theme.relation.focus, weight: 1, lead: true, approx: home.precision !== "city", logo: b.logo, logoTrusted: b.trusted, logoFill: b.fill, mark: focus.ticker ?? undefined, shape: "circle" });
     }
     for (const p of placed) {
       if (p.relation === "focus") continue;
@@ -270,12 +271,13 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
       const value = p.hop === 1 ? side.value(p.key) : 0, share = node ? maxShare(node) : 0;
       const weight = value > 0 && side.max > 0 ? Math.sqrt(value / side.max) : 0;
       const dim = !lit(p.key), faded = outside(p);
-      /* a covered company's bundled mark; otherwise a logo looked up by domain, good enough for its own badge */
-      const mark = p.ticker ? logoUrl(p.ticker) : undefined;
+      /* a covered company's square mark or site icon, its letters when its only mark is a wordmark; a name without a bundled
+         mark gets a logo looked up by domain, good enough for its own badge */
+      const b = badgeLogo(p.ticker, externalLogo(node?.domain ?? null, p.ticker));
       points.push({
         key: p.key, name: p.name, hub: p.place, lon: p.lon, lat: p.lat,
         color: theme.relation[p.relation], weight, faded, dim,
-        logo: mark ?? externalLogo(node?.domain ?? null, p.ticker), logoTrusted: !!mark, mark: p.ticker ?? undefined,
+        logo: b.logo, logoTrusted: b.trusted, logoFill: b.fill, mark: p.ticker ?? undefined,
         approx: p.basis !== "hq", ring: flagged(p.key) ? theme.negative : undefined, shape: RELATION_SHAPE[p.relation],
         /* the figure behind the width, written as the Network cards write it */
         note: p.hop === 1 && value > 0 ? (share > 0 ? `${share}%` : side.basis === "dollars" ? fmtCompactUsd(value) : undefined) : undefined,

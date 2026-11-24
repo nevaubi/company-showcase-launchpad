@@ -5,8 +5,13 @@
 // page and stays where it is when its content grows (`nextFollow`, `followRoom`). page-nav.test.ts guards all of it.
 // Pure, no browser/Node APIs.
 
-/** View state (view, tab, overlay, depth, selection, isolation): replaces the history entry, never moves the page. */
+/** View state (view, tab, overlay, depth, selection): replaces the history entry, never moves the page. */
 export const VIEW_NAV = { replace: true, resetScroll: false } as const;
+/**
+ * An isolation (setting, changing or clearing it): a new history entry, so Back undoes it instead of leaving the company
+ * (p3-sup-L5). The page stays where it is.
+ */
+export const ISOLATE_NAV = { resetScroll: false } as const;
 /** A company change: a new history entry (Back returns to the previous company), the page stays where it is. */
 export const COMPANY_NAV = { resetScroll: false } as const;
 

@@ -4,7 +4,7 @@
 // Each cell here names the direction and the party it measures, and a cell that shares a word with a score part counts the
 // same thing as that part, so the two never read as a contradiction.
 import { supplierShareBasis, type ShareBasis } from "./chain";
-import { concentrationBasis, copies, dependencyScore, periodWords, statedShare, type Dependency, type GraphNode, type ProLink, type RiskLink, type SharePeriod } from "./core";
+import { basisWords, concentrationBasis, copies, dependencyScore, periodWords, statedShare, type Dependency, type GraphNode, type ProLink, type RevenueBasis, type RiskLink, type SharePeriod } from "./core";
 
 export interface StripFacts {
   /** supplier and partner ties the company's own filings call sole, single or exclusive source (the score's count) */
@@ -115,8 +115,8 @@ export const SINGLE_SOURCE_LABEL = "Single-source inputs";
 export const scoreScope = (focusName: string) =>
   `Counts ${possessive(focusName)} own 10-K and 10-Q only. Sole-source ties and shares that other companies state about ${focusName} are in the strip at the top.`;
 
-/** How the exposure figure was reached: stated flows, estimates from a stated share × the filer's last twelve months of revenue, or both. */
-export function exposureWords(rows: { from: "flow" | "share"; period?: SharePeriod }[]): { label: string; note: string | null; title: string } {
+/** How the exposure figure was reached: stated flows, estimates from a stated share × the filer's revenue (a 10-K's fiscal year or the last twelve months), or both. */
+export function exposureWords(rows: { from: "flow" | "share"; period?: SharePeriod; basis?: RevenueBasis }[]): { label: string; note: string | null; title: string } {
   const est = rows.filter((r) => r.from === "share");
   const quarter = est.filter((r) => r.period === "quarter").length;
   const interim = est.filter((r) => r.period === "interim").length;
@@ -124,15 +124,15 @@ export function exposureWords(rows: { from: "flow" | "share"; period?: SharePeri
   const note = est.length ? `${est.length} estimated` : null;
   const periods = [quarter ? `${plural(quarter, "estimate")} from a quarter's share in a 10-Q` : "", interim ? `${plural(interim, "estimate")} from a year-to-date share in a 10-Q` : ""].filter(Boolean).join("; ");
   const title = est.length
-    ? `${plural(est.length, "name")} estimated from a stated share × the filer's revenue for the last twelve months; a 10-K's annual share is used where there is one.${periods ? ` ${periods}.` : ""} ${plural(rows.length - est.length, "name")} at a flow the sentence states.`
+    ? `${plural(est.length, "name")} estimated from a stated share × the filer's revenue; a 10-K's annual share is used where there is one, times that fiscal year's revenue when it is the latest year, else the last twelve months.${periods ? ` ${periods}.` : ""} ${plural(rows.length - est.length, "name")} at a flow the sentence states.`
     : "Each name once, at its largest flow the sentence states.";
   return { label, note, title };
 }
 
 /** How one estimated exposure row reads: the share, its period and whose revenue. */
-export function estimateWords(pct: number, period: SharePeriod | undefined, filer: string): string {
+export function estimateWords(pct: number, period: SharePeriod | undefined, filer: string, basis?: RevenueBasis): string {
   const of = period === "quarter" ? `of ${possessive(filer)} revenue for a quarter (10-Q)` : period === "interim" ? `of ${possessive(filer)} revenue year to date (10-Q)` : `of ${possessive(filer)} revenue`;
-  return `est. ${pct}% ${of} × 12-month revenue`;
+  return `est. ${pct}% ${of} × ${basisWords(basis)}`;
 }
 
 /** A customer share the company's own 10-K or 10-Q states without naming the customer ("one direct customer represented 22%"). */

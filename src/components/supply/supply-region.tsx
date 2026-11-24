@@ -14,6 +14,7 @@ import { quoteLink, signalConfidence } from "@/lib/supply/counterparty";
 import type { ProLink } from "@/lib/supply/core";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { quoteShown } from "@/lib/supply/quote-cut";
 
 const TIER: Record<RiskTier, { label: string; cls: string }> = {
   high: { label: "High", cls: "bg-negative-soft text-negative" },
@@ -162,7 +163,7 @@ export function RegionDossierPanel({ ticker, name, country, theme }: { ticker: s
                     <span>{x.form ?? x.source_kind}</span>{x.filed && <span>· {fmtDate(x.filed)}</span>}
                   </div>
                   <p className="mt-0.5 text-xs font-medium">{x.title}</p>
-                  <p className="mt-0.5 line-clamp-2 text-[11px] italic text-muted-foreground">“{x.quote}”</p>
+                  <p className="mt-0.5 line-clamp-2 text-[11px] italic text-muted-foreground" title={x.quote}>“{quoteShown(x.quote)}”</p>
                 </button>
               </li>
             ))}

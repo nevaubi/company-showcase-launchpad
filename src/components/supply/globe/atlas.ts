@@ -51,8 +51,11 @@ export class LogoAtlas {
     return s;
   }
 
-  /** The tile of a logo at `size` device pixels (plate with slightly rounded corners, logo fitted inside with padding), or null until it has loaded. */
-  tile(url: string, size: number): AtlasTile | null {
+  /**
+   * The tile of a logo at `size` device pixels (plate with slightly rounded corners, logo fitted inside with padding; a logo
+   * that paints its own square background, `fill`, covers the plate edge to edge), or null until it has loaded.
+   */
+  tile(url: string, size: number, fill = false): AtlasTile | null {
     const img = this.image(url);
     if (!img) return null;
     const s = this.sheet(size);
@@ -71,11 +74,11 @@ export class LogoAtlas {
       }
       s.slots.set(url, slot);
       const x = (slot % s.cols) * size, y = Math.floor(slot / s.cols) * size, ctx = s.ctx;
-      const radius = Math.max(2, Math.round(size * 0.17)), pad = Math.max(2, Math.round(size * 0.13)), room = size - 2 * pad;
+      const radius = Math.max(2, Math.round(size * 0.17)), pad = fill ? 0 : Math.max(2, Math.round(size * 0.13)), room = size - 2 * pad;
       ctx.save();
       ctx.beginPath(); ctx.roundRect(x, y, size, size, radius); ctx.clip();
       ctx.fillStyle = this.plate; ctx.fillRect(x, y, size, size);
-      const iw = img.naturalWidth || room, ih = img.naturalHeight || room, k = Math.min(room / iw, room / ih), w = iw * k, h = ih * k;
+      const iw = img.naturalWidth || room, ih = img.naturalHeight || room, k = fill ? Math.max(room / iw, room / ih) : Math.min(room / iw, room / ih), w = iw * k, h = ih * k;
       ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
       let drawn = true;
       try { ctx.drawImage(img, x + pad + (room - w) / 2, y + pad + (room - h) / 2, w, h); } catch { drawn = false; }

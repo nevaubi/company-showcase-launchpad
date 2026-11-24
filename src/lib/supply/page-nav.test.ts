@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { APP_HEADER, columnBehind, COMPANY_NAV, currentSection, fitsBeside, FOLLOW_START, followRoom, nextFollow, offscreen, PANEL_TOP, SUPPLY_SECTIONS, type FollowState, VIEW_NAV } from "./page-nav";
+import { APP_HEADER, columnBehind, COMPANY_NAV, currentSection, ISOLATE_NAV, fitsBeside, FOLLOW_START, followRoom, nextFollow, offscreen, PANEL_TOP, SUPPLY_SECTIONS, type FollowState, VIEW_NAV } from "./page-nav";
 
 const ROOT = join(__dirname, "../../..");
 const ROUTE = "src/routes/_authenticated/app.supply-chain.tsx";
@@ -14,10 +14,20 @@ describe("the supply page never moves the reader", () => {
   it("every address change it makes keeps the scroll position", () => {
     expect(VIEW_NAV).toEqual({ replace: true, resetScroll: false });
     expect(COMPANY_NAV).toEqual({ resetScroll: false });
+    expect(ISOLATE_NAV).toEqual({ resetScroll: false });
     // each call is one statement on one line, ending with the spread of one of the two option sets
     const calls = read(ROUTE).split("\n").filter((line) => /\bnavigate\(\{/.test(line));
     expect(calls.length).toBeGreaterThanOrEqual(2);
-    for (const c of calls) expect(c, `navigate call without a scroll-keeping option: ${c.trim().slice(0, 80)}`).toMatch(/\.\.\.(VIEW_NAV|COMPANY_NAV) \}\)/);
+    for (const c of calls) expect(c, `navigate call without a scroll-keeping option: ${c.trim().slice(0, 80)}`).toMatch(/\.\.\.(VIEW_NAV|COMPANY_NAV|ISOLATE_NAV) \}\)/);
+  });
+  it("an isolation is a history step: Back undoes it instead of leaving the company (p3-sup-L5)", () => {
+    const route = read(ROUTE);
+    expect(route).toMatch(/const isoPatch = useCallback\(\(p: Partial<SupplySearch>\) => navigate\(\{ search: [^\n]*\.\.\.ISOLATE_NAV \}\)/);
+    // every change to `iso` (set, change, clear) goes through it; view state keeps replacing the entry
+    const isoWrites = route.split("\n").filter((line) => /\b(patch|isoPatch)\(\{ iso:/.test(line));
+    expect(isoWrites.length).toBeGreaterThanOrEqual(2);
+    for (const line of isoWrites) expect(line.trim()).toMatch(/\bisoPatch\(\{ iso:/);
+    expect("replace" in ISOLATE_NAV).toBe(false);
   });
   it("nothing scrolls as a side effect: the window's scroll position is touched in one file only", () => {
     const offenders = pageFiles().filter((p) => p !== `${DIR}/scroll-to.ts`).filter((p) => /scrollIntoView|\bscrollTo\(|\bscrollBy\(|\.scrollTop\s*=/.test(read(p)));

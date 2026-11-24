@@ -28,12 +28,12 @@ import { fmtDate } from "@/lib/format";
 import { countryExposure } from "@/lib/supply/analytics";
 import { countryOf } from "@/lib/supply/place-kind";
 import { buildChain, type ChainFlow, type TaggedShare } from "@/lib/supply/chain";
-import { focusGraph, nodeRisk, RELATIONS, secondOrder, simulateShock, statedRegions, type GraphNode, type ProLink, type Relation, type RiskLink } from "@/lib/supply/core";
+import { focusGraph, nodeRisk, RELATIONS, secondOrder, simulateShock, statedRegions, type FiscalBook, type GraphNode, type ProLink, type Relation, type RiskLink } from "@/lib/supply/core";
 import { exposureSummary } from "@/lib/supply/describe";
 import { isolationParam, nextIsolation, nodeId, parseIsolation, resolveIsolation, type IsolateContext } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
 import { concentrationCell, exposureWords, hotspotCell, singleSourceCell, stripFacts } from "@/lib/supply/strip";
-import { COMPANY_NAV, SUPPLY_SECTIONS, VIEW_NAV } from "@/lib/supply/page-nav";
+import { COMPANY_NAV, ISOLATE_NAV, SUPPLY_SECTIONS, VIEW_NAV } from "@/lib/supply/page-nav";
 import { supplyLinksQuery, taggedSharesQuery } from "@/lib/supply/query";
 import { resolveSelection, selectionParam, SUPPLY_OVERLAYS, SUPPLY_VIEWS, supplySearch, type SupplySearch, type SupplyTab, type SupplyView } from "@/lib/supply/url-state";
 import { useSessionState } from "@/lib/use-session-state";
@@ -87,6 +87,8 @@ function SupplyChainPage() {
   const depth: 1 | 2 = (search.depth ?? savedDepth) === 2 ? 2 : 1;
   const tab: SupplyTab = search.tab ?? savedTab;
   const patch = useCallback((p: Partial<SupplySearch>) => navigate({ search: (prev: SupplySearch) => ({ ...prev, ...p }), ...VIEW_NAV }), [navigate]);
+  /* an isolation is one step of history: Back undoes it instead of leaving the company (p3-sup-L5) */
+  const isoPatch = useCallback((p: Partial<SupplySearch>) => navigate({ search: (prev: SupplySearch) => ({ ...prev, ...p }), ...ISOLATE_NAV }), [navigate]);
   const setView = (v: SupplyView) => { setSavedView(v); patch({ view: v === "network" ? undefined : v }); };
   const setOverlay = (o: Overlay) => { setSavedOverlay(o); patch({ overlay: o === "none" ? undefined : o }); };
   const setDepth = (d: 1 | 2) => { setSavedDepth(d); patch({ depth: d === 2 ? 2 : undefined }); };
@@ -119,17 +121,19 @@ function SupplyChainPage() {
   const covered = useMemo(() => new Set(Object.keys(names)), [names]);
   const coveredList = useMemo(() => [...covered], [covered]);
   const revenue = useMemo(() => Object.fromEntries((universe?.companies ?? []).map((c) => [c.ticker, c.revenueTTM ?? undefined])), [universe]);
+  /* a 10-K's annual share is multiplied by that fiscal year's revenue, not the last twelve months (p3-sup-L2) */
+  const fiscal: FiscalBook = useMemo(() => Object.fromEntries((universe?.companies ?? []).flatMap((c) => (c.revenueFY && c.latestFY ? [[c.ticker, { fy: c.latestFY, revenue: c.revenueFY, yearEnd: c.fiscalYearEnd ?? null }]] : []))), [universe]);
   const all = useMemo(() => (links ?? []) as RiskLink[], [links]);
   const graph = useMemo(() => focusGraph(ticker, all, names), [ticker, all, names]);
   // the unfiltered chain decides whether there is anything to draw; filters narrow what is drawn
-  const fullChain = useMemo(() => (view === "chain" ? buildChain(ticker, all, tagged ?? [], names, revenue, { depth: chainDepth }) : null), [view, ticker, all, tagged, names, revenue, chainDepth]);
+  const fullChain = useMemo(() => (view === "chain" ? buildChain(ticker, all, tagged ?? [], names, revenue, { depth: chainDepth, fiscal }) : null), [view, ticker, all, tagged, names, revenue, chainDepth, fiscal]);
   const chain = useMemo(
-    () => (fullChain && (chainFlow !== "all" || product.trim()) ? buildChain(ticker, all, tagged ?? [], names, revenue, { depth: chainDepth, flow: chainFlow, product }) : fullChain),
-    [fullChain, chainFlow, product, ticker, all, tagged, names, revenue, chainDepth],
+    () => (fullChain && (chainFlow !== "all" || product.trim()) ? buildChain(ticker, all, tagged ?? [], names, revenue, { depth: chainDepth, flow: chainFlow, product, fiscal }) : fullChain),
+    [fullChain, chainFlow, product, ticker, all, tagged, names, revenue, chainDepth, fiscal],
   );
   const hop2 = useMemo(() => (depth === 2 ? secondOrder(ticker, graph, all, names) : []), [depth, ticker, graph, all, names]);
   const nodes = useMemo(() => [...graph, ...hop2], [graph, hop2]);
-  const risks = useMemo(() => Object.fromEntries(nodes.map((n) => [n.key, nodeRisk(n.links as RiskLink[], revenue)])), [nodes, revenue]);
+  const risks = useMemo(() => Object.fromEntries(nodes.map((n) => [n.key, nodeRisk(n.links as RiskLink[], revenue, fiscal)])), [nodes, revenue, fiscal]);
   const focusName = names[ticker] ?? ticker;
   const focus: GraphNode = useMemo(() => ({ key: "focus", name: focusName, ticker, domain: null, relation: "focus", links: [] }), [focusName, ticker]);
   const byId = useMemo(() => new Map((all as ProLink[]).map((l) => [l.id, l])), [all]);
@@ -154,11 +158,11 @@ function SupplyChainPage() {
     /* a pathway picked in the chain is read in the evidence tab: open it with the same address change */
     const toEvidence = view === "chain" && request.kind === "path" && next != null;
     if (toEvidence) setSavedTab("evidence");
-    patch({ iso: isolationParam(next), ...(toEvidence ? { tab: undefined } : {}) });
+    isoPatch({ iso: isolationParam(next), ...(toEvidence ? { tab: undefined } : {}) });
     const label = toEvidence ? resolveIsolation(next, isoCtx)?.label : null;
     if (label) setCue({ target: "supply-analysis", label: `Pathway: ${label}`, action: "Evidence", n: Date.now() });
-  }, [isolation, isoCtx, patch, view, setSavedTab]);
-  const clearIsolation = useCallback(() => patch({ iso: undefined }), [patch]);
+  }, [isolation, isoCtx, isoPatch, view, setSavedTab]);
+  const clearIsolation = useCallback(() => isoPatch({ iso: undefined }), [isoPatch]);
   const isolating = search.iso != null;
   useEffect(() => {
     if (!isolating) return;
@@ -187,14 +191,14 @@ function SupplyChainPage() {
      (guarantees, investments, financing, commitments, settlements, balances) are listed apart and never added. */
   const summary = useMemo(() => {
     const vals = graph.map((n) => risks[n.key]).filter(Boolean);
-    const { exposure, others, total } = exposureSummary(graph, revenue);
+    const { exposure, others, total } = exposureSummary(graph, revenue, fiscal);
     return {
       hotspots: [...new Set(vals.flatMap((r) => r.hotspots))],
       exposure,
       others,
       total,
     };
-  }, [risks, graph, revenue]);
+  }, [risks, graph, revenue, fiscal]);
   const strip = useMemo(() => stripFacts(ticker, graph, all as ProLink[], names), [ticker, graph, all, names]);
   // What the globe tints: every country the company's links and signals tie it to.
   const exposureRows = useMemo(

@@ -15,6 +15,7 @@ import { dependencyScore, type GraphNode, type ProLink } from "@/lib/supply/core
 import { verifySupplyLink, type VerifyResult } from "@/lib/supply-verify.functions";
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { quoteShown } from "@/lib/supply/quote-cut";
 
 // ---------------------------------------------------------------- data
 
@@ -254,7 +255,7 @@ export function DeepVerify({ linkId }: { linkId: string }) {
         {r.evidence.slice(0, 8).map((e) => (
           <li key={e.id} className="text-[11px]">
             <span className={cn("mr-1 rounded px-1 text-[11px] font-medium", e.stance === "supports" ? "bg-positive-soft text-positive" : e.stance === "contradicts" ? "bg-negative-soft text-negative" : "bg-muted text-muted-foreground")}>{e.id.slice(1)} · {e.stance}</span>
-            <span className="italic text-muted-foreground">“{e.quote}”</span>{" "}
+            <span className="italic text-muted-foreground">“{quoteShown(e.quote)}”</span>{" "}
             <a href={e.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-link hover:underline">{new URL(e.url).hostname.replace(/^www\./, "")}{e.publishedAt && `, ${e.publishedAt.slice(0, 10)}`}<ExternalLink className="size-2.5" /></a>
           </li>
         ))}
