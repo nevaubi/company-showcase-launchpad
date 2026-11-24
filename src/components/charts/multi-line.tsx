@@ -11,8 +11,23 @@ export interface LineSeries {
 
 /** Widest end label the chart reserves room for, as a share of its width. */
 const LABEL_SHARE = 0.34;
-/** Average glyph width of the 10.5 px semibold end labels, in px. */
-const GLYPH = 6.1;
+/** Glyph width of the 10.5 px semibold end labels, in px: set for wide letters so a label is never cut. */
+const GLYPH = 6.6;
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * The crosshair readout names its date in full ("Jul 26, 2026", "Jul 2026") whatever the axis format, so a
+ * short axis label such as "Jul 26" never leaves it open whether 26 is a day or a year. Keys that are not
+ * ISO dates or months return null and the caller's format applies.
+ */
+export function readoutDate(x: string): string | null {
+  const m = /^(\d{4})-(\d{2})(?:-(\d{2}))?/.exec(x);
+  if (!m) return null;
+  const mon = MONTHS[Number(m[2]) - 1];
+  if (!mon) return null;
+  return m[3] ? `${mon} ${Number(m[3])}, ${m[1]}` : `${mon} ${m[1]}`;
+}
 
 /**
  * Lightweight multi-series line chart: round axis values, direct end labels, a crosshair readout that
@@ -167,7 +182,7 @@ export function MultiLine({
           className="pointer-events-none absolute top-1 rounded border bg-popover px-2 py-1 text-[11px] leading-4 shadow-sm"
           style={x(hover) > m.l + plotW / 2 ? { left: m.l + 4 } : { right: m.r + 4 }}
         >
-          <p className="font-medium">{xFormat(hx!)}</p>
+          <p className="font-medium">{readoutDate(hx!) ?? xFormat(hx!)}</p>
           {series.map((s, k) => {
             const v = byX[k].get(hx!);
             return (
