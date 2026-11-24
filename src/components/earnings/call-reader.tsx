@@ -278,8 +278,8 @@ export function CallReader({
                 </ul>
                 <p className="px-4 pb-3 text-[11px] text-muted-foreground">
                   Shown when every number in them (amounts, rates and counts; 76.0% and 76% count as one) appears in a sentence management said that also names the item. The wording is not checked.
-                  {takeaways.notFound ? ` ${takeaways.notFound} left out because a number was not found that way.` : ""}
-                  {takeaways.noFigure ? ` ${takeaways.noFigure} left out because they state no number to check.` : ""}
+                  {takeaways.notFound ? ` ${takeaways.notFound} left out because a number in ${takeaways.notFound === 1 ? "it" : "them"} was not found that way.` : ""}
+                  {takeaways.noFigure ? ` ${takeaways.noFigure} left out because ${takeaways.noFigure === 1 ? "it states" : "they state"} no number to check.` : ""}
                 </p>
               </div>
             )}

@@ -278,6 +278,8 @@ describe("fourth-quarter EPS (earnings-H2)", () => {
     // JPMorgan reported $4.63 for Q4 FY25; net income ÷ shares gives about $4.75.
     expect(q4(JPM, "Q4 FY25").eps).toBeNull();
     expect(q4(JPM, "Q4 FY25").yoy.eps).toBeUndefined();
+    expect(q4(JPM, "Q4 FY25").q4EpsWithheld).toBe(true);
+    expect(q4(AAPL, "Q4 FY25").q4EpsWithheld).toBe(false);
   });
 
   it("uses the figure printed in the quarter's release when it is known", () => {

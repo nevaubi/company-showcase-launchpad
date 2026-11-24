@@ -86,15 +86,16 @@ export function SourceNum({
 /** Mark beside a fourth-quarter EPS figure (or a change built on one) calculated from net income and shares. */
 export const DERIVED_MARK = "†";
 
-/** Footnote for tables that may show `DERIVED_MARK`. */
-export function DerivedQ4Note({ className }: { className?: string }) {
+/** Footnote for tables that show `DERIVED_MARK`, or a dash for a fourth-quarter EPS that is withheld. */
+export function DerivedQ4Note({ derived, withheld, className }: { derived: boolean; withheld: boolean; className?: string }) {
+  if (!derived && !withheld) return null;
   return (
     <p className={cn("text-[11px] text-muted-foreground", className)}>
-      {DERIVED_MARK} Fourth-quarter EPS calculated: the 10-K reports only the full year, so it is Q4 net income ÷ Q4 weighted diluted shares, rounded to the cent. A dash where that does not reproduce the company's reported EPS.
+      {derived && <>{DERIVED_MARK} Fourth-quarter EPS calculated: the 10-K reports only the full year, so it is Q4 net income ÷ Q4 weighted diluted shares, rounded to the cent. </>}
+      {withheld && <>A dash for fourth-quarter EPS: the 10-K reports only the full year, and net income ÷ shares does not reproduce this company's reported EPS (EPS is earned after preferred dividends or similar), so no quarterly figure is shown.</>}
     </p>
   );
 }
-
 export function Stat({ label, value, hint, className }: { label: ReactNode; value: ReactNode; hint?: ReactNode; className?: string }) {
   return (
     <div className={cn("min-w-0 bg-card px-4 py-2.5", className)}>

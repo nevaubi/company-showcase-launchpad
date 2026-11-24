@@ -177,7 +177,7 @@ export function LatestQuarter({
               ))}
             </tbody>
           </table>
-          {[cur, prior, year].some((r) => r?.eps?.q4 === "derived") && <DerivedQ4Note className="border-t px-4 py-2" />}
+          <DerivedQ4Note derived={[cur, prior, year].some((r) => r?.eps?.q4 === "derived")} withheld={[cur, prior, year].some((r) => r?.q4EpsWithheld)} className="border-t px-4 py-2" />
         </div>
         <div className="grid min-w-0 grid-cols-2 content-start divide-x border-t lg:grid-cols-1 lg:divide-x-0 lg:divide-y lg:border-t-0 lg:border-b-0">
           <Stat
@@ -209,6 +209,9 @@ export function LatestQuarter({
   );
 }
 
+/** Longest straddle (snapshot to expiry, days) set beside the typical reaction: two weeks around the report. */
+const MAX_SPAN = 14;
+
 /** "Adjusted close $271.40 on 29 Oct → $262.24 on 31 Oct": the two prices behind a reaction (earnings-M4). */
 export function windowText(w: ReactionWindow | null | undefined): string | null {
   if (!w) return null;
@@ -227,7 +230,6 @@ function ReactionStat({ ticker, reaction, release, window: w }: { ticker: string
           <>
             <span className={cn("num", toneText(reaction.excess))}>{signedPct(reaction.excess)}</span> vs S&amp;P 500 ·{" "}
             <span className={cn("num", toneText(reaction.drift20))}>{signedPct(reaction.drift20)}</span> over the next 20 sessions
-            {w && <span className="block">{windowText(w)}</span>}
             {release && (
               <>
                 {" · "}
@@ -236,6 +238,7 @@ function ReactionStat({ ticker, reaction, release, window: w }: { ticker: string
                 </ReleaseLink>
               </>
             )}
+            {w && <span className="mt-0.5 block">{windowText(w)}</span>}
           </>
         ) : release ? (
           "Not enough price history around the release"
@@ -433,7 +436,7 @@ export function History({ ticker, quarters, profit }: { ticker: string; quarters
           </tbody>
         </table>
       </div>
-      {quarters.some((q) => q.eps?.q4 === "derived") && <DerivedQ4Note className="border-t px-4 py-2" />}
+      <DerivedQ4Note derived={quarters.some((q) => q.eps?.q4 === "derived")} withheld={quarters.some((q) => q.q4EpsWithheld)} className="border-t px-4 py-2" />
     </Section>
   );
 }
@@ -474,6 +477,10 @@ export function NextReport({
 }) {
   const today = new Date().toISOString().slice(0, 10);
   const daysTo = next ? Math.round((Date.parse(next.date) - Date.parse(today)) / 86_400_000) : null;
+  // The options figure sits beside the typical reaction only when it prices mainly the report: an expiry
+  // within REPORT_EXPIRY_LAG days after it, quoted no more than MAX_SPAN days before that expiry (earnings-M1).
+  const span = pricing && pricedAsOf ? Math.round((Date.parse(pricing.point.e) - Date.parse(pricedAsOf)) / 86_400_000) : null;
+  const pricingNear = !!pricing && pricing.lag <= REPORT_EXPIRY_LAG && span != null && span <= MAX_SPAN;
   return (
     <Section
       id="next"
@@ -505,8 +512,8 @@ export function NextReport({
         <Stat
           label="Move priced by options"
           value={
-            pricing && pricing.lag <= REPORT_EXPIRY_LAG ? (
-              <span className="num">±{(pricing.point.m * 100).toFixed(1)}%</span>
+            pricingNear ? (
+              <span className="num">±{(pricing!.point.m * 100).toFixed(1)}%</span>
             ) : (
               <span className="text-muted-foreground">–</span>
             )
@@ -514,12 +521,14 @@ export function NextReport({
           hint={
             // An expiry weeks after the report also prices ordinary movement, so it is not set beside
             // the typical reaction (earnings-M1); the options panel below still shows it.
-            pricing && pricing.lag <= REPORT_EXPIRY_LAG
-              ? `At-the-money straddle to ${fmtDate(pricing.point.e)}${
-                  pricedAsOf ? `, the ${Math.round((Date.parse(pricing.point.e) - Date.parse(pricedAsOf)) / 86_400_000)} days from the Cboe close of ${fmtDate(pricedAsOf, { month: "short", day: "numeric" })}` : ""
-                }${pricing.lag > 0 ? `, ${pricing.lag} ${pricing.lag === 1 ? "day" : "days"} after the report` : ""}`
-              : pricing
+            pricingNear
+              ? `At-the-money straddle to ${fmtDate(pricing!.point.e)}, the ${span} days from the Cboe close of ${fmtDate(pricedAsOf!, { month: "short", day: "numeric" })}${
+                  pricing!.lag > 0 ? `, ${pricing!.lag} ${pricing!.lag === 1 ? "day" : "days"} after the report` : ""
+                }`
+              : pricing && pricing.lag > REPORT_EXPIRY_LAG
                 ? `No expiry close to the report yet: the nearest, ${fmtDate(pricing.point.e)}, is ${pricing.lag} days after it`
+                : pricing && span != null
+                  ? `Options price ±${(pricing.point.m * 100).toFixed(1)}% to ${fmtDate(pricing.point.e)}, but that spans ${span} days of ordinary trading, not mainly the report`
                 : "No listed expiry covers the report yet, or no options snapshot"
           }
         />

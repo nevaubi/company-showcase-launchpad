@@ -57,6 +57,8 @@ export interface QuarterRecord {
   surprise: Surprise | null;
   /** The two adjusted closes behind the reaction, so the move can be inspected (earnings-M4). */
   window: ReactionWindow | null;
+  /** Fourth quarter whose EPS is not shown: not in a release we hold and not reproducible from net income and shares. */
+  q4EpsWithheld: boolean;
 }
 
 export interface ReactionWindow {
@@ -329,6 +331,7 @@ export function quarterRecords({ dataset: d, reactions = [], surprises, releaseE
   const releases = periods.map((p) => releaseFor(p.end, d.earningsReleases, d.filings));
   const base = periods.map((p, i) => {
     const epsCell = eps?.cells[i];
+    const epsFig = epsCell?.approx ? q4Eps(d, i, releases[i], releaseEps) : fig(epsCell);
     const revenue = fig(rev?.cells[i]);
     const profit = fig(prof?.cells[i]);
     const netIncome = fig(ni?.cells[i]);
@@ -339,7 +342,8 @@ export function quarterRecords({ dataset: d, reactions = [], surprises, releaseE
       profit,
       netIncome,
       // A fourth-quarter cell is the year minus nine months (approx): never shown as the reported figure.
-      eps: epsCell?.approx ? q4Eps(d, i, releases[i], releaseEps) : fig(epsCell),
+      eps: epsFig,
+      q4EpsWithheld: !!epsCell?.approx && !epsFig,
       // Operating cash flow less capex says nothing useful about a bank or insurer (earnings-M2).
       fcf: pl.key === "operatingIncome" ? fcfAt(cf, cfIndex.get(p.key) ?? -1) : null,
       grossMargin: ratio(gross, revenue, "Gross profit ÷ revenue", "Gross profit", "Revenue"),
