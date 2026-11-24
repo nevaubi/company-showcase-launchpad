@@ -507,7 +507,7 @@ export default function SupplyGlobe({ focus, graph, hop2, visible, selected, onS
           {isolate && (
             <div role="status" data-globe-isolated="" className="flex max-w-full items-center gap-1 rounded-md border bg-card py-0.5 pl-2.5 pr-0.5 text-xs shadow-paper">
               <Waypoints aria-hidden="true" className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="min-w-0 truncate"><span className="text-muted-foreground">Isolated: </span><span className="font-medium">{isolateLabel ?? "selected names"}</span><span className="num text-muted-foreground"> · {litOnMap} on the map</span></span>
+              <span className="min-w-0 truncate"><span className="text-muted-foreground">Isolated: </span><span className="font-medium">{isolateLabel ?? "selected names"}</span><span className="num text-muted-foreground"> · {litOnMap}<span className="hidden sm:inline"> on the map</span></span></span>
               {onIsolate && <button type="button" data-agent-click className={cn(quiet, "shrink-0")} onClick={() => ask({ kind: "clear" })}><X aria-hidden="true" className="size-3.5" />Show all</button>}
             </div>
           )}
