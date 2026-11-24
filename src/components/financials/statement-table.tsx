@@ -4,6 +4,7 @@ import { useSource } from "@/components/source/source-context";
 import { Sparkline } from "@/components/charts/sparkline";
 import type { Cell, Period, Row, Statement } from "@/lib/financials/types";
 import { fmtCell, fmtDate, scaled, unitLabel, type Scale } from "@/lib/format";
+import { rowLabel } from "./row-label";
 import { cagr } from "@/lib/financials/metrics";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -168,7 +169,7 @@ export function StatementTable({
         <table className="w-max min-w-full border-separate border-spacing-0 text-[13px]">
           <thead>
             <tr>
-              <th className={cn("sticky left-0 z-30 w-44 min-w-44 border-b border-r bg-card px-3 py-2 text-left align-bottom sm:w-56 sm:min-w-56 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}>
+              <th className={cn("sticky left-0 z-30 w-44 min-w-44 border-b border-r bg-card px-3 py-2 text-left align-bottom sm:w-auto sm:min-w-60 sm:px-4", fits && "top-[var(--sticky-top,3.5rem)]")}>
                 <span className="eyebrow">Line item</span>
                 {tableUnit && <span className="num ml-2 text-[11px] font-normal text-muted-foreground">{unitLabel(tableUnit, scale)}</span>}
               </th>
@@ -222,12 +223,12 @@ export function StatementTable({
                   <th
                     scope="row"
                     className={cn(
-                      "sticky left-0 z-10 max-w-44 border-b border-r bg-card px-2 py-1.5 text-left font-normal transition-colors group-hover:bg-secondary sm:max-w-56",
+                      "sticky left-0 z-10 max-w-44 border-b border-r bg-card px-2 py-1 text-left font-normal transition-colors group-hover:bg-secondary sm:max-w-none",
                       row.bold && "font-semibold",
                       isCharted && "bg-highlight-soft",
                     )}
                   >
-                    <span className={cn("flex items-center gap-1.5 sm:max-w-48", row.indent && "pl-4 text-foreground/80")}>
+                    <span className={cn("flex items-center gap-1.5", row.indent && "pl-4 text-foreground/80")}>
                       {onToggleChart ? (
                         <button
                           type="button"
@@ -244,7 +245,7 @@ export function StatementTable({
                       ) : (
                         <span className="w-2" />
                       )}
-                      <span className={cn("truncate", row.kind === "kpi" && row.unit === "usd" && "italic")} title={row.label}>{row.label}</span>
+                      <span className={cn("min-w-0 leading-4 [overflow-wrap:anywhere] sm:whitespace-nowrap", row.kind === "kpi" && row.unit === "usd" && "italic")}>{rowLabel(row.label)}</span>
                       {row.unit !== tableUnit && <span className="num ml-auto whitespace-nowrap pl-2 text-[11px] font-normal text-muted-foreground">{unitLabel(row.unit, scale)}</span>}
                     </span>
                   </th>
@@ -252,8 +253,8 @@ export function StatementTable({
                     const key = `${row.label}|${periods[i].label}`;
                     if (!cell)
                       return (
-                        <td key={i} className="num border-b px-2.5 py-1.5 text-right text-muted-foreground/50 group-hover:bg-secondary/60">
-                          —
+                        <td key={i} className="num border-b px-2.5 py-1 text-right text-muted-foreground/50 group-hover:bg-secondary/60">
+                          –
                         </td>
                       );
                     const filing = cell.src ? filingsByAccn.get(cell.src.accn) : undefined;
@@ -271,7 +272,7 @@ export function StatementTable({
                               data-tour="fin-cell"
                               onClick={() => onCell(row, i, cell)}
                               className={cn(
-                                "num relative block w-full px-2.5 py-1.5 text-right tabular-nums transition-colors hover:bg-highlight-soft focus-visible:bg-highlight-soft focus-visible:outline-none",
+                                "num relative block w-full px-2.5 py-1 text-right tabular-nums transition-colors hover:bg-highlight-soft focus-visible:bg-highlight-soft focus-visible:outline-none",
                                 row.bold && "font-medium",
                                 cell.v < 0 && row.unit !== "pct" && "text-negative",
                                 cell.derived && "italic text-foreground/85",
@@ -315,7 +316,7 @@ export function StatementTable({
                       </td>
                     );
                   })}
-                  {showGrowth && <td className="border-b border-l px-3 py-1.5 text-right group-hover:bg-secondary/60">
+                  {showGrowth && <td className="border-b border-l px-3 py-1 text-right group-hover:bg-secondary/60">
                     {trend ? (
                       <Tooltip delayDuration={300}>
                         <TooltipTrigger asChild>
@@ -327,7 +328,7 @@ export function StatementTable({
                         <TooltipContent className="text-xs">{freq === "annual" ? `Compound annual growth, ${trend.label}` : `Year over year, ${trend.label}`}</TooltipContent>
                       </Tooltip>
                     ) : (
-                      <span className="text-muted-foreground/40">—</span>
+                      <span className="text-muted-foreground/40">–</span>
                     )}
                   </td>}
                   {showTrend && (

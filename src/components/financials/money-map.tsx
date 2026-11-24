@@ -112,7 +112,7 @@ export function MoneyMap({ d, ticker }: { d: FilingDetail; ticker: string }) {
                   onMouseLeave={() => setHover(null)}
                   onClick={() => openParts(`${from.label} → ${to.label}`, l.value, l)}
                 >
-                  <title>{`${from.label} → ${to.label}: ${fmtB(l.value)} (${pct(l.value / map.total)} of revenue)${l.derived ? ` — ${l.derived.formula}` : ""}`}</title>
+                  <title>{`${from.label} → ${to.label}: ${fmtB(l.value)} (${pct(l.value / map.total)} of revenue)${l.derived ? `: ${l.derived.formula}` : ""}`}</title>
                 </path>
               );
             })}

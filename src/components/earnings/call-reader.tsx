@@ -6,6 +6,7 @@ import { Link } from "@tanstack/react-router";
 import { Fragment, useDeferredValue, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Bot, ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import { CompanyLogo } from "@/components/app/company-logo";
+import { sentenceCase, termCasing } from "./term-case";
 import { Segmented } from "@/components/app/segmented";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,9 @@ export function CallReader({
   const share = useMemo(() => talkShare(t), [t]);
   const figures = useMemo(() => callFigures(t, 8), [t]);
   const topics = useMemo(() => topicShift(t, prev, 12, exclude), [t, prev, exclude]);
+  // topic terms are counted in lower case: show them as the call writes them ("iPhone Duo"), else in sentence case
+  const cased = useMemo(() => termCasing([...new Set([...topics.map((r) => r.term)])], t.turns.map((x) => x.text)), [t, topics]);
+  const term = (x: string) => cased.get(x) ?? sentenceCase(x);
   const tone = useMemo(() => callTone(t), [t]);
   const prevTone = useMemo(() => (prev ? callTone(prev) : null), [prev]);
   const asked = useMemo(
@@ -405,7 +409,7 @@ export function CallReader({
                 {topics.map((r) => (
                   <tr key={r.term} className="h-7 border-b border-border/60 last:border-0">
                     <th scope="row" className="py-1 pl-4 pr-2 text-left font-normal">
-                      {r.term}
+                      {term(r.term)}
                     </th>
                     <td className="num px-2 py-1 text-right">{r.count}</td>
                     <td className="num px-2 py-1 text-right">{r.rate.toFixed(1)}</td>
@@ -474,7 +478,7 @@ export function CallReader({
                         <span className="flex flex-wrap gap-1">
                           {e.topics.map((tp) => (
                             <span key={tp} className="rounded-sm border px-1 py-px">
-                              {tp}
+                              {term(tp)}
                             </span>
                           ))}
                         </span>

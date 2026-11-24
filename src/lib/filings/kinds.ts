@@ -138,8 +138,9 @@ const FORM_NAME: Record<string, string> = {
   "S-3MEF": "Shelf registration (added securities)",
   DRS: "Draft registration statement",
   RW: "Registration withdrawal request",
-  "15-12B": "Registration termination",
-  "15-12G": "Registration termination",
+  // Form 15 ends the registration of one class of securities (often a note issue), not of the company.
+  "15-12B": "Deregistration of a class of securities",
+  "15-12G": "Deregistration of a class of securities",
   "15-15D": "Reporting suspension notice",
   "305B2": "Trustee eligibility statement",
   "ABS-15G": "Asset-backed securities report",
@@ -151,8 +152,10 @@ const FORM_NAME: Record<string, string> = {
   "425": "Merger communication",
   "8-A12B": "Exchange listing registration",
   "8-A12G": "Securities registration",
-  "25": "Delisting notice",
-  "25-NSE": "Exchange delisting notice",
+  // SEC Form 25: "Notification of the removal from listing and registration of matured, redeemed or retired
+  // securities". It names one class of securities (often a note issue that matured), not the company.
+  "25": "Removal of a class of securities from listing",
+  "25-NSE": "Exchange removal of a listed security",
   CERT: "Exchange listing certification",
   D: "Exempt offering notice",
   "SC TO-T": "Third-party tender offer",

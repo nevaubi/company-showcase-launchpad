@@ -91,3 +91,11 @@ describe("every form in production sec_filings has a family and a name", () => {
     expect(formName("144")).toBe("Notice of proposed sale (Rule 144)");
   });
 });
+
+describe("form labels that name one class of securities", () => {
+  it("never call a Form 25 or Form 15 a delisting or termination of the company", () => {
+    expect(formName("25-NSE")).toBe("Exchange removal of a listed security");
+    expect(formName("25")).toBe("Removal of a class of securities from listing");
+    for (const f of ["25", "25-NSE", "15-12B", "15-12G"]) expect(formName(f)).not.toMatch(/delist|terminat/i);
+  });
+});

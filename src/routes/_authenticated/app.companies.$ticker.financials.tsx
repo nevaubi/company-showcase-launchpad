@@ -248,7 +248,7 @@ function Financials() {
           <Info className="size-3.5" /> Click any value to open the SEC filing it was reported in, scrolled to the tagged fact.
         </p>
         <p className="flex items-center gap-1.5">
-          <span className="size-1.5 rounded-full bg-chart-2" /> <em>Italic</em> values are calculated ({derivedCount} in this view) — e.g. fourth quarters
+          <span className="size-1.5 rounded-full bg-chart-2" /> <em>Italic</em> values are calculated ({derivedCount} in this view), for example fourth quarters
           (annual − nine-month YTD), EBITDA, total debt; the panel lists every component.
         </p>
         <p>

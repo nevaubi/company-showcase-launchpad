@@ -6,12 +6,15 @@ import { OptionsPanel } from "@/components/options/options-panel";
 import { PageNav, SECTION_SCROLL_MARGIN } from "@/components/earnings/layout";
 import { History, LatestQuarter, NextReport } from "@/components/earnings/results";
 import { PromiseTracker } from "@/components/earnings/promise-tracker";
+import { resultsModel, resultsReadNote } from "@/components/earnings/results-view";
+import { HoldHeight, KeepReaderInPlace } from "@/components/company/hold-height";
+import { readPlan, useFiledStatements } from "@/components/financials/currency";
 import { Skeleton } from "@/components/ui/skeleton";
 import { coverageOf } from "@/lib/coverage";
 import { usePrices, useCompany } from "@/lib/data";
 import { useNextEarnings } from "@/hooks/use-next-earnings";
 import { latestGuidance } from "@/lib/earnings/promises";
-import { nextConsensus, pendingRelease, profitLine, quarterRecords, reactionSummary, recentQuarters } from "@/lib/earnings/quarters";
+import { nextConsensus, reactionSummary } from "@/lib/earnings/quarters";
 import { previewQuery, scoreQuery } from "@/lib/earnings/workflow";
 import { getPromises } from "@/lib/earnings.functions";
 import { getEstimates } from "@/lib/estimates.functions";
@@ -81,17 +84,19 @@ function Earnings() {
   }, [prices.data, spy.data, d]);
 
   const surprises = est.data?.estimates?.surprises;
+  // Statements extended with any newer 10-Q/10-K read at view time: the same read and query cache as the
+  // Overview and the Financials tab, so the latest quarter here is the one the rest of the page shows.
+  const filed = useFiledStatements(d, ticker);
+  const plan = useMemo(() => (d && filed.served?.status === "behind" ? readPlan(d, filed.served) : []), [d, filed.served]);
   const model = useMemo(() => {
     if (!d) return null;
     // GAAP diluted EPS printed in the newest release (partner scorecard), for a fourth quarter it reports.
     const sc = score.data;
     const printed = sc?.metrics.find((m) => m.id === "eps_gaap" && m.value != null && !m.unconfirmed && /dilut/i.test(`${m.label} ${m.quote ?? ""}`));
     const releaseEps = sc && printed?.value != null ? [{ accn: sc.accession, v: printed.value, quote: printed.quote }] : [];
-    const records = quarterRecords({ dataset: d, reactions, surprises, releaseEps, bars: prices.data?.bars });
-    const recent = recentQuarters(records, 12);
-    const pending = pendingRelease(records, d.earningsReleases, reactions, surprises, d.filings);
-    return { records, recent, pending, profit: profitLine(d) };
-  }, [d, reactions, surprises, score.data, prices.data]);
+    const m = resultsModel(d, filed, plan, { reactions, surprises, releaseEps, bars: prices.data?.bars });
+    return { ...m, note: resultsReadNote(m) };
+  }, [d, filed.extension, filed.reading, filed.failed, plan, reactions, surprises, score.data, prices.data]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const typical = useMemo(() => reactionSummary(reactions, 12), [reactions]);
   const lastReportedEnd = model?.pending?.surprise?.quarter ?? model?.recent[0]?.period.end ?? null;
@@ -119,18 +124,24 @@ function Earnings() {
     return <p className="py-10 text-center text-[13px] text-muted-foreground">Couldn't load this company's statements. Try again in a moment.</p>;
 
   return (
+    <KeepReaderInPlace phase={model.state}>
     <div className="grid grid-cols-1 gap-5">
       <PageNav sections={SECTIONS} label="Results sections" />
-      <LatestQuarter
-        ticker={ticker}
-        cik={d.profile.cik}
-        records={model.records}
-        profit={model.profit}
-        pending={model.pending}
-        score={score.data ?? null}
-        companyName={co?.shortName ?? d.profile.name}
-      />
-      <History ticker={ticker} quarters={model.recent} profit={model.profit} />
+      <HoldHeight phase={model.state}>
+        <LatestQuarter
+          ticker={ticker}
+          cik={d.profile.cik}
+          records={model.records}
+          profit={model.profit}
+          pending={model.pending}
+          readNote={model.note}
+          score={score.data ?? null}
+          companyName={co?.shortName ?? d.profile.name}
+        />
+      </HoldHeight>
+      <HoldHeight phase={model.state}>
+        <History ticker={ticker} quarters={model.recent} profit={model.profit} />
+      </HoldHeight>
       <PromiseTracker loading={promises.isLoading} data={promises.data} error={promises.error as Error | null} shownElsewhere={guidanceQuotes} />
       <NextReport
         next={next}
@@ -145,5 +156,6 @@ function Earnings() {
         <OptionsPanel ticker={ticker} next={next} releases={d.earningsReleases} />
       </div>
     </div>
+    </KeepReaderInPlace>
   );
 }

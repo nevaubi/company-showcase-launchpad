@@ -14,6 +14,28 @@ import { cn } from "@/lib/utils";
 import { DerivedQ4Note, fmtFig, MachineWritten, signedPct, signedPts, SourceNum, Stat, toneText, type FigUnit } from "./figures";
 import { Quiet, Section } from "./layout";
 import { HistoryCharts } from "./history-charts";
+import { readFromOf } from "./results-view";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import type { Period } from "@/lib/financials/types";
+
+/** The Financials tab's mark for a column read at view time: "10-K · new", with the filing in a tooltip. */
+export function ReadMark({ period, className }: { period: Period; className?: string }) {
+  const read = readFromOf(period);
+  if (!read) return null;
+  return (
+    <Tooltip delayDuration={250}>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className={cn("num text-[10px] font-normal uppercase tracking-wide text-foreground/80 underline decoration-dotted underline-offset-2", className)}>
+          {read.form} · new
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-60 text-xs">
+        Read at view time from the {read.form} filed {fmtDate(read.filed)}. The scheduled rebuild has not added this quarter yet.
+        {read.form.startsWith("10-K") && " A 10-K states the full year, so the quarter is derived: the year less the first nine months."}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 const releaseUrl = (cik: string | undefined, r: EarningsRelease) =>
   cik ? `https://www.sec.gov/Archives/edgar/data/${Number(cik)}/${r.accn.replace(/-/g, "")}/${r.doc}` : null;
@@ -72,6 +94,7 @@ export function LatestQuarter({
   records,
   profit,
   pending,
+  readNote,
   score,
   companyName,
 }: {
@@ -81,6 +104,8 @@ export function LatestQuarter({
   records: QuarterRecord[];
   profit: ProfitLine;
   pending: PendingRelease | null;
+  /** What the view-time read of a newer 10-Q/10-K did (resultsReadNote), or null when the statements are current */
+  readNote?: string | null;
   score: Scorecard | null;
   companyName: string;
 }) {
@@ -123,7 +148,12 @@ export function LatestQuarter({
         </>
       }
     >
-      {pending && <PendingNote ticker={ticker} cik={cik} pending={pending} score={score} companyName={companyName} />}
+      {pending && <PendingNote ticker={ticker} cik={cik} pending={pending} score={score} companyName={companyName} readNote={readNote} />}
+      {!pending && readNote && (
+        <p data-section="Read at view time" className="border-b bg-secondary/40 px-4 py-2.5 text-[13px] text-muted-foreground">
+          {readNote}
+        </p>
+      )}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_17rem]">
         <div className="relative min-w-0 overflow-x-auto lg:border-r">
           <table className="w-full min-w-[560px] text-[13px]">
@@ -137,6 +167,7 @@ export function LatestQuarter({
                 </th>
                 <th scope="col" className="px-2 py-1.5 text-right font-medium text-foreground">
                   {p.label}
+                  <ReadMark period={p} className="ml-1.5" />
                 </th>
                 <th scope="col" className="px-2 py-1.5 text-right font-normal">
                   {prior ? prior.period.label : "Prior quarter"}
@@ -251,7 +282,21 @@ function ReactionStat({ ticker, reaction, release, window: w }: { ticker: string
 }
 
 /** The company has reported a newer quarter than the statements hold: say so precisely, with what is known from the release. */
-function PendingNote({ ticker, cik, pending, score, companyName }: { ticker: string; cik?: string; pending: PendingRelease; score: Scorecard | null; companyName: string }) {
+function PendingNote({
+  ticker,
+  cik,
+  pending,
+  score,
+  companyName,
+  readNote,
+}: {
+  ticker: string;
+  cik?: string;
+  pending: PendingRelease;
+  score: Scorecard | null;
+  companyName: string;
+  readNote?: string | null;
+}) {
   const r = pending.release;
   const url = releaseUrl(cik, r);
   const sc = score && score.accession === r.accn ? score : null;
@@ -270,6 +315,7 @@ function PendingNote({ ticker, cik, pending, score, companyName }: { ticker: str
         </span>{" "}
         <span className="text-muted-foreground">
           {sc?.quarter_end ? "Its statements are not in these tables yet; they" : "These tables"} run through the quarter ended {fmtDate(pending.throughEnd)}.{" "}
+          {readNote && <>{readNote} </>}
         </span>
         <ReleaseLink ticker={ticker} r={r} className="text-[13px]">
           Open the release
@@ -387,6 +433,7 @@ export function History({ ticker, quarters, profit }: { ticker: string; quarters
                 <tr key={q.period.key} className={cn("h-7 border-b border-border/60 last:border-0", i === 0 && "font-medium")}>
                   <th scope="row" className="sticky left-0 z-[1] bg-card py-1 pl-4 pr-2 text-left font-normal whitespace-nowrap">
                     <span className={cn("num", i === 0 && "font-medium")}>{pl}</span>{" "}
+                    <ReadMark period={q.period} className="mr-1" />
                     <span className="hidden text-[11px] text-muted-foreground sm:inline">{fmtDate(q.period.end, { month: "short", year: "numeric" })}</span>
                   </th>
                   <Td>

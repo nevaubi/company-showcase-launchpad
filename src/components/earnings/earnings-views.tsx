@@ -7,15 +7,17 @@ import { TickerMark } from "@/components/app/ticker";
 import LoadingState from "@/components/ui/loading-state";
 import {
   groupUpcoming,
-  pct,
   seasonQuery,
   type SeasonReported,
 } from "@/lib/earnings/workflow";
 import { friendlyError } from "@/lib/errors";
+import { signedPct as pct } from "./figures";
 import { fmtDate, fmtRelative } from "@/lib/format";
 import { useWatchlist } from "@/lib/workspace";
 import { cn } from "@/lib/utils";
 
+/** Two decimals with a true minus, the quiet en dash when missing. */
+const num2 = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "–" : v.toFixed(2).replace("-", "−"));
 const tone = (v: number | null | undefined) => (v == null ? "" : v > 0 ? "text-positive" : v < 0 ? "text-negative" : "");
 
 function Section({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
@@ -131,7 +133,7 @@ export function EarningsSeason() {
             <div>
               <dt className="text-[11px] text-muted-foreground">Surprise vs move, correlation</dt>
               <dd>
-                {d.corr_surprise_move == null ? "–" : d.corr_surprise_move.toFixed(2)} ({d.n_pairs}{" "}
+                {num2(d.corr_surprise_move)} ({d.n_pairs}{" "}
                 pairs)
               </dd>
             </div>
@@ -224,8 +226,8 @@ function ReportedTable({ rows }: { rows: SeasonReported[] }) {
                 </Link>
               </td>
               <td className="py-1">{r.filed}</td>
-              <td className="py-1 text-right">{r.eps_actual?.toFixed(2) ?? "–"}</td>
-              <td className="py-1 text-right">{r.eps_estimate?.toFixed(2) ?? "–"}</td>
+              <td className="py-1 text-right">{num2(r.eps_actual)}</td>
+              <td className="py-1 text-right">{num2(r.eps_estimate)}</td>
               <td className={cn("py-1 text-right", tone(r.surprise_pct))}>{pct(r.surprise_pct)}</td>
               <td className={cn("py-1 text-right", tone(r.move))}>{pct(r.move)}</td>
               <td className={cn("py-1 text-right", tone(r.excess))}>{pct(r.excess)}</td>

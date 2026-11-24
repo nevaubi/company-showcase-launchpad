@@ -71,7 +71,7 @@ export function FiledGrid({ head, columns, rows, scrollTo = "end", maxHeight = "
                   <td
                     title={r.title}
                     className={cn(
-                      "sticky left-0 z-10 max-w-80 truncate border-b border-r bg-card px-4 py-1.5 group-hover:bg-secondary",
+                      "sticky left-0 z-10 max-w-80 truncate border-b border-r bg-card px-4 py-1 group-hover:bg-secondary",
                       r.kind === "sub" && "pl-8 text-muted-foreground",
                       r.kind === "total" && "border-t border-t-rule",
                     )}
@@ -80,7 +80,7 @@ export function FiledGrid({ head, columns, rows, scrollTo = "end", maxHeight = "
                   </td>
                   {r.cells.map((c, i) =>
                     !c ? (
-                      <td key={i} className="border-b px-3 py-1.5 text-right text-muted-foreground/60 group-hover:bg-secondary">
+                      <td key={i} className="border-b px-3 py-1 text-right text-muted-foreground/60 group-hover:bg-secondary">
                         –
                       </td>
                     ) : (
@@ -91,7 +91,7 @@ export function FiledGrid({ head, columns, rows, scrollTo = "end", maxHeight = "
                         onClick={c.onClick}
                         onKeyDown={(e) => e.key === "Enter" && c.onClick?.()}
                         className={cn(
-                          "num relative border-b px-3 py-1.5 text-right tabular-nums group-hover:bg-secondary",
+                          "num relative border-b px-3 py-1 text-right tabular-nums group-hover:bg-secondary",
                           r.kind === "total" && "border-t border-t-rule",
                           c.negative && "text-negative",
                           c.italic && "italic",

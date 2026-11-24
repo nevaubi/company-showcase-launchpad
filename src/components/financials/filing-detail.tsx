@@ -176,7 +176,7 @@ function useOpen(ticker: string, d: FilingDetail) {
 
 function fmtValue(v: number, unit: string, scale: ReturnType<typeof useUnitScale>[0]) {
   const u = detailUnit(unit);
-  if (u === "count") return Math.round(v).toLocaleString();
+  if (u === "count") return Math.round(v).toLocaleString("en-US").replace("-", "−");
   return fmtCell(v, u, scale);
 }
 const unitCaption = (unit: string, scale: ReturnType<typeof useUnitScale>[0]) => {
@@ -185,7 +185,7 @@ const unitCaption = (unit: string, scale: ReturnType<typeof useUnitScale>[0]) =>
 };
 
 function ValueCell({ v, onOpen, text, className }: { v: DetailValue | undefined; onOpen?: () => void; text: string; className?: string }) {
-  if (!v) return <td className={cn("num border-b px-3 py-1 text-right text-muted-foreground/40", className)}>—</td>;
+  if (!v) return <td className={cn("num border-b px-3 py-1 text-right text-muted-foreground/40", className)}>–</td>;
   return (
     <td className={cn("border-b p-0", className)}>
       <button type="button" onClick={onOpen} className="num block w-full px-3 py-1 text-right hover:bg-secondary focus-visible:bg-secondary focus-visible:outline-none" title="Show in filing">
@@ -199,7 +199,7 @@ function ValueCell({ v, onOpen, text, className }: { v: DetailValue | undefined;
 function GrowthCell({ rate, title, className }: { rate: number | null; title?: string; className?: string }) {
   return (
     <td className={cn("num border-b px-3 py-1 text-right text-[12px]", rate == null ? "text-muted-foreground/40" : rate >= 0 ? "text-positive" : "text-negative", className)} title={title}>
-      {rate == null ? "—" : `${rate >= 0 ? "+" : "−"}${Math.abs(rate * 100).toFixed(1)}%`}
+      {rate == null ? "–" : `${rate >= 0 ? "+" : "−"}${Math.abs(rate * 100).toFixed(1)}%`}
     </td>
   );
 }
@@ -245,12 +245,12 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
         <th
           scope="row"
           className={cn("sticky left-0 z-10 min-w-40 max-w-72 border-b bg-card px-3 py-1 text-left font-normal group-hover:bg-secondary", depth || r.former ? "text-muted-foreground" : "", depth ? "pl-7" : "")}
-          title={r.former ? `${r.label} — reported only in earlier filings (renamed, merged or no longer broken out)` : r.member}
+          title={r.former ? `${r.label}: reported only in earlier filings (renamed, merged or no longer broken out)` : r.member}
         >
           <span className="line-clamp-2">{r.label}</span>
         </th>
         {t.periods.map((k) => (
-          <ValueCell key={k} v={r.values[k]} text={r.values[k] ? fmtValue(r.values[k].v, t.unit, scale) : ""} onOpen={() => open(`${r.label} — ${t.conceptLabel || r.label}`, k, r.values[k], t.concept || r.member, t.unit)} />
+          <ValueCell key={k} v={r.values[k]} text={r.values[k] ? fmtValue(r.values[k].v, t.unit, scale) : ""} onOpen={() => open(`${r.label}, ${t.conceptLabel || r.label}`, k, r.values[k], t.concept || r.member, t.unit)} />
         ))}
         {hasChange && <GrowthCell rate={ch} />}
         {hasCagr && <GrowthCell rate={g?.rate ?? null} title={g ? `${detailPeriodLabel(d.periods[g.from])} to ${detailPeriodLabel(d.periods[g.to])}, ${g.years} years compounded` : "Needs a positive value at least three years apart"} />}
@@ -306,7 +306,7 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
               <tr className="font-medium">
                 <th scope="row" className="sticky left-0 z-10 border-t-2 border-t-foreground/70 bg-card px-3 py-1 text-left">Consolidated total</th>
                 {t.periods.map((k) => (
-                  <ValueCell key={k} className="border-t-2 border-t-foreground/70" v={t.total![k]} text={t.total![k] ? fmtValue(t.total![k].v, t.unit, scale) : ""} onOpen={() => open(`${t.conceptLabel} — total`, k, t.total![k], t.concept, t.unit)} />
+                  <ValueCell key={k} className="border-t-2 border-t-foreground/70" v={t.total![k]} text={t.total![k] ? fmtValue(t.total![k].v, t.unit, scale) : ""} onOpen={() => open(`${t.conceptLabel}, total`, k, t.total![k], t.concept, t.unit)} />
                 ))}
                 {hasChange && <GrowthCell className="border-t-2 border-t-foreground/70" rate={changeOf(t, t.total, d.periods)} />}
                 {hasCagr && (() => {
@@ -337,7 +337,7 @@ function RatioRow({ segs, period, d, ticker, num, den, label, note, what, first 
       {segs.map((s) => {
         const dv = den.values[s.member]?.[period];
         const nv = num.values[s.member]?.[period];
-        if (!dv || !nv || !dv.v) return <td key={s.member} className={cn("num px-3 py-1 text-right text-muted-foreground/40", line)}>—</td>;
+        if (!dv || !nv || !dv.v) return <td key={s.member} className={cn("num px-3 py-1 text-right text-muted-foreground/40", line)}>–</td>;
         const p = d.periods[period];
         const part = (v: DetailValue, concept: string, lbl: string) => ({ accn: v.accn ?? d.accn, doc: v.doc ?? d.doc, concept, start: p?.start, end: p?.end ?? d.reportDate, value: v.v, label: lbl, sign: 1 as const });
         return (
@@ -348,7 +348,7 @@ function RatioRow({ segs, period, d, ticker, num, den, label, note, what, first 
               onClick={() =>
                 source.open({
                   ticker,
-                  label: `${s.label} — ${what}`,
+                  label: `${s.label}, ${what}`,
                   periodLabel: detailPeriodLabel(p),
                   unit: "pct",
                   value: nv.v / dv.v,
@@ -431,7 +431,7 @@ function SegmentPnl({ m, d, ticker }: { m: SegmentMatrix; d: FilingDetail; ticke
                   </th>
                   {segs.map((s) => {
                     const v = r.values[s.member]?.[period];
-                    return <ValueCell key={s.member} v={v} text={v ? fmtCell(v.v, "usd", scale) : ""} onOpen={() => v && open(`${s.label} — ${r.label}`, period, v, r.concept, "USD")} />;
+                    return <ValueCell key={s.member} v={v} text={v ? fmtCell(v.v, "usd", scale) : ""} onOpen={() => v && open(`${s.label}, ${r.label}`, period, v, r.concept, "USD")} />;
                   })}
                 </tr>,
               ];
@@ -484,7 +484,7 @@ function Concentration({ rows, d, ticker }: { rows: ConcentrationRow[]; d: Filin
                         <span className="line-clamp-2">{r.label}</span>
                       </th>
                       {keys.map((p) => (
-                        <ValueCell key={p} v={r.values[p]} text={r.values[p] ? fmtShare(r.values[p].v) : ""} onOpen={() => open(`${r.label} — ${head}`, p, r.values[p], "us-gaap:ConcentrationRiskPercentage1", "pure")} />
+                        <ValueCell key={p} v={r.values[p]} text={r.values[p] ? fmtShare(r.values[p].v) : ""} onOpen={() => open(`${r.label}, ${head}`, p, r.values[p], "us-gaap:ConcentrationRiskPercentage1", "pure")} />
                       ))}
                       <td className="border-b px-3 py-1">
                         <div className="h-1.5 w-20 overflow-hidden rounded-full bg-secondary">
