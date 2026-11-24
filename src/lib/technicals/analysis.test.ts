@@ -85,6 +85,22 @@ describe("analysis on real histories, against an independent calculation", () =>
     expect(v.table.rows).toHaveLength(T.evidence.rows.filter((r) => r.active).length);
   });
 
+  it("names the condition, its figures and its interval when a condition in force passes every check", () => {
+    // Long runs of drift: trend conditions carry information (the planted case of evidence.test.ts).
+    let T: Technicals | null = null;
+    for (let seed = 77; seed < 97 && !T; seed++) {
+      const x = analyze({ sym: "SIM", bars: simulateBars(seed, { trend: 0.003, run: 250, vol: 0.012 }), bench: [] });
+      if (x && x.evidence.rows.some((r) => r.active && Object.values(r.cells).some((c) => c?.verdict === "reliable"))) T = x;
+    }
+    expect(T).not.toBeNull();
+    const v = T!.read.find((s) => s.key === "verdict")!;
+    expect(v.text).not.toMatch(/No statistically reliable/);
+    expect(v.text).toMatch(/has been followed by [+−][\d.]+% (more|less) than its usual (5|20|60)-day return \(\d+ independent cases, interval /);
+    expect(v.tone).not.toBe(0);
+    expect(v.figures.map((f) => f.label)).toEqual(expect.arrayContaining(["Excess", "Horizon", "Independent cases", "q"]));
+    expect(v.table.rows.some((r) => r[r.length - 1] === "reliable")).toBe(true);
+  });
+
   it("builds the earnings-reaction history from the 8-K releases", () => {
     const T = run("AAPL");
     expect(T.reactions).not.toBeNull();
