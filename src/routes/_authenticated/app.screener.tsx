@@ -40,7 +40,9 @@ import {
 import {
   buildFilter,
   encodeSpec,
+  applicable,
   readShared,
+  searchAlone,
   screenSearch,
   SHARE_MAX,
   fieldGroups,
@@ -53,8 +55,11 @@ import {
   toCsv,
   type FieldGroup,
 } from "@/lib/screener/present";
-import { SERIES_FIELD_IDS } from "@/lib/screener/series";
+import { SERIES_FIELD_IDS, SERIES_FIELDS } from "@/lib/screener/series";
 import { ROW_H, useRowFocus, useWindowRange } from "@/lib/screener/window";
+
+/** Field names for chips of filters whose field is not loaded (the liquidity fields come from a separate query). */
+const NAMES = new Map(SERIES_FIELDS.map((f) => [f.id, f]));
 
 export const Route = createFileRoute("/_authenticated/app/screener")({
   validateSearch: (s: Record<string, unknown>) => screenSearch(s),
@@ -102,7 +107,7 @@ function Screener() {
   const [history, setHistory] = useState<{ prompt: string; spec: Spec }[]>([]);
   const [copied, setCopied] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const { file, F, rows, seriesDate, seriesSettled } = useScreenRows(basic);
+  const { file, F, rows, seriesSpan, seriesSettled } = useScreenRows(basic);
 
   const fields = useMemo(() => [...F.values()], [F]);
   const groups = useMemo(() => fieldGroups(fields, file.data?.groups ?? []), [fields, file.data]);
@@ -136,11 +141,18 @@ function Screener() {
     void navigate({ to: "/app/screener", search: {}, replace: true, resetScroll: false });
   }, [shared, fields.length, rows.length, seriesSettled, cat, setSpec, navigate]);
 
-  const res = useMemo(() => (rows.length ? run(rows, spec, F, q) : null), [rows, spec, F, q]);
+  // Filters on fields that are not in the catalogue right now are shown but not applied.
+  const live = useMemo(() => applicable(spec, F), [spec, F]);
+  const res = useMemo(() => (rows.length ? run(rows, live.spec, F, q) : null), [rows, live.spec, F, q]);
   const cols = (spec.columns.length ? spec.columns : (COLSETS[colset] ?? COLSETS.Overview)).filter((id) => F.has(id));
   const impact = useMemo(
-    () => (res && !res.rows.length && spec.filters.length ? filterImpact(rows, spec, F) : null),
-    [res, rows, spec, F],
+    () => {
+      if (!res || res.rows.length || !live.spec.filters.length) return null;
+      // Impact indexes refer to the applied filters; map them back to the screen's own filter list.
+      const orig = spec.filters.flatMap((_, i) => (live.missing.includes(i) ? [] : [i]));
+      return filterImpact(rows, live.spec, F, q).map((x) => ({ ...x, i: orig[x.i] }));
+    },
+    [res, rows, spec.filters, live, F, q],
   );
 
   async function ask(e?: FormEvent, text?: string) {
@@ -208,7 +220,7 @@ function Screener() {
       ...(grouped ? { groupOf: grouped.key, groupLabel: spec.group_by?.startsWith("quintile:") ? "Quintile" : GROUP_LABEL[spec.group_by!] } : {}),
     });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([text], { type: "text/csv" }));
+    a.href = URL.createObjectURL(new Blob(["\uFEFF", text], { type: "text/csv;charset=utf-8" }));
     a.download = `screen-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     const href = a.href;
@@ -248,7 +260,7 @@ function Screener() {
         title="Screener"
         description={
           file.data
-            ? `${rows.length.toLocaleString()} companies · prices ${file.data.asof.prices ? fmtDate(file.data.asof.prices) : "–"}, live where quoted · latest quarter ${file.data.asof.facts ? fmtDate(file.data.asof.facts) : "–"}${seriesDate ? ` · liquidity ${fmtDate(seriesDate)}` : ""}`
+            ? `${rows.length.toLocaleString()} companies · prices ${file.data.asof.prices ? fmtDate(file.data.asof.prices) : "–"}, live where quoted · latest quarter ${file.data.asof.facts ? fmtDate(file.data.asof.facts) : "–"}${seriesSpan ? ` · liquidity ${seriesSpan.from === seriesSpan.to ? fmtDate(seriesSpan.to) : `${fmtDate(seriesSpan.from)} to ${fmtDate(seriesSpan.to)}`}` : ""}`
             : undefined
         }
       />
@@ -322,7 +334,17 @@ function Screener() {
 
         {isActive(spec) && (
           <div className="flex flex-wrap items-center gap-1.5" aria-label="Active criteria">
-            {spec.filters.map((f, i) => (
+            {spec.filters.map((f, i) =>
+              live.missing.includes(i) ? (
+                <span key={`${f.field}-${i}`} title="This field is not available right now, so the filter is not applied. It applies again once the field loads." className="inline-flex h-7 items-center rounded-md border border-dashed text-xs text-muted-foreground">
+                  <span className="pl-2 pr-1">
+                    {filterText(f, NAMES)} · unavailable, not applied
+                  </span>
+                  <button type="button" aria-label={`Remove ${filterText(f, NAMES)}`} onClick={() => removeFilter(i)} className="grid h-full w-6 place-items-center rounded-r-md hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ) : (
               <span key={`${f.field}-${i}`} className="inline-flex h-7 items-center rounded-md border bg-secondary/60 text-xs">
                 <FilterPopover groups={groups} count={countFor} initial={f} onSave={(nf) => setFilter(i, nf)}>
                   <button type="button" title={`${F.get(f.field)?.d ?? ""}\nClick to edit`} className="h-full rounded-l-md pl-2 pr-1 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
@@ -333,7 +355,8 @@ function Screener() {
                   <X className="size-3" />
                 </button>
               </span>
-            ))}
+              ),
+            )}
             {[
               ...spec.sectors.map((x) => ({ t: `Sector: ${x}`, rm: (s: Spec) => ({ ...s, sectors: s.sectors.filter((y) => y !== x) }) })),
               ...spec.exclude_sectors.map((x) => ({ t: `Not ${x}`, rm: (s: Spec) => ({ ...s, exclude_sectors: s.exclude_sectors.filter((y) => y !== x) }) })),
@@ -441,7 +464,7 @@ function Screener() {
             {res.rows.length ? (
               <ResultsTable rows={res.rows} grouped={grouped?.groups ?? null} cols={cols} F={F} spec={spec} sim={res.sim} sortBy={sortBy} onOpen={openCompany} />
             ) : (
-              <NoResults impact={impact} q={q} onRemove={removeFilter} onClearQuery={() => setQ("")} onReset={reset} />
+              <NoResults impact={impact} q={q} qAlone={res && q ? searchAlone(rows, live.spec, F, q) : null} onRemove={removeFilter} onClearQuery={() => setQ("")} onReset={reset} />
             )}
             <p className="border-t px-3 py-2 text-[11px] leading-4 text-muted-foreground">
               Fundamentals from SEC filings (trailing four quarters unless named); prices daily, with valuation moved to the live quote where one is available; dollar volume and short volume from the daily setup feed. Rows marked “basic” carry SEC fundamentals only. Hover a column head for its definition and source; open a company for every underlying filing value.
@@ -630,7 +653,7 @@ const ResultRow = memo(function ResultRow({
         return (
           <td
             key={id}
-            title={missing ? "Not computed for fundamentals-only rows" : filled ? "Computed from the company's SEC fundamentals (trailing four quarters) at the current price" : undefined}
+            title={missing ? "Not computed for fundamentals-only rows" : filled ? "Computed from the company's SEC fundamentals (trailing four quarters) at the current price" : SERIES_FIELD_IDS.has(id) && v != null && typeof r.series_asof === "string" ? `As of ${fmtDate(r.series_asof)}` : undefined}
             className={cn(
               "num whitespace-nowrap border-b px-3 py-1 text-right group-hover:bg-secondary",
               id === sortField && "font-medium",
@@ -673,9 +696,11 @@ function NoResults({
   onRemove,
   onClearQuery,
   onReset,
+  qAlone,
 }: {
   impact: ReturnType<typeof filterImpact> | null;
   q: string;
+  qAlone: number | null;
   onRemove: (i: number) => void;
   onClearQuery: () => void;
   onReset: () => void;
@@ -686,13 +711,13 @@ function NoResults({
       <p className="font-semibold">No companies pass every criterion.</p>
       {q && (
         <p className="text-muted-foreground">
-          The search “{q}” also narrows the list.{" "}
+          {qAlone === 0 ? `The search “${q}” matches no company on its own.` : `The search “${q}” also narrows the list.`}{" "}
           <button type="button" onClick={onClearQuery} className="text-link hover:underline">
             Clear the search
           </button>
         </p>
       )}
-      {impact?.length ? (
+      {impact?.length && qAlone !== 0 ? (
         <>
           <p className="text-muted-foreground">
             {best && best.without > 0
@@ -784,7 +809,7 @@ function FilterPopover({ groups, count, onSave, initial, children }: { groups: F
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0">
+      <PopoverContent align="start" collisionPadding={12} className="w-80 p-0">
         {open && (
           <FilterEditor
             groups={groups}
@@ -905,7 +930,7 @@ function PresetPopover({ onPick }: { onPick: (id: string) => void }) {
           Presets
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-96 p-1">
+      <PopoverContent align="start" collisionPadding={12} className="w-96 p-1">
         <div className="max-h-96 overflow-y-auto overscroll-contain scrollbar-thin">
           {PRESETS.map((p) => (
             <button
@@ -936,7 +961,7 @@ function ColumnsPopover({ groups, cols, setName, onSet, onCols }: { groups: Fiel
           <Columns3 /> {setName ?? "Custom"} · {cols.length}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-0">
+      <PopoverContent align="end" collisionPadding={12} className="w-80 p-0">
         <div className="border-b p-2">
           <p className="eyebrow mb-1.5">Column sets</p>
           <div role="radiogroup" aria-label="Column set" className="flex flex-wrap gap-1">

@@ -126,18 +126,23 @@ export interface FilterImpact {
 }
 
 /** For each filter: how many pass it alone and how many the screen returns without it (what to change when nothing passes). */
-export function filterImpact(all: Row[], spec: Spec, F: Map<string, FieldDef>): FilterImpact[] {
+export function filterImpact(all: Row[], spec: Spec, F: Map<string, FieldDef>, q = ""): FilterImpact[] {
+  // Counts include the find text, so "brings back" never promises rows the search still hides (review M11).
   const base = { ...spec, similar_to: null, limit: null, sort: null };
-  const uni = run(all, { ...base, filters: [] }, F).uni;
+  const uni = run(all, { ...base, filters: [] }, F, q).rows;
   return spec.filters.map((f, i) => {
     const alone =
       f.op === "top" || f.op === "bottom"
-        ? run(all, { ...base, filters: [f] }, F).rows.length
+        ? run(all, { ...base, filters: [f] }, F, q).rows.length
         : uni.reduce((n, r) => n + (testFilter(f, r[f.field]) ? 1 : 0), 0);
-    const without = run(all, { ...base, filters: spec.filters.filter((_, k) => k !== i) }, F).rows.length;
+    const without = run(all, { ...base, filters: spec.filters.filter((_, k) => k !== i) }, F, q).rows.length;
     return { i, text: filterText(f, F), alone, without };
   });
 }
+
+/** How many companies the find text matches with no filters (0 means the search alone empties the list). */
+export const searchAlone = (all: Row[], spec: Spec, F: Map<string, FieldDef>, q: string) =>
+  run(all, { ...spec, filters: [], similar_to: null, limit: null, sort: null }, F, q).rows.length;
 
 const csvCell = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
 
@@ -243,3 +248,15 @@ export function decodeSpec(code: string): unknown {
 /** Whether a screen narrows the universe at all (used to show the clear button and the impact panel). */
 export const isActive = (s: Spec) =>
   s.filters.length > 0 || s.sectors.length > 0 || s.exclude_sectors.length > 0 || s.industries.length > 0 || s.exclude_industries.length > 0 || s.tickers.length > 0 || s.exclude_tickers.length > 0 || !!s.similar_to || s.index !== "all";
+
+/**
+ * The part of a screen that can run now: filters (and the sort) on fields the catalogue does not hold at the
+ * moment (a liquidity field while its series is late or failed, a field the file dropped) are set aside, so
+ * they show as "unavailable, not applied" instead of failing every row (review M8). `missing` lists their indexes.
+ */
+export function applicable(spec: Spec, F: Map<string, FieldDef>): { spec: Spec; missing: number[] } {
+  const missing = spec.filters.flatMap((f, i) => (F.has(f.field) ? [] : [i]));
+  const sortOk = !spec.sort || F.has(spec.sort.field);
+  if (!missing.length && sortOk) return { spec, missing };
+  return { spec: { ...spec, filters: spec.filters.filter((f) => F.has(f.field)), sort: sortOk ? spec.sort : null }, missing };
+}

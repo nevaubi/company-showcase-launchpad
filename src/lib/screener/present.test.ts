@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptySpec, fmtField, run, validate, type FieldDef, type Row, type Spec } from "./engine";
-import { buildFilter, decodeSpec, encodeSpec, fieldGroups, filterImpact, formatInput, parseInput, readShared, screenSearch, SHARE_MAX, toCsv } from "./present";
-import { SERIES_FIELDS, seriesAsOf, withSeries } from "./series";
+import { applicable, buildFilter, decodeSpec, encodeSpec, fieldGroups, filterImpact, searchAlone, formatInput, parseInput, readShared, screenSearch, SHARE_MAX, toCsv } from "./present";
+import { SERIES_FIELDS, seriesAsOf, seriesRange, withSeries } from "./series";
 
 const fields: FieldDef[] = [
   { id: "price", g: "px", n: "Price", u: "usd", d: "Last close" },
@@ -69,6 +69,27 @@ describe("filterImpact", () => {
     expect(imp.map((x) => [x.alone, x.without])).toEqual([[1, 2], [2, 1]]);
     expect(imp[0].text).toBe("Operating margin > 25%");
   });
+
+  it("counts with the find text applied, so removing a filter never promises rows the search hides", () => {
+    const spec: Spec = { ...emptySpec(), filters: [{ field: "om", op: ">", value: 0.25 }] };
+    expect(run(rows, spec, F, "zzz").rows).toHaveLength(0);
+    expect(filterImpact(rows, spec, F, "zzz").map((x) => x.without)).toEqual([0]);
+    expect(searchAlone(rows, spec, F, "zzz")).toBe(0);
+    expect(searchAlone(rows, spec, F, "AAA")).toBe(1);
+  });
+});
+
+describe("applicable", () => {
+  it("sets aside filters and a sort on fields that are not loaded instead of failing every row", () => {
+    const spec: Spec = { ...emptySpec(), filters: [{ field: "dv20", op: ">", value: 1e8 }, { field: "om", op: ">", value: 0.25 }], sort: { field: "short_vol5", dir: "desc" } };
+    const a = applicable(spec, F);
+    expect(a.missing).toEqual([0]);
+    expect(a.spec.filters).toEqual([{ field: "om", op: ">", value: 0.25 }]);
+    expect(a.spec.sort).toBeNull();
+    expect(run(rows, a.spec, F).rows.length).toBeGreaterThan(0);
+    const ok: Spec = { ...emptySpec(), filters: [{ field: "om", op: ">", value: 0.1 }] };
+    expect(applicable(ok, F).spec).toBe(ok);
+  });
 });
 
 describe("toCsv", () => {
@@ -133,5 +154,12 @@ describe("shared screen links", () => {
     expect(long.ok).toBe(false);
     expect(!long.ok && long.notice).toMatch(/too long/);
     for (const bad of ["123", "true", '{"a":1}', "abc"]) expect(readShared(bad).ok).toBe(false);
+  });
+});
+
+describe("seriesRange", () => {
+  it("states the oldest and newest scan date", () => {
+    expect(seriesRange([{ end_date: "2026-11-23" }, { end_date: "2026-11-16" }, { end_date: "2026-11-20" }])).toEqual({ from: "2026-11-16", to: "2026-11-23" });
+    expect(seriesRange([])).toBeNull();
   });
 });

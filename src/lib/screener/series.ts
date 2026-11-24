@@ -61,3 +61,15 @@ export function seriesAsOf(rows: Pick<SeriesRow, "end_date">[]): string | null {
   for (const r of rows) if (r.end_date && (!best || r.end_date > best)) best = r.end_date;
   return best;
 }
+
+/** Oldest and newest series date (rows are scanned on different days, so the header states a range when they differ). */
+export function seriesRange(rows: Pick<SeriesRow, "end_date">[]): { from: string; to: string } | null {
+  let from: string | null = null;
+  let to: string | null = null;
+  for (const r of rows) {
+    if (!r.end_date) continue;
+    if (!from || r.end_date < from) from = r.end_date;
+    if (!to || r.end_date > to) to = r.end_date;
+  }
+  return from && to ? { from, to } : null;
+}

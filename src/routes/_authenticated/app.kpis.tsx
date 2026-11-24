@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { useSource } from "@/components/source/source-context";
 import { partnerFile, useQuotes, useUniverse } from "@/lib/data";
-import { COVERAGE_TICKERS } from "@/lib/coverage";
+import { COVERAGE_TICKERS, coverageOf } from "@/lib/coverage";
 import { kpiFileQuery, kpiItems, type KpiValue } from "@/lib/statements/filed";
 import { useSessionState } from "@/lib/use-session-state";
 import { fmtDate } from "@/lib/format";
@@ -196,7 +196,7 @@ function KpiMatrix() {
       );
       return {
         t,
-        name: u?.name ?? t,
+        name: coverageOf(t)?.shortName ?? u?.name ?? t,
         ind: Object.values(L).find((x) => x[t])?.[t]?.ind ?? "",
         mcap,
         revg: u?.revenueGrowthYoY ?? null,
@@ -335,10 +335,11 @@ function KpiMatrix() {
       ),
     ];
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+    a.href = URL.createObjectURL(new Blob(["\uFEFF", lines.join("\n")], { type: "text/csv;charset=utf-8" }));
     a.download = "kpi-matrix.csv";
     a.click();
-    URL.revokeObjectURL(a.href);
+    const href = a.href;
+    setTimeout(() => URL.revokeObjectURL(href), 10_000);
   };
 
   // One unit and scale per column, and the period most companies in it report.
