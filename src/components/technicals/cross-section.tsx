@@ -1,15 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Segmented } from "@/components/app/segmented";
+import { TickerMark } from "@/components/app/ticker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { coverageOf } from "@/lib/coverage";
 import { fmtDate } from "@/lib/format";
 import { crossQuery, METRICS, niceTicks, ols, quantileSorted, rowsOf, SCATTER_KEYS, type CrossRow } from "@/lib/technicals/cross";
 import { methodsQuery } from "@/lib/technicals/data";
 import { cn } from "@/lib/utils";
 import { Note, T as S, TechPanel } from "./ui";
 
+/** Axis values are round numbers: "+30.0%" reads as "+30%". */
+const axis = (s: string) => s.replace(/\.0+(?=%|$)/, "");
 function val(r: CrossRow | undefined, k: string): number | null {
   const v = r?.[k];
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -32,7 +34,7 @@ function useWidth<T extends HTMLElement>() {
  * Any two measures against each other for every covered company on one as-of date, with the open symbol
  * and its sector picked out. A point opens that company.
  */
-export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: string) => void }) {
+export function CrossScatter({ symbol, onPick }: { symbol: string | null; onPick: (s: string) => void }) {
   const X = useQuery(crossQuery);
   const methods = useQuery(methodsQuery);
   const [xk, setXk] = useState("vol60");
@@ -124,7 +126,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
                   <g key={`y${t}`}>
                     <line x1={m.l} x2={W - m.r} y1={Math.round(py(t)) + 0.5} y2={Math.round(py(t)) + 0.5} stroke="var(--border)" shapeRendering="crispEdges" />
                     <text x={m.l - 6} y={py(t) + 3} textAnchor="end" className="num fill-muted-foreground text-[10px]">
-                      {METRICS[yk].fmt(t)}
+                      {axis(METRICS[yk].fmt(t))}
                     </text>
                   </g>
                 ))}
@@ -132,7 +134,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
                   <g key={`x${t}`}>
                     <line x1={Math.round(px(t)) + 0.5} x2={Math.round(px(t)) + 0.5} y1={H - m.b} y2={H - m.b + 4} stroke="var(--border)" shapeRendering="crispEdges" />
                     <text x={px(t)} y={H - m.b + 15} textAnchor="middle" className="num fill-muted-foreground text-[10px]">
-                      {METRICS[xk].fmt(t)}
+                      {axis(METRICS[xk].fmt(t))}
                     </text>
                   </g>
                 ))}
@@ -163,7 +165,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
                       cy={py(val(p, yk)!)}
                       r={mine ? 5.5 : hover?.sym === p.sym ? 4.5 : 3}
                       fill={mine ? "var(--foreground)" : inSec ? "var(--chart-1)" : "var(--muted-foreground)"}
-                      fillOpacity={mine ? 1 : inSec ? 0.8 : 0.3}
+                      fillOpacity={mine ? 1 : inSec ? 0.85 : 0.5}
                       stroke={mine ? "var(--card)" : "none"}
                       strokeWidth={mine ? 2 : 0}
                       className="cursor-pointer"
@@ -191,9 +193,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
             {W > 0 && pts.length <= 1 && <p className={cn("px-1 py-6", S.caption)}>Too few companies have both measures to plot.</p>}
             {hover && (
               <div className="pointer-events-none absolute right-3 top-1 rounded-md border bg-popover px-2.5 py-1.5 text-[11px] leading-4 shadow-sm">
-                <p className="font-medium">
-                  <span className="num">{hover.sym}</span> <span className="font-normal text-muted-foreground">{coverageOf(hover.sym)?.shortName ?? ""}</span>
-                </p>
+                <TickerMark ticker={hover.sym} name link={false} className="max-w-56" />
                 <p className="text-muted-foreground">{hover.sector}</p>
                 <p className="num">
                   {METRICS[yk].label} {METRICS[yk].fmt(val(hover, yk))}
@@ -216,7 +216,7 @@ export function CrossScatter({ symbol, onPick }: { symbol: string; onPick: (s: s
               </span>
             )}
             <span className="flex items-center gap-1.5">
-              <i className="inline-block size-2 rounded-full bg-muted-foreground/40" /> {sector ? "Other covered companies" : "Covered companies"}
+              <i className="inline-block size-2 rounded-full bg-muted-foreground/50" /> {sector ? "Other covered companies" : "Covered companies"}
             </span>
             {pts.length >= 10 && <span>Dashed line: least-squares fit</span>}
             <span>A point opens that company</span>

@@ -108,7 +108,7 @@ export function LevelsPanel({ T, loading }: { T: Technicals | null; loading: boo
                         }
                         out.push(
                           <tr key={i} className={S.row} title={l.detail}>
-                            <td className={cn(S.td, "whitespace-nowrap")}>{LEVEL_LABEL[l.label] ?? l.label}</td>
+                            <td className={cn(S.td, "sm:whitespace-nowrap")}>{LEVEL_LABEL[l.label] ?? l.label}</td>
                             <td className={S.num}>{f2(l.price)}</td>
                             <td className={S.num}>{pp(l.distance)}</td>
                             <td className={S.num}>{l.atrs == null ? "–" : f2(l.atrs, 1)}</td>
@@ -198,21 +198,30 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
         <>
           <Split>
             <div>
-              <SubTitle caption="one standard deviation: about two outcomes in three fall inside if volatility holds">Expected move</SubTitle>
+              <SubTitle caption="one standard deviation, from realised volatility and from option prices: about two outcomes in three fall inside if volatility holds">Expected move</SubTitle>
               <TableWrap min={400}>
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="border-b">
                       <th className={S.th}>Horizon</th>
-                      <th className={S.thNum}>From realised volatility</th>
-                      <th className={S.thNum}>Price range</th>
-                      <th className={S.thNum}>From option prices</th>
+                      <th className={S.thNum} title="From the 21-day realised volatility">
+                        Realised
+                      </th>
+                      <th className={S.thNum} title="The close less and plus the realised figure">
+                        Price range
+                      </th>
+                      <th className={S.thNum} title="From the 30-day implied volatility of listed options">
+                        Options
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {M.volatility.expected.map((e) => (
                       <tr key={e.sessions} className={S.row}>
-                        <td className={S.td}>{e.sessions === 5 ? "1 week (5 sessions)" : "1 month (21 sessions)"}</td>
+                        <td className={cn(S.td, "whitespace-nowrap")}>
+                          {e.sessions === 5 ? "1 week" : "1 month"}
+                          <span className="hidden text-muted-foreground sm:inline"> ({e.sessions} sessions)</span>
+                        </td>
                         <td className={cn(S.num, "font-medium")}>±{pc(e.pct, 1)}</td>
                         <td className={S.num}>
                           {f2(e.low)} to {f2(e.high)}
@@ -242,20 +251,20 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                       <th className={S.thNum}>Now</th>
                       <th className={S.thNum}>Percentile</th>
                       <th className={cn(S.th, "hidden sm:table-cell")} />
-                      <th className={S.thNum}>Median</th>
+                      <th className={cn(S.thNum, S.wide)}>Median</th>
                       <th className={S.thNum}>10th to 90th</th>
                     </tr>
                   </thead>
                   <tbody>
                     {M.volatility.cone.map((z) => (
                       <tr key={z.n} className={S.row}>
-                        <td className={S.td}>{z.n} sessions</td>
+                        <td className={cn(S.td, "whitespace-nowrap")}>{z.n} sessions</td>
                         <td className={cn(S.num, "font-medium")}>{pc(z.current, 1)}</td>
                         <td className={S.num}>{pct(z.pct)}</td>
                         <td className={cn(S.td, "hidden w-20 sm:table-cell")}>
                           <PercentileBar value={z.pct} />
                         </td>
-                        <td className={S.num}>{pc(z.p50, 1)}</td>
+                        <td className={cn(S.num, S.wide)}>{pc(z.p50, 1)}</td>
                         <td className={S.num}>
                           {pc(z.p10, 0)} to {pc(z.p90, 0)}
                         </td>
@@ -282,7 +291,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                       <th className={S.thNum} title="Variance of q-day returns ÷ (q × variance of 1-day returns): 1 for a random walk">
                         Variance ratio
                       </th>
-                      <th className={S.thNum} title="Lo-MacKinlay statistic, valid when volatility changes over time">
+                      <th className={cn(S.thNum, S.wide)} title="Lo-MacKinlay statistic, valid when volatility changes over time">
                         z
                       </th>
                       <th className={S.thNum}>p</th>
@@ -292,9 +301,9 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                   <tbody>
                     {M.walk.rows.map((r) => (
                       <tr key={r.q} className={S.row}>
-                        <td className={S.td}>{r.q} days</td>
+                        <td className={cn(S.td, "whitespace-nowrap")}>{r.q} days</td>
                         <td className={cn(S.num, "font-medium")}>{f2(r.vr)}</td>
-                        <td className={S.num}>{f2(r.z)}</td>
+                        <td className={cn(S.num, S.wide)}>{f2(r.z)}</td>
                         <td className={S.num}>{f2(r.p, 3)}</td>
                         <td className={cn(S.td, "whitespace-nowrap text-[11px] text-muted-foreground")}>{r.p < 0.05 ? (r.vr > 1 ? "moves continued" : "moves reversed") : "as a random walk"}</td>
                       </tr>
@@ -319,7 +328,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                       <thead>
                         <tr className="border-b">
                           <th className={S.th}>Expiry</th>
-                          <th className={S.thNum} title="Weekdays from the snapshot to the expiry">
+                          <th className={cn(S.thNum, S.wide)} title="Weekdays from the snapshot to the expiry">
                             Sessions
                           </th>
                           <th className={S.thNum} title="At-the-money straddle ÷ share price: the average size of the move the market prices by expiry">
@@ -340,7 +349,7 @@ export function VolatilityPanel({ symbol, T, loading, covered }: { symbol: strin
                           return (
                             <tr key={t.e} className={S.row}>
                               <td className={cn(S.td, "num whitespace-nowrap")}>{fmtDate(t.e)}</td>
-                              <td className={S.num}>{n || "–"}</td>
+                              <td className={cn(S.num, S.wide)}>{n || "–"}</td>
                               <td className={cn(S.num, "font-medium")}>±{pc(t.m, 1)}</td>
                               <td className={S.num}>{real != null ? `±${pc(real, 1)}` : "–"}</td>
                               <td className={S.num}>{real ? `${f2(t.m / real)}×` : "–"}</td>
@@ -476,18 +485,19 @@ export function RelativePanel({
                         Beta
                       </th>
                       <th className={S.thNum}>Correlation</th>
-                      <th className={S.thNum} title="Share of its daily variance the benchmark explains">
+                      <th className={cn(S.thNum, S.wide)} title="Share of its daily variance the benchmark explains">
                         R²
                       </th>
                       <th className={S.thNum} title="Annualised volatility of the part the benchmark does not explain">
-                        Own volatility
+                        Own vol<span className="hidden sm:inline">atility</span>
+                        <span className="sm:hidden">.</span>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {M.momentum.vs.map((b) => (
                       <tr key={b.sym} className={S.row}>
-                        <td className={S.td}>
+                        <td className={cn(S.td, "whitespace-nowrap")}>
                           {b.sym} <span className="text-[11px] text-muted-foreground">{b.kind === "market" ? "market" : "sector"}</span>
                         </td>
                         <td className={cn(S.num, "font-medium")}>
@@ -495,7 +505,7 @@ export function RelativePanel({
                           <span className="font-normal text-muted-foreground"> ± {f2(b.seBeta)}</span>
                         </td>
                         <td className={S.num}>{f2(b.corr)}</td>
-                        <td className={S.num}>{f2(b.r2)}</td>
+                        <td className={cn(S.num, S.wide)}>{f2(b.r2)}</td>
                         <td className={S.num}>{pc(b.idioVol, 1)}</td>
                       </tr>
                     ))}
@@ -635,7 +645,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
               <th className={S.thNum} title="The same window minus SPY">
                 vs SPY
               </th>
-              <th className={S.thNum} title="Size of the move in units of its normal two-day volatility: the daily volatility of the 60 sessions before × √2">
+              <th className={cn(S.thNum, S.wide)} title="Size of the move in units of its normal two-day volatility: the daily volatility of the 60 sessions before × √2">
                 σ
               </th>
               <th className={S.thNum} title="Return over the 20 sessions after the reaction window">
@@ -659,7 +669,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
                 </td>
                 <td className={cn(S.num, "font-medium", signTone(r.move))}>{pp(r.move)}</td>
                 <td className={cn(S.num, signTone(r.excess))}>{pp(r.excess)}</td>
-                <td className={S.num}>{f2(r.sigma, 1)}</td>
+                <td className={cn(S.num, S.wide)}>{f2(r.sigma, 1)}</td>
                 <td className={cn(S.num, signTone(r.drift20))}>{pp(r.drift20)}</td>
               </tr>
             ))}
@@ -669,7 +679,7 @@ function Reactions({ symbol, T, R }: { symbol: string; T: Technicals; R: NonNull
                 ±{pc(R.stats.avgAbsMove, 1)}
               </td>
               <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgExcess)}</td>
-              <td className={cn(S.num, "font-semibold")}>{f2(R.stats.avgSigma, 1)}</td>
+              <td className={cn(S.num, S.wide, "font-semibold")}>{f2(R.stats.avgSigma, 1)}</td>
               <td className={cn(S.num, "font-semibold")}>{pp(R.stats.avgDrift20)}</td>
             </tr>
           </tbody>
@@ -696,7 +706,7 @@ function ChartEvents({ T, count }: { T: Technicals; count: number }) {
               <th className={S.th}>Event</th>
               <th className={S.thNum}>+5 days</th>
               <th className={S.thNum}>+20 days</th>
-              <th className={S.thNum}>+60 days</th>
+              <th className={cn(S.thNum, S.wide)}>+60 days</th>
             </tr>
           </thead>
           <tbody>
@@ -705,7 +715,7 @@ function ChartEvents({ T, count }: { T: Technicals; count: number }) {
                 <td className={cn(S.td, "num whitespace-nowrap")}>{fmtDate(e.date)}</td>
                 <td className={S.td}>{e.name}</td>
                 {[5, 20, 60].map((h) => (
-                  <td key={h} className={cn(S.num, signTone(e.fwd[h]))}>
+                  <td key={h} className={cn(S.num, h === 60 && S.wide, signTone(e.fwd[h]))}>
                     {e.fwd[h] == null ? <span className="text-muted-foreground">open</span> : pp(e.fwd[h])}
                   </td>
                 ))}

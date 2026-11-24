@@ -21,7 +21,8 @@ const VIEWS = ["symbol", "market"] as const;
 type View = (typeof VIEWS)[number];
 
 const pageSearch = z.object({
-  symbol: z.string().max(12).default("NVDA"),
+  // No symbol in the address: the market-wide view. Every link from another page carries one.
+  symbol: z.string().max(12).optional().catch(undefined),
   range: z.enum(CHART_RANGES).default("1y").catch("1y"),
   // Links from before the page was rebuilt carry view=chart, indicators, signals, risk, quant or cross.
   // Those views are sections of the one symbol page now, so anything unknown opens it.
@@ -67,15 +68,42 @@ function asOf(t: string | undefined) {
   return `as of ${fmtDate(t, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })} ET`;
 }
 
+const BAR =
+  "sticky top-[var(--sticky-top,3.5rem)] z-10 -mx-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background/95 px-4 py-1.5 backdrop-blur lg:-mx-6 lg:px-6";
+
+type SearchPatch = Partial<{ symbol: string; range: ChartRange; view: View }>;
+
 function Markets() {
   const s = Route.useSearch();
   const navigate = Route.useNavigate();
-  const symbol = s.symbol.toUpperCase();
-  const view: View = s.view;
   // View state lives in the address; changing it never moves the page.
-  const setSearch = (patch: Partial<{ symbol: string; range: ChartRange; view: View }>) =>
+  const setSearch = (patch: SearchPatch) =>
     navigate({ search: (p) => ({ ...p, ...patch }), resetScroll: false, replace: Object.keys(patch).every((k) => k === "range") });
+  const symbol = s.symbol?.trim().toUpperCase();
+  if (!symbol) return <MarketHome onPick={(v) => setSearch({ symbol: v, view: "symbol" })} />;
+  return <SymbolPage symbol={symbol} range={s.range} view={s.view} setSearch={setSearch} />;
+}
 
+/** No symbol chosen: the market-wide view on its own, with the picker to open a symbol. */
+function MarketHome({ onPick }: { onPick: (symbol: string) => void }) {
+  return (
+    <div className="grid grid-cols-1 gap-4">
+      <PageHeader
+        className="mb-0"
+        eyebrow="Markets"
+        title="Technicals"
+        description="Breadth, chart events tested across tracked companies, a scan and the cross-section. Choose a symbol for its chart, read and evidence."
+        actions={<SymbolPicker symbol={null} onPick={onPick} />}
+      />
+      <div data-section="Technicals navigation" className={BAR}>
+        <SectionNav items={MARKET_NAV} className="flex-1" />
+      </div>
+      <MarketView symbol={null} onPick={onPick} />
+    </div>
+  );
+}
+
+function SymbolPage({ symbol, range, view, setSearch }: { symbol: string; range: ChartRange; view: View; setSearch: (patch: SearchPatch) => void }) {
   const tech = useTechnicals(symbol);
   const { covered, benchmark, history, T } = tech;
   const quote = useQuotes([symbol]).data?.quotes[0];
@@ -127,10 +155,7 @@ function Markets() {
         }
       />
 
-      <div
-        data-section="Technicals navigation"
-        className="sticky top-[var(--sticky-top,3.5rem)] z-10 -mx-4 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 border-b bg-background/95 px-4 py-1.5 backdrop-blur lg:-mx-6 lg:px-6"
-      >
+      <div data-section="Technicals navigation" className={BAR}>
         <Segmented
           label="View"
           value={view}
@@ -155,7 +180,7 @@ function Markets() {
             company={tech.company}
             releases={tech.releases}
             sectorEtf={covered?.sectorEtf}
-            range={s.range}
+            range={range}
             onRange={(r) => setSearch({ range: r })}
           />
           {tooShort || tech.error ? (

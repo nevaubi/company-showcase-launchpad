@@ -51,7 +51,7 @@ export function searchSymbols(all: SymbolEntry[], query: string, limit = 40): Sy
 }
 
 /** Searchable symbol list in a popover. Only the matches are rendered, so it opens at once with the full coverage behind it. */
-export function SymbolPicker({ symbol, onPick }: { symbol: string; onPick: (symbol: string) => void }) {
+export function SymbolPicker({ symbol, onPick }: { symbol: string | null; onPick: (symbol: string) => void }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const current = SYMBOLS.find((e) => e.symbol === symbol);
@@ -88,11 +88,11 @@ export function SymbolPicker({ symbol, onPick }: { symbol: string; onPick: (symb
         <button
           type="button"
           data-agent-click
-          aria-label={`Symbol: ${symbol}. Change symbol`}
+          aria-label={symbol ? `Symbol: ${symbol}. Change symbol` : "Choose a symbol"}
           className="inline-flex h-9 w-full min-w-0 items-center gap-2 rounded-md border bg-card px-3 text-sm shadow-xs transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none sm:w-64"
         >
-          <span className="num shrink-0 font-medium">{symbol}</span>
-          <span className="min-w-0 flex-1 truncate text-left text-muted-foreground">{current?.name ?? ""}</span>
+          {symbol && <span className="num shrink-0 font-medium">{symbol}</span>}
+          <span className="min-w-0 flex-1 truncate text-left text-muted-foreground">{symbol ? (current?.name ?? "") : "Choose a symbol"}</span>
           <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         </button>
       </PopoverTrigger>

@@ -73,13 +73,13 @@ function BreadthPanel({ breadth, loading }: { breadth: BreadthFile | null; loadi
         )
       ) : (
         <>
-          <TableWrap min={520}>
+          <TableWrap>
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b">
                   <th className={S.th}>Measure</th>
                   {cols.map((c, i) => (
-                    <th key={i} className={S.thNum}>
+                    <th key={i} className={cn(S.thNum, i === 2 && S.wide)}>
                       {c ? (i === 0 ? "Latest" : i === 1 ? "20 sessions ago" : "One year ago") : ""}
                       {c && <span className="block">{fmtDate(c.date)}</span>}
                     </th>
@@ -99,7 +99,7 @@ function BreadthPanel({ breadth, loading }: { breadth: BreadthFile | null; loadi
                   <tr key={l} className={S.row}>
                     <td className={S.td}>{l}</td>
                     {cols.map((c, i) => (
-                      <td key={i} className={cn(S.num, i === 0 && "font-medium")}>
+                      <td key={i} className={cn(S.num, i === 0 && "font-medium", i === 2 && S.wide)}>
                         {c ? f(c) : "–"}
                       </td>
                     ))}
@@ -215,23 +215,23 @@ function PooledPanel({
               <thead>
                 <tr className="border-b">
                   <th className={S.th}>Event</th>
-                  <th className={S.th} title="How chart reading conventionally takes the event">
+                  <th className={cn(S.th, S.wide)} title="How chart reading conventionally takes the event">
                     Read as
                   </th>
-                  <th className={S.thNum} title="Events with a complete forward window, and the companies they come from">
+                  <th className={cn(S.thNum, S.wide)} title="Events with a complete forward window, and the companies they come from">
                     Events / companies
                   </th>
-                  <th className={S.thNum} title="Share of events followed by a rise, and the same share over all days">
+                  <th className={cn(S.thNum, S.wide)} title="Share of events followed by a rise, and the same share over all days">
                     Up share / all days
                   </th>
-                  <th className={S.thNum} title="Mean total return after the event, and over all days">
+                  <th className={cn(S.thNum, S.wide)} title="Mean total return after the event, and over all days">
                     Mean after / all days
                   </th>
                   <th className={S.thNum}>Excess</th>
-                  <th className={S.thNum} title="Standard errors clustered by calendar month, because events fire together across companies">
+                  <th className={cn(S.thNum, S.wide)} title="Standard errors clustered by calendar month, because events fire together across companies">
                     95% interval
                   </th>
-                  <th className={S.thNum} title="p-value adjusted for every event-horizon pair in this table (Benjamini-Hochberg)">
+                  <th className={cn(S.thNum, S.wide)} title="p-value adjusted for every event-horizon pair in this table (Benjamini-Hochberg)">
                     q
                   </th>
                   <th className={S.thNum}>Fired</th>
@@ -245,20 +245,20 @@ function PooledPanel({
                   return (
                     <Fragment key={r.type}>
                       <tr className={cn("border-b", ok && list.length > 0 && "border-b-0")} title={r.text}>
-                        <td className={cn(S.td, "whitespace-nowrap", ok && "font-medium")}>{r.name}</td>
-                        <td className={cn(S.td, "text-[11px] text-muted-foreground")}>{r.dir > 0 ? "Bullish" : "Bearish"}</td>
-                        <td className={S.num}>
+                        <td className={cn(S.td, "sm:whitespace-nowrap", ok && "font-medium")}>{r.name}</td>
+                        <td className={cn(S.td, S.wide, "text-[11px] text-muted-foreground")}>{r.dir > 0 ? "Bullish" : "Bearish"}</td>
+                        <td className={cn(S.num, S.wide)}>
                           {r.n.toLocaleString("en-US")} <span className="text-muted-foreground">/ {r.symbols.toLocaleString("en-US")}</span>
                         </td>
-                        <td className={S.num}>
+                        <td className={cn(S.num, S.wide)}>
                           {pc(r.hit)} <span className="text-muted-foreground">/ {pc(r.baseHit)}</span>
                         </td>
-                        <td className={S.num}>
+                        <td className={cn(S.num, S.wide)}>
                           {pp(r.mean)} <span className="text-muted-foreground">/ {pp(r.base)}</span>
                         </td>
                         <td className={cn(S.num, "font-medium", ok && signTone(r.excess))}>{pp(r.excess, 2)}</td>
-                        <td className={S.num}>{r.ci ? `${pp(r.ci[0])} to ${pp(r.ci[1])}` : "–"}</td>
-                        <td className={S.num}>{r.q == null ? "–" : r.q < 0.001 ? "<0.001" : f2(r.q, 3)}</td>
+                        <td className={cn(S.num, S.wide)}>{r.ci ? `${pp(r.ci[0])} to ${pp(r.ci[1])}` : "–"}</td>
+                        <td className={cn(S.num, S.wide)}>{r.q == null ? "–" : r.q < 0.001 ? "<0.001" : f2(r.q, 3)}</td>
                         <td className={S.num}>{list.length ? list.length.toLocaleString("en-US") : "–"}</td>
                         <td className={S.td}>
                           {ok ? (
@@ -343,7 +343,7 @@ const SC = {
 const PAGE = 50;
 const TREND_LABEL: Record<string, string> = { up: "Up", down: "Down", mixed: "Mixed" };
 
-function ScanPanel({ states, loading, symbol, onPick }: { states: { as_of: string; rows: StateRow[] } | null; loading: boolean; symbol: string; onPick: (s: string) => void }) {
+function ScanPanel({ states, loading, symbol, onPick }: { states: { as_of: string; rows: StateRow[] } | null; loading: boolean; symbol: string | null; onPick: (s: string) => void }) {
   const [sort, setSort] = useState<{ k: keyof StateRow; d: 1 | -1 }>({ k: "r63", d: -1 });
   const [filter, setFilter] = useState<ScanFilter>("all");
   const [page, setPage] = useState(0);
@@ -406,7 +406,7 @@ function ScanPanel({ states, loading, symbol, onPick }: { states: { as_of: strin
         )
       ) : (
         <>
-          <TableWrap min={980}>
+          <TableWrap min={980} always>
             <table className="w-full border-collapse">
               <thead>
                 <tr className="border-b">
@@ -485,8 +485,12 @@ function ScanPanel({ states, loading, symbol, onPick }: { states: { as_of: strin
 const PAGER_BTN =
   "inline-flex h-7 items-center rounded border px-2 text-xs transition-colors duration-150 hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none";
 
-/** The market-wide view: breadth, what chart events have meant across tracked companies, a sortable scan and the cross-section. */
-export function MarketView({ symbol, onPick }: { symbol: string; onPick: (s: string) => void }) {
+/**
+ * The market-wide view: breadth, what chart events have meant across tracked companies, a sortable scan and
+ * the cross-section. `symbol` is the symbol the page has open, picked out in the scan and the scatter; null
+ * when none is chosen.
+ */
+export function MarketView({ symbol, onPick }: { symbol: string | null; onPick: (s: string) => void }) {
   const SG = useQuery(signalsQuery);
   const states = useQuery(statesQuery);
   const breadth = useQuery(breadthQuery);
