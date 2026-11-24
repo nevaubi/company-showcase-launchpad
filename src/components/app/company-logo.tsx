@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { LOGO_FILES, LOGO_ICON_TILES, LOGO_ICONS, LOGO_TILES, LOGO_WIDE } from "@/lib/logos.generated";
+import { LOGO_FILES, LOGO_ICON_TILES, LOGO_ICONS, LOGO_MONOGRAMS, LOGO_TILES, LOGO_WIDE } from "@/lib/logos.generated";
 import { cn } from "@/lib/utils";
 
 /**
@@ -14,7 +14,10 @@ import { cn } from "@/lib/utils";
  * - a wide mark (a wordmark, listed in LOGO_WIDE) cannot be read squeezed into a square. In the large
  *   plates (lg, xl) the plate widens to the mark's ratio, up to 3:1, and the file is cropped to its ink
  *   so the word fills the plate; in the small tiles (2xs to md) it is not drawn: the company's own
- *   square site icon is shown when one was collected (LOGO_ICONS), else the ticker letters.
+ *   square site icon is shown when one was collected (LOGO_ICONS), else a monogram (LOGO_MONOGRAMS): one or
+ *   two letters of the company's name on a plate tinted with the dominant ink colour of its own wordmark
+ *   (white letters when they reach 4.5:1 on it, else the colour as letters on the light plate, else the
+ *   neutral plate). A monogram is not a logo; the header keeps the real wordmark in its wide plate.
  * Every size comes from the manifest, never from the loaded image, so nothing moves when it loads.
  */
 const EXT = new Map<string, string>();
@@ -28,6 +31,13 @@ const WIDE = new Map<string, { ratio: number; crop: [number, number, number, num
 for (const entry of words(LOGO_WIDE)) {
   const [t, r, l, top, right, bottom] = entry.split(":");
   WIDE.set(t, { ratio: Number(r), crop: [Number(l) / 100, Number(top) / 100, Number(right) / 100, Number(bottom) / 100] });
+}
+
+/** Monograms for wide marks without a square icon: letters, tone (w, c or n) and brand colour. */
+const MONO = new Map<string, { letters: string; tone: "w" | "c" | "n"; colour?: string }>();
+for (const entry of words(LOGO_MONOGRAMS)) {
+  const [t, colour, tone, letters] = entry.split(":");
+  MONO.set(t, { letters, tone: tone as "w" | "c" | "n", colour: colour === "-" ? undefined : `#${colour}` });
 }
 
 export type LogoSize = "2xs" | "xs" | "sm" | "md" | "lg" | "xl";
@@ -61,6 +71,9 @@ export type LogoChoice =
   | { kind: "wide"; url: string; ratio: number; plate: number; crop: [number, number, number, number] }
   /** the company's own square site icon, in a small tile, for a wide mark */
   | { kind: "icon"; url: string; tile: boolean }
+  /** one or two letters of the company's name for a wide mark with no square icon: `w` white on the brand
+   *  colour, `c` the brand colour on the light plate, `n` the neutral plate */
+  | { kind: "monogram"; letters: string; tone: "w" | "c" | "n"; colour?: string }
   /** the ticker's letters */
   | { kind: "letters" };
 
@@ -72,7 +85,9 @@ export function logoChoice(ticker: string, size: LogoSize, src?: string): LogoCh
   if (!wide) return { kind: "mark", url: bundled, tile: TILES.has(t) };
   if (LARGE.has(size)) return { kind: "wide", url: bundled, ratio: wide.ratio, plate: Math.min(wide.ratio, MAX_PLATE_RATIO), crop: wide.crop };
   const icon = logoIconUrl(t);
-  return icon ? { kind: "icon", url: icon, tile: ICON_TILES.has(t) } : { kind: "letters" };
+  if (icon) return { kind: "icon", url: icon, tile: ICON_TILES.has(t) };
+  const mono = MONO.get(t);
+  return mono ? { kind: "monogram", ...mono } : { kind: "letters" };
 }
 
 /* plate size and corner; padding leaves the mark 12, 14, 20, 26, 34 and 46 px inside the 1 px border */
@@ -84,6 +99,9 @@ const BOX: Record<LogoSize, [string, string, number, number]> = {
   lg: ["size-12 rounded-lg", "p-1.5", 48, 6],
   xl: ["size-16 rounded-xl", "p-2", 64, 8],
 };
+
+/* monogram letter size in px for one and for two letters */
+const MONO_PX: Record<LogoSize, [number, number]> = { "2xs": [9, 7], xs: [11, 9], sm: [14, 11], md: [17, 13], lg: [22, 17], xl: [28, 22] };
 
 /** Pixel geometry of a wide plate of height `h` with padding `pad`: plate width and the ink box inside it. */
 export function widePlate(h: number, pad: number, ratio: number) {
@@ -119,6 +137,20 @@ export function CompanyLogo({
   );
   const plate = "inline-flex shrink-0 items-center justify-center overflow-hidden border bg-logo-plate shadow-paper";
   const common = { title: decorative ? undefined : ticker, "aria-hidden": decorative || undefined };
+
+  if (choice.kind === "monogram") {
+    const two = choice.letters.length > 1;
+    const fontPx = MONO_PX[size][two ? 1 : 0];
+    const brand = choice.tone === "w" ? { backgroundColor: choice.colour, borderColor: choice.colour, color: "#fff" } : choice.tone === "c" ? { color: choice.colour } : undefined;
+    return (
+      <span className={cn(plate, box, "p-0", className)} style={brand} data-logo="monogram" data-tone={choice.tone} {...common}>
+        <span className={cn("font-semibold leading-none tracking-tight", choice.tone === "n" && "text-logo-plate-foreground")} style={{ fontSize: fontPx }} aria-hidden>
+          {choice.letters}
+        </span>
+        {decorative ? null : <span className="sr-only">{ticker}</span>}
+      </span>
+    );
+  }
 
   if (choice.kind === "wide") {
     const g = widePlate(h, padPx, choice.ratio);

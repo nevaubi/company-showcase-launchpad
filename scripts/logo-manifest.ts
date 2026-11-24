@@ -12,6 +12,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { inflateSync } from "node:zlib";
+import { COVERAGE } from "../src/lib/coverage";
 
 const DIR = "public/logos";
 const OUT = "src/lib/logos.generated.ts";
@@ -179,7 +180,7 @@ export function logoTiles(manifest: Record<string, string[]>, read: (file: strin
 export const WIDE_RATIO = 2.6;
 
 /** One measured file: sha256 of its bytes, the file's own width/height, and the ink box as fractions (left, top, right, bottom). */
-export type Measured = { sha256: string; box: number; crop: [number, number, number, number] };
+export type Measured = { sha256: string; box: number; crop: [number, number, number, number] } & InkColour;
 
 /** Width/height of what is drawn: the ink box of the file, in the file's own proportions. */
 export const inkRatio = (m: Measured) => (m.box * (m.crop[2] - m.crop[0])) / Math.max(1e-6, m.crop[3] - m.crop[1]);
@@ -207,12 +208,92 @@ export function logoIcons(files: string[]): string[] {
   return files.filter((f) => /^[A-Z0-9.-]+\.png$/.test(f)).map((f) => f.slice(0, -4)).sort();
 }
 
+/* ---------- monograms: wide marks with no square icon of their own ---------- */
+
+/** The light logo plate (--logo-plate, oklch(0.996 0.003 85)) as sRGB, for the contrast rule. */
+export const PLATE_HEX = "fefdf9";
+/** White letters on the brand colour need this contrast (WCAG AA for text). */
+export const WHITE_ON_COLOUR = 4.5;
+/** The brand colour as letters on the light plate needs this much (WCAG for bold glyphs and graphics). */
+export const COLOUR_ON_PLATE = 3;
+/** Under this share of the saturated ink in one hue family the mark is multi-coloured: no single brand colour. */
+export const MIN_INK_MIX = 0.6;
+
+/** WCAG relative luminance of an sRGB colour written as six hex digits. */
+export function luminance(hex: string): number {
+  const ch = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2];
+}
+
+/** WCAG contrast ratio of two colours (1 to 21). */
+export function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Ink colour fields of a measured file (scripts/logo-measure.py). */
+export type InkColour = { ink_rgb?: string; ink_mode?: "hue" | "dark"; ink_mix?: number };
+
+/**
+ * How a monogram plate is drawn: `w` white letters on the brand colour, `c` the brand colour as letters on
+ * the light plate, `n` the neutral plate (dark letters on the light plate). The brand colour is the mark's
+ * dominant ink; a multi-colour mark, a white or near-white ink, a colour neither rule can make legible, or a
+ * company named in `neutral` (the contact-sheet check) gets the neutral plate.
+ */
+export function monogramTone(m: InkColour | undefined, neutral = false): { tone: "w" | "c" | "n"; colour?: string } {
+  const c = m?.ink_rgb;
+  if (neutral || !c || !/^[0-9a-f]{6}$/i.test(c) || (m.ink_mix ?? 0) < MIN_INK_MIX) return { tone: "n" };
+  if (contrast("ffffff", c) >= WHITE_ON_COLOUR) return { tone: "w", colour: c.toLowerCase() };
+  if (contrast(c, PLATE_HEX) >= COLOUR_ON_PLATE) return { tone: "c", colour: c.toLowerCase() };
+  return { tone: "n" };
+}
+
+/** Words that describe the kind of company rather than name it: skipped after the first word ("Agilent Technologies" is "A"). */
+const GENERIC = new Set(["TECHNOLOGIES", "TECHNOLOGY", "INTERNATIONAL", "INDUSTRIES", "SYSTEMS", "BANCORP", "BANCSHARES", "FINANCIAL", "ENTERPRISES", "BRANDS", "PHARMACEUTICALS", "THERAPEUTICS", "SOLUTIONS", "PARTNERS", "WORLDWIDE", "GLOBAL", "HOLDINGS", "SERVICES", "RESOURCES", "PROPERTIES", "REALTY", "LABS", "LABORATORIES", "SCIENCES", "BIOSCIENCES", "ENERGY", "CAPITAL", "INSURANCE", "BANK", "PHARMA", "STORES", "RESTAURANTS", "ELECTRONICS", "SEMICONDUCTOR", "NETWORKS", "SOFTWARE", "MEDICAL", "HEALTH", "HEALTHCARE", "COMPANIES", "COMMUNICATIONS"]);
+const STOP = new Set(["THE", "AND", "OF", "INC", "CORP", "CORPORATION", "CO", "COMPANY", "GROUP", "HOLDINGS", "HOLDING", "PLC", "LTD", "LLC", "LP", "NV", "SA", "AG", "TRUST", "INCORPORATED"]);
+
+/**
+ * One or two letters of the company's name, which can be read at 16 px where a four-letter ticker cannot:
+ * the initials of its first two words (stop words such as "The", "&", "Inc" and "Group" skipped, and after the
+ * first word generic ones such as "Technologies" or "Financial"; a word joined by "&" like "S&P" counts its
+ * parts), or the first letter of a one-word name.
+ */
+export function monogramLetters(name: string): string {
+  const words = name
+    .toUpperCase()
+    .replace(/[’'.]/g, "")
+    .split(/[\s,/&+-]+/)
+    .map((w) => w.replace(/[^A-Z0-9]/g, ""))
+    .filter((w) => w && !STOP.has(w))
+    .filter((w, i) => i === 0 || !GENERIC.has(w));
+  if (!words.length) return name.replace(/[^A-Za-z0-9]/g, "").slice(0, 1).toUpperCase();
+  return words.slice(0, 2).map((w) => w[0]).join("");
+}
+
+/**
+ * Monogram plates as "TICKER:colour:tone:letters" (colour "-" for the neutral plate), sorted, for every wide
+ * mark without a square icon. `names` maps a ticker to its short name; `measured` a ticker to its mark's
+ * measurement; `neutral` lists the tickers the contact-sheet check sent to the neutral plate.
+ */
+export function logoMonograms(wide: string[], icons: string[], names: Map<string, string>, measured: (t: string) => InkColour | undefined, neutral: Set<string>): string[] {
+  const has = new Set(icons);
+  const out: string[] = [];
+  for (const entry of wide) {
+    const t = entry.split(":")[0];
+    if (has.has(t)) continue;
+    const { tone, colour } = monogramTone(measured(t), neutral.has(t));
+    out.push([t, colour ?? "-", tone, monogramLetters(names.get(t) ?? t)].join(":"));
+  }
+  return out.sort();
+}
+
 export function render(
   manifest: Record<string, string[]>,
   tiles: string[] = [],
   wide: string[] = [],
   icons: string[] = [],
   iconTiles: string[] = [],
+  monograms: string[] = [],
 ): string {
   const total = Object.values(manifest).reduce((n, l) => n + l.length, 0);
   const lines = Object.entries(manifest).map(([ext, list]) => `  ${JSON.stringify(ext)}:\n    ${JSON.stringify(list.join(" "))},`);
@@ -235,6 +316,10 @@ export function render(
     "",
     `// ${iconTiles.length} of those icons paint their own square background.`,
     `export const LOGO_ICON_TILES =\n  ${JSON.stringify(iconTiles.join(" "))};`,
+    "",
+    `// ${monograms.length} wide marks with no square icon draw a monogram in small tiles, as TICKER:colour:tone:letters`,
+    "// (tone w: white letters on the colour, c: the colour on the light plate, n: the neutral plate). A monogram is not a logo.",
+    `export const LOGO_MONOGRAMS =\n  ${JSON.stringify(monograms.join(" "))};`,
     "",
   ].join("\n");
 }
@@ -267,7 +352,12 @@ export function build(dir = DIR): string {
   }
   const icons = logoIcons(iconFiles);
   const iconTiles = icons.filter((t) => isTile(pngCorners(read(`icons/${t}.png`))));
-  return render(manifest, logoTiles(manifest, read), logoWide(manifest, fresh), icons, iconTiles);
+  const wide = logoWide(manifest, fresh);
+  const fileOf = new Map(Object.entries(manifest).flatMap(([ext, list]) => list.map((t) => [t, `${t}.${ext}`] as const)));
+  const neutral = new Set(Object.keys(JSON.parse(readFileSync(`${dir}/monogram-neutral.json`, "utf8")) as Record<string, string>));
+  const names = new Map(COVERAGE.map((c) => [c.ticker, c.shortName]));
+  const monograms = logoMonograms(wide, icons, names, (t) => fresh[fileOf.get(t) ?? ""], neutral);
+  return render(manifest, logoTiles(manifest, read), wide, icons, iconTiles, monograms);
 }
 
 if (import.meta.main) {

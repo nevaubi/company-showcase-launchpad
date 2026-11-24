@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { COVERAGE } from "@/lib/coverage";
 import { LOGO_FILES, LOGO_TILES } from "@/lib/logos.generated";
-import { build, inkRatio, isTile, logoManifest, logoWide, pngCorners, WIDE_RATIO, type Measured } from "../../../scripts/logo-manifest";
+import { build, contrast, inkRatio, isTile, logoManifest, logoMonograms, logoWide, monogramLetters, monogramTone, pngCorners, WIDE_RATIO, type Measured } from "../../../scripts/logo-manifest";
 import { isLogoTile, isWideLogo, logoChoice, logoIconUrl, logoUrl, widePlate } from "./company-logo";
 
 /** the marks themselves: public/logos also holds sources.json, aspect.json and the icons folder */
@@ -143,10 +143,14 @@ describe("wide marks", () => {
     expect(logoChoice("AAPL", "xs")).toEqual({ kind: "mark", url: "/logos/AAPL.svg", tile: false });
     // a wide mark with a collected site icon
     expect(logoChoice("LMT", "sm")).toMatchObject({ kind: "icon", url: "/logos/icons/LMT.png" });
-    // a wide mark without one (oracle.com refused the request): letters
+    // a wide mark without one (oracle.com refused the request): a monogram in Oracle's red, never the ticker
     expect(isWideLogo("ORCL")).toBe(true);
     expect(logoIconUrl("ORCL")).toBeUndefined();
-    for (const size of ["2xs", "xs", "sm", "md"] as const) expect(logoChoice("ORCL", size)).toEqual({ kind: "letters" });
+    for (const size of ["2xs", "xs", "sm", "md"] as const) expect(logoChoice("ORCL", size)).toEqual({ kind: "monogram", letters: "O", tone: "w", colour: "#c94735" });
+    // the header keeps the real wordmark
+    expect(logoChoice("ORCL", "lg").kind).toBe("wide");
+    // a covered company with no file at all keeps the letters
+    expect(logoChoice("WAT", "sm")).toEqual({ kind: "letters" });
     // outside coverage the caller's URL is still used
     expect(logoChoice("NOT-COVERED", "sm", "https://example.com/x.png")).toEqual({ kind: "mark", url: "https://example.com/x.png", tile: false });
   });
@@ -169,5 +173,72 @@ describe("wide marks", () => {
       expect(seen.has(icon!.sha256), `${f} shares its bytes with another icon`).toBe(false);
       seen.add(icon!.sha256);
     }
+  });
+
+  it("measures contrast the WCAG way", () => {
+    expect(contrast("ffffff", "000000")).toBeCloseTo(21, 5);
+    expect(contrast("ffffff", "ffffff")).toBe(1);
+    expect(contrast("ffffff", "767676")).toBeCloseTo(4.54, 2); // the classic AA grey
+    expect(contrast("000000", "ffffff")).toBe(contrast("ffffff", "000000"));
+  });
+
+  it("puts white letters on the brand colour only at 4.5:1, else the colour on the light plate, else neutral", () => {
+    // Visa blue: white reads well on it
+    expect(monogramTone({ ink_rgb: "1434cb", ink_mode: "hue", ink_mix: 1 })).toEqual({ tone: "w", colour: "1434cb" });
+    // a red that misses 4.5:1 with white (4.0) but reaches 3:1 on the plate
+    expect(contrast("ffffff", "ee1b2d")).toBeLessThan(4.5);
+    expect(monogramTone({ ink_rgb: "ee1b2d", ink_mode: "hue", ink_mix: 1 })).toEqual({ tone: "c", colour: "ee1b2d" });
+    // a yellow: legible neither way, so the neutral plate
+    expect(monogramTone({ ink_rgb: "ffd200", ink_mode: "hue", ink_mix: 1 })).toEqual({ tone: "n" });
+    // a near-white ink
+    expect(monogramTone({ ink_rgb: "f4f4f4", ink_mode: "dark", ink_mix: 1 })).toEqual({ tone: "n" });
+    // a multi-colour mark: no single brand colour
+    expect(monogramTone({ ink_rgb: "1434cb", ink_mode: "hue", ink_mix: 0.45 })).toEqual({ tone: "n" });
+    // no measurement, or sent to neutral by the contact-sheet check
+    expect(monogramTone(undefined)).toEqual({ tone: "n" });
+    expect(monogramTone({ ink_rgb: "1434cb", ink_mode: "hue", ink_mix: 1 }, true)).toEqual({ tone: "n" });
+    // a black wordmark is the brand colour of a black-and-white brand
+    expect(monogramTone({ ink_rgb: "000000", ink_mode: "dark", ink_mix: 1 })).toEqual({ tone: "w", colour: "000000" });
+  });
+
+  it("writes one or two letters of the company's name, not the ticker", () => {
+    expect(monogramLetters("Oracle")).toBe("O");
+    expect(monogramLetters("Johnson & Johnson")).toBe("JJ");
+    expect(monogramLetters("S&P Global")).toBe("SP");
+    expect(monogramLetters("Agilent Technologies")).toBe("A");
+    expect(monogramLetters("Thermo Fisher Scientific")).toBe("TF");
+    expect(monogramLetters("The Cheesecake Factory")).toBe("CF");
+    expect(monogramLetters("Colgate-Palmolive")).toBe("CP");
+    expect(monogramLetters("3M")).toBe("3");
+  });
+
+  it("gives a monogram to every wide mark without a square icon, and to nothing else", () => {
+    const wide = ["AAA:3.00:0:0:100:100", "BBB:4.00:0:0:100:100", "CCC:5.00:0:0:100:100"];
+    const names = new Map([["AAA", "Alpha Beta"], ["BBB", "Bravo"], ["CCC", "Charlie"]]);
+    const ink: Record<string, Measured> = {
+      AAA: { sha256: "", box: 3, crop: [0, 0, 1, 1], ink_rgb: "1434cb", ink_mode: "hue", ink_mix: 1 },
+      CCC: { sha256: "", box: 5, crop: [0, 0, 1, 1], ink_rgb: "1434cb", ink_mode: "hue", ink_mix: 1 },
+    };
+    expect(logoMonograms(wide, ["BBB"], names, (t) => ink[t], new Set(["CCC"]))).toEqual(["AAA:1434cb:w:AB", "CCC:-:n:C"]);
+    // every wide mark in the folder ends up with exactly one of: its own icon, a monogram
+    const generated = readFileSync("src/lib/logos.generated.ts", "utf8");
+    const list = (name: string) => (generated.match(new RegExp(`${name} =\\s*"([^"]*)"`))?.[1] ?? "").split(" ").filter(Boolean);
+    const wideTickers = list("LOGO_WIDE").map((e) => e.split(":")[0]);
+    const icons = new Set(list("LOGO_ICONS"));
+    const monos = new Set(list("LOGO_MONOGRAMS").map((e) => e.split(":")[0]));
+    for (const t of wideTickers) expect(icons.has(t) !== monos.has(t), t).toBe(true);
+    expect(monos.size + icons.size).toBe(wideTickers.length);
+  });
+
+  it("records the companies that show a monogram (a monogram is not a logo)", () => {
+    const sources = JSON.parse(readFileSync("public/logos/sources.json", "utf8")) as Record<string, { monogram?: { letters: string; tone: string; note: string } }>;
+    const generated = readFileSync("src/lib/logos.generated.ts", "utf8");
+    const monos = (generated.match(/LOGO_MONOGRAMS =\s*"([^"]*)"/)?.[1] ?? "").split(" ").filter(Boolean);
+    expect(monos.length).toBeGreaterThan(0);
+    for (const e of monos) {
+      const [t, , tone, letters] = e.split(":");
+      expect(sources[t]?.monogram, t).toMatchObject({ letters, tone });
+    }
+    expect(Object.values(sources).filter((s) => s.monogram).length).toBe(monos.length);
   });
 });
