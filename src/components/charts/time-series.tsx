@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as d3 from "d3";
 import { cn } from "@/lib/utils";
 
@@ -25,25 +25,32 @@ interface Props {
   endLabels?: boolean;
   yDomain?: [number, number];
   rightFormat?: (v: number) => string;
+  /** Accessible name; the series labels are used when it is left out */
+  label?: string;
 }
 
 /** Datawrapper-style line chart: light grid, direct end labels, hover readout. */
-export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFixed(1), bands, zeroLine, className, endLabels = true, yDomain, rightFormat }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
+export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFixed(1), bands, zeroLine, className, endLabels = true, yDomain, rightFormat, label }: Props) {
+  // A callback ref: the measured element changes when the chart goes from empty to drawn.
+  const [el, ref] = useState<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(600);
   const [hover, setHover] = useState<{ x: number; date: Date } | null>(null);
 
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
     if (el.clientWidth) setWidth(Math.max(240, el.clientWidth));
-    const ro = new ResizeObserver((e) => setWidth(Math.max(240, e[0].contentRect.width)));
+    const ro = new ResizeObserver((e) => setWidth(Math.max(240, Math.round(e[0].contentRect.width))));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [el]);
 
   const hasRight = series.some((s) => s.axis === "right");
-  const margin = { top: 12, right: endLabels ? 74 : hasRight ? 48 : 12, bottom: 24, left: 44 };
+  // With end labels and a right axis together, the axis values sit outside the labels so the two never overlap.
+  // End labels get the room their own text needs (value in 10 px mono, name in 9 px), up to a third of the
+  // width; a name longer than that is shortened with an ellipsis and shown whole on hover.
+  const endRoom = endLabels ? endLabelRoom(series, yFormat, rightFormat, width) : 0;
+  const nameChars = Math.max(6, Math.floor((endRoom - 6) / NAME_GLYPH));
+  const margin = { top: 12, right: endLabels ? endRoom + (hasRight ? 48 : 0) : hasRight ? 48 : 12, bottom: 24, left: 44 };
   const iw = width - margin.left - margin.right;
   const ih = height - margin.top - margin.bottom;
 
@@ -97,6 +104,9 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
       })
     : [];
 
+  // The crosshair sits on the nearest observation, where the dots are, not on the pointer.
+  const snapX = hover ? (readouts.find((r) => r.p) ? x(readouts.find((r) => r.p)!.p.date) : hover.x) : 0;
+
   // Resolve end-label collisions: each label is two lines (value + name), so keep them a
   // full label apart, pushing down first and then back up if the stack runs off the plot.
   const ends = series
@@ -114,7 +124,7 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
 
   return (
     <div ref={ref} className={cn("relative w-full select-none", className)}>
-      <svg width={width} height={height} className="block overflow-visible">
+      <svg width={width} height={height} className="block overflow-visible" role="img" aria-label={label ?? `Line chart: ${series.map((s) => s.label).join(", ")}`}>
         <g transform={`translate(${margin.left},${margin.top})`}>
           {bands?.map((b, i) => (
             <rect
@@ -128,23 +138,23 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
             />
           ))}
           {yTicks.map((t) => (
-            <g key={t} transform={`translate(0,${y(t)})`}>
-              <line x1={0} x2={iw} stroke="var(--border)" strokeDasharray={t === 0 ? undefined : "2 3"} />
+            <g key={t} transform={`translate(0,${Math.round(y(t)) + 0.5})`}>
+              <line x1={0} x2={iw} stroke="var(--border)" strokeDasharray={t === 0 ? undefined : "2 3"} shapeRendering="crispEdges" />
               <text x={-8} dy="0.32em" textAnchor="end" className="fill-muted-foreground font-mono text-[10px]">
                 {yFormat(t)}
               </text>
             </g>
           ))}
-          {zeroLine && <line x1={0} x2={iw} y1={y(0)} y2={y(0)} stroke="var(--foreground)" strokeOpacity={0.5} />}
+          {zeroLine && <line x1={0} x2={iw} y1={Math.round(y(0)) + 0.5} y2={Math.round(y(0)) + 0.5} stroke="var(--foreground)" strokeOpacity={0.5} shapeRendering="crispEdges" />}
           {hasRight &&
             yR.ticks(5).map((t) => (
-              <text key={`r${t}`} x={iw + 8} y={yR(t)} dy="0.32em" className="fill-muted-foreground font-mono text-[10px]">
+              <text key={`r${t}`} x={iw + (endLabels ? endRoom + 8 : 8)} y={yR(t)} dy="0.32em" className="fill-muted-foreground font-mono text-[10px]">
                 {(rightFormat ?? yFormat)(t)}
               </text>
             ))}
           {xTicks.map((t) => (
             <text key={+t} x={x(t)} y={ih + 16} textAnchor="middle" className="fill-muted-foreground font-mono text-[10px]">
-              {d3.utcFormat(iwSpanYears(x) > 3 ? "%Y" : "%b %y")(t)}
+              {d3.utcFormat(iwSpanYears(x) > 3 ? "%Y" : "%b ’%y")(t)}
             </text>
           ))}
           {series.map((s) => (
@@ -168,13 +178,14 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
                   {(e.s.axis === "right" ? (rightFormat ?? yFormat) : yFormat)(e.p.value)}
                 </text>
                 <text dy="0.32em" dx={0} y={11} className="fill-muted-foreground text-[9px]">
-                  {e.s.label.length > 12 ? e.s.label.slice(0, 11) + "…" : e.s.label}
+                  <title>{e.s.label}</title>
+                  {e.s.label.length > nameChars ? e.s.label.slice(0, nameChars - 1) + "…" : e.s.label}
                 </text>
               </g>
             ))}
           {hover && (
             <g>
-              <line x1={hover.x} x2={hover.x} y1={0} y2={ih} stroke="var(--foreground)" strokeOpacity={0.35} />
+              <line x1={Math.round(snapX) + 0.5} x2={Math.round(snapX) + 0.5} y1={0} y2={ih} stroke="var(--foreground)" strokeOpacity={0.35} shapeRendering="crispEdges" />
               {readouts.map(({ s, p }) =>
                 p ? <circle key={s.id} cx={x(p.date)} cy={yOf(s)(p.value)} r={3.5} fill="var(--card)" stroke={s.color} strokeWidth={2} /> : null,
               )}
@@ -184,11 +195,17 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
             width={iw}
             height={ih}
             fill="transparent"
-            onMouseMove={(e) => {
+            style={{ touchAction: "pan-y" }}
+            onPointerMove={(e) => {
               const [mx] = d3.pointer(e);
               setHover({ x: mx, date: x.invert(mx) });
             }}
-            onMouseLeave={() => setHover(null)}
+            onPointerDown={(e) => {
+              const [mx] = d3.pointer(e);
+              setHover({ x: mx, date: x.invert(mx) });
+            }}
+            // a finger lifting is not "leaving": the value read by touch stays on screen
+            onPointerLeave={(e) => e.pointerType === "mouse" && setHover(null)}
           />
         </g>
       </svg>
@@ -209,6 +226,21 @@ export function TimeSeriesChart({ series, height = 260, yFormat = (v) => v.toFix
       )}
     </div>
   );
+}
+
+/** Width of a 10 px mono digit and of a 9 px proportional letter (set for wide letters), in px. */
+const VALUE_GLYPH = 6.2;
+const NAME_GLYPH = 5.6;
+
+function endLabelRoom(series: Props["series"], yFormat: (v: number) => string, rightFormat: ((v: number) => string) | undefined, width: number) {
+  let need = 0;
+  for (const s of series) {
+    const p = s.points[s.points.length - 1];
+    if (!p) continue;
+    const value = (s.axis === "right" ? (rightFormat ?? yFormat) : yFormat)(p.value);
+    need = Math.max(need, value.length * VALUE_GLYPH, s.label.length * NAME_GLYPH);
+  }
+  return Math.round(Math.min(Math.max(56, need + 10), Math.max(56, width / 3)));
 }
 
 function iwSpanYears(x: d3.ScaleTime<number, number>) {
