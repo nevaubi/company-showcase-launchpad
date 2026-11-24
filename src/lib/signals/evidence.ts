@@ -62,9 +62,43 @@ export interface BlockStats {
 const monthIndex = (m: string) => Number(m.slice(0, 4)) * 12 + Number(m.slice(5, 7)) - 1;
 
 /**
+ * Months a hold of `horizon` trading days can reach into: 1 up to 21 days, 2 up to 42.
+ */
+const reach = (horizon: number) => Math.max(1, Math.ceil((Number.isFinite(horizon) && horizon > 0 ? horizon : 1) / 21));
+
+/**
+ * Newey-West lag in months for the Bartlett error. Bartlett weights count only half of the first
+ * autocovariance at lag 1, and a 20-day hold entered late in one month overlaps the next month's
+ * trades enough to make that autocorrelation about 0.23 (review M3); so the lag is doubled, as the
+ * day-level `overlapLag` does: 1 for holds up to 10 days, 2 up to 21, 4 for 40.
+ */
+export const monthLag = (horizon: number) => Math.max(1, Math.ceil((2 * (Number.isFinite(horizon) && horizon > 0 ? horizon : 1)) / 21));
+
+/**
+ * Error of the mean with every autocovariance up to `lag` counted in full (truncated kernel) on an
+ * irregular month grid. Not positive-definite in general, so it is only ever used as one of the
+ * candidates in a maximum with the plain error.
+ */
+export function truncatedSe(x: readonly number[], lag: number, at: readonly number[]): number {
+  const n = x.length;
+  if (n < 2) return NaN;
+  const m = mean(x);
+  let g = 0;
+  for (let i = 0; i < n; i++) g += (x[i] - m) ** 2;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      const d = at[j] - at[i];
+      if (d > lag) break;
+      if (d > 0) g += 2 * (x[i] - m) * (x[j] - m);
+    }
+  }
+  return Math.sqrt(Math.max(g, 0) / (n * (n - 1)));
+}
+
+/**
  * Month-by-month record from the stored curve (running sum of the monthly average net return per
- * trade). The error is the larger of the plain one and a Newey-West one over the months a hold can
- * reach into, so the correction can only widen it.
+ * trade). The error is the largest of the plain one and two overlap-corrected ones (see below), so
+ * the correction can only widen it.
  */
 export function monthlyBlocks(curve: readonly (readonly [string, number])[], horizon: number, from = OOS_START.slice(0, 7), minMonths = 12): BlockStats | null {
   const x: number[] = [], at: number[] = [];
@@ -80,8 +114,9 @@ export function monthlyBlocks(curve: readonly (readonly [string, number])[], hor
   if (x.length < minMonths) return null;
   const mu = mean(x), sd = std(x, mu);
   if (!(sd > 0)) return null;
-  const lag = Math.max(1, Math.ceil((Number.isFinite(horizon) ? horizon : 1) / 21));
-  const se = Math.max(sd / Math.sqrt(x.length), hacSe(x, lag, at));
+  // The largest of three errors: plain, Bartlett at the doubled lag, and the months a hold reaches
+  // counted in full. Overlap can only widen the error, never narrow it.
+  const se = Math.max(sd / Math.sqrt(x.length), hacSe(x, monthLag(horizon), at), truncatedSe(x, reach(horizon), at));
   return { months: x.length, mean: mu, sd, se, t: mu / se, positive: x.filter((v) => v > 0).length, nEff: (sd / se) ** 2 };
 }
 

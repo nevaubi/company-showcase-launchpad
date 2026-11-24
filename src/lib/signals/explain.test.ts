@@ -89,9 +89,9 @@ describe("the evidence in words, on the production record of 20 Nov 2026", () =>
 
   it("says why a rule is not listed, without calling a backtest proven", () => {
     const vol = book.byKey.get("volPremium:L:20")!;
-    expect(recordLine(vol)).toBe("+0.67% a trade after costs since 2022, 33 of 58 months up, t 1.88");
+    expect(recordLine(vol)).toBe("+0.67% a trade after costs since 2022, 33 of 58 months up, t 1.78");
     // The verdict leads; a backtest average never stands without its t and the words that it is not told apart from luck.
-    expect(evidenceLine(vol, book.discovery)).toBe("Not listed: cannot be told apart from luck (t 1.88, needs 2.98). Backtest +0.67% a trade after costs since 2022, 33 of 58 months up.");
+    expect(evidenceLine(vol, book.discovery)).toBe("Not listed: cannot be told apart from luck (t 1.78, needs 2.98). Backtest +0.67% a trade after costs since 2022, 33 of 58 months up.");
     for (const e of book.variants) {
       const line = evidenceLine(e, book.discovery);
       if (e.blocks && e.blocks.mean > 0) expect(line).toMatch(/^Not listed/);

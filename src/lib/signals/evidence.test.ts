@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { adjustedT, finalize, overlapLag, variantPartial, type DailyAgg, type Regime, type VariantProof } from "./backtest";
-import { buildEvidence, EVIDENCE, LISTED, liveCheck, monthlyBlocks, priorScale, tQuantile } from "./evidence";
+import { buildEvidence, EVIDENCE, LISTED, liveCheck, monthLag, monthlyBlocks, priorScale, tQuantile, truncatedSe } from "./evidence";
 import type { LiveDay } from "./live";
 import { variantMeta, type LiveRecord, type VariantMeta } from "./setups";
 import { bhFdr, bhQ, expectedMaxZ, hacSe, tCdf, tHac } from "./stats";
@@ -260,6 +260,31 @@ describe("today's regime", () => {
   });
 });
 
+describe("overlap across months", () => {
+  it("doubles the Bartlett lag for holds that reach into the next month", () => {
+    expect([1, 5, 10, 11, 20, 21, 40].map(monthLag)).toEqual([1, 1, 1, 2, 2, 2, 4]);
+  });
+
+  it("counts the next month's covariance in full in the truncated error (hand case)", () => {
+    // Mean 2.5; squares 5; neighbours (-1.5)(-0.5) + (-0.5)(0.5) + (0.5)(1.5) = 1.25, counted twice.
+    expect(truncatedSe([1, 2, 3, 4], 1, [0, 1, 2, 3])).toBeCloseTo(Math.sqrt(7.5 / 12), 12);
+    // A gap of two months is beyond lag 1.
+    expect(truncatedSe([1, 2, 3, 4], 1, [0, 2, 4, 6])).toBeCloseTo(Math.sqrt(5 / 12), 12);
+  });
+
+  it("never narrows the error below the plain one", () => {
+    // Alternating months: negative autocovariance, so both corrections fall below the plain error.
+    const curve: [string, number][] = [];
+    let cum = 0;
+    for (let k = 0; k < 30; k++) {
+      cum += k % 2 ? -0.01 : 0.012;
+      curve.push([`${2022 + Math.floor(k / 12)}-${String((k % 12) + 1).padStart(2, "0")}`, cum]);
+    }
+    const b = monthlyBlocks(curve, 20)!;
+    expect(b.se).toBeCloseTo(b.sd / Math.sqrt(b.months), 12);
+  });
+});
+
 describe("probation", () => {
   const real = { "rsi2:L:3": 0.9 };
   const withLive = (live: LiveRecord) => universe(31, real).map((v) => (v.key === "rsi2:L:3" ? { ...v, live } : v));
@@ -402,10 +427,11 @@ describe("production record of 20 Nov 2026", () => {
     expect(e("volPremium:L:20").tStored).toBeCloseTo(2.51753, 5);
     expect(e("volPremium:L:20").blocks!.months).toBe(58);
     expect(e("volPremium:L:20").blocks!.mean).toBeCloseTo(0.00667, 5);
-    expect(e("volPremium:L:20").blocks!.t).toBeCloseTo(1.88, 2);
-    // Pre-earnings run-up: 2.28 stored, 0.90 by months. Insider buying, 20 days: 2.28 and 1.24.
+    // 1.88 with Bartlett at lag 1; 1.78 once the month after is counted in full (review M3).
+    expect(e("volPremium:L:20").blocks!.t).toBeCloseTo(1.78, 2);
+    // Pre-earnings run-up: 2.28 stored, 0.90 by months. Insider buying, 20 days: 2.28 and 1.23 (1.24 before M3).
     expect(e("earnRunup:L:6").blocks!.t).toBeCloseTo(0.9, 2);
-    expect(e("insider:L:20").blocks!.t).toBeCloseTo(1.24, 2);
+    expect(e("insider:L:20").blocks!.t).toBeCloseTo(1.23, 2);
     // The short-selling flow shorts lose money reliably either way.
     expect(e("shortFlow:S:5").blocks!.t).toBeLessThan(-3.5);
   });
@@ -423,7 +449,7 @@ describe("production record of 20 Nov 2026", () => {
     // First Benjamini-Hochberg step at 10% over 46 tests: p = 0.1 / 46, on Student's t for a typical record (about 50 months).
     expect(d.firstBarT).toBeCloseTo(2.98, 2);
     expect(book.variants.filter((e) => LISTED.includes(e.grade))).toHaveLength(0);
-    expect(Math.min(...book.variants.map((e) => e.q))).toBeCloseTo(0.706, 2);
+    expect(Math.min(...book.variants.map((e) => e.q))).toBeCloseTo(0.714, 2);
     // The spread of real edges is within one standard error of zero, and regimes add nothing.
     expect(book.prior.raw).toBeLessThan(book.prior.se);
     expect(book.prior.value).toBe(0);
