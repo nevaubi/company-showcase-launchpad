@@ -507,7 +507,9 @@ function ResultsTable({
   const span = cols.length + 1 + (sim ? 1 : 0);
   const head = cn("border-b bg-card", fits && `sticky ${STICKY} z-20`);
   return (
-    <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")}>
+    // overflow-anchor: none: rows are keyed by ticker, so after a sort the browser's scroll anchoring would
+    // follow a row that moved and shift the page (review H2: 6 of 60 sort clicks).
+    <div ref={wrap} className={cn("relative", !fits && "overflow-x-auto scrollbar-thin")} style={{ overflowAnchor: "none" }}>
       <table className={cn("border-separate border-spacing-0 text-[13px] leading-5", fits ? "w-full" : "w-max min-w-full")}>
         <thead>
           <tr>
