@@ -100,10 +100,13 @@ const SECTIONS = {
  */
 const FRAMED = "min-w-0 [&>section]:rounded-md [&>section]:border [&>section]:bg-card [&>section]:shadow-paper";
 
-/** A section of the page: the nav jumps to its id, and it stacks its panels with the page's one gap. */
+/**
+ * A section of the page: the nav jumps to its id, and it stacks its panels with the page's one gap. Panels that have
+ * no data for the company render nothing; a section left with nothing in it takes no space (and loses its nav chip).
+ */
 function Section({ id, children, className }: { id: string; children: ReactNode; className?: string }) {
   return (
-    <section id={id} className={cn("grid min-w-0 scroll-mt-28 grid-cols-1 gap-3", className)}>
+    <section id={id} className={cn("grid min-w-0 scroll-mt-28 grid-cols-1 gap-3 [&:not(:has(>*:not(:empty)))]:hidden", className)}>
       {children}
     </section>
   );
@@ -159,7 +162,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <Section id={SECTIONS.earnings.id} className="xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <EarningsSection ticker={ticker} data={data} />
-        <div data-section="Latest earnings call" className="min-w-0">
+        <div data-section="Latest earnings call" className="min-w-0 empty:hidden">
           <EarningsCallPanel ticker={ticker} />
         </div>
       </Section>
@@ -175,7 +178,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
 
       <Section id={SECTIONS.operating.id}>
         <ReportedKpis ticker={ticker} />
-        <div data-section="operating-insights" className="min-w-0">
+        <div data-section="operating-insights" className="min-w-0 empty:hidden">
           <KpiInsightsPanel ticker={ticker} />
         </div>
       </Section>

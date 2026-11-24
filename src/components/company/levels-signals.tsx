@@ -26,13 +26,8 @@ function LevelBlock({ label, level, price }: { label: string; level: Level | nul
 export function LevelsAndSignals({ ticker }: { ticker: string }) {
   const long = usePrices(ticker, "5y");
   const setup = useMemo(() => chartSetup((long.data?.bars ?? []) as Bar[]), [long.data]);
-  if (!setup) {
-    return (
-      <IrPanel section="Levels and signals" title="Levels and signals" subtitle={long.isLoading ? "Loading prices" : `Not enough daily history for ${ticker} to place levels or test rules`}>
-        <p className={cn("px-4 py-3", IR.caption)}>{long.isLoading ? "Reading the daily bars." : "The rules need at least 60 sessions."}</p>
-      </IrPanel>
-    );
-  }
+  // fewer than 60 sessions on file: nothing to place levels on or test rules with
+  if (!setup) return null;
   return (
     <IrPanel
       section="Levels and signals"

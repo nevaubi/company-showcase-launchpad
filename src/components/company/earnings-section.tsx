@@ -106,30 +106,27 @@ export function EarningsSection({ ticker, data }: { ticker: string; data: Compan
             <p className={cn("mt-0.5", IR.stat)}>{DASH}</p>
           )}
         </div>
-        <div className="min-w-0 px-4 py-3">
-          <p className={cn("truncate", IR.caption)}>Last EPS against consensus</p>
-          {est.isLoading ? (
-            <Skeleton className="mt-1 h-6 w-24" />
-          ) : lastSurprise ? (
-            <>
-              <p className={cn("mt-0.5 truncate", IR.stat)}>
-                ${lastSurprise.actual!.toFixed(2)} <span className="text-[13px] font-normal text-muted-foreground">against ${lastSurprise.estimate!.toFixed(2)}</span>
-              </p>
-              <p className={cn("mt-0.5", IR.caption)}>
-                {lastSurprise.surprisePct != null && <span className={cn("num", tone(lastSurprise.surprisePct))}>{signedPct(lastSurprise.surprisePct)}</span>} quarter to {fmtDate(lastSurprise.quarter)}
-                {beats ? ` · above consensus in ${beats.beats} of ${beats.n}` : ""} ·{" "}
-                <Link to="/app/companies/$ticker/estimates" params={{ ticker }} className="text-link hover:underline">
-                  estimates
-                </Link>
-              </p>
-            </>
-          ) : (
-            <>
-              <p className={cn("mt-0.5", IR.stat)}>{DASH}</p>
-              <p className={cn("mt-0.5", IR.caption)}>no consensus history stored for {ticker}</p>
-            </>
-          )}
-        </div>
+        {(est.isLoading || lastSurprise) && (
+          <div className="min-w-0 px-4 py-3">
+            <p className={cn("truncate", IR.caption)}>Last EPS against consensus</p>
+            {lastSurprise ? (
+              <>
+                <p className={cn("mt-0.5 truncate", IR.stat)}>
+                  ${lastSurprise.actual!.toFixed(2)} <span className="text-[13px] font-normal text-muted-foreground">against ${lastSurprise.estimate!.toFixed(2)}</span>
+                </p>
+                <p className={cn("mt-0.5", IR.caption)}>
+                  {lastSurprise.surprisePct != null && <span className={cn("num", tone(lastSurprise.surprisePct))}>{signedPct(lastSurprise.surprisePct)}</span>} quarter to {fmtDate(lastSurprise.quarter)}
+                  {beats ? ` · above consensus in ${beats.beats} of ${beats.n}` : ""} ·{" "}
+                  <Link to="/app/companies/$ticker/estimates" params={{ ticker }} className="text-link hover:underline">
+                    estimates
+                  </Link>
+                </p>
+              </>
+            ) : (
+              <Skeleton className="mt-1 h-6 w-24" />
+            )}
+          </div>
+        )}
       </StatGrid>
       {shown.length > 0 && (
         <div className="border-t px-4 py-3" data-section="Earnings reactions">

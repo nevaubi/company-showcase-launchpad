@@ -105,6 +105,8 @@ function Insiders({ ticker, data }: { ticker: string; data: CompanyDataset }) {
 function ShortVolume({ ticker }: { ticker: string }) {
   const q = useQuery(shortVolumeQuery(ticker));
   const t = useMemo(() => shortTrend(q.data ?? []), [q.data]);
+  // no recent daily files for the ticker: no block
+  if (!t && !q.isLoading && !q.isError) return null;
   return (
     <div className="min-w-0 px-4 py-3" data-section="Short volume">
       <Head title="Short sale volume" note={t ? `${t.days} trading days to ${fmtDate(t.asOf)} · FINRA daily files` : q.isLoading ? "Loading" : "FINRA daily files"} />
@@ -121,7 +123,7 @@ function ShortVolume({ ticker }: { ticker: string }) {
           </div>
         </>
       ) : (
-        <p className={cn("mt-2", IR.caption)}>{q.isLoading ? "Reading the daily files." : q.isError ? "The short sale volume could not be read just now." : `No recent daily short sale volume is stored for ${ticker}.`}</p>
+        <p className={cn("mt-2", IR.caption)}>{q.isLoading ? "Reading the daily files." : "The short sale volume could not be read just now."}</p>
       )}
       <p className={cn("mt-1.5", IR.caption)}>
         Short sales as a share of the off-exchange volume FINRA publishes each day. It includes market makers' hedging and is not short interest.{" "}
@@ -139,6 +141,8 @@ function Options({ ticker, data }: { ticker: string; data: CompanyDataset }) {
   const next = useNextEarnings(ticker, releases);
   const c = useMemo(() => optionsContext(q.data ?? [], next && !next.estimated ? next.date : null), [q.data, next]);
   const last = q.data?.[0];
+  // no recorded snapshot for the ticker: no block
+  if (!c && !q.isLoading && !q.isError) return null;
   return (
     <div className="min-w-0 px-4 py-3" data-section="Options context">
       <Head title="Options" note={c ? `Close of ${fmtDate(c.asOf)}${last ? ` at ${fmtPrice(last.price)}` : ""} · Cboe delayed chain · ${c.recorded} recorded day${c.recorded === 1 ? "" : "s"}` : q.isLoading ? "Loading" : "Cboe delayed chain"} />
@@ -166,7 +170,7 @@ function Options({ ticker, data }: { ticker: string; data: CompanyDataset }) {
           </dl>
         </>
       ) : (
-        <p className={cn("mt-2", IR.caption)}>{q.isLoading ? "Reading the snapshots." : q.isError ? "The options snapshots could not be read just now." : `No options snapshot is recorded for ${ticker} yet.`}</p>
+        <p className={cn("mt-2", IR.caption)}>{q.isLoading ? "Reading the snapshots." : "The options snapshots could not be read just now."}</p>
       )}
       <p className={cn("mt-1.5", IR.caption)}>
         Context, not a signal: the history is only as long as the recorded days.{" "}
@@ -183,7 +187,7 @@ export function PositioningPanel({ ticker, data }: { ticker: string; data: Compa
     <IrPanel
       section="Ownership and positioning"
       title="Ownership and positioning"
-      subtitle="Insider trades from Form 4, short sale volume from FINRA, options from Cboe · each block states its date"
+      subtitle="Insider trades from Form 4, short sale volume from FINRA and options from Cboe where they are on file · each block states its date"
       bodyClassName="p-0"
       actions={
         <Button size="xs" variant="ghost" asChild>
@@ -193,7 +197,7 @@ export function PositioningPanel({ ticker, data }: { ticker: string; data: Compa
         </Button>
       }
     >
-      <div className="grid grid-cols-1 divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+      <div className="grid grid-cols-1 divide-y lg:auto-cols-fr lg:grid-flow-col lg:grid-cols-none lg:divide-x lg:divide-y-0">
         <Insiders ticker={ticker} data={data} />
         <ShortVolume ticker={ticker} />
         <Options ticker={ticker} data={data} />

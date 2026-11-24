@@ -10,7 +10,6 @@ import { IrPanel } from "@/components/ir/panel";
 import { IR } from "@/components/ir/typography";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useSource } from "@/components/source/source-context";
 import { externalLogo } from "@/components/supply/supply-map-meta";
 import { supabase } from "@/integrations/supabase/client";
@@ -107,13 +106,13 @@ function Side({ ticker, title, rows, total, empty }: { ticker: string; title: st
   );
 }
 
-function Tagged({ ticker, rows }: { ticker: string; rows: TaggedConcentration[] }) {
+function Tagged({ ticker, rows, first }: { ticker: string; rows: TaggedConcentration[]; first: boolean }) {
   const { open } = useSource();
   if (!rows.length) return null;
   // "revenue" as the filing's own caption words it is often "Sales revenue net": say revenue; other totals keep the caption
   const basis = (r: TaggedConcentration) => (r.benchmark === "revenue" ? "revenue" : (r.benchmarkLabel?.toLowerCase() ?? r.benchmark));
   return (
-    <div className="border-t px-4 py-3" data-section="Stated concentration">
+    <div className={cn("px-4 py-3", !first && "border-t")} data-section="Stated concentration">
       <p className={IR.group}>Concentration the company states</p>
       <p className={IR.caption}>
         Shares tagged in the {rows[0].form} for the period to {fmtDate(rows[0].periodEnd)}. A report may name these parties only as "Customer A".
@@ -148,13 +147,16 @@ export function KeyRelationshipsPanel({ ticker }: { ticker: string }) {
     return keyRelationships(ticker, rows, names);
   }, [links.data, ticker]);
   const tagged = useMemo(() => taggedConcentration(own.data ?? []), [own.data]);
-  const none = !links.isLoading && rel.totals.customers + rel.totals.suppliers === 0;
+  const named = rel.totals.customers + rel.totals.suppliers > 0;
   const others = [rel.totals.partners ? `${rel.totals.partners} partner${rel.totals.partners === 1 ? "" : "s"}` : null, rel.totals.competitors ? `${rel.totals.competitors} competitor${rel.totals.competitors === 1 ? "" : "s"}` : null].filter(Boolean).join(" and ");
+  // a company no filing names, with no tagged concentration, has no such section
+  if (links.isLoading || (!named && own.isLoading)) return null;
+  if (!named && !tagged.length && !links.isError) return null;
   return (
     <IrPanel
       section="Key relationships"
       title="Key relationships"
-      subtitle={`Customers and suppliers named in current 10-K and 10-Q filings, largest stated share first · each row opens its sentence${others ? ` · ${others} also named` : ""}`}
+      subtitle={named ? `Customers and suppliers named in current 10-K and 10-Q filings, largest stated share first · each row opens its sentence${others ? ` · ${others} also named` : ""}` : `No current filing names a customer or supplier of ${nameOf(ticker)}; its own report states the shares below`}
       bodyClassName="p-0"
       actions={
         <Button size="xs" variant="ghost" asChild>
@@ -164,21 +166,15 @@ export function KeyRelationshipsPanel({ ticker }: { ticker: string }) {
         </Button>
       }
     >
-      {links.isLoading ? (
-        <div className="p-4">
-          <Skeleton className="h-24" />
-        </div>
-      ) : links.isError ? (
+      {links.isError ? (
         <p className="px-4 py-3 text-[13px] text-muted-foreground">The filing links could not be read just now.</p>
-      ) : none ? (
-        <p className="px-4 py-3 text-[13px] text-muted-foreground">No current filing names a customer or supplier of {nameOf(ticker)} that could be verified against its sentence.</p>
-      ) : (
+      ) : named ? (
         <div className="grid grid-cols-1 divide-y lg:grid-cols-2 lg:divide-x lg:divide-y-0">
           <Side ticker={ticker} title="Suppliers" rows={rel.suppliers} total={rel.totals.suppliers} empty="No supplier is named." />
           <Side ticker={ticker} title="Customers" rows={rel.customers} total={rel.totals.customers} empty="No customer is named." />
         </div>
-      )}
-      <Tagged ticker={ticker} rows={tagged} />
+      ) : null}
+      <Tagged ticker={ticker} rows={tagged} first={!named && !links.isError} />
     </IrPanel>
   );
 }
