@@ -74,8 +74,8 @@ export function AboutPanel({ ticker, data }: { ticker: string; data: CompanyData
             <Skeleton className="h-40" />
           ) : (
             <>
-              <p className="text-sm font-semibold leading-5 tracking-tight">{p.description}</p>
-              <div className="mt-2 space-y-2 text-[13px] leading-5 text-foreground/90">
+              {p.description && <p className="mb-2 text-sm font-semibold leading-5 tracking-tight">{p.description}</p>}
+              <div className="space-y-2 text-[13px] leading-5 text-foreground/90">
                 {paras.map((t, i) => (
                   <p key={i}>{t}</p>
                 ))}
@@ -86,12 +86,17 @@ export function AboutPanel({ ticker, data }: { ticker: string; data: CompanyData
                     Wikipedia <ArrowUpRight className="size-3" />
                   </a>
                 )}
-                <Button size="xs" variant="outline" asChild>
-                  <a href={p.website} target="_blank" rel="noreferrer">Website <ArrowUpRight /></a>
-                </Button>
-                <Button size="xs" variant="outline" asChild>
-                  <a href={p.investorRelations} target="_blank" rel="noreferrer">Investor relations <ArrowUpRight /></a>
-                </Button>
+                {/* Profiles of the generated coverage list can lack both addresses: a button with no address is not drawn. */}
+                {p.website && (
+                  <Button size="xs" variant="outline" asChild>
+                    <a href={p.website} target="_blank" rel="noreferrer">Website <ArrowUpRight /></a>
+                  </Button>
+                )}
+                {p.investorRelations && (
+                  <Button size="xs" variant="outline" asChild>
+                    <a href={p.investorRelations} target="_blank" rel="noreferrer">Investor relations <ArrowUpRight /></a>
+                  </Button>
+                )}
               </div>
             </>
           )}

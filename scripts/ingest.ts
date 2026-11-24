@@ -38,6 +38,7 @@ import type {
   UniverseFundamentals,
 } from "../src/lib/financials/types";
 import { COVERAGE, historyCik, isBundled, BENCHMARKS, MACRO_SERIES, type MacroDef } from "../src/lib/coverage";
+import { coverageDetails } from "../src/lib/coverage-details.server";
 import { summarize, type MacroSummary } from "../src/lib/macro";
 
 const UA = "FiledUnder Research research@filedunder.ai";
@@ -645,6 +646,9 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
     insiders.find((t) => /chief executive officer/i.test(t.role) && !/worldwide|segment|division/i.test(t.role))?.owner ??
     "";
   const b = sub.addresses.business;
+  // The generated coverage list keeps website, IR address, founding year and description in the
+  // server-only details file; without this read their profiles were built with none of the four.
+  const details = coverageDetails(cfg.ticker);
   const profile: CompanyProfile = {
     ticker: cfg.ticker,
     cik: pad(cik),
@@ -659,11 +663,11 @@ async function ingestCompany(cfg: (typeof COVERAGE)[number]): Promise<UniverseEn
     ein: sub.ein,
     phone: sub.phone,
     address: { street: [b.street1, b.street2].filter(Boolean).join(", "), city: b.city, state: b.stateOrCountry, zip: b.zipCode },
-    website: cfg.website,
-    investorRelations: cfg.ir,
-    description: cfg.description,
+    website: cfg.website ?? details.website,
+    investorRelations: cfg.ir ?? details.ir,
+    description: cfg.description ?? details.description,
     logo: await loadLogo(cfg.ticker),
-    founded: cfg.founded,
+    founded: cfg.founded ?? details.founded,
     ceo,
     sharesOutstanding,
     sharesOutstandingAsOf: cover[0]?.end ?? null,

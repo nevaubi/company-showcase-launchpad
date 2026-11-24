@@ -6,6 +6,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { companyCiks, type CoverageCompany } from "@/lib/coverage";
 import { classifyIrDocument, irFileExt, IR_FILE_RE } from "@/lib/ir/classify";
+import { isIrFileAllowed } from "@/lib/ir/source-guard";
 import { archiveUrl, fetchSec } from "@/lib/sec.server";
 
 const BUCKET = "ir-documents";
@@ -201,6 +202,8 @@ export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 
       }
     }
   } else todo = (await irSiteCandidates(c)).filter((k) => !known.has(k.url)).slice(0, max);
+  // A file the reviewed list shows to be another company's is never stored (source-guard.ts).
+  todo = todo.filter((k) => isIrFileAllowed(c.ticker, k.url));
   const results: { url: string; stored: boolean; reason?: string }[] = [];
   for (const k of todo) {
     try {

@@ -1,6 +1,6 @@
 // Executors for the assistant tools that read what the Filed Under pipeline has already computed: KPIs extracted
 // from company documents (each value with its document, page and printed quote), KPI signals, earnings previews and
-// scorecards, the quant read, correlation peers, short interest, special situations, the 30-day brief and the tables
+// scorecards, correlation peers, short interest, special situations, the 30-day brief and the tables
 // parsed out of IR PDFs. These are the facts the pipeline spends hours producing; the assistant should start here
 // before re-deriving anything from raw filings or the web.
 import type { QueryClient } from "@tanstack/react-query";

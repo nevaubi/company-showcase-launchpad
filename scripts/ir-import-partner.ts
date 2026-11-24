@@ -1,9 +1,12 @@
 // Registers the copied partner IR files (ir-documents/partner/...) as regular ir_documents rows,
 // so our own readers, renditions and series builds treat them like any other stored document.
-// Skips files we already hold (same source URL or sha256) and files not yet copied.
+// Skips files we already hold (same source URL or sha256), files not yet copied, and files the
+// reviewed list in src/lib/ir/source-guard-list.ts shows to be another company's: the partner store
+// still holds those, and a deleted row would otherwise come back on the next import.
 // Usage: bun scripts/ir-import-partner.ts [--tickers=AAPL,MSFT]
 import { sb, args, log } from "./lib/supa";
 import { notFuture } from "../src/lib/ir/doc-meta";
+import { isIrFileAllowed } from "../src/lib/ir/source-guard";
 
 const KIND: Record<string, string> = {
   release: "press-release", supplement: "supplement", presentation: "presentation",
@@ -24,7 +27,7 @@ const tickers = args.tickers
   ? args.tickers.split(",")
   : [...new Set((await all<{ ticker: string }>((f) => sb.from("partner_mirror").select("ticker").eq("kind", "original").eq("status", "done").range(f, f + 999))).map((r) => r.ticker))];
 log(`importing ${tickers.length} companies`);
-let added = 0, dup = 0, missing = 0;
+let added = 0, dup = 0, missing = 0, refused = 0;
 for (const t of tickers) {
   const { data: blob } = await sb.storage.from("datasets").download(`ir/${t}.json`);
   if (!blob) continue;
@@ -35,6 +38,7 @@ for (const t of tickers) {
   const rows = [];
   for (const d of docs) {
     if (!copied.has(d.storage_path)) { missing++; continue; }
+    if (!isIrFileAllowed(t, d.url)) { refused++; continue; }
     if (urls.has(d.url) || (d.sha256 && shas.has(d.sha256))) { dup++; continue; }
     urls.add(d.url); if (d.sha256) shas.add(d.sha256);
     const ext = (d.ext ?? "").replace(/^\./, "").toLowerCase();
@@ -53,4 +57,4 @@ for (const t of tickers) {
   added += rows.length;
   log(`${t}: +${rows.length}`);
 }
-log(`done: ${added} added, ${dup} already held, ${missing} not copied yet`);
+log(`done: ${added} added, ${dup} already held, ${missing} not copied yet, ${refused} refused as another company's`);
