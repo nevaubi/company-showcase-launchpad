@@ -8,6 +8,7 @@ import { Sparkline } from "@/components/charts/sparkline";
 import { Skeleton } from "@/components/ui/skeleton";
 import { BENCHMARKS, COVERAGE, MACRO_TILES } from "@/lib/coverage";
 import { macroSummariesQuery, pricesQuery } from "@/lib/data";
+import type { MacroSummary } from "@/lib/macro";
 import { changeText, fmtMacro } from "@/lib/macro";
 import { fmtDate, ordinal } from "@/lib/format";
 import { marketsQuery } from "@/lib/markets/query";
@@ -706,7 +707,7 @@ export function MacroContext() {
 }
 
 type Tile = (typeof MACRO_TILES)[number];
-type Summary = ReturnType<Map<string, Parameters<typeof changeText>[1]>["get"]>;
+type Summary = MacroSummary | undefined;
 
 /** One macro series as a table row: title (opens Macro), latest value, change with its date, trend, and optionally the sectors it is tagged to. */
 export function DriverRow({ d, r, sectors }: { d: Tile; r: Summary; sectors?: boolean }) {

@@ -18,7 +18,9 @@ import {
   type GroupFile,
   type Overview,
 } from "@/lib/sectors/groups";
-import { Section, useWidth } from "./ui";
+import { noteWeek } from "@/lib/sectors/notes";
+import { placeLabels } from "@/lib/sectors/labels";
+import { Section, Stepper, useWidth } from "./ui";
 
 /* ---------- relative rotation graph ---------- */
 const QUAD = [
@@ -48,17 +50,17 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4w" |
   const x = (v: number) => m + ((v - (100 - span)) / (2 * span)) * (W - 2 * m);
   const y = (v: number) => m + ((100 + span - v) / (2 * span)) * (H - 2 * m);
   const week = pts.reduce((a, p) => (p[0] > a ? p[0] : a), "");
-  // Labels that would print on top of each other step down until they clear (12 px apart within 34 px across).
-  const labelY = new Map<string, number>();
-  const placed: { x: number; y: number }[] = [];
-  for (const g of [...sectors].sort((a, b) => ov.etf_rrg[b.etf!].at(-1)![2] - ov.etf_rrg[a.etf!].at(-1)![2])) {
-    const last = ov.etf_rrg[g.etf!].at(-1)!;
-    const lx = x(last[1]);
-    let ly = y(last[2]) + 3.5;
-    while (placed.some((p) => Math.abs(p.x - lx) < 34 && Math.abs(p.y - ly) < 12)) ly += 12;
-    placed.push({ x: lx, y: ly });
-    labelY.set(g.slug, ly);
-  }
+  // Labels beside their point, the furthest-right sector first, stepped by whole lines until no two boxes overlap.
+  const order = [...sectors].sort((a, b) => ov.etf_rrg[b.etf!].at(-1)![1] - ov.etf_rrg[a.etf!].at(-1)![1]);
+  const labels = new Map(
+    placeLabels(
+      order.map((g) => {
+        const last = ov.etf_rrg[g.etf!].at(-1)!;
+        return { id: g.slug, x: x(last[1]), y: y(last[2]), w: g.etf!.length * 7 + 1 };
+      }),
+      { left: 0, right: W, top: 0, bottom: H },
+    ).map((l) => [l.id, l]),
+  );
   return (
     <Section
       id="rotation"
@@ -95,8 +97,7 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4w" |
               const tr = ov.etf_rrg[g.etf!].slice(-weeks);
               const last = tr[tr.length - 1];
               const c = quadOf(last[1], last[2]).c;
-              const right = x(last[1]) < W - m - 40;
-              const ly = labelY.get(g.slug) ?? y(last[2]) + 3.5;
+              const lab = labels.get(g.slug);
               return (
                 <g
                   key={g.slug}
@@ -112,7 +113,7 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4w" |
                     <circle key={p[0]} cx={x(p[1])} cy={y(p[2])} r={1.6} fill="var(--muted-foreground)" opacity={0.5} />
                   ))}
                   <circle cx={x(last[1])} cy={y(last[2])} r={4.5} fill={c} stroke="var(--background)" strokeWidth={1.5} />
-                  <text x={x(last[1]) + (right ? 7 : -7)} y={ly} textAnchor={right ? "start" : "end"} fontSize={11} fontWeight={600} fill="var(--foreground)">
+                  <text x={lab?.x ?? x(last[1]) + 7} y={lab?.y ?? y(last[2]) + 3.5} textAnchor={lab?.anchor ?? "start"} fontSize={11} fontWeight={600} fill="var(--foreground)">
                     {g.etf}
                   </text>
                   <title>{`${g.name} (${g.etf}) · week of ${last[0]}: RS-ratio ${last[1].toFixed(1)}, RS-momentum ${last[2].toFixed(1)}`}</title>
@@ -131,29 +132,52 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4w" |
 }
 
 /* ---------- weekly notes ---------- */
-export function SectorNotes({ only }: { only?: string }) {
+/**
+ * One week of notes, the newest by default, with a stepper to earlier weeks. `only` keeps one sector's
+ * notes (a sector page, or an industry page showing its sector's note); `week` and `onWeek` keep the week
+ * in the address. Renders nothing when there is no note, so the caller can give its neighbour the row.
+ */
+export function SectorNotes({ only, onlyName, week, onWeek }: { only?: string; onlyName?: string; week?: string; onWeek: (w: string | undefined) => void }) {
   const q = useQuery(notesQuery);
   const navigate = useNavigate();
+  const nw = useMemo(() => noteWeek(q.data?.notes, { only, want: week }), [q.data, only, week]);
   if (q.isLoading) return <Skeleton className="h-32" />;
-  const notes = (q.data?.notes ?? []).filter((n) => !only || n.slug === only);
-  if (!notes.length) return null;
+  if (!nw.week || !nw.notes.length) return null;
+  const newest = nw.weeks[0];
+  const step = (w: string | null) => (w ? () => onWeek(w === newest ? undefined : w) : undefined);
   return (
     <Section
       id="notes"
       name="Weekly notes"
-      title={only ? "This week's note" : "Weekly sector notes"}
-      caption={`Written around stored figures: each underlined number opens the aggregate it cites · week of ${fmtDate(notes[0].week)}`}
+      title={only ? (onlyName ? `Weekly note on ${onlyName}` : "Weekly note") : "Weekly sector notes"}
+      caption={`${nw.week === newest ? "Latest week" : "An earlier week"} · ${nw.weeks.length} ${nw.weeks.length === 1 ? "week" : "weeks"} on file · each underlined number opens the aggregate it cites`}
+      actions={
+        nw.weeks.length > 1 ? (
+          <Stepper
+            label="Week of the notes"
+            value={`Week of ${fmtDate(nw.week)}`}
+            onEarlier={step(nw.earlier)}
+            onLater={step(nw.later)}
+            earlier={nw.earlier ? `week of ${fmtDate(nw.earlier)}` : null}
+            later={nw.later ? `week of ${fmtDate(nw.later)}` : null}
+          />
+        ) : (
+          <span className="num text-[11px] text-muted-foreground">Week of {fmtDate(nw.week)}</span>
+        )
+      }
     >
       <div className={cn("grid grid-cols-1 gap-px bg-border", !only && "md:grid-cols-2")}>
-        {notes.map((n) => (
-          <article key={n.slug} className="min-w-0 bg-card px-3.5 py-3">
-            <p className="text-[11px] text-muted-foreground">{n.sector}</p>
+        {nw.notes.map((n) => (
+          <article key={`${n.slug}-${n.week}`} className="min-w-0 bg-card px-3.5 py-3">
+            <p className="text-[11px] text-muted-foreground">
+              {n.sector} · week of {fmtDate(n.week)}
+            </p>
             <h3 className="mt-0.5 text-[13px] font-semibold leading-snug">
-              <Link to="/app/sectors/g/$slug" params={{ slug: n.slug }} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <Link to="/app/sectors/$sector" params={{ sector: n.sector }} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {n.title}
               </Link>
             </h3>
-            <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+            <p className="mt-1.5 text-[13px] leading-7 text-muted-foreground">
               {noteParts(n).map((p, i) =>
                 typeof p === "string" ? (
                   <Fragment key={i}>{p}</Fragment>
@@ -165,12 +189,12 @@ export function SectorNotes({ only }: { only?: string }) {
                     onClick={() => {
                       const f = n.facts[p.id];
                       navigate({
-                        to: "/app/sectors/g/$slug",
-                        params: { slug: n.slug },
+                        to: "/app/sectors/$sector",
+                        params: { sector: n.sector },
                         search: f?.ref?.type === "agg" && f.ref.metric ? { m: f.ref.metric, q: f.ref.q } : {},
                       });
                     }}
-                    className="num rounded-sm px-0.5 font-medium text-foreground underline decoration-dotted underline-offset-2 hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="num inline-flex h-7 items-center rounded-sm px-0.5 align-baseline font-medium text-foreground underline decoration-dotted underline-offset-2 hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     {p.text}
                   </button>
@@ -185,6 +209,12 @@ export function SectorNotes({ only }: { only?: string }) {
       </div>
     </Section>
   );
+}
+
+/** Whether a note will show for this selection, so a page can lay out the row before the notes render. */
+export function useHasNotes(only?: string) {
+  const q = useQuery(notesQuery);
+  return q.isLoading ? null : noteWeek(q.data?.notes, { only }).notes.length > 0;
 }
 
 /* ---------- quarterly aggregates with the breakdown behind each point ---------- */
