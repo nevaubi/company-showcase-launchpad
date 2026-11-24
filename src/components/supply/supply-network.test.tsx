@@ -60,15 +60,26 @@ describe("SupplyNetwork", () => {
     expect(screen.getByText(/Isolated: TSMC/)).toBeInTheDocument();
   });
 
-  it("a card's isolate button asks for that name, and shows as pressed while it is the one isolated", () => {
+  it("the open card carries the isolate button: it asks for that name and shows as pressed while it is the one isolated", () => {
     const onIsolate = vi.fn();
-    const { rerender } = render(<SupplyNetwork {...props} onIsolate={onIsolate} />);
+    const { rerender } = render(<SupplyNetwork {...props} selected="supplier:TSMC" onIsolate={onIsolate} />);
     const button = screen.getByRole("button", { name: "Isolate TSMC" });
     expect(button).toHaveAttribute("aria-pressed", "false");
+    /* unopened cards keep their whole width for the name */
+    expect(screen.queryByRole("button", { name: "Isolate AMD" })).toBeNull();
     fireEvent.click(button);
     expect(onIsolate).toHaveBeenCalledWith({ kind: "node", key: "supplier:TSMC" });
     rerender(<SupplyNetwork {...props} onIsolate={onIsolate} isolate={new Set(["supplier:TSMC"])} isolatedKey="supplier:TSMC" />);
     expect(screen.getByRole("button", { name: "Stop isolating TSMC" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps the key the same whatever is isolated or shocked, so nothing above the evidence changes height on a phone", () => {
+    const key = (c: HTMLElement) => c.querySelector('[data-section="Network legend"]')!.querySelectorAll("li, p:not(.sr-only)").length;
+    const plain = render(<SupplyNetwork {...props} onIsolate={() => {}} />);
+    const before = key(plain.container);
+    plain.unmount();
+    const busy = render(<SupplyNetwork {...props} onIsolate={() => {}} isolate={new Set(["supplier:TSMC"])} isolateLabel="TSMC" isolatedKey="supplier:TSMC" impacts={new Map()} />);
+    expect(key(busy.container)).toBe(before);
   });
 
   it("a group's isolate button asks for that relation", () => {

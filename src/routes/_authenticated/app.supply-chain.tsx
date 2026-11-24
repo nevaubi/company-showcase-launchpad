@@ -216,6 +216,8 @@ function SupplyChainPage() {
      The page is not scrolled. The map above may get taller or shorter, so what the reader pressed is held where it is on
      screen, and when the map is out of view a cue offers to go there. */
   const pressed = useRef<Element | null>(null);
+  /* what the reader last pressed, by pointer or by keyboard (Enter in a search field presses no button: nothing is held) */
+  const press = (e: { target: EventTarget }) => { pressed.current = e.target instanceof Element ? e.target.closest("button, a, [role='option']") : null; };
   const endHold = useRef<() => void>(() => {});
   useEffect(() => () => endHold.current(), []);
   const go = useCallback((tk: string, keepCountry: string | null = null) => {
@@ -249,14 +251,16 @@ function SupplyChainPage() {
   const statements = useMemo(() => graph.flatMap((n) => n.links), [graph]);
   const failed = linksQuery.isError && !links;
   const drawn = view === "chain" ? (fullChain?.nodes.length ?? 0) > 1 : graph.length > 0;
+  /* while the shock tab is open the Network draws it: said in the canvas header, where it costs no height */
+  const shockNote = tab === "shock" && view === "network" ? `Shock on ${names[src] ?? src}: dashed cards are not reached` : null;
   const status = (
-    <IsolationStatus label={isolated?.label ?? null} note={view === "chain" ? isolated?.chainNote : null} onClear={clearIsolation}
-      hint={view === "chain" ? "Click a company or a line to isolate its pathway" : view === "globe" ? "Click a marker to read its filing sentences" : "Click a card to read its filing sentences"} />
+    <IsolationStatus label={isolated?.label ?? null} onClear={clearIsolation}
+      hint={shockNote ?? (view === "globe" ? "Click a marker to read its filing sentences" : "Click a card to read its filing sentences")} />
   );
   const lit = isolated ? graph.filter((n) => isolated.lit.has(n.key) || isolated.relation === n.relation) : graph;
 
   return (
-    <div onClickCapture={(e) => { pressed.current = e.target instanceof Element ? e.target.closest("button, a, [role='option']") : null; }}>
+    <div onClickCapture={press} onKeyDownCapture={(e) => { if (e.key === "Enter" || e.key === " ") press(e); }}>
       <PageHeader
         eyebrow="Filings and data"
         title="Supply chain map"
@@ -303,7 +307,7 @@ function SupplyChainPage() {
                 </div>
               ) : view === "chain" && chain ? (
                 <ValueChain chain={chain} flow={chainFlow} onFlow={setChainFlow} product={chainProduct} onProduct={setChainProduct} size={chainSize}
-                  isolated={isolated} onIsolate={onIsolate} names={names} onOpenText={openLink} onOpenTag={openTag} status={status} />
+                  isolated={isolated} onIsolate={onIsolate} onOpenText={openLink} onOpenTag={openTag} />
               ) : (
                 <>
                   {/* one line that never wraps on a wide screen, so what is isolated can change without moving the map */}

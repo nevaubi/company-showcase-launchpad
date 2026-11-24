@@ -1,10 +1,10 @@
 // The column beside the supply-chain map. Its panel follows the reader down the page so the evidence for a pick is
 // always next to it, and it never jumps: when its content grows (another tab, a longer list) the column makes room
 // and the panel stays where it is. A panel taller than the window is released into the flow while the reader scrolls
-// through it. The decisions are pure (`nextFollow`, `followRoom` in page-nav.ts); this file measures and applies them.
+// through it. Once the reader is past the column it is left alone (`columnBehind`). The decisions are pure (`nextFollow`, `followRoom` in page-nav.ts); this file measures and applies them.
 // It only positions the panel: the window's scroll position is never touched.
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
-import { FOLLOW_START, followRoom, nextFollow, PANEL_TOP, type FollowState } from "@/lib/supply/page-nav";
+import { columnBehind, FOLLOW_START, followRoom, nextFollow, PANEL_TOP, type FollowState } from "@/lib/supply/page-nav";
 import { cn } from "@/lib/utils";
 
 const MARGIN = 16;
@@ -38,7 +38,10 @@ export function FollowPanel({ id, resetKey, minWidth, className, children }: {
         put(p, "position", ""); put(p, "top", ""); put(p, "marginTop", ""); put(c, "minHeight", "");
         return;
       }
-      const cellTop = c.getBoundingClientRect().top, rect = p.getBoundingClientRect(), vh = window.innerHeight;
+      const cellRect = c.getBoundingClientRect();
+      /* the reader is past the column (a company picked from a list further down): leave it exactly as it is */
+      if (columnBehind(cellRect.bottom, PANEL_TOP)) return;
+      const cellTop = cellRect.top, rect = p.getBoundingClientRect(), vh = window.innerHeight;
       const prev = state.current;
       const next = reset ? FOLLOW_START : nextFollow(prev, { cellTop, panelTop: rect.top, panelHeight: rect.height, viewportHeight: vh, dir }, PANEL_TOP, MARGIN);
       state.current = next;

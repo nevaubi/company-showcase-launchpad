@@ -1,16 +1,17 @@
 // End-to-end value chain view: tiers of suppliers → company → tiers of customers, every link sized by the share or
-// dollars a filing states. Clicking a company or a line isolates the pathway through it: the rest dims, a strip above
+// dollars a filing states. Clicking a company or a line isolates the pathway through it: the rest dims, a band above
 // the drawing lists each link of the pathway with its stated figure and a button that opens the sentence, and the
 // evidence panel and the table of links follow. Wide screens draw columns; phones get the same tiers as a list.
-import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, FileText, Focus, Lock, Search, ShieldCheck, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CompanyLogo } from "@/components/app/company-logo";
-import { Segmented } from "@/components/app/segmented";
+import { Segmented, type SegOption } from "@/components/app/segmented";
 import { RELATION_COLOR } from "@/components/supply/supply-map-meta";
+import { ClearIsolation } from "@/components/supply/supply-toolbar";
 import { BASIS_WORD, CHAIN_FLOWS, LINK_TYPE_LABEL, TIER_LABEL, type Chain, type ChainEdge, type ChainFlow, type ChainNode, type TaggedShare } from "@/lib/supply/chain";
-import { edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
+import { CHAIN, edgePath, edgeWidth, layoutChain } from "@/lib/supply/chain-layout";
 import type { RiskLink } from "@/lib/supply/core";
 import { chainEdgePath, chainPath, pathHops, type Isolated, type PathHop } from "@/lib/supply/isolate";
 import type { IsolateRequest } from "@/lib/supply/isolate-contract";
@@ -59,14 +60,11 @@ export interface ValueChainProps {
   /** what the page isolates, resolved against this chain */
   isolated: Isolated | null;
   onIsolate: (request: IsolateRequest) => void;
-  names: Record<string, string>;
   onOpenText: OpenText;
   onOpenTag: OpenTag;
-  /** right end of the toolbar row: what is isolated, or a hint */
-  status?: ReactNode;
 }
 
-export function ValueChain({ chain, flow, onFlow, product, onProduct, size, isolated, onIsolate, onOpenText, onOpenTag, status }: ValueChainProps) {
+export function ValueChain({ chain, flow, onFlow, product, onProduct, size, isolated, onIsolate, onOpenText, onOpenTag }: ValueChainProps) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const wide = width >= 640;
   /** the pathway under the pointer or the keyboard focus: a preview of what a click would isolate */
@@ -85,17 +83,17 @@ export function ValueChain({ chain, flow, onFlow, product, onProduct, size, isol
   const what = size === "dollars" ? "stated dollars, or a stated share of the seller's revenue" : "the stated share";
   const empty = chain.nodes.length <= 1;
 
-  const focusNode = byKey.get(chain.focus);
+  const focusName = byKey.get(chain.focus)?.name ?? chain.focus;
   /* the pathway in two halves, each on its own line: into the company, and out of it */
   const upHops = hops.filter((h) => h.to.tier <= 0), downHops = hops.filter((h) => h.from.tier >= 0);
   const litCount = isolated?.chainEdges?.size ?? 0;
+  const pick = wide ? "Click a company or a line" : "Tap a company";
 
   return (
     <div data-section="Value chain" className="flex min-w-0 flex-col">
-      {/* one line that never wraps on a wide screen, so what is isolated can change without moving the drawing */}
-      <div className="grid grid-cols-1 items-center gap-x-3 gap-y-2 border-b px-3.5 py-2 sm:grid-cols-[auto_minmax(0,14rem)_minmax(0,1fr)]">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-3.5 py-2">
         <Segmented label="What flows" value={flow} options={FLOW_OPTIONS} onChange={onFlow} />
-        <label className="relative min-w-0">
+        <label className="relative min-w-0 flex-1 basis-40 sm:max-w-56">
           <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <Input value={product} onChange={(ev) => onProduct(ev.target.value)} placeholder="Product: wafers, GPUs" aria-label="Filter by product" className="h-8 pl-7 pr-7 text-xs" />
           {product && (
@@ -104,24 +102,27 @@ export function ValueChain({ chain, flow, onFlow, product, onProduct, size, isol
             </button>
           )}
         </label>
-        <div className="flex h-7 min-w-0 items-center sm:justify-end">{status}</div>
       </div>
 
-      {/* the isolated pathway, in a band of fixed height: picking, extending or clearing a pathway never moves the drawing */}
-      {wide && !empty && (
-        <div data-section="Isolated pathway" className="grid h-[76px] grid-rows-2 gap-y-1 border-b px-3.5 py-2">
-          {hops.length > 0 ? (
-            <>
-              <PathRow label="Upstream" hops={upHops} size={size} onOpenText={onOpenText} onOpenTag={onOpenTag} hint={`Pick a supplier to extend the pathway upstream of ${focusNode?.name ?? chain.focus}`} />
-              <PathRow label="Downstream" hops={downHops} size={size} onOpenText={onOpenText} onOpenTag={onOpenTag} hint={`Pick a customer to extend the pathway downstream of ${focusNode?.name ?? chain.focus}`} />
-            </>
-          ) : (
-            <>
-              <PathRow label="Pathway" hops={[]} size={size} onOpenText={onOpenText} onOpenTag={onOpenTag}
-                hint={isolated?.chainNodes ? `${isolated.label}: ${litCount} of ${chain.edges.length} links are lit. Click a company or a line to isolate one pathway.` : isolated?.chainNote ? `${isolated.chainNote}. Click a company or a line to isolate a pathway.` : "Click a company or a line to isolate the pathway through it. Each link then shows its stated figure and opens its sentence."} />
-              <PathRow label="" hops={[]} size={size} onOpenText={onOpenText} onOpenTag={onOpenTag} hint={`A supplier and then a customer make one pathway through ${focusNode?.name ?? chain.focus}. Esc clears it.`} />
-            </>
-          )}
+      {/* The isolated pathway, in a band of fixed height on every screen: picking, extending or clearing a pathway never
+          moves the drawing under it. The control that clears it sits at the end of the band. */}
+      {!empty && (
+        <div data-section="Isolated pathway" className="flex h-[76px] items-center gap-2 border-b px-3.5 py-2">
+          <div className="grid min-w-0 flex-1 grid-rows-2 gap-y-1">
+            {hops.length > 0 ? (
+              <>
+                <PathRow label="Upstream" hops={upHops} size={size} short={!wide} onOpenText={onOpenText} onOpenTag={onOpenTag} hint={`Pick a supplier to extend the pathway upstream of ${focusName}`} />
+                <PathRow label="Downstream" hops={downHops} size={size} short={!wide} onOpenText={onOpenText} onOpenTag={onOpenTag} hint={`Pick a customer to extend the pathway downstream of ${focusName}`} />
+              </>
+            ) : (
+              <>
+                <PathRow label="Pathway" hops={[]} size={size} onOpenText={onOpenText} onOpenTag={onOpenTag}
+                  hint={isolated?.chainNodes ? `${isolated.label}: ${litCount} of ${chain.edges.length} links are lit. ${pick} to isolate one pathway.` : isolated?.chainNote ? `${isolated.chainNote}. ${pick} to isolate a pathway.` : `${pick} to isolate the pathway through it. Each link then shows its stated figure and opens its sentence.`} />
+                <PathRow label="" hops={[]} size={size} onOpenText={onOpenText} onOpenTag={onOpenTag} hint={`A supplier and then a customer make one pathway through ${focusName}.${wide ? " Esc clears it." : ""}`} />
+              </>
+            )}
+          </div>
+          {isolated && <ClearIsolation label={isolated.label} onClear={() => onIsolate({ kind: "clear" })} />}
         </div>
       )}
 
@@ -151,6 +152,7 @@ export function ValueChain({ chain, flow, onFlow, product, onProduct, size, isol
           <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="inline-block h-0.5 w-4 rounded" style={{ background: RELATION_COLOR.supplier }} />into the company</li>
           <li className="inline-flex items-center gap-1.5"><span aria-hidden="true" className="inline-block h-0.5 w-4 rounded" style={{ background: RELATION_COLOR.customer }} />out of the company</li>
           <li className="inline-flex items-center gap-1.5"><Lock aria-hidden="true" className="size-3 text-negative" />single source stated</li>
+          <li className="inline-flex items-center gap-1.5"><ShieldCheck aria-hidden="true" className="size-3 text-positive" />both companies' filings state it</li>
         </ul>
       )}
     </div>
@@ -169,12 +171,13 @@ function StripNode({ n }: { n: ChainNode }) {
 
 /**
  * One half of the isolated pathway as a single line: seller, what the filing states about the link (its kind and its
- * figure), a button that opens the sentence, buyer. The line never wraps: names and words shorten first.
+ * figure), a button that opens the sentence, buyer. The line never wraps: names and words shorten first, and a long
+ * pathway or a narrow screen (`short`) drops the kind and keeps the figure.
  */
-function PathRow({ label, hops, size, hint, onOpenText, onOpenTag }: { label: string; hops: PathHop[]; size: ChainSize; hint: string; onOpenText: OpenText; onOpenTag: OpenTag }) {
-  const short = hops.length > 2;
+function PathRow({ label, hops, size, hint, short: narrow = false, onOpenText, onOpenTag }: { label: string; hops: PathHop[]; size: ChainSize; hint: string; short?: boolean; onOpenText: OpenText; onOpenTag: OpenTag }) {
+  const short = narrow || hops.length > 2;
   return (
-    <div className="grid h-7 min-w-0 grid-cols-[5.25rem_minmax(0,1fr)] items-center gap-2">
+    <div className="grid h-7 min-w-0 grid-cols-[4.75rem_minmax(0,1fr)] items-center gap-2">
       <span className="eyebrow truncate">{label}</span>
       {hops.length === 0 ? <p className="truncate text-[11px] leading-4 text-muted-foreground" title={hint}>{hint}</p> : (
         <ol aria-label={`${label} pathway`} className="flex min-w-0 items-center gap-1.5 overflow-hidden">
@@ -184,20 +187,20 @@ function PathRow({ label, hops, size, hint, onOpenText, onOpenTag }: { label: st
             const dollars = e?.dollars != null ? `≈ ${fmtCompactUsd(e.dollars)}` : null;
             const figure = size === "dollars" ? (dollars ?? share) : (share ?? dollars);
             const kind = e && !short && e.types[0] ? LINK_TYPE_LABEL(e.types[0]) : null;
-            const text = e ? ([kind, figure].filter(Boolean).join(" · ") || "named, no figure") : "no stated link";
-            const label = `${h.from.name} sells to ${h.to.name}`;
-            const full = e ? [label, ...e.types.map(LINK_TYPE_LABEL), shareText(e), dollars, e.sole && "single source stated", e.confirmed && "both companies' filings state it"].filter(Boolean).join(" · ") : `${label}: no filing states this link directly`;
+            const text = e ? ([kind, figure].filter(Boolean).join(" · ") || (short ? "" : "named, no figure")) : "no stated link";
+            const pair = `${h.from.name} sells to ${h.to.name}`;
+            const full = e ? [pair, ...e.types.map(LINK_TYPE_LABEL), shareText(e), dollars, e.sole && "single source stated", e.confirmed && "both companies' filings state it"].filter(Boolean).join(" · ") : `${pair}: no filing states this link directly`;
             return (
               <Fragment key={`${h.from.key}>${h.to.key}`}>
                 {i === 0 && <StripNode n={h.from} />}
                 <li className="inline-flex h-7 min-w-0 shrink-[2] items-center gap-1 text-[11px] leading-4 text-muted-foreground" title={full}>
-                  <span className="sr-only">{label}:</span>
-                  <span className={cn("num min-w-0 truncate", figure && "text-foreground")}>{text}</span>
+                  <span className="sr-only">{pair}:</span>
+                  {text && <span className={cn("num min-w-0 truncate", figure && "text-foreground")}>{text}</span>}
                   {e?.sole && <Lock className="size-3 shrink-0 text-negative" aria-label="single source stated" />}
                   {e?.confirmed && <ShieldCheck className="size-3 shrink-0 text-positive" aria-label="both companies' filings state it" />}
                   {e && (
-                    <button type="button" onClick={() => openFirst(e, label.replace(" sells to ", " → "), onOpenText, onOpenTag)} aria-label={`Open the source sentence: ${label}`} title="Open the sentence in the filing"
-                      className="inline-flex h-6 shrink-0 items-center gap-1 rounded bg-highlight-soft px-1.5 font-medium text-foreground transition-colors duration-150 hover:bg-highlight hover:text-highlight-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+                    <button type="button" onClick={() => openFirst(e, pair.replace(" sells to ", " → "), onOpenText, onOpenTag)} aria-label={`Open the source sentence: ${pair}`} title="Open the sentence in the filing"
+                      className="inline-flex h-7 min-w-7 shrink-0 items-center justify-center gap-1 rounded bg-highlight-soft px-1.5 font-medium text-foreground transition-colors duration-150 hover:bg-highlight hover:text-highlight-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
                       <FileText className="size-3" aria-hidden="true" />{!short && "Source"}
                     </button>
                   )}
@@ -227,6 +230,7 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
   onEdge: (e: ChainEdge) => void;
 }) {
   const L = useMemo(() => layoutChain(chain, width), [chain, width]);
+  const compact = L.boxW < CHAIN.compact;
   const maxD = Math.max(0, ...chain.edges.map((e) => e.dollars ?? 0));
   const degree = useMemo(() => {
     const out = new Map<string, number>(), into = new Map<string, number>();
@@ -236,6 +240,12 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
   const sole = useMemo(() => new Set(chain.edges.filter((e) => e.sole).flatMap((e) => [e.from, e.to]).filter((k) => k !== chain.focus)), [chain]);
   /* lit links are drawn last so they sit on top of the dimmed ones */
   const edges = useMemo(() => [...chain.edges].sort((a, b) => Number(lit?.edges.has(a.key) ?? false) - Number(lit?.edges.has(b.key) ?? false)), [chain.edges, lit]);
+  const drawn = edges.flatMap((e) => {
+    const a = L.boxes.get(e.from), b = L.boxes.get(e.to);
+    if (!a || !b) return [];
+    const atTarget = (degree.out.get(e.from) ?? 0) > (degree.into.get(e.to) ?? 0);
+    return [{ e, g: edgePath(a, b, atTarget), on: !lit || lit.edges.has(e.key), upstream: (byKey.get(e.to)?.tier ?? 0) <= 0 }];
+  });
   return (
     <div className="relative" style={{ height: L.height }}>
       {L.columns.map((c) => (
@@ -244,22 +254,12 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
         </p>
       ))}
       <svg width={L.width} height={L.height} viewBox={`0 0 ${L.width} ${L.height}`} role="img" aria-label={`Links of the value chain around ${byKey.get(chain.focus)?.name ?? chain.focus}. The same links are listed in the table below.`} className="absolute inset-0 block">
-        {edges.map((e) => {
-          const a = L.boxes.get(e.from), b = L.boxes.get(e.to);
-          if (!a || !b) return null;
-          const upstream = (byKey.get(e.to)?.tier ?? 0) <= 0;
+        {drawn.map(({ e, g, on, upstream }) => {
           const { width: w, sized } = edgeWidth(e, size, maxD);
-          const atTarget = (degree.out.get(e.from) ?? 0) > (degree.into.get(e.to) ?? 0);
-          const g = edgePath(a, b, atTarget);
-          const on = !lit || lit.edges.has(e.key);
-          const tag = tagOf(e, size);
           const from = byKey.get(e.from)?.name ?? e.from, to = byKey.get(e.to)?.name ?? e.to;
           return (
             <g key={e.key} opacity={on ? 1 : 0.16} className="transition-opacity duration-150 motion-reduce:transition-none">
               <path d={g.d} fill="none" stroke={upstream ? RELATION_COLOR.supplier : RELATION_COLOR.customer} strokeOpacity={sized ? (lit && on ? 0.85 : 0.6) : lit && on ? 0.8 : 0.42} strokeWidth={lit && on && !sized ? 1.75 : w} strokeLinecap="round" />
-              {tag && on && (
-                <text x={g.lx} y={g.ly} textAnchor={g.anchor} className="num fill-foreground" style={{ fontSize: 11, paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}>{tag}</text>
-              )}
               {/* a wide invisible stroke makes the line easy to hit; the table below gives the keyboard the same action for every link */}
               <path d={g.d} fill="none" stroke="transparent" strokeWidth={14} className="cursor-pointer" style={{ pointerEvents: "stroke" }}
                 onClick={() => onEdge(e)} onMouseEnter={() => onPreview(chainEdgePath(chain, e))} onMouseLeave={() => onPreview(null)}>
@@ -280,8 +280,8 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
             data-agent-click
             data-key={n.key}
             aria-pressed={focus ? undefined : pressed}
-            aria-label={`${n.name}, ${TIER_LABEL(n.tier).toLowerCase()}${sole.has(n.key) ? ", single source stated" : ""}. ${focus ? "Show the whole chain" : pressed ? "On the isolated pathway" : "Isolate its pathway"}`}
-            title={n.name}
+            aria-label={`${n.name}${n.ticker ? ` (${n.ticker})` : ""}, ${TIER_LABEL(n.tier).toLowerCase()}${sole.has(n.key) ? ", single source stated" : ""}. ${focus ? "Show the whole chain" : pressed ? "On the isolated pathway" : "Isolate its pathway"}`}
+            title={n.ticker ? `${n.name} (${n.ticker})` : n.name}
             onClick={() => onNode(n.key)}
             onMouseEnter={() => onPreview(focus ? null : chainPath(chain, n.key))} onMouseLeave={() => onPreview(null)}
             onFocus={() => onPreview(focus ? null : chainPath(chain, n.key))} onBlur={() => onPreview(null)}
@@ -294,12 +294,29 @@ function ChainColumns({ chain, byKey, width, lit, inPath, size, onPreview, onNod
             )}
           >
             <CompanyLogo ticker={logoKey(n)} size="xs" decorative />
-            <span className="min-w-0 flex-1 truncate font-medium">{n.name}</span>
+            <span className="min-w-0 flex-1">
+              {compact ? (
+                <span className={cn("block truncate font-medium", n.ticker && "num")}>{n.ticker ?? n.name}</span>
+              ) : n.ticker ? (
+                <>
+                  <span className="block truncate font-medium leading-4">{n.name}</span>
+                  <span className={cn("num block truncate text-[10px] leading-3", focus ? "opacity-80" : "text-muted-foreground")}>{n.ticker}</span>
+                </>
+              ) : (
+                <span className="line-clamp-2 font-medium leading-[15px]">{n.name}</span>
+              )}
+            </span>
             {sole.has(n.key) && <Lock className="size-3 shrink-0 text-negative" aria-hidden="true" />}
-            {n.ticker && <span className={cn("num shrink-0 text-[11px]", focus ? "opacity-80" : "text-muted-foreground")}>{n.ticker}</span>}
           </button>
         );
       })}
+      {/* the figures are written over the boxes' edges, so a figure wider than the gutter is never cut off by a box */}
+      <svg width={L.width} height={L.height} viewBox={`0 0 ${L.width} ${L.height}`} aria-hidden="true" className="pointer-events-none absolute inset-0 block">
+        {drawn.map(({ e, g, on }) => {
+          const tag = on ? tagOf(e, size) : null;
+          return tag ? <text key={e.key} x={g.lx} y={g.ly} textAnchor={g.anchor} className="num fill-foreground" style={{ fontSize: 11, paintOrder: "stroke", stroke: "var(--card)", strokeWidth: 3 }}>{tag}</text> : null;
+        })}
+      </svg>
     </div>
   );
 }
@@ -407,13 +424,13 @@ export function ChainEvidence({ chain, isolated, names, onFocus, onOpenText, onO
                       ev.kind === "text" ? (
                         <li key={`t${ev.link.id}`}>
                           <blockquote className="border-l-2 border-highlight pl-2 text-xs italic leading-relaxed text-muted-foreground">“{ev.link.quote}”</blockquote>
-                          <button type="button" onClick={() => onOpenText(ev.link, label)} className="mt-1 inline-flex min-h-6 items-center gap-1 rounded bg-highlight-soft px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors duration-150 hover:bg-highlight hover:text-highlight-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+                          <button type="button" onClick={() => onOpenText(ev.link, label)} className="mt-1 inline-flex min-h-7 items-center gap-1 rounded bg-highlight-soft px-2 py-0.5 text-[11px] font-medium text-foreground transition-colors duration-150 hover:bg-highlight hover:text-highlight-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
                             <FileText className="size-3" aria-hidden="true" /> {names[ev.link.ticker] ?? ev.link.ticker} {ev.link.form}, {fmtDate(ev.link.filed)}
                           </button>
                         </li>
                       ) : (
                         <li key={`x${j}`} className="text-xs">
-                          <button type="button" onClick={() => onOpenTag(ev.fact)} className="inline-flex min-h-6 items-center gap-1 rounded bg-highlight-soft px-2 py-0.5 text-left text-[11px] font-medium text-foreground transition-colors duration-150 hover:bg-highlight hover:text-highlight-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+                          <button type="button" onClick={() => onOpenTag(ev.fact)} className="inline-flex min-h-7 items-center gap-1 rounded bg-highlight-soft px-2 py-0.5 text-left text-[11px] font-medium text-foreground transition-colors duration-150 hover:bg-highlight hover:text-highlight-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
                             <Tag className="size-3 shrink-0" aria-hidden="true" /> Tagged in {names[ev.fact.ticker] ?? ev.fact.ticker}'s {ev.fact.form}: “{ev.fact.label}” {(ev.fact.pct * 100).toFixed(1)}% of {ev.fact.benchmark}, period ending {fmtDate(ev.fact.period_end)}
                           </button>
                         </li>
@@ -440,14 +457,21 @@ export function ChainEvidence({ chain, isolated, names, onFocus, onOpenText, onO
 }
 
 type EdgeSort = "dollars" | "share" | "evidence";
-const SORT_LABEL: Record<EdgeSort, string> = { share: "Stated share", dollars: "≈ Dollars", evidence: "Filings" };
+const SORT_LABEL: Record<EdgeSort, string> = { share: "Share", dollars: "≈ Dollars", evidence: "Filings" };
+const SORT_TITLE: Record<EdgeSort, string> = {
+  share: "The share a filing states, and what it is a share of",
+  dollars: "Dollars the sentence states, or a stated share of the seller's revenue over the last 12 months",
+  evidence: "How many filings state the link. The button opens the first.",
+};
+const SORT_OPTIONS: SegOption<EdgeSort>[] = [{ v: "dollars", l: "Dollars" }, { v: "share", l: "Share" }, { v: "evidence", l: "Filings" }];
+const CELL = "@[640px]:table-cell @[640px]:border-b @[640px]:align-top";
 
 /**
  * Every link drawn in the chain as a table: who sells what to whom, the stated share and the dollars it implies (with
  * how they were worked out), and the filings that state it. It follows what is isolated the way the drawing does: the
- * links inside it stay lit and the rest dim, and no row changes place, so the row under the pointer never moves. A
- * row's source button opens its first filing; its isolate button does what clicking the line does, so the keyboard
- * reaches every link.
+ * links inside it stay lit and the rest dim, and no row changes place or size, so the row under the pointer never
+ * moves. A row's filings button opens its first filing; its isolate button does what clicking the line does, so the
+ * keyboard reaches every link. In a narrow column the same rows stack (the section is its own size container).
  */
 export function ChainTable({ chain, names, revenue, isolated, onIsolate, onOpenText, onOpenTag }: {
   chain: Chain;
@@ -466,6 +490,8 @@ export function ChainTable({ chain, names, revenue, isolated, onIsolate, onOpenT
     return [...chain.edges].sort((a, b) => v(b) - v(a) || (b.share ?? 0) - (a.share ?? 0) || b.evidence.length - a.evidence.length);
   }, [chain.edges, sort]);
   const litRows = litEdges ? rows.filter((e) => litEdges.has(e.key)).length : rows.length;
+  /* a row's isolate button reads as pressed only for a pathway, not when a whole side is lit */
+  const pathOn = (isolated?.path.length ?? 0) > 1;
   if (!chain.edges.length) return null;
   const quantified = rows.filter((e) => e.dollars != null).length;
   const node = (k: string) => byKey.get(k) ?? { key: k, name: k, ticker: null, tier: 0, via: null };
@@ -476,89 +502,91 @@ export function ChainTable({ chain, names, revenue, isolated, onIsolate, onOpenT
     const rev = seller ? revenue[seller] : undefined;
     return rev && e.share != null ? `${e.share}% of revenue × ${fmtCompactUsd(rev)} ${names[seller as string] ?? seller} revenue (last 12 months)` : "Stated share × the seller's revenue (last 12 months)";
   };
-  const th = "border-b px-3 py-2 font-medium";
-  const head = (k: EdgeSort) => (
-    <th scope="col" aria-sort={sort === k ? "descending" : undefined} className={cn(th, "text-right")}>
-      <button type="button" onClick={() => setSort(k)} className={cn("inline-flex min-h-6 items-center gap-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort === k ? "text-foreground" : "hover:text-foreground")}>
-        {SORT_LABEL[k]}{sort === k && <span aria-hidden="true">↓</span>}
+  const th = "border-b px-2 py-1.5 font-medium";
+  /* the arrow keeps its place when it is not shown, so sorting never changes a header's width or height */
+  const head = (k: EdgeSort, w: string) => (
+    <th scope="col" aria-sort={sort === k ? "descending" : undefined} title={SORT_TITLE[k]} className={cn(th, w, "text-right")}>
+      <button type="button" onClick={() => setSort(k)} className={cn("inline-flex h-7 items-center whitespace-nowrap rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", sort === k ? "text-foreground" : "hover:text-foreground")}>
+        {SORT_LABEL[k]}<span aria-hidden="true" className={cn("w-3 text-center", sort !== k && "invisible")}>↓</span>
       </button>
     </th>
   );
   const party = (n: ChainNode) => (
-    <span className="inline-flex min-w-0 items-center gap-1.5" title={n.name}>
+    <span className={cn("inline-flex items-center gap-1.5", n.ticker ? "shrink-0" : "min-w-0")} title={n.name}>
       <CompanyLogo ticker={logoKey(n)} size="xs" decorative />
       <span className={cn("min-w-0 truncate font-medium", n.ticker && "num")}>{n.ticker ?? n.name}</span>
     </span>
   );
   return (
-    <section className="min-w-0 border-y bg-card/40" data-section="Chain links" aria-label="Links in the chain">
-      <header className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b px-3.5 py-2">
-        <h2 className="text-[13px] font-semibold tracking-tight">Links in the chain</h2>
-        <p className="text-[11px] text-muted-foreground">
-          {litEdges ? <><span className="num">{litRows}</span> of <span className="num">{rows.length}</span> links lit · isolated: {isolated?.label}</> : <><span className="num">{rows.length}</span> links</>}
-          {" · "}<span className="num">{quantified}</span> with a dollar figure (stated, or a stated share of the seller's revenue)
+    <section className="@container min-w-0 border-y bg-card/40" data-section="Chain links" aria-label="Links in the chain">
+      <header className="border-b px-3.5 py-2">
+        <h2 className="truncate text-[13px] font-semibold leading-5 tracking-tight">Links in the chain</h2>
+        <p className="truncate text-[11px] leading-4 text-muted-foreground" title="A dollar figure is one the sentence states, or a stated share of the seller's revenue over the last 12 months">
+          {litEdges ? <><span className="num">{litRows}</span> of <span className="num">{rows.length}</span> links lit</> : <><span className="num">{rows.length}</span> links</>}
+          {" · "}<span className="num">{quantified}</span> with a dollar figure
         </p>
+        <div className="mt-1.5 @[640px]:hidden"><Segmented label="Sort links by" size="xs" value={sort} options={SORT_OPTIONS} onChange={setSort} /></div>
       </header>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px] border-separate border-spacing-0 text-[13px]">
-          <thead className="text-left text-[11px] text-muted-foreground">
-            <tr>
-              <th scope="col" className={th}>Seller → buyer</th>
-              <th scope="col" className={th}>What changes hands</th>
-              {head("share")}
-              {head("dollars")}
-              {head("evidence")}
-              <th scope="col" className={th}>Flags</th>
-              <th scope="col" className={cn(th, "text-right")}><span className="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((e) => {
-              const a = node(e.from), b = node(e.to);
-              const label = `${a.name} → ${b.name}`;
-              const td = "border-b px-3 py-1.5 align-top";
-              return (
-                <tr key={e.key} data-lit={litEdges ? litEdges.has(e.key) : undefined}
-                  className={cn("transition-[opacity,background-color] duration-150 hover:bg-secondary/60 motion-reduce:transition-none", litEdges && (litEdges.has(e.key) ? "bg-highlight-soft/50" : "opacity-45 hover:opacity-100 focus-within:opacity-100"))}>
-                  <td className={cn(td, "max-w-72")}>
-                    <span className="flex min-w-0 items-center gap-1.5">{party(a)}<ArrowRight className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />{party(b)}</span>
-                    <span className="block text-[11px] text-muted-foreground">{TIER_LABEL(a.tier)} → {TIER_LABEL(a.tier + 1).toLowerCase()}</span>
-                  </td>
-                  <td className={cn(td, "max-w-64")}>
-                    <span className="flex flex-wrap items-center gap-1">
-                      {e.types.map((x) => <span key={x} className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{LINK_TYPE_LABEL(x)}</span>)}
-                      {e.products.map((x) => <span key={x} className="max-w-40 truncate text-[11px] text-muted-foreground" title={x}>{x}</span>)}
-                      {!e.types.length && !e.products.length && <span className="text-[11px] text-muted-foreground">{e.evidence.some((x) => x.kind === "tag") ? "tagged share" : "–"}</span>}
-                    </span>
-                  </td>
-                  <td className={cn(td, "num text-right")}>{e.share != null ? `${e.share}%` : <span className="text-muted-foreground">–</span>}{e.share != null && <span className="block text-[11px] text-muted-foreground">of {e.basis ? BASIS_WORD[e.basis] : "an unstated base"}</span>}</td>
-                  <td className={cn(td, "num text-right")} title={formula(e)}>
-                    {e.dollars != null ? fmtCompactUsd(e.dollars) : <span className="text-muted-foreground">–</span>}
-                    {e.dollars != null && <span className="block text-[11px] text-muted-foreground">{e.dollarsFrom === "stated" ? "stated flow" : "share × revenue"}</span>}
-                  </td>
-                  <td className={cn(td, "num text-right")}>{e.evidence.length}</td>
-                  <td className={td}>
-                    <span className="flex flex-wrap gap-1 text-[11px]">
-                      {e.confirmed && <span className="inline-flex items-center gap-1 rounded bg-positive-soft px-1.5 py-0.5 text-positive"><ShieldCheck className="size-3" aria-hidden="true" />both filings</span>}
-                      {e.sole && <span className="inline-flex items-center gap-1 rounded bg-negative-soft px-1.5 py-0.5 text-negative"><Lock className="size-3" aria-hidden="true" />single source</span>}
-                    </span>
-                  </td>
-                  <td className={cn(td, "whitespace-nowrap text-right")}>
-                    <button type="button" onClick={() => openFirst(e, label, onOpenText, onOpenTag)} aria-label={`Open the source: ${label}`}
-                      className="inline-flex h-7 items-center gap-1 rounded px-1.5 text-[11px] text-muted-foreground transition-colors duration-150 hover:bg-highlight-soft hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
-                      <FileText className="size-3" aria-hidden="true" />Source
-                    </button>
-                    <button type="button" onClick={() => onIsolate({ kind: "path", keys: chainEdgePath(chain, e) })} aria-label={`Isolate the pathway through ${label}`} title="Isolate the pathway through this link"
-                      className="ml-1 inline-grid size-7 place-items-center rounded align-middle text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
-                      <Focus className="size-3.5" aria-hidden="true" />
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <table className="block w-full text-[13px] @[640px]:table @[640px]:table-fixed @[640px]:border-separate @[640px]:border-spacing-0">
+        <thead className="hidden text-left text-[11px] text-muted-foreground @[640px]:table-header-group">
+          <tr>
+            <th scope="col" className={cn(th, "pl-3.5")}>Seller → buyer</th>
+            <th scope="col" className={cn(th, "w-[23%]")}>What changes hands</th>
+            {head("share", "w-[92px]")}
+            {head("dollars", "w-[108px]")}
+            {head("evidence", "w-[76px]")}
+            <th scope="col" className={cn(th, "w-11 px-0")}><span className="sr-only">Isolate</span></th>
+          </tr>
+        </thead>
+        <tbody className="block @[640px]:table-row-group">
+          {rows.map((e) => {
+            const a = node(e.from), b = node(e.to);
+            const label = `${a.name} → ${b.name}`;
+            const on = litEdges ? litEdges.has(e.key) : null;
+            const products = e.products.join(" · ");
+            return (
+              <tr key={e.key} data-lit={on ?? undefined}
+                className={cn("grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-1 border-b px-3.5 py-2 transition-[opacity,background-color] duration-150 hover:bg-secondary/60 motion-reduce:transition-none @[640px]:table-row @[640px]:border-b-0 @[640px]:p-0",
+                  on != null && (on ? "bg-highlight-soft/50" : "opacity-45 hover:opacity-100 focus-within:opacity-100"))}>
+                <td className={cn("col-start-1 row-start-1 block min-w-0 @[640px]:py-1.5 @[640px]:pl-3.5 @[640px]:pr-2", CELL)}>
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    {party(a)}<ArrowRight className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />{party(b)}
+                    {e.sole && <span className="shrink-0" title="Single source stated"><Lock className="size-3 text-negative" aria-label="single source stated" /></span>}
+                    {e.confirmed && <span className="shrink-0" title="Both companies' filings state it"><ShieldCheck className="size-3 text-positive" aria-label="both companies' filings state it" /></span>}
+                  </span>
+                  <span className="block truncate text-[11px] leading-4 text-muted-foreground">{TIER_LABEL(a.tier)} → {TIER_LABEL(a.tier + 1).toLowerCase()}</span>
+                </td>
+                <td className={cn("col-span-3 row-start-2 mt-1 block min-w-0 @[640px]:mt-0 @[640px]:px-2 @[640px]:py-1.5", CELL)} title={[...e.types.map(LINK_TYPE_LABEL), ...e.products].join(" · ") || undefined}>
+                  <span className="flex h-5 min-w-0 items-center gap-1 overflow-hidden">
+                    {e.types.slice(0, 2).map((x) => <span key={x} className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] leading-4">{LINK_TYPE_LABEL(x)}</span>)}
+                    {e.types.length > 2 && <span className="num shrink-0 text-[11px] text-muted-foreground">+{e.types.length - 2}</span>}
+                    {!e.types.length && <span className="truncate text-[11px] text-muted-foreground">{products || (e.evidence.some((x) => x.kind === "tag") ? "tagged share" : "–")}</span>}
+                  </span>
+                  {e.types.length > 0 && <span className="block h-4 truncate text-[11px] leading-4 text-muted-foreground">{products}</span>}
+                </td>
+                <td className={cn("num col-start-1 row-start-3 mt-1 min-w-0 @[640px]:mt-0 @[640px]:px-2 @[640px]:py-1.5 @[640px]:text-right", e.share == null ? "hidden" : "block", CELL)}>
+                  {e.share != null ? <>{e.share}%<span className="ml-1 text-[11px] text-muted-foreground @[640px]:ml-0 @[640px]:block">of {e.basis ? BASIS_WORD[e.basis] : "an unstated base"}</span></> : <span className="text-muted-foreground">–</span>}
+                </td>
+                <td className={cn("num col-span-2 col-start-2 row-start-3 mt-1 min-w-0 text-right @[640px]:mt-0 @[640px]:px-2 @[640px]:py-1.5", e.dollars == null ? "hidden" : "block", CELL)} title={formula(e)}>
+                  {e.dollars != null ? <><span className="@[640px]:hidden">≈ </span>{fmtCompactUsd(e.dollars)}<span className="ml-1 text-[11px] text-muted-foreground @[640px]:ml-0 @[640px]:block">{e.dollarsFrom === "stated" ? "stated flow" : "share × revenue"}</span></> : <span className="text-muted-foreground">–</span>}
+                </td>
+                <td className={cn("col-start-2 row-start-1 block @[640px]:px-1 @[640px]:py-1 @[640px]:text-right", CELL)}>
+                  <button type="button" onClick={() => openFirst(e, label, onOpenText, onOpenTag)} aria-label={`Open the source: ${label}, ${e.evidence.length} ${e.evidence.length === 1 ? "filing" : "filings"}`} title={e.evidence.length === 1 ? "Open the filing that states it" : `Open the first of ${e.evidence.length} filings that state it`}
+                    className="num inline-flex h-7 min-w-9 items-center justify-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors duration-150 hover:bg-highlight-soft hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+                    <FileText className="size-3" aria-hidden="true" />{e.evidence.length}
+                  </button>
+                </td>
+                <td className={cn("col-start-3 row-start-1 block @[640px]:py-1 @[640px]:pr-2 @[640px]:text-right", CELL)}>
+                  <button type="button" onClick={() => onIsolate({ kind: "path", keys: chainEdgePath(chain, e) })} aria-label={`Isolate the pathway through ${label}`} aria-pressed={pathOn && on === true} title="Isolate the pathway through this link"
+                    className="inline-grid size-7 place-items-center rounded align-middle text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none">
+                    <Focus className="size-3.5" aria-hidden="true" />
+                  </button>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </section>
   );
 }
