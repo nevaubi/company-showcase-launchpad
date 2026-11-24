@@ -188,6 +188,7 @@ describe("shrinkage toward zero", () => {
       for (const e of book.variants) if (e.blocks!.t < book.discovery.expectedBestT && book.prior.value === 0) expect(e.edge).toBe(0);
     }
     // False-discovery control at 10%: at most about one universe in ten lists anything at all.
+    console.log("NOISE", withAny, listed);
     expect(withAny).toBeLessThanOrEqual(30);
     expect(listed / 200).toBeLessThan(0.25);
   });

@@ -376,6 +376,11 @@ export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, 
       return { ...head, blocks: null, kept: 0, base: 0, regimes: [], regime: null, edge: 0, live: liveCheck(v, 0, null, daysOf(v.key)), grade: "unproven", reason: "Under 12 months of trades since 2022" };
     }
     // Shrinkage from the whole set, or what the variant's own record keeps beyond the luckiest worthless rule, whichever is larger.
+    // `pooled` is the normal-normal posterior share. `own` is a heuristic, not a posterior: it keeps
+    // nothing below the expected best of the tested rules (about 2.2 for 46), which is a second bar.
+    // With the pooled prior at zero (as on production) a rule that Benjamini-Hochberg lists at a later
+    // step with t under that level gets edge zero and is not listed (`edge > 0` below); the page says
+    // the first rule needs the first-step bar, which is higher, so the statement stays true (review L5).
     const pooled = (prior.value * b.nEff) / (1 + prior.value * b.nEff);
     const own = b.t > lucky ? 1 - (lucky / b.t) ** 2 : 0;
     const kept = Math.max(pooled, own);

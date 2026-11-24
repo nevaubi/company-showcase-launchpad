@@ -270,7 +270,7 @@ function MethodPanel({ data }: { data: SetupsData }) {
               <li key={l}>{l}</li>
             ))}
             <li>
-              A listed rule's average is shrunk toward zero before it is called an expected edge, and a rule goes on probation once {EVIDENCE.liveMinBlocks} or more live holding periods sit well below what its backtest allows. Backtest figures are estimates, not promises.
+              A listed rule's average is shrunk toward zero before it is called an expected edge. While the rules show no measurable spread of real edges, only the part of a record above what the best of {data.book.discovery.tested} worthless rules would show (t about {num(data.book.discovery.expectedBestT, 1)}) is kept, so a rule also needs that much to be listed. A rule goes on probation once {EVIDENCE.liveMinBlocks} or more independent holding periods with live signals sit well below what its backtest allows; trades entered on one day count once. Backtest figures are estimates, not promises.
             </li>
           </ul>
         </div>
