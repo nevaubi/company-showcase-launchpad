@@ -6,12 +6,23 @@
 // net income, diluted EPS, and for banks net interest income and the provision for credit losses).
 // An IR line counts as one of them when its printed name says so, its unit fits, and nothing in its
 // name, table or scope marks it as a part of the company (a segment, a business), another basis
-// (adjusted, non-GAAP, managed, fully taxable equivalent, annualized) or another measure; in each
-// period only lines at least 90% the size of the largest such line are taken as the consolidated
-// figure (a segment's "Net interest income" is smaller than the bank's).
+// (adjusted, non-GAAP, managed, fully taxable equivalent, annualized, FFO/AFFO, trailing twelve
+// months, guidance) or another measure. Each such figure is checked on its own against the filing's line: no line shields another. A same-signed
+// figure less than half or more than twice the filing's is taken as another line of the same name
+// (a segment's "Net interest income") and not compared.
 //
-// Tolerances: equal within 0.05% or $0.5 million (EPS within half a cent), or equal at the precision
-// the release prints (a sentence's "$7.7 billion" agrees with 7,658 million).
+// Sign first: a figure whose sign differs from the filing's never agrees and is always marked,
+// whatever its size. A label that names a loss ("Net loss", "Loss per share") carries the sign, so
+// a positive figure under it is read as negative.
+//
+// Tolerances: same sign, and totals within 0.5% (or at the precision a round figure prints: a
+// sentence's "$7.7 billion" agrees with 7,658 million, within 5%); per-share figures within one cent
+// or 1%, whichever is larger.
+//
+// The flag names the real source of the filing's figure: a fourth quarter the statements derive
+// from the 10-K year less the first nine months is called that, and a figure taken from a filing
+// made after the period's own (a comparative a later 10-Q or 10-K may have recast) is not called a
+// disagreement: it is listed as compared with a later filing.
 //
 // A disagreement is never corrected. It is held (moved to `series.held`, like other contradicted
 // figures, so no total, change, chart or export uses it) when the filing contradicts its unit
@@ -36,14 +47,15 @@ export const STD_LABEL: Record<StdLine, string> = {
 /** The statement rows the check reads (a subset of a CompanyDataset income statement). */
 export interface CheckStatement {
   periods: { end: string; start?: string }[];
-  rows: { key: string; cells: ({ v: number; src?: { accn?: string; concept?: string } } | null)[] }[];
+  rows: { key: string; cells: ({ v: number; src?: { accn?: string; concept?: string }; derived?: string } | null)[] }[];
 }
 export interface CheckStatements {
   quarterly?: CheckStatement | null;
   annual?: CheckStatement | null;
 }
 
-export type SecStatus = "agree" | "held" | "flagged" | "released";
+/** agree · held (contradicted unit, sign or period) · flagged (differs) · released (the unit guard had held it, the filing confirms it) · later (differs from a later filing's comparative, which may be a recast: not a disagreement) */
+export type SecStatus = "agree" | "held" | "flagged" | "released" | "later";
 export interface SecItem {
   k: string;
   label: string;
@@ -65,12 +77,14 @@ export interface SecCheck {
   flagged: number;
   /** figures the display guard (suspect.ts) had held that the filing confirms: shown again */
   released: number;
+  /** figures that differ only from a later filing's comparative (possibly recast): not counted as differing */
+  later?: number;
   items: SecItem[];
   /** time the check took in the worker, ms */
   ms?: number;
 }
 
-const OTHER_BASIS = /\b(adjusted|non-?gaap|core|underlying|operating basis|annuali[sz]ed|fte|fully taxable|taxable[- ]equivalent|tax[- ]equivalent|managed|pro forma|proforma|excluding|ex-|constant currency|organic|normalized|comparable|segment|segments|reportable|by business|by division|per share|margin|growth|change|yoy|guidance|outlook|forecast|budget|attributable to (noncontrolling|non-controlling|minority)|common (stock|share)holders|available to common)\b/i;
+const OTHER_BASIS = /\b(adjusted|non-?gaap|core|underlying|operating basis|annuali[sz]ed|fte|fully taxable|taxable[- ]equivalent|tax[- ]equivalent|managed|pro forma|proforma|excluding|ex-|constant currency|organic|normalized|comparable|segment|segments|reportable|by business|by division|per share|margin|growth|change|yoy|guidance|outlook|forecast|forecasted|projected|budget|ffo|affo|funds from operations|last twelve months|last 12 months|twelve months ended|ltm|ttm|trailing|attributable to (noncontrolling|non-controlling|minority)|common (stock|share)holders|available to common)\b/i;
 
 const LINE_RULES: { line: StdLine; unit: string; root: boolean; test: (n: string) => boolean }[] = [
   { line: "revenue", unit: "usd", root: true, test: (n) => /^(total )?(revenue|sales|net revenue|sales and (other )?revenue|revenue and other income|revenue net of interest expense)$/.test(n) },
@@ -115,70 +129,98 @@ export function printedStep(v: number): number {
 
 /** Whether an IR figure agrees with the filing's figure (see the tolerances above). */
 export function agrees(ir: number, sec: number, unit: string): boolean {
-  if (unit === "usdPerShare") {
-    if (Math.abs(ir - sec) <= 0.005 + 1e-9) return true;
-    const st = printedStep(ir);
-    return st >= 0.1 && Math.abs(ir - sec) <= st / 2 + 1e-9;
-  }
-  if (Math.abs(ir - sec) <= Math.max(Math.abs(sec) * 0.0005, 5e5)) return true;
+  if (ir !== 0 && sec !== 0 && Math.sign(ir) !== Math.sign(sec)) return false;
+  const d = Math.abs(ir - sec);
+  if (unit === "usdPerShare") return d <= Math.max(0.01, Math.abs(sec) * 0.01) + 1e-9;
+  if (d <= Math.abs(sec) * 0.005) return true;
   const st = printedStep(ir);
-  return st >= 1e8 && Math.abs(ir - sec) <= st / 2;
+  return st >= 1e6 && d <= st / 2 && d <= Math.abs(sec) * 0.05;
 }
 
+/** A label that names a loss carries the sign: "Net loss" 0.35 is −0.35. */
+export function lossNamed(label: string): boolean {
+  const n = normLabel(label);
+  return /\bloss(es)?\b/.test(n) && !/\b(income|earnings|profit)\b/.test(n);
+}
+
+interface Ref { v: number; accn?: string; concept?: string; derived?: string }
 interface SecSide {
   /** by period end (as printed by the filing) → value and its source */
-  q: Map<string, { v: number; accn?: string; concept?: string }>;
-  y: Map<string, { v: number; accn?: string; concept?: string }>;
+  q: Map<string, Ref>;
+  y: Map<string, Ref>;
 }
 
 function sideOf(st: CheckStatements, line: StdLine): SecSide {
   const read = (s: CheckStatement | null | undefined) => {
-    const out = new Map<string, { v: number; accn?: string; concept?: string }>();
+    const out = new Map<string, Ref>();
     const row = s?.rows.find((r) => r.key === line);
     if (!s || !row) return out;
     s.periods.forEach((p, i) => {
       const c = row.cells[i];
-      if (c && Number.isFinite(c.v)) out.set(p.end, { v: c.v, accn: c.src?.accn, concept: c.src?.concept });
+      if (c && Number.isFinite(c.v)) out.set(p.end, { v: c.v, accn: c.src?.accn, concept: c.src?.concept, derived: c.derived ?? (c.src?.accn ? undefined : "calculated") });
     });
     return out;
   };
   return { q: read(st.quarterly), y: read(st.annual) };
 }
 
-const find = (m: Map<string, { v: number; accn?: string; concept?: string }>, e: string) => {
+const find = (m: Map<string, Ref>, e: string) => {
   for (const [k, x] of m) if (near(k, e)) return x;
   return undefined;
 };
 
 const fmt = (v: number, unit: string) => {
-  if (unit === "usdPerShare") return `$${v.toFixed(2)}`;
+  if (unit === "usdPerShare") return `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`;
   const a = Math.abs(v);
   const s = a >= 1e9 ? `$${(a / 1e9).toFixed(a >= 1e11 ? 1 : 2)}B` : a >= 1e6 ? `$${(a / 1e6).toFixed(a >= 1e8 ? 0 : 1)}M` : `$${Math.round(a).toLocaleString("en-US")}`;
   return v < 0 ? `−${s}` : s;
 };
 const filingOf = (kind: "q" | "y") => (kind === "q" ? "10-Q" : "10-K");
 
+/** Year a filing was made, from its accession number (0001065696-26-000012 → 2026). */
+export function accnYear(accn: string | undefined): number | null {
+  const m = /^\d{10}-(\d{2})-\d{6}$/.exec(accn ?? "");
+  return m ? 2000 + Number(m[1]) : null;
+}
+
+/** Whether the figure comes from a filing made after the period's own (a later comparative). */
+export function laterFiling(ref: Ref, kind: "q" | "y", e: string): boolean {
+  const y = accnYear(ref.accn);
+  if (y == null) return false;
+  // a quarter's own 10-Q comes within about 45 days, a year's 10-K within about 90
+  const due = new Date(ms(e) + (kind === "q" ? 75 : 120) * DAY).getUTCFullYear();
+  return y > due;
+}
+
+/** The real source of the filing's figure, for the flag text. */
+export function sourceOf(ref: Ref, kind: "q" | "y", e: string, yearEnds: Iterable<string>): string {
+  if (kind === "q" && ref.derived && [...yearEnds].some((y) => near(y, e))) return "the 10-K year less the first nine months";
+  if (ref.derived) return `the statements' calculation (${ref.derived})`;
+  const yr = accnYear(ref.accn);
+  if (laterFiling(ref, kind, e)) return `a ${filingOf(kind)} filed in ${yr} (after this period's own filing)`;
+  return `the ${filingOf(kind)}${ref.accn ? ` (${ref.accn})` : ""}`;
+}
+
 /** Why a disagreement is a contradicted unit, sign or period (held), or null (flagged). */
-function contradiction(ir: number, sec: number, unit: string, kind: "q" | "y", e: string, side: SecSide): string | null {
-  const f = filingOf(kind);
+function contradiction(ir: number, sec: number, unit: string, kind: "q" | "y", e: string, side: SecSide, f: string): string | null {
   if (sec !== 0 && ir !== 0 && unit !== "usdPerShare") {
     const k = Math.log10(Math.abs(ir / sec));
     const n = Math.round(k / 3) * 3;
-    if (n !== 0 && Math.abs(k - n) < 0.01) return `${fmt(ir, unit)} is ${n > 0 ? "" : "1/"}${(10 ** Math.abs(n)).toLocaleString("en-US")}× the ${f}'s ${fmt(sec, unit)}: unit contradicted by the filing`;
+    if (n !== 0 && Math.abs(k - n) < 0.01) return `${fmt(ir, unit)} is ${n > 0 ? "" : "1/"}${(10 ** Math.abs(n)).toLocaleString("en-US")}× the ${fmt(sec, unit)} from ${f}: unit contradicted by the filing`;
   }
-  if (sec !== 0 && Math.sign(ir) !== Math.sign(sec) && agrees(-ir, sec, unit)) return `the ${f} reports ${fmt(sec, unit)}: sign contradicted by the filing`;
+  if (sec !== 0 && ir !== 0 && Math.sign(ir) !== Math.sign(sec)) return agrees(-ir, sec, unit) ? `${f} gives ${fmt(sec, unit)}: sign contradicted by the filing` : `${f} gives ${fmt(sec, unit)}, ${sec < 0 ? "a loss" : "a positive figure"}; this figure, ${fmt(ir, unit)}, has the opposite sign`;
   if (unit === "usdPerShare") return null;
   if (kind === "q") {
     const yr = find(side.y, e);
-    if (yr && agrees(ir, yr.v, unit) && !agrees(sec, yr.v, unit)) return `${fmt(ir, unit)} is the 10-K's full-year figure; the 10-Q reports ${fmt(sec, unit)} for the quarter`;
-    if (Math.abs(sec) > 0 && Math.abs(ir / sec - 4) < 0.08) return `${fmt(ir, unit)} is about four times the 10-Q's ${fmt(sec, unit)}: an annualized or full-year figure in a quarter column`;
+    if (yr && agrees(ir, yr.v, unit) && !agrees(sec, yr.v, unit)) return `${fmt(ir, unit)} is the 10-K's full-year figure; ${f} gives ${fmt(sec, unit)} for the quarter`;
+    if (Math.abs(sec) > 0 && Math.abs(ir / sec - 4) < 0.08) return `${fmt(ir, unit)} is about four times the ${fmt(sec, unit)} from ${f}: an annualized or full-year figure in a quarter column`;
     for (const [k, x] of side.q) {
       const days = Math.abs(ms(k) - ms(e)) / DAY;
-      if (days > 20 && days < 100 && agrees(ir, x.v, unit) && !agrees(sec, x.v, unit)) return `${fmt(ir, unit)} is the 10-Q's figure for the quarter ending ${k}; it reports ${fmt(sec, unit)} for this one`;
+      if (days > 20 && days < 100 && agrees(ir, x.v, unit) && !agrees(sec, x.v, unit)) return `${fmt(ir, unit)} is the SEC figure for the quarter ending ${k}; ${f} gives ${fmt(sec, unit)} for this one`;
     }
   } else {
     const q = find(side.q, e);
-    if (q && agrees(ir, q.v, unit) && !agrees(sec, q.v, unit)) return `${fmt(ir, unit)} is the fourth quarter's figure; the 10-K reports ${fmt(sec, unit)} for the year`;
+    if (q && agrees(ir, q.v, unit) && !agrees(sec, q.v, unit)) return `${fmt(ir, unit)} is the fourth quarter's figure; ${f} gives ${fmt(sec, unit)} for the year`;
   }
   return null;
 }
@@ -223,34 +265,70 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
           items.push({ k: s.k, label: s.label, line, kind, e, ir: h.v, sec: ref.v, accn: ref.accn, concept: ref.concept, status: "released", why: `Held by the unit guard (${(h.why ?? "").replace(/\.$/, "")}); the ${filingOf(kind)} reports the same figure, so it is shown.` });
         }
         if (!cells.length) continue;
+        const yearEnds = side.y.keys();
+        const src = sourceOf(ref, kind, e, [...yearEnds]);
+        // the value as signed: a loss-named label carries the sign
+        const signed = (s: PayloadSeries, c: PayloadCell) => (lossNamed(s.label) && c.v > 0 && ref.v < 0 ? -c.v : c.v);
+        const anyAgrees = cells.some(({ s, c }) => agrees(signed(s, c), ref.v, s.unit));
         const top = Math.max(...cells.map((x) => Math.abs(x.c.v)));
         for (const { s, c } of cells) {
-          if (Math.abs(c.v) < 0.9 * top) continue;
+          const v = signed(s, c);
           const base = { k: s.k, label: s.label, line, kind, e, ir: c.v, sec: ref.v, accn: ref.accn, concept: ref.concept };
-          if (agrees(c.v, ref.v, s.unit)) {
-            items.push({ ...base, status: "agree" });
+          const opposite = v !== 0 && ref.v !== 0 && Math.sign(v) !== Math.sign(ref.v);
+          if (!opposite && agrees(v, ref.v, s.unit)) {
+            items.push({ ...base, status: "agree", ...(src.startsWith("the 10-K year less") ? { why: `Compared with ${src}.` } : {}) });
             continue;
           }
-          const bad = contradiction(c.v, ref.v, s.unit, kind, e, side);
-          if (bad) {
+          // A same-signed figure is compared when it is within 10% of the filing's, or when it is the
+          // period's largest candidate, none agrees and it is within half to twice the filing's (LKQ's
+          // "Total Revenue" table totals a segment at 43% of revenue); a smaller line of the same name (a segment's
+          // net interest income) is not compared, unless it is the filing's figure at another unit.
+          const r = ref.v !== 0 ? Math.abs(v) / Math.abs(ref.v) : 1;
+          const eligible = opposite || Math.abs(r - 1) <= 0.1 || (Math.abs(c.v) === top && !anyAgrees && r >= 0.5 && r <= 2);
+          const unitOff = ref.v !== 0 && v !== 0 && s.unit !== "usdPerShare" && (() => {
+            const k = Math.log10(r);
+            const n = Math.round(k / 3) * 3;
+            return n !== 0 && Math.abs(k - n) < 0.01;
+          })();
+          const bad = contradiction(v, ref.v, s.unit, kind, e, side, src.charAt(0).toUpperCase() + src.slice(1));
+          // the largest figure is also compared when the filing places it in another period (a year,
+          // an annualized figure, the neighbouring quarter)
+          if (!eligible && !unitOff && !(bad && Math.abs(c.v) === top && !anyAgrees)) continue;
+          if (bad && !opposite) {
             hold.set(keyOf(s.k, kind, e), `${bad} (${ref.accn ?? "SEC filing"})`);
             items.push({ ...base, status: "held", why: bad });
             continue;
           }
-          const pct = ref.v !== 0 ? ((c.v - ref.v) / Math.abs(ref.v)) * 100 : null;
+          if (opposite) {
+            // Sign first: an opposite sign is always marked. Held when it is the filing's figure with the
+            // sign lost; flagged otherwise (another line of the same name may differ in size).
+            const why = bad!;
+            if (agrees(-v, ref.v, s.unit)) {
+              hold.set(keyOf(s.k, kind, e), `${why} (${ref.accn ?? "SEC filing"})`);
+              items.push({ ...base, status: "held", why });
+            } else {
+              flag.set(keyOf(s.k, kind, e), { k: "sec", why: `${why}.`, v: ref.v });
+              items.push({ ...base, status: "flagged", why: `${why}.` });
+            }
+            continue;
+          }
+          const pct = ref.v !== 0 ? ((v - ref.v) / Math.abs(ref.v)) * 100 : null;
           const alt = c.alt && agrees(c.alt.v, ref.v, s.unit) ? ` ${c.alt.kind === "restated" ? "An earlier" : "Another"} document prints ${fmt(c.alt.v, s.unit)}, which agrees.` : "";
           const derived = c.f ? ` The figure is calculated: ${c.f.formula}.` : "";
-          // A release's plain "Net income" often includes noncontrolling interests; the filing's line is
-          // the company's share, so a small excess is a different measure rather than a misread.
-          const nci = line === "netIncome" && !/attributable/i.test(s.label) && ref.v > 0 && c.v > ref.v && c.v <= ref.v * 1.05 ? " The release's net income may include noncontrolling interests; the filing's line is the company's share." : "";
-          const why = `The ${filingOf(kind)} reports ${fmt(ref.v, s.unit)}; this figure is ${fmt(c.v, s.unit)}${pct != null ? ` (${pct > 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}%)` : ""}.${alt}${derived}${nci}`;
+          const diff = `${pct != null ? ` (${pct > 0 ? "+" : "−"}${Math.abs(pct).toFixed(1)}%)` : ""}`;
+          if (laterFiling(ref, kind, e) && !ref.derived) {
+            const why = `The SEC figure, ${fmt(ref.v, s.unit)}, comes from ${src}; that filing may have recast the period, and the figure as first filed is not in the statements. This figure is ${fmt(c.v, s.unit)}${diff}.${alt}`;
+            items.push({ ...base, status: "later", why });
+            continue;
+          }
+          const why = `${src.charAt(0).toUpperCase() + src.slice(1)} gives ${fmt(ref.v, s.unit)}; this figure is ${fmt(c.v, s.unit)}${diff}.${alt}${derived}`;
           flag.set(keyOf(s.k, kind, e), { k: "sec", why, v: ref.v });
           items.push({ ...base, status: "flagged", why });
         }
       }
     }
   }
-  if (!items.length) return { payload: p, check: { checked: 0, agree: 0, held: 0, flagged: 0, released: 0, items } };
+  if (!items.length) return { payload: p, check: { checked: 0, agree: 0, held: 0, flagged: 0, released: 0, later: 0, items } };
 
   // Calculated values that use a held figure are held too; tie-out checks touching one are dropped.
   const heldKeys = new Set(hold.keys());
@@ -310,9 +388,24 @@ export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefin
     : p.checks;
   const held = items.filter((x) => x.status === "held").length;
   const released = items.filter((x) => x.status === "released").length;
-  const check: SecCheck = { checked: items.length, agree: items.filter((x) => x.status === "agree" || x.status === "released").length, held, flagged: items.filter((x) => x.status === "flagged").length, released, items };
+  const later = items.filter((x) => x.status === "later").length;
+  const check: SecCheck = { later, checked: items.length, agree: items.filter((x) => x.status === "agree" || x.status === "released").length, held, flagged: items.filter((x) => x.status === "flagged").length, released, items };
   return {
     payload: { ...p, series, checks, stats: { ...p.stats, held: Math.max(0, (p.stats.held ?? 0) + held + extra - released) } },
     check,
   };
+}
+
+/** The statement rows the cross-check needs, from a company dataset (null when it has none). */
+export function checkStatementsOf(d: { statements?: { quarterly?: { income?: DatasetStatement }; annual?: { income?: DatasetStatement } } } | null | undefined): CheckStatements | null {
+  const q = d?.statements?.quarterly?.income;
+  const y = d?.statements?.annual?.income;
+  if (!q && !y) return null;
+  const slim = (s?: DatasetStatement): CheckStatement | null =>
+    s ? { periods: s.periods.map((p) => ({ end: p.end, start: p.start })), rows: s.rows.map((r) => ({ key: r.key, cells: r.cells.map((c) => (c ? { v: c.v, src: c.src ? { accn: c.src.accn, concept: c.src.concept } : undefined, ...(c.derived ? { derived: c.derived.formula } : {}) } : null)) })) } : null;
+  return { quarterly: slim(q), annual: slim(y) };
+}
+interface DatasetStatement {
+  periods: { end: string; start?: string }[];
+  rows: { key: string; cells: ({ v: number; src?: { accn?: string; concept?: string }; derived?: { formula: string } } | null)[] }[];
 }

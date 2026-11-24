@@ -2,7 +2,7 @@
 import { getIrData, type IrDocRow } from "@/lib/ir.functions";
 import type { ConsistencySummary } from "@/lib/ir/consistency";
 import type { IrPayload } from "@/lib/ir/payload";
-import type { CheckStatements, SecCheck } from "@/lib/ir/sec-check";
+import { checkStatementsOf, type CheckStatements, type SecCheck } from "@/lib/ir/sec-check";
 
 export interface IrPageData {
   payload: IrPayload | null;
@@ -21,15 +21,7 @@ export interface IrPageData {
   timings?: { unpackMs: number; tidyMs: number; checkMs: number };
 }
 
-/** The statement rows the cross-check needs, from a company dataset (null when it has none). */
-export function checkStatementsOf(d: { statements?: { quarterly?: { income?: CheckStatement }; annual?: { income?: CheckStatement } } } | null | undefined): CheckStatements | null {
-  const q = d?.statements?.quarterly?.income;
-  const y = d?.statements?.annual?.income;
-  if (!q && !y) return null;
-  const slim = (s?: CheckStatement) => (s ? { periods: s.periods.map((p) => ({ end: p.end, start: p.start })), rows: s.rows.map((r) => ({ key: r.key, cells: r.cells.map((c) => (c ? { v: c.v, src: c.src ? { accn: c.src.accn, concept: c.src.concept } : undefined } : null)) })) } : null);
-  return { quarterly: slim(q), annual: slim(y) };
-}
-type CheckStatement = NonNullable<CheckStatements["quarterly"]>;
+export { checkStatementsOf };
 
 /** Bank-sized payloads arrive as a gzipped byte stream (see getIrData); unpack it in the browser. */
 type IrFetch = (opts: { data: { ticker: string } }) => Promise<{ gz: unknown }>;

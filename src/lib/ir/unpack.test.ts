@@ -16,3 +16,19 @@ describe("unpacking the IR page data", () => {
     expect(out.payload?.series[0].q["2025-03-31"].v).toBe(41);
   });
 });
+// Review iracc M3: an exception in the read-time checks failed the whole page.
+describe("unpacking when a check throws", () => {
+  it("shows the tidied payload when a read-time check throws", async () => {
+    const payload = {
+      v: 2, ticker: "TST", builtAt: "", quarters: ["2025-03-31"], years: [], docs: [], groups: [], checks: [],
+      series: [{ k: "r", cat: "income", met: "revenue", label: "Revenue", parent: null, total: true, unit: "usd", q: { "2025-03-31": { v: 1e9, d: 0 } }, y: {} }],
+      stats: { series: 1, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } },
+    };
+    const gz = await new Response(new Response(JSON.stringify({ payload, builtAt: null, documents: [], images: 0, pending: 0 })).body!.pipeThrough(new CompressionStream("gzip"))).arrayBuffer();
+    // malformed statements (no rows) make the cross-check throw
+    const st = { quarterly: { periods: [{ end: "2025-03-31" }] } } as unknown as Parameters<typeof unpackIrPage>[1];
+    const out = await unpackIrPage(gz, st);
+    expect(out.secCheck).toBeNull();
+    expect(out.payload?.series.length).toBeGreaterThan(0);
+  });
+});
