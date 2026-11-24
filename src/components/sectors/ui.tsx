@@ -3,7 +3,7 @@
 // captions, 13 px rows of 28 px, 11 px column heads, `.eyebrow` for quiet group heads.
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Share } from "@/lib/sectors/stats";
 
@@ -34,12 +34,12 @@ export function Section({
       data-section={name}
       className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)] border-y bg-card/40", className)}
     >
-      <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b px-3.5 py-2">
-        <div className="min-w-0">
+      <header className="flex flex-wrap items-start gap-x-3 gap-y-1.5 border-b px-3.5 py-2">
+        <div className="min-w-[min(100%,16rem)] flex-1">
           <h2 className="text-[14px] font-semibold leading-5 tracking-tight">{title}</h2>
           {caption && <p className="text-[11px] leading-4 text-muted-foreground">{caption}</p>}
         </div>
-        {actions && <div className="ml-auto flex flex-wrap items-center gap-1.5">{actions}</div>}
+        {actions && <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-1.5">{actions}</div>}
       </header>
       <div className={cn("min-w-0", bodyClassName)}>{children}</div>
     </section>
@@ -125,6 +125,7 @@ export function SortTh({
       <button
         type="button"
         title={title}
+        data-agent-click
         onClick={() => onSort(k, on ? (dir === "asc" ? "desc" : "asc") : first)}
         className={cn(
           "inline-flex h-7 items-center gap-0.5 whitespace-nowrap rounded px-1 transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -174,17 +175,29 @@ export function groupLink(kind: "sector" | "industry", name: string, slug: strin
   return kind === "sector" ? { label: name, to: "/app/sectors/$sector", params: { sector: name } } : { label: name, to: "/app/sectors/g/$slug", params: { slug } };
 }
 
+/** What a breadth share rests on, for a tooltip: members with a reading, and those without a breadth row. */
+export function shareTitle(share: Share | null | undefined, noRow?: number | null) {
+  if (!share) return undefined;
+  const none = noRow ? `; ${noRow} ${noRow === 1 ? "has" : "have"} no breadth row` : "";
+  return `${share.hits} of ${share.known} members with a reading${none}`;
+}
+
 /** Breadth as a short meter plus the share; a thin group shows its count instead of a percentage. */
-export function ShareMeter({ value, share, className }: { value: number | null; share?: Share | null; className?: string }) {
+export function ShareMeter({ value, share, noRow, className }: { value: number | null; share?: Share | null; noRow?: number | null; className?: string }) {
   if (share?.thin && share.known > 0)
     return (
-      <span className={cn("num text-muted-foreground", className)} title={`${share.hits} of ${share.known} members with a known reading`}>
+      <span className={cn("num text-muted-foreground", className)} title={shareTitle(share, noRow)}>
         {share.hits} of {share.known}
       </span>
     );
-  if (value == null) return <span className="text-muted-foreground">–</span>;
+  if (value == null)
+    return (
+      <span className="text-muted-foreground" title={share && noRow ? `No member has a breadth row (${noRow})` : undefined}>
+        –
+      </span>
+    );
   return (
-    <span className={cn("inline-flex items-center justify-end gap-1.5", className)} title={share ? `${share.hits} of ${share.known} members` : undefined}>
+    <span className={cn("inline-flex items-center justify-end gap-1.5", className)} title={shareTitle(share, noRow)}>
       <span className="relative h-1 w-8 overflow-hidden rounded-full bg-secondary" aria-hidden>
         <span className="absolute inset-y-0 left-0 rounded-full bg-muted-foreground/70" style={{ width: `${Math.round(value * 100)}%` }} />
       </span>
@@ -212,6 +225,103 @@ export function useWidth<T extends HTMLElement>() {
     return () => ro.disconnect();
   }, []);
   return [ref, w] as const;
+}
+
+/**
+ * Whether a table that needs `min` px fits its wrapper. When it does, the wrapper needs no sideways
+ * scroller and the table head can stick to the page; when it does not, the wrapper scrolls and the head
+ * stays with the table (a sticky head cannot leave a scrolling box).
+ */
+export function useFits<T extends HTMLElement>(min: number) {
+  const [ref, w] = useWidth<T>();
+  return [ref, w >= min] as const;
+}
+
+/** Head cells that stick under the app header, or under the page's section nav (41 px) when `nav`. Written out in full so Tailwind sees the classes. */
+export const STICKY_HEAD = "[&>th]:sticky [&>th]:top-[var(--sticky-top,3.5rem)] [&>th]:z-10";
+export const STICKY_HEAD_2 = "[&>th]:sticky [&>th]:top-[calc(var(--sticky-top,3.5rem)+1.5rem)] [&>th]:z-10";
+export const STICKY_HEAD_NAV = "[&>th]:sticky [&>th]:top-[calc(var(--sticky-top,3.5rem)+41px)] [&>th]:z-10";
+
+/** Step between neighbouring values (weeks of a note): two small buttons around the current label. */
+export function Stepper({
+  label,
+  value,
+  onEarlier,
+  onLater,
+  earlier,
+  later,
+}: {
+  /** Accessible name of the group, e.g. "Week". */
+  label: string;
+  value: ReactNode;
+  onEarlier?: () => void;
+  onLater?: () => void;
+  /** Names of the neighbours, for the buttons' labels. */
+  earlier?: string | null;
+  later?: string | null;
+}) {
+  const btn =
+    "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-35";
+  return (
+    <div role="group" aria-label={label} className="inline-flex items-center gap-0.5 rounded-md border bg-secondary/50 p-0.5">
+      <button type="button" className={btn} disabled={!onEarlier} onClick={onEarlier} aria-label={earlier ? `Earlier: ${earlier}` : "No earlier one"} title={earlier ? `Earlier: ${earlier}` : undefined}>
+        <ChevronLeft className="size-3.5" aria-hidden />
+      </button>
+      <span className="num px-1.5 text-[11px] whitespace-nowrap">{value}</span>
+      <button type="button" className={btn} disabled={!onLater} onClick={onLater} aria-label={later ? `Later: ${later}` : "No later one"} title={later ? `Later: ${later}` : undefined}>
+        <ChevronRight className="size-3.5" aria-hidden />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * One figure with what it rests on: label, value, a secondary line, and a basis line (quarter and
+ * company count, or a date). Used by the summary strip and the risk tiles so every headline says its basis.
+ */
+export function Tile({
+  label,
+  value,
+  sub,
+  basis,
+  subTone,
+  title,
+  onClick,
+  className,
+}: {
+  label: string;
+  value: ReactNode;
+  sub?: ReactNode;
+  basis?: ReactNode;
+  subTone?: string;
+  title?: string;
+  onClick?: () => void;
+  className?: string;
+}) {
+  const body = (
+    <>
+      <span className="block truncate text-[11px] text-muted-foreground">{label}</span>
+      <span className="num mt-0.5 block text-[18px] font-semibold leading-6">{value}</span>
+      <span className={cn("num block truncate text-[11px] leading-4 text-muted-foreground", subTone)}>{sub ?? "\u00a0"}</span>
+      <span className="num block truncate text-[11px] leading-4 text-muted-foreground/80">{basis ?? "\u00a0"}</span>
+    </>
+  );
+  const cls = cn("min-w-0 px-3 py-2 text-left", className);
+  return onClick ? (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      data-agent-click
+      className={cn(cls, "transition-colors duration-150 hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring")}
+    >
+      {body}
+    </button>
+  ) : (
+    <div className={cls} title={title}>
+      {body}
+    </div>
+  );
 }
 
 /** One quiet line in place of a section that has nothing for this group. */

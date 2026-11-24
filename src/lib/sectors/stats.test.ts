@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareNullable, distribution, median, percentileRanks, positiveMedian, quantileSorted, ranks, shareOf, sortBy } from "./stats";
+import { compareNullable, distribution, ends, mean, median, percentileRanks, positiveMedian, quantileSorted, ranks, shareOf, sortBy } from "./stats";
 
 describe("median", () => {
   it("skips missing values", () => {
@@ -79,10 +79,53 @@ describe("distribution", () => {
     expect(d.points.find((p) => p.v === 5000)!.clipped).toBe(true);
     expect(d.points.find((p) => p.v === 20)!.clipped).toBe(false);
   });
+  it("plots the 2nd to 98th percentile of a large group and its full range up to 20 values", () => {
+    // 0..100: type-7 quantiles of 101 evenly spaced values are the values themselves
+    const big = distribution(Array.from({ length: 101 }, (_, i) => i), (x) => x);
+    expect([big.lo, big.hi]).toEqual([2, 98]);
+    expect(big.points.filter((p) => p.clipped).map((p) => p.v)).toEqual([0, 1, 99, 100]);
+    // exactly 20 values: nothing is pinned, even an outlier
+    const small = distribution([...Array.from({ length: 19 }, (_, i) => i), 900], (x) => x);
+    expect([small.lo, small.hi]).toEqual([0, 900]);
+    expect(small.points.some((p) => p.clipped)).toBe(false);
+  });
   it("widens a range of one repeated value", () => {
     const d = distribution([0.1, 0.1], (x) => x);
     expect(d.lo).toBeLessThan(0.1);
     expect(d.hi).toBeGreaterThan(0.1);
+  });
+});
+
+describe("highest and lowest lists", () => {
+  const pts = (vals: number[]) => distribution(vals.map((v, i) => ({ id: `T${String(i).padStart(2, "0")}`, v })), (x) => x.v).points;
+  const id = (x: { id: string }) => x.id;
+  it("takes five from each end of a group of twelve, never the same company twice", () => {
+    const e = ends(pts([5, 1, 9, 3, 12, 7, 2, 11, 4, 10, 6, 8]), id);
+    expect(e.all).toBeNull();
+    expect(e.top.map((p) => p.v)).toEqual([12, 11, 10, 9, 8]);
+    expect(e.bottom.map((p) => p.v)).toEqual([1, 2, 3, 4, 5]);
+    expect(e.top.some((p) => e.bottom.includes(p))).toBe(false);
+  });
+  it("gives one ranked list when fewer than ten values are known", () => {
+    // a group of seven: five from each end would list three companies twice
+    const e = ends(pts([0.05, 0.064, 0.075, 0.086, 0.135, 0.2, 0.3]), id);
+    expect(e.all!.map((p) => p.v)).toEqual([0.3, 0.2, 0.135, 0.086, 0.075, 0.064, 0.05]);
+    expect(e.top).toEqual([]);
+    expect(e.bottom).toEqual([]);
+  });
+  it("reports ties cut off at the fifth place and orders them by id", () => {
+    // lowest five of twelve: −3, −2, −1.1, −1.1, −1.1 and a fourth −1.1 left out
+    const e = ends(pts([-3, -2, -1.1, -1.1, -1.1, -1.1, 0, 1, 2, 3, 4, 5]), id);
+    expect(e.bottom.map((p) => p.item.id)).toEqual(["T00", "T01", "T02", "T03", "T04"]);
+    expect(e.bottomTied).toBe(1);
+    expect(e.topTied).toBe(0);
+  });
+});
+
+describe("mean", () => {
+  it("averages the finite values only", () => {
+    expect(mean([0.02, null, 0.04, Number.NaN])).toBeCloseTo(0.03);
+    expect(mean([null])).toBeNull();
   });
 });
 

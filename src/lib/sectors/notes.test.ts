@@ -1,0 +1,46 @@
+import { describe, expect, it } from "vitest";
+import type { Note } from "./groups";
+import { noteWeek } from "./notes";
+
+const SECTORS = ["Communication Services", "Consumer Discretionary", "Consumer Staples", "Energy", "Financials", "Health Care", "Industrials", "Information Technology", "Materials", "Real Estate", "Utilities"];
+const slug = (s: string) => s.toLowerCase().replace(/ /g, "-");
+const N = (sector: string, week: string, p: Partial<Note> = {}): Note => ({ slug: slug(sector), sector, week, title: `${sector} ${week}`, text: "", facts: {}, generated_at: `${week}T09:00:00Z`, model: "m", ...p });
+
+// What the pipeline stores: every Monday's notes, newest first, earlier weeks kept (etl/sectors.py notes()).
+const WEEKS = ["2026-11-16", "2026-11-09", "2026-11-02"];
+const FILE = WEEKS.flatMap((w) => [...SECTORS].reverse().map((s) => N(s, w)));
+
+describe("weekly notes", () => {
+  it("shows the newest week only, however many weeks the file keeps", () => {
+    const w = noteWeek(FILE);
+    expect(FILE).toHaveLength(33);
+    expect(w.week).toBe("2026-11-16");
+    expect(w.notes).toHaveLength(11);
+    expect(new Set(w.notes.map((n) => n.week))).toEqual(new Set(["2026-11-16"]));
+    expect(w.notes.map((n) => n.sector)).toEqual(SECTORS); // by sector name
+    expect(w.weeks).toEqual(WEEKS);
+    expect([w.earlier, w.later]).toEqual(["2026-11-09", null]);
+  });
+  it("steps to an earlier week and back", () => {
+    const w = noteWeek(FILE, { want: "2026-11-09" });
+    expect(w.week).toBe("2026-11-09");
+    expect(w.notes).toHaveLength(11);
+    expect([w.earlier, w.later]).toEqual(["2026-11-02", "2026-11-16"]);
+    expect(noteWeek(FILE, { want: "2026-11-02" }).earlier).toBeNull();
+  });
+  it("falls back to the newest week when the asked one has no note", () => {
+    expect(noteWeek(FILE, { want: "2025-01-06" }).week).toBe("2026-11-16");
+  });
+  it("gives a group page that group's newest note, even when it missed the latest week", () => {
+    const file = FILE.filter((n) => !(n.slug === "energy" && n.week === "2026-11-16"));
+    const w = noteWeek(file, { only: "energy" });
+    expect(w.notes.map((n) => n.title)).toEqual(["Energy 2026-11-09"]);
+    expect(w.weeks).toEqual(["2026-11-09", "2026-11-02"]);
+    expect(noteWeek(file, { only: "no-such-group" })).toMatchObject({ week: null, notes: [], weeks: [] });
+  });
+  it("keeps one note per sector and week", () => {
+    const dup = [N("Energy", "2026-11-16", { title: "first", generated_at: "2026-11-16T09:00:00Z" }), N("Energy", "2026-11-16", { title: "rewritten", generated_at: "2026-11-17T09:00:00Z" })];
+    expect(noteWeek(dup).notes.map((n) => n.title)).toEqual(["rewritten"]);
+    expect(noteWeek(null).notes).toEqual([]);
+  });
+});

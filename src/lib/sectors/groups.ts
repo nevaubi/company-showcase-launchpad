@@ -53,6 +53,8 @@ export interface Overview {
   metrics: Record<string, { name: string; unit: string }>;
   etf_rrg: Record<string, [string, number, number][]>;
   spy_returns: Record<string, number>;
+  /** The pipeline's own assignment of every company to a sector and an industry (SIC code with overrides). */
+  companies?: { tk: string; name?: string; sector: string; industry: string }[];
 }
 export interface Series {
   agg: (number | null)[];
@@ -216,16 +218,25 @@ export const compQuery = (slug: string) =>
     retry: 1,
   });
 
-/** Every covered company's returns and trend flags (setup_series), indexed by ticker. */
+/** Every covered company's trend flags and volatility (setup_series), indexed by ticker. */
 export const tapeQuery = queryOptions({
   queryKey: ["sectors", "tape"],
   queryFn: async () => {
     const f: TapeFile = await getSectorBreadth();
-    return { asOf: f.asOf, idx: tapeIndex(f.rows) };
+    return { file: f, idx: tapeIndex(f.rows) };
   },
   staleTime: 15 * 60_000,
   retry: 1,
 });
+
+/** Why a partner file did not load, from the errors `partnerFile` throws (src/lib/data.ts). */
+export type LoadFailure = "missing" | "signin" | "service";
+export function loadFailure(err: unknown): LoadFailure {
+  const m = err instanceof Error ? err.message : String(err ?? "");
+  if (/^Not available/i.test(m)) return "missing";
+  if (/^Sign in/i.test(m)) return "signin";
+  return "service";
+}
 
 export const SECTOR_ETF: Record<string, string> = {
   "Information Technology": "XLK",
