@@ -1,0 +1,20 @@
+AMP|kpi|other|usd|0|Adjusted operating net revenue per advisor (TTM in thousands)||Adjusted operating net revenue per advisor|q:20250930=1093000,20260930=1240000|y:
+AMP|kpi|other|usd|0|Adjusted operating net revenue per advisor (TTM in thousands)||Advisor productivity|q:20250630=1070000,20260630=1203000|y:
+AMP|kpi|other|usd|1|TTM Revenue Per Advisor||Operating KPIs|q:|y:20250630=1070000,20260630=1203000
+AMP|kpi|other|usdPerShare|0|Adjusted operating net revenue per advisor (TTM in thousands)||Advice & Wealth Management operating metrics|q:20250930=1093|y:20250331=1056
+AMZN|segment|operating_income|usd|1|Operating income -- TTM||TTM operating income by segment|q:|y:20250331=71691000000,20250630=76190000000,20250930=76201000000,20251231=79975000000,20260331=85422000000,20260630=93712000000,20260930=104366000000
+AMZN|segment|revenue|usd|1|WW net sales -- TTM||TTM net sales by segment|q:|y:20250331=650313000000,20250630=670038000000,20250930=691330000000,20251231=716924000000,20260331=742776000000,20260630=775680000000,20260930=797455000000
+EQH|kpi|other|usd|0|Average asset value (TTM)||KPIs|q:20250331=149051000000,20250630=153648000000,20250930=158988000000,20251231=163857000000,20260331=168549000000|y:
+EQH|kpi|other|usd|0|Revenue per advisor TTM||Advisors|q:20250331=410000,20250630=414000,20250930=426000,20251231=440000,20260331=456000,20260630=469000,20260930=487000|y:
+EQH|segment|net_income|usd|1|Net income (loss) attributable to Holdings||TTM Net Income Reconciliation|q:|y:20260331=-822000000,20260630=-926000000,20260930=1504000000
+EQH|segment|operating_income|usd|1|Non-GAAP Operating Earnings||TTM Net Income Reconciliation|q:|y:20260331=1792000000,20260630=1928000000,20260930=2068000000
+HIG|kpi|other|pct|0|Core earnings ROE, last 12 months||Core Earnings (loss) By Segment|q:20250930=17,20260930=18|y:
+HIG|kpi|other|pct|0|Core earnings ROE, last 12 months||kpi|q:20250630=16,20260630=19|y:
+HIG|kpi|other|pct|0|Core earnings ROE, last 12 months||KPIs|q:20250630=17|y:20250331=16,20251231=19,20260331=20
+HIG|kpi|other|pct|0|Net income ROE, last 12 months||KPIs|q:20250630=20|y:20250331=19,20251231=22,20260331=23
+UNFI|balance|other|usd|0|LTM Adjusted EBITDA||Earnings|q:20250131=552000000,20250430=579000000,20251031=585000000,20260131=619000000,20260430=645000000,20260731=701000000|y:20250731=552000000
+UNFI|kpi|other|usd|0|LTM Adjusted EBITDA||Capital Structure|q:20250131=552000000,20250201=552000000,20250430=579000000,20250503=579000000,20250802=552000000,20251101=585000000,20260131=619000000|y:
+UNFI|kpi|other|usd|0|LTM Adjusted EBITDA||Performance|q:20250131=552000000,20250430=579000000,20251031=585000000|y:20250731=552000000
+UNFI|kpi|other|usd|1|LTM Adjusted EBITDA||LTM Adjusted EBITDA|q:20250131=552000000,20250430=579000000,20250731=552000000,20251031=585000000,20260131=619000000,20260430=645000000,20260731=701000000|y:
+ZM|customer|users|count|0|Customers >$100K TTM Revenue||Operating statistics|q:20250131=4088,20250430=4192,20250731=4274|y:
+ZM|customer|users|count|0|Customers contributing more than $100,000 in trailing 12 months revenue||Operating statistics|q:20251031=4363,20260731=4625|y:

@@ -22,3 +22,12 @@ vsat-segment.folded.txt it rebuilds the page's VSAT payload (one document per pr
 
 hood-lines.txt: HOOD's standard-line candidates (same transfer and format as lkq-lines.txt): the
 quarter 1,274,000,000 printed elsewhere as 1,274,100,000,000, the large side being the slip.
+
+smci-netsales.txt: SMCI's 61 "Net sales" facts, the p3 reviewer's checksum-verified transfer of 24 Nov
+2026. Fields: document_id|document_kind|filed|category|
+metric|breakdown|parent|label|is_total|period_end|months|value. Releases 557d2877 and 44918224 print
+in thousands. Used by suspect.test.ts (p3-ir M1).
+
+ttm-lines.txt: 20 trailing-twelve-month lines (AMP AMZN EQH HIG UNFI ZM, periods since 2025) from
+production ir_kpi_facts on 24 Nov 2026, checksum-verified transfer; format as lkq-lines.txt, text
+folded (non-ASCII as "?"). Used by ttm.test.ts (p3-ir H1).

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { groupColumns, groupTitle } from "./display";
 import type { IrPayload, PayloadCheck, PayloadGroup, PayloadSeries } from "./payload";
 import { dropStrays } from "./periods";
-import { alikeLabels, labelTokens, tidyPayload } from "./tidy";
+import { alikeLabels, familiesTogether, labelTokens, tidyPayload } from "./tidy";
 
 type Vals = Record<string, number>;
 const line = (k: string, label: string, q: Vals, extra: Partial<PayloadSeries> = {}): PayloadSeries => ({
@@ -514,5 +514,20 @@ describe("p5-ir4: lines of one table whose names differ only by & and and are on
     const p = nvda();
     p.series[2].q["2025-01-26"] = { v: 120_000_000, d: 1, e: "2025-01-26" };
     expect(tidyPayload(p).series.filter((s) => /^oem/i.test(s.label))).toHaveLength(2);
+  });
+});
+
+describe("screenshot pass: a part line follows its own parent's other parts", () => {
+  it("NVDA Revenue by market platform: Data Center parts stay together, in the printed order (kit payload's row order)", () => {
+    const labels = ["Hyperscale", "AI Clouds, Industrial, & Enterprise", "Data Center — Compute", "Gaming", "Data Center — Networking", "Professional Visualization", "Automotive", "OEM and Other", "Revenue"];
+    const rows = labels.map((l, i) => ({ k: `k${i}`, depth: l === "Revenue" ? 0 : 1 }));
+    const out = familiesTogether(rows, (k) => labels[Number(k.slice(1))]).map((r) => labels[Number(r.k.slice(1))]);
+    expect(out).toEqual(["Hyperscale", "AI Clouds, Industrial, & Enterprise", "Data Center — Compute", "Data Center — Networking", "Gaming", "Professional Visualization", "Automotive", "OEM and Other", "Revenue"]);
+  });
+
+  it("a line named by the lead-in leads its parts; rows without one keep their places", () => {
+    const labels = ["Data Center", "Gaming", "Data Center: Compute", "Automotive", "Data Center: Networking"];
+    const rows = labels.map((_, i) => ({ k: `k${i}`, depth: 1 }));
+    expect(familiesTogether(rows, (k) => labels[Number(k.slice(1))]).map((r) => labels[Number(r.k.slice(1))])).toEqual(["Data Center", "Data Center: Compute", "Data Center: Networking", "Gaming", "Automotive"]);
   });
 });

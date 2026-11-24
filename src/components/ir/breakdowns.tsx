@@ -454,6 +454,8 @@ const BreakdownCard = memo(function BreakdownCard({
   const title = groupTitle(group, root);
   // Figures held back as suspect, and shown values another document prints differently, in view.
   const heldN = rows.reduce((n, r) => n + cols.filter((e) => heldFor(r.s, freq)[e]).length, 0);
+  // Trailing-twelve-month figures of these lines left out of the columns (ttm.ts).
+  const ttmN = rows.reduce((n, r) => n + (r.s.ttm ?? 0), 0);
   const others = rows.flatMap((r) => cols.flatMap((e) => {
     const c = cellsOf(r.s)[e];
     return c?.alt ? [{ s: r.s, e, c, alt: c.alt }] : [];
@@ -543,6 +545,12 @@ const BreakdownCard = memo(function BreakdownCard({
                 {" · "}
                 <HeldMark /> {heldN} figure{heldN === 1 ? "" : "s"} held back: unit, sign or period contradicted by the documents or the SEC filing
               </span>
+            )}
+            {ttmN > 0 && (
+              <>
+                {" · "}
+                {ttmN} trailing-twelve-month figure{ttmN === 1 ? "" : "s"} left out of the columns
+              </>
             )}
             {flagged.length > 0 && (
               <span className="text-foreground">

@@ -17,8 +17,9 @@ import { METRIC_LABEL, groupTitle } from "@/lib/ir/display";
 import type { IrPayload, PayloadCell, PayloadCheck, PayloadGroup, PayloadSeries } from "@/lib/ir/payload";
 import { FLOW_FORMULAS, stockKind } from "@/lib/ir/stock";
 import { holdSuspects } from "@/lib/ir/suspect";
+import { splitTrailing, trailingLine } from "@/lib/ir/ttm";
 
-export const TIDY_VERSION = 10;
+export const TIDY_VERSION = 11;
 
 const STOP = new Set(["total", "totals", "the", "of", "for", "in", "on", "a", "an", "and", "by", "segment", "segments", "reportable", "measure", "line", "lines", "item", "items", "amount", "amounts", "consolidated", "reported", "as", "from", "to", "all", "per"]);
 /** Years glued to a label ("… end of the period — 2024") come from a column header, not the line. */
@@ -242,10 +243,41 @@ interface Ctx {
   yearEnds?: Set<string>;
 }
 
-const TRAILING = /\b(last|trailing|latest) (twelve|12) months\b|\b(ttm|ltm)\b/i;
+/**
+ * Rows of one depth whose names share a lead-in ("Data Center — Compute", "Data Center — Networking")
+ * move up behind the first of them, keeping their order; every other row keeps its place. A row named
+ * by the lead-in alone ("Data Center") leads its parts.
+ */
+export function familiesTogether<R extends { k: string; depth: number }>(rows: R[], labelOf: (k: string) => string): R[] {
+  const lead = (r: R) => {
+    const m = /^(.+?)(\s+—|\s*:)\s+\S/.exec(labelOf(r.k));
+    return m ? `${r.depth}|${m[1].trim().toLowerCase()}` : null;
+  };
+  const own = (r: R) => `${r.depth}|${labelOf(r.k).trim().toLowerCase()}`;
+  const families = new Map<string, R[]>();
+  for (const r of rows) {
+    const f = lead(r);
+    if (f) families.set(f, [...(families.get(f) ?? []), r]);
+  }
+  const placed = new Set<R>();
+  const out: R[] = [];
+  for (const r of rows) {
+    if (placed.has(r)) continue;
+    const f = lead(r) ?? (families.has(own(r)) ? own(r) : null);
+    out.push(r);
+    placed.add(r);
+    if (!f) continue;
+    for (const x of families.get(f) ?? []) if (!placed.has(x)) {
+      out.push(x);
+      placed.add(x);
+    }
+  }
+  return out;
+}
+
 /** Whether a line is a trailing-twelve-month figure (by its printed name or its table's). */
 export function trailing(s: Pick<PayloadSeries, "label" | "bd" | "sc">): boolean {
-  return TRAILING.test(`${s.label} ${s.bd ?? ""} ${s.sc ?? ""}`);
+  return trailingLine(s);
 }
 
 /**
@@ -1470,7 +1502,8 @@ function segmentMatrices(c: Ctx, groups: PayloadGroup[], checks: PayloadCheck[])
 export function tidyPayload(p0: IrPayload, opts: { log?: string[] } = {}): IrPayload {
   if (p0.tidy === TIDY_VERSION && !opts.log) return p0;
   // A quarter printed under two dates a week apart (52/53-week years) becomes one column first.
-  const p = mergeTwinEnds(p0);
+  // Trailing-twelve-month figures leave the quarter and year columns first (ttm.ts, review p3-ir H1).
+  const p = splitTrailing(mergeTwinEnds(p0));
   const series = p.series.map((s) => ({ ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) }));
   const out: IrPayload = { ...p, series, groups: p.groups.map((g) => ({ ...g, t: undefined, rows: [...g.rows] })), checks: p.checks.map((x) => ({ ...x })) };
   const c: Ctx = { p: out, byKey: new Map(series.map((s) => [s.k, s])), alias: new Map(Object.entries(p.alias ?? {})), removed: new Set(), kids: new Map(), renamed: new Map(), touched: new Set(), home: new Map(), log: opts.log };
@@ -1665,6 +1698,9 @@ export function tidyPayload(p0: IrPayload, opts: { log?: string[] } = {}): IrPay
       root.label = `Total ${measure.toLowerCase()}`;
     }
   }
+  // Lines a reader named "<parent> — <part>" stay together, in the order printed (NVDA "Data Center —
+  // Compute" and "— Networking" had "Gaming" between them).
+  for (const g of groups) g.rows = familiesTogether(g.rows, (k) => c.byKey.get(k)?.label ?? "");
   const kept = series.filter((s) => !c.removed.has(s.k));
   const rechecked = checkable(c, groups, c.removed.size ? recheck(c, groups, checks) : checks);
   const q = rechecked.filter((x) => x.kind === "q");

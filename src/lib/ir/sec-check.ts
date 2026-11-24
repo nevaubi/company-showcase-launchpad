@@ -36,6 +36,7 @@
 // (recasts, a subtotal the release calls by the same name).
 import { LEVEL_SPLIT, normLabel } from "@/lib/ir/kpis";
 import type { IrPayload, PayloadCell, PayloadCellFlag, PayloadSeries } from "@/lib/ir/payload";
+import { annualEnds, splitTrailing } from "@/lib/ir/ttm";
 
 export type StdLine = "revenue" | "operatingIncome" | "netIncome" | "epsDiluted" | "netInterestIncome" | "provisionCreditLosses";
 export const STD_LINES: StdLine[] = ["revenue", "operatingIncome", "netIncome", "epsDiluted", "netInterestIncome", "provisionCreditLosses"];
@@ -112,6 +113,20 @@ export function stdLineOf(s: PayloadSeries): StdLine | null {
     return r.line;
   }
   return null;
+}
+
+const SEGMENT_WORDS = /\b(by |per )?(reportable |operating )?segments?\b/gi;
+/**
+ * The standard line of a total printed in a segment table that lists one segment or none (ZM's "Total
+ * revenue" in "Revenue by segment"; review p3-ir L1). The segment words alone kept it out of the check;
+ * it is compared as a part of the company (`partOf`), so it is read as the whole only when it is within
+ * 10% of the filing, and a smaller figure is never flagged as the whole.
+ */
+export function soleSegmentLine(s: PayloadSeries, kids: number): StdLine | null {
+  if (kids > 1 || (s.parent && !s.total)) return null;
+  const words = `${s.bd ?? ""} ${s.sc ?? ""}`;
+  if (!/\bsegments?\b/i.test(words)) return null;
+  return stdLineOf({ ...s, bd: s.bd?.replace(SEGMENT_WORDS, " ") ?? s.bd, sc: s.sc?.replace(SEGMENT_WORDS, " ") ?? s.sc });
 }
 
 const DAY = 86_400_000;
@@ -309,12 +324,17 @@ function levelBreaks(list: PayloadSeries[], sec: Map<string, Ref>, items: SecIte
  * `held` (with any calculated value that uses them, and the tie-out checks they touch), flagged
  * figures carrying a `sec` flag; and the summary with every checked value.
  */
-export function crossCheckSec(p: IrPayload, st: CheckStatements | null | undefined): { payload: IrPayload; check: SecCheck | null } {
-  if (!st || (!st.quarterly && !st.annual)) return { payload: p, check: null };
+export function crossCheckSec(p0: IrPayload, st: CheckStatements | null | undefined): { payload: IrPayload; check: SecCheck | null } {
+  if (!st || (!st.quarterly && !st.annual)) return { payload: p0, check: null };
+  // Year columns closing off the 10-K's fiscal year-end are trailing twelve months (ttm.ts): they
+  // leave the year columns before anything is compared (review p3-ir H1).
+  const p = splitTrailing(p0, annualEnds(st.annual?.periods));
   const candidates = new Map<StdLine, PayloadSeries[]>();
   const byKey = new Map(p.series.map((s) => [s.k, s]));
+  const kidCount = new Map<string, number>();
+  for (const s of p.series) if (s.parent) kidCount.set(s.parent, (kidCount.get(s.parent) ?? 0) + 1);
   for (const s of p.series) {
-    const line = stdLineOf(s);
+    const line = stdLineOf(s) ?? soleSegmentLine(s, kidCount.get(s.k) ?? 0);
     if (line) candidates.set(line, [...(candidates.get(line) ?? []), s]);
   }
   const items: SecItem[] = [];

@@ -1,0 +1,61 @@
+01c6a315|press-release|2024-08-06|segment|revenue|Income Statement||Net sales|1|2023-06-30|12|7123482000
+01c6a315|press-release|2024-08-06|segment|revenue|Income Statement||Net sales|1|2023-06-30|3|2184861000
+01c6a315|press-release|2024-08-06|segment|revenue|Income Statement||Net sales|1|2024-06-30|12|14942854000
+01c6a315|press-release|2024-08-06|segment|revenue|Income Statement||Net sales|1|2024-06-30|3|5308192000
+059ab911|press-release|2025-11-04|segment|revenue|Income Statement||Net sales|1|2024-09-30|3|5937256000
+059ab911|press-release|2025-11-04|segment|revenue|Income Statement||Net sales|1|2025-09-30|3|5017790000
+0f43218e|press-release|2026-05-05|segment|revenue|Revenue||Net sales|1|2025-03-31|3|4599913000
+0f43218e|press-release|2026-05-05|segment|revenue|Revenue||Net sales|1|2026-03-31|3|10243014000
+1609ef3f|press-release|2022-02-01|segment|revenue|Consolidated income||Net sales|1|2020-12-31|3|830306
+1609ef3f|press-release|2022-02-01|segment|revenue|Consolidated income||Net sales|1|2021-12-31|3|1172419
+165b5e08|press-release|2026-08-11|segment|revenue|Consolidated Statement of Operations||Net sales|1|2025-06-30|12|21972042000
+165b5e08|press-release|2026-08-11|segment|revenue|Consolidated Statement of Operations||Net sales|1|2025-06-30|3|5756911000
+165b5e08|press-release|2026-08-11|segment|revenue|Consolidated Statement of Operations||Net sales|1|2026-06-30|12|39063072000
+165b5e08|press-release|2026-08-11|segment|revenue|Consolidated Statement of Operations||Net sales|1|2026-06-30|3|11119777000
+1aa57299|other|2020-11-03|segment|revenue|Income Statement||Net sales|1|2019-09-30|3|799804000
+1aa57299|other|2020-11-03|segment|revenue|Income Statement||Net sales|1|2020-09-30|3|762250000
+1b8fe687|press-release|2024-04-30|segment|revenue|Consolidated income||Net sales|1|2023-03-31|3|1283296000
+1b8fe687|press-release|2024-04-30|segment|revenue|Consolidated income||Net sales|1|2024-03-31|3|3850066000
+23230656|press-release|2023-01-31|segment|revenue|Revenue||Net sales|1|2021-12-31|3|1172419000
+23230656|press-release|2023-01-31|segment|revenue|Revenue||Net sales|1|2022-12-31|3|1803195000
+2ca834ff|press-release|2024-01-29|segment|revenue|Income Statement||Net sales|1|2022-12-31|3|1803195000
+2ca834ff|press-release|2024-01-29|segment|revenue|Income Statement||Net sales|1|2023-12-31|3|3664924000
+44918224|press-release|2022-11-01|segment|revenue|Revenue||Net sales|1|2021-09-30|3|1032730
+44918224|press-release|2022-11-01|segment|revenue|Revenue||Net sales|1|2022-09-30|3|1852130
+44c60fda|press-release|2021-05-04|segment|revenue|Income statement||Net sales|1|2020-03-31|3|772408000
+44c60fda|press-release|2021-05-04|segment|revenue|Income statement||Net sales|1|2021-03-31|3|895881000
+44f1db3b|press-release|2023-08-08|product|revenue|Income Statement||Net sales|1|2022-06-30|12|5196099000
+44f1db3b|press-release|2023-08-08|product|revenue|Income Statement||Net sales|1|2022-06-30|3|1635460000
+44f1db3b|press-release|2023-08-08|product|revenue|Income Statement||Net sales|1|2023-06-30|12|7123482000
+44f1db3b|press-release|2023-08-08|product|revenue|Income Statement||Net sales|1|2023-06-30|3|2184861000
+48968c6c|press-release|2026-11-03|segment|revenue|Income Statement||Net sales|1|2025-09-30|3|5017790000
+48968c6c|press-release|2026-11-03|segment|revenue|Income Statement||Net sales|1|2026-09-30|3|19945832000
+49f04ec1|press-release|2023-05-02|product|revenue|Income Statement||Net sales|1|2022-03-31|3|1355490000
+49f04ec1|press-release|2023-05-02|product|revenue|Income Statement||Net sales|1|2023-03-31|3|1283296000
+557d2877|press-release|2021-08-10|segment|revenue|Income statement||Net sales|1|2020-06-30|12|3339281
+557d2877|press-release|2021-08-10|segment|revenue|Income statement||Net sales|1|2020-06-30|3|896126
+557d2877|press-release|2021-08-10|segment|revenue|Income statement||Net sales|1|2021-06-30|12|3557422
+557d2877|press-release|2021-08-10|segment|revenue|Income statement||Net sales|1|2021-06-30|3|1068985
+5fef0568|press-release|2025-05-06|segment|revenue|Consolidated Statement of Operations||Net sales|1|2024-03-31|3|3850066000
+5fef0568|press-release|2025-05-06|segment|revenue|Consolidated Statement of Operations||Net sales|1|2025-03-31|3|4599913000
+6a8f94eb|press-release|2023-11-01|segment|revenue|Income Statement||Net sales|1|2022-09-30|3|1852130000
+6a8f94eb|press-release|2023-11-01|segment|revenue|Income Statement||Net sales|1|2023-09-30|3|2119672000
+6a9eb0e7|press-release|2022-05-03|segment|revenue|Income Statement||Net sales|1|2021-03-31|3|895881000
+6a9eb0e7|press-release|2022-05-03|segment|revenue|Income Statement||Net sales|1|2022-03-31|3|1355490000
+82f45583|press-release|2022-08-09|segment|revenue|Income statement||Net sales|1|2021-06-30|12|3557422000
+82f45583|press-release|2022-08-09|segment|revenue|Income statement||Net sales|1|2021-06-30|3|1068985000
+82f45583|press-release|2022-08-09|segment|revenue|Income statement||Net sales|1|2022-06-30|12|5196099000
+82f45583|press-release|2022-08-09|segment|revenue|Income statement||Net sales|1|2022-06-30|3|1635460000
+95fe2676|press-release|2025-08-05|segment|revenue|Income Statement||Net sales|1|2024-06-30|12|14989251000
+95fe2676|press-release|2025-08-05|segment|revenue|Income Statement||Net sales|1|2024-06-30|3|5354589000
+95fe2676|press-release|2025-08-05|segment|revenue|Income Statement||Net sales|1|2025-06-30|12|21972042000
+95fe2676|press-release|2025-08-05|segment|revenue|Income Statement||Net sales|1|2025-06-30|3|5756911000
+d761a9eb|press-release|2021-11-02|segment|revenue|Income Statement||Net sales|1|2020-09-30|3|762250000
+d761a9eb|press-release|2021-11-02|segment|revenue|Income Statement||Net sales|1|2021-09-30|3|1032730000
+de47f7ff|other|2020-08-11|segment|revenue|Income Statement||Net sales|1|2019-06-30|12|3500360000
+de47f7ff|other|2020-08-11|segment|revenue|Income Statement||Net sales|1|2019-06-30|3|854234000
+de47f7ff|other|2020-08-11|segment|revenue|Income Statement||Net sales|1|2020-06-30|12|3339281000
+de47f7ff|other|2020-08-11|segment|revenue|Income Statement||Net sales|1|2020-06-30|3|896126000
+e3c27be9|press-release|2026-02-03|segment|revenue|Income Statement||Net sales|1|2024-12-31|3|5677962000
+e3c27be9|press-release|2026-02-03|segment|revenue|Income Statement||Net sales|1|2025-12-31|3|12682491000
+fa6aa0c5|other|2020-05-07|cost|revenue|Income Statement||Net sales|1|2020-03-31|3|772408000

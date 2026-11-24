@@ -85,6 +85,18 @@ function baselineOf<X extends { lg: number }>(clusters: X[][], company: number |
   return twin ?? major;
 }
 
+/** The step a figure is printed to, from its trailing zeros (657,000,000 → 1,000,000; 896,126,437 → 1). */
+export function printedStep(v: number): number {
+  let n = Math.round(Math.abs(v));
+  if (!n) return 1;
+  let step = 1;
+  while (n % 10 === 0 && step < 1e12) {
+    n /= 10;
+    step *= 10;
+  }
+  return step;
+}
+
 /** Finds the cells to hold back; see the rules at the top of this file. */
 export function findSuspects(p: IrPayload): SuspectMap {
   const out: SuspectMap = new Map();
@@ -227,7 +239,7 @@ export function findSuspects(p: IrPayload): SuspectMap {
 
   // 7. A line printed in another unit than the same line in the same table: for one period, the cell's
   // other printed figure (alt), or a line of the same name in the same table, is 1,000× or 1,000,000×
-  // this figure to within half a percent (the digits agree; a real segment never does that to its total).
+  // this figure with the same digits to the printed precision (the digits agree; a real segment never does that to its total).
   // The same document's other figures of the line, and of the lines under it, share the table's unit.
   const proven: { s: PayloadSeries; d: number; e: string; why: string }[] = [];
   // Which side of a 1,000× pair is the slip: the one farther from the company's usual line size (all
@@ -242,8 +254,10 @@ export function findSuspects(p: IrPayload): SuspectMap {
   }
   const unitSlip = (small: number, big: number, unit: string, k: Kind): number | null => {
     if (!small || Math.sign(small) !== Math.sign(big)) return null;
-    const r = Math.abs(big / small);
-    const f = [1e3, 1e6].find((x) => Math.abs(r / x - 1) <= 5e-3);
+    // The digits must agree (review p3-ir M2: KEY -660,000 against -657,000,000 is 995×, not a slip):
+    // the large figure is the small one times 1,000 or 1,000,000 to the large figure's printed
+    // precision, or to the small one's last digit when the large one is printed in full.
+    const f = [1e3, 1e6].find((x) => Math.abs(Math.abs(big) - Math.abs(small) * x) <= Math.max(printedStep(big), x / 2));
     const at = usual.get(unit);
     if (!f || at == null) return null;
     const lg = (v: number) => Math.log10(Math.abs(k === "y" ? v / 4 : v));
@@ -271,7 +285,7 @@ export function findSuspects(p: IrPayload): SuspectMap {
         const already = isFlagged(s, k, e);
         let why: string | null = null;
         const fa = c.alt ? unitSlip(c.v, c.alt.v, s.unit, k) : null;
-        if (fa && c.alt) why = slipWhy("Another document prints this line in the same table and", c.alt.v, fa);
+        if (fa && c.alt) why = slipWhy(c.alt.d != null && c.alt.d === c.d ? "This document also prints this line in the same table and" : "Another document prints this line in the same table and", c.alt.v, fa);
         for (const t of twins) {
           if (why) break;
           const tc = cellsOf(t, k)[e];
@@ -302,9 +316,70 @@ export function findSuspects(p: IrPayload): SuspectMap {
   return out;
 }
 
+/** Whether `big` is `small` printed in thousands or millions: 1,000× or 1,000,000× exactly to `small`'s last digit. */
+export function sameDigits(small: number, big: number): boolean {
+  if (!small || Math.sign(small) !== Math.sign(big) || Math.abs(big) <= Math.abs(small)) return false;
+  return [1e3, 1e6].some((f) => Math.abs(big - small * f) < f / 2);
+}
+
+/**
+ * A held figure whose other printing (`alt`) is the same period of the same line can leave the right
+ * figure behind (SMCI net sales Q4 FY2020: 896,126 from a release in thousands is held, the release
+ * printing 896,126,000 was its `alt`; review p3-ir M1). The other printing takes the cell, keeping the
+ * held figure as its `alt`, and goes through every rule again: if any holds it, the original hold stands.
+ * Holds of the first pass are never undone except for the promoted cells themselves.
+ */
+function promoteAlts(p: IrPayload, found: SuspectMap): { p: IrPayload; found: SuspectMap } {
+  const promoted: { k: string; kind: Kind; e: string }[] = [];
+  const series = p.series.map((s) => {
+    const byKind = found.get(s.k);
+    if (!byKind) return s;
+    let next: PayloadSeries | null = null;
+    for (const [kind, m] of byKind)
+      for (const e of m.keys()) {
+        const c = cellsOf(next ?? s, kind)[e];
+        // Only the same digits in another unit (1,000× or 1,000,000× to the figure's last printed
+        // digit): another figure entirely (a segment total, a restatement) is no proof of anything.
+        if (!c?.alt || c.f || !sameDigits(c.v, c.alt.v)) continue;
+        next ??= { ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) };
+        const { kind: _k, ...a } = c.alt;
+        const { alt: _a, w: _w, why: _why, flags: _f, ...old } = c;
+        cellsOf(next, kind)[e] = { ...a, ...(c.s ? { s: c.s } : {}), alt: { ...old, kind: "conflict" } };
+        promoted.push({ k: s.k, kind, e });
+      }
+    return next ?? s;
+  });
+  if (!promoted.length) return { p, found };
+  const p1 = { ...p, series };
+  const again = findSuspects(p1);
+  const out: SuspectMap = new Map();
+  const put = (k: string, kind: Kind, e: string, why: string) => {
+    let byKind = out.get(k);
+    if (!byKind) out.set(k, (byKind = new Map()));
+    let m = byKind.get(kind);
+    if (!m) byKind.set(kind, (m = new Map()));
+    if (!m.has(e)) m.set(e, why);
+  };
+  const isPromoted = new Set(promoted.map((x) => `${x.k}|${x.kind}|${x.e}`));
+  const failed = new Set(promoted.filter((x) => again.get(x.k)?.get(x.kind)?.has(x.e)).map((x) => `${x.k}|${x.kind}|${x.e}`));
+  // The first pass's holds stand (rule 7's document sweep included), except promoted cells that pass.
+  for (const [k, byKind] of found) for (const [kind, m] of byKind) for (const [e, why] of m) if (!isPromoted.has(`${k}|${kind}|${e}`) || failed.has(`${k}|${kind}|${e}`)) put(k, kind, e, why);
+  for (const [k, byKind] of again) for (const [kind, m] of byKind) for (const [e, why] of m) if (!isPromoted.has(`${k}|${kind}|${e}`)) put(k, kind, e, why);
+  // A promoted cell that fails goes back to the figure that was stored, held with its first reason.
+  const restored = p1.series.map((s, i) => {
+    const mine = promoted.filter((x) => x.k === s.k && failed.has(`${x.k}|${x.kind}|${x.e}`));
+    if (!mine.length) return s;
+    const orig = p.series[i];
+    const next = { ...s, q: { ...s.q }, y: { ...s.y }, ...(s.mo ? { mo: { ...s.mo } } : {}) };
+    for (const x of mine) cellsOf(next, x.kind)[x.e] = cellsOf(orig, x.kind)[x.e];
+    return next;
+  });
+  return { p: { ...p1, series: restored }, found: out };
+}
+
 /** Moves suspect cells into `held`, drops the tie-out checks that used them and recounts the stats. */
-export function holdSuspects(p: IrPayload): IrPayload {
-  const found = findSuspects(p);
+export function holdSuspects(p0: IrPayload): IrPayload {
+  const { p, found } = promoteAlts(p0, findSuspects(p0));
   let held = 0;
   let conflicts = 0;
   const heldAt = new Set<string>();

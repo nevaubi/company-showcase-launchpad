@@ -82,6 +82,8 @@ export interface PayloadSeries {
   mo?: Record<string, PayloadCell>;
   /** cells held back as suspect, by period kind: shown with their reason, never used in figures */
   held?: { q?: Record<string, PayloadCell>; y?: Record<string, PayloadCell>; mo?: Record<string, PayloadCell> };
+  /** trailing-twelve-month figures of this line taken out of the quarter and year columns (ttm.ts) */
+  ttm?: number;
 }
 export interface PayloadGroup {
   id: string;
@@ -149,6 +151,8 @@ export interface IrStats {
   scaleFlags?: number;
   /** cells held back as suspect (see suspect.ts) */
   held?: number;
+  /** trailing-twelve-month figures left out of the quarter and year columns (ttm.ts) */
+  ttm?: number;
   /** shown values that another document prints differently */
   conflicts?: number;
   /** printed totals whose listed lines never add up, shown as plain lines instead of a breakdown */

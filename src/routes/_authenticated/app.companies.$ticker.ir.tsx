@@ -265,6 +265,11 @@ function IrSummary({
         </div>
       )}
       {payload && <IrChecksLine ticker={ticker} payload={payload} check={data.secCheck} consistency={data.consistency} timings={data.timings} late={data.secCheckLate} />}
+      {s?.ttm ? (
+        <p className={cn("border-t px-4 py-2", IR.caption)} data-section="IR trailing twelve months">
+          {s.ttm.toLocaleString()} trailing-twelve-month figure{s.ttm === 1 ? "" : "s"} (twelve months that end off the fiscal year, or printed as TTM or LTM) {s.ttm === 1 ? "is" : "are"} left out of the year and quarter columns, so none is read as a fiscal year or a quarter.
+        </p>
+      ) : null}
     </IrPanel>
   );
 }

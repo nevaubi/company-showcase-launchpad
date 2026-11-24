@@ -431,3 +431,28 @@ describe("p5-ir4: a stored line that mixes a segment total into the company's re
     expect(check!.items.map((x) => x.status)).toEqual(["agree", "agree"]);
   });
 });
+
+describe("p3-ir L1: a segment table that lists one segment is checked", () => {
+  // The reviewer's ZM line (lines.ok, production of 23 Nov) and ZM's 10-Q revenue (companyfacts,
+  // RevenueFromContractWithCustomerExcludingAssessedTax, 0001585521-25-000141 and -000202).
+  const zm: PayloadSeries = { k: "zm", cat: "segment", met: "revenue", unit: "usd", label: "Total revenue", parent: null, total: true, bd: "Revenue by segment", q: { "2025-07-31": { v: 1_217_200_000, d: 0, m: 3 }, "2025-10-31": { v: 1_229_800_000, d: 1, m: 3 } }, y: {} };
+  const payloadOf = (series: PayloadSeries[]): IrPayload => ({ v: 2, ticker: "ZM", builtAt: "", quarters: ["2025-07-31", "2025-10-31"], years: [], docs: [], series, groups: [], checks: [], stats: { series: series.length, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } } });
+  const st = (a: number, b: number): CheckStatements => ({ quarterly: { periods: [{ end: "2025-07-31" }, { end: "2025-10-31" }], rows: [{ key: "revenue", cells: [{ v: a, src: { accn: "0001585521-25-000141" } }, { v: b, src: { accn: "0001585521-25-000202" } }] }] }, annual: { periods: [], rows: [] } });
+
+  it("ZM's total revenue is compared and agrees in both quarters", () => {
+    const { check } = crossCheckSec(payloadOf([zm]), st(1_217_227_000, 1_229_835_000));
+    expect(check?.checked).toBe(2);
+    expect(check?.items.map((x) => x.status)).toEqual(["agree", "agree"]);
+  });
+
+  it("a segment total of a company with several segments stays out", () => {
+    const kids: PayloadSeries[] = ["A", "B"].map((n) => ({ ...zm, k: `zm${n}`, label: `Segment ${n}`, total: false, parent: "zm" }));
+    const { check } = crossCheckSec(payloadOf([zm, ...kids]), st(1_217_227_000, 1_229_835_000));
+    expect(check?.checked ?? 0).toBe(0);
+  });
+
+  it("a one-segment total far from the filing is not read as the whole (no flag)", () => {
+    const { payload } = crossCheckSec(payloadOf([zm]), st(3_000_000_000, 3_100_000_000));
+    expect(payload.series[0].q["2025-07-31"].flags ?? []).toEqual([]);
+  });
+});

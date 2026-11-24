@@ -6,7 +6,8 @@ import { keyLines } from "./highlights";
 import type { IrFact } from "./kpis";
 import { buildPayload, type IrPayload, type PayloadSeries } from "./payload";
 import { heldFor, periodGrids } from "./periods";
-import { findSuspects, holdSuspects } from "./suspect";
+import { findSuspects, holdSuspects, printedStep } from "./suspect";
+import { tidyPayload } from "./tidy";
 import { XYZ_FACTS } from "@/test/ir-xyz";
 
 // PNC 8-K of 15 Jul 2026 (q22026financialhighlightsa.htm): revenue lines of the Consolidated Financial
@@ -28,15 +29,21 @@ describe("held figures on real stored data", () => {
 
   it("XYZ: quarters a later release printed in thousands are held; the dollar quarters stay", () => {
     const total = find(xyz, "Total net revenue", "revenue type");
-    expect(Object.keys(total.held!.q!).sort()).toEqual(["2019-03-31", "2019-12-31", "2020-03-31"]);
-    expect(Object.keys(total.held!.y!)).toEqual(["2019-12-31"]);
+    expect(Object.keys(total.held!.q!).sort()).toEqual(["2019-03-31", "2020-03-31"]);
+    // Q4 2019: the thousands printing (1,313,429) is the other value of the dollars printing, which is
+    // shown: its parts add up to it (832,180,000 + 22,267,000 + 177,567,000 + 281,415,000; p3-ir M1).
+    expect(total.q["2019-12-31"]).toMatchObject({ v: 1_313_429_000, alt: { v: 1_313_429 } });
+    // FY2019 likewise: the dollars printing is shown, the thousands one is its other value.
+    expect(total.held?.y?.["2019-12-31"]).toBeUndefined();
+    expect(Math.abs(total.y["2019-12-31"].v - total.y["2019-12-31"].alt!.v * 1000)).toBeLessThan(500);
     expect(total.held!.q!["2019-03-31"]).toMatchObject({ v: 959_359, w: "suspect" });
     expect(total.held!.q!["2019-03-31"].why).toMatch(/About 1,000× smaller than this line's other periods/);
     // Q2 2020 (1.92 billion) sits with the line's other dollar quarters: shown (the old neighbour test held it).
     expect(total.q["2020-06-30"].v).toBe(1_923_625_000);
     for (const label of ["Transaction-based revenue", "Subscription and services-based revenue", "Hardware revenue", "Bitcoin revenue"]) {
       const s = xyz.series.find((x) => x.label === label && x.parent === total.k)!;
-      expect(Object.keys(s.held?.q ?? {}).length, label).toBeGreaterThanOrEqual(3);
+      // Q4 2019 moved to its dollars printing (M1): the other thousands quarters stay held.
+      expect(Object.keys(s.held?.q ?? {}).length, label).toBeGreaterThanOrEqual(2);
       expect(Object.values(s.q).every((c) => Math.abs(c.v) >= 1e7), label).toBe(true);
     }
     expect(xyz.stats.held).toBe(heldKeys(xyz).length);
@@ -288,5 +295,61 @@ describe("a line printed in another unit beside its same-named twin in one table
     const pay: IrPayload = { v: 2, ticker: "LKQ", builtAt: "", quarters: [], years: [], docs: [], series, groups: [], checks: [], stats: { series: series.length, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } } };
     const why = [...findSuspects(pay).values()].flatMap((m) => [...m.values()].flatMap((x) => [...x.values()]));
     expect(why.filter((w) => /same table|same document prints this line/.test(w))).toEqual([]);
+  });
+});
+
+describe("p3-ir M1: a held slip leaves the correct printing of the same period shown", () => {
+  const facts: IrFact[] = readFileSync(path.resolve(__dirname, "fixtures/smci-netsales.txt"), "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l, i) => {
+      const [d, kind, filed, cat, met, bd, parent, label, tot, e, m, v] = l.split("|");
+      return { id: `f${i}`, document_id: d, document_kind: kind, category: cat, metric: met, breakdown: bd || null, parent: parent || null, label, unit: "usd", is_total: tot === "1", period_start: null, period_end: e, months: Number(m), value: Number(v), accn: null, doc: null, filed: filed || null, method: "table", locator: {} } as unknown as IrFact;
+    });
+
+  it("SMCI net sales Q4 FY2020 and FY2020: 896,126,000 and 3,339,281,000 are shown, the thousands printing held as their other value", () => {
+    const p = tidyPayload(buildPayload("SMCI", facts));
+    const shownQ = p.series.flatMap((s) => (s.q["2020-06-30"] ? [s.q["2020-06-30"]] : []));
+    const shownY = p.series.flatMap((s) => (s.y["2020-06-30"] ? [s.y["2020-06-30"]] : []));
+    expect(shownQ.map((c) => c.v)).toContain(896_126_000);
+    expect(shownY.map((c) => c.v)).toContain(3_339_281_000);
+    expect(shownQ.find((c) => c.v === 896_126_000)?.alt?.v).toBe(896_126);
+    // No slip is shown anywhere: every shown net sales quarter is in the hundreds of millions or more.
+    for (const s of p.series) for (const c of Object.values(s.q)) expect(Math.abs(c.v)).toBeGreaterThan(1e8);
+  });
+});
+
+describe("p3-ir M2: rule 7 needs the same digits, and its reason says which document", () => {
+  // The reviewer's KEY rows: document 5fd4c3ef, "Loss on sale of securities", table "Selected items impact
+  // on earnings", Q4 2024: -660,000 ($0.66 per share read in millions) and -657,000,000 (after tax), plus
+  // 30 neutral quarter cells at 10^8.64 (KEY's median usd quarter fact) so the usual size matches.
+  const keyFacts = (pair: number[]) => {
+    const facts: Record<string, unknown>[] = pair.map((v, i) => ({ id: `f${i}`, document_id: "5fd4c3ef", document_kind: "presentation", category: "kpi", metric: "other", breakdown: "Selected items impact on earnings", parent: null, label: "Loss on sale of securities", unit: "usd", is_total: false, period_start: null, period_end: "2024-12-31", months: 3, value: v, accn: null, doc: null, filed: "2025-04-17", method: "table", locator: { n: i } }));
+    const ends = ["2023-03-31", "2023-06-30", "2023-09-30", "2023-12-31", "2024-03-31", "2024-06-30", "2024-09-30", "2024-12-31", "2025-03-31", "2025-06-30"];
+    for (let i = 0; i < 3; i++) for (const e of ends) facts.push({ id: `x${i}${e}`, document_id: `filler${i}`, document_kind: "other", category: "kpi", metric: "other", breakdown: `Filler ${i}`, parent: null, label: `Filler ${i}`, unit: "usd", is_total: false, period_start: null, period_end: e, months: 3, value: Math.round(10 ** 8.64) + i, accn: null, doc: null, filed: null, method: "table", locator: { n: 0 } });
+    return buildPayload("KEY", facts as unknown as IrFact[]);
+  };
+  const loss = (p: IrPayload) => p.series.filter((s) => /loss on sale/i.test(s.label));
+
+  it("KEY: -660,000 against -657,000,000 (995×) is no unit slip; nothing is held on rule 7", () => {
+    const p = keyFacts([-660_000, -657_000_000]);
+    const why = loss(p).flatMap((s) => Object.values(s.held?.q ?? {}).map((c) => c.why ?? ""));
+    expect(why.filter((w) => /1,000× this figure/.test(w))).toEqual([]);
+    expect(loss(p).some((s) => s.q["2024-12-31"]?.v === -657_000_000 || s.q["2024-12-31"]?.alt?.v === -657_000_000)).toBe(true);
+  });
+
+  it("the same digits in one document are still a slip, the reason names this document, and the full printing is shown", () => {
+    const p = keyFacts([-657_000, -657_000_000]);
+    // The slip is the shown figure's other value now (M1); the rule's own reason, from findSuspects:
+    const shown = loss(p).find((s) => s.q["2024-12-31"]?.v === -657_000_000)!;
+    expect(shown.q["2024-12-31"].alt?.v).toBe(-657_000);
+    const slip: PayloadSeries = { ...shown, k: "slip", q: { "2024-12-31": { v: -657_000, d: 7, m: 3, alt: { v: -657_000_000, d: 7, m: 3, kind: "conflict" } } }, y: {} };
+    const filler: PayloadSeries[] = [0, 1, 2].map((i) => ({ ...shown, k: `fill${i}`, label: `Filler ${i}`, bd: `Filler ${i}`, q: Object.fromEntries(["2024-03-31", "2024-06-30", "2024-09-30"].map((e) => [e, { v: 4.4e8 + i, d: 9, m: 3 }])), y: {} }));
+    const why = findSuspects({ ...p, series: [slip, ...filler], groups: [] }).get("slip")?.get("q")?.get("2024-12-31");
+    expect(why).toMatch(/^This document also prints this line in the same table and prints -657,000,000 for this period, 1,000× this figure/);
+  });
+
+  it("printed precision", () => {
+    expect([printedStep(657_000_000), printedStep(896_126_437), printedStep(1_274_100_000_000), printedStep(0)]).toEqual([1_000_000, 1, 100_000_000, 1]);
   });
 });
