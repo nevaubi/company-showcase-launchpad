@@ -1,0 +1,26 @@
+02b63f44-63fa-4e5d-bfc1-129615b1d695|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment||Total revenues|usd|true|2024-04-01|2025-03-31|12|2214741||text
+071bd0e1-d9df-444c-91b5-1eaad536c88a|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Maritime|usd|false|2025-01-01|2025-03-31|3|116600000|2026-03-31|text
+09a60bdc-b4eb-4220-ae6e-d88abb7b04c2|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Government|usd|false|2026-01-01|2026-03-31|3|183900000|2026-03-31|text
+0f505c3a-323b-4a75-8baa-75e295aa1ebe|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Aviation ? revenue|usd|false|2025-04-01|2026-03-31|12|478003||text
+16d32b30-b8b6-4a44-8f57-3e49efc6955d|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Central Services|usd|false|2026-01-01|2026-03-31|3|22600000|2026-03-31|text
+18327523-1c86-43fc-9c6c-09ce9929ba8b|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Aviation|usd|false|2026-01-01|2026-03-31|3|117900000|2026-03-31|text
+2c45d1bd-092a-4e26-9fd0-eaf5009df06a|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Central services ? revenue|usd|false|2025-04-01|2026-03-31|12|94058||text
+2e04e4b5-b0ba-46ba-9222-bba269e70844|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Government ? revenue|usd|false|2024-04-01|2025-03-31|12|758497||text
+323bc6a2-9721-432b-b125-77911af5c501|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment||Total Revenue|usd|true|2025-01-01|2025-03-31|3|454300000|2026-03-31|text
+36a58451-ae61-443f-8fa9-7d8c4a929892|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Government|usd|false|2025-01-01|2025-03-31|3|161800000|2026-03-31|text
+49ae2588-497a-4e47-b704-1f6db20b2445|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Aviation ? revenue|usd|false|2024-04-01|2025-03-31|12|601857||text
+527d9587-646b-4594-9bf2-8f419fd84646|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment||Total Revenue|usd|true|2026-01-01|2026-03-31|3|465200000|2026-03-31|text
+547ef13e-a6b6-4311-a82f-b7981b882e79|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Enterprise|usd|false|2026-01-01|2026-03-31|3|25500000|2026-03-31|text
+5485c859-28db-42e4-9d2d-bb500889f3fc|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment||Total revenues|usd|true|2025-04-01|2026-03-31|12|1832925||text
+59daa0e6-b58f-46dc-aab9-410e0d4915ed|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment||Total Revenue|usd|true|2025-04-01|2026-03-31|12|1832900000|2026-03-31|text
+5e3350f4-706c-4d13-af10-d70e7a966d09|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Maritime ? revenue|usd|false|2024-04-01|2025-03-31|12|614236||text
+64e98543-82c8-4c96-9333-545849c5f4cb|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Maritime|usd|false|2026-01-01|2026-03-31|3|115300000|2026-03-31|text
+88c84a49-0d46-458f-a3d6-fca701d75914|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Aviation|usd|false|2025-01-01|2025-03-31|3|127600000|2026-03-31|text
+c7421b4f-5947-41d2-8fb5-ce1f57276c0c|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Enterprise ? revenue|usd|false|2024-04-01|2025-03-31|12|142227||text
+cb88c326-12be-4632-8002-b8117b352607|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Central services ? revenue|usd|false|2024-04-01|2025-03-31|12|97924||text
+d1ff78f3-2c1d-4998-882a-49adc20c7686|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Enterprise|usd|false|2025-01-01|2025-03-31|3|28800000|2026-03-31|text
+dbfad801-6e90-4339-9d86-7149925bbbb6|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment|Total Revenue|Central Services|usd|false|2025-01-01|2025-03-31|3|19500000|2026-03-31|text
+dcae57af-b709-4e95-8102-95938ba3c1ab|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Maritime ? revenue|usd|false|2025-04-01|2026-03-31|12|475043||text
+de34672b-c895-4b96-ba87-7603f9e44839|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Enterprise ? revenue|usd|false|2025-04-01|2026-03-31|12|105131||text
+e904402c-fadf-4c00-b158-30d525c0da5f|69085149-2cf4-420c-afae-47e038538eea|supplement|segment|revenue|Revenue by segment|Total revenues|Government ? revenue|usd|false|2025-04-01|2026-03-31|12|680690||text
+fe2ed6e7-ac80-4bc8-be37-ba710b0066cc|bea91f83-b709-40a3-a612-f286732676e9|presentation|segment|revenue|Revenue by segment||Total Revenue|usd|true|2024-04-01|2025-03-31|12|1781400000|2026-03-31|text

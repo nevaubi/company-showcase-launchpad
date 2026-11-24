@@ -43,6 +43,12 @@ const labelKey = (s: string) =>
     .replace(/^\s*total\s+/, "")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
+/** Strict name identity for rule 7: case, a leading "Total", punctuation and a plural "s" aside. */
+const sameName = (s: string) =>
+  labelKey(s)
+    .split(" ")
+    .map((w) => (w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w))
+    .join(" ");
 
 /** Moved by the nearest power of 1,000, does `c` land among `base`'s values? Returns the shift in decades, or 0. */
 function slipShift<X extends { lg: number }>(c: X[], base: X[]): number {
@@ -217,6 +223,72 @@ export function findSuspects(p: IrPayload): SuspectMap {
         break;
       }
     }
+  }
+
+  // 7. A line printed in another unit than the same line in the same table: for one period, the cell's
+  // other printed figure (alt), or a line of the same name in the same table, is 1,000× or 1,000,000×
+  // this figure to within half a percent (the digits agree; a real segment never does that to its total).
+  // The same document's other figures of the line, and of the lines under it, share the table's unit.
+  const proven: { s: PayloadSeries; d: number; e: string; why: string }[] = [];
+  // Which side of a 1,000× pair is the slip: the one farther from the company's usual line size (all
+  // its printed quarter figures of the unit; years count a quarter). HOOD prints 1,274,000,000 for a quarter and
+  // another document 1,274,100,000,000: there the large side is the slip and nothing shown is held.
+  const usual = new Map<string, number>();
+  for (const unit of GUARDED) {
+    const lgs = p.series
+      .filter((s) => s.unit === unit)
+      .flatMap((s) => Object.values(s.q).filter((c) => c.v && !c.f).map((c) => Math.log10(Math.abs(c.v))));
+    if (lgs.length >= 6) usual.set(unit, median(lgs));
+  }
+  const unitSlip = (small: number, big: number, unit: string, k: Kind): number | null => {
+    if (!small || Math.sign(small) !== Math.sign(big)) return null;
+    const r = Math.abs(big / small);
+    const f = [1e3, 1e6].find((x) => Math.abs(r / x - 1) <= 5e-3);
+    const at = usual.get(unit);
+    if (!f || at == null) return null;
+    const lg = (v: number) => Math.log10(Math.abs(k === "y" ? v / 4 : v));
+    return Math.abs(lg(big) - at) + 1 <= Math.abs(lg(small) - at) ? f : null;
+  };
+  const slipWhy = (other: string, big: number, f: number) =>
+    `${other} prints ${big.toLocaleString("en-US")} for this period, ${f === 1e3 ? "1,000" : "1,000,000"}× this figure: this line was probably read in ${f === 1e3 ? "thousands" : "millions"} as if in dollars`;
+  const tableKey = (s: PayloadSeries) => {
+    const bd = s.bd ?? bdOf.get(s.k);
+    return bd ? `${s.unit}|${bd.toLowerCase()}|${sameName(s.label)}` : null;
+  };
+  const sameTable = new Map<string, PayloadSeries[]>();
+  for (const s of p.series) {
+    if (!GUARDED.has(s.unit)) continue;
+    const key = tableKey(s);
+    if (key) (sameTable.get(key) ?? sameTable.set(key, []).get(key)!).push(s);
+  }
+  for (const s of p.series) {
+    if (!GUARDED.has(s.unit)) continue;
+    const twins = (sameTable.get(tableKey(s) ?? "") ?? []).filter((x) => x !== s);
+    for (const k of ["q", "y"] as Kind[])
+      for (const [e, c] of Object.entries(cellsOf(s, k))) {
+        // A cell another rule already holds still proves its document's unit for the lines under it.
+        if (c.f || c.d == null) continue;
+        const already = isFlagged(s, k, e);
+        let why: string | null = null;
+        const fa = c.alt ? unitSlip(c.v, c.alt.v, s.unit, k) : null;
+        if (fa && c.alt) why = slipWhy("Another document prints this line in the same table and", c.alt.v, fa);
+        for (const t of twins) {
+          if (why) break;
+          const tc = cellsOf(t, k)[e];
+          if (!tc || tc.f || isFlagged(t, k, e)) continue;
+          const f = unitSlip(c.v, tc.v, s.unit, k);
+          if (f) why = slipWhy(`The same table's line “${t.label}”`, tc.v, f);
+        }
+        if (!why) continue;
+        if (!already) flag(s, k, e, why);
+        proven.push({ s, d: c.d, e, why });
+      }
+  }
+  for (const x of proven) {
+    const also = `The same document prints this table in another unit (period ending ${x.e}: ${x.why.split(": ")[0].replace(/^./, (m) => m.toLowerCase())})`;
+    for (const t of [x.s, ...(kids.get(x.s.k) ?? [])])
+      for (const k of KINDS)
+        for (const [e, c] of Object.entries(cellsOf(t, k))) if (!c.f && c.d === x.d && !isFlagged(t, k, e)) flag(t, k, e, also);
   }
 
   // 6. Calculated values that use a held figure.

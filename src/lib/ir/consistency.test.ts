@@ -37,15 +37,33 @@ describe("quarters against the year", () => {
   });
 });
 
-describe("calculated values against their formula", () => {
-  it("passes a correct formula and flags a wrong one", () => {
-    const good = c(2e9, { f: { formula: "Full year − Q1 − Q2 − Q3", parts: [{ label: "FY", v: 5e9, sign: 1, e: "x", m: 12 }, { label: "Q1–Q3", v: 3e9, sign: -1, e: "y", m: 9 }] } });
-    const bad = c(2.5e9, { f: { formula: "Full year − Q1 − Q2 − Q3", parts: [{ label: "FY", v: 5e9, sign: 1, e: "x", m: 12 }, { label: "Q1–Q3", v: 3e9, sign: -1, e: "y", m: 9 }] } });
-    const s: PayloadSeries = { k: "r", cat: "income", met: "revenue", label: "Revenue", parent: null, total: true, unit: "usd", q: { "2025-12-31": good, "2024-12-31": bad }, y: {} };
-    const { payload, summary } = checkConsistency(p([s], ["2024-12-31", "2025-12-31"]));
-    expect(summary).toMatchObject({ formulas: 2, formulasFailed: 1 });
-    expect(payload.series[0].q["2024-12-31"].flags?.[0].why).toBe("Full year − Q1 − Q2 − Q3: $5.000B − $3.000B = $2.000B, but the cell shows $2.500B.");
+describe("calculated values against the figures they were calculated from (review iracc L2)", () => {
+  // LKQ FY2025 revenue ($M, EDGAR and LKQ releases): 10-K year 13,651; Q1 first filed 3,463 (recast
+  // 3,327 in 2026), Q2 3,642, Q3 3,499. A Q4 calculated as FY − Q1 − Q2 − Q3 from the first-filed
+  // quarters is 3,047; the 10-K's own Q4 is 3,312.
+  const yq = ["2025-03-31", "2025-06-30", "2025-09-30"];
+  const q4 = (q1Shown: number, v = 3_047e6) => {
+    const f = { formula: "Full year − Q1 − Q2 − Q3", parts: [{ label: "FY", v: 13_651e6, sign: 1 as const, e: "2025-12-31", m: 12 }, ...yq.map((e, i) => ({ label: `Quarter ending ${e}`, v: [3_463e6, 3_642e6, 3_499e6][i], sign: -1 as const, e, m: 3 }))] };
+    const s: PayloadSeries = { k: "r", cat: "segment", met: "revenue", label: "Total revenue", parent: null, total: true, unit: "usd", q: { "2025-03-31": c(q1Shown), "2025-06-30": c(3_642e6), "2025-09-30": c(3_499e6), "2025-12-31": c(v, { f }) }, y: { "2025-12-31": c(13_651e6) } };
+    return checkConsistency(p([s], [...yq, "2025-12-31"]));
+  };
+  it("passes a value whose parts are the figures the line shows", () => {
+    const { payload, summary } = q4(3_463e6);
+    expect(summary).toMatchObject({ formulas: 1, formulasFailed: 0 });
     expect(payload.series[0].q["2025-12-31"].flags).toBeUndefined();
+  });
+  it("flags a value calculated from a printing the page no longer shows (Q1 recast)", () => {
+    const { payload, summary } = q4(3_327e6);
+    expect(summary).toMatchObject({ formulas: 1, formulasFailed: 1 });
+    expect(payload.series[0].q["2025-12-31"].flags?.[0]).toMatchObject({ k: "formula", v: 3_183e6 });
+    expect(payload.series[0].q["2025-12-31"].flags?.[0].why).toBe("Full year − Q1 − Q2 − Q3: calculated with $3.463B for the period ending 2025-03-31, but this line now shows $3.327B there; with the figures shown it would be $3.183B.");
+    // Nothing is corrected.
+    expect(payload.series[0].q["2025-12-31"].v).toBe(3_047e6);
+  });
+  it("does not count a value whose parts are not on the line (a nine-month part) as checked", () => {
+    const ytd = c(2e9, { f: { formula: "Full year − nine-month YTD", parts: [{ label: "FY", v: 5e9, sign: 1, e: "2025-12-31", m: 12 }, { label: "Nine months", v: 3e9, sign: -1, e: "2025-09-30", m: 9 }] } });
+    const s: PayloadSeries = { k: "r", cat: "income", met: "revenue", label: "Revenue", parent: null, total: true, unit: "usd", q: { "2025-12-31": ytd }, y: { "2025-12-31": c(5e9) } };
+    expect(checkConsistency(p([s], ["2025-12-31"])).summary).toMatchObject({ formulas: 0, formulasFailed: 0 });
   });
 });
 

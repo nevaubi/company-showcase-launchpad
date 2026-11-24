@@ -2,8 +2,8 @@
 // Each failure is flagged at the figure it concerns with the arithmetic in words; nothing is changed.
 //   1. Quarters against the year: a flow line whose fiscal year prints all four quarters and the year
 //      (none of the five calculated) must add up, within the rounding the release prints in.
-//   2. A calculated value against its formula: the shown value must equal the signed sum of the
-//      parts it lists.
+//   2. A calculated value against the figures it was calculated from: every part must be the figure
+//      this line shows for that period now (only values whose parts are all on the line are counted).
 // Parts against totals are the build's tie-out checks (`payload.checks`), already shown at the total
 // and listed under its table.
 import { stockKind } from "@/lib/ir/stock";
@@ -18,7 +18,7 @@ export interface ConsistencySummary {
   /** years checked against their four printed quarters, and how many failed */
   years: number;
   yearsFailed: number;
-  /** calculated values checked against their formula, and how many failed */
+  /** calculated values whose parts are all shown on their line, checked against those figures; failures */
   formulas: number;
   formulasFailed: number;
 }
@@ -82,15 +82,30 @@ export function checkConsistency(p: IrPayload): { payload: IrPayload; summary: C
         summary.yearsFailed++;
         edit("y", y, { k: "year", v: sum, why: `The four quarters add up to ${num(sum, s.unit)} (${parts.map((v) => num(v, s.unit)).join(" + ")}); the year prints ${num(yc.v, s.unit)}, ${num(yc.v - sum, s.unit)} apart.` });
       }
-    // 2. calculated values against their formula
+    // 2. calculated values against the figures they were calculated from (review iracc L2: summing
+    // a cell's own embedded parts proves only the arithmetic). Each part is looked up where the page
+    // shows it on this line (a quarter part among the quarters, a year part among the years); the
+    // value counts as checked only when every part is found there, and fails when the page now shows
+    // a different figure for a part (another printing won after the value was calculated).
     for (const kind of ["q", "y"] as const)
       for (const [e, c] of Object.entries(s[kind])) {
         if (!c.f?.parts.length) continue;
+        const shownPart = c.f.parts.map((pt) => {
+          const at = pt.m === 12 ? s.y[pt.e] : pt.m === 3 ? s.q[pt.e] : undefined;
+          return at && !at.f ? at : null;
+        });
+        if (shownPart.some((x) => !x)) continue;
         summary.formulas++;
+        const off = c.f.parts.map((pt, i) => ({ pt, now: shownPart[i]!.v })).filter((x) => Math.abs(x.now - x.pt.v) > Math.max(1e-6 * Math.abs(x.pt.v), 0.5));
         const sum = c.f.parts.reduce((a, pt) => a + pt.sign * pt.v, 0);
-        if (Math.abs(sum - c.v) <= Math.max(1e-6 * Math.abs(c.v), 0.5)) continue;
+        const sumOff = Math.abs(sum - c.v) > Math.max(1e-6 * Math.abs(c.v), 0.5);
+        if (!off.length && !sumOff) continue;
         summary.formulasFailed++;
-        edit(kind, e, { k: "formula", v: sum, why: `${c.f.formula}: ${c.f.parts.map((pt, i) => `${i ? (pt.sign < 0 ? "− " : "+ ") : pt.sign < 0 ? "−" : ""}${num(pt.v, s.unit)}`).join(" ")} = ${num(sum, s.unit)}, but the cell shows ${num(c.v, s.unit)}.` });
+        const now = c.f.parts.reduce((a, pt, i) => a + pt.sign * shownPart[i]!.v, 0);
+        const why = off.length
+          ? `${c.f.formula}: calculated with ${off.map((x) => `${num(x.pt.v, s.unit)} for the period ending ${x.pt.e}`).join(" and ")}, but this line now shows ${off.map((x) => num(x.now, s.unit)).join(" and ")} there; with the figures shown it would be ${num(now, s.unit)}.`
+          : `${c.f.formula}: ${c.f.parts.map((pt, i) => `${i ? (pt.sign < 0 ? "− " : "+ ") : pt.sign < 0 ? "−" : ""}${num(pt.v, s.unit)}`).join(" ")} = ${num(sum, s.unit)}, but the cell shows ${num(c.v, s.unit)}.`;
+        edit(kind, e, { k: "formula", v: off.length ? now : sum, why });
       }
     return out ?? s;
   });

@@ -13,8 +13,15 @@ import { STD_LABEL, type SecCheck, type SecItem } from "@/lib/ir/sec-check";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const STATUS: Record<SecItem["status"], string> = { agree: "agrees", held: "held", flagged: "differs", released: "agrees, shown again", later: "later filing only" };
+const STATUS: Record<SecItem["status"], string> = { agree: "agrees", held: "held", flagged: "differs", released: "agrees, shown again", later: "later filing only (possibly recast)" };
 const ORDER: Record<SecItem["status"], number> = { held: 0, flagged: 1, later: 2, released: 3, agree: 4 };
+
+/** A checked figure in its own scale with its unit ($27.0M, $1.83B, $0.12), so both numbers of a row read alike. */
+function money(v: number, unit: string, big: number): string {
+  if (unit !== "usd") return `${v < 0 ? "−" : ""}$${fmtIr(Math.abs(v), unit, "B")}`;
+  const sc = Math.abs(big) >= 1e9 ? "B" : "M";
+  return `${v < 0 ? "−" : ""}$${fmtIr(Math.abs(v), unit, sc)}${sc}`;
+}
 
 export function IrChecksLine({ ticker, payload, check, consistency, timings, late }: { ticker: string; payload: IrPayload; check?: SecCheck | null; consistency?: ConsistencySummary; late?: boolean; timings?: { unpackMs: number; tidyMs: number; checkMs: number } }) {
   const { open } = useSource();
@@ -57,43 +64,56 @@ export function IrChecksLine({ ticker, payload, check, consistency, timings, lat
           Quarters against the year: {years} checked{consistency!.yearsFailed ? `, ${consistency!.yearsFailed} don't add up` : ", all add up"}
         </span>
       )}
-      {formulas > 0 && <span>Calculated values: {formulas} checked{consistency!.formulasFailed ? `, ${consistency!.formulasFailed} don't match their formula` : ", all match"}</span>}
+      {formulas > 0 && <span>Calculated values: {formulas} checked against the figures they use{consistency!.formulasFailed ? `, ${consistency!.formulasFailed} don't match the figures they use` : ", all match"}</span>}
       {items.length > 0 && (
         <Popover>
           <PopoverTrigger className="rounded-sm px-1 text-foreground underline decoration-dotted underline-offset-[3px] hover:bg-highlight-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">Which</PopoverTrigger>
-          <PopoverContent align="start" className="max-h-[70vh] w-[min(36rem,calc(100vw-2rem))] overflow-auto p-0">
+          <PopoverContent align="start" collisionPadding={8} className="max-h-[min(70vh,var(--radix-popover-content-available-height))] w-[min(36rem,calc(100vw-1rem))] overflow-y-auto overflow-x-hidden p-0">
             <div className="border-b px-3 py-2">
               <p className={IR.group}>Checked against the 10-Q and 10-K</p>
-              <p className={IR.caption}>Held figures are kept out of totals and charts; differing figures stay, marked at the figure. Same sign, and equal within 0.5% (per share: one cent or 1%), or at the precision a round figure prints. A figure that differs only from a later filing's comparative is not counted as differing.</p>
+              <p className={IR.caption}>Held figures are kept out of totals and charts; differing figures stay, marked at the figure. Same sign, and equal within 0.5% (per share: one cent or 1%), or at the precision a round figure prints. A figure that differs only from a later filing's comparative is not counted as differing. Click a figure to open its source.</p>
             </div>
-            <table className="w-full text-[13px]">
+            <table className="w-full table-fixed text-[13px]">
               <thead className={IR.caption}>
                 <tr className="border-b">
                   <th scope="col" className="px-3 py-1 text-left font-normal">Line</th>
-                  <th scope="col" className="px-2 py-1 text-left font-normal">Period</th>
-                  <th scope="col" className="px-2 py-1 text-right font-normal">Release</th>
-                  <th scope="col" className="px-2 py-1 text-right font-normal">Filing</th>
-                  <th scope="col" className="px-3 py-1 text-left font-normal">Result</th>
+                  <th scope="col" className="w-[6.5rem] px-2 py-1 text-left font-normal">Period</th>
+                  <th scope="col" className="w-[5.75rem] px-2 py-1 text-right font-normal">Release</th>
+                  <th scope="col" className="w-[5.75rem] px-2 py-1 text-right font-normal">Filing</th>
+                  <th scope="col" className="hidden w-[11rem] px-3 py-1 text-left font-normal sm:table-cell">Result</th>
                 </tr>
               </thead>
-              <tbody>
-                {items.map((x) => (
-                  <tr key={`${x.k}|${x.kind}|${x.e}`} className="h-7 border-b last:border-0 align-top" title={x.why}>
-                    <td className="px-3 py-1">{STD_LABEL[x.line]}</td>
-                    <td className="px-2 py-1 whitespace-nowrap">{x.kind === "y" ? "Year to " : ""}{fmtDate(x.e)}</td>
-                    <td className="px-2 py-1 text-right">
-                      <button type="button" onClick={() => openIr(x)} className={cn(IR.cellButton, IR.num)}>{fmtIr(x.ir, unit(x), "B")}</button>
-                    </td>
-                    <td className="px-2 py-1 text-right">
-                      {x.accn ? <button type="button" onClick={() => openSec(x)} className={cn(IR.cellButton, IR.num)}>{fmtIr(x.sec, unit(x), "B")}</button> : <span className={IR.num}>{fmtIr(x.sec, unit(x), "B")}</span>}
-                    </td>
-                    <td className="px-3 py-1">
-                      <span className={x.status === "agree" ? "text-muted-foreground" : "text-foreground"}>{STATUS[x.status]}</span>
-                      {x.why && <span className={cn("block", IR.caption)}>{x.why}</span>}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+              {items.map((x) => {
+                const label = byKey.get(x.k)?.label;
+                const big = Math.max(Math.abs(x.ir), Math.abs(x.sec));
+                const result = (
+                  <>
+                    <span className={x.status === "agree" ? "text-muted-foreground" : "text-foreground"}>{STATUS[x.status]}</span>
+                    {x.why && <span className={cn("block", IR.caption)}>{x.why}</span>}
+                  </>
+                );
+                return (
+                  <tbody key={`${x.k}|${x.kind}|${x.e}`} className="border-b last:border-0" title={x.why}>
+                    <tr className="h-7 align-top">
+                      <td className="px-3 py-1">
+                        {STD_LABEL[x.line]}
+                        {label && label !== STD_LABEL[x.line] && <span className={cn("block truncate", IR.caption)} title={label}>{label}</span>}
+                      </td>
+                      <td className="px-2 py-1">{x.kind === "y" ? "Year to " : ""}{fmtDate(x.e)}</td>
+                      <td className="px-2 py-1 text-right">
+                        <button type="button" onClick={() => openIr(x)} className={cn(IR.cellButton, IR.num)}>{money(x.ir, unit(x), big)}</button>
+                      </td>
+                      <td className="px-2 py-1 text-right">
+                        {x.accn ? <button type="button" onClick={() => openSec(x)} className={cn(IR.cellButton, IR.num)}>{money(x.sec, unit(x), big)}</button> : <span className={IR.num}>{money(x.sec, unit(x), big)}</span>}
+                      </td>
+                      <td className="hidden px-3 py-1 sm:table-cell">{result}</td>
+                    </tr>
+                    <tr className="sm:hidden">
+                      <td colSpan={4} className="px-3 pb-1.5">{result}</td>
+                    </tr>
+                  </tbody>
+                );
+              })}
             </table>
           </PopoverContent>
         </Popover>

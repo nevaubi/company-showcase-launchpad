@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getIrData, type IrDocRow } from "@/lib/ir.functions";
-import { checkStatementsOf, irPageKey, loadIrPage, type IrPageData } from "@/lib/ir/client";
+import { checkLateIrPage, checkStatementsOf, irPageKey, loadIrPage, type IrPageData } from "@/lib/ir/client";
 import type { IrPayload } from "@/lib/ir/payload";
 import { companyQuery } from "@/lib/data";
 import { IrChecksLine } from "@/components/ir/checks";
@@ -89,6 +89,23 @@ function IrPage() {
     refetchInterval: (query) => (query.state.data?.pending ? 120_000 : false),
   });
   const slow = useSlow(q.isLoading, 6000);
+  // Statements that arrive after the page is shown still get the SEC check: it runs on the shown
+  // payload and the result replaces the cached page data in place (nothing blanks or moves).
+  const lateData = q.data?.secCheckLate ? q.data : undefined;
+  useEffect(() => {
+    if (!lateData) return;
+    let off = false;
+    qc.fetchQuery(companyQuery(ticker))
+      .then(checkStatementsOf)
+      .catch(() => null)
+      .then((st) => checkLateIrPage(lateData, st))
+      .then((next) => {
+        if (!off && qc.getQueryData(irPageKey(ticker)) === lateData) qc.setQueryData(irPageKey(ticker), next);
+      });
+    return () => {
+      off = true;
+    };
+  }, [lateData, qc, ticker]);
 
   if (q.isLoading)
     return (

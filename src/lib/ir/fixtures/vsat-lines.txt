@@ -1,0 +1,12 @@
+VSAT|kpi|other|usdPerShare|1|Diluted net income (loss) per share attributable to Viasat, Inc. common stockhol||EPS|q:20250630=-0.43,20260630=-0.38|y:
+VSAT|kpi|other|usdPerShare|1|Non-GAAP diluted net income (loss) per share attributable to Viasat, Inc. common||EPS|q:20250630=0.17,20260630=0.17|y:
+VSAT|product|revenue|usd|1|Total revenues||Revenue by product/service|q:20250630=1171054000,20260630=1156543000|y:
+VSAT|segment|net_income|usd|1|Net income (loss) attributable to Viasat, Inc.||Net income attributable to parent|q:20250630=56434000,20260630=-51741000|y:
+VSAT|segment|net_income|usd|1|Net income (loss)||Net income|q:20250630=47724000,20260630=42794000|y:
+VSAT|segment|operating_income|usd|1|Income (loss) from operations||Operating income|q:20250630=46672000,20260630=47308000|y:
+VSAT|segment|revenue|usd|0|Revenue||Revenue by segment|q:20250930=1141000000|y:
+VSAT|segment|revenue|usd|1|Revenues||Company results|q:20250630=1171100000,20260630=1156500000|y:
+VSAT|segment|revenue|usd|1|Total Revenue||Revenue by segment|q:20250331=454300000,20260331=465200000|y:20250331=1781400000,20260331=1832900000
+VSAT|segment|revenue|usd|1|Total revenue||Revenue by segment|q:20251231=459700000|y:
+VSAT|segment|revenue|usd|1|Total revenues||Revenue by business line|q:20250630=1171054000,20260630=1156543000|y:
+VSAT|segment|revenue|usd|1|Total revenues||Revenue by segment|q:|y:20250331=2214741,20260331=1832925

@@ -173,3 +173,120 @@ describe("a run read in the wrong unit outnumbers the right one", () => {
     expect(found.get("xyrem")!.get("q")!.size).toBe(6);
   });
 });
+
+describe("a line printed in another unit beside its same-named twin in one table (iracc-H5)", () => {
+  // VSAT "Revenue by segment": the supplement (69085149) prints the table in thousands, the deck (bea91f83) in dollars.
+  const VSAT: IrFact[] = readFileSync(path.resolve(__dirname, "fixtures/vsat-segment.folded.txt"), "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => {
+      const [id, document_id, document_kind, category, metric, breakdown, parent, label, unit, total, start, end, months, value, filed, method] = l.split("|");
+      return { id, document_id, document_kind, category, metric, breakdown, parent: parent || null, label, unit, is_total: total === "true", period_start: start || null, period_end: end, months: Number(months), value: Number(value), accn: null, doc: null, filed: filed || null, method, locator: {} };
+    });
+  const linesFacts = (file: string): IrFact[] => {
+    const iso = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+    let n = 0;
+    return readFileSync(path.resolve(__dirname, `fixtures/${file}`), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .flatMap((ln) => {
+        const f = ln.split("|");
+        return ([["q", f[8]], ["y", f[9]]] as const).flatMap(([kind, cells]) =>
+          cells.slice(2).split(",").filter(Boolean).flatMap((c) => c.split("=")[1].split("~").map((v) => ({ id: `f${++n}`, document_id: `doc-${n}`, document_kind: "release", category: f[1], metric: f[2], breakdown: f[7] || null, parent: f[6] || null, label: f[5], unit: f[3], is_total: f[4] === "1", period_start: null, period_end: iso(c.split("=")[0]), months: kind === "q" ? 3 : 12, value: Number(v), accn: null, doc: null, filed: null, method: "table", locator: {} }))),
+        );
+      });
+  };
+  const p = buildPayload("VSAT", VSAT);
+  const byLabel = (label: string) => p.series.filter((s) => s.label === label);
+
+  it("holds the thousands figure whose other printed figure is 1,000× larger, and the same document's other periods", () => {
+    // The build merges the two documents' "Total revenues" / "Total Revenue" into one line; the supplement's
+    // thousands won the year cells and the deck's dollars sit beside them as the conflicting figure.
+    const [total] = byLabel("Total revenues");
+    expect(total.held?.y?.["2026-03-31"]).toMatchObject({ v: 1_832_925, w: "suspect" });
+    expect(total.held!.y!["2026-03-31"].why).toMatch(/1,832,900,000 for this period, 1,000× this figure: this line was probably read in thousands/);
+    // FY2025: the deck prints another figure (no 1,000× match), but the same supplement prints the line in thousands.
+    expect(total.held?.y?.["2025-03-31"]).toMatchObject({ v: 2_214_741, w: "suspect" });
+    expect(total.held!.y!["2025-03-31"].why).toMatch(/^The same document prints this table in another unit \(period ending 2026-03-31/);
+    expect(Object.keys(total.y)).toEqual([]);
+    // Held, never multiplied; the cell keeps its source. The deck's quarters (dollars) stay.
+    expect(total.held!.y!["2026-03-31"].d).toBe(total.held!.y!["2025-03-31"].d);
+    expect(total.q["2026-03-31"].v).toBe(465_200_000);
+    expect(total.q["2025-03-31"].v).toBe(454_300_000);
+  });
+
+  it("holds the parts that total prints in the same document, and leaves their dollar quarters alone", () => {
+    for (const label of ["Aviation", "Government", "Maritime", "Enterprise", "Central Services"]) {
+      const [s] = byLabel(label);
+      expect(Object.keys(s.y), label).toEqual([]);
+      expect(Object.keys(s.held?.y ?? {}).sort(), label).toEqual(["2025-03-31", "2026-03-31"]);
+      expect(Object.keys(s.held?.q ?? {}), label).toEqual([]);
+      expect(Object.values(s.q).every((c) => c.v > 1e7), label).toBe(true);
+    }
+  });
+
+  it("a same-named line of the same table 1,000× larger for the period holds it (reviewer's split series)", () => {
+    const mk = (k: string, label: string, y: Record<string, number>, d: number): PayloadSeries => ({ k, cat: "segment", met: "revenue", label, parent: null, total: true, unit: "usd", bd: "Revenue by segment", q: {}, y: Object.fromEntries(Object.entries(y).map(([e, v]) => [e, { v, d, m: 12 }])) });
+    const a = mk("a", "Total revenues", { "2025-03-31": 2_214_741, "2026-03-31": 1_832_925 }, 1);
+    const b = mk("b", "Total Revenue", { "2025-03-31": 1_781_400_000, "2026-03-31": 1_832_900_000 }, 0);
+    const other = { ...mk("c", "Total revenues", { "2026-03-31": 1_832_900_000 }, 2), bd: "Revenue by product" };
+    // The company's quarters (deck, dollars) give its usual line size: VSAT's segment quarters of FY2026.
+    const ctx: PayloadSeries = { k: "ctx", cat: "segment", met: "revenue", label: "Segments", parent: null, total: false, unit: "usd", q: Object.fromEntries([127_600_000, 161_800_000, 116_600_000, 117_900_000, 183_900_000, 115_300_000].map((v, i) => [`2025-0${i + 1}-28`, { v, d: 3, m: 3 }])), y: {} };
+    const pay: IrPayload = { v: 2, ticker: "VSAT", builtAt: "", quarters: [], years: [], docs: [], series: [a, b, other, ctx], groups: [], checks: [], stats: { series: 4, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } } };
+    const found = findSuspects(pay);
+    expect([...found.get("a")!.get("y")!.keys()].sort()).toEqual(["2025-03-31", "2026-03-31"]);
+    expect(found.get("a")!.get("y")!.get("2026-03-31")).toMatch(/The same table's line “Total Revenue” prints 1,832,900,000/);
+    expect(found.has("b")).toBe(false);
+    expect(found.has("c")).toBe(false);
+    expect(found.has("ctx")).toBe(false);
+  });
+
+  it("holds the parts also when another rule holds their total first (page payload: segment rows with VSAT's standard lines)", () => {
+    const std = linesFacts("vsat-lines.txt");
+    const page = buildPayload("VSAT", [...std, ...VSAT]);
+    const parts = page.series.filter((s) => ["Aviation", "Government", "Maritime", "Enterprise", "Central Services"].includes(s.label) && s.bd === "Revenue by segment");
+    expect(parts.length).toBe(5);
+    for (const s of parts) {
+      expect(Object.values(s.y).filter((c) => Math.abs(c.v) < 1e7), s.label).toEqual([]);
+      expect(Object.keys(s.held?.y ?? {}).length, s.label).toBe(2);
+    }
+  });
+
+  it("holds nothing shown when the 1,000x figure is the slip (HOOD: 1,274,000,000 printed elsewhere as 1,274,100,000,000)", () => {
+    // Series as the reviewer's indep2.ts builds them: each printed cell its own document, the other printing as `alt`.
+    const iso = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+    const series: PayloadSeries[] = readFileSync(path.resolve(__dirname, "fixtures/hood-lines.txt"), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((ln, i) => {
+        const f = ln.split("|");
+        const cells = (str: string, m: number) =>
+          Object.fromEntries(
+            str.slice(2).split(",").filter(Boolean).map((c, j) => {
+              const [v, alt] = c.split("=")[1].split("~").map(Number);
+              return [iso(c.split("=")[0]), { v, d: i * 100 + j, m, ...(alt != null ? { alt: { v: alt, d: i * 100 + j + 50, kind: "conflict" as const } } : {}) }];
+            }),
+          );
+        return { k: `s${i}`, cat: f[1], met: f[2], unit: f[3], total: f[4] === "1", label: f[5], parent: null, bd: f[7] || undefined, q: cells(f[8], 3), y: cells(f[9], 12) } as PayloadSeries;
+      });
+    const pay: IrPayload = { v: 2, ticker: "HOOD", builtAt: "", quarters: [], years: [], docs: [], series, groups: [], checks: [], stats: { series: series.length, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } } };
+    expect(series.some((s) => s.q["2025-09-30"]?.alt?.v === 1_274_100_000_000)).toBe(true);
+    const why = [...findSuspects(pay).values()].flatMap((m) => [...m.values()].flatMap((x) => [...x.values()]));
+    expect(why.filter((w) => /1,000× this figure|same document prints this table/.test(w))).toEqual([]);
+  });
+
+  it("holds no real segment line: LKQ's segment tables (4% to 46% of revenue)", () => {
+    const iso = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
+    const series: PayloadSeries[] = readFileSync(path.resolve(__dirname, "fixtures/lkq-lines.txt"), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((ln, i) => {
+        const f = ln.split("|");
+        const cells = (s: string, m: number) => Object.fromEntries(s.slice(2).split(",").filter(Boolean).map((c, j) => [iso(c.split("=")[0]), { v: Number(c.split("=")[1].split("~")[0]), d: i * 100 + j, m }]));
+        return { k: `s${i}`, cat: f[1], met: f[2], unit: f[3], total: f[4] === "1", label: f[5], parent: null, bd: f[7] || undefined, q: cells(f[8], 3), y: cells(f[9], 12) } as PayloadSeries;
+      });
+    const pay: IrPayload = { v: 2, ticker: "LKQ", builtAt: "", quarters: [], years: [], docs: [], series, groups: [], checks: [], stats: { series: series.length, groups: 0, documents: 0, facts: 0, firstPeriod: null, lastPeriod: null, checksQ: { ok: 0, total: 0 }, checksFY: { ok: 0, total: 0 } } };
+    const why = [...findSuspects(pay).values()].flatMap((m) => [...m.values()].flatMap((x) => [...x.values()]));
+    expect(why.filter((w) => /same table|same document prints this line/.test(w))).toEqual([]);
+  });
+});

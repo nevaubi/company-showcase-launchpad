@@ -3,7 +3,7 @@ import { ArrowUpRight, Loader2, Search } from "lucide-react";
 import { useState } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
-import { Badge } from "@/components/ui/badge";
+import { TickerMark } from "@/components/app/ticker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { fmtDate } from "@/lib/format";
@@ -23,7 +23,7 @@ function Hit({ h, showTicker }: { h: DocHit; showTicker: boolean }) {
   return (
     <li className="px-4 py-2">
       <div className="flex flex-wrap items-center gap-1.5 text-[13px]">
-        {showTicker && <Badge variant="mono">{h.ticker}</Badge>}
+        {showTicker && <TickerMark ticker={h.ticker} />}
         <span className="min-w-0 flex-1 truncate font-medium">
           {(h.title ?? "Document").split("||")[0]}
         </span>

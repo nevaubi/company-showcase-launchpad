@@ -37,6 +37,32 @@ describe("twin period columns", () => {
     expect(Object.values(q).filter((c) => c.v === 54_229_000_000)).toHaveLength(1);
     expect(out.series[0].y[out.years.at(-1)!].v).toBe(133_188_000_000);
   });
+  it("decides one end per period for quarters and years together (iracc-M4, reviewer's edge case E10)", () => {
+    const a = "2026-08-27";
+    const b = "2026-09-03";
+    const S = (k: string, q: Record<string, number>, y: Record<string, number>): PayloadSeries => ({ k, cat: "income", met: "other", label: k, parent: null, total: true, unit: "usd", q: Object.fromEntries(Object.entries(q).map(([e, v]) => [e, { v, d: 0 }])), y: Object.fromEntries(Object.entries(y).map(([e, v]) => [e, { v, d: 0 }])) });
+    // Quarter cells sit mostly under b, year cells mostly under a: deciding each kind alone dropped both columns.
+    const series = [S("Revenue", { [a]: 100, [b]: 100 }, { [a]: 400, [b]: 400 }), S("Net income", { [a]: 10, [b]: 10 }, { [a]: 40, [b]: 40 }), S("Gross profit", { [b]: 50 }, { [a]: 200 }), S("Opex", { [b]: 30 }, { [a]: 120 }), S("Capex", { [b]: 5 }, { [a]: 20 })];
+    const p = { ...payloadOf(series), quarters: ["2026-05-28", a, b], years: [a, b] };
+    const out = mergeTwinEnds(p);
+    expect(out.quarters).toHaveLength(2);
+    expect(out.years).toHaveLength(1);
+    const kept = out.years[0];
+    expect(out.quarters).toContain(kept);
+    for (const s of out.series) {
+      expect(Object.keys(s.q), s.label).toEqual([kept]);
+      expect(Object.keys(s.y), s.label).toEqual([kept]);
+    }
+  });
+  it("keeps the same end for MU's quarter and year columns (real revenue and operating income rows)", () => {
+    const opi = rows("MU", "opi");
+    const op: PayloadSeries = { k: "opi", cat: "income", met: "operating_income", label: "Operating income", parent: null, total: true, unit: "usd", q: Object.fromEntries(opi.filter((r) => r.m === 3).map((r) => [r.e, { v: r.v, d: 0 }])), y: Object.fromEntries(opi.filter((r) => r.m === 12).map((r) => [r.e, { v: r.v, d: 0 }])) };
+    const out = mergeTwinEnds(payloadOf([rev, op]));
+    const qs = out.quarters.filter((e) => e >= "2026-08-01");
+    const ys = out.years.filter((e) => e >= "2026-08-01");
+    expect(qs).toHaveLength(1);
+    expect(ys).toEqual(qs);
+  });
   it("keeps dates a week apart that print different figures (a retail month next to a quarter)", () => {
     const s: PayloadSeries = { ...rev, q: { "2026-01-31": { v: 5, d: 0 }, "2026-02-07": { v: 7, d: 0 } }, y: {} };
     const out = mergeTwinEnds(payloadOf([s]));

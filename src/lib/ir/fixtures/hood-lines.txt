@@ -1,0 +1,49 @@
+HOOD|cost|expense|usd|0|Provision for credit losses|Total operating expenses|GAAP operating expenses by function|q:20250331=24000000,20250630=28000000,20250930=26000000,20251231=36000000,20260331=36000000|y:
+HOOD|cost|expense|usd|0|Provision for credit losses|Total operating expenses|Operating expenses (GAAP)|q:20250331=24000000,20250630=28000000,20250930=26000000,20251231=36000000,20260331=36000000,20260630=56000000,20260930=71000000|y:
+HOOD|cost|expense|usd|0|Provision for credit losses|Total operating expenses|Operating expenses by function|q:20250331=24000000,20250630=28000000,20250930=26000000~2613000000,20251231=36000000,20260331=36000000,20260630=56000000,20260930=71000000|y:20251231=114000000
+HOOD|cost|expense|usd|0|Provision for credit losses|Total operating expenses|Operating expenses|q:20250331=24000000,20250630=28000000,20250930=26000000,20251231=36000000~3689000000,20260331=36000000,20260630=56000000,20260930=71000000|y:20251231=11450000000
+HOOD|cost|net_income|usd|1|Net income||Cash flows from operating activities|q:20250331=336000000|y:
+HOOD|cost|other|usd|0|Provision for credit losses|Net income|Cash flows from operating activities|q:20250331=24000000|y:
+HOOD|kpi|net_income|usd|0|Net income (last twelve months)||GAAP net income|q:|y:20250930=2200000000
+HOOD|kpi|net_income|usd|0|Net Income (last twelve months)||Net income LTM|q:|y:20260331=1900000000
+HOOD|kpi|net_income|usd|0|Net income (loss) attributable to Robinhood||Net income reconciliation|q:|y:20260630=2072000000
+HOOD|kpi|net_income|usd|0|Net income (loss) attributable to Robinhood|Net Income|Net Income reconciliation|q:20250331=336000000,20250630=386000000,20250930=556000000,20251231=605000000,20260331=350000000,20260630=561000000|y:
+HOOD|kpi|net_income|usd|0|Net Income||Net income|q:20250331=336000000,20250630=386000000,20250930=556000000,20251231=605000000,20260331=346000000|y:
+HOOD|kpi|net_income|usd|0|Net Income||TTM|q:|y:20250630=1800000000
+HOOD|kpi|net_income|usd|1|Net income (loss) attributable to Robinhood||Net income|q:20250331=336000000,20250630=386000000,20250930=556000000,20251231=605000000,20260331=350000000,20260630=561000000|y:
+HOOD|kpi|net_income|usd|1|Net income (loss)||Net income reconciliation|q:|y:20260630=2080000000
+HOOD|kpi|net_income|usd|1|Net income||GAAP net income by quarter|q:20250331=336000000,20250630=386000000,20250930=556000000,20251231=605000000,20260331=346000000|y:
+HOOD|kpi|net_income|usd|1|Net income||GAAP net income|q:20250331=336000000,20250630=386000000,20250930=556000000|y:
+HOOD|kpi|net_income|usd|1|Net income||Net income by quarter|q:20250331=336000000,20250630=386000000,20250930=556000000,20251231=605000000,20260331=346000000,20260630=573000000,20260930=476000000|y:
+HOOD|kpi|net_income|usd|1|Net Income||Net Income reconciliation|q:20250331=336000000,20250630=386000000,20250930=556000000,20251231=605000000,20260331=346000000,20260630=573000000|y:
+HOOD|kpi|net_income|usd|1|Net Income||Net Income|q:20250331=336000000,20250630=386000000,20250930=556000000,20251231=605000000,20260331=346000000,20260630=573000000|y:
+HOOD|kpi|net_income|usd|1|Net Income||Net income|q:20250331=336000000,20250630=386000000,20250930=556000000|y:
+HOOD|kpi|net_income|usd|1|Net income||Profit|q:20250930=556000000|y:
+HOOD|kpi|other|usdPerShare|0|Diluted Earnings per Share (EPS)||Diluted Earnings per Share (EPS)|q:20250331=0.37,20250630=0.42,20250930=0.61,20251231=0.66,20260331=0.38|y:
+HOOD|kpi|other|usdPerShare|0|Diluted EPS||TTM|q:|y:20250630=1.97
+HOOD|kpi|other|usdPerShare|1|Diluted Earnings per Share||Quarterly EPS|q:20250331=0.37,20250630=0.42,20250930=0.61,20251231=0.66,20260331=0.38|y:20260630=2.27
+HOOD|kpi|other|usdPerShare|1|Diluted EPS||Diluted EPS|q:20250331=0.37,20250630=0.42|y:
+HOOD|kpi|revenue|usd|0|Total Net Revenues (Last twelve months)|Total Net Revenues|Total Net Revenues|q:20260630=4900000000|y:
+HOOD|kpi|revenue|usd|0|Total Net Revenues||Operating and Financial Metrics|q:20250930=1274000000,20251231=1283000000,20260630=1308000000|y:
+HOOD|kpi|revenue|usd|0|Total Net Revenues||Operating Metrics|q:20250331=927000000|y:
+HOOD|kpi|revenue|usd|1|Total Net Revenues||Total Net Revenues|q:20250331=927000000,20250930=1274000000,20251231=1283000000,20260630=1308000000|y:
+HOOD|product|revenue|usd|1|Total Net Revenues||Net revenues across products|q:|y:20250630=3600000000,20260630=4900000000
+HOOD|product|revenue|usd|1|Total net revenues||Net revenues by type|q:20250331=927000000~46927000000,20250630=989000000,20250930=1274000000~12741283000000,20251231=1283000000,20260331=1067000000,20260630=1308000000,20260930=1424000000|y:
+HOOD|product|revenue|usd|1|Total net revenues||Revenue by product|q:20250331=927000000,20250630=989000000|y:
+HOOD|product|revenue|usd|1|Total net revenues||Revenue by service|q:20250331=927000000|y:
+HOOD|product|revenue|usd|1|Total net revenues||Revenue by source|q:20250930=1274000000,20251231=1283000000|y:20251231=4473000000
+HOOD|product|revenue|usd|1|Total net revenues||Revenue by type|q:20250331=927000000~46927000000,20250630=989000000,20250930=1274000000~1274100000000,20251231=1283000000~128327000000,20260331=1067000000,20260630=1308000000,20260930=1424000000|y:20251231=4473000000~447352000000
+HOOD|product|revenue|usd|1|Total net revenues||Revenues by category|q:20250331=927000000|y:
+HOOD|product|revenue|usd|1|Total net revenues||Revenues by source|q:20250331=927000000,20250630=989000000,20250930=1274000000,20251231=1283000000|y:
+HOOD|product|revenue|usd|1|Total net revenues||Revenues|q:20250331=927000000,20250630=989000000,20250930=1274000000,20251231=1283000000,20260331=1067000000,20260630=1308000000|y:
+HOOD|product|revenue|usd|1|Total net revenues||Total revenues|q:20250331=927000000,20250630=989000000,20250930=1274000000|y:
+HOOD|segment|net_income|usd|1|Net income (loss) attributable to Robinhood||Net income|q:20250331=336000000,20250630=386000000,20250930=556000000,20251231=605000000|y:
+HOOD|segment|net_income|usd|1|Net income||GAAP to Non-GAAP Reconciliation|q:20250331=336000000|y:
+HOOD|segment|net_income|usd|1|Net Income||Net Income|q:20250331=336000000,20250630=386000000|y:20250630=1800000000
+HOOD|segment|net_income|usd|1|Net Income||Quarterly Net Income|q:20250331=336000000,20250630=386000000|y:
+HOOD|segment|revenue|usd|1|Total Net Revenues (last twelve months)||Total net revenues LTM|q:|y:20260331=4600000000
+HOOD|segment|revenue|usd|1|Total net revenues||Revenue by segment|q:20250630=989000000|y:
+HOOD|segment|revenue|usd|1|Total net revenues||Revenue|q:20250331=927000000,20250630=989000000,20250930=1274000000,20251231=1283000000,20260331=1067000000,20260630=1308000000,20260930=1424000000|y:
+HOOD|segment|revenue|usd|1|Total Net Revenues||Revenue|q:20250331=927000000,20250630=989000000,20250930=1274000000,20251231=1283000000|y:20250630=3600000000
+HOOD|segment|revenue|usd|1|Total Net Revenues||Total net revenues by quarter|q:20250331=927000000,20250930=1274000000,20251231=1283000000,20260331=1067000000|y:
+HOOD|segment|revenue|usd|1|Total Net Revenues||Total Net Revenues|q:|y:20251231=4473000000

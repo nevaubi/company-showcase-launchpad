@@ -43,3 +43,23 @@ export async function unpackIrPage(gz: ArrayBuffer, statements?: CheckStatements
     timings: { unpackMs: Math.round(t1 - t0), tidyMs: Math.round(t2 - t1), checkMs: Math.round(t3 - t2) },
   };
 }
+
+/**
+ * The SEC cross-check for a page shown before the company's statements arrived: the tidied and
+ * consistency-checked payload is checked as it is, so the page keeps every figure where it was and
+ * only gains its holds and flags. The same guard applies: a failure leaves the page as shown, and
+ * no statements (or none with income lines) end the wait, so the checks line stops saying "not yet".
+ */
+export function checkLate(data: IrPageData, statements: CheckStatements | null | undefined): IrPageData {
+  if (!data.payload || data.secCheck) return data.secCheckLate ? { ...data, secCheckLate: false } : data;
+  const t0 = now();
+  try {
+    const { payload, check } = crossCheckSec(data.payload, statements);
+    if (!check) return { ...data, secCheckLate: false };
+    const ms = Math.round(now() - t0);
+    return { ...data, payload, secCheck: { ...check, ms }, secCheckLate: false, ...(data.timings ? { timings: { ...data.timings, checkMs: data.timings.checkMs + ms } } : {}) };
+  } catch (e) {
+    console.warn("IR SEC cross-check failed", e);
+    return { ...data, secCheckLate: false };
+  }
+}

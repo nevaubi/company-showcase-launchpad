@@ -13,8 +13,13 @@ const ms = (d: string) => Date.parse(`${d.slice(0, 10)}T00:00:00Z`);
 
 type Kind = "q" | "y";
 
-function plan(p: IrPayload, kind: Kind): Map<string, string> {
-  const ends = [...new Set(p.series.flatMap((s) => Object.keys(s[kind])))].sort();
+/**
+ * One map for each pair of ends, decided over quarter and year cells together (a period end is one
+ * date whichever columns print it), so the quarter and the year views always keep the same end.
+ */
+function plan(p: IrPayload): Map<string, string> {
+  const kinds: Kind[] = ["q", "y"];
+  const ends = [...new Set(p.series.flatMap((s) => kinds.flatMap((k) => Object.keys(s[k]))))].sort();
   const into = new Map<string, string>();
   for (let i = 0; i < ends.length; i++)
     for (let j = i + 1; j < ends.length; j++) {
@@ -27,16 +32,17 @@ function plan(p: IrPayload, kind: Kind): Map<string, string> {
       let differ = 0;
       let na = 0;
       let nb = 0;
-      for (const s of p.series) {
-        const x = s[kind][a];
-        const y = s[kind][b];
-        if (x) na++;
-        if (y) nb++;
-        if (x && y) {
-          if (x.v === y.v) same++;
-          else differ++;
+      for (const s of p.series)
+        for (const kind of kinds) {
+          const x = s[kind][a];
+          const y = s[kind][b];
+          if (x) na++;
+          if (y) nb++;
+          if (x && y) {
+            if (x.v === y.v) same++;
+            else differ++;
+          }
         }
-      }
       if (differ || !same) continue;
       // One shared figure is enough only when the two dates never appear apart.
       if (same < 2 && (na > same || nb > same)) continue;
@@ -47,9 +53,10 @@ function plan(p: IrPayload, kind: Kind): Map<string, string> {
 }
 
 export function mergeTwinEnds(p: IrPayload): IrPayload {
-  const q = plan(p, "q");
-  const y = plan(p, "y");
-  if (!q.size && !y.size) return p;
+  const into = plan(p);
+  if (!into.size) return p;
+  const q = into;
+  const y = into;
   const move = (cells: Record<string, PayloadCell>, into: Map<string, string>) => {
     const out: Record<string, PayloadCell> = {};
     for (const [e, c] of Object.entries(cells)) {
@@ -79,7 +86,7 @@ export function mergeTwinEnds(p: IrPayload): IrPayload {
     ...p,
     series,
     checks,
-    quarters: p.quarters.filter((e) => !q.has(e) && !y.has(e)),
-    years: p.years.filter((e) => !y.has(e)),
+    quarters: p.quarters.filter((e) => !into.has(e)),
+    years: p.years.filter((e) => !into.has(e)),
   };
 }

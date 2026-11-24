@@ -1,0 +1,52 @@
+LKQ|kpi|net_income|usd|0|Net income attributable to LKQ stockholders||Reconciliation of Net Income to Segment EBITDA|q:20250630=192000000,20260630=136000000|y:
+LKQ|kpi|net_income|usd|0|Net income||Reconciliation|q:20250331=169000000|y:
+LKQ|kpi|other|usd|0|Net income||Reconciliation of Net Income to Segment EBITDA|q:20250630=193000000,20260630=136000000|y:
+LKQ|kpi|other|usdPerShare|0|Adjusted Diluted EPS||Operating Performance|q:20260331=0.67|y:
+LKQ|kpi|other|usdPerShare|0|Diluted (loss) earnings per share: Adjusted||EPS|q:20250930=0.84,20260930=0.47~0.53|y:
+LKQ|kpi|other|usdPerShare|0|Diluted (loss) earnings per share: Reported||EPS|q:20250930=0.69,20260930=0.06~0.12|y:
+LKQ|kpi|other|usdPerShare|0|Diluted earnings per share ? Adjusted||Earnings per share|q:20250630=0.84,20260630=0.67|y:
+LKQ|kpi|other|usdPerShare|0|Diluted earnings per share ? Reported||Earnings per share|q:20250630=0.72,20260630=0.52|y:
+LKQ|kpi|other|usdPerShare|0|Diluted EPS||Operating Performance|q:20260331=0.3|y:
+LKQ|kpi|other|usdPerShare|0|Earnings per share - Diluted|Net income|Consolidated income statement|q:20250331=0.65|y:
+LKQ|kpi|other|usdPerShare|1|Adjusted diluted earnings per share||Adjusted earnings per share|q:20250930=0.84|y:
+LKQ|kpi|other|usdPerShare|1|Diluted earnings per share: Net income||EPS|q:20250630=0.75,20260630=0.53|y:
+LKQ|kpi|revenue|usd|0|Total Revenue||Operating Performance|q:20260331=3469000000|y:
+LKQ|product|revenue|usd|1|Total revenue||Revenue by category|q:|y:20251231=13651000000
+LKQ|product|revenue|usd|1|Total Revenue||Revenue by product|q:20250331=3463000000|y:
+LKQ|product|revenue|usd|1|Total Revenue||Revenue|q:20250630=1442000000|y:
+LKQ|segment|net_income|usd|0|Net (loss) income attributable to LKQ stockholders|Net (loss) income|Net income reconciliation|q:20250930=180000000,20260930=18000000~34000000|y:
+LKQ|segment|net_income|usd|0|Net income attributable to LKQ stockholders|Net income|Net income reconciliation|q:20250630=192000000|y:
+LKQ|segment|net_income|usd|1|Net (loss) income attributable to LKQ stockholders|Revenue|Consolidated Income Statement|q:20250930=180000000,20260930=26000000|y:
+LKQ|segment|net_income|usd|1|Net (loss) income||Net income reconciliation|q:20250930=180000000,20260930=19000000~35000000|y:
+LKQ|segment|net_income|usd|1|Net (loss) income|Revenue|Consolidated Income Statement|q:20250930=180000000,20260930=27000000|y:
+LKQ|segment|net_income|usd|1|Net income attributable to LKQ stockholders|Net income|Consolidated Income Statement|q:20250630=192000000,20250930=180000000|y:
+LKQ|segment|net_income|usd|1|Net income attributable to LKQ stockholders|Net income|Net income|q:20250630=192000000,20260630=136000000|y:
+LKQ|segment|net_income|usd|1|Net income||Consolidated income statement|q:20250331=169000000,20251231=66000000|y:20251231=608000000
+LKQ|segment|net_income|usd|1|Net income||Consolidated Income Statement|q:20250630=193000000,20250930=180000000|y:
+LKQ|segment|net_income|usd|1|Net income||Consolidated Statement of Income|q:20250930=180000000|y:
+LKQ|segment|net_income|usd|1|Net income||Forecasted FY 2025 Net Income|q:|y:20251231=639000000~717000000
+LKQ|segment|net_income|usd|1|Net income||Net income reconciliation|q:20250630=193000000|y:
+LKQ|segment|net_income|usd|1|Net income||Net income|q:20250331=169000000,20250630=193000000,20260331=79000000,20260630=136000000|y:
+LKQ|segment|net_income|usd|1|Net income|Revenue|Consolidated Statement of Income|q:20250331=169000000,20260331=79000000|y:
+LKQ|segment|operating_income|usd|1|Operating income||Operating income|q:20250630=299000000,20250930=274000000,20260630=225000000,20260930=53000000|y:
+LKQ|segment|operating_income|usd|1|Operating income|Revenue|Consolidated income statement|q:20250331=267000000~287000000,20250630=312000000,20251231=153000000,20260331=217000000|y:20251231=993000000
+LKQ|segment|operating_income|usd|1|Operating income|Revenue|Consolidated Income Statement|q:20250630=312000000,20250930=274000000,20260930=53000000|y:
+LKQ|segment|operating_income|usd|1|Operating income|Revenue|Consolidated Statement of Income|q:20250331=267000000,20250930=274000000,20260331=217000000|y:
+LKQ|segment|other|usdPerShare|0|Diluted (loss) earnings per share: Adjusted|Diluted (loss) earnings per share|Earnings per share|q:20250930=0.84,20260930=0.47~0.53|y:
+LKQ|segment|other|usdPerShare|0|Diluted (loss) earnings per share: Reported|Diluted (loss) earnings per share|Earnings per share|q:20250930=0.69,20260930=-0.12~-0.06|y:
+LKQ|segment|revenue|usd|0|Revenue||Revenue|q:20250331=394000000,20260331=409000000|y:
+LKQ|segment|revenue|usd|0|Total Revenue||Total Revenue|q:20250630=1607000000,20251231=1374000000,20260630=1455000000|y:
+LKQ|segment|revenue|usd|1|Revenue||Consolidated income statement|q:20250331=3327000000~3463000000,20250630=3642000000,20251231=3312000000,20260331=3469000000|y:20251231=13651000000
+LKQ|segment|revenue|usd|1|Revenue||Consolidated Income Statement|q:20250630=3642000000,20250930=3499000000,20260930=3319000000|y:
+LKQ|segment|revenue|usd|1|Revenue||Consolidated Statement of Income|q:20250331=3327000000,20250930=3499000000,20260331=3469000000|y:
+LKQ|segment|revenue|usd|1|Revenue||Revenue|q:20250630=3513000000,20250930=3499000000,20260630=3408000000,20260930=3319000000|y:
+LKQ|segment|revenue|usd|1|Total revenue||Revenue by business unit|q:20250331=3463000000|y:
+LKQ|segment|revenue|usd|1|Total revenue||Revenue by geography and segment|q:20250930=3499000000,20260930=3319000000|y:
+LKQ|segment|revenue|usd|1|Total revenue||Revenue by operating segment|q:20250630=3642000000|y:
+LKQ|segment|revenue|usd|1|Total revenue||Revenue by Operating Segment|q:20250930=3499000000|y:
+LKQ|segment|revenue|usd|1|Total revenue||Revenue by reportable segment|q:20250630=3513000000~3642000000,20250930=3499000000,20251231=3312000000,20260630=3408000000|y:20251231=13651000000
+LKQ|segment|revenue|usd|1|Total revenue||Revenue by segment|q:20250331=3327000000~3463000000,20250630=3513000000~3642000000,20250930=3499000000,20251231=3312000000,20260331=3469000000,20260630=3408000000,20260930=3319000000|y:20251231=13651000000
+LKQ|segment|revenue|usd|1|Total revenue||Revenue by Segment|q:20250630=3642000000|y:
+LKQ|segment|revenue|usd|1|Total revenue||Revenue by source and segment|q:20250331=3463000000|y:
+LKQ|segment|revenue|usd|1|Total Revenue||Revenue|q:20250331=136000000~394000000,20250630=465000000~3513000000,20260331=1440000000~1621000000,20260630=488000000~3408000000|y:
+LKQ|segment|revenue|usd|1|Total Revenue||Total Revenue|q:20250630=129000000~1442000000,20251231=377000000~1562000000,20260630=1466000000~3408000000|y:

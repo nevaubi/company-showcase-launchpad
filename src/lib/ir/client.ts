@@ -76,4 +76,39 @@ export async function loadIrPage(ticker: string, fetchIr: IrFetch = getIrData, g
   return late ? { ...data, secCheckLate: true } : data;
 }
 
+/**
+ * The SEC cross-check for a page whose statements were late (`secCheckLate`): runs in the page worker
+ * on the shown payload, so the page keeps its place and gains its holds and flags in place. Falls back
+ * to the main thread where a worker can't start; never rejects (the page as shown is returned).
+ */
+export async function checkLateIrPage(data: IrPageData, statements: CheckStatements | null): Promise<IrPageData> {
+  if (typeof Worker !== "undefined") {
+    try {
+      return await new Promise<IrPageData>((resolve, reject) => {
+        let w: Worker;
+        try {
+          w = new Worker(new URL("./ir-page.worker.ts", import.meta.url), { type: "module" });
+        } catch (e) {
+          reject(new WorkerUnavailable((e as Error).message));
+          return;
+        }
+        w.onmessage = (e: MessageEvent<{ ok: boolean; data?: IrPageData; error?: string }>) => {
+          w.terminate();
+          resolve(e.data.ok && e.data.data ? e.data.data : { ...data, secCheckLate: false });
+        };
+        w.onerror = (e) => {
+          w.terminate();
+          e.preventDefault();
+          reject(new WorkerUnavailable(e.message || "worker failed to start"));
+        };
+        w.postMessage({ late: data, statements });
+      });
+    } catch (e) {
+      if (!(e instanceof WorkerUnavailable)) return { ...data, secCheckLate: false };
+    }
+  }
+  const { checkLate } = await import("./unpack");
+  return checkLate(data, statements);
+}
+
 export const irPageKey = (ticker: string) => ["ir", ticker] as const;
