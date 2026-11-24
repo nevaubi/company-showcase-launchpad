@@ -128,8 +128,14 @@ describe("growth", () => {
     expect(growth(f(5), f(-2), "Net income", "a year earlier")).toBeNull();
     expect(growth(f(5), f(0), "Net income", "a year earlier")).toBeNull();
   });
-  it("measures a smaller loss as a rise against the absolute base", () => {
-    expect(growth(f(-50), f(-100), "Net income", "a year earlier")?.v).toBeCloseTo(0.5, 10);
+  it("is null for a negative base, where no ratio formula reads correctly (earnings-M3)", () => {
+    // Alphabet Q3 FY26 free cash flow −$9.1B against −$5.9B: "÷ − 1" would read +54.8%.
+    expect(growth(f(-9.1), f(-5.9), "Free cash flow", "a year earlier")).toBeNull();
+    expect(growth(f(-50), f(-100), "Net income", "a year earlier")).toBeNull();
+  });
+  it("states the formula it computes, keeping acronyms", () => {
+    expect(growth(f(2.2), f(2), "Diluted EPS", "a year earlier")?.derived?.formula).toBe("Diluted EPS ÷ diluted EPS a year earlier − 1");
+    expect(growth(f(2.2), f(2), "Revenue", "a year earlier")?.derived?.formula).toBe("Revenue ÷ revenue a year earlier − 1");
   });
 });
 
@@ -235,6 +241,14 @@ describe("statements lagging several quarters (earnings-H1)", () => {
     expect(p?.release.filed).toBe("2026-10-13");
     expect(p?.count).toBe(3);
     expect(p?.surprise?.quarter).toBe("2026-09-30");
+  });
+});
+
+describe("free cash flow for banks (earnings-M2)", () => {
+  it("is not shown when the profit line is pre-tax income (no operating line: banks, insurers)", () => {
+    const C = load("C");
+    expect(quarterRecords({ dataset: C }).every((r) => r.fcf === null && !r.yoy.fcf)).toBe(true);
+    expect(quarterRecords({ dataset: AAPL }).some((r) => r.fcf)).toBe(true);
   });
 });
 

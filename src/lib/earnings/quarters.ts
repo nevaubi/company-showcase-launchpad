@@ -102,16 +102,18 @@ export function ratio(a: Figure | null, b: Figure | null, formula: string, aLabe
 }
 
 /**
- * Growth from `prev` to `cur`: (cur − prev) ÷ |prev|. Null when the base is zero or missing, or when the
- * sign flips (a loss turning into a profit has no meaningful percentage).
+ * Growth from `prev` to `cur`: cur ÷ prev − 1. Null when the base is zero, negative or missing, or when
+ * the current value is negative (a profit turning into a loss has no meaningful percentage).
  */
 export function growth(cur: Figure | null, prev: Figure | null, label: string, basis: string): Figure | null {
-  if (!cur || !prev || prev.v === 0) return null;
-  if (Math.sign(cur.v) !== Math.sign(prev.v) && cur.v !== 0) return null;
+  // A negative base (a loss, cash burn) has no percentage that reads the way "÷ … − 1" says (earnings-M3).
+  if (!cur || !prev || !(prev.v > 0)) return null;
+  if (cur.v < 0) return null;
+  const lower = /^[A-Z][a-z]/.test(label) ? label[0].toLowerCase() + label.slice(1) : label;
   return {
     v: (cur.v - prev.v) / Math.abs(prev.v),
     ...(cur.q4 === "derived" || prev.q4 === "derived" ? { q4: "derived" as const } : {}),
-    derived: { formula: `${label} ÷ ${label.toLowerCase()} ${basis} − 1`, parts: [...figPartsOf(cur, `${label}, this quarter`), ...figPartsOf(prev, `${label}, ${basis}`, -1)] },
+    derived: { formula: `${label} ÷ ${lower} ${basis} − 1`, parts: [...figPartsOf(cur, `${label}, this quarter`), ...figPartsOf(prev, `${label}, ${basis}`, -1)] },
   };
 }
 
@@ -306,7 +308,8 @@ export function quarterRecords({ dataset: d, reactions = [], surprises, releaseE
       netIncome,
       // A fourth-quarter cell is the year minus nine months (approx): never shown as the reported figure.
       eps: epsCell?.approx ? q4Eps(d, i, releases[i], releaseEps) : fig(epsCell),
-      fcf: fcfAt(cf, cfIndex.get(p.key) ?? -1),
+      // Operating cash flow less capex says nothing useful about a bank or insurer (earnings-M2).
+      fcf: pl.key === "operatingIncome" ? fcfAt(cf, cfIndex.get(p.key) ?? -1) : null,
       grossMargin: ratio(gross, revenue, "Gross profit ÷ revenue", "Gross profit", "Revenue"),
       profitMargin: ratio(profit, revenue, `${pl.label} ÷ revenue`, pl.label, "Revenue"),
       netMargin: ratio(netIncome, revenue, "Net income ÷ revenue", "Net income", "Revenue"),

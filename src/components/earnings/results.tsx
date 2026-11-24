@@ -7,7 +7,7 @@ import { priorIndex, yearAgoIndex, type Figure, type PendingRelease, type Profit
 import type { PeriodEstimate } from "@/lib/estimates/core";
 import type { EarningsRelease } from "@/lib/financials/types";
 import type { Reaction } from "@/lib/markets/core";
-import type { EarningsPricing } from "@/lib/options/core";
+import { REPORT_EXPIRY_LAG, type EarningsPricing } from "@/lib/options/core";
 import type { NextEarnings } from "@/lib/company/catalysts";
 import { fmtCompactUsd, fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -498,11 +498,23 @@ export function NextReport({
         />
         <Stat
           label="Move priced by options"
-          value={pricing ? <span className="num">±{(pricing.point.m * 100).toFixed(1)}%</span> : <span className="text-muted-foreground">–</span>}
+          value={
+            pricing && pricing.lag <= REPORT_EXPIRY_LAG ? (
+              <span className="num">±{(pricing.point.m * 100).toFixed(1)}%</span>
+            ) : (
+              <span className="text-muted-foreground">–</span>
+            )
+          }
           hint={
-            pricing
-              ? `At-the-money straddle to ${fmtDate(pricing.point.e)}${pricing.lag > 7 ? `, ${pricing.lag} days after the report` : ""}${pricedAsOf ? ` · Cboe ${fmtDate(pricedAsOf, { month: "short", day: "numeric" })}` : ""}`
-              : "No listed expiry covers the report yet, or no options snapshot"
+            // An expiry weeks after the report also prices ordinary movement, so it is not set beside
+            // the typical reaction (earnings-M1); the options panel below still shows it.
+            pricing && pricing.lag <= REPORT_EXPIRY_LAG
+              ? `At-the-money straddle to ${fmtDate(pricing.point.e)}${
+                  pricedAsOf ? `, the ${Math.round((Date.parse(pricing.point.e) - Date.parse(pricedAsOf)) / 86_400_000)} days from the Cboe close of ${fmtDate(pricedAsOf, { month: "short", day: "numeric" })}` : ""
+                }${pricing.lag > 0 ? `, ${pricing.lag} ${pricing.lag === 1 ? "day" : "days"} after the report` : ""}`
+              : pricing
+                ? `No expiry close to the report yet: the nearest, ${fmtDate(pricing.point.e)}, is ${pricing.lag} days after it`
+                : "No listed expiry covers the report yet, or no options snapshot"
           }
         />
         <Stat

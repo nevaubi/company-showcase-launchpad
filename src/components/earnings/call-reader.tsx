@@ -381,7 +381,7 @@ export function CallReader({
                     {prev && (
                       <>
                         <td className="num px-2 py-1 text-right text-muted-foreground">{r.prevRate == null ? "–" : r.prevRate.toFixed(1)}</td>
-                        <td className={cn("px-2 py-1 text-left text-[12px]", r.trend && TREND[r.trend].cls)}>{r.trend ? TREND[r.trend].label : "–"}</td>
+                        <td className={cn("px-2 py-1 text-left text-[11px]", r.trend && TREND[r.trend].cls)}>{r.trend ? TREND[r.trend].label : "–"}</td>
                       </>
                     )}
                     <td className="py-1 pl-2 pr-4 text-right">
@@ -437,7 +437,7 @@ export function CallReader({
                         <FirmMark firm={e.firm} />
                       </span>
                     </td>
-                    <td className="max-w-[28rem] px-2 py-1.5 text-[12px] leading-5 text-muted-foreground">{e.gist}</td>
+                    <td className="max-w-[28rem] px-2 py-1.5 text-[11px] leading-5 text-muted-foreground">{e.gist}</td>
                     <td className="px-2 py-1.5 text-[11px]">
                       {e.topics.length ? (
                         <span className="flex flex-wrap gap-1">
@@ -478,7 +478,7 @@ export function CallReader({
               { v: "qa", l: "Q&A" },
             ]}
           />
-          <label className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted-foreground">
+          <label className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
             <span className="sr-only sm:not-sr-only">Speaker</span>
             <select
               value={speaker ?? ""}
@@ -543,7 +543,7 @@ export function CallReader({
         </div>
 
         <div ref={body} className="divide-y">
-          {visible.length === 0 && <p className="px-4 py-10 text-center text-sm text-muted-foreground">Nothing in this section.</p>}
+          {visible.length === 0 && <p className="px-4 py-10 text-center text-[13px] text-muted-foreground">Nothing in this section.</p>}
           {visible.map((x, idx) => {
             const prevTurn = visible[idx - 1];
             const showQa = section === "all" && !speaker && x.section === "qa" && prevTurn?.section === "prepared";

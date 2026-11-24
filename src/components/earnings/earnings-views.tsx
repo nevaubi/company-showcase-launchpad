@@ -45,7 +45,7 @@ export function EarningsSeason() {
   if (season.isLoading)
     return <LoadingState label="Loading the earnings season" variant="Dots" className="mt-8" />;
   if (season.error || !season.data)
-    return <p className="mt-8 text-sm text-muted-foreground">{friendlyError(season.error)}</p>;
+    return <p className="mt-8 text-[13px] text-muted-foreground">{friendlyError(season.error)}</p>;
   const s = season.data;
   const filter = scope === "mine" ? mine : undefined;
   const upcoming = groupUpcoming(s.upcoming, filter).slice(0, 14);
@@ -109,7 +109,7 @@ export function EarningsSeason() {
           </table>
         </Section>
         <Section title="Does a beat move the stock?" note={d.basis}>
-          <dl className="grid grid-cols-2 gap-3 text-sm tabular-nums">
+          <dl className="grid grid-cols-2 gap-3 text-[13px] tabular-nums">
             <div>
               <dt className="text-[11px] text-muted-foreground">Beats</dt>
               <dd>

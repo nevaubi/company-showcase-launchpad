@@ -26,7 +26,7 @@ function Frame({ title, caption, children }: { title: string; caption: string; c
   );
 }
 
-const axisText = "fill-muted-foreground text-[9px]";
+const axisText = "fill-muted-foreground text-[10px]";
 
 function XLabels({ quarters, x }: { quarters: QuarterRecord[]; x: (i: number) => number }) {
   const n = quarters.length;

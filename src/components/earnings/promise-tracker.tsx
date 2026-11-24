@@ -90,19 +90,19 @@ function PromiseRow({ p }: { p: TrackedPromise }) {
   return (
     <li className="grid grid-cols-1 gap-x-6 gap-y-1.5 px-4 py-2.5 lg:grid-cols-2">
       <div className="min-w-0">
-        <p className="text-[13px] font-medium">{p.summary}</p>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          <span className="capitalize">{p.category}</span>
-          {p.deadline && <> · due {p.deadline}</>} · said on the {p.callQuarter ?? fmtDate(p.callDate)} call
-        </p>
+        {/* The company's words lead; the model's one-line summary follows, labelled (earnings-M6). */}
         <a
           href={quoteLink(p.callUrl, p.quote)}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-1 block border-l-2 border-border pl-2 text-[12px] leading-5 text-muted-foreground italic transition-colors duration-150 hover:text-foreground"
+          className="block border-l-2 border-border pl-2 text-[13px] leading-5 transition-colors duration-150 hover:border-foreground/40"
         >
-          “{p.quote}” <ExternalLink className="inline size-3 not-italic" aria-label="Open the transcript at this quote" />
+          “{p.quote}” <ExternalLink className="inline size-3 text-muted-foreground" aria-label="Open the transcript at this quote" />
         </a>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          <span className="capitalize">{p.category}</span>
+          {p.deadline && <> · due {p.deadline}</>} · said on the {p.callQuarter ?? fmtDate(p.callDate)} call · model's summary: {p.summary}
+        </p>
       </div>
       <div className="min-w-0">
         {p.outcomeQuote && p.outcomeUrl && p.status === "kept" ? (
@@ -111,7 +111,7 @@ function PromiseRow({ p }: { p: TrackedPromise }) {
             target="_blank"
             rel="noopener noreferrer"
             title={`“${p.outcomeQuote}”`}
-            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            className="inline-flex min-h-7 items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
           >
             Graded on the {fmtDate(p.outcomeCallDate!)} call <ExternalLink className="size-3" />
           </a>
@@ -122,7 +122,7 @@ function PromiseRow({ p }: { p: TrackedPromise }) {
               href={quoteLink(p.outcomeUrl, p.outcomeQuote)}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-0.5 block border-l-2 border-foreground/20 pl-2 text-[12px] leading-5 text-muted-foreground italic transition-colors duration-150 hover:text-foreground"
+              className="mt-0.5 block border-l-2 border-foreground/20 pl-2 text-[13px] leading-5 text-muted-foreground italic transition-colors duration-150 hover:text-foreground"
             >
               “{p.outcomeQuote}” <ExternalLink className="inline size-3 not-italic" aria-label="Open the transcript at this quote" />
             </a>
@@ -130,7 +130,7 @@ function PromiseRow({ p }: { p: TrackedPromise }) {
         ) : (
           <p className="text-[11px] text-muted-foreground">No later call settles it yet.</p>
         )}
-        {p.note && <p className="mt-1 text-[12px]">{p.note}</p>}
+        {p.note && <p className="mt-1 text-[11px] text-muted-foreground">{p.note}</p>}
       </div>
     </li>
   );

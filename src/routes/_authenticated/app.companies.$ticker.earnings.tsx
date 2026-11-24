@@ -116,7 +116,7 @@ function Earnings() {
       </div>
     );
   if (!d || !model)
-    return <p className="py-10 text-center text-sm text-muted-foreground">Couldn't load this company's statements. Try again in a moment.</p>;
+    return <p className="py-10 text-center text-[13px] text-muted-foreground">Couldn't load this company's statements. Try again in a moment.</p>;
 
   return (
     <div className="grid grid-cols-1 gap-5">
