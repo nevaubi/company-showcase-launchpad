@@ -20,7 +20,7 @@ function ev(key: string, grade: Grade, edge: number, t = 3.5, mean = 0.004): Var
   const k = parseVariantKey(key);
   return {
     key, ...k, family: STRATEGY[k.strategy].family, passed: grade === "proven", blocks: blocks(mean, t), tStored: t, p: 0.001, q: grade === "unproven" ? 0.7 : 0.03,
-    kept: 0.5, base: edge, regimes: [], regime: null, edge, live: { n: 0, avgNet: null, avgExSpy: null, hit: null, since: null, blocks: 0, band: null, z: null, verdict: "none" },
+    kept: 0.5, base: edge, regimes: [], regime: null, edge, live: { n: 0, avgNet: null, avgExSpy: null, hit: null, since: null, days: null, blocks: 0, periodMean: null, band: null, z: null, verdict: "none" },
     grade, reason: "",
   };
 }
@@ -207,7 +207,7 @@ describe("ranking", () => {
   });
 
   it("leaves a rule out of the next in line once its live record is well below zero", () => {
-    const losing: VariantEvidence = { ...ev("reversal:L:5", "unproven", 0, 2.1), live: { n: 400, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01", blocks: 11, band: 0.012, z: -3.2, verdict: "behind" } };
+    const losing: VariantEvidence = { ...ev("reversal:L:5", "unproven", 0, 2.1), live: { n: 400, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01", days: 11, blocks: 11, periodMean: -0.02, band: 0.012, z: -3.2, verdict: "behind" } };
     const more = [...signals, ...Array.from({ length: 6 }, (_, k) => sig(`REVL${k}`, "reversal:L:5", { sector: SECTORS[k] }))];
     const out = rankSetups(book([...variants, losing]), more);
     expect(out.closest.some((x) => x.key === "reversal:L:5")).toBe(false);

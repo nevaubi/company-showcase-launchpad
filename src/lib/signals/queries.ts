@@ -4,6 +4,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { buildEvidence, type EvidenceBook } from "./evidence";
+import { liveDays, sameLiveTrades, type LiveTrade } from "./live";
 import { rankSetups, toSetup, type LiveSignal } from "./rank";
 import type { SetupsFile } from "./setups";
 import type { EquityRow, Position } from "./bots";
@@ -22,6 +23,8 @@ export interface SetupsData extends SetupsFile {
   liveError: string | null;
   /** Evidence for every variant, worked out once per load from the stored records (kept in the query cache). */
   book: EvidenceBook;
+  /** Rules whose finished live trades are the same trades as other rules' (key to the other keys). */
+  sameLive: Map<string, string[]>;
 }
 
 const SIGNAL_COLUMNS = "ticker, variant, fired_at, first_seen, name, sector, strength, detail, price, atr, dv20, cost";
@@ -75,6 +78,34 @@ export async function fetchLiveSignals(asOf: string): Promise<LiveSignal[]> {
   return out;
 }
 
+/**
+ * Finished live trades (caught the night they fired: `first_seen = fired_at`) since the first live
+ * signal any rule has, for the live check by signal day. The API cannot compare two columns, so rows
+ * are filtered here; the date bound keeps the read to the live era (about 600 rows on 24 Nov 2026).
+ */
+export async function fetchLiveTrades(since: string): Promise<LiveTrade[]> {
+  const out: LiveTrade[] = [];
+  for (let from = 0; from < 20 * PAGE; from += PAGE) {
+    const { data, error } = await supabase
+      .from("setup_signals")
+      .select("ticker, variant, fired_at, first_seen, outcome_net")
+      .gte("fired_at", since)
+      .not("outcome_net", "is", null)
+      .order("variant")
+      .order("fired_at")
+      .order("ticker")
+      .range(from, from + PAGE - 1);
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []) as unknown as { ticker: string; variant: string; fired_at: string; first_seen: string | null; outcome_net: number | string | null }[];
+    for (const r of rows) {
+      if (r.first_seen !== r.fired_at || r.outcome_net == null) continue;
+      out.push({ variant: r.variant, ticker: r.ticker, firedAt: r.fired_at, net: Number(r.outcome_net) });
+    }
+    if (rows.length < PAGE) break;
+  }
+  return out;
+}
+
 async function fetchSetupsFile(): Promise<SetupsFile> {
   const { data } = await supabase.from("setup_results").select("payload").order("as_of", { ascending: false }).limit(1).maybeSingle();
   if (data?.payload) return data.payload as unknown as SetupsFile;
@@ -95,11 +126,21 @@ export const setupsQuery = queryOptions({
     } catch (e) {
       liveError = (e as Error).message;
     }
-    const book = buildEvidence(file.variants, file.regime, file.asOf);
+    // The live record by signal day; if it cannot be read, no live record is judged (nothing demoted).
+    const since = file.variants.map((v) => v.live?.since).filter((d): d is string => !!d).sort()[0];
+    let trades: LiveTrade[] | null = since ? null : [];
+    if (since) {
+      try {
+        trades = await fetchLiveTrades(since);
+      } catch {
+        trades = null;
+      }
+    }
+    const book = buildEvidence(file.variants, file.regime, file.asOf, trades ? liveDays(trades) : null);
     // What the page shows by default: the short list, or the closest rules' signals when no rule is listed.
     const ranking = rankSetups(book, live);
     const shown = ranking.list.length ? ranking.list : ranking.closest;
-    return { ...file, setups: shown.map((r) => toSetup(r)), live, liveError, book };
+    return { ...file, setups: shown.map((r) => toSetup(r)), live, liveError, book, sameLive: sameLiveTrades(trades ?? []) };
   },
 });
 

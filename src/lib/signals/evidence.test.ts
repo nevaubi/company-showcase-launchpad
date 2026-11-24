@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { adjustedT, finalize, overlapLag, variantPartial, type DailyAgg, type Regime, type VariantProof } from "./backtest";
 import { buildEvidence, EVIDENCE, LISTED, liveCheck, monthlyBlocks, priorScale, tQuantile } from "./evidence";
+import type { LiveDay } from "./live";
 import { variantMeta, type LiveRecord, type VariantMeta } from "./setups";
 import { bhFdr, bhQ, expectedMaxZ, hacSe, tCdf, tHac } from "./stats";
 import { STRATEGIES } from "./strategies";
@@ -262,40 +263,80 @@ describe("today's regime", () => {
 describe("probation", () => {
   const real = { "rsi2:L:3": 0.9 };
   const withLive = (live: LiveRecord) => universe(31, real).map((v) => (v.key === "rsi2:L:3" ? { ...v, live } : v));
+  /** Weekdays from `from`, every `step` weekdays, `count` of them. */
+  const weekdays = (from: string, count: number, step = 1) => {
+    const out: string[] = [];
+    let t = Date.parse(from + "T12:00:00Z"), k = 0;
+    while (out.length < count) {
+      const w = new Date(t).getUTCDay();
+      if (w !== 0 && w !== 6) {
+        if (k % step === 0) out.push(new Date(t).toISOString().slice(0, 10));
+        k++;
+      }
+      t += 86_400_000;
+    }
+    return out;
+  };
+  const daysOf = (dates: string[], n: number, mean: (i: number) => number): LiveDay[] => dates.map((date, i) => ({ date, n, mean: mean(i) }));
+  const book = (live: LiveRecord, days: LiveDay[], key = "rsi2:L:3", vs = withLive(live)) => buildEvidence(vs, "Up, calm", "2026-11-20", new Map([[key, days]]));
 
-  it("counts independent holding periods, not signals", () => {
-    // First live signal Mon 2 Nov; by Fri 20 Nov there are 14 weekdays after it; a 3-day hold fired
-    // on or before 17 Nov has finished: 12 signal days, four holding periods end to end.
-    const c = liveCheck({ live: { n: 400, avgNet: -0.02, avgExSpy: -0.02, hit: 0.3, since: "2026-11-02" }, horizon: 3 }, 0.004, 0.01, "2026-11-20");
+  it("counts independent holding periods that hold signal days, never calendar days", () => {
+    // Twelve consecutive signal days of a 3-day hold: four independent periods.
+    const days = daysOf(weekdays("2026-11-02", 12), 30, () => -0.02);
+    const c = liveCheck({ live: { n: 360, avgNet: -0.02, avgExSpy: -0.02, hit: 0.3, since: "2026-11-02" }, horizon: 3 }, 0.004, 0.01, days);
+    expect(c.days).toBe(12);
     expect(c.blocks).toBe(4);
-    // Monthly sd 1% over 12 trading days: 1% * sqrt(21 / 12).
-    expect(c.band).toBeCloseTo(1.96 * 0.01 * Math.sqrt(21 / 12), 10);
-    expect(c.z).toBeCloseTo((-0.02 - 0.004) / (0.01 * Math.sqrt(21 / 12)), 10);
+    expect(c.periodMean).toBeCloseTo(-0.02, 12);
+    // Monthly sd 1%; a month holds 21 / 3 periods, so one period's sd is 1% * sqrt(7); four of them.
+    expect(c.band).toBeCloseTo((1.96 * 0.01 * Math.sqrt(7)) / 2, 10);
     expect(c.verdict).toBe("short");
-    expect(liveCheck({ live: { n: 0, avgNet: null, avgExSpy: null, hit: null, since: null }, horizon: 3 }, 0.004, 0.01, "2026-11-20").verdict).toBe("none");
+    expect(liveCheck({ live: { n: 0, avgNet: null, avgExSpy: null, hit: null, since: null }, horizon: 3 }, 0.004, 0.01, []).verdict).toBe("none");
+    // No day breakdown: nothing is judged.
+    expect(liveCheck({ live: { n: 360, avgNet: -0.02, avgExSpy: -0.02, hit: 0.3, since: "2026-11-02" }, horizon: 3 }, 0.004, 0.01, null)).toMatchObject({ days: null, verdict: "short" });
+  });
+
+  it("never completes probation on one signal day, however many trades it holds or however long ago it was", () => {
+    // stressRev:L:5 on 16 Nov: 65 live trades entered on one day. Judged weeks later, it is still one day.
+    const one = [{ date: "2026-11-16", n: 65, mean: -0.03 }];
+    const c = liveCheck({ live: { n: 65, avgNet: -0.03, avgExSpy: -0.03, hit: 0.2, since: "2026-11-16" }, horizon: 5 }, 0, 0.01, one);
+    expect(c.days).toBe(1);
+    expect(c.blocks).toBe(1);
+    expect(c.verdict).toBe("short");
+    const e = book({ n: 65, avgNet: -0.03, avgExSpy: -0.03, hit: 0.2, since: "2026-11-16" }, one).byKey.get("rsi2:L:3")!;
+    expect(e.live.verdict).toBe("short");
+    expect(LISTED.includes(e.grade)).toBe(true);
+  });
+
+  it("counts days whose holds overlap once: thirty signal days inside six weeks of a 20-day hold are two periods", () => {
+    const days = daysOf(weekdays("2026-09-01", 30), 10, () => -0.05);
+    const c = liveCheck({ live: { n: 300, avgNet: -0.05, avgExSpy: -0.05, hit: 0.2, since: "2026-09-01" }, horizon: 20 }, 0, 0.01, days);
+    expect(c.blocks).toBe(2);
+    expect(c.verdict).toBe("short");
   });
 
   it("leaves a rule listed while its live record is too short to judge", () => {
-    const e = buildEvidence(withLive({ n: 190, avgNet: -0.03, avgExSpy: -0.03, hit: 0.3, since: "2026-11-16" }), "Up, calm", "2026-11-20").byKey.get("rsi2:L:3")!;
+    const e = book({ n: 190, avgNet: -0.03, avgExSpy: -0.03, hit: 0.3, since: "2026-11-16" }, daysOf(weekdays("2026-11-16", 5), 38, () => -0.03)).byKey.get("rsi2:L:3")!;
+    expect(e.live.blocks).toBe(2);
     expect(e.live.verdict).toBe("short");
     expect(LISTED.includes(e.grade)).toBe(true);
   });
 
   it("demotes a rule whose live record contradicts its backtest once there is enough of it", () => {
-    // Since 1 Sep: 58 weekdays to 20 Nov, 56 signal days that could have finished, 19 three-day holds.
-    const behind = buildEvidence(withLive({ n: 900, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01" }), "Up, calm", "2026-11-20").byKey.get("rsi2:L:3")!;
-    expect(behind.live.blocks).toBeGreaterThanOrEqual(EVIDENCE.liveMinBlocks);
+    // Nineteen independent 3-day periods with a signal day each, losing 2% a trade.
+    const spread = weekdays("2026-09-01", 19, 3);
+    const live = { n: 190, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01" };
+    const behind = book(live, daysOf(spread, 10, (i) => -0.02 + (i % 2 ? 0.002 : -0.002))).byKey.get("rsi2:L:3")!;
+    expect(behind.live.blocks).toBe(19);
     expect(behind.live.z!).toBeLessThan(EVIDENCE.liveZ);
     expect(behind.live.verdict).toBe("behind");
     expect(behind.grade).toBe("probation");
     expect(behind.reason).toBe("Live record is well below its backtest");
     // The same length of record close to the backtest keeps its grade.
-    const fine = buildEvidence(withLive({ n: 900, avgNet: 0.004, avgExSpy: 0.004, hit: 0.52, since: "2026-09-01" }), "Up, calm", "2026-11-20").byKey.get("rsi2:L:3")!;
+    const fine = book({ ...live, avgNet: 0.004 }, daysOf(spread, 10, (i) => behind.edge + (i % 2 ? 0.002 : -0.002))).byKey.get("rsi2:L:3")!;
     expect(fine.live.verdict).toBe("in line");
     expect(LISTED.includes(fine.grade)).toBe(true);
-    // A small loss inside the range the backtest allows is not a contradiction. Since 21 Oct: 22 weekdays,
-    // 20 signal days that could have finished, seven three-day holds: enough to judge, and a wide range.
-    const dip = buildEvidence(withLive({ n: 900, avgNet: -0.003, avgExSpy: -0.003, hit: 0.48, since: "2026-10-21" }), "Up, calm", "2026-11-20").byKey.get("rsi2:L:3")!;
+    // A small loss inside the range the backtest allows is not a contradiction: seven periods.
+    const dip = book({ ...live, avgNet: -0.003 }, daysOf(weekdays("2026-10-21", 7, 3), 30, () => -0.003)).byKey.get("rsi2:L:3")!;
     expect(dip.live.blocks).toBe(7);
     expect(dip.live.z!).toBeGreaterThan(EVIDENCE.liveZ);
     expect(dip.live.z!).toBeLessThan(0);
@@ -306,8 +347,9 @@ describe("probation", () => {
     // Every record is noise. Take a short-hold rule with a positive record that is not listed.
     const first = buildEvidence(universe(31), "Up, calm", "2026-11-20");
     const key = first.variants.find((e) => e.grade === "unproven" && e.blocks!.mean > 0 && e.horizon <= 5)!.key;
-    const live = { n: 900, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01" };
-    const e = buildEvidence(universe(31).map((v) => (v.key === key ? { ...v, live } : v)), "Up, calm", "2026-11-20").byKey.get(key)!;
+    const live = { n: 200, avgNet: -0.02, avgExSpy: -0.02, hit: 0.4, since: "2026-09-01" };
+    const vs = universe(31).map((v) => (v.key === key ? { ...v, live } : v));
+    const e = book(live, daysOf(weekdays("2026-09-01", 20, 5), 10, () => -0.02), key, vs).byKey.get(key)!;
     // Expected edge zero, so the live average is read against zero.
     expect(e.edge).toBe(0);
     expect(e.live.blocks).toBeGreaterThanOrEqual(EVIDENCE.liveMinBlocks);
@@ -387,7 +429,10 @@ describe("production record of 20 Nov 2026", () => {
     expect(book.prior.value).toBe(0);
     expect(book.regimePrior.value).toBe(0);
     expect(book.variants.every((e) => e.edge === 0)).toBe(true);
-    // The live record is two signal days long: nothing can be demoted on it.
-    expect(book.byKey.get("rsi2:L:3")!.live).toMatchObject({ n: 190, blocks: 1, verdict: "short" });
+    // Without the day breakdown no live record is judged.
+    expect(book.byKey.get("rsi2:L:3")!.live).toMatchObject({ n: 190, days: null, verdict: "short" });
+    // With it: the live record is two signal days long, one period of a 3-day hold: nothing can be demoted on it.
+    const days = new Map([["rsi2:L:3", [{ date: "2026-11-16", n: 120, mean: 0.012 }, { date: "2026-11-17", n: 70, mean: 0.016 }]]]);
+    expect(buildEvidence(vs, "Down, stressed", "2026-11-20", days).byKey.get("rsi2:L:3")!.live).toMatchObject({ n: 190, days: 2, blocks: 1, verdict: "short" });
   });
 });

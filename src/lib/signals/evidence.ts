@@ -16,7 +16,7 @@
 //   4. Today's market: the variant's record in today's regime moves the edge up or down, itself
 //      shrunk by how many trades that regime holds.
 import { adjustedT, GATE, OOS_START, REGIMES, type Regime } from "./backtest";
-import { weekdaysBetween } from "./events";
+import { livePeriods, type LiveDay } from "./live";
 import type { VariantMeta } from "./setups";
 import { bhQ, expectedMaxZ, hacSe, mean, normInv, std, tCdf } from "./stats";
 
@@ -35,7 +35,7 @@ export const EVIDENCE = {
    * of all-years months being about twice as variable as months since 2022.
    */
   regimeDesign: 2,
-  /** Finished live signals and independent holding periods needed before the live record can demote a variant. */
+  /** Finished live trades, and independent holding periods with at least one signal day, needed before the live record can demote a variant. */
   liveMinN: 30,
   liveMinBlocks: 6,
   /** Standard errors below its expected edge at which a losing live record puts a variant on probation. */
@@ -149,8 +149,12 @@ export interface LiveCheck {
   avgExSpy: number | null;
   hit: number | null;
   since: string | null;
-  /** Holding periods laid end to end between the first live signal and the last that could have finished. */
+  /** Distinct signal days with finished live trades; null when the day breakdown did not load. */
+  days: number | null;
+  /** Independent holding periods that hold at least one of those days (never calendar time). */
   blocks: number;
+  /** Average of the period averages: what the live check reads. */
+  periodMean: number | null;
   /** Range the backtest allows for an average over a record this short: expected edge plus or minus this. */
   band: number | null;
   /** Standard errors the live average sits from the expected edge. */
@@ -280,29 +284,44 @@ function typicalDf(vs: readonly VariantEvidence[]): number {
   return Math.max((n.length % 2 ? n[n.length >> 1] : (n[n.length / 2 - 1] + n[n.length / 2]) / 2) - 1, 1);
 }
 
-/** Live record against what the backtest allows for a record that short. */
-export function liveCheck(v: Pick<VariantMeta, "live" | "horizon">, expected: number, monthlySd: number | null, asOf: string): LiveCheck {
+/**
+ * Live record against what the backtest allows for a record that short. The unit is the independent
+ * holding period that holds at least one finished live signal day (`livePeriods`): trades entered on
+ * one day count once, and days whose holds overlap count once together, so a single clustered day of
+ * many correlated trades is one observation however much calendar time passes after it. The live
+ * average is the average of the period averages, read against the expected edge with an error built
+ * two ways, keeping the larger: from the backtest (a month holds about 21 / h independent periods for
+ * holds up to a month, so one period's spread is the monthly spread times sqrt(21 / h)) and, with
+ * enough periods, from the periods themselves. Without the day breakdown (`days` null) nothing is judged.
+ */
+export function liveCheck(v: Pick<VariantMeta, "live" | "horizon">, expected: number, monthlySd: number | null, days: readonly LiveDay[] | null | undefined): LiveCheck {
   const L = v.live;
   const n = L?.n ?? 0;
-  const base: LiveCheck = { n, avgNet: L?.avgNet ?? null, avgExSpy: L?.avgExSpy ?? null, hit: L?.hit ?? null, since: L?.since ?? null, blocks: 0, band: null, z: null, verdict: "none" };
+  const base: LiveCheck = { n, avgNet: L?.avgNet ?? null, avgExSpy: L?.avgExSpy ?? null, hit: L?.hit ?? null, since: L?.since ?? null, days: days ? days.length : null, blocks: 0, periodMean: null, band: null, z: null, verdict: "none" };
   if (!n || !L?.since || L.avgNet == null) return base;
+  if (!days) return { ...base, verdict: "short" };
   const h = Math.max(1, v.horizon || 1);
-  // Signal days whose trades could have finished: a signal has to be one holding period old.
-  const span = Math.max(0, weekdaysBetween(L.since, asOf) - h) + 1;
-  const blocks = Math.floor((span - 1) / h) + 1;
-  // An average over `span` trading days is noisier than a month's by sqrt(21 / span).
-  const se = monthlySd != null && monthlySd > 0 ? monthlySd * Math.sqrt(21 / span) : null;
-  const z = se ? (L.avgNet - expected) / se : null;
-  const enough = n >= EVIDENCE.liveMinN && blocks >= EVIDENCE.liveMinBlocks;
-  const verdict: LiveVerdict = !enough || z == null ? "short" : z <= EVIDENCE.liveZ && L.avgNet < 0 ? "behind" : z >= -EVIDENCE.liveZ ? "ahead" : "in line";
-  return { ...base, blocks, band: se == null ? null : 1.96 * se, z, verdict };
+  const periods = livePeriods(days, h);
+  const P = periods.length;
+  if (!P) return { ...base, verdict: "short" };
+  const pm = mean(periods.map((p) => p.mean));
+  const model = monthlySd != null && monthlySd > 0 ? (monthlySd * Math.sqrt(21 / Math.min(h, 21))) / Math.sqrt(P) : null;
+  const own = P >= EVIDENCE.liveMinBlocks ? std(periods.map((p) => p.mean), pm) / Math.sqrt(P) : 0;
+  const se = model == null ? null : Math.max(model, Number.isFinite(own) ? own : 0);
+  const z = se ? (pm - expected) / se : null;
+  const trades = days.reduce((s, d) => s + d.n, 0);
+  const enough = trades >= EVIDENCE.liveMinN && P >= EVIDENCE.liveMinBlocks;
+  const verdict: LiveVerdict = !enough || z == null ? "short" : z <= EVIDENCE.liveZ && pm < 0 ? "behind" : z >= -EVIDENCE.liveZ ? "ahead" : "in line";
+  return { ...base, blocks: P, periodMean: pm, band: se == null ? null : 1.96 * se, z, verdict };
 }
 
 /**
  * Evidence for every variant at once (false-discovery control and shrinkage need all of them).
  * `regime` is today's market regime and `asOf` the session the live records run to.
  */
-export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, asOf: string): EvidenceBook {
+export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, asOf: string, live?: ReadonlyMap<string, readonly LiveDay[]> | null): EvidenceBook {
+  // Without the day breakdown no live record is judged; with it, a rule with no finished live day has none.
+  const daysOf = (key: string) => (live ? live.get(key) ?? [] : null);
   const blocks = variants.map((v) => monthlyBlocks(v.curve ?? [], v.horizon));
   // One-sided p-values, Student's t on the months the error is worth. No record is no evidence.
   const p = blocks.map((b) => (b ? 1 - tCdf(b.t, Math.max(b.nEff - 1, 1)) : 1));
@@ -319,7 +338,7 @@ export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, 
     const b = blocks[i];
     const head = { key: v.key, strategy: v.strategy, family: v.family, side: v.side, horizon: v.horizon, passed: v.passed, tStored: adjustedT(v.outSample), p: p[i], q: q[i] };
     if (!b) {
-      return { ...head, blocks: null, kept: 0, base: 0, regimes: [], regime: null, edge: 0, live: liveCheck(v, 0, null, asOf), grade: "unproven", reason: "Under 12 months of trades since 2022" };
+      return { ...head, blocks: null, kept: 0, base: 0, regimes: [], regime: null, edge: 0, live: liveCheck(v, 0, null, daysOf(v.key)), grade: "unproven", reason: "Under 12 months of trades since 2022" };
     }
     // Shrinkage from the whole set, or what the variant's own record keeps beyond the luckiest worthless rule, whichever is larger.
     const pooled = (prior.value * b.nEff) / (1 + prior.value * b.nEff);
@@ -332,7 +351,7 @@ export function buildEvidence(variants: readonly VariantMeta[], regime: Regime, 
     });
     const fit = fits.find((f) => f.regime === regime) ?? null;
     const edge = base + (fit?.adjust ?? 0);
-    const live = liveCheck(v, edge, b.sd, asOf);
+    const live = liveCheck(v, edge, b.sd, daysOf(v.key));
     const enoughMonths = b.months >= EVIDENCE.minMonths;
     const ok = b.mean > 0 && enoughMonths && edge > 0;
     let grade: Grade = "unproven";

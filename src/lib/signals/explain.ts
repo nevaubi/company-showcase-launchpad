@@ -32,19 +32,22 @@ export function evidenceLine(e: VariantEvidence, d: Discovery): string {
   }
 }
 
-/** The live record in one line, with what it can and cannot say. */
-export function liveLine(l: LiveCheck): string {
+/** The live record in one line, with what it can and cannot say. `same` names rules whose live trades are these very trades. */
+export function liveLine(l: LiveCheck, same: readonly string[] = []): string {
   if (!l.n || l.avgNet == null) return "No finished live trades yet.";
-  const head = `${count(l.n)} finished live trades since ${dayShort(l.since)}: ${pct(l.avgNet)} a trade, ${pct(l.hit, 0, false)} up`;
+  const shared = same.length ? ` (the same trades as ${same.join(" and ")}: one record, not ${same.length + 1})` : "";
+  const head = `${count(l.n)} finished live trades since ${dayShort(l.since)}${shared}: ${pct(l.avgNet)} a trade, ${pct(l.hit, 0, false)} up`;
+  if (l.days == null) return `${head}. Not judged: the live trades by day did not load.`;
+  const span = `${l.days} signal ${l.days === 1 ? "day" : "days"} in ${l.blocks} independent holding ${l.blocks === 1 ? "period" : "periods"}`;
   switch (l.verdict) {
     case "short":
-      return `${head}. Too short to judge: ${l.blocks} holding ${l.blocks === 1 ? "period" : "periods"} end to end, ${EVIDENCE.liveMinBlocks} needed.`;
+      return `${head}. Too short to judge: ${span}, ${EVIDENCE.liveMinBlocks} periods needed.`;
     case "behind":
-      return `${head}. Well below what the backtest allows for a record this long.`;
+      return `${head}. Over ${span}, well below what the backtest allows.`;
     case "ahead":
-      return `${head}. Above what the backtest led us to expect.`;
+      return `${head}. Over ${span}, above what the backtest led us to expect.`;
     case "in line":
-      return `${head}. In line with the backtest.`;
+      return `${head}. Over ${span}, in line with the backtest.`;
     default:
       return `${head}.`;
   }

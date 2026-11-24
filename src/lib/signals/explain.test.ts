@@ -86,8 +86,16 @@ describe("the evidence in words, on the production record of 20 Nov 2026", () =>
   });
 
   it("says a live record of one holding period is too short to judge", () => {
-    expect(liveLine(book.byKey.get("rsi2:L:3")!.live)).toBe("190 finished live trades since Nov 16: +1.37% a trade, 66% up. Too short to judge: 1 holding period end to end, 6 needed.");
+    // Without the day breakdown nothing is judged.
+    expect(liveLine(book.byKey.get("rsi2:L:3")!.live)).toBe("190 finished live trades since Nov 16: +1.37% a trade, 66% up. Not judged: the live trades by day did not load.");
+    const days = new Map([["rsi2:L:3", [{ date: "2026-11-16", n: 120, mean: 0.01 }, { date: "2026-11-17", n: 70, mean: 0.02 }]]]);
+    const withDays = buildEvidence(realVariants(), "Up, calm", "2026-11-20", days);
+    expect(liveLine(withDays.byKey.get("rsi2:L:3")!.live)).toBe("190 finished live trades since Nov 16: +1.37% a trade, 66% up. Too short to judge: 2 signal days in 1 independent holding period, 6 periods needed.");
     expect(liveLine(book.byKey.get("volPremium:L:20")!.live)).toBe("No finished live trades yet.");
+  });
+
+  it("names a rule whose live trades are another rule's, so one record is not read as two", () => {
+    expect(liveLine(book.byKey.get("rsi2:L:3")!.live, ["residual:L:5"])).toMatch(/^190 finished live trades since Nov 16 \(the same trades as residual:L:5: one record, not 2\): /);
   });
 
   it("counts listed rules when there are some", () => {
