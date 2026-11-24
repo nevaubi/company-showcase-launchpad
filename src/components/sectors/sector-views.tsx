@@ -20,7 +20,7 @@ import {
 } from "@/lib/sectors/groups";
 import { noteWeek } from "@/lib/sectors/notes";
 import { placeLabels } from "@/lib/sectors/labels";
-import { Section, Stepper, useWidth } from "./ui";
+import { Section, useWidth } from "./ui";
 
 /* ---------- relative rotation graph ---------- */
 const QUAD = [
@@ -133,45 +133,27 @@ export function RotationGraph({ ov, tail, onTail }: { ov: Overview; tail: "4w" |
 
 /* ---------- weekly notes ---------- */
 /**
- * One week of notes, the newest by default, with a stepper to earlier weeks. `only` keeps one sector's
- * notes (a sector page, or an industry page showing its sector's note); `week` and `onWeek` keep the week
- * in the address. Renders nothing when there is no note, so the caller can give its neighbour the row.
+ * The current week's notes (the newest week in the file); earlier weeks are not shown. `only` keeps one
+ * sector's note (a sector page, or an industry page showing its sector's note). Renders nothing when
+ * there is no current note, so the caller can give its neighbour the row.
  */
-export function SectorNotes({ only, onlyName, week, onWeek }: { only?: string; onlyName?: string; week?: string; onWeek: (w: string | undefined) => void }) {
+export function SectorNotes({ only, onlyName }: { only?: string; onlyName?: string }) {
   const q = useQuery(notesQuery);
   const navigate = useNavigate();
-  const nw = useMemo(() => noteWeek(q.data?.notes, { only, want: week }), [q.data, only, week]);
+  const nw = useMemo(() => noteWeek(q.data?.notes, { only }), [q.data, only]);
   if (q.isLoading) return <Skeleton className="h-32" />;
   if (!nw.week || !nw.notes.length) return null;
-  const newest = nw.weeks[0];
-  const step = (w: string | null) => (w ? () => onWeek(w === newest ? undefined : w) : undefined);
   return (
     <Section
       id="notes"
       name="Weekly notes"
-      title={only ? (onlyName ? `Weekly note on ${onlyName}` : "Weekly note") : "Weekly sector notes"}
-      caption={`${nw.week === newest ? "Latest week" : "An earlier week"} · ${nw.weeks.length} ${nw.weeks.length === 1 ? "week" : "weeks"} on file · each underlined number opens the aggregate it cites`}
-      actions={
-        nw.weeks.length > 1 ? (
-          <Stepper
-            label="Week of the notes"
-            value={`Week of ${fmtDate(nw.week)}`}
-            onEarlier={step(nw.earlier)}
-            onLater={step(nw.later)}
-            earlier={nw.earlier ? `week of ${fmtDate(nw.earlier)}` : null}
-            later={nw.later ? `week of ${fmtDate(nw.later)}` : null}
-          />
-        ) : (
-          <span className="num text-[11px] text-muted-foreground">Week of {fmtDate(nw.week)}</span>
-        )
-      }
+      title={only ? (onlyName ? `This week's note on ${onlyName}` : "This week's note") : "This week's sector notes"}
+      caption={`Week of ${fmtDate(nw.week)} · each underlined number opens the aggregate it cites`}
     >
       <div className={cn("grid grid-cols-1 gap-px bg-border", !only && "md:grid-cols-2")}>
         {nw.notes.map((n) => (
           <article key={`${n.slug}-${n.week}`} className="min-w-0 bg-card px-3.5 py-3">
-            <p className="text-[11px] text-muted-foreground">
-              {n.sector} · week of {fmtDate(n.week)}
-            </p>
+            <p className="text-[11px] text-muted-foreground">{n.sector}</p>
             <h3 className="mt-0.5 text-[13px] font-semibold leading-snug">
               <Link to="/app/sectors/$sector" params={{ sector: n.sector }} className="rounded-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                 {n.title}
@@ -219,6 +201,22 @@ export function useHasNotes(only?: string) {
 
 /* ---------- quarterly aggregates with the breakdown behind each point ---------- */
 export const TREND_METRICS = ["rev_growth", "ni_growth", "pct_rev_up", "gm", "om", "nm", "fcfm", "roic", "roe", "nd_ebitda", "pe", "ps", "pfcf"];
+/** Short names for the metric buttons; the full name is the button's title and the chart's caption. */
+const TREND_SHORT: Record<string, string> = {
+  rev_growth: "Rev growth",
+  ni_growth: "NI growth",
+  pct_rev_up: "% growing",
+  gm: "Gross m.",
+  om: "Op m.",
+  nm: "Net m.",
+  fcfm: "FCF m.",
+  roic: "ROIC",
+  roe: "ROE",
+  nd_ebitda: "ND/EBITDA",
+  pe: "P/E",
+  ps: "P/S",
+  pfcf: "P/FCF",
+};
 
 export function AggregateTrends({
   g,
@@ -259,18 +257,6 @@ export function AggregateTrends({
       caption={`${g.metrics[metric]?.name ?? metric}: aggregate (solid) and company median (dashed) by calendar quarter${canBreak ? " · click a quarter for the companies behind it" : ""}`}
       actions={
         <>
-          <select
-            aria-label="Metric"
-            value={metric}
-            onChange={(e) => onPick(e.target.value, q)}
-            className="h-7 rounded-md border bg-card px-2 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            {TREND_METRICS.filter((k) => g.agg[k]).map((k) => (
-              <option key={k} value={k}>
-                {g.metrics[k]?.name ?? k}
-              </option>
-            ))}
-          </select>
           <Segmented
             size="xs"
             label="Trend span"
@@ -285,6 +271,24 @@ export function AggregateTrends({
         </>
       }
     >
+      <div role="radiogroup" aria-label="Metric" className="flex flex-wrap gap-1 border-b px-3.5 py-2">
+        {TREND_METRICS.filter((k) => g.agg[k]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={k === metric}
+            title={g.metrics[k]?.name ?? k}
+            onClick={() => onPick(k, q)}
+            className={cn(
+              "inline-flex h-7 items-center rounded-md px-2 text-[11px] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              k === metric ? "bg-secondary font-medium text-foreground shadow-[inset_0_0_0_1px_var(--border)]" : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            )}
+          >
+            {TREND_SHORT[k] ?? g.metrics[k]?.name ?? k}
+          </button>
+        ))}
+      </div>
       <div ref={ref} className="px-3.5 py-2">
         {!s || show.length < 2 ? (
           <p className="py-6 text-center text-[12px] text-muted-foreground">Not enough quarters reported for this metric.</p>

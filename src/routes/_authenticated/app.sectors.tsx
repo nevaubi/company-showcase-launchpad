@@ -19,12 +19,6 @@ const pageSearch = z.object({
   dir: z.enum(["asc", "desc"]).optional().catch(undefined),
   span: z.enum(SPANS.map((s) => s.v) as unknown as [string, ...string[]]).optional().catch(undefined),
   tail: z.enum(["4w", "10w"]).optional().catch(undefined),
-  /** Week of the notes shown (a Monday); the newest when absent. */
-  wk: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional()
-    .catch(undefined),
 });
 
 export const Route = createFileRoute("/_authenticated/app/sectors")({
@@ -86,7 +80,7 @@ function Sectors() {
         {overview.data ? <RotationGraph ov={overview.data} tail={s.tail ?? "4w"} onTail={(t) => set({ tail: t === "4w" ? undefined : t })} /> : null}
         <FundCorrelation />
       </div>
-      <SectorNotes week={s.wk} onWeek={(w) => set({ wk: w })} />
+      <SectorNotes />
       <MacroContext />
     </div>
   );

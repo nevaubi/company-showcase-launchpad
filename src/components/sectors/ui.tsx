@@ -3,7 +3,7 @@
 // captions, 13 px rows of 28 px, 11 px column heads, `.eyebrow` for quiet group heads.
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Share } from "@/lib/sectors/stats";
 
@@ -241,39 +241,6 @@ export function useFits<T extends HTMLElement>(min: number) {
 export const STICKY_HEAD = "[&>th]:sticky [&>th]:top-[var(--sticky-top,3.5rem)] [&>th]:z-10";
 export const STICKY_HEAD_2 = "[&>th]:sticky [&>th]:top-[calc(var(--sticky-top,3.5rem)+1.5rem)] [&>th]:z-10";
 export const STICKY_HEAD_NAV = "[&>th]:sticky [&>th]:top-[calc(var(--sticky-top,3.5rem)+41px)] [&>th]:z-10";
-
-/** Step between neighbouring values (weeks of a note): two small buttons around the current label. */
-export function Stepper({
-  label,
-  value,
-  onEarlier,
-  onLater,
-  earlier,
-  later,
-}: {
-  /** Accessible name of the group, e.g. "Week". */
-  label: string;
-  value: ReactNode;
-  onEarlier?: () => void;
-  onLater?: () => void;
-  /** Names of the neighbours, for the buttons' labels. */
-  earlier?: string | null;
-  later?: string | null;
-}) {
-  const btn =
-    "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-35";
-  return (
-    <div role="group" aria-label={label} className="inline-flex items-center gap-0.5 rounded-md border bg-secondary/50 p-0.5">
-      <button type="button" className={btn} disabled={!onEarlier} onClick={onEarlier} aria-label={earlier ? `Earlier: ${earlier}` : "No earlier one"} title={earlier ? `Earlier: ${earlier}` : undefined}>
-        <ChevronLeft className="size-3.5" aria-hidden />
-      </button>
-      <span className="num px-1.5 text-[11px] whitespace-nowrap">{value}</span>
-      <button type="button" className={btn} disabled={!onLater} onClick={onLater} aria-label={later ? `Later: ${later}` : "No later one"} title={later ? `Later: ${later}` : undefined}>
-        <ChevronRight className="size-3.5" aria-hidden />
-      </button>
-    </div>
-  );
-}
 
 /**
  * One figure with what it rests on: label, value, a secondary line, and a basis line (quarter and

@@ -152,7 +152,7 @@ export function GroupView({
         <div className="grid min-w-0 grid-cols-1 content-start gap-5">
           <RiskSignals d={d} rows={rows} tape={idx} tapePending={tape.isPending} market={market.data ?? null} marketError={market.isError} />
           {hasNote !== false && (
-            <SectorNotes only={d.sector_slug} onlyName={d.kind === "industry" ? d.sector : undefined} week={search.wk} onWeek={(w) => setSearch({ wk: w })} />
+            <SectorNotes only={d.sector_slug} onlyName={d.kind === "industry" ? d.sector : undefined} />
           )}
         </div>
       </div>

@@ -114,8 +114,8 @@ describe("group page model", () => {
     expect(tableSort("risk", "industry", undefined)).toEqual({ sort: "industry", dir: "asc" });
   });
   it("reads the address leniently", () => {
-    expect(groupSearch.parse({ sort: "om", dir: "asc", dm: "pe", cols: "risk", wk: "2026-11-09" })).toMatchObject({ sort: "om", dir: "asc", dm: "pe", cols: "risk", wk: "2026-11-09" });
-    expect(groupSearch.parse({ sort: "bogus", dm: "nope", span: "20", cols: "all", wk: "last week" })).toEqual({ sort: undefined, dm: undefined, span: undefined, cols: undefined, wk: undefined });
+    expect(groupSearch.parse({ sort: "om", dir: "asc", dm: "pe", cols: "risk" })).toMatchObject({ sort: "om", dir: "asc", dm: "pe", cols: "risk" });
+    expect(groupSearch.parse({ sort: "bogus", dm: "nope", span: "20", cols: "all" })).toEqual({ sort: undefined, dm: undefined, span: undefined, cols: undefined });
   });
   it("slugs match the pipeline's", () => {
     expect(slugify("Hotels, Restaurants & Leisure")).toBe("hotels-restaurants-and-leisure");

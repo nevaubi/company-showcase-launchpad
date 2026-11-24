@@ -275,12 +275,6 @@ export const groupSearch = z.object({
   dm: z.enum(DIST.map((x) => x.k) as [string, ...string[]]).optional().catch(undefined),
   /** Industry filter on a sector page. */
   ind: z.string().max(80).optional().catch(undefined),
-  /** Week of the note shown (a Monday, YYYY-MM-DD); the newest when absent. */
-  wk: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional()
-    .catch(undefined),
 });
 export type GroupSearch = z.infer<typeof groupSearch>;
 
