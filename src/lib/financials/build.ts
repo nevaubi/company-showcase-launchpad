@@ -83,6 +83,14 @@ function allDurationFacts(cf: CompanyFacts): RawFact[] {
   return out;
 }
 
+/**
+ * Longest discrete quarter, in days. Retailers on 52/53-week years run 12/12/12/16-week quarters
+ * (Costco: 84, 168 and 252 days year to date) or 16/12/12/12 (Kroger: a 112-day first quarter), so
+ * the year-to-date buckets are 160–200 and 245–290 days; with the old 170–195 and 260–285 Costco's
+ * second and third quarters were never placed until its 10-K arrived.
+ */
+const Q_MAX = 115;
+
 export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
   const durations = allDurationFacts(cf);
   const annual = durations.filter((f) => isAnnualForm(f.form) && f.start && inRange(durationDays(f.start, f.end), 350, 380));
@@ -98,15 +106,15 @@ export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
     const fromStart = durations.filter((f) => near(f.start, start, 4));
     const bucket = (lo: number, hi: number) =>
       mostCommon(fromStart.filter((f) => inRange(durationDays(f.start!, f.end), lo, hi)).map((f) => f.end));
-    let q1 = bucket(80, 100);
-    let q2 = bucket(170, 195);
-    let q3 = bucket(260, 285);
+    let q1 = bucket(80, Q_MAX);
+    let q2 = bucket(160, 200);
+    let q3 = bucket(245, 290);
     if (!q1 || !q2 || !q3) {
       // Fall back to discrete three-month periods inside the year.
       const discreteEnds = durations
         .filter(
           (f) =>
-            inRange(durationDays(f.start!, f.end), 80, 100) &&
+            inRange(durationDays(f.start!, f.end), 80, Q_MAX) &&
             toTime(f.end) > toTime(start) + 60 * DAY &&
             toTime(f.end) < toTime(end) - 30 * DAY,
         )
@@ -120,23 +128,52 @@ export function detectFiscalYears(cf: CompanyFacts): FiscalYear[] {
   }
   years.sort((a, b) => toTime(a.end) - toTime(b.end));
 
-  // Fiscal year in progress: 10-Q periods that start the day after the last 10-K year.
+  // Fiscal years in progress: 10-Q periods that start the day after the last 10-K year.
   const last = years.at(-1);
   if (last) {
-    const start = addDays(last.end, 1);
-    const fromStart = durations.filter((f) => near(f.start, start, 4) && f.form.startsWith("10-Q"));
-    const bucket = (lo: number, hi: number) =>
-      mostCommon(fromStart.filter((f) => inRange(durationDays(f.start!, f.end), lo, hi)).map((f) => f.end));
-    // Keep quarters in position: when a 10-Q is missing from companyfacts (URI, DOW, ED and EIX lack
-    // their Q2 FY2026 facts), a later nine-month YTD must stay Q3. Dropping the gap turned it into
-    // "Q2" and derived Q2 as 9M − Q1, double the real quarter. The missing quarter keeps its
-    // calendar end and simply has no cells.
-    const found = [bucket(80, 100), bucket(170, 195), bucket(260, 285)];
-    const lastFound = found.reduce((acc, e, i) => (e ? i : acc), -1);
-    const qEnds = found.slice(0, lastFound + 1).map((e, i) => e ?? quarterEndAfter(start, i + 1));
-    if (qEnds.length) {
-      const end = addDays(start, durationDays(last.start, last.end));
-      years.push({ fy: fiscalYearFromEnd(end), start, end, qEnds, partial: true });
+    const yearDays = durationDays(last.start, last.end);
+    const quartersFrom = (start: string) => {
+      const fromStart = durations.filter((f) => near(f.start, start, 4) && f.form.startsWith("10-Q"));
+      const bucket = (lo: number, hi: number) =>
+        mostCommon(fromStart.filter((f) => inRange(durationDays(f.start!, f.end), lo, hi)).map((f) => f.end));
+      // Keep quarters in position: when a 10-Q is missing from companyfacts (URI, DOW, ED and EIX lack
+      // their Q2 FY2026 facts), a later nine-month YTD must stay Q3. Dropping the gap turned it into
+      // "Q2" and derived Q2 as 9M − Q1, double the real quarter. The missing quarter keeps its
+      // calendar end and simply has no cells.
+      const found = [bucket(80, Q_MAX), bucket(160, 200), bucket(245, 290)];
+      const lastFound = found.reduce((acc, e, i) => (e ? i : acc), -1);
+      return found.slice(0, lastFound + 1).map((e, i) => e ?? quarterEndAfter(start, i + 1));
+    };
+    // A short 10-K or 10-KT period starting here is a transition (Ferguson moved its year end from
+    // July to December with a five-month 10-KT; Paramount Skydance's successor 10-K covers 8 Aug to
+    // 31 Dec 2025): the next year starts after it.
+    const transitionFrom = (start: string) =>
+      durations
+        .filter((f) => isAnnualForm(f.form) && near(f.start, start, 4) && inRange(durationDays(f.start!, f.end), 28, 349))
+        .sort((a, b) => (a.end < b.end ? 1 : -1))[0];
+    const used = new Set(years.map((y) => y.fy));
+    let start = addDays(last.end, 1);
+    // Several years can be in progress when a 10-K is missing from companyfacts (Clorox's FY2026
+    // 10-K): each year's quarters are still placed, the year itself has no annual column.
+    for (let guard = 0; guard < 4; guard++) {
+      const qEnds = quartersFrom(start);
+      let end = addDays(start, yearDays);
+      let next = addDays(end, 1);
+      let t = transitionFrom(start);
+      while (t) {
+        end = t.end;
+        next = addDays(t.end, 1);
+        // A successor period can follow a predecessor stub (Skydance: Jan–Aug, then Aug–Dec).
+        t = transitionFrom(next);
+      }
+      const fy = fiscalYearFromEnd(end);
+      if (qEnds.length && !used.has(fy) && qEnds.every((e) => toTime(e) <= toTime(end) + 6 * DAY)) {
+        years.push({ fy, start, end, qEnds, partial: true });
+        used.add(fy);
+      }
+      // Go on only when a later year's quarters exist.
+      if (!durations.some((f) => near(f.start, next, 4) && f.form.startsWith("10-Q"))) break;
+      start = next;
     }
   }
   return years;
@@ -238,9 +275,9 @@ function pickCell(cf: CompanyFacts, def: LineDef, pred: (f: RawFact) => boolean)
   const picked = firstConcept(cf, def, pred);
   if (picked) return reportedCell(picked);
   if (!def.components?.length) return null;
-  const found = def.components
-    .map((c) => choose(factsFor(cf, c, unitKey(def)), c, pred))
-    .filter((x): x is Picked => !!x);
+  const found = dedupeComponents(
+    def.components.map((c) => choose(factsFor(cf, c, unitKey(def)), c, pred)).filter((x): x is Picked => !!x),
+  );
   if (!found.length) return null;
   if (found.length === 1) return reportedCell(found[0]);
   const names = found.map((x) => humanizeConcept(x.concept));
@@ -248,6 +285,24 @@ function pickCell(cf: CompanyFacts, def: LineDef, pred: (f: RawFact) => boolean)
     v: found.reduce((sum, x) => sum + x.fact.val, 0),
     derived: { formula: names.join(" + "), parts: found.map((x, i) => ({ ...ref(x), label: names[i], sign: 1 as const })) },
   };
+}
+
+/**
+ * Components that are one line tagged twice are counted once: an identical amount under two
+ * concepts (Con Edison tags its $392M "Notes payable" as both CommercialPaper and
+ * NotesPayableCurrent), and commercial paper beside a short-term borrowings line.
+ */
+function dedupeComponents(found: Picked[]): Picked[] {
+  const out: Picked[] = [];
+  for (const x of found) if (!out.some((y) => y.fact.val === x.fact.val)) out.push(x);
+  // Commercial paper beside a short-term borrowings line is part of it: PepsiCo's $9,223M includes $4,800M of
+  // paper, FedEx tags $750M face value of paper and $745M carried; Chevron's $977M is what is left after
+  // reclassifying paper to long-term. Paper alone (Home Depot's "Short-term debt") still counts.
+  // OtherShortTermBorrowings is the same kind of breakdown: in the taxonomy and in the filings it is
+  // the rest of the borrowings total (Citigroup 2009: $10,223M paper + $58,656M other = $68,879M
+  // short-term borrowings; JPMorgan 2016: $11,738M + $22,705M = $34,443M).
+  const stb = out.some((x) => x.concept === "ShortTermBorrowings");
+  return stb ? out.filter((x) => x.concept !== "CommercialPaper" && x.concept !== "OtherShortTermBorrowings") : out;
 }
 
 /** "CommercialPaper" → "Commercial paper" */
@@ -276,7 +331,7 @@ function quarterCell(
   prevCells: (Cell | null)[],
 ): Cell | null {
   if (def.kind === "stock") return pickCell(cf, def, (f) => !f.start && near(f.end, p.end, 4));
-  const direct = firstConcept(cf, def, (f) => isDuration(80, 100)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4));
+  const direct = firstConcept(cf, def, (f) => isDuration(80, Q_MAX)(f) && near(f.start, p.start, 4) && near(f.end, p.end, 4));
   if (direct) return reportedCell(direct);
   if (!def.additive || !p.fq || p.fq === 1) return null;
 
@@ -296,7 +351,7 @@ function quarterCell(
     // 10-Qs), the non-negative guard below drops the mismatched result instead of showing it.
     const prevPred =
       k - 1 === 1
-        ? (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, 100)(f)
+        ? (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(80, Q_MAX)(f)
         : (f: RawFact) => near(f.start, year.start, 4) && near(f.end, prevEnd, 4) && isDuration(160, 290)(f);
     // A later 10-Q can restate the old nine months for a divestiture (IFF FY2025) while the 10-K
     // total is still on the original basis; subtracting the restated YTD inflates Q4. When the
@@ -630,15 +685,43 @@ const SHORT_BORROWINGS: LineDef = {
   key: "_stb",
   label: "Short-term borrowings",
   concepts: [],
-  components: ["CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings"],
+  components: ["CommercialPaper", "ShortTermBorrowings", "OtherShortTermBorrowings", "NotesPayableCurrent"],
   unit: "usd",
   kind: "stock",
 };
 
 /** Long-term debt concepts that already include current maturities. */
 const INCLUDES_CURRENT = new Set(["us-gaap:LongTermDebt", "us-gaap:LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities"]);
+/** Short-term debt concepts that hold only the current portion of long-term debt, not short-term borrowings. */
+const CURRENT_MATURITIES_ONLY = new Set(["us-gaap:LongTermDebtCurrent", "us-gaap:LongTermDebtAndCapitalLeaseObligationsCurrent"]);
 
-/** Total debt = long-term + short-term debt, without double-counting current maturities. */
+/**
+ * The long-term figure includes current maturities when its own concept says so, or when the filing
+ * tags the same amount, on the same date, with a concept that does (Chevron tags $39.8B as both
+ * LongTermDebtAndCapitalLeaseObligations and …IncludingCurrentMaturities; adding its DebtCurrent
+ * double counted $9.9B of reclassified short-term debt).
+ */
+function includesCurrent(cf: CompanyFacts, l: Cell, end: string) {
+  if (!l.src) return false;
+  if (INCLUDES_CURRENT.has(l.src.concept)) return true;
+  // Only the explicit "including current maturities" concept counts here: plain LongTermDebt is often
+  // the noncurrent line (IDACORP, Trupanion tag their noncurrent debt with it).
+  return factsFor(cf, "LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities", "USD").some((f) => !f.start && near(f.end, end, 4) && f.val === l.v);
+}
+
+/**
+ * NotesPayableCurrent counts as short-term debt beside a long-term debt line (Oracle's "Notes payable
+ * and other borrowings, current"), but alone it is usually a note figure, not a balance sheet line:
+ * Meta's FY2015 balance sheet has no debt at all, yet it tags $201M of NotesPayableCurrent in a note.
+ */
+function dropLoneNotesPayable(balance: Row[]) {
+  const s = rowOf(balance, "shortTermDebt");
+  const l = rowOf(balance, "longTermDebt");
+  if (!s) return;
+  s.cells = s.cells.map((c, i) => (c?.src?.concept === "us-gaap:NotesPayableCurrent" && !l?.cells[i] ? null : c));
+}
+
+/** Total debt = long-term + short-term debt, without double-counting current maturities or leaving out short-term borrowings. */
 function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row {
   const ltd = rowOf(balance, "longTermDebt");
   const std = rowOf(balance, "shortTermDebt");
@@ -646,15 +729,23 @@ function totalDebtRow(cf: CompanyFacts, balance: Row[], periods: Period[]): Row 
     const l = ltd?.cells[i] ?? null;
     const s = std?.cells[i] ?? null;
     if (!l && !s) return null;
-    if (l?.src && INCLUDES_CURRENT.has(l.src.concept)) {
-      // This concept already includes current maturities; add only short-term borrowings.
-      const extra = pickCell(cf, SHORT_BORROWINGS, (f) => !f.start && near(f.end, p.end, 4));
-      if (extra) return combine(l, extra, "add", ["Long-term debt incl. current maturities", "Short-term borrowings"]);
-      return { v: l.v, derived: { formula: "Long-term debt incl. current maturities", parts: partsFrom(l, "Long-term debt incl. current maturities", 1) } };
+    const borrowings = () => pickCell(cf, SHORT_BORROWINGS, (f) => !f.start && near(f.end, p.end, 4));
+    if (l && includesCurrent(cf, l, p.end)) {
+      // This figure already includes current maturities; add only short-term borrowings.
+      const label = "Long-term debt incl. current maturities";
+      const extra = borrowings();
+      if (extra) return combine(l, extra, "add", [label, "Short-term borrowings"]);
+      return { v: l.v, derived: { formula: label, parts: partsFrom(l, label, 1) } };
     }
-    if (l && s) return combine(l, s, "add", ["Long-term debt", "Short-term debt"]);
-    const only = (l ?? s)!;
-    const label = l ? "Long-term debt" : "Short-term debt";
+    // Current maturities alone (FedEx, Home Depot): short-term borrowings and commercial paper are separate lines.
+    const sbAll = s?.src && CURRENT_MATURITIES_ONLY.has(s.src.concept) ? borrowings() : null;
+    // The same amount under a second concept is the same line (Goosehead: current maturities also tagged NotesPayableCurrent).
+    const sb = sbAll && sbAll.v !== s!.v ? sbAll : null;
+    const short = s && sb ? combine(s, sb, "add", ["Current maturities of long-term debt", "Short-term borrowings"]) : s;
+    const shortLabel = sb ? "(current maturities + short-term borrowings)" : "Short-term debt";
+    if (l && short) return combine(l, short, "add", ["Long-term debt", shortLabel]);
+    const only = (l ?? short)!;
+    const label = l ? "Long-term debt" : shortLabel;
     return { v: only.v, derived: { formula: label, parts: partsFrom(only, label, 1) } };
   });
   return { key: "totalDebt", label: "Total debt", unit: "usd", bold: true, kind: "kpi", cells };
@@ -689,6 +780,39 @@ export function fixShareScale(income: Row[]) {
   }
 }
 
+/** Income statement totals that run from revenue straight to pretax income on statements without an operating subtotal. */
+const TOTAL_EXPENSES: LineDef = {
+  key: "_totalExpenses",
+  label: "Total benefits, losses and expenses",
+  concepts: ["BenefitsLossesAndExpenses", "CostsAndExpenses"],
+  unit: "usd",
+  kind: "flow",
+  additive: true,
+};
+
+/**
+ * Drop an "operating income" that cannot be an income-statement subtotal. Since ASU 2023-07 some
+ * filers tag their segment profit total with OperatingIncomeLoss (MetLife's $6,137M "total
+ * consolidated adjusted earnings", FY2025) while the statement itself runs revenue − total
+ * benefits and expenses = pretax income. When the filing's own totals show that, an operating
+ * income that differs from pretax income is a segment measure, not GAAP operating income.
+ */
+export function dropSegmentOperatingIncome(income: Row[], totalExpenses: Row) {
+  const oi = rowOf(income, "operatingIncome");
+  const rev = rowOf(income, "revenue");
+  const pt = rowOf(income, "pretaxIncome");
+  if (!oi || !rev || !pt) return;
+  oi.cells = oi.cells.map((c, i) => {
+    const r = rev.cells[i];
+    const t = totalExpenses.cells[i];
+    const b = pt.cells[i];
+    if (!c || !r || !t || !b || !r.v) return c;
+    const tol = Math.abs(r.v) * 0.005;
+    const straightToPretax = Math.abs(r.v - t.v - b.v) <= tol;
+    return straightToPretax && Math.abs(c.v - b.v) > tol ? null : c;
+  });
+}
+
 export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
   const years = detectFiscalYears(cf);
   const periods = buildPeriods(years);
@@ -700,8 +824,10 @@ export function buildStatements(cf: CompanyFacts, opts: BuildOptions = {}) {
     const balance = buildStatement(cf, BALANCE_LINES.filter(keepLine), ps, years, freq);
     const cash = buildStatement(cf, CASHFLOW_LINES.filter(keepLine), ps, years, freq);
     fillDerived(income, "grossProfit", "revenue", "costOfRevenue", ["Revenue", "Cost of revenue"]);
+    dropSegmentOperatingIncome(income, buildStatement(cf, [TOTAL_EXPENSES], ps, years, freq)[0]);
     fixShareScale(income);
     fillDerived(balance, "totalLiabilities", "liabilitiesAndEquity", "equity", ["Total liabilities & equity", "Equity"]);
+    dropLoneNotesPayable(balance);
     const cfo = rowOf(cash, "cfo");
     const capex = rowOf(cash, "capex");
     const fcf: Row = {
