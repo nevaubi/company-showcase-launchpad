@@ -223,6 +223,8 @@ function useWidth<T extends HTMLElement>() {
   return [ref, w] as const;
 }
 const th = "px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground";
+/** keeps "Up / down" on one line when a narrow column wraps its header */
+const NBSP = "\u00a0";
 
 /* ---------- headline strip ---------- */
 function Headline({
@@ -316,19 +318,20 @@ function Headline({
   ];
   return (
     /* Hairlines are the 1 px gaps of the grid showing the rule colour, so no row ends on a doubled or
-       a stray line at any width; the seventh tile fills what is left of the last row. */
+       a stray line at any width; the seventh tile fills what is left of the last row. Tiles go four and
+       seven across by the page's own width (StreetTab is the container), so a date keeps one line. */
     <section
       aria-label={`${ticker} street summary`}
-      className="grid grid-cols-2 gap-px border-y bg-border sm:grid-cols-4 xl:grid-cols-7"
+      className="grid grid-cols-2 gap-px border-y bg-border @2xl:grid-cols-4 @6xl:grid-cols-7"
     >
       {cells.map((c) => (
         <div
           key={c.l}
-          className="min-w-0 bg-panel px-3.5 py-2.5 last:col-span-2 xl:last:col-span-1"
+          className="min-w-0 bg-panel px-3.5 py-2.5 last:col-span-2 @6xl:last:col-span-1"
         >
           <p className="text-[11px] text-muted-foreground">{c.l}</p>
           {c.on ? (
-            <V onClick={c.on} className={cn("mt-0.5 block text-lg font-medium", c.t)}>
+            <V onClick={c.on} className={cn("mt-0.5 block text-left text-lg font-medium", c.t)}>
               {c.v}
             </V>
           ) : (
@@ -753,7 +756,9 @@ function Revisions({
                   </th>
                 ))}
                 <th className={cn(th, "text-right")}>90d</th>
-                <th className={cn(th, "text-right")}>Up / down 30d</th>
+                <th className={cn(th, "text-right")}>
+                  Up{NBSP}/{NBSP}down 30d
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -787,7 +792,7 @@ function Revisions({
                     <td className={cn("num px-3 py-2 text-right tabular-nums", tone(ch))}>
                       {fPctS(ch)}
                     </td>
-                    <td className="num px-3 py-2 text-right tabular-nums">
+                    <td className="num px-3 py-2 text-right whitespace-nowrap tabular-nums">
                       <span className="text-positive">{p.revisions.up30 ?? 0}</span> /{" "}
                       <span className="text-negative">{p.revisions.down30 ?? 0}</span>
                     </td>
@@ -1805,15 +1810,17 @@ export function StreetTab({
   live?: LiveEstimates | null;
 }) {
   const o = useOpeners(ticker, d);
+  /* Panels go side by side by the room this page really has (a container query), not by the window: with
+     the sidebar open a 1440 px window leaves 1152 px, where two columns cut the tables off at the right. */
   return (
-    <div className="grid grid-cols-1 gap-4">
+    <div className="@container grid grid-cols-1 gap-4">
       <Headline ticker={ticker} d={d} o={o} />
       <Consensus d={d} o={o} />
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 @7xl:grid-cols-2">
         <Revisions ticker={ticker} d={d} o={o} live={live} />
         <Surprises d={d} o={o} />
       </div>
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid grid-cols-1 items-start gap-4 @7xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Actions d={d} o={o} />
         <div className="grid min-w-0 gap-4">
           <Targets d={d} o={o} />
