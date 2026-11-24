@@ -32,8 +32,12 @@ import { KeyRelationshipsPanel } from "@/components/company/relationships";
 import { ReportedKpis } from "@/components/company/reported-kpis";
 import { ResearchChart } from "@/components/company/research-chart";
 import { SectionNav } from "@/components/company/section-nav";
+import { HoldHeight, KeepReaderInPlace } from "@/components/company/hold-height";
 import { SectorTable } from "@/components/company/sector-table";
+import { AltSnapshot } from "@/components/alt/alt-snapshot";
 import { FirmNotes } from "@/components/firm/firm-notes";
+import { readPlan, useFiledStatements } from "@/components/financials/currency";
+import { statementView } from "@/lib/company/currency-view";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/")({
   head: ({ params }) => ({
@@ -60,7 +64,7 @@ function Overview() {
   const ticker = raw.toUpperCase();
   const company = useCompany(ticker);
   if (!company.data) return <OverviewSkeleton />;
-  return <OverviewBody ticker={ticker} data={company.data} />;
+  return <OverviewBody key={ticker} ticker={ticker} data={company.data} />;
 }
 
 function OverviewSkeleton() {
@@ -88,6 +92,7 @@ const SECTIONS = {
   about: { id: "ov-about", label: "Business" },
   relationships: { id: "ov-relationships", label: "Relationships" },
   operating: { id: "ov-operating", label: "Operating data" },
+  alt: { id: "ov-alt", label: "Alt data" },
   ownership: { id: "ov-ownership", label: "Ownership" },
   peers: { id: "ov-peers", label: "Peers" },
   news: { id: "ov-news", label: "News" },
@@ -111,8 +116,14 @@ function Section({ id, children, className }: { id: string; children: ReactNode;
   );
 }
 
-function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }) {
+function OverviewBody({ ticker, data: served }: { ticker: string; data: CompanyDataset }) {
   const changes = useQuery(companyChangesQuery(ticker));
+  // Statements extended with any newer 10-Q/10-K read at view time (same queries, same cache as the Financials tab);
+  // every statement computation below uses `data`, the extended dataset once it is read.
+  const filed = useFiledStatements(served, ticker);
+  const plan = useMemo(() => (filed.served?.status === "behind" ? readPlan(served, filed.served) : []), [served, filed.served]);
+  const view = useMemo(() => statementView(served, filed, plan), [served, filed.extension, filed.reading, filed.failed, plan]); // eslint-disable-line react-hooks/exhaustive-deps
+  const data = view.dataset;
   const q = data.statements.quarterly;
   const a = data.statements.annual;
   const p = data.profile;
@@ -124,16 +135,19 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
   const lastQ = q.income.periods.at(-1);
 
   return (
+    <KeepReaderInPlace phase={view.state}>
     <div className="grid grid-cols-1 gap-3">
       <SectionNav sections={sections} />
 
       <Section id={SECTIONS.analysis.id}>
-        <FinancialAnalysisSection ticker={ticker} data={data} />
+        <FinancialAnalysisSection ticker={ticker} served={served} view={view} filed={filed} />
       </Section>
 
       {drivers.length > 0 && (
         <Section id={SECTIONS.drivers.id}>
-          <QuarterDrivers ticker={ticker} cards={drivers} data={data} />
+          <HoldHeight phase={view.state}>
+            <QuarterDrivers ticker={ticker} cards={drivers} data={data} />
+          </HoldHeight>
         </Section>
       )}
 
@@ -156,7 +170,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         <LevelsAndSignals ticker={ticker} />
       </Section>
 
-      <Section id={SECTIONS.earnings.id} className="xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
+      <Section id={SECTIONS.earnings.id} className="xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] xl:[&>div>section]:h-full xl:[&>div>div]:h-full xl:[&>div>div>section]:h-full">
         <EarningsSection ticker={ticker} data={data} />
         <div data-section="Latest earnings call" className="min-w-0 empty:hidden">
           <EarningsCallPanel ticker={ticker} />
@@ -179,10 +193,10 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         </div>
       </Section>
 
-      {/* Named spot for the alt-data snapshot (built by the alt unit, mounted by the lead):
-          put <AltSnapshot ticker={ticker} /> inside this element and add { id: "ov-alt", label: "Alt data" }
-          to SECTIONS after `operating`. While it is empty it takes no space. */}
-      <section id="ov-alt" data-section="Alt data snapshot" data-slot="alt-snapshot" className="min-w-0 scroll-mt-28 empty:hidden" />
+      {/* Renders nothing for a company without alt data; while loading it reserves its six tiles. */}
+      <section id={SECTIONS.alt.id} data-slot="alt-snapshot" className="min-w-0 scroll-mt-28 empty:hidden">
+        <AltSnapshot ticker={ticker} />
+      </section>
 
       <Section id={SECTIONS.ownership.id}>
         <PositioningPanel ticker={ticker} data={data} />
@@ -203,6 +217,7 @@ function OverviewBody({ ticker, data }: { ticker: string; data: CompanyDataset }
         Statements through {lastQ ? `${lastQ.label} (quarter ended ${fmtDate(lastQ.end)})` : "no quarter yet"} and {a.income.periods.at(-1)?.label ?? "no fiscal year yet"}. Dataset built {fmtDate(data.generatedAt)}. Click any figure to open the filing behind it.
       </p>
     </div>
+    </KeepReaderInPlace>
   );
 }
 

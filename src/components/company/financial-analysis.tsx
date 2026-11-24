@@ -3,6 +3,7 @@
 // (src/lib/company/read.ts); no model writes any of it. Every number opens the filed figures behind it.
 import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
+import { HoldHeight } from "@/components/company/hold-height";
 import { IrPanel } from "@/components/ir/panel";
 import { DASH, IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,9 @@ import { useSource } from "@/components/source/source-context";
 import { analyze, figTarget, medianTarget, vsPrior, type Fig, type FinancialAnalysis, type KeyFigure, type Measure, type MeasureGroup, type MeasureUnit } from "@/lib/company/analysis";
 import { changeTone, fmtChange, fmtValue, fmtWithUnit, groupUnit, rowValues, unitLabel, usdScale } from "@/lib/company/analysis-format";
 import { financialRead, fmtFig, READ_RULES, type ReadItem } from "@/lib/company/read";
-import { newerFilings, type NewerFiling } from "@/lib/company/staleness";
+import { stillMissing, type StatementView } from "@/lib/company/currency-view";
+import type { NewerFiling } from "@/lib/company/staleness";
+import { StatementCurrency, type FiledStatements } from "@/components/financials/currency";
 import type { CompanyDataset } from "@/lib/financials/types";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -242,10 +245,15 @@ function MeasureTable({ ticker, a, g }: { ticker: string; a: FinancialAnalysis; 
 
 /* ------------------------------------------------------------------ the section */
 
-export function FinancialAnalysisSection({ ticker, data }: { ticker: string; data: CompanyDataset }) {
+/**
+ * `view` is what the page computes from (the statements extended at view time once the newer filing is read,
+ * src/lib/company/currency-view.ts); `served` and `filed` feed the one currency line.
+ */
+export function FinancialAnalysisSection({ ticker, served, view, filed }: { ticker: string; served: CompanyDataset; view: StatementView; filed: FiledStatements }) {
+  const data = view.dataset;
   const a = useMemo(() => analyze(data), [data]);
   const read = useMemo(() => financialRead(a), [a]);
-  const newer = useMemo(() => newerFilings(data, a.quarter?.end ?? a.fiscalYear?.end ?? null), [data, a]);
+  const newer = useMemo(() => stillMissing(view, a.quarter?.end ?? a.fiscalYear?.end ?? null, filed.extension), [view, a, filed.extension]);
   const measures = a.groups.flatMap((g) => g.measures);
   const prior = measures.find((m) => m.prior && m.now && m.now.period === a.current)?.prior?.period;
   const widest = measures.reduce<Measure["median"]>((best, m) => (m.median && (!best || m.median.n > best.n) ? m.median : best), null);
@@ -259,10 +267,11 @@ export function FinancialAnalysisSection({ ticker, data }: { ticker: string; dat
   }
   return (
     <>
+      <HoldHeight phase={view.state}>
       <IrPanel
         section="Key figures"
         title="Key figures"
-        subtitle={`${a.basis === "ttm" ? `Trailing twelve months to ${a.quarter?.label}, quarter ended ${a.quarter ? fmtDate(a.quarter.end) : ""}` : `Fiscal year ${a.fiscalYear?.label}`}; balances at the period end · click a figure for its filings`}
+        subtitle={`${a.basis === "ttm" ? `Trailing twelve months to ${a.quarter?.label}` : `Fiscal year ${a.fiscalYear?.label}`}; balances at the period end · click a figure for its filings`}
         bodyClassName="p-0"
         actions={
           <Button size="xs" variant="ghost" asChild>
@@ -272,6 +281,7 @@ export function FinancialAnalysisSection({ ticker, data }: { ticker: string; dat
           </Button>
         }
       >
+        <StatementCurrency data={served} ticker={ticker} filed={filed} className="border-b px-4 py-2" />
         <NotYetIncluded ticker={ticker} filings={newer} />
         <StatGrid className={cn("grid-cols-2 sm:grid-cols-3", a.keyFigures.length >= 5 ? "xl:grid-cols-5" : a.keyFigures.length === 4 ? "xl:grid-cols-4" : "")}>
           {a.keyFigures.map((k) => (
@@ -279,7 +289,9 @@ export function FinancialAnalysisSection({ ticker, data }: { ticker: string; dat
           ))}
         </StatGrid>
       </IrPanel>
+      </HoldHeight>
 
+      <HoldHeight phase={view.state}>
       <IrPanel
         section="Financial read"
         title="Financial read"
@@ -297,7 +309,9 @@ export function FinancialAnalysisSection({ ticker, data }: { ticker: string; dat
           At most {READ_RULES.perSide} per side, heaviest rule first. It is a reading aid, not advice.
         </p>
       </IrPanel>
+      </HoldHeight>
 
+      <HoldHeight phase={view.state}>
       <IrPanel
         section="Financial analysis"
         title="Financial analysis"
@@ -310,6 +324,7 @@ export function FinancialAnalysisSection({ ticker, data }: { ticker: string; dat
           ))}
         </div>
       </IrPanel>
+      </HoldHeight>
     </>
   );
 }

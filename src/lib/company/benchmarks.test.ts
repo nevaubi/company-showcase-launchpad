@@ -31,3 +31,15 @@ describe("sector benchmarks", () => {
     expect(rankIn(10, [5, 10, 20], "high")).toEqual({ rank: 2, of: 3 });
   });
 });
+
+describe("groupMedians", () => {
+  it("gives a median only where at least three members have the figure", async () => {
+    const { groupMedians, METRICS } = await import("./benchmarks");
+    const k = METRICS[0].key;
+    const row = (v: number | null) => Object.fromEntries(METRICS.map((m) => [m.key, m.key === k ? v : null])) as Parameters<typeof groupMedians>[0][number];
+    expect(groupMedians([row(5), row(null), row(null)])[k]).toBeNull();
+    expect(groupMedians([row(5), row(7)])[k]).toBeNull();
+    expect(groupMedians([row(5), row(7), row(9)])[k]).toBe(7);
+    expect(groupMedians([row(5), row(7), row(9)])[METRICS[1].key]).toBeNull();
+  });
+});

@@ -121,7 +121,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                 <p className="text-[13px]">{ceo.title}</p>
                 <Meta p={ceo} />
                 {ceo.bio && (
-                  <p className="mt-1.5 line-clamp-2 text-[12px] text-muted-foreground">{ceo.bio}</p>
+                  <p className="mt-1.5 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{ceo.bio}</p>
                 )}
               </div>
             </div>
@@ -148,7 +148,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                       <Avatar p={p} />
                       <div className="min-w-0">
                         <p className="truncate text-[13px] font-medium">{p.name}</p>
-                        <p className="line-clamp-2 text-[11.5px] leading-snug">{p.title}</p>
+                        <p className="line-clamp-2 text-[11px] leading-snug">{p.title}</p>
                         <Meta p={p} />
                       </div>
                     </div>
@@ -191,7 +191,7 @@ export function LeadershipPanel({ ticker }: { ticker: string }) {
                           </Badge>
                         )}
                       </p>
-                      <p className="truncate text-[11.5px] text-muted-foreground">{p.title}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">{p.title}</p>
                       <Meta p={p} />
                       {p.committees?.length ? (
                         <p className="truncate text-[10.5px] text-muted-foreground">

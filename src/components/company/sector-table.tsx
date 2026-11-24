@@ -4,7 +4,7 @@ import { IrPanel } from "@/components/ir/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useQuotes, useUniverse } from "@/lib/data";
 import { coverageOf } from "@/lib/coverage";
-import { METRICS, medians, metricsOf, rankIn, type Metrics } from "@/lib/company/benchmarks";
+import { METRICS, groupMedians, metricsOf, rankIn, type Metrics } from "@/lib/company/benchmarks";
 import { fmtCompactUsd, fmtDate, fmtPct } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -40,11 +40,14 @@ export function SectorTable({ ticker }: { ticker: string }) {
     const px = new Map((quotes.data?.quotes ?? []).map((q) => [q.symbol, q.price || null]));
     const of = (c: (typeof members.industry)[number]) => ({ c, m: metricsOf(c, px.get(c.ticker) ?? null) });
     const industry = members.industry.map(of);
+    // the median row only where at least three members have the figure; with none, no row
+    const med = groupMedians(industry.map((x) => x.m));
+    const hasMedian = METRICS.some((k) => med[k.key] != null);
     return {
       self: of(members.self),
       industry,
       peers: members.peers.map(of),
-      rows: [{ id: "ind", label: "Industry median", sub: `${members.self.industry} · ${industry.length}${members.industrySize > industry.length ? ` largest of ${members.industrySize}` : industry.length === 1 ? " company" : " companies"}`, m: medians(industry.map((x) => x.m)) }],
+      rows: [{ id: "ind", label: "Industry median", sub: `${members.self.industry} · ${industry.length}${members.industrySize > industry.length ? ` largest of ${members.industrySize}` : industry.length === 1 ? " company" : " companies"}`, m: med }].filter(() => hasMedian),
       asOf: members.self.f?.asOf,
     };
   }, [members, quotes.data]);

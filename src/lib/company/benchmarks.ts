@@ -57,6 +57,19 @@ export function medians(rows: Metrics[]): Metrics {
   return Object.fromEntries(METRICS.map((m) => [m.key, median(rows.map((r) => r[m.key]))])) as Metrics;
 }
 
+/** Fewer members with a figure than this, and a median would only repeat one or two companies' own values. */
+export const MEDIAN_MIN = 3;
+
+/** Per-metric medians, each only where at least `min` members have a figure (null otherwise). */
+export function groupMedians(rows: Metrics[], min = MEDIAN_MIN): Metrics {
+  return Object.fromEntries(
+    METRICS.map((m) => {
+      const n = rows.filter((r) => r[m.key] != null && Number.isFinite(r[m.key] as number)).length;
+      return [m.key, n >= min ? median(rows.map((r) => r[m.key])) : null];
+    }),
+  ) as Metrics;
+}
+
 /** Rank of `value` in `group` (1 = best), with the group size. */
 export function rankIn(value: number | null, group: (number | null)[], better: "high" | "low"): { rank: number; of: number } | null {
   if (value == null) return null;

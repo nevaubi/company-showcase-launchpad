@@ -10,6 +10,7 @@ import { IrPanel } from "@/components/ir/panel";
 import { DASH, IR } from "@/components/ir/typography";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useKeepReaderBelow } from "@/components/company/hold-height";
 import { useSource } from "@/components/source/source-context";
 import { useUnitScale } from "@/hooks/use-preference";
 import { supabase } from "@/integrations/supabase/client";
@@ -55,6 +56,7 @@ export function ReportedKpis({ ticker }: { ticker: string }) {
   const { open } = useSource();
   const [scale] = useUnitScale();
   const [ref, near] = useNear<HTMLDivElement>();
+  const keep = useKeepReaderBelow<HTMLDivElement>();
   // a small row that says whether IR data is stored at all, so a company without any never asks for the payload
   const index = useQuery({
     queryKey: ["ir-series-index", ticker],
@@ -83,7 +85,13 @@ export function ReportedKpis({ ticker }: { ticker: string }) {
   // a company with no stored IR documents has no such section
   if (!stored && !index.isLoading) return null;
   return (
-    <div ref={ref} className="min-w-0">
+    <div
+      ref={(el) => {
+        ref(el);
+        keep.current = el;
+      }}
+      className="min-w-0"
+    >
       {index.isLoading ? null : (
       <IrPanel
         section="What the company reports"
