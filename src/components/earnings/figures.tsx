@@ -92,7 +92,7 @@ export function DerivedQ4Note({ derived, withheld, className }: { derived: boole
   return (
     <p className={cn("text-[11px] text-muted-foreground", className)}>
       {derived && <>{DERIVED_MARK} Fourth-quarter EPS calculated: the 10-K reports only the full year, so it is Q4 net income ÷ Q4 weighted diluted shares, rounded to the cent. </>}
-      {withheld && <>A dash for fourth-quarter EPS: the 10-K reports only the full year, and net income ÷ shares does not reproduce this company's reported EPS (EPS is earned after preferred dividends or similar), so no quarterly figure is shown.</>}
+      {withheld && <>A dash for fourth-quarter EPS: the 10-K reports only the full year, and net income ÷ shares does not reproduce this company's reported EPS (preferred dividends, a share split restated in some quarters only, or similar), so no quarterly figure is shown.</>}
     </p>
   );
 }
