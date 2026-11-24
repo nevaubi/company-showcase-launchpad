@@ -216,11 +216,37 @@ export async function collectIr(c: CoverageCompany, mode: "sec" | "site", max = 
  * Newest earnings / Reg FD 8-K (seen by the SEC filings scan in the last three weeks) whose
  * exhibits aren't stored yet: store up to `max` of its files. Keeps scheduled runs to a few seconds.
  */
+/** Failed attempts on one release: three, at least six hours apart, then the filing is left alone. */
+export const RELEASE_RETRY_LIMIT = 3;
+export const RELEASE_RETRY_WAIT_MS = 6 * 3600000;
+
+/**
+ * Whether a release is still to be collected. `scan` is its `ir_release_scan` row, `tries` its
+ * `ir-release-retry:<accession>` row in `job_state`. Back-off and giving up are decided from
+ * `job_state` alone, because the scan table's status column accepts only done, partial and empty:
+ * a failed attempt that tried to store any other status was rejected by the database, left no scan
+ * row, and the same filing was picked again on every run.
+ */
+export function releaseDue(
+  scan: { status: string } | undefined,
+  tries: { attempts: number; at: string | null } | undefined,
+  now: number,
+): boolean {
+  if (scan && scan.status !== "partial" && scan.status !== "retry") return false; // done, empty, or given up
+  if (!tries || tries.attempts <= 0) return true;
+  if (tries.attempts >= RELEASE_RETRY_LIMIT) return false;
+  const last = tries.at ? Date.parse(tries.at) : NaN;
+  return !Number.isFinite(last) || now - last >= RELEASE_RETRY_WAIT_MS;
+}
+
 /**
  * Store the exhibits of the newest earnings (Item 2.02) or Reg FD (7.01) 8-K that isn't fully
  * stored yet. Files are stored a few at a time while `more()` allows; `ir_release_scan` records
  * each filing as done, partial (cut short by the budget — resumed first next run) or empty (no
- * exhibits), so one exhibit-less filing never blocks the queue.
+ * exhibits), so one exhibit-less filing never blocks the queue. A failed attempt is counted in
+ * `job_state` (`ir-release-retry:<accession>`, with the error text) and writes nothing to the scan
+ * table; `releaseDue` reads that count, so a filing whose download keeps failing is retried twice
+ * more, six hours apart, and then stops holding up the filings behind it.
  */
 export async function collectRecentRelease(companies: CoverageCompany[], more: () => boolean = () => true) {
   const since = new Date(Date.now() - 45 * 86400000).toISOString().slice(0, 10);
@@ -238,16 +264,15 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
   const accns = wanted.map((f) => f.accn);
   const [{ data: scans, error: scanError }, { data: retries, error: retryError }] = await Promise.all([
     supabaseAdmin.from("ir_release_scan").select("accn, status, scanned_at").in("accn", accns),
-    supabaseAdmin.from("job_state").select("job, cursor").in("job", accns.map(a => `ir-release-retry:${a}`)),
+    supabaseAdmin.from("job_state").select("job, cursor, updated_at").in("job", accns.map(a => `ir-release-retry:${a}`)),
   ]);
   if (scanError || retryError) throw new Error(scanError?.message ?? retryError?.message);
   const scan = new Map((scans ?? []).map(r => [r.accn, r]));
-  const attempts = new Map((retries ?? []).map(r => [r.job, r.cursor]));
-  const next = wanted.find(f => {
-    const s = scan.get(f.accn);
-    if (!s) return true; // A stored exhibit is not proof that every file was collected.
-    return s.status === "partial" || (s.status === "retry" && Date.now() - Date.parse(s.scanned_at) >= 6 * 3600000);
-  });
+  const tries = new Map((retries ?? []).map(r => [r.job, { attempts: Number(r.cursor) || 0, at: (r.updated_at as string | null) ?? null }]));
+  const attempts = new Map([...tries].map(([job, t]) => [job, t.attempts]));
+  const now = Date.now();
+  // A stored exhibit is not proof that every file was collected, so a filing without a scan row is due.
+  const next = wanted.find(f => releaseDue(scan.get(f.accn), tries.get(`ir-release-retry:${f.accn}`), now));
   if (!next) return null;
   const c = companies.find((x) => x.ticker === next.ticker);
   if (!c) return null;
@@ -255,16 +280,12 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
   if (knownError) throw new Error(knownError.message);
   const done = new Set((known ?? []).map((d) => d.source_url));
   const retryKey = `ir-release-retry:${next.accn}`;
-  const selectedAccn = next.accn;
-  const selectedTicker = c.ticker;
-  async function recordFailure(message: string, files = 0, stored = done.size) {
+  /** Counts the failed attempt in `job_state`; the scan table is left as it was (see `releaseDue`). */
+  async function recordFailure(message: string) {
     const attempt = (attempts.get(retryKey) ?? 0) + 1;
-    const status = attempt >= 3 ? "error" : "retry";
-    const now = new Date().toISOString();
-    const { error } = await supabaseAdmin.from("job_state").upsert({ job: retryKey, cursor: attempt, paused_reason: message.slice(0, 500), updated_at: now });
+    const status = attempt >= RELEASE_RETRY_LIMIT ? "error" : "retry";
+    const { error } = await supabaseAdmin.from("job_state").upsert({ job: retryKey, cursor: attempt, paused_reason: message.slice(0, 500), updated_at: new Date().toISOString() });
     if (error) throw new Error(error.message);
-    const { error: scanWriteError } = await supabaseAdmin.from("ir_release_scan").upsert({ accn: selectedAccn, ticker: selectedTicker, files, stored, status, scanned_at: now });
-    if (scanWriteError) throw new Error(scanWriteError.message);
     return status;
   }
   let all: Candidate[];
@@ -296,7 +317,7 @@ export async function collectRecentRelease(companies: CoverageCompany[], more: (
   const left = files.length - successes;
   const failures = results.filter(r => !r.stored);
   const status = failures.length
-    ? await recordFailure(failures.map(r => `${r.url}: ${r.reason}`).join("; "), all.length, done.size + successes)
+    ? await recordFailure(failures.map(r => `${r.url}: ${r.reason}`).join("; "))
     : all.length === 0 ? "empty" : left > 0 ? "partial" : "done";
   if (!failures.length) {
     const { error: scanWriteError } = await supabaseAdmin.from("ir_release_scan").upsert({ accn: next.accn, ticker: c.ticker, files: all.length, stored: done.size + successes, status, scanned_at: new Date().toISOString() });
