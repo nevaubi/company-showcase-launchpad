@@ -1,7 +1,7 @@
 // The cross-company feed of SEC filings (`sec_filings`, a rolling 60-day table): one filing day at
 // a time, filtered by form family, sector, watchlist and words, with same-day bursts of insider
 // forms from one company folded into one row so a day of 1,200 filings stays readable.
-import { describeFiling, familyOf, formName, type FilingFamily } from "./kinds";
+import { describeFiling, familyOf, filedByIssuer, formName, isStakeForm, OWN_STAKE_TITLE, type FilingFamily } from "./kinds";
 
 export interface FeedFiling {
   accn: string;
@@ -38,31 +38,38 @@ export interface FeedRow {
   detail: string | null;
   /** Filings in the row, newest accession first; one unless an insider-form burst was folded. */
   filings: FeedFiling[];
+  /** Schedule 13D/G filed by the company itself about other issuers. */
+  own?: boolean;
+  /** Item 4.02 or 1.03: shown prominently. */
+  alert?: boolean;
 }
 
 /** Rows for one day: each filing, except same-company same-form insider bursts, which fold into one row. */
-export function feedRows(rows: FeedFiling[]): FeedRow[] {
+export function feedRows(rows: FeedFiling[], nameOf?: (ticker: string) => string | undefined): FeedRow[] {
   const out: FeedRow[] = [];
   const burst = new Map<string, FeedRow>();
   const sorted = [...rows].sort((a, b) => b.filed.localeCompare(a.filed) || a.ticker.localeCompare(b.ticker) || b.accn.localeCompare(a.accn));
   for (const f of sorted) {
     const form = f.form.toUpperCase();
-    if (BURST.test(form)) {
-      const k = `${f.filed}|${f.ticker}|${form}`;
+    // A Schedule 13D/G the company filed is about its stake in another issuer; asset managers file
+    // hundreds in a day, so they fold like insider bursts, under their own title.
+    const own = isStakeForm(form) && filedByIssuer(f.accn, f.cik);
+    if (BURST.test(form) || own) {
+      const k = own ? `${f.filed}|${f.ticker}|own-stake` : `${f.filed}|${f.ticker}|${form}`;
       const row = burst.get(k);
       if (row) {
         row.filings.push(f);
         continue;
       }
-      const r: FeedRow = { key: k, ticker: f.ticker, form: f.form, family: familyOf(form), title: formName(form), detail: null, filings: [f] };
+      const r: FeedRow = { key: k, ticker: f.ticker, form: f.form, family: familyOf(form), title: own ? OWN_STAKE_TITLE : formName(form), detail: null, filings: [f], own };
       burst.set(k, r);
       out.push(r);
       continue;
     }
-    const d = describeFiling({ form: f.form, items: f.items, desc: f.description });
-    out.push({ key: f.accn, ticker: f.ticker, form: f.form, family: familyOf(form), title: d.title, detail: d.detail, filings: [f] });
+    const d = describeFiling({ form: f.form, items: f.items, desc: f.description, company: nameOf?.(f.ticker) });
+    out.push({ key: f.accn, ticker: f.ticker, form: f.form, family: familyOf(form), title: d.title, detail: d.detail, filings: [f], alert: d.alert });
   }
-  for (const r of out) if (r.filings.length > 1) r.title = `${formName(r.form)} · ${r.filings.length} filings`;
+  for (const r of out) if (r.filings.length > 1) r.title = r.own ? `Company's own holdings filings (stakes in other issuers) · ${r.filings.length} filings` : `${formName(r.form)} · ${r.filings.length} filings`;
   return out;
 }
 

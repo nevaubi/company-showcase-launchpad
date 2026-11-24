@@ -1,6 +1,7 @@
 // The verdict at the top of Filing changes: how much of the filing changed, which sections drive it,
 // and the sections ranked by amount of change. Reads only the stored comparison (src/lib/redline).
 import type { Change, Redline, SectionStats } from "@/lib/redline/core";
+import { normFor, normLevel, percentileOf, rankPhrase, type FormNorm, type NormLevel } from "./redline-norms";
 
 export interface SectionRank {
   key: string;
@@ -34,7 +35,20 @@ export interface Verdict {
   rewritten: number;
   wordsAdded: number;
   wordsRemoved: number;
-  level: "major" | "moderate" | "light" | "none";
+  /**
+   * Grade against stored comparisons of the same form (redline-norms.ts): "unusual" is the top 5%,
+   * "high" the next 20%, "low" the bottom quarter. "none" when no language changed; "unrated" when
+   * nothing of this form is stored to compare with.
+   */
+  level: NormLevel | "none" | "unrated";
+  /** Share of stored comparisons of the same form with less change (0..1), null when unrated. */
+  rank: number | null;
+  /** "More change than 8 in 10 annual reports", null when unrated or nothing changed. */
+  basis: string | null;
+  /** The norm the grade came from (sample size and date for the caption). */
+  norm: FormNorm | null;
+  /** Core sections (Business, Risk factors, MD&A, Financial statements) that were not compared in both filings. */
+  notCompared: { key: string; title: string; found: SectionStats["found"] | "missing" }[];
   /** Sections with language changes, by weight (largest first); sections found in one filing only come last. */
   sections: SectionRank[];
   /** The one to three sections that carry most of the weight. */
@@ -43,16 +57,27 @@ export interface Verdict {
 
 const language = (c: Change) => !c.figuresOnly;
 
-/**
- * Level of the whole comparison. Major: ten or more high-materiality changes, or new or removed risk
- * factors with at least five high ones, or a quarter of compared paragraphs changed. Moderate: any
- * high-materiality change, or 5% of paragraphs. Light: anything else that changed.
- */
-export function levelOf(v: Pick<Verdict, "high" | "share" | "newRisks" | "removedRisks" | "changed">): Verdict["level"] {
-  if (!v.changed) return "none";
-  if (v.high >= 10 || (v.newRisks + v.removedRisks > 0 && v.high >= 5) || v.share >= 0.25) return "major";
-  if (v.high > 0 || v.share >= 0.05) return "moderate";
-  return "light";
+/** Core sections a reader expects compared, by form. A comparison without one of them says so. */
+export const CORE_SECTIONS: Record<string, { key: string; title: string }[]> = {
+  "10-K": [
+    { key: "1", title: "Business" },
+    { key: "1A", title: "Risk factors" },
+    { key: "7", title: "MD&A" },
+    { key: "8", title: "Financial statements & notes" },
+  ],
+  "10-Q": [
+    { key: "I-1", title: "Financial statements & notes" },
+    { key: "I-2", title: "MD&A" },
+  ],
+};
+
+/** Grade a share of changed paragraphs against stored comparisons of the same form. */
+export function gradeShare(form: string, share: number, changed: number): Pick<Verdict, "level" | "rank" | "basis" | "norm"> {
+  const norm = normFor(form);
+  if (!changed) return { level: "none", rank: norm ? 0 : null, basis: null, norm };
+  if (!norm) return { level: "unrated", rank: null, basis: null, norm: null };
+  const rank = percentileOf(norm, share);
+  return { level: normLevel(rank), rank, basis: rankPhrase(rank, norm.noun), norm };
 }
 
 export function redlineVerdict(r: Redline): Verdict {
@@ -106,15 +131,31 @@ export function redlineVerdict(r: Redline): Verdict {
     sections,
     drivers,
   };
-  return { ...v, level: levelOf(v) };
+  // A filer organised by topic is compared as one "Full report" section, which covers every Item.
+  const core = r.sections.some((s) => s.key === "ALL") ? [] : (CORE_SECTIONS[r.form] ?? []);
+  const notCompared = core
+    .map((c) => ({ ...c, found: (r.sections.find((s) => s.key === c.key)?.found ?? "missing") as Verdict["notCompared"][number]["found"] }))
+    .filter((c) => c.found !== "both");
+  return { ...v, ...gradeShare(r.form, v.share, v.changed), notCompared };
 }
 
 export const LEVEL_LABEL: Record<Verdict["level"], string> = {
-  major: "Major changes",
-  moderate: "Moderate changes",
-  light: "Light changes",
+  unusual: "Unusually large change",
+  high: "More change than usual",
+  typical: "Typical amount of change",
+  low: "Less change than usual",
   none: "No language changes",
+  unrated: "Changes",
 };
+
+/** "MD&A and Business were not compared: not found in both filings." Null when every core section was compared. */
+export function notComparedSentence(v: Verdict): string | null {
+  if (!v.notCompared.length) return null;
+  const names = v.notCompared.map((c) => c.title);
+  const who = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
+  const one = v.notCompared.every((c) => c.found === "new" || c.found === "old");
+  return `${who} ${names.length > 1 ? "were" : "was"} not compared: ${one ? "found in only one of the two filings" : "not found in both filings"}. The share above leaves ${names.length > 1 ? "them" : "it"} out.`;
+}
 
 /** One sentence naming what drives the change, e.g. "Driven by Risk factors and MD&A: 26 high-materiality changes, 3 new risk factors." */
 export function verdictSentence(v: Verdict): string {
@@ -127,4 +168,18 @@ export function verdictSentence(v: Verdict): string {
     v.removedRisks ? `${v.removedRisks} risk ${v.removedRisks === 1 ? "factor" : "factors"} removed` : null,
   ].filter(Boolean);
   return `${who ? `Driven by ${who}` : "Spread across sections"}${facts.length ? `: ${facts.join(", ")}` : ""}.`;
+}
+
+/**
+ * Caption for the default comparison base. A 10-Q is compared with the same quarter a year earlier when that report is
+ * on file (period ends 325 to 405 days apart, the window `defaultBase` uses); otherwise `defaultBase` falls back to the
+ * previous 10-Q, and the caption must say so.
+ */
+export function baseCaption(form: string, to: { report?: string | null }, base: { report?: string | null }): string {
+  if (form !== "10-Q") return "Prior annual report";
+  if (to.report && base.report) {
+    const days = (Date.parse(to.report) - Date.parse(base.report)) / 86400_000;
+    if (Math.abs(days - 365) < 40) return "Same quarter a year earlier";
+  }
+  return "Previous quarterly report (no report for the same quarter a year earlier on file)";
 }

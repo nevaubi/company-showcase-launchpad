@@ -46,6 +46,6 @@ export function Pager<T>({ p, onPage, label, className }: { p: Page<T>; onPage: 
   );
 }
 
-export function QuietLine({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn("px-3.5 py-3 text-[12px] text-muted-foreground", className)}>{children}</p>;
+export function QuietLine({ children, className, section }: { children: ReactNode; className?: string; section?: string }) {
+  return <p data-section={section} className={cn("px-3.5 py-3 text-[12px] text-muted-foreground", className)}>{children}</p>;
 }

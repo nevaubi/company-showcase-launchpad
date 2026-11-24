@@ -3,8 +3,11 @@ import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, GitCompareArrows, Megaphone } from "lucide-react";
 import { useSource } from "@/components/source/source-context";
 import { FormChip } from "@/components/filings/parts";
-import { describeFiling, familyOf } from "@/lib/filings/kinds";
-import { canCompare, groupByYear, type KeyDocs, type ListFiling } from "@/lib/filings/list";
+import { describeFiling, familyOf, filedByIssuer } from "@/lib/filings/kinds";
+import { pickReleaseExhibit, releaseIsExhibit } from "@/lib/filings/release-doc";
+import { getFilingIndex } from "@/lib/sec.functions";
+import { coverageOf } from "@/lib/coverage";
+import { canCompare, groupByYear, yearCount, type KeyDocs, type ListFiling } from "@/lib/filings/list";
 import { indexUrl } from "@/lib/filings/daily";
 import type { EarningsRelease } from "@/lib/financials/types";
 import { fmtDate } from "@/lib/format";
@@ -17,10 +20,32 @@ type Open = ReturnType<typeof useSource>["open"];
 
 const openFiling = (open: Open, ticker: string, f: ListFiling) => {
   const d = describeFiling(f);
-  open({ ticker, label: d.title, periodLabel: f.report ? `period ${fmtDate(f.report)}` : `filed ${fmtDate(f.filed)}`, unit: "usd", value: 0, doc: { accn: f.accn, doc: f.doc, form: f.form, filed: f.filed, title: `${f.form} filed ${fmtDate(f.filed)}` } });
+  // An 8-K's report date is the event date and a proxy's is the meeting date, not a period.
+  const fam = familyOf(f.form);
+  const dateWord = fam === "current" ? "event" : fam === "proxy" ? "meeting" : "period";
+  open({ ticker, label: d.title, periodLabel: f.report ? `${dateWord} ${fmtDate(f.report)}` : `filed ${fmtDate(f.filed)}`, unit: "usd", value: 0, doc: { accn: f.accn, doc: f.doc, form: f.form, filed: f.filed, title: `${f.form} filed ${fmtDate(f.filed)}` } });
 };
-const openRelease = (open: Open, ticker: string, r: EarningsRelease) =>
-  open({ ticker, label: "Earnings release", periodLabel: `filed ${fmtDate(r.filed)}`, unit: "usd", value: 0, doc: { accn: r.accn, doc: r.doc, form: "8-K", filed: r.filed, title: `Exhibit 99.1 · earnings release filed ${fmtDate(r.filed)}` } });
+/**
+ * Open the press release itself. When the stored document is the 8-K cover (releases added from the
+ * live table), find Exhibit 99.1 in the filing index first; only if the index has none, open the 8-K.
+ */
+const openRelease = async (open: Open, ticker: string, cik: string, r: EarningsRelease, filingDoc?: string) => {
+  let doc = r.doc;
+  let exhibit = releaseIsExhibit(r, filingDoc);
+  if (!exhibit) {
+    try {
+      const ix = await getFilingIndex({ data: { cik: String(Number(cik)), accn: r.accn } });
+      const name = pickReleaseExhibit(ix.documents);
+      if (name) {
+        doc = name;
+        exhibit = true;
+      }
+    } catch {
+      // the index could not be read: fall back to the 8-K itself, labelled as such
+    }
+  }
+  open({ ticker, label: "Earnings release", periodLabel: `filed ${fmtDate(r.filed)}`, unit: "usd", value: 0, doc: { accn: r.accn, doc, form: "8-K", filed: r.filed, title: exhibit ? `Exhibit 99.1 · earnings release filed ${fmtDate(r.filed)}` : `8-K · earnings release filed ${fmtDate(r.filed)}` } });
+};
 
 /** Period column: the fiscal period for periodic and holdings reports; 8-K "report dates" are event dates, so not shown. */
 const periodOf = (f: ListFiling) => (f.report && (familyOf(f.form) === "periodic" || /^13F/i.test(f.form)) ? f.report : null);
@@ -49,7 +74,7 @@ export function KeyDocStrip({ ticker, cik, keys, rows }: { ticker: string; cik: 
     <KeyCard label={label}>
       {f && (
         <>
-          <button type="button" onClick={() => openFiling(open, ticker, f)} className="truncate text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <button type="button" onClick={() => openFiling(open, ticker, f)} className="min-h-7 truncate text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             {f.form} · {period} {f.report ? fmtDate(f.report) : ""}
           </button>
           <p className="num text-[11px] text-muted-foreground">Filed {fmtDate(f.filed)}</p>
@@ -74,13 +99,13 @@ export function KeyDocStrip({ ticker, cik, keys, rows }: { ticker: string; cik: 
       <KeyCard label="Earnings release">
         {rel && (
           <>
-            <button type="button" onClick={() => openRelease(open, ticker, rel.release)} className="flex min-w-0 items-center gap-1.5 text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={() => void openRelease(open, ticker, cik, rel.release, rel.filing?.doc)} className="flex min-h-7 min-w-0 items-center gap-1.5 text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               <Megaphone className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">Exhibit 99.1 · {fmtDate(rel.release.filed, { month: "short", year: "numeric" })}</span>
+              <span className="truncate">{releaseIsExhibit(rel.release, rel.filing?.doc) ? "Exhibit 99.1" : "Earnings release"} · {fmtDate(rel.release.filed, { month: "short", year: "numeric" })}</span>
             </button>
             <p className="num text-[11px] text-muted-foreground">Filed {fmtDate(rel.release.filed)} · 8-K Item 2.02</p>
             <div className="-ml-1.5 flex flex-wrap items-center">
-              <button type="button" className={action} onClick={() => openRelease(open, ticker, rel.release)}>
+              <button type="button" className={action} onClick={() => void openRelease(open, ticker, cik, rel.release, rel.filing?.doc)}>
                 Open
               </button>
               {rel.filing && (
@@ -98,7 +123,7 @@ export function KeyDocStrip({ ticker, cik, keys, rows }: { ticker: string; cik: 
       <KeyCard label="Proxy statement">
         {keys.proxy && (
           <>
-            <button type="button" onClick={() => openFiling(open, ticker, keys.proxy!)} className="truncate text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <button type="button" onClick={() => openFiling(open, ticker, keys.proxy!)} className="min-h-7 truncate text-left text-[13px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               DEF 14A · {fmtDate(keys.proxy.filed, { month: "short", year: "numeric" })}
             </button>
             <p className="num text-[11px] text-muted-foreground">Filed {fmtDate(keys.proxy.filed)}</p>
@@ -120,7 +145,7 @@ export function KeyDocStrip({ ticker, cik, keys, rows }: { ticker: string; cik: 
 const GRID = "grid grid-cols-[3.25rem_minmax(0,1fr)_4.5rem] items-center gap-x-2 sm:gap-x-3 sm:grid-cols-[4rem_5.5rem_minmax(0,1fr)_6.5rem_6.5rem] lg:grid-cols-[4rem_5.5rem_minmax(0,1fr)_6.5rem_9rem]";
 
 /** Dense filing rows for one page, under year headers: date, form, plain description, period, actions. */
-export function FilingRows({ ticker, cik, rows, all, releases }: { ticker: string; cik: string; rows: ListFiling[]; all: ListFiling[]; releases: Map<string, EarningsRelease> }) {
+export function FilingRows({ ticker, cik, rows, all, releases, years }: { ticker: string; cik: string; rows: ListFiling[]; all: ListFiling[]; releases: Map<string, EarningsRelease>; years?: Map<string, number> }) {
   const { open } = useSource();
   return (
     <div role="table" aria-label="Filings" className="text-[13px]">
@@ -141,15 +166,15 @@ export function FilingRows({ ticker, cik, rows, all, releases }: { ticker: strin
         <div role="rowgroup" key={g.year}>
           <div role="row" className="border-b bg-secondary/40 px-3.5 py-1">
             <span role="cell" className="eyebrow">
-              {g.year} · {g.rows.length}
+              {g.year} · {yearCount(g.rows.length, years?.get(g.year))}
             </span>
           </div>
           {g.rows.map((f) => {
-            const d = describeFiling(f);
+            const d = describeFiling({ ...f, selfFiled: filedByIssuer(f.accn, cik), company: coverageOf(ticker)?.shortName });
             const rel = releases.get(f.accn);
             const period = periodOf(f);
             return (
-              <div role="row" key={f.accn} className={cn(GRID, "group min-h-8 border-b px-3.5 py-1 transition-colors duration-150 last:border-0 hover:bg-secondary/50")}>
+              <div role="row" key={f.accn} className={cn(GRID, "group min-h-8 border-b px-3.5 py-0.5 transition-colors duration-150 last:border-0 hover:bg-secondary/50")}>
                 <span role="cell" className="num text-[12px] text-muted-foreground">
                   {fmtDate(f.filed, { month: "short", day: "numeric" })}
                 </span>
@@ -157,9 +182,9 @@ export function FilingRows({ ticker, cik, rows, all, releases }: { ticker: strin
                   <FormChip form={f.form} />
                 </span>
                 <span role="cell" className="min-w-0">
-                  <button type="button" onClick={() => openFiling(open, ticker, f)} className="flex w-full min-w-0 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <button type="button" onClick={() => openFiling(open, ticker, f)} className="flex min-h-7 w-full min-w-0 items-center gap-2 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                     <FormChip form={f.form} className="sm:hidden" />
-                    <span className="truncate underline-offset-2 group-hover:underline">{d.title}</span>
+                    <span className={cn("truncate underline-offset-2 group-hover:underline", d.alert && "font-medium text-negative")}>{d.title}</span>
                     {d.detail && <span className="hidden min-w-0 truncate text-[11px] text-muted-foreground md:inline">{d.detail}</span>}
                   </button>
                 </span>
@@ -168,7 +193,7 @@ export function FilingRows({ ticker, cik, rows, all, releases }: { ticker: strin
                 </span>
                 <span role="cell" className="flex items-center justify-end">
                   {rel && (
-                    <button type="button" className={action} onClick={() => openRelease(open, ticker, rel)} title="Open the earnings release (Exhibit 99.1)">
+                    <button type="button" className={action} onClick={() => void openRelease(open, ticker, cik, rel, f.doc)} title="Open the earnings release">
                       <Megaphone className="size-3.5" /> <span className="hidden lg:inline">Release</span>
                     </button>
                   )}

@@ -116,9 +116,17 @@ export function filterHighlights(
         (!q ||
           r.ticker.toLowerCase() === q ||
           r.name.toLowerCase().includes(q) ||
-          r.excerpt.toLowerCase().includes(q)),
+          r.excerpt.toLowerCase().includes(q) ||
+          r.signals.some((x) => x.toLowerCase().includes(q))),
     )
     .sort((a, b) => b.filed.localeCompare(a.filed) || b.score - a.score);
+}
+
+/** Signal words across the highlights with the number of passages carrying each, most frequent first. */
+export function signalCounts(rows: RedlineHighlight[]): { signal: string; n: number }[] {
+  const n = new Map<string, number>();
+  for (const r of rows) for (const s of new Set(r.signals)) n.set(s, (n.get(s) ?? 0) + 1);
+  return [...n.entries()].map(([signal, k]) => ({ signal, n: k })).sort((a, b) => b.n - a.n || a.signal.localeCompare(b.signal));
 }
 
 /** First words of a passage, used as the viewer's in-document search. */

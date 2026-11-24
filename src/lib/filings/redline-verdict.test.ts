@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Change, Redline, SectionStats } from "@/lib/redline/core";
-import { levelOf, redlineVerdict, verdictSentence } from "./redline-verdict";
+import { baseCaption, gradeShare, LEVEL_LABEL, notComparedSentence, redlineVerdict, verdictSentence } from "./redline-verdict";
 
 const sec = (key: string, title: string, o: Partial<SectionStats> = {}): SectionStats => ({ key, title, added: 0, removed: 0, changed: 0, figuresOnly: 0, unchanged: 0, moved: 0, wordsAdded: 0, wordsRemoved: 0, high: 0, medium: 0, found: "both", ...o });
 let n = 0;
@@ -45,11 +45,58 @@ describe("redline verdict", () => {
     expect(verdictSentence(v)).toBe("Driven by Risk factors: 2 high-materiality changes, 1 new risk factor, 1 risk factor removed.");
   });
 
-  it("grades the comparison", () => {
-    expect(v.level).toBe("moderate");
-    expect(levelOf({ high: 12, share: 0.02, newRisks: 0, removedRisks: 0, changed: 40 })).toBe("major");
-    expect(levelOf({ high: 0, share: 0.3, newRisks: 0, removedRisks: 0, changed: 40 })).toBe("major");
-    expect(levelOf({ high: 0, share: 0.01, newRisks: 0, removedRisks: 0, changed: 3 })).toBe("light");
-    expect(levelOf({ high: 0, share: 0, newRisks: 0, removedRisks: 0, changed: 0 })).toBe("none");
+  it("grades the comparison against stored comparisons of the same form", () => {
+    // 5.4% of paragraphs changed is far below any stored 10-K (the lowest is 20%)
+    expect(v.level).toBe("low");
+    expect(v.basis).toBe("Less change than 99 in 100 annual reports");
+    expect(gradeShare("10-K", 0, 0).level).toBe("none");
+    expect(gradeShare("20-F", 0.5, 10)).toMatchObject({ level: "unrated", rank: null, basis: null });
+  });
+
+  it("names core sections that were not compared", () => {
+    // Business, Risk factors and MD&A were compared; Financial statements is absent from both filings
+    expect(v.notCompared.map((c) => c.key)).toEqual(["8"]);
+    expect(notComparedSentence(v)).toBe("Financial statements & notes was not compared: not found in both filings. The share above leaves it out.");
+  });
+});
+
+describe("verdict on real stored comparisons", () => {
+  // COST 10-K (review): 121 of 408 paragraphs, no Item 7 in the stored stats
+  const cost = redline(
+    [
+      sec("1", "Business", { added: 1, removed: 2, changed: 16, unchanged: 27, figuresOnly: 4 }),
+      sec("1A", "Risk factors", { removed: 8, changed: 28, unchanged: 45, high: 1 }),
+      sec("1C", "Cybersecurity", { changed: 4, unchanged: 5 }),
+      sec("3", "Legal proceedings", { unchanged: 1 }),
+      sec("7A", "Market risk", { removed: 1, changed: 3, unchanged: 5, figuresOnly: 2 }),
+      sec("8", "Financial statements & notes", { added: 12, removed: 9, changed: 36, unchanged: 158, figuresOnly: 31, high: 1 }),
+      sec("9A", "Controls & procedures", { changed: 1, unchanged: 4, figuresOnly: 4 }),
+      sec("9B", "Other information", { figuresOnly: 1 }),
+    ],
+    [ch("1A", "changed", 70), ch("8", "changed", 65)],
+  );
+  const vc = redlineVerdict(cost);
+
+  it("does not call a below-median 10-K major, and says MD&A was not compared", () => {
+    expect(vc.changed).toBe(121);
+    expect(vc.paragraphs).toBe(408);
+    expect(vc.level).toBe("low");
+    expect(LEVEL_LABEL[vc.level]).toBe("Less change than usual");
+    expect(vc.basis).toBe("Less change than 91 in 100 annual reports");
+    expect(vc.notCompared.map((c) => c.title)).toEqual(["MD&A"]);
+  });
+
+  it("AAPL 10-K, 236 of 597 paragraphs, is typical", () => {
+    const g = gradeShare("10-K", 236 / 597, 236);
+    expect(g.level).toBe("typical");
+    expect(g.basis).toBe("Less change than 6 in 10 annual reports");
+  });
+});
+
+describe("baseCaption (L8)", () => {
+  it("names the same quarter a year earlier only when the base really is a year earlier", () => {
+    expect(baseCaption("10-Q", { report: "2026-06-27" }, { report: "2025-06-28" })).toBe("Same quarter a year earlier");
+    expect(baseCaption("10-Q", { report: "2024-03-30" }, { report: "2023-12-30" })).toMatch(/^Previous quarterly report/);
+    expect(baseCaption("10-K", { report: "2026-09-26" }, { report: "2025-09-27" })).toBe("Prior annual report");
   });
 });

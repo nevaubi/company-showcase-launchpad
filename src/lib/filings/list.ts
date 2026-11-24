@@ -1,6 +1,6 @@
 // The company Filings tab's list logic: scope (kind, year, words) held in the address, counts per
 // kind, year groups and pages, and the strip of latest key documents. Pure, so the page stays thin.
-import { describeFiling, familyOf, formName, type FilingFamily } from "./kinds";
+import { describeFiling, familyOf, filedByIssuer, formName, isActiveStake, type FilingFamily } from "./kinds";
 import { INSIDER_CODES } from "@/lib/format";
 
 export interface ListFiling {
@@ -20,6 +20,8 @@ export interface ListScope {
   kind: ListKind;
   year: number | null;
   q: string;
+  /** The company's CIK: tells its own Schedule 13D/G filings (about other issuers) from stakes in it. */
+  cik?: string;
 }
 
 export const PAGE_SIZE = 50;
@@ -46,9 +48,10 @@ export const yearsOf = (rows: { filed: string }[]): number[] =>
   [...new Set(rows.map((r) => Number(r.filed.slice(0, 4))).filter((y) => y > 1990))].sort((a, b) => b - a);
 
 /** Words a reader might type for a filing: form, plain description, item words, EDGAR description, dates. */
-export function searchText(r: ListFiling): string {
-  const d = describeFiling(r);
-  return [r.form, formName(r.form), d.title, d.detail, r.desc, r.items, r.filed, r.report, r.accn].filter(Boolean).join(" ").toLowerCase();
+export function searchText(r: ListFiling, cik?: string): string {
+  const d = describeFiling({ ...r, selfFiled: filedByIssuer(r.accn, cik) });
+  // The accession is left out: its digits ("...-16-020258") matched year searches for other years.
+  return [r.form, formName(r.form), d.title, d.detail, r.desc, r.items, r.filed, r.report].filter(Boolean).join(" ").toLowerCase();
 }
 
 /** Every term of the query must appear (so "results 2025" finds 2025 earnings releases). */
@@ -61,8 +64,17 @@ export function matchesQuery(text: string, q: string): boolean {
 export function scopeFilings(rows: ListFiling[], s: ListScope): ListFiling[] {
   if (s.kind === "ir") return [];
   return rows
-    .filter((r) => (s.kind === "all" || (s.kind === "key" ? familyOf(r.form) !== "ownership" : familyOf(r.form) === s.kind)) && (s.year == null || r.filed.startsWith(String(s.year))) && (!s.q.trim() || matchesQuery(searchText(r), s.q)))
+    .filter((r) => (s.kind === "all" || (s.kind === "key" ? isKeyFiling(r, s.cik) : familyOf(r.form) === s.kind)) && (s.year == null || r.filed.startsWith(String(s.year))) && (!s.q.trim() || matchesQuery(searchText(r, s.cik), s.q)))
     .sort(byFiledDesc);
+}
+
+/**
+ * Key filings: everything but ownership forms, except a Schedule 13D (an active, possibly activist
+ * stake) filed by someone else about the company, which a reader wants to see first.
+ */
+export function isKeyFiling(r: ListFiling, cik?: string): boolean {
+  if (familyOf(r.form) !== "ownership") return true;
+  return isActiveStake(r.form) && !!cik && !filedByIssuer(r.accn, cik);
 }
 
 export interface Page<T> {
@@ -153,4 +165,88 @@ export function insiderFilings(trades: InsiderLike[]): ListFiling[] {
     const plan = ts.some((x) => x.plan10b5) ? "10b5-1 plan" : null;
     return { accn: t.accn, form: "4", filed: t.filed, report: undefined, doc: t.doc, desc: [who, kinds.join(", "), plan].filter(Boolean).join(" · ") };
   });
+}
+
+/** A row of the live 60-day `sec_filings` table as the Filings tab reads it. */
+export interface LiveFilingRow {
+  accn: string;
+  form: string;
+  filed: string;
+  report: string | null;
+  doc: string | null;
+  description: string | null;
+  items: string | null;
+}
+
+export const liveToList = (r: LiveFilingRow): ListFiling => ({
+  accn: r.accn,
+  form: r.form,
+  filed: r.filed,
+  report: r.report ?? undefined,
+  doc: r.doc ?? "",
+  desc: r.description ?? undefined,
+  items: r.items ?? undefined,
+});
+
+/**
+ * Every filing the tab can list, one per accession. Live rows come first so their form wins
+ * (a recorded trade does not say whether its filing was a 4 or a 4/A); then the company record;
+ * then Form 4s rebuilt from recorded insider trades.
+ */
+export function mergeFilings(live: ListFiling[], record: ListFiling[], insider: ListFiling[]): ListFiling[] {
+  return dedupeFilings([...live, ...record, ...insider]);
+}
+
+export interface ListCoverage {
+  total: number;
+  first: string | null;
+  last: string | null;
+  /** First day of the live table: every filing from then on is listed. */
+  liveSince: string | null;
+  /** Form 4s before `liveSince` come only from recorded insider trades: how many, and from when. */
+  insiderBefore: number;
+  insiderFirst: string | null;
+}
+
+/** What the list actually covers, for the copy above it (never claim more than this). */
+export function listCoverage(rows: ListFiling[], insider: ListFiling[], liveSince: string | null): ListCoverage {
+  let first: string | null = null;
+  let last: string | null = null;
+  for (const r of rows) {
+    if (!first || r.filed < first) first = r.filed;
+    if (!last || r.filed > last) last = r.filed;
+  }
+  const before = insider.filter((r) => !liveSince || r.filed < liveSince);
+  const insiderFirst = before.reduce<string | null>((m, r) => (!m || r.filed < m ? r.filed : m), null);
+  return { total: rows.length, first, last, liveSince, insiderBefore: before.length, insiderFirst };
+}
+
+/** EDGAR's own filing list for the company, optionally one form type and filings up to the end of a year. */
+export function edgarListUrl(cik: string, opts: { type?: string; year?: number | null } = {}): string {
+  const p = new URLSearchParams({ action: "getcompany", CIK: String(Number(cik)).padStart(10, "0"), owner: "include", count: "100" });
+  if (opts.type) p.set("type", opts.type);
+  if (opts.year) p.set("dateb", `${opts.year}1231`);
+  return `https://www.sec.gov/cgi-bin/browse-edgar?${p.toString()}`;
+}
+
+/** Rows per filing year across a whole scoped list (not one page), keyed like `groupByYear`. */
+export function yearTotals(rows: { filed: string | null }[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const r of rows) {
+    const y = r.filed ? r.filed.slice(0, 4) : "Undated";
+    m.set(y, (m.get(y) ?? 0) + 1);
+  }
+  return m;
+}
+
+/** Year header count: "34", or "15 of 34" when the page shows only part of the year. */
+export const yearCount = (onPage: number, total: number | undefined) => (total == null || total === onPage ? onPage.toLocaleString() : `${onPage.toLocaleString()} of ${total.toLocaleString()}`);
+
+/**
+ * Threads listed before "Show registration reviews": periodic-report reviews and any thread with a reply round. When
+ * none qualifies, every thread is listed, so the tab count (the length of this list) always matches what is shown.
+ */
+export function defaultThreads<T extends { periodic: boolean; rounds: number }>(threads: T[]): T[] {
+  const main = threads.filter((t) => t.periodic || t.rounds > 0);
+  return main.length ? main : threads;
 }

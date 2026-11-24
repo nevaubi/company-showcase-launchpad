@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { ArrowRight, ChevronLeft, ChevronRight, GitCompareArrows, Search, ShieldCheck, Sparkles } from "lucide-react";
@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChangeCard, TYPE_LABEL } from "@/components/redline/change-card";
 import { Pager, QuietLine } from "@/components/filings/parts";
 import { paginate } from "@/lib/filings/list";
-import { LEVEL_LABEL, redlineVerdict, verdictSentence, type Verdict } from "@/lib/filings/redline-verdict";
+import { baseCaption, LEVEL_LABEL, notComparedSentence, redlineVerdict, verdictSentence, type Verdict } from "@/lib/filings/redline-verdict";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompany } from "@/lib/data";
 import { coverageOf, historyCik } from "@/lib/coverage";
@@ -27,10 +27,10 @@ import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/app/companies/$ticker/redline")({
   validateSearch: z.object({
-    form: z.enum(["10-K", "10-Q"]).optional(),
-    to: z.string().regex(/^\d{10}-\d{2}-\d{6}$/).optional(),
-    from: z.string().regex(/^\d{10}-\d{2}-\d{6}$/).optional(),
-    section: z.string().max(8).optional(),
+    form: z.enum(["10-K", "10-Q"]).optional().catch(undefined),
+    to: z.string().regex(/^\d{10}-\d{2}-\d{6}$/).optional().catch(undefined),
+    from: z.string().regex(/^\d{10}-\d{2}-\d{6}$/).optional().catch(undefined),
+    section: z.string().max(8).optional().catch(undefined),
   }),
   head: ({ params }) => {
     const name = coverageOf(params.ticker)?.shortName ?? params.ticker.toUpperCase();
@@ -96,6 +96,17 @@ function RedlinePage() {
   const section = search.section ?? "all";
   const jumpTo = useRef<string | null>(null);
   const listTop = useRef<HTMLDivElement>(null);
+  // The filter row sticks just under the section bar (md and up), so the list needs the bar's live height.
+  const navObserver = useRef<ResizeObserver | null>(null);
+  const navBar = useCallback((el: HTMLDivElement | null) => {
+    navObserver.current?.disconnect();
+    navObserver.current = null;
+    if (!el) return;
+    const host = el.closest<HTMLElement>('[data-section="Changes"]');
+    const ro = new ResizeObserver(() => host?.style.setProperty("--redline-nav", `${el.offsetHeight}px`));
+    ro.observe(el);
+    navObserver.current = ro;
+  }, []);
   useEffect(() => { if (!jumpTo.current) setPage(1); }, [section, level, type, figures, text, from?.accn, to?.accn]);
 
   const r = q.data?.redline;
@@ -136,10 +147,13 @@ function RedlinePage() {
     setSearch({ section: undefined });
     setLevel("all"); setType("all"); setText(""); if (c.figuresOnly) setFigures(true);
   };
-  // Paging from the bottom of the list brings the top of the new page into view; paging from the top does not move the page.
+  // Two deliberate exceptions to "a click never moves the page": paging and "Next section" from the bottom of the list
+  // bring the top of the new list under the sticky toolbar, because the reader asked to start reading it from the top.
+  // The same controls at the top of the list do not move the page.
+  const toListTop = () => requestAnimationFrame(() => listTop.current?.scrollIntoView({ block: "start" }));
   const turn = (n: number, fromBottom: boolean) => {
     setPage(n);
-    if (fromBottom) requestAnimationFrame(() => listTop.current?.scrollIntoView({ block: "start" }));
+    if (fromBottom) toListTop();
   };
 
   if (company.isLoading) return <Skeleton className="h-96" />;
@@ -161,7 +175,7 @@ function RedlinePage() {
           <ArrowRight className="size-3.5 rotate-180 text-muted-foreground" />
           <FilingSelect label="against" value={from?.accn} options={filings.filter((f) => to && f.filed < to.filed)} onChange={(v) => setSearch({ from: v })} />
         </div>
-        {from && base && from.accn === base.accn && <span className="text-[11px] text-muted-foreground">{form === "10-Q" ? "Same quarter a year earlier" : "Prior annual report"}</span>}
+        {from && to && base && from.accn === base.accn && <span className="text-[11px] text-muted-foreground">{baseCaption(form, to, base)}</span>}
       </div>
 
       {q.isLoading ? (
@@ -181,8 +195,9 @@ function RedlinePage() {
               title={section === "all" ? "All sections · changes ranked by materiality" : `${titles.get(section) ?? section} · changes ranked by materiality`}
               subtitle={`${visible.length.toLocaleString()} shown · ${from!.form} filed ${fmtDate(to!.filed)} against ${fmtDate(from!.filed)}${q.data!.stored ? "" : " · compared just now"}`}
             >
-              <div className="sticky top-[var(--sticky-top,3.5rem)] z-10 grid grid-cols-1 gap-2 border-b bg-card/95 px-3.5 py-2 backdrop-blur">
-                <div className="flex flex-wrap items-center gap-2">
+              {/* Section navigation and the pager stay in view while reading; the filters below stick with them from md up and
+                  scroll away at phone width, where a two-row sticky bar would cover a third of the screen. */}
+              <div ref={navBar} className="sticky top-[var(--sticky-top,3.5rem)] z-20 flex flex-wrap items-center gap-2 border-b bg-card/95 px-3.5 py-2 backdrop-blur">
                   {section !== "all" && (
                     <button type="button" onClick={() => setSearch({ section: undefined })} className="inline-flex h-7 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">
                       <ChevronLeft className="size-3.5" /> All sections
@@ -199,17 +214,16 @@ function RedlinePage() {
                   </Select>
                   {prevKey && <button type="button" onClick={() => setSearch({ section: prevKey === "all" ? undefined : prevKey })} className="inline-flex h-7 max-w-48 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground" title="Previous section by amount of change"><ChevronLeft className="size-3.5 shrink-0" /><span className="truncate">{sectionLabel(prevKey)}</span></button>}
                   {nextKey && <button type="button" onClick={() => setSearch({ section: nextKey })} className="inline-flex h-7 max-w-48 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground" title="Next section by amount of change"><span className="truncate">{sectionLabel(nextKey)}</span><ChevronRight className="size-3.5 shrink-0" /></button>}
-                  <div className="relative ml-auto">
+                  <Pager p={pg} onPage={(n) => turn(n, false)} label="Change pages, top" className="ml-auto" />
+              </div>
+              <div className="z-10 flex flex-wrap items-center gap-2 border-b bg-card/95 px-3.5 py-2 backdrop-blur md:sticky md:top-[calc(var(--sticky-top,3.5rem)+var(--redline-nav,0px))]">
+                  <div className="relative">
                     <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                     <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Find words, e.g. tariff" className="h-7 w-48 pl-7 text-xs" aria-label="Search changes" />
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
                   <Segmented label="Materiality" size="xs" value={level} onChange={setLevel} options={[{ v: "high", l: "High" }, { v: "medium", l: "High + medium" }, { v: "all", l: "All" }]} />
                   <Segmented label="Change type" size="xs" value={type} onChange={setType} options={[{ v: "all", l: "Any change" }, { v: "added", l: "Added" }, { v: "removed", l: "Removed" }, { v: "changed", l: "Rewritten" }]} />
-                  <label className="flex items-center gap-2 text-[12px] text-muted-foreground"><Switch checked={figures} onCheckedChange={setFigures} aria-label="Show figure-only updates" /> Figure-only updates</label>
-                  <Pager p={pg} onPage={(n) => turn(n, false)} label="Change pages, top" className="ml-auto" />
-                </div>
+                  <label className="flex h-7 items-center gap-2 text-[12px] text-muted-foreground"><Switch checked={figures} onCheckedChange={setFigures} aria-label="Show figure-only updates" /> Figure-only updates</label>
               </div>
               {!visible.length ? (
                 <QuietLine className="py-6 text-center">{level !== "all" ? "Nothing at this materiality here. Try showing all levels." : "Nothing matches. Try another section or search."}</QuietLine>
@@ -218,7 +232,7 @@ function RedlinePage() {
                   {pg.rows.map((c) => <ChangeCard key={c.id} c={c} ticker={ticker} sectionTitle={titles.get(c.section) ?? c.section} from={r.from} to={r.to} highlighted={focus === c.id} />)}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t px-3.5 py-2">
                     {nextKey ? (
-                      <button type="button" onClick={() => setSearch({ section: nextKey })} className="inline-flex h-7 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">Next section: {sectionLabel(nextKey)} <ChevronRight className="size-3.5" /></button>
+                      <button type="button" onClick={() => { setSearch({ section: nextKey }); toListTop(); }} className="inline-flex h-7 items-center gap-1 rounded px-2 text-[12px] text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground">Next section: {sectionLabel(nextKey)} <ChevronRight className="size-3.5" /></button>
                     ) : <span />}
                     <Pager p={pg} onPage={(n) => turn(n, true)} label="Change pages, bottom" />
                   </div>
@@ -239,11 +253,11 @@ function RedlinePage() {
 function VerdictPanel({ v, from, to, stored, section, onSection }: { v: Verdict; from: Filing; to: Filing; stored: boolean; section: string; onSection: (k: string) => void }) {
   const max = Math.max(1, ...v.sections.map((s) => s.added + s.removed + s.changed));
   const pct = (x: number) => `${(x * 100).toFixed(x > 0 && x < 0.01 ? 1 : 0)}%`;
-  const facts: [string, string, boolean?][] = [
+  const facts: [string, string][] = [
     ["Added", v.added.toLocaleString()],
     ["Removed", v.removed.toLocaleString()],
     ["Rewritten", v.rewritten.toLocaleString()],
-    ["High materiality", v.high.toLocaleString(), v.high > 0],
+    ["High materiality", v.high.toLocaleString()],
     ["New risk factors", v.newRisks.toLocaleString()],
     ["Risk factors removed", v.removedRisks.toLocaleString()],
   ];
@@ -257,17 +271,29 @@ function VerdictPanel({ v, from, to, stored, section, onSection }: { v: Verdict;
             {to.report && <span className="text-muted-foreground"> (period {fmtDate(to.report)})</span>} against <span className="font-semibold">{fmtDate(from.filed)}</span>
             {from.report && <span className="text-muted-foreground"> (period {fmtDate(from.report)})</span>}
           </p>
-          <div className="mt-3 flex items-baseline gap-3">
-            <span className={cn("num text-[18px] font-semibold", v.level === "major" && "text-negative")}>{pct(v.share)}</span>
-            <span className="text-[13px] font-medium">{LEVEL_LABEL[v.level]}</span>
+          <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+            <span className="num text-[18px] font-semibold">{pct(v.share)}</span>
+            <span data-level={v.level} className={cn("text-[13px] font-medium", v.level === "unusual" && "text-negative")}>{LEVEL_LABEL[v.level]}</span>
           </div>
           <p className="num text-[11px] text-muted-foreground">{v.changed.toLocaleString()} of {v.paragraphs.toLocaleString()} compared paragraphs added, removed or rewritten</p>
+          {v.basis && v.norm && (
+            <p className="mt-1 text-[12px]">
+              {v.basis}
+              <span className="text-muted-foreground"> on file. The typical {v.norm.form} changes {pct(v.norm.cuts.find(([p]) => p === 0.5)![1])} ({v.norm.sample.toLocaleString()} stored comparisons, {fmtDate(v.norm.asOf)}).</span>
+            </p>
+          )}
+          {v.level === "unrated" && <p className="mt-1 text-[12px] text-muted-foreground">No stored comparisons of this form to grade it against.</p>}
           <p className="mt-2 text-[13px]">{verdictSentence(v)}</p>
+          {notComparedSentence(v) && (
+            <p data-section="Sections not compared" className="mt-2 rounded-[4px] border border-dashed px-2 py-1 text-[12px]">
+              <span className="font-medium">{notComparedSentence(v)}</span>
+            </p>
+          )}
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
-            {facts.map(([l, x, warn]) => (
+            {facts.map(([l, x]) => (
               <div key={l} className="flex items-baseline justify-between gap-2 border-b border-dashed py-0.5">
                 <dt className="text-muted-foreground">{l}</dt>
-                <dd className={cn("num", warn && "text-negative")}>{x}</dd>
+                <dd className="num">{x}</dd>
               </div>
             ))}
           </dl>

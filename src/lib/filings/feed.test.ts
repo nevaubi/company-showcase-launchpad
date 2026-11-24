@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterHighlights, resolveDoc, searchPhrase, type RedlineHighlight } from "./feed";
+import { filterHighlights, signalCounts, resolveDoc, searchPhrase, type RedlineHighlight } from "./feed";
 
 const h = (o: Partial<RedlineHighlight>): RedlineHighlight => ({
   kind: "quarterly",
@@ -61,5 +61,16 @@ describe("filings feed", () => {
     expect(resolveDoc(h({}), doc)?.accn).toBe("N");
     expect(resolveDoc(h({ accn: "X", doc: "x.htm" }), null)?.accn).toBe("X");
     expect(searchPhrase("  a  b c ", 2)).toBe("a b");
+  });
+});
+
+describe("signal filter (L6)", () => {
+  const H = (signals: string[], excerpt = "text"): RedlineHighlight => ({ ticker: "AAPL", name: "Apple", form: "10-K", filed: "2026-11-03", section: "Risk factors", section_id: "1A", change: "added", score: 1, excerpt, signals }) as RedlineHighlight;
+  it("counts each signal once per passage, most frequent first", () => {
+    expect(signalCounts([H(["guidance", "guidance", "tariff"]), H(["tariff"]), H([])])).toEqual([{ signal: "tariff", n: 2 }, { signal: "guidance", n: 1 }]);
+  });
+  it("search matches signal words too", () => {
+    const f = { form: "all" as const, sector: "all", signal: "all", days: 30, q: "tarif" };
+    expect(filterHighlights([H(["tariff"]), H(["guidance"])], f, () => undefined, "2026-11-23")).toHaveLength(1);
   });
 });

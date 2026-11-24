@@ -11,7 +11,7 @@ import { Pager, QuietLine } from "@/components/filings/parts";
 import { Skeleton } from "@/components/ui/skeleton";
 import { collapseDocCopies } from "@/lib/ir/dedupe";
 import { libraryTitle } from "@/lib/ir/display";
-import { groupByYear, matchesQuery, paginate } from "@/lib/filings/list";
+import { groupByYear, matchesQuery, paginate, yearCount, yearTotals } from "@/lib/filings/list";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +28,9 @@ export interface IrListDoc {
 }
 
 /** Stored kinds shown here; images belong to the IR library and SEC copies are already in the filing list. */
+/** Type label of a stored document: "other" is an exhibit only when it came from an SEC filing (it has an accession). */
+export const irKindLabel = (d: { kind: string; accn: string | null }) => (d.kind === "other" ? (d.accn ? "Exhibit" : "Document") : (IR_KIND[d.kind] ?? "Document"));
+
 export const IR_KIND: Record<string, string> = {
   "press-release": "Release",
   presentation: "Presentation",
@@ -72,8 +75,8 @@ export const cleanTitle = (t: string) => t.replace(/^\[[^\]]*\]\s*/, "").replace
 /** Dated documents newest first, undated ones last, scoped by year and words. */
 export function scopeIrDocs(docs: IrListDoc[], year: number | null, q: string): (IrListDoc & { title2: string; year: string | null })[] {
   return docs
-    .map((d) => ({ ...d, title2: cleanTitle(libraryTitle(d, IR_KIND[d.kind] ?? "Document")), year: yearOfDoc(d) }))
-    .filter((d) => (year == null || d.year === String(year)) && (!q.trim() || matchesQuery(`${d.title2} ${IR_KIND[d.kind] ?? ""} ${d.period ?? ""} ${d.filed ?? ""}`.toLowerCase(), q)))
+    .map((d) => ({ ...d, title2: cleanTitle(libraryTitle(d, irKindLabel(d))), year: yearOfDoc(d) }))
+    .filter((d) => (year == null || d.year === String(year)) && (!q.trim() || matchesQuery(`${d.title2} ${irKindLabel(d)} ${d.period ?? ""} ${d.filed ?? ""}`.toLowerCase(), q)))
     .sort((a, b) => Number(!a.filed) - Number(!b.filed) || (b.filed ?? "").localeCompare(a.filed ?? "") || (b.year ?? "").localeCompare(a.year ?? "") || a.title2.localeCompare(b.title2));
 }
 
@@ -89,6 +92,7 @@ export function IrDocRows({ ticker, docs, loading, error, year, q, page, onPage 
   const { open } = useSource();
   const scoped = useMemo(() => scopeIrDocs(docs, year, q), [docs, year, q]);
   const p = paginate(scoped, page);
+  const totals = useMemo(() => yearTotals(scoped), [scoped]);
   if (loading) return <Skeleton className="m-3.5 h-40" />;
   if (error) return <QuietLine>Stored IR documents could not be loaded right now.</QuietLine>;
   if (!docs.length) return <QuietLine>No IR documents stored for this company yet.</QuietLine>;
@@ -110,7 +114,7 @@ export function IrDocRows({ ticker, docs, loading, error, year, q, page, onPage 
           <div role="rowgroup" key={g.year}>
             <div role="row" className="border-b bg-secondary/40 px-3.5 py-1">
               <span role="cell" className="eyebrow">
-                {g.year === "Undated" ? "Undated (stored from IR sites without a date)" : g.year} · {g.rows.length}
+                {g.year === "Undated" ? "Undated (stored from IR sites without a date)" : g.year} · {yearCount(g.rows.length, totals.get(g.year))}
               </span>
             </div>
             {g.rows.map((d) => (
@@ -119,7 +123,7 @@ export function IrDocRows({ ticker, docs, loading, error, year, q, page, onPage 
                   {d.filed ? fmtDate(d.filed, { month: "short", day: "numeric" }) : "–"}
                 </span>
                 <span role="cell" className="hidden text-[12px] text-muted-foreground sm:block">
-                  {IR_KIND[d.kind] ?? "Document"}
+                  {irKindLabel(d)}
                 </span>
                 <span role="cell" className="min-w-0">
                   {d.viewable ? (
