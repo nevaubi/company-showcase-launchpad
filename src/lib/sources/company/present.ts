@@ -49,6 +49,14 @@ export function showCell(cell: OfficialCell | null | undefined, unit: string | n
   return { text: grouped(cell.text ?? String(cell.value)), title: stored, empty: false };
 }
 
+/** The caption of a panel that shows FDIC percentages rounded by `showCell` (review int-code N9). */
+export const ROUNDED_NOTE = "Percentages are rounded to two decimals; hover a figure for the digits as stored.";
+
+/** `ROUNDED_NOTE` when any of a panel's units is a rounded FDIC percentage, otherwise null. */
+export function roundedNote(units: readonly (string | null | undefined)[]): string | null {
+  return units.some(u => u === "Percent") ? ROUNDED_NOTE : null;
+}
+
 /** "2026-09-30" as a reader says the quarter: "Q3 2026". */
 export function quarterLabel(iso: string): string {
   const [y, m] = iso.split("-").map(Number);

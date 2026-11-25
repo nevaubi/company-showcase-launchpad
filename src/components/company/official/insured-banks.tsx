@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { BASIS_TEXT, FDIC_LINES } from "@/lib/sources/company/fdic-fields";
-import { absSentence, axisUnit, dayLabel, historySeries, quarterLabel, showCell, unitLabel } from "@/lib/sources/company/present";
+import { absSentence, axisUnit, dayLabel, historySeries, quarterLabel, roundedNote, showCell, unitLabel } from "@/lib/sources/company/present";
 import type { BankHistory, CompanyOfficial, OfficialBank, OfficialSource } from "@/lib/sources/company/types";
 import { cn } from "@/lib/utils";
 import { BankHistoryChart } from "./bank-history-chart";
@@ -150,6 +150,7 @@ function BankDetail({ bank, history, note, pending }: { ticker: string; bank: Of
             })}
           </tbody>
         </table>
+        {roundedNote(bank.lines.map(l => l.unit)) && <p className="border-t px-3.5 py-1.5 text-[11px] text-muted-foreground">{roundedNote(bank.lines.map(l => l.unit))}</p>}
       </div>
       <div data-section="Bank history" className={cn("min-w-0 transition-opacity duration-150", pending && "opacity-50")}>
         <div className="flex flex-wrap items-center gap-2 px-3.5 pb-1 pt-2">
@@ -191,6 +192,7 @@ function BankDetail({ bank, history, note, pending }: { ticker: string; bank: Of
             <p className="mt-1 text-[11px] text-muted-foreground">
               {series.notReported > 0 && `${series.notReported} ${series.notReported === 1 ? "quarter is" : "quarters are"} stored as 0 before the ratio was reported and not drawn. `}
               {leadEmpty(series.points) && `No figure is stored before ${quarterLabel(series.points.find(p => p.value != null)!.period)}. `}
+              {roundedNote([series.unit]) && `${roundedNote([series.unit])} `}
               The bank's own reports; quarters before the company held it may be included. History retrieved {retrieved(history?.sources[0])}
               {history && history.sources.length > 1 ? `, latest quarter retrieved ${retrieved(history.sources[1])}` : ""}.
             </p>

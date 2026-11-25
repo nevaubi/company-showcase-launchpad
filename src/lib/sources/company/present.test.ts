@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absSentence, assetsTie, axisUnit, dayLabel, historySeries, niceDomain, quarterLabel, showCell, tickText, unitLabel, usdShort } from "./present";
+import { absSentence, assetsTie, axisUnit, dayLabel, historySeries, niceDomain, quarterLabel, ROUNDED_NOTE, roundedNote, showCell, tickText, unitLabel, usdShort } from "./present";
 import type { BankHistory, OfficialCell } from "./types";
 
 const num = (text: string): OfficialCell => ({ text, value: Number(text), kind: "number" });
@@ -96,5 +96,15 @@ describe("statementTotalAssets", () => {
     expect(statementTotalAssets(ds, "2025-12-31")).toEqual({ value: 4_000_000_000_000, src: undefined });
     expect(statementTotalAssets(ds, "2026-03-31")).toBeNull();
     expect(statementTotalAssets(null, "2026-06-30")).toBeNull();
+  });
+});
+
+describe("rounding caption (review int-code N9)", () => {
+  it("says the panel rounds where it shows an FDIC percentage, and the stored digits stay on hover", () => {
+    expect(roundedNote(["USD thousands", "Percent"])).toBe(ROUNDED_NOTE);
+    expect(ROUNDED_NOTE).toBe("Percentages are rounded to two decimals; hover a figure for the digits as stored.");
+    expect(roundedNote(["USD thousands", null])).toBeNull();
+    const shown = showCell({ text: "1.04730322351758596", value: 1.04730322351758596, kind: "number" }, "Percent");
+    expect(shown).toMatchObject({ text: "1.05", title: "As stored: 1.04730322351758596" });
   });
 });
