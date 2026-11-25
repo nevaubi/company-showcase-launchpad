@@ -17,7 +17,10 @@ describe("migration 0066", () => {
   });
   it("keeps its journal entry and snapshot chain", () => {
     const j = JSON.parse(readFileSync("drizzle/migrations/meta/_journal.json", "utf8")) as { entries: { idx: number; tag: string }[] };
-    expect(j.entries.at(-1)).toMatchObject({ idx: 66, tag: "0066_data_freshness_ingest" });
+    expect(j.entries.find((e) => e.idx === 66)).toMatchObject({
+      idx: 66,
+      tag: "0066_data_freshness_ingest",
+    });
     const s66 = JSON.parse(readFileSync("drizzle/migrations/meta/0066_snapshot.json", "utf8")) as { id: string; prevId: string };
     const s65 = JSON.parse(readFileSync("drizzle/migrations/meta/0065_snapshot.json", "utf8")) as { id: string };
     expect(s66.prevId).toBe(s65.id);

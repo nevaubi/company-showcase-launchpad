@@ -37,3 +37,6 @@ dist-ssr
 
 # Local component preview harness (standalone vite page), never part of the app
 .preview/
+
+# SEC files kept on disk by scripts/abs-ee.ts
+.cache/
