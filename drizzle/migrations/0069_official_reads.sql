@@ -260,17 +260,30 @@ BEGIN
   RETURN res;
 END $$;
 
--- The library in one call: the dataset rows and the published snapshots the app's buildLibrary reads, in the keys of
--- its direct selects. Small tables only; never reads source_records.
+-- The library in one call, in the shape of the app's direct path (src/lib/sources/read.server.ts, LibrarySource):
+-- every dataset with its current snapshot and up to two snapshots published before the window, and the window (the
+-- 400 newest publications). Small tables only; never reads source_records; its cost grows with datasets, not with
+-- snapshots.
 CREATE OR REPLACE FUNCTION public.source_library()
 RETURNS jsonb LANGUAGE sql STABLE SET search_path = public AS $$
+  WITH win AS (
+    SELECT s.id, s.dataset_id, s.loaded_rows, s.published_at FROM public.source_snapshots s
+    WHERE s.status = 'ready' AND s.published_at IS NOT NULL ORDER BY s.published_at DESC, s.id DESC LIMIT 400),
+  edge AS (SELECT count(*) >= 400 AS is_full, min(published_at) AS start FROM win)
   SELECT jsonb_build_object(
+    'window', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', w.id, 'dataset_id', w.dataset_id, 'loaded_rows', w.loaded_rows, 'published_at', w.published_at)
+        ORDER BY w.published_at DESC, w.id DESC), '[]'::jsonb) FROM win w),
+    'windowFull', (SELECT is_full FROM edge),
     'datasets', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name, 'sector', d.sector, 'agency', d.agency, 'source_id', d.source_id,
-        'source_url', d.source_url, 'grain', d.grain, 'latest_snapshot_id', d.latest_snapshot_id) ORDER BY d.id), '[]'::jsonb) FROM public.source_datasets d),
-    'snapshots', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'dataset_id', s.dataset_id, 'loaded_rows', s.loaded_rows, 'column_count', s.column_count,
-        'published_at', s.published_at, 'retrieved_at', s.retrieved_at, 'dims', s.ingest->'dimensions', 'consts', s.ingest->'constants',
-        'comp', s.ingest->'composites', 'family', s.coverage->'refresh_provenance'->>'family') ORDER BY s.id), '[]'::jsonb)
-      FROM public.source_snapshots s WHERE s.status = 'ready'))
+        'source_url', d.source_url, 'grain', d.grain, 'latest_snapshot_id', d.latest_snapshot_id,
+        'latest', (SELECT jsonb_build_object('id', s.id, 'loaded_rows', s.loaded_rows, 'column_count', s.column_count, 'published_at', s.published_at,
+            'retrieved_at', s.retrieved_at, 'dims', s.ingest->'dimensions', 'consts', s.ingest->'constants', 'comp', s.ingest->'composites',
+            'family', s.coverage->'refresh_provenance'->>'family') FROM public.source_snapshots s WHERE s.dataset_id = d.id AND s.id = d.latest_snapshot_id),
+        'prev', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'loaded_rows', p.loaded_rows, 'published_at', p.published_at) ORDER BY p.published_at DESC, p.id DESC), '[]'::jsonb)
+          FROM (SELECT s.id, s.loaded_rows, s.published_at FROM public.source_snapshots s, edge
+                WHERE s.dataset_id = d.id AND s.status = 'ready' AND edge.is_full AND s.published_at < edge.start
+                ORDER BY s.published_at DESC, s.id DESC LIMIT 2) p)) ORDER BY d.id), '[]'::jsonb)
+      FROM public.source_datasets d))
 $$;
 
 -- 4. Storage: members keep reading the app's own files in the datasets bucket, but not the vendor archives, the
@@ -303,3 +316,266 @@ REVOKE ALL ON FUNCTION public.source_find(text, integer) FROM PUBLIC, anon, auth
 GRANT EXECUTE ON FUNCTION public.source_find(text, integer) TO authenticated, service_role;
 REVOKE ALL ON FUNCTION public.source_library() FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.source_library() TO authenticated, service_role;
+
+-- ============================================================================================================
+-- Part from unit `abs` of round 4, appended verbatim from /home/claude/work/r4/abs/0069_part_abs_read.sql
+-- (SHA-256 dc36ae0b603aa2f425e45ad1a47400f7adeb997f91cbc6fef5887a449de1aca7). Unit `abs` describes it as optional: its view reads by direct selects and uses these objects as
+-- a test oracle. Applied twice locally over 0067 beside the statements above; no name is shared with them.
+-- ============================================================================================================
+-- Part of migration 0069: what the "Securitized credit" view of the Alt data page reads.
+-- Written by unit `abs` of round 4; the lead assembles the migration. Rules: src/lib/abs/AGENTS.md.
+--
+-- Three objects, all for signed-in members and all run as the caller, so the row security of the abs_*
+-- tables (migration 0067) stays in force: a caller without app access gets empty results, not an error.
+--
+--   abs_filing_periods   one row per loaded filing with the period its records state and the two dated
+--                        facts the page calls "offering-stage" on. Nothing is stored: the stage is read
+--                        from the filing's own dates each time.
+--   abs_monitor(family)  one call for the deal monitor of one family, with the coverage counts.
+--   abs_deal(deal_id)    one call for a deal page: the deal, every filing, the figures of its current
+--                        filings, the breakdowns of the newest one and, for commercial mortgages, the
+--                        loan and property records of the newest one.
+--
+-- The whole file can be applied twice: every statement replaces a definition with the same one.
+
+-- The period a filing's records state is the date-shaped bucket of the figure `records` split by
+-- `period_end` (src/lib/abs/auto.ts, cmbs.ts): both readers store it for every file. A file can hold
+-- records without a period (property rows of a commercial mortgage file: the bucket "(blank)"); a file
+-- whose records state more than one period end is reported through `period_ends`.
+--
+-- Stage, by dates only. A filing dated to a period that had not ended when it was filed cannot be a
+-- report on that period: it describes a pool at a cut-off, made for an offering.
+--   records_after_filing  the records state a period end later than the filing date
+--   cover_after_filing    the cover period in the EDGAR header ends after the filing date
+-- An offering file dated to a past cut-off by both clocks is not recognised by either: nothing stored
+-- says more (src/lib/abs/AGENTS.md, "Nothing here says whether a file is an offering-stage pool").
+--
+-- alone_amendment is the condition of abs_review(), which members cannot call: an ABS-EE/A that shares
+-- its cover period with no other loaded filing of the deal, so the filing it replaces is not tied to it.
+CREATE OR REPLACE VIEW public.abs_filing_periods WITH (security_invoker = true) AS
+  SELECT f.accession, f.deal_id, f.list_cik, f.form, f.filed, f.accepted_at,
+         f.period_start AS cover_period_start, f.period_end AS cover_period_end,
+         f.is_current, f.superseded_by, f.load_id, f.loaded_at,
+         p.records_period_end, p.period_ends,
+         coalesce(p.records_period_end > f.filed, false) AS records_after_filing,
+         coalesce(f.period_end > f.filed, false) AS cover_after_filing,
+         (f.form = 'ABS-EE/A' AND NOT EXISTS (
+            SELECT 1 FROM public.abs_filings o
+            WHERE o.status = 'loaded' AND o.deal_id = f.deal_id AND o.accession <> f.accession
+              AND o.period_end IS NOT DISTINCT FROM f.period_end)) AS alone_amendment
+  FROM public.abs_filings f
+  LEFT JOIN LATERAL (
+    SELECT (max(m.bucket) FILTER (WHERE m.bucket ~ '^\d{4}-\d{2}-\d{2}$'))::date AS records_period_end,
+           (count(*) FILTER (WHERE m.bucket ~ '^\d{4}-\d{2}-\d{2}$'))::integer AS period_ends
+    FROM public.abs_pool_metrics_live m
+    WHERE m.accession = f.accession AND m.load_id = f.load_id AND m.metric = 'records' AND m.dim = 'period_end'
+  ) p ON true
+  WHERE f.status = 'loaded';
+
+REVOKE ALL ON public.abs_filing_periods FROM PUBLIC, anon, authenticated;
+GRANT SELECT ON public.abs_filing_periods TO authenticated, service_role;
+
+-- The deal monitor of one family ('auto_loan', 'auto_lease', 'cmbs') and the coverage counts of all.
+--
+-- Per deal: how many filings are stored and in which state, the figures of the newest current filing
+-- that is not offering-stage (`latest`), the trend of up to `_periods` of the deal's newest such filings,
+-- oldest first, and the newest current offering-stage filing (`offering`). Figures are the stored rows
+-- of abs_pool_metrics as they are: value as text, the number of records behind it and the number left
+-- out. A split is {bucket: [value, n, n_missing]} of the family's end amount (metrics.ts:
+-- sched_end_balance, end_balance, end_securitization_value) by payment status (commercial mortgages) or
+-- days past due (auto). A trend point is [period end the records state, accession, end amount,
+-- {bucket: value}]: the same split without its counts, to keep a long list of deals small.
+-- Nothing is summed across deals and no share is computed here: the page derives shares and shows
+-- both parts.
+CREATE OR REPLACE FUNCTION public.abs_monitor(_family text, _periods integer DEFAULT 13)
+RETURNS jsonb
+LANGUAGE sql STABLE SET search_path = public AS $$
+  WITH cap AS (SELECT least(greatest(coalesce(_periods, 13), 2), 120) AS n),
+  keys AS (
+    SELECT CASE _family WHEN 'cmbs' THEN 'sched_end_balance' WHEN 'auto_loan' THEN 'end_balance'
+                        WHEN 'auto_lease' THEN 'end_securitization_value' END AS end_metric,
+           CASE _family WHEN 'cmbs' THEN 'payment_status' ELSE 'delinquency' END AS status_dim
+  ),
+  allf AS MATERIALIZED (
+    SELECT d.family, p.*, (p.records_after_filing OR p.cover_after_filing) AS offering
+    FROM abs_deals d JOIN abs_filing_periods p ON p.deal_id = d.deal_id
+  ),
+  fil AS (SELECT * FROM allf WHERE family = _family),
+  per_deal AS (
+    SELECT deal_id,
+           count(*) AS loaded,
+           count(*) FILTER (WHERE is_current) AS current,
+           count(*) FILTER (WHERE offering) AS offering,
+           count(*) FILTER (WHERE is_current AND NOT offering) AS monthly,
+           count(DISTINCT records_period_end) FILTER (WHERE is_current AND NOT offering) AS monthly_periods,
+           count(*) FILTER (WHERE alone_amendment) AS review,
+           min(records_period_end) FILTER (WHERE is_current AND NOT offering) AS first_period,
+           min(filed) AS first_filed, max(filed) AS last_filed
+    FROM fil GROUP BY deal_id
+  ),
+  ranked AS (
+    SELECT fil.*, row_number() OVER (PARTITION BY deal_id ORDER BY records_period_end DESC NULLS LAST, accepted_at DESC NULLS LAST, accession DESC) AS rn
+    FROM fil WHERE is_current AND NOT offering
+  ),
+  pts AS (
+    SELECT r.deal_id, r.rn, r.accession, r.list_cik, r.form, r.filed, r.accepted_at, r.cover_period_start, r.cover_period_end,
+           r.records_period_end, r.period_ends,
+           (SELECT m.value::text FROM abs_pool_metrics_live m, keys k
+             WHERE m.accession = r.accession AND m.load_id = r.load_id AND m.metric = k.end_metric AND m.dim = '' AND m.bucket = '') AS end_value,
+           (SELECT jsonb_build_array(jsonb_object_agg(m.bucket, m.value::text), jsonb_object_agg(m.bucket, jsonb_build_array(m.value::text, m.n, m.n_missing)))
+              FROM abs_pool_metrics_live m, keys k
+             WHERE m.accession = r.accession AND m.load_id = r.load_id AND m.metric = k.end_metric AND m.dim = k.status_dim) AS splits,
+           CASE WHEN r.rn = 1 THEN
+             (SELECT jsonb_object_agg(m.metric, jsonb_build_array(m.value::text, m.n, m.n_missing)) FROM abs_pool_metrics_live m
+               WHERE m.accession = r.accession AND m.load_id = r.load_id AND m.dim = '' AND m.bucket = '') END AS totals
+    FROM ranked r, cap WHERE r.rn <= cap.n
+  ),
+  agg AS (
+    SELECT p.deal_id,
+           (jsonb_agg(jsonb_build_object(
+              'accession', p.accession, 'list_cik', p.list_cik, 'form', p.form, 'filed', p.filed, 'accepted_at', p.accepted_at,
+              'cover_start', p.cover_period_start, 'cover_end', p.cover_period_end,
+              'records_end', p.records_period_end, 'period_ends', p.period_ends,
+              'totals', coalesce(p.totals, '{}'::jsonb), 'split', coalesce(p.splits -> 1, '{}'::jsonb))) FILTER (WHERE p.rn = 1)) -> 0 AS latest,
+           jsonb_agg(jsonb_build_array(p.records_period_end, p.accession, p.end_value, coalesce(p.splits -> 0, '{}'::jsonb))
+                     ORDER BY p.rn DESC) AS trend
+    FROM pts p GROUP BY p.deal_id
+  ),
+  off AS (
+    SELECT DISTINCT ON (f.deal_id) f.deal_id, jsonb_build_object(
+             'accession', f.accession, 'list_cik', f.list_cik, 'form', f.form, 'filed', f.filed,
+             'cover_end', f.cover_period_end, 'records_end', f.records_period_end,
+             'records_after_filing', f.records_after_filing, 'cover_after_filing', f.cover_after_filing,
+             'totals', coalesce((SELECT jsonb_object_agg(m.metric, jsonb_build_array(m.value::text, m.n, m.n_missing)) FROM abs_pool_metrics_live m
+                                  WHERE m.accession = f.accession AND m.load_id = f.load_id AND m.dim = '' AND m.bucket = ''), '{}'::jsonb)) AS offering
+    FROM fil f WHERE f.is_current AND f.offering
+    ORDER BY f.deal_id, f.filed DESC, f.accepted_at DESC NULLS LAST, f.accession DESC
+  )
+  SELECT jsonb_build_object(
+    'family', _family,
+    'periods_cap', (SELECT n FROM cap),
+    'coverage', jsonb_build_object(
+      'families', coalesce((
+        SELECT jsonb_agg(jsonb_build_object(
+                 'family', c.family, 'deals', c.deals, 'loaded', c.loaded, 'current', c.current, 'offering', c.offering,
+                 'newest_period', c.newest_period, 'first_filed', c.first_filed, 'last_filed', c.last_filed,
+                 'last_loaded_at', c.last_loaded_at) ORDER BY c.family)
+        FROM (SELECT family, count(DISTINCT deal_id) AS deals, count(*) AS loaded,
+                     count(*) FILTER (WHERE is_current) AS current, count(*) FILTER (WHERE offering) AS offering,
+                     max(records_period_end) FILTER (WHERE is_current AND NOT offering) AS newest_period,
+                     min(filed) AS first_filed, max(filed) AS last_filed, max(loaded_at) AS last_loaded_at
+              FROM allf GROUP BY family) c), '[]'::jsonb),
+      'filings', coalesce((SELECT jsonb_object_agg(s.status, s.n) FROM (SELECT status, count(*) AS n FROM abs_filings GROUP BY status) s), '{}'::jsonb)),
+    'deals', coalesce((
+      SELECT jsonb_agg(jsonb_build_object(
+               'deal_id', d.deal_id, 'issuer_cik', d.issuer_cik, 'issuer_name', d.issuer_name, 'file_number', d.file_number,
+               'depositor_cik', d.depositor_cik, 'sponsor_cik', d.sponsor_cik,
+               'files', jsonb_build_object('loaded', g.loaded, 'current', g.current, 'offering', g.offering, 'monthly', g.monthly,
+                                           'monthly_periods', g.monthly_periods, 'review', g.review,
+                                           'first_period', g.first_period, 'first_filed', g.first_filed, 'last_filed', g.last_filed),
+               'latest', a.latest,
+               'trend', coalesce(a.trend, '[]'::jsonb),
+               'offering', o.offering)
+             ORDER BY d.issuer_name, d.deal_id)
+      FROM abs_deals d JOIN per_deal g ON g.deal_id = d.deal_id
+      LEFT JOIN agg a ON a.deal_id = d.deal_id
+      LEFT JOIN off o ON o.deal_id = d.deal_id
+      WHERE d.family = _family), '[]'::jsonb))
+$$;
+
+-- One deal. `filings` lists every loaded filing of the deal, newest filing first, with the asset file
+-- that was read (name, address, size and SHA-256 of the bytes SEC served, records) and, for a current
+-- filing, its figures as rows [metric, dim, bucket, value, n, n_missing]: the pool totals, the split of
+-- the end amount and of the record or loan count by status and, for auto files, the payment-to-income
+-- quantiles as written. `waiting`
+-- counts the filings EDGAR lists under the trust's own CIK that are not stored, by state.
+-- `shown` is the filing whose detail is given: the newest current filing that is not offering-stage,
+-- or the newest current offering-stage filing when the deal has no other. For it: `breakdowns` (auto:
+-- state, make, score band, new or used, zero-balance code) and, for commercial mortgages, `loans` and
+-- `properties` as the file states them, in file order.
+CREATE OR REPLACE FUNCTION public.abs_deal(_deal_id text)
+RETURNS jsonb
+LANGUAGE sql STABLE SET search_path = public AS $$
+  WITH d AS (SELECT * FROM abs_deals WHERE deal_id = _deal_id),
+  keys AS (
+    SELECT CASE d.family WHEN 'cmbs' THEN 'sched_end_balance' WHEN 'auto_loan' THEN 'end_balance'
+                         WHEN 'auto_lease' THEN 'end_securitization_value' END AS end_metric,
+           CASE d.family WHEN 'cmbs' THEN 'payment_status' ELSE 'delinquency' END AS status_dim
+    FROM d
+  ),
+  fil AS MATERIALIZED (
+    SELECT p.*, (p.records_after_filing OR p.cover_after_filing) AS offering
+    FROM abs_filing_periods p WHERE p.deal_id = _deal_id
+  ),
+  shown AS (
+    SELECT * FROM fil WHERE is_current
+    ORDER BY offering, records_period_end DESC NULLS LAST, accepted_at DESC NULLS LAST, accession DESC
+    LIMIT 1
+  )
+  SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM d) THEN NULL ELSE jsonb_build_object(
+    'deal', (SELECT jsonb_build_object('deal_id', d.deal_id, 'issuer_cik', d.issuer_cik, 'issuer_name', d.issuer_name,
+                                       'file_number', d.file_number, 'family', d.family, 'depositor_cik', d.depositor_cik,
+                                       'sponsor_cik', d.sponsor_cik, 'updated_at', d.updated_at) FROM d),
+    'filings', coalesce((
+      SELECT jsonb_agg(jsonb_build_object(
+               'accession', f.accession, 'list_cik', f.list_cik, 'form', f.form, 'filed', f.filed, 'accepted_at', f.accepted_at,
+               'cover_start', f.cover_period_start, 'cover_end', f.cover_period_end,
+               'records_end', f.records_period_end, 'period_ends', f.period_ends,
+               'records_after_filing', f.records_after_filing, 'cover_after_filing', f.cover_after_filing,
+               'is_current', f.is_current, 'superseded_by', f.superseded_by, 'alone_amendment', f.alone_amendment,
+               'loaded_at', f.loaded_at,
+               'asset_class', x.asset_class, 'issuer_name', x.issuer_name, 'depositor_cik', x.depositor_cik,
+               'sponsor_cik', x.sponsor_cik, 'file_number', x.file_number,
+               'file', (SELECT jsonb_build_object('name', doc.name, 'url', doc.url, 'bytes', doc.bytes, 'sha256', doc.sha256,
+                                                  'records', doc.records, 'retrieved_at', doc.retrieved_at)
+                        FROM abs_documents doc WHERE doc.accession = f.accession AND doc.sha256 IS NOT NULL
+                        ORDER BY doc.seq LIMIT 1),
+               'figures', CASE WHEN f.is_current THEN coalesce((
+                            SELECT jsonb_agg(jsonb_build_array(m.metric, m.dim, m.bucket, m.value::text, m.n, m.n_missing)
+                                             ORDER BY m.metric, m.dim, m.bucket)
+                            FROM abs_pool_metrics_live m, keys k
+                            WHERE m.accession = f.accession AND m.load_id = f.load_id
+                              AND (m.dim = '' OR m.dim = 'quantile' OR (m.dim = k.status_dim AND m.metric IN (k.end_metric, 'loans', 'records')))), '[]'::jsonb) END)
+             ORDER BY f.filed DESC, f.accepted_at DESC NULLS LAST, f.accession DESC)
+      FROM fil f JOIN abs_filings x ON x.accession = f.accession), '[]'::jsonb),
+    'waiting', coalesce((
+      SELECT jsonb_object_agg(w.status, w.n)
+      FROM (SELECT o.status, count(*) AS n FROM abs_filings o, d
+            WHERE o.list_cik = d.issuer_cik AND o.deal_id IS NULL AND o.status <> 'loaded' GROUP BY o.status) w), '{}'::jsonb),
+    'not_stored', coalesce((
+      SELECT jsonb_agg(jsonb_build_object('accession', o.accession, 'list_cik', o.list_cik, 'form', o.form, 'filed', o.filed,
+                                          'status', o.status, 'status_detail', o.status_detail) ORDER BY o.filed DESC, o.accession DESC)
+      FROM abs_filings o, d
+      WHERE o.list_cik = d.issuer_cik AND o.deal_id IS NULL AND o.status IN ('skipped', 'failed')), '[]'::jsonb),
+    'shown', (SELECT jsonb_build_object('accession', s.accession, 'offering', s.offering, 'records_end', s.records_period_end) FROM shown s),
+    'breakdowns', coalesce((
+      SELECT jsonb_agg(jsonb_build_array(m.metric, m.dim, m.bucket, m.value::text, m.n, m.n_missing) ORDER BY m.dim, m.metric, m.bucket)
+      FROM shown s JOIN abs_pool_metrics_live m ON m.accession = s.accession AND m.load_id = s.load_id, keys k
+      WHERE m.dim IN ('state', 'make', 'score_band', 'new_used', 'zero_balance_code')
+        AND m.metric IN (k.end_metric, 'records')), '[]'::jsonb),
+    'loans', coalesce((
+      SELECT jsonb_agg(to_jsonb(a) ORDER BY a.rec)
+      FROM (SELECT l.rec, l.kind, l.asset_number, l.period_begin, l.period_end, l.origination_date,
+                   l.original_loan_amount, l.original_term_months, l.maturity_date, l.original_rate, l.securitization_rate,
+                   l.rate_type_code, l.loan_structure_code, l.payment_type_code, l.properties, l.interest_only, l.balloon,
+                   l.securitization_balance, l.begin_balance, l.sched_end_balance, l.actual_end_balance, l.period_rate,
+                   l.paid_through_date, l.payment_status_code, l.pi_advances_outstanding, l.non_recoverable,
+                   l.modified, l.modification_code, l.last_modification_date, l.realized_loss,
+                   l.liquidation_prepayment_code, l.liquidation_prepayment_date, l.workout_strategy_code,
+                   l.special_servicer_transfer_date, l.master_servicer_return_date
+            FROM shown s JOIN abs_cmbs_assets_live l ON l.accession = s.accession AND l.load_id = s.load_id) a), '[]'::jsonb),
+    'properties', coalesce((
+      SELECT jsonb_agg(to_jsonb(b) ORDER BY b.rec, b.seq)
+      FROM (SELECT q.rec, q.seq, q.asset_number, q.loan_asset_number, q.link, q.name, q.city, q.state, q.type_code,
+                   q.status_code, q.defeased_code, q.year_built, q.sq_ft, q.units,
+                   q.valuation_securitization, q.valuation_securitization_date, q.valuation_recent, q.valuation_recent_date,
+                   q.occupancy_securitization, q.occupancy_recent, q.financials_recent_end,
+                   q.dscr_noi_securitization, q.dscr_noi_recent, q.dscr_ncf_securitization, q.dscr_ncf_recent
+            FROM shown s JOIN abs_cmbs_properties_live q ON q.accession = s.accession AND q.load_id = s.load_id) b), '[]'::jsonb))
+  END
+$$;
+
+REVOKE ALL ON FUNCTION public.abs_monitor(text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.abs_deal(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.abs_monitor(text, integer) TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.abs_deal(text) TO authenticated, service_role;
