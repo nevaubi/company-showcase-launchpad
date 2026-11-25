@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { describeDataset } from "./catalog";
 import { FakeSourceDb, type FakeRow } from "./read.fake";
 import {
-  buildLibrary, LIBRARY_DATASET_SELECT, LIBRARY_TTL_MS, LIBRARY_WINDOW, readLibraryWire, resetReadState,
+  buildLibrary, LIBRARY_DATASET_SELECT, LIBRARY_RETRY_MS, LIBRARY_TTL_MS, LIBRARY_WINDOW, readLibraryWire, resetReadState,
   type LibraryDatasetRow, type LibraryEventRow, type LibrarySource,
 } from "./read.server";
 import { packLibraryRows, unpackLibrary } from "./read-types";
@@ -191,6 +191,25 @@ describe("readLibraryWire", () => {
     const r = await readLibraryWire(db, t0 + 2 * LIBRARY_TTL_MS + 2);
     expect(kinds().slice(3)).toEqual(["source_snapshots", "source_snapshots", "source_datasets"]);
     expect(r.ok && unpackLibrary(r.data).datasets.find(x => x.id === DS[0].id)?.rows).toBe(102);
+  });
+  it("serves the held copy when the ten-minute check fails, and checks again a minute later (review int-code N10)", async () => {
+    const t0 = Date.parse(BUILT);
+    const first = await readLibraryWire(db, t0);
+    expect(first.ok).toBe(true);
+    const before = db.calls.length;
+    db.failNext = { code: "57014", message: "canceling statement due to statement timeout" };
+    const held = await readLibraryWire(db, t0 + LIBRARY_TTL_MS + 1);
+    expect(held).toEqual(first);
+    expect(db.calls).toHaveLength(before + 1);
+    // within the minute the copy is served without a select; after it, the check runs again
+    await readLibraryWire(db, t0 + LIBRARY_TTL_MS + LIBRARY_RETRY_MS - 1);
+    expect(db.calls).toHaveLength(before + 1);
+    expect((await readLibraryWire(db, t0 + LIBRARY_TTL_MS + LIBRARY_RETRY_MS + 2)).ok).toBe(true);
+    expect(db.calls).toHaveLength(before + 2);
+    // with no copy held, a failure is answered as one
+    resetReadState();
+    db.failNext = { code: "57014", message: "canceling statement due to statement timeout" };
+    expect(await readLibraryWire(db, t0)).toMatchObject({ ok: false, reason: "timeout" });
   });
   it("uses source_library when it exists", async () => {
     const src = sourceOf(SNAPS, LIBRARY_WINDOW);

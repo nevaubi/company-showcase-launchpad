@@ -490,6 +490,8 @@ export const LIBRARY_DATASET_SELECT =
 export const LIBRARY_EVENT_SELECT = "id,dataset_id,loaded_rows,published_at";
 const DIMENSION_ORDER: SourceDimension[] = ["entity_id", "entity_name", "period", "geo_level", "geo_code", "geo_name", "source_url"];
 export const LIBRARY_TTL_MS = 10 * 60_000;
+/** After a failed check or rebuild, the held copy is served and the check tried again this much later. */
+export const LIBRARY_RETRY_MS = 60_000;
 /** Dataset pages per build without 0069 (2,000 datasets; 1,059 today). With the probe and the window: at most four selects. */
 export const LIBRARY_DATASET_PAGES = 2;
 const MAX_CHANGE_GROUPS = 200;
@@ -656,7 +658,8 @@ let libraryFlight: Promise<SourceRead<SourceLibraryWire>> | null = null;
 
 /**
  * The landing in one call, packed (`unpackLibrary` restores it). Cached per server process: reused for ten minutes,
- * then kept while the newest publication time is unchanged (one select). A rebuild reads, without 0069, the newest
+ * then kept while the newest publication time is unchanged (one select); when that select or a rebuild fails, the
+ * held copy is served and the check tried again a minute later. A rebuild reads, without 0069, the newest
  * 400 publications and the datasets with their current and two earlier snapshots embedded: at most four selects
  * whatever the number of snapshots. Every member sees the same published rows (row-level security is
  * `has_app_access` and `status = 'ready'`, embedded rows included), so one copy serves all members.
@@ -693,6 +696,14 @@ async function directLibrary(db: SourceDirectClient): Promise<LibrarySource> {
   return { datasets, window, windowFull };
 }
 async function refreshLibrary(db: SourceDirectClient, now: number): Promise<SourceRead<SourceLibraryWire>> {
+  const held = library;
+  const read = await rebuildLibrary(db, now);
+  if (read.ok || !held) return read;
+  // a failed check or rebuild keeps the good copy this process holds (review int-code N10); it is checked again soon
+  held.checkedAt = now - LIBRARY_TTL_MS + LIBRARY_RETRY_MS;
+  return readOk(held.wire);
+}
+async function rebuildLibrary(db: SourceDirectClient, now: number): Promise<SourceRead<SourceLibraryWire>> {
   return guarded(async () => {
     let newest: string | null = null;
     if (library) {
