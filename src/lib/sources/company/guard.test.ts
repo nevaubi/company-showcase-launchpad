@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectorCert, depositsScopeProven, guardAltRows, guardEntry, reviewCaveat } from "./guard";
+import { bankScopeLine, collectorCert, depositsScopeProven, guardAltRows, guardEntry, reviewCaveat } from "./guard";
 
 type R = { uid: string; dataset: string; date: string; value: number | null; meta: Record<string, unknown> };
 const bank = (ticker: string, cert: number, field: string, date: string): R => ({ uid: `fdic:${ticker}:${field}:${date.replace(/-/g, "")}`, dataset: "bank", date, value: 1, meta: { field, cert } });
@@ -92,5 +92,17 @@ describe("reviewCaveat", () => {
     expect(reviewCaveat("MS")).toBe("Matched by name and by the bank named in the company's subsidiary list, not by a shared identifier.");
     expect(reviewCaveat("wex")).toBe("Matched by name, not by a shared identifier.");
     expect(reviewCaveat("JPM")).toBeNull();
+  });
+});
+
+describe("bankScopeLine", () => {
+  it("names the one bank a call-report panel reads when the company holds several, and says nothing otherwise", () => {
+    expect(bankScopeLine("WTFC", 33935)).toBe(
+      "Call reports of one bank, certificate 33935, of the 17 institutions the company holds; each one's own figures are under Insured banks.",
+    );
+    expect(bankScopeLine("MCHB", 1768)).toBeNull(); // one bank: the panel is that bank
+    expect(bankScopeLine("WTFC", 29011)).toBeNull(); // never a certificate the mapping does not prove
+    expect(bankScopeLine("WTFC", null)).toBeNull();
+    expect(bankScopeLine("MS", 32992)).toBeNull(); // not mapped: the caveat line speaks instead
   });
 });

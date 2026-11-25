@@ -20,7 +20,7 @@ import { BANK_RISK, bpChange, buildCompanyAlt, type CompanyAlt, type DatasetView
 import { revenuePoints, yearOnYear } from "@/lib/alt/derive";
 import { altCompanyQuery, type AltRow } from "@/lib/alt/query";
 import { useCompany } from "@/lib/data";
-import { guardAltRows, guardEntry, reviewCaveat } from "@/lib/sources/company/guard";
+import { bankScopeLine, guardAltRows, guardEntry, reviewCaveat } from "@/lib/sources/company/guard";
 import { datasetHref, FDIC_NATIVE_DATASET, soleBankCertificate } from "@/lib/sources/links";
 import { cn } from "@/lib/utils";
 
@@ -174,6 +174,7 @@ function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetVie
   const name = SECTION_NAME[view.dataset] ?? view.label;
   const series = view.dataset === "settlement" || view.dataset === "attention" || view.dataset === "complaints";
   const caveat = view.dataset === "bank" || view.dataset === "deposits" ? reviewCaveat(ticker) : null;
+  const scope = view.dataset === "bank" ? bankScopeLine(ticker, Number(soleBankCertificate(view.rows as never)) || null) : null;
   return (
     <div data-section={name} id={panelId(view.dataset)} className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]", (WIDE.has(view.dataset) || span) && "xl:col-span-2")}>
       <Panel
@@ -185,6 +186,7 @@ function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetVie
         actions={view.dataset === "bank" ? <BankRecordsLink ticker={ticker} rows={view.rows} /> : undefined}
       >
         {caveat && <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">{caveat}</p>}
+        {scope && <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">{scope}</p>}
         {!OWN_STATS.has(view.dataset) && <Figures ticker={ticker} figures={view.figures} />}
         {view.coverage && <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">{view.coverage}</p>}
         {view.flag && <div className="border-b"><FlagLine flag={view.flag} ticker={ticker} /></div>}

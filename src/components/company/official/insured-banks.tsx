@@ -109,6 +109,12 @@ export function InsuredBanks({ ticker, data, selected, onSelect, pending }: { ti
   );
 }
 
+/** The history opens with quarters whose cells are empty (not zeros the FDIC uses for "not reported"). */
+const leadEmpty = (points: { value: number | null; gap: string | null }[]) => {
+  const first = points.findIndex(p => p.value != null);
+  return first > 0 && points.slice(0, first).every(p => p.gap !== "not-reported");
+};
+
 function BankDetail({ bank, history, note, pending }: { ticker: string; bank: OfficialBank; history: BankHistory | null; note: string | null; pending: boolean }) {
   const fields = history?.measures.map(m => m.field) ?? [];
   const [field, setField] = useState("ASSET");
@@ -184,6 +190,7 @@ function BankDetail({ bank, history, note, pending }: { ticker: string; bank: Of
             )}
             <p className="mt-1 text-[11px] text-muted-foreground">
               {series.notReported > 0 && `${series.notReported} ${series.notReported === 1 ? "quarter is" : "quarters are"} stored as 0 before the ratio was reported and not drawn. `}
+              {leadEmpty(series.points) && `No figure is stored before ${quarterLabel(series.points.find(p => p.value != null)!.period)}. `}
               The bank's own reports; quarters before the company held it may be included. History retrieved {retrieved(history?.sources[0])}
               {history && history.sources.length > 1 ? `, latest quarter retrieved ${retrieved(history.sources[1])}` : ""}.
             </p>

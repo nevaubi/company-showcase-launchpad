@@ -25,6 +25,13 @@ export function reviewCaveat(ticker: string, guard: BankGuardFile = BANK_GUARD):
   return kind ? NAME_CAVEAT[kind] : null;
 }
 
+/** For a company that holds several institutions, the line saying which one bank a call-report panel reads, or null. */
+export function bankScopeLine(ticker: string, cert: number | null, guard: BankGuardFile = BANK_GUARD): string | null {
+  const e = guardEntry(ticker, guard);
+  if (!e || e.certs.length < 2 || cert == null || !e.certs.includes(cert)) return null;
+  return `Call reports of one bank, certificate ${cert}, of the ${e.certs.length} institutions the company holds; each one's own figures are under Insured banks.`;
+}
+
 /**
  * The certificate a collector may read for a ticker: the candidate when the mapping does not cover the ticker or
  * proves the candidate, otherwise the largest proven insured bank. Never a certificate of another company.
