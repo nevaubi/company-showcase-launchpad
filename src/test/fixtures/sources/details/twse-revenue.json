@@ -1,0 +1,237 @@
+{
+ "dataset": {
+  "id": "official_twse_monthly_revenue_native_current",
+  "name": "TWSE · Reported monthly revenue · All industries",
+  "sector": "00_universal",
+  "agency": "Taiwan Stock Exchange",
+  "source_id": "TWSE_MONTHLY",
+  "source_url": "https://openapi.twse.com.tw/v1/opendata/t187ap05_L",
+  "description": "Reported monthly revenue: every returned issuer row and all 14 native Chinese fields from the official TWSE endpoint. All returned industries are included, separately from historical technology subsets. Exchange population completeness is not independently established.",
+  "grain": "Exchange-listed issuer × reported month",
+  "units": "Exact reported strings. Percentages are explicitly labeled in source headers; currency and monetary scale are not stated in this JSON schema.",
+  "notes": "Issuer identity uses the native company code within this exchange only. No parent, ADR, or US-company mapping is inferred. Original ROC month and table dates remain in native fields. The Gregorian search index adds 1911 to the ROC year using the Taiwan Ministry of the Interior calendar table; no financial value is converted. All returned industries are included. The endpoint has no pagination or independent total-count field, so coverage describes the complete returned array rather than asserting every eligible issuer has filed.",
+  "latest_snapshot_id": "7a791406127805fdf88981b4d60ccab08388fc6a58834a7845bf05ad9595ea14",
+  "created_at": "2026-11-25T06:04:09.640053+00:00",
+  "updated_at": "2026-11-25T06:04:17.664739+00:00"
+ },
+ "snapshot": {
+  "id": "7a791406127805fdf88981b4d60ccab08388fc6a58834a7845bf05ad9595ea14",
+  "dataset_id": "official_twse_monthly_revenue_native_current",
+  "file_sha256": "90a9b4fae453de69215d22da38b7e32944fd749978fde4e44ff1737fa66d3e0b",
+  "source_path": "refresh/7a791406127805fdf88981b4d60ccab08388fc6a58834a7845bf05ad9595ea14.csv",
+  "retrieved_at": "2026-11-25T06:04:12.031+00:00",
+  "status": "ready",
+  "expected_rows": 1091,
+  "loaded_rows": 1091,
+  "columns": [
+   {
+    "key": "col0001",
+    "type": "string",
+    "label": "出表日期",
+    "native_type": "string"
+   },
+   {
+    "key": "col0002",
+    "type": "string",
+    "label": "資料年月",
+    "description": "Native ROC year and month, preserved exactly. The Gregorian search index is separately derived by adding 1911 to the ROC year.",
+    "native_type": "string",
+    "period_basis": "Native ROC year/month"
+   },
+   {
+    "key": "col0003",
+    "type": "string",
+    "label": "公司代號",
+    "native_type": "string"
+   },
+   {
+    "key": "col0004",
+    "type": "string",
+    "label": "公司名稱",
+    "native_type": "string"
+   },
+   {
+    "key": "col0005",
+    "type": "string",
+    "label": "產業別",
+    "native_type": "string"
+   },
+   {
+    "key": "col0006",
+    "type": "string",
+    "label": "營業收入-當月營收",
+    "native_type": "string"
+   },
+   {
+    "key": "col0007",
+    "type": "string",
+    "label": "營業收入-上月營收",
+    "native_type": "string"
+   },
+   {
+    "key": "col0008",
+    "type": "string",
+    "label": "營業收入-去年當月營收",
+    "native_type": "string"
+   },
+   {
+    "key": "col0009",
+    "type": "string",
+    "unit": "Percent",
+    "label": "營業收入-上月比較增減(%)",
+    "native_type": "string",
+    "unit_evidence": "Explicit (%) in the official native field label"
+   },
+   {
+    "key": "col0010",
+    "type": "string",
+    "unit": "Percent",
+    "label": "營業收入-去年同月增減(%)",
+    "native_type": "string",
+    "unit_evidence": "Explicit (%) in the official native field label"
+   },
+   {
+    "key": "col0011",
+    "type": "string",
+    "label": "累計營業收入-當月累計營收",
+    "native_type": "string"
+   },
+   {
+    "key": "col0012",
+    "type": "string",
+    "label": "累計營業收入-去年累計營收",
+    "native_type": "string"
+   },
+   {
+    "key": "col0013",
+    "type": "string",
+    "unit": "Percent",
+    "label": "累計營業收入-前期比較增減(%)",
+    "native_type": "string",
+    "unit_evidence": "Explicit (%) in the official native field label"
+   },
+   {
+    "key": "col0014",
+    "type": "string",
+    "label": "備註",
+    "native_type": "string"
+   }
+  ],
+  "column_count": 14,
+  "coverage": {
+   "market": "TWSE",
+   "periods": [
+    "2026-10"
+   ],
+   "source_ids": [
+    "TWSE_MONTHLY"
+   ],
+   "entity_type": "exchange_listed_issuer",
+   "field_count": 14,
+   "source_urls": [
+    "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
+   ],
+   "identity_rule": "Native issuer code within the named exchange + native reported month. No parent, ADR, US-company, or cross-exchange identity inference.",
+   "native_period": "11510",
+   "monetary_scale": "not_asserted_by_json_schema",
+   "population_role": "all_returned_issuers_all_industries",
+   "entity_id_column": "公司代號",
+   "period_frequency": "monthly",
+   "monetary_currency": "not_asserted_by_json_schema",
+   "period_index_rule": "Gregorian search index only: ROC year + 1911, month unchanged. Original 資料年月 cells remain exact native text.",
+   "calendar_reference": "https://www.ris.gov.tw/documents/html/8/1/219.html",
+   "completeness_basis": "Complete returned response: the successful unpaginated JSON array is parsed through its closing bracket and every row is preserved. Exchange population completeness is not independently established; the API provides no independent total-count field.",
+   "native_table_dates": [
+    "1151117"
+   ],
+   "native_period_field": "資料年月",
+   "newly_reported_codes": [],
+   "returned_field_count": 14,
+   "reported_issuer_count": 1091,
+   "requested_field_count": 14,
+   "publication_time_known": false,
+   "source_retrieval_times": [
+    "2026-11-25T06:04:12.031Z"
+   ],
+   "availability_time_known": false,
+   "population_change_policy": "Source absence is recorded without asserting a cause or inserting a missing issuer row.",
+   "period_index_is_native_text": false,
+   "supporting_source_file_shas": [
+    "6f47523aead8cf9da8bba6e9b511198eb1b491080c6cb2e20dda927cc31d8bac",
+    "207a141d007bd0d37f1313bfdf09ee0b63b64d55ae04913e6112b1cc54e97edf"
+   ],
+   "previous_population_compared": false,
+   "reported_issuer_count_change": null,
+   "empty_string_counts_by_column": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    3,
+    4,
+    0,
+    0,
+    0,
+    0
+   ],
+   "reported_population_decreased": false,
+   "previous_reported_issuer_count": null,
+   "previously_reported_codes_absent": [],
+   "requested_but_not_returned_count": 0,
+   "requested_but_not_returned_fields": [],
+   "_preview_dropped_keys": [
+    "reported_company_codes",
+    "refresh_provenance"
+   ]
+  },
+  "quality": {
+   "refresh": true,
+   "row_width_verified": true,
+   "source_value_policy": "exact_strings_blank_is_empty_string",
+   "previous_snapshot_id": null,
+   "blank_counts_by_column": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    3,
+    4,
+    0,
+    0,
+    0,
+    0
+   ],
+   "header_matches_previous": true,
+   "native_values_unchanged": true,
+   "expected_row_count_known": true,
+   "refresh_identity_version": "source-1:retrieved_at"
+  },
+  "ingest": {
+   "format": "csv",
+   "encoding": "utf-8",
+   "constants": {
+    "period": "2026-10",
+    "source_url": "https://openapi.twse.com.tw/v1/opendata/t187ap05_L"
+   },
+   "delimiter": ",",
+   "dimensions": {
+    "entity_id": 2,
+    "entity_name": 3
+   },
+   "header_rows": 1,
+   "null_values": []
+  },
+  "attempts": 1,
+  "created_at": "2026-11-25T06:04:15.211864+00:00",
+  "published_at": "2026-11-25T06:04:17.664739+00:00"
+ },
+ "file": null
+}

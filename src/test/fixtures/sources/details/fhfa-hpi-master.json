@@ -1,0 +1,158 @@
+{
+ "dataset": {
+  "id": "official_11_real_estate_hpi_master_all_0755e8292e",
+  "name": "FHFA House Price Index \u2014 complete master history",
+  "sector": "11_real_estate",
+  "agency": "Federal Housing Finance Agency",
+  "source_id": "FHFA_MASTER",
+  "source_url": "https://www.fhfa.gov/data/hpi/datasets",
+  "description": "Complete retained FHFA master history across index types, flavors, frequencies and geographic levels. Keep all series-context fields; index bases and seasonal adjustments differ. Retained table: 186,031 source rows and 12 columns.",
+  "grain": "index type / flavor / frequency / geography / year / period",
+  "units": "Source-native, column-specific units; retained official dictionaries and row unit fields govern interpretation.",
+  "notes": "Do not join or compare index levels across different index families without checking base periods; current vintage includes revisions.\nComplete master snapshot; 186,031 rows. Index base differs by series.\nSource values and disclosure flags are unchanged. Retrieval time does not establish historical public availability.",
+  "latest_snapshot_id": "ed72e8d4dc863aaa9105655515e7eb8cd04339b4d9de53ef134b8a4a3801e44a",
+  "created_at": "2026-11-25T05:29:55.347319+00:00",
+  "updated_at": "2026-11-25T07:01:53.84661+00:00"
+ },
+ "snapshot": {
+  "id": "ed72e8d4dc863aaa9105655515e7eb8cd04339b4d9de53ef134b8a4a3801e44a",
+  "dataset_id": "official_11_real_estate_hpi_master_all_0755e8292e",
+  "file_sha256": "a90f6cd7967de3e93b7005ca6fd2dcb7ac289ee18c329db24d4d1e1ea2d662aa",
+  "source_path": "refresh/ed72e8d4dc863aaa9105655515e7eb8cd04339b4d9de53ef134b8a4a3801e44a.csv",
+  "retrieved_at": "2026-11-25T07:00:43.531+00:00",
+  "status": "ready",
+  "expected_rows": 187213,
+  "loaded_rows": 187213,
+  "columns": [
+   {
+    "key": "col0001",
+    "type": "string",
+    "label": "hpi_type"
+   },
+   {
+    "key": "col0002",
+    "type": "string",
+    "label": "hpi_flavor"
+   },
+   {
+    "key": "col0003",
+    "type": "string",
+    "label": "frequency"
+   },
+   {
+    "key": "col0004",
+    "type": "string",
+    "label": "level"
+   },
+   {
+    "key": "col0005",
+    "type": "string",
+    "label": "place_name"
+   },
+   {
+    "key": "col0006",
+    "type": "string",
+    "label": "place_id"
+   },
+   {
+    "key": "col0007",
+    "type": "string",
+    "label": "yr"
+   },
+   {
+    "key": "col0008",
+    "type": "string",
+    "label": "period"
+   },
+   {
+    "key": "col0009",
+    "type": "string",
+    "label": "index_nsa"
+   },
+   {
+    "key": "col0010",
+    "type": "string",
+    "label": "index_sa"
+   },
+   {
+    "key": "col0011",
+    "type": "string",
+    "label": "rstderr"
+   },
+   {
+    "key": "col0012",
+    "type": "string",
+    "label": "note"
+   }
+  ],
+  "column_count": 12,
+  "coverage": {
+   "source_ids": [
+    "FHFA_MASTER"
+   ],
+   "source_urls": [
+    "https://www.fhfa.gov/hpi/download/monthly/hpi_master.csv"
+   ],
+   "period_components": [
+    "hpi_type",
+    "hpi_flavor",
+    "frequency",
+    "yr",
+    "period"
+   ],
+   "publication_time_known": false,
+   "source_retrieval_times": [
+    "2026-11-25T07:00:43.531Z"
+   ],
+   "availability_time_known": false,
+   "period_index_is_native_text": true,
+   "supporting_source_file_shas": [],
+   "_preview_dropped_keys": [
+    "refresh_provenance"
+   ]
+  },
+  "quality": {
+   "refresh": true,
+   "row_width_verified": true,
+   "source_value_policy": "exact_strings_blank_is_empty_string",
+   "previous_snapshot_id": "7b90b2cc2c5c8346c0be05ba04ca00d911942fa75872a0b77e4d22700ece6d85",
+   "blank_counts_by_column": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    90424,
+    128583,
+    128583
+   ],
+   "header_matches_previous": true,
+   "native_values_unchanged": true,
+   "expected_row_count_known": true,
+   "refresh_identity_version": "source-1:retrieved_at"
+  },
+  "ingest": {
+   "format": "csv",
+   "encoding": "utf-8",
+   "constants": {
+    "source_url": "https://www.fhfa.gov/hpi/download/monthly/hpi_master.csv"
+   },
+   "delimiter": ",",
+   "dimensions": {
+    "period": 6,
+    "geo_code": 5,
+    "geo_name": 4,
+    "geo_level": 3
+   },
+   "header_rows": 1
+  },
+  "attempts": 1,
+  "created_at": "2026-11-25T07:00:47.132347+00:00",
+  "published_at": "2026-11-25T07:01:53.84661+00:00"
+ },
+ "file": null
+}
