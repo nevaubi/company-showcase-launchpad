@@ -67,14 +67,19 @@ async function main(): Promise<void> {
   for (const family of FAMILIES) {
     const candidates = family.candidates(datasets);
     const pages = new Map<string, Page>();
-    for (const url of family.listings(candidates)) {
-      try {
-        const listing = await readListing(url, cache, args.offline);
-        pages.set(url, { url, status: listing.status, body: listing.body });
-      } catch (error) {
-        console.error(`${family.id}: ${url}: ${(error as Error).message}`);
+    const read = async (urls: string[]) => {
+      for (const url of urls) {
+        if (pages.has(url)) continue;
+        try {
+          const listing = await readListing(url, cache, args.offline);
+          pages.set(url, { url, status: listing.status, body: listing.body });
+        } catch (error) {
+          console.error(`${family.id}: ${url}: ${(error as Error).message}`);
+        }
       }
-    }
+    };
+    await read(family.listings(candidates));
+    if (family.more) await read(family.more(candidates, pages));
     const result = family.build(candidates, pages);
     for (const [id, title] of Object.entries(result.titles)) {
       const earlier = claimed.get(id);
