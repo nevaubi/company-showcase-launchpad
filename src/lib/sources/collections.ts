@@ -1,13 +1,17 @@
 /**
- * Address slugs of the 15 collections (`source_datasets.sector`), for
- * `/app/alt-data/library/c/$collection`. Pure, no imports.
+ * The 15 collections (`source_datasets.sector`) for screens: the catalogue's names, order and
+ * one-line scopes (re-exported from `./catalog/collections`, unit `catalog`, the one source of
+ * them) with the address slug of each, for `/app/alt-data/library/c/$collection`.
  *
- * Only the slug lives here. A collection's reader-facing name, order and one-line scope come
- * from the catalogue (`collectionFor`, `COLLECTIONS` in `./catalog`), and each slug below is
- * the catalogue's name written for an address ("Banks and funds" is `banks`). A slug never
- * changes once published: a renamed collection keeps its slug, and older spellings stay as
- * aliases so links already shared keep working.
+ * Each slug is the catalogue's name written for an address ("Banks and funds" is `banks`). A
+ * slug never changes once published: a renamed collection keeps its slug, and older spellings
+ * stay as aliases so links already shared keep working.
  */
+import { COLLECTIONS, collectionFor } from "./catalog/collections";
+import type { Collection } from "./catalog/types";
+
+export { COLLECTIONS, collectionFor };
+export type { Collection };
 
 export const COLLECTION_SLUGS = {
   "00_universal": "economy",
@@ -58,3 +62,19 @@ export function collectionIdFromSlug(slug: string | null | undefined): Collectio
   if (isCollectionId(slug)) return slug;
   return BY_SLUG.get(slug) ?? ALIASES.get(slug) ?? null;
 }
+
+/** A collection with its address slug. */
+export type LibraryCollection = Collection & { slug: string };
+
+/** Every collection in the catalogue's reading order, with its slug. */
+export const LIBRARY_COLLECTIONS: readonly LibraryCollection[] = COLLECTIONS.map((collection) => ({
+  ...collection,
+  slug: collectionSlug(collection.id),
+}));
+
+/** The collection an address names (slug, alias or stored id), or null. */
+export function collectionBySlug(slug: string | null | undefined): LibraryCollection | null {
+  const id = collectionIdFromSlug(slug);
+  return id ? { ...collectionFor(id), slug: collectionSlug(id) } : null;
+}
+

@@ -16,10 +16,12 @@ vi.mock("./read.functions", () => ({
   getSourceFacets: vi.fn(),
   findSources: vi.fn(),
   getSnapshotStats: vi.fn(),
+  getLibraryWire: vi.fn(),
 }));
 
 import { getSourceDataset, listSources, querySourceRecords } from "./functions";
-import { findSources, getSourceFacets, getSourceRecord, getSourceSeries } from "./read.functions";
+import { findSources, getLibraryWire, getSourceFacets, getSourceRecord, getSourceSeries } from "./read.functions";
+import library from "@/test/fixtures/sources/reads/library.json";
 import {
   fetchSourceDataset,
   LATEST_STALE_MS,
@@ -274,6 +276,23 @@ describe("previousRecordCursor (rev-app M3)", () => {
     expect(previousRecordCursor({ after: 50, entity: "628" })).toBeNull();
     expect(previousRecordCursor({ after: 50, q: "chase" })).toBeNull();
     expect(previousRecordCursor({ after: 50, q: "  ", period: "" })).toBe(25);
+  });
+});
+
+describe("library()", () => {
+  it("unpacks the landing, passes the abort signal and keeps unavailable as data", async () => {
+    const wireMock = vi.mocked(getLibraryWire);
+    wireMock.mockReset();
+    const fixture = (library as unknown as { result: { ok: true; data: unknown } }).result;
+    wireMock.mockResolvedValue(fixture as never);
+    const client = new QueryClient();
+    const answer = await client.fetchQuery(sourceQueries.library());
+    expect(answer.ok).toBe(true);
+    if (answer.ok) expect(answer.data.datasets.length).toBeGreaterThan(0);
+    const [call] = wireMock.mock.calls[0] as unknown as [{ signal: AbortSignal }];
+    expect(call.signal).toBeInstanceOf(AbortSignal);
+    wireMock.mockResolvedValue(UNAVAILABLE as never);
+    await expect(new QueryClient().fetchQuery(sourceQueries.library())).resolves.toEqual(UNAVAILABLE);
   });
 });
 

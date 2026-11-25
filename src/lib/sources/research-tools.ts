@@ -8,9 +8,9 @@ export const OFFICIAL_SOURCE_TOOL_DEFS = [
   {
     type: "function",
     name: "search_official_sources",
-    description: "Search the published official-source catalogue by dataset name/description, exact sector or agency. Returns bounded pages with immutable snapshot IDs, declared grain and original source URLs. These native datasets are separate from company statements and derived alt-data series. Do not infer a ticker-to-CERT, plant, tract or other entity link. Inspect a source's fields and population before querying it; overlapping source views are not distinct populations.",
+    description: "Search the published official-source catalogue by words (every word must occur in the dataset name, description or publisher), exact sector or agency. Returns bounded pages with immutable snapshot IDs, declared grain and original source URLs. These native datasets are separate from company statements and derived alt-data series. Do not infer a ticker-to-CERT, plant, tract or other entity link. Inspect a source's fields and population before querying it; overlapping source views are not distinct populations.",
     parameters: obj({
-      query: optional(str("Literal catalogue text search; null for all published sources", 200)),
+      query: optional(str("Catalogue search words, every one required (one distinctive word such as a publisher or series code works best); null for all published sources", 200)),
       sector: optional(str("Exact declared sector/collection; null for all")),
       agency: optional(str("Exact declared agency; null for all")),
       after: optional(str("Dataset ID from next_cursor; null for the first catalogue page", 1024)),
@@ -35,7 +35,7 @@ export const OFFICIAL_SOURCE_TOOL_DEFS = [
   {
     type: "function",
     name: "query_official_records",
-    description: "Read a bounded slice of one ready, immutable native source snapshot. Choose 1–12 exact field keys from inspect_official_source (a unique exact native label is also accepted; duplicate labels are rejected). Returns at most 20 complete rows, their original string/null cells, declared units, immutable row IDs, original source URLs and pinned app links. No numeric parsing, scaling, aggregation or ticker/entity inference. Entity, geography and period are exact native search-index values; monthly/county normalization exists only where the source declares it. Blank strings, literal zeroes and suppression markers remain distinct. Follow next_cursor with the same snapshot, filters and fields. If one row is too wide, request fewer fields; do not treat omitted rows as missing data.",
+    description: "Read a bounded slice of one ready, immutable native source snapshot. Choose 1–12 exact field keys from inspect_official_source (a unique exact native label is also accepted; duplicate labels are rejected). Returns at most 20 complete rows with their row numbers and original string/null cells, the fields' declared units (full descriptors on the first page, key and unit on later pages), original source URLs and a pinned link per record (row_rules.record_app_url with {row_number} replaced). No numeric parsing, scaling, aggregation or ticker/entity inference. Entity, geography and period are exact native search-index values; monthly/county normalization exists only where the source declares it. Blank strings, literal zeroes and suppression markers remain distinct. Follow next_cursor with the same snapshot, filters and fields; a page with scan_complete false stopped at the scan limit and may be empty: keep following next_cursor, it is not the end of the results. is_latest_snapshot false means a newer snapshot is published. If one row is too wide, request fewer fields; do not treat omitted rows as missing data.",
     parameters: obj({
       dataset_id: str("Exact dataset ID", 1024),
       snapshot_id: { ...str("Required immutable ready snapshot ID from source search/inspection", 64), pattern: "^[0-9a-f]{64}$" },

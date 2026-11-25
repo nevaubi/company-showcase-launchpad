@@ -10,19 +10,9 @@
  * Nothing in a profile rescales a value or converts a unit. A unit is printed as the source states it.
  */
 
-/**
- * The declared period formats of src/lib/sources/periods.ts (unit core). The list is kept identical to
- * that module; this alias exists so the profiles compile on their own.
- */
-export type PeriodFormat =
-  | "iso-date"
-  | "yyyymmdd"
-  | "yyyy-mm"
-  | "yyyymm"
-  | "quarter"
-  | "year"
-  | "roc-yyymm"
-  | "text";
+import type { PeriodFormat } from "../periods";
+
+export type { PeriodFormat };
 
 /** The dimensions of a record that have their own index and can address a series directly. */
 export type IndexedDimension = "entity_id" | "entity_name" | "geo_code" | "geo_name";
@@ -32,12 +22,16 @@ export type FieldMatch = { field: string; value: string };
 
 /**
  * How one series is picked out of a table.
- * - by and key: every record whose indexed dimension equals the key, optionally narrowed by field matches;
- * - where alone: every record whose fields equal the values, found inside the read's scan limit.
+ * - by and key: every record whose indexed dimension equals the key, read through that dimension's index;
+ *   field matches beside it narrow those records after the read (the key bounds what is scanned);
+ * - where alone: every record whose fields equal the values, a filter on cells that the reads allow only on
+ *   a snapshot of at most 50,000 rows;
+ * - whole: the snapshot is one series (a FRED series file), read in row order.
  */
 export type SeriesAddress =
   | { by: IndexedDimension; key: string; where?: readonly FieldMatch[] }
-  | { where: readonly FieldMatch[] };
+  | { where: readonly FieldMatch[] }
+  | { whole: true };
 
 /**
  * Where the unit of a measure is established.
@@ -97,6 +91,13 @@ export type SeriesAddressing = {
 
 export type FirstLook = "series" | "ranking" | "places" | "none";
 
+/**
+ * How the periods of a series follow each other: it decides how a period is said ("Oct 2026", "Q3 2026",
+ * "Nov 19, 2026") and which period is a year earlier. Without it a period's cadence follows its format
+ * (a month for yyyymm and yyyy-mm, a quarter, a year, a day for a full date).
+ */
+export type Cadence = "day" | "week" | "month" | "quarter" | "year";
+
 /** What a profile is matched on. `source_id` and `id` come from the dataset as registered. */
 export type ProfileDataset = { id: string; source_id: string | null };
 
@@ -128,6 +129,14 @@ export type Profile = {
   /** The noun for one entity of the table, in the publisher's sense ("insured institution"). */
   entityNoun?: { one: string; many: string };
   period: PeriodSpec;
+  /** Set where a full date stands for a longer period (a FRED monthly series dates each month by its first day). */
+  cadence?: Cadence;
+  /**
+   * Field values every series drawn under this profile must carry, because the unit holds only for them (the
+   * FHFA master file mixes index families with different base periods). An address that does not fix them
+   * is refused.
+   */
+  fixed?: readonly FieldMatch[];
   /** At least one. The first is the default measure. */
   measures: readonly MeasureSpec[];
   addressing: SeriesAddressing;

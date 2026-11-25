@@ -1,0 +1,121 @@
+{
+ "dataset": {
+  "id": "official_00_universal_daily_weekly_f0d4dafad8",
+  "name": "Native daily and weekly indicators",
+  "sector": "00_universal",
+  "agency": "Board of Governors of the Federal Reserve System (US) via Federal Reserve Bank of St. Louis; Federal Reserve Bank of Chicago via Federal Reserve Bank of St. Louis; Federal Reserve Bank of St. Louis via Federal Reserve Bank of St. Louis; U.S. Employment and Training Administration via Federal Reserve Bank of St. Louis",
+  "source_id": null,
+  "source_url": null,
+  "description": "No averaging or forward-fill applied. Retained table: 43,174 source rows and 6 columns.",
+  "grain": "US aggregate time series",
+  "units": "Source-native, column-specific units; retained official dictionaries and row unit fields govern interpretation.",
+  "notes": "Current-vintage observations; no point-in-time vintage history. Number , Seasonally Adjusted\nNative-frequency data from 2000-01-01 through 2026-11-24\nCurrent-vintage observations; no point-in-time vintage history. Chinese Yuan Renminbi to One U.S. Dollar , Not Seasonally Adjusted\nCurrent-vintage observations; no point-in-time vintage history. Japanese Yen to One U.S. Dollar , Not Seasonally Adjusted\nCurrent-vintage observations; no point-in-time vintage history. U.S. Dollars to One Euro , Not Seasonally Adjusted\nCurrent-vintage observations; no point-in-time vintage history. Percent , Not Seasonally Adjusted\nCurrent-vintage observations; no point-in-time vintage history. Index Jan 2006=100 , Not Seasonally Adjusted\nCurrent-vintage observations; no point-in-time vintage history. Index , Not Seasonally Adjusted\nCurrent-vintage observations; no point-in-time vintage history. Millions of U.S. Dollars , Not Seasonally Adjusted\nSource values and disclosure flags are unchanged. Retrieval time does not establish historical public availability.",
+  "latest_snapshot_id": "cb6f43225b097f8092d6569a5ee8cc52a52702f907273e10c321fcb681553a77",
+  "created_at": "2026-11-25T05:29:56.40025+00:00",
+  "updated_at": "2026-11-25T06:08:38.281067+00:00"
+ },
+ "snapshot": {
+  "id": "cb6f43225b097f8092d6569a5ee8cc52a52702f907273e10c321fcb681553a77",
+  "dataset_id": "official_00_universal_daily_weekly_f0d4dafad8",
+  "file_sha256": "f4bab8c15bf5b4f8a62e0ab06ad5bedbda77570fdeec17f044876918a74b4fed",
+  "source_path": "00_universal/daily_weekly.csv",
+  "retrieved_at": "2026-11-24T09:58:23.485318+00:00",
+  "status": "ready",
+  "expected_rows": 43174,
+  "loaded_rows": 43174,
+  "columns": [
+   {
+    "key": "col0001",
+    "type": "string",
+    "label": "Series code"
+   },
+   {
+    "key": "col0002",
+    "type": "string",
+    "label": "Observation period"
+   },
+   {
+    "key": "col0003",
+    "type": "string",
+    "label": "Value"
+   },
+   {
+    "key": "col0004",
+    "type": "string",
+    "label": "Native unit"
+   },
+   {
+    "key": "col0005",
+    "type": "string",
+    "label": "Frequency"
+   },
+   {
+    "key": "col0006",
+    "type": "string",
+    "label": "Source URL"
+   }
+  ],
+  "column_count": 6,
+  "coverage": {
+   "source_ids": [
+    "FRED_CCSA",
+    "FRED_DEXCHUS",
+    "FRED_DEXJPUS",
+    "FRED_DEXUSEU",
+    "FRED_DFF",
+    "FRED_DTWEXBGS",
+    "FRED_ICSA",
+    "FRED_NFCI",
+    "FRED_STLFSI4",
+    "FRED_WALCL"
+   ],
+   "entity_type": "source_native_entity",
+   "source_path": "00_universal/daily_weekly.csv",
+   "overlaps_files": [],
+   "collection_slug": "00_universal",
+   "population_role": "source_native_table",
+   "entity_id_column": "Series code",
+   "source_linkage_basis": "workbook_specification",
+   "publication_time_known": false,
+   "source_retrieval_times": [
+    "2026-11-24T09:58:23.485318+00:00"
+   ],
+   "availability_time_known": false,
+   "archive_population_is_not_unique_entity_count": true,
+   "_preview_dropped_keys": [
+    "source_urls"
+   ]
+  },
+  "quality": {
+   "row_width_verified": true,
+   "source_value_policy": "exact_strings_blank_is_empty_string",
+   "blank_counts_by_column": [
+    0,
+    0,
+    1035,
+    0,
+    0,
+    0
+   ],
+   "duplicate_header_labels": {},
+   "geo_identifier_validation": {},
+   "source_bytes_sha256_verified": true,
+   "source_lexical_marker_counts": {}
+  },
+  "ingest": {
+   "format": "csv",
+   "encoding": "utf-8",
+   "constants": {},
+   "delimiter": ",",
+   "dimensions": {
+    "entity_id": 0,
+    "source_url": 5
+   },
+   "header_rows": 1
+  },
+  "attempts": 1,
+  "created_at": "2026-11-25T05:30:01.652765+00:00",
+  "published_at": "2026-11-25T06:08:38.281067+00:00"
+ },
+ "file": null
+}

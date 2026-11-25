@@ -10,6 +10,12 @@ describe("source page CSV", () => {
     expect(csvSourceCell("\t@SUM(A1:A2)")).toBe('"\'\t@SUM(A1:A2)"');
     expect(csvSourceCell("-1+2")).toBe('"\'-1+2"');
     expect(csvSourceCell("+cmd|' /C calc'!A0")).toBe("\"'+cmd|' /C calc'!A0\"");
+    expect(csvSourceCell("-SUM(1)")).toBe('"\'-SUM(1)"');
+    expect(csvSourceCell(" -1,234")).toBe('"\' -1,234"');
+  });
+
+  it("leaves published signed figures and dash markers as they are (rev-app N2)", () => {
+    for (const cell of ["-", "--", "-1,234", "-0.5%", "+1.2%", "+3"]) expect(csvSourceCell(cell), cell).toBe(`"${cell}"`);
   });
 
   it("retains negative numbers, exact precision and zero-padded native IDs", () => {

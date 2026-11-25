@@ -169,7 +169,7 @@ async function runToolNow(qc: QueryClient, name: string, args: Record<string, un
     case "search_official_sources":
     case "inspect_official_source":
     case "query_official_records":
-      return runOfficialSourceTool(name,args);
+      return runOfficialSourceTool(name,args,qc);
     case "screen_companies": {
       const u = await qc.fetchQuery(universeQuery);
       let rows = flatUniverse(u.companies);

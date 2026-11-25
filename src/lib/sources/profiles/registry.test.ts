@@ -156,5 +156,7 @@ describe("series addresses", () => {
     ).toBe(true);
     expect(sameAddress({ by: "entity_id", key: "628" }, { by: "entity_name", key: "628" })).toBe(false);
     expect(sameAddress({ where: [{ field: "MSN", value: "TETCBUS" }] }, { where: [{ field: "MSN", value: "TERCBUS" }] })).toBe(false);
+    expect(sameAddress({ whole: true }, { whole: true })).toBe(true);
+    expect(sameAddress({ whole: true }, { where: [] })).toBe(false);
   });
 });
