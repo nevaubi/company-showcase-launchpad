@@ -15,3 +15,5 @@ were folded as TRANSFER.md prescribes (a `|`, quote or backslash replaced, non-A
 
 Transfer files (scratch, not in git): `/home/claude/work/r4/company/xfer/{fdic_dict,other_dict_meta,fdic_current,hist_1768_{1,2},hist_628_{1,2},hist_33935_{1,2},y9_ident_vars}.txt.ok`.
 `fake-store.ts` answers the panels' selects and member functions from these rows.
+
+Orange Book (added 25 Nov 2026, same transfer): products (22 rows), patents (91) and exclusivity (32) of Bristol Myers Squibb's applications 005657, 021880, 021986, 202155, 209606, 221075 and Exelixis' 203756, from snapshots 5e77f822…, 60c0c879… and c7553d3c… (files retrieved 24 Nov 2026). Every cell kept; text folded as TRANSFER.md says (none needed folding).

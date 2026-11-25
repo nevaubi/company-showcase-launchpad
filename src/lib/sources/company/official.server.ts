@@ -38,7 +38,8 @@ export interface OfficialClient {
   rpc(fn: string, args?: Record<string, unknown>): PromiseLike<Result>;
 }
 
-class Stop extends Error {}
+/** A read that cannot go on; its message is the sentence the panel shows. */
+export class Stop extends Error {}
 const SENTENCE: Record<string, string> = {
   unavailable: "This read needs a database update that is not applied yet.",
   timeout: "The database stopped the read after its time limit.",
@@ -47,12 +48,12 @@ const SENTENCE: Record<string, string> = {
   error: "The official records could not be read.",
 };
 const fail = (error: PgError) => new Stop(SENTENCE[classifyReadError(error).reason] ?? SENTENCE.error);
-async function select(q: PromiseLike<Result>): Promise<Record<string, unknown>[]> {
+export async function select(q: PromiseLike<Result>): Promise<Record<string, unknown>[]> {
   const { data, error } = await q;
   if (error) throw fail(error);
   return Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
 }
-const text = (v: unknown): string | null => (typeof v === "string" ? v : v == null ? null : String(v));
+export const text = (v: unknown): string | null => (typeof v === "string" ? v : v == null ? null : String(v));
 
 /** A stored cell as the panel shows it: a number only for a plain decimal (numbers.ts), otherwise what it is. */
 export function cellOf(v: unknown): OfficialCell {
@@ -95,7 +96,7 @@ async function latestId(db: OfficialClient, dataset: string): Promise<string> {
 }
 
 /** A published snapshot as the panel cites it; `newerSnapshot` names the dataset's latest when it is not this one. */
-async function sourceOf(db: OfficialClient, dataset: string, snapshot?: string): Promise<OfficialSource> {
+export async function sourceOf(db: OfficialClient, dataset: string, snapshot?: string): Promise<OfficialSource> {
   const latest = await latestId(db, dataset);
   const id = snapshot ?? latest;
   let meta = snapshotCache.get(id);
@@ -113,7 +114,7 @@ async function sourceOf(db: OfficialClient, dataset: string, snapshot?: string):
  * (the publisher changed the header) the whole dictionary is read once and the fields are found by label. A label
  * missing from the snapshot, or present twice, is left out.
  */
-async function fieldsOf(db: OfficialClient, snapshot: string, wanted: readonly Wanted[]): Promise<Map<string, { position: number; column: SourceColumn }>> {
+export async function fieldsOf(db: OfficialClient, snapshot: string, wanted: readonly Wanted[]): Promise<Map<string, { position: number; column: SourceColumn }>> {
   const key = `${snapshot}|${wanted.map(w => `${w.label}@${w.hint}`).join(",")}`;
   const hit = fieldCache.get(key);
   if (hit) return hit;
@@ -137,13 +138,13 @@ async function fieldsOf(db: OfficialClient, snapshot: string, wanted: readonly W
   fieldCache.set(key, out);
   return out;
 }
-const projection = (fields: Map<string, { position: number }>, labels: readonly string[]) =>
+export const projection = (fields: Map<string, { position: number }>, labels: readonly string[]) =>
   labels.filter(l => fields.has(l)).map(l => `c_${l.replace(/[^A-Za-z0-9]/g, "_")}:values->>${fields.get(l)!.position}`).join(",");
-const cellAt = (r: Record<string, unknown>, label: string): unknown => r[`c_${label.replace(/[^A-Za-z0-9]/g, "_")}`];
+export const cellAt = (r: Record<string, unknown>, label: string): unknown => r[`c_${label.replace(/[^A-Za-z0-9]/g, "_")}`];
 
 // ------------------------------------------------------------------ FDIC: lines, identity, history
 
-type Wanted = { label: string; hint: number };
+export type Wanted = { label: string; hint: number };
 const lineLabels = FDIC_LINES.map(l => l.field);
 type Fields = Map<string, { position: number; column: SourceColumn }>;
 const quantity = (f: Fields, field: string): string | null => {
