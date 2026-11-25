@@ -91,6 +91,7 @@ import { Route as AuthenticatedAppOfficeSheetsIdRouteImport } from './routes/_au
 import { Route as AuthenticatedAppOfficeSlidesIdRouteImport } from './routes/_authenticated/app.office.slides.$id'
 import { Route as AuthenticatedAppOfficeWriterIdRouteImport } from './routes/_authenticated/app.office.writer.$id'
 import { Route as AuthenticatedAppSectorsGSlugRouteImport } from './routes/_authenticated/app.sectors_.g.$slug'
+import { Route as AuthenticatedAppAltDataLibraryDDatasetRouteImport } from './routes/_authenticated/app.alt-data_.library_.d.$dataset'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -546,6 +547,12 @@ const AuthenticatedAppSectorsGSlugRoute =
     path: '/sectors/g/$slug',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppAltDataLibraryDDatasetRoute =
+  AuthenticatedAppAltDataLibraryDDatasetRouteImport.update({
+    id: '/alt-data_/library_/d/$dataset',
+    path: '/alt-data/library/d/$dataset',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -629,6 +636,7 @@ export interface FileRoutesByFullPath {
   '/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
+  '/app/alt-data/library/d/$dataset': typeof AuthenticatedAppAltDataLibraryDDatasetRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -709,6 +717,7 @@ export interface FileRoutesByTo {
   '/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
+  '/app/alt-data/library/d/$dataset': typeof AuthenticatedAppAltDataLibraryDDatasetRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -794,6 +803,7 @@ export interface FileRoutesById {
   '/_authenticated/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/_authenticated/app/sectors_/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
+  '/_authenticated/app/alt-data_/library_/d/$dataset': typeof AuthenticatedAppAltDataLibraryDDatasetRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -879,6 +889,7 @@ export interface FileRouteTypes {
     | '/app/office/writer/$id'
     | '/app/sectors/g/$slug'
     | '/app/companies/$ticker/'
+    | '/app/alt-data/library/d/$dataset'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -959,6 +970,7 @@ export interface FileRouteTypes {
     | '/app/office/writer/$id'
     | '/app/sectors/g/$slug'
     | '/app/companies/$ticker'
+    | '/app/alt-data/library/d/$dataset'
   id:
     | '__root__'
     | '/'
@@ -1043,6 +1055,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/office/writer/$id'
     | '/_authenticated/app/sectors_/g/$slug'
     | '/_authenticated/app/companies/$ticker/'
+    | '/_authenticated/app/alt-data_/library_/d/$dataset'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1642,6 +1655,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppSectorsGSlugRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/alt-data_/library_/d/$dataset': {
+      id: '/_authenticated/app/alt-data_/library_/d/$dataset'
+      path: '/alt-data/library/d/$dataset'
+      fullPath: '/app/alt-data/library/d/$dataset'
+      preLoaderRoute: typeof AuthenticatedAppAltDataLibraryDDatasetRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
@@ -1759,6 +1779,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppOfficeSlidesIdRoute: typeof AuthenticatedAppOfficeSlidesIdRoute
   AuthenticatedAppOfficeWriterIdRoute: typeof AuthenticatedAppOfficeWriterIdRoute
   AuthenticatedAppSectorsGSlugRoute: typeof AuthenticatedAppSectorsGSlugRoute
+  AuthenticatedAppAltDataLibraryDDatasetRoute: typeof AuthenticatedAppAltDataLibraryDDatasetRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
@@ -1810,6 +1831,8 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppOfficeSlidesIdRoute: AuthenticatedAppOfficeSlidesIdRoute,
   AuthenticatedAppOfficeWriterIdRoute: AuthenticatedAppOfficeWriterIdRoute,
   AuthenticatedAppSectorsGSlugRoute: AuthenticatedAppSectorsGSlugRoute,
+  AuthenticatedAppAltDataLibraryDDatasetRoute:
+    AuthenticatedAppAltDataLibraryDDatasetRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =
