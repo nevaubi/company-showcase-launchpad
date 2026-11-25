@@ -7,9 +7,10 @@ import {
   isFiltering,
   librarySearch,
   queryWords,
+  resultsCaption,
   rowShape,
   sortTables,
-} from "./library-search";
+} from "./search";
 import { libRow } from "./test-rows";
 
 const names = (id: string) =>
@@ -84,5 +85,12 @@ describe("library search", () => {
     expect(isFiltering({ q: "  " })).toBe(false);
     expect(isFiltering({ pub: "eia" })).toBe(true);
     expect(isFiltering({ view: "changes" })).toBe(true);
+  });
+
+  it("says what a result list holds", () => {
+    expect(resultsCaption({ count: 38, q: " mortgage " })).toBe("38 tables match “mortgage”");
+    expect(resultsCaption({ count: 1, q: "ccsa" })).toBe("1 table matches “ccsa”");
+    expect(resultsCaption({ count: 216, publisher: "EIA", shape: "Panels" })).toBe("216 tables from EIA · Panels");
+    expect(resultsCaption({ count: 1037, changes: true })).toBe("1,037 tables · by latest publication, newest first");
   });
 });

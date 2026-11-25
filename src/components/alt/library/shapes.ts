@@ -10,7 +10,7 @@
  * dark set L 0.72 to 0.80); they are the app's and are used as they are.
  */
 import { SHAPE_LABEL, type SourceShape } from "@/lib/sources/shape";
-import type { ShapeCounts } from "./library-facts";
+import type { ShapeCounts } from "./overview";
 
 export const SHAPE_ORDER: readonly SourceShape[] = ["series", "panel", "places", "table"];
 

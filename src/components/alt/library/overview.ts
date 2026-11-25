@@ -13,8 +13,8 @@ import { publisherFor } from "@/lib/sources/catalog/publishers";
 import type { SourceLibrary, SourceLibraryChange, SourceLibraryRow } from "@/lib/sources/read-types";
 import type { SourceShape } from "@/lib/sources/shape";
 import { collectionPath, datasetPath, LIBRARY_PATH } from "./addresses";
-import { rowShape, SHAPES } from "./library-search";
-import { utcMinute } from "./table-list";
+import { rowShape, SHAPES } from "./search";
+import { utcMinute } from "./table-rows";
 
 export type ShapeCounts = Record<SourceShape, number>;
 

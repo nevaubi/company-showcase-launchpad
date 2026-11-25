@@ -54,6 +54,7 @@ import { Route as AuthenticatedAppSituationsRouteImport } from './routes/_authen
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
 import { Route as AuthenticatedAppSupplyChainRouteImport } from './routes/_authenticated/app.supply-chain'
 import { Route as AuthenticatedAppWorkerRouteImport } from './routes/_authenticated/app.worker'
+import { Route as AuthenticatedAppAltDataLibraryRouteImport } from './routes/_authenticated/app.alt-data_.library'
 import { Route as AuthenticatedAppAutopilotsIndexRouteImport } from './routes/_authenticated/app.autopilots.index'
 import { Route as AuthenticatedAppAutopilotsBotIdRouteImport } from './routes/_authenticated/app.autopilots.$botId'
 import { Route as AuthenticatedAppCompaniesIndexRouteImport } from './routes/_authenticated/app.companies.index'
@@ -91,6 +92,7 @@ import { Route as AuthenticatedAppOfficeSheetsIdRouteImport } from './routes/_au
 import { Route as AuthenticatedAppOfficeSlidesIdRouteImport } from './routes/_authenticated/app.office.slides.$id'
 import { Route as AuthenticatedAppOfficeWriterIdRouteImport } from './routes/_authenticated/app.office.writer.$id'
 import { Route as AuthenticatedAppSectorsGSlugRouteImport } from './routes/_authenticated/app.sectors_.g.$slug'
+import { Route as AuthenticatedAppAltDataLibraryCCollectionRouteImport } from './routes/_authenticated/app.alt-data_.library_.c.$collection'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -328,6 +330,12 @@ const AuthenticatedAppWorkerRoute = AuthenticatedAppWorkerRouteImport.update({
   path: '/worker',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppAltDataLibraryRoute =
+  AuthenticatedAppAltDataLibraryRouteImport.update({
+    id: '/alt-data_/library',
+    path: '/alt-data/library',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppAutopilotsIndexRoute =
   AuthenticatedAppAutopilotsIndexRouteImport.update({
     id: '/autopilots/',
@@ -546,6 +554,12 @@ const AuthenticatedAppSectorsGSlugRoute =
     path: '/sectors/g/$slug',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppAltDataLibraryCCollectionRoute =
+  AuthenticatedAppAltDataLibraryCCollectionRouteImport.update({
+    id: '/alt-data_/library_/c/$collection',
+    path: '/alt-data/library/c/$collection',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -592,6 +606,7 @@ export interface FileRoutesByFullPath {
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app/worker': typeof AuthenticatedAppWorkerRoute
   '/app/': typeof AuthenticatedAppIndexRoute
+  '/app/alt-data/library': typeof AuthenticatedAppAltDataLibraryRoute
   '/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
@@ -629,6 +644,7 @@ export interface FileRoutesByFullPath {
   '/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
+  '/app/alt-data/library/c/$collection': typeof AuthenticatedAppAltDataLibraryCCollectionRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -673,6 +689,7 @@ export interface FileRoutesByTo {
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app/worker': typeof AuthenticatedAppWorkerRoute
   '/app': typeof AuthenticatedAppIndexRoute
+  '/app/alt-data/library': typeof AuthenticatedAppAltDataLibraryRoute
   '/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
   '/app/firm/branding': typeof AuthenticatedAppFirmBrandingRoute
@@ -709,6 +726,7 @@ export interface FileRoutesByTo {
   '/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
+  '/app/alt-data/library/c/$collection': typeof AuthenticatedAppAltDataLibraryCCollectionRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -757,6 +775,7 @@ export interface FileRoutesById {
   '/_authenticated/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/_authenticated/app/worker': typeof AuthenticatedAppWorkerRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
+  '/_authenticated/app/alt-data_/library': typeof AuthenticatedAppAltDataLibraryRoute
   '/_authenticated/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/_authenticated/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   '/_authenticated/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
@@ -794,6 +813,7 @@ export interface FileRoutesById {
   '/_authenticated/app/office/writer/$id': typeof AuthenticatedAppOfficeWriterIdRoute
   '/_authenticated/app/sectors_/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
+  '/_authenticated/app/alt-data_/library_/c/$collection': typeof AuthenticatedAppAltDataLibraryCCollectionRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -842,6 +862,7 @@ export interface FileRouteTypes {
     | '/app/supply-chain'
     | '/app/worker'
     | '/app/'
+    | '/app/alt-data/library'
     | '/app/autopilots/$botId'
     | '/app/companies/$ticker'
     | '/app/docs/$id'
@@ -879,6 +900,7 @@ export interface FileRouteTypes {
     | '/app/office/writer/$id'
     | '/app/sectors/g/$slug'
     | '/app/companies/$ticker/'
+    | '/app/alt-data/library/c/$collection'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -923,6 +945,7 @@ export interface FileRouteTypes {
     | '/app/supply-chain'
     | '/app/worker'
     | '/app'
+    | '/app/alt-data/library'
     | '/app/autopilots/$botId'
     | '/app/docs/$id'
     | '/app/firm/branding'
@@ -959,6 +982,7 @@ export interface FileRouteTypes {
     | '/app/office/writer/$id'
     | '/app/sectors/g/$slug'
     | '/app/companies/$ticker'
+    | '/app/alt-data/library/c/$collection'
   id:
     | '__root__'
     | '/'
@@ -1006,6 +1030,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/supply-chain'
     | '/_authenticated/app/worker'
     | '/_authenticated/app/'
+    | '/_authenticated/app/alt-data_/library'
     | '/_authenticated/app/autopilots/$botId'
     | '/_authenticated/app/companies/$ticker'
     | '/_authenticated/app/docs/$id'
@@ -1043,6 +1068,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/office/writer/$id'
     | '/_authenticated/app/sectors_/g/$slug'
     | '/_authenticated/app/companies/$ticker/'
+    | '/_authenticated/app/alt-data_/library_/c/$collection'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1383,6 +1409,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppWorkerRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/alt-data_/library': {
+      id: '/_authenticated/app/alt-data_/library'
+      path: '/alt-data/library'
+      fullPath: '/app/alt-data/library'
+      preLoaderRoute: typeof AuthenticatedAppAltDataLibraryRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/autopilots/': {
       id: '/_authenticated/app/autopilots/'
       path: '/autopilots'
@@ -1642,6 +1675,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppSectorsGSlugRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/alt-data_/library_/c/$collection': {
+      id: '/_authenticated/app/alt-data_/library_/c/$collection'
+      path: '/alt-data/library/c/$collection'
+      fullPath: '/app/alt-data/library/c/$collection'
+      preLoaderRoute: typeof AuthenticatedAppAltDataLibraryCCollectionRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
@@ -1743,6 +1783,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppSupplyChainRoute: typeof AuthenticatedAppSupplyChainRoute
   AuthenticatedAppWorkerRoute: typeof AuthenticatedAppWorkerRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
+  AuthenticatedAppAltDataLibraryRoute: typeof AuthenticatedAppAltDataLibraryRoute
   AuthenticatedAppAutopilotsBotIdRoute: typeof AuthenticatedAppAutopilotsBotIdRoute
   AuthenticatedAppCompaniesTickerRoute: typeof AuthenticatedAppCompaniesTickerRouteWithChildren
   AuthenticatedAppDocsIdRoute: typeof AuthenticatedAppDocsIdRoute
@@ -1759,6 +1800,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppOfficeSlidesIdRoute: typeof AuthenticatedAppOfficeSlidesIdRoute
   AuthenticatedAppOfficeWriterIdRoute: typeof AuthenticatedAppOfficeWriterIdRoute
   AuthenticatedAppSectorsGSlugRoute: typeof AuthenticatedAppSectorsGSlugRoute
+  AuthenticatedAppAltDataLibraryCCollectionRoute: typeof AuthenticatedAppAltDataLibraryCCollectionRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
@@ -1793,6 +1835,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppSupplyChainRoute: AuthenticatedAppSupplyChainRoute,
   AuthenticatedAppWorkerRoute: AuthenticatedAppWorkerRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
+  AuthenticatedAppAltDataLibraryRoute: AuthenticatedAppAltDataLibraryRoute,
   AuthenticatedAppAutopilotsBotIdRoute: AuthenticatedAppAutopilotsBotIdRoute,
   AuthenticatedAppCompaniesTickerRoute:
     AuthenticatedAppCompaniesTickerRouteWithChildren,
@@ -1810,6 +1853,8 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppOfficeSlidesIdRoute: AuthenticatedAppOfficeSlidesIdRoute,
   AuthenticatedAppOfficeWriterIdRoute: AuthenticatedAppOfficeWriterIdRoute,
   AuthenticatedAppSectorsGSlugRoute: AuthenticatedAppSectorsGSlugRoute,
+  AuthenticatedAppAltDataLibraryCCollectionRoute:
+    AuthenticatedAppAltDataLibraryCCollectionRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =
@@ -1851,11 +1896,15 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
+
 import type { startInstance } from './start.ts'
+
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
+
     router: Awaited<ReturnType<typeof getRouter>>
+
     config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

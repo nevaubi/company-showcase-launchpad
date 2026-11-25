@@ -10,8 +10,8 @@ import {
   publisherLabel,
   publisherNames,
   publisherRows,
-} from "./library-facts";
-import { shapeSegments, shapeSummary } from "./shape-bar";
+} from "./overview";
+import { shapeSegments, shapeSummary } from "./shapes";
 import { lib, libRow } from "./test-rows";
 
 const SNAP = "b".repeat(64);

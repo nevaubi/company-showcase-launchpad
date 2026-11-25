@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { Input } from "@/components/ui/input";
@@ -14,11 +14,18 @@ import {
   type ThemeFilter,
 } from "@/components/alt/alt-hub";
 import { DATASETS, THEMES } from "@/lib/alt/catalog";
-import { SourceExplorer } from "@/components/alt/source-explorer";
+import { AltNav } from "@/components/alt/library/alt-nav";
+import { legacyHref, legacyTarget } from "@/components/alt/library/addresses";
 import { altPageSearch } from "@/lib/sources/url-state";
 
 export const Route = createFileRoute("/_authenticated/app/alt-data")({
   validateSearch: altPageSearch,
+  // The Source explorer was this page with `view=sources`; its links now open the Data library page that
+  // shows the same thing (a table with its snapshot and filters, a collection, or the library).
+  beforeLoad: ({ location }) => {
+    const target = legacyTarget(location.searchStr);
+    if (target) throw redirect({ href: legacyHref(target), replace: true });
+  },
   head: () => ({
     meta: [
       { title: "Alternative data · FiledUnder" },
@@ -45,9 +52,7 @@ const THEME_OPTIONS: { v: ThemeFilter; l: string }[] = [
 ];
 
 function AltHub() {
-  const search = Route.useSearch();
-  const { d } = search;
-  const sources = search.view === "sources";
+  const { d } = Route.useSearch();
   const navigate = useNavigate({ from: "/app/alt-data" });
   const [theme, setTheme] = useState<ThemeFilter>("all");
   const [find, setFind] = useState("");
@@ -56,101 +61,64 @@ function AltHub() {
   const { ref, hold } = useHoldPage<HTMLDivElement>();
   return (
     <div ref={ref} className="grid grid-cols-1 content-start gap-5">
-      <PageHeader
-        eyebrow="Filings and data"
-        title="Alternative data"
-        description={
-          sources
-            ? "Explore official datasets at the institution, county and source-record level. Inspect every native field, reporting period and source, with collection status shown as it stands."
-            : "Public registries scored against each company's own history: what is unusual now, who leads each measure, and every dataset with its coverage. Every row links to its record."
-        }
-      />
-      <div data-section="Alt data view">
+      <div className="min-w-0">
+        <PageHeader
+          className="mb-3"
+          eyebrow="Filings and data"
+          title="Alternative data"
+          description="Public registries scored against each company's own history: what is unusual now, who leads each measure, and every dataset with its coverage. Every row links to its record."
+        />
+        <AltNav />
+      </div>
+      <div data-section="Alt data filters" className="flex flex-wrap items-center gap-2">
         <Segmented
-          label="Alternative data view"
-          value={sources ? "sources" : "signals"}
-          options={[
-            { v: "signals", l: "Company signals" },
-            { v: "sources", l: "Source explorer" },
-          ]}
-          onChange={(value) => {
+          label="Theme"
+          value={theme}
+          onChange={(v) => {
+            hold();
+            setTheme(v);
+          }}
+          options={THEME_OPTIONS}
+        />
+        <Input
+          value={find}
+          onChange={(e) => setFind(e.target.value)}
+          placeholder="Ticker"
+          aria-label="Filter by ticker"
+          className="h-8 w-28 text-[13px]"
+        />
+      </div>
+      <div data-section="Unusual now" className="min-w-0">
+        <UnusualNow theme={theme} find={find} />
+      </div>
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <div data-section="Leaderboard" className="min-w-0">
+          <Leaders theme={theme} find={find} />
+        </div>
+        <div data-section="Material filings" className="min-w-0">
+          <MaterialFilings theme={theme} find={find} />
+        </div>
+      </div>
+      <div data-section="Datasets" className="min-w-0">
+        <Catalogue
+          theme={theme}
+          selected={dataset}
+          onSelect={(x) => {
             hold();
             void navigate({
-              search: (previous) => ({
-                ...previous,
-                view: value === "sources" ? "sources" : undefined,
-              }),
-              replace: true,
+              search: (previous) => ({ ...previous, d: x === dataset ? undefined : x }),
               resetScroll: false,
+              replace: true,
             });
           }}
         />
       </div>
-      {sources ? (
-        <SourceExplorer
-          state={search}
-          onChange={(patch) => {
-            hold();
-            void navigate({
-              search: (previous) => ({ ...previous, ...patch }),
-              replace: true,
-              resetScroll: false,
-            });
-          }}
-        />
-      ) : (
-        <>
-          <div data-section="Alt data filters" className="flex flex-wrap items-center gap-2">
-            <Segmented
-              label="Theme"
-              value={theme}
-              onChange={(v) => {
-                hold();
-                setTheme(v);
-              }}
-              options={THEME_OPTIONS}
-            />
-            <Input
-              value={find}
-              onChange={(e) => setFind(e.target.value)}
-              placeholder="Ticker"
-              aria-label="Filter by ticker"
-              className="h-8 w-28 text-[13px]"
-            />
-          </div>
-          <div data-section="Unusual now" className="min-w-0">
-            <UnusualNow theme={theme} find={find} />
-          </div>
-          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            <div data-section="Leaderboard" className="min-w-0">
-              <Leaders theme={theme} find={find} />
-            </div>
-            <div data-section="Material filings" className="min-w-0">
-              <MaterialFilings theme={theme} find={find} />
-            </div>
-          </div>
-          <div data-section="Datasets" className="min-w-0">
-            <Catalogue
-              theme={theme}
-              selected={dataset}
-              onSelect={(x) => {
-                hold();
-                void navigate({
-                  search: (previous) => ({ ...previous, d: x === dataset ? undefined : x }),
-                  resetScroll: false,
-                  replace: true,
-                });
-              }}
-            />
-          </div>
-          {dataset && (
-            <div data-section="Dataset records" className="min-w-0">
-              <DatasetFeed dataset={dataset} />
-            </div>
-          )}
-          <PlantHazardsPanel />
-        </>
+      {dataset && (
+        <div data-section="Dataset records" className="min-w-0">
+          <DatasetFeed dataset={dataset} />
+        </div>
       )}
+      <PlantHazardsPanel />
     </div>
   );
 }

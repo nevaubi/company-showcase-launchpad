@@ -141,3 +141,15 @@ export function effectiveSort(sort: LibrarySort | undefined, q: string | undefin
 export function isFiltering(s: LibrarySearch): boolean {
   return !!(queryWords(s.q).length || s.shape || s.pub || s.view);
 }
+
+/** The line above a result list: "38 tables match “mortgage” from FHFA · Panels". */
+export function resultsCaption(o: { count: number; q?: string; publisher?: string; shape?: string; changes?: boolean }): string {
+  const n = o.count.toLocaleString("en-US");
+  const tables = o.count === 1 ? "table" : "tables";
+  const q = o.q?.trim();
+  let s = q ? `${n} ${tables} ${o.count === 1 ? "matches" : "match"} “${q}”` : `${n} ${tables}`;
+  if (o.publisher) s += ` from ${o.publisher}`;
+  if (o.shape) s += ` · ${o.shape}`;
+  if (o.changes) s += " · by latest publication, newest first";
+  return s;
+}

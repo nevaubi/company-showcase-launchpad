@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ALT_SECTIONS, altSectionFor } from "./alt-nav";
+import { ALT_SECTIONS, altSectionFor } from "./sections";
 
 describe("Alt data sections", () => {
   it("names the three parts in reading order", () => {

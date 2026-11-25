@@ -22,6 +22,7 @@ export type AppPath =
   | "/app/earnings"
   | "/app/sectors"
   | "/app/alt-data"
+  | "/app/alt-data/library"
   | "/app/hedge-funds"
   | "/app/options"
   | "/app/supply-chain"

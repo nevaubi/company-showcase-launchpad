@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { indexedBy, orderWithViews, utcDay, utcDayRange, utcMinute } from "./table-list";
+import { indexedBy, orderWithViews, utcDay, utcDayRange, utcMinute } from "./table-rows";
 import { libRow } from "./test-rows";
 
 const parent = libRow({ id: "hpi_master", title: "House Price Index master", retrievedAt: "2026-11-25T07:01:00Z" });
