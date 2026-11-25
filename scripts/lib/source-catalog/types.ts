@@ -32,6 +32,8 @@ export type Family = {
   candidates: (datasets: DatasetRow[]) => DatasetRow[];
   /** The listings to read, given the candidates (fixed addresses or one per series). */
   listings: (candidates: DatasetRow[]) => string[];
+  /** Pages the first listings point to and that must be read too (each file's own page). */
+  more?: (candidates: DatasetRow[], pages: Map<string, Page>) => string[];
   /** Pure: titles from the pages read. A page that did not answer 200 is passed with its status. */
   build: (candidates: DatasetRow[], pages: Map<string, Page>) => FamilyResult;
 };

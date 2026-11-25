@@ -5,6 +5,7 @@
  * address read once: the response (any HTTP status) is kept under the cache folder and every later
  * run reads it from there. A network failure is not cached, so a rerun tries again.
  */
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -36,16 +37,34 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * A PDF listing (a publisher's readme) is read as its text layer, extracted once with poppler's
+ * `pdftotext -layout` and kept beside the cached file.
+ */
+async function bodyText(dir: string, key: string, meta: Meta): Promise<string> {
+  const bodyPath = join(dir, `${key}.body`);
+  if (!/pdf/i.test(meta.contentType)) return readFile(bodyPath, "utf8");
+  const textPath = join(dir, `${key}.txt`);
+  try {
+    return await readFile(textPath, "utf8");
+  } catch {
+    const run = spawnSync("pdftotext", ["-layout", bodyPath, "-"], { encoding: "utf8", maxBuffer: MAX_BYTES });
+    if (run.status !== 0) throw new Error(`pdftotext failed for ${meta.url}: ${run.stderr}`);
+    await writeFile(textPath, run.stdout);
+    return run.stdout;
+  }
+}
+
 async function readCached(dir: string, url: string): Promise<Listing | null> {
   const key = cacheKey(url);
+  let meta: Meta;
   try {
-    const meta = JSON.parse(await readFile(join(dir, `${key}.json`), "utf8")) as Meta;
-    const body = await readFile(join(dir, `${key}.body`), "utf8");
-    if (meta.url !== url) return null;
-    return { ...meta, body };
+    meta = JSON.parse(await readFile(join(dir, `${key}.json`), "utf8")) as Meta;
   } catch {
     return null;
   }
+  if (meta.url !== url) return null;
+  return { ...meta, body: await bodyText(dir, key, meta) };
 }
 
 async function download(dir: string, url: string): Promise<Listing> {
@@ -71,7 +90,7 @@ async function download(dir: string, url: string): Promise<Listing> {
     const key = cacheKey(url);
     await writeFile(join(dir, `${key}.body`), buffer);
     await writeFile(join(dir, `${key}.json`), `${JSON.stringify(meta, null, 2)}\n`);
-    return { ...meta, body: buffer.toString("utf8") };
+    return { ...meta, body: await bodyText(dir, key, meta) };
   } finally {
     clearTimeout(timer);
   }
