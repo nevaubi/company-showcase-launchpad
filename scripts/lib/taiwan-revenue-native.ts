@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { OFFICIAL_USER_AGENT } from "../../src/lib/sources/refresh-plan";
 import type { SourceColumn, SourceIngest, SourceJson } from "../../src/lib/sources/schema";
 
 export type TaiwanRevenueMarket = "TWSE" | "TPEX";
@@ -349,7 +350,7 @@ export async function collectTaiwanRevenue(
           headers: {
             Accept: "application/json",
             "Accept-Encoding": "identity",
-            "User-Agent": "FiledUnder official-source collector",
+            "User-Agent": OFFICIAL_USER_AGENT,
           },
           signal,
           redirect: "error",
