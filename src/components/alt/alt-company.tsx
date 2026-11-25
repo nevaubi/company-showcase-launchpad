@@ -14,6 +14,7 @@ import { MedicareByState } from "@/components/alt/medicare-by-state";
 import { PlantsTri } from "@/components/alt/plants-tri";
 import { CompanyPlantHazards } from "@/components/alt/plant-hazards";
 import { OfficialBanking } from "@/components/company/official/official-banking";
+import { OrangeBook } from "@/components/company/official/orange-book";
 import { AppLink } from "@/components/company/official/record-link";
 import { fmtAlt, fmtChange, fmtDay } from "@/lib/alt/catalog";
 import { BANK_RISK, bpChange, buildCompanyAlt, type CompanyAlt, type DatasetView, type Figure, type Flag } from "@/lib/alt/company";
@@ -202,6 +203,7 @@ function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetVie
           : view.dataset === "deposits" ? <DepositsByState ticker={ticker} rows={view.table as AltRow[]} />
           : view.dataset === "tri" ? <><CompanyPlantHazards ticker={ticker} /><PlantsTri ticker={ticker} rows={view.table as AltRow[]} /></>
           : <AltRecords rows={view.table as AltRow[]} ticker={ticker} series={series} pageSize={series ? 4 : 6} />}
+        {view.dataset === "fda" && <OrangeBook ticker={ticker} rows={view.rows} />}
       </Panel>
     </div>
   );
