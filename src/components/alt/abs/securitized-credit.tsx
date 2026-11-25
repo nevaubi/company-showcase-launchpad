@@ -24,19 +24,28 @@ export type { AbsSearch } from "@/lib/abs/view/url-state";
 
 const STALE = 5 * 60_000;
 
+/** The server reads answer a value; a failure becomes the query's error, with the server's sentence. */
+function unwrap<T>(answer: { ok: true; data: T } | { ok: false; message: string }): T {
+  if (!answer.ok) throw new Error(answer.message);
+  return answer.data;
+}
+
 export function SecuritizedCredit({ state, onChange }: { state: AbsSearch; onChange: (patch: Partial<AbsSearch>) => void }) {
   const family = familyOf(state);
+  // one read is about fifteen selects: a failure is shown with its retry button, never retried on its own
   const monitor = useQuery({
     queryKey: ["abs_monitor", family],
-    queryFn: () => getAbsMonitor({ data: { family } }),
+    queryFn: async () => unwrap(await getAbsMonitor({ data: { family } })),
     staleTime: STALE,
     enabled: !state.deal,
+    retry: false,
   });
   const deal = useQuery({
     queryKey: ["abs_deal", state.deal],
-    queryFn: () => getAbsDeal({ data: { deal: state.deal! } }),
+    queryFn: async () => unwrap(await getAbsDeal({ data: { deal: state.deal! } })),
     staleTime: STALE,
     enabled: !!state.deal,
+    retry: false,
   });
   const model = useMemo(() => (monitor.data ? monitorModel(monitor.data) : null), [monitor.data]);
   const dealView = useMemo(() => (deal.data ? dealModel(deal.data) : null), [deal.data]);

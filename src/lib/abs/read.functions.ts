@@ -9,20 +9,20 @@ import type { AbsReadClient } from "./read.server";
 const monitorInput = z.object({ family: z.enum(FAMILIES as unknown as [AbsFamily, ...AbsFamily[]]) });
 const dealInput = z.object({ deal: z.string().regex(DEAL_ID) });
 
-/** The deal monitor of one family, with the coverage counts of all three. */
+/** The deal monitor of one family, with the coverage counts of all three. Answers a value; a failure is `ok: false`. */
 export const getAbsMonitor = createServerFn({ method: "POST" })
   .middleware([requireAppAccess])
   .inputValidator((d: unknown) => monitorInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { readMonitor } = await import("./read.server");
-    return readMonitor(context.supabase as unknown as AbsReadClient, data.family);
+    const { answerOf, readMonitor } = await import("./read.server");
+    return answerOf(() => readMonitor(context.supabase as unknown as AbsReadClient, data.family));
   });
 
-/** One deal: its filings, the figures of its current filings and the detail of its newest one; null when unknown. */
+/** One deal: its filings, the figures of its current filings and the detail of its newest one; null when unknown. Answers a value. */
 export const getAbsDeal = createServerFn({ method: "POST" })
   .middleware([requireAppAccess])
   .inputValidator((d: unknown) => dealInput.parse(d))
   .handler(async ({ data, context }) => {
-    const { readDeal } = await import("./read.server");
-    return readDeal(context.supabase as unknown as AbsReadClient, data.deal);
+    const { answerOf, readDeal } = await import("./read.server");
+    return answerOf(() => readDeal(context.supabase as unknown as AbsReadClient, data.deal));
   });

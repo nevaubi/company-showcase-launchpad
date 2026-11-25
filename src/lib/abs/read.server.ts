@@ -54,9 +54,26 @@ export type AbsReadClient = {
 };
 
 export class AbsReadError extends Error {
-  constructor(what: string, error: { message: string; code?: string }) {
+  readonly timeout: boolean;
+  constructor(
+    readonly what: string,
+    error: { message: string; code?: string },
+  ) {
     super(`Could not read ${what}: ${error.message}`);
     this.name = "AbsReadError";
+    this.timeout = error.code === "57014" || /statement timeout|canceling statement/i.test(error.message);
+  }
+}
+
+/** A read's answer as a value, as the official-source reads answer: never a throw to the page, never the database's own text. */
+export type AbsReadAnswer<T> = { ok: true; data: T } | { ok: false; reason: "timeout" | "error"; message: string };
+
+export async function answerOf<T>(read: () => Promise<T>): Promise<AbsReadAnswer<T>> {
+  try {
+    return { ok: true, data: await read() };
+  } catch (e) {
+    if (e instanceof AbsReadError && e.timeout) return { ok: false, reason: "timeout", message: `The database stopped the read of ${e.what} after its time limit.` };
+    return { ok: false, reason: "error", message: e instanceof AbsReadError ? `The stored filings could not be read (${e.what}).` : "The stored filings could not be read." };
   }
 }
 

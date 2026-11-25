@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PAGE, readDeal, readMonitor, readPages, type AbsQuery, type AbsReadClient } from "../read.server";
+import { AbsReadError, answerOf, PAGE, readDeal, readMonitor, readPages, type AbsQuery, type AbsReadClient } from "../read.server";
 
 type Row = Record<string, unknown>;
 type Call = { table: string; columns: string; filters: string[]; range: [number, number] | null; limit: number | null; head: boolean };
@@ -175,5 +175,16 @@ describe("paging", () => {
     const { client } = memoryClient({ t: rows(3000) });
     const p = await readPages("t", (a, b) => client.from("t").select("load_id").order("load_id").range(a, b), 3000);
     expect(p.complete).toBe(true);
+  });
+});
+
+describe("answers (review int-code N6)", () => {
+  it("answers a value, never the database's own text, and names a timeout", async () => {
+    expect(await answerOf(async () => 7)).toEqual({ ok: true, data: 7 });
+    expect(await answerOf(async () => { throw new AbsReadError("the deal list", { code: "57014", message: "canceling statement due to statement timeout" }); }))
+      .toEqual({ ok: false, reason: "timeout", message: "The database stopped the read of the deal list after its time limit." });
+    expect(await answerOf(async () => { throw new AbsReadError("the newest load", { code: "42501", message: "permission denied for table abs_loads" }); }))
+      .toEqual({ ok: false, reason: "error", message: "The stored filings could not be read (the newest load)." });
+    expect(await answerOf(async () => { throw new TypeError("fetch failed"); })).toEqual({ ok: false, reason: "error", message: "The stored filings could not be read." });
   });
 });
