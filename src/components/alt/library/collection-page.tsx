@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import type { Collection } from "@/lib/sources/catalog";
 import { SHAPE_LABEL } from "@/lib/sources/shape";
 import { collectionForSegment } from "./addresses";
-import { BoardSlot } from "./board-slot";
+import { boardSpec, collectionBoardId } from "@/lib/sources/boards/specs";
+import { CollectionBoard } from "./boards";
 import { CollectionCard, CollectionCardSkeleton } from "./collection-card";
 import { CollectionFacts, CollectionHeader } from "./collection-header";
 import { HrefLink } from "./href-link";
@@ -55,6 +56,9 @@ function KnownCollection({ collection, search, onSearch }: { collection: Collect
     return orderWithViews(sortTables(hits, sort), new Map(lib.datasets.map((r) => [r.id, r])));
   }, [lib, mine, deferred, names, includeHidden]);
   const related = relatedPages(collection.id);
+  // a collection without a proven board shows none: its tables come straight after the links
+  const boardId = collectionBoardId(collection.id);
+  const hasBoard = !!(boardId && boardSpec(boardId));
   const filtered = !!(queryWords(deferred.q).length || deferred.shape || deferred.pub);
 
   return (
@@ -69,7 +73,12 @@ function KnownCollection({ collection, search, onSearch }: { collection: Collect
       ) : (
         <>
           <CollectionFacts facts={facts} loading={loading} />
-          {!collection.internal && <BoardSlot section={`${collection.name} board`} title="What the data says" />}
+          {hasBoard && (
+            <div className="min-w-0">
+              <h2 className="mb-2 text-[14px] font-semibold tracking-tight">What the data says</h2>
+              <CollectionBoard collection={collection.id} />
+            </div>
+          )}
           {related.length > 0 && (
             <section data-section="Related pages" className="min-w-0 rounded-md border bg-card px-3.5 py-2.5 shadow-paper">
               <h2 className="text-[13px] font-semibold tracking-tight">In the app</h2>

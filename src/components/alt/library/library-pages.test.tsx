@@ -19,6 +19,10 @@ vi.mock("@/lib/sources/read.functions", async () => {
   return { getLibrary: async () => ({ ok: true, data: lib(rows) }), getSourceSeries: async () => ({ ok: false, reason: "unavailable", message: "" }) };
 });
 
+vi.mock("@/lib/sources/boards/board.functions", () => ({
+  getBoard: async () => ({ ok: false, reason: "unavailable", message: "The reads are not there yet." }),
+}));
+
 class NoResize {
   observe() {}
   unobserve() {}

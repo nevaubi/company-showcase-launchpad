@@ -4,7 +4,7 @@ import { DataUnavailable } from "@/components/app/data-unavailable";
 import { Button } from "@/components/ui/button";
 import { SHAPE_LABEL } from "@/lib/sources/shape";
 import { AltNav } from "./alt-nav";
-import { BoardSlot } from "./board-slot";
+import { LibraryBoard } from "./boards";
 import { ChangesFeed } from "./changes-feed";
 import { CollectionCard, CollectionCardSkeleton } from "./collection-card";
 import { failureHint, useLibrary } from "./library-data";
@@ -135,7 +135,10 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
       ) : (
         <>
           <LibraryFacts facts={lib ? libraryFacts(lib) : null} note={lib ? newestChangeNote(lib.changes[0] ?? null, names) : null} loading={loading} />
-          <BoardSlot section="What the data says" title="What the data says" />
+          <div className="min-w-0">
+            <h2 className="mb-2 text-[14px] font-semibold tracking-tight">What the data says</h2>
+            <LibraryBoard />
+          </div>
           <section data-section="Collections" className="min-w-0">
             <header className="mb-2 flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
               <h2 className="text-[14px] font-semibold tracking-tight">Collections</h2>
