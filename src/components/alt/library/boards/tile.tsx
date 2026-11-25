@@ -3,7 +3,13 @@ import { useNavigate } from "@tanstack/react-router";
 import { Segmented } from "@/components/app/segmented";
 import { datasetHref, recordHref, type DatasetSearch } from "@/lib/sources/links";
 import type { BoardTile } from "@/lib/sources/boards/types";
-import { TILE_CHART_HEIGHT, TileChart } from "./tile-chart";
+import { TileChart } from "./tile-chart";
+
+/**
+ * Height of a board tile's chart: ten ranked bars with their names above them need 20px a row, so every chart
+ * of a board is this tall and the charts of a row still end on one line.
+ */
+export const BOARD_CHART_HEIGHT = 200;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -83,6 +89,7 @@ export function Tile({ tile }: { tile: BoardTile }) {
               label={`${tile.title}, ${isRank ? result.asOf : `${result.points[0]?.label ?? ""} to ${result.points[result.points.length - 1]?.label ?? ""}`}, ${result.plotUnit}`}
               recordHref={rowHref}
               onOpen={open}
+              height={BOARD_CHART_HEIGHT}
             />
           </>
         ) : (
@@ -127,7 +134,7 @@ function TileTable({ tile, rowHref }: { tile: BoardTile; rowHref: (row: number) 
   const isRank = tile.form === "ranked-bars";
   const rows = isRank ? r.points : [...r.points].reverse();
   return (
-    <div className="min-w-0 overflow-x-auto" style={{ minHeight: TILE_CHART_HEIGHT + 18 }}>
+    <div className="min-w-0 overflow-x-auto" style={{ minHeight: BOARD_CHART_HEIGHT + 18 }}>
       <table className="w-full text-[11px]">
         <caption className="sr-only">
           {tile.title}, {r.plotUnit}
@@ -143,7 +150,7 @@ function TileTable({ tile, rowHref }: { tile: BoardTile; rowHref: (row: number) 
         <tbody>
           {rows.map((p) => (
             <tr key={`${p.key}-${p.row}`} className="border-b border-border/60 last:border-0">
-              <td className="max-w-[12rem] truncate py-1 pr-2">{p.label}</td>
+              <td className="py-1 pr-2">{p.label}</td>
               <td className="num py-1 pr-2 text-right">{p.display}</td>
               <td className="num py-1 pr-2 text-right text-muted-foreground">{p.text === null ? "null" : p.text === "" ? "empty" : p.text}</td>
               <td className="py-1 text-right">
