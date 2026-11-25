@@ -42,14 +42,15 @@ export function cleanName(name: string): string {
 /**
  * A name that is still only a code or a file stem: one token of capitals and digits ("UNRATE",
  * "FS220"), words with no capital at all ("aircraft assets"), or a short run of file tokens
- * ("S1282 1 t", "MER T01.01"). Such a title is counted as untitled until a listing supplies one.
+ * ("S1282 1 t", "M3s A", "MER T01.01"). Such a title is counted as untitled until a listing
+ * supplies one.
  */
 export function isBareName(title: string): boolean {
   const text = (title ?? "").trim();
   if (!text) return true;
-  if (/^[A-Z0-9.\-]+$/.test(text)) return true;
+  if (/^[A-Z0-9.-]+$/.test(text)) return true;
   if (text === text.toLowerCase()) return true;
-  if (/^[A-Z][0-9A-Za-z]*( [0-9a-z]{1,3})+$/.test(text)) return true;
+  if (/^[A-Z][0-9A-Za-z]*( [0-9A-Za-z]{1,3})+$/.test(text)) return true;
   if (/^MER T[0-9A-Z.]+$/.test(text)) return true;
   return false;
 }
