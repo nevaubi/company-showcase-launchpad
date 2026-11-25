@@ -1,8 +1,7 @@
 import { describe,expect,it,vi } from "vitest";
 import { defaultParseSearch } from "@tanstack/react-router";
-import { executeOfficialResearch,OFFICIAL_RESEARCH_MAX_CHARS,officialSourceHref,resolveOfficialFields,type OfficialSourceReader } from "./research";
+import { digestOfficialSourceOutput,EVERY_WORD_PAGE_SIZE,executeOfficialResearch,OFFICIAL_RESEARCH_MAX_CHARS,officialSourceHref,resolveOfficialFields,searchWords,type OfficialSourceReader } from "./research";
 import { OFFICIAL_SOURCE_TOOL_DEFS } from "./research-tools";
-import { altPageSearch } from "./url-state";
 import type { SourceColumn,SourceDatasetDetail,SourceDatasetList,SourceRecord,SourceRecordPage,SourceRecordQuery } from "./schema";
 
 const SNAP="a".repeat(64);
@@ -90,14 +89,13 @@ describe("official source research reads",()=>{
     const p=parsed(result);
     expect(p.rows[0].values).toEqual(["000123","9007199254740993.000000000000000001","0.000000000000000001","","0",null]);
     expect(p.fields[1]).toMatchObject({key:"col0002",unit:"USD thousands",scale:"1000"});
-    expect(p.rows[0]).toMatchObject({record_id:`${SNAP}:1`,source_url:"https://official.example/source.csv",source_url_basis:"record"});
+    expect(p.rows[0]).toEqual({row_number:1,values:p.rows[0].values,entity_id:"000123",entity_name:"Native Bank",period:"2026Q2",geo_level:"county",geo_code:"01001",geo_name:"Autauga",source_url:"https://official.example/source.csv"});
     expect(p.scope.notes).toBe("A fixed cohort; not the complete historical bank population.");
     expect(query).toHaveBeenCalledWith(expect.objectContaining({snapshotId:SNAP,entity:"000123",geography:"01001",period:"2026Q2",columns:[0,1,2,3,4,5],limit:20}));
-    const url=new URL(p.rows[0].app_url,"https://filedunder.example");
-    expect(url.searchParams.get("source")).toBe("financials/fdic");
-    expect(url.searchParams.get("snapshot")).toBe(SNAP);
-    expect(url.searchParams.get("after")).toBe("0");
-    expect(url.searchParams.get("geography")).toBe("01001");
+    const url=new URL(p.row_rules.record_app_url.replace("{row_number}",String(p.rows[0].row_number)),"https://filedunder.example");
+    expect(url.pathname).toBe("/app/alt-data/library/d/financials%2Ffdic");
+    expect(defaultParseSearch(url.search)).toEqual({snapshot:SNAP,row:1});
+    expect(p).toMatchObject({snapshot_id:SNAP,latest_snapshot_id:SNAP,is_latest_snapshot:true,published_at:"2026-11-25T00:00:00Z"});
     expect(result.output.length).toBeLessThanOrEqual(OFFICIAL_RESEARCH_MAX_CHARS);
   });
   it("rejects duplicate-label ambiguity and duplicate selectors instead of guessing a field",()=>{
@@ -233,9 +231,11 @@ describe("official source catalogue and inspection",()=>{
     expect(p.scope.search_constants).toEqual({period:"2026-10"});
     expect(p.scope.declared_coverage).toMatchObject({native_period:"11510",period_index_is_native_text:false,period_index_rule:d.snapshot!.coverage.period_index_rule});
   });
-  it("pins row links without losing exact identifier strings",()=>{
+  it("pins row links at the table page without losing exact identifier strings",()=>{
     const url=new URL(officialSourceHref("collection/file",SNAP,37,{entity:"00123",geography:"01001",period:"FY 2026"}),"https://example.test");
-    expect(Object.fromEntries(url.searchParams)).toEqual({view:"sources",source:"collection/file",snapshot:SNAP,after:"37",entity:"00123",geography:"01001",period:"FY 2026"});
+    expect(url.pathname).toBe("/app/alt-data/library/d/collection%2Ffile");
+    expect(Object.fromEntries(url.searchParams)).toEqual({snapshot:SNAP,after:"37",entity:"00123",geography:"01001",period:"FY 2026"});
+    expect(new URL(officialSourceHref("collection/file",SNAP),"https://example.test").search).toBe(`?snapshot=${SNAP}`);
   });
   it.each([
     {entity:"628",geography:"01095",period:"20260930"},
@@ -244,9 +244,7 @@ describe("official source catalogue and inspection",()=>{
     {entity:"900719925474099312345678901234567890",geography:"01001",period:"20260930"},
   ])("keeps native filters through the real router parser: $entity / $geography / $period",filters=>{
     const url=new URL(officialSourceHref("collection/file",SNAP,9,filters),"https://example.test");
-    expect(altPageSearch.parse(defaultParseSearch(url.search))).toEqual({
-      view:"sources",source:"collection/file",snapshot:SNAP,after:9,...filters,
-    });
+    expect(defaultParseSearch(url.search)).toEqual({snapshot:SNAP,after:9,...filters});
   });
   it("advertises explicit bounds and only the three intended read tools",()=>{
     expect(OFFICIAL_SOURCE_TOOL_DEFS.map(t=>t.name)).toEqual(["search_official_sources","inspect_official_source","query_official_records"]);
@@ -257,3 +255,114 @@ describe("official source catalogue and inspection",()=>{
     expect(OFFICIAL_SOURCE_TOOL_DEFS.every(t=>t.strict && t.parameters.additionalProperties===false)).toBe(true);
   });
 });
+
+// A realistic FDIC answer: four fields, values and index strings at their live widths (rev-app P7).
+const fdicColumns:SourceColumn[]=[
+  {key:"col0001",label:"CERT",type:"string",native_type:"number",unit:"FDIC certificate identifier",title:"FDIC Certificate #"},
+  {key:"col0002",label:"REPDTE",type:"string",native_type:"string",unit:"Text / categorical / date; see definition",title:"Report Date"},
+  {key:"col0003",label:"ASSET",type:"string",native_type:"number",unit:"USD thousands (monetary measures)",title:"Total assets"},
+  {key:"col0004",label:"ROA",type:"string",native_type:"number",unit:"Percent",title:"Return on assets"},
+];
+function fdicFixtures(rows:number,options:{latest?:string;after?:number}={}) {
+  const d=detail();
+  d.snapshot!.columns=fdicColumns;d.snapshot!.expected_rows=51453;d.snapshot!.loaded_rows=51453;
+  d.dataset.latest_snapshot_id=options.latest??SNAP;
+  const start=(options.after??0)+1;
+  const sourceRows=Array.from({length:rows},(_,i):SourceRecord=>({row_number:start+i,values:["628","20260630","4091315000","1.5851712753913223"],entity_id:"628",entity_name:"JPMORGAN CHASE BANK NATIONAL ASSOCIATION",period:"20260630",geo_level:null,geo_code:null,geo_name:null,source_url:null}));
+  return {d,...fixtures(d,sourceRows,true)};
+}
+
+describe("record answers sized for the assistant (rev-app S2, S7)",()=>{
+  it("fits twenty FDIC rows of four fields in one answer",async()=>{
+    const {reader}=fdicFixtures(20);
+    const result=await executeOfficialResearch("query_official_records",request({fields:["col0001","col0002","col0003","col0004"]}),reader);
+    const p=parsed(result);
+    expect(p.rows_returned).toBe(20);
+    expect(p.rows[0]).toEqual({row_number:1,values:["628","20260630","4091315000","1.5851712753913223"],entity_id:"628",entity_name:"JPMORGAN CHASE BANK NATIONAL ASSOCIATION",period:"20260630"});
+    expect(p.fields[2]).toMatchObject({key:"col0003",unit:"USD thousands (monetary measures)",title:"Total assets"});
+    expect(p.row_rules.source_url).toMatch(/dataset's source_url/);
+    expect(result.output.length).toBeLessThanOrEqual(OFFICIAL_RESEARCH_MAX_CHARS);
+  });
+  it("sends scope and full field text only with the first page; units stay on every page",async()=>{
+    const {reader}=fdicFixtures(20,{after:40});
+    const p=parsed(await executeOfficialResearch("query_official_records",request({fields:["col0001","col0003"],after:40}),reader));
+    expect(p.scope).toBeUndefined();
+    expect(p.fields).toEqual([{key:"col0001",position:0,unit:"FDIC certificate identifier"},{key:"col0003",position:2,unit:"USD thousands (monetary measures)"}]);
+    expect(p.fields_note).toMatch(/first page/);
+    expect(p.next_cursor).toBe(60);
+  });
+  it("says when a pinned snapshot is no longer the latest",async()=>{
+    const {reader}=fdicFixtures(1,{latest:"d".repeat(64)});
+    const p=parsed(await executeOfficialResearch("query_official_records",request({fields:["col0001"]}),reader));
+    expect(p).toMatchObject({snapshot_id:SNAP,latest_snapshot_id:"d".repeat(64),is_latest_snapshot:false});
+  });
+});
+
+describe("a records page that stopped at the scan limit (rev-sql M1)",()=>{
+  it("is a legitimate answer: no rows yet, and the cursor continues the search",async()=>{
+    const {d,reader}=fdicFixtures(0);
+    reader.query=async(input)=>({dataset_id:d.dataset.id,snapshot_id:SNAP,total:51453,columns:input.columns!.map(i=>fdicColumns[i]),column_indices:input.columns!,rows:[],hasMore:true,nextCursor:50000,scanned:50000,scanComplete:false});
+    const p=parsed(await executeOfficialResearch("query_official_records",request({fields:["col0001"],entity:"99999"}),reader));
+    expect(p).toMatchObject({rows:[],has_more:true,next_cursor:50000,scan_complete:false,rows_examined:50000,remaining_matching_rows:null});
+    expect(p.hint).toMatch(/scan limit at row 50000 of 51453.*not the end/);
+  });
+  it("still refuses a cursor that goes backwards or past the snapshot",async()=>{
+    const {d,reader}=fdicFixtures(0);
+    for(const nextCursor of [-1,60000]) {
+      reader.query=async(input)=>({dataset_id:d.dataset.id,snapshot_id:SNAP,total:51453,columns:input.columns!.map(i=>fdicColumns[i]),column_indices:input.columns!,rows:[],hasMore:true,nextCursor,scanComplete:false});
+      await expect(executeOfficialResearch("query_official_records",request({fields:["col0001"],entity:"99999"}),reader)).rejects.toThrow(/continuation cursor/);
+    }
+  });
+});
+
+describe("catalogue search by every word (rev-app S9)",()=>{
+  const entry=(id:string,name:string,agency="FDIC")=>({...detail().dataset,id,name,agency,description:"Complete retained source table.",latest_snapshot:detail().snapshot!});
+  it("splits the query into words",()=>{
+    expect(searchWords("  FDIC  call report fdic ")).toEqual(["fdic","call","report"]);
+    expect(searchWords(undefined)).toEqual([]);
+  });
+  it("asks the database for the longest word and keeps rows that contain every word",async()=>{
+    const {reader}=fixtures();
+    const list=vi.fn(async():Promise<SourceDatasetList>=>({datasets:[entry("a","FDIC Summary of Deposits branch table"),entry("b","FDIC institution deposits",""),entry("c","Deposits of credit unions","NCUA")],total:3,sectors:[],agencies:[],nextCursor:null}));
+    reader.list=list;
+    const p=parsed(await executeOfficialResearch("search_official_sources",{query:"fdic deposits"},reader));
+    expect(list).toHaveBeenCalledWith({q:"deposits",sector:undefined,agency:undefined,after:undefined,limit:EVERY_WORD_PAGE_SIZE});
+    expect(p.datasets.map((d:{dataset_id:string})=>d.dataset_id)).toEqual(["a","b"]);
+    expect(p).toMatchObject({total_catalogue_matches:null,has_more:false,next_cursor:null,match_rule:expect.stringMatching(/Every word/)});
+  });
+  it("continues after the last dataset returned and says when nothing matches",async()=>{
+    const {reader}=fixtures();
+    const many=Array.from({length:30},(_,i)=>entry(`d${String(i).padStart(2,"0")}`,"FDIC call report panel"));
+    reader.list=async()=>({datasets:many,total:30,sectors:[],agencies:[],nextCursor:null});
+    const p=parsed(await executeOfficialResearch("search_official_sources",{query:"fdic call report",limit:5},reader));
+    expect(p.datasets).toHaveLength(5);
+    expect(p.next_cursor).toBe("d04");
+    reader.list=async()=>({datasets:[],total:0,sectors:[],agencies:[],nextCursor:null});
+    const none=parsed(await executeOfficialResearch("search_official_sources",{query:"house prices by zip"},reader));
+    expect(none.datasets).toEqual([]);
+    expect(none.hint).toMatch(/one distinctive word/);
+  });
+});
+
+describe("the step digest a person reads (rev-app S11)",()=>{
+  it("lists whole records with units and the pinned link, never a cut value",async()=>{
+    const {reader}=fdicFixtures(20);
+    const result=await executeOfficialResearch("query_official_records",request({fields:["col0001","col0003","col0004"]}),reader);
+    const digest=digestOfficialSourceOutput(result.output)!;
+    expect(digest.split("\n")[1]).toBe("row 1: CERT 628 (FDIC certificate identifier), ASSET 4091315000 (USD thousands (monetary measures)), ROA 1.5851712753913223 (Percent)");
+    expect(digest).toContain("/app/alt-data/library/d/financials%2Ffdic?snapshot=");
+    expect(digest).not.toMatch(/Re-read the pinned source/);
+    const small=digestOfficialSourceOutput(result.output,600)!;
+    expect(small.length).toBeLessThanOrEqual(600);
+    expect(small).toMatch(/\d+ more in the answer/);
+    for(const line of small.split("\n").filter(l=>l.startsWith("row "))) expect(line).toMatch(/ROA 1\.5851712753913223 \(Percent\)$/);
+  });
+  it("reads search and inspection answers, and ignores other outputs",async()=>{
+    const {reader}=fixtures();
+    const inspected=await executeOfficialResearch("inspect_official_source",{dataset_id:"financials/fdic",snapshot_id:SNAP},reader);
+    expect(digestOfficialSourceOutput(inspected.output)).toMatch(/^Native institution records, snapshot aaaaaaaaaaaa: 6 of 6 matching fields\ncol0001 CERT \(FDIC certificate identifier\)/);
+    expect(digestOfficialSourceOutput("not json")).toBeNull();
+    expect(digestOfficialSourceOutput(JSON.stringify({kind:"other"}))).toBeNull();
+  });
+});
+
