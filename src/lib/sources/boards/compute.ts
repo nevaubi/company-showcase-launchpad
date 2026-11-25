@@ -115,7 +115,10 @@ export function periodLabel(parsed: ParsedPeriod, cadence: Cadence): string {
   return parsed.label;
 }
 
-const at = (cadence: Cadence, label: string) => (cadence === "day" || cadence === "week" ? `on ${label}` : `in ${label}`);
+const at = (cadence: Cadence, label: string) =>
+  cadence === "week" ? `in the week ending ${label}` : cadence === "day" ? `on ${label}` : `in ${label}`;
+/** A period named as the object of a comparison ("above Oct 2025", "above the week ending Nov 20, 2025"). */
+const named = (cadence: Cadence, label: string) => (cadence === "week" ? `the week ending ${label}` : label);
 
 const SPAN: Record<Cadence, string> = {
   day: "day",
@@ -197,15 +200,27 @@ function place(
   return { ok: true, placed };
 }
 
-function unitWords(unit: string): string {
-  return unit === "Percent" ? "%" : ` ${unit}`;
+/** What is printed right after a big figure: "%" for Percent, nothing for a count, else the unit as stated. */
+export function figureUnitOf(unit: string): string {
+  return unit === "Percent" ? "%" : unit === "Number" ? "" : unit;
+}
+
+/**
+ * The unit as it follows a figure in a sentence, as the source states it: "Percent" is written "%", a count
+ * stated as "Number" needs no word, an index base goes in brackets ("134.4 (Index 2000=100)").
+ */
+export function unitWords(unit: string): string {
+  if (unit === "Percent") return "%";
+  if (unit === "Number") return "";
+  if (/^Index\b/.test(unit)) return ` (${unit})`;
+  return ` ${unit}`;
 }
 
 function changeText(change: Decimal, as: "percent" | "difference", unit: string, decimals: number): string {
   const size = formatDecimal(absDecimal(change), { decimals });
   if (as === "percent") return `${size}%`;
-  if (unit === "Percent") return `${size} percentage ${size === "1" || size === "1.0" ? "point" : "points"}`;
-  return `${size} ${unit}`;
+  if (unit === "Percent") return `${size} percentage ${size === "1" ? "point" : "points"}`;
+  return `${size}${unitWords(unit)}`.trim();
 }
 
 function computeChange(latest: Decimal, base: Decimal, as: "percent" | "difference", decimals: number): Decimal | null {
@@ -300,7 +315,7 @@ export function computeSeriesTile(spec: SeriesTileSpec, context: TileContext, ce
     if (!latestPair) {
       if (!isChange) {
         figure = level;
-        figureUnit = unitWords(spec.unit).trim();
+        figureUnit = figureUnitOf(spec.unit);
         headline = `${spec.subject} ${verb} ${level}${unitWords(spec.unit)} ${at(context.cadence, latest.label)}. No comparison with a year earlier: ${missing(latest)}.`;
         return result(spec, context, latest, points, gaps, null, rows, headline, figure, figureUnit, isChange, as);
       }
@@ -332,17 +347,17 @@ export function computeSeriesTile(spec: SeriesTileSpec, context: TileContext, ce
           : `${spec.subject} ${sign > 0 ? "rose" : "fell"} ${changeText(change, "percent", spec.unit, 1)} over the ${SPAN[context.cadence]} to ${lead.label}.`) + tail;
     } else {
       figure = isChange ? formatDecimal(change, { decimals: changeDecimals, plus: true }) : leadLevel;
-      figureUnit = isChange ? (as === "percent" ? "%" : spec.unit === "Percent" ? "pp" : spec.unit) : unitWords(spec.unit).trim();
+      figureUnit = isChange ? (as === "percent" ? "%" : spec.unit === "Percent" ? "pp" : spec.unit) : figureUnitOf(spec.unit);
       const comparison =
         sign === 0
-          ? `unchanged from ${prior.label}`
-          : `${changeText(change, as, spec.unit, changeDecimals)} ${sign > 0 ? "above" : "below"} ${prior.label}`;
+          ? `unchanged from ${named(context.cadence, prior.label)}`
+          : `${changeText(change, as, spec.unit, changeDecimals)} ${sign > 0 ? "above" : "below"} ${named(context.cadence, prior.label)}`;
       headline = `${spec.subject} ${verb} ${leadLevel}${unitWords(spec.unit)} ${at(context.cadence, lead.label)}, ${comparison}.` + tail;
     }
     return result(spec, context, lead, points, gaps, derivation, rows, headline, figure, figureUnit, isChange, as);
   } else {
     figure = level;
-    figureUnit = unitWords(spec.unit).trim();
+    figureUnit = figureUnitOf(spec.unit);
     headline = `${spec.subject} ${verb} ${level}${unitWords(spec.unit)} ${at(context.cadence, latest.label)}.`;
   }
 
@@ -483,7 +498,7 @@ export function computeRankTile(
     ok: true,
     headline: `${leader.cell.name ?? leader.cell.key} ${spec.verb ?? "had"} the largest ${spec.subject} of ${ranked.length} ${spec.entities} ${at(context.cadence, label)}: ${figure}${unitWords(spec.unit)}.`,
     figure,
-    figureUnit: unitWords(spec.unit).trim(),
+    figureUnit: figureUnitOf(spec.unit),
     asOf: label,
     unit: spec.unit,
     plotUnit: spec.unit,

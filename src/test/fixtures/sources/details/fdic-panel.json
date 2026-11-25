@@ -1,0 +1,343 @@
+{
+ "dataset": {
+  "id": "official_01_financials_data_fdic_top500_all_native_quarterly_2000_latest_f5f72a5b7b",
+  "name": "FDIC bank financial statements \u2014 all reported quarters, 2000–2026Q2",
+  "sector": "01_financials",
+  "agency": "FDIC",
+  "source_id": "FDIC_FINANCIALS",
+  "source_url": "https://api.fdic.gov/banks/financials",
+  "description": "Institution-quarter observations for the validated 500-bank cohort selected in 2026Q2. All available quarterly records from 2000Q1 through 2026Q2 and all native fields are retained; this is not the complete historical universe of every insured bank. Retained table: 51,453 source rows and 2,379 columns.",
+  "grain": "FDIC certificate / reporting quarter",
+  "units": "Source-native, column-specific units; retained official dictionaries and row unit fields govern interpretation.",
+  "notes": "Fixed 2026Q2 cohort, not historical top-500 or failure-inclusive population. Native quarterly and YTD fields are separate. Current vintage may contain revisions. API also contains noninsured NC records, explicitly excluded.\nLargest 500 institutions at 2026-06-30 in insured bank classes N,NM,SM,SB,SI,SL,SA,OI. 51,453 rows; all 2,378 documented native fields explicitly requested. Latest financials index risview_20261116221646.\nSource values and disclosure flags are unchanged. Retrieval time does not establish historical public availability.",
+  "latest_snapshot_id": "cc6fa80010395b5e964e828c57820be11b1522d433a7f2681eda439d723ba817",
+  "created_at": "2026-11-25T05:29:55.347319+00:00",
+  "updated_at": "2026-11-25T05:47:34.707471+00:00"
+ },
+ "snapshot": {
+  "id": "cc6fa80010395b5e964e828c57820be11b1522d433a7f2681eda439d723ba817",
+  "dataset_id": "official_01_financials_data_fdic_top500_all_native_quarterly_2000_latest_f5f72a5b7b",
+  "file_sha256": "770282f14ded45f3dccdcc9d62f595814df7dc9bbf3bc13674d6ba46f741b6b2",
+  "source_path": "01_financials/data/fdic_top500_all_native_quarterly_2000_latest.csv",
+  "retrieved_at": "2026-11-24T10:14:39.851097+00:00",
+  "status": "ready",
+  "expected_rows": 51453,
+  "loaded_rows": 51453,
+  "column_count": 2379,
+  "coverage": {
+   "source_ids": [
+    "FDIC_FINANCIALS"
+   ],
+   "entity_type": "FDIC_certificate",
+   "source_path": "01_financials/data/fdic_top500_all_native_quarterly_2000_latest.csv",
+   "source_urls": [
+    "https://api.fdic.gov/banks/financials"
+   ],
+   "identity_rule": "CERT identifies insured institution; ID identifies source record; RSSDHCR identifies regulatory parent and must not replace CERT.",
+   "overlaps_files": [],
+   "collection_slug": "01_financials",
+   "population_role": "source_native_table",
+   "entity_id_column": "CERT",
+   "period_components": [],
+   "source_linkage_basis": "workbook_specification",
+   "publication_time_known": false,
+   "source_retrieval_times": [
+    "2026-11-24T10:14:39.851097+00:00"
+   ],
+   "availability_time_known": false,
+   "period_index_is_native_text": true,
+   "archive_population_is_not_unique_entity_count": true
+  },
+  "quality": {
+   "row_width_verified": true,
+   "source_value_policy": "exact_strings_blank_is_empty_string",
+   "duplicate_header_labels": {},
+   "geo_identifier_validation": {},
+   "source_bytes_sha256_verified": true,
+   "source_lexical_marker_counts": {
+    "NM": 21709
+   },
+   "_preview_dropped_keys": [
+    "blank_counts_by_column"
+   ]
+  },
+  "ingest": {
+   "format": "csv",
+   "encoding": "utf-8",
+   "constants": {
+    "geo_level": "state",
+    "source_url": "https://api.fdic.gov/banks/financials"
+   },
+   "delimiter": ",",
+   "dimensions": {
+    "period": 1,
+    "geo_code": 2050,
+    "entity_id": 0,
+    "entity_name": 1176
+   },
+   "header_rows": 1
+  },
+  "attempts": 2,
+  "created_at": "2026-11-25T05:29:58.793658+00:00",
+  "published_at": "2026-11-25T05:47:34.707471+00:00",
+  "columns": null
+ },
+ "file": null,
+ "columns_total": 2379,
+ "columns_complete": [
+  {
+   "key": "col0001",
+   "type": "string",
+   "unit": "FDIC certificate identifier",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "CERT",
+   "title": "FDIC Certificate #",
+   "description": "A unique number assigned by the FDIC used to identify institutions and for the issuance of insurance certificates.",
+   "native_type": "number",
+   "period_basis": "See definition",
+   "unit_evidence": "Official API schema / official standard-report variable workbook; count/identifier override from official field description",
+   "position": 0
+  },
+  {
+   "key": "col0002",
+   "type": "string",
+   "unit": "Text / categorical / date; see definition",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "REPDTE",
+   "title": "Report Date",
+   "description": "The last day of the financial reporting period selected.",
+   "native_type": "string",
+   "period_basis": "See definition",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 1
+  },
+  {
+   "key": "col0003",
+   "type": "string",
+   "unit": "identifier",
+   "label": "ID",
+   "title": "FDIC source record identifier",
+   "description": "Source ID is preserved as supplied; CERT is the institution identity and REPDTE is its reporting period.",
+   "position": 2
+  },
+  {
+   "key": "col0004",
+   "type": "string",
+   "unit": "Not explicitly specified in retrieved field metadata",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ABCUBK",
+   "title": "ASST-BCK UNUSED COMMIT - RELATED",
+   "native_type": "number",
+   "period_basis": "See definition",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 3
+  },
+  {
+   "key": "col0005",
+   "type": "string",
+   "unit": "Percent",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ABCUBKR",
+   "title": "ASST-BCK UNUSED COMMIT - RELATED RATIO",
+   "description": "( YTD, % ) Conduits Sponsored by the Bank - Unused Commitments to Provide Liquidity to Conduit Structures: Asset-Backed Commercial Paper Conduits Sponsored By The Bank, A Bank Affiliate, Or The Bank's Holding Company.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 4
+  },
+  {
+   "key": "col0006",
+   "type": "string",
+   "unit": "USD thousands (monetary measures)",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ABCUOTH",
+   "title": "ASSET-BACK UNUSED COMMIT - OTHER",
+   "description": "( YTD, $ ) Conduits Sponsored by Other Unrelated Institutions_x000D_\nUnused Commitments To Provide Liquidity To Conduit_x000D_\nStructures: Asset-Backed Commercial Paper Conduits Sponsored By Other Unrelated Institutions.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 5
+  },
+  {
+   "key": "col0007",
+   "type": "string",
+   "unit": "Percent",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ABCUOTHR",
+   "title": "ASSET-BACK UNUSED COMMIT - OTHER RATIO",
+   "description": "( YTD, % ) Conduits Sponsored by Other Unrelated Institutions_x000D_\nUnused Commitments To Provide Liquidity To Conduit_x000D_\nStructures: Asset-Backed Commercial Paper Conduits Sponsored By Other Unrelated Institutions.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 6
+  },
+  {
+   "key": "col0008",
+   "type": "string",
+   "unit": "USD thousands (monetary measures)",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ABCXBK",
+   "title": "ASSET-BACK CREDIT EX-RELATED",
+   "description": "( YTD, $ ) Conduits Sponsored by the Bank Maximum Amount Of Credit Exposure Arising From Credit Enhancements Provided To Conduit Structures In The Form Of Standby Letters Of Credit, Subordinate Securities, And Other Enhancements - Assets-Backed Commercial Paper Conduits Sponsored By The Bank, A Bank Affiliate Or The Bank's Holding Company.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 7
+  },
+  {
+   "key": "col0009",
+   "type": "string",
+   "unit": "Percent",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ABCXBKR",
+   "title": "ASSET-BACK CREDIT EX-RELATED RATIO",
+   "description": "( YTD, % ) Conduits Sponsored by the Bank Maximum Amount Of Credit Exposure Arising From Credit Enhancements Provided To Conduit Structures In The Form Of Standby Letters Of Credit, Subordinate Securities, And Other Enhancements - Assets-Backed Commercial Paper Conduits Sponsored By The Bank, A Bank Affiliate Or The Bank's Holding Company.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 8
+  },
+  {
+   "key": "col0010",
+   "type": "string",
+   "unit": "USD thousands (monetary measures)",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ABCXOTH",
+   "title": "ASSET-BACK CREDIT EX-OTHER",
+   "description": "( YTD, $ ) Conduits Sponsored by Other Unrelated Institutions Maximum Amount Of Credit Exposure Arising From Credit Enhancements Provided To Conduit Structures In The Form Of Standby Letters Of Credit, Subordinate Securities, And Other Enhancements - Assets-Backed Commercial Paper Conduits Sponsored By Other Unrelated Institutions.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 9
+  },
+  {
+   "key": "col0011",
+   "type": "string",
+   "unit": "Percent",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ABCXOTHR",
+   "title": "ASSET-BACK CREDIT EX-OTHER RATIO",
+   "description": "( YTD, % ) Conduits Sponsored by Other Unrelated Institutions Maximum Amount Of Credit Exposure Arising From Credit Enhancements Provided To Conduit Structures In The Form Of Standby Letters Of Credit, Subordinate Securities, And Other Enhancements - Assets-Backed Commercial Paper Conduits Sponsored By Other Unrelated Institutions.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 10
+  },
+  {
+   "key": "col0012",
+   "type": "string",
+   "unit": "Not explicitly specified in retrieved field metadata",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ACEPT",
+   "title": "BANKS LIABILITY ON ACCEPTANCES",
+   "native_type": "number",
+   "period_basis": "See definition",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 11
+  },
+  {
+   "key": "col0036",
+   "type": "string",
+   "unit": "USD thousands (monetary measures)",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ASSET",
+   "title": "Total assets",
+   "description": "( YTD, $ ) The sum of all assets owned by the institution including cash, loans, securities, bank premises and other assets. This total does not include off-balance-sheet accounts.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 35
+  },
+  {
+   "key": "col0236",
+   "type": "string",
+   "unit": "USD thousands (monetary measures)",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "DEP",
+   "title": "Total deposits",
+   "description": "( YTD, $ ) The sum of all deposits including demand deposits, money market deposits, other savings deposits, time deposits and deposits in foreign offices.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 235
+  },
+  {
+   "key": "col0919",
+   "type": "string",
+   "unit": "USD thousands (monetary measures)",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "LNLSNET",
+   "title": "LOANS AND LEASES-NET",
+   "description": "( YTD, $ ) Net Loans and Leases",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 918
+  },
+  {
+   "key": "col1177",
+   "type": "string",
+   "unit": "Text / categorical / date; see definition",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "NAME",
+   "title": "INSTITUTION NAME",
+   "description": "The legal title or name of the institution._x000D_\nNote: If you are having trouble finding an FDIC-Insured Institution: Type only part of the name. By typing a part of the name -- for example, type NET instead of NET.B@NK -- you can list all institutions that have net anywhere in their name. Then, you can look at the list and select the bank or thrift you are seeking.",
+   "native_type": "string",
+   "period_basis": "See definition",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 1176
+  },
+  {
+   "key": "col1297",
+   "type": "string",
+   "unit": "Percent",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "NIMY",
+   "title": "NET INTEREST MARGIN",
+   "description": "( YTD, % ) Total interest income less total interest expense (annualized) as a percent of average earning assets .",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 1296
+  },
+  {
+   "key": "col1896",
+   "type": "string",
+   "unit": "Percent",
+   "basis": "Official FDIC dictionary and source report definitions; native values retained",
+   "label": "ROA",
+   "title": "Return on assets (ROA)",
+   "description": "( YTD, % ) Net income after taxes and extraordinary items (annualized) as a percent of average total assets. Bank net income (including gains or losses on securities and extraordinary items) as a percentage of average total (consolidated) assets. The basic yardstick of bank profitability.",
+   "native_type": "number",
+   "period_basis": "YTD tag; balance-sheet amounts are period-end stocks",
+   "unit_evidence": "Official API schema / official standard-report variable workbook",
+   "position": 1895
+  }
+ ],
+ "columns_shape": [
+  {
+   "position": 0,
+   "label": "CERT",
+   "native_type": "number",
+   "unit": "FDIC certificate identifier"
+  },
+  {
+   "position": 1,
+   "label": "REPDTE",
+   "native_type": "string",
+   "unit": "Text / categorical / date; see definition"
+  },
+  {
+   "position": 1176,
+   "label": "NAME",
+   "native_type": "string",
+   "unit": "Text / categorical / date; see definition"
+  },
+  {
+   "position": 2050,
+   "label": "STALP",
+   "native_type": "string",
+   "unit": "Text / categorical / date; see definition"
+  }
+ ]
+}

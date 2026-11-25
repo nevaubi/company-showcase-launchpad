@@ -1,0 +1,106 @@
+{
+ "dataset": {
+  "id": "official_04_energy_csv_monthly_energy_2024_onward_1bf877c69e",
+  "name": "MER monthly observations, 2024 onward",
+  "sector": "04_energy",
+  "agency": "US EIA",
+  "source_id": "EIA_MER",
+  "source_url": "https://www.eia.gov/totalenergy/data/browser/csv.php?tbl=T01.01",
+  "description": "All monthly observations from 2024-01 onward in all 107 current MER tables; not every series has reached the same latest month. Full historical monthly source tables accompany the workbook. YYYYMM is a source period code, not a day. Retained table: 34,808 source rows and 4 columns.",
+  "grain": "source table / column / MSN / YYYYMM",
+  "units": "Source-native, column-specific units; retained official dictionaries and row unit fields govern interpretation.",
+  "notes": "Same MSN may appear with different units or multiple columns; do not collapse on MSN alone. Native units and withheld/missing flags retained. Current release is revised history, not vintage-as-of history.\nComplete 107 table-linked CSV downloads captured from October 2026 release page; 737825 source-context records.\nAll monthly observations from 2024-01 onward in all 107 current MER tables; not every series has reached the same latest month. Full historical monthly source tables accompany the workbook. YYYYMM is a source period code, not a day.\nSource values and disclosure flags are unchanged. Retrieval time does not establish historical public availability.",
+  "latest_snapshot_id": "218091b7f8a0d5b99507baeba8b7f00298636a50bfcc34f2162905072024e0db",
+  "created_at": "2026-11-25T05:29:56.689+00:00",
+  "updated_at": "2026-11-25T06:13:06.246353+00:00"
+ },
+ "snapshot": {
+  "id": "218091b7f8a0d5b99507baeba8b7f00298636a50bfcc34f2162905072024e0db",
+  "dataset_id": "official_04_energy_csv_monthly_energy_2024_onward_1bf877c69e",
+  "file_sha256": "9d2ab58c8f3969b70362556dd3fb5c45405923e9627ed6acb61ed6bf893e52a9",
+  "source_path": "04_energy/csv/Monthly_energy_2024_onward.csv",
+  "retrieved_at": "2026-11-24T09:55:50.243982+00:00",
+  "status": "ready",
+  "expected_rows": 34808,
+  "loaded_rows": 34808,
+  "columns": [
+   {
+    "key": "col0001",
+    "type": "string",
+    "label": "Series Key"
+   },
+   {
+    "key": "col0002",
+    "type": "string",
+    "label": "YYYYMM"
+   },
+   {
+    "key": "col0003",
+    "type": "string",
+    "label": "Numeric Value"
+   },
+   {
+    "key": "col0004",
+    "type": "string",
+    "label": "Flag"
+   }
+  ],
+  "column_count": 4,
+  "coverage": {
+   "source_ids": [
+    "EIA_MER"
+   ],
+   "entity_type": "source_native_entity",
+   "source_path": "04_energy/csv/Monthly_energy_2024_onward.csv",
+   "source_urls": [
+    "https://www.eia.gov/totalenergy/data/browser/csv.php?tbl=T01.01"
+   ],
+   "overlaps_files": [
+    "MER_ALL_107_TABLES_ALL_HISTORY.csv"
+   ],
+   "collection_slug": "04_energy",
+   "population_role": "projection_or_subset",
+   "entity_id_column": "Series Key",
+   "period_components": [],
+   "source_linkage_basis": "inspected_sector_mapping",
+   "publication_time_known": false,
+   "source_retrieval_times": [
+    "2026-11-24T09:55:50.243982+00:00"
+   ],
+   "availability_time_known": false,
+   "period_index_is_native_text": true,
+   "archive_population_is_not_unique_entity_count": true
+  },
+  "quality": {
+   "row_width_verified": true,
+   "source_value_policy": "exact_strings_blank_is_empty_string",
+   "blank_counts_by_column": [
+    0,
+    0,
+    1457,
+    33351
+   ],
+   "duplicate_header_labels": {},
+   "geo_identifier_validation": {},
+   "source_bytes_sha256_verified": true,
+   "source_lexical_marker_counts": {}
+  },
+  "ingest": {
+   "format": "csv",
+   "encoding": "utf-8",
+   "constants": {
+    "source_url": "https://www.eia.gov/totalenergy/data/browser/csv.php?tbl=T01.01"
+   },
+   "delimiter": ",",
+   "dimensions": {
+    "period": 1,
+    "entity_id": 0
+   },
+   "header_rows": 1
+  },
+  "attempts": 1,
+  "created_at": "2026-11-25T05:30:02.038383+00:00",
+  "published_at": "2026-11-25T06:13:06.246353+00:00"
+ },
+ "file": null
+}

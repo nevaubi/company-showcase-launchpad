@@ -1,6 +1,6 @@
 import { defaultParseSearch } from "@tanstack/react-router";
 import { describe, expect, it } from "vitest";
-import { collectionIdFromSlug, collectionSlug, COLLECTION_SLUGS } from "./collections";
+import { collectionBySlug, collectionIdFromSlug, collectionSlug, COLLECTION_SLUGS, COLLECTIONS, LIBRARY_COLLECTIONS } from "./collections";
 import {
   collectionHref,
   datasetHref,
@@ -108,3 +108,14 @@ describe("collection slugs", () => {
     expect(collectionIdFromSlug(undefined)).toBeNull();
   });
 });
+
+describe("collections with the catalogue", () => {
+  it("gives every catalogue collection a slug and takes names only from the catalogue", () => {
+    expect(LIBRARY_COLLECTIONS.map((c) => c.id).sort()).toEqual(Object.keys(COLLECTION_SLUGS).sort());
+    expect(LIBRARY_COLLECTIONS.map((c) => c.id)).toEqual(COLLECTIONS.map((c) => c.id));
+    expect(collectionBySlug("banks")).toMatchObject({ id: "01_financials", name: COLLECTIONS.find((c) => c.id === "01_financials")!.name, slug: "banks" });
+    expect(collectionBySlug("macro")?.slug).toBe("economy");
+    expect(collectionBySlug("nothing")).toBeNull();
+  });
+});
+

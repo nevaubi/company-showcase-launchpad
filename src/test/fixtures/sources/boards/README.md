@@ -1,0 +1,15 @@
+# Fixtures of the boards unit (round 4)
+
+Real production rows, read on 25 Nov 2026 with bounded selects (one snapshot each) and copied with the checksum-verified transfer of round 2 (`/home/claude/fu/round2/TRANSFER.md`): every line was returned with an md5 prefix and checked with `linecheck.py` before the checksum column was dropped. Nothing here was typed by hand or edited.
+
+| File | Lines | Source (dataset, snapshot) | Columns |
+| --- | ---: | --- | --- |
+| `fred.txt` | 900 | 19 FRED series files (dataset ids and snapshots in `datasets.json`); the last 36 rows of each monthly level series, the last 48 of each 12-month-change series, the last 20 or 24 of the two quarterly series, the last 104 of the two weekly series; IPMAN is kept as the refused case | `code`, `row_number`, `period` (the period dimension, FRED's `observation_date`), cell of the value field (empty when the stored cell is empty) |
+| `mer.txt` | 156 | MER T01.01 (`9a953a8c...`), T03.01 (`cbe503a5...`), T07.01 (`25443a33...`), T09.04 (`c8ab3731...`), rows 8614 to 8652, 2131 to 2169, 2846 to 2884, 5023 to 5061 | `MSN`, `row_number`, `period` (= `YYYYMM`), `Value`. In every row read the `Unit` and `Description` cells are one value per table (checked by aggregate in the same query): Quadrillion Btu / Total Primary Energy Consumption; Thousand Barrels per Day / Crude Oil Production, Total; Billion Kilowatthours / Electricity Net Generation, Total; Dollars per Gallon Including Taxes / Regular Motor Gasoline, All Areas, Retail Price |
+| `fdic-summary-cb.txt` | 26 | FDIC annual national history (`de8e57f4...`), CB rows 2000 to 2025 | `CB_SI`, `row_number`, `YEAR`, `ASSET`, `DEP`, `NETINC`, `STNAME` |
+| `fdic-q3-cross-section.txt` | 496 | FDIC current quarter (`5161b586...`), every record of period 20260930 | `CERT` (entity_id), `row_number`, `ASSET` (field 35), `DEP` (field 235) |
+| `fdic-q3-names.txt` | 12 | the same snapshot, the twelve largest by ASSET or DEP | `CERT`, `row_number`, `REPDTE`, `entity_name`, `NAME` (field 1175) |
+| `fhfa-usa-purchase-only.txt` | 48 | FHFA master (`ed72e8d4...`), geo_code USA, rows 4243 to 4290 | `hpi_type`, `hpi_flavor`, `frequency`, `row_number`, `yr`, `period`, `index_nsa`, `index_sa`, record period |
+| `datasets.json` | 26 | `source_datasets` joined to the latest `source_snapshots` | id, name, sector, agency, source id and address, grain, snapshot id, retrieval and publication times, rows, fields. Three stored names and grains had a long dash, a multiplication sign or a middle dot; they are written here with a comma or "by" |
+
+Checks against the publishers on the same day (scripts in `/home/claude/work/r4/boards/scripts/`): every MER row equals EIA's CSV of its table; the FHFA rows equal `hpi_master.csv`; the FDIC CB rows 2023 to 2025 and the ten largest institutions equal the FDIC API; FRED rows equal FRED's graph files except later revisions published after the 24 Nov retrieval (GDPC1, PCEPI, MSPNHSUS, CSUSHPINSA, DGORDER, TOTALSA, ICSA: listed in the boards report) and IPMAN, which FRED has since rebased.

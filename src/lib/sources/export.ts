@@ -5,10 +5,16 @@ import { nativeColumnCode, safeSourceHref } from "./presentation";
 // negative financial number from formula text such as -1+2 or -cmd|' /C ...'.
 const NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 const FORMULA = /^[\s\u0000-\u001f\u007f]*[=+\-@]/u;
+/**
+ * Published figures and markers that start with a sign but cannot be a formula: "-1,234",
+ * "-0.5%", "+1.2%", "-", "--" (rev-app N2). Anything with a letter, a bracket or a second
+ * operator after the sign ("-1+2", "-cmd|...") is still guarded.
+ */
+const SIGNED_FIGURE = /^[+-](?:\d[\d,]*(?:\.\d+)?%?|-*)$/;
 
 export function csvSourceCell(value: string | null | undefined): string {
   if (value == null) return "";
-  const guarded = FORMULA.test(value) && !NUMBER.test(value.trim()) ? `'${value}` : value;
+  const guarded = FORMULA.test(value) && !NUMBER.test(value.trim()) && !SIGNED_FIGURE.test(value) ? `'${value}` : value;
   return `"${guarded.replace(/"/g, '""')}"`;
 }
 

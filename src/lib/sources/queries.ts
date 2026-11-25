@@ -32,6 +32,7 @@ import {
   getSourcePeriodRange,
   getSourceRecord,
   getSourceSeries,
+  getLibraryWire,
 } from "./read.functions";
 import type {
   SourceCrossSection,
@@ -42,6 +43,7 @@ import type {
   SourceFacetsQueryInput,
   SourceFieldCompleteness,
   SourceFind,
+  SourceLibrary,
   SourcePeriodRange,
   SourceRead,
   SourceReadFailure,
@@ -50,6 +52,7 @@ import type {
   SourceSeriesQueryInput,
   SourceSnapshotStats,
 } from "./read-types";
+import { unpackLibrary } from "./read-types";
 import type {
   SourceDatasetDetail,
   SourceDatasetList,
@@ -162,6 +165,7 @@ const snapshotKey = <T extends { datasetId: string; snapshotId?: string }>(read:
 
 export const sourceKeys = {
   all: ["sources"] as const,
+  library: () => ["sources", "library"] as const,
   list: (filters: SourceListFilters = {}) =>
     ["sources", "list", keyPart(normalizeListFilters(filters))] as const,
   /** Every read of one dataset, whatever the snapshot: use it to drop a dataset from the cache. */
@@ -192,6 +196,22 @@ const pinnedOnly = (datasetId: string, snapshotId?: string | null) => ({
 });
 
 export const sourceQueries = {
+  /**
+   * The Data library landing in one call: totals, collections, publishers, what changed and one slim row per
+   * dataset for client-side search. Works before 0069 (direct selects, cached ten minutes on the server).
+   */
+  library: () =>
+    queryOptions({
+      queryKey: sourceKeys.library(),
+      queryFn: async ({ signal }): Promise<SourceRead<SourceLibrary>> => {
+        const wire = await getLibraryWire({ signal });
+        return wire.ok ? { ok: true, data: unpackLibrary(wire.data) } : wire;
+      },
+      staleTime: readStaleTime(null),
+      refetchOnWindowFocus: false,
+      retry: 1,
+    }),
+
   /** The old catalogue read: every dataset row with its latest snapshot summary. Fallback mode. */
   list: (filters: SourceListFilters = {}) =>
     queryOptions({
