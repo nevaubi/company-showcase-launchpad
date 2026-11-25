@@ -260,17 +260,30 @@ BEGIN
   RETURN res;
 END $$;
 
--- The library in one call: the dataset rows and the published snapshots the app's buildLibrary reads, in the keys of
--- its direct selects. Small tables only; never reads source_records.
+-- The library in one call, in the shape of the app's direct path (src/lib/sources/read.server.ts, LibrarySource):
+-- every dataset with its current snapshot and up to two snapshots published before the window, and the window (the
+-- 400 newest publications). Small tables only; never reads source_records; its cost grows with datasets, not with
+-- snapshots.
 CREATE OR REPLACE FUNCTION public.source_library()
 RETURNS jsonb LANGUAGE sql STABLE SET search_path = public AS $$
+  WITH win AS (
+    SELECT s.id, s.dataset_id, s.loaded_rows, s.published_at FROM public.source_snapshots s
+    WHERE s.status = 'ready' AND s.published_at IS NOT NULL ORDER BY s.published_at DESC, s.id DESC LIMIT 400),
+  edge AS (SELECT count(*) >= 400 AS is_full, min(published_at) AS start FROM win)
   SELECT jsonb_build_object(
+    'window', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', w.id, 'dataset_id', w.dataset_id, 'loaded_rows', w.loaded_rows, 'published_at', w.published_at)
+        ORDER BY w.published_at DESC, w.id DESC), '[]'::jsonb) FROM win w),
+    'windowFull', (SELECT is_full FROM edge),
     'datasets', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name, 'sector', d.sector, 'agency', d.agency, 'source_id', d.source_id,
-        'source_url', d.source_url, 'grain', d.grain, 'latest_snapshot_id', d.latest_snapshot_id) ORDER BY d.id), '[]'::jsonb) FROM public.source_datasets d),
-    'snapshots', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'dataset_id', s.dataset_id, 'loaded_rows', s.loaded_rows, 'column_count', s.column_count,
-        'published_at', s.published_at, 'retrieved_at', s.retrieved_at, 'dims', s.ingest->'dimensions', 'consts', s.ingest->'constants',
-        'comp', s.ingest->'composites', 'family', s.coverage->'refresh_provenance'->>'family') ORDER BY s.id), '[]'::jsonb)
-      FROM public.source_snapshots s WHERE s.status = 'ready'))
+        'source_url', d.source_url, 'grain', d.grain, 'latest_snapshot_id', d.latest_snapshot_id,
+        'latest', (SELECT jsonb_build_object('id', s.id, 'loaded_rows', s.loaded_rows, 'column_count', s.column_count, 'published_at', s.published_at,
+            'retrieved_at', s.retrieved_at, 'dims', s.ingest->'dimensions', 'consts', s.ingest->'constants', 'comp', s.ingest->'composites',
+            'family', s.coverage->'refresh_provenance'->>'family') FROM public.source_snapshots s WHERE s.dataset_id = d.id AND s.id = d.latest_snapshot_id),
+        'prev', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'loaded_rows', p.loaded_rows, 'published_at', p.published_at) ORDER BY p.published_at DESC, p.id DESC), '[]'::jsonb)
+          FROM (SELECT s.id, s.loaded_rows, s.published_at FROM public.source_snapshots s, edge
+                WHERE s.dataset_id = d.id AND s.status = 'ready' AND edge.is_full AND s.published_at < edge.start
+                ORDER BY s.published_at DESC, s.id DESC LIMIT 2) p)) ORDER BY d.id), '[]'::jsonb)
+      FROM public.source_datasets d))
 $$;
 
 -- 4. Storage: members keep reading the app's own files in the datasets bucket, but not the vendor archives, the

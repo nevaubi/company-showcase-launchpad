@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildLibrary, type LibraryDatasetRow, type LibrarySnapshotRow } from "../lib/sources/read.server";
+import { buildLibrary, type LibrarySource } from "../lib/sources/read.server";
 
 const url = process.env.SOURCE_DB_URL ?? "";
 const local = /^postgres(?:ql)?:\/\/[^/]*@(?:127\.0\.0\.1|localhost)(?::\d+)?\/[\w-]*(?:proof|test)[\w-]*$/.test(url);
@@ -227,17 +227,42 @@ describe.skipIf(!local)("official reads of migration 0069 on PostgreSQL", () => 
     await expect(member("source_facets", ["fdic_panel", PANEL_NEXT, "period", null, null, 10, 1000])).rejects.toThrow(/not found/);
     await expect(member("source_get_snapshot_stats", ["fdic_panel", PANEL_NEXT])).rejects.toThrow(/not found/);
     const lib = await member("source_library", []);
-    expect(lib.snapshots.map((s: { id: string }) => s.id).sort()).toEqual([PANEL, BIG].sort());
+    expect(lib.window.map((s: { id: string }) => s.id).sort()).toEqual([PANEL, BIG].sort());
+    expect(lib.datasets.map((d: { latest: { id: string } }) => d.latest.id).sort()).toEqual([PANEL, BIG].sort());
     const outsider = await call("authenticated", OUTSIDER, "source_library", []);
-    expect(outsider).toEqual({ datasets: [], snapshots: [] });
+    expect(outsider).toEqual({ datasets: [], window: [], windowFull: false });
     expect((await call("authenticated", OUTSIDER, "source_find", ["bank", 50])).hits).toEqual([]);
     await expect(call("authenticated", OUTSIDER, "source_facets", ["fdic_panel", null, "period", null, null, 10, 1000])).rejects.toThrow(/not found/);
     await expect(call("anon", null, "source_library", [])).rejects.toThrow(/permission denied/);
   });
 
+  it("embeds the current and earlier snapshots as PostgREST does, under the members' row-level security", async () => {
+    // What PostgREST runs for the direct path's dataset select (LIBRARY_DATASET_SELECT): a lateral subquery per
+    // embed on the same tables, so the snapshot policy applies inside it. The unpublished snapshot of fdic_panel is
+    // given a publication time here: only row-level security can keep it out of "prev".
+    await sql.unsafe(`update source_snapshots set published_at = '2026-11-25T01:00:00Z' where id = '${PANEL_NEXT}'`);
+    const embedded = (cutoff: string) => as("authenticated", MEMBER, async tx => tx.unsafe(`
+      select d.id, d.latest_snapshot_id,
+        (select row_to_json(x)::jsonb from (select s.id, s.loaded_rows, s.column_count, s.published_at, s.retrieved_at, s.ingest->'dimensions' as dims,
+           s.ingest->'constants' as consts, s.ingest->'composites' as comp, s.coverage->'refresh_provenance'->>'family' as family
+           from public.source_snapshots s where s.dataset_id = d.id and s.id = d.latest_snapshot_id) x) as latest,
+        coalesce((select jsonb_agg(row_to_json(y)::jsonb) from (select s.id, s.loaded_rows, s.published_at from public.source_snapshots s
+           where s.dataset_id = d.id and s.published_at < $1::timestamptz order by s.published_at desc, s.id desc limit 2) y), '[]'::jsonb) as prev
+      from public.source_datasets d order by d.id limit 1000`, [cutoff]));
+    const rows = await embedded("2026-12-01T00:00:00Z");
+    expect(rows.map(r => [r.id, r.latest?.id, r.prev.map((p: { id: string }) => p.id)])).toEqual([["big_table", BIG, [BIG]], ["fdic_panel", PANEL, [PANEL]]]);
+    const outsider = await as("authenticated", OUTSIDER, async tx => tx.unsafe("select count(*)::int as n from public.source_datasets"));
+    expect(outsider[0].n).toBe(0);
+    // The same datasets and current snapshots as source_library().
+    const lib = await member("source_library", []);
+    expect(lib.datasets.map((d: { id: string; latest: { id: string; loaded_rows: number } }) => [d.id, d.latest.id, d.latest.loaded_rows]))
+      .toEqual(rows.map(r => [r.id, r.latest.id, r.latest.loaded_rows]));
+    await sql.unsafe(`update source_snapshots set published_at = null where id = '${PANEL_NEXT}'`);
+  });
+
   it("feeds the app's library builder from one call", async () => {
     const raw = await member("source_library", []);
-    const lib = buildLibrary(raw.datasets as LibraryDatasetRow[], raw.snapshots as LibrarySnapshotRow[], "source_library", "2026-11-25T21:00:00.000Z");
+    const lib = buildLibrary(raw as LibrarySource, "source_library", "2026-11-25T21:00:00.000Z");
     expect(lib.datasets.map(r => [r.id, r.rows, r.fields, r.dimensions])).toEqual([
       ["big_table", 60000, 3, ["entity_id", "period"]], ["fdic_panel", 12, 4, ["entity_id", "entity_name", "period"]],
     ]);
