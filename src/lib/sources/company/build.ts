@@ -204,10 +204,19 @@ export function serializeLinks(links: CompanyLink[]): string {
   return "[\n" + links.map(l => JSON.stringify(l)).join(",\n") + "\n]\n";
 }
 
-/** Reads the EIN from a filing's cover page (R1.htm): the cell after "Entity Tax Identification Number". */
+/**
+ * Reads the EIN from a filing's cover page (R1.htm): the row of the XBRL element dei:EntityTaxIdentificationNumber
+ * (whatever its label: "Entity Tax Identification Number", "IRS identification number"), first value cell that
+ * holds an EIN (a cover with several columns can leave the first one empty).
+ */
 export function coverEin(html: string): string | null {
-  const m = html.match(/Entity Tax Identification Number\s*<\/a>\s*<\/td>\s*<td[^>]*>([\s\S]*?)<\/td>/i);
-  if (!m) return null;
-  const digits = m[1].replace(/<[^>]+>/g, " ").replace(/&#?\w+;/g, " ").replace(/\D/g, "");
-  return digits.length === 9 ? digits : null;
+  const at = html.search(/defref_dei_EntityTaxIdentificationNumber|Entity Tax Identification Number/);
+  if (at < 0) return null;
+  const row = html.slice(at, at + 2000).split(/<\/tr>/i)[0];
+  for (const cell of row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)) {
+    const text = cell[1].replace(/<[^>]+>/g, " ").replace(/&#?\w+;/g, " ").trim();
+    const m = text.match(/^(\d{2})-?(\d{7})$/);
+    if (m) return m[1] + m[2];
+  }
+  return null;
 }

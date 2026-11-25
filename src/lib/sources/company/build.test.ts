@@ -110,4 +110,10 @@ describe("coverEin", () => {
     expect(coverEin(html)).toBe("132624428");
     expect(coverEin("<td>Entity Registrant Name</td>")).toBeNull();
   });
+  it("finds the EIN by its XBRL element whatever the label, past an empty first column", () => {
+    const twoColumns = '<td class="pl "><a class="a" href="javascript:void(0);" onclick="Show.showAR( this, \'defref_dei_EntityTaxIdentificationNumber\', window );">Entity Tax Identification Number</a></td>\n<td class="text">&#160;<span></span>\n</td>\n<td class="text">39-1098068<span></span>\n</td></tr>';
+    expect(coverEin(twoColumns)).toBe("391098068");
+    const customLabel = '<td class="pl "><a class="a" onclick="Show.showAR( this, \'defref_dei_EntityTaxIdentificationNumber\', window );">IRS identification number</a></td><td class="text">27-2631712<span></span></td></tr>';
+    expect(coverEin(customLabel)).toBe("272631712");
+  });
 });

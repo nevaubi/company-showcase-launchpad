@@ -18,7 +18,7 @@ describe("links.json", () => {
     expect(s.provenTickers).toBe(133);
     expect(s.registrants).toBe(133);
     expect(s.y9cRegistrants).toBe(126);
-    expect(s.y9cPointers).toBe(376);
+    expect(s.y9cPointers).toBe(375); // ESQ's 30 Jun 2026 row has no consolidated total assets: not an FR Y-9C
     expect(s.insuredBanks).toBe(173); // 174 mapped, Blue Foundry Bank closed on 10 Jul 2026
     expect(s.trustCompanies).toBe(16);
     expect(s.cohortBanks).toBe(154);
@@ -99,6 +99,25 @@ describe("links.json", () => {
 
   it("names the five sponsor banks of asset-backed deals", () => {
     expect(["BAC", "COF", "FITB", "JPM", "WFC"].map(t => absSponsors(t).map(l => l.evidence.sponsor?.cert))).toEqual([["3510"], ["4297"], ["6672"], ["628"], ["3511"]]);
+  });
+
+  it("cites each registrant's latest 10-K or 10-Q cover, names it as SEC prints it, and keeps the filing it was first proved on", () => {
+    const regs = ALL.filter(l => l.link_kind === "registrant_rssd");
+    expect(regs.every(l => /^10-[KQ]$/.test(l.evidence.sec.form ?? ""))).toBe(true);
+    expect(regs.find(l => l.ticker === "USB")!.entity_name).toBe("US BANCORP \\DE\\");
+    expect(regs.find(l => l.ticker === "TFSL")!.evidence.sec).toMatchObject({ form: "10-K", accession: "0001381668-26-000050", prior_accession: "0001381668-26-000039" });
+    expect(regs.find(l => l.ticker === "MCHB")!.evidence.sec).toMatchObject({ accession: "0001518715-26-000073", prior_accession: "0001518715-26-000060" });
+  });
+
+  it("states the FDIC's own top holder, and cites the stored row for trust companies the FDIC API does not list", () => {
+    expect(provenBanks("MCHB")[0].evidence.fdic!.holder_rssd).toBe("4759650"); // above the registrant (3843507)
+    expect(provenBanks("UNH")[0].evidence.fdic!.holder_rssd).toBeNull();
+    const trusts = ALL.filter(l => l.link_kind === "noninsured_trust_company");
+    expect(trusts).toHaveLength(16);
+    for (const t of trusts) {
+      expect(t.evidence.fdic!.api_url).toBeUndefined();
+      expect(t.evidence.fdic!.row).toBeGreaterThan(0);
+    }
   });
 
   it("is what the loader serves", () => {

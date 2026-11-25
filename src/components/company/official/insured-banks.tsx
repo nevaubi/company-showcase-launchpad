@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
-import { BASIS_TEXT, FDIC_LINES, fdicInstitutionUrl } from "@/lib/sources/company/fdic-fields";
+import { BASIS_TEXT, FDIC_LINES } from "@/lib/sources/company/fdic-fields";
 import { absSentence, dayLabel, historySeries, quarterLabel, showCell, unitLabel } from "@/lib/sources/company/present";
 import type { BankHistory, CompanyOfficial, OfficialBank, OfficialSource } from "@/lib/sources/company/types";
 import { cn } from "@/lib/utils";
@@ -73,7 +73,13 @@ export function InsuredBanks({ ticker, data, selected, onSelect, pending }: { ti
                       {b.note && <span className="block text-[11px] text-muted-foreground">{b.note}</span>}
                     </td>
                     <td className="num py-1 pr-2 text-[11px]">
-                      <OutLink href={fdicInstitutionUrl(b.cert)} className="text-muted-foreground" label={`FDIC record of certificate ${b.cert}`}>{b.cert}</OutLink>
+                      {b.fdicUrl ? (
+                        <OutLink href={b.fdicUrl} className="text-muted-foreground" label={`FDIC record of certificate ${b.cert}`}>{b.cert}</OutLink>
+                      ) : b.linkRef ? (
+                        <RecordLink at={b.linkRef} className="text-muted-foreground" title="Open the stored FDIC record of this institution">{b.cert}</RecordLink>
+                      ) : (
+                        <span className="text-muted-foreground">{b.cert}</span>
+                      )}
                     </td>
                     <td className="py-1 pr-2 text-[11px] text-muted-foreground">{b.state ?? "–"}</td>
                     <td className="num py-1 text-right">{assets ? <RecordLink at={assets.ref} title={showCell(assets.cell, assets.unit).title}>{showCell(assets.cell, assets.unit).text}</RecordLink> : <span className="text-muted-foreground">{"–"}</span>}</td>
@@ -88,7 +94,7 @@ export function InsuredBanks({ ticker, data, selected, onSelect, pending }: { ti
           <p className="border-t px-3.5 py-1.5 text-[11px] text-muted-foreground">
             Figures are shown for insured banks in the FDIC 500 cohort (insured institutions chosen by assets on 30 Jun 2026), whose stored tables state each field's unit.
             {outside > 0 && ` ${outside} ${outside === 1 ? "bank sits" : "banks sit"} outside it.`}
-            {trusts > 0 && ` ${trusts === 1 ? "A trust company files" : "Trust companies file"} a call report but ${trusts === 1 ? "is" : "are"} not FDIC insured.`} The certificate opens the FDIC's own record.
+            {trusts > 0 && ` ${trusts === 1 ? "A trust company files" : "Trust companies file"} a call report but ${trusts === 1 ? "is" : "are"} not FDIC insured; ${trusts === 1 ? "its certificate opens" : "their certificates open"} the stored FDIC row.`} A bank's certificate opens the FDIC's own record.
           </p>
         )}
         {data.abs.map(a => (

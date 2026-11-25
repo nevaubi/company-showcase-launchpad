@@ -44,6 +44,8 @@ export interface SecEvidence {
   cover_url?: string;
   /** The EIN in SEC's EDGAR header when it differs from the cover page. */
   header_ein?: string;
+  /** An earlier filing whose cover printed the same EIN (the one the link was first proved on). */
+  prior_accession?: string;
 }
 export interface NicEvidence extends RecordPointer {
   rssd: string;
@@ -56,13 +58,18 @@ export interface NicEvidence extends RecordPointer {
   name_check: string;
 }
 export interface FdicEvidence {
-  /** FDIC institutions API address of the certificate. */
-  api_url: string;
+  /** FDIC institutions API address of the certificate; absent where the API does not list the institution. */
+  api_url?: string;
+  /** Why there is no API address (noninsured trust companies). */
+  api_note?: string;
   dataset?: string;
   snapshot?: string;
   row?: number;
   bank_rssd?: string;
-  /** The FDIC record's top regulatory holder; null when the FDIC names none or it sits above the registrant. */
+  /**
+   * The FDIC record's top regulatory holder (RSSDHCR) as the FDIC states it; null when it names none. It is the
+   * registrant for `top_holder`; for a bank held through NIC relationship rows it is an entity above the registrant.
+   */
   holder_rssd?: string | null;
   report_date?: string;
   total_assets_k?: string;
@@ -187,7 +194,8 @@ export interface OfficialBank {
   lines: BankLine[];
   /** Why no figures are shown, when none are. */
   note: string | null;
-  fdicUrl: string;
+  /** The FDIC's public page of the institution; null for a trust company the FDIC's public data does not list. */
+  fdicUrl: string | null;
   linkRef: { dataset: string; snapshot: string; row: number } | null;
 }
 export interface HistoryMeasure {

@@ -346,7 +346,7 @@ export async function readCompanyOfficial(db: OfficialClient, ticker: string, ce
         deposits: row ? pick("DEP") : null,
         lines: bankLines,
         note: [note, basisNote(b)].filter(Boolean).join(" ") || null,
-        fdicUrl: fdicInstitutionUrl(b.key_value),
+        fdicUrl: insured ? fdicInstitutionUrl(b.key_value) : null,
         linkRef: b.evidence.fdic?.dataset && b.evidence.fdic.snapshot && b.evidence.fdic.row ? { dataset: b.evidence.fdic.dataset, snapshot: b.evidence.fdic.snapshot, row: b.evidence.fdic.row } : null,
       };
     });

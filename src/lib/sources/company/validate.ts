@@ -81,6 +81,8 @@ export function validateLinks(input: unknown): string[] {
       if (!sec?.ein || !EIN.test(sec.ein)) bad("proven row without the cover-page EIN");
       if (sec?.ein_source !== "cover") bad("the EIN does not come from the cover page");
       if (!sec?.accession || !ACCESSION.test(sec.accession)) bad("proven row without the filing's accession");
+      if (sec?.prior_accession && !ACCESSION.test(sec.prior_accession)) bad("prior accession is not an accession");
+      if (sec?.form && !/^10-[KQ]$/.test(sec.form)) bad(`the cover is from a ${sec.form}, not a 10-K or 10-Q`);
       if (!sec?.cover_url?.startsWith(`https://www.sec.gov/Archives/edgar/data/${l.cik}/`)) bad("cover page address is not the registrant's SEC filing");
       const nic = l.evidence?.nic;
       if (!nic || !pointerOk(nic)) bad("proven row without the stored NIC row");
@@ -100,12 +102,14 @@ export function validateLinks(input: unknown): string[] {
       } else if (l.y9c) bad("FR Y-9C pointers on a row that is not the registrant");
       if (l.link_kind === "insured_bank" || l.link_kind === "noninsured_trust_company") {
         const f = l.evidence?.fdic;
-        if (!f?.api_url?.startsWith(`https://api.fdic.gov/banks/institutions?filters=CERT%3A${l.key_value}&`)) bad("FDIC record address is not this certificate");
+        if (l.link_kind === "insured_bank" && !f?.api_url?.startsWith(`https://api.fdic.gov/banks/institutions?filters=CERT%3A${l.key_value}&`)) bad("FDIC record address is not this certificate");
+        if (l.link_kind === "noninsured_trust_company" && (f?.api_url || !f?.api_note)) bad("a trust company cites the stored row, not an API address the FDIC answers empty");
         if (!pointerOk(f as never)) bad("proven bank without its stored FDIC row");
         if (!f?.bank_rssd || !KEY_PATTERN.RSSD.test(f.bank_rssd)) bad("proven bank without its RSSD");
         if ((f?.class === "noninsured_trust") !== (l.link_kind === "noninsured_trust_company")) bad("FDIC class does not match the kind");
         const reg = nic?.rssd;
         if (l.basis === "top_holder" && f?.holder_rssd !== reg) bad("FDIC top holder is not the registrant");
+        if ((l.basis === "nic_equity" || l.basis === "nic_other_basis") && f?.holder_rssd === reg) bad("a bank the FDIC lists under the registrant must rest on top_holder");
         if (l.basis === "self" && f?.bank_rssd !== reg) bad("the bank's RSSD is not the registrant's");
         if (l.basis === "nic_equity" || l.basis === "nic_other_basis") {
           const rel = l.evidence?.relationship;

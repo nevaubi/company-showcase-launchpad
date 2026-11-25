@@ -146,7 +146,19 @@ async function build(): Promise<number> {
       const date = /^\d{8}$/.test(b.inst.REPDTE ?? "") ? `${b.inst.REPDTE!.slice(0, 4)}-${b.inst.REPDTE!.slice(4, 6)}-${b.inst.REPDTE!.slice(6)}` : (b.inst.REPDTE ?? "");
       fresh.push({
         ...r.link, link_kind: trust ? "noninsured_trust_company" : "insured_bank", key_field: "CERT", key_value: cert, entity_name: b.inst.NAME, basis: b.basis, valid_from: date || today,
-        evidence: { ...r.link.evidence, fdic: { api_url: fdicRecordUrl(cert), dataset: fdicSnap.dataset, snapshot: fdicSnap.snapshot, row: b.inst.row, bank_rssd: String(b.inst.FED_RSSD), holder_rssd: b.basis === "top_holder" ? r.rssd : null, report_date: date, total_assets_k: String(b.inst.ASSET ?? ""), cohort500: cohort.has(cert), class: trust ? "noninsured_trust" : "insured" }, ...(b.relationship ? { relationship: b.relationship } : {}), checks: {} },
+        evidence: {
+          ...r.link.evidence,
+          fdic: {
+            // the FDIC institutions API does not list noninsured trust companies: their record is the stored row
+            ...(trust ? { api_note: "The FDIC institutions API does not list this noninsured trust company; the stored FDIC all-banks row is the record." } : { api_url: fdicRecordUrl(cert) }),
+            dataset: fdicSnap.dataset, snapshot: fdicSnap.snapshot, row: b.inst.row, bank_rssd: String(b.inst.FED_RSSD),
+            // the FDIC's own top holder, as it states it: the registrant for top_holder, an entity above it for a NIC path
+            holder_rssd: String(b.inst.RSSDHCR ?? "").replace(/^0+/, "") || null,
+            report_date: date, total_assets_k: String(b.inst.ASSET ?? ""), cohort500: cohort.has(cert), class: trust ? "noninsured_trust" : "insured",
+          },
+          ...(b.relationship ? { relationship: b.relationship } : {}),
+          checks: {},
+        },
       });
     }
   }
@@ -162,7 +174,8 @@ async function build(): Promise<number> {
   console.log(`step 4: FR Y-9C rows and the total-assets tie`);
   const { snap: y9Snap, byRssd } = await store.y9cRowsByRssd(sb as never, flags.y9c ?? store.DATASETS.y9c);
   for (const [t, r] of registrants) {
-    const rows = (byRssd.get(r.rssd) ?? []).sort((a, b) => a.date.localeCompare(b.date));
+    // only consolidated reports: a row without total assets (BHCK2170) is a parent-only FR Y-9LP or Y-9SP report
+    const rows = (byRssd.get(r.rssd) ?? []).filter(x => x.assetsK != null && x.assetsK.trim() !== "").sort((a, b) => a.date.localeCompare(b.date));
     const hasBank = (banksOf.get(t) ?? []).length > 0;
     if (!rows.length && !hasBank) continue;
     const link = { ...r.link };
