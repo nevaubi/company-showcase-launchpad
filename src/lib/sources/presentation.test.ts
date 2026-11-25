@@ -8,17 +8,23 @@ import {
   safeSourceHref,
   sourceAvailability,
   sourceCoverageExceptions,
+  sourceDate,
   sourceDescription,
+  sourceSectorName,
 } from "./presentation";
 import type { SourceColumn, SourceSnapshotSummary } from "./schema";
 
+// Live descriptor shape (25 Nov 2026): `type` is "string" on every field, no field has a scale.
 const numeric: SourceColumn = {
-  key: "ASSET",
-  label: "Assets",
-  type: "number",
-  unit: "USD thousands",
-  scale: 1000,
+  key: "col0002",
+  label: "ASSET",
+  type: "string",
+  native_type: "number",
+  unit: "USD thousands (monetary measures)",
+  title: "Total assets",
 };
+const unstated = "Not explicitly specified in retrieved field metadata";
+const live = (label: string, unit: string): SourceColumn => ({ key: `col_${label}`, label, type: "string", native_type: "number", unit });
 
 describe("native record presentation", () => {
   it.each([
@@ -156,7 +162,24 @@ describe("native record presentation", () => {
   it("keeps reported zero, an empty cell and a null distinct", () => {
     expect(formatNativeValue("0", numeric)).toBe("0");
     expect(formatNativeValue("", numeric)).toBe('""');
-    expect(formatNativeValue(null, numeric)).toBe("—");
+    expect(formatNativeValue(null, numeric)).toBe("–");
+  });
+
+  it("shows FDIC dates, codes and identifiers typed number exactly as stored (rev-app M1, P1)", () => {
+    // Row 48517 of the FDIC institution snapshot (CERT 628, period 20260630).
+    expect(formatNativeValue("20260630", live("CALLYMD", unstated))).toBe("20260630");
+    expect(formatNativeValue("202606", live("CALLYM", unstated))).toBe("202606");
+    expect(formatNativeValue("18240101", live("ESTYMD", unstated))).toBe("18240101");
+    expect(formatNativeValue("99991231", live("ENDEFYMD", unstated))).toBe("99991231");
+    expect(formatNativeValue("18140.0", live("MSA", unstated))).toBe("18140.0");
+    expect(formatNativeValue("628", live("CERT", "FDIC certificate identifier"))).toBe("628");
+    expect(numericColumn(live("CALLYMD", unstated))).toBe(false);
+    expect(numericColumn(live("TRUST", "Indicator"))).toBe(false);
+    // Money, percent and counts still group.
+    expect(formatNativeValue("4091315000", numeric)).toBe("4,091,315,000");
+    expect(formatNativeValue("1.5851712753913223", live("ROA", "Percent"))).toBe("1.5851712753913223");
+    expect(formatNativeValue("5013", live("OFFDOM", "Offices"))).toBe("5,013");
+    expect(numericColumn(numeric)).toBe(true);
   });
 
   it("groups numeric strings without changing source precision or applying their scale", () => {
@@ -179,43 +202,39 @@ describe("native record presentation", () => {
     expect(nativeColumnCode(cert)).toBe("CERT");
   });
 
-  it("finds an institution's identifying fields and financial lines in a wide native schema", () => {
-    const cols = [
-      { key: "UNUSED", label: "Extra", type: "number" },
-      { key: "DEP", label: "Deposits", type: "number" },
-      { key: "CERT", label: "Certificate", type: "string" },
-      { key: "NAME", label: "Institution", type: "string" },
-      { key: "REPDTE", label: "Report date", type: "date" },
+  it("opens on the declared dimensions and quantities, never on a publisher's field names (rev-app S12)", () => {
+    const cols: SourceColumn[] = [
+      { key: "col0000", label: "UNUSED", type: "string" },
+      live("DEP", "USD thousands (monetary measures)"),
+      live("CERT", "FDIC certificate identifier"),
+      { key: "col0003", label: "NAME", type: "string", native_type: "string", unit: "Text / categorical / date; see definition" },
+      { key: "col0004", label: "REPDTE", type: "string", native_type: "string" },
       numeric,
     ];
-    expect(defaultSourceColumns(cols, 5)).toEqual([3, 2, 4, 5, 1]);
-    expect(filterSourceColumns(cols, "deposit").map((c) => c.index)).toEqual([1]);
-    expect(filterSourceColumns(cols, "cert").map((c) => c.index)).toEqual([2]);
-    expect(
-      defaultSourceColumns(
-        [
-          { key: "col0000", label: "ASSET", type: "string" },
-          { key: "col0001", label: "CERT", type: "string" },
-          { key: "col0002", label: "NAME", type: "string" },
-        ],
-        3,
-      ),
-    ).toEqual([2, 1, 0]);
+    const ingest = { dimensions: { entity_id: 2, entity_name: 3, period: 4 } };
+    expect(defaultSourceColumns(cols, 5, ingest)).toEqual([3, 2, 4, 1, 5]);
+    // Without the snapshot's declarations: quantities, then file order. No name is looked at.
+    expect(defaultSourceColumns(cols, 4)).toEqual([1, 5, 0, 2]);
+    const renamed = cols.map((c, i) => ({ ...c, label: `F${i}`, key: `k${i}` }));
+    expect(defaultSourceColumns(renamed, 5, ingest)).toEqual(defaultSourceColumns(cols, 5, ingest));
+    expect(filterSourceColumns(cols, "deposit").map((c) => c.index)).toEqual([]);
+    expect(filterSourceColumns(cols, "dep").map((c) => c.index)).toEqual([1]);
+    expect(filterSourceColumns(cols, "total assets").map((c) => c.index)).toEqual([5]);
   });
 
-  it("starts branch records with branch deposits and county fields rather than repeated bank assets", () => {
-    const columns = [
-      "ASSET",
-      "DEPSUMBR",
-      "CERT",
-      "NAMEBR",
-      "YEAR",
-      "CNTYNAMB",
-      "STALPBR",
-      "STCNTYBR",
-      "NAMEFULL",
-    ].map((label, i) => ({ key: `col${i}`, label, type: "string" }));
-    expect(defaultSourceColumns(columns)).toEqual([8, 3, 2, 4, 6, 5, 7, 1]);
+  it("writes dates as the app does and keeps anything else as stored", () => {
+    expect(sourceDate("2026-11-25T12:27:00Z")).toBe("Nov 25, 2026");
+    expect(sourceDate("2026-11-25")).toBe("Nov 25, 2026");
+    expect(sourceDate("2026Q3")).toBe("2026Q3");
+    expect(sourceDate(null)).toBe("–");
+  });
+
+  it("names every collection key, including the ones that are not sectors (rev-app N1)", () => {
+    expect(sourceSectorName("13_ir_integration")).toBe("IR integration");
+    expect(sourceSectorName("00_universal")).toBe("Universal");
+    expect(sourceSectorName("10_communications")).toBe("Communications");
+    expect(sourceSectorName("01_financials")).toBe("Financials");
+    expect(sourceSectorName("99_new_collection")).toBe("New collection");
   });
 
   it("does not call an uncollected, failed or partly loaded source ready", () => {
