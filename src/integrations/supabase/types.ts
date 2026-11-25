@@ -14,6 +14,680 @@ export type Database = {
   }
   public: {
     Tables: {
+      abs_cmbs_assets: {
+        Row: {
+          accession: string
+          accrual_method_code: string | null
+          actual_end_balance: number | null
+          asset_added: boolean | null
+          asset_number: string
+          asset_type_number: string | null
+          balloon: boolean | null
+          begin_balance: number | null
+          extra: Json
+          first_payment_date: string | null
+          group_id: string | null
+          interest_only: boolean | null
+          kind: string
+          last_modification_date: string | null
+          lien_position_code: string | null
+          liquidation_prepayment_code: string | null
+          liquidation_prepayment_date: string | null
+          load_id: number
+          loan_structure_code: string | null
+          master_servicer_return_date: string | null
+          maturity_date: string | null
+          modification_code: string | null
+          modified: boolean | null
+          non_recoverable: boolean | null
+          original_amortization_months: number | null
+          original_interest_only_months: number | null
+          original_loan_amount: number | null
+          original_rate: number | null
+          original_term_months: number | null
+          origination_date: string | null
+          originator_name: string | null
+          other_advances_outstanding: number | null
+          paid_through_date: string | null
+          payment_frequency_code: string | null
+          payment_status_code: string | null
+          payment_type_code: string | null
+          period_begin: string | null
+          period_end: string | null
+          period_modified: boolean | null
+          period_rate: number | null
+          pi_advances_outstanding: number | null
+          primary_servicer_name: string | null
+          properties: number | null
+          properties_securitization: number | null
+          rate_type_code: string | null
+          realized_loss: number | null
+          rec: number
+          sched_end_balance: number | null
+          sched_interest: number | null
+          sched_principal: number | null
+          securitization_balance: number | null
+          securitization_rate: number | null
+          special_servicer_transfer_date: string | null
+          subject_to_demand: boolean | null
+          ti_advances_outstanding: number | null
+          total_pi_due: number | null
+          unparsed: Json
+          unsched_principal: number | null
+          workout_strategy_code: string | null
+        }
+        Insert: {
+          accession: string
+          accrual_method_code?: string | null
+          actual_end_balance?: number | null
+          asset_added?: boolean | null
+          asset_number: string
+          asset_type_number?: string | null
+          balloon?: boolean | null
+          begin_balance?: number | null
+          extra?: Json
+          first_payment_date?: string | null
+          group_id?: string | null
+          interest_only?: boolean | null
+          kind: string
+          last_modification_date?: string | null
+          lien_position_code?: string | null
+          liquidation_prepayment_code?: string | null
+          liquidation_prepayment_date?: string | null
+          load_id: number
+          loan_structure_code?: string | null
+          master_servicer_return_date?: string | null
+          maturity_date?: string | null
+          modification_code?: string | null
+          modified?: boolean | null
+          non_recoverable?: boolean | null
+          original_amortization_months?: number | null
+          original_interest_only_months?: number | null
+          original_loan_amount?: number | null
+          original_rate?: number | null
+          original_term_months?: number | null
+          origination_date?: string | null
+          originator_name?: string | null
+          other_advances_outstanding?: number | null
+          paid_through_date?: string | null
+          payment_frequency_code?: string | null
+          payment_status_code?: string | null
+          payment_type_code?: string | null
+          period_begin?: string | null
+          period_end?: string | null
+          period_modified?: boolean | null
+          period_rate?: number | null
+          pi_advances_outstanding?: number | null
+          primary_servicer_name?: string | null
+          properties?: number | null
+          properties_securitization?: number | null
+          rate_type_code?: string | null
+          realized_loss?: number | null
+          rec: number
+          sched_end_balance?: number | null
+          sched_interest?: number | null
+          sched_principal?: number | null
+          securitization_balance?: number | null
+          securitization_rate?: number | null
+          special_servicer_transfer_date?: string | null
+          subject_to_demand?: boolean | null
+          ti_advances_outstanding?: number | null
+          total_pi_due?: number | null
+          unparsed?: Json
+          unsched_principal?: number | null
+          workout_strategy_code?: string | null
+        }
+        Update: {
+          accession?: string
+          accrual_method_code?: string | null
+          actual_end_balance?: number | null
+          asset_added?: boolean | null
+          asset_number?: string
+          asset_type_number?: string | null
+          balloon?: boolean | null
+          begin_balance?: number | null
+          extra?: Json
+          first_payment_date?: string | null
+          group_id?: string | null
+          interest_only?: boolean | null
+          kind?: string
+          last_modification_date?: string | null
+          lien_position_code?: string | null
+          liquidation_prepayment_code?: string | null
+          liquidation_prepayment_date?: string | null
+          load_id?: number
+          loan_structure_code?: string | null
+          master_servicer_return_date?: string | null
+          maturity_date?: string | null
+          modification_code?: string | null
+          modified?: boolean | null
+          non_recoverable?: boolean | null
+          original_amortization_months?: number | null
+          original_interest_only_months?: number | null
+          original_loan_amount?: number | null
+          original_rate?: number | null
+          original_term_months?: number | null
+          origination_date?: string | null
+          originator_name?: string | null
+          other_advances_outstanding?: number | null
+          paid_through_date?: string | null
+          payment_frequency_code?: string | null
+          payment_status_code?: string | null
+          payment_type_code?: string | null
+          period_begin?: string | null
+          period_end?: string | null
+          period_modified?: boolean | null
+          period_rate?: number | null
+          pi_advances_outstanding?: number | null
+          primary_servicer_name?: string | null
+          properties?: number | null
+          properties_securitization?: number | null
+          rate_type_code?: string | null
+          realized_loss?: number | null
+          rec?: number
+          sched_end_balance?: number | null
+          sched_interest?: number | null
+          sched_principal?: number | null
+          securitization_balance?: number | null
+          securitization_rate?: number | null
+          special_servicer_transfer_date?: string | null
+          subject_to_demand?: boolean | null
+          ti_advances_outstanding?: number | null
+          total_pi_due?: number | null
+          unparsed?: Json
+          unsched_principal?: number | null
+          workout_strategy_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_cmbs_assets_load_id_fkey"
+            columns: ["load_id"]
+            isOneToOne: false
+            referencedRelation: "abs_loads"
+            referencedColumns: ["load_id"]
+          },
+        ]
+      }
+      abs_cmbs_properties: {
+        Row: {
+          accession: string
+          address: string | null
+          asset_number: string
+          city: string | null
+          county: string | null
+          debt_service_recent: number | null
+          defeased_code: string | null
+          dscr_code_recent: string | null
+          dscr_code_securitization: string | null
+          dscr_ncf_recent: number | null
+          dscr_ncf_securitization: number | null
+          dscr_noi_recent: number | null
+          dscr_noi_securitization: number | null
+          extra: Json
+          financials_recent_end: string | null
+          financials_recent_start: string | null
+          financials_securitization_date: string | null
+          lease_rollover_review_date: string | null
+          link: string
+          load_id: number
+          loan_asset_number: string
+          name: string | null
+          ncf_recent: number | null
+          ncf_securitization: number | null
+          noi_ncf_code_recent: string | null
+          noi_ncf_code_securitization: string | null
+          noi_recent: number | null
+          noi_securitization: number | null
+          occupancy_recent: number | null
+          occupancy_securitization: number | null
+          opex_recent: number | null
+          opex_securitization: number | null
+          rec: number
+          revenue_recent: number | null
+          revenue_securitization: number | null
+          seq: number
+          sq_ft: number | null
+          sq_ft_securitization: number | null
+          state: string | null
+          status_code: string | null
+          tenant1: string | null
+          tenant1_lease_end: string | null
+          tenant1_sq_ft: number | null
+          tenant2: string | null
+          tenant2_lease_end: string | null
+          tenant2_sq_ft: number | null
+          tenant3: string | null
+          tenant3_lease_end: string | null
+          tenant3_sq_ft: number | null
+          type_code: string | null
+          units: number | null
+          units_securitization: number | null
+          unparsed: Json
+          valuation_recent: number | null
+          valuation_recent_date: string | null
+          valuation_recent_source: string | null
+          valuation_securitization: number | null
+          valuation_securitization_date: string | null
+          valuation_source_securitization: string | null
+          year_built: number | null
+          year_renovated: number | null
+          zip: string | null
+        }
+        Insert: {
+          accession: string
+          address?: string | null
+          asset_number: string
+          city?: string | null
+          county?: string | null
+          debt_service_recent?: number | null
+          defeased_code?: string | null
+          dscr_code_recent?: string | null
+          dscr_code_securitization?: string | null
+          dscr_ncf_recent?: number | null
+          dscr_ncf_securitization?: number | null
+          dscr_noi_recent?: number | null
+          dscr_noi_securitization?: number | null
+          extra?: Json
+          financials_recent_end?: string | null
+          financials_recent_start?: string | null
+          financials_securitization_date?: string | null
+          lease_rollover_review_date?: string | null
+          link: string
+          load_id: number
+          loan_asset_number: string
+          name?: string | null
+          ncf_recent?: number | null
+          ncf_securitization?: number | null
+          noi_ncf_code_recent?: string | null
+          noi_ncf_code_securitization?: string | null
+          noi_recent?: number | null
+          noi_securitization?: number | null
+          occupancy_recent?: number | null
+          occupancy_securitization?: number | null
+          opex_recent?: number | null
+          opex_securitization?: number | null
+          rec: number
+          revenue_recent?: number | null
+          revenue_securitization?: number | null
+          seq: number
+          sq_ft?: number | null
+          sq_ft_securitization?: number | null
+          state?: string | null
+          status_code?: string | null
+          tenant1?: string | null
+          tenant1_lease_end?: string | null
+          tenant1_sq_ft?: number | null
+          tenant2?: string | null
+          tenant2_lease_end?: string | null
+          tenant2_sq_ft?: number | null
+          tenant3?: string | null
+          tenant3_lease_end?: string | null
+          tenant3_sq_ft?: number | null
+          type_code?: string | null
+          units?: number | null
+          units_securitization?: number | null
+          unparsed?: Json
+          valuation_recent?: number | null
+          valuation_recent_date?: string | null
+          valuation_recent_source?: string | null
+          valuation_securitization?: number | null
+          valuation_securitization_date?: string | null
+          valuation_source_securitization?: string | null
+          year_built?: number | null
+          year_renovated?: number | null
+          zip?: string | null
+        }
+        Update: {
+          accession?: string
+          address?: string | null
+          asset_number?: string
+          city?: string | null
+          county?: string | null
+          debt_service_recent?: number | null
+          defeased_code?: string | null
+          dscr_code_recent?: string | null
+          dscr_code_securitization?: string | null
+          dscr_ncf_recent?: number | null
+          dscr_ncf_securitization?: number | null
+          dscr_noi_recent?: number | null
+          dscr_noi_securitization?: number | null
+          extra?: Json
+          financials_recent_end?: string | null
+          financials_recent_start?: string | null
+          financials_securitization_date?: string | null
+          lease_rollover_review_date?: string | null
+          link?: string
+          load_id?: number
+          loan_asset_number?: string
+          name?: string | null
+          ncf_recent?: number | null
+          ncf_securitization?: number | null
+          noi_ncf_code_recent?: string | null
+          noi_ncf_code_securitization?: string | null
+          noi_recent?: number | null
+          noi_securitization?: number | null
+          occupancy_recent?: number | null
+          occupancy_securitization?: number | null
+          opex_recent?: number | null
+          opex_securitization?: number | null
+          rec?: number
+          revenue_recent?: number | null
+          revenue_securitization?: number | null
+          seq?: number
+          sq_ft?: number | null
+          sq_ft_securitization?: number | null
+          state?: string | null
+          status_code?: string | null
+          tenant1?: string | null
+          tenant1_lease_end?: string | null
+          tenant1_sq_ft?: number | null
+          tenant2?: string | null
+          tenant2_lease_end?: string | null
+          tenant2_sq_ft?: number | null
+          tenant3?: string | null
+          tenant3_lease_end?: string | null
+          tenant3_sq_ft?: number | null
+          type_code?: string | null
+          units?: number | null
+          units_securitization?: number | null
+          unparsed?: Json
+          valuation_recent?: number | null
+          valuation_recent_date?: string | null
+          valuation_recent_source?: string | null
+          valuation_securitization?: number | null
+          valuation_securitization_date?: string | null
+          valuation_source_securitization?: string | null
+          year_built?: number | null
+          year_renovated?: number | null
+          zip?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_cmbs_properties_load_id_fkey"
+            columns: ["load_id"]
+            isOneToOne: false
+            referencedRelation: "abs_loads"
+            referencedColumns: ["load_id"]
+          },
+        ]
+      }
+      abs_deals: {
+        Row: {
+          created_at: string
+          deal_id: string
+          depositor_cik: number | null
+          family: string
+          file_number: string | null
+          issuer_cik: number | null
+          issuer_name: string
+          sponsor_cik: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deal_id: string
+          depositor_cik?: number | null
+          family: string
+          file_number?: string | null
+          issuer_cik?: number | null
+          issuer_name: string
+          sponsor_cik?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deal_id?: string
+          depositor_cik?: number | null
+          family?: string
+          file_number?: string | null
+          issuer_cik?: number | null
+          issuer_name?: string
+          sponsor_cik?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      abs_documents: {
+        Row: {
+          accession: string
+          bytes: number | null
+          description: string | null
+          doc_type: string
+          listed_bytes: number | null
+          name: string
+          namespace: string | null
+          records: number | null
+          retrieved_at: string | null
+          seq: number
+          sha256: string | null
+          url: string
+        }
+        Insert: {
+          accession: string
+          bytes?: number | null
+          description?: string | null
+          doc_type: string
+          listed_bytes?: number | null
+          name: string
+          namespace?: string | null
+          records?: number | null
+          retrieved_at?: string | null
+          seq: number
+          sha256?: string | null
+          url: string
+        }
+        Update: {
+          accession?: string
+          bytes?: number | null
+          description?: string | null
+          doc_type?: string
+          listed_bytes?: number | null
+          name?: string
+          namespace?: string | null
+          records?: number | null
+          retrieved_at?: string | null
+          seq?: number
+          sha256?: string | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_documents_accession_fkey"
+            columns: ["accession"]
+            isOneToOne: false
+            referencedRelation: "abs_filings"
+            referencedColumns: ["accession"]
+          },
+        ]
+      }
+      abs_filings: {
+        Row: {
+          accepted_at: string | null
+          accession: string
+          asset_class: string | null
+          attempts: number
+          deal_id: string | null
+          depositor_cik: number | null
+          file_number: string | null
+          filed: string
+          form: string
+          header_sha256: string | null
+          is_current: boolean
+          issuer_cik: number | null
+          issuer_name: string | null
+          list_cik: number
+          listed_at: string
+          load_id: number | null
+          loaded_at: string | null
+          period_end: string | null
+          period_start: string | null
+          sponsor_cik: number | null
+          status: string
+          status_detail: string | null
+          superseded_by: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          accession: string
+          asset_class?: string | null
+          attempts?: number
+          deal_id?: string | null
+          depositor_cik?: number | null
+          file_number?: string | null
+          filed: string
+          form: string
+          header_sha256?: string | null
+          is_current?: boolean
+          issuer_cik?: number | null
+          issuer_name?: string | null
+          list_cik: number
+          listed_at?: string
+          load_id?: number | null
+          loaded_at?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          sponsor_cik?: number | null
+          status?: string
+          status_detail?: string | null
+          superseded_by?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          accession?: string
+          asset_class?: string | null
+          attempts?: number
+          deal_id?: string | null
+          depositor_cik?: number | null
+          file_number?: string | null
+          filed?: string
+          form?: string
+          header_sha256?: string | null
+          is_current?: boolean
+          issuer_cik?: number | null
+          issuer_name?: string | null
+          list_cik?: number
+          listed_at?: string
+          load_id?: number | null
+          loaded_at?: string | null
+          period_end?: string | null
+          period_start?: string | null
+          sponsor_cik?: number | null
+          status?: string
+          status_detail?: string | null
+          superseded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_filings_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "abs_deals"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "abs_filings_load_fk"
+            columns: ["load_id"]
+            isOneToOne: false
+            referencedRelation: "abs_loads"
+            referencedColumns: ["load_id"]
+          },
+          {
+            foreignKeyName: "abs_filings_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "abs_filings"
+            referencedColumns: ["accession"]
+          },
+        ]
+      }
+      abs_loads: {
+        Row: {
+          accession: string
+          counts: Json | null
+          finished_at: string | null
+          load_id: number
+          parser: string
+          source_bytes: number
+          source_sha256: string
+          started_at: string
+          status: string
+        }
+        Insert: {
+          accession: string
+          counts?: Json | null
+          finished_at?: string | null
+          load_id?: never
+          parser: string
+          source_bytes: number
+          source_sha256: string
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          accession?: string
+          counts?: Json | null
+          finished_at?: string | null
+          load_id?: never
+          parser?: string
+          source_bytes?: number
+          source_sha256?: string
+          started_at?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_loads_accession_fkey"
+            columns: ["accession"]
+            isOneToOne: false
+            referencedRelation: "abs_filings"
+            referencedColumns: ["accession"]
+          },
+        ]
+      }
+      abs_pool_metrics: {
+        Row: {
+          accession: string
+          bucket: string
+          dim: string
+          load_id: number
+          metric: string
+          n: number
+          n_missing: number
+          unit: string
+          value: number | null
+        }
+        Insert: {
+          accession: string
+          bucket?: string
+          dim?: string
+          load_id: number
+          metric: string
+          n?: number
+          n_missing?: number
+          unit: string
+          value?: number | null
+        }
+        Update: {
+          accession?: string
+          bucket?: string
+          dim?: string
+          load_id?: number
+          metric?: string
+          n?: number
+          n_missing?: number
+          unit?: string
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_pool_metrics_load_id_fkey"
+            columns: ["load_id"]
+            isOneToOne: false
+            referencedRelation: "abs_loads"
+            referencedColumns: ["load_id"]
+          },
+        ]
+      }
       ai_cache: {
         Row: {
           created_at: string
@@ -2623,9 +3297,461 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      abs_cmbs_assets_live: {
+        Row: {
+          accepted_at: string | null
+          accession: string | null
+          accrual_method_code: string | null
+          actual_end_balance: number | null
+          asset_added: boolean | null
+          asset_number: string | null
+          asset_type_number: string | null
+          balloon: boolean | null
+          begin_balance: number | null
+          cover_period_end: string | null
+          deal_id: string | null
+          extra: Json | null
+          filed: string | null
+          first_payment_date: string | null
+          form: string | null
+          group_id: string | null
+          interest_only: boolean | null
+          is_current: boolean | null
+          kind: string | null
+          last_modification_date: string | null
+          lien_position_code: string | null
+          liquidation_prepayment_code: string | null
+          liquidation_prepayment_date: string | null
+          load_id: number | null
+          loan_structure_code: string | null
+          master_servicer_return_date: string | null
+          maturity_date: string | null
+          modification_code: string | null
+          modified: boolean | null
+          non_recoverable: boolean | null
+          original_amortization_months: number | null
+          original_interest_only_months: number | null
+          original_loan_amount: number | null
+          original_rate: number | null
+          original_term_months: number | null
+          origination_date: string | null
+          originator_name: string | null
+          other_advances_outstanding: number | null
+          paid_through_date: string | null
+          payment_frequency_code: string | null
+          payment_status_code: string | null
+          payment_type_code: string | null
+          period_begin: string | null
+          period_end: string | null
+          period_modified: boolean | null
+          period_rate: number | null
+          pi_advances_outstanding: number | null
+          primary_servicer_name: string | null
+          properties: number | null
+          properties_securitization: number | null
+          rate_type_code: string | null
+          realized_loss: number | null
+          rec: number | null
+          sched_end_balance: number | null
+          sched_interest: number | null
+          sched_principal: number | null
+          securitization_balance: number | null
+          securitization_rate: number | null
+          special_servicer_transfer_date: string | null
+          subject_to_demand: boolean | null
+          ti_advances_outstanding: number | null
+          total_pi_due: number | null
+          unparsed: Json | null
+          unsched_principal: number | null
+          workout_strategy_code: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_cmbs_assets_load_id_fkey"
+            columns: ["load_id"]
+            isOneToOne: false
+            referencedRelation: "abs_loads"
+            referencedColumns: ["load_id"]
+          },
+          {
+            foreignKeyName: "abs_filings_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "abs_deals"
+            referencedColumns: ["deal_id"]
+          },
+        ]
+      }
+      abs_cmbs_properties_live: {
+        Row: {
+          accepted_at: string | null
+          accession: string | null
+          address: string | null
+          asset_number: string | null
+          city: string | null
+          county: string | null
+          cover_period_end: string | null
+          deal_id: string | null
+          debt_service_recent: number | null
+          defeased_code: string | null
+          dscr_code_recent: string | null
+          dscr_code_securitization: string | null
+          dscr_ncf_recent: number | null
+          dscr_ncf_securitization: number | null
+          dscr_noi_recent: number | null
+          dscr_noi_securitization: number | null
+          extra: Json | null
+          filed: string | null
+          financials_recent_end: string | null
+          financials_recent_start: string | null
+          financials_securitization_date: string | null
+          form: string | null
+          is_current: boolean | null
+          lease_rollover_review_date: string | null
+          link: string | null
+          load_id: number | null
+          loan_asset_number: string | null
+          name: string | null
+          ncf_recent: number | null
+          ncf_securitization: number | null
+          noi_ncf_code_recent: string | null
+          noi_ncf_code_securitization: string | null
+          noi_recent: number | null
+          noi_securitization: number | null
+          occupancy_recent: number | null
+          occupancy_securitization: number | null
+          opex_recent: number | null
+          opex_securitization: number | null
+          rec: number | null
+          revenue_recent: number | null
+          revenue_securitization: number | null
+          seq: number | null
+          sq_ft: number | null
+          sq_ft_securitization: number | null
+          state: string | null
+          status_code: string | null
+          tenant1: string | null
+          tenant1_lease_end: string | null
+          tenant1_sq_ft: number | null
+          tenant2: string | null
+          tenant2_lease_end: string | null
+          tenant2_sq_ft: number | null
+          tenant3: string | null
+          tenant3_lease_end: string | null
+          tenant3_sq_ft: number | null
+          type_code: string | null
+          units: number | null
+          units_securitization: number | null
+          unparsed: Json | null
+          valuation_recent: number | null
+          valuation_recent_date: string | null
+          valuation_recent_source: string | null
+          valuation_securitization: number | null
+          valuation_securitization_date: string | null
+          valuation_source_securitization: string | null
+          year_built: number | null
+          year_renovated: number | null
+          zip: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_cmbs_properties_load_id_fkey"
+            columns: ["load_id"]
+            isOneToOne: false
+            referencedRelation: "abs_loads"
+            referencedColumns: ["load_id"]
+          },
+          {
+            foreignKeyName: "abs_filings_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "abs_deals"
+            referencedColumns: ["deal_id"]
+          },
+        ]
+      }
+      abs_pool_metrics_live: {
+        Row: {
+          accepted_at: string | null
+          accession: string | null
+          bucket: string | null
+          cover_period_end: string | null
+          cover_period_start: string | null
+          deal_id: string | null
+          dim: string | null
+          filed: string | null
+          form: string | null
+          is_current: boolean | null
+          load_id: number | null
+          metric: string | null
+          n: number | null
+          n_missing: number | null
+          unit: string | null
+          value: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "abs_filings_deal_id_fkey"
+            columns: ["deal_id"]
+            isOneToOne: false
+            referencedRelation: "abs_deals"
+            referencedColumns: ["deal_id"]
+          },
+          {
+            foreignKeyName: "abs_pool_metrics_load_id_fkey"
+            columns: ["load_id"]
+            isOneToOne: false
+            referencedRelation: "abs_loads"
+            referencedColumns: ["load_id"]
+          },
+        ]
+      }
     }
     Functions: {
+      abs_begin_load: {
+        Args: {
+          _accession: string
+          _bytes: number
+          _force?: boolean
+          _parser: string
+          _sha256: string
+        }
+        Returns: Json
+      }
+      abs_check: {
+        Args: never
+        Returns: {
+          bad: number
+          problem: string
+        }[]
+      }
+      abs_claim_next: {
+        Args: { _max_attempts: number; _watch: Json }
+        Returns: Json
+      }
+      abs_commit_load: {
+        Args: {
+          _documents: Json
+          _expect: Json
+          _filing: Json
+          _load_id: number
+        }
+        Returns: Json
+      }
+      abs_fail_claimed: {
+        Args: { _accession: string; _detail: string }
+        Returns: undefined
+      }
+      abs_filing_load: { Args: { _accession: string }; Returns: Json }
+      abs_filing_states: { Args: { _list_cik: number }; Returns: Json }
+      abs_mark_filing: {
+        Args: { _accession: string; _detail: string; _status: string }
+        Returns: undefined
+      }
+      abs_put_rows: {
+        Args: { _kind: string; _load_id: number; _rows: Json }
+        Returns: number
+      }
+      abs_register_filings: { Args: { _rows: Json }; Returns: Json }
+      abs_release_filing: {
+        Args: { _accession: string; _detail: string }
+        Returns: undefined
+      }
+      abs_require_columns: {
+        Args: { _rows: Json; _table: string }
+        Returns: undefined
+      }
+      abs_review: {
+        Args: never
+        Returns: {
+          accession: string
+          deal_id: string
+          filed: string
+          period_end: string
+          what: string
+        }[]
+      }
+      abs_rows_cmbs_assets: {
+        Args: { _accession: string; _load_id: number; _rows: Json }
+        Returns: {
+          accession: string
+          accrual_method_code: string | null
+          actual_end_balance: number | null
+          asset_added: boolean | null
+          asset_number: string
+          asset_type_number: string | null
+          balloon: boolean | null
+          begin_balance: number | null
+          extra: Json
+          first_payment_date: string | null
+          group_id: string | null
+          interest_only: boolean | null
+          kind: string
+          last_modification_date: string | null
+          lien_position_code: string | null
+          liquidation_prepayment_code: string | null
+          liquidation_prepayment_date: string | null
+          load_id: number
+          loan_structure_code: string | null
+          master_servicer_return_date: string | null
+          maturity_date: string | null
+          modification_code: string | null
+          modified: boolean | null
+          non_recoverable: boolean | null
+          original_amortization_months: number | null
+          original_interest_only_months: number | null
+          original_loan_amount: number | null
+          original_rate: number | null
+          original_term_months: number | null
+          origination_date: string | null
+          originator_name: string | null
+          other_advances_outstanding: number | null
+          paid_through_date: string | null
+          payment_frequency_code: string | null
+          payment_status_code: string | null
+          payment_type_code: string | null
+          period_begin: string | null
+          period_end: string | null
+          period_modified: boolean | null
+          period_rate: number | null
+          pi_advances_outstanding: number | null
+          primary_servicer_name: string | null
+          properties: number | null
+          properties_securitization: number | null
+          rate_type_code: string | null
+          realized_loss: number | null
+          rec: number
+          sched_end_balance: number | null
+          sched_interest: number | null
+          sched_principal: number | null
+          securitization_balance: number | null
+          securitization_rate: number | null
+          special_servicer_transfer_date: string | null
+          subject_to_demand: boolean | null
+          ti_advances_outstanding: number | null
+          total_pi_due: number | null
+          unparsed: Json
+          unsched_principal: number | null
+          workout_strategy_code: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "abs_cmbs_assets"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      abs_rows_cmbs_properties: {
+        Args: { _accession: string; _load_id: number; _rows: Json }
+        Returns: {
+          accession: string
+          address: string | null
+          asset_number: string
+          city: string | null
+          county: string | null
+          debt_service_recent: number | null
+          defeased_code: string | null
+          dscr_code_recent: string | null
+          dscr_code_securitization: string | null
+          dscr_ncf_recent: number | null
+          dscr_ncf_securitization: number | null
+          dscr_noi_recent: number | null
+          dscr_noi_securitization: number | null
+          extra: Json
+          financials_recent_end: string | null
+          financials_recent_start: string | null
+          financials_securitization_date: string | null
+          lease_rollover_review_date: string | null
+          link: string
+          load_id: number
+          loan_asset_number: string
+          name: string | null
+          ncf_recent: number | null
+          ncf_securitization: number | null
+          noi_ncf_code_recent: string | null
+          noi_ncf_code_securitization: string | null
+          noi_recent: number | null
+          noi_securitization: number | null
+          occupancy_recent: number | null
+          occupancy_securitization: number | null
+          opex_recent: number | null
+          opex_securitization: number | null
+          rec: number
+          revenue_recent: number | null
+          revenue_securitization: number | null
+          seq: number
+          sq_ft: number | null
+          sq_ft_securitization: number | null
+          state: string | null
+          status_code: string | null
+          tenant1: string | null
+          tenant1_lease_end: string | null
+          tenant1_sq_ft: number | null
+          tenant2: string | null
+          tenant2_lease_end: string | null
+          tenant2_sq_ft: number | null
+          tenant3: string | null
+          tenant3_lease_end: string | null
+          tenant3_sq_ft: number | null
+          type_code: string | null
+          units: number | null
+          units_securitization: number | null
+          unparsed: Json
+          valuation_recent: number | null
+          valuation_recent_date: string | null
+          valuation_recent_source: string | null
+          valuation_securitization: number | null
+          valuation_securitization_date: string | null
+          valuation_source_securitization: string | null
+          year_built: number | null
+          year_renovated: number | null
+          zip: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "abs_cmbs_properties"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      abs_rows_metrics: {
+        Args: { _accession: string; _load_id: number; _rows: Json }
+        Returns: {
+          accession: string
+          bucket: string
+          dim: string
+          load_id: number
+          metric: string
+          n: number
+          n_missing: number
+          unit: string
+          value: number | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "abs_pool_metrics"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      abs_store_filing: {
+        Args: {
+          _accession: string
+          _bytes: number
+          _documents: Json
+          _expect: Json
+          _filing: Json
+          _parser: string
+          _rows: Json
+          _sha256: string
+        }
+        Returns: Json
+      }
+      abs_summary: { Args: never; Returns: Json }
+      abs_verify_rows: {
+        Args: { _accession: string; _kind: string; _rows: Json }
+        Returns: number
+      }
       accept_firm_invite: { Args: { _token: string }; Returns: string }
       accept_trial_terms: { Args: never; Returns: undefined }
       alt_event_buckets: {
@@ -2669,8 +3795,8 @@ export type Database = {
         Args: never
         Returns: {
           dataset: string
-          median_age_hours: number | null
-          p90_age_hours: number | null
+          median_age_hours: number
+          p90_age_hours: number
           top100: number
           top1000: number
           top500: number
@@ -2759,8 +3885,8 @@ export type Database = {
           fail_streak: number
           failed: number
           job: string
-          last_ok: string | null
-          last_run: string | null
+          last_ok: string
+          last_run: string
           runs: number
           unfinished: number
         }[]
@@ -2812,6 +3938,10 @@ export type Database = {
       remove_firm_member: {
         Args: { _firm: string; _user: string }
         Returns: undefined
+      }
+      replace_supply_signals: {
+        Args: { _rows: Json; _source_kind: string; _ticker: string }
+        Returns: number
       }
       request_bot_close: { Args: { _position: string }; Returns: undefined }
       require_feature: { Args: { _feature: string }; Returns: boolean }
