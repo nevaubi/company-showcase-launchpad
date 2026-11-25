@@ -125,7 +125,7 @@ export function PointTable({
   onOpen,
   first = "Period",
 }: {
-  points: { key: string; label: string; text: string | null; row: number }[];
+  points: { key: string; label: string; text: string | null; display?: string; row: number }[];
   unit: string;
   onOpen: (row: number) => void;
   first?: string;
@@ -150,7 +150,9 @@ export function PointTable({
           {points.slice(0, 60).map((p) => (
             <tr key={`${p.key}-${p.row}`} style={{ height: 29 }}>
               <td className="border-b px-1">{p.label}</td>
-              <td className="num border-b px-1 text-right">{p.text ?? "–"}</td>
+              <td className="num border-b px-1 text-right" title={p.text ?? "missing in the source"}>
+                {p.display ?? p.text ?? "–"}
+              </td>
               <td className="border-b px-1 text-right">
                 <button type="button" onClick={() => onOpen(p.row)} className="num text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                   {count(p.row)}

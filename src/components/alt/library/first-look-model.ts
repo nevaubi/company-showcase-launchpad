@@ -164,8 +164,17 @@ export function levelSpec(datasetId: string, collection: string, measure: Measur
 }
 
 /** A ranking of one period across entities or places as a tile spec. */
-export function rankSpec(datasetId: string, collection: string, measure: MeasureSpec, by: "entity_id" | "entity_name" | "geo_code" | "geo_name", unit: string, top: number): RankTileSpec {
+export function rankSpec(
+  datasetId: string,
+  collection: string,
+  measure: MeasureSpec,
+  by: "entity_id" | "entity_name" | "geo_code" | "geo_name",
+  unit: string,
+  top: number,
+  entities: string,
+): RankTileSpec {
   return {
+    entities,
     id: `look-rank:${datasetId}`,
     collection,
     datasetId,

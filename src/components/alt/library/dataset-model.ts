@@ -2,7 +2,11 @@
  * Pure facts of the table page, decided from the stored snapshot only: which dimensions it fills, which orders
  * the records can take, the words for its refresh state and its version. Tested in `dataset-model.test.ts`.
  */
-import { detectPeriodFormat, type PeriodFormat } from "@/lib/sources/periods";
+import { periodLabel } from "@/lib/sources/boards/compute";
+import { detectPeriodFormat, formatPeriod, parsePeriod, type PeriodFormat } from "@/lib/sources/periods";
+import { cadenceOf, locateField, unitOf, type Profile } from "@/lib/sources/profiles";
+import type { FieldHint } from "@/lib/sources/fields";
+import type { SourceColumn } from "@/lib/sources/schema";
 import type { SourceDataset, SourceIngest, SourceSnapshot } from "@/lib/sources/schema";
 import type { RecordDims, RecordOrder } from "./record-read";
 
@@ -122,4 +126,40 @@ export function bytesText(n: number | null | undefined): string {
     i += 1;
   }
   return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
+}
+
+
+/**
+ * A period as a reader says it. Where a reviewed profile reads the period dimension, its cadence decides
+ * ("2026-10-01" of a monthly FRED series is Oct 2026); otherwise the format alone does. The stored text is the title.
+ */
+export function periodWords(text: string, format: PeriodFormat, profile: Profile | null): { text: string; title?: string } {
+  if (profile && profile.period.from === "dimension") {
+    const parsed = parsePeriod(text, profile.period.format);
+    if (parsed) {
+      const label = periodLabel(parsed, cadenceOf(profile));
+      return label === text ? { text } : { text: label, title: text };
+    }
+  }
+  return formatPeriod(text, format);
+}
+
+/**
+ * What a reviewed profile says about the fields of this snapshot: its measures are quantities, with the unit the
+ * profile establishes (a dictionary entry it checked, or the publisher's documentation). A unit kept in a column
+ * of the row varies by record and is not put in a column head.
+ */
+export function profileFields(profile: Profile | null, columns: readonly SourceColumn[]): { hints: Record<string, FieldHint>; units: Map<number, string> } {
+  const hints: Record<string, FieldHint> = {};
+  const units = new Map<number, string>();
+  if (!profile) return { hints, units };
+  for (const m of profile.measures) {
+    const at = locateField(columns, m.field);
+    if (!at.ok) continue;
+    hints[at.key] = { role: "quantity" };
+    if (m.unit.from === "column") continue;
+    const unit = unitOf(m, columns);
+    if (unit.ok) units.set(at.index, unit.text);
+  }
+  return { hints, units };
 }

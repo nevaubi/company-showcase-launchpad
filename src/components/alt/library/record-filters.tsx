@@ -49,7 +49,7 @@ export function RecordFilters({
   if (search.q) chips.push({ key: "q", label: `Names containing "${search.q}"` });
   if (!offer.entity && !offer.geography && !offer.period && !offer.search && !chips.length) return null;
   return (
-    <div className="grid gap-2" data-section="Record filters">
+    <div className="grid grid-cols-1 gap-2" data-section="Record filters">
       <div className="flex min-w-0 flex-wrap items-center gap-2">
         {offer.entity && (
           <EntityPicker

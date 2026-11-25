@@ -12,7 +12,7 @@ import { fieldCompleteness } from "@/lib/sources/read-types";
 import type { SourceDatasetDetail } from "@/lib/sources/schema";
 import { DatasetHeader } from "./dataset-header";
 import { datasetHref, libraryHref, recordHref } from "@/lib/sources/links";
-import { canOrderNewest, effectiveOrder, rangeFormat, recordDims, variesByRow } from "./dataset-model";
+import { canOrderNewest, effectiveOrder, profileFields, rangeFormat, recordDims, variesByRow } from "./dataset-model";
 import { datasetQueries, readData } from "./dataset-queries";
 import { openingFields } from "./columns-model";
 import { columnsOf, filterPatch, MAX_COLUMNS, snapshotPatch, type DatasetSearch } from "./dataset-search";
@@ -59,7 +59,7 @@ export function DatasetPage({
   }
   if (!detail.data.snapshot)
     return (
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <PageHeader eyebrow="Data library" title={describeDataset({ ...detail.data.dataset, rows: null }).title} />
         <DataUnavailable title="This table is registered but not published yet" hint="Its records appear here once a version of the file is published." />
       </div>
@@ -125,7 +125,8 @@ function DatasetBody({
   const entities = entityDimension === null ? null : (entitiesRead.data ?? undefined);
   const entitiesFailed = entityDimension !== null && (entitiesQuery.isError || !!entitiesRead.reason);
   const versions = useQuery(datasetQueries.versions(dataset.id));
-  const roles = useMemo(() => fieldRoles(snapshot.columns, snapshot.ingest), [snapshot.columns, snapshot.ingest]);
+  const reviewed = useMemo(() => profileFields(profile.state === "on" ? profile.profile : null, snapshot.columns), [profile, snapshot.columns]);
+  const roles = useMemo(() => fieldRoles(snapshot.columns, snapshot.ingest, reviewed.hints), [snapshot.columns, snapshot.ingest, reviewed]);
   const fills = useMemo(() => fieldCompleteness(snapshot), [snapshot]);
   const defaults = useMemo(
     () => openingFields(snapshot.columns, snapshot.ingest, profile.state === "on" ? profile.profile.measures.map((m) => m.field) : []),
@@ -151,6 +152,7 @@ function DatasetBody({
           entitiesFailed={entitiesFailed}
           entityDimension={entityDimension}
           entityNoun={noun}
+          profile={profile.state === "on" ? profile.profile : null}
           onLatest={() => setSearch(snapshotPatch(undefined))}
           pinnedUrl={pinnedUrl}
         />
@@ -183,6 +185,7 @@ function DatasetBody({
         newest={newest}
         format={format}
         roles={roles}
+        units={reviewed.units}
         columns={columns}
         defaults={defaults}
         entities={entityDimension === "entity" ? entities : null}
@@ -211,6 +214,7 @@ function DatasetBody({
         row={search.row}
         shown={columns}
         roles={roles}
+        units={reviewed.units}
         format={format}
         entityNoun={noun ? cap(noun.one) : "Entity"}
         onClose={() => setSearch({ row: undefined })}
@@ -246,7 +250,7 @@ function Missing({
 }) {
   const notFound = failure === "not-found";
   return (
-    <div className="grid gap-4" data-section="Table not found">
+    <div className="grid grid-cols-1 gap-4" data-section="Table not found">
       <PageHeader
         eyebrow={
           <HrefLink href={libraryHref()} className="underline-offset-4 hover:underline">
@@ -294,8 +298,8 @@ function Missing({
 
 function PageSkeleton() {
   return (
-    <div className="grid gap-6" aria-busy="true" aria-label="Loading the table">
-      <div className="grid gap-2">
+    <div className="grid grid-cols-1 gap-6" aria-busy="true" aria-label="Loading the table">
+      <div className="grid grid-cols-1 gap-2">
         <span className="block h-3 w-40 animate-pulse rounded bg-muted" />
         <span className="block h-7 w-2/3 animate-pulse rounded bg-muted" />
         <span className="block h-4 w-1/2 animate-pulse rounded bg-muted" />

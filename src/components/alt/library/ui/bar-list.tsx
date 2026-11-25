@@ -36,7 +36,7 @@ export function BarList({
 }) {
   const top = max ?? Math.max(0, ...bars.map((b) => b.value));
   return (
-    <ol className="grid gap-y-1" aria-label={label}>
+    <ol className="grid grid-cols-1 gap-y-1" aria-label={label}>
       {bars.map((b) => {
         const share = top > 0 ? Math.max(0, b.value) / top : 0;
         const body = (

@@ -64,7 +64,8 @@ export function RankingView({
     const ctx = tileContext(profile, measure, datasetId, snapshot.id, snapshot.columns);
     if (!ctx.ok) return { ok: false, reason: ctx.reason };
     const unit = ctx.unit ?? "";
-    return computeRankTile(rankSpec(datasetId, collection, measure, by, unit, top), ctx.context, rankCells(read.data, by));
+    const plural = profile.entityNoun?.many ?? (by.startsWith("geo") ? "places" : "entities");
+    return computeRankTile(rankSpec(datasetId, collection, measure, by, unit, top, plural), ctx.context, rankCells(read.data, by));
   }, [field, read.data, profile, measure, datasetId, snapshot.id, snapshot.columns, collection, by, top]);
 
   if (query.isError || read.reason) return <QuietLine>{read.reason === "unavailable" ? AWAITS_UPDATE : "The last period could not be read."}</QuietLine>;

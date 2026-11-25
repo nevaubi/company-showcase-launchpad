@@ -69,7 +69,7 @@ export function FieldsSection({
       title={`Fields (${count(snapshot.columns.length)})`}
       meta={fills ? "Filled share from the counts stored with this version" : "Filled share not counted for this version"}
     >
-      <div className="grid gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <div className="relative min-w-0">
             <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden />

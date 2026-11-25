@@ -35,6 +35,7 @@ export function RecordSheet({
   row,
   shown,
   roles,
+  units,
   format,
   entityNoun,
   onClose,
@@ -46,6 +47,7 @@ export function RecordSheet({
   row: number | undefined;
   shown: number[];
   roles: FieldRole[];
+  units: Map<number, string>;
   format: PeriodFormat;
   entityNoun: string;
   onClose: () => void;
@@ -65,7 +67,7 @@ export function RecordSheet({
                 {record ? recordTitle(record, shown) : query.isPending ? `Record ${row!.toLocaleString("en-US")}` : "Record not found"}
               </SheetTitle>
               <SheetDescription asChild>
-                <div className="grid gap-1 text-[11px] leading-4">
+                <div className="grid grid-cols-1 gap-1 text-[11px] leading-4">
                   {record && <RecordFacts record={record} total={snapshot.loaded_rows} noun={entityNoun} format={format} />}
                   {!record && !query.isPending && (
                     <span>
@@ -111,7 +113,7 @@ export function RecordSheet({
                 </Button>
               </div>
             ) : (
-              <RecordFields record={record} loading={query.isPending} snapshot={snapshot} shown={shown} roles={roles} />
+              <RecordFields record={record} loading={query.isPending} snapshot={snapshot} shown={shown} roles={roles} units={units} />
             )}
             <div className="border-t px-4 py-2.5 text-[11px] leading-4 text-muted-foreground">
               <span className="inline-flex flex-wrap items-center gap-x-1.5">
@@ -149,12 +151,14 @@ function RecordFields({
   snapshot,
   shown,
   roles,
+  units,
 }: {
   record: WholeRecord | null | undefined;
   loading: boolean;
   snapshot: SourceSnapshot;
   shown: number[];
   roles: FieldRole[];
+  units: Map<number, string>;
 }) {
   const [find, setFind] = useState("");
   const order = useMemo(() => {
@@ -209,7 +213,7 @@ function RecordFields({
       </div>
       <div ref={setScroller} className="min-h-0 flex-1 overflow-y-auto" role="list" aria-label="Fields of this record">
         {loading ? (
-          <div className="grid gap-2 px-4 py-3" aria-hidden>
+          <div className="grid grid-cols-1 gap-2 px-4 py-3" aria-hidden>
             {Array.from({ length: 10 }, (_, i) => (
               <span key={i} className="block h-8 animate-pulse rounded bg-muted" />
             ))}
@@ -225,7 +229,7 @@ function RecordFields({
               const head = columnHead(column);
               const cell = record.values[p] ?? null;
               const f = formatCell(cell, roles[p], column);
-              const unit = statedUnit(column);
+              const unit = units.get(p) ?? statedUnit(column);
               const inTable = shown.includes(p);
               return (
                 <div

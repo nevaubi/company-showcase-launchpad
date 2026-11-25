@@ -52,6 +52,7 @@ export function RecordsSection({
   newest,
   format,
   roles,
+  units,
   columns,
   defaults,
   entities,
@@ -68,6 +69,8 @@ export function RecordsSection({
   newest: boolean;
   format: PeriodFormat;
   roles: FieldRole[];
+  /** Units a reviewed profile establishes for its measures, by position. */
+  units: Map<number, string>;
   columns: number[];
   defaults: number[];
   entities: SourceEntities | null | undefined;
@@ -160,7 +163,7 @@ export function RecordsSection({
         </>
       }
     >
-      <div className="grid gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <RecordFilters
           offer={offer}
           search={filter}
@@ -173,6 +176,7 @@ export function RecordsSection({
           snapshot={snapshot}
           columns={columns}
           roles={roles}
+          units={units}
           page={page}
           loading={query.isPending}
           dim={query.isPlaceholderData}
@@ -230,6 +234,7 @@ function RecordGrid({
   snapshot,
   columns,
   roles,
+  units,
   page,
   loading,
   dim,
@@ -242,6 +247,7 @@ function RecordGrid({
   snapshot: SourceSnapshot;
   columns: number[];
   roles: FieldRole[];
+  units: Map<number, string>;
   page: RecordPage | undefined;
   loading: boolean;
   dim: boolean;

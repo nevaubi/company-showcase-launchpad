@@ -3,14 +3,15 @@ import { useQuery } from "@tanstack/react-query";
 import { PageHeader, Stat } from "@/components/app/page-header";
 import { describeDataset, staleAgainstParent, withoutLongDashes, type CatalogEntry } from "@/lib/sources/catalog";
 import { statedUnit } from "@/lib/sources/fields";
-import { formatPeriod, type PeriodFormat } from "@/lib/sources/periods";
+import type { PeriodFormat } from "@/lib/sources/periods";
 import { safeSourceHref, sourceDescription } from "@/lib/sources/presentation";
 import type { SourceEntities } from "@/lib/sources/read-types";
 import type { SourceDataset, SourceSnapshot } from "@/lib/sources/schema";
 import { cn } from "@/lib/utils";
 import { datasetQueries } from "./dataset-queries";
 import { collectionHref, datasetHref, libraryHref } from "@/lib/sources/links";
-import { count, isLatest, refreshState, utcDay, utcStamp, versionPosition } from "./dataset-model";
+import { count, isLatest, periodWords, refreshState, utcDay, utcStamp, versionPosition } from "./dataset-model";
+import type { Profile } from "@/lib/sources/profiles";
 import type { SnapshotVersion } from "./record-read";
 import { CopyButton, HrefLink, LINK, QuietLine } from "./ui/primitives";
 
@@ -43,6 +44,7 @@ export function DatasetHeader({
   entitiesFailed,
   entityDimension,
   entityNoun,
+  profile,
   onLatest,
   pinnedUrl,
 }: {
@@ -56,6 +58,7 @@ export function DatasetHeader({
   entitiesFailed: boolean;
   entityDimension: "entity" | "geo" | null;
   entityNoun: { one: string; many: string } | null;
+  profile: Profile | null;
   onLatest: () => void;
   pinnedUrl: string;
 }) {
@@ -72,8 +75,8 @@ export function DatasetHeader({
     const v = snapshot.coverage?.[key];
     return typeof v === "string" && v.trim() ? [{ label, text: withoutLongDashes(v.trim()) }] : [];
   });
-  const first = range ? formatPeriod(range.first, format) : null;
-  const last = range ? formatPeriod(range.last, format) : null;
+  const first = range ? periodWords(range.first, format, profile) : null;
+  const last = range ? periodWords(range.last, format, profile) : null;
 
   return (
     <div data-section="Table header" className="grid min-w-0 grid-cols-1 gap-3">
@@ -97,7 +100,7 @@ export function DatasetHeader({
           </span>
         }
         description={
-          <span className="grid gap-1">
+          <span className="grid grid-cols-1 gap-1">
             {showStored && <span className="block text-[11px] leading-4">Stored as {storedName}</span>}
             <span className="block text-[13px] leading-5">
               {entry.publisher.name}
@@ -165,7 +168,7 @@ export function DatasetHeader({
         />
       </div>
 
-      <div className="grid gap-1" data-section="Version shown">
+      <div className="grid grid-cols-1 gap-1" data-section="Version shown">
         {latest ? (
           <QuietLine>
             Snapshot <span className="num text-foreground">{snapshot.id.slice(0, 12)}</span>, published{" "}

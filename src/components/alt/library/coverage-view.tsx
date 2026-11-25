@@ -106,7 +106,7 @@ export function CoverageView({
               )}
             </>
           ) : (
-            <div className="grid gap-4 @7xl:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 @7xl:grid-cols-2">
               <div className="min-w-0">
                 <p className="mb-2 text-[11px] text-muted-foreground">{count(snapshot.columns.length)} fields by the share of records that have a value.</p>
                 {view === "chart" ? (
@@ -154,7 +154,7 @@ export function CoverageView({
                   {many} in {entities!.period ?? "the first rows"}
                   {entities!.periodRule === "greatest" ? ", the last period" : ""}. The first in file order:
                 </p>
-                <ul className="grid gap-0.5 text-[13px] leading-5">
+                <ul className="grid grid-cols-1 gap-0.5 text-[13px] leading-5">
                   {entities!.entities.slice(0, 10).map((e) => (
                     <li key={`${e.id}|${e.name}|${e.row}`} className="flex min-w-0 items-baseline gap-1.5">
                       <button

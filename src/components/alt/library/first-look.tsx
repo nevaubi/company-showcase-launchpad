@@ -135,7 +135,7 @@ function Measured({
   const top = look?.n === "40" ? 40 : 15;
   const picker = profile.firstLook === "series" && (profile.addressing.by || profile.addressing.where.length > 0);
   return (
-    <div className="grid min-w-0 gap-3">
+    <div className="grid grid-cols-1 min-w-0 gap-3">
       <div className="flex min-w-0 flex-wrap items-center gap-2" data-section="First look controls">
         {picker && <SeriesPicker dataset={dataset} snapshot={snapshot} profile={profile} value={look?.s} current={address} onPick={(s) => patch({ s })} />}
         {profile.measures.length > 1 && (

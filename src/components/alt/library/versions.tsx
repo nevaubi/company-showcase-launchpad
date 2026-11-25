@@ -50,7 +50,7 @@ export function VersionsSection({
 
   return (
     <LibrarySection id="versions" name="Versions and provenance" title="Versions and provenance">
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 gap-4">
         <div className={PANEL} data-section="Versions">
           <div className="overflow-x-auto">
             <table className="w-full min-w-[46rem] border-separate border-spacing-0 text-[13px]">
@@ -62,7 +62,8 @@ export function VersionsSection({
                   <th scope="col" className="h-8 border-b px-3 text-right font-normal">Change</th>
                   <th scope="col" className="h-8 border-b px-3 font-normal">File SHA-256</th>
                   <th scope="col" className="h-8 border-b px-3 text-right font-normal">Size</th>
-                  <th scope="col" className="h-8 border-b px-3 font-normal">
+                  {/* relative: the screen-reader text stays in this cell instead of widening a phone page */}
+                  <th scope="col" className="relative h-8 border-b px-3 font-normal">
                     <span className="sr-only">Shown</span>
                   </th>
                 </tr>
@@ -157,7 +158,7 @@ export function VersionsSection({
 
         {notes.length > 0 && (
           <Block title="Notes kept with the table">
-            <ul className="grid gap-1 text-[13px] leading-5">
+            <ul className="grid grid-cols-1 gap-1 text-[13px] leading-5">
               {notes.map((n, i) => (
                 <li key={i} className="text-muted-foreground">
                   {n}
@@ -170,7 +171,7 @@ export function VersionsSection({
         {stored.length > 0 && (
           <Block title="Declared as stored">
             <QuietLine className="mb-2 text-[11px] leading-4">Further declarations of this version, under the names the collection gave them.</QuietLine>
-            <div className="grid gap-3">
+            <div className="grid grid-cols-1 gap-3">
               {stored.map((g) => (
                 <div key={g.group}>
                   <p className="eyebrow mb-1 text-muted-foreground">{g.group}</p>
