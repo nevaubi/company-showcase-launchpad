@@ -39,7 +39,7 @@ export const OFFICIAL_SOURCE_TOOL_DEFS = [
     parameters: obj({
       dataset_id: str("Exact dataset ID", 1024),
       snapshot_id: { ...str("Required immutable ready snapshot ID from source search/inspection", 64), pattern: "^[0-9a-f]{64}$" },
-      fields: { type: "array", items: str("Exact field key, or a unique exact native label"), minItems: 1, maxItems: 12, uniqueItems: true },
+      fields: { type: "array", items: str("Exact field key, or a unique exact native label"), minItems: 1, maxItems: 12 },
       entity: optional(str("Exact entity ID or exact entity name already established by this source; null for no filter")),
       geography: optional(str("Exact declared geography code or name; null for no filter")),
       period: optional(str("Exact source period/search-index label; null for no filter")),

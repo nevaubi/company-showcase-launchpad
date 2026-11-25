@@ -7,6 +7,7 @@ import {
   numericColumn,
   safeSourceHref,
   sourceAvailability,
+  sourceCoverageExceptions,
   sourceDescription,
 } from "./presentation";
 import type { SourceColumn, SourceSnapshotSummary } from "./schema";
@@ -74,6 +75,82 @@ describe("native record presentation", () => {
     ]) {
       expect(sourceDescription(description)).toBe(description);
     }
+  });
+
+  it("discloses the exact certificates and requested fields absent from the FDIC response", () => {
+    expect(
+      sourceCoverageExceptions({
+        cohort_size: 500,
+        reporting_institutions: 496,
+        missing_certificates: ["18221", "26484", "28710", "58629"],
+        missing_institution_policy: "No imputation, successor substitution, or zero-fill.",
+        requested_but_not_returned_fields: ["L_REPDTE"],
+        omitted_field_policy: "An omitted column has no invented blank or null cells.",
+      }),
+    ).toEqual([
+      {
+        key: "missing_certificates",
+        label: "Missing certificates (CERT)",
+        values: ["18221", "26484", "28710", "58629"],
+        policyKey: "missing_institution_policy",
+        policy: "No imputation, successor substitution, or zero-fill.",
+      },
+      {
+        key: "requested_but_not_returned_fields",
+        label: "Requested fields not returned",
+        values: ["L_REPDTE"],
+        policyKey: "omitted_field_policy",
+        policy: "An omitted column has no invented blank or null cells.",
+      },
+    ]);
+  });
+
+  it("preserves every declared identifier without scalar limits or numeric conversion", () => {
+    const certificates = [
+      "00001",
+      "00002",
+      "00003",
+      "00004",
+      "00005",
+      "00006",
+      "00007",
+      "00008",
+      "00009",
+      "00010",
+      "00011",
+      "00012",
+      "00013",
+    ];
+    const coverage = Object.freeze({ missing_certificates: Object.freeze(certificates) });
+    const [exception] = sourceCoverageExceptions(coverage);
+    expect(exception.values).toEqual(certificates);
+    expect(exception.policy).toBeNull();
+    expect(exception.values).not.toBe(certificates);
+  });
+
+  it("does not invent exceptions or policy text from counts, unrelated arrays or invalid metadata", () => {
+    expect(
+      sourceCoverageExceptions({
+        cohort_size: 500,
+        reporting_institutions: 496,
+        periods: ["20260930"],
+        missing_certificates: [],
+        requested_but_not_returned_fields: ["L_REPDTE", null],
+        omitted_field_policy: "Preserve the stored policy.",
+      }),
+    ).toEqual([]);
+    expect(
+      sourceCoverageExceptions({
+        missing_certificates: [18221],
+        requested_but_not_returned_fields: "L_REPDTE",
+      }),
+    ).toEqual([]);
+    expect(
+      sourceCoverageExceptions({
+        requested_but_not_returned_fields: ["L_REPDTE"],
+        omitted_field_policy: { text: "Not a declared policy string" },
+      })[0].policy,
+    ).toBeNull();
   });
 
   it("keeps reported zero, an empty cell and a null distinct", () => {

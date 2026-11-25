@@ -1,6 +1,8 @@
 import { describe,expect,it,vi } from "vitest";
+import { defaultParseSearch } from "@tanstack/react-router";
 import { executeOfficialResearch,OFFICIAL_RESEARCH_MAX_CHARS,officialSourceHref,resolveOfficialFields,type OfficialSourceReader } from "./research";
 import { OFFICIAL_SOURCE_TOOL_DEFS } from "./research-tools";
+import { altPageSearch } from "./url-state";
 import type { SourceColumn,SourceDatasetDetail,SourceDatasetList,SourceRecord,SourceRecordPage,SourceRecordQuery } from "./schema";
 
 const SNAP="a".repeat(64);
@@ -26,6 +28,60 @@ function fixtures(d=detail(),sourceRows=[row(1,["000123","9007199254740993.00000
 }
 const request=(extra:Record<string,unknown>={})=>({dataset_id:"financials/fdic",snapshot_id:SNAP,fields:["col0001","col0002","col0003","col0004","col0005","col0006"],entity:null,geography:null,period:null,after:0,limit:20,...extra});
 const parsed=(r:{output:string})=>JSON.parse(r.output);
+
+// Declared values from the verified current-quarter FDIC response and retained cohort contract.
+const fdicCoverage={
+  cohort_date:"20260630",
+  cohort_selection:"Largest 500 reporting institutions in insured bank classes N, NM, SM, SB, SI, SL, SA, OI by ASSET; ties sorted by CERT. Noninsured NC records excluded.",
+  cohort_size:500,
+  reporting_institutions:496,
+  missing_certificates:["18221","26484","28710","58629"],
+  missing_institution_policy:"No imputation, successor substitution, or zero-fill. Absence from the latest official reporting quarter is not an explanation of why a certificate is absent.",
+  requested_but_not_returned_fields:["L_REPDTE"],
+  requested_but_not_returned_count:1,
+  omitted_field_policy:"An omitted column has no invented blank or null cells. Each omission is independently verified absent from the official dictionary-known field request over every available current-quarter identity.",
+  requested_field_count:2379,
+  returned_field_count:2378,
+};
+
+describe.each(["inspect_official_source","query_official_records"] as const)("%s declared FDIC coverage",tool=>{
+  const args=()=>tool==="inspect_official_source"?{dataset_id:"financials/fdic",snapshot_id:SNAP}:request();
+  it("includes the exact cohort counts, missing certificates and omitted field policies",async()=>{
+    const d=detail();
+    d.snapshot!.coverage=structuredClone(fdicCoverage);
+    const before=JSON.stringify(d.snapshot!.coverage);
+    const {reader}=fixtures(d);
+    const result=await executeOfficialResearch(tool,args(),reader);
+    expect(parsed(result).scope.declared_coverage).toEqual({
+      cohort_date:"20260630",
+      cohort_selection:"Largest 500 reporting institutions in insured bank classes N, NM, SM, SB, SI, SL, SA, OI by ASSET; ties sorted by CERT. Noninsured NC records excluded.",
+      cohort_size:500,
+      reporting_institutions:496,
+      missing_certificates:["18221","26484","28710","58629"],
+      missing_institution_policy:"No imputation, successor substitution, or zero-fill. Absence from the latest official reporting quarter is not an explanation of why a certificate is absent.",
+      requested_but_not_returned_fields:["L_REPDTE"],
+      requested_but_not_returned_count:1,
+      omitted_field_policy:"An omitted column has no invented blank or null cells. Each omission is independently verified absent from the official dictionary-known field request over every available current-quarter identity.",
+      requested_field_count:2379,
+      returned_field_count:2378,
+    });
+    expect(JSON.stringify(d.snapshot!.coverage)).toBe(before);
+    expect(result.output.length).toBeLessThanOrEqual(OFFICIAL_RESEARCH_MAX_CHARS);
+  });
+  it("does not invent absent coverage counts, exception arrays or policies",async()=>{
+    const d=detail();d.snapshot!.coverage={};
+    const {reader}=fixtures(d);
+    expect(parsed(await executeOfficialResearch(tool,args(),reader)).scope.declared_coverage).toEqual({});
+  });
+  it.each(["missing_certificates","missing_institution_policy"] as const)("rejects oversized %s intact instead of clipping metadata",async(key)=>{
+    const d=detail();
+    d.snapshot!.coverage={...structuredClone(fdicCoverage),[key]:key==="missing_certificates"?Array(2000).fill("00018221"):"Declared policy. ".repeat(1000)};
+    const before=JSON.stringify(d.snapshot!.coverage);
+    const {reader}=fixtures(d);
+    await expect(executeOfficialResearch(tool,args(),reader)).rejects.toThrow(/Official source metadata exceeds this bounded response.*No source values were clipped/);
+    expect(JSON.stringify(d.snapshot!.coverage)).toBe(before);
+  });
+});
 
 describe("official source research reads",()=>{
   it("preserves native zeros, blanks, leading zeros, nulls and large decimals without scaling",async()=>{
@@ -180,6 +236,17 @@ describe("official source catalogue and inspection",()=>{
   it("pins row links without losing exact identifier strings",()=>{
     const url=new URL(officialSourceHref("collection/file",SNAP,37,{entity:"00123",geography:"01001",period:"FY 2026"}),"https://example.test");
     expect(Object.fromEntries(url.searchParams)).toEqual({view:"sources",source:"collection/file",snapshot:SNAP,after:"37",entity:"00123",geography:"01001",period:"FY 2026"});
+  });
+  it.each([
+    {entity:"628",geography:"01095",period:"20260930"},
+    {entity:"000123",geography:"00101",period:"2026Q2"},
+    {entity:"null",geography:"true",period:"false"},
+    {entity:"900719925474099312345678901234567890",geography:"01001",period:"20260930"},
+  ])("keeps native filters through the real router parser: $entity / $geography / $period",filters=>{
+    const url=new URL(officialSourceHref("collection/file",SNAP,9,filters),"https://example.test");
+    expect(altPageSearch.parse(defaultParseSearch(url.search))).toEqual({
+      view:"sources",source:"collection/file",snapshot:SNAP,after:9,...filters,
+    });
   });
   it("advertises explicit bounds and only the three intended read tools",()=>{
     expect(OFFICIAL_SOURCE_TOOL_DEFS.map(t=>t.name)).toEqual(["search_official_sources","inspect_official_source","query_official_records"]);

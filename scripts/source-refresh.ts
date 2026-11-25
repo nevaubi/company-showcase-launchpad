@@ -9,12 +9,13 @@
  */
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, open, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { directRefreshProvenance, refreshChecked, refreshEligibility, refreshFailure, isRefreshDue, safeRefreshRedirect,
   type RefreshState, type RefreshEligibility } from "../src/lib/sources/refresh-plan";
 import type { SourceDataset, SourceFileManifest, SourceSnapshot, SourceIngest } from "../src/lib/sources/schema";
 import { stageNativeRefresh } from "./lib/source-refresh-io";
+import { writeOfficialResponseBody } from "./lib/official-response-body";
 import { downloadFred } from "./lib/fred-transport";
 import { collectFdicNative, FDIC_BASELINE_DATASET_ID, FDIC_CURRENT_DATASET } from "./lib/fdic-native";
 import { collectTaiwanRevenue, TAIWAN_REVENUE_DATASETS, type TaiwanRevenueMarket } from "./lib/taiwan-revenue-native";
@@ -188,25 +189,7 @@ async function downloadOfficial(candidate: Candidate, folder: string, state: Ref
   if (declaredLength !== null && (!Number.isSafeInteger(declaredLength) || declaredLength < 0 || declaredLength > MAX_FILE_BYTES)) {
     await response.body.cancel(); throw new Error("Official source declared an invalid or oversized payload");
   }
-  const file = await open(filePath, "wx", 0o600);
-  const reader = response.body.getReader();
-  let bytes = 0;
-  try {
-    for (;;) {
-      stop.signal.throwIfAborted();
-      const { value, done } = await reader.read();
-      if (done) break;
-      bytes += value.byteLength;
-      if (bytes > MAX_FILE_BYTES) throw new Error("Official source exceeds the bounded refresh payload size");
-      let offset = 0;
-      while (offset < value.length) {
-        const written = await file.write(value, offset, value.length - offset);
-        if (!written.bytesWritten) throw new Error("Could not persist complete official response bytes");
-        offset += written.bytesWritten;
-      }
-    }
-  } catch (error) { await reader.cancel().catch(() => undefined); throw error; }
-  finally { await file.close(); reader.releaseLock(); }
+  const bytes = await writeOfficialResponseBody(response.body, filePath, stop.signal, MAX_FILE_BYTES);
   if (declaredLength !== null && bytes !== declaredLength) throw new Error("Official response byte count differs from Content-Length");
   return { notModified: false as const, filePath, bytes, url: requestedUrl, resolvedUrl: url,
     retrievedAt: new Date().toISOString(), contentType, etag, lastModified };

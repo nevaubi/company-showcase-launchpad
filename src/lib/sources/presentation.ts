@@ -8,6 +8,45 @@ export function sourceDescription(description: string): string {
   );
 }
 
+export type SourceCoverageException = {
+  key: string;
+  label: string;
+  values: string[];
+  policyKey: string;
+  policy: string | null;
+};
+
+/** Only the source's explicit exception lists are shown; counts never imply missing identities. */
+export function sourceCoverageExceptions(
+  coverage: Record<string, unknown>,
+): SourceCoverageException[] {
+  const declarations = [
+    {
+      key: "missing_certificates",
+      label: "Missing certificates (CERT)",
+      policyKey: "missing_institution_policy",
+    },
+    {
+      key: "requested_but_not_returned_fields",
+      label: "Requested fields not returned",
+      policyKey: "omitted_field_policy",
+    },
+  ];
+  return declarations.flatMap((declaration) => {
+    const values = coverage[declaration.key];
+    if (
+      !Array.isArray(values) ||
+      !values.length ||
+      !values.every((value) => typeof value === "string")
+    )
+      return [];
+    const policy = coverage[declaration.policyKey];
+    return [
+      { ...declaration, values: [...values], policy: typeof policy === "string" ? policy : null },
+    ];
+  });
+}
+
 /** Manifest keys may be positional (col0001); label retains the exact native header. */
 export const nativeColumnCode = (c: SourceColumn) => c.label || c.key;
 const IDENTIFIER =

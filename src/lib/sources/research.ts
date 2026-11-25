@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { defaultStringifySearch } from "@tanstack/react-router";
 import { sourceDescription } from "./presentation";
 import type { SourceColumn, SourceDatasetDetail, SourceDatasetList, SourceJson, SourceListFilters, SourceRecordPage, SourceRecordQuery, SourceSnapshot } from "./schema";
 import type { OfficialSourceToolName } from "./research-tools";
@@ -40,11 +41,11 @@ function ready(detail:SourceDatasetDetail,datasetId:string,snapshotId?:string):S
   return snapshot;
 }
 
-/** The explorer's existing URL contract; filters stay exact strings and never become numbers. */
+/** Match the explorer router's JSON search codec so native strings survive parsing. */
 export function officialSourceHref(datasetId:string,snapshotId:string,after=0,filters:Pick<RecordsInput,"entity"|"geography"|"period">={entity:undefined,geography:undefined,period:undefined}) {
-  const search=new URLSearchParams({view:"sources",source:datasetId,snapshot:snapshotId,after:String(after)});
-  for(const key of ["entity","geography","period"] as const) if(filters[key]!==undefined) search.set(key,filters[key]!);
-  return `/app/alt-data?${search.toString()}`;
+  const search=defaultStringifySearch({view:"sources",source:datasetId,snapshot:snapshotId,after,
+    entity:filters.entity,geography:filters.geography,period:filters.period});
+  return `/app/alt-data${search}`;
 }
 
 export function resolveOfficialFields(columns:SourceColumn[],requested:string[]):number[] {
@@ -64,7 +65,11 @@ function descriptor(column:SourceColumn,position:number,definitions=false):JsonO
   if(definitions) for(const key of ["description","unit_evidence"] as const) if(column[key]!==undefined) result[key]=column[key]!;
   return result;
 }
-const COVERAGE_SCOPE = ["identity_rule","entity_type","entity_id_column","population_role","period_frequency","period_components","period_index_is_native_text","period_search_index_rule","period_index_rule","native_period_field","native_period","geography_rule","geo_code_search_index_rule","geo_level","index_not_currency_price","operator_fields_available","publication_time_known","availability_time_known","archive_population_is_not_unique_entity_count"] as const;
+const COVERAGE_SCOPE = [
+  "identity_rule","entity_type","entity_id_column","population_role","period_frequency","period_components","period_index_is_native_text","period_search_index_rule","period_index_rule","native_period_field","native_period","geography_rule","geo_code_search_index_rule","geo_level","index_not_currency_price","operator_fields_available","publication_time_known","availability_time_known","archive_population_is_not_unique_entity_count",
+  "cohort_date","cohort_selection","cohort_size","reporting_institutions","missing_certificates","missing_institution_policy",
+  "requested_but_not_returned_fields","requested_but_not_returned_count","omitted_field_policy","requested_field_count","returned_field_count",
+] as const;
 function sourceScope(detail:SourceDatasetDetail,full:boolean):JsonObject {
   const d=detail.dataset,s=detail.snapshot!;
   const coverage:JsonObject={};

@@ -34,6 +34,7 @@ import {
   nativeUnit,
   numericColumn,
   sourceAvailability,
+  sourceCoverageExceptions,
   sourceDate,
   sourceDescription,
   sourcePeriods,
@@ -366,25 +367,51 @@ function Metadata({ label, value }: { label: string; value: string }) {
 }
 
 function CoverageMetadata({ coverage }: { coverage: Record<string, unknown> }) {
+  const exceptions = sourceCoverageExceptions(coverage);
   const entries = Object.entries(coverage)
     .filter(
       ([key, value]) =>
         key !== "periods" &&
+        !exceptions.some((exception) => exception.policyKey === key) &&
         (typeof value === "string" || typeof value === "number" || typeof value === "boolean"),
     )
     .slice(0, 12);
-  return entries.length ? (
-    <dl className="grid grid-cols-1 gap-x-5 gap-y-1 sm:grid-cols-2">
-      {entries.map(([key, value]) => (
-        <div key={key} className="flex min-w-0 gap-2">
-          <dt>{key.replace(/_/g, " ")}:</dt>
-          <dd className="min-w-0 break-words text-foreground">
-            {typeof value === "number" ? value.toLocaleString("en-US") : String(value)}
-          </dd>
+  return (
+    <>
+      {exceptions.length > 0 && (
+        <div className="min-w-0 space-y-2 rounded-md border bg-muted/30 p-3">
+          <p className="font-medium text-foreground">Declared coverage exceptions</p>
+          <dl className="space-y-3">
+            {exceptions.map((exception) => (
+              <div key={exception.key}>
+                <dt className="font-medium text-foreground">{exception.label}</dt>
+                <dd className="mt-1">
+                  <p className="break-words font-mono text-foreground">
+                    {exception.values.join(", ")}
+                  </p>
+                  {exception.policy && (
+                    <p className="mt-1 whitespace-pre-wrap leading-relaxed">{exception.policy}</p>
+                  )}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </div>
-      ))}
-    </dl>
-  ) : null;
+      )}
+      {entries.length > 0 && (
+        <dl className="grid grid-cols-1 gap-x-5 gap-y-1 sm:grid-cols-2">
+          {entries.map(([key, value]) => (
+            <div key={key} className="flex min-w-0 gap-2">
+              <dt>{key.replace(/_/g, " ")}:</dt>
+              <dd className="min-w-0 break-words text-foreground">
+                {typeof value === "number" ? value.toLocaleString("en-US") : String(value)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </>
+  );
 }
 
 function RecordFilters({
