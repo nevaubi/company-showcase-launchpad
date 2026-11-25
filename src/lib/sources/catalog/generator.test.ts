@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildMer, parseMerListing } from "../../../../scripts/lib/source-catalog/mer";
 import { listingTitle } from "../../../../scripts/lib/source-catalog/text";
 import { buildZ1, parseZ1Listing, z1Stem, z1Title } from "../../../../scripts/lib/source-catalog/z1";
 import type { DatasetRow } from "../../../../scripts/lib/source-catalog/types";
@@ -83,5 +84,34 @@ describe("Z.1 listing", () => {
     });
     expect(result.unmatched.map((u) => u.id)).toEqual([unlisted.id]);
     expect(buildZ1([listed], { url, status: 503, body: "" }).titles).toEqual({});
+  });
+});
+
+/** Two entries of EIA's MER table list as the page writes them; table 4.4 has no title on its CSV link. */
+const MER_HTML = `
+<li><span class="number">1.1</span>Primary energy overview</a></li>
+<li><span class="number"></span><span class="formats">Available formats:</span> <a href="./pdf/sec1_3.pdf" title="Table 1.1 Primary energy overview"><span class="ico pdf"></span></a> <a href="/totalenergy/data/browser/xls.php?tbl=T01.01&freq=m" title="Table 1.1 Primary energy overview"></a> <a href="/totalenergy/data/browser/csv.php?tbl=T01.01" title="Table 1.1 Primary energy overview"></a></li>
+<li><span class="number">4.4</span>Underground storage</li>
+<li><a href="./pdf/sec4_7.pdf" title="Table 4.4 Underground storage"></a> <a href="/totalenergy/data/browser/xls.php?tbl=T04.04&freq=m" title="Table 4.4 Underground storage"></a> <a href="/totalenergy/data/browser/csv.php?tbl=T04.04"></a> <a href="/totalenergy/data/browser/index.php?tbl=T04.04#/?f=M&start=200001" title="Table 4.4 Underground storage  - View in Total Energy Browser"></a></li>
+<li><a href="/totalenergy/data/browser/csv.php?tbl=TC1" title="Table C1. Electric Vehicle Charging Infrastructure"></a></li>`;
+
+describe("MER table list", () => {
+  it("reads each table's number and title, from the XLS link where the CSV link has none", () => {
+    expect(parseMerListing(MER_HTML)).toEqual([
+      { tbl: "T01.01", number: "1.1", title: "Primary energy overview" },
+      { tbl: "T04.04", number: "4.4", title: "Underground storage" },
+      { tbl: "TC1", number: "C1", title: "Electric Vehicle Charging Infrastructure" },
+    ]);
+  });
+
+  it("titles only single tables read from their own CSV address", () => {
+    const base = "https://www.eia.gov/totalenergy/data/browser/csv.php?tbl=";
+    const raw = { ...row("official_04_energy_raw_mer_t04_04_6b27d1604d", "MER T04.04"), source_url: `${base}T04.04`, source_id: "EIA_MER" };
+    const union = { ...row("official_04_energy_csv_mer_all_107_tables_all_history_3e7c636fc7", "EIA Monthly Energy Review, all 107 tables"), source_url: `${base}T01.01`, source_id: "EIA_MER" };
+    const wrongName = { ...row("official_04_energy_raw_mer_t01_01_50b683cd84", "MER T01.02"), source_url: `${base}T01.01`, source_id: "EIA_MER" };
+    const url = "https://www.eia.gov/totalenergy/data/monthly/";
+    const result = buildMer([raw, union, wrongName], { url, status: 200, body: MER_HTML });
+    expect(result.titles).toEqual({ [raw.id]: { title: "Underground storage", code: "MER 4.4", source: url } });
+    expect(result.unmatched.map((u) => u.id)).toEqual([union.id, wrongName.id]);
   });
 });
