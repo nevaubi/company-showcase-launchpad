@@ -1,0 +1,184 @@
+{
+ "read": "getSourceFacets",
+ "input": {
+  "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+  "dimension": "geo_code"
+ },
+ "result": {
+  "ok": true,
+  "data": {
+   "values": [
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "AK"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "AL"
+    },
+    {
+     "rows": 23,
+     "exact": true,
+     "label": null,
+     "value": "AR"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "AZ"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "CO"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "IL"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "IN"
+    },
+    {
+     "rows": 17,
+     "exact": true,
+     "label": null,
+     "value": "KS"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "KY"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "LA"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "MD"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "MO"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "MS"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "MT"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "ND"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "NM"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "OH"
+    },
+    {
+     "rows": 25,
+     "exact": true,
+     "label": null,
+     "value": "OK"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "PA"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "TN"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "TX"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "UT"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "VA"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "WA"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "WV"
+    },
+    {
+     "rows": 27,
+     "exact": true,
+     "label": null,
+     "value": "WY"
+    }
+   ],
+   "scanned": 686,
+   "complete": true,
+   "snapshot": {
+    "rows": 686,
+    "fields": 5,
+    "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+    "fileSha256": "c32bc8aafd02953e419a18074d531110e759d8b791c4566d345d5abbe5b96ee7",
+    "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+    "publishedAt": "2026-11-25T06:10:19.876385+00:00",
+    "retrievedAt": "2026-11-24T09:55:53.865453+00:00"
+   },
+   "dimension": "geo_code",
+   "nextAfter": null,
+   "scanLimit": 250000
+  }
+ }
+}

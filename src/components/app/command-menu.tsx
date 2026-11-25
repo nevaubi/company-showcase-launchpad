@@ -16,6 +16,7 @@ import {
   Landmark,
   Lightbulb,
   LayoutDashboard,
+  Library,
   LineChart,
   Network,
   PieChart,
@@ -154,8 +155,19 @@ const PAGES: { to: NavPath; label: string; icon: typeof Building2; keywords: str
     ),
   );
 
+/** Pages inside a hub page that the menu offers too; each stays under its hub's tab ("Data library" under Alt data). */
+const SECTION_PAGES: { to: NavPath; label: string; icon: typeof Building2; keywords: string }[] = [
+  {
+    to: "/app/alt-data/library",
+    label: "Data library",
+    icon: Library,
+    keywords:
+      "official tables agencies publishers collections fdic eia fhfa usgs fred federal reserve sec bea bls call reports house prices energy source explorer",
+  },
+];
+
 /** Pages grouped under the sidebar entry (or the account menu) that holds them. */
-const PAGE_GROUPS = groupByHub(PAGES);
+const PAGE_GROUPS = groupByHub([...PAGES, ...SECTION_PAGES]);
 
 export function CommandMenu({
   open,

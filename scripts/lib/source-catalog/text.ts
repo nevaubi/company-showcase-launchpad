@@ -15,12 +15,12 @@ const ENTITIES: Record<string, string> = {
   quot: '"',
   apos: "'",
   nbsp: " ",
-  ndash: "–",
-  mdash: "—",
-  rsquo: "’",
-  lsquo: "‘",
-  rdquo: "”",
-  ldquo: "“",
+  ndash: "\u2013",
+  mdash: "\u2014",
+  rsquo: "\u2019",
+  lsquo: "\u2018",
+  rdquo: "\u201d",
+  ldquo: "\u201c",
 };
 
 export function decodeEntities(text: string): string {
@@ -42,7 +42,7 @@ export function listingTitle(raw: string): string {
     .replace(/\s+/g, " ")
     .trim()
     .replace(/(\S)\s*--\s*(\S)/g, "$1, $2")
-    .replace(/\s+[-‒–—―]\s+/g, ", ")
-    .replace(/(\S)[‒–—―](\S)/g, "$1 to $2")
+    .replace(/\s+[-\u2012\u2013\u2014\u2015]\s+/g, ", ")
+    .replace(/(\S)[\u2012\u2013\u2014\u2015](\S)/g, "$1 to $2")
     .replace(/\s+,/g, ",");
 }

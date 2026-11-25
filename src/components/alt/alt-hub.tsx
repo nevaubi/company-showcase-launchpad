@@ -18,6 +18,7 @@ import { asOfLabel } from "@/lib/alt/periods";
 import { altFeedQuery, altRedFlagsQuery, altSettledLeadersQuery, altSourceStatsQuery, altUnusualQuery, leaderStats, RED_FLAG_DAYS } from "@/lib/alt/query";
 import { FTD_TITLE } from "@/lib/alt/ftd";
 import { cn } from "@/lib/utils";
+import { LibraryLinkRow } from "@/components/alt/library/library-link";
 
 export type ThemeFilter = AltTheme | "all";
 const inTheme = (dataset: string, theme: ThemeFilter) => theme === "all" || DATASETS[dataset]?.theme === theme;
@@ -281,6 +282,7 @@ export function Catalogue({ theme, selected, onSelect }: { theme: ThemeFilter; s
           </tbody>
         </table>
       </div>
+      <LibraryLinkRow />
     </Panel>
   );
 }

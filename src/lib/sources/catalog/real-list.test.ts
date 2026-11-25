@@ -17,7 +17,7 @@ const LIST = fixture.datasets as CatalogInput[];
 const TITLES = generatedTitles as Record<string, { title: string; code?: string; source: string }>;
 
 /** Titles that are still a code or a file stem: no official listing could be matched yet. */
-const UNTITLED = 162;
+const UNTITLED = 167;
 
 const QUARANTINED = [
   "official_01_financials_data_financials_authoritative_source_registry_c42083680a",
@@ -68,7 +68,7 @@ describe("the production list", () => {
   it("shows no long dash, no underscore and no bare file stem outside the counted untitled list", () => {
     const untitled: string[] = [];
     for (const [d, e] of entries) {
-      expect(e.title, d.id).not.toMatch(/[‒-―]/);
+      expect(e.title, d.id).not.toMatch(/[\u2012-\u2015]/);
       expect(e.title, d.id).not.toMatch(/_/);
       expect(e.title.trim(), d.id).toBe(e.title);
       expect(e.title.length, d.id).toBeGreaterThan(0);
@@ -84,7 +84,7 @@ describe("the production list", () => {
       expect(byId.has(id), id).toBe(true);
       expect(t.source, id).toMatch(/^https:\/\/[^\s]+$/);
       expect(t.title.trim().length, id).toBeGreaterThan(0);
-      expect(t.title, id).not.toMatch(/[‒-―_]/);
+      expect(t.title, id).not.toMatch(/[\u2012-\u2015_]/);
     }
     for (const [d, e] of entries) {
       if (TITLES[d.id]) expect(e.titleSource, d.id).toBe(TITLES[d.id].source);
@@ -128,13 +128,27 @@ describe("the production list", () => {
     ]);
   });
 
+  it("counts each kind as the audit and the snapshots' own roles establish it", () => {
+    const kinds: Record<string, number> = {};
+    for (const [, e] of entries) kinds[e.kind] = (kinds[e.kind] ?? 0) + 1;
+    expect(kinds).toEqual({ native: 869, projection: 93, derived: 36, reference: 39, internal: 22 });
+    const of = (id: string) => entries.find(([d]) => d.id === id)![1];
+    expect(of("official_05_utilities_csv_eia923_record_monthly_netgen_2020_2025_full_cf872fc2c0")).toMatchObject({
+      kind: "projection",
+      parentId: "official_05_utilities_csv_eia923_record_annual_2020_2025_full_5bd9e9031f",
+    });
+    expect(of("official_01_financials_data_sec_nmfp_october2026_table_inventory_e3330d0968").kind).toBe("reference");
+    expect(of("official_01_financials_data_sec_nport_accounting_identity_exceptions_656ee92b1f").kind).toBe("derived");
+  });
+
   it("attaches each audit issue to a dataset that exists, in one sentence", () => {
     let count = 0;
     for (const [d, e] of entries) {
       for (const issue of e.issues) {
         count += 1;
         expect(issue.text, d.id).toMatch(/^[A-Z].*\.$/);
-        expect(issue.text, d.id).not.toMatch(/[‒-―]/);
+        expect(issue.text, d.id).not.toMatch(/[\u2012-\u2015]/);
+        expect(["W1", "W2", "W3", "W4", "W5", "M1", "M4", "M6", "M10", "DUP"], d.id).toContain(issue.id);
       }
     }
     expect(count).toBeGreaterThan(0);

@@ -188,14 +188,37 @@ describe("site map", () => {
     expect(hub).toContain("Alt data filters (Theme: All, Government, Products, Market, Banking, Corporate events; Filter by ticker), Unusual now, Leaderboard");
     expect(hub).toContain("compares only periods a source has fully published");
     expect(hub).toContain("An empty list (\"Nothing unusual right now\") is the normal result");
-    expect(hub).toContain("Source explorer");
-    expect(hub).toContain("view=sources");
-    expect(hub).toContain("entity= native identifier or exact name");
-    expect(hub).toContain("Every native field");
     const tab = map.split("\n").find((l) => l.includes("/app/companies/LMT/alt-data"))!;
     expect(tab).toContain("#alt-ds-DATASET");
     expect(tab).toContain("8-K filings");
     expect(tab).not.toMatch(/#alt-DATASET|Every event/);
+  });
+
+  it("describes the Alt data sections and the Data library as the code has them", () => {
+    const hub = line(siteMapText(), "/app/alt-data");
+    for (const s of [
+      "tab row Alt data sections: Company signals (this page), Data library (/app/alt-data/library) and Securitized credit (/app/alt-data/credit)",
+      "Library search (Search tables, publishers, series codes",
+      "Shape: All, Series, Panels, By place, Reference",
+      "Order: Best match while searching, Newest, Largest, A to Z",
+      "Library facts (Tables; Records, counted over original tables only",
+      "What the data says",
+      "Collections (one card per collection",
+      "What changed (publications grouped by hour, publisher and kind",
+      "Publishers (a row filters the library to that publisher)",
+      "Library tables replaces the overview",
+      "q=words, shape=series|panel|place|reference, pub=PUBLISHER_ID, sort=match|new|size|name, view=changes",
+      "/app/alt-data/library/c/SLUG (economy, banks, technology",
+      "/app/alt-data/library/c/SLUG",
+      "Collection facts, COLLECTION board (charts), Related pages",
+      "Collection tables (Collection search",
+      "/app/alt-data/library/d/DATASET_ID",
+      "entity= native identifier or exact name",
+      "Old links /app/alt-data?view=sources&source=ID open that table page",
+    ])
+      expect(hub).toContain(s);
+    // the switch and the explorer are gone
+    expect(hub).not.toMatch(/Alternative data view|Source explorer|Source catalogue|Alt data view/);
   });
 
   it("describes the sector board and the shared sector and industry page", () => {
@@ -247,6 +270,12 @@ describe("site map", () => {
     expect(isAppPath("/app/companies/NVDA/delete")).toBe(false);
     expect(isAppPath("https://example.com")).toBe(false);
     expect(isAppPath("/app/billing/../admin")).toBe(false);
+    expect(isAppPath("/app/alt-data/library?q=bank")).toBe(true);
+    expect(isAppPath("/app/alt-data/library/c/banks")).toBe(true);
+    expect(isAppPath("/app/alt-data/library/d/official_01_financials_data_fdic_top500_all_native_quarterly_2000_latest_f5f72a5b7b?entity=%22628%22")).toBe(true);
+    expect(isAppPath("/app/alt-data/credit")).toBe(true);
+    expect(isAppPath("/app/alt-data/library/d/../../admin")).toBe(false);
+    expect(isAppPath("/app/alt-data/library/x/financials")).toBe(false);
   });
 
   it("lists every non-admin page in the navigation and no admin page", () => {
