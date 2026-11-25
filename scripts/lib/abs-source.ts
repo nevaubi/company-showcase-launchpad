@@ -27,7 +27,13 @@ export class SecSource {
   private last = 0;
   constructor(
     private readonly dir: string,
-    private readonly o: { offline?: boolean; minGapMs?: number; log?: (m: string) => void } = {},
+    private readonly o: {
+      offline?: boolean;
+      minGapMs?: number;
+      log?: (m: string) => void;
+      /** the request itself; tests pass their own */
+      fetch?: (url: string) => Promise<{ status: number; body: unknown }>;
+    } = {},
   ) {}
 
   /** Where a URL is kept: <dir>/<host>/<path>, or the same with `.gz` (large files another tool stored compressed). */
@@ -39,10 +45,17 @@ export class SecSource {
     return null;
   }
 
-  /** Downloads a URL to disk unless it is there. Never more than two requests a second. */
-  private async ensure(url: string): Promise<{ path: string; gz: boolean; fromDisk: boolean }> {
+  /**
+   * Downloads a URL to disk unless it is there. Never more than two requests a second. `fresh` asks SEC
+   * again even when a copy is on disk and puts the new one in its place: a filing's files never change
+   * once accepted, a listing of filings does. Offline, the copy on disk is all there is.
+   */
+  private async ensure(
+    url: string,
+    fresh = false,
+  ): Promise<{ path: string; gz: boolean; fromDisk: boolean }> {
     const have = this.place(url);
-    if (have) return { ...have, fromDisk: true };
+    if (have && (!fresh || this.o.offline)) return { ...have, fromDisk: true };
     if (this.o.offline) throw new Error(`offline and not on disk: ${url}`);
     const wait = this.last + (this.o.minGapMs ?? 500) - Date.now();
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -50,7 +63,9 @@ export class SecSource {
     const u = new URL(url);
     const path = join(this.dir, u.host, decodeURIComponent(u.pathname));
     mkdirSync(dirname(path), { recursive: true });
-    const res = await fetchSec(url, { timeoutMs: 900_000, tries: 4, maxWaitMs: 30_000 });
+    const res = this.o.fetch
+      ? await this.o.fetch(url)
+      : await fetchSec(url, { timeoutMs: 900_000, tries: 4, maxWaitMs: 30_000 });
     if (!res.body) throw new Error(`no body: ${url}`);
     const part = `${path}.part`;
     const out = createWriteStream(part);
@@ -60,10 +75,10 @@ export class SecSource {
       for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
         hash.update(chunk);
         bytes += chunk.length;
-        if (!out.write(chunk)) await new Promise((r) => out.once("drain", r));
+        if (!out.write(chunk)) await new Promise<void>((r) => out.once("drain", () => r()));
       }
     } finally {
-      await new Promise((r) => out.end(r));
+      await new Promise<void>((r) => out.end(() => r()));
     }
     renameSync(part, path);
     // one line per retrieval, the same record other tools keep beside these files
@@ -76,8 +91,11 @@ export class SecSource {
   }
 
   /** The bytes of a URL as SEC served them, chunk by chunk, with their size and SHA-256 once read to the end. */
-  async open(url: string): Promise<{ chunks: AsyncIterable<Uint8Array>; done: () => Served }> {
-    const at = await this.ensure(url);
+  async open(
+    url: string,
+    o: { fresh?: boolean } = {},
+  ): Promise<{ chunks: AsyncIterable<Uint8Array>; done: () => Served }> {
+    const at = await this.ensure(url, o.fresh);
     const hash = createHash("sha256");
     let bytes = 0;
     let ended = false;
@@ -102,8 +120,8 @@ export class SecSource {
   }
 
   /** A small file as text (headers, index pages, JSON). */
-  async text(url: string): Promise<Served & { text: string }> {
-    const f = await this.open(url);
+  async text(url: string, o: { fresh?: boolean } = {}): Promise<Served & { text: string }> {
+    const f = await this.open(url, o);
     const parts: Uint8Array[] = [];
     for await (const c of f.chunks) parts.push(c);
     return { ...f.done(), text: Buffer.concat(parts).toString("utf8") };

@@ -43,11 +43,13 @@ const SIGNATURES = {
   },
   abs_claim_next: { _watch: "jsonb", _max_attempts: "integer" },
   abs_release_filing: { _accession: "text", _detail: "text" },
+  abs_fail_claimed: { _accession: "text", _detail: "text" },
   abs_check: {},
+  abs_review: {},
   abs_summary: {},
 } as const;
 export type AbsFn = keyof typeof SIGNATURES;
-const TABLE_FUNCTIONS = new Set<AbsFn>(["abs_check"]);
+const TABLE_FUNCTIONS = new Set<AbsFn>(["abs_check", "abs_review"]);
 
 async function postgresDb(url: string): Promise<AbsDb> {
   const { default: postgres } = await import("postgres");

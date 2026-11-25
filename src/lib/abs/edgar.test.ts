@@ -153,6 +153,44 @@ describe("abs EDGAR files", () => {
     });
     expect(dealOf({ ...base, filers: [{ ...depositor, fileNumber: null }] })).toBeNull();
     expect(dealOf({ ...base, filers: [] })).toBeNull();
+    // the depositor tag is keyed by the filer and can be a digit off: the shelf file number then tells trust from depositor
+    const mistagged = {
+      ...base,
+      depositorCik: 1013612,
+      filers: [
+        { ...depositor, fileNumber: "333-258342" },
+        { ...trust, fileNumber: "333-258342-04" },
+      ],
+    };
+    expect(dealOf(mistagged)).toEqual({
+      deal_id: "0002017898",
+      issuer_cik: 2017898,
+      issuer_name: "Trust",
+      file_number: "333-258342-04",
+    });
+    expect(
+      dealOf({ ...mistagged, depositorCik: null, filers: [...mistagged.filers].reverse() })
+        ?.deal_id,
+    ).toBe("0002017898");
+    // unrelated file numbers settle nothing
+    expect(
+      dealOf({
+        ...mistagged,
+        filers: [
+          { ...depositor, fileNumber: "333-1" },
+          { ...trust, fileNumber: "333-2-04" },
+        ],
+      }),
+    ).toBeNull();
+    expect(
+      dealOf({
+        ...mistagged,
+        filers: [
+          { ...depositor, fileNumber: "333-1" },
+          { ...trust, fileNumber: "333-1-A" },
+        ],
+      }),
+    ).toBeNull();
     // two filers that are both not the depositor: no single issuing entity
     expect(dealOf({ ...base, filers: [trust, { ...trust, cik: 5 }] })).toBeNull();
     expect(dealOf({ ...base, depositorCik: null, filers: [trust] })?.deal_id).toBe("0002017898");

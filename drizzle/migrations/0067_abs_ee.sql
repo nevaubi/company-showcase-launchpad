@@ -17,6 +17,10 @@
 --   abs_pool_metrics     figures computed from one asset file (pool totals and breakdowns); `metric`
 --                        names a definition in src/lib/abs/metrics.ts and abs_loads.parser its version.
 --
+-- Commercial mortgage files are stored record by record. Auto loan and auto lease files are not (one
+-- deal's monthly file holds tens of thousands of records): what is stored for them is the filing, its
+-- documents with the asset file's size and SHA-256, and the figures in abs_pool_metrics.
+--
 -- Values are kept as filed: numbers and dates are stored as the number and date the file states, a field
 -- with no column is kept word for word in `extra`, and text that could not be read as its type is kept
 -- word for word in `unparsed` (the typed column is then NULL). Nothing is rescaled.
@@ -603,8 +607,20 @@ LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = public AS $$
   WHERE accession = _accession AND status = 'failed'
 $$;
 
--- A filing that cannot be stored: `skipped` (nothing to read, for example no asset file or an asset
--- class this reader does not cover) or `failed` (an error, counted so the importer can give up).
+-- The scheduled job could not read a filing it had claimed: the reason goes on the filing. The attempt
+-- was counted when the filing was claimed (abs_claim_next), so it is not counted a second time here.
+-- A filing that is no longer in the claimed state (stored meanwhile, or released) is left alone.
+CREATE OR REPLACE FUNCTION public.abs_fail_claimed(_accession text, _detail text)
+RETURNS void
+LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+  UPDATE abs_filings SET status_detail = left(_detail, 500)
+  WHERE accession = _accession AND status = 'failed'
+$$;
+
+-- A filing that cannot be stored: `skipped` (nothing to read, for example no asset file, an asset
+-- class this reader does not cover, or a file the scheduled job leaves to the script) or `failed` (an
+-- error in a run of the script, counted so the importer can give up; the scheduled job counts its
+-- attempts when it claims a filing and reports a failure through abs_fail_claimed).
 -- A loaded filing keeps its data and status; only the note and the attempt count change.
 CREATE OR REPLACE FUNCTION public.abs_mark_filing(_accession text, _status text, _detail text)
 RETURNS void
@@ -654,6 +670,24 @@ LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
     WHERE p.link <> 'none' AND NOT EXISTS (SELECT 1 FROM abs_cmbs_assets a WHERE a.load_id = p.load_id AND a.asset_number = p.loan_asset_number AND a.kind = 'loan')
 $$;
 
+-- What a person should look at. Nothing listed here breaks the store; each line is something the
+-- importer cannot settle from the filings alone.
+--   An amendment alone in its cover period. An ABS-EE/A replaces an earlier filing of the deal, and the
+--   store ties the two by deal and cover period. An amendment filed to change the reporting period
+--   itself (seen once: the amendment restated the period in its header and in every record) shares a
+--   period with nothing, so the filing it replaced still shows as current for the period it was filed
+--   under. Which filing an amendment replaces is stated only in the text of its cover page.
+CREATE OR REPLACE FUNCTION public.abs_review()
+RETURNS TABLE(what text, accession text, deal_id text, period_end text, filed text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT 'amendment alone in its cover period: the filing it replaces is not tied to it'::text, f.accession, f.deal_id, f.period_end::text, f.filed::text
+  FROM abs_filings f
+  WHERE f.status = 'loaded' AND f.form = 'ABS-EE/A'
+    AND NOT EXISTS (SELECT 1 FROM abs_filings o WHERE o.status = 'loaded' AND o.deal_id = f.deal_id AND o.accession <> f.accession
+                      AND o.period_end IS NOT DISTINCT FROM f.period_end)
+  ORDER BY f.filed, f.accession
+$$;
+
 -- Totals for the importer's status line and for checks against the source.
 CREATE OR REPLACE FUNCTION public.abs_summary()
 RETURNS jsonb
@@ -684,8 +718,10 @@ REVOKE ALL ON FUNCTION public.abs_filing_load(text) FROM PUBLIC, anon, authentic
 REVOKE ALL ON FUNCTION public.abs_store_filing(text, text, text, bigint, jsonb, jsonb, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_claim_next(jsonb, integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_release_filing(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.abs_fail_claimed(text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_mark_filing(text, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_check() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.abs_review() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_summary() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.abs_register_filings(jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_filing_states(bigint) TO service_role;
@@ -701,6 +737,8 @@ GRANT EXECUTE ON FUNCTION public.abs_filing_load(text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_store_filing(text, text, text, bigint, jsonb, jsonb, jsonb, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_claim_next(jsonb, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_release_filing(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.abs_fail_claimed(text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_mark_filing(text, text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_check() TO service_role;
+GRANT EXECUTE ON FUNCTION public.abs_review() TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_summary() TO service_role;

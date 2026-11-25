@@ -16,7 +16,7 @@ import {
   submissionsUrl,
   type SubmissionsFile,
 } from "@/lib/abs/edgar";
-import { cmbsCollector, countReplacements, filingPayload, planFiling } from "@/lib/abs/filing";
+import { fileSink, countReplacements, filingPayload, planFiling } from "@/lib/abs/filing";
 import { PARSER } from "@/lib/abs/metrics";
 import { ABS_WATCH, type AbsWatch } from "@/lib/abs/watch";
 import { createAbsReader, declaredEncoding } from "@/lib/abs/xml";
@@ -52,13 +52,17 @@ class DbFailure extends Error {}
 
 const text = (bytes: Uint8Array) => new TextDecoder(declaredEncoding(bytes)).decode(bytes);
 
+/** What the database answers when the functions of migration 0067 do not exist. */
+const NO_STORE =
+  /Could not find the function public\.abs_claim_next|function public\.abs_claim_next\(.*\) does not exist|PGRST202/;
+
 /** SEC's throttle and outage answers: nothing is wrong with the filing that was asked for. */
 const secUnavailable = (status: unknown) =>
   status === 403 || status === 429 || (typeof status === "number" && status >= 500);
 
 async function storeClaimed(io: AbsJobIo, c: Claimed): Promise<AbsJobResult> {
   const base = { accession: c.accession, cik: c.list_cik, attempt: c.attempt };
-  const mark = (status: "skipped" | "failed", detail: string) =>
+  const mark = (status: "skipped", detail: string) =>
     io.rpc("abs_mark_filing", { _accession: c.accession, _status: status, _detail: detail });
   try {
     const headerBytes = await io.get(headerUrl(c.list_cik, c.accession));
@@ -73,12 +77,13 @@ async function storeClaimed(io: AbsJobIo, c: Claimed): Promise<AbsJobResult> {
       return { ok: true, items: 0, detail: { ...base, skipped: plan.skip } };
     }
     if ((plan.file.listed_bytes ?? Infinity) > ABS_JOB_FILE_LIMIT) {
-      const why = `asset file of ${plan.file.listed_bytes ?? "unknown"} bytes is over the scheduled run's limit; store it with scripts/abs-ee.ts`;
-      await mark("failed", why);
+      // not a failure of the filing: it is set aside for the script, which reads files of any size
+      const why = `asset file of ${plan.file.listed_bytes ?? "unknown"} bytes is over the scheduled run's limit; store it with scripts/abs-ee.ts load --retry-skipped`;
+      await mark("skipped", why);
       return { ok: true, items: 0, detail: { ...base, left: why } };
     }
     const bytes = await io.get(plan.file.url);
-    const collected = cmbsCollector();
+    const collected = fileSink();
     const reader = createAbsReader((record) => collected.add(record, reader.shape().family));
     const xml = text(bytes);
     reader.write(xml);
@@ -143,7 +148,8 @@ async function storeClaimed(io: AbsJobIo, c: Claimed): Promise<AbsJobResult> {
       });
       return { ok: true, items: 0, detail: { ...base, outcome: "SEC unavailable", status } };
     }
-    await mark("failed", message);
+    // the attempt was counted when the filing was claimed: only the reason is added
+    await io.rpc("abs_fail_claimed", { _accession: c.accession, _detail: message });
     return {
       ok: true,
       items: 0,
@@ -214,10 +220,24 @@ export async function runAbsEe(
         throw new DbFailure(e.message);
       }),
   };
-  const claimed = await io.rpc<Claimed | null>("abs_claim_next", {
-    _watch: watch.map((w) => ({ cik: w.cik, from: w.from ?? null })),
-    _max_attempts: ABS_JOB_MAX_ATTEMPTS,
-  });
+  let claimed: Claimed | null;
+  try {
+    claimed = await io.rpc<Claimed | null>("abs_claim_next", {
+      _watch: watch.map((w) => ({ cik: w.cik, from: w.from ?? null })),
+      _max_attempts: ABS_JOB_MAX_ATTEMPTS,
+    });
+  } catch (e) {
+    // scheduled before migration 0067 is applied: there is no store yet, which is not a failure of the job
+    if (NO_STORE.test((e as Error).message))
+      return {
+        ok: true,
+        items: 0,
+        detail: {
+          note: "the abs_* store is not there yet (migration 0067 not applied); nothing done",
+        },
+      };
+    throw e;
+  }
   return claimed ? storeClaimed(io, claimed) : listNext(io, watch);
 }
 

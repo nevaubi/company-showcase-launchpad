@@ -620,6 +620,106 @@ describe.skipIf(!scratch)("abs store on a real Postgres", () => {
     await checkClean();
   });
 
+  it("counts a failed attempt of the scheduled job once, and sets a filing aside without failing it", async () => {
+    const K1 = "0001888524-25-000101";
+    const K2 = "0001888524-25-000102";
+    await db.rpc("abs_register_filings", {
+      _rows: [K1, K2].map((accession, i) => ({
+        accession,
+        list_cik: 888,
+        form: "ABS-EE",
+        filed: `2025-03-0${i + 1}`,
+        accepted_at: `2025-03-0${i + 1}T15:00:00Z`,
+      })),
+    });
+    const claim = () =>
+      db.rpc<{ accession: string; attempt: number } | null>("abs_claim_next", {
+        _watch: [{ cik: 888, from: null }],
+        _max_attempts: 3,
+      });
+    const state = async (a: string) =>
+      (
+        await rows(
+          `select status, attempts, status_detail from abs_filings where accession = '${a}'`,
+        )
+      )[0];
+    // the claim counts the attempt; the failure only says why
+    expect(await claim()).toMatchObject({ accession: K1, attempt: 1 });
+    await db.rpc("abs_fail_claimed", { _accession: K1, _detail: "not well-formed XML" });
+    expect(await state(K1)).toEqual({
+      status: "failed",
+      attempts: 1,
+      status_detail: "not well-formed XML",
+    });
+    // a file too large for the job: set aside for the script, never claimed again, and not a failure
+    expect(await claim()).toMatchObject({ accession: K2, attempt: 1 });
+    await db.rpc("abs_mark_filing", {
+      _accession: K2,
+      _status: "skipped",
+      _detail: "over the scheduled run's limit",
+    });
+    expect(await state(K2)).toMatchObject({ status: "skipped", attempts: 1 });
+    // three real tries for the filing that fails, and then it is left alone
+    for (const attempt of [2, 3]) {
+      expect(await claim()).toMatchObject({ accession: K1, attempt });
+      await db.rpc("abs_fail_claimed", { _accession: K1, _detail: `try ${attempt}` });
+    }
+    expect(await claim()).toBeNull();
+    expect(await state(K1)).toEqual({ status: "failed", attempts: 3, status_detail: "try 3" });
+    // the script still sees the set-aside filing as waiting when asked to retry skipped ones
+    const states = await db.rpc<{ accession: string; status: string; attempts: number }[]>(
+      "abs_filing_states",
+      { _list_cik: 888 },
+    );
+    expect(states.find((x) => x.accession === K2)).toMatchObject({ status: "skipped" });
+    // a reason for a filing that is not in the claimed state changes nothing
+    await db.rpc("abs_fail_claimed", { _accession: A, _detail: "late" });
+    expect(await one(`select status from abs_filings where accession = '${A}'`)).toBe("loaded");
+    await db.rpc("abs_fail_claimed", { _accession: K2, _detail: "late" });
+    expect(await state(K2)).toMatchObject({
+      status: "skipped",
+      status_detail: "over the scheduled run's limit",
+    });
+    await checkClean();
+  });
+
+  it("lists for review an amendment that shares its cover period with no other filing", async () => {
+    type Review = { what: string; accession: string; deal_id: string; period_end: string };
+    // AMEND shares its period with the filing it replaced: nothing to look at
+    expect(await db.rpc<Review[]>("abs_review")).toEqual([]);
+    // an amendment filed to change the reporting period itself: its period matches nothing
+    const LONE = "0001888524-25-000201";
+    await db.rpc("abs_register_filings", {
+      _rows: [
+        {
+          accession: LONE,
+          list_cik: 2017898,
+          form: "ABS-EE/A",
+          filed: "2025-06-25",
+          accepted_at: "2025-06-25T15:00:00Z",
+        },
+      ],
+    });
+    const lone = await store(
+      LONE,
+      facts({
+        period_start: "2025-05-18",
+        period_end: "2025-06-17",
+        accepted_at: "2025-06-25 11:00:00 America/New_York",
+      }),
+    );
+    // by the store's rule it is current for its own period, and so is whatever it replaced: say so
+    expect(lone.current).toBe(true);
+    const review = await db.rpc<Review[]>("abs_review");
+    expect(review).toHaveLength(1);
+    expect(review[0]).toMatchObject({ accession: LONE, deal_id: "0002017898" });
+    // dates come as text, the same through both ways of reaching the database
+    expect(review[0].period_end).toBe("2025-06-17");
+    expect(review[0].what).toMatch(/amendment alone in its cover period/);
+    // a note for a person, not a broken invariant
+    await checkClean();
+  });
+
   it("stores a whole filing in one call, all or nothing, and does nothing the second time", async () => {
     const J1 = "0001888524-25-000001";
     const args = (rowsArg: unknown) => ({
@@ -723,7 +823,7 @@ describe.skipIf(!scratch)("abs store on a real Postgres", () => {
           "select count(*)::int n from abs_filings",
         )
       )[0].n,
-    ).toBe(7);
+    ).toBe(10);
     // signed in without app access: row security shows nothing
     expect(
       (
@@ -768,15 +868,15 @@ describe.skipIf(!scratch)("abs store on a real Postgres", () => {
     const s = await db.rpc<Record<string, unknown>>("abs_summary");
     expect(s).toMatchObject({
       deals: 1,
-      filings: { loaded: 5, failed: 1, listed: 1 },
-      current: 3,
+      filings: { loaded: 6, failed: 2, listed: 1, skipped: 1 },
+      current: 4,
       superseded: 2,
-      cmbs_assets: 30,
-      cmbs_properties: 30,
-      metrics: 5 * metrics.length,
+      cmbs_assets: 36,
+      cmbs_properties: 36,
+      metrics: 6 * metrics.length,
     });
     // one open load is left from the refusal test; nothing of it is visible
-    expect((s.loads as Record<string, number>).committed).toBe(5);
+    expect((s.loads as Record<string, number>).committed).toBe(6);
     expect(
       await one(
         "select count(*)::int from abs_cmbs_assets a join abs_loads l using (load_id) where l.status = 'open'",

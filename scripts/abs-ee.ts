@@ -8,9 +8,15 @@
 //   bun scripts/abs-ee.ts status                       totals and the store's invariants
 //
 // Options: --max-filings=25 (per CIK and run), --from=YYYY-MM-DD, --to=YYYY-MM-DD, --reparse (store
-// again what an older reader version stored), --retry-skipped, --max-attempts=3 (tries per filing before
-// it is left alone), --cache=<dir> (SEC files as served; default .cache/sec), --offline (use only files
-// already on disk).
+// again what an older reader version stored), --retry-skipped (read again the filings marked skipped:
+// those an older reader had no reader for, and those the scheduled job set aside because their file is
+// over its size limit), --max-attempts=3 (tries per filing before it is left alone), --cache=<dir> (SEC
+// files as served; default .cache/sec), --offline (use only files already on disk; a listing is then
+// the copy on disk, however old).
+//
+// Commercial mortgage files are stored record by record. Auto loan and auto lease files (30 to 380 MB
+// each) are read in one streaming pass and stored as pool figures only; the file stays on EDGAR under
+// the address, size and SHA-256 recorded with the filing.
 //
 // A run is safe to stop at any point and safe to run again. One filing is stored all or nothing
 // (abs_begin_load, abs_put_rows, abs_commit_load); a filing this reader version already stored is not
@@ -26,7 +32,7 @@ import {
   type SubmissionsFile,
 } from "../src/lib/abs/edgar";
 import {
-  cmbsCollector,
+  fileSink,
   countReplacements,
   filingPayload,
   planFiling,
@@ -92,7 +98,7 @@ async function readFiling(cik: number, accession: string): Promise<FilingPayload
     (await src.text(indexUrl(cik, accession))).text,
   );
   if (plan.skip !== undefined) return plan;
-  const collected = cmbsCollector();
+  const collected = fileSink();
   const reader = createAbsReader((record) => collected.add(record, reader.shape().family));
   const file = await src.open(plan.file.url);
   let decoder: TextDecoder | null = null;
@@ -168,12 +174,17 @@ async function storeFiling(
 }
 
 async function discover(cik: number) {
-  const first = JSON.parse((await src.text(submissionsUrl(cik))).text) as SubmissionsFile;
+  // the listing changes with every new filing: ask SEC again, whatever copy is on disk (offline, the copy is used)
+  const first = JSON.parse(
+    (await src.text(submissionsUrl(cik), { fresh: true })).text,
+  ) as SubmissionsFile;
   const found = listedFilings(first, cik);
   for (const page of olderPages(first))
     found.push(
       ...listedFilings(
-        JSON.parse((await src.text(submissionsPageUrl(page))).text) as SubmissionsFile,
+        JSON.parse(
+          (await src.text(submissionsPageUrl(page), { fresh: true })).text,
+        ) as SubmissionsFile,
         cik,
       ),
     );
@@ -234,8 +245,12 @@ async function load(cik: number) {
       const outcome = await storeFiling(accession, parsed);
       t[outcome]++;
       if (outcome === "stored") stored++;
+      const kept =
+        parsed.filing.family === "cmbs"
+          ? `${parsed.counts.cmbs_assets} records and ${parsed.counts.cmbs_properties} properties stored`
+          : `${parsed.counts.records} records read, ${parsed.counts.metrics} figures stored`;
       log(
-        `  ${accession} ${outcome}: period ${parsed.filing.period_end ?? "?"}, ${parsed.counts.cmbs_assets} records, ${parsed.counts.cmbs_properties} properties, ${parsed.bytes} bytes`,
+        `  ${accession} ${outcome}: ${parsed.filing.family}, period ${parsed.filing.period_end ?? "?"}, ${kept}, ${parsed.bytes} bytes`,
       );
     } catch (e) {
       t.failed++;
@@ -334,6 +349,20 @@ try {
     ok = false;
     for (const p of problems) log(`INVARIANT BROKEN: ${p.problem}: ${p.bad}`);
   } else log("invariants: all hold");
+  // not errors: what the filings alone do not settle, for a person to look at
+  const review = await db.rpc<
+    {
+      what: string;
+      accession: string;
+      deal_id: string;
+      period_end: string | null;
+      filed: string;
+    }[]
+  >("abs_review");
+  detail.review = review.length;
+  for (const r of review.slice(0, 20))
+    log(`to review: ${r.accession} (deal ${r.deal_id}, period ${r.period_end ?? "?"}): ${r.what}`);
+  if (review.length > 20) log(`to review: ${review.length - 20} more`);
 } catch (e) {
   ok = false;
   detail.error = (e as Error).message;

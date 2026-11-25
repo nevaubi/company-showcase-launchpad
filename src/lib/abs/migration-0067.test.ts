@@ -77,7 +77,7 @@ describe("migration 0067 (ABS-EE store)", () => {
     const names = [...sql.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\(([^)]*)\)/g)].map(
       (m) => m[1],
     );
-    expect(names.length).toBe(17);
+    expect(names.length).toBe(19);
     for (const n of names) {
       expect(sql, n).toMatch(
         new RegExp(
@@ -187,6 +187,12 @@ describe("migration 0067 (ABS-EE store)", () => {
     expect(fn("abs_release_filing")).toMatch(
       /attempts = greatest\(attempts - 1, 0\)[\s\S]*WHERE accession = _accession AND status = 'failed'/,
     );
+    // a failure of a claimed filing adds the reason and leaves the count alone: the claim counted it
+    const failed = fn("abs_fail_claimed");
+    expect(failed).toMatch(
+      /UPDATE abs_filings SET status_detail = left\(_detail, 500\)\s+WHERE accession = _accession AND status = 'failed'/,
+    );
+    expect(failed).not.toMatch(/attempts/);
   });
 
   it("never downgrades a loaded filing when a later attempt fails", () => {

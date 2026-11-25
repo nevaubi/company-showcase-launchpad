@@ -178,23 +178,22 @@ export type DealIdentity = {
 
 /**
  * Which deal a filing belongs to. The issuing entity is the filer that is not the depositor; its CIK,
- * as ten digits, is the deal. A filing whose only filer is the depositor (several trusts share that CIK)
- * is keyed by the depositor and the file number, which SEC gives each trust on the depositor's shelf.
- * Null when the header names no filer, or a depositor-only filing has no file number: the deal is then
- * not established and the filing is not stored.
+ * as ten digits, is the deal. The header's depositor tag is keyed by the filer and has been seen one
+ * digit off, so when it singles out no filer among two, the file numbers decide: SEC gives the issuing
+ * entity the depositor's shelf number plus a suffix ("333-258342-04" under "333-258342"). A filing
+ * whose only filer is the depositor (several trusts share that CIK) is keyed by the depositor and the
+ * file number. Null when none of this establishes one issuing entity: the filing is then not stored.
  */
 export function dealOf(h: AbsHeader): DealIdentity | null {
   if (!h.filers.length) return null;
+  const issuer = (f: HeaderFiler): DealIdentity => ({
+    deal_id: String(f.cik).padStart(10, "0"),
+    issuer_cik: f.cik,
+    issuer_name: f.name,
+    file_number: f.fileNumber,
+  });
   const others = h.filers.filter((f) => f.cik !== h.depositorCik);
-  if (others.length === 1) {
-    const f = others[0];
-    return {
-      deal_id: String(f.cik).padStart(10, "0"),
-      issuer_cik: f.cik,
-      issuer_name: f.name,
-      file_number: f.fileNumber,
-    };
-  }
+  if (others.length === 1) return issuer(others[0]);
   if (others.length === 0 && h.filers.length === 1 && h.filers[0].fileNumber) {
     const f = h.filers[0];
     return {
@@ -203,6 +202,16 @@ export function dealOf(h: AbsHeader): DealIdentity | null {
       issuer_name: f.name,
       file_number: f.fileNumber,
     };
+  }
+  if (others.length === 2 && h.filers.length === 2) {
+    const under = (x: HeaderFiler, y: HeaderFiler) =>
+      !!x.fileNumber &&
+      !!y.fileNumber &&
+      x.fileNumber.startsWith(`${y.fileNumber}-`) &&
+      /^\d+$/.test(x.fileNumber.slice(y.fileNumber.length + 1));
+    const [a, b] = others;
+    if (under(a, b) && !under(b, a)) return issuer(a);
+    if (under(b, a) && !under(a, b)) return issuer(b);
   }
   return null;
 }

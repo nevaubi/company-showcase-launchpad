@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { PARSER } from "@/lib/abs/metrics";
 import { ABS_WATCH } from "@/lib/abs/watch";
 import { ABS_JOB_FILE_LIMIT, runAbsEe, type AbsJobIo } from "./abs-ee.server";
 
@@ -98,7 +99,7 @@ describe("abs-ee scheduled run", () => {
     const a = t.calls[1].args;
     expect(a).toMatchObject({
       _accession: A,
-      _parser: "abs-1",
+      _parser: PARSER,
       _sha256: `sha-of-${new TextEncoder().encode(XML).length}`,
       _bytes: new TextEncoder().encode(XML).length,
     });
@@ -155,7 +156,7 @@ describe("abs-ee scheduled run", () => {
     expect(t.gets.length).toBe(2);
   });
 
-  it("does not fetch an asset file over its size limit; the filing is left for the script", async () => {
+  it("does not fetch an asset file over its size limit; the filing is set aside for the script, not failed", async () => {
     const big = String(ABS_JOB_FILE_LIMIT + 1);
     const t = io({
       claim: CLAIM,
@@ -163,20 +164,49 @@ describe("abs-ee scheduled run", () => {
     });
     const r = await runAbsEe(t.io, WATCH);
     expect(t.gets.length).toBe(2);
-    expect(t.calls.at(-1)).toMatchObject({ fn: "abs_mark_filing", args: { _status: "failed" } });
+    // skipped: the job never claims it again, and the script stores it with --retry-skipped
+    expect(t.calls.at(-1)).toMatchObject({ fn: "abs_mark_filing", args: { _status: "skipped" } });
     expect(String(t.calls.at(-1)?.args._detail)).toMatch(
-      /over the scheduled run's limit; store it with scripts\/abs-ee\.ts/,
+      /over the scheduled run's limit; store it with scripts\/abs-ee\.ts load --retry-skipped/,
     );
     expect(r.ok).toBe(true);
+  });
+
+  it("leaves an auto loan filing to the script: its file is tens of megabytes", async () => {
+    const AUTO = "0001104659-26-119913";
+    const at = "https://www.sec.gov/Archives/edgar/data/2140699/000110465926119913/";
+    const t = io({
+      claim: {
+        accession: AUTO,
+        list_cik: 2140699,
+        form: "ABS-EE",
+        filed: "2026-10-29",
+        attempt: 1,
+      },
+      files: {
+        [`${at}${AUTO}.hdr.sgml`]: readFileSync("src/test/fixtures/abs/autoloan.hdr.sgml", "utf8"),
+        [`${at}${AUTO}-index.htm`]: readFileSync(
+          "src/test/fixtures/abs/autoloan-index.htm",
+          "utf8",
+        ),
+      },
+    });
+    const r = await runAbsEe(t.io, [{ cik: 2140699, name: "World Omni Select Auto Trust 2026-A" }]);
+    expect(t.gets).toEqual([`${at}${AUTO}.hdr.sgml`, `${at}${AUTO}-index.htm`]);
+    expect(t.calls.at(-1)).toMatchObject({
+      fn: "abs_mark_filing",
+      args: { _accession: AUTO, _status: "skipped" },
+    });
+    expect(String(t.calls.at(-1)?.args._detail)).toMatch(/^asset file of 79876850 bytes is over/);
+    expect(r).toMatchObject({ ok: true, items: 0 });
   });
 
   it("records a filing it cannot read as failed on the filing, not as a failed run", async () => {
     const t = io({ claim: CLAIM, files: { [`${FOLDER}exh_102.xml`]: XML.slice(0, 5000) } });
     const r = await runAbsEe(t.io, WATCH);
-    expect(t.calls.at(-1)).toMatchObject({
-      fn: "abs_mark_filing",
-      args: { _accession: A, _status: "failed" },
-    });
+    // the claim counted the attempt; the failure adds the reason and does not count it again
+    expect(t.calls.at(-1)).toMatchObject({ fn: "abs_fail_claimed", args: { _accession: A } });
+    expect(t.calls.some((c) => c.fn === "abs_mark_filing")).toBe(false);
     expect(String(t.calls.at(-1)?.args._detail)).toMatch(/not well-formed XML/);
     expect(r).toMatchObject({ ok: true, items: 0, detail: { outcome: "filing failed" } });
     expect(t.calls.some((c) => c.fn === "abs_store_filing")).toBe(false);
@@ -230,6 +260,19 @@ describe("abs-ee scheduled run", () => {
     const r = await runAbsEe(t.io, WATCH);
     expect(r).toMatchObject({ ok: true, items: 0, detail: { outcome: "cut" } });
     expect(t.calls.map((c) => c.fn)).toEqual(["abs_claim_next"]);
+  });
+
+  it("does nothing, without failing, when it is scheduled before the store exists", async () => {
+    const t = io();
+    t.io.rpc = async () => {
+      throw new Error(
+        "abs_claim_next: Could not find the function public.abs_claim_next(_max_attempts, _watch) in the schema cache",
+      );
+    };
+    const r = await runAbsEe(t.io, WATCH);
+    expect(r.ok).toBe(true);
+    expect(String(r.detail.note)).toMatch(/migration 0067 not applied/);
+    expect(t.gets).toEqual([]);
   });
 
   it("fails the run when the database fails, whatever it was doing", async () => {
