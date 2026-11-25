@@ -107,6 +107,10 @@ export type SourceRecordPage = {
   hasMore: boolean;
   /** Total rows in the pinned snapshot, before filters. */
   total: number;
+  /** Rows examined by this call (0069 replacement only; absent from the 0068 function). */
+  scanned?: number;
+  /** False when the call stopped at its scan limit before the snapshot's end: `nextCursor` then continues the search even when `rows` is empty (0069 only). */
+  scanComplete?: boolean;
 };
 export type SourceBundleManifest = {
   version: 1;
