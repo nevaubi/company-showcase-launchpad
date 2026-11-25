@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/app/page-header";
 import { SecuritizedCredit } from "@/components/alt/abs/securitized-credit";
+import { AltNav } from "@/components/alt/library/alt-nav";
 import { absSearch, type AbsSearch } from "@/lib/abs/view/url-state";
 
 export const Route = createFileRoute("/_authenticated/app/alt-data_/credit")({
@@ -33,11 +34,15 @@ function SecuritizedCreditPage() {
   };
   return (
     <div className="grid grid-cols-1 content-start gap-5">
-      <PageHeader
-        eyebrow="Filings and data"
-        title="Securitized credit"
-        description="Asset-level data that issuers of registered asset-backed securities file with the SEC on Form ABS-EE: auto loan and auto lease pools as pool figures, commercial mortgage loans record by record. Every figure opens the filing it comes from."
-      />
+      <div className="min-w-0">
+        <PageHeader
+          className="mb-3"
+          eyebrow="Filings and data"
+          title="Alternative data"
+          description="Securitized credit: asset-level data that issuers of registered asset-backed securities file with the SEC on Form ABS-EE. Auto loan and auto lease pools as pool figures, commercial mortgage loans record by record. Every figure opens the filing it comes from."
+        />
+        <AltNav />
+      </div>
       <SecuritizedCredit state={search} onChange={onChange} />
     </div>
   );

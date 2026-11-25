@@ -6,7 +6,7 @@ import { REMEDY_KEYS } from "./remediation";
 const NOW = Date.parse("2026-11-20T15:00:00Z"); // a Friday, market hours
 const iso = (minAgo: number) => new Date(NOW - minAgo * 60_000).toISOString();
 const job = (j: Partial<JobHealthRow> & { job: string }): JobHealthRow => ({ runs: 30, unfinished: 0, failed: 0, last_ok: iso(1), last_run: iso(1), fail_streak: 0, ...j });
-const SCHEDULED = ["prices", "sec", "macro", "filing-cache", "ir-docs", "estimates", "alt-data", "gov-data", "sec-discover", "partner-mirror", "filing-steps", "freshness"].map((j) => job({ job: j }));
+const SCHEDULED = ["prices", "sec", "macro", "filing-cache", "ir-docs", "estimates", "alt-data", "gov-data", "sec-discover", "partner-mirror", "filing-steps", "freshness", "official-source-refresh"].map((j) => job({ job: j }));
 
 function input(over: Partial<WatchdogInput> = {}, freshness: { key: string; newest: string | null }[] = []): WatchdogInput {
   const all = dataFreshness([{ key: "worker_heartbeat", newest: iso(2) }, ...freshness], new Date(NOW)).map((f) => (freshness.some((x) => x.key === f.key) || f.key === "worker_heartbeat" ? f : { ...f, status: "fresh" as const }));

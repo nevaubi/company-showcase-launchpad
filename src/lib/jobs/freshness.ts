@@ -35,6 +35,7 @@ export const SOURCES: FreshnessSource[] = [
   { job: "filing-steps", label: "Redlines & supply for new filings (worker)", everyMin: 30 },
   { job: "alt-slow", label: "Slow alt data (worker)", everyMin: 1440 },
   { job: "freshness", label: "Hourly data-advance check (worker)", everyMin: 60 },
+  { job: "official-source-refresh", label: "Official source refresh (worker)", everyMin: 60 },
 ];
 
 export interface Run {

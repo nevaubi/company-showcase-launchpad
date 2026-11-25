@@ -78,7 +78,7 @@ export type RemedyKeys = ReadonlySet<string>;
 const ageMin = (iso: string | null | undefined, nowMs: number) => (iso ? (nowMs - Date.parse(iso)) / 60_000 : Infinity);
 
 /** Jobs the Render worker runs (the others are scheduled HTTP jobs). */
-const WORKER_JOBS = new Set(["filing-steps", "alt-slow", "freshness", "xbrl-detail", "gov-sod", "gov-medicare-states", "gov-tri"]);
+const WORKER_JOBS = new Set(["filing-steps", "alt-slow", "freshness", "xbrl-detail", "gov-sod", "gov-medicare-states", "gov-tri", "official-source-refresh"]);
 
 const inMarketHours = (d: Date) => {
   const day = d.getUTCDay();
