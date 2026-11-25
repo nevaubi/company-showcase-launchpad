@@ -30,6 +30,7 @@ import {
 import { absWatchList } from "./lib/abs-watch-list";
 import { sweepRunReceipts, takeRunReceipt } from "./lib/run-receipt";
 import { sweepRefreshFolders, trimSourceCache } from "./lib/source-cache";
+import { snapshotStatsStep, statsOnlyRow, type StatsOutcome } from "./lib/snapshot-stats";
 
 const owner = `official:${process.env.RENDER_INSTANCE_ID ?? "worker"}:${randomUUID()}`;
 const WORK = process.env.OFFICIAL_SOURCE_WORK_DIR ?? "/var/data/official-sources";
@@ -126,6 +127,8 @@ async function childRun(
   script: string,
   args: string[],
   maxMs: number,
+  /** work the lane does right after the child, recorded in the same job_runs row; never throws */
+  after?: () => Promise<Record<string, unknown>>,
 ): Promise<ChildEnd> {
   if (stopped || !hasMemoryHeadroom()) {
     log(lease.job, "waiting for memory headroom before starting new work");
@@ -176,6 +179,7 @@ async function childRun(
     seconds: (Date.now() - Date.parse(started)) / 1000,
     told,
   });
+  if (after) Object.assign(row.detail, await after().catch((e: unknown) => ({ after_error: safeError(e) })));
   const receipt = await sb.from("job_runs").insert({
     job: lease.job,
     started_at: started,
@@ -190,6 +194,18 @@ async function childRun(
 
 async function sourceLoop() {
   let failures = 0;
+  // Snapshot statistics after each pass (source_compute_missing_stats, migration 0069): a quiet no-op until
+  // the function exists, bounded in time, and never a reason to back off this lane (scripts/lib/snapshot-stats.ts).
+  const stats = snapshotStatsStep({
+    rpc: (fn, args, signal) => sb.rpc(fn, args).abortSignal(signal),
+    log: (line) => log(SOURCE_WORKER_JOB, line),
+  });
+  const statsPass = async (lease: Lease): Promise<StatsOutcome> => {
+    await dbGate("official-source-stats");
+    // An import child may have run for minutes: the lease must outlast this call too.
+    if (!(await lease.renew().catch(() => false))) return { status: "skipped", reason: "the lane's lease could not be renewed" };
+    return await stats();
+  };
   while (!stopped) {
     let lease: Lease | null = null;
     try {
@@ -198,6 +214,7 @@ async function sourceLoop() {
         await sleep(30_000);
         continue;
       }
+      const held = lease;
       const pending = await sb
         .from("source_snapshots" as never)
         .select("id")
@@ -206,13 +223,23 @@ async function sourceLoop() {
       if (pending.error) throw new Error(pending.error.message);
       if (pending.data?.length) {
         const { code } = await childRun(
-          lease,
+          held,
           "scripts/source-import.ts",
           ["--all", "--max-snapshots=25", "--max-runtime-seconds=480"],
           570_000,
+          async () => ({ stats: await statsPass(held) }),
         );
         failures = code === 0 || code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
-      } else failures = 0;
+      } else {
+        failures = 0;
+        const started = new Date().toISOString();
+        const row = statsOnlyRow(await statsPass(held));
+        if (row) {
+          const written = await sb.from("job_runs").insert({ job: SOURCE_WORKER_JOB, started_at: started,
+            finished_at: new Date().toISOString(), ...row });
+          if (written.error) log(SOURCE_WORKER_JOB, "statistics receipt failed", safeError(written.error));
+        }
+      }
     } catch (e) {
       failures++;
       log(SOURCE_WORKER_JOB, safeError(e));
