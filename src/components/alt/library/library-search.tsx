@@ -3,9 +3,9 @@ import { Search, X } from "lucide-react";
 import { Segmented } from "@/components/app/segmented";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SHAPE_LABEL, type SourceShape } from "@/lib/sources/shape";
+import { SHAPE_LABEL } from "@/lib/sources/shape";
 import { cn } from "@/lib/utils";
-import { SHAPES, type CollectionSearch, type LibrarySort } from "./search";
+import { SHAPE_PARAMS, shapeOfParam, type CollectionSearch, type LibrarySort, type ShapeParam } from "./search";
 
 const ALL = "all";
 
@@ -78,9 +78,9 @@ export function LibrarySearchRow({
       <div className="max-w-full overflow-x-auto scrollbar-thin">
         <Segmented
           label="Shape"
-          value={(value.shape ?? ALL) as SourceShape | typeof ALL}
-          options={[{ v: ALL, l: "All" }, ...SHAPES.map((s) => ({ v: s, l: SHAPE_LABEL[s] }))]}
-          onChange={(v) => onChange({ shape: v === ALL ? undefined : (v as SourceShape) })}
+          value={(value.shape ?? ALL) as ShapeParam | typeof ALL}
+          options={[{ v: ALL, l: "All" }, ...SHAPE_PARAMS.map((p) => ({ v: p, l: SHAPE_LABEL[shapeOfParam(p)!] }))]}
+          onChange={(v) => onChange({ shape: v === ALL ? undefined : (v as ShapeParam) })}
           className="flex-nowrap"
         />
       </div>

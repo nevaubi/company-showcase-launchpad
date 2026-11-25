@@ -6,7 +6,7 @@ import type { SourceLibrary, SourceReadFailure } from "@/lib/sources/read-types"
 export const libraryQuery = () =>
   queryOptions({
     queryKey: ["sources", "library"] as const,
-    queryFn: ({ signal }) => getLibrary({ signal }),
+    queryFn: () => getLibrary(),
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     retry: 1,

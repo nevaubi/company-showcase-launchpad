@@ -19,22 +19,22 @@ const to = (search: string) => {
 };
 
 describe("collection addresses", () => {
-  it("writes the stored id without its order prefix", () => {
-    expect(collectionSlug("01_financials")).toBe("financials");
+  it("uses core's slugs for the collection pages", () => {
+    expect(collectionSlug("01_financials")).toBe("banks");
     expect(collectionSlug("08_consumer_discretionary")).toBe("consumer-discretionary");
-    expect(collectionSlug("12_sec_company_financials")).toBe("sec-company-financials");
     expect(collectionPath("11_real_estate")).toBe("/app/alt-data/library/c/real-estate");
   });
 
-  it("gives every collection its own slug", () => {
+  it("finds every collection by its slug", () => {
     const slugs = COLLECTIONS.map((c) => collectionSlug(c.id));
     expect(new Set(slugs).size).toBe(COLLECTIONS.length);
     for (const c of COLLECTIONS) expect(collectionForSegment(collectionSlug(c.id))?.id).toBe(c.id);
   });
 
-  it("accepts the stored id and any letter case, and names nothing for a wrong slug", () => {
+  it("accepts the stored id, an older alias and any letter case, and names nothing for a wrong slug", () => {
     expect(collectionForSegment("01_financials")?.id).toBe("01_financials");
     expect(collectionForSegment("Real-Estate")?.id).toBe("11_real_estate");
+    expect(collectionForSegment("macro")?.id).toBe("00_universal");
     expect(collectionForSegment("banks-and-stuff")).toBeNull();
     expect(collectionForSegment("%E0%A4%A")).toBeNull();
     expect(collectionForSegment("")).toBeNull();
@@ -78,7 +78,7 @@ describe("old Alt data addresses", () => {
   });
 
   it("sends a collection link to the collection whose stored id it names", () => {
-    expect(to("?view=sources&sector=01_financials")).toBe("/app/alt-data/library/c/financials");
+    expect(to("?view=sources&sector=01_financials")).toBe("/app/alt-data/library/c/banks");
     expect(to("?view=sources&sector=%2204_energy%22")).toBe("/app/alt-data/library/c/energy");
   });
 

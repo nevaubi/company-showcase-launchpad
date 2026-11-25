@@ -13,7 +13,7 @@ import { useLibrary } from "./library-data";
 import { LibrarySearchRow, type PublisherOption } from "./library-search";
 import { collectionCards, libraryFacts, publisherLabel, publisherNames, publisherRows } from "./overview";
 import { OVERLAP_NOTE, relatedPages } from "./related";
-import { effectiveSort, filterTables, queryWords, resultsCaption, sortTables, type CollectionSearch } from "./search";
+import { effectiveSort, filterTables, queryWords, resultsCaption, shapeOfParam, sortTables, type CollectionSearch } from "./search";
 import { TableList } from "./table-list";
 import { orderWithViews } from "./table-rows";
 
@@ -51,7 +51,7 @@ function KnownCollection({ collection, search, onSearch }: { collection: Collect
   const items = useMemo(() => {
     if (!lib) return null;
     const sort = effectiveSort(deferred.sort, deferred.q, "size");
-    const hits = filterTables(mine, { q: deferred.q, shape: deferred.shape, pub: deferred.pub, includeHidden }, names);
+    const hits = filterTables(mine, { q: deferred.q, shape: shapeOfParam(deferred.shape), pub: deferred.pub, includeHidden }, names);
     return orderWithViews(sortTables(hits, sort), new Map(lib.datasets.map((r) => [r.id, r])));
   }, [lib, mine, deferred, names, includeHidden]);
   const related = relatedPages(collection.id);
@@ -108,7 +108,7 @@ function KnownCollection({ collection, search, onSearch }: { collection: Collect
                           count: items.length,
                           q: deferred.q,
                           publisher: deferred.pub ? (names(deferred.pub)?.short ?? deferred.pub) : undefined,
-                          shape: deferred.shape ? SHAPE_LABEL[deferred.shape] : undefined,
+                          shape: deferred.shape ? SHAPE_LABEL[shapeOfParam(deferred.shape)!] : undefined,
                         })
                       : `Tables (${items.length.toLocaleString("en-US")})`
                     : "Tables"}

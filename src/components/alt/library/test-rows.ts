@@ -14,8 +14,6 @@ export function libRow(patch: Partial<SourceLibraryRow> & Pick<SourceLibraryRow,
     agency: "Federal Deposit Insurance Corporation",
     sourceId: null,
     grain: "One row per institution and quarter",
-    units: "",
-    snapshotId: "a".repeat(64),
     rows: 100,
     fields: 10,
     publishedAt: "2026-11-25T05:30:00Z",
@@ -30,7 +28,7 @@ export function libRow(patch: Partial<SourceLibraryRow> & Pick<SourceLibraryRow,
 
 export function lib(datasets: SourceLibraryRow[], patch: Partial<SourceLibrary> = {}): SourceLibrary {
   return {
-    totals: { datasets: datasets.length, publishers: 0, rows: 0, fields: 0, newestPublication: null, refreshable: 0 },
+    totals: { datasets: datasets.length, hiddenDatasets: 0, publishers: 0, rows: 0, fields: 0, newestPublication: null, refreshable: 0 },
     collections: [],
     publishers: [],
     changes: [],

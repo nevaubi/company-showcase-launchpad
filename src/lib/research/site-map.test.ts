@@ -207,7 +207,8 @@ describe("site map", () => {
       "What changed (publications grouped by hour, publisher and kind",
       "Publishers (a row filters the library to that publisher)",
       "Library tables replaces the overview",
-      "q=words, shape=series|panel|places|table, pub=PUBLISHER_ID, sort=match|new|size|name, view=changes",
+      "q=words, shape=series|panel|place|reference, pub=PUBLISHER_ID, sort=match|new|size|name, view=changes",
+      "/app/alt-data/library/c/SLUG (economy, banks, technology",
       "/app/alt-data/library/c/SLUG",
       "Collection facts, COLLECTION board (charts), Related pages",
       "Collection tables (Collection search",
@@ -270,7 +271,7 @@ describe("site map", () => {
     expect(isAppPath("https://example.com")).toBe(false);
     expect(isAppPath("/app/billing/../admin")).toBe(false);
     expect(isAppPath("/app/alt-data/library?q=bank")).toBe(true);
-    expect(isAppPath("/app/alt-data/library/c/financials")).toBe(true);
+    expect(isAppPath("/app/alt-data/library/c/banks")).toBe(true);
     expect(isAppPath("/app/alt-data/library/d/official_01_financials_data_fdic_top500_all_native_quarterly_2000_latest_f5f72a5b7b?entity=%22628%22")).toBe(true);
     expect(isAppPath("/app/alt-data/credit")).toBe(true);
     expect(isAppPath("/app/alt-data/library/d/../../admin")).toBe(false);

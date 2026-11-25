@@ -11,7 +11,10 @@ import { useLibrary } from "./library-data";
 import { LibraryFacts } from "./library-facts";
 import { LibrarySearchRow, type PublisherOption } from "./library-search";
 import {
+  changeForKey,
+  changeGroupLabel,
   changeLines,
+  changeMembers,
   collectionCards,
   libraryFacts,
   newestChangeNote,
@@ -20,7 +23,7 @@ import {
   publisherRows,
 } from "./overview";
 import { PublisherList } from "./publisher-list";
-import { effectiveSort, filterTables, isFiltering, resultsCaption, sortTables, type LibrarySearch } from "./search";
+import { effectiveSort, filterTables, isFiltering, resultsCaption, shapeOfParam, sortTables, type LibrarySearch } from "./search";
 import { ShapeLegend } from "./shape-bar";
 import { TableList } from "./table-list";
 import { orderWithViews } from "./table-rows";
@@ -40,13 +43,16 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
   const filtering = isFiltering(search);
   // Typing never waits for the list: the list follows the field a frame later and dims meanwhile.
   const deferred = useDeferredValue(search);
+  const group = lib ? changeForKey(lib, deferred.chg) : null;
   const results = useMemo(() => {
     if (!lib || !isFiltering(deferred)) return null;
-    const sort = deferred.view === "changes" ? "new" : effectiveSort(deferred.sort, deferred.q, "new");
-    const hits = filterTables(lib.datasets, { q: deferred.q, shape: deferred.shape, pub: deferred.pub }, names);
+    const sort = deferred.view === "changes" && !deferred.sort ? "new" : effectiveSort(deferred.sort, deferred.q, "new");
+    // a group from What changed lists exactly its tables; the other filters still narrow it
+    const base = deferred.chg ? (group ? changeMembers(lib, group) : []) : lib.datasets;
+    const hits = filterTables(base, { q: deferred.q, shape: shapeOfParam(deferred.shape), pub: deferred.pub }, names);
     const byId = new Map(lib.datasets.map((r) => [r.id, r]));
     return orderWithViews(sortTables(hits, sort), byId);
-  }, [lib, deferred, names]);
+  }, [lib, deferred, names, group]);
 
   return (
     <div className="@container grid grid-cols-1 content-start gap-5">
@@ -77,8 +83,9 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
                       count: results.length,
                       q: deferred.q,
                       publisher: deferred.pub ? (names(deferred.pub)?.short ?? deferred.pub) : undefined,
-                      shape: deferred.shape ? SHAPE_LABEL[deferred.shape] : undefined,
+                      shape: deferred.shape ? SHAPE_LABEL[shapeOfParam(deferred.shape)!] : undefined,
                       changes: deferred.view === "changes",
+                      group: group ? changeGroupLabel(group, names) : undefined,
                     })
                   : "Tables"}
               </h2>
@@ -86,7 +93,7 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
                 size="xs"
                 variant="ghost"
                 className="ml-auto"
-                onClick={() => onSearch({ q: undefined, shape: undefined, pub: undefined, sort: undefined, view: undefined })}
+                onClick={() => onSearch({ q: undefined, shape: undefined, pub: undefined, sort: undefined, view: undefined, chg: undefined })}
               >
                 Back to the overview
               </Button>
@@ -95,8 +102,12 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
           empty={
             <div className="px-3.5 py-6 text-[13px]">
               <p>
-                {deferred.q?.trim() ? `No table matches “${deferred.q.trim()}”` : "No table matches these filters"}
-                {deferred.pub || deferred.shape ? " with the filters set" : ""}.
+                {deferred.chg && !group
+                  ? "This group of publications is no longer listed"
+                  : deferred.q?.trim()
+                    ? `No table matches “${deferred.q.trim()}”`
+                    : "No table matches these filters"}
+                {!deferred.chg && (deferred.pub || deferred.shape) ? " with the filters set" : ""}.
               </p>
               <p className="mt-1 text-muted-foreground">
                 Try a publisher (FDIC, EIA, FHFA), a series code (CCSA) or a form number (EIA-923).
@@ -110,6 +121,11 @@ export function LibraryPage({ search, onSearch }: { search: LibrarySearch; onSea
                 {(deferred.pub || deferred.shape) && (
                   <Button size="sm" variant="outline" onClick={() => onSearch({ pub: undefined, shape: undefined })}>
                     Clear filters
+                  </Button>
+                )}
+                {deferred.chg && !group && (
+                  <Button size="sm" variant="outline" onClick={() => onSearch({ chg: undefined, view: "changes" })}>
+                    Every table by its latest publication
                   </Button>
                 )}
               </div>

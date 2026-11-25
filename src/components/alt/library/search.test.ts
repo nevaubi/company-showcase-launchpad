@@ -9,6 +9,7 @@ import {
   queryWords,
   resultsCaption,
   rowShape,
+  shapeOfParam,
   sortTables,
 } from "./search";
 import { libRow } from "./test-rows";
@@ -80,11 +81,16 @@ describe("library search", () => {
   it("validates its address state and drops what it does not know", () => {
     expect(librarySearch.parse({ q: "bank", shape: "panel", pub: "fdic", sort: "size", view: "changes" })).toEqual({ q: "bank", shape: "panel", pub: "fdic", sort: "size", view: "changes" });
     expect(librarySearch.parse({ shape: "pie", sort: 3, view: "all", q: "x".repeat(201) })).toEqual({});
+    expect(librarySearch.parse({ shape: "places" })).toEqual({});
+    expect(shapeOfParam("place")).toBe("places");
+    expect(shapeOfParam("reference")).toBe("table");
+    expect(shapeOfParam(undefined)).toBeUndefined();
     expect(collectionSearch.parse({ view: "changes", q: "a" })).toEqual({ q: "a" });
     expect(isFiltering({})).toBe(false);
     expect(isFiltering({ q: "  " })).toBe(false);
     expect(isFiltering({ pub: "eia" })).toBe(true);
     expect(isFiltering({ view: "changes" })).toBe(true);
+    expect(isFiltering({ chg: "2026-11-25T12:27:00.000Z~version~eia" })).toBe(true);
   });
 
   it("says what a result list holds", () => {
@@ -92,5 +98,6 @@ describe("library search", () => {
     expect(resultsCaption({ count: 1, q: "ccsa" })).toBe("1 table matches “ccsa”");
     expect(resultsCaption({ count: 216, publisher: "EIA", shape: "Panels" })).toBe("216 tables from EIA · Panels");
     expect(resultsCaption({ count: 1037, changes: true })).toBe("1,037 tables · by latest publication, newest first");
+    expect(resultsCaption({ count: 31, group: "EIA, new version, 25 Nov 12:27 UTC" })).toBe("31 tables · EIA, new version, 25 Nov 12:27 UTC");
   });
 });

@@ -13,7 +13,7 @@ import { publisherFor } from "@/lib/sources/catalog/publishers";
 import type { SourceLibrary, SourceLibraryChange, SourceLibraryRow } from "@/lib/sources/read-types";
 import type { SourceShape } from "@/lib/sources/shape";
 import { collectionPath, datasetPath, LIBRARY_PATH } from "./addresses";
-import { rowShape, SHAPES } from "./search";
+import { rowShape } from "./search";
 import { utcMinute } from "./table-rows";
 
 export type ShapeCounts = Record<SourceShape, number>;
@@ -23,14 +23,12 @@ export const visibleRows = (lib: Pick<SourceLibrary, "datasets">) => lib.dataset
 
 const PUBLISHER_BY_ID = new Map(PUBLISHERS.map((p) => [p.id, p]));
 
-/** Display names of a publisher id: the catalogue's entry, or the name the library answer carries. */
+/** Display names of a publisher id: the catalogue's entry, or the names the library answer carries. */
 export function publisherNames(lib: Pick<SourceLibrary, "publishers">) {
-  const fromLib = new Map(lib.publishers.map((p) => [p.id, p.name]));
+  const fromLib = new Map(lib.publishers.map((p) => [p.id, { name: p.name, short: p.short || p.name }]));
   return (id: string): { name: string; short: string } | undefined => {
     const known = PUBLISHER_BY_ID.get(id);
-    if (known) return { name: known.name, short: known.short };
-    const name = fromLib.get(id);
-    return name ? { name, short: name } : undefined;
+    return known ? { name: known.name, short: known.short } : fromLib.get(id);
   };
 }
 
@@ -172,9 +170,25 @@ export type ChangeLine = {
   publisher: string;
   text: string;
   kind: SourceLibraryChange["kind"];
-  /** A group of one opens its table at the snapshot it names; a larger group opens that publisher's tables, newest first. */
+  /** A group of one opens its table at the snapshot it names; a larger group opens the list of exactly its tables. */
   href: string;
 };
+
+/** How the address names one group of publications: its first time, its kind and its publisher. */
+export function changeKey(c: Pick<SourceLibraryChange, "from" | "kind" | "publisherId">): string {
+  return `${c.from}~${c.kind}~${c.publisherId ?? "*"}`;
+}
+
+/** The group an address names, or null when the library no longer lists it. */
+export function changeForKey(lib: Pick<SourceLibrary, "changes">, key: string | undefined): SourceLibraryChange | null {
+  if (!key) return null;
+  return lib.changes.find((c) => changeKey(c) === key) ?? null;
+}
+
+/** The tables of one group, newest first, as the library answer lists them. */
+export function changeMembers(lib: Pick<SourceLibrary, "datasets">, change: SourceLibraryChange): SourceLibraryRow[] {
+  return change.members.map((i) => lib.datasets[i]).filter((r): r is SourceLibraryRow => !!r);
+}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const dayMinute = (d: Date) =>
@@ -204,24 +218,36 @@ export function changeText(c: SourceLibraryChange): string {
   return `${n(c.datasets)} tables, ${c.kind === "first" ? "first published" : "new version"}`;
 }
 
-export function changeLines(lib: SourceLibrary, names = publisherNames(lib)): ChangeLine[] {
-  return lib.changes.map((c, i) => ({
-    key: `${c.from}|${c.publisherId}|${c.kind}|${i}`,
+/** Who published a group: the publisher's short name, or how many publishers a first-publication run spans. */
+export function changePublisher(c: SourceLibraryChange, names: ReturnType<typeof publisherNames>): string {
+  if (!c.publisherId) return `${n(c.publishers)} ${c.publishers === 1 ? "publisher" : "publishers"}`;
+  return names(c.publisherId)?.short ?? c.publisherName ?? c.publisherId;
+}
+
+/** A group in the words of a list caption: "EIA, new version, 25 Nov 12:27 UTC". */
+export function changeGroupLabel(c: SourceLibraryChange, names: ReturnType<typeof publisherNames>): string {
+  return `${changePublisher(c, names)}, ${c.kind === "first" ? "first published" : "new version"}, ${changeWhen(c.from, c.to)} UTC`;
+}
+
+/** The newest `limit` groups as lines. */
+export function changeLines(lib: SourceLibrary, names = publisherNames(lib), limit = 10): ChangeLine[] {
+  return lib.changes.slice(0, limit).map((c, i) => ({
+    key: `${changeKey(c)}|${i}`,
     when: changeWhen(c.from, c.to),
-    publisher: names(c.publisherId)?.short ?? c.publisherName,
+    publisher: changePublisher(c, names),
     text: changeText(c),
     kind: c.kind,
     href:
       c.single && c.datasets === 1
         ? datasetPath(c.single.datasetId, { snapshot: c.single.snapshotId })
-        : `${LIBRARY_PATH}${defaultStringifySearch({ pub: c.publisherId, sort: "new" })}`,
+        : `${LIBRARY_PATH}${defaultStringifySearch({ chg: changeKey(c) })}`,
   }));
 }
 
 /** The line under "Last published": the newest group of publications, in words. */
 export function newestChangeNote(change: SourceLibraryChange | null, names: ReturnType<typeof publisherNames>): string | null {
   if (!change) return null;
-  return `${names(change.publisherId)?.short ?? change.publisherName}: ${changeText(change)}`;
+  return `${changePublisher(change, names)}: ${changeText(change)}`;
 }
 
-export { SHAPES, utcMinute };
+export { utcMinute };

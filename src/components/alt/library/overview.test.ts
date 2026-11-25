@@ -2,7 +2,11 @@ import { defaultParseSearch } from "@tanstack/react-router";
 import { describe, expect, it } from "vitest";
 import type { SourceLibraryChange } from "@/lib/sources/read-types";
 import {
+  changeForKey,
+  changeKey,
   changeLines,
+  changeMembers,
+  changePublisher,
   changeText,
   changeWhen,
   collectionCards,
@@ -30,8 +34,11 @@ const change = (patch: Partial<SourceLibraryChange>): SourceLibraryChange => ({
   publisherId: "eia",
   publisherName: "U.S. Energy Information Administration",
   kind: "version",
+  publishers: 1,
   datasets: 31,
+  rows: 0,
   datasetIds: [],
+  members: [],
   single: null,
   ...patch,
 });
@@ -54,7 +61,7 @@ describe("library facts", () => {
     const cards = collectionCards(lib(ROWS));
     expect(cards.map((c) => c.id)).toEqual(["00_universal", "01_financials", "04_energy"]);
     const banks = cards.find((c) => c.id === "01_financials")!;
-    expect(banks).toMatchObject({ tables: 3, records: 51953, views: 1, href: "/app/alt-data/library/c/financials", publishers: ["FDIC", "NCUA"], morePublishers: 0 });
+    expect(banks).toMatchObject({ tables: 3, records: 51953, views: 1, href: "/app/alt-data/library/c/banks", publishers: ["FDIC", "NCUA"], morePublishers: 0 });
     expect(banks.shapes).toEqual({ series: 0, panel: 2, places: 1, table: 0 });
     expect(cards.find((c) => c.id === "04_energy")!.shapes).toEqual({ series: 1, panel: 0, places: 0, table: 1 });
   });
@@ -92,14 +99,27 @@ describe("what changed", () => {
     expect(changeWhen("2026-11-24T23:10:00Z", "2026-11-25T00:40:00Z")).toBe("24 Nov 23:10 to 25 Nov 00:40");
   });
 
-  it("opens a group of one at its snapshot and a larger group as that publisher's newest tables", () => {
+  it("opens a group of one at its snapshot and a larger group as exactly its tables", () => {
     const single = { datasetId: "hpi", title: "HPI", rows: 2, previousRows: 1, snapshotId: SNAP, previousSnapshotId: null };
-    const [one, many] = changeLines(lib(ROWS, { changes: [change({ datasets: 1, single }), change({})] }));
+    const group = change({ from: "2026-11-25T11:40:00Z", to: "2026-11-25T11:52:00Z", datasets: 2, members: [3, 4] });
+    const library = lib(ROWS, { changes: [change({ datasets: 1, single }), group] });
+    const [one, many] = changeLines(library);
     expect(one.href).toBe(`/app/alt-data/library/d/hpi?snapshot=${SNAP}`);
     expect(many.publisher).toBe("EIA");
     const url = new URL(many.href, "https://example.test");
     expect(url.pathname).toBe("/app/alt-data/library");
-    expect(defaultParseSearch(url.search)).toEqual({ pub: "eia", sort: "new" });
+    const { chg } = defaultParseSearch(url.search) as { chg: string };
+    expect(chg).toBe(changeKey(group));
+    expect(changeForKey(library, chg)).toBe(group);
+    expect(changeMembers(library, group).map((r) => r.id)).toEqual(["eia_a", "eia_b"]);
+    expect(changeForKey(library, "2020-01-01T00:00:00.000Z~first~*")).toBeNull();
+  });
+
+  it("names a first-publication run across publishers by how many it spans, and shows the newest ten", () => {
+    const run = change({ kind: "first", publisherId: null, publisherName: null, publishers: 41, datasets: 1053 });
+    expect(changePublisher(run, publisherNames(lib(ROWS)))).toBe("41 publishers");
+    const many = Array.from({ length: 14 }, (_, i) => change({ from: `2026-11-25T0${i % 10}:00:00Z` }));
+    expect(changeLines(lib(ROWS, { changes: many }))).toHaveLength(10);
   });
 });
 

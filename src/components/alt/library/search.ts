@@ -12,20 +12,28 @@ import type { SourceLibraryRow } from "@/lib/sources/read-types";
 export const SHAPES: readonly SourceShape[] = ["series", "panel", "places", "table"];
 export type LibrarySort = "match" | "new" | "size" | "name";
 
+/** Shapes as the address writes them (core's link builder): series, panel, place, reference. */
+export const SHAPE_PARAMS = ["series", "panel", "place", "reference"] as const;
+export type ShapeParam = (typeof SHAPE_PARAMS)[number];
+const PARAM_SHAPE: Record<ShapeParam, SourceShape> = { series: "series", panel: "panel", place: "places", reference: "table" };
+export const shapeOfParam = (p: ShapeParam | undefined): SourceShape | undefined => (p ? PARAM_SHAPE[p] : undefined);
+
 const text = (max: number) => z.string().max(max).optional().catch(undefined);
 
 /** Address state of the library page. `view=changes` lists every table by its latest publication. */
 export const librarySearch = z.object({
   q: text(200),
-  shape: z.enum(["series", "panel", "places", "table"]).optional().catch(undefined),
+  shape: z.enum(SHAPE_PARAMS).optional().catch(undefined),
   pub: text(80),
   sort: z.enum(["match", "new", "size", "name"]).optional().catch(undefined),
   view: z.enum(["changes"]).optional().catch(undefined),
+  /** One group of publications from "What changed" (`changeKey`): the list shows exactly its tables. */
+  chg: text(80),
 });
 export type LibrarySearch = z.infer<typeof librarySearch>;
 
 /** Address state of a collection page: the same filters, scoped to the collection. */
-export const collectionSearch = librarySearch.omit({ view: true });
+export const collectionSearch = librarySearch.omit({ view: true, chg: true });
 export type CollectionSearch = z.infer<typeof collectionSearch>;
 
 /** The publisher names a row can be found by. */
@@ -139,17 +147,18 @@ export function effectiveSort(sort: LibrarySort | undefined, q: string | undefin
 
 /** True while the library shows a result list in place of its overview. */
 export function isFiltering(s: LibrarySearch): boolean {
-  return !!(queryWords(s.q).length || s.shape || s.pub || s.view);
+  return !!(queryWords(s.q).length || s.shape || s.pub || s.view || s.chg);
 }
 
 /** The line above a result list: "38 tables match “mortgage” from FHFA · Panels". */
-export function resultsCaption(o: { count: number; q?: string; publisher?: string; shape?: string; changes?: boolean }): string {
+export function resultsCaption(o: { count: number; q?: string; publisher?: string; shape?: string; changes?: boolean; group?: string }): string {
   const n = o.count.toLocaleString("en-US");
   const tables = o.count === 1 ? "table" : "tables";
   const q = o.q?.trim();
   let s = q ? `${n} ${tables} ${o.count === 1 ? "matches" : "match"} “${q}”` : `${n} ${tables}`;
   if (o.publisher) s += ` from ${o.publisher}`;
   if (o.shape) s += ` · ${o.shape}`;
+  if (o.group) s += ` · ${o.group}`;
   if (o.changes) s += " · by latest publication, newest first";
   return s;
 }

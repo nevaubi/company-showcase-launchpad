@@ -1,25 +1,17 @@
 /**
  * Addresses of the Data library's own pages and where an old Alt data address now leads. Pure.
  *
- * - The library is `/app/alt-data/library`; a collection is `/app/alt-data/library/c/<slug>`, where the
- *   slug is the collection's stored id without its order prefix ("01_financials" is "financials"). The
- *   stored id itself is accepted too, so a link built from a dataset's `sector` never fails.
- * - Old addresses (`/app/alt-data?view=sources...`) lead to the library page that shows the same thing:
- *   a table with its pinned snapshot and filters, a collection, or the library.
+ * Paths and slugs come from core's one link builder (`@/lib/sources/links`, `@/lib/sources/collections`):
+ * a collection is `/app/alt-data/library/c/<slug>` ("banks"), and its stored id ("01_financials"), an older
+ * alias or another letter case names the same collection. Old addresses (`/app/alt-data?view=sources...`)
+ * lead to the library page that shows the same thing: a table with its pinned snapshot and filters, a
+ * collection, or the library.
  */
-import { defaultStringifySearch } from "@tanstack/react-router";
 import { COLLECTIONS, type Collection } from "@/lib/sources/catalog";
+import { collectionIdFromSlug, collectionSlug } from "@/lib/sources/collections";
+import { collectionHref, datasetHref, LIBRARY_PATH } from "@/lib/sources/links";
 
-export const LIBRARY_PATH = "/app/alt-data/library";
-
-/** "01_financials" -> "financials", "08_consumer_discretionary" -> "consumer-discretionary". */
-export function collectionSlug(id: string): string {
-  return id
-    .trim()
-    .toLowerCase()
-    .replace(/^\d+_/, "")
-    .replace(/_+/g, "-");
-}
+export { collectionSlug, LIBRARY_PATH };
 
 function decoded(segment: string): string {
   try {
@@ -29,17 +21,17 @@ function decoded(segment: string): string {
   }
 }
 
-/** The collection an address segment names, by slug or by stored id; null when it names none. */
+/** The collection an address segment names (slug, alias or stored id, any letter case); null when it names none. */
 export function collectionForSegment(segment: string | null | undefined): Collection | null {
   if (!segment) return null;
-  const s = decoded(segment).trim().toLowerCase();
-  if (!s) return null;
-  return COLLECTIONS.find((c) => c.id.toLowerCase() === s || collectionSlug(c.id) === s) ?? null;
+  const s = decoded(segment).trim();
+  const id = collectionIdFromSlug(s) ?? collectionIdFromSlug(s.toLowerCase());
+  return (id && COLLECTIONS.find((c) => c.id === id)) || null;
 }
 
 /** A collection's address, from its stored id (a dataset's `sector`). */
 export function collectionPath(id: string): string {
-  return `${LIBRARY_PATH}/c/${encodeURIComponent(collectionSlug(id))}`;
+  return collectionHref(id);
 }
 
 /** Filters of a table page that an old address can carry. Native identifiers stay strings. */
@@ -108,17 +100,11 @@ export function legacyTarget(searchStr: string): LegacyTarget | null {
 
 const FILTER_ORDER = ["snapshot", "entity", "geography", "period", "q", "after"] as const;
 
-/**
- * A table page's address with filters, in the router's own search encoding (native strings survive parsing) and
- * a fixed key order, so one view has one address.
- */
+/** A table page's address with filters, through core's builder, in a fixed key order so one view has one address. */
 export function datasetPath(datasetId: string, filters: CarriedFilters = {}): string {
-  const search = defaultStringifySearch(
-    Object.fromEntries(
-      FILTER_ORDER.filter((k) => filters[k] !== undefined && filters[k] !== "").map((k) => [k, filters[k]]),
-    ),
-  );
-  return `${LIBRARY_PATH}/d/${encodeURIComponent(datasetId)}${search}`;
+  const ordered: CarriedFilters = {};
+  for (const k of FILTER_ORDER) if (filters[k] !== undefined && filters[k] !== "") (ordered as Record<string, unknown>)[k] = filters[k];
+  return datasetHref(datasetId, ordered);
 }
 
 /** The address an old link is sent on to. */
