@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EIA860_PAGE, EIA861_PAGE, build860, build861, parse860, parse861 } from "../../../../scripts/lib/source-catalog/eia-forms";
 import { buildFred, catalogueTitles, isCut, parseFredTitle } from "../../../../scripts/lib/source-catalog/fred";
 import { buildMer, parseMerListing } from "../../../../scripts/lib/source-catalog/mer";
 import { listingTitle } from "../../../../scripts/lib/source-catalog/text";
@@ -205,5 +206,61 @@ describe("USGS Data Series 140 listing", () => {
       [abran.id]: { title: "Abrasives (natural): Tripoli", code: "DS140 abran", source: USGS_LISTING },
     });
     expect(result.unmatched.map((u) => u.id)).toEqual([other.id]);
+  });
+});
+
+/** EIA-860's list of data files, as the form page writes it (cut down). */
+const EIA860_HTML = `<p>Detailed data are compressed (zip) and contain the following files:</p>
+<ul><li><strong>1___UtilityYyyyy</strong> &#x2014; Contains utility-level data.</li>
+<li><strong>3_4_Energy_StorageYyyyy </strong> &#x2014; Contains additional details, split into two tabs:</li>
+<li class="list-item"><ul><li>The <em>Operable</em> tab includes those generators which are currently operating;</li></ul>
+<ul><li>The <em>Retired and Canceled</em> tab includes those generators which were cancelled.</li></ul>
+<ul><li>The retired tab only includes those retired generators which were reported.</li></ul></li>
+<li><strong>4___OwnerYyyyy</strong> &#x2014; Contains owner and/or operator data.</li>
+<li><strong>6_2_EnviroEquipYyyyy</strong> &#x2014; Contains environmental equipment data.</li>
+<li class="list-item"><ul><li>The <em>Emission Standards & Strategies</em> tab shows boiler data;</li></ul></li></ul>
+<h3>Superseded Form EIA-860A (Utility) & B (Non-Utility)</h3>`;
+
+const EIA861_HTML = `<ul><li class="head">Demand Response</li><li class="list-item"><li><strong>Survey:</strong> Form EIA-861</li></li>
+<li class="head">Non-Net Metering Distributed</li><li class="head">Sales to Ultimate Customers</li></ul>`;
+
+describe("EIA form pages", () => {
+  it("reads EIA-860's files with the tabs the page names for each", () => {
+    expect(parse860(EIA860_HTML).map((f) => [f.file, f.subject, f.tabs])).toEqual([
+      ["1___UtilityYyyyy", "Utility", []],
+      ["3_4_Energy_StorageYyyyy", "Energy Storage", ["Operable", "Retired and Canceled"]],
+      ["4___OwnerYyyyy", "Owner", []],
+      ["6_2_EnviroEquipYyyyy", "EnviroEquip", ["Emission Standards & Strategies"]],
+    ]);
+    expect(parse861(EIA861_HTML)).toEqual(["Demand Response", "Non-Net Metering Distributed", "Sales to Ultimate Customers"]);
+  });
+
+  it("titles EIA-860 tables only for listed files and named tabs", () => {
+    const t = (id: string, name: string): DatasetRow => ({ ...row(id, name), source_id: "EIA860_X", sector: "05_utilities" });
+    const utility = t("a_utility", "EIA860 1 Utility Y2025 Utility");
+    const operable = t("b_storage_operable", "EIA860 3 4 Energy Storage Y2025 Operable");
+    const proposed = t("c_storage_proposed", "EIA860 3 4 Energy Storage Y2025 Proposed");
+    const owner = t("d_owner", "EIA860 4 Owner Y2025 Ownership");
+    const strategies = t("e_strategies", "EIA860 6 2 EnviroEquip Y2025 Emission Standards Strategies");
+    const result = build860([utility, operable, proposed, owner, strategies], { url: EIA860_PAGE, status: 200, body: EIA860_HTML });
+    expect(result.titles).toEqual({
+      a_utility: { title: "Utility, 2025", code: "EIA-860 1___UtilityY2025", source: EIA860_PAGE },
+      b_storage_operable: { title: "Energy Storage, Operable, 2025", code: "EIA-860 3_4_Energy_StorageY2025", source: EIA860_PAGE },
+      e_strategies: { title: "EnviroEquip, Emission Standards & Strategies, 2025", code: "EIA-860 6_2_EnviroEquipY2025", source: EIA860_PAGE },
+    });
+    expect(result.unmatched.map((u) => u.id)).toEqual(["c_storage_proposed", "d_owner"]);
+  });
+
+  it("titles EIA-861 tables whose file name is a listed name, without repeating it", () => {
+    const t = (id: string, name: string): DatasetRow => ({ ...row(id, name), source_id: "EIA861_X", sector: "05_utilities" });
+    const states = t("a", "EIA861 Demand Response 2025 Demand Response States");
+    const distributed = t("b", "EIA861 Non Net Metering Distributed 2025 Territories");
+    const sales = t("c", "EIA861 Sales Ult Cust 2025 States");
+    const result = build861([states, distributed, sales], { url: EIA861_PAGE, status: 200, body: EIA861_HTML });
+    expect(result.titles).toEqual({
+      a: { title: "Demand Response, States, 2025", source: EIA861_PAGE },
+      b: { title: "Non-Net Metering Distributed, Territories, 2025", source: EIA861_PAGE },
+    });
+    expect(result.unmatched.map((u) => u.id)).toEqual(["c"]);
   });
 });
