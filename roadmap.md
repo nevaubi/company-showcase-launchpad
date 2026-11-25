@@ -2,7 +2,10 @@
 
 ## Official source phase one (Nov 25)
 - [x] Verify the frozen patch/catalogue hashes and all 43 per-file base hashes; 42 reviewed paths applied byte-exactly. The platform removed the new migration file because only the managed migration tool can create it.
-- [ ] Apply the reviewed schema, then register and run three bounded import processes — blocked: the frozen migration writes storage.buckets, which the managed migration service prohibits, and places table grants after RLS rather than the required create/grant/RLS order; a corrected reviewed migration is needed.
+- [x] Corrected reviewed schema applied through the managed migration tool as `drizzle/migrations/0068_official_sources.sql`; SHA-256 `b2e3e0b345a5a754dd14895850f0c4ccac4523a8f14a0008f5823980717f01f4` matches exactly, generated types refreshed, all 11 isolated PostgreSQL tests passed. No auth changes; ticket bucket remains private with a 5 MiB limit.
+- [x] Catalogue registered: 1,073 files, 1,056 datasets/snapshots, initially 1,053 staging and 3 explicitly quarantined metadata tables; 21,192,456 expected rows, 21,192,169 eligible. Registration published nothing.
+- [x] Initial three 480-second/100-snapshot bounded imports completed with exit 0 and no import failures: processes published 14/10/12 snapshots. Actual database totals: 36 ready (1,266,663 rows), 1,017 staging (3,271,097 committed rows), 3 predeclared quarantined/failed (0 loaded, 287 expected); exact source_records count 4,537,760, no held leases. Partial FDIC, FHFA tract and SEC standard-fact snapshots retained their prefixes on normal runtime-budget stops. Logs: `/tmp/official-import/import-{1,2,3}.log`.
+- [ ] Continue remaining source imports in the next authorized bounded batch: 1,017 staging snapshots, 16,654,409 eligible rows not yet committed; do not bypass verification or publish the 3 quarantined metadata tables. Worker deployment and app publication are not part of this batch.
 - [x] 47 source/worker/navigation tests, 5 preparation tests and 9 isolated PostgreSQL/RLS/interruption tests passed; preview build OK. Desktop/mobile redirect to sign-in; requester session unavailable, no access controls changed. Commit the eligible reviewed paths; no publication or worker deployment.
 
 ## Automatic data refresh — wave 1 (Nov 19)

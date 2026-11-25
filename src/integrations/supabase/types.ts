@@ -2766,6 +2766,220 @@ export type Database = {
         }
         Relationships: []
       }
+      source_datasets: {
+        Row: {
+          agency: string
+          created_at: string
+          description: string
+          grain: string
+          id: string
+          latest_snapshot_id: string | null
+          name: string
+          notes: string
+          sector: string
+          source_id: string | null
+          source_url: string | null
+          units: string
+          updated_at: string
+        }
+        Insert: {
+          agency: string
+          created_at?: string
+          description?: string
+          grain?: string
+          id: string
+          latest_snapshot_id?: string | null
+          name: string
+          notes?: string
+          sector: string
+          source_id?: string | null
+          source_url?: string | null
+          units?: string
+          updated_at?: string
+        }
+        Update: {
+          agency?: string
+          created_at?: string
+          description?: string
+          grain?: string
+          id?: string
+          latest_snapshot_id?: string | null
+          name?: string
+          notes?: string
+          sector?: string
+          source_id?: string | null
+          source_url?: string | null
+          units?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_datasets_latest_fk"
+            columns: ["id", "latest_snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "source_snapshots"
+            referencedColumns: ["dataset_id", "id"]
+          },
+        ]
+      }
+      source_files: {
+        Row: {
+          bytes: number
+          chunks: Json
+          content_type: string
+          created_at: string
+          provenance: Json
+          sha256: string
+          verified_at: string | null
+        }
+        Insert: {
+          bytes: number
+          chunks: Json
+          content_type: string
+          created_at?: string
+          provenance?: Json
+          sha256: string
+          verified_at?: string | null
+        }
+        Update: {
+          bytes?: number
+          chunks?: Json
+          content_type?: string
+          created_at?: string
+          provenance?: Json
+          sha256?: string
+          verified_at?: string | null
+        }
+        Relationships: []
+      }
+      source_records: {
+        Row: {
+          entity_id: string | null
+          entity_name: string | null
+          geo_code: string | null
+          geo_level: string | null
+          geo_name: string | null
+          period: string | null
+          row_number: number
+          snapshot_id: string
+          source_url: string | null
+          values: Json
+        }
+        Insert: {
+          entity_id?: string | null
+          entity_name?: string | null
+          geo_code?: string | null
+          geo_level?: string | null
+          geo_name?: string | null
+          period?: string | null
+          row_number: number
+          snapshot_id: string
+          source_url?: string | null
+          values: Json
+        }
+        Update: {
+          entity_id?: string | null
+          entity_name?: string | null
+          geo_code?: string | null
+          geo_level?: string | null
+          geo_name?: string | null
+          period?: string | null
+          row_number?: number
+          snapshot_id?: string
+          source_url?: string | null
+          values?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_records_snapshot_id_fkey"
+            columns: ["snapshot_id"]
+            isOneToOne: false
+            referencedRelation: "source_snapshots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      source_snapshots: {
+        Row: {
+          attempts: number
+          column_count: number | null
+          columns: Json
+          coverage: Json
+          created_at: string
+          dataset_id: string
+          expected_rows: number
+          file_sha256: string
+          id: string
+          ingest: Json
+          last_error: string | null
+          lease_owner: string | null
+          lease_until: string | null
+          loaded_rows: number
+          published_at: string | null
+          quality: Json
+          retrieved_at: string | null
+          source_path: string
+          status: string
+        }
+        Insert: {
+          attempts?: number
+          column_count?: number | null
+          columns: Json
+          coverage?: Json
+          created_at?: string
+          dataset_id: string
+          expected_rows: number
+          file_sha256: string
+          id: string
+          ingest: Json
+          last_error?: string | null
+          lease_owner?: string | null
+          lease_until?: string | null
+          loaded_rows?: number
+          published_at?: string | null
+          quality?: Json
+          retrieved_at?: string | null
+          source_path: string
+          status?: string
+        }
+        Update: {
+          attempts?: number
+          column_count?: number | null
+          columns?: Json
+          coverage?: Json
+          created_at?: string
+          dataset_id?: string
+          expected_rows?: number
+          file_sha256?: string
+          id?: string
+          ingest?: Json
+          last_error?: string | null
+          lease_owner?: string | null
+          lease_until?: string | null
+          loaded_rows?: number
+          published_at?: string | null
+          quality?: Json
+          retrieved_at?: string | null
+          source_path?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_snapshots_dataset_id_fkey"
+            columns: ["dataset_id"]
+            isOneToOne: false
+            referencedRelation: "source_datasets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "source_snapshots_file_sha256_fkey"
+            columns: ["file_sha256"]
+            isOneToOne: false
+            referencedRelation: "source_files"
+            referencedColumns: ["sha256"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           cancel_at_period_end: boolean
@@ -3992,6 +4206,70 @@ export type Database = {
           variant: string
         }[]
       }
+      source_chunks_valid: {
+        Args: { _bytes: number; _chunks: Json }
+        Returns: boolean
+      }
+      source_claim_snapshot: {
+        Args: {
+          _owner: string
+          _retry_failed?: boolean
+          _snapshot_id?: string
+          _ttl_seconds?: number
+        }
+        Returns: Json
+      }
+      source_columns_valid: { Args: { _columns: Json }; Returns: boolean }
+      source_get_dataset: {
+        Args: { _id: string; _snapshot_id?: string }
+        Returns: Json
+      }
+      source_list_datasets: {
+        Args: {
+          _after?: string
+          _agency?: string
+          _limit?: number
+          _q?: string
+          _sector?: string
+        }
+        Returns: Json
+      }
+      source_publish_snapshot: {
+        Args: { _owner: string; _snapshot_id: string }
+        Returns: Json
+      }
+      source_put_records: {
+        Args: { _owner: string; _rows: Json; _snapshot_id: string }
+        Returns: Json
+      }
+      source_query_records: {
+        Args: {
+          _after?: number
+          _columns?: number[]
+          _dataset_id: string
+          _entity?: string
+          _geography?: string
+          _limit?: number
+          _period?: string
+          _q?: string
+          _snapshot_id?: string
+        }
+        Returns: Json
+      }
+      source_release_snapshot: {
+        Args: {
+          _error?: string
+          _failed?: boolean
+          _owner: string
+          _snapshot_id: string
+        }
+        Returns: boolean
+      }
+      source_renew_lease: {
+        Args: { _owner: string; _snapshot_id: string; _ttl_seconds?: number }
+        Returns: boolean
+      }
+      source_values_valid: { Args: { _values: Json }; Returns: boolean }
       tier_has_feature: {
         Args: { _feature: string; _tier: string }
         Returns: boolean

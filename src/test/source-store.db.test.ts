@@ -23,6 +23,7 @@ DO $$ BEGIN
 END $$;
 CREATE SCHEMA IF NOT EXISTS auth; CREATE SCHEMA IF NOT EXISTS storage;
 CREATE TABLE IF NOT EXISTS storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint);
+INSERT INTO storage.buckets(id,name,public,file_size_limit) VALUES ('official-ingest-tickets','official-ingest-tickets',false,5242880) ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS storage.objects(bucket_id text,name text,metadata jsonb);
 ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS catch_all_read ON storage.objects;
@@ -93,6 +94,28 @@ describe.skipIf(!local && !wasm)("official source store on PostgreSQL", () => {
     await expect(put([row(2)],"another-worker")).rejects.toThrow(/lease/);
     expect(await claim(SNAP,"another-worker")).toBeNull();
   });
+  it("rejects explicit null lease durations and invalid owners without weakening a held lease", async () => {
+    await expect(as("service_role",null,()=>rpc("source_claim_snapshot",["proof",SNAP,null,false]))).rejects.toThrow(/lease/);
+    await expect(as("service_role",null,()=>rpc("source_renew_lease",[SNAP,"proof",null]))).rejects.toThrow(/lease/);
+    for (const owner of [null,"", "x".repeat(201)]) {
+      await expect(as("service_role",null,()=>rpc("source_claim_snapshot",[owner,SNAP,180,false]))).rejects.toThrow(/lease/);
+      await expect(as("service_role",null,()=>rpc("source_renew_lease",[SNAP,owner,180]))).rejects.toThrow(/lease/);
+      await expect(as("service_role",null,()=>rpc("source_release_snapshot",[SNAP,owner,false,null]))).rejects.toThrow(/lease/);
+    }
+    expect(await one("select lease_owner from source_snapshots")).toBe("proof");
+    expect(await one("select lease_until > now() from source_snapshots")).toBe(true);
+  });
+  it("cannot write or publish an unclaimed snapshot using a null owner or null lease expiry", async () => {
+    await db.exec("update source_snapshots set lease_owner=null,lease_until=null");
+    await expect(as("service_role",null,()=>rpc("source_put_records",[SNAP,null,JSON.stringify([row(1)])]))).rejects.toThrow(/lease/);
+    await claim(); await put([row(1),row(2)]);
+    await db.exec("update source_snapshots set lease_until=null");
+    await expect(put([row(2)])).rejects.toThrow(/lease/);
+    await expect(publish()).rejects.toThrow(/lease/);
+    await db.exec("update source_snapshots set lease_owner=null");
+    await expect(as("service_role",null,()=>rpc("source_publish_snapshot",[SNAP,null]))).rejects.toThrow(/lease/);
+    expect(await one("select status from source_snapshots")).toBe("staging");
+  });
   it("requires verified, present raw bytes and keeps verified file definitions immutable", async () => {
     await put([row(1),row(2)]);
     await db.exec("update source_files set verified_at=null");
@@ -114,10 +137,15 @@ describe.skipIf(!local && !wasm)("official source store on PostgreSQL", () => {
   it("enforces native filters, keyset bounds and ordered field projection in PostgreSQL", async () => {
     await put([row(1),row(2)]); await publish();
     const page=await as("authenticated",MEMBER,()=>rpc("source_query_records",["financials/fdic",SNAP,null,null,null,null,0,1,[1,0]])) as {rows:{values:unknown[]}[],nextCursor:number,hasMore:boolean};
+    const list=await as("authenticated",MEMBER,()=>rpc("source_list_datasets",[null,null,null,null,1])) as {datasets:unknown[]};
+    expect(list.datasets).toHaveLength(1);
     expect(page.rows[0].values).toEqual(["0","000123"]); expect(page.nextCursor).toBe(1); expect(page.hasMore).toBe(true);
     const second=await as("authenticated",MEMBER,()=>rpc("source_query_records",["financials/fdic",SNAP,null,null,"FY 2026",null,1,100,[0,1,2,3]])) as {rows:{values:unknown[]}[],hasMore:boolean};
     expect(second.rows[0].values).toEqual(["000124","","FY 2026",null]); expect(second.hasMore).toBe(false);
     await expect(as("authenticated",MEMBER,()=>rpc("source_query_records",["financials/fdic",SNAP,null,null,null,null,0,101,null]))).rejects.toThrow(/bounds/);
+    await expect(as("authenticated",MEMBER,()=>rpc("source_query_records",["financials/fdic",SNAP,null,null,null,null,0,null,null]))).rejects.toThrow(/bounds/);
+    await expect(as("authenticated",MEMBER,()=>rpc("source_query_records",["financials/fdic",SNAP,null,null,null,null,null,1,null]))).rejects.toThrow(/bounds/);
+    await expect(as("authenticated",MEMBER,()=>rpc("source_list_datasets",[null,null,null,null,null]))).rejects.toThrow(/bounds/);
     await expect(as("authenticated",MEMBER,()=>rpc("source_query_records",["financials/fdic",SNAP,null,null,null,null,0,1,[4]]))).rejects.toThrow(/projection/);
     await expect(as("authenticated",MEMBER,()=>rpc("source_query_records",["another/dataset",SNAP,null,null,null,null,0,1,null]))).rejects.toThrow(/not found/);
   });
