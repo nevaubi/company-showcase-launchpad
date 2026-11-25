@@ -11,10 +11,11 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, open, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { refreshChecked, refreshEligibility, refreshFailure, isRefreshDue, safeRefreshRedirect,
+import { directRefreshProvenance, refreshChecked, refreshEligibility, refreshFailure, isRefreshDue, safeRefreshRedirect,
   type RefreshState, type RefreshEligibility } from "../src/lib/sources/refresh-plan";
 import type { SourceDataset, SourceFileManifest, SourceSnapshot, SourceIngest } from "../src/lib/sources/schema";
 import { stageNativeRefresh } from "./lib/source-refresh-io";
+import { downloadFred } from "./lib/fred-transport";
 import { collectFdicNative, FDIC_BASELINE_DATASET_ID, FDIC_CURRENT_DATASET } from "./lib/fdic-native";
 import { collectTaiwanRevenue, TAIWAN_REVENUE_DATASETS, type TaiwanRevenueMarket } from "./lib/taiwan-revenue-native";
 
@@ -137,7 +138,7 @@ async function planCandidates() {
       if (!snapshot) continue;
       const file = fileByHash.get(snapshot.file_sha256);
       if (!file) throw new Error("Published snapshot has no source file evidence");
-      const eligibility = refreshEligibility(file, snapshot.ingest as SourceIngest, new Date());
+      const eligibility = refreshEligibility(file, snapshot.ingest as SourceIngest, new Date(), dataset.id);
       if (!eligibility.eligible) { skipped.push({ dataset_id: dataset.id, reason: eligibility.reason }); continue; }
       const state = stateByJob.get(stateJob(dataset.id)) ?? {};
       if (options.dataset || isRefreshDue(state, Date.now())) candidates.push({ dataset, snapshot, file, state, eligibility });
@@ -156,6 +157,11 @@ async function downloadOfficial(candidate: Candidate, folder: string, state: Ref
   if (state.last_requested_url === requestedUrl) {
     if (state.etag) headers["If-None-Match"] = state.etag;
     else if (state.last_modified) headers["If-Modified-Since"] = state.last_modified;
+  }
+  const filePath = join(folder, "response.csv" + (candidate.snapshot.ingest.compression ? ".gz" : ""));
+  if (candidate.eligibility.family === "fred") {
+    return await downloadFred({ url: requestedUrl, filePath, userAgent: headers["User-Agent"],
+      etag: headers["If-None-Match"], lastModified: headers["If-Modified-Since"], signal: stop.signal, deadline });
   }
   let response: Response | null = null;
   for (let redirects = 0; redirects <= 3; redirects++) {
@@ -182,7 +188,6 @@ async function downloadOfficial(candidate: Candidate, folder: string, state: Ref
   if (declaredLength !== null && (!Number.isSafeInteger(declaredLength) || declaredLength < 0 || declaredLength > MAX_FILE_BYTES)) {
     await response.body.cancel(); throw new Error("Official source declared an invalid or oversized payload");
   }
-  const filePath = join(folder, "response.csv" + (candidate.snapshot.ingest.compression ? ".gz" : ""));
   const file = await open(filePath, "wx", 0o600);
   const reader = response.body.getReader();
   let bytes = 0;
@@ -235,10 +240,8 @@ async function refreshOne(candidate: Candidate) {
       template: { datasetId: id, previousSnapshotId: baseline.id, previousFileSha256: baseline.file_sha256,
         previousRows: baseline.expected_rows, columns: baseline.columns, ingest: baseline.ingest, coverage: baseline.coverage },
       sourceUrl: downloaded.url, contentType: downloaded.contentType, signal: stop.signal, gate,
-      provenance: { adapter: "official_direct_csv_v1", direct_url: downloaded.url, direct_download_sha256_verified: true,
-        original_direct_url: candidate.file.provenance.direct_url ?? null, response_resolved_url: downloaded.resolvedUrl,
-        http_status: 200, response_etag: downloaded.etag ?? null, response_last_modified: downloaded.lastModified ?? null,
-        family: candidate.eligibility.family, fetched_complete_response: true } });
+      provenance: { ...directRefreshProvenance(candidate.file, candidate.eligibility, downloaded),
+        ...("transport" in downloaded ? { retrieval_transport: downloaded.transport } : {}) } });
     if (result.outcome === "quarantined") {
       await saveState(id, refreshFailure(state, new Date(), result.reason ?? "Refreshed native schema requires review"));
       return { event: "source_refresh_quarantined", dataset_id: id, ...result };

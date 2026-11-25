@@ -37,11 +37,11 @@ The refresh worker polls every five minutes, processes at most eight due dataset
 | --- | --- | --- | --- |
 | FRED | 120 hash-proven direct CSV inputs from the initial bundle | Daily | Original series and lower date bound; a retained upper date bound advances to the current date |
 | EIA Monthly Energy Review | 107 hash-proven direct CSV inputs | Weekly | The original official table identifier and ordered fields |
-| FHFA | The hash-proven annual tract CSV | Weekly | Native tract index rows; the adapter also recognizes the official master CSV path when exact original-byte provenance exists |
+| FHFA | Annual tract CSV and the master HPI CSV | Weekly | Native tract and master index rows, with exact original-byte provenance |
 | FDIC | Current reported quarter for the fixed 2026-Q2 cohort of 500 CERTs | Daily | All returned native fields from the historical field dictionary; reporting coverage and verified omitted fields are explicit |
 | TWSE and TPEx | Two official reported monthly revenue feeds | Daily | Each exchange's complete returned response, native Chinese headers, issuer codes and reported revenue strings; full exchange population completeness is not independently established |
 
-The 228 direct CSV inputs are eligible only after their original snapshots are published. The FDIC current-quarter adapter waits for the verified full historical FDIC baseline. The three native-adapter datasets are additional datasets; historical cohorts and technology-only Taiwan subsets remain intact. `OFFICIAL_FDIC_NATIVE_ENABLED=0` and `OFFICIAL_TAIWAN_REVENUE_ENABLED=0` disable those adapters independently.
+The 229 direct CSV inputs are eligible only after their original snapshots are published. The master HPI CSV uses the reviewed supplement in `refresh-supplements.ts`: only its exact dataset ID, original SHA-256 and complete ingest contract match. The retained raw-download receipt and its own hash establish the URL without rewriting the registered canonical file provenance; later retrievals carry that proof forward. The FDIC current-quarter adapter waits for the verified full historical FDIC baseline. The three native-adapter datasets are additional datasets; historical cohorts and technology-only Taiwan subsets remain intact. `OFFICIAL_FDIC_NATIVE_ENABLED=0` and `OFFICIAL_TAIWAN_REVENUE_ENABLED=0` disable those adapters independently.
 
 ```sh
 bun scripts/source-refresh.ts --all --plan --max-datasets=8
@@ -50,6 +50,8 @@ bun scripts/source-refresh.ts --dataset=<reviewed-dataset-id> --max-runtime-seco
 ```
 
 Source responses are restricted to reviewed HTTPS endpoints with bounded transfers and explicit redirect rules. Complete responses, original hashes and supporting field/identity evidence are retained. Conditional responses and unchanged content update the checked time without manufacturing a new snapshot. A changed response receives a new immutable retrieval event; a source reverting to older bytes also receives a new event so publication chronology remains correct.
+
+FRED CSV transfers use the worker's existing Python 3 runtime with standard TLS verification and the same reviewed endpoint, series and date bounds. The parent creates the output file exclusively, gives the child only that file descriptor and the needed network settings, bounds the transfer and process lifetime, and independently verifies the returned byte count and hash. Cancellation removes only the file created by that attempt. Successful changed responses retain this transport evidence alongside their retrieval provenance; normal staging and importer validation still determine publication.
 
 Every changed table passes header, width, row and hash validation before it is staged. The importer independently verifies and publishes it. A changed header is held for review; the previous published snapshot remains usable. A staged refresh prevents duplicate collection while its import is pending. Per-dataset state lives under `source-refresh-state:<dataset-id>` in `job_state`; separate `source-refresh-lock:<dataset-id>` rows hold collection leases. A checked or staged timestamp is not a publication timestamp. Process receipts use the existing `job_runs` health view; actual row counts come from `source_snapshots`.
 
@@ -76,7 +78,7 @@ Each record response contains at most 20 complete rows and 12 selected fields, o
 
 ## Initial bundle scope
 
-The reviewed bundle contains 17 original archives and 1,056 distinct native tables across 15 collections. Its 21,192,456 rows include overlapping projections and reference tables. Exactly 287 rows in three metadata tables were held because an exact source-registry association was unresolved; their file bytes remain preserved. All other snapshots are initially staging and become visible only as their individual imports pass. These are inventory counts, not a claim of completed publication.
+The reviewed bundle contains 17 original archives and 1,056 distinct native tables across 15 collections. Its 21,192,456 rows include overlapping projections and reference tables. Exactly 287 rows in three metadata tables were held because an exact source-registry association was unresolved; their file bytes remain preserved. At the verified 2026-11-25 06:39 UTC checkpoint, all 1,053 eligible original snapshots were published with exactly 21,192,169 rows and no remaining staging prefix or new failure. The 287 quarantined metadata rows were not published. Later refresh snapshots are counted separately, and the UI reports their current publication state.
 
 ## Verification
 

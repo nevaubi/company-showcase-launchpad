@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { authoritativeCsvUrl, NativeRefreshScanner, refreshChecked, refreshColumns, refreshEligibility, refreshFailure, safeRefreshRedirect } from "./refresh-plan";
 import type { SourceIngest } from "./schema";
+import { FHFA_MASTER_REFRESH_SUPPLEMENT } from "./refresh-supplements";
 
 const ingest: SourceIngest = { format: "csv", encoding: "utf-8", delimiter: ",", header_rows: 1, dimensions: {} };
 describe("official native CSV refresh", () => {
@@ -56,5 +57,28 @@ describe("official native CSV refresh", () => {
     expect(refreshChecked(old, now, 1000, { url: "https://example.test" }).last_success_at).toBe(old.last_success_at);
     expect(refreshFailure(old, now, "upstream failure").last_success_at).toBe(old.last_success_at);
     expect(refreshChecked(old, now, 1000, { url: "https://example.test", stagedSnapshotId: "abc" }).last_success_at).toBe(now.toISOString());
+  });
+  it("uses the FHFA supplement only for the exact dataset, original file hash and complete ingest contract", () => {
+    const proof = FHFA_MASTER_REFRESH_SUPPLEMENT;
+    const file = { sha256: proof.original_file_sha256, provenance: { alias_paths: ["11_real_estate/raw/hpi_master.csv"] } };
+    const before = structuredClone(file), now = new Date("2026-11-25");
+    expect(refreshEligibility(file, proof.expected_ingest, now, proof.dataset_id)).toMatchObject({
+      eligible: true, family: "fhfa", url: proof.direct_url, supplementalProof: proof,
+    });
+    expect(file).toEqual(before);
+    expect(refreshEligibility(file, proof.expected_ingest, now)).toMatchObject({ eligible: false });
+    expect(refreshEligibility(file, proof.expected_ingest, now, "another_dataset")).toMatchObject({ eligible: false });
+    expect(refreshEligibility({ ...file, sha256: "0".repeat(64) }, proof.expected_ingest, now, proof.dataset_id)).toMatchObject({ eligible: false });
+    for (const altered of [
+      { ...proof.expected_ingest, encoding: "windows-1252" as const },
+      { ...proof.expected_ingest, dimensions: { ...proof.expected_ingest.dimensions, period: 7 } },
+      { ...proof.expected_ingest, constants: { source_url: proof.direct_url } },
+      { ...proof.expected_ingest, null_values: [""] },
+      { ...proof.expected_ingest, compression: "gzip" as const },
+    ]) expect(refreshEligibility(file, altered, now, proof.dataset_id)).toMatchObject({ eligible: false });
+    // Database JSON serialization can change key order without changing the contract.
+    const reordered: SourceIngest = { constants: proof.expected_ingest.constants, dimensions: { geo_name: 4, geo_code: 5, period: 6, geo_level: 3 },
+      delimiter: ",", header_rows: 1, encoding: "utf-8", format: "csv" };
+    expect(refreshEligibility(file, reordered, now, proof.dataset_id)).toMatchObject({ eligible: true });
   });
 });

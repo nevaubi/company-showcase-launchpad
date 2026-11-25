@@ -1,5 +1,10 @@
 # Filed Under — roadmap
 
+## Final reviewed FHFA + FRED patch (Nov 25)
+- [x] Verified archive and all ten reviewed file/base hashes; applied byte-exactly with no conflicts.
+- [x] All 18 Python and 28 focused tests passed; automatic preview production build OK. FHFA changed and was staged normally, then published by the persistent importer: 187,213 rows, original 186,031-row snapshot retained. No schema/auth changes, Render redeployment or app publication.
+- [ ] FRED live transport check remains blocked by the actual 120-second download deadline on both normal attempts; 1,402-row published baseline and pointer remain intact. Normal error state retained (4 failures; next due 2026-11-25T11:04:52.202Z); no lease override or validation changes. Receipt: `/tmp/official-rollout/final-refresh-patch/receipt.json`.
+
 ## Official source phase two (Nov 25)
 - [x] Applied all 22 reviewed files byte-exactly after verifying the ZIP and every file/base hash against `cd3b2153b81a165048157689c980b260d2b30203`; no conflicts or unrelated source changes.
 - [x] 106 focused refresh/native-adapter/research/worker tests passed across 11 test files; automatic preview build OK. No migration, bulk collection, imports, publication or Render deployment started in this code-application turn.

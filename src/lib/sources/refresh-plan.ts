@@ -1,9 +1,10 @@
 /** Refresh planning and CSV validation. No I/O, numeric inference or publication. */
 import { NativeCsvReader } from "./csv";
-import type { SourceColumn, SourceFileManifest, SourceIngest } from "./schema";
+import { supplementalRefreshProof, type SupplementalRefreshProof } from "./refresh-supplements";
+import type { SourceColumn, SourceFileManifest, SourceIngest, SourceJson } from "./schema";
 
 export type RefreshFamily = "fred" | "fhfa" | "eia_mer";
-export type RefreshEligibility = { eligible: true; family: RefreshFamily; url: string; intervalMs: number }
+export type RefreshEligibility = { eligible: true; family: RefreshFamily; url: string; intervalMs: number; supplementalProof?: SupplementalRefreshProof }
   | { eligible: false; reason: string };
 export type RefreshState = {
   last_attempt_at?: string;
@@ -42,10 +43,14 @@ export function authoritativeCsvUrl(value: string): { family: RefreshFamily; url
   return null;
 }
 
-export function refreshEligibility(file: Pick<SourceFileManifest, "provenance">, ingest: SourceIngest, now: Date): RefreshEligibility {
-  const direct = file.provenance.direct_url;
+export function refreshEligibility(file: Pick<SourceFileManifest, "provenance"> & Partial<Pick<SourceFileManifest, "sha256">>,
+  ingest: SourceIngest, now: Date, datasetId?: string): RefreshEligibility {
+  let direct = file.provenance.direct_url;
+  let supplemental: SupplementalRefreshProof | null = null;
   if (typeof direct !== "string" || file.provenance.direct_download_sha256_verified !== true) {
-    return { eligible: false, reason: "No hash-proven original direct CSV download; derived tables and JSON APIs require their own reviewed adapter." };
+    supplemental = supplementalRefreshProof(datasetId, file.sha256, ingest);
+    if (!supplemental) return { eligible: false, reason: "No hash-proven original direct CSV download; derived tables and JSON APIs require their own reviewed adapter." };
+    direct = supplemental.direct_url;
   }
   const trusted = authoritativeCsvUrl(direct);
   if (!trusted) return { eligible: false, reason: "Direct endpoint is outside the reviewed official CSV families; a separate adapter is required." };
@@ -53,7 +58,21 @@ export function refreshEligibility(file: Pick<SourceFileManifest, "provenance">,
   // Retained FRED URLs often end at the old collection date. Advance only that
   // documented upper date bound; preserve series IDs and the original lower bound.
   if (trusted.family === "fred" && trusted.url.searchParams.has("coed")) trusted.url.searchParams.set("coed", now.toISOString().slice(0, 10));
-  return { eligible: true, family: trusted.family, url: trusted.url.href, intervalMs: trusted.family === "fred" ? DAY : 7 * DAY };
+  return { eligible: true, family: trusted.family, url: trusted.url.href, intervalMs: trusted.family === "fred" ? DAY : 7 * DAY,
+    ...(supplemental ? { supplementalProof: supplemental } : {}) };
+}
+
+/** Evidence for a newly fetched response; never writes back to the old file record. */
+export function directRefreshProvenance(file: Pick<SourceFileManifest, "provenance">,
+  eligibility: Extract<RefreshEligibility, { eligible: true }>,
+  response: { url: string; resolvedUrl: string; etag?: string; lastModified?: string }): Record<string, SourceJson> {
+  const supplemental = eligibility.supplementalProof ?? file.provenance.supplemental_original_download_evidence;
+  return { adapter: "official_direct_csv_v1", direct_url: response.url, direct_download_sha256_verified: true,
+    original_direct_url: file.provenance.direct_url ?? eligibility.supplementalProof?.direct_url ?? null,
+    response_resolved_url: response.resolvedUrl, http_status: 200,
+    response_etag: response.etag ?? null, response_last_modified: response.lastModified ?? null,
+    family: eligibility.family, fetched_complete_response: true,
+    ...(supplemental ? { supplemental_original_download_evidence: supplemental } : {}) };
 }
 
 export function safeRefreshRedirect(initial: string, redirected: string): boolean {

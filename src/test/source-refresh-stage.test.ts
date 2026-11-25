@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { stageNativeRefresh, type NativeRefreshTemplate } from "../../scripts/lib/source-refresh-io";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { directRefreshProvenance, refreshEligibility } from "../lib/sources/refresh-plan";
+import { FHFA_MASTER_REFRESH_SUPPLEMENT } from "../lib/sources/refresh-supplements";
+import type { SourceFileManifest, SourceIngest } from "../lib/sources/schema";
 
 const folders: string[] = [];
 afterEach(async () => { await Promise.all(folders.splice(0).map(folder => rm(folder, { recursive: true, force: true }))); });
@@ -104,5 +107,33 @@ describe("immutable refresh staging", () => {
       requested_field_count: 3, returned_field_count: 2, requested_but_not_returned_fields: ["legacy"],
       requested_but_not_returned_count: 1, omission_verified: true, quarantined: true, header_matches_previous: false, expected_row_count_known: true,
     });
+  });
+  it("retains supplemental original evidence on a new file/snapshot and then uses ordinary direct provenance", async () => {
+    const proof = FHFA_MASTER_REFRESH_SUPPLEMENT;
+    const baselineFile = { sha256: proof.original_file_sha256, provenance: {} };
+    const eligible = refreshEligibility(baselineFile, proof.expected_ingest, new Date("2026-11-25"), proof.dataset_id);
+    if (!eligible.eligible) throw new Error("Pinned baseline fixture was not eligible");
+    const provenance = directRefreshProvenance(baselineFile, eligible, { url: proof.direct_url, resolvedUrl: proof.direct_url });
+    const headers = "hpi_type,hpi_flavor,frequency,level,place_name,place_id,yr,period,index_nsa,index_sa,rstderr,note";
+    const filePath = await localFile(`${headers}\ntraditional,all-transactions,quarterly,State,Alabama,01,2026,2,337.12,,,\n`), db = client();
+    const result = await stageNativeRefresh({ sb: db.sb, template: { ...template, datasetId: proof.dataset_id,
+      previousFileSha256: proof.original_file_sha256, ingest: proof.expected_ingest,
+      columns: headers.split(",").map((label, i) => ({ key: `col${String(i + 1).padStart(4, "0")}`, label, type: "string" })) },
+      filePath, retrievedAt: "2026-11-25T12:00:00Z", provenance, sourceUrl: proof.direct_url, signal: new AbortController().signal });
+    expect(result.outcome).toBe("staged");
+    const newFile = db.writes.find(w => w.table === "source_files")!.row as SourceFileManifest;
+    const snapshot = db.writes.find(w => w.table === "source_snapshots")!.row;
+    expect(newFile.sha256).not.toBe(proof.original_file_sha256);
+    expect(newFile.provenance).toMatchObject({ direct_url: proof.direct_url, direct_download_sha256_verified: true,
+      supplemental_original_download_evidence: proof });
+    expect(snapshot.coverage).toMatchObject({ refresh_provenance: { supplemental_original_download_evidence: proof } });
+    // The new file no longer matches the exception. Its own exact-download proof is sufficient.
+    const next = refreshEligibility(newFile, snapshot.ingest as SourceIngest, new Date("2026-12-02"));
+    expect(next).toMatchObject({ eligible: true, family: "fhfa", url: proof.direct_url });
+    expect(next).not.toHaveProperty("supplementalProof");
+    if (next.eligible) expect(directRefreshProvenance(newFile, next, { url: proof.direct_url, resolvedUrl: proof.direct_url }))
+      .toMatchObject({ supplemental_original_download_evidence: proof });
+    expect(baselineFile.provenance).toEqual({});
+    expect(db.update).not.toHaveBeenCalled();
   });
 });
