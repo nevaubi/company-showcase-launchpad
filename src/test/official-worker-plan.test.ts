@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ABS_IDLE_RECHECK_MS,
   ABS_MOVE_PAUSE_MS,
+  ABS_STAY_MAX_MS,
   ABS_STAY_MAX_RUNS,
   ABS_STAY_PAUSE_MS,
   absAfterRun,
@@ -106,12 +107,12 @@ describe("ABS lane rotation (review rev-workers S7)", () => {
   const NOW = Date.parse("2026-11-25T19:00:00Z");
   it("stays on a CIK while its run leaves filings to do, without listing it again", () => {
     const after = absAfterRun({ count: 91, index: 7, exitCode: 0, left: 31, stay: null, now: NOW });
-    expect(after).toEqual({ seen: { at: NOW, left: 31 }, stay: { index: 7, runs: 1 }, cursor: 7, pauseMs: ABS_STAY_PAUSE_MS });
+    expect(after).toEqual({ seen: { at: NOW, left: 31 }, stay: { index: 7, runs: 1, since: NOW }, cursor: 7, pauseMs: ABS_STAY_PAUSE_MS });
     expect(absNextTurn({ count: 91, cursor: 7, seen: new Map([[7, after.seen!]]), stay: after.stay, now: NOW + 5_000 })).toEqual({ index: 7, command: "load" });
   });
 
   it("moves on when nothing is left, a minute later, and lists the next CIK", () => {
-    const after = absAfterRun({ count: 91, index: 90, exitCode: 0, left: 0, stay: { index: 90, runs: 3 }, now: NOW });
+    const after = absAfterRun({ count: 91, index: 90, exitCode: 0, left: 0, stay: { index: 90, runs: 3, since: NOW - 600_000 }, now: NOW });
     expect(after).toEqual({ seen: { at: NOW, left: 0 }, stay: null, cursor: 0, pauseMs: ABS_MOVE_PAUSE_MS });
     expect(absNextTurn({ count: 91, cursor: 0, seen: new Map(), stay: null, now: NOW })).toEqual({ index: 0, command: "run" });
   });
@@ -128,14 +129,14 @@ describe("ABS lane rotation (review rev-workers S7)", () => {
   });
 
   it("gives the other CIKs a turn after a long stay, and comes back on the next pass", () => {
-    const stay: AbsStay = { index: 4, runs: ABS_STAY_MAX_RUNS - 1 };
+    const stay: AbsStay = { index: 4, runs: ABS_STAY_MAX_RUNS - 1, since: NOW - 600_000 };
     const after = absAfterRun({ count: 91, index: 4, exitCode: 0, left: 12, stay, now: NOW });
     expect(after).toMatchObject({ stay: null, cursor: 5, seen: { left: 12 } });
   });
 
   it("a failed run keeps the cursor and forgets the CIK, so it is retried after the backoff", () => {
     // a discover cut by an SEC outage reports no filings left; the CIK must not look idle for an hour
-    expect(absAfterRun({ count: 91, index: 12, exitCode: 1, left: null, stay: { index: 12, runs: 2 }, now: NOW }))
+    expect(absAfterRun({ count: 91, index: 12, exitCode: 1, left: null, stay: { index: 12, runs: 2, since: NOW }, now: NOW }))
       .toEqual({ seen: null, stay: null, cursor: 12, pauseMs: null });
   });
 
@@ -147,6 +148,16 @@ describe("ABS lane rotation (review rev-workers S7)", () => {
     expect(absLeftFromReceipt(null, 1974820)).toBeNull();
   });
 
+  it("leaves a CIK after an hour of one stay, counted from the start of its first run, even with filings left", () => {
+    const first = absAfterRun({ count: 91, index: 7, exitCode: 0, left: 500, stay: null, now: NOW + 20 * 60_000, startedAt: NOW });
+    expect(first.stay).toEqual({ index: 7, runs: 1, since: NOW });
+    expect(absNextTurn({ count: 91, cursor: 7, seen: new Map([[7, first.seen!]]), stay: first.stay, now: NOW + 59 * 60_000 })).toEqual({ index: 7, command: "load" });
+    // the run that ends past the hour moves the rotation on
+    const later = absAfterRun({ count: 91, index: 7, exitCode: 0, left: 480, stay: { index: 7, runs: 6, since: NOW }, now: NOW + ABS_STAY_MAX_MS });
+    expect(later).toMatchObject({ stay: null, cursor: 8, pauseMs: ABS_MOVE_PAUSE_MS, seen: { left: 480 } });
+    // a stay remembered across the hour is not taken up again
+    expect(absNextTurn({ count: 91, cursor: 7, seen: new Map(), stay: { index: 7, runs: 3, since: NOW }, now: NOW + ABS_STAY_MAX_MS })).toEqual({ index: 7, command: "run" });
+  });
   it("works through production's backlog in about a tenth of the old rotation's turns", () => {
     // 25 Nov: 305 filings in range in 9 of 91 CIKs; 3 filings a run. The old rotation took one CIK a
     // turn and needed 30 passes of 91 turns (2,730) for the longest queue.

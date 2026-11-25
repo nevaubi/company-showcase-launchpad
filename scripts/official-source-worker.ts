@@ -338,6 +338,7 @@ async function absLoop() {
           ...(w.from ? [`--from=${w.from}`] : []),
         ];
         // One importer process at a time, under this lane's lease; it keeps SEC at two requests a second.
+        const runStarted = Date.now();
         const { code, told } = await childRun(lease, "scripts/abs-ee.ts", args, 25 * 60_000);
         // The durable provenance is in abs_*; these are re-fetchable copies owned by this worker.
         // Pruning occurs only after the child exits, so no active reader loses its file.
@@ -355,6 +356,7 @@ async function absLoop() {
             left: absLeftFromReceipt(told, w.cik),
             stay,
             now: Date.now(),
+            startedAt: runStarted,
           });
           if (after.seen) seen.set(turn.index, after.seen);
           else seen.delete(turn.index);

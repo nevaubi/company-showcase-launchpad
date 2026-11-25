@@ -85,16 +85,19 @@ export const ABS_STAY_PAUSE_MS = 5_000;
 export const ABS_MOVE_PAUSE_MS = 60_000;
 /** Runs in a row on one CIK before the others get a turn; the CIK is taken up again on the next pass. */
 export const ABS_STAY_MAX_RUNS = 40;
+/** The longest one stay on a CIK lasts, from the start of its first run, so other deals' new filings wait at most this (review int-code N8). */
+export const ABS_STAY_MAX_MS = 60 * 60_000;
 
 /** What the lane remembers of a CIK in this process: when it was last worked and what it had left. */
 export type AbsSeen = { at: number; left: number };
-export type AbsStay = { index: number; runs: number };
+/** The CIK the lane stays on, the runs so far and when the first of them started. */
+export type AbsStay = { index: number; runs: number; since: number };
 export type AbsTurn = { index: number; command: "run" | "load" } | { waitMs: number };
 
 /**
  * Which watched CIK the ABS lane works next, by its index in the watch list. While a CIK's last run
  * left filings to do, it is worked again (`load`: its listing was read at the start of this visit),
- * up to `ABS_STAY_MAX_RUNS` runs in a row. Otherwise the rotation goes on from `cursor` to the first CIK
+ * up to `ABS_STAY_MAX_RUNS` runs in a row and `ABS_STAY_MAX_MS` from the start of the first. Otherwise the rotation goes on from `cursor` to the first CIK
  * not looked at in this process, or with work left, or idle for an hour, and lists it again (`run`).
  * When every CIK was idle within the hour, the lane waits for the first one to come due.
  */
@@ -107,7 +110,7 @@ export function absNextTurn(i: {
 }): AbsTurn {
   if (!Number.isSafeInteger(i.count) || i.count <= 0) return { waitMs: ABS_IDLE_RECHECK_MS };
   const start = ((i.cursor % i.count) + i.count) % i.count;
-  if (i.stay && i.stay.index === start && i.stay.runs < ABS_STAY_MAX_RUNS) return { index: start, command: "load" };
+  if (i.stay && i.stay.index === start && i.stay.runs < ABS_STAY_MAX_RUNS && i.now - i.stay.since < ABS_STAY_MAX_MS) return { index: start, command: "load" };
   let soonest = Infinity;
   for (let step = 0; step < i.count; step++) {
     const index = (start + step) % i.count;
@@ -132,12 +135,16 @@ export function absAfterRun(i: {
   left: number | null;
   stay: AbsStay | null;
   now: number;
+  /** When this run started (the start of a stay); `now` when not given. */
+  startedAt?: number;
 }): { seen: AbsSeen | null; stay: AbsStay | null; cursor: number; pauseMs: number | null } {
   const left = i.left !== null && Number.isSafeInteger(i.left) && i.left > 0 ? i.left : 0;
   if (i.exitCode !== 0) return { seen: null, stay: null, cursor: i.index, pauseMs: null };
-  const runs = i.stay?.index === i.index ? i.stay.runs + 1 : 1;
-  if (left > 0 && runs < ABS_STAY_MAX_RUNS)
-    return { seen: { at: i.now, left }, stay: { index: i.index, runs }, cursor: i.index, pauseMs: ABS_STAY_PAUSE_MS };
+  const staying = i.stay?.index === i.index;
+  const runs = staying ? i.stay!.runs + 1 : 1;
+  const since = staying ? i.stay!.since : (i.startedAt ?? i.now);
+  if (left > 0 && runs < ABS_STAY_MAX_RUNS && i.now - since < ABS_STAY_MAX_MS)
+    return { seen: { at: i.now, left }, stay: { index: i.index, runs, since }, cursor: i.index, pauseMs: ABS_STAY_PAUSE_MS };
   return { seen: { at: i.now, left }, stay: null, cursor: (i.index + 1) % Math.max(1, i.count), pauseMs: ABS_MOVE_PAUSE_MS };
 }
 
