@@ -25,3 +25,15 @@ production).
 
 Notes for the screens: every field in these dictionaries is typed `string`; 2026 is the publisher's current-year row
 (the dictionary does not say whether the year is complete); the MSHA table has no place names, so `name` is null.
+
+## `library.json` (`getLibraryWire`; `getLibrary()` answers `{ ok: true, data: unpackLibrary(result.data) }`)
+
+The real library for two whole collections, 04_energy (144 tables) and 11_real_estate (36), so the file stays under
+40 kB; production has all 1,059 datasets (measured: about 197 kB packed for all of them, 648 kB as objects). Built
+by `/home/claude/work/r4/sqlfn/gen-library.ts` with the real `buildLibrary` from: the production dataset list of unit
+`catalog` (all 1,059 rows; md5 `3b296784e52d2037203b6460d98ae9f3` of its canonical lines recomputed on production
+and equal); the 277 published snapshots of those collections (checksum transfer: rows, fields, publication second,
+dimension set, refresh family, latest or not); the four snapshot ids its two single-dataset groups show (md5 checked
+on production). Publication times are at second precision, as the packed rows carry them. It shows the EIA Monthly
+Energy Review refreshes (groups of 53 and 31 tables on 25 Nov), the FHFA master index version (186,031 to 187,213
+records) and the first-publication run of 05:31 to 06:36 across nine publishers.

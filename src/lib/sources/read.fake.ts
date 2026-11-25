@@ -33,13 +33,20 @@ export class FakeSourceDb implements SourceDirectClient {
     return this.tables.source_datasets.filter(d => ready.has(d.latest_snapshot_id));
   }
 }
+/** A column or a PostgREST JSON path (`values->>3`, `ingest->dimensions`, `coverage->refresh_provenance->>family`). */
 function cell(row: Row, column: string): unknown {
-  const m = /^values->>(\d+)$/.exec(column);
-  if (m) {
-    const v = (row.values as unknown[])[Number(m[1])];
-    return v === undefined ? null : v;
+  const parts = column.split(/(->>?)/);
+  let v: unknown = row[parts[0]];
+  for (let i = 1; i < parts.length; i += 2) {
+    const [op, key] = [parts[i], parts[i + 1]];
+    if (v === null || v === undefined) return null;
+    if (Array.isArray(v) && /^-?\d+$/.test(key)) v = v[Number(key) < 0 ? v.length + Number(key) : Number(key)];
+    else if (typeof v === "object" && !Array.isArray(v)) v = (v as Row)[key];
+    else return null;
+    if (v === undefined) return null;
+    if (op === "->>") return v === null ? null : typeof v === "string" ? v : JSON.stringify(v);
   }
-  return row[column];
+  return v;
 }
 const cmp = (a: unknown, b: unknown) => (typeof a === "number" && typeof b === "number" ? a - b : String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0);
 class FakeSelect implements SourceSelect {

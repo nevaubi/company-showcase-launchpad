@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { requireAppAccess } from "@/lib/app-access-middleware";
 import {
   completenessReadInput, crossSectionReadInput, entitiesReadInput, facetsReadInput, findReadInput,
-  periodRangeReadInput, recordReadInput, seriesReadInput, statsReadInput,
+  periodRangeReadInput, recordReadInput, seriesReadInput, statsReadInput, unpackLibrary,
+  type SourceLibrary, type SourceRead,
 } from "./read-types";
 import type { SourceDirectClient } from "./read.server";
 
@@ -87,3 +88,17 @@ export const getSnapshotStats = createServerFn({ method: "POST" })
     const { readSnapshotStats } = await import("./read.server");
     return readSnapshotStats(client(context), data);
   });
+
+/** The landing in one call, packed for the wire. Most callers want `getLibrary`, which unpacks it. */
+export const getLibraryWire = createServerFn({ method: "POST" })
+  .middleware([requireAppAccess])
+  .handler(async ({ context }) => {
+    const { readLibraryWire } = await import("./read.server");
+    return readLibraryWire(client(context));
+  });
+
+/** The landing in one call: totals, collections, publishers, changes and one slim row per dataset. */
+export async function getLibrary(): Promise<SourceRead<SourceLibrary>> {
+  const wire = await getLibraryWire();
+  return wire.ok ? { ok: true, data: unpackLibrary(wire.data) } : wire;
+}
