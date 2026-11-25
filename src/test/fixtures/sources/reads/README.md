@@ -37,3 +37,14 @@ dimension set, refresh family, latest or not); the four snapshot ids its two sin
 on production). Publication times are at second precision, as the packed rows carry them. It shows the EIA Monthly
 Energy Review refreshes (groups of 53 and 31 tables on 25 Nov), the FHFA master index version (186,031 to 187,213
 records) and the first-publication run of 05:31 to 06:36 across nine publishers.
+
+## Reads that need 0069: `facets.json` (`getSourceFacets`), `snapshot-stats.json` (`getSnapshotStats`)
+
+Produced by the real read functions calling the real SQL of migration 0069 (`/home/claude/work/r4/sqlfn/gen-0069-fixtures.ts`)
+as a member under row-level security on a local PostgreSQL 16 database (`sqlfn_fixture_test`) that holds the MSHA
+snapshot with its dimension columns exactly as production stores them: row number, year and state of all 686 rows
+(checksum transfer, one line per state, cross-checked against the 51 full rows above). Cells other than year and
+state are blank locally for 635 rows; neither read returns cells. Facets: the 26 state codes with their exact
+record counts (Arkansas 23, Kansas 17, Oklahoma 25, the others 27). Statistics: periods 2000 to 2026, 27 periods,
+26 places, no entities; `computedAt` is the local run's time. `findSources` has no fixture: a faithful answer needs
+every dictionary of the 1,059 tables; its shape is in `read-types.ts` and the database test asserts it.
