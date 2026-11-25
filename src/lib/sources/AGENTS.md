@@ -4,7 +4,7 @@ Official records are 1,059 published tables of agencies and regulators (migratio
 
 ## Accuracy (binds every screen, panel and tool)
 - A stored cell is shown as stored. Blank (`""`), null, zero and a disclosure marker ("NM", "W", ".") are four different things. Missing is an en dash "–", never an em dash, never zero.
-- Numbers come only from `numbers.ts` (`readNative`: a plain decimal or nothing), only for a field `fields.ts` calls a quantity, and never rescaled. The unit goes on the axis or column head exactly as the dictionary or a reviewed profile states it.
+- Numbers come only from `numbers.ts` (`readNative`: a plain decimal or nothing), only for a field `fields.ts` calls a quantity, and never rescaled, with one exception: a board headline and its axis may show a reader scale ("$24.07 trillion") for a unit on the tested whitelist in `boards/scale.ts`, computed with exact decimal arithmetic, with the stored figure and unit as filed printed beneath it. Sentences, tooltips, tables and records keep the stored figure. Otherwise the unit goes on the axis or column head exactly as the dictionary or a reviewed profile states it.
 - `fieldRole`: the dictionary alone makes a quantity only from a numeric `native_type` and a unit that states a quantity. Every live field is `type: "string"` (the store's type), so `type` proves nothing. Identifiers and dates are never quantities, whatever a hint says.
 - Periods are parsed only by a declared or unanimously detected format (`periods.ts`); anything else stays a category in code-point order. The Taiwan ROC month is never detected, only declared.
 - Every figure traces to dataset, snapshot (immutable), row and field. Link it with `recordHref` / `datasetHref` (`links.ts`); never build an address by hand.
