@@ -24,9 +24,9 @@ const ROW_H = 29;
 export function pageWords(page: RecordPage, order: RecordOrder, filtered: boolean, total: number, format: PeriodFormat): string {
   const n = page.rows.length;
   if (page.scan) {
-    const read = `Read rows ${count(page.scan.from)} to ${count(page.scan.to)} of ${count(total)}`;
-    if (!n) return page.scan.complete ? `${read}: no name matches.` : `${read}: no match yet.`;
-    return `${read}: ${count(n)} ${n === 1 ? "match" : "matches"} on this page.`;
+    const upTo = `up to row ${count(page.scan.to)} of ${count(total)}`;
+    if (!n) return page.scan.complete ? `No match ${upTo}, the end of the table.` : `No match ${upTo}. This search read rows ${count(page.scan.from)} to ${count(page.scan.to)}.`;
+    return `${count(n)} ${n === 1 ? "match" : "matches"} on this page, ${upTo}${page.scan.complete ? ", the end of the table" : ""}.`;
   }
   if (!n) return filtered ? "No records match these filters." : "No records here.";
   const first = page.rows[0];
@@ -185,7 +185,7 @@ export function RecordsSection({
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <p className="min-w-0 text-[11px] leading-4 text-muted-foreground" aria-live="polite">
             {page ? pageWords(page, order, filtered, snapshot.loaded_rows, format) : query.isPending ? "Reading records" : ""}
-            {page?.scan && !page.scan.complete && page.next !== null && !page.rows.length ? " Press Keep searching to read further." : ""}
+            {page?.scan && !page.scan.complete && page.next !== null && !page.rows.length ? " Keep searching reads the next 50,000 rows." : ""}
           </p>
           <div className="ml-auto flex items-center gap-1">
             <Button
