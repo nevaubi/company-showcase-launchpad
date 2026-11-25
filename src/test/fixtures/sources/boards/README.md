@@ -1,6 +1,6 @@
 # Fixtures of the boards unit (round 4)
 
-Real production rows, read on 25 Nov 2026 with bounded selects (one snapshot each) and copied with the checksum-verified transfer of round 2 (`/home/claude/fu/round2/TRANSFER.md`): every line was returned with an md5 prefix and checked with `linecheck.py` before the checksum column was dropped. Nothing here was typed by hand or edited.
+Real production rows, read on 25 Nov 2026 with bounded selects (one snapshot each) and copied with the checksum-verified transfer of round 2: every line was returned with an md5 prefix and checked with `linecheck.py` before the checksum column was dropped. Nothing here was typed by hand or edited.
 
 | File | Lines | Source (dataset, snapshot) | Columns |
 | --- | ---: | --- | --- |
@@ -12,4 +12,4 @@ Real production rows, read on 25 Nov 2026 with bounded selects (one snapshot eac
 | `fhfa-usa-purchase-only.txt` | 48 | FHFA master (`ed72e8d4...`), geo_code USA, rows 4243 to 4290 | `hpi_type`, `hpi_flavor`, `frequency`, `row_number`, `yr`, `period`, `index_nsa`, `index_sa`, record period |
 | `datasets.json` | 26 | `source_datasets` joined to the latest `source_snapshots` | id, name, sector, agency, source id and address, grain, snapshot id, retrieval and publication times, rows, fields. Three stored names and grains had a long dash, a multiplication sign or a middle dot; they are written here with a comma or "by" |
 
-Checks against the publishers on the same day (scripts in `/home/claude/work/r4/boards/scripts/`): every MER row equals EIA's CSV of its table; the FHFA rows equal `hpi_master.csv`; the FDIC CB rows 2023 to 2025 and the ten largest institutions equal the FDIC API; FRED rows equal FRED's graph files except later revisions published after the 24 Nov retrieval (GDPC1, PCEPI, MSPNHSUS, CSUSHPINSA, DGORDER, TOTALSA, ICSA: listed in the boards report) and IPMAN, which FRED has since rebased.
+Checks against the publishers on the same day (scripts of unit boards, kept outside the repository): every MER row equals EIA's CSV of its table; the FHFA rows equal `hpi_master.csv`; the FDIC CB rows 2023 to 2025 and the ten largest institutions equal the FDIC API; FRED rows equal FRED's graph files except later revisions published after the 24 Nov retrieval (GDPC1, PCEPI, MSPNHSUS, CSUSHPINSA, DGORDER, TOTALSA, ICSA: listed in the boards report) and IPMAN, which FRED has since rebased.

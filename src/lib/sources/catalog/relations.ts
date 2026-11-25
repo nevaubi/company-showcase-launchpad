@@ -8,7 +8,7 @@ import type { CatalogInput, CatalogIssue, CatalogKind } from "./types";
  *
  * Three sources, in this order of precedence:
  * 1. `AUDIT`: relations the audit of 25 Nov 2026 established by reading rows and counts
- *    (`/home/claude/fu/round4/reports/data.md`, sections 1 and 5).
+ *    (the round 4 data audit, sections 1 and 5).
  * 2. `audit-roles.json` and `audit-parents.json`: the role each latest snapshot declares in
  *    `coverage.population_role` and the parent its `coverage.overlaps_files` names, read from
  *    production on 25 Nov 2026 (72 roles, 52 single parents).

@@ -4,9 +4,9 @@ One real answer per read of `src/lib/sources/read.functions.ts`, as `{ read, inp
 exactly the `SourceRead<T>` the server function returns. UI previews answer the server functions with `result`.
 
 How they were made (25 Nov 2026, about 20:45 UTC): rows were copied from production with small selects and the
-checksum-verified line transfer (`/home/claude/fu/round2/TRANSFER.md`, every line verified by `linecheck.py`); the
+checksum-verified line transfer of round 2 (every line verified by `linecheck.py`); the
 two snapshot rows were copied as JSON and verified by comparing `md5(to_jsonb(row)::text)` on production with the
-same digest of the local copy. The generator `/home/claude/work/r4/sqlfn/gen-fixtures.ts` loads them into the fake
+same digest of the local copy. The generator of unit reads (`gen-fixtures.ts`, kept outside the repository) loads them into the fake
 member client (`src/lib/sources/read.fake.ts`) and calls the real read functions. The fake held exactly the rows
 each select returns on production for these inputs: all 27 rows with geo code WV, all 24 rows of period 2026, and
 rows 1 and 686 of the MSHA snapshot (its least and greatest period strings, 2000 and 2026, were checked on
@@ -30,7 +30,7 @@ Notes for the screens: every field in these dictionaries is typed `string`; 2026
 
 The real library for two whole collections, 04_energy (144 tables) and 11_real_estate (36), so the file stays under
 40 kB; production has all 1,059 datasets (measured: about 197 kB packed for all of them, 648 kB as objects). Built
-by `/home/claude/work/r4/sqlfn/gen-library.ts` with the real `buildLibrary` from: the production dataset list of unit
+by unit reads' `gen-library.ts` (kept outside the repository) with the real `buildLibrary` from: the production dataset list of unit
 `catalog` (all 1,059 rows; md5 `3b296784e52d2037203b6460d98ae9f3` of its canonical lines recomputed on production
 and equal); the 277 published snapshots of those collections (checksum transfer: rows, fields, publication second,
 dimension set, refresh family, latest or not); the four snapshot ids its two single-dataset groups show (md5 checked
@@ -40,7 +40,7 @@ records) and the first-publication run of 05:31 to 06:36 across nine publishers.
 
 ## Reads that need 0069: `facets.json` (`getSourceFacets`), `snapshot-stats.json` (`getSnapshotStats`)
 
-Produced by the real read functions calling the real SQL of migration 0069 (`/home/claude/work/r4/sqlfn/gen-0069-fixtures.ts`)
+Produced by the real read functions calling the real SQL of migration 0069 (unit reads' `gen-0069-fixtures.ts`, kept outside the repository)
 as a member under row-level security on a local PostgreSQL 16 database (`sqlfn_fixture_test`) that holds the MSHA
 snapshot with its dimension columns exactly as production stores them: row number, year and state of all 686 rows
 (checksum transfer, one line per state, cross-checked against the 51 full rows above). Cells other than year and

@@ -1,7 +1,7 @@
 # Official dataset details (test fixtures)
 
 Answers of `source_get_dataset` for nine production datasets of different shapes, copied on 25 Nov 2026 from the
-unit `ux` preview kit (`/home/claude/wt/r4-ux/.preview/fx/sources/detail/`, built from production rows with the
+unit `ux` preview kit (its `.preview/fx/sources/detail/` folder, built from production rows with the
 checksum-verified transfer; its README says what each file holds). `file` (chunk paths and provenance) is dropped
 from every copy. Stored strings are kept exactly; two stored dataset names contain U+2014, written here as the JSON
 escape `\u2014`, which parses to the same string.
