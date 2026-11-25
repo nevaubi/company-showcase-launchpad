@@ -106,7 +106,7 @@ describe("name rules", () => {
   });
 
   it("recognises a name that is still a code or a file stem", () => {
-    for (const bare of ["UNRATE", "FS220", "BHCF20260630", "S1282 1 t", "F4 3 s", "aircraft assets", "MER T01.01", ""]) {
+    for (const bare of ["UNRATE", "FS220", "BHCF20260630", "S1282 1 t", "F4 3 s", "M3s A", "aircraft assets", "MER T01.01", ""]) {
       expect(isBareName(bare)).toBe(true);
     }
     for (const written of ["FDIC drug applications", "Largest 500 insured banks at 2026Q2", "H.8 monthly all-bank headline balances"]) {

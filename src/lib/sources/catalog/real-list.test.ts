@@ -17,7 +17,7 @@ const LIST = fixture.datasets as CatalogInput[];
 const TITLES = generatedTitles as Record<string, { title: string; code?: string; source: string }>;
 
 /** Titles that are still a code or a file stem: no official listing could be matched yet. */
-const UNTITLED = 162;
+const UNTITLED = 167;
 
 const QUARANTINED = [
   "official_01_financials_data_financials_authoritative_source_registry_c42083680a",
