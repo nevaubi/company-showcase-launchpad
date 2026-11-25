@@ -1,0 +1,177 @@
+{
+ "read": "getSourceSeries",
+ "input": {
+  "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+  "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+  "field": "col0004",
+  "address": {
+   "by": "geo_code",
+   "key": "WV"
+  }
+ },
+ "result": {
+  "ok": true,
+  "data": {
+   "snapshot": {
+    "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+    "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+    "publishedAt": "2026-11-25T06:10:19.876385+00:00",
+    "retrievedAt": "2026-11-24T09:55:53.865453+00:00",
+    "fileSha256": "c32bc8aafd02953e419a18074d531110e759d8b791c4566d345d5abbe5b96ee7",
+    "rows": 686,
+    "fields": 5
+   },
+   "field": {
+    "basis": "workbook_units",
+    "key": "col0004",
+    "label": "ANNUAL_COAL_PROD",
+    "type": "string",
+    "unit": "short tons clean coal",
+    "position": 3
+   },
+   "address": {
+    "by": "geo_code",
+    "key": "WV"
+   },
+   "where": [],
+   "points": [
+    {
+     "row": 25,
+     "period": "2000",
+     "text": "164749864.0"
+    },
+    {
+     "row": 51,
+     "period": "2001",
+     "text": "167965561.0"
+    },
+    {
+     "row": 77,
+     "period": "2002",
+     "text": "154678491.0"
+    },
+    {
+     "row": 103,
+     "period": "2003",
+     "text": "144269154.0"
+    },
+    {
+     "row": 129,
+     "period": "2004",
+     "text": "154115957.0"
+    },
+    {
+     "row": 155,
+     "period": "2005",
+     "text": "159846413.0"
+    },
+    {
+     "row": 181,
+     "period": "2006",
+     "text": "158370702.0"
+    },
+    {
+     "row": 207,
+     "period": "2007",
+     "text": "158925961.0"
+    },
+    {
+     "row": 233,
+     "period": "2008",
+     "text": "163910713.0"
+    },
+    {
+     "row": 259,
+     "period": "2009",
+     "text": "141109440.0"
+    },
+    {
+     "row": 285,
+     "period": "2010",
+     "text": "140218741.0"
+    },
+    {
+     "row": 311,
+     "period": "2011",
+     "text": "139214382.0"
+    },
+    {
+     "row": 337,
+     "period": "2012",
+     "text": "124371351.0"
+    },
+    {
+     "row": 363,
+     "period": "2013",
+     "text": "116314220.0"
+    },
+    {
+     "row": 389,
+     "period": "2014",
+     "text": "117662536.0"
+    },
+    {
+     "row": 415,
+     "period": "2015",
+     "text": "99519540.0"
+    },
+    {
+     "row": 441,
+     "period": "2016",
+     "text": "84336439.0"
+    },
+    {
+     "row": 466,
+     "period": "2017",
+     "text": "97392037.0"
+    },
+    {
+     "row": 491,
+     "period": "2018",
+     "text": "100045175.0"
+    },
+    {
+     "row": 515,
+     "period": "2019",
+     "text": "97368771.0"
+    },
+    {
+     "row": 539,
+     "period": "2020",
+     "text": "69916102.0"
+    },
+    {
+     "row": 563,
+     "period": "2021",
+     "text": "80683013.0"
+    },
+    {
+     "row": 587,
+     "period": "2022",
+     "text": "83994015.0"
+    },
+    {
+     "row": 612,
+     "period": "2023",
+     "text": "85188670.0"
+    },
+    {
+     "row": 637,
+     "period": "2024",
+     "text": "79835145.0"
+    },
+    {
+     "row": 661,
+     "period": "2025",
+     "text": "80948316.0"
+    },
+    {
+     "row": 685,
+     "period": "2026",
+     "text": "62310400.0"
+    }
+   ],
+   "next": null
+  }
+ }
+}
