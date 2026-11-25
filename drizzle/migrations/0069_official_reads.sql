@@ -21,6 +21,11 @@
 -- each new object starts from REVOKE ALL and gets explicit grants.
 -- The whole file can be applied twice: every statement creates what is missing or replaces a definition with the
 -- same one.
+-- Apply it while the worker lanes are paused: creating source_snapshot_stats holds a lock on source_snapshots until
+-- the end, which worker writes would wait behind. No statement waits more than 5 s for a lock; one that would fails,
+-- and the file can then be applied again. The storage policy is the last statement, so the lock it takes on
+-- storage.objects, which every storage request waits behind, is held for the shortest time (review int-code N1).
+SET lock_timeout = '5s';
 
 -- 1. Records page. Against 0068: an entity or geography filter reads its two index ranges (id, then name where the
 --    id differs) in row order and merges them; at most 50,000 rows are examined per call for anything an index
@@ -143,8 +148,10 @@ BEGIN
   RETURN to_jsonb(st) - 'labels';
 END $$;
 
--- Computes the statistics of up to _max_snapshots published snapshots that have none yet, newest first. For the
--- service role (the worker calls it on a schedule). Returns how many it computed.
+-- Computes the statistics of up to _max_snapshots published snapshots that have none yet, newest first, in one
+-- statement. For the service role, by hand: the worker computes one snapshot per call through
+-- source_compute_snapshot_stats and skips a snapshot that fails for a day (review int-code S1). Returns how many it
+-- computed.
 CREATE OR REPLACE FUNCTION public.source_compute_missing_stats(_max_snapshots integer DEFAULT 10, _max_values integer DEFAULT 100000)
 RETURNS integer LANGUAGE plpgsql SET search_path = public AS $$
 DECLARE id text; n integer := 0;
@@ -286,12 +293,7 @@ RETURNS jsonb LANGUAGE sql STABLE SET search_path = public AS $$
       FROM public.source_datasets d))
 $$;
 
--- 4. Storage: members keep reading the app's own files in the datasets bucket, but not the vendor archives, the
---    operations files or the raw official parts kept beside them. A restrictive policy only narrows what the
---    permissive ones allow; the service role bypasses row-level security, so imports are unaffected (review M2).
-DROP POLICY IF EXISTS "Vendor, ops and raw official files are private" ON storage.objects;
-CREATE POLICY "Vendor, ops and raw official files are private" ON storage.objects AS RESTRICTIVE FOR SELECT TO anon, authenticated
-  USING (bucket_id <> 'datasets' OR (name NOT LIKE 'vendor/%' AND name NOT LIKE 'ops/%' AND name NOT LIKE 'official/%'));
+-- 4. Storage: the last statements of this file (review int-code N1), after the appended parts.
 
 -- 5. Autovacuum for an insert-only table of this size: with the defaults a vacuum starts only after 20 % of the table
 --    has been inserted (about 4 million rows), so new snapshots have no visibility bits and no statistics for days.
@@ -318,7 +320,7 @@ REVOKE ALL ON FUNCTION public.source_library() FROM PUBLIC, anon, authenticated,
 GRANT EXECUTE ON FUNCTION public.source_library() TO authenticated, service_role;
 
 -- ============================================================================================================
--- Part from unit `abs` of round 4, appended verbatim from /home/claude/work/r4/abs/0069_part_abs_read.sql
+-- Part from unit `abs` of round 4, appended verbatim from its part file 0069_part_abs_read.sql
 -- (SHA-256 dc36ae0b603aa2f425e45ad1a47400f7adeb997f91cbc6fef5887a449de1aca7). Unit `abs` describes it as optional: its view reads by direct selects and uses these objects as
 -- a test oracle. Applied twice locally over 0067 beside the statements above; no name is shared with them.
 -- ============================================================================================================
@@ -581,13 +583,13 @@ GRANT EXECUTE ON FUNCTION public.abs_monitor(text, integer) TO authenticated, se
 GRANT EXECUTE ON FUNCTION public.abs_deal(text) TO authenticated, service_role;
 
 -- ============================================================================================================
--- Part from unit `fixw` of round 4, appended verbatim from /home/claude/work/r4/fixw/0069_part_abs.sql
--- (SHA-256 0251372a5506a4a84f6877f7a09177788b51d82cba6fbe1a33cd89eb72665991). Replaces existing service-role functions with the same signatures; grants unchanged.
+-- Part from unit `fixw` of round 4, appended verbatim from its part file 0069_part_abs.sql
+-- (SHA-256 0251372a5506a4a84f6877f7a09177788b51d82cba6fbe1a33cd89eb72665991 of that file; one comment here leaves out where its proof script is kept). Replaces existing service-role functions with the same signatures; grants unchanged.
 -- ============================================================================================================
 -- 0069 part from unit fixw (review rev-workers M3 and S1): what the ABS importer needs to tell skips
 -- apart and to show filings it gave up on. Both functions keep the signature and return type of
 -- migration 0067, so CREATE OR REPLACE is safe to apply twice and changes no grant. Proven on local
--- PostgreSQL 16 (scratch database r4_fixw_test): /home/claude/work/r4/fixw/sql/prove-abs.sql.
+-- PostgreSQL 16 (scratch database r4_fixw_test).
 
 -- The filing states scripts/abs-ee.ts plans from, now with `detail`: the reason a skipped or failed
 -- filing carries (abs_filings.status_detail). `--retry-skipped` reads again only the filings the
@@ -635,12 +637,12 @@ REVOKE ALL ON FUNCTION public.abs_review() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.abs_review() TO service_role;
 
 -- ============================================================================================================
--- Part from unit `fixw` of round 4, appended verbatim from /home/claude/work/r4/fixw/0069_part_sources.sql
--- (SHA-256 76d2801695119f67b4dc524dd43b5abd2fb5f38008ab9524798508edbb064eae). Replaces existing service-role functions with the same signatures; grants unchanged.
+-- Part from unit `fixw` of round 4, appended verbatim from its part file 0069_part_sources.sql
+-- (SHA-256 76d2801695119f67b4dc524dd43b5abd2fb5f38008ab9524798508edbb064eae of that file; one comment here leaves out where its proof script is kept). Replaces existing service-role functions with the same signatures; grants unchanged.
 -- ============================================================================================================
 -- 0069 part from unit fixw (review rev-workers S3): the import queue. Same signature and return type
 -- as migration 0068, so CREATE OR REPLACE is safe to apply twice and keeps the grants of 0068 (service
--- role only). Proven on local PostgreSQL 16: /home/claude/work/r4/fixw/sql/prove-sources.sql.
+-- role only). Proven on a local PostgreSQL 16.
 --
 -- Before: the oldest staging snapshot was claimed first, every time. A snapshot that fails in a way
 -- that is not its data (a chunk missing in storage, a batch that always times out) was released as
@@ -671,3 +673,24 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.source_claim_snapshot(text, text, integer, boolean) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.source_claim_snapshot(text, text, integer, boolean) TO service_role;
+
+-- ============================================================================================================
+-- Last statements of this file (review int-code N1 and N2).
+-- ============================================================================================================
+-- sandbox_exec, a platform login role that bypasses row-level security, gets every new table and view through the
+-- project's default privileges. It has no use for the statistics or the filing periods, so it keeps no grant on them
+-- (review int-code N2). Where the role does not exist there is nothing to revoke.
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sandbox_exec') THEN
+    REVOKE ALL ON public.source_snapshot_stats FROM sandbox_exec;
+    REVOKE ALL ON public.abs_filing_periods FROM sandbox_exec;
+  END IF;
+END $$;
+
+-- 4. Storage: members keep reading the app's own files in the datasets bucket, but not the vendor archives, the
+--    operations files or the raw official parts kept beside them. A restrictive policy only narrows what the
+--    permissive ones allow; the service role bypasses row-level security, so imports are unaffected (review M2).
+--    Last, so the lock on storage.objects is held for the shortest time (review int-code N1).
+DROP POLICY IF EXISTS "Vendor, ops and raw official files are private" ON storage.objects;
+CREATE POLICY "Vendor, ops and raw official files are private" ON storage.objects AS RESTRICTIVE FOR SELECT TO anon, authenticated
+  USING (bucket_id <> 'datasets' OR (name NOT LIKE 'vendor/%' AND name NOT LIKE 'ops/%' AND name NOT LIKE 'official/%'));

@@ -6,10 +6,11 @@ const m67 = readFileSync("drizzle/migrations/0067_abs_ee.sql", "utf8");
 const m68 = readFileSync("drizzle/migrations/0068_official_sources.sql", "utf8");
 /** This unit's statements: everything before the parts appended from other units. */
 const sql = file.slice(0, file.indexOf("\n-- ============"));
+/** The parts appended from other units, by the name of the part file each unit wrote (checked in the migration text alone). */
 const PARTS = [
-  { unit: "abs", path: "/home/claude/work/r4/abs/0069_part_abs_read.sql" },
-  { unit: "fixw", path: "/home/claude/work/r4/fixw/0069_part_abs.sql" },
-  { unit: "fixw", path: "/home/claude/work/r4/fixw/0069_part_sources.sql" },
+  { unit: "abs", file: "0069_part_abs_read.sql" },
+  { unit: "fixw", file: "0069_part_abs.sql" },
+  { unit: "fixw", file: "0069_part_sources.sql" },
 ];
 const NEW_FUNCTIONS = [
   "source_snapshot_ref", "source_count_distinct", "source_compute_snapshot_stats", "source_compute_missing_stats",
@@ -42,7 +43,8 @@ describe("migration 0069 (official reads)", () => {
   });
 
   it("appends the parts of units abs and fixw after its own statements, each under a comment naming its unit and hash", () => {
-    const marks = PARTS.map(p => file.indexOf(`-- Part from unit \`${p.unit}\` of round 4, appended verbatim from ${p.path}\n-- (SHA-256 `));
+    const marks = PARTS.map(p => file.indexOf(`-- Part from unit \`${p.unit}\` of round 4, appended verbatim from its part file ${p.file}\n-- (SHA-256 `));
+    expect(marks.every(m => m >= 0)).toBe(true);
     expect(marks.every(m => m > sql.length)).toBe(true);
     expect([...marks].sort((a, b) => a - b)).toEqual(marks);
     expect(sql).toContain("GRANT EXECUTE ON FUNCTION public.source_library() TO authenticated, service_role;");
@@ -71,10 +73,32 @@ describe("migration 0069 (official reads)", () => {
     expect(file).not.toMatch(/^CREATE (UNIQUE )?INDEX /m);
     expect(file).not.toMatch(/^CREATE (FUNCTION|VIEW) /m);
     expect(file).not.toMatch(/^(DROP (TABLE|FUNCTION|VIEW|INDEX)|TRUNCATE|DELETE) /m);
-    const policies = [...sql.matchAll(/^CREATE POLICY "([^"]+)" ON ([\w.]+)/gm)];
+    const policies = [...file.matchAll(/^CREATE POLICY "([^"]+)" ON ([\w.]+)/gm)];
     expect(policies.map(m => m[1])).toEqual(["Members read statistics of published source snapshots", "Vendor, ops and raw official files are private"]);
-    for (const m of policies) expect(sql, m[1]).toContain(`DROP POLICY IF EXISTS "${m[1]}" ON ${m[2]};\nCREATE POLICY "${m[1]}"`);
+    for (const m of policies) expect(file, m[1]).toContain(`DROP POLICY IF EXISTS "${m[1]}" ON ${m[2]};\nCREATE POLICY "${m[1]}"`);
     expect(sql).toMatch(/^ON CONFLICT \(snapshot_id\) DO NOTHING;$/m);
+  });
+
+  it("waits at most 5 s for any lock and takes the lock on storage.objects last (review int-code N1)", () => {
+    const statements = file.split("\n").filter(l => l.trim() && !l.startsWith("--"));
+    expect(statements[0]).toBe("SET lock_timeout = '5s';");
+    expect(statements.slice(-3)).toEqual([
+      'DROP POLICY IF EXISTS "Vendor, ops and raw official files are private" ON storage.objects;',
+      'CREATE POLICY "Vendor, ops and raw official files are private" ON storage.objects AS RESTRICTIVE FOR SELECT TO anon, authenticated',
+      "  USING (bucket_id <> 'datasets' OR (name NOT LIKE 'vendor/%' AND name NOT LIKE 'ops/%' AND name NOT LIKE 'official/%'));",
+    ]);
+    // no other statement touches storage.objects
+    expect(statements.filter(l => l.includes("storage.objects"))).toEqual(statements.slice(-3, -1));
+  });
+
+  it("leaves sandbox_exec no grant on the new table and view, where that role exists (review int-code N2)", () => {
+    const block = file.slice(file.indexOf("DO $$ BEGIN\n  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'sandbox_exec')"));
+    expect(block.slice(0, block.indexOf("END $$;"))).toContain("REVOKE ALL ON public.source_snapshot_stats FROM sandbox_exec;\n    REVOKE ALL ON public.abs_filing_periods FROM sandbox_exec;");
+    expect(file.indexOf("CREATE OR REPLACE VIEW public.abs_filing_periods")).toBeLessThan(file.indexOf("REVOKE ALL ON public.abs_filing_periods FROM sandbox_exec;"));
+  });
+
+  it("names no path of the machine it was written on", () => {
+    expect(file).not.toMatch(/\/home\/|\/tmp\/|\/var\//);
   });
 
   it("revokes nothing that existed before it, and starts every new object from no access", () => {
