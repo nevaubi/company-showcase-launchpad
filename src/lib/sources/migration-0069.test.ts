@@ -1,8 +1,16 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const sql = readFileSync("drizzle/migrations/0069_official_reads.sql", "utf8");
+const file = readFileSync("drizzle/migrations/0069_official_reads.sql", "utf8");
+const m67 = readFileSync("drizzle/migrations/0067_abs_ee.sql", "utf8");
 const m68 = readFileSync("drizzle/migrations/0068_official_sources.sql", "utf8");
+/** This unit's statements: everything before the parts appended from other units. */
+const sql = file.slice(0, file.indexOf("\n-- ============"));
+const PARTS = [
+  { unit: "abs", path: "/home/claude/work/r4/abs/0069_part_abs_read.sql" },
+  { unit: "fixw", path: "/home/claude/work/r4/fixw/0069_part_abs.sql" },
+  { unit: "fixw", path: "/home/claude/work/r4/fixw/0069_part_sources.sql" },
+];
 const NEW_FUNCTIONS = [
   "source_snapshot_ref", "source_count_distinct", "source_compute_snapshot_stats", "source_compute_missing_stats",
   "source_get_snapshot_stats", "source_facets", "source_find", "source_library",
@@ -33,15 +41,25 @@ describe("migration 0069 (official reads)", () => {
     expect(s69.id).not.toBe(s68.id);
   });
 
-  it("appends the abs part verbatim, after everything of its own", () => {
-    const part = sql.slice(sql.indexOf('-- Part of migration 0069: what the "Securitized credit" view'));
-    expect(part.length).toBeGreaterThan(1000);
-    expect(sql.indexOf("-- Part from unit `abs` of round 4")).toBeGreaterThan(sql.indexOf("GRANT EXECUTE ON FUNCTION public.source_library() TO authenticated, service_role;"));
-    for (const name of ABS_PART) expect(part, name).toMatch(new RegExp(`CREATE OR REPLACE (VIEW|FUNCTION) public\\.${name}\\b`));
+  it("appends the parts of units abs and fixw after its own statements, each under a comment naming its unit and hash", () => {
+    const marks = PARTS.map(p => file.indexOf(`-- Part from unit \`${p.unit}\` of round 4, appended verbatim from ${p.path}\n-- (SHA-256 `));
+    expect(marks.every(m => m > sql.length)).toBe(true);
+    expect([...marks].sort((a, b) => a - b)).toEqual(marks);
+    expect(sql).toContain("GRANT EXECUTE ON FUNCTION public.source_library() TO authenticated, service_role;");
+    for (const name of ABS_PART) expect(file.slice(marks[0], marks[1]), name).toMatch(new RegExp(`CREATE OR REPLACE (VIEW|FUNCTION) public\\.${name}\\b`));
+    // fixw replaces three existing service-role functions and keeps their signatures and grants.
+    const sig = (text: string, name: string) => text.slice(text.indexOf(`CREATE OR REPLACE FUNCTION public.${name}(`)).split("\n")[0];
+    const fixw = file.slice(marks[1]);
+    expect(sig(fixw, "abs_filing_states")).toBe(sig(m67, "abs_filing_states"));
+    expect(sig(fixw, "abs_review")).toBe(sig(m67, "abs_review"));
+    expect(sig(fixw, "source_claim_snapshot")).toBe(sig(m68, "source_claim_snapshot"));
+    for (const name of ["abs_filing_states(bigint)", "abs_review()", "source_claim_snapshot(text, text, integer, boolean)"])
+      expect(fixw, name).toContain(`GRANT EXECUTE ON FUNCTION public.${name} TO service_role;`);
+    expect(file.slice(sql.length)).not.toMatch(/GRANT [^;]*TO[^;]*\banon\b/);
   });
 
   it("is plain ASCII without long dashes", () => {
-    const outside = [...sql].filter(ch => {
+    const outside = [...file].filter(ch => {
       const code = ch.charCodeAt(0);
       return !(code === 9 || code === 10 || code === 13 || (code >= 32 && code <= 126));
     });
@@ -49,9 +67,10 @@ describe("migration 0069 (official reads)", () => {
   });
 
   it("can be applied twice: nothing is created without a guard", () => {
-    expect(sql).not.toMatch(/^CREATE TABLE (?!IF NOT EXISTS)/m);
-    expect(sql).not.toMatch(/^CREATE (UNIQUE )?INDEX /m);
-    expect(sql).not.toMatch(/^CREATE FUNCTION /m);
+    expect(file).not.toMatch(/^CREATE TABLE (?!IF NOT EXISTS)/m);
+    expect(file).not.toMatch(/^CREATE (UNIQUE )?INDEX /m);
+    expect(file).not.toMatch(/^CREATE (FUNCTION|VIEW) /m);
+    expect(file).not.toMatch(/^(DROP (TABLE|FUNCTION|VIEW|INDEX)|TRUNCATE|DELETE) /m);
     const policies = [...sql.matchAll(/^CREATE POLICY "([^"]+)" ON ([\w.]+)/gm)];
     expect(policies.map(m => m[1])).toEqual(["Members read statistics of published source snapshots", "Vendor, ops and raw official files are private"]);
     for (const m of policies) expect(sql, m[1]).toContain(`DROP POLICY IF EXISTS "${m[1]}" ON ${m[2]};\nCREATE POLICY "${m[1]}"`);
