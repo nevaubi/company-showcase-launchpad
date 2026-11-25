@@ -13,12 +13,15 @@ import { DepositsByState } from "@/components/alt/deposits-by-state";
 import { MedicareByState } from "@/components/alt/medicare-by-state";
 import { PlantsTri } from "@/components/alt/plants-tri";
 import { CompanyPlantHazards } from "@/components/alt/plant-hazards";
-import { BankSourceLink } from "@/components/alt/source-links";
+import { OfficialBanking } from "@/components/company/official/official-banking";
+import { AppLink } from "@/components/company/official/record-link";
 import { fmtAlt, fmtChange, fmtDay } from "@/lib/alt/catalog";
 import { BANK_RISK, bpChange, buildCompanyAlt, type CompanyAlt, type DatasetView, type Figure, type Flag } from "@/lib/alt/company";
 import { revenuePoints, yearOnYear } from "@/lib/alt/derive";
 import { altCompanyQuery, type AltRow } from "@/lib/alt/query";
 import { useCompany } from "@/lib/data";
+import { bankScopeLine, guardAltRows, guardEntry, reviewCaveat } from "@/lib/sources/company/guard";
+import { datasetHref, FDIC_NATIVE_DATASET, soleBankCertificate } from "@/lib/sources/links";
 import { cn } from "@/lib/utils";
 
 /** In-page id of a dataset's panel (theme sections own the `alt-<theme>` ids). */
@@ -53,7 +56,8 @@ export function useCompanyAlt(ticker: string) {
   const q = useQuery(altCompanyQuery(ticker));
   const company = useCompany(ticker);
   const income = company.data?.statements?.annual?.income;
-  const alt = useMemo<CompanyAlt | null>(() => (q.data ? buildCompanyAlt(q.data as AltRow[], new Date().toISOString().slice(0, 10), revenuePoints(income as never)) : null), [q.data, income]);
+  // a mapped company shows bank and deposits rows only of banks the official mapping proves (guard.ts)
+  const alt = useMemo<CompanyAlt | null>(() => (q.data ? buildCompanyAlt(guardAltRows(ticker, q.data as AltRow[]), new Date().toISOString().slice(0, 10), revenuePoints(income as never)) : null), [q.data, income, ticker]);
   return { q, alt };
 }
 
@@ -159,9 +163,18 @@ function Spark({ values }: { values: number[] }) {
   return <svg width={120} height={20} aria-hidden className="block"><polyline points={pts} fill="none" stroke="var(--chart-1)" strokeWidth={1.25} /></svg>;
 }
 
+/** Where a bank panel's figures come from in the official library: the company's proven banks, or the one certificate its rows carry. */
+function BankRecordsLink({ ticker, rows }: { ticker: string; rows: DatasetView["rows"] }) {
+  if (guardEntry(ticker)) return <SectionLink to="official-banks" className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">Insured banks</SectionLink>;
+  const cert = soleBankCertificate(rows as never);
+  return cert ? <AppLink href={datasetHref(FDIC_NATIVE_DATASET, { entity: cert })} className="text-[11px] text-muted-foreground">FDIC records</AppLink> : null;
+}
+
 function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetView; span?: boolean }) {
   const name = SECTION_NAME[view.dataset] ?? view.label;
   const series = view.dataset === "settlement" || view.dataset === "attention" || view.dataset === "complaints";
+  const caveat = view.dataset === "bank" || view.dataset === "deposits" ? reviewCaveat(ticker) : null;
+  const scope = view.dataset === "bank" ? bankScopeLine(ticker, Number(soleBankCertificate(view.rows as never)) || null) : null;
   return (
     <div data-section={name} id={panelId(view.dataset)} className={cn("min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]", (WIDE.has(view.dataset) || span) && "xl:col-span-2")}>
       <Panel
@@ -170,8 +183,10 @@ function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetVie
         bodyClassName="p-0"
         title={<span className="flex items-center gap-2">{view.label}{view.flag && <span className={cn("rounded-[3px] px-1.5 text-[10px] font-medium leading-4", view.flag.direction === "up" ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground")}>{flagBadge(view.flag)}</span>}</span>}
         subtitle={`${view.source} · latest ${fmtDay(view.latest)} · ${view.count.toLocaleString("en-US")} records`}
-        actions={view.dataset === "bank" ? <BankSourceLink rows={view.rows} /> : undefined}
+        actions={view.dataset === "bank" ? <BankRecordsLink ticker={ticker} rows={view.rows} /> : undefined}
       >
+        {caveat && <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">{caveat}</p>}
+        {scope && <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">{scope}</p>}
         {!OWN_STATS.has(view.dataset) && <Figures ticker={ticker} figures={view.figures} />}
         {view.coverage && <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">{view.coverage}</p>}
         {view.flag && <div className="border-b"><FlagLine flag={view.flag} ticker={ticker} /></div>}
@@ -231,7 +246,15 @@ export function AltCompanyTab({ ticker }: { ticker: string }) {
   const { q, alt } = useCompanyAlt(ticker);
   if (q.isLoading) return <Skeleton className="h-[600px]" />;
   if (q.isError && !q.data) return <Panel title="Alternative data"><p role="alert" className="text-sm text-muted-foreground">Public records are temporarily unavailable.</p><Button variant="outline" size="xs" className="mt-2" onClick={() => q.refetch()}>Retry</Button></Panel>;
-  if (!alt?.views.length) return <Panel title="Alternative data" collapse={false}><p className="text-[13px] text-muted-foreground">No public alt data on file for {ticker} yet. Datasets fill in as the collectors reach the company.</p></Panel>;
+  const official = !!guardEntry(ticker);
+  const banking = alt?.themes.find((t) => t.id === "banking");
+  const officialSection = official && !banking && (
+    <section id="alt-official-banking" data-section="Official bank records" className="min-w-0 scroll-mt-[calc(var(--sticky-top,3.5rem)+3rem)]">
+      <h2 className="mb-3 text-[14px] font-semibold">Banking</h2>
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2"><OfficialBanking ticker={ticker} /></div>
+    </section>
+  );
+  if (!alt?.views.length) return <div className="grid grid-cols-1 gap-5"><Panel title="Alternative data" collapse={false}><p className="text-[13px] text-muted-foreground">No public alt data on file for {ticker} yet. Datasets fill in as the collectors reach the company.</p></Panel>{officialSection}</div>;
   return (
     <div className="grid grid-cols-1 gap-5" data-section="Alternative data">
       <Summary ticker={ticker} alt={alt} />
@@ -252,6 +275,12 @@ export function AltCompanyTab({ ticker }: { ticker: string }) {
             const half = active.filter((x) => !WIDE.has(x.dataset));
             return (
               <>
+                {/* a proven company's official bank records lead its Banking theme; the call-report panels below link up to them */}
+                {official && t.id === "banking" && (
+                  <div className={cn("grid grid-cols-1 gap-3 xl:grid-cols-2", (active.length > 0 || quiet.length > 0) && "mb-3")}>
+                    <OfficialBanking ticker={ticker} />
+                  </div>
+                )}
                 {active.length > 0 && (
                   <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     {active.map((v) => <DatasetPanel key={v.dataset} ticker={ticker} view={v} span={!WIDE.has(v.dataset) && half.length % 2 === 1 && half[half.length - 1] === v} />)}
@@ -273,6 +302,7 @@ export function AltCompanyTab({ ticker }: { ticker: string }) {
           })()}
         </section>
       ))}
+      {officialSection}
     </div>
   );
 }

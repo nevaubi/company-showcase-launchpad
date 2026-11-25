@@ -11,6 +11,7 @@ import { useSource } from "@/components/source/source-context";
 import { useUnitScale } from "@/hooks/use-preference";
 import { fmtCell, fmtDate, scaleCaption } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { guardEntry } from "@/lib/sources/company/guard";
 import {
   cagrOf,
   changeOf,
@@ -276,6 +277,7 @@ function DetailCard({ t, d, ticker }: { t: DetailTable; d: FilingDetail; ticker:
       subtitle={`${unitCaption(t.unit, scale)}${t.overlap ? " · lines as tagged; some include others" : cov != null && (cov < 0.97 || cov > 1.03) ? ` · listed items explain ${fmtShare(cov)} of the consolidated total` : cov != null ? " · items add up to the consolidated total" : ""}`}
       bodyClassName="p-0"
       collapse={520}
+      actions={t.id === "capital" && guardEntry(ticker)?.y9c ? <Link to="/app/companies/$ticker/alt-data" params={{ ticker }} hash="official-y9c" className="text-[11px] text-muted-foreground hover:text-foreground hover:underline">FR Y-9C as filed</Link> : undefined}
     >
       <div ref={scroller} className="overflow-x-auto">
         <table className="w-full border-separate border-spacing-0 text-[13px]">

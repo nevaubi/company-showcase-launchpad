@@ -1,6 +1,7 @@
 // FDIC Summary of Deposits: every insured branch's deposits each June 30, rolled up per company
 // (all banks under its holding company) by state, with the company's share of each state's
 // deposits and its largest metro areas. Pure.
+import { guardEntry } from "@/lib/sources/company/guard";
 
 export const SOD_API = "https://api.fdic.gov/banks/sod";
 export const SOD_PAGE = "https://www.fdic.gov/resources/data-tools/summary-deposits";
@@ -24,7 +25,31 @@ export interface SodEntity {
   name: string;
 }
 
-export const sodFilter = (e: SodEntity, year: number) => (e.rssd && e.rssd !== "0" ? `RSSDHCR:${e.rssd}` : `CERT:${e.cert}`) + ` AND YEAR:${year}`;
+/** What a roll-up covers, recorded on every row it writes (`meta.scope`) so the page can tell its rows apart. */
+export interface SodScope {
+  filter: string;
+  rssd: string | null;
+  cert: number;
+  scope: string;
+  name: string;
+}
+
+/**
+ * The branches a company's roll-up covers. By default all banks under the holding company (RSSDHCR), or the bank
+ * alone without one. For a company the official mapping covers (src/lib/sources/company/links.json), only its
+ * proven banks: the holder's RSSD only when the registrant is the top holder of every proven bank, otherwise the
+ * proven certificates themselves; a certificate the mapping does not prove for the company is never used.
+ */
+export function sodScope(e: SodEntity): SodScope {
+  const g = guardEntry(e.ticker);
+  const byHolder = !!e.rssd && e.rssd !== "0";
+  if (!g || (g.certs.includes(e.cert) && (!byHolder || g.rollup.includes(e.rssd!))))
+    return byHolder ? { filter: `RSSDHCR:${e.rssd}`, rssd: e.rssd, cert: e.cert, scope: `rssd:${e.rssd}`, name: e.name } : { filter: `CERT:${e.cert}`, rssd: null, cert: e.cert, scope: `cert:${e.cert}`, name: e.name };
+  const certs = g.certs;
+  return { filter: certs.length === 1 ? `CERT:${certs[0]}` : `CERT:(${certs.join(" OR ")})`, rssd: null, cert: g.main, scope: `certs:${certs.join(",")}`, name: g.name };
+}
+
+export const sodFilter = (e: SodEntity, year: number) => `${sodScope(e).filter} AND YEAR:${year}`;
 export const sodUrl = (filter: string, by: string, limit = 100) => `${SOD_API}?filters=${encodeURIComponent(filter)}&agg_by=${by}&agg_sum_fields=DEPSUMBR&agg_limit=${limit}&limit=1`;
 
 /** Reads an FDIC aggregate response; zero-deposit buckets (an office that takes no deposits) are kept only for branch counts. */
@@ -62,6 +87,7 @@ export function sodRows(e: SodEntity, year: number, states: SodBucket[], stateTo
   const totalK = held.reduce((n, s) => n + s.depositsK, 0);
   if (!totalK) return [];
   const date = `${year}-06-30`;
+  const scope = sodScope(e);
   const url = sodUrl(sodFilter(e, year), "STALPBR");
   const base = { ticker: e.ticker, dataset: "deposits", kind: "series", date, unit: "USD", source: "FDIC Summary of Deposits", source_url: url };
   const ranked = [...held].sort((a, b) => b.depositsK - a.depositsK);
@@ -73,9 +99,10 @@ export function sodRows(e: SodEntity, year: number, states: SodBucket[], stateTo
       value: totalK * 1000,
       meta: {
         year,
-        entity: e.name,
-        rssd: e.rssd,
-        cert: e.cert,
+        entity: scope.name,
+        rssd: scope.rssd,
+        cert: scope.cert,
+        scope: scope.scope,
         states: held.length,
         branches: states.reduce((n, s) => n + s.branches, 0),
         top: ranked.slice(0, 8).map((s) => ({ state: s.key, value: s.depositsK * 1000, share: s.depositsK / totalK })),
@@ -94,7 +121,7 @@ export function sodRows(e: SodEntity, year: number, states: SodBucket[], stateTo
       uid: `sod:${e.ticker}:${year}:${s.key}`,
       title: stateTitle(s.key),
       value: s.depositsK * 1000,
-      meta: { year, state: s.key, name: STATES[s.key] ?? s.key, branches: s.branches, share: s.depositsK / totalK, ...(all ? { market_share: s.depositsK / all, state_total: all * 1000 } : {}), rank: ranked.indexOf(s) + 1 },
+      meta: { year, state: s.key, name: STATES[s.key] ?? s.key, branches: s.branches, share: s.depositsK / totalK, ...(all ? { market_share: s.depositsK / all, state_total: all * 1000 } : {}), rank: ranked.indexOf(s) + 1, scope: scope.scope },
     });
   }
   return out;
