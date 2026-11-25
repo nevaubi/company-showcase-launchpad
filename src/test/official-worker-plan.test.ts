@@ -16,6 +16,7 @@ import {
   retryDelay,
   safeError,
 } from "../../scripts/lib/official-worker-plan";
+import { refreshReceipt } from "../../scripts/lib/source-refresh-run";
 
 describe("official source worker scheduling", () => {
   it("does not lose a unit when a process fails or is killed", () => {
@@ -57,6 +58,22 @@ describe("official source worker scheduling", () => {
     expect("error" in row.detail).toBe(false);
     expect("note" in row.detail).toBe(false);
     expect("items" in row.detail).toBe(false);
+  });
+  it("writes a refresh run that checked no dataset as failed, from the child's own account, though it exited 0", () => {
+    const told = refreshReceipt({
+      mode: "all", startedMs: 0, finishedMs: 41_000, due: 2, notStarted: [], switchedOff: [], circuits: {}, stop: null,
+      outcomes: [
+        { id: "fred_x", family: "fred", outcome: "failed", fault: "provider", error: "FRED download deadline exceeded" },
+        { id: "fred_y", family: "fred", outcome: "failed", fault: "provider", error: "FRED download deadline exceeded" },
+      ],
+    });
+    const row = childReceipt({ child: "scripts/source-refresh.ts", exitCode: 0, killed: false, seconds: 41, told });
+    expect(row.ok).toBe(false);
+    expect(row.items).toBe(0);
+    expect(row.detail).toMatchObject({ exit_code: 0, first_error: "fred_x: FRED download deadline exceeded", error: "child exited with code 0 and reported a failed run: all 2 datasets attempted failed; none was checked" });
+    expect("ok" in row.detail).toBe(false);
+    // any other account of a run that exited 0 stays a run that worked
+    expect(childReceipt({ child: "scripts/source-refresh.ts", exitCode: 0, killed: false, seconds: 41, told: { items: 0, checked: [], failed: [] } }).ok).toBe(true);
   });
   it("always gives a failed run an error to read, with or without a receipt", () => {
     // the watchdog tells the owner to read detail.error; before, these rows held only an exit code

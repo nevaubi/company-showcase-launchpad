@@ -398,6 +398,22 @@ describe("receipt and exit code", () => {
     expect(r.error).toBe("List refresh datasets: no reply https://x.supabase.co/rest/v1/source_datasets");
   });
 
+  it("says a run failed when it attempted datasets and checked none, and still ends with 0 (review int-code S2)", () => {
+    const base = { mode: "all" as const, startedMs: NOW, finishedMs: NOW + 41_000, due: 5, notStarted: [], switchedOff: [], circuits: {}, stop: null };
+    const failedOnly = outcomes.filter((o) => o.outcome === "failed" || o.outcome === "skipped");
+    expect(refreshReceipt({ ...base, outcomes: failedOnly })).toMatchObject({
+      ok: false, items: 0, checked: [], error: "all 2 datasets attempted failed; none was checked", first_error: `${FRED_ID}: FRED download deadline exceeded`,
+    });
+    expect(refreshReceipt({ ...base, outcomes: failedOnly.slice(0, 1) }).error).toBe("the one dataset attempted failed; none was checked");
+    // the run itself still worked: the lane keeps its pace
+    expect(refreshExitCode({ stop: null, runError: false })).toBe(0);
+    // one dataset checked, or nothing attempted, claims no failure
+    expect("ok" in receipt).toBe(false);
+    expect(refreshReceipt({ ...base, outcomes: outcomes.filter((o) => o.outcome === "skipped") })).not.toHaveProperty("ok");
+    // a run error keeps its own text
+    expect(refreshReceipt({ ...base, outcomes: failedOnly, runError: "Read refresh states: no reply" })).toMatchObject({ ok: false, error: "Read refresh states: no reply" });
+  });
+
   it("ends with 0 when the run worked, whatever the datasets did", () => {
     // exit 1 on any dataset failure and 124 on the budget is what backed the whole lane off to hourly
     expect(refreshExitCode({ stop: null, runError: false })).toBe(0);

@@ -41,13 +41,17 @@ export function childReceipt(i: {
   seconds: number;
   told: Record<string, unknown> | null;
 }): { ok: boolean; items: number; detail: Record<string, unknown> } {
-  const ok = i.exitCode === 0;
-  const { items: toldItems, error: toldError, ...account } = i.told ?? {};
+  const { items: toldItems, error: toldError, ok: toldOk, ...account } = i.told ?? {};
+  // a child that exits 0 (so its lane keeps its pace) can still say the run failed: every dataset it tried failed
+  const failedByAccount = i.exitCode === 0 && !i.killed && toldOk === false;
+  const ok = i.exitCode === 0 && !failedByAccount;
   const items = typeof toldItems === "number" && Number.isSafeInteger(toldItems) && toldItems >= 0 ? toldItems : 0;
   const said = [toldError, account.first_error].find((v): v is string => typeof v === "string" && v.length > 0);
   const ended = i.killed
     ? `stopped by the worker after ${Math.round(i.seconds)} s (time limit or lost lease)`
-    : `child exited with code ${i.exitCode ?? "none"}`;
+    : failedByAccount
+      ? "child exited with code 0 and reported a failed run"
+      : `child exited with code ${i.exitCode ?? "none"}`;
   return {
     ok,
     items,

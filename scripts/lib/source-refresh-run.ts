@@ -390,7 +390,9 @@ export type ReceiptInput = {
 /**
  * What the run did, for `job_runs.detail`: the ids the publisher answered for (`checked`), which of
  * them were unchanged, staged or held for review, the ids that failed with their error, and why
- * anything due was not started. `items` counts the checked ids.
+ * anything due was not started. `items` counts the checked ids. A run that attempted datasets and
+ * checked none says so with `ok: false` and an `error` (the worker writes that row as failed, so a
+ * lasting outage reaches the watchdog), while its exit code stays 0 and the lane keeps its pace.
  */
 export function refreshReceipt(i: ReceiptInput): Record<string, unknown> {
   const of = <K extends RefreshOutcome["outcome"]>(kind: K) =>
@@ -402,6 +404,12 @@ export function refreshReceipt(i: ReceiptInput): Record<string, unknown> {
   const waiting = of("skipped").map((x) => ({ id: x.id, reason: receiptText(x.reason, 120) }));
   const checked = [...unchanged, ...staged.map((x) => x.id), ...held.map((x) => x.id)];
   const left = i.notStarted.reduce((n, x) => n + x.count, 0);
+  const noneChecked = checked.length === 0 && failed.length > 0;
+  const runError = i.runError
+    ? receiptText(i.runError, 300)
+    : noneChecked
+      ? `${failed.length === 1 ? "the one dataset attempted" : `all ${failed.length} datasets attempted`} failed; none was checked`
+      : null;
   return {
     script: "source-refresh",
     mode: i.mode,
@@ -421,7 +429,8 @@ export function refreshReceipt(i: ReceiptInput): Record<string, unknown> {
     ...(i.probe ? { fred_probe: i.probe } : {}),
     ...(i.stop === "budget" ? { budget_reached: true } : {}),
     ...(i.stop === "signal" ? { stopped_by_signal: true } : {}),
-    ...(i.runError ? { error: receiptText(i.runError, 300) } : {}),
+    ...(runError ? { error: runError } : {}),
+    ...(noneChecked ? { ok: false } : {}),
   };
 }
 
