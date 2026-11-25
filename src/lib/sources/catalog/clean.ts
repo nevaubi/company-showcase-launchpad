@@ -47,7 +47,7 @@ export function cleanName(name: string): string {
 export function isBareName(title: string): boolean {
   const text = (title ?? "").trim();
   if (!text) return true;
-  if (/^[A-Z0-9.\-]+$/.test(text)) return true;
+  if (/^[A-Z0-9.-]+$/.test(text)) return true;
   if (text === text.toLowerCase()) return true;
   if (/^[A-Z][0-9A-Za-z]*( [0-9a-z]{1,3})+$/.test(text)) return true;
   if (/^MER T[0-9A-Z.]+$/.test(text)) return true;
