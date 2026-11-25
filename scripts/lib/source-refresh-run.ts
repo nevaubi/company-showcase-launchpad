@@ -11,7 +11,6 @@
  *   - one dataset's failure is that dataset's: the run still ends with exit code 0 and lists every
  *     outcome in its receipt.
  */
-import { connect as connectHttp2 } from "node:http2";
 import { formatReason, parseReason } from "../../src/lib/jobs/provider-health";
 import {
   OFFICIAL_USER_AGENT,
@@ -590,9 +589,14 @@ export const http1Probe = (fetchImpl: typeof fetch = fetch): ProbeTransport => a
   return { status: response.status, bytes: await drain(response.body, FRED_PROBE_MAX_BYTES) };
 };
 
-/** HTTP/2 through node:http2 (ALPN on TLS). The session is closed as soon as the answer is read. */
-export const http2Probe: ProbeTransport = (url, headers, signal) =>
-  new Promise((resolve, reject) => {
+/**
+ * HTTP/2 through node:http2 (ALPN on TLS). The session is closed as soon as the answer is read. The
+ * module is loaded only here: a runtime without an HTTP/2 client fails this one request (recorded as
+ * its error), never the refresh run that imports these rules.
+ */
+export const http2Probe: ProbeTransport = async (url, headers, signal) => {
+  const { connect: connectHttp2 } = await import("node:http2");
+  return await new Promise((resolve, reject) => {
     const target = new URL(url);
     const session = connectHttp2(target.origin);
     let settled = false;
@@ -631,3 +635,4 @@ export const http2Probe: ProbeTransport = (url, headers, signal) =>
     stream.on("error", finish);
     stream.end();
   });
+};
