@@ -166,8 +166,10 @@ describe("FDIC tiles", () => {
     const spec = rank("largest-banks-assets") as RankTileSpec;
     const r = ok(computeRankTile(spec, context(spec, "yyyymmdd", "day"), fdicCrossSection("ASSET")));
     expect(r.headline).toBe(
-      "JPMORGAN CHASE BANK NA had the largest total assets of 496 institutions in the FDIC cohort on Sep 30, 2026: 4,174,631,000 USD thousands (monetary measures).",
+      "JPMORGAN CHASE BANK NA had the largest total assets of 496 institutions in the FDIC cohort on Sep 30, 2026.",
     );
+    expect(r.figure).toBe("4,174,631,000");
+    expect(r.figureUnit).toBe("USD thousands (monetary measures)");
     expect(r.points.map((p) => p.key)).toEqual(["628", "3510", "7213", "3511", "33124", "6548", "4297", "6384", "9846", "32992"]);
     expect(r.points[4]).toMatchObject({ label: "GOLDMAN SACHS BANK USA", display: "789,723,000", text: "789723000", row: 356 });
     const deposits = ok(computeRankTile(rank("largest-banks-deposits"), context(rank("largest-banks-deposits"), "yyyymmdd", "day"), fdicCrossSection("DEP")));

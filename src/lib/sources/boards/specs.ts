@@ -509,7 +509,6 @@ export const BOARDS: readonly BoardSpec[] = [
       "housing-starts",
       "retail-sales",
       "energy-consumption",
-      "crude-oil-production",
       "largest-banks-assets",
     ],
   },

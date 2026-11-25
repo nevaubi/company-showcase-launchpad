@@ -112,8 +112,9 @@ function LineChart({ points, unit, label, recordHref, onOpen }: Omit<Props, "for
     .defined((d) => d.py !== null)
     .x((d) => d.px)
     .y((d) => d.py as number)(xy);
-  const years = x.ticks(width < 360 ? 3 : 4);
   const span = (x.domain()[1].getTime() - x.domain()[0].getTime()) / 86_400_000;
+  // Years on an axis of two years or more (one tick each, never a year twice), months on a shorter one.
+  const years = span > 700 ? x.ticks(d3.utcYear.every(span > 3700 ? 5 : span > 1900 ? 2 : 1) as d3.TimeInterval) : x.ticks(width < 360 ? 3 : 4);
   const xFormat = span > 700 ? d3.utcFormat("%Y") : d3.utcFormat("%b %Y");
   const zeroInside = y.domain()[0] < 0 && y.domain()[1] > 0;
   const lastXy = last ? xy.find((d) => d.p === last) : null;
@@ -264,16 +265,16 @@ function ColumnChart({ points, unit, label, recordHref, onOpen }: Omit<Props, "f
 function RankedBars({ points, unit, label, recordHref, onOpen }: Omit<Props, "form">) {
   const [ref, width] = useWidth(220);
   const max = d3.max(points, (p) => p.value ?? 0) ?? 1;
-  const narrow = width < 420;
-  const nameWidth = narrow ? 0 : Math.min(190, Math.round(width * 0.38));
-  const valueWidth = 92;
-  const track = Math.max(40, width - nameWidth - valueWidth - 8);
+  // Names in a left column (the whole name on hover and in the table view), bars from a shared zero, the value at the tip.
+  const nameWidth = Math.max(96, Math.min(200, Math.round(width * 0.46)));
+  const valueWidth = Math.max(...points.map((p) => p.display.length), 1) * 6.2 + 8;
+  const track = Math.max(24, width - nameWidth - valueWidth - 8);
   const rowHeight = TILE_CHART_HEIGHT / Math.max(points.length, 1);
   return (
     <div ref={ref} style={{ height: TILE_CHART_HEIGHT }}>
       <ul className="flex flex-col" aria-label={label}>
         {points.map((p) => {
-          const w = p.value === null ? 0 : Math.max(2, (p.value / max) * track);
+          const w = p.value === null || max <= 0 ? 0 : Math.max(2, (p.value / max) * track);
           return (
             <li key={p.key} style={{ height: rowHeight }}>
               <a
@@ -286,20 +287,15 @@ function RankedBars({ points, unit, label, recordHref, onOpen }: Omit<Props, "fo
                 title={`${p.label}: ${p.display} ${unit}`}
                 className="group flex h-full min-w-0 items-center gap-2 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                {!narrow && (
-                  <span className="shrink-0 truncate text-[11px] text-muted-foreground group-hover:text-foreground" style={{ width: nameWidth }}>
-                    {p.label}
-                  </span>
-                )}
-                <span className="relative flex h-full min-w-0 flex-1 items-center">
-                  {narrow && <span className="absolute left-0 top-0 max-w-full truncate text-[10px] leading-none text-muted-foreground">{p.label}</span>}
+                <span className="shrink-0 truncate text-[11px] text-muted-foreground group-hover:text-foreground" style={{ width: nameWidth }}>
+                  {p.label}
+                </span>
+                <span className="flex min-w-0 flex-1 items-center">
                   <span
                     className="block shrink-0 rounded-r-[4px] transition-opacity group-hover:opacity-80"
-                    style={{ width: w, height: Math.min(10, rowHeight - (narrow ? 9 : 6)), marginTop: narrow ? 8 : 0, background: COLOR }}
+                    style={{ width: w, height: Math.min(10, rowHeight - 6), background: COLOR }}
                   />
-                  <span className="num ml-1.5 shrink-0 text-[10px] text-foreground" style={{ marginTop: narrow ? 8 : 0 }}>
-                    {p.display}
-                  </span>
+                  <span className="num ml-1.5 shrink-0 text-[10px] text-foreground">{p.display}</span>
                 </span>
               </a>
             </li>

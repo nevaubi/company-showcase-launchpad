@@ -90,11 +90,14 @@ async function datasetMeta(db: SourceDirectClient, datasetId: string, now: numbe
 function sourceOf(meta: DatasetMeta): TileSource {
   const entry = describeDataset({ ...meta.dataset, rows: meta.snapshot.rows, retrieved_at: meta.snapshot.retrievedAt });
   const publisher = entry.publisher.via ? `${entry.publisher.short} via ${entry.publisher.via}` : entry.publisher.short;
+  // "FDIC, Current quarter, June 2026 cohort" under the publisher "FDIC" reads "FDIC, FDIC, ...": say it once.
+  const short = entry.publisher.short;
+  const table = entry.title.startsWith(`${short}, `) ? entry.title.slice(short.length + 2) : entry.title;
   return {
     datasetId: meta.dataset.id,
     snapshotId: meta.snapshot.id,
     publisher,
-    table: entry.title,
+    table,
     code: entry.code,
     retrievedAt: meta.snapshot.retrievedAt,
     publishedAt: meta.snapshot.publishedAt,
