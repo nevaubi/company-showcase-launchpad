@@ -2,6 +2,7 @@
 // offering-stage stays out of every series; superseded filings are listed and point at what replaced
 // them; an amendment the store could not tie to the filing it replaces carries a note.
 import { indexUrl } from "../edgar";
+import { safeSourceHref } from "@/lib/sources/presentation";
 import {
   BLANK,
   DELINQUENCY_BUCKETS,
@@ -85,7 +86,8 @@ export function filingRows(filings: readonly DealFiling[]): FilingRow[] {
       bytes: f.file?.bytes ?? null,
       sha256: f.file?.sha256 ?? null,
       fileName: f.file?.name ?? null,
-      fileUrl: f.file?.url ?? null,
+      // a stored address is a link only when it is an http(s) address, as every source link is (review int-code N7)
+      fileUrl: safeSourceHref(f.file?.url),
       indexUrl: indexUrl(f.list_cik, f.accession),
     };
   });

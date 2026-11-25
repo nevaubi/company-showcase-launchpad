@@ -36,6 +36,19 @@ describe("filings list", () => {
   });
 });
 
+describe("asset file links", () => {
+  it("links a stored file address only when it is an http(s) address", () => {
+    const withUrl = (url: string) => {
+      const p = structuredClone(worldOmni) as unknown as { filings: { file?: { url?: string } | null }[] };
+      for (const f of p.filings) if (f.file) f.file.url = url;
+      return model(p).filings.filter((f) => f.sha256);
+    };
+    expect(withUrl("https://www.sec.gov/Archives/edgar/data/1/x.xml").every((f) => f.fileUrl === "https://www.sec.gov/Archives/edgar/data/1/x.xml")).toBe(true);
+    expect(withUrl("javascript:alert(1)").every((f) => f.fileUrl === null)).toBe(true);
+    expect(withUrl("not an address").every((f) => f.fileUrl === null)).toBe(true);
+  });
+});
+
 describe("auto series and breakdowns", () => {
   const m = model(worldOmni);
   it("builds the series oldest first from current monthly filings only", () => {
