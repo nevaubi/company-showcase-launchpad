@@ -260,17 +260,30 @@ BEGIN
   RETURN res;
 END $$;
 
--- The library in one call: the dataset rows and the published snapshots the app's buildLibrary reads, in the keys of
--- its direct selects. Small tables only; never reads source_records.
+-- The library in one call, in the shape of the app's direct path (src/lib/sources/read.server.ts, LibrarySource):
+-- every dataset with its current snapshot and up to two snapshots published before the window, and the window (the
+-- 400 newest publications). Small tables only; never reads source_records; its cost grows with datasets, not with
+-- snapshots.
 CREATE OR REPLACE FUNCTION public.source_library()
 RETURNS jsonb LANGUAGE sql STABLE SET search_path = public AS $$
+  WITH win AS (
+    SELECT s.id, s.dataset_id, s.loaded_rows, s.published_at FROM public.source_snapshots s
+    WHERE s.status = 'ready' AND s.published_at IS NOT NULL ORDER BY s.published_at DESC, s.id DESC LIMIT 400),
+  edge AS (SELECT count(*) >= 400 AS is_full, min(published_at) AS start FROM win)
   SELECT jsonb_build_object(
+    'window', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', w.id, 'dataset_id', w.dataset_id, 'loaded_rows', w.loaded_rows, 'published_at', w.published_at)
+        ORDER BY w.published_at DESC, w.id DESC), '[]'::jsonb) FROM win w),
+    'windowFull', (SELECT is_full FROM edge),
     'datasets', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', d.id, 'name', d.name, 'sector', d.sector, 'agency', d.agency, 'source_id', d.source_id,
-        'source_url', d.source_url, 'grain', d.grain, 'latest_snapshot_id', d.latest_snapshot_id) ORDER BY d.id), '[]'::jsonb) FROM public.source_datasets d),
-    'snapshots', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', s.id, 'dataset_id', s.dataset_id, 'loaded_rows', s.loaded_rows, 'column_count', s.column_count,
-        'published_at', s.published_at, 'retrieved_at', s.retrieved_at, 'dims', s.ingest->'dimensions', 'consts', s.ingest->'constants',
-        'comp', s.ingest->'composites', 'family', s.coverage->'refresh_provenance'->>'family') ORDER BY s.id), '[]'::jsonb)
-      FROM public.source_snapshots s WHERE s.status = 'ready'))
+        'source_url', d.source_url, 'grain', d.grain, 'latest_snapshot_id', d.latest_snapshot_id,
+        'latest', (SELECT jsonb_build_object('id', s.id, 'loaded_rows', s.loaded_rows, 'column_count', s.column_count, 'published_at', s.published_at,
+            'retrieved_at', s.retrieved_at, 'dims', s.ingest->'dimensions', 'consts', s.ingest->'constants', 'comp', s.ingest->'composites',
+            'family', s.coverage->'refresh_provenance'->>'family') FROM public.source_snapshots s WHERE s.dataset_id = d.id AND s.id = d.latest_snapshot_id),
+        'prev', (SELECT coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'loaded_rows', p.loaded_rows, 'published_at', p.published_at) ORDER BY p.published_at DESC, p.id DESC), '[]'::jsonb)
+          FROM (SELECT s.id, s.loaded_rows, s.published_at FROM public.source_snapshots s, edge
+                WHERE s.dataset_id = d.id AND s.status = 'ready' AND edge.is_full AND s.published_at < edge.start
+                ORDER BY s.published_at DESC, s.id DESC LIMIT 2) p)) ORDER BY d.id), '[]'::jsonb)
+      FROM public.source_datasets d))
 $$;
 
 -- 4. Storage: members keep reading the app's own files in the datasets bucket, but not the vendor archives, the
@@ -566,3 +579,95 @@ REVOKE ALL ON FUNCTION public.abs_monitor(text, integer) FROM PUBLIC, anon, auth
 REVOKE ALL ON FUNCTION public.abs_deal(text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.abs_monitor(text, integer) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.abs_deal(text) TO authenticated, service_role;
+
+-- ============================================================================================================
+-- Part from unit `fixw` of round 4, appended verbatim from /home/claude/work/r4/fixw/0069_part_abs.sql
+-- (SHA-256 0251372a5506a4a84f6877f7a09177788b51d82cba6fbe1a33cd89eb72665991). Replaces existing service-role functions with the same signatures; grants unchanged.
+-- ============================================================================================================
+-- 0069 part from unit fixw (review rev-workers M3 and S1): what the ABS importer needs to tell skips
+-- apart and to show filings it gave up on. Both functions keep the signature and return type of
+-- migration 0067, so CREATE OR REPLACE is safe to apply twice and changes no grant. Proven on local
+-- PostgreSQL 16 (scratch database r4_fixw_test): /home/claude/work/r4/fixw/sql/prove-abs.sql.
+
+-- The filing states scripts/abs-ee.ts plans from, now with `detail`: the reason a skipped or failed
+-- filing carries (abs_filings.status_detail). `--retry-skipped` reads again only the filings the
+-- scheduled job set aside for size (sizeSkip in src/lib/abs/plan.ts); until this function returns
+-- `detail`, the importer reads no skipped filing again.
+CREATE OR REPLACE FUNCTION public.abs_filing_states(_list_cik bigint)
+RETURNS jsonb
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT coalesce(jsonb_agg(jsonb_build_object(
+           'accession', f.accession, 'form', f.form, 'filed', f.filed, 'status', f.status, 'attempts', f.attempts,
+           'is_current', f.is_current, 'parser', l.parser, 'sha256', l.source_sha256,
+           'detail', CASE WHEN f.status IN ('skipped', 'failed') THEN f.status_detail END) ORDER BY f.filed, f.accession), '[]'::jsonb)
+  FROM abs_filings f LEFT JOIN abs_loads l ON l.load_id = f.load_id
+  WHERE f.list_cik = _list_cik
+$$;
+REVOKE ALL ON FUNCTION public.abs_filing_states(bigint) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.abs_filing_states(bigint) TO service_role;
+
+-- What a person should look at. Nothing listed here breaks the store; each line is something the
+-- importer cannot settle from the filings alone.
+--   An amendment alone in its cover period (see migration 0067).
+--   A filing given up after three failed attempts (the importer's default --max-attempts and the
+--   scheduled job's limit). Neither caller tries it again by itself; the line names the command that
+--   does, which plans only such filings and so never meets the worker's own runs.
+CREATE OR REPLACE FUNCTION public.abs_review()
+RETURNS TABLE(what text, accession text, deal_id text, period_end text, filed text)
+LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
+  SELECT r.what, r.accession, r.deal_id, r.period_end, r.filed FROM (
+    SELECT 'amendment alone in its cover period: the filing it replaces is not tied to it'::text AS what,
+           f.accession, f.deal_id, f.period_end::text AS period_end, f.filed::text AS filed
+    FROM abs_filings f
+    WHERE f.status = 'loaded' AND f.form = 'ABS-EE/A'
+      AND NOT EXISTS (SELECT 1 FROM abs_filings o WHERE o.status = 'loaded' AND o.deal_id = f.deal_id AND o.accession <> f.accession
+                        AND o.period_end IS NOT DISTINCT FROM f.period_end)
+    UNION ALL
+    SELECT 'given up after ' || f.attempts || ' attempts (store it with scripts/abs-ee.ts load --cik=' || f.list_cik
+             || ' --retry-failed): ' || left(coalesce(f.status_detail, 'no reason recorded'), 300),
+           f.accession, f.deal_id, f.period_end::text, f.filed::text
+    FROM abs_filings f
+    WHERE f.status = 'failed' AND f.attempts >= 3
+  ) r
+  ORDER BY r.filed, r.accession
+$$;
+REVOKE ALL ON FUNCTION public.abs_review() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.abs_review() TO service_role;
+
+-- ============================================================================================================
+-- Part from unit `fixw` of round 4, appended verbatim from /home/claude/work/r4/fixw/0069_part_sources.sql
+-- (SHA-256 76d2801695119f67b4dc524dd43b5abd2fb5f38008ab9524798508edbb064eae). Replaces existing service-role functions with the same signatures; grants unchanged.
+-- ============================================================================================================
+-- 0069 part from unit fixw (review rev-workers S3): the import queue. Same signature and return type
+-- as migration 0068, so CREATE OR REPLACE is safe to apply twice and keeps the grants of 0068 (service
+-- role only). Proven on local PostgreSQL 16: /home/claude/work/r4/fixw/sql/prove-sources.sql.
+--
+-- Before: the oldest staging snapshot was claimed first, every time. A snapshot that fails in a way
+-- that is not its data (a chunk missing in storage, a batch that always times out) was released as
+-- staging and claimed again at once, ahead of every newer refresh, and a staged refresh also blocks
+-- re-collection of its dataset. Now the least tried snapshot goes first, and one claimed 12 times
+-- without being published is left alone: an unnamed claim never takes it again, a claim that names it
+-- (`bun scripts/source-import.ts --snapshot=<id>`) still does. Twelve is four times the most claims a
+-- published snapshot needed in production on 25 Nov 2026 (3, the 3,629,030-row SEC facts table):
+-- every claim counts, including the resume of a large import after a run's time limit. The importer
+-- lists such snapshots in its log and in the receipt of its job_runs row (`held`).
+CREATE OR REPLACE FUNCTION public.source_claim_snapshot(_owner text, _snapshot_id text DEFAULT NULL, _ttl_seconds integer DEFAULT 180, _retry_failed boolean DEFAULT false)
+RETURNS jsonb LANGUAGE plpgsql SET search_path = public AS $$
+DECLARE s public.source_snapshots;
+BEGIN
+  IF coalesce(length(_owner),0) NOT BETWEEN 1 AND 200 OR _ttl_seconds IS NULL OR _ttl_seconds NOT BETWEEN 30 AND 1200 THEN RAISE EXCEPTION 'invalid source lease'; END IF;
+  SELECT * INTO s FROM public.source_snapshots
+  WHERE (status = 'staging' OR (_retry_failed AND status = 'failed'))
+    AND NOT (quality @> '{"quarantined":true}'::jsonb)
+    AND (_snapshot_id IS NULL OR id = _snapshot_id)
+    AND (_snapshot_id IS NOT NULL OR attempts < 12)
+    AND (lease_until IS NULL OR lease_until < now() OR lease_owner = _owner)
+  ORDER BY attempts, created_at, id FOR UPDATE SKIP LOCKED LIMIT 1;
+  IF NOT FOUND THEN RETURN NULL; END IF;
+  UPDATE public.source_snapshots SET status = 'staging', lease_owner = _owner,
+    lease_until = now() + make_interval(secs => _ttl_seconds), attempts = attempts + 1, last_error = NULL
+    WHERE id = s.id RETURNING * INTO s;
+  RETURN to_jsonb(s);
+END $$;
+REVOKE ALL ON FUNCTION public.source_claim_snapshot(text, text, integer, boolean) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.source_claim_snapshot(text, text, integer, boolean) TO service_role;

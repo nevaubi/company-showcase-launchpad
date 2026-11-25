@@ -303,9 +303,9 @@ export type SourceLibraryRow = {
   publishedAt: string | null;
   retrievedAt: string | null;
   dimensions: SourceDimensionSet;
-  /** Published snapshots of this dataset (1 = never replaced). */
-  versions: number;
-  /** Refresh adapter family when a refresh has run for it (`coverage.refresh_provenance.family` on any snapshot), else null. */
+  /** True when the dataset has more than one published snapshot (its current one replaced an earlier one). Exact. */
+  replaced: boolean;
+  /** Refresh adapter family of the current snapshot (`coverage.refresh_provenance.family`), else null. */
   refreshFamily: string | null;
   /** The catalogue's `hiddenByDefault`: internal specification tables, empty tables. */
   hidden: boolean;
@@ -363,8 +363,13 @@ export type SourceLibrary = {
   collections: SourceLibraryCount[];
   /** By datasets, most first. */
   publishers: SourceLibraryCount[];
-  /** Newest first, every group (at most 200). The landing shows the first ten. */
+  /**
+   * Newest first (at most 200 groups; the landing shows ten), built from the 400 most recent publications. A group
+   * that may continue before that window is left out, so every group shown is complete.
+   */
   changes: SourceLibraryChange[];
+  /** The publication time from which `changes` is complete, or null when it covers every publication. */
+  changesSince: string | null;
   datasets: SourceLibraryRow[];
   /** Which path built it: the 0069 function or direct selects on the two small tables. */
   via: "source_library" | "direct";
@@ -375,7 +380,7 @@ export type SourceLibrary = {
 /** The columns of the packed rows, in order. Coded columns hold an index into `dict[column]`. */
 export const LIBRARY_COLUMNS = [
   "id", "title", "code", "storedName", "publisherId", "collectionId", "kind", "parentId", "sector", "agency", "sourceId",
-  "grain", "rows", "fields", "publishedAt", "retrievedAt", "dimensions", "versions", "refreshFamily", "hidden",
+  "grain", "rows", "fields", "publishedAt", "retrievedAt", "dimensions", "replaced", "refreshFamily", "hidden",
 ] as const;
 export const LIBRARY_CODED = ["publisherId", "collectionId", "kind", "sector", "agency", "sourceId", "grain", "dimensions", "refreshFamily"] as const;
 export type LibraryCodedColumn = (typeof LIBRARY_CODED)[number];
@@ -383,7 +388,7 @@ export type LibraryCodedColumn = (typeof LIBRARY_CODED)[number];
  * What the server function sends: the library with its dataset rows packed as arrays, about a third of the size of
  * objects. Repeated strings are coded by dictionary; an id of the usual form `official_<sector>_<rest>` is sent as
  * `<rest>` (any other id as `=<id>`); a parent is the index of its row (or `=<id>` when it is not listed); times are
- * seconds after `timeBase`; `dimensions` is a comma list; `hidden` is 0 or 1. `unpackLibrary` restores
+ * seconds after `timeBase`; `dimensions` is a comma list; `replaced` and `hidden` are 0 or 1. `unpackLibrary` restores
  * `SourceLibrary`, with times at second precision.
  */
 export type SourceLibraryWire = Omit<SourceLibrary, "datasets"> & {
@@ -418,7 +423,7 @@ export function packLibraryRows(rows: SourceLibraryRow[]): SourceLibraryWire["da
     shortId(r), r.title, r.code, r.storedName, code("publisherId", r.publisherId), code("collectionId", r.collectionId), code("kind", r.kind),
     r.parentId === null ? null : position.get(r.parentId) ?? `=${r.parentId}`, code("sector", r.sector), code("agency", r.agency),
     code("sourceId", r.sourceId), code("grain", r.grain), r.rows, r.fields, rel(r.publishedAt), rel(r.retrievedAt),
-    code("dimensions", r.dimensions.join(",")), r.versions, code("refreshFamily", r.refreshFamily), r.hidden ? 1 : 0,
+    code("dimensions", r.dimensions.join(",")), r.replaced ? 1 : 0, code("refreshFamily", r.refreshFamily), r.hidden ? 1 : 0,
   ]);
   return { columns: LIBRARY_COLUMNS, dict, timeBase, rows: packed };
 }
@@ -443,7 +448,7 @@ export function unpackLibrary(wire: SourceLibraryWire): SourceLibrary {
     grain: coded("grain", r[11]) ?? "", rows: Number(r[12]), fields: Number(r[13]),
     publishedAt: time(r[14]), retrievedAt: time(r[15]),
     dimensions: (coded("dimensions", r[16]) ?? "").split(",").filter(Boolean) as SourceDimensionSet,
-    versions: Number(r[17]), refreshFamily: coded("refreshFamily", r[18]), hidden: r[19] === 1,
+    replaced: r[17] === 1, refreshFamily: coded("refreshFamily", r[18]), hidden: r[19] === 1,
   }));
   return { ...wire, datasets };
 }
