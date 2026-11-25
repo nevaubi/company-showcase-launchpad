@@ -11,6 +11,7 @@
  *
  * Nothing here parses, rescales or infers a cell: the publisher's strings go out as stored.
  */
+import { COLLECTIONS, describeDataset, type CatalogEntry } from "./catalog";
 import type { SourceColumn, SourceDimension, SourceIngest, SourceRecord } from "./schema";
 import {
   READ_LIMITS, readFail, readOk,
@@ -21,6 +22,8 @@ import {
   type SourcePoint, type SourceRead, type SourceReadFailure, type SourceRecordQueryInput, type SourceRecordRead,
   type SourceResolvedMatch, type SourceSeries, type SourceSeriesQueryInput, type SourceSnapshotRef,
   type SourceSnapshotStats, type SourceSnapshotStatsQueryInput, fieldCompleteness,
+  packLibraryRows, type SourceDimensionSet, type SourceLibrary, type SourceLibraryChange, type SourceLibraryCount,
+  type SourceLibraryRow, type SourceLibraryWire,
 } from "./read-types";
 
 // ---------------------------------------------------------------- client shape
@@ -358,11 +361,13 @@ export function knownMissing(fn: string, now = Date.now()): boolean {
   const at = missing.get(fn);
   return at !== undefined && now - at < MISSING_TTL_MS;
 }
-/** Test hook: forget missing functions and cached dictionaries. */
+/** Test hook: forget missing functions, cached dictionaries and the cached library. */
 export function resetReadState() {
   missing.clear();
   dictionaries.clear();
   dictWeight = 0;
+  library = null;
+  libraryFlight = null;
 }
 async function callNew<T>(db: SourceDirectClient, fn: string, args: Record<string, unknown>, check: (v: unknown) => v is T): Promise<SourceRead<T>> {
   if (knownMissing(fn)) return readFail("unavailable", "This read needs a database update that is not applied yet");
@@ -405,4 +410,230 @@ export function readSourceFind(db: SourceDirectClient, input: SourceFindQueryInp
 /** Period range and distinct counts computed by the worker (0069 `source_get_snapshot_stats`). */
 export function readSnapshotStats(db: SourceDirectClient, input: SourceSnapshotStatsQueryInput): Promise<SourceRead<SourceSnapshotStats>> {
   return callNew(db, "source_get_snapshot_stats", { _dataset_id: input.datasetId, _snapshot_id: input.snapshotId ?? null }, isStats);
+}
+
+// ---------------------------------------------------------------- getLibrary
+
+/** A dataset row as the library reads it (direct select on `source_datasets`, or `source_library()` after 0069). */
+export type LibraryDatasetRow = {
+  id: string; name: string; sector: string; agency: string; source_id: string | null; source_url: string | null;
+  grain: string; latest_snapshot_id: string | null;
+};
+/** A published snapshot as the library reads it. */
+export type LibrarySnapshotRow = {
+  id: string; dataset_id: string; loaded_rows: number; column_count: number; published_at: string | null; retrieved_at: string | null;
+  dims: Record<string, number> | null; consts: Record<string, string> | null; comp: Record<string, unknown> | null; family: string | null;
+};
+const LIBRARY_DATASET_COLUMNS = "id,name,sector,agency,source_id,source_url,grain,latest_snapshot_id";
+const LIBRARY_SNAPSHOT_COLUMNS = "id,dataset_id,loaded_rows,column_count,published_at,retrieved_at,dims:ingest->dimensions,consts:ingest->constants,comp:ingest->composites,family:coverage->refresh_provenance->>family";
+const DIMENSION_ORDER: SourceDimension[] = ["entity_id", "entity_name", "period", "geo_level", "geo_code", "geo_name", "source_url"];
+export const LIBRARY_TTL_MS = 10 * 60_000;
+const MAX_CHANGE_GROUPS = 200;
+const RUN_GAP_MS = 60 * 60_000;
+
+/** Library times are ISO 8601 at second precision (the packed rows carry seconds). */
+const isoSeconds = (ms: number) => new Date(Math.floor(ms / 1000) * 1000).toISOString();
+const iso = (v: string | null | undefined): string | null => {
+  if (typeof v !== "string" || !v) return null;
+  const ms = Date.parse(v);
+  return Number.isFinite(ms) ? isoSeconds(ms) : null;
+};
+function dimensionsOf(s: LibrarySnapshotRow): SourceDimensionSet {
+  return DIMENSION_ORDER.filter(d => (s.dims && s.dims[d] !== undefined) || (s.consts && s.consts[d] !== undefined) || (d === "period" && !!s.comp?.period));
+}
+
+/** Builds the library from the two small tables. Pure: the same rows give the same library. */
+export function buildLibrary(datasetRows: LibraryDatasetRow[], snapshotRows: LibrarySnapshotRow[], via: SourceLibrary["via"], builtAt: string): SourceLibrary {
+  const snapshotsById = new Map(snapshotRows.map(s => [s.id, s]));
+  const byDataset = new Map<string, LibrarySnapshotRow[]>();
+  for (const s of snapshotRows) {
+    const list = byDataset.get(s.dataset_id) ?? [];
+    list.push(s);
+    byDataset.set(s.dataset_id, list);
+  }
+  for (const list of byDataset.values()) list.sort((a, b) => (Date.parse(a.published_at ?? "") || 0) - (Date.parse(b.published_at ?? "") || 0) || a.id.localeCompare(b.id));
+
+  const entries = new Map<string, CatalogEntry>();
+  const datasets: SourceLibraryRow[] = [];
+  for (const d of [...datasetRows].sort((a, b) => a.id.localeCompare(b.id))) {
+    const latest = d.latest_snapshot_id ? snapshotsById.get(d.latest_snapshot_id) : undefined;
+    if (!latest || latest.dataset_id !== d.id) continue;
+    const entry = describeDataset({ id: d.id, name: d.name, sector: d.sector, agency: d.agency, source_id: d.source_id, source_url: d.source_url, grain: d.grain, rows: latest.loaded_rows, retrieved_at: latest.retrieved_at });
+    entries.set(d.id, entry);
+    const versions = byDataset.get(d.id) ?? [latest];
+    datasets.push({
+      id: d.id, title: entry.title, code: entry.code ?? null, storedName: d.name && d.name !== entry.title ? d.name : null,
+      publisherId: entry.publisher.id, collectionId: entry.collection.id, kind: entry.kind, parentId: entry.parentId ?? null,
+      sector: d.sector, agency: d.agency, sourceId: d.source_id, grain: d.grain, rows: latest.loaded_rows, fields: latest.column_count,
+      publishedAt: iso(latest.published_at), retrievedAt: iso(latest.retrieved_at), dimensions: dimensionsOf(latest),
+      versions: versions.length, refreshFamily: [...versions].reverse().find(v => v.family)?.family ?? null, hidden: entry.hiddenByDefault,
+    });
+  }
+  const position = new Map(datasets.map((r, i) => [r.id, i]));
+
+  type Acc = SourceLibraryCount;
+  const count = (map: Map<string, Acc>, id: string, name: string, short: string, r: SourceLibraryRow) => {
+    const a = map.get(id) ?? { id, name, short, datasets: 0, hidden: 0, rows: 0, fields: 0, newestPublication: null };
+    if (r.hidden) a.hidden++;
+    else {
+      a.datasets++;
+      a.rows += r.rows;
+      a.fields += r.fields;
+      if (r.publishedAt && (!a.newestPublication || r.publishedAt > a.newestPublication)) a.newestPublication = r.publishedAt;
+    }
+    map.set(id, a);
+  };
+  const collections = new Map<string, Acc>();
+  const publishers = new Map<string, Acc>();
+  for (const r of datasets) {
+    const e = entries.get(r.id)!;
+    count(collections, e.collection.id, e.collection.name, e.collection.name, r);
+    count(publishers, e.publisher.id, e.publisher.name, e.publisher.short, r);
+  }
+  const shown = datasets.filter(r => !r.hidden);
+  let newest: string | null = null;
+  for (const s of snapshotRows) {
+    const t = iso(s.published_at);
+    if (t && position.has(s.dataset_id) && (!newest || t > newest)) newest = t;
+  }
+  const order = new Map(COLLECTIONS.map(c => [c.id, c.order]));
+
+  return {
+    totals: {
+      datasets: shown.length, hiddenDatasets: datasets.length - shown.length,
+      publishers: new Set(shown.map(r => r.publisherId)).size,
+      rows: shown.reduce((n, r) => n + r.rows, 0), fields: shown.reduce((n, r) => n + r.fields, 0),
+      newestPublication: newest, refreshable: shown.filter(r => r.refreshFamily).length,
+    },
+    collections: [...collections.values()].sort((a, b) => (order.get(a.id) ?? 999) - (order.get(b.id) ?? 999) || a.id.localeCompare(b.id)),
+    publishers: [...publishers.values()].sort((a, b) => b.datasets - a.datasets || b.rows - a.rows || a.name.localeCompare(b.name)),
+    changes: libraryChanges(byDataset, position, datasets, entries),
+    datasets, via, builtAt,
+  };
+}
+
+type PublicationEvent = { at: number; datasetId: string; snapshot: LibrarySnapshotRow; previous: LibrarySnapshotRow | null };
+function libraryChanges(byDataset: Map<string, LibrarySnapshotRow[]>, position: Map<string, number>, datasets: SourceLibraryRow[], entries: Map<string, CatalogEntry>): SourceLibraryChange[] {
+  const events: PublicationEvent[] = [];
+  for (const [datasetId, list] of byDataset) {
+    if (!position.has(datasetId)) continue;
+    list.forEach((snapshot, i) => {
+      const at = Date.parse(snapshot.published_at ?? "");
+      if (Number.isFinite(at)) events.push({ at, datasetId, snapshot, previous: i > 0 ? list[i - 1] : null });
+    });
+  }
+  events.sort((a, b) => a.at - b.at || a.datasetId.localeCompare(b.datasetId));
+  const groups: PublicationEvent[][] = [];
+  const versionGroups = new Map<string, PublicationEvent[]>();
+  let run: PublicationEvent[] | null = null;
+  for (const e of events) {
+    if (e.previous) {
+      const key = `${entries.get(e.datasetId)!.publisher.id}|${isoSeconds(e.at).slice(0, 13)}`;
+      const g = versionGroups.get(key);
+      if (g) g.push(e);
+      else {
+        const fresh = [e];
+        versionGroups.set(key, fresh);
+        groups.push(fresh);
+      }
+    } else {
+      if (!run || e.at - run[run.length - 1].at >= RUN_GAP_MS) {
+        run = [];
+        groups.push(run);
+      }
+      run.push(e);
+    }
+  }
+  const out = groups.map((g): SourceLibraryChange => {
+    const newestFirst = [...g].reverse();
+    const pubs = new Set(g.map(e => entries.get(e.datasetId)!.publisher.id));
+    const one = pubs.size === 1 ? entries.get(g[0].datasetId)!.publisher : null;
+    const first = g[0];
+    return {
+      from: isoSeconds(g[0].at), to: isoSeconds(g[g.length - 1].at),
+      kind: first.previous ? "version" : "first", publisherId: one?.id ?? null, publisherName: one?.name ?? null, publishers: pubs.size,
+      datasets: new Set(g.map(e => e.datasetId)).size, rows: g.reduce((n, e) => n + e.snapshot.loaded_rows, 0),
+      datasetIds: [...new Set(newestFirst.map(e => e.datasetId))].slice(0, 20),
+      members: [...new Set(newestFirst.map(e => position.get(e.datasetId)!))],
+      single: g.length === 1 ? {
+        datasetId: first.datasetId, title: datasets[position.get(first.datasetId)!].title, rows: first.snapshot.loaded_rows,
+        previousRows: first.previous?.loaded_rows ?? null, snapshotId: first.snapshot.id, previousSnapshotId: first.previous?.id ?? null,
+      } : null,
+    };
+  });
+  return out.sort((a, b) => b.to.localeCompare(a.to) || b.from.localeCompare(a.from)).slice(0, MAX_CHANGE_GROUPS);
+}
+
+/** Every row of a small table in id order, `pages` selects of at most 1,000 rows at most. */
+async function allRows<T>(db: SourceDirectClient, table: "source_datasets" | "source_snapshots", columns: string, ready: boolean, pages: number): Promise<T[]> {
+  const out: Record<string, unknown>[] = [];
+  let after: string | null = null;
+  for (let page = 0; page < pages; page++) {
+    let q = db.from(table).select(columns);
+    if (ready) q = q.eq("status", "ready");
+    if (after !== null) q = q.gt("id", after);
+    const got = await rows(q.order("id", { ascending: true }).limit(READ_LIMITS.page));
+    out.push(...got);
+    if (got.length < READ_LIMITS.page) return out as T[];
+    after = String(got[got.length - 1].id);
+  }
+  return stop("error", `More than ${(pages * READ_LIMITS.page).toLocaleString("en-US")} rows in ${table}: the library needs database update 0069 (source_library) to read them in one call`);
+}
+/** Selects per library build without 0069: snapshots (3,000 rows) then datasets (2,000 rows), five in all. */
+export const LIBRARY_SNAPSHOT_PAGES = 3;
+export const LIBRARY_DATASET_PAGES = 2;
+const isLibraryPayload = (v: unknown): v is { datasets: LibraryDatasetRow[]; snapshots: LibrarySnapshotRow[] } =>
+  isObj(v) && Array.isArray(v.datasets) && Array.isArray(v.snapshots);
+
+let library: { wire: SourceLibraryWire; newest: string | null; checkedAt: number } | null = null;
+let libraryFlight: Promise<SourceRead<SourceLibraryWire>> | null = null;
+
+/**
+ * The landing in one call, packed (`unpackLibrary` restores it). Cached per server process: reused for ten minutes,
+ * then kept while the newest publication time is unchanged. Without 0069 that check reads the snapshot table (at most
+ * three selects) and the dataset table is read only when something was published. Every member sees the same
+ * published rows (row-level security is `has_app_access` and `status = 'ready'`), so one copy serves all members.
+ */
+export function readLibraryWire(db: SourceDirectClient, now = Date.now()): Promise<SourceRead<SourceLibraryWire>> {
+  if (library && now - library.checkedAt < LIBRARY_TTL_MS) return Promise.resolve(readOk(library.wire));
+  if (!libraryFlight) libraryFlight = refreshLibrary(db, now).finally(() => { libraryFlight = null; });
+  return libraryFlight;
+}
+function newestOf(snapshotRows: LibrarySnapshotRow[]): string | null {
+  let newest: string | null = null;
+  for (const s of snapshotRows) {
+    const t = iso(s.published_at);
+    if (t && (!newest || t > newest)) newest = t;
+  }
+  return newest;
+}
+async function refreshLibrary(db: SourceDirectClient, now: number): Promise<SourceRead<SourceLibraryWire>> {
+  return guarded(async () => {
+    let datasetRows: LibraryDatasetRow[];
+    let snapshotRows: LibrarySnapshotRow[];
+    let via: SourceLibrary["via"] = "direct";
+    const fast = await callNew(db, "source_library", {}, isLibraryPayload);
+    if (fast.ok) {
+      ({ datasets: datasetRows, snapshots: snapshotRows } = fast.data);
+      via = "source_library";
+      const newest = newestOf(snapshotRows);
+      if (library && library.newest === newest && library.wire.via === via) {
+        library.checkedAt = now;
+        return library.wire;
+      }
+    } else {
+      if (fast.reason !== "unavailable") stop(fast.reason, fast.message);
+      snapshotRows = await allRows<LibrarySnapshotRow>(db, "source_snapshots", LIBRARY_SNAPSHOT_COLUMNS, true, LIBRARY_SNAPSHOT_PAGES);
+      const newest = newestOf(snapshotRows);
+      if (library && library.newest === newest && library.wire.via === via) {
+        library.checkedAt = now;
+        return library.wire;
+      }
+      datasetRows = await allRows<LibraryDatasetRow>(db, "source_datasets", LIBRARY_DATASET_COLUMNS, false, LIBRARY_DATASET_PAGES);
+    }
+    const built = buildLibrary(datasetRows, snapshotRows, via, new Date(now).toISOString());
+    const wire: SourceLibraryWire = { ...built, datasets: packLibraryRows(built.datasets) };
+    library = { wire, newest: newestOf(snapshotRows), checkedAt: now };
+    return wire;
+  });
 }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { defaultStringifySearch } from "@tanstack/react-router";
+import { datasetHref } from "./links";
 import { sourceDescription } from "./presentation";
 import type { SourceColumn, SourceDatasetDetail, SourceDatasetList, SourceJson, SourceListFilters, SourceRecordPage, SourceRecordQuery, SourceSnapshot } from "./schema";
 import type { OfficialSourceToolName } from "./research-tools";
@@ -41,11 +41,13 @@ function ready(detail:SourceDatasetDetail,datasetId:string,snapshotId?:string):S
   return snapshot;
 }
 
-/** Match the explorer router's JSON search codec so native strings survive parsing. */
+/** The table page of a pinned snapshot, with the record filters and cursor; built by `links.ts`, so tools and screens write one address. */
 export function officialSourceHref(datasetId:string,snapshotId:string,after=0,filters:Pick<RecordsInput,"entity"|"geography"|"period">={entity:undefined,geography:undefined,period:undefined}) {
-  const search=defaultStringifySearch({view:"sources",source:datasetId,snapshot:snapshotId,after,
-    entity:filters.entity,geography:filters.geography,period:filters.period});
-  return `/app/alt-data${search}`;
+  return datasetHref(datasetId,{snapshot:snapshotId,after:after>0?after:undefined,entity:filters.entity,geography:filters.geography,period:filters.period});
+}
+/** The address of one record, with the row number left as `{row_number}` for the reader to fill. */
+export function officialRecordHrefTemplate(datasetId:string,snapshotId:string) {
+  return `${datasetHref(datasetId,{snapshot:snapshotId})}&row={row_number}`;
 }
 
 export function resolveOfficialFields(columns:SourceColumn[],requested:string[]):number[] {
@@ -86,9 +88,12 @@ function sourceScope(detail:SourceDatasetDetail,full:boolean):JsonObject {
   };
   return scope;
 }
+/** Which snapshot was read and whether a newer one is published (rev-app S7): a pinned id kept from history is not "the latest". */
 function identity(detail:SourceDatasetDetail,snapshot:SourceSnapshot):JsonObject {
-  return {dataset_id:detail.dataset.id,snapshot_id:snapshot.id,name:detail.dataset.name,sector:detail.dataset.sector,agency:detail.dataset.agency,
-    source_url:detail.dataset.source_url,source_path:snapshot.source_path,file_sha256:snapshot.file_sha256,retrieved_at:snapshot.retrieved_at,
+  const latest=detail.dataset.latest_snapshot_id;
+  return {dataset_id:detail.dataset.id,snapshot_id:snapshot.id,latest_snapshot_id:latest,is_latest_snapshot:latest===snapshot.id,
+    name:detail.dataset.name,sector:detail.dataset.sector,agency:detail.dataset.agency,
+    source_url:detail.dataset.source_url,source_path:snapshot.source_path,file_sha256:snapshot.file_sha256,retrieved_at:snapshot.retrieved_at,published_at:snapshot.published_at,
     total_snapshot_rows:snapshot.expected_rows,app_url:officialSourceHref(detail.dataset.id,snapshot.id)};
 }
 /** Greedy prefix of complete items. A non-fitting first item leaves the cursor unchanged. */
@@ -133,47 +138,121 @@ function verifyPage(page:SourceRecordPage,snapshot:SourceSnapshot,input:RecordsI
       throw new Error("Official record response did not satisfy the exact entity, geography or period filter.");
     previous=row.row_number;
   }
-  if(page.hasMore && (!page.rows.length || page.nextCursor!==previous)) throw new Error("Official record response has an inconsistent continuation cursor.");
+  // Under the scan cap of the 0069 records function a page can stop before the snapshot's end with no match yet:
+  // then rows may be empty and nextCursor (the last row examined) continues the search (rev-sql M1).
+  if(page.scanComplete===false) {
+    if(!page.hasMore || page.nextCursor===null || page.nextCursor<previous || page.nextCursor>snapshot.expected_rows) throw new Error("Official record response has an inconsistent continuation cursor.");
+  } else if(page.hasMore && (!page.rows.length || page.nextCursor!==previous)) throw new Error("Official record response has an inconsistent continuation cursor.");
 }
 
+const INDEX_KEYS=["entity_id","entity_name","period","geo_level","geo_code","geo_name"] as const;
+/**
+ * One answer of records. What is the same on every row is said once (rev-app S2): the source address rule, the
+ * record address template, the index rule, scope only on the first page, full field descriptors only on the first
+ * page (key, position and unit after that). A row carries its number, its values and the index values it has.
+ */
 function recordsResult(detail:SourceDatasetDetail,snapshot:SourceSnapshot,page:SourceRecordPage,input:RecordsInput,positions:number[]):OfficialResearchResult {
   verifyPage(page,snapshot,input,positions);
-  const rows=page.rows.map(row=>({
-    record_id:`${snapshot.id}:${row.row_number}`,row_number:row.row_number,values:row.values,
-    entity_id:row.entity_id,entity_name:row.entity_name,period:row.period,geo_level:row.geo_level,geo_code:row.geo_code,geo_name:row.geo_name,
-    source_url:row.source_url??detail.dataset.source_url,source_url_basis:row.source_url!==null?"record":detail.dataset.source_url!==null?"dataset":"unavailable",
-    app_url:officialSourceHref(input.dataset_id,snapshot.id,row.row_number-1,input),
-  }));
+  const datasetUrl=detail.dataset.source_url;
+  const rows=page.rows.map(row=>{
+    const out:JsonObject={row_number:row.row_number,values:row.values};
+    for(const key of INDEX_KEYS) if(row[key]!==null) out[key]=row[key];
+    if(row.source_url!==null && row.source_url!==datasetUrl) out.source_url=row.source_url;
+    return out;
+  });
   const filtered=input.entity!==undefined || input.geography!==undefined || input.period!==undefined;
+  const first=input.after===0;
+  const scanStopped=page.scanComplete===false;
+  const fields=positions.map(p=>{
+    if(first) return descriptor(snapshot.columns[p],p);
+    const c=snapshot.columns[p],brief:JsonObject={key:c.key,position:p};
+    if(c.unit!==undefined) brief.unit=c.unit;
+    if(c.scale!==undefined) brief.scale=c.scale;
+    return brief;
+  });
   const {output,included}=wholePage(rows,returned=>{
     const more=returned.length<rows.length || page.hasMore;
-    const cursor=returned.at(-1)?.row_number??input.after;
-    return {kind:"official_source",tool:"query_official_records",...identity(detail,snapshot),scope:sourceScope(detail,false),
+    const lastRow=returned.at(-1)?.row_number;
+    const cursor=returned.length<rows.length || !scanStopped?(typeof lastRow==="number"?lastRow:input.after):page.nextCursor!;
+    return {kind:"official_source",tool:"query_official_records",...identity(detail,snapshot),
+      ...(first?{scope:sourceScope(detail,false)}:{}),
       native_value_rule:"Original string/null cells; no numeric conversion. Blank strings, literal zero and suppression markers are distinct.",
-      fields:positions.map(p=>descriptor(snapshot.columns[p],p)),filters:{entity:input.entity??null,geography:input.geography??null,period:input.period??null},after:input.after,
+      row_rules:{
+        values:"values[i] is the cell of fields[i].",
+        index:"entity_id, entity_name, period, geo_level, geo_code and geo_name are the row's stored search index values; a key a row does not carry is null for that row.",
+        source_url:datasetUrl!==null?"A row's source_url is given only where its record has its own address; every other row comes from the dataset's source_url.":"A row's source_url is given only where its record has its own address; the dataset states none.",
+        record_app_url:officialRecordHrefTemplate(detail.dataset.id,snapshot.id),
+      },
+      fields,...(first?{}:{fields_note:"Full field descriptors were sent with the first page (after 0)."}),
+      filters:{entity:input.entity??null,geography:input.geography??null,period:input.period??null},after:input.after,
       rows:returned,rows_returned:returned.length,remaining_in_fetched_page:rows.length-returned.length,
       remaining_matching_rows:filtered?(more?null:0):Math.max(0,snapshot.expected_rows-cursor),
       remaining_count_basis:filtered?"Unknown until the exact filtered query is exhausted; total_snapshot_rows is unfiltered.":"Unfiltered immutable snapshot row count after the last returned cursor.",
+      ...(page.scanned!==undefined?{rows_examined:page.scanned}:{}),
+      ...(scanStopped?{scan_complete:false}:{}),
       has_more:more,next_cursor:more?cursor:null,requires_narrower_fields:returned.length<rows.length,
-      hint:returned.length<rows.length?"Request fewer chosen fields and keep the same snapshot/filters and next_cursor. A row was omitted whole; no native cell was clipped.":null,
+      hint:returned.length<rows.length?"Request fewer chosen fields and keep the same snapshot/filters and next_cursor. A row was omitted whole; no native cell was clipped."
+        :scanStopped?`The search stopped at its scan limit at row ${page.nextCursor} of ${snapshot.expected_rows} before the end of the snapshot${returned.length?"":" without a match yet"}. Call again with after set to next_cursor to keep searching; this is not the end of the results.`:null,
     };
   });
   return {output,summary:`Read ${included.length} native records · ${detail.dataset.name}`};
 }
 
+/** Lower-case words of a catalogue query, each once, in order. */
+export function searchWords(query:string|undefined):string[] {
+  return [...new Set((query??"").toLocaleLowerCase().split(/\s+/).filter(Boolean))];
+}
+type SearchHits={datasets:SourceDatasetList["datasets"];total:number|null;next:string|null};
+const readyEntry=(d:SourceDatasetList["datasets"][number])=>d.latest_snapshot?.status==="ready" && d.latest_snapshot.quality.quarantined!==true && d.latest_snapshot.loaded_rows===d.latest_snapshot.expected_rows;
+async function phraseSearch(reader:OfficialSourceReader,input:z.infer<typeof officialSearchInput>):Promise<SearchHits> {
+  const page=await reader.list({q:input.query,sector:input.sector,agency:input.agency,after:input.after,limit:input.limit});
+  if(page.datasets.length>input.limit) throw new Error("Official catalogue response exceeded its requested page bound.");
+  return {datasets:page.datasets.filter(readyEntry),total:page.total,next:page.nextCursor??null};
+}
+/** Catalogue pages read per multi-word search, and their size: at most 200 dataset rows. */
+export const EVERY_WORD_PAGES=2,EVERY_WORD_PAGE_SIZE=100;
+/**
+ * Every word must occur (rev-app S9): the database matches one literal phrase, so it is asked for the longest word
+ * and the other words are checked here against the same text it searches (name, description, publisher), in its
+ * order (by dataset id) and with its cursor. `total` is unknown then: the database counts the one word only.
+ */
+async function everyWordSearch(reader:OfficialSourceReader,input:z.infer<typeof officialSearchInput>,words:string[]):Promise<SearchHits> {
+  const probe=words.reduce((a,b)=>b.length>a.length?b:a);
+  const found:SourceDatasetList["datasets"]=[];
+  let after=input.after;
+  for(let read=0;read<EVERY_WORD_PAGES;read++) {
+    const page=await reader.list({q:probe,sector:input.sector,agency:input.agency,after,limit:EVERY_WORD_PAGE_SIZE});
+    if(page.datasets.length>EVERY_WORD_PAGE_SIZE) throw new Error("Official catalogue response exceeded its requested page bound.");
+    for(const d of page.datasets) {
+      const text=`${d.name} ${d.description} ${d.agency}`.toLocaleLowerCase();
+      if(!readyEntry(d) || !words.every(w=>text.includes(w))) continue;
+      found.push(d);
+      if(found.length===input.limit) return {datasets:found,total:null,next:d.id};
+    }
+    if(!page.nextCursor) return {datasets:found,total:null,next:null};
+    after=page.nextCursor;
+  }
+  return {datasets:found,total:null,next:after??null};
+}
+
 export async function executeOfficialResearch(name:OfficialSourceToolName,args:Record<string,unknown>,reader:OfficialSourceReader):Promise<OfficialResearchResult> {
   if(name==="search_official_sources") {
     const input=officialSearchInput.parse(args);
-    const page=await reader.list({q:input.query,sector:input.sector,agency:input.agency,after:input.after,limit:input.limit});
-    if(page.datasets.length>input.limit) throw new Error("Official catalogue response exceeded its requested page bound.");
-    const datasets=page.datasets.filter(d=>d.latest_snapshot?.status==="ready" && d.latest_snapshot.quality.quarantined!==true && d.latest_snapshot.loaded_rows===d.latest_snapshot.expected_rows);
-    const candidates=datasets.map(d=>({dataset_id:d.id,name:d.name,sector:d.sector,agency:d.agency,grain:d.grain,snapshot_id:d.latest_snapshot!.id,source_rows:d.latest_snapshot!.expected_rows,retrieved_at:d.latest_snapshot!.retrieved_at,source_url:d.source_url,app_url:officialSourceHref(d.id,d.latest_snapshot!.id)}));
-    const {output,included}=wholePage(candidates,returned=>({kind:"official_source",tool:name,query:input.query??null,sector:input.sector??null,agency:input.agency??null,after:input.after??null,total_catalogue_matches:page.total,datasets:returned,
-      remaining_in_fetched_page:candidates.length-returned.length,has_more:returned.length<candidates.length || !!page.nextCursor,
-      next_cursor:returned.length<candidates.length?(returned.at(-1)?.dataset_id??input.after??null):(page.nextCursor??null),
-      remaining_catalogue_matches:returned.length<candidates.length || page.nextCursor?null:0,requires_narrower_fields:returned.length<candidates.length,
-      hint:"Inspect exact scope and field keys before reading records. Catalogue counts include overlapping views; no ticker/entity relationship is inferred.",
-    }));
+    const words=searchWords(input.query);
+    const hits=words.length>1?await everyWordSearch(reader,input,words):await phraseSearch(reader,input);
+    const candidates=hits.datasets.map(d=>({dataset_id:d.id,name:d.name,sector:d.sector,agency:d.agency,grain:d.grain,snapshot_id:d.latest_snapshot!.id,source_rows:d.latest_snapshot!.expected_rows,retrieved_at:d.latest_snapshot!.retrieved_at,source_url:d.source_url,app_url:officialSourceHref(d.id,d.latest_snapshot!.id)}));
+    const {output,included}=wholePage(candidates,returned=>{
+      const cut=returned.length<candidates.length;
+      return {kind:"official_source",tool:name,query:input.query??null,match_rule:words.length>1?"Every word occurs in the name, description or publisher.":"The text occurs in the name, description or publisher.",
+        sector:input.sector??null,agency:input.agency??null,after:input.after??null,total_catalogue_matches:hits.total,datasets:returned,
+        remaining_in_fetched_page:candidates.length-returned.length,has_more:cut || hits.next!==null,
+        next_cursor:cut?(returned.at(-1)?.dataset_id??input.after??null):hits.next,
+        remaining_catalogue_matches:cut || hits.next!==null?null:0,requires_narrower_fields:cut,
+        hint:candidates.length?"Inspect exact scope and field keys before reading records. Catalogue counts include overlapping views; no ticker/entity relationship is inferred."
+          :hits.next!==null?"No match in the part of the catalogue read so far. Call again with after set to next_cursor to keep searching."
+          :"Nothing matches. Try one distinctive word (a publisher such as FDIC or EIA, or a series code such as CCSA), or filter by agency.",
+      };
+    });
     return {output,summary:`Found ${included.length} published official sources`};
   }
   if(name==="inspect_official_source") {
@@ -195,7 +274,7 @@ export function compactOfficialSourceOutput(output:string):string|null {
   if(!value || value.kind!=="official_source" || !["search_official_sources","inspect_official_source","query_official_records"].includes(String(value.tool))) return null;
   const compact:Record<string,unknown>={kind:"official_source",tool:value.tool,requires_reread:true};
   for(const key of ["dataset_id","snapshot_id","next_cursor","next_field_after","after","field_after"]) if(value[key]!==undefined) compact[key]=value[key];
-  if(Array.isArray(value.rows)) compact.row_ids=value.rows.map(r=>(r as Record<string,unknown>).record_id);
+  if(Array.isArray(value.rows)) compact.row_ids=value.rows.map(r=>{const row=r as Record<string,unknown>;return row.record_id??`${String(value.snapshot_id)}:${String(row.row_number)}`;});
   else if(Array.isArray(value.row_ids)) compact.row_ids=[...value.row_ids];
   if(Array.isArray(value.fields)) compact.field_keys=value.fields.map(f=>(f as Record<string,unknown>).key);
   else if(Array.isArray(value.field_keys)) compact.field_keys=[...value.field_keys];
@@ -210,4 +289,52 @@ export function compactOfficialSourceOutput(output:string):string|null {
     }
   }
   return text;
+}
+
+/** Budget of the digest a person reads in the assistant's step list. */
+export const OFFICIAL_DIGEST_MAX_CHARS = 4000;
+const short=(id:unknown)=>typeof id==="string"?id.slice(0,12):"";
+const text=(value:unknown)=>value===null?"null":value===""?'""':String(value);
+/**
+ * What the reader of the assistant's steps sees for an official-source answer (rev-app S11), instead of the note
+ * written for the model: whole lines only ("row 48517: ASSET 4091315000 (USD thousands)"), never a cut value, then
+ * the pinned link. The model's own history keeps `compactOfficialSourceOutput`.
+ */
+export function digestOfficialSourceOutput(output:string,budget=OFFICIAL_DIGEST_MAX_CHARS):string|null {
+  let value:Record<string,unknown>;
+  try {value=JSON.parse(output) as Record<string,unknown>;} catch {return null;}
+  if(!value || value.kind!=="official_source") return null;
+  const lines:string[]=[];
+  const items:string[]=[];
+  let tail="";
+  if(value.tool==="search_official_sources") {
+    const datasets=Array.isArray(value.datasets)?value.datasets as Record<string,unknown>[]:[];
+    lines.push(datasets.length?`${datasets.length} official ${datasets.length===1?"table":"tables"} found${value.query?` for "${String(value.query)}"`:""}`:`No official table found${value.query?` for "${String(value.query)}"`:""}`);
+    for(const d of datasets) items.push(`${String(d.name)} · ${String(d.agency)} · ${Number(d.source_rows).toLocaleString("en-US")} rows · ${String(d.app_url)}`);
+  } else if(value.tool==="inspect_official_source") {
+    const fields=Array.isArray(value.fields)?value.fields as Record<string,unknown>[]:[];
+    lines.push(`${String(value.name)}, snapshot ${short(value.snapshot_id)}: ${fields.length} of ${String(value.total_matching_fields)} matching fields`);
+    for(const f of fields) items.push(`${String(f.key)} ${String(f.label)}${f.title&&f.title!==f.label?`, ${String(f.title)}`:""}${f.unit?` (${String(f.unit)})`:""}`);
+    tail=typeof value.app_url==="string"?value.app_url:"";
+  } else if(value.tool==="query_official_records") {
+    const fields=Array.isArray(value.fields)?value.fields as Record<string,unknown>[]:[];
+    const rows=Array.isArray(value.rows)?value.rows as Record<string,unknown>[]:[];
+    lines.push(`${String(value.name)}, snapshot ${short(value.snapshot_id)}${value.is_latest_snapshot===false?" (a newer snapshot is published)":""}: ${rows.length} ${rows.length===1?"record":"records"}`);
+    for(const r of rows) {
+      const values=Array.isArray(r.values)?r.values:[];
+      items.push(`row ${String(r.row_number)}: ${fields.map((f,i)=>`${String(f.label??f.key)} ${text(values[i])}${f.unit?` (${String(f.unit)})`:""}`).join(", ")}`);
+    }
+    tail=typeof value.app_url==="string"?value.app_url:"";
+  } else return null;
+  let digest=lines.join("\n");
+  let omitted=0;
+  for(const [i,item] of items.entries()) {
+    const rest=items.length-i-1;
+    const closing=`${rest?`\n${rest} more in the answer`:""}${tail?`\n${tail}`:""}`;
+    if(digest.length+1+item.length+closing.length>budget) {omitted=items.length-i;break;}
+    digest+=`\n${item}`;
+  }
+  if(omitted) digest+=`\n${omitted} more in the answer`;
+  if(tail) digest+=`\n${tail}`;
+  return digest.length<=budget?digest:null;
 }

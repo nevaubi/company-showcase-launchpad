@@ -1,0 +1,647 @@
+{
+ "dataset": {
+  "id": "official_01_financials_data_fdic_top500_2026_all_sod_branches_dbdabfd5ea",
+  "name": "fdic top500 2026 all sod branches",
+  "sector": "01_financials",
+  "agency": "FDIC",
+  "source_id": "FDIC_SOD",
+  "source_url": "https://api.fdic.gov/banks/sod",
+  "description": "Complete retained source table with all original fields and records from this file. Retained table: 55,060 source rows and 81 columns.",
+  "grain": "Branch × survey year",
+  "units": "Source-native, column-specific units; retained official dictionaries and row unit fields govern interpretation.",
+  "notes": "DEPSUMBR is the branch amount. Bank ASSET and other bank fields repeat across branch rows and must not be summed.\n55,060 branch records for all 500 selected banks, complete pagination; all 82 documented fields requested.\nSource values and disclosure flags are unchanged. Retrieval time does not establish historical public availability.",
+  "latest_snapshot_id": "4650ab942344b6632c95def7754a952a3aa51fd2f6e94a8d8bfec7b3ad5f6d6d",
+  "created_at": "2026-11-25T05:29:55.347319+00:00",
+  "updated_at": "2026-11-25T05:31:25.743706+00:00"
+ },
+ "snapshot": {
+  "id": "4650ab942344b6632c95def7754a952a3aa51fd2f6e94a8d8bfec7b3ad5f6d6d",
+  "dataset_id": "official_01_financials_data_fdic_top500_2026_all_sod_branches_dbdabfd5ea",
+  "file_sha256": "482b43b0be6dd9d10925f8c5a977be5fb1271769dd612c737e877b7dada64f3e",
+  "source_path": "01_financials/data/fdic_top500_2026_all_sod_branches.csv",
+  "retrieved_at": "2026-11-24T10:14:39.851097+00:00",
+  "status": "ready",
+  "expected_rows": 55060,
+  "loaded_rows": 55060,
+  "columns": [
+   {
+    "key": "col0001",
+    "type": "string",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "basis": "Official FDIC dictionary and source report definitions; native values retained",
+    "label": "ZIP",
+    "title": "ZIP CODE",
+    "description": "The ZIP code associated with the physical address of the institution's headquarters.",
+    "native_type": "number",
+    "period_basis": "See definition",
+    "unit_evidence": "Official API schema / official standard-report variable workbook"
+   },
+   {
+    "key": "col0002",
+    "type": "string",
+    "unit": "Text / categorical / date; see definition",
+    "basis": "Official FDIC dictionary and source report definitions; native values retained",
+    "label": "INSAGNT1",
+    "title": "PRIMARY INSURER",
+    "native_type": "string",
+    "period_basis": "See definition",
+    "unit_evidence": "Official API schema / official standard-report variable workbook"
+   },
+   {
+    "key": "col0003",
+    "type": "string",
+    "unit": "Text / categorical / date; see definition",
+    "basis": "Official FDIC dictionary and source report definitions; native values retained",
+    "label": "BKCLASS",
+    "title": "INSTITUTION CLASS",
+    "description": "A classification code assigned by the FDIC based on the institution's charter type (commercial bank or savings institution), charter agent (state or federal), Federal Reserve membership status (Fed member, Fed non-member) and its primary federal regulator (state chartered institutions are subject to both federal and state supervision). _x000D_N - Commercial bank, national (federal) charter, Fed member, and supervised by the Office of the Comptroller of the Currency (OCC); \nNM - Commercial bank, state charter, Fed non-member, and supervised by the Federal Deposit Insurance Corporation (FDIC); _x000D_OI - Insured U.S. branch of a foreign chartered institution (IBA) and supervised by the OCC or FDIC; \nSB Federal savings banks, federal charter, supervised by the OCC or before July 21,2011 the Office of Thrift Supervision (OTS); _x000D_SI - State chartered stock savings banks, supervised by the FDIC; _x000D_SL - State chartered stock savings and loan associations, supervised by the FDIC or before July 21,2011 the OTS; _x000D_SM - Commercial bank, state charter, Fed member, and supervised by the Federal Reserve Bank (FRB); _x000D_NC - Noninsured non-deposit commercial banks and/or trust companies regulated by the OCC, a state, or a territory; _x000D_NS - Noninsured stock savings bank supervised by a state or territory; _x000D_CU - state or federally chartered credit unions supervised by the National Credit Union Association (NCUA).\n\nNote:  The BKCLASS value represents the institution’s class as of the SOD survey date.",
+    "native_type": "string",
+    "period_basis": "See definition",
+    "unit_evidence": "Official API schema / official standard-report variable workbook"
+   },
+   {
+    "key": "col0004",
+    "type": "string",
+    "label": "CNTRYNAB"
+   },
+   {
+    "key": "col0005",
+    "type": "string",
+    "label": "ZIPBR"
+   },
+   {
+    "key": "col0006",
+    "type": "string",
+    "unit": "Text / categorical / date; see definition",
+    "basis": "Official FDIC dictionary and source report definitions; native values retained",
+    "label": "CHRTAGNT",
+    "title": "CHARTER AGENT",
+    "description": "The abbreviation of the chartering agency of the institution.\nOCC   = COMPTROLLER OF THE CURRENCY\nOTS   = OFFICE OF THRIFT SUPERVISION\nSTATE = STATE AGENCY\nSOVER = FOREIGN COUNTRY",
+    "native_type": "string",
+    "period_basis": "See definition",
+    "unit_evidence": "Official API schema / official standard-report variable workbook"
+   },
+   {
+    "key": "col0007",
+    "type": "string",
+    "label": "MSABR"
+   },
+   {
+    "key": "col0008",
+    "type": "string",
+    "label": "UNINUMBR"
+   },
+   {
+    "key": "col0009",
+    "type": "string",
+    "unit": "Text / categorical / date; see definition",
+    "basis": "Official FDIC dictionary and source report definitions; native values retained",
+    "label": "STNAME",
+    "title": "STATE NAME",
+    "native_type": "string",
+    "period_basis": "See definition",
+    "unit_evidence": "Official API schema / official standard-report variable workbook"
+   },
+   {
+    "key": "col0010",
+    "type": "string",
+    "label": "SIMS_ESTABLISHED_DATE"
+   },
+   {
+    "key": "col0011",
+    "type": "string",
+    "label": "YEAR"
+   },
+   {
+    "key": "col0012",
+    "type": "string",
+    "label": "CHRTAGNN"
+   },
+   {
+    "key": "col0013",
+    "type": "string",
+    "label": "BRSERTYP"
+   },
+   {
+    "key": "col0014",
+    "type": "string",
+    "label": "STNUMBR"
+   },
+   {
+    "key": "col0015",
+    "type": "string",
+    "label": "SIMS_DESCRIPTION"
+   },
+   {
+    "key": "col0016",
+    "type": "string",
+    "label": "FDICDBS",
+    "title": "FDIC REGION",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0017",
+    "type": "string",
+    "label": "DOCKET",
+    "title": "Docket Number",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0018",
+    "type": "string",
+    "label": "CNTRYNA"
+   },
+   {
+    "key": "col0019",
+    "type": "string",
+    "label": "NAMEHCR",
+    "title": "Bank Holding Company (Regulatory Top Holder)",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0020",
+    "type": "string",
+    "label": "UNIT",
+    "title": "BANKS UNIT",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "native_type": "number"
+   },
+   {
+    "key": "col0021",
+    "type": "string",
+    "label": "OCCDIST",
+    "title": "OCC DISTRICT",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0022",
+    "type": "string",
+    "label": "DEPSUM"
+   },
+   {
+    "key": "col0023",
+    "type": "string",
+    "label": "DEPDOM",
+    "title": "Deposits held in domestic offices",
+    "unit": "USD thousands (monetary measures)",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0024",
+    "type": "string",
+    "label": "ESCROW"
+   },
+   {
+    "key": "col0025",
+    "type": "string",
+    "label": "CITY2BR"
+   },
+   {
+    "key": "col0026",
+    "type": "string",
+    "label": "HCTMULT",
+    "title": "Bank Holding Company Type",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0027",
+    "type": "string",
+    "label": "INSURED"
+   },
+   {
+    "key": "col0028",
+    "type": "string",
+    "label": "SIMS_PROJECTION"
+   },
+   {
+    "key": "col0029",
+    "type": "string",
+    "label": "BRCENM"
+   },
+   {
+    "key": "col0030",
+    "type": "string",
+    "label": "CHARTER"
+   },
+   {
+    "key": "col0031",
+    "type": "string",
+    "label": "BKMO"
+   },
+   {
+    "key": "col0032",
+    "type": "string",
+    "label": "CONSOLD"
+   },
+   {
+    "key": "col0033",
+    "type": "string",
+    "label": "DIVISIONB"
+   },
+   {
+    "key": "col0034",
+    "type": "string",
+    "label": "ADDRESS",
+    "title": "ADDRESS",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0035",
+    "type": "string",
+    "label": "CSABR"
+   },
+   {
+    "key": "col0036",
+    "type": "string",
+    "label": "DEPSUMBR"
+   },
+   {
+    "key": "col0037",
+    "type": "string",
+    "label": "RSSDHCR",
+    "title": "RSSDID - High Regulatory Holder",
+    "unit": "Federal Reserve parent identifier",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0038",
+    "type": "string",
+    "label": "CNTYNUMB"
+   },
+   {
+    "key": "col0039",
+    "type": "string",
+    "unit": "FDIC certificate identifier",
+    "basis": "Official FDIC dictionary and source report definitions; native values retained",
+    "label": "CERT",
+    "title": "FDIC Certificate #",
+    "description": "A unique number assigned by the FDIC used to identify institutions and for the issuance of insurance certificates.",
+    "native_type": "number",
+    "period_basis": "See definition",
+    "unit_evidence": "Official API schema / official standard-report variable workbook; count/identifier override from official field description"
+   },
+   {
+    "key": "col0040",
+    "type": "string",
+    "label": "SIMS_LATITUDE"
+   },
+   {
+    "key": "col0041",
+    "type": "string",
+    "label": "STALP",
+    "title": "FIPS STATE ALPHA CODE",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0042",
+    "type": "string",
+    "label": "SPECGRP",
+    "title": "Asset Concentration Hierarchy",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0043",
+    "type": "string",
+    "label": "CALL"
+   },
+   {
+    "key": "col0044",
+    "type": "string",
+    "label": "DENOVO",
+    "title": "Denovo Institution",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0045",
+    "type": "string",
+    "label": "FDICNAME"
+   },
+   {
+    "key": "col0046",
+    "type": "string",
+    "label": "RSSDID",
+    "title": "FEDERAL RESERVE ID NUMBER",
+    "unit": "Federal Reserve identifier",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0047",
+    "type": "string",
+    "label": "NAMEBR"
+   },
+   {
+    "key": "col0048",
+    "type": "string",
+    "label": "METROBR"
+   },
+   {
+    "key": "col0049",
+    "type": "string",
+    "label": "NECNAMB"
+   },
+   {
+    "key": "col0050",
+    "type": "string",
+    "label": "CNTYNAMB"
+   },
+   {
+    "key": "col0051",
+    "type": "string",
+    "label": "SPECDESC"
+   },
+   {
+    "key": "col0052",
+    "type": "string",
+    "label": "OCCNAME"
+   },
+   {
+    "key": "col0053",
+    "type": "string",
+    "label": "NECTABR"
+   },
+   {
+    "key": "col0054",
+    "type": "string",
+    "label": "SIMS_ACQUIRED_DATE"
+   },
+   {
+    "key": "col0055",
+    "type": "string",
+    "label": "MICROBR"
+   },
+   {
+    "key": "col0056",
+    "type": "string",
+    "label": "BRNUM"
+   },
+   {
+    "key": "col0057",
+    "type": "string",
+    "label": "CB",
+    "title": "Community Bank",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0058",
+    "type": "string",
+    "label": "STALPBR"
+   },
+   {
+    "key": "col0059",
+    "type": "string",
+    "label": "USA",
+    "title": "USA LOCATED INSTITUTION",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "native_type": "number"
+   },
+   {
+    "key": "col0060",
+    "type": "string",
+    "label": "STNAMEBR"
+   },
+   {
+    "key": "col0061",
+    "type": "string",
+    "label": "FED",
+    "title": "FED DISTRICT",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0062",
+    "type": "string",
+    "label": "REGAGNT",
+    "title": "PRIMARY REGULATING AGENCY",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0063",
+    "type": "string",
+    "label": "FEDNAME"
+   },
+   {
+    "key": "col0064",
+    "type": "string",
+    "label": "ASSET",
+    "title": "Total assets",
+    "unit": "USD thousands (monetary measures)",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0065",
+    "type": "string",
+    "label": "INSBRTS"
+   },
+   {
+    "key": "col0066",
+    "type": "string",
+    "label": "PLACENUM"
+   },
+   {
+    "key": "col0067",
+    "type": "string",
+    "label": "ADDRESBR"
+   },
+   {
+    "key": "col0068",
+    "type": "string",
+    "label": "SIMS_LONGITUDE"
+   },
+   {
+    "key": "col0069",
+    "type": "string",
+    "label": "INSBRDD"
+   },
+   {
+    "key": "col0070",
+    "type": "string",
+    "label": "CITYHCR",
+    "title": "City of High Holder",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0071",
+    "type": "string",
+    "label": "STCNTY",
+    "title": "State and County Nunber",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0072",
+    "type": "string",
+    "label": "CSANAMBR"
+   },
+   {
+    "key": "col0073",
+    "type": "string",
+    "label": "CITY",
+    "title": "CITY",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0074",
+    "type": "string",
+    "label": "CLCODE",
+    "title": "Classcode",
+    "unit": "Not explicitly specified in retrieved field metadata",
+    "native_type": "number",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0075",
+    "type": "string",
+    "label": "STCNTYBR"
+   },
+   {
+    "key": "col0076",
+    "type": "string",
+    "label": "CBSA_DIV_NAMB"
+   },
+   {
+    "key": "col0077",
+    "type": "string",
+    "label": "MSANAMB"
+   },
+   {
+    "key": "col0078",
+    "type": "string",
+    "unit": "Text / categorical / date; see definition",
+    "basis": "Official FDIC dictionary and source report definitions; native values retained",
+    "label": "NAMEFULL",
+    "title": "INSTITUTION FULL NAME",
+    "description": "Institution Name at Time of Reporting",
+    "native_type": "string",
+    "period_basis": "See definition",
+    "unit_evidence": "Official API schema / official standard-report variable workbook"
+   },
+   {
+    "key": "col0079",
+    "type": "string",
+    "label": "CITYBR"
+   },
+   {
+    "key": "col0080",
+    "type": "string",
+    "label": "STALPHCR",
+    "title": "Regulatory holding company state location",
+    "unit": "Text / categorical / date; see definition",
+    "native_type": "string",
+    "description": "[Title and definition not held in the preview fixture]"
+   },
+   {
+    "key": "col0081",
+    "type": "string",
+    "label": "ID",
+    "title": "FDIC source record identifier",
+    "unit": "identifier",
+    "description": "[Title and definition not held in the preview fixture]"
+   }
+  ],
+  "column_count": 81,
+  "coverage": {
+   "source_ids": [
+    "FDIC_SOD"
+   ],
+   "entity_type": "FDIC_certificate",
+   "source_path": "01_financials/data/fdic_top500_2026_all_sod_branches.csv",
+   "source_urls": [
+    "https://api.fdic.gov/banks/sod"
+   ],
+   "identity_rule": "CERT identifies insured institution; ID identifies source record; RSSDHCR identifies regulatory parent and must not replace CERT.",
+   "geography_rule": "Branch county STCNTYBR only: validated 4/5-digit numeric source code is zero-padded to five in the search index. Native values unchanged; missing/invalid codes are unindexed. STCNTY county names and CNTYNUMB components are not used.",
+   "overlaps_files": [],
+   "collection_slug": "01_financials",
+   "population_role": "source_native_table",
+   "entity_id_column": "CERT",
+   "period_components": [
+    "YEAR"
+   ],
+   "source_linkage_basis": "workbook_specification",
+   "publication_time_known": false,
+   "source_retrieval_times": [
+    "2026-11-24T10:14:39.851097+00:00"
+   ],
+   "availability_time_known": false,
+   "period_index_is_native_text": true,
+   "archive_population_is_not_unique_entity_count": true
+  },
+  "quality": {
+   "row_width_verified": true,
+   "source_value_policy": "exact_strings_blank_is_empty_string",
+   "duplicate_header_labels": {},
+   "geo_identifier_validation": {
+    "STCNTYBR": {
+     "invalid": 9454,
+     "examples": [
+      "1095",
+      "1071",
+      "1133",
+      "1039"
+     ],
+     "nonempty": 55060
+    }
+   },
+   "source_bytes_sha256_verified": true,
+   "source_lexical_marker_counts": {
+    "NM": 10420
+   },
+   "_preview_dropped_keys": [
+    "blank_counts_by_column"
+   ]
+  },
+  "ingest": {
+   "format": "csv",
+   "encoding": "utf-8",
+   "constants": {
+    "geo_level": "county",
+    "source_url": "https://api.fdic.gov/banks/sod"
+   },
+   "delimiter": ",",
+   "dimensions": {
+    "period": 10,
+    "geo_code": 74,
+    "geo_name": 49,
+    "entity_id": 38
+   },
+   "header_rows": 1,
+   "geo_code_format": "county_fips_5"
+  },
+  "attempts": 1,
+  "created_at": "2026-11-25T05:29:58.793658+00:00",
+  "published_at": "2026-11-25T05:31:25.743706+00:00"
+ },
+ "file": null
+}

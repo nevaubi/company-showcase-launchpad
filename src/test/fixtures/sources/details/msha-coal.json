@@ -1,0 +1,157 @@
+{
+ "dataset": {
+  "id": "official_04_energy_csv_msha_coal_employment_production_2000_2026_full_d3f430059d",
+  "name": "MSHA Coal Employment Production 2000 2026 FULL",
+  "sector": "04_energy",
+  "agency": "US DOL MSHA",
+  "source_id": "MSHA_COAL",
+  "source_url": "https://arlweb.msha.gov/OpenGovernmentData/DataSets/MinesProdYearly.zip",
+  "description": "Complete retained source table with all original fields and records from this file. Retained table: 70,374 source rows and 11 columns.",
+  "grain": "mine / subunit / calendar year",
+  "units": "Source-native, column-specific units; retained official dictionaries and row unit fields govern interpretation.",
+  "notes": "Clean coal production is short tons per Form 7000-2. Null production remains null. Average subunit employee counts are not unduplicated workers.\nAll 70374 coal rows from complete 659470-row operator annual file.\nSource values and disclosure flags are unchanged. Retrieval time does not establish historical public availability.",
+  "latest_snapshot_id": "e3cef823a5c16c29c92637045fb6948e788585b319ecdcd18f25705fe41c586e",
+  "created_at": "2026-11-25T05:29:56.689+00:00",
+  "updated_at": "2026-11-25T06:17:29.822171+00:00"
+ },
+ "snapshot": {
+  "id": "e3cef823a5c16c29c92637045fb6948e788585b319ecdcd18f25705fe41c586e",
+  "dataset_id": "official_04_energy_csv_msha_coal_employment_production_2000_2026_full_d3f430059d",
+  "file_sha256": "d4b7a30f2fe9f410b16fe851d49c0e82cf2fc60c6c221c2401f0f42929d2de03",
+  "source_path": "04_energy/csv/MSHA_Coal_Employment_Production_2000_2026_FULL.csv",
+  "retrieved_at": "2026-11-24T09:55:53.865453+00:00",
+  "status": "ready",
+  "expected_rows": 70374,
+  "loaded_rows": 70374,
+  "columns": [
+   {
+    "key": "col0001",
+    "type": "string",
+    "label": "MINE_ID"
+   },
+   {
+    "key": "col0002",
+    "type": "string",
+    "label": "CURR_MINE_NM"
+   },
+   {
+    "key": "col0003",
+    "type": "string",
+    "label": "STATE_ABBR"
+   },
+   {
+    "key": "col0004",
+    "type": "string",
+    "label": "SUBUNIT_CD"
+   },
+   {
+    "key": "col0005",
+    "type": "string",
+    "label": "SUBUNIT_DESC"
+   },
+   {
+    "key": "col0006",
+    "type": "string",
+    "label": "CALENDAR_YR"
+   },
+   {
+    "key": "col0007",
+    "type": "string",
+    "unit": "employee-hours",
+    "basis": "workbook_units",
+    "label": "ANNUAL_HRS"
+   },
+   {
+    "key": "col0008",
+    "type": "string",
+    "unit": "short tons clean coal",
+    "basis": "workbook_units",
+    "label": "ANNUAL_COAL_PROD"
+   },
+   {
+    "key": "col0009",
+    "type": "string",
+    "unit": "sum of subunit average employees",
+    "basis": "workbook_units",
+    "label": "AVG_ANNUAL_EMPL"
+   },
+   {
+    "key": "col0010",
+    "type": "string",
+    "label": "AVG_EMPLOYEE_HOURS"
+   },
+   {
+    "key": "col0011",
+    "type": "string",
+    "label": "C_M_IND"
+   }
+  ],
+  "column_count": 11,
+  "coverage": {
+   "source_ids": [
+    "MSHA_COAL"
+   ],
+   "entity_type": "mine",
+   "source_path": "04_energy/csv/MSHA_Coal_Employment_Production_2000_2026_FULL.csv",
+   "source_urls": [
+    "https://arlweb.msha.gov/OpenGovernmentData/DataSets/MinesProdYearly.zip"
+   ],
+   "overlaps_files": [],
+   "collection_slug": "04_energy",
+   "population_role": "source_native_table",
+   "entity_id_column": "MINE_ID",
+   "period_components": [],
+   "source_linkage_basis": "inspected_sector_mapping",
+   "publication_time_known": false,
+   "source_retrieval_times": [
+    "2026-11-24T09:55:53.865453+00:00"
+   ],
+   "availability_time_known": false,
+   "period_index_is_native_text": true,
+   "archive_population_is_not_unique_entity_count": true
+  },
+  "quality": {
+   "row_width_verified": true,
+   "source_value_policy": "exact_strings_blank_is_empty_string",
+   "blank_counts_by_column": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    5768,
+    0,
+    0,
+    0
+   ],
+   "duplicate_header_labels": {},
+   "geo_identifier_validation": {},
+   "source_bytes_sha256_verified": true,
+   "source_lexical_marker_counts": {
+    "NM": 399
+   }
+  },
+  "ingest": {
+   "format": "csv",
+   "encoding": "utf-8",
+   "constants": {
+    "geo_level": "state",
+    "source_url": "https://arlweb.msha.gov/OpenGovernmentData/DataSets/MinesProdYearly.zip"
+   },
+   "delimiter": ",",
+   "dimensions": {
+    "period": 5,
+    "geo_code": 2,
+    "entity_id": 0,
+    "entity_name": 1
+   },
+   "header_rows": 1
+  },
+  "attempts": 1,
+  "created_at": "2026-11-25T05:30:02.038383+00:00",
+  "published_at": "2026-11-25T06:17:29.822171+00:00"
+ },
+ "file": null
+}

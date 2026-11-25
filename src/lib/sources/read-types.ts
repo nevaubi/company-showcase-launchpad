@@ -276,12 +276,12 @@ export type SourceSnapshotStats = {
 
 // ---------------------------------------------------------------- getLibrary
 
-/** Dimensions a snapshot fills, from `ingest.dimensions`, `ingest.constants` and `ingest.composites`. */
+/** Dimensions a snapshot fills, from `ingest.dimensions`, `ingest.constants` and `ingest.composites`, in schema order. */
 export type SourceDimensionSet = SourceDimension[];
 /** One slim row per published dataset, for the landing and client-side search. */
 export type SourceLibraryRow = {
   id: string;
-  /** Reader-facing title from the catalogue. */
+  /** Reader-facing title from the catalogue (`describeDataset`). */
   title: string;
   /** The publisher's own table or series code, when the catalogue knows it. */
   code: string | null;
@@ -296,47 +296,74 @@ export type SourceLibraryRow = {
   agency: string;
   sourceId: string | null;
   grain: string;
-  units: string;
-  snapshotId: string;
+  /** Rows and fields of the latest published snapshot, exact. */
   rows: number;
   fields: number;
+  /** Times of the latest snapshot (ISO 8601 from `Date.prototype.toISOString`, second precision). */
   publishedAt: string | null;
   retrievedAt: string | null;
   dimensions: SourceDimensionSet;
   /** Published snapshots of this dataset (1 = never replaced). */
   versions: number;
-  /** Refresh adapter family when a refresh has run for it (`coverage.refresh_provenance.family`), else null. */
+  /** Refresh adapter family when a refresh has run for it (`coverage.refresh_provenance.family` on any snapshot), else null. */
   refreshFamily: string | null;
+  /** The catalogue's `hiddenByDefault`: internal specification tables, empty tables. */
   hidden: boolean;
 };
+/** Counts over the datasets a reader sees by default (`hidden` false); `hidden` counts the others. */
 export type SourceLibraryCount = {
   id: string;
   name: string;
+  /** Short display name (publishers); the name again for collections. */
+  short: string;
   datasets: number;
+  hidden: number;
   rows: number;
   fields: number;
   newestPublication: string | null;
 };
-/** Publication events grouped by hour, publisher and kind (ux.md Screen 2, region 5). */
+/**
+ * Publication events grouped as ux.md Screen 2 region 5 describes: new versions by publisher and hour; first
+ * publications by run (consecutive first publications less than an hour apart form one group, across publishers,
+ * so the initial load is one line).
+ */
 export type SourceLibraryChange = {
   /** First and last publication time in the group (ISO 8601). */
   from: string;
   to: string;
-  publisherId: string;
-  publisherName: string;
   /** `first`: a dataset's first published snapshot; `version`: a snapshot that replaced an earlier one. */
   kind: "first" | "version";
+  /** The publisher when the group has one; null for a first-publication run across several publishers. */
+  publisherId: string | null;
+  publisherName: string | null;
+  publishers: number;
   datasets: number;
+  /** Rows of the group's snapshots, summed. */
+  rows: number;
   /** Up to 20 dataset ids of the group, newest first. */
   datasetIds: string[];
+  /** Every dataset of the group as an index into `SourceLibrary.datasets`, newest first. */
+  members: number[];
   /** For a group of one: the dataset, its rows now and before (null for a first publication), both snapshot ids. */
   single: { datasetId: string; title: string; rows: number; previousRows: number | null; snapshotId: string; previousSnapshotId: string | null } | null;
 };
 export type SourceLibrary = {
-  totals: { datasets: number; publishers: number; rows: number; fields: number; newestPublication: string | null; refreshable: number };
+  totals: {
+    /** Datasets a reader sees by default; `hiddenDatasets` are the others. */
+    datasets: number;
+    hiddenDatasets: number;
+    publishers: number;
+    rows: number;
+    fields: number;
+    newestPublication: string | null;
+    /** Datasets with a refresh family. */
+    refreshable: number;
+  };
+  /** In the catalogue's collection order; only collections with at least one dataset. */
   collections: SourceLibraryCount[];
+  /** By datasets, most first. */
   publishers: SourceLibraryCount[];
-  /** Newest first, at most 10 groups built from the last 40 replacing publications and the first publications. */
+  /** Newest first, every group (at most 200). The landing shows the first ten. */
   changes: SourceLibraryChange[];
   datasets: SourceLibraryRow[];
   /** Which path built it: the 0069 function or direct selects on the two small tables. */
@@ -344,6 +371,82 @@ export type SourceLibrary = {
   /** When this server process built it (ISO 8601); the cache holds it ten minutes, keyed by the newest publication. */
   builtAt: string;
 };
+
+/** The columns of the packed rows, in order. Coded columns hold an index into `dict[column]`. */
+export const LIBRARY_COLUMNS = [
+  "id", "title", "code", "storedName", "publisherId", "collectionId", "kind", "parentId", "sector", "agency", "sourceId",
+  "grain", "rows", "fields", "publishedAt", "retrievedAt", "dimensions", "versions", "refreshFamily", "hidden",
+] as const;
+export const LIBRARY_CODED = ["publisherId", "collectionId", "kind", "sector", "agency", "sourceId", "grain", "dimensions", "refreshFamily"] as const;
+export type LibraryCodedColumn = (typeof LIBRARY_CODED)[number];
+/**
+ * What the server function sends: the library with its dataset rows packed as arrays, about a third of the size of
+ * objects. Repeated strings are coded by dictionary; an id of the usual form `official_<sector>_<rest>` is sent as
+ * `<rest>` (any other id as `=<id>`); a parent is the index of its row (or `=<id>` when it is not listed); times are
+ * seconds after `timeBase`; `dimensions` is a comma list; `hidden` is 0 or 1. `unpackLibrary` restores
+ * `SourceLibrary`, with times at second precision.
+ */
+export type SourceLibraryWire = Omit<SourceLibrary, "datasets"> & {
+  datasets: { columns: readonly string[]; dict: Record<LibraryCodedColumn, string[]>; timeBase: number; rows: (string | number | null)[][] };
+};
+
+export function packLibraryRows(rows: SourceLibraryRow[]): SourceLibraryWire["datasets"] {
+  const dict = Object.fromEntries(LIBRARY_CODED.map(c => [c, [] as string[]])) as Record<LibraryCodedColumn, string[]>;
+  const index = Object.fromEntries(LIBRARY_CODED.map(c => [c, new Map<string, number>()])) as Record<LibraryCodedColumn, Map<string, number>>;
+  const code = (column: LibraryCodedColumn, value: string | null): number | null => {
+    if (value === null) return null;
+    let i = index[column].get(value);
+    if (i === undefined) {
+      i = dict[column].push(value) - 1;
+      index[column].set(value, i);
+    }
+    return i;
+  };
+  const seconds = (v: string | null) => (v === null || !Number.isFinite(Date.parse(v)) ? null : Math.floor(Date.parse(v) / 1000));
+  const times = rows.flatMap(r => [seconds(r.publishedAt), seconds(r.retrievedAt)]).filter((t): t is number => t !== null);
+  const timeBase = times.length ? Math.min(...times) : 0;
+  const rel = (v: string | null) => {
+    const t = seconds(v);
+    return t === null ? null : t - timeBase;
+  };
+  const position = new Map(rows.map((r, i) => [r.id, i]));
+  const shortId = (r: SourceLibraryRow) => {
+    const prefix = `official_${r.sector}_`;
+    return r.id.startsWith(prefix) && r.id.length > prefix.length && !r.id.startsWith("=", prefix.length) ? r.id.slice(prefix.length) : `=${r.id}`;
+  };
+  const packed = rows.map(r => [
+    shortId(r), r.title, r.code, r.storedName, code("publisherId", r.publisherId), code("collectionId", r.collectionId), code("kind", r.kind),
+    r.parentId === null ? null : position.get(r.parentId) ?? `=${r.parentId}`, code("sector", r.sector), code("agency", r.agency),
+    code("sourceId", r.sourceId), code("grain", r.grain), r.rows, r.fields, rel(r.publishedAt), rel(r.retrievedAt),
+    code("dimensions", r.dimensions.join(",")), r.versions, code("refreshFamily", r.refreshFamily), r.hidden ? 1 : 0,
+  ]);
+  return { columns: LIBRARY_COLUMNS, dict, timeBase, rows: packed };
+}
+
+export function unpackLibrary(wire: SourceLibraryWire): SourceLibrary {
+  const { dict, rows, columns, timeBase } = wire.datasets;
+  if (columns.length !== LIBRARY_COLUMNS.length || columns.some((c, i) => c !== LIBRARY_COLUMNS[i])) throw new Error("Unknown library row layout");
+  const coded = (column: LibraryCodedColumn, v: unknown): string | null => (typeof v === "number" ? dict[column][v] ?? null : null);
+  const text = (v: unknown) => (typeof v === "string" ? v : null);
+  const time = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? new Date((timeBase + v) * 1000).toISOString() : null);
+  const sectors = rows.map(r => coded("sector", r[8]) ?? "");
+  const ids = rows.map((r, i) => {
+    const s = String(r[0]);
+    return s.startsWith("=") ? s.slice(1) : `official_${sectors[i]}_${s}`;
+  });
+  const datasets: SourceLibraryRow[] = rows.map((r, i) => ({
+    id: ids[i], title: String(r[1]), code: text(r[2]), storedName: text(r[3]),
+    publisherId: coded("publisherId", r[4]) ?? "", collectionId: coded("collectionId", r[5]) ?? "",
+    kind: (coded("kind", r[6]) ?? "native") as SourceLibraryRow["kind"],
+    parentId: typeof r[7] === "number" ? ids[r[7]] ?? null : typeof r[7] === "string" ? r[7].slice(1) : null,
+    sector: sectors[i], agency: coded("agency", r[9]) ?? "", sourceId: coded("sourceId", r[10]),
+    grain: coded("grain", r[11]) ?? "", rows: Number(r[12]), fields: Number(r[13]),
+    publishedAt: time(r[14]), retrievedAt: time(r[15]),
+    dimensions: (coded("dimensions", r[16]) ?? "").split(",").filter(Boolean) as SourceDimensionSet,
+    versions: Number(r[17]), refreshFamily: coded("refreshFamily", r[18]), hidden: r[19] === 1,
+  }));
+  return { ...wire, datasets };
+}
 
 // ---------------------------------------------------------------- inputs (zod), the bounds the server keeps
 
