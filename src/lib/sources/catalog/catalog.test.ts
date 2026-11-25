@@ -190,9 +190,9 @@ describe("describeDataset", () => {
 
   it("drops the stale-copy issue once the table is retrieved after the new release", () => {
     const union = { ...base, id: "official_04_energy_csv_mer_all_107_tables_all_history_3e7c636fc7", sector: "04_energy", agency: "US EIA", source_id: "EIA_MER" };
-    expect(describeDataset({ ...union, retrieved_at: "2026-11-24T09:55:00Z" }).issues.map((i) => i.id)).toEqual(["W1"]);
-    expect(describeDataset({ ...union, retrieved_at: null }).issues.map((i) => i.id)).toEqual(["W1"]);
-    expect(describeDataset({ ...union, retrieved_at: "2026-11-26T08:00:00Z" }).issues).toEqual([]);
+    expect(describeDataset({ ...union, retrieved_at: "2026-11-24T09:55:00Z" }).issues.map((i) => i.id)).toEqual(["W1", "M4"]);
+    expect(describeDataset({ ...union, retrieved_at: null }).issues.map((i) => i.id)).toEqual(["W1", "M4"]);
+    expect(describeDataset({ ...union, retrieved_at: "2026-11-26T08:00:00Z" }).issues.map((i) => i.id)).toEqual(["M4"]);
   });
 
   it("never throws and keeps the stored name of a dataset it has not seen", () => {

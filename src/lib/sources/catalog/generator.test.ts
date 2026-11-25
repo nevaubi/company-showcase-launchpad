@@ -38,7 +38,7 @@ const row = (id: string, name: string): DatasetRow => ({
   agency: "Federal Reserve Board",
   source_id: "FED_Z1",
   source_url: "https://www.federalreserve.gov/releases/z1/",
-  grain: "Sector/instrument series × period",
+  grain: "Sector/instrument series \u00d7 period",
   rows: 305,
   retrieved_at: "2026-11-24T10:00:00.000Z",
 });
@@ -47,7 +47,7 @@ describe("listing titles", () => {
   it("keeps the publisher's words and turns its dashes into commas or ranges", () => {
     expect(listingTitle("Financial accounts matrix--transactions")).toBe("Financial accounts matrix, transactions");
     expect(listingTitle("Total economy - current account")).toBe("Total economy, current account");
-    expect(listingTitle("Prices, 2020–2025")).toBe("Prices, 2020 to 2025");
+    expect(listingTitle("Prices, 2020\u20132025")).toBe("Prices, 2020 to 2025");
     expect(listingTitle("Mortgage real estate investment trusts &amp; funds  ")).toBe("Mortgage real estate investment trusts & funds");
     expect(listingTitle("Ownership&#39;s share")).toBe("Ownership's share");
   });

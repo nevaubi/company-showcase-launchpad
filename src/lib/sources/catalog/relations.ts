@@ -55,6 +55,22 @@ const EIA861_NON_NET = o(
 );
 const EGRID_PLANT = o("05_utilities_csv_egrid2023_plnt23_full_964175ba0b");
 const SEC_EMPTY = o("12_sec_company_financials_ambiguous_facts_0440a6946c");
+const EIA923_ANNUAL = o("05_utilities_csv_eia923_record_annual_2020_2025_full_5bd9e9031f");
+const IR_TABLES = [
+  o("13_ir_integration_ir_document_inventory_7a0103703d"),
+  o("13_ir_integration_ir_sheet_inventory_123a5fefcd"),
+  o("13_ir_integration_ir_source_cells_2d82184900"),
+  o("13_ir_integration_source_indexes_hood_official_quarterly_ir_links_67ae5a86b6"),
+];
+/** The six non-raw `EIA_MER` tables that are Monthly Energy Review data (the two EV files are apart). */
+const MER_DERIVED = [
+  MER_UNION,
+  o("04_energy_csv_mer_normalized_observations_all_history_a30b874605"),
+  o("04_energy_csv_annual_energy_history_cb19180b78"),
+  o("04_energy_csv_monthly_energy_2024_onward_1bf877c69e"),
+  o("04_energy_csv_energy_series_dictionary_301bb6518e"),
+  o("04_energy_csv_energy_source_flags_6296a665d7"),
+];
 
 const ERS = "09_consumer_staples_";
 const ERS_PAIRS: [string, string][] = [
@@ -142,6 +158,11 @@ const AUDIT_ROWS: [string, CatalogKind, string?][] = [
   [o("12_sec_company_financials_selected_tag_dictionary_ce05b8ab45"), "reference"],
   // Energy: the union of the 107 Monthly Energy Review tables has no single parent.
   [MER_UNION, "projection"],
+  // EIA-923: the six yearly Generation and Fuel tables (101,304 rows together) are the annual
+  // record table; the monthly table is its twelve months unpivoted (12 x 101,304); plant sums.
+  [EIA923_ANNUAL, "projection"],
+  [o("05_utilities_csv_eia923_record_monthly_netgen_2020_2025_full_cf872fc2c0"), "projection", EIA923_ANNUAL],
+  [o("05_utilities_csv_eia923_plant_annual_2020_2025_full_8bfe728a7d"), "derived", EIA923_ANNUAL],
   // Technology and communications.
   [
     o("02_technology_csv_us_electronics_ip_b57a689467"),
@@ -224,6 +245,12 @@ function byRule(d: CatalogInput): Relation | null {
   if (/_indicators_all_observations_[0-9a-f]{10}$/.test(d.id)) return { kind: "projection" };
   if (/_series_catalogue_[0-9a-f]{10}$/.test(d.id)) return { kind: "reference" };
   if (/(_lookup|_dictionary|_field_dictionary)(_full)?_[0-9a-f]{10}$/.test(d.id)) return { kind: "reference" };
+  // The kit's lists of files, tables and series it read: not publisher records.
+  if (/_(inventory|catalog_latest)_[0-9a-f]{10}$/.test(d.id)) return { kind: "reference" };
+  // Rows the kit flagged by checking an accounting identity: computed, not published.
+  if (/_identity_exceptions_[0-9a-f]{10}$/.test(d.id)) return { kind: "derived" };
+  // Tables the kit joined from several published tables.
+  if (/_joined_[0-9a-f]{10}$/.test(d.id)) return { kind: "projection" };
   return null;
 }
 
@@ -276,6 +303,12 @@ const ISSUE_TEXT = {
   wrongLink:
     "The stored source address points to Monthly Energy Review table 1.1; this file is EIA's electric vehicle charging data.",
   sameFile: "This is the same file as EIA's charging-port microdata table; do not add the two.",
+  merLink:
+    "The stored source address is Monthly Energy Review table 1.1 alone; this table is built from all 107 tables.",
+  irLink:
+    "The stored source address is Robinhood's investor site, but this table holds JPMorgan Chase rows too.",
+  secLink:
+    "The stored source address is the 2026q3 data set, but rows come from other quarterly sets too (row 2,000 cites 2025q4).",
   sameRows:
     "These rows are also stored as the exchange's current monthly revenue table; do not add the two.",
 } as const;
@@ -324,6 +357,9 @@ const ISSUES: [string, IssueRule][] = [
   [EV_MICRODATA_RAW, { id: "M4", text: ISSUE_TEXT.wrongLink }],
   [EV_ID_LINKING_RAW, { id: "M4", text: ISSUE_TEXT.wrongLink }],
   [EV_MICRODATA_RAW, { id: "DUP", text: ISSUE_TEXT.sameFile }],
+  ...MER_DERIVED.map((id): [string, IssueRule] => [id, { id: "M4", text: ISSUE_TEXT.merLink }]),
+  ...IR_TABLES.map((id): [string, IssueRule] => [id, { id: "M4", text: ISSUE_TEXT.irLink }]),
+  [SEC_FACTS, { id: "M4", text: ISSUE_TEXT.secLink }],
 ];
 
 const ISSUES_BY_ID = new Map<string, IssueRule[]>();
