@@ -135,6 +135,7 @@ describe("OrangeBookView", () => {
     expect(screen.getByText(OB_CAVEAT)).toBeTruthy();
     const eliquis = screen.getByRole("button", { name: "ELIQUIS" }).closest("tr")!;
     expect(within(eliquis).getByText("NDA 202155")).toBeTruthy();
+    expect(within(eliquis).getByText("2")).toBeTruthy(); // 6967208 and 9326945; their *PED lines are the same patents
     expect(within(eliquis).getByText("Aug 24, 2031")).toBeTruthy();
     expect(within(eliquis).getByText(/Oct 17, 2028/)).toBeTruthy();
     expect(screen.queryByText(/TUBOCURARINE/)).toBeNull(); // no Orange Book patent or exclusivity rows

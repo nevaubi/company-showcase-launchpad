@@ -24,6 +24,8 @@ const EXCLUSIVITY_WORDS: Record<string, string> = {
   CGT: "Competitive generic therapy",
 };
 const codeWords = (code: string) => EXCLUSIVITY_WORDS[code.split("-")[0]] ?? undefined;
+/** Patents an application lists: a number printed with *PED is the same patent with pediatric exclusivity, counted once. */
+const patentCount = (a: ObApplication) => new Set(a.patents.filter(p => !p.delisted).map(p => p.patent.replace(/\*PED$/, ""))).size;
 
 /** The query of a company's Orange Book rows, keyed by the applications its FDA panel shows. */
 export const companyPatentsQuery = (ticker: string, asks: { appl: string; sponsor: string }[]) => ({
@@ -119,10 +121,10 @@ export function OrangeBookView({ data, selected, onSelect }: { data: CompanyPate
                     </button>
                     <span className="ml-1.5 text-[11px] text-muted-foreground">{a.ingredient.join(", ").toLowerCase()}</span>
                   </td>
-                  <td className="num py-1 pr-2 text-[11px] text-muted-foreground">NDA {a.appl}</td>
-                  <td className="num py-1 text-right">{a.patents.filter(p => !p.delisted).length}</td>
-                  <td className="num py-1 pl-3 text-[11px]">{last.patent ? last.patent.expiry : <span className="text-muted-foreground">{"–"}</span>}</td>
-                  <td className="num py-1 pr-3.5 text-[11px]">
+                  <td className="num whitespace-nowrap py-1 pr-2 text-[11px] text-muted-foreground">NDA {a.appl}</td>
+                  <td className="num py-1 text-right">{patentCount(a)}</td>
+                  <td className="num whitespace-nowrap py-1 pl-3 text-[11px]">{last.patent ? last.patent.expiry : <span className="text-muted-foreground">{"–"}</span>}</td>
+                  <td className="num whitespace-nowrap py-1 pr-3.5 text-[11px]">
                     {last.exclusivity ? (
                       <span title={codeWords(last.exclusivity.code)}>
                         {last.exclusivity.date} <span className="text-muted-foreground">{last.exclusivity.code}</span>
@@ -172,15 +174,15 @@ function ApplicationDetail({ app }: { app: ObApplication }) {
             <tbody>
               {app.patents.map(p => (
                 <tr key={`${p.patent}|${p.expiry}|${p.substance}|${p.drugProduct}|${p.delisted}`} className="h-7 border-b last:border-0">
-                  <td className="num py-1 pl-3.5 pr-2">{p.patent}</td>
-                  <td className="num py-1 pr-2">
+                  <td className="num whitespace-nowrap py-1 pl-3.5 pr-2">{p.patent}</td>
+                  <td className="num whitespace-nowrap py-1 pr-2">
                     {p.expiry || <span className="text-muted-foreground">{"–"}</span>}
                     {p.delisted && <span className="ml-1.5 text-[11px] text-muted-foreground">delisting requested</span>}
                   </td>
                   <td className="py-1 pr-2 text-[11px] text-muted-foreground">{[p.substance && "drug substance", p.drugProduct && "drug product"].filter(Boolean).join(", ") || "–"}</td>
                   <td className="py-1 pr-2 text-[11px] text-muted-foreground">{p.useCodes.join(", ") || "–"}</td>
-                  <td className="num py-1 pr-2 text-[11px] text-muted-foreground">{p.products.join(", ")}</td>
-                  <td className="py-1 pr-3.5 text-right text-[11px]">
+                  <td className="num whitespace-nowrap py-1 pr-2 text-[11px] text-muted-foreground">{p.products.join(", ")}</td>
+                  <td className="whitespace-nowrap py-1 pr-3.5 text-right text-[11px]">
                     <Rows refs={p.refs} />
                   </td>
                 </tr>
@@ -207,9 +209,9 @@ function ApplicationDetail({ app }: { app: ObApplication }) {
                     <span className="num">{e.code}</span>
                     {codeWords(e.code) && <span className="ml-1.5 text-[11px] text-muted-foreground">{codeWords(e.code)}</span>}
                   </td>
-                  <td className="num py-1 pr-2">{e.date}</td>
-                  <td className="num py-1 pr-2 text-[11px] text-muted-foreground">{e.products.join(", ")}</td>
-                  <td className="py-1 pr-3.5 text-right text-[11px]">
+                  <td className="num whitespace-nowrap py-1 pr-2">{e.date}</td>
+                  <td className="num whitespace-nowrap py-1 pr-2 text-[11px] text-muted-foreground">{e.products.join(", ")}</td>
+                  <td className="whitespace-nowrap py-1 pr-3.5 text-right text-[11px]">
                     <Rows refs={e.refs} />
                   </td>
                 </tr>
