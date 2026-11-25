@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { fakeStore } from "@/test/fixtures/sources/company/fake-store";
 import { resetOfficialCache, type OfficialClient } from "./official.server";
 import { lastListed, obAsks, printedDay, type CompanyPatents } from "./orange-book";
-import { readCompanyPatents, resetPatentsCache } from "./orange-book.server";
+import { PATENTS_CACHE_LIMIT, patentsCacheSize, readCompanyPatents, resetPatentsCache } from "./orange-book.server";
 
 // Real rows (fixture store): Bristol Myers Squibb's REVLIMID 021880, SPRYCEL 021986, ELIQUIS 202155, IDHIFA 209606,
 // ZENBEXUS 221075, TUBOCURARINE CHLORIDE 005657 (no patents), Exelixis' COMETRIQ 203756. Sponsors as the FDA panel stores them.
@@ -76,6 +76,23 @@ describe("readCompanyPatents", () => {
     const d = await read(fakeStore({ shift: [{ snapshot: "60c0c87962d5bffc357c222f1a25184892e15415c673f4d5d16636d9c3c1e992", from: 4, to: 9 }] }), "BMY");
     expect(d.applications).toHaveLength(5);
     expect(d.applications[0].patents.some(p => p.patent === "6967208" && p.expiry === "Nov 21, 2026")).toBe(true);
+  });
+  it("caches by application number, checks the sponsor after the cache, and keeps at most 300 applications (review int-code S6)", async () => {
+    const log: string[] = [];
+    const store = fakeStore({ log });
+    expect((await read(store, "BMY")).applications).toHaveLength(5);
+    const reads = log.filter(l => l.startsWith("source_records")).length;
+    // the same applications with another sponsor string: no record is read again, and the check still withholds them
+    const other = await read(store, "BMY", BMY.map(a => ({ ...a, sponsor: "SOMEONE ELSE" })));
+    expect(other.applications).toEqual([]);
+    expect(other.withheld.map(w => w.appl)).toEqual(["021880", "021986", "202155", "209606", "221075"]);
+    expect(log.filter(l => l.startsWith("source_records")).length).toBe(reads);
+    // a caller who sends ever new application numbers cannot grow the cache past its cap
+    for (let batch = 0; batch < 3; batch++) {
+      const asks = Array.from({ length: 200 }, (_, i) => ({ appl: String(300_000 + batch * 200 + i), sponsor: `S${i}` }));
+      expect((await read(store, "BMY", asks)).applications).toEqual([]);
+    }
+    expect(patentsCacheSize()).toBe(PATENTS_CACHE_LIMIT);
   });
   it("answers with a reason and never throws when the database fails", async () => {
     const broken: OfficialClient = { from: () => { throw new Error("socket closed"); }, rpc: async () => ({ data: null, error: null }) };
