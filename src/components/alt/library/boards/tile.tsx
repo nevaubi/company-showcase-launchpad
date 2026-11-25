@@ -51,6 +51,8 @@ export function Tile({ tile }: { tile: BoardTile }) {
   const collected = collectedOn(tile.source.retrievedAt);
   const percent = result.figureUnit === "%";
   const isRank = tile.form === "ranked-bars";
+  const reader = result.reader;
+  const axisTitle = reader?.axis.title ?? result.plotUnit;
 
   return (
     <article data-section={tile.title} className="row-span-4 grid min-w-0 grid-cols-1 grid-rows-subgrid gap-y-0 rounded-md border bg-card shadow-paper">
@@ -68,28 +70,40 @@ export function Tile({ tile }: { tile: BoardTile }) {
         />
       </header>
       <div className="px-3.5">
+        {/* A level in a scale unit reads in reader scale, the stored figure as filed directly beneath (scale.ts). */}
         <p className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
-          <span className="text-[18px] font-semibold leading-tight">
-            {result.figure}
-            {percent ? "%" : ""}
-          </span>
-          {!percent && result.figureUnit && <span className="text-[11px] text-muted-foreground">{result.figureUnit}</span>}
+          {reader ? (
+            <>
+              <span className="text-[18px] font-semibold leading-tight">{reader.figure}</span>
+              {reader.unit && <span className="text-[11px] text-muted-foreground">{reader.unit}</span>}
+            </>
+          ) : (
+            <>
+              <span className="text-[18px] font-semibold leading-tight">
+                {result.figure}
+                {percent ? "%" : ""}
+              </span>
+              {!percent && result.figureUnit && <span className="text-[11px] text-muted-foreground">{result.figureUnit}</span>}
+            </>
+          )}
           <span className="ml-auto text-[11px] text-muted-foreground">{result.asOf}</span>
         </p>
+        {reader && <p className="text-[11px] leading-snug text-muted-foreground">{reader.filed}</p>}
         <p className="mt-1 text-[13px] leading-snug">{result.headline}</p>
       </div>
       <div className="px-3.5 pt-2">
         {view === "chart" ? (
           <>
-            <p className="mb-1 text-[11px] text-muted-foreground">{result.plotUnit}</p>
+            <p className="mb-1 text-[11px] text-muted-foreground">{axisTitle}</p>
             <TileChart
               form={tile.form}
               points={result.points}
               unit={result.plotUnit}
-              label={`${tile.title}, ${isRank ? result.asOf : `${result.points[0]?.label ?? ""} to ${result.points[result.points.length - 1]?.label ?? ""}`}, ${result.plotUnit}`}
+              label={`${tile.title}, ${isRank ? result.asOf : `${result.points[0]?.label ?? ""} to ${result.points[result.points.length - 1]?.label ?? ""}`}, ${axisTitle}`}
               recordHref={rowHref}
               onOpen={open}
               height={BOARD_CHART_HEIGHT}
+              axis={reader?.axis}
             />
           </>
         ) : (

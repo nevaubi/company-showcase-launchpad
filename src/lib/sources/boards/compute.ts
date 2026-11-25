@@ -10,7 +10,9 @@
  *   total in a monthly table) is left out and counted;
  * - a change over a year needs the period a year earlier present with a number, otherwise there is no figure;
  * - figures are computed from the stored digits (exact decimals) and rounded once for print;
- * - the latest period must carry a number: a tile never shows an older figure as if it were current.
+ * - the latest period must carry a number: a tile never shows an older figure as if it were current;
+ * - a level in a whitelisted scale unit also carries its reader scale (`scale.ts`); the headline keeps the
+ *   stored figure and unit.
  */
 import { readNative, type NativeReading } from "../numbers";
 import { parsePeriod, type ParsedPeriod, type PeriodFormat } from "../periods";
@@ -26,6 +28,7 @@ import {
   toNumber,
   type Decimal,
 } from "./decimal";
+import { axisLabel, readerFigure, type ReaderFigure } from "./scale";
 import type {
   Cadence,
   RankTileSpec,
@@ -270,11 +273,18 @@ export function computeSeriesTile(spec: SeriesTileSpec, context: TileContext, ce
   const window = placed.slice(-Math.max(1, spec.window));
   const as = spec.changeAs ?? "percent";
   const changeDecimals = as === "percent" ? 1 : spec.decimals;
+  // A level tile's figure is always the latest level; a change tile prints a percent or a difference.
+  const reader = isChange ? null : readerFigure(spec.unit, latest.value, formatDecimal(latest.value, { decimals: spec.decimals }));
   const points: TilePoint[] = window.map((p) => {
     const base = { key: p.cell.period ?? "", label: p.label, date: p.parsed.start, text: p.cell.text, row: p.cell.row };
     if (!isChange) {
       return p.value
-        ? { ...base, value: toNumber(p.value), display: formatDecimal(p.value, { decimals: spec.decimals }) }
+        ? {
+            ...base,
+            value: toNumber(p.value),
+            display: formatDecimal(p.value, { decimals: spec.decimals }),
+            ...(reader ? { axisDisplay: axisLabel(p.value, reader.axis) } : {}),
+          }
         : { ...base, value: null, display: EN_DASH };
     }
     const prior = baseOf(p);
@@ -317,7 +327,7 @@ export function computeSeriesTile(spec: SeriesTileSpec, context: TileContext, ce
         figure = level;
         figureUnit = figureUnitOf(spec.unit);
         headline = `${spec.subject} ${verb} ${level}${unitWords(spec.unit)} ${at(context.cadence, latest.label)}. No comparison with a year earlier: ${missing(latest)}.`;
-        return result(spec, context, latest, points, gaps, null, rows, headline, figure, figureUnit, isChange, as);
+        return result(spec, context, latest, points, gaps, null, rows, headline, figure, figureUnit, isChange, as, reader);
       }
       const earlier = [...placed].reverse().find((p) => p !== latest && pairOf(p));
       if (!earlier) return refuse(`No period of the selection has a figure a year earlier: ${missing(latest)}.`);
@@ -354,14 +364,14 @@ export function computeSeriesTile(spec: SeriesTileSpec, context: TileContext, ce
           : `${changeText(change, as, spec.unit, changeDecimals)} ${sign > 0 ? "above" : "below"} ${named(context.cadence, prior.label)}`;
       headline = `${spec.subject} ${verb} ${leadLevel}${unitWords(spec.unit)} ${at(context.cadence, lead.label)}, ${comparison}.` + tail;
     }
-    return result(spec, context, lead, points, gaps, derivation, rows, headline, figure, figureUnit, isChange, as);
+    return result(spec, context, lead, points, gaps, derivation, rows, headline, figure, figureUnit, isChange, as, reader);
   } else {
     figure = level;
     figureUnit = figureUnitOf(spec.unit);
     headline = `${spec.subject} ${verb} ${level}${unitWords(spec.unit)} ${at(context.cadence, latest.label)}.`;
   }
 
-  return result(spec, context, latest, points, gaps, derivation, rows, headline, figure, figureUnit, isChange, as);
+  return result(spec, context, latest, points, gaps, derivation, rows, headline, figure, figureUnit, isChange, as, reader);
 }
 
 function result(
@@ -377,6 +387,7 @@ function result(
   figureUnit: string,
   isChange: boolean,
   as: "percent" | "difference",
+  reader: ReaderFigure | null,
 ): TileResult {
   return {
     ok: true,
@@ -386,6 +397,7 @@ function result(
     asOf: lead.label,
     unit: spec.unit,
     plotUnit: isChange ? (as === "percent" ? "%" : spec.unit === "Percent" ? "percentage points" : spec.unit) : spec.unit,
+    ...(reader ? { reader } : {}),
     periodFormat: context.format,
     points,
     gaps,
@@ -484,6 +496,9 @@ export function computeRankTile(
     return order !== 0 ? order : a.cell.row - b.cell.row;
   });
   const top = ranked.slice(0, Math.max(1, spec.across.top));
+  const leader = top[0];
+  const figure = formatDecimal(leader.value, { decimals: spec.decimals });
+  const reader = readerFigure(spec.unit, leader.value, figure);
   const points: TilePoint[] = top.map(({ cell, value }) => ({
     key: cell.key,
     label: cell.name ?? cell.key,
@@ -491,9 +506,8 @@ export function computeRankTile(
     display: formatDecimal(value, { decimals: spec.decimals }),
     text: cell.text,
     row: cell.row,
+    ...(reader ? { axisDisplay: axisLabel(value, reader.axis) } : {}),
   }));
-  const leader = top[0];
-  const figure = formatDecimal(leader.value, { decimals: spec.decimals });
   return {
     ok: true,
     headline: `${leader.cell.name ?? leader.cell.key} ${spec.verb ?? "had"} the largest ${spec.subject} of ${ranked.length} ${spec.entities} ${at(context.cadence, label)}.`,
@@ -502,6 +516,7 @@ export function computeRankTile(
     asOf: label,
     unit: spec.unit,
     plotUnit: spec.unit,
+    ...(reader ? { reader } : {}),
     periodFormat: context.format,
     points,
     gaps,

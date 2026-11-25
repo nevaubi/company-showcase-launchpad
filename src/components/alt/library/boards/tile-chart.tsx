@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import * as d3 from "d3";
+import type { ScaleAxis } from "@/lib/sources/boards/scale";
 import type { TilePoint } from "@/lib/sources/boards/types";
 import { estimateTextWidth, rankLayout } from "./ranked-layout";
 
@@ -7,7 +8,9 @@ import { estimateTextWidth, rankLayout } from "./ranked-layout";
  * The chart of one tile: one series, so no legend (the tile's title names it). A line breaks at a gap
  * (a period without a figure is never drawn as zero or bridged), bars grow from a zero baseline, ranked bars
  * carry their value at the tip, or on the name's line where the names sit above the bars (`ranked-layout.ts`).
- * Hover or focus shows the value, its period and the unit; a click opens the record behind the mark. Marks
+ * With a reader-scale axis (`scale.ts`) the marks are placed and labelled in the axis unit ("USD trillions"),
+ * while the tooltip keeps the stored figure and unit. Hover or focus shows the value, its period and the unit;
+ * a click opens the record behind the mark. Marks
  * follow the dataviz specs: 2px lines, an end dot with a surface ring, bars at most 24px thick with a 4px
  * rounded data end, hairline solid gridlines.
  */
@@ -25,6 +28,13 @@ type Props = {
   onOpen: (href: string) => void;
   /** Height of the plot (TILE_CHART_HEIGHT when not given). A stacked ranking grows past it only when its rows need more. */
   height?: number;
+  /** A reader-scale value axis: values are plotted divided by its divisor and labelled with each point's `axisDisplay`. */
+  axis?: ScaleAxis;
+};
+
+type ChartProps = Omit<Props, "form" | "axis"> & {
+  /** The text of a direct label on the chart: the point in the axis unit, else as printed. */
+  labelOf: (p: TilePoint) => string;
 };
 
 const COLOR = "var(--chart-1)";
@@ -128,12 +138,12 @@ function Tooltip({ point, unit, x, width }: { point: TilePoint; unit: string; x:
   );
 }
 
-function LineChart({ points, unit, label, recordHref, onOpen, height = TILE_CHART_HEIGHT }: Omit<Props, "form">) {
+function LineChart({ points, unit, label, recordHref, onOpen, height = TILE_CHART_HEIGHT, labelOf }: ChartProps) {
   const [ref, width] = useWidth(220);
   const [hover, setHover] = useState<number | null>(null);
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
   const last = [...points].reverse().find((p) => p.value !== null) ?? null;
-  const endText = last?.display ?? "";
+  const endText = last ? labelOf(last) : "";
   const margin = { top: 10, right: Math.max(28, endText.length * 6.4 + 12), bottom: 20, left: 40 };
   const iw = Math.max(40, width - margin.left - margin.right);
   const ih = height - margin.top - margin.bottom;
@@ -226,7 +236,7 @@ function LineChart({ points, unit, label, recordHref, onOpen, height = TILE_CHAR
   );
 }
 
-function ColumnChart({ points, unit, label, recordHref, onOpen, height = TILE_CHART_HEIGHT }: Omit<Props, "form">) {
+function ColumnChart({ points, unit, label, recordHref, onOpen, height = TILE_CHART_HEIGHT, labelOf }: ChartProps) {
   const [ref, width] = useWidth(220);
   const [hover, setHover] = useState<number | null>(null);
   const margin = { top: 16, right: 8, bottom: 20, left: 40 };
@@ -282,7 +292,7 @@ function ColumnChart({ points, unit, label, recordHref, onOpen, height = TILE_CH
               textAnchor="end"
               className="fill-foreground font-mono text-[10px] font-medium"
             >
-              {points[lastIndex].display}
+              {labelOf(points[lastIndex])}
             </text>
           )}
           {points.map((p, i) => (
@@ -308,10 +318,10 @@ function ColumnChart({ points, unit, label, recordHref, onOpen, height = TILE_CH
   );
 }
 
-function RankedBars({ points, unit, label, recordHref, onOpen, height = TILE_CHART_HEIGHT }: Omit<Props, "form">) {
+function RankedBars({ points, unit, label, recordHref, onOpen, height = TILE_CHART_HEIGHT, labelOf }: ChartProps) {
   const [ref, width, el] = useWidth(220);
   const font = useFont(el);
-  const values = useMemo(() => points.map((p) => p.display), [points]);
+  const values = useMemo(() => points.map(labelOf), [points, labelOf]);
   const labelWidth = useMemo(() => widestText(points.map((p) => p.label), 11, font, false), [points, font]);
   const valueWidth = useMemo(() => widestText(values, 10, font, true), [values, font]);
   const layout = rankLayout({ width, labelWidth, valueWidth, count: points.length, height });
@@ -367,8 +377,17 @@ function RankedBars({ points, unit, label, recordHref, onOpen, height = TILE_CHA
   );
 }
 
-export function TileChart(props: Props) {
-  if (props.form === "ranked-bars") return <RankedBars {...props} />;
-  if (props.form === "bars") return <ColumnChart {...props} />;
+const asPrinted = (p: TilePoint) => p.display;
+const inAxisUnit = (p: TilePoint) => p.axisDisplay ?? p.display;
+
+export function TileChart({ form, axis, points, ...rest }: Props) {
+  // Marks are placed in the axis unit; `display` and the unit stay as stored for the tooltip.
+  const plotted = useMemo(
+    () => (axis ? points.map((p) => (p.value === null ? p : { ...p, value: p.value / axis.divisor })) : points),
+    [points, axis],
+  );
+  const props: ChartProps = { ...rest, points: plotted, labelOf: axis ? inAxisUnit : asPrinted };
+  if (form === "ranked-bars") return <RankedBars {...props} />;
+  if (form === "bars") return <ColumnChart {...props} />;
   return <LineChart {...props} />;
 }

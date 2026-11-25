@@ -4,6 +4,7 @@
  * rule. The sentence on a tile is assembled from the figures it carries; no model writes any of it.
  */
 import type { Cadence, FieldMatch, IndexedDimension, PeriodFormat, SeriesAddress } from "../profiles/types";
+import type { ReaderFigure } from "./scale";
 
 export type TileTransform = "level" | "change-12m" | "change-1y-quarterly" | "share" | "rank";
 export type TileForm = "line" | "bars" | "ranked-bars";
@@ -100,6 +101,8 @@ export type TilePoint = {
   text: string | null;
   /** Row number of the record in the snapshot. */
   row: number;
+  /** The figure in the reader-scale axis unit ("4.175" on a "USD trillions" axis), when the result has a `reader`. */
+  axisDisplay?: string;
 };
 
 /** A figure that is not a stored cell: its formula in words and the stored cells it was computed from. */
@@ -146,6 +149,11 @@ export type TileResult =
       unit: string;
       /** The unit of the plotted values when a transform changes it ("%"); otherwise the same as `unit`. */
       plotUnit: string;
+      /**
+       * The headline level in reader scale ("$24.07 trillion") with the stored figure as filed beneath it and the
+       * chart's axis in the same scale, when the unit is on the whitelist of `scale.ts`. Absent otherwise.
+       */
+      reader?: ReaderFigure;
       periodFormat: PeriodFormat;
       points: TilePoint[];
       gaps: TileGaps;

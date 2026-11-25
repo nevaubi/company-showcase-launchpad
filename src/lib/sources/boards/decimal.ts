@@ -72,6 +72,18 @@ export function roundDecimal(a: Decimal, decimals: number): Decimal {
   return { int: divideRound(a.int, pow10(a.scale - decimals)), scale: decimals };
 }
 
+/** a × 10^k, exact: the decimal point moves, no digit is lost or added. */
+export function shiftDecimal(a: Decimal, k: number): Decimal {
+  if (k < 0) return { int: a.int, scale: a.scale - k };
+  return a.scale >= k ? { int: a.int, scale: a.scale - k } : { int: a.int * pow10(k - a.scale), scale: 0 };
+}
+
+/** How many digits |a| has before the decimal point (0 when |a| < 1). */
+export function integerDigits(a: Decimal): number {
+  const whole = (a.int < 0n ? -a.int : a.int) / pow10(a.scale);
+  return whole === 0n ? 0 : whole.toString().length;
+}
+
 export function isZero(a: Decimal): boolean {
   return a.int === 0n;
 }

@@ -198,6 +198,56 @@ describe("FDIC tiles", () => {
   });
 });
 
+describe("reader scale of a level in a whitelisted unit", () => {
+  it("adds the figure in reader scale and the stored figure as filed, and keeps the headline as stored", () => {
+    const assets = series("commercial-banks-assets");
+    const r = ok(computeSeriesTile(assets, context(assets, "year", "year"), fdicSummaryCells("ASSET")));
+    expect(r.headline).toContain("24,067,204,474 USD thousands (monetary measures) in 2025");
+    expect(r.figure).toBe("24,067,204,474");
+    expect(r.plotUnit).toBe("USD thousands (monetary measures)");
+    expect(r.reader).toMatchObject({
+      figure: "$24.07 trillion",
+      unit: "",
+      filed: "24,067,204,474 USD thousands (monetary measures) as filed",
+      axis: { title: "USD trillions", divisor: 1e9, decimals: 2 },
+    });
+    // the bars and the table keep the stored figure; the chart's labels are in trillions
+    expect(r.points[r.points.length - 1]).toMatchObject({ display: "24,067,204,474", text: "24067204474", axisDisplay: "24.07" });
+    const income = series("commercial-banks-income");
+    const net = ok(computeSeriesTile(income, context(income, "year", "year"), fdicSummaryCells("NETINC")));
+    expect(net.reader).toMatchObject({ figure: "$282.6 billion", axis: { title: "USD billions" } });
+    expect(net.points.find((p) => p.key === "2009")).toMatchObject({ display: "−11,619,811", axisDisplay: "−11.6" });
+  });
+
+  it("scales FRED and EIA levels and names the base unit after the figure", () => {
+    expect(ok(fred("housing-starts")).reader).toMatchObject({ figure: "1.309 million", unit: "units", filed: "1,309 Thousands of Units as filed" });
+    expect(ok(fred("retail-sales")).reader).toMatchObject({ figure: "$748.2 billion", axis: { title: "Billions of Dollars" } });
+    expect(ok(fred("durable-goods-orders")).reader?.figure).toBe("$345.7 billion");
+    expect(ok(fred("manufacturing-employment")).reader).toMatchObject({ figure: "12.68 million", unit: "persons" });
+    const oil = ok(mer("crude-oil-production", "PAPRPUS"));
+    expect(oil.reader).toMatchObject({ figure: "13.76 million", unit: "barrels per day", axis: { title: "Million Barrels per Day" } });
+    expect(oil.headline).toBe("U.S. crude oil production was 13,761 Thousand Barrels per Day in Oct 2026, 1.7% below Oct 2025.");
+  });
+
+  it("ranks in the stored unit and labels every bar in the leader's scale", () => {
+    const spec = rank("largest-banks-assets");
+    const r = ok(computeRankTile(spec, context(spec, "yyyymmdd", "day"), fdicCrossSection("ASSET")));
+    expect(r.reader).toMatchObject({ figure: "$4.175 trillion", filed: "4,174,631,000 USD thousands (monetary measures) as filed" });
+    expect(r.points.slice(0, 3).map((p) => [p.display, p.axisDisplay])).toEqual([
+      ["4,174,631,000", "4.175"],
+      ["2,657,391,000", "2.657"],
+      ["2,018,870,000", "2.019"],
+    ]);
+  });
+
+  it("leaves other units, and every change tile, as filed", () => {
+    for (const r of [ok(fred("vehicle-sales")), ok(fred("unemployment-rate")), ok(fred("pce-prices-12m")), ok(mer("energy-consumption", "TETCBUS"))]) {
+      expect(r.reader).toBeUndefined();
+      expect(r.points.every((p) => p.axisDisplay === undefined)).toBe(true);
+    }
+  });
+});
+
 describe("FHFA tile", () => {
   it("composes the month from the year and period fields and states the 12-month change", () => {
     const spec = series("house-prices-12m");
