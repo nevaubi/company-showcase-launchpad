@@ -38,8 +38,11 @@ export function recordsSearch(tile: BoardTile): DatasetSearch {
   return search;
 }
 
-/** One insight tile: the figure and its sentence, the chart (or its table), the caveat and the source line. */
-export function Tile({ tile }: { tile: BoardTile }) {
+/**
+ * One insight tile: the figure and its sentence, the chart (or its table), the caveat and the source line.
+ * `focusable` lets the board move keyboard focus to the tile (the first one "Show all" reveals).
+ */
+export function Tile({ tile, className, focusable }: { tile: BoardTile; className?: string; focusable?: boolean }) {
   const navigate = useNavigate();
   const [view, setView] = useState<"chart" | "table">("chart");
   const result = tile.result;
@@ -55,7 +58,11 @@ export function Tile({ tile }: { tile: BoardTile }) {
   const axisTitle = reader?.axis.title ?? result.plotUnit;
 
   return (
-    <article data-section={tile.title} className="row-span-4 grid min-w-0 grid-cols-1 grid-rows-subgrid gap-y-0 rounded-md border bg-card shadow-paper">
+    <article
+      data-section={tile.title}
+      tabIndex={focusable ? -1 : undefined}
+      className={`row-span-4 grid min-w-0 grid-cols-1 grid-rows-subgrid gap-y-0 rounded-md border bg-card shadow-paper outline-none focus-visible:ring-2 focus-visible:ring-ring ${className ?? ""}`}
+    >
       <header className="flex items-start gap-2 px-3.5 pb-1 pt-3">
         <h3 className="min-w-0 flex-1 text-[13px] font-semibold leading-snug tracking-tight">{tile.title}</h3>
         <Segmented
