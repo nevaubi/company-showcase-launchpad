@@ -30,7 +30,7 @@ import {
 import { absWatchList } from "./lib/abs-watch-list";
 import { sweepRunReceipts, takeRunReceipt } from "./lib/run-receipt";
 import { sweepRefreshFolders, trimSourceCache } from "./lib/source-cache";
-import { snapshotStatsStep, statsOnlyRow, type StatsOutcome } from "./lib/snapshot-stats";
+import { snapshotStatsStep, statsOnlyRow, type StatsList, type StatsOutcome } from "./lib/snapshot-stats";
 
 const owner = `official:${process.env.RENDER_INSTANCE_ID ?? "worker"}:${randomUUID()}`;
 const WORK = process.env.OFFICIAL_SOURCE_WORK_DIR ?? "/var/data/official-sources";
@@ -194,10 +194,33 @@ async function childRun(
 
 async function sourceLoop() {
   let failures = 0;
-  // Snapshot statistics after each pass (source_compute_missing_stats, migration 0069): a quiet no-op until
-  // the function exists, bounded in time, and never a reason to back off this lane (scripts/lib/snapshot-stats.ts).
+  // Snapshot statistics after each pass (source_compute_snapshot_stats, migration 0069): a quiet no-op until
+  // the function exists, one snapshot per call, bounded in time, and never a reason to back off this lane or a
+  // failed run of it (scripts/lib/snapshot-stats.ts).
+  // Published snapshots without computed statistics, newest first: ids only, paged (1,153 snapshots today).
+  const statsList: StatsList = async () => {
+    const done = new Set<string>();
+    for (let from = 0; from < 20_000; from += 1000) {
+      const page = await sb.from("source_snapshot_stats" as never).select("snapshot_id").not("computed_at", "is", null).order("snapshot_id").range(from, from + 999);
+      if (page.error) return { error: page.error };
+      const rows = (page.data ?? []) as { snapshot_id: string }[];
+      for (const r of rows) done.add(r.snapshot_id);
+      if (rows.length < 1000) break;
+    }
+    const ids: string[] = [];
+    for (let from = 0; from < 20_000; from += 1000) {
+      const page = await sb.from("source_snapshots" as never).select("id").eq("status", "ready")
+        .order("published_at", { ascending: false, nullsFirst: false }).order("id").range(from, from + 999);
+      if (page.error) return { error: page.error };
+      const rows = (page.data ?? []) as { id: string }[];
+      for (const r of rows) if (!done.has(r.id)) ids.push(r.id);
+      if (rows.length < 1000) break;
+    }
+    return { ids };
+  };
   const stats = snapshotStatsStep({
     rpc: (fn, args, signal) => sb.rpc(fn, args).abortSignal(signal),
+    list: statsList,
     log: (line) => log(SOURCE_WORKER_JOB, line),
   });
   const statsPass = async (lease: Lease): Promise<StatsOutcome> => {
