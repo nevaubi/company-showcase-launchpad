@@ -6,10 +6,9 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdirSync, readFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sb, dbGate, log, sleep } from "./lib/supa";
-import { ABS_WATCH, type AbsWatch } from "../src/lib/abs/watch";
 import {
   SOURCE_WORKER_JOB,
   SOURCE_REFRESH_JOB,
@@ -17,12 +16,18 @@ import {
   WORKER_LEASE_MS,
   RESOURCE_WAIT_EXIT,
   canStartOfficialChild,
-  advanceCursor,
   enabled,
   retryDelay,
   safeError,
   childReceipt,
+  ABS_MOVE_PAUSE_MS,
+  absAfterRun,
+  absLeftFromReceipt,
+  absNextTurn,
+  type AbsSeen,
+  type AbsStay,
 } from "./lib/official-worker-plan";
+import { absWatchList } from "./lib/abs-watch-list";
 import { sweepRunReceipts, takeRunReceipt } from "./lib/run-receipt";
 import { trimSourceCache } from "./lib/source-cache";
 
@@ -243,30 +248,20 @@ async function refreshLoop() {
   }
 }
 
-function watches(): AbsWatch[] {
+async function absLoop() {
   // These optional CIKs are discovery candidates from the supplied workbook, not company ties.
   // The existing SEC reader verifies the filing's real issuer/depositor and file family.
-  const file = join(import.meta.dir, "data", "abs-candidate-watch.json");
-  const extra = existsSync(file)
-    ? (JSON.parse(readFileSync(file, "utf8")).candidates as AbsWatch[])
-    : [];
-  return [
-    ...new Map(
-      [
-        ...ABS_WATCH,
-        ...extra.filter((w) => Number.isInteger(w.cik) && w.cik > 0 && typeof w.name === "string"),
-      ].map((w) => [w.cik, w]),
-    ).values(),
-  ];
-}
-
-async function absLoop() {
-  const watch = watches();
+  const watch = absWatchList();
   const cache = join(WORK, "sec");
   mkdirSync(cache, { recursive: true });
   let failures = 0;
+  // What this process knows of each watched CIK, by index: when it was last worked and what it had
+  // left (rules: absNextTurn, absAfterRun). Lost on restart, which only means one more look at each.
+  const seen = new Map<number, AbsSeen>();
+  let stay: AbsStay | null = null;
   while (!stopped && watch.length) {
     let lease: Lease | null = null;
+    let pause: number | null = null;
     try {
       lease = await claim(ABS_WORKER_JOB);
       if (!lease) {
@@ -276,34 +271,52 @@ async function absLoop() {
       const state = await sb.from("job_state").select("cursor").eq("job", ABS_WORKER_JOB).single();
       if (state.error) throw new Error(state.error.message);
       const cursor = Math.max(0, Number(state.data.cursor ?? 0)) % watch.length;
-      const w = watch[cursor]!;
-      const args = [
-        "run",
-        `--cik=${w.cik}`,
-        "--max-filings=3",
-        "--retry-skipped",
-        `--cache=${cache}`,
-        ...(w.from ? [`--from=${w.from}`] : []),
-      ];
-      const { code } = await childRun(lease, "scripts/abs-ee.ts", args, 25 * 60_000);
-      // The durable provenance is in abs_*; these are re-fetchable copies owned by this worker.
-      // Pruning occurs only after the child exits, so no active reader loses its file.
-      const cacheState = trimSourceCache(
-        cache,
-        Number(process.env.OFFICIAL_SEC_CACHE_BYTES ?? 2 * 1024 ** 3),
-      );
-      if (cacheState.removed) log(ABS_WORKER_JOB, "cache trimmed", cacheState);
-      failures = code === 0 || code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
-      if (code === 0) {
-        const updated = await sb
-          .from("job_state")
-          .update({
-            cursor: advanceCursor(cursor, watch.length, code),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("job", ABS_WORKER_JOB)
-          .eq("paused_reason", owner);
-        if (updated.error) throw new Error(updated.error.message);
+      const turn = absNextTurn({ count: watch.length, cursor, seen, stay, now: Date.now() });
+      if ("waitMs" in turn) pause = turn.waitMs;
+      else {
+        const w = watch[turn.index]!;
+        // `load` while staying on a CIK: its listing was read at the start of this visit.
+        const args = [
+          turn.command,
+          `--cik=${w.cik}`,
+          "--max-filings=3",
+          "--retry-skipped",
+          `--cache=${cache}`,
+          ...(w.from ? [`--from=${w.from}`] : []),
+        ];
+        // One importer process at a time, under this lane's lease; it keeps SEC at two requests a second.
+        const { code, told } = await childRun(lease, "scripts/abs-ee.ts", args, 25 * 60_000);
+        // The durable provenance is in abs_*; these are re-fetchable copies owned by this worker.
+        // Pruning occurs only after the child exits, so no active reader loses its file.
+        const cacheState = trimSourceCache(
+          cache,
+          Number(process.env.OFFICIAL_SEC_CACHE_BYTES ?? 2 * 1024 ** 3),
+        );
+        if (cacheState.removed) log(ABS_WORKER_JOB, "cache trimmed", cacheState);
+        if (code === RESOURCE_WAIT_EXIT) failures = 0;
+        else {
+          const after = absAfterRun({
+            count: watch.length,
+            index: turn.index,
+            exitCode: code,
+            left: absLeftFromReceipt(told, w.cik),
+            stay,
+            now: Date.now(),
+          });
+          if (after.seen) seen.set(turn.index, after.seen);
+          else seen.delete(turn.index);
+          stay = after.stay;
+          pause = after.pauseMs;
+          failures = code === 0 ? 0 : failures + 1;
+          if (code === 0 && after.cursor !== cursor) {
+            const updated = await sb
+              .from("job_state")
+              .update({ cursor: after.cursor, updated_at: new Date().toISOString() })
+              .eq("job", ABS_WORKER_JOB)
+              .eq("paused_reason", owner);
+            if (updated.error) throw new Error(updated.error.message);
+          }
+        }
       }
     } catch (e) {
       failures++;
@@ -311,8 +324,9 @@ async function absLoop() {
     } finally {
       await lease?.release();
     }
-    // At most one CIK a minute. Listing and asset downloads also use the SEC reader's rate limit.
-    if (!stopped) await sleep(failures ? retryDelay(failures) : 60_000);
+    // A failed run (an SEC outage among them) backs off from a minute up to an hour; a clean run pauses
+    // a minute before the next CIK, or a few seconds before the next batch of the same CIK.
+    if (!stopped) await sleep(failures ? Math.max(ABS_MOVE_PAUSE_MS, retryDelay(failures)) : (pause ?? ABS_MOVE_PAUSE_MS));
   }
 }
 

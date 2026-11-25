@@ -8,11 +8,18 @@
 //   bun scripts/abs-ee.ts status                       totals and the store's invariants
 //
 // Options: --max-filings=25 (per CIK and run), --from=YYYY-MM-DD, --to=YYYY-MM-DD, --reparse (store
-// again what an older reader version stored), --retry-skipped (read again the filings marked skipped:
-// those an older reader had no reader for, and those the scheduled job set aside because their file is
-// over its size limit), --max-attempts=3 (tries per filing before it is left alone), --cache=<dir> (SEC
-// files as served; default .cache/sec), --offline (use only files already on disk; a listing is then
-// the copy on disk, however old).
+// again what an older reader version stored), --retry-skipped (read again the filings the scheduled job
+// set aside because their file is over its size limit; no other skip: "no EX-102", "unsupported" and a
+// header that does not establish one issuer are permanent), --retry-failed (store only the filings given
+// up after --max-attempts, for recovery after an outage; listed filings are left to other runs),
+// --max-attempts=3 (tries per filing before it is left alone), --cache=<dir> (SEC files as served;
+// default .cache/sec), --offline (use only files already on disk; a listing is then the copy on disk,
+// however old), --receipt=<file> (the worker passes it: what the run did, as JSON, for job_runs).
+//
+// When SEC throttles or is down (no answer, 403, 429, 500 and above) the filing being read is not
+// marked and no attempt is counted; the batch and the run stop and the process exits 1, so the worker
+// backs off. `status` prints, per watched CIK (or per --cik), the filings to do in the watch range, the
+// listed filings outside it (no backlog of the worker) and every filing given up.
 //
 // Commercial mortgage files are stored record by record. Auto loan and auto lease files (30 to 380 MB
 // each) are read in one streaming pass and stored as pool figures only; the file stays on EDGAR under
@@ -41,6 +48,9 @@ import {
 } from "../src/lib/abs/filing";
 import { PARSER } from "../src/lib/abs/metrics";
 import { planLoads, type FilingState } from "../src/lib/abs/plan";
+import { absWatchList } from "./lib/abs-watch-list";
+import { loadFilings, type LoadTally } from "./lib/abs-load";
+import { writeRunReceipt } from "./lib/run-receipt";
 import { createAbsReader, declaredEncoding } from "../src/lib/abs/xml";
 import { connectAbsDb, type AbsDb } from "./lib/abs-store";
 import { SecSource } from "./lib/abs-source";
@@ -204,46 +214,36 @@ async function discover(cik: number) {
   return { found: found.length, listed };
 }
 
-const plan = async (cik: number, extra: { reparse?: boolean } = {}) => {
+const plan = async (cik: number, extra: { reparse?: boolean; from?: string } = {}) => {
   const states = await db.rpc<FilingState[]>("abs_filing_states", { _list_cik: cik });
-  const retry = args["retry-skipped"] === "true";
-  const seen = retry
-    ? states.map((s) => (s.status === "skipped" ? { ...s, status: "listed" as const } : s))
-    : states;
   return {
     states,
-    plan: planLoads(seen, {
+    plan: planLoads(states, {
       parser: PARSER,
       maxFilings: MAX_FILINGS,
       maxAttempts: MAX_ATTEMPTS,
       reparse: extra.reparse ?? args.reparse === "true",
-      from: args.from,
+      retrySkipped: args["retry-skipped"] === "true",
+      retryFailed: args["retry-failed"] === "true",
+      from: extra.from ?? args.from,
       to: args.to,
     }),
   };
 };
 
-async function load(cik: number) {
+async function load(cik: number): Promise<LoadTally & { given_up: number }> {
   const { plan: p } = await plan(cik);
-  const t = { stored: 0, unchanged: 0, skipped: 0, failed: 0, left: p.left };
   log(
     `cik ${cik}: ${p.todo.length} to store now, ${p.left} after this run, ${p.loaded} stored${p.stale ? ` (${p.stale} by an older reader)` : ""}, ${p.skipped} skipped, ${p.givenUp} given up`,
   );
-  for (const accession of p.todo) {
-    try {
-      const parsed = await readFiling(cik, accession);
-      if (parsed.skip !== undefined) {
-        await db.rpc("abs_mark_filing", {
-          _accession: accession,
-          _status: "skipped",
-          _detail: parsed.skip,
-        });
-        t.skipped++;
-        log(`  ${accession} skipped: ${parsed.skip}`);
-        continue;
-      }
-      const outcome = await storeFiling(accession, parsed);
-      t[outcome]++;
+  const t = await loadFilings(p.todo, p.left, {
+    read: (accession) => readFiling(cik, accession),
+    store: storeFiling,
+    async mark(accession, status, detail) {
+      await db.rpc("abs_mark_filing", { _accession: accession, _status: status, _detail: detail });
+    },
+    log,
+    done(accession, outcome, parsed) {
       if (outcome === "stored") stored++;
       const kept =
         parsed.filing.family === "cmbs"
@@ -252,16 +252,30 @@ async function load(cik: number) {
       log(
         `  ${accession} ${outcome}: ${parsed.filing.family}, period ${parsed.filing.period_end ?? "?"}, ${kept}, ${parsed.bytes} bytes`,
       );
-    } catch (e) {
-      t.failed++;
-      const message = (e as Error).message;
-      log(`  ${accession} FAILED: ${message}`);
-      await db
-        .rpc("abs_mark_filing", { _accession: accession, _status: "failed", _detail: message })
-        .catch(() => undefined);
-    }
+    },
+  });
+  return { ...t, given_up: p.givenUp };
+}
+
+/** Per CIK: what is to do in the watch range, what is listed outside it, what was given up. */
+async function backlog() {
+  const watched = absWatchList();
+  const list = ciks.length
+    ? ciks.map((cik) => ({ cik, from: args.from ?? watched.find((w) => w.cik === cik)?.from }))
+    : watched.map((w) => ({ cik: w.cik, from: args.from ?? w.from }));
+  const total = { ciks: list.length, to_do: 0, outside_range: 0, given_up: 0 };
+  for (const w of list) {
+    await db.gate("abs-ee");
+    const { plan: p } = await plan(w.cik, { from: w.from });
+    const toDo = p.todo.length + p.left;
+    total.to_do += toDo;
+    total.outside_range += p.outOfRange;
+    total.given_up += p.givenUp;
+    if (toDo || p.givenUp || p.outOfRange)
+      log(`cik ${w.cik} (from ${w.from ?? "the start"}): ${toDo} to do, ${p.outOfRange} listed outside the range, ${p.givenUp} given up${p.givenUp ? `: ${p.givenUpList.join(", ")}` : ""}`);
   }
-  return t;
+  log(`backlog: ${total.to_do} filings to do in ${total.ciks} CIKs' ranges, ${total.outside_range} listed outside them (not a backlog), ${total.given_up} given up (bun scripts/abs-ee.ts load --cik=<cik> --retry-failed)`);
+  return total;
 }
 
 /** Re-reads stored filings and compares the store with the source: same bytes, same rows, value for value. */
@@ -320,17 +334,32 @@ async function verify(cik: number) {
 
 const runId = command === "status" ? null : await db.runStart("abs-ee-script");
 const detail: Record<string, unknown> = { command, parser: PARSER, ciks };
+/** One line per CIK for the worker's receipt; `left` is what the worker reads to stay on a CIK. */
+const perCik: Record<string, unknown>[] = [];
 let ok = true;
 let items = 0;
 try {
   for (const cik of ciks) {
-    if (command === "discover" || command === "run")
-      detail[`discover:${cik}`] = await discover(cik);
+    const line: Record<string, unknown> = { cik };
+    perCik.push(line);
+    if (command === "discover" || command === "run") {
+      const found = await discover(cik);
+      detail[`discover:${cik}`] = found;
+      Object.assign(line, { found: found.found, listed_new: found.listed });
+    }
     if (command === "load" || command === "run") {
       const t = await load(cik);
       detail[`load:${cik}`] = t;
+      Object.assign(line, t);
       items += t.stored;
       if (t.failed) ok = false;
+      if (t.sec_unavailable) {
+        // An outage is nobody's filing: stop here, mark nothing more, and let the caller back off.
+        ok = false;
+        detail.error = `SEC is throttling or down (status ${t.sec_unavailable.status || "none"}): stopped before filing ${t.sec_unavailable.accession}; no attempt counted`;
+        log(detail.error);
+        break;
+      }
     }
     if (command === "verify") {
       const t = await verify(cik);
@@ -339,6 +368,7 @@ try {
       if (t.different) ok = false;
     }
   }
+  if (command === "status") detail.backlog = await backlog();
   const problems = (await db.rpc<{ problem: string; bad: number | string }[]>("abs_check")).filter(
     (r) => Number(r.bad) !== 0,
   );
@@ -354,14 +384,14 @@ try {
     {
       what: string;
       accession: string;
-      deal_id: string;
+      deal_id: string | null;
       period_end: string | null;
       filed: string;
     }[]
   >("abs_review");
   detail.review = review.length;
   for (const r of review.slice(0, 20))
-    log(`to review: ${r.accession} (deal ${r.deal_id}, period ${r.period_end ?? "?"}): ${r.what}`);
+    log(`to review: ${r.accession} (deal ${r.deal_id ?? "?"}, period ${r.period_end ?? "?"}): ${r.what}`);
   if (review.length > 20) log(`to review: ${review.length - 20} more`);
 } catch (e) {
   ok = false;
@@ -369,6 +399,16 @@ try {
   log("run failed:", (e as Error).message);
 } finally {
   await db.runFinish(runId, ok, items, detail);
+  writeRunReceipt(args.receipt, {
+    script: "abs-ee",
+    command,
+    parser: PARSER,
+    items,
+    ciks: perCik,
+    ...(detail.check ? { check_problems: (detail.check as unknown[]).length } : {}),
+    ...(typeof detail.review === "number" ? { review: detail.review } : {}),
+    ...(typeof detail.error === "string" ? { error: detail.error } : {}),
+  });
   await db.close();
 }
 process.exit(ok ? 0 : 1);
