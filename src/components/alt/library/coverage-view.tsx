@@ -69,7 +69,13 @@ export function CoverageView({
   const showEntities = !!top || !!entities;
   const notes: string[] = [];
   if (varies.period && !perPeriod && !periodsPending) notes.push(periods.reason === "unavailable" ? AWAITS_UPDATE : "Records per period could not be counted.");
-  if (!varies.period) notes.push("No period field: the records are not counted by period.");
+  const constant = snapshot.ingest.constants?.period;
+  if (!varies.period)
+    notes.push(
+      typeof constant === "string"
+        ? `Every record is of one period, ${constant} as the source writes it, so the records are not counted by period.`
+        : "No period field: the records are not counted by period.",
+    );
 
   return (
     <div className="grid min-w-0 grid-cols-1 gap-3">
@@ -113,7 +119,7 @@ export function CoverageView({
                   <BarList
                     bars={bands.map((b) => ({ key: b.band.id, label: b.band.label, value: b.fields, text: `${count(b.fields)} fields`, title: `${b.band.label}: ${count(b.fields)} fields` }))}
                     label="Fields by filled share"
-                    labelWidth="minmax(9rem,13rem)"
+                    labelWidth="minmax(0,13rem)"
                   />
                 ) : (
                   <CountTable rows={bands.map((b) => ({ key: b.band.id, label: b.band.label, text: count(b.fields) }))} head={["Filled share", "Fields"]} />
@@ -122,7 +128,7 @@ export function CoverageView({
               <div className="min-w-0">
                 <p className="mb-2 text-[11px] text-muted-foreground">The fields shown in the records table.</p>
                 {view === "chart" ? (
-                  <BarList bars={fillBars(fills, snapshot.columns, columns)} max={1} label="Filled share of the fields in the table" labelWidth="minmax(8rem,14rem)" />
+                  <BarList bars={fillBars(fills, snapshot.columns, columns)} max={1} label="Filled share of the fields in the table" labelWidth="minmax(0,14rem)" />
                 ) : (
                   <CountTable
                     rows={columns.map((p) => ({ key: String(p), label: fieldTitle(snapshot.columns[p]), text: fills[p] ? `${(fills[p].share * 100).toFixed(1)}%` : "–" }))}

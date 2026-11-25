@@ -1,6 +1,5 @@
 import { useMemo, type CSSProperties } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { DataUnavailable } from "@/components/app/data-unavailable";
 import { PageHeader } from "@/components/app/page-header";
 import { SectionNav } from "@/components/company/section-nav";
 import { Button } from "@/components/ui/button";
@@ -57,13 +56,9 @@ export function DatasetPage({
       />
     );
   }
+  // members read only published snapshots (row level security), so a detail without one is the same dead address
   if (!detail.data.snapshot)
-    return (
-      <div className="grid grid-cols-1 gap-4">
-        <PageHeader eyebrow="Data library" title={describeDataset({ ...detail.data.dataset, rows: null }).title} />
-        <DataUnavailable title="This table is registered but not published yet" hint="Its records appear here once a version of the file is published." />
-      </div>
-    );
+    return <Missing datasetId={datasetId} snapshot={search.snapshot} failure="not-found" onLatest={() => setSearch(snapshotPatch(undefined))} retry={() => void detail.refetch()} />;
   return <DatasetBody detail={detail.data as SourceDatasetDetail & { snapshot: NonNullable<SourceDatasetDetail["snapshot"]> }} search={search} setSearch={setSearch} />;
 }
 
