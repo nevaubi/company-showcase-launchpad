@@ -31,7 +31,7 @@ describe("source page CSV", () => {
       hasMore: true,
       columns: [
         { key: "col0", label: "CERT", type: "string" },
-        { key: "col1", label: "ASSET", type: "number", unit: "USD thousands", scale: 1000 },
+        { key: "col1", label: "ASSET", type: "string", native_type: "number", unit: "USD thousands (monetary measures)" },
       ],
       column_indices: [0, 1],
       rows: [
