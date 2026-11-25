@@ -36,7 +36,7 @@ class Query implements AbsQuery<unknown> {
     private table: string,
     private columns: string,
     private count: boolean,
-    private calls: string[],
+    private calls: { sql: string; params: unknown[] }[],
   ) {}
 
   eq(column: string, value: string | number | boolean) {
@@ -126,7 +126,7 @@ class Query implements AbsQuery<unknown> {
     const text = this.count
       ? `select count(*)::int as n from (${body}) q`
       : `select coalesce(json_agg(q), '[]'::json)::text as rows from (${body}) q`;
-    this.calls.push(body);
+    this.calls.push({ sql: body, params });
     const run = this.sql.begin(async (tx) => {
       await tx.unsafe("set local role authenticated");
       await tx.unsafe(`set local request.jwt.claim.sub = '${this.member}'`);
@@ -140,8 +140,8 @@ class Query implements AbsQuery<unknown> {
 }
 
 /** A read client over `sql`, acting as the member `member` (a uuid the local has_app_access() admits). */
-export function pgReadClient(sql: Sql, member: string): AbsReadClient & { calls: string[] } {
-  const calls: string[] = [];
+export function pgReadClient(sql: Sql, member: string): AbsReadClient & { calls: { sql: string; params: unknown[] }[] } {
+  const calls: { sql: string; params: unknown[] }[] = [];
   return {
     calls,
     from(table: string) {
