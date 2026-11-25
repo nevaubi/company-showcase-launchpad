@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   classifyReadError, knownMissing, readFieldCompleteness, readSnapshotStats, readSourceCrossSection, readSourceEntities,
-  readSourceFacets, readSourceFind, readSourcePeriodRange, readSourceRecord, readSourceSeries, resetReadState,
+  readSourceFacets, readSourceFind, readSourcePeriodRange, readSourceRecord, readSourceSeries, readSourceSeriesFields, resetReadState,
 } from "./read.server";
 import { FakeSourceDb, type FakeRow as Row } from "./read.fake";
 import { crossSectionReadInput, entitiesReadInput, fieldCompleteness, findReadInput, recordReadInput, seriesReadInput } from "./read-types";
@@ -87,6 +87,26 @@ describe("readSourceSeries", () => {
     expect(r.data.next).toBeNull();
     expect(r.data.field).toMatchObject({ key: "asset", label: "Total assets", position: 3 });
     expect(recordCalls()[0]).toMatchObject({ columns: "row_number,period,cell:values->>3", filters: ["snapshot_id=eq", "entity_id=eq", "row_number=gt"], orders: ["row_number.asc"] });
+  });
+  it("reads several fields of one series on the same selects, and skips the snapshot select for a snapshot the caller read", async () => {
+    const r = await readSourceSeriesFields(db, { datasetId: "fdic", snapshotId: S1, fields: ["asset", 4, "repdte"], address: { by: "entity_id", key: "3510" } });
+    expect(r.ok && r.data.points).toEqual([
+      { row: 2, period: "2025Q4", cells: ["1002", "NM", "2025Q4"] }, { row: 5, period: "2026Q1", cells: ["1005", "NM", "2026Q1"] },
+      { row: 8, period: "2026Q2", cells: ["1008", "", "2026Q2"] }, { row: 11, period: "2026Q3", cells: ["1011", "NM", "2026Q3"] },
+    ]);
+    expect(recordCalls()).toHaveLength(1);
+    expect(recordCalls()[0].columns).toBe("row_number,period,c0:values->>3,c1:values->>4,c2:values->>2");
+    if (!r.ok) return;
+    const before = db.calls.length;
+    const known = { ref: r.data.snapshot, columns: db.tables.source_snapshots[0].columns as never, ingest: db.tables.source_snapshots[0].ingest as never };
+    const again = await readSourceSeriesFields(db, { datasetId: "fdic", snapshotId: S1, fields: [3], address: { by: "entity_id", key: "628" } }, known);
+    expect(again.ok && again.data.points.map(p => p.cells[0])).toEqual(["1001", "1004", "1007", "1010"]);
+    expect(db.calls.slice(before).map(c => c.table)).toEqual(["source_records"]);
+    const cross = await readSourceCrossSection(db, { datasetId: "fdic", snapshotId: S1, field: 3 }, known);
+    expect(cross.ok && cross.data.rows).toHaveLength(3);
+    expect(db.calls.slice(before).some(c => c.table === "source_snapshots")).toBe(false);
+    expect(await readSourceSeriesFields(db, { datasetId: "long", fields: [1], address: { whole: true } }, known)).toMatchObject({ ok: false, reason: "invalid" });
+    expect(await readSourceSeriesFields(db, { datasetId: "fdic", fields: [3, "asset"], address: { whole: true } })).toMatchObject({ ok: false, reason: "invalid" });
   });
   it("pages a long series in selects of at most 1,000 rows, five a call, and continues exactly", async () => {
     const first = await readSourceSeries(db, { datasetId: "long", field: 1, address: { whole: true }, limit: 1500 });

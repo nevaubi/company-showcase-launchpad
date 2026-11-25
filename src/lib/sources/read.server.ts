@@ -214,6 +214,64 @@ export function readSourceRecord(db: SourceDirectClient, input: SourceRecordQuer
 
 export const SERIES_DEFAULT_LIMIT = 1000;
 export const SERIES_MAX_LIMIT = READ_LIMITS.page * READ_LIMITS.pages;
+/** At most this many fields in one series read of several fields. */
+export const SERIES_FIELDS_MAX = 8;
+
+/**
+ * A published snapshot the caller has already read with the member's own client in this call (its reference and
+ * field dictionary), so a read does not select it, and its dictionary, a second time.
+ */
+export type SourceSnapshotKnown = { ref: SourceSnapshotRef; columns: SourceColumn[]; ingest: SourceIngest };
+function knownMeta(known: SourceSnapshotKnown, datasetId: string, snapshotId: string | undefined): SnapshotMeta {
+  if (known.ref.datasetId !== datasetId || (snapshotId !== undefined && known.ref.snapshotId !== snapshotId))
+    stop("invalid", "The snapshot given does not belong to this read");
+  if (!Array.isArray(known.columns)) stop("error", "The snapshot's field dictionary is not a list");
+  return { ref: known.ref, dict: { columns: known.columns, ingest: known.ingest ?? {} } };
+}
+
+/** One row of a series read of several fields: the cells in the order of the fields asked for. */
+export type SourceSeriesRow = { row: number; period: string | null; cells: (string | null)[] };
+export type SourceSeriesFields = Omit<SourceSeries, "field" | "points"> & { fields: SourceFieldInfo[]; points: SourceSeriesRow[] };
+export type SourceSeriesFieldsQueryInput = Omit<SourceSeriesQueryInput, "field"> & { fields: (number | string)[] };
+
+/** The pages of one series address, every asked field read on the same select (`values->>N` paths). */
+async function seriesRead(db: SourceDirectClient, meta: SnapshotMeta, input: SourceSeriesFieldsQueryInput, single: boolean): Promise<SourceSeriesFields> {
+  if (!input.fields.length || input.fields.length > SERIES_FIELDS_MAX) stop("invalid", `A series read takes 1 to ${SERIES_FIELDS_MAX} fields`);
+  const fields = input.fields.map(f => resolveField(meta.dict.columns, f));
+  if (new Set(fields.map(f => f.position)).size !== fields.length) stop("invalid", "A field is asked for twice");
+  const a = input.address;
+  let address: SourceSeries["address"] = null;
+  let where: SourceResolvedMatch[] = [];
+  if ("by" in a) {
+    if (!hasDimension(meta.dict.ingest, a.by)) stop("invalid", `This table has no ${a.by.replace("_", " ")}`);
+    address = { by: a.by, key: a.key };
+    where = resolveMatches(meta, a.where);
+  } else if ("whole" in a) address = { whole: true };
+  else {
+    if (!a.where.length) stop("invalid", "A series by cells needs at least one cell filter");
+    where = resolveMatches(meta, a.where);
+  }
+  const select = single ? `row_number,period,cell:${cellPath(fields[0].position)}` : `row_number,period,${fields.map((f, i) => `c${i}:${cellPath(f.position)}`).join(",")}`;
+  const cellsOf = (r: Record<string, unknown>) => (single ? [str(r.cell)] : fields.map((_, i) => str(r[`c${i}`])));
+  const limit = Math.min(Math.max(1, input.limit ?? SERIES_DEFAULT_LIMIT), SERIES_MAX_LIMIT);
+  const points: SourceSeriesRow[] = [];
+  let after = input.after ?? 0;
+  let next: number | null = null;
+  for (let page = 0; page < READ_LIMITS.pages; page++) {
+    const remaining = limit - points.length;
+    const ask = Math.min(READ_LIMITS.page, remaining + 1);
+    let q = records(db, meta.ref.snapshotId, select, where);
+    if (address && "by" in address) q = q.eq(address.by, address.key);
+    const got = await rows(q.gt("row_number", after).order("row_number", { ascending: true }).limit(ask));
+    for (const r of got.slice(0, remaining)) points.push({ row: rowNumber(r), period: str(r.period), cells: cellsOf(r) });
+    if (got.length > remaining) { next = points[points.length - 1]?.row ?? after; break; }
+    if (got.length < ask) { next = null; break; }
+    after = points[points.length - 1]?.row ?? after;
+    if (points.length >= limit) { next = after; break; }
+    next = after;
+  }
+  return { snapshot: meta.ref, fields, address, where, points, next };
+}
 
 /**
  * One measure over one series, in file order. Each select reads at most 1,000 rows after `after` through the
@@ -224,44 +282,30 @@ export const SERIES_MAX_LIMIT = READ_LIMITS.page * READ_LIMITS.pages;
 export function readSourceSeries(db: SourceDirectClient, input: SourceSeriesQueryInput): Promise<SourceRead<SourceSeries>> {
   return guarded(async () => {
     const meta = await snapshotMeta(db, input.datasetId, input.snapshotId);
-    const field = resolveField(meta.dict.columns, input.field);
-    const a = input.address;
-    let address: SourceSeries["address"] = null;
-    let where: SourceResolvedMatch[] = [];
-    if ("by" in a) {
-      if (!hasDimension(meta.dict.ingest, a.by)) stop("invalid", `This table has no ${a.by.replace("_", " ")}`);
-      address = { by: a.by, key: a.key };
-      where = resolveMatches(meta, a.where);
-    } else if ("whole" in a) address = { whole: true };
-    else {
-      if (!a.where.length) stop("invalid", "A series by cells needs at least one cell filter");
-      where = resolveMatches(meta, a.where);
-    }
-    const limit = Math.min(Math.max(1, input.limit ?? SERIES_DEFAULT_LIMIT), SERIES_MAX_LIMIT);
-    const points: SourcePoint[] = [];
-    let after = input.after ?? 0;
-    let next: number | null = null;
-    for (let page = 0; page < READ_LIMITS.pages; page++) {
-      const remaining = limit - points.length;
-      const ask = Math.min(READ_LIMITS.page, remaining + 1);
-      let q = records(db, meta.ref.snapshotId, `row_number,period,cell:${cellPath(field.position)}`, where);
-      if (address && "by" in address) q = q.eq(address.by, address.key);
-      const got = await rows(q.gt("row_number", after).order("row_number", { ascending: true }).limit(ask));
-      for (const r of got.slice(0, remaining)) points.push({ row: rowNumber(r), period: str(r.period), text: str(r.cell) });
-      if (got.length > remaining) { next = points[points.length - 1]?.row ?? after; break; }
-      if (got.length < ask) { next = null; break; }
-      after = points[points.length - 1]?.row ?? after;
-      if (points.length >= limit) { next = after; break; }
-      next = after;
-    }
-    return { snapshot: meta.ref, field, address, where, points, next };
+    const { fields, points, ...rest } = await seriesRead(db, meta, { ...input, fields: [input.field] }, true);
+    return { ...rest, field: fields[0], points: points.map(p => ({ row: p.row, period: p.period, text: p.cells[0] })) };
   });
 }
 
-/** One measure across the rows of one period (the greatest period string when none is given), at most 1,000 rows. */
-export function readSourceCrossSection(db: SourceDirectClient, input: SourceCrossSectionQueryInput): Promise<SourceRead<SourceCrossSection>> {
+/**
+ * Several fields of one series (a measure and the fields beside it: its unit, a check, the parts of a period) on the
+ * same selects as `readSourceSeries` reads one: same address, pages and bounds, one `values->>N` path per field.
+ * With `known`, the snapshot the caller already read is used and not selected again.
+ */
+export function readSourceSeriesFields(db: SourceDirectClient, input: SourceSeriesFieldsQueryInput, known?: SourceSnapshotKnown): Promise<SourceRead<SourceSeriesFields>> {
   return guarded(async () => {
-    const meta = await snapshotMeta(db, input.datasetId, input.snapshotId);
+    const meta = known ? knownMeta(known, input.datasetId, input.snapshotId) : await snapshotMeta(db, input.datasetId, input.snapshotId);
+    return seriesRead(db, meta, input, false);
+  });
+}
+
+/**
+ * One measure across the rows of one period (the greatest period string when none is given), at most 1,000 rows.
+ * With `known`, the snapshot the caller already read is used and not selected again.
+ */
+export function readSourceCrossSection(db: SourceDirectClient, input: SourceCrossSectionQueryInput, known?: SourceSnapshotKnown): Promise<SourceRead<SourceCrossSection>> {
+  return guarded(async () => {
+    const meta = known ? knownMeta(known, input.datasetId, input.snapshotId) : await snapshotMeta(db, input.datasetId, input.snapshotId);
     const field = resolveField(meta.dict.columns, input.field);
     const where = resolveMatches(meta, input.where);
     const { period, rule } = await choosePeriod(db, meta, input.period);

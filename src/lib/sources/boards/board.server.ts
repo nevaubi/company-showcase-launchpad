@@ -4,20 +4,25 @@
  * client), then `compute.ts`. A computed tile is kept in this process per snapshot: a snapshot is immutable,
  * so the figures of a pinned snapshot never change; only the dataset's pointer to its latest snapshot is
  * looked up again after ten minutes.
+ *
+ * Cost of a cold tile: one select for the dataset with its snapshot and dictionary (the latest-snapshot
+ * relation), then the pages of one series read that carries the measure and every field beside it, or a
+ * cross-section. The dictionary is read once and handed to the reads. Callers that ask for the same dataset
+ * or tile at the same time share one read and one computation.
  */
 import { describeDataset } from "../catalog";
 import { addressMatches, addressRefusal, cadenceOf, locateField, measureOf, profileStatus, unitOf } from "../profiles";
 import type { MeasureSpec, Profile, SeriesAddress } from "../profiles/types";
-import { readSourceCrossSection, readSourceSeries, type SourceDirectClient } from "../read.server";
+import { readSourceCrossSection, readSourceSeriesFields, type SourceDirectClient, type SourceSnapshotKnown } from "../read.server";
 import type { SourceCellMatch, SourceSeriesAddress } from "../read-types";
-import type { SourceColumn } from "../schema";
+import type { SourceColumn, SourceIngest } from "../schema";
 import { computeRankTile, computeSeriesTile, type CellInput, type RankCellInput, type TileContext } from "./compute";
 import { boardSpec, tileSpec } from "./specs";
 import type { Board, BoardRead, BoardTile, RankTileSpec, SeriesTileSpec, TileResult, TileSource, TileSpec } from "./types";
 
 type DatasetMeta = {
   dataset: { id: string; source_id: string | null; name: string; sector: string; agency: string; source_url: string | null; grain: string };
-  snapshot: { id: string; columns: SourceColumn[]; retrievedAt: string | null; publishedAt: string | null; rows: number };
+  snapshot: { id: string; columns: SourceColumn[]; ingest: SourceIngest; retrievedAt: string | null; publishedAt: string | null; rows: number; fields: number; fileSha256: string };
 };
 
 type Outcome = { tile: BoardTile } | { refused: { id: string; title: string; reason: string } };
@@ -29,11 +34,16 @@ const SERIES_ROW_LIMIT = 5000;
 
 const metaCache = new Map<string, { at: number; meta: DatasetMeta }>();
 const tileCache = new Map<string, Outcome>();
+/** Reads and computations in progress, shared by callers that ask for the same dataset or tile meanwhile. */
+const metaFlight = new Map<string, Promise<DatasetMeta>>();
+const tileFlight = new Map<string, Promise<Outcome>>();
 
 /** Forgets every cached dataset pointer and tile (tests). */
 export function resetBoardCache() {
   metaCache.clear();
   tileCache.clear();
+  metaFlight.clear();
+  tileFlight.clear();
 }
 
 class TileStop extends Error {}
@@ -43,48 +53,89 @@ const stop = (reason: string): never => {
 
 const text = (v: unknown): string | null => (typeof v === "string" ? v : null);
 
-async function datasetMeta(db: SourceDirectClient, datasetId: string, now: number): Promise<DatasetMeta> {
-  const hit = metaCache.get(datasetId);
-  if (hit && now - hit.at < META_TTL_MS) return hit.meta;
-  const ds = await db
-    .from("source_datasets")
-    .select("id,source_id,latest_snapshot_id,name,sector,agency,source_url,grain")
-    .eq("id", datasetId)
-    .limit(1);
+const DATASET_COLUMNS = "id,source_id,latest_snapshot_id,name,sector,agency,source_url,grain";
+const SNAPSHOT_COLUMNS = "id,dataset_id,status,columns,ingest,retrieved_at,published_at,loaded_rows,column_count,file_sha256";
+/** The dataset with its published snapshot and that snapshot's dictionary, in one select. */
+export const BOARD_DATASET_SELECT = `${DATASET_COLUMNS},latest:source_snapshots!source_datasets_latest_fk(${SNAPSHOT_COLUMNS})`;
+
+const count = (v: unknown): number => (typeof v === "number" ? v : Number(v));
+
+function datasetOf(datasetId: string, row: Record<string, unknown>): DatasetMeta["dataset"] {
+  return {
+    id: datasetId,
+    source_id: text(row.source_id),
+    name: text(row.name) ?? datasetId,
+    sector: text(row.sector) ?? "",
+    agency: text(row.agency) ?? "",
+    source_url: text(row.source_url),
+    grain: text(row.grain) ?? "",
+  };
+}
+
+async function datasetRow(db: SourceDirectClient, datasetId: string, columns: string): Promise<Record<string, unknown> | undefined> {
+  const ds = await db.from("source_datasets").select(columns).eq("id", datasetId).limit(1);
   if (ds.error) stop(`The dataset could not be read (${ds.error.message}).`);
-  const row = Array.isArray(ds.data) ? (ds.data[0] as Record<string, unknown> | undefined) : undefined;
+  return Array.isArray(ds.data) ? (ds.data[0] as Record<string, unknown> | undefined) : undefined;
+}
+
+/**
+ * The dataset and its published snapshot with the dictionary: one select. After ten minutes the pointer alone is
+ * read again (one small select) and the dictionary kept while the pointer names the same snapshot.
+ */
+async function datasetMeta(db: SourceDirectClient, datasetId: string, now: number): Promise<DatasetMeta> {
+  const stale = metaCache.get(datasetId);
+  if (stale) {
+    const row = await datasetRow(db, datasetId, DATASET_COLUMNS);
+    if (!row || !text(row.latest_snapshot_id)) stop("The dataset has no published snapshot.");
+    if (text(row!.latest_snapshot_id) === stale.meta.snapshot.id) {
+      const meta: DatasetMeta = { dataset: datasetOf(datasetId, row!), snapshot: stale.meta.snapshot };
+      metaCache.set(datasetId, { at: now, meta });
+      return meta;
+    }
+  }
+  const row = await datasetRow(db, datasetId, BOARD_DATASET_SELECT);
   const snapshotId = text(row?.latest_snapshot_id);
   if (!row || !snapshotId) stop("The dataset has no published snapshot.");
-  const sn = await db
-    .from("source_snapshots")
-    .select("id,dataset_id,columns,retrieved_at,published_at,loaded_rows")
-    .eq("id", snapshotId as string)
-    .eq("dataset_id", datasetId)
-    .eq("status", "ready")
-    .limit(1);
-  if (sn.error) stop(`The snapshot could not be read (${sn.error.message}).`);
-  const snap = Array.isArray(sn.data) ? (sn.data[0] as Record<string, unknown> | undefined) : undefined;
-  if (!snap || !Array.isArray(snap.columns)) stop("The published snapshot has no field dictionary.");
+  const snap = row!.latest && typeof row!.latest === "object" ? (row!.latest as Record<string, unknown>) : undefined;
+  if (!snap || snap.id !== snapshotId || snap.dataset_id !== datasetId || snap.status !== "ready") stop("The dataset has no published snapshot.");
+  if (!Array.isArray(snap!.columns)) stop("The published snapshot has no field dictionary.");
   const meta: DatasetMeta = {
-    dataset: {
-      id: datasetId,
-      source_id: text(row!.source_id),
-      name: text(row!.name) ?? datasetId,
-      sector: text(row!.sector) ?? "",
-      agency: text(row!.agency) ?? "",
-      source_url: text(row!.source_url),
-      grain: text(row!.grain) ?? "",
-    },
+    dataset: datasetOf(datasetId, row!),
     snapshot: {
       id: snapshotId as string,
       columns: snap!.columns as SourceColumn[],
+      ingest: (snap!.ingest && typeof snap!.ingest === "object" ? snap!.ingest : {}) as SourceIngest,
       retrievedAt: text(snap!.retrieved_at),
       publishedAt: text(snap!.published_at),
-      rows: typeof snap!.loaded_rows === "number" ? snap!.loaded_rows : Number(snap!.loaded_rows),
+      rows: count(snap!.loaded_rows),
+      fields: count(snap!.column_count),
+      fileSha256: text(snap!.file_sha256) ?? "",
     },
   };
   metaCache.set(datasetId, { at: now, meta });
   return meta;
+}
+
+/** `datasetMeta` with one read in flight per dataset; a fresh cached pointer answers without a select. */
+function sharedMeta(db: SourceDirectClient, datasetId: string, now: number): Promise<DatasetMeta> {
+  const hit = metaCache.get(datasetId);
+  if (hit && now - hit.at < META_TTL_MS) return Promise.resolve(hit.meta);
+  let flight = metaFlight.get(datasetId);
+  if (!flight) {
+    flight = datasetMeta(db, datasetId, now).finally(() => metaFlight.delete(datasetId));
+    metaFlight.set(datasetId, flight);
+  }
+  return flight;
+}
+
+/** The snapshot as the reads take it, so they do not select it or its dictionary again. */
+function known(meta: DatasetMeta): SourceSnapshotKnown {
+  const s = meta.snapshot;
+  return {
+    ref: { datasetId: meta.dataset.id, snapshotId: s.id, publishedAt: s.publishedAt, retrievedAt: s.retrievedAt, fileSha256: s.fileSha256, rows: s.rows, fields: s.fields },
+    columns: s.columns,
+    ingest: s.ingest,
+  };
 }
 
 function sourceOf(meta: DatasetMeta): TileSource {
@@ -108,27 +159,6 @@ function position(columns: readonly SourceColumn[], label: string): number {
   const found = locateField(columns, label);
   if (!found.ok) stop(`The field ${label} is ${found.reason === "missing" ? "not in" : "carried twice by"} this version.`);
   return (found as { index: number }).index;
-}
-
-/** Every point of one field for one address, in file order, at most SERIES_ROW_LIMIT rows. */
-async function readField(
-  db: SourceDirectClient,
-  meta: DatasetMeta,
-  field: number,
-  address: SourceSeriesAddress,
-): Promise<Map<number, { period: string | null; text: string | null }>> {
-  const out = new Map<number, { period: string | null; text: string | null }>();
-  const read = await readSourceSeries(db, {
-    datasetId: meta.dataset.id,
-    snapshotId: meta.snapshot.id,
-    field,
-    address,
-    limit: SERIES_ROW_LIMIT,
-  });
-  if (!read.ok) stop(read.reason === "unavailable" ? "The series read is not available yet." : read.message);
-  if (read.ok && read.data.next !== null) stop(`The series has more than ${SERIES_ROW_LIMIT.toLocaleString("en-US")} records; a tile reads at most that many.`);
-  if (read.ok) for (const p of read.data.points) out.set(p.row, { period: p.period, text: p.text });
-  return out;
 }
 
 /** The reads' address for a profile address: labels become positions; field matches beside a key are applied here. */
@@ -172,7 +202,6 @@ async function seriesCells(
   if (refusal) stop(refusal);
   const { read, local } = readAddress(columns, spec.series);
   const measureAt = position(columns, measure.field);
-  const extra = new Map<number, Map<number, { period: string | null; text: string | null }>>();
   const want = new Set<number>();
   if (measure.unit.from === "column") want.add(position(columns, measure.unit.column));
   if (spec.subjectCheck) want.add(position(columns, spec.subjectCheck.field));
@@ -181,25 +210,30 @@ async function seriesCells(
   for (const m of local) want.add(m.position);
   want.delete(measureAt);
 
-  const values = await readField(db, meta, measureAt, read);
-  for (const at of want) extra.set(at, await readField(db, meta, at, read));
-  const cellAt = (at: number, row: number) => (at === measureAt ? values.get(row)?.text ?? null : extra.get(at)?.get(row)?.text ?? null);
-
+  // the measure and every field beside it on the same selects
+  const fields = [measureAt, ...want];
+  const got = await readSourceSeriesFields(db, { datasetId: meta.dataset.id, snapshotId: meta.snapshot.id, fields, address: read, limit: SERIES_ROW_LIMIT }, known(meta));
+  if (!got.ok) stop(got.reason === "unavailable" ? "The series read is not available yet." : got.message);
+  const series = got.ok ? got.data : null;
+  if (!series) return [];
+  if (series.next !== null) stop(`The series has more than ${SERIES_ROW_LIMIT.toLocaleString("en-US")} records; a tile reads at most that many.`);
+  const slot = new Map(fields.map((at, i) => [at, i] as const));
   const cells: CellInput[] = [];
-  for (const [row, point] of values) {
-    if (local.some((m) => cellAt(m.position, row) !== m.value)) continue;
+  for (const point of series.points) {
+    const cellAt = (at: number) => point.cells[slot.get(at) ?? -1] ?? null;
+    if (local.some((m) => cellAt(m.position) !== m.value)) continue;
     let period = point.period;
-    if (profile.period.from === "field") period = cellAt(position(columns, profile.period.field), row);
+    if (profile.period.from === "field") period = cellAt(position(columns, profile.period.field));
     if (profile.period.from === "fields") {
-      const composed = profile.period.compose(profile.period.fields.map((f) => cellAt(position(columns, f), row)));
+      const composed = profile.period.compose(profile.period.fields.map((f) => cellAt(position(columns, f))));
       period = composed ? composed.text : null;
     }
     cells.push({
-      row,
+      row: point.row,
       period,
-      text: point.text,
-      unit: measure.unit.from === "column" ? cellAt(position(columns, measure.unit.column), row) : undefined,
-      check: spec.subjectCheck ? cellAt(position(columns, spec.subjectCheck.field), row) : undefined,
+      text: cellAt(measureAt),
+      unit: measure.unit.from === "column" ? cellAt(position(columns, measure.unit.column)) : undefined,
+      check: spec.subjectCheck ? cellAt(position(columns, spec.subjectCheck.field)) : undefined,
     });
   }
   return cells;
@@ -211,7 +245,7 @@ async function rankCells(db: SourceDirectClient, meta: DatasetMeta, measure: Mea
     snapshotId: meta.snapshot.id,
     field: position(meta.snapshot.columns, measure.field),
     period: spec.across.period === "latest" ? undefined : spec.across.period,
-  });
+  }, known(meta));
   if (!read.ok) stop(read.reason === "unavailable" ? "The cross-section read is not available yet." : read.message);
   const data = read.ok ? read.data : null;
   if (!data) return [];
@@ -236,12 +270,13 @@ function boardTile(spec: TileSpec, source: TileSource, result: TileResult): Boar
   };
 }
 
-async function computeTile(db: SourceDirectClient, spec: TileSpec, now: number): Promise<Outcome> {
+const refusedBy = (spec: TileSpec, error: unknown): Outcome => ({
+  refused: { id: spec.id, title: spec.title, reason: error instanceof TileStop ? error.message : "The tile could not be computed." },
+});
+
+/** Computes one tile on a dataset's snapshot and keeps the outcome; never rejects. */
+async function buildTile(db: SourceDirectClient, spec: TileSpec, meta: DatasetMeta, key: string): Promise<Outcome> {
   try {
-    const meta = await datasetMeta(db, spec.datasetId, now);
-    const key = `${spec.id}:${meta.snapshot.id}`;
-    const cached = tileCache.get(key);
-    if (cached) return cached;
     const status = profileStatus(meta.dataset, meta.snapshot.columns);
     if (status.state === "none") stop("No reviewed profile covers this table.");
     if (status.state === "off") stop(status.reason);
@@ -265,9 +300,26 @@ async function computeTile(db: SourceDirectClient, spec: TileSpec, now: number):
     if (tileCache.size > TILE_CACHE_LIMIT) tileCache.delete(tileCache.keys().next().value as string);
     return outcome;
   } catch (error) {
-    const reason = error instanceof TileStop ? error.message : "The tile could not be computed.";
-    return { refused: { id: spec.id, title: spec.title, reason } };
+    return refusedBy(spec, error);
   }
+}
+
+async function computeTile(db: SourceDirectClient, spec: TileSpec, now: number): Promise<Outcome> {
+  let meta: DatasetMeta;
+  try {
+    meta = await sharedMeta(db, spec.datasetId, now);
+  } catch (error) {
+    return refusedBy(spec, error);
+  }
+  const key = `${spec.id}:${meta.snapshot.id}`;
+  const cached = tileCache.get(key);
+  if (cached) return cached;
+  let flight = tileFlight.get(key);
+  if (!flight) {
+    flight = buildTile(db, spec, meta, key).finally(() => tileFlight.delete(key));
+    tileFlight.set(key, flight);
+  }
+  return flight;
 }
 
 /** Runs `work` over `items` with at most `width` at a time, keeping the order of `items` in the answer. */
