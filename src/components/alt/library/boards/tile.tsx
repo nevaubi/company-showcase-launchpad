@@ -3,7 +3,13 @@ import { useNavigate } from "@tanstack/react-router";
 import { Segmented } from "@/components/app/segmented";
 import { datasetHref, recordHref, type DatasetSearch } from "@/lib/sources/links";
 import type { BoardTile } from "@/lib/sources/boards/types";
-import { TILE_CHART_HEIGHT, TileChart } from "./tile-chart";
+import { TileChart } from "./tile-chart";
+
+/**
+ * Height of a board tile's chart: ten ranked bars with their names above them need 20px a row, so every chart
+ * of a board is this tall and the charts of a row still end on one line.
+ */
+export const BOARD_CHART_HEIGHT = 200;
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -47,7 +53,7 @@ export function Tile({ tile }: { tile: BoardTile }) {
   const isRank = tile.form === "ranked-bars";
 
   return (
-    <article data-section={tile.title} className="flex min-w-0 flex-col rounded-md border bg-card shadow-paper">
+    <article data-section={tile.title} className="row-span-4 grid min-w-0 grid-cols-1 grid-rows-subgrid gap-y-0 rounded-md border bg-card shadow-paper">
       <header className="flex items-start gap-2 px-3.5 pb-1 pt-3">
         <h3 className="min-w-0 flex-1 text-[13px] font-semibold leading-snug tracking-tight">{tile.title}</h3>
         <Segmented
@@ -70,7 +76,7 @@ export function Tile({ tile }: { tile: BoardTile }) {
           {!percent && result.figureUnit && <span className="text-[11px] text-muted-foreground">{result.figureUnit}</span>}
           <span className="ml-auto text-[11px] text-muted-foreground">{result.asOf}</span>
         </p>
-        <p className="mt-1 min-h-[3.4rem] text-[13px] leading-snug">{result.headline}</p>
+        <p className="mt-1 text-[13px] leading-snug">{result.headline}</p>
       </div>
       <div className="px-3.5 pt-2">
         {view === "chart" ? (
@@ -83,13 +89,14 @@ export function Tile({ tile }: { tile: BoardTile }) {
               label={`${tile.title}, ${isRank ? result.asOf : `${result.points[0]?.label ?? ""} to ${result.points[result.points.length - 1]?.label ?? ""}`}, ${result.plotUnit}`}
               recordHref={rowHref}
               onOpen={open}
+              height={BOARD_CHART_HEIGHT}
             />
           </>
         ) : (
           <TileTable tile={tile} rowHref={rowHref} />
         )}
       </div>
-      <footer className="mt-auto space-y-1 border-t px-3.5 py-2 text-[11px] leading-snug text-muted-foreground">
+      <footer className="mt-2 space-y-1 self-end border-t px-3.5 py-2 text-[11px] leading-snug text-muted-foreground">
         {tile.note && <p>{tile.note}</p>}
         {result.gaps.count + result.gaps.noBase > 0 && (
           <p>
@@ -127,7 +134,7 @@ function TileTable({ tile, rowHref }: { tile: BoardTile; rowHref: (row: number) 
   const isRank = tile.form === "ranked-bars";
   const rows = isRank ? r.points : [...r.points].reverse();
   return (
-    <div className="min-w-0 overflow-x-auto" style={{ minHeight: TILE_CHART_HEIGHT + 18 }}>
+    <div className="min-w-0 overflow-x-auto" style={{ minHeight: BOARD_CHART_HEIGHT + 18 }}>
       <table className="w-full text-[11px]">
         <caption className="sr-only">
           {tile.title}, {r.plotUnit}
@@ -143,7 +150,7 @@ function TileTable({ tile, rowHref }: { tile: BoardTile; rowHref: (row: number) 
         <tbody>
           {rows.map((p) => (
             <tr key={`${p.key}-${p.row}`} className="border-b border-border/60 last:border-0">
-              <td className="max-w-[12rem] truncate py-1 pr-2">{p.label}</td>
+              <td className="py-1 pr-2">{p.label}</td>
               <td className="num py-1 pr-2 text-right">{p.display}</td>
               <td className="num py-1 pr-2 text-right text-muted-foreground">{p.text === null ? "null" : p.text === "" ? "empty" : p.text}</td>
               <td className="py-1 text-right">

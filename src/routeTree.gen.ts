@@ -94,6 +94,7 @@ import { Route as AuthenticatedAppOfficeSlidesIdRouteImport } from './routes/_au
 import { Route as AuthenticatedAppOfficeWriterIdRouteImport } from './routes/_authenticated/app.office.writer.$id'
 import { Route as AuthenticatedAppSectorsGSlugRouteImport } from './routes/_authenticated/app.sectors_.g.$slug'
 import { Route as AuthenticatedAppAltDataLibraryCCollectionRouteImport } from './routes/_authenticated/app.alt-data_.library_.c.$collection'
+import { Route as AuthenticatedAppAltDataLibraryDDatasetRouteImport } from './routes/_authenticated/app.alt-data_.library_.d.$dataset'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -567,6 +568,12 @@ const AuthenticatedAppAltDataLibraryCCollectionRoute =
     path: '/alt-data/library/c/$collection',
     getParentRoute: () => AuthenticatedAppRoute,
   } as any)
+const AuthenticatedAppAltDataLibraryDDatasetRoute =
+  AuthenticatedAppAltDataLibraryDDatasetRouteImport.update({
+    id: '/alt-data_/library_/d/$dataset',
+    path: '/alt-data/library/d/$dataset',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -653,6 +660,7 @@ export interface FileRoutesByFullPath {
   '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
   '/app/alt-data/library/c/$collection': typeof AuthenticatedAppAltDataLibraryCCollectionRoute
+  '/app/alt-data/library/d/$dataset': typeof AuthenticatedAppAltDataLibraryDDatasetRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -736,6 +744,7 @@ export interface FileRoutesByTo {
   '/app/sectors/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerIndexRoute
   '/app/alt-data/library/c/$collection': typeof AuthenticatedAppAltDataLibraryCCollectionRoute
+  '/app/alt-data/library/d/$dataset': typeof AuthenticatedAppAltDataLibraryDDatasetRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -824,6 +833,7 @@ export interface FileRoutesById {
   '/_authenticated/app/sectors_/g/$slug': typeof AuthenticatedAppSectorsGSlugRoute
   '/_authenticated/app/companies/$ticker/': typeof AuthenticatedAppCompaniesTickerIndexRoute
   '/_authenticated/app/alt-data_/library_/c/$collection': typeof AuthenticatedAppAltDataLibraryCCollectionRoute
+  '/_authenticated/app/alt-data_/library_/d/$dataset': typeof AuthenticatedAppAltDataLibraryDDatasetRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -912,6 +922,7 @@ export interface FileRouteTypes {
     | '/app/sectors/g/$slug'
     | '/app/companies/$ticker/'
     | '/app/alt-data/library/c/$collection'
+    | '/app/alt-data/library/d/$dataset'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -995,6 +1006,7 @@ export interface FileRouteTypes {
     | '/app/sectors/g/$slug'
     | '/app/companies/$ticker'
     | '/app/alt-data/library/c/$collection'
+    | '/app/alt-data/library/d/$dataset'
   id:
     | '__root__'
     | '/'
@@ -1082,6 +1094,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/sectors_/g/$slug'
     | '/_authenticated/app/companies/$ticker/'
     | '/_authenticated/app/alt-data_/library_/c/$collection'
+    | '/_authenticated/app/alt-data_/library_/d/$dataset'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -1702,6 +1715,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppAltDataLibraryCCollectionRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/alt-data_/library_/d/$dataset': {
+      id: '/_authenticated/app/alt-data_/library_/d/$dataset'
+      path: '/alt-data/library/d/$dataset'
+      fullPath: '/app/alt-data/library/d/$dataset'
+      preLoaderRoute: typeof AuthenticatedAppAltDataLibraryDDatasetRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
   }
 }
 
@@ -1822,6 +1842,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppOfficeWriterIdRoute: typeof AuthenticatedAppOfficeWriterIdRoute
   AuthenticatedAppSectorsGSlugRoute: typeof AuthenticatedAppSectorsGSlugRoute
   AuthenticatedAppAltDataLibraryCCollectionRoute: typeof AuthenticatedAppAltDataLibraryCCollectionRoute
+  AuthenticatedAppAltDataLibraryDDatasetRoute: typeof AuthenticatedAppAltDataLibraryDDatasetRoute
 }
 
 const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
@@ -1877,6 +1898,8 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppSectorsGSlugRoute: AuthenticatedAppSectorsGSlugRoute,
   AuthenticatedAppAltDataLibraryCCollectionRoute:
     AuthenticatedAppAltDataLibraryCCollectionRoute,
+  AuthenticatedAppAltDataLibraryDDatasetRoute:
+    AuthenticatedAppAltDataLibraryDDatasetRoute,
 }
 
 const AuthenticatedAppRouteWithChildren =
