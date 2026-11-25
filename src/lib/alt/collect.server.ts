@@ -6,6 +6,7 @@ import { ALT_NAMES, awardTie, CONTRACTS_RULE, ignoredFilter, nameCore, pickParen
 import { CONTRACT_ALIASES } from "@/lib/alt/contract-aliases";
 import { calendarYearPeriod, fiscalYearPeriod } from "@/lib/alt/periods";
 import { FDIC_ZERO_IS_MISSING } from "@/lib/alt/bank";
+import { collectorCert } from "@/lib/sources/company/guard";
 import { cpscFirmName, cpscRole, firmCheck } from "@/lib/alt/firms";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -269,7 +270,8 @@ async function complaints(c: Co): Promise<Row[]> {
 // ───────── FDIC call reports for the main bank subsidiary ─────────
 const FDIC_FIELDS: Record<string, [string, string]> = { ASSET: ["Total assets", "USD_K"], DEP: ["Total deposits", "USD_K"], DEPUNINA: ["Uninsured deposits (est.)", "USD_K"], LNLSNET: ["Net loans & leases", "USD_K"], NETINC: ["Net income (YTD)", "USD_K"], NIMY: ["Net interest margin", "%"], ROA: ["Return on assets", "%"], NTLNLSR: ["Net charge-off rate", "%"], RBCT1CER: ["CET1 ratio", "%"], NCLNLSR: ["Noncurrent loans / loans", "%"] };
 async function bank(c: Co): Promise<Row[]> {
-  const cert = FDIC[c.ticker] ?? c.reg?.fdic; if (!cert) return [];
+  // for a company the official mapping covers, only a certificate it proves (src/lib/sources/company/guard.ts)
+  const cert = collectorCert(c.ticker, FDIC[c.ticker] ?? c.reg?.fdic); if (!cert) return [];
   const j = await get(`https://api.fdic.gov/banks/financials?filters=CERT:${cert}&fields=REPDTE,${Object.keys(FDIC_FIELDS).join(",")}&sort_by=REPDTE&sort_order=DESC&limit=200`);
   const out: Row[] = [];
   for (const { data: d } of j?.data ?? []) for (const [f, [label, unit]] of Object.entries(FDIC_FIELDS)) {
