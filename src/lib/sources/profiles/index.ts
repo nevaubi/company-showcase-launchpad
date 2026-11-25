@@ -1,6 +1,7 @@
 import type { SourceColumn } from "../schema";
 import type {
   FieldLocation,
+  FieldMatch,
   MeasureSpec,
   PeriodSpec,
   Profile,
@@ -162,18 +163,24 @@ export function unitOf(
   return { ok: true, text: cell };
 }
 
+/** The field matches of an address (none for a whole snapshot). */
+export function addressMatches(address: SeriesAddress): readonly FieldMatch[] {
+  return "where" in address && address.where ? address.where : [];
+}
+
 /** Field labels an address fixes, for checks before a read is sent. */
 export function addressFields(address: SeriesAddress): string[] {
-  return (address.where ?? []).map((m) => m.field);
+  return addressMatches(address).map((m) => m.field);
 }
 
 /** True when two addresses pick the same series. */
 export function sameAddress(a: SeriesAddress, b: SeriesAddress): boolean {
   const key = (x: SeriesAddress) =>
     JSON.stringify({
+      whole: "whole" in x,
       by: "by" in x ? x.by : null,
       key: "by" in x ? x.key : null,
-      where: [...(x.where ?? [])].map((m) => [m.field, m.value]).sort((p, q) => (p[0] < q[0] ? -1 : p[0] > q[0] ? 1 : 0)),
+      where: [...addressMatches(x)].map((m) => [m.field, m.value]).sort((p, q) => (p[0] < q[0] ? -1 : p[0] > q[0] ? 1 : 0)),
     });
   return key(a) === key(b);
 }

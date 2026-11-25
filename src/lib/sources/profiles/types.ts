@@ -32,12 +32,16 @@ export type FieldMatch = { field: string; value: string };
 
 /**
  * How one series is picked out of a table.
- * - by and key: every record whose indexed dimension equals the key, optionally narrowed by field matches;
- * - where alone: every record whose fields equal the values, found inside the read's scan limit.
+ * - by and key: every record whose indexed dimension equals the key, read through that dimension's index;
+ *   field matches beside it narrow those records after the read (the key bounds what is scanned);
+ * - where alone: every record whose fields equal the values, a filter on cells that the reads allow only on
+ *   a snapshot of at most 50,000 rows;
+ * - whole: the snapshot is one series (a FRED series file), read in row order.
  */
 export type SeriesAddress =
   | { by: IndexedDimension; key: string; where?: readonly FieldMatch[] }
-  | { where: readonly FieldMatch[] };
+  | { where: readonly FieldMatch[] }
+  | { whole: true };
 
 /**
  * Where the unit of a measure is established.
