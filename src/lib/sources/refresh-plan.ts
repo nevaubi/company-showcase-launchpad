@@ -128,6 +128,15 @@ export function refreshFailure(state: RefreshState, now: Date, error: string): R
     next_due_at: new Date(now.getTime() + Math.min(DAY, 30 * 60_000 * 2 ** (failures - 1))).toISOString() };
 }
 
+/**
+ * A collection held for review (a changed native header, an empty response): a person has to look,
+ * and collecting the same file again in 30 minutes only registers another held snapshot and uploads
+ * its bytes again. The next try is a day later; the failure count and the reason are kept.
+ */
+export function refreshHeld(state: RefreshState, now: Date, reason: string): RefreshState {
+  return { ...refreshFailure(state, now, reason), next_due_at: new Date(now.getTime() + DAY).toISOString() };
+}
+
 export function refreshChecked(state: RefreshState, now: Date, intervalMs: number, result: {
   url: string; etag?: string; lastModified?: string; stagedSnapshotId?: string;
 }): RefreshState {

@@ -17,7 +17,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { OFFICIAL_USER_AGENT, REFRESH_FAMILY_SWITCH, directRefreshProvenance, refreshChecked, refreshEligibility, refreshFailure,
+import { OFFICIAL_USER_AGENT, REFRESH_FAMILY_SWITCH, directRefreshProvenance, refreshChecked, refreshEligibility, refreshHeld,
   refreshFamilyDisabledReason, refreshFamilyEnabled, isRefreshDue, safeRefreshRedirect,
   type RefreshFamily, type RefreshState, type RefreshEligibility } from "../src/lib/sources/refresh-plan";
 import type { SourceDataset, SourceFileManifest, SourceSnapshot, SourceIngest } from "../src/lib/sources/schema";
@@ -323,7 +323,7 @@ function refreshOne(candidate: Candidate): Promise<RefreshOutcome> {
         ...("transport" in downloaded ? { retrieval_transport: downloaded.transport } : {}) } });
     if (result.outcome === "quarantined") {
       const reason = result.reason ?? "Refreshed native schema requires review";
-      await store.writeState(id, refreshFailure(state, new Date(), reason));
+      await store.writeState(id, refreshHeld(state, new Date(), reason));
       return { outcome: "held", reason, snapshot_id: result.snapshotId };
     }
     await store.writeState(id, refreshChecked(state, new Date(), candidate.eligibility.intervalMs, {
@@ -399,7 +399,7 @@ function refreshFdic(baselineId: string): Promise<RefreshOutcome> {
       supportingFiles: collected.supportingFiles, contentType: "text/csv", signal: stop.signal, gate });
     if (result.outcome === "quarantined") {
       const reason = result.reason ?? "FDIC source schema requires review";
-      await store.writeState(id, refreshFailure(state, new Date(), reason));
+      await store.writeState(id, refreshHeld(state, new Date(), reason));
       return { outcome: "held", reason, snapshot_id: result.snapshotId };
     }
     await store.writeState(id, refreshChecked(state, new Date(), 24 * 3600_000, { url: FDIC_CURRENT_DATASET.source_url,
@@ -468,7 +468,7 @@ function refreshTaiwan(market: TaiwanRevenueMarket): Promise<RefreshOutcome> {
       supportingFiles: collected.supportingFiles, contentType: "text/csv", signal: stop.signal, gate });
     if (result.outcome === "quarantined") {
       const reason = result.reason ?? "Exchange source schema requires review";
-      await store.writeState(id, refreshFailure(state, new Date(), reason));
+      await store.writeState(id, refreshHeld(state, new Date(), reason));
       return { outcome: "held", reason, snapshot_id: result.snapshotId };
     }
     await store.writeState(id, refreshChecked(state, new Date(), 24 * 3600_000, { url: dataset.source_url,

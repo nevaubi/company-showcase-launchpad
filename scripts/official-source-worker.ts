@@ -29,7 +29,7 @@ import {
 } from "./lib/official-worker-plan";
 import { absWatchList } from "./lib/abs-watch-list";
 import { sweepRunReceipts, takeRunReceipt } from "./lib/run-receipt";
-import { trimSourceCache } from "./lib/source-cache";
+import { sweepRefreshFolders, trimSourceCache } from "./lib/source-cache";
 
 const owner = `official:${process.env.RENDER_INSTANCE_ID ?? "worker"}:${randomUUID()}`;
 const WORK = process.env.OFFICIAL_SOURCE_WORK_DIR ?? "/var/data/official-sources";
@@ -40,6 +40,9 @@ try {
   // Receipts a previous worker process never read (it was stopped while a child ran).
   const swept = sweepRunReceipts(RECEIPTS);
   if (swept) log("official-source-worker", `removed ${swept} unread receipt files older than a day`);
+  // Response bodies of failed or held refresh collections, kept as evidence for a week (review S5).
+  const old = sweepRefreshFolders(WORK);
+  if (old.length) log("official-source-worker", `removed ${old.length} refresh evidence folders older than 7 days`, old.slice(0, 5).join(", "));
 } catch (e) {
   // Without the folder the children still run; their receipts then say only how each process ended.
   log("official-source-worker", "receipt folder unavailable", safeError(e));
