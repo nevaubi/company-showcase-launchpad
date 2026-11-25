@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
+import { SectorSourceLink } from "@/components/alt/source-links";
 import { TickerMark } from "@/components/app/ticker";
 import { MultiLine } from "@/components/charts/multi-line";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -135,6 +136,7 @@ export function GroupView({
           className="mb-0"
           eyebrow={d.kind === "sector" ? `Sector${d.etf ? ` · ${d.etf}` : ""}` : `Industry · ${d.sector}`}
           title={d.name}
+          actions={<SectorSourceLink sector={d.kind === "sector" ? d.name : d.sector} />}
           description={`${d.constituents.length} covered companies, classified by SIC code with documented overrides. Fundamentals are Σ numerator ÷ Σ denominator over the companies reporting both, for ${
             ref ? `${qLabel(ref.q)} (${ref.n} companies)` : "the latest quarter"
           }: the newest quarter at least half as many companies have reported as the one before${

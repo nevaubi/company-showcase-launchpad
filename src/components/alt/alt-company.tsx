@@ -13,6 +13,7 @@ import { DepositsByState } from "@/components/alt/deposits-by-state";
 import { MedicareByState } from "@/components/alt/medicare-by-state";
 import { PlantsTri } from "@/components/alt/plants-tri";
 import { CompanyPlantHazards } from "@/components/alt/plant-hazards";
+import { BankSourceLink } from "@/components/alt/source-links";
 import { fmtAlt, fmtChange, fmtDay } from "@/lib/alt/catalog";
 import { BANK_RISK, bpChange, buildCompanyAlt, type CompanyAlt, type DatasetView, type Figure, type Flag } from "@/lib/alt/company";
 import { revenuePoints, yearOnYear } from "@/lib/alt/derive";
@@ -169,6 +170,7 @@ function DatasetPanel({ ticker, view, span }: { ticker: string; view: DatasetVie
         bodyClassName="p-0"
         title={<span className="flex items-center gap-2">{view.label}{view.flag && <span className={cn("rounded-[3px] px-1.5 text-[10px] font-medium leading-4", view.flag.direction === "up" ? "bg-warning/15 text-warning" : "bg-secondary text-muted-foreground")}>{flagBadge(view.flag)}</span>}</span>}
         subtitle={`${view.source} · latest ${fmtDay(view.latest)} · ${view.count.toLocaleString("en-US")} records`}
+        actions={view.dataset === "bank" ? <BankSourceLink rows={view.rows} /> : undefined}
       >
         {!OWN_STATS.has(view.dataset) && <Figures ticker={ticker} figures={view.figures} />}
         {view.coverage && <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">{view.coverage}</p>}

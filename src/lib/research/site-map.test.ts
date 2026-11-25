@@ -188,6 +188,10 @@ describe("site map", () => {
     expect(hub).toContain("Alt data filters (Theme: All, Government, Products, Market, Banking, Corporate events; Filter by ticker), Unusual now, Leaderboard");
     expect(hub).toContain("compares only periods a source has fully published");
     expect(hub).toContain("An empty list (\"Nothing unusual right now\") is the normal result");
+    expect(hub).toContain("Source explorer");
+    expect(hub).toContain("view=sources");
+    expect(hub).toContain("entity= native identifier or exact name");
+    expect(hub).toContain("Every native field");
     const tab = map.split("\n").find((l) => l.includes("/app/companies/LMT/alt-data"))!;
     expect(tab).toContain("#alt-ds-DATASET");
     expect(tab).toContain("8-K filings");

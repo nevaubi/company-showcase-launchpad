@@ -12,5 +12,6 @@ async function supervise(file:string, flags:string[]=[]) {
 }
 await Promise.all([
   supervise('scripts/ir-deep-loop.ts',['--python=/opt/dvenv/bin/python']),
+  supervise('scripts/official-source-worker.ts'),
   ...(process.env.FIRECRAWL_API_KEY ? [supervise('scripts/vendor-backfill.ts')] : (console.error('Vendor collector disabled: FIRECRAWL_API_KEY is missing'),[])),
 ]);

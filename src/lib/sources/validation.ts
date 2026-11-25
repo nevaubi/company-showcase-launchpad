@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { SourceDimension, SourceFileManifest, SourceIngest, SourceRecord } from "./schema";
+import type { SourceDimension, SourceFileManifest, SourceIngest, SourceRecord, SourceJson } from "./schema";
 
 export const SOURCE_CHUNK_BYTES = 32 * 1024 * 1024;
 export const sourceHash = z.string().regex(/^[0-9a-f]{64}$/, "Expected a lowercase SHA-256");
@@ -20,13 +20,14 @@ export const recordInput = z.object({
 });
 const fileInput = z.object({
   sha256: sourceHash, bytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-  content_type: z.string().min(1).max(200), provenance: z.record(z.unknown()).default({}),
+  content_type: z.string().min(1).max(200), provenance: z.record(z.lazy((): z.ZodType<SourceJson> => z.union([z.null(),z.boolean(),z.number().finite(),z.string(),z.array(jsonValue),z.record(jsonValue)]))).default({}),
   verified_at: z.string().nullable().optional(),
   chunks: z.array(z.object({
     index: z.number().int().min(0), path: z.string(), sha256: sourceHash,
     bytes: z.number().int().min(1).max(SOURCE_CHUNK_BYTES, "A chunk must not exceed 32 MiB"),
   })),
 });
+const jsonValue: z.ZodType<SourceJson> = z.lazy(() => z.union([z.null(),z.boolean(),z.number().finite(),z.string(),z.array(jsonValue),z.record(jsonValue)]));
 export function validateSourceFile(value: unknown): SourceFileManifest {
   const file = fileInput.parse(value);
   let bytes = 0;
@@ -53,6 +54,8 @@ export const ingestInput = z.object({
   header_rows: z.number().int().min(0).max(100),
   dimensions: z.object(Object.fromEntries(dimensionNames.map(n => [n, z.number().int().min(0).max(16383).optional()])) as Record<SourceDimension, z.ZodOptional<z.ZodNumber>>),
   constants: z.record(z.string()).optional(), null_values: z.array(z.string()).optional(),
+  composites: z.object({ period: z.object({ indices: z.tuple([z.number().int().min(0),z.number().int().min(0)]), separator: z.string().max(8), format: z.literal("year_month") }).optional() }).optional(),
+  geo_code_format: z.literal("county_fips_5").optional(),
 });
 export function validateSourceRow(value: unknown, width: number): SourceRecord {
   const row = rowInput.parse(value);
@@ -67,5 +70,13 @@ export function projectSourceRow(values: string[], row_number: number, ingest: S
     if (index !== undefined && (index < 0 || index >= values.length)) throw new Error(`Dimension ${name} is outside the source row`);
     row[name] = index === undefined ? ingest.constants?.[name] ?? null : row.values[index];
   }
+  const composite = ingest.composites?.period;
+  if (composite) {
+    const year = values[composite.indices[0]]?.trim();
+    const month = values[composite.indices[1]]?.trim();
+    if (!year || !/^\d{4}$/.test(year) || !month || !/^(?:0?[1-9]|1[0-2])$/.test(month)) throw new Error(`Invalid declared year_month period at row ${row_number}`);
+    row.period = `${year}${composite.separator}${month.padStart(2,"0")}`;
+  }
+  if (ingest.geo_code_format === "county_fips_5") row.geo_code = row.geo_code && /^\d{4,5}$/.test(row.geo_code) ? row.geo_code.padStart(5,"0") : null;
   return row;
 }

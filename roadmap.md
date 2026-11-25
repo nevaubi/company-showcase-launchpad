@@ -1,5 +1,10 @@
 # Filed Under — roadmap
 
+## Official source phase one (Nov 25)
+- [x] Verify the frozen patch/catalogue hashes and all 43 per-file base hashes; 42 reviewed paths applied byte-exactly. The platform removed the new migration file because only the managed migration tool can create it.
+- [ ] Apply the reviewed schema, then register and run three bounded import processes — blocked: the frozen migration writes storage.buckets, which the managed migration service prohibits, and places table grants after RLS rather than the required create/grant/RLS order; a corrected reviewed migration is needed.
+- [x] 47 source/worker/navigation tests, 5 preparation tests and 9 isolated PostgreSQL/RLS/interruption tests passed; preview build OK. Desktop/mobile redirect to sign-in; requester session unavailable, no access controls changed. Commit the eligible reviewed paths; no publication or worker deployment.
+
 ## Automatic data refresh — wave 1 (Nov 19)
 - [x] G15: removed job_runs pruning entirely (no stored ledger deletes); 21 tests and TypeScript passed; live prices refresh stored 230 bars, vendor ledger preserved.
 - [x] G14: include 4/A, durable job_state receipts for empty ownership filings (no fabricated trades), per-filing retries; six tests and TypeScript passed; live SEC slices stored three real trades.

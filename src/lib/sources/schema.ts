@@ -1,4 +1,5 @@
 /** Native official records. Values are never parsed or scaled in this layer. */
+export type SourceJson = null | boolean | number | string | SourceJson[] | { [key: string]: SourceJson };
 export type SourceColumn = {
   key: string;
   label: string;
@@ -20,7 +21,7 @@ export type SourceFileManifest = {
   bytes: number;
   content_type: string;
   chunks: SourceChunk[];
-  provenance: Record<string, unknown>;
+  provenance: Record<string, SourceJson>;
   verified_at?: string | null;
 };
 export type SourceDimension = "entity_id" | "entity_name" | "period" | "geo_level" | "geo_code" | "geo_name" | "source_url";
@@ -34,6 +35,8 @@ export type SourceIngest = {
   constants?: Partial<Record<SourceDimension, string>>;
   /** Only explicitly declared markers become null. Without this, even an empty cell is ''. */
   null_values?: string[];
+  composites?: { period?: { indices: [number, number]; separator: string; format: "year_month" } };
+  geo_code_format?: "county_fips_5";
 };
 export type SourceSnapshotSummary = {
   id: string;
@@ -42,8 +45,8 @@ export type SourceSnapshotSummary = {
   loaded_rows: number;
   retrieved_at: string | null;
   published_at: string | null;
-  coverage: Record<string, unknown>;
-  quality: Record<string, unknown>;
+  coverage: Record<string, SourceJson>;
+  quality: Record<string, SourceJson>;
 };
 export type SourceSnapshot = SourceSnapshotSummary & {
   dataset_id: string;

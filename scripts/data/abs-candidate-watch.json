@@ -1,0 +1,318 @@
+{
+  "source": "User-supplied SEC ABS-EE workbook; identifiers are discovery candidates only. The SEC importer verifies the filing issuer/depositor and actual asset family. No company attribution or workbook financial figures are imported.",
+  "workbook_sha256": "8e0844e39bd790a9f8bfe039ab9a1e4b1ee86882484f0156fe6823bc1a46ac8e",
+  "candidates": [
+    {
+      "cik": 2149906,
+      "name": "Capital One Prime Auto Receivables Trust 2026-1",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2160077,
+      "name": "Hyundai Auto Receivables Trust 2026-D",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2143474,
+      "name": "BMW Vehicle Owner Trust 2026-A",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2161415,
+      "name": "Honda Auto Receivables 2026-4 Owner Trust",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2152109,
+      "name": "Ford Credit Auto Owner Trust 2026-C",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2105961,
+      "name": "Santander Drive Auto Receivables Trust 2026-1",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2099542,
+      "name": "Toyota Auto Receivables 2026-D Owner Trust",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1129987,
+      "name": "FORD CREDIT AUTO RECEIVABLES TWO LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2153094,
+      "name": "Nissan Auto Receivables 2026-B Owner Trust",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2150706,
+      "name": "CarMax Auto Owner Trust 2026-4",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2082136,
+      "name": "DRIVE AUTO RECEIVABLES TRUST 2025-2",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2115657,
+      "name": "Mercedes-Benz Auto Receivables Trust 2026-1",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1770373,
+      "name": "Carvana Receivables Depositor LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2159090,
+      "name": "World Omni Auto Receivables Trust 2026-D",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2150254,
+      "name": "Exeter Automobile Receivables Trust 2026-4",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1347185,
+      "name": "AFS SENSUB CORP.",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2147611,
+      "name": "GM Financial Consumer Automobile Receivables Trust 2026-4",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1259380,
+      "name": "CARMAX AUTO FUNDING LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2149768,
+      "name": "Porsche Financial Auto Securitization Trust 2026-1",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2151184,
+      "name": "Bridgecrest Lending Auto Securitization Trust 2026-4",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2036081,
+      "name": "Drive Auto Receivables Trust 2024-2",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2111835,
+      "name": "Ally Auto Receivables Trust 2026-1",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2095374,
+      "name": "Volkswagen Auto Loan Enhanced Trust 2025-2",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2140699,
+      "name": "World Omni Select Auto Trust 2026-A",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2087070,
+      "name": "ALLY AUTO RECEIVABLES TRUST 2025- 1",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2020251,
+      "name": "AmeriCredit Automobile Receivables Trust 2024-1",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2150707,
+      "name": "CarMax Select Receivables Trust 2026-C",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1654238,
+      "name": "EFCAR, LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2153522,
+      "name": "Exeter Select Automobile Receivables Trust 2026-2",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2066712,
+      "name": "Harley Davidson Motorcycle Trust 2025-A",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1405332,
+      "name": "Fifth Third Holdings Funding, LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2034427,
+      "name": "Harley-Davidson Motorcycle Trust 2024-B",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1463814,
+      "name": "Mercedes-Benz Retail Receivables LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1974820,
+      "name": "Bridgecrest Auto Funding LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1477336,
+      "name": "Ally Auto Assets LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1133438,
+      "name": "Capital One Auto Receivables LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1260125,
+      "name": "HYUNDAI ABS FUNDING LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1129068,
+      "name": "NISSAN AUTO RECEIVABLES Co II LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1114926,
+      "name": "HARLEY-DAVIDSON CUSTOMER FUNDING CORP.",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 1383094,
+      "name": "SANTANDER DRIVE AUTO RECEIVABLES LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto loan deals"
+    },
+    {
+      "cik": 2151670,
+      "name": "Mercedes-Benz Auto Lease Trust 2026-B",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 1519881,
+      "name": "Ford Credit Auto Lease Two LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 2149941,
+      "name": "Volkswagen Auto Lease Trust 2026-B",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 1631055,
+      "name": "GMF Leasing LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 2160547,
+      "name": "Nissan Auto Lease Trust 2026-C",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 2111093,
+      "name": "World Omni Automobile Lease Securitization Trust 2026-A",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 2142914,
+      "name": "GM Financial Automobile Leasing Trust 2026-3",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 1182534,
+      "name": "VOLKSWAGEN AUTO LEASE/LOAN UNDERWRITTEN FUNDING, LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 2126256,
+      "name": "Porsche Innovative Lease Owner Trust 2026-1",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 2161311,
+      "name": "VOLKSWAGEN AUTO LEASE TRUST 2026-C",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 1244832,
+      "name": "NISSAN AUTO LEASING LLC II",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    },
+    {
+      "cik": 1537805,
+      "name": "Mercedes-Benz Trust Leasing LLC",
+      "from": "2026-07-01",
+      "candidate_source_sheet": "Auto lease deals"
+    }
+  ]
+}
