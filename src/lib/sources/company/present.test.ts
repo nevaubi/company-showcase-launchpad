@@ -104,7 +104,7 @@ describe("rounding caption (review int-code N9)", () => {
     expect(roundedNote(["USD thousands", "Percent"])).toBe(ROUNDED_NOTE);
     expect(ROUNDED_NOTE).toBe("Percentages are rounded to two decimals; hover a figure for the digits as stored.");
     expect(roundedNote(["USD thousands", null])).toBeNull();
-    const shown = showCell({ text: "1.04730322351758596", value: 1.04730322351758596, kind: "number" }, "Percent");
+    const shown = showCell({ text: "1.04730322351758596", value: Number("1.04730322351758596"), kind: "number" }, "Percent");
     expect(shown).toMatchObject({ text: "1.05", title: "As stored: 1.04730322351758596" });
   });
 });
