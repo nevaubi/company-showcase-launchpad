@@ -74,7 +74,6 @@ const latestCache = new Map<string, { at: number; id: string }>();
 const snapshotCache = new Map<string, Omit<OfficialSource, "newerSnapshot">>();
 const fieldCache = new Map<string, Map<string, { position: number; column: SourceColumn }>>();
 const resultCache = new Map<string, { at: number; value: CompanyOfficial }>();
-let recordFunctionMissingUntil = 0;
 
 /** Forget every cached read (tests). */
 export function resetOfficialCache() {
@@ -82,7 +81,6 @@ export function resetOfficialCache() {
   snapshotCache.clear();
   fieldCache.clear();
   resultCache.clear();
-  recordFunctionMissingUntil = 0;
 }
 
 async function latestId(db: OfficialClient, dataset: string): Promise<string> {
@@ -218,18 +216,8 @@ async function readHistory(db: OfficialClient, cert: string, current: { source: 
 
 const Y9C_WANTED: Wanted[] = [...[Y9C_KEYS.rssd, Y9C_KEYS.date, Y9C_KEYS.assets].map(k => ({ label: k.field as string, hint: k.hint as number })), ...Y9C_FIELDS.map(f => ({ label: f.field, hint: f.hint }))];
 
-/** One stored row by number: `source_record` (migration 0069) when present, else `source_query_records` after row - 1. */
+/** One stored row by number: `source_query_records` after row - 1, the fields asked for only. */
 async function readRow(db: OfficialClient, p: Y9cPointer, positions: number[], labels: string[]): Promise<(string | null)[] | null> {
-  if (Date.now() >= recordFunctionMissingUntil) {
-    const { data, error } = await db.rpc("source_record", { _dataset_id: p.dataset, _snapshot_id: p.snapshot, _row_number: p.row });
-    if (!error) {
-      const rec = (data as { record?: { row_number?: number; values?: (string | null)[] } | null } | null)?.record;
-      if (!rec || Number(rec.row_number) !== p.row || !Array.isArray(rec.values)) return null;
-      return positions.map(i => rec.values![i] ?? null);
-    }
-    if (classifyReadError(error).reason !== "unavailable") throw fail(error);
-    recordFunctionMissingUntil = Date.now() + 10 * MINUTES;
-  }
   const { data, error } = await db.rpc("source_query_records", { _dataset_id: p.dataset, _snapshot_id: p.snapshot, _after: p.row - 1, _limit: 1, _columns: positions });
   if (error) throw fail(error);
   const page = data as { columns?: (SourceColumn | null)[]; rows?: { row_number: number; values: (string | null)[] }[] } | null;

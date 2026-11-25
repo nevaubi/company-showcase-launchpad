@@ -73,11 +73,11 @@ describe("readCompanyOfficial: JPMorgan Chase, without migration 0069", () => {
 });
 
 describe("readCompanyOfficial: the two read modes and the failures", () => {
-  it("reads the same FR Y-9C cells through source_record when migration 0069 is applied", async () => {
+  it("reads FR Y-9C rows through source_query_records only, never a function no migration defines (review int-code N3)", async () => {
     const log: string[] = [];
     const a = await read(fakeStore({ log }), "JPM");
-    expect(log).toContain("rpc:source_record");
-    expect(log).not.toContain("rpc:source_query_records");
+    expect(log).not.toContain("rpc:source_record");
+    expect(log).toContain("rpc:source_query_records");
     resetOfficialCache();
     const b = await read(fakeStore({ missing: new Set(["source_record"]) }), "JPM");
     expect(a.y9c!.lines).toEqual(b.y9c!.lines);
