@@ -7,6 +7,7 @@ import {
   numericColumn,
   safeSourceHref,
   sourceAvailability,
+  sourceDescription,
 } from "./presentation";
 import type { SourceColumn, SourceSnapshotSummary } from "./schema";
 
@@ -19,6 +20,62 @@ const numeric: SourceColumn = {
 };
 
 describe("native record presentation", () => {
+  it.each([
+    [
+      "Complete retained FHFA master history across index types, flavors, frequencies and geographic levels. Keep all series-context fields; index bases and seasonal adjustments differ.",
+      "186,031",
+      "12",
+    ],
+    [
+      "Complete retained source table with all original fields and records from this file.",
+      "8,640",
+      "6",
+    ],
+  ])("identifies generated counts as the original collection without changing scope: %s", (scope, rows, columns) => {
+    expect(
+      sourceDescription(`${scope} Retained table: ${rows} source rows and ${columns} columns.`),
+    ).toBe(`${scope} Original collection: ${rows} source rows and ${columns} columns.`);
+  });
+
+  it("preserves count strings exactly, including zero and values beyond numeric precision", () => {
+    expect(
+      sourceDescription("Scope. Retained table: 0 source rows and 2,379 columns."),
+    ).toBe("Scope. Original collection: 0 source rows and 2,379 columns.");
+    expect(
+      sourceDescription(
+        "Scope. Retained table: 12,345,678,901,234,567,890 source rows and 6 columns.",
+      ),
+    ).toBe("Scope. Original collection: 12,345,678,901,234,567,890 source rows and 6 columns.");
+  });
+
+  it("leaves unknown wording, nonterminal counts and noncanonical suffixes untouched", () => {
+    for (const description of [
+      "",
+      "Retained table: 8,640 source rows and 6 columns.",
+      "Scope. Retained table: 8,640 source rows and 6 columns. Further source context.",
+      "Scope. Retained table: 8640 source rows and 6 columns.",
+      "Scope. Retained table: 08,640 source rows and 6 columns.",
+      "Scope. Retained table: 8,64 source rows and 6 columns.",
+      "Scope. Retained table: 8,640 source rows and 6.0 columns.",
+      "Scope. Retained table: 8,640 records and 6 columns.",
+      "Scope. retained table: 8,640 source rows and 6 columns.",
+      "Scope. Retained table: 8,640 source rows and 6 columns.\n",
+      "Scope. Original collection: 8,640 source rows and 6 columns.",
+    ]) {
+      expect(sourceDescription(description)).toBe(description);
+    }
+  });
+
+  it("leaves explicitly scoped native adapter descriptions unchanged", () => {
+    for (const description of [
+      "All returned current-quarter fields from the 2,379-field reviewed FDIC baseline, retaining the 500 insured institutions selected at June 30, 2026. Requested fields that FDIC does not return are listed explicitly in snapshot coverage.",
+      "Reported monthly revenue from the official TWSE response. Native Chinese fields and reported ROC month are preserved; exchange population completeness is not independently established.",
+      "Reported monthly revenue from the official TPEx response. Native Chinese fields and reported ROC month are preserved; exchange population completeness is not independently established.",
+    ]) {
+      expect(sourceDescription(description)).toBe(description);
+    }
+  });
+
   it("keeps reported zero, an empty cell and a null distinct", () => {
     expect(formatNativeValue("0", numeric)).toBe("0");
     expect(formatNativeValue("", numeric)).toBe('""');

@@ -35,6 +35,7 @@ import {
   numericColumn,
   sourceAvailability,
   sourceDate,
+  sourceDescription,
   sourcePeriods,
 } from "@/lib/sources/presentation";
 import type {
@@ -147,7 +148,7 @@ export function SourceRecordBrowser({
         <div className="border-b px-3.5 py-2.5">
           {dataset.description && (
             <p className="max-w-4xl text-[12px] leading-relaxed text-muted-foreground">
-              {dataset.description}
+              {sourceDescription(dataset.description)}
             </p>
           )}
           <dl className="mt-2 grid grid-cols-1 gap-x-5 gap-y-2 text-[11px] sm:grid-cols-2 @3xl:grid-cols-4">

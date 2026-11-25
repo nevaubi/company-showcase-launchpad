@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { sourceDescription } from "./presentation";
 import type { SourceColumn, SourceDatasetDetail, SourceDatasetList, SourceJson, SourceListFilters, SourceRecordPage, SourceRecordQuery, SourceSnapshot } from "./schema";
 import type { OfficialSourceToolName } from "./research-tools";
 
@@ -70,7 +71,7 @@ function sourceScope(detail:SourceDatasetDetail,full:boolean):JsonObject {
   for(const key of COVERAGE_SCOPE) if(s.coverage[key]!==undefined) coverage[key]=s.coverage[key];
   const scope:JsonObject={grain:d.grain,units:d.units,notes:d.notes,declared_coverage:coverage};
   if(full) {
-    scope.description=d.description;
+    scope.description=sourceDescription(d.description);
     scope.search_indices=Object.fromEntries(Object.entries(s.ingest.dimensions).map(([dimension,position])=>[dimension,{key:s.columns[position].key,label:s.columns[position].label,position}]));
     scope.search_constants=Object.fromEntries(Object.entries(s.ingest.constants??{}).filter(([dimension])=>dimension!=="source_url"));
   }

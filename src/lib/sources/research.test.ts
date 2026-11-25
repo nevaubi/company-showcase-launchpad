@@ -144,6 +144,24 @@ describe("official source catalogue and inspection",()=>{
     expect(second.fields[0]).toMatchObject({key:"col0003",unit:"percent",description:"Duplicate source label; a different native field"});
     expect(second.next_field_after).toBeNull();
   });
+  it("distinguishes original collection counts from current snapshot totals during inspection",async()=>{
+    const d=detail();
+    const original="Complete retained source table with all original fields and records from this file. Retained table: 8,640 source rows and 6 columns.";
+    d.dataset.description=original;
+    d.snapshot!.expected_rows=8652;
+    d.snapshot!.loaded_rows=8652;
+    const {reader}=fixtures(d);
+    const result=await executeOfficialResearch("inspect_official_source",{dataset_id:d.dataset.id,snapshot_id:SNAP,include_definitions:true},reader);
+    const p=parsed(result);
+    expect(p.scope.description).toBe("Complete retained source table with all original fields and records from this file. Original collection: 8,640 source rows and 6 columns.");
+    expect(p.total_snapshot_rows).toBe(8652);
+    expect(p.total_columns).toBe(6);
+    expect(p.snapshot_id).toBe(SNAP);
+    expect(p.scope.notes).toBe(d.dataset.notes);
+    expect(p.fields).toEqual(columns.map((column,position)=>({...column,position})));
+    expect(d.dataset.description).toBe(original);
+    expect(result.output.length).toBeLessThanOrEqual(OFFICIAL_RESEARCH_MAX_CHARS);
+  });
   it("never clips a complete long field definition",async()=>{
     const d=detail();d.snapshot!.columns[0]={...columns[0],description:"9".repeat(18000)};
     const {reader}=fixtures(d);
