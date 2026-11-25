@@ -35,7 +35,7 @@ export function HoldingCompanyReport({ ticker, report, statementAssets }: { tick
       >
         <p className="border-b px-3.5 py-1.5 text-[11px] font-medium">{Y9C_CAPTION}</p>
         {q.length > 0 ? (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[620px] text-[13px]">
               <thead>
                 <tr className="h-7 border-b text-left text-[11px] text-muted-foreground">

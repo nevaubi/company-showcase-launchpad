@@ -101,3 +101,17 @@ describe("HoldingCompanyReport", () => {
     expect(screen.getByText(/differ at 30 Sep 2026: 10-Q less FR Y-9C is −\$64\.0M\./)).toBeTruthy();
   });
 });
+
+describe("Phone width", () => {
+  it("keeps every table's scroll box positioned, so visually hidden text inside a table cannot widen the page", async () => {
+    const data = await load("JPM");
+    const banks = render(<InsuredBanks ticker="JPM" data={data} selected={null} onSelect={() => {}} pending={false} />);
+    const report = render(<HoldingCompanyReport ticker="JPM" report={data.y9c!} statementAssets={() => null} />);
+    for (const { container } of [banks, report]) {
+      // a table with a minimum width scrolls inside its own box; the box is the containing block of what it holds
+      const wide = [...container.querySelectorAll("table")].filter(t => /min-w-\[/.test(t.className));
+      expect(wide.length).toBeGreaterThan(0);
+      for (const t of wide) expect(t.closest(".overflow-x-auto")?.classList.contains("relative")).toBe(true);
+    }
+  });
+});

@@ -1,6 +1,7 @@
 // Presentation of the company's official records, pure. A figure is shown only in the unit its dictionary (or the
 // reviewed FR Y-9C list) states; the stored string stays one hover away; nothing is added together.
 import { FDIC_ZERO_IS_MISSING } from "@/lib/alt/bank";
+import { fmtCompactUsd } from "@/lib/format";
 import type { AbsSponsorLine, BankHistory, FigureRef, OfficialCell } from "./types";
 
 const MINUS = "−";
@@ -118,9 +119,19 @@ export function tickText(v: number, unit: string): string {
   const sign = v < 0 ? MINUS : "";
   const a = Math.abs(v);
   if (unit === "Percent") return `${sign}${a % 1 === 0 ? a.toFixed(0) : a.toFixed(1)}`;
+  // an amount filed in thousands reads in dollars on the axis ("$4.2T", never "4.2B" of thousands); the tooltip and
+  // the table keep the filed figure and its unit
+  if (unit.startsWith("USD thousands")) return a === 0 ? "$0" : `${sign}$${COMPACT.format(a * 1000)}`;
   if (a < 10_000) return sign + a.toLocaleString("en-US");
-  return sign + new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(a);
+  return sign + COMPACT.format(a);
 }
+
+/** What the history chart's axis is in, stated above it. */
+export function axisUnit(unit: string): string {
+  return unit.startsWith("USD thousands") ? "US dollars, filed in thousands" : unitLabel(unit);
+}
+
+const COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
 
 export type AssetsTie =
   | { kind: "equal"; date: string; y9cUsd: number; statementUsd: number }
@@ -149,9 +160,7 @@ export function absSentence(line: AbsSponsorLine): string {
 
 /** USD with a true minus and a scale word, for the tie line ("$2.0M", "−$64M"). */
 export function usdShort(v: number): string {
-  const a = Math.abs(v);
-  const s = a >= 1e9 ? `${(a / 1e9).toFixed(1)}B` : a >= 1e6 ? `${(a / 1e6).toFixed(a >= 1e8 ? 0 : 1)}M` : a >= 1e3 ? `${(a / 1e3).toFixed(0)}K` : a.toFixed(0);
-  return `${v < 0 ? MINUS : ""}$${s}`;
+  return fmtCompactUsd(v);
 }
 
 type StatementSource = { statements?: { quarterly?: { balance?: Statementish }; annual?: { balance?: Statementish } } } | null | undefined;

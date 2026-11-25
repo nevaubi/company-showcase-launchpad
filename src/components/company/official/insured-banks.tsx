@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Panel } from "@/components/app/page-header";
 import { Segmented } from "@/components/app/segmented";
 import { BASIS_TEXT, FDIC_LINES } from "@/lib/sources/company/fdic-fields";
-import { absSentence, dayLabel, historySeries, quarterLabel, showCell, unitLabel } from "@/lib/sources/company/present";
+import { absSentence, axisUnit, dayLabel, historySeries, quarterLabel, showCell, unitLabel } from "@/lib/sources/company/present";
 import type { BankHistory, CompanyOfficial, OfficialBank, OfficialSource } from "@/lib/sources/company/types";
 import { cn } from "@/lib/utils";
 import { BankHistoryChart } from "./bank-history-chart";
@@ -44,7 +44,7 @@ export function InsuredBanks({ ticker, data, selected, onSelect, pending }: { ti
         <p className="border-b px-3.5 py-1.5 text-[11px] text-muted-foreground">
           <span className="font-medium text-foreground">{BANKS_CAPTION}</span> Each bank's own figures; banks are never added together.
         </p>
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[640px] text-[13px]">
             <thead>
               <tr className="h-7 border-b text-left text-[11px] text-muted-foreground">
@@ -117,7 +117,7 @@ function BankDetail({ bank, history, note, pending }: { ticker: string; bank: Of
   const series = history && pick ? historySeries(history, pick) : null;
   const sourceName = (p: { ref: { dataset: string } }) => (history && p.ref.dataset === history.sources[0]?.dataset ? "FDIC quarterly history" : "FDIC latest quarter");
   return (
-    <div className="grid grid-cols-1 border-t @container lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 border-t @container lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
       <div className="min-w-0 border-b lg:border-b-0 lg:border-r">
         <div className="flex h-8 items-center justify-between px-3.5 text-[11px] text-muted-foreground">
           <span className="truncate font-medium text-foreground">{bank.name}</span>
@@ -138,7 +138,7 @@ function BankDetail({ bank, history, note, pending }: { ticker: string; bank: Of
                   <td className="num text-right font-medium">
                     <RecordLink at={l.ref} title={shown.title}>{shown.text || <span className="text-muted-foreground">empty</span>}</RecordLink>
                   </td>
-                  <td className="w-[92px] pl-2 pr-3.5 text-[11px] text-muted-foreground">{unitLabel(l.unit)}</td>
+                  <td className="whitespace-nowrap pl-2 pr-3.5 text-[11px] text-muted-foreground">{unitLabel(l.unit)}</td>
                 </tr>
               );
             })}
@@ -153,12 +153,12 @@ function BankDetail({ bank, history, note, pending }: { ticker: string; bank: Of
         {series && series.points.length > 1 ? (
           <div className="px-3.5 pb-2">
             <div className="mb-1 text-[11px] text-muted-foreground">
-              <span className="font-medium text-foreground">{series.label}</span> · {unitLabel(series.unit)} · {quarterLabel(series.points[0].period)} to {quarterLabel(series.points[series.points.length - 1].period)}
+              <span className="font-medium text-foreground">{series.label}</span> · {axisUnit(series.unit)} · {quarterLabel(series.points[0].period)} to {quarterLabel(series.points[series.points.length - 1].period)}
             </div>
             {view === "chart" ? (
               <BankHistoryChart points={series.points} unit={series.unit} label={`${bank.name}: ${series.label}`} sourceName={sourceName} />
             ) : (
-              <div className="overflow-x-auto">
+              <div className="relative overflow-x-auto">
                 <table className="w-full min-w-[360px] text-[13px]">
                   <thead>
                     <tr className="h-7 border-b text-left text-[11px] text-muted-foreground">

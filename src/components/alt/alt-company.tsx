@@ -273,6 +273,12 @@ export function AltCompanyTab({ ticker }: { ticker: string }) {
             const half = active.filter((x) => !WIDE.has(x.dataset));
             return (
               <>
+                {/* a proven company's official bank records lead its Banking theme; the call-report panels below link up to them */}
+                {official && t.id === "banking" && (
+                  <div className={cn("grid grid-cols-1 gap-3 xl:grid-cols-2", (active.length > 0 || quiet.length > 0) && "mb-3")}>
+                    <OfficialBanking ticker={ticker} />
+                  </div>
+                )}
                 {active.length > 0 && (
                   <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     {active.map((v) => <DatasetPanel key={v.dataset} ticker={ticker} view={v} span={!WIDE.has(v.dataset) && half.length % 2 === 1 && half[half.length - 1] === v} />)}

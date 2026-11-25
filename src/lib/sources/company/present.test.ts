@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absSentence, assetsTie, dayLabel, historySeries, niceDomain, quarterLabel, showCell, tickText, unitLabel, usdShort } from "./present";
+import { absSentence, assetsTie, axisUnit, dayLabel, historySeries, niceDomain, quarterLabel, showCell, tickText, unitLabel, usdShort } from "./present";
 import type { BankHistory, OfficialCell } from "./types";
 
 const num = (text: string): OfficialCell => ({ text, value: Number(text), kind: "number" });
@@ -60,7 +60,9 @@ describe("axis", () => {
     expect(net.ticks).toContain(0);
   });
   it("writes ticks compactly only past 10,000", () => {
-    expect([tickText(4_000_000_000, "USD thousands (monetary measures)"), tickText(2500, "USD thousands (monetary measures)"), tickText(-2.5, "Percent"), tickText(15, "Percent")]).toEqual(["4B", "2,500", "−2.5", "15"]);
+    // amounts filed in thousands read in dollars on the axis: 4,000,000,000 thousand is $4T, never "4B"
+    expect([tickText(4_000_000_000, "USD thousands (monetary measures)"), tickText(2500, "USD thousands (monetary measures)"), tickText(0, "USD thousands (monetary measures)"), tickText(-1_500, "USD thousands (monetary measures)"), tickText(-2.5, "Percent"), tickText(15, "Percent")]).toEqual(["$4T", "$2.5M", "$0", "−$1.5M", "−2.5", "15"]);
+    expect([axisUnit("USD thousands (monetary measures)"), axisUnit("Percent")]).toEqual(["US dollars, filed in thousands", "%"]);
   });
 });
 
@@ -81,7 +83,7 @@ describe("words", () => {
   });
   it("labels quarters, days and dollar differences", () => {
     expect([quarterLabel("2026-09-30"), quarterLabel("2000-03-31"), dayLabel("2026-06-30"), dayLabel(null)]).toEqual(["Q3 2026", "Q1 2000", "30 Jun 2026", "–"]);
-    expect([usdShort(-2_000_000), usdShort(64_000_000), usdShort(1_500_000_000)]).toEqual(["−$2.0M", "$64.0M", "$1.5B"]);
+    expect([usdShort(-2_000_000), usdShort(64_000_000), usdShort(1_500_000_000), usdShort(5_015_069_000_000)]).toEqual(["−$2.0M", "$64.0M", "$1.5B", "$5.02T"]);
   });
 });
 

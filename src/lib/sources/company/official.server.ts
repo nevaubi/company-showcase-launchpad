@@ -7,14 +7,25 @@
 // dictionary before use. Nothing is parsed except through numbers.ts, nothing is rescaled, nothing is summed.
 // Each part degrades to a note; the call never throws to the page.
 import { readNative } from "../numbers";
-import { classifyReadError, type PgError } from "../read.server";
 import type { SourceColumn } from "../schema";
 import { ALL_BANKS_FIELDS, ALL_BANKS_LABELS, FDIC_ALL_BANKS, FDIC_CURRENT, FDIC_HISTORY, FDIC_IDS, FDIC_LINES, fdicInstitutionUrl, QUANTITY_UNITS } from "./fdic-fields";
 import { absSponsors, provenBanks, registrantLink } from "./links.server";
 import type { BankHistory, BankLine, CompanyLink, CompanyOfficial, CompanyOfficialResult, FigureRef, HistoryPoint, OfficialBank, OfficialCell, OfficialSource, Y9cLine, Y9cPointer, Y9cQuarter, Y9cReport } from "./types";
 import { Y9C_FIELDS, Y9C_KEYS, Y9C_VARIABLES } from "./y9c-fields";
 
+export type PgError = { message: string; code?: string | null };
 type Result = { data: unknown; error: PgError | null };
+
+/** The kind of a PostgREST or Postgres failure (the same codes as read.server.ts, without its catalogue import). */
+export function classifyReadError(error: PgError): { reason: "unavailable" | "timeout" | "invalid" | "not-found" | "error" } {
+  const code = error.code ?? "";
+  const message = error.message || "";
+  if (code === "PGRST202" || code === "42883" || code === "PGRST205" || code === "42P01" || /could not find the (function|table)/i.test(message)) return { reason: "unavailable" };
+  if (code === "57014" || /statement timeout|canceling statement/i.test(message)) return { reason: "timeout" };
+  if (code === "22P02" || code === "22023" || code === "22003" || code === "PGRST100" || code === "PGRST103") return { reason: "invalid" };
+  if (code === "P0002" || /not found/i.test(message)) return { reason: "not-found" };
+  return { reason: "error" };
+}
 export interface OfficialQuery extends PromiseLike<Result> {
   eq(column: string, value: string | number): OfficialQuery;
   in(column: string, values: readonly (string | number)[]): OfficialQuery;

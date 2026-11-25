@@ -136,7 +136,10 @@ export function BankHistoryChart({ points, unit, label, sourceName }: { points: 
             <div className="num text-[13px] font-semibold text-foreground">
               {showCell(at.cell, unit).text || "empty"} <span className="text-[11px] font-normal text-muted-foreground">{unitLabel(unit)}</span>
             </div>
-            <div className="text-muted-foreground">{quarterLabel(at.period)} · {dayLabel(at.period)}</div>
+            <div className="text-muted-foreground">
+              {quarterLabel(at.period)} · {dayLabel(at.period)}
+              {at.value != null && unit.startsWith("USD thousands") && <> · {tickText(at.value, unit)}</>}
+            </div>
             <div className="truncate text-muted-foreground">{sourceName(at)}, row {at.ref.row.toLocaleString("en-US")}</div>
             <div className="text-muted-foreground">Click or press Enter to open the record</div>
           </div>
