@@ -17,7 +17,7 @@ const LIST = fixture.datasets as CatalogInput[];
 const TITLES = generatedTitles as Record<string, { title: string; code?: string; source: string }>;
 
 /** Titles that are still a code or a file stem: no official listing could be matched yet. */
-const UNTITLED = 281;
+const UNTITLED = 162;
 
 const QUARANTINED = [
   "official_01_financials_data_financials_authoritative_source_registry_c42083680a",
@@ -72,10 +72,9 @@ describe("the production list", () => {
       expect(e.title, d.id).not.toMatch(/_/);
       expect(e.title.trim(), d.id).toBe(e.title);
       expect(e.title.length, d.id).toBeGreaterThan(0);
-      if (isBareName(e.title)) {
-        untitled.push(d.id);
-        expect(e.titleSource, `${d.id} has a listing but a bare title`).toBeUndefined();
-      }
+      // A listing's own title may look like a code ("M2" is FRED's title for M2SL); only names
+      // without a listing are counted as untitled.
+      if (!e.titleSource && isBareName(e.title)) untitled.push(d.id);
     }
     expect(untitled).toHaveLength(UNTITLED);
   });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildFred, catalogueTitles, isCut, parseFredTitle } from "../../../../scripts/lib/source-catalog/fred";
 import { buildMer, parseMerListing } from "../../../../scripts/lib/source-catalog/mer";
 import { listingTitle } from "../../../../scripts/lib/source-catalog/text";
 import { buildZ1, parseZ1Listing, z1Stem, z1Title } from "../../../../scripts/lib/source-catalog/z1";
@@ -113,5 +114,44 @@ describe("MER table list", () => {
     const result = buildMer([raw, union, wrongName], { url, status: 200, body: MER_HTML });
     expect(result.titles).toEqual({ [raw.id]: { title: "Underground storage", code: "MER 4.4", source: url } });
     expect(result.unmatched.map((u) => u.id)).toEqual([union.id, wrongName.id]);
+  });
+});
+
+describe("FRED series", () => {
+  const page = (title: string) => `<html><head><meta property="og:title" content="${title}"/></head></html>`;
+
+  it("reads the title FRED states for the series", () => {
+    expect(parseFredTitle(page("Manufacturers&#039; New Orders: Total Manufacturing"))).toBe(
+      "Manufacturers' New Orders: Total Manufacturing",
+    );
+    expect(parseFredTitle("<html></html>")).toBeNull();
+  });
+
+  it("does not use catalogue titles the kit cut at an apostrophe", () => {
+    expect(isCut("Manufacturers", 9)).toBe(true);
+    expect(isCut("Consumer Price Index for All Urban Consumers: Owners", 1)).toBe(true);
+    expect(isCut("Federal Funds Effective Rate", 2)).toBe(false);
+    expect(isCut("M2", 1)).toBe(false);
+    expect(isCut("Initial Claims", 1)).toBe(false);
+    const titles = catalogueTitles({
+      catalogues: [
+        { dataset: "a", snapshot: "s", rows: [[1, "AMTMNO", "Manufacturers"], [2, "AMTMVS", "Manufacturers"], [3, "DGORDER", "Manufacturers"], [4, "UNRATE", "Unemployment Rate"]] },
+      ],
+    });
+    expect([...titles]).toEqual([["UNRATE", "Unemployment Rate"]]);
+  });
+
+  it("prefers the series page, falls back to the catalogue, and says where the title is from", () => {
+    const unrate = { ...row("official_00_universal_raw_fred_unrate_3286ca8718", "UNRATE"), source_id: "FRED_UNRATE" };
+    const amtmno = { ...row("official_06_industrials_raw_fred_amtmno_17ff88a923", "AMTMNO"), source_id: "FRED_AMTMNO" };
+    const pages = new Map([
+      ["https://fred.stlouisfed.org/series/AMTMNO", { url: "https://fred.stlouisfed.org/series/AMTMNO", status: 200, body: page("Manufacturers&#039; New Orders: Total Manufacturing") }],
+    ]);
+    const result = buildFred([unrate, amtmno], pages, new Map([["UNRATE", "Unemployment Rate"]]));
+    expect(result.titles).toEqual({
+      [unrate.id]: { title: "Unemployment Rate", code: "UNRATE", source: "https://fred.stlouisfed.org/series/UNRATE" },
+      [amtmno.id]: { title: "Manufacturers' New Orders: Total Manufacturing", code: "AMTMNO", source: "https://fred.stlouisfed.org/series/AMTMNO" },
+    });
+    expect(buildFred([amtmno], new Map(), new Map()).unmatched).toHaveLength(1);
   });
 });
