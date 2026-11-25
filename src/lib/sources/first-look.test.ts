@@ -101,6 +101,14 @@ describe("firstLook on the live table shapes", () => {
     expect(p.note).toBe("This snapshot holds no records.");
   });
 
+  it("plans an empty dictionary without a field to show", () => {
+    const snapshot = { ...detail(ccsa).snapshot!, columns: [], quality: {} };
+    const p = firstLook({ datasetId: "x", snapshot });
+    expect(p.views.at(-1)).toMatchObject({ kind: "fields", positions: [] });
+    expect(p.dictionaryQuantities).toBe(0);
+    expect(filledShares(snapshot, [0])).toBeNull();
+  });
+
   it("shows the first eight fields when no default view is given, and never a position outside the dictionary", () => {
     const snapshot = detail(copper).snapshot!;
     expect(firstLook({ datasetId: "x", snapshot }).views.at(-1)!.positions).toEqual([0, 1, 2, 3, 4, 5, 6, 7]);

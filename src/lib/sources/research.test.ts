@@ -366,3 +366,11 @@ describe("the step digest a person reads (rev-app S11)",()=>{
   });
 });
 
+describe("edge cases from the review",()=>{
+  it("answers a cursor past the end with an empty, final page that blames no filter",async()=>{
+    const {reader}=fixtures(detail(2),[]);
+    const p=parsed(await executeOfficialResearch("query_official_records",request({fields:["col0001"],after:100}),reader));
+    expect(p).toMatchObject({rows:[],rows_returned:0,has_more:false,next_cursor:null,remaining_matching_rows:0,hint:null});
+  });
+});
+
