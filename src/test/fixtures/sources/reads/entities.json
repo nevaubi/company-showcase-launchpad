@@ -1,0 +1,149 @@
+{
+ "read": "getSourceEntities",
+ "input": {
+  "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+  "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+  "dimension": "geo"
+ },
+ "result": {
+  "ok": true,
+  "data": {
+   "snapshot": {
+    "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+    "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+    "publishedAt": "2026-11-25T06:10:19.876385+00:00",
+    "retrievedAt": "2026-11-24T09:55:53.865453+00:00",
+    "fileSha256": "c32bc8aafd02953e419a18074d531110e759d8b791c4566d345d5abbe5b96ee7",
+    "rows": 686,
+    "fields": 5
+   },
+   "dimension": "geo",
+   "period": "2026",
+   "periodRule": "greatest",
+   "entities": [
+    {
+     "id": "AK",
+     "name": null,
+     "row": 663
+    },
+    {
+     "id": "AL",
+     "name": null,
+     "row": 664
+    },
+    {
+     "id": "AR",
+     "name": null,
+     "row": 665
+    },
+    {
+     "id": "AZ",
+     "name": null,
+     "row": 666
+    },
+    {
+     "id": "CO",
+     "name": null,
+     "row": 667
+    },
+    {
+     "id": "IL",
+     "name": null,
+     "row": 668
+    },
+    {
+     "id": "IN",
+     "name": null,
+     "row": 669
+    },
+    {
+     "id": "KY",
+     "name": null,
+     "row": 670
+    },
+    {
+     "id": "LA",
+     "name": null,
+     "row": 671
+    },
+    {
+     "id": "MD",
+     "name": null,
+     "row": 672
+    },
+    {
+     "id": "MO",
+     "name": null,
+     "row": 673
+    },
+    {
+     "id": "MS",
+     "name": null,
+     "row": 674
+    },
+    {
+     "id": "MT",
+     "name": null,
+     "row": 675
+    },
+    {
+     "id": "ND",
+     "name": null,
+     "row": 676
+    },
+    {
+     "id": "NM",
+     "name": null,
+     "row": 677
+    },
+    {
+     "id": "OH",
+     "name": null,
+     "row": 678
+    },
+    {
+     "id": "PA",
+     "name": null,
+     "row": 679
+    },
+    {
+     "id": "TN",
+     "name": null,
+     "row": 680
+    },
+    {
+     "id": "TX",
+     "name": null,
+     "row": 681
+    },
+    {
+     "id": "UT",
+     "name": null,
+     "row": 682
+    },
+    {
+     "id": "VA",
+     "name": null,
+     "row": 683
+    },
+    {
+     "id": "WA",
+     "name": null,
+     "row": 684
+    },
+    {
+     "id": "WV",
+     "name": null,
+     "row": 685
+    },
+    {
+     "id": "WY",
+     "name": null,
+     "row": 686
+    }
+   ],
+   "rowsRead": 24,
+   "complete": true
+  }
+ }
+}
