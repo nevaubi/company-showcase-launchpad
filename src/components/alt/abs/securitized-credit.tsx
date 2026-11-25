@@ -48,13 +48,14 @@ export function SecuritizedCredit({ state, onChange }: { state: AbsSearch; onCha
         {deal.isPending ? (
           <Note className="py-10 text-center text-[12px]">Reading the deal's filings</Note>
         ) : deal.isError ? (
-          <DataUnavailable title="This deal could not be read" error={deal.error} onRetry={() => void deal.refetch()} />
+          <div className="grid gap-2">
+            <BackLink onBack={back} />
+            <DataUnavailable title="This deal could not be read" error={deal.error} onRetry={() => void deal.refetch()} />
+          </div>
         ) : !dealView ? (
           <div className="grid gap-2">
+            <BackLink onBack={back} />
             <Note>No stored deal has the id {state.deal}.</Note>
-            <button type="button" onClick={back} className="w-fit rounded-sm text-[12px] text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              Back to the monitor
-            </button>
           </div>
         ) : (
           <DealPage model={dealView} onBack={back} />
@@ -131,6 +132,18 @@ export function SecuritizedCredit({ state, onChange }: { state: AbsSearch; onCha
         </Panel>
       </div>
     </div>
+  );
+}
+
+function BackLink({ onBack }: { onBack: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      className="w-fit rounded-sm text-[12px] text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      Back to the monitor
+    </button>
   );
 }
 

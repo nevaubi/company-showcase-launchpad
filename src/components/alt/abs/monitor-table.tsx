@@ -247,10 +247,10 @@ export function MonitorTable({
     );
   return (
     <div className="max-lg:overflow-x-auto">
-      <table className="w-full min-w-[1080px] table-fixed border-collapse text-[13px]">
+      <table className="w-full min-w-[930px] table-fixed border-collapse text-[13px] lg:min-w-[1080px]">
         <thead className="lg:sticky lg:top-[var(--sticky-top,3.5rem)] lg:z-[2]">
           <tr className="border-b bg-panel">
-            <SortHead active={sort.key === "name"} dir={sort.dir} onClick={() => click("name")} align="left" className="sticky left-0 z-[3] w-[340px] bg-panel">
+            <SortHead active={sort.key === "name"} dir={sort.dir} onClick={() => click("name")} align="left" className="sticky left-0 z-[3] w-[190px] bg-panel sm:w-[260px] lg:w-[340px]">
               Deal, issuer as filed
             </SortHead>
             {cols.map((c, i) =>
