@@ -1,0 +1,228 @@
+{
+ "read": "getSourceCrossSection",
+ "input": {
+  "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+  "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+  "field": "col0004"
+ },
+ "result": {
+  "ok": true,
+  "data": {
+   "snapshot": {
+    "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+    "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+    "publishedAt": "2026-11-25T06:10:19.876385+00:00",
+    "retrievedAt": "2026-11-24T09:55:53.865453+00:00",
+    "fileSha256": "c32bc8aafd02953e419a18074d531110e759d8b791c4566d345d5abbe5b96ee7",
+    "rows": 686,
+    "fields": 5
+   },
+   "field": {
+    "basis": "workbook_units",
+    "key": "col0004",
+    "label": "ANNUAL_COAL_PROD",
+    "type": "string",
+    "unit": "short tons clean coal",
+    "position": 3
+   },
+   "period": "2026",
+   "periodRule": "greatest",
+   "where": [],
+   "rows": [
+    {
+     "row": 663,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "AK",
+     "geoName": null,
+     "text": "757906.0"
+    },
+    {
+     "row": 664,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "AL",
+     "geoName": null,
+     "text": "13426017.0"
+    },
+    {
+     "row": 665,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "AR",
+     "geoName": null,
+     "text": "0.0"
+    },
+    {
+     "row": 666,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "AZ",
+     "geoName": null,
+     "text": "0.0"
+    },
+    {
+     "row": 667,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "CO",
+     "geoName": null,
+     "text": "7515310.0"
+    },
+    {
+     "row": 668,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "IL",
+     "geoName": null,
+     "text": "26728474.0"
+    },
+    {
+     "row": 669,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "IN",
+     "geoName": null,
+     "text": "15174022.0"
+    },
+    {
+     "row": 670,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "KY",
+     "geoName": null,
+     "text": "18057375.0"
+    },
+    {
+     "row": 671,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "LA",
+     "geoName": null,
+     "text": "223258.0"
+    },
+    {
+     "row": 672,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "MD",
+     "geoName": null,
+     "text": "812893.0"
+    },
+    {
+     "row": 673,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "MO",
+     "geoName": null,
+     "text": "98528.0"
+    },
+    {
+     "row": 674,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "MS",
+     "geoName": null,
+     "text": "1629895.0"
+    },
+    {
+     "row": 675,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "MT",
+     "geoName": null,
+     "text": "16745119.0"
+    },
+    {
+     "row": 676,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "ND",
+     "geoName": null,
+     "text": "19297141.0"
+    },
+    {
+     "row": 677,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "NM",
+     "geoName": null,
+     "text": "5082364.0"
+    },
+    {
+     "row": 678,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "OH",
+     "geoName": null,
+     "text": "1041346.0"
+    },
+    {
+     "row": 679,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "PA",
+     "geoName": null,
+     "text": "31391371.0"
+    },
+    {
+     "row": 680,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "TN",
+     "geoName": null,
+     "text": "0.0"
+    },
+    {
+     "row": 681,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "TX",
+     "geoName": null,
+     "text": "10654109.0"
+    },
+    {
+     "row": 682,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "UT",
+     "geoName": null,
+     "text": "4871961.0"
+    },
+    {
+     "row": 683,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "VA",
+     "geoName": null,
+     "text": "6206911.0"
+    },
+    {
+     "row": 684,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "WA",
+     "geoName": null,
+     "text": "0.0"
+    },
+    {
+     "row": 685,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "WV",
+     "geoName": null,
+     "text": "62310400.0"
+    },
+    {
+     "row": 686,
+     "entityId": null,
+     "entityName": null,
+     "geoCode": "WY",
+     "geoName": null,
+     "text": "147697999.0"
+    }
+   ],
+   "complete": true
+  }
+ }
+}

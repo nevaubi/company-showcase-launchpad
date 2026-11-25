@@ -1,0 +1,21 @@
+{
+ "read": "getSourceSeries",
+ "input": {
+  "datasetId": "official_11_real_estate_raw_hpi_at_tract_d51b3471be",
+  "snapshotId": "a5b0f712db7e8ac19126e1c6cd734fea4c4103b84d23ddff8eec80d3cf513c2c",
+  "field": "col0005",
+  "address": {
+   "where": [
+    {
+     "field": "col0002",
+     "value": "WV"
+    }
+   ]
+  }
+ },
+ "result": {
+  "ok": false,
+  "reason": "invalid",
+  "message": "A filter on a cell needs a snapshot of at most 50,000 rows; this one has 2,179,042"
+ }
+}

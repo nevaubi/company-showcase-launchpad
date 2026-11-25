@@ -1,0 +1,13 @@
+{
+ "read": "getSourceFacets",
+ "input": {
+  "datasetId": "official_04_energy_csv_coal_state_annual_6368e041fb",
+  "snapshotId": "3952a30ead2d3ded04bd735827ad26d2563f45da977a749d40ec6d718fc234cd",
+  "dimension": "period"
+ },
+ "result": {
+  "ok": false,
+  "reason": "unavailable",
+  "message": "This read needs a database update that is not applied yet"
+ }
+}

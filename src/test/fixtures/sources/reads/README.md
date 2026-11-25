@@ -1,0 +1,27 @@
+# Read fixtures (unit `reads`)
+
+One real answer per read of `src/lib/sources/read.functions.ts`, as `{ read, input, result }`, where `result` is
+exactly the `SourceRead<T>` the server function returns. UI previews answer the server functions with `result`.
+
+How they were made (25 Nov 2026, about 20:45 UTC): rows were copied from production with small selects and the
+checksum-verified line transfer (`/home/claude/fu/round2/TRANSFER.md`, every line verified by `linecheck.py`); the
+two snapshot rows were copied as JSON and verified by comparing `md5(to_jsonb(row)::text)` on production with the
+same digest of the local copy. The generator `/home/claude/work/r4/sqlfn/gen-fixtures.ts` loads them into the fake
+member client (`src/lib/sources/read.fake.ts`) and calls the real read functions. The fake held exactly the rows
+each select returns on production for these inputs: all 27 rows with geo code WV, all 24 rows of period 2026, and
+rows 1 and 686 of the MSHA snapshot (its least and greatest period strings, 2000 and 2026, were checked on
+production).
+
+| File | Read | Dataset and snapshot | What it shows |
+| --- | --- | --- | --- |
+| `record.json` | `getSourceRecord` | MSHA coal employment and production by state (`official_04_energy_csv_coal_state_annual_6368e041fb`, snapshot `3952a30e...`, 686 rows, 5 fields) | Row 685: West Virginia, 2026 |
+| `series.json` | `getSourceSeries` | same | Field `col0004` (ANNUAL_COAL_PROD, short tons clean coal) for geo code WV: 27 points 2000 to 2026, `next` null |
+| `cross-section.json` | `getSourceCrossSection` | same | Field `col0004` across the 24 states of the greatest period string, 2026 (`periodRule: "greatest"`) |
+| `period-range.json` | `getSourcePeriodRange` | same | 2000 (row 1) to 2026 (row 686) |
+| `entities.json` | `getSourceEntities` | same | `dimension: "geo"`: the 24 state codes of 2026 (no place names in this table) |
+| `field-completeness.json` | `getFieldCompleteness` | FHFA house price index by census tract (`official_11_real_estate_raw_hpi_at_tract_d51b3471be`, snapshot `a5b0f712...`, 2,179,042 rows) | Filled share per field from the stored blank counts (hpi1990 is 47.5 % filled) |
+| `unavailable.json` | `getSourceFacets` | MSHA | What every 0069 read answers before the migration: `{ ok: false, reason: "unavailable" }` |
+| `invalid.json` | `getSourceSeries` | FHFA tract | A cell filter refused on a snapshot over 50,000 rows |
+
+Notes for the screens: every field in these dictionaries is typed `string`; 2026 is the publisher's current-year row
+(the dictionary does not say whether the year is complete); the MSHA table has no place names, so `name` is null.
