@@ -90,7 +90,8 @@ export function CopyButton({ text, label, className }: { text: string; label: st
         });
       }}
       className={cn(
-        "inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
+        // relative: the screen-reader status inside stays in the button, not at the page's edge (it would widen a phone page)
+        "relative inline-flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors duration-150 hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none",
         className,
       )}
     >

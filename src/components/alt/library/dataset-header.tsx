@@ -40,6 +40,8 @@ export function DatasetHeader({
   range,
   format,
   entities,
+  entitiesFailed,
+  entityDimension,
   entityNoun,
   onLatest,
   pinnedUrl,
@@ -51,6 +53,8 @@ export function DatasetHeader({
   range: { first: string; last: string } | null | undefined;
   format: PeriodFormat;
   entities: SourceEntities | null | undefined;
+  entitiesFailed: boolean;
+  entityDimension: "entity" | "geo" | null;
   entityNoun: { one: string; many: string } | null;
   onLatest: () => void;
   pinnedUrl: string;
@@ -139,16 +143,14 @@ export function DatasetHeader({
             range === undefined ? (
               <span className="inline-block h-5 w-24 animate-pulse rounded bg-muted" aria-label="Loading" />
             ) : first && last ? (
-              <span title={`${range!.first} to ${range!.last}, as stored`}>
-                {first.text === last.text ? first.text : `${first.text} to ${last.text}`}
-              </span>
+              <span title={`${range!.first} to ${range!.last}, as stored`}>{periodSpan(first.text, last.text)}</span>
             ) : (
               "–"
             )
           }
-          sub={range === null ? "no period field" : range ? "first to last, as sorted" : undefined}
+          sub={range === null ? "no period field" : range ? (first!.text === last!.text ? "one period" : `${first!.text} to ${last!.text}`) : undefined}
         />
-        <EntityStat entities={entities} noun={entityNoun} />
+        <EntityStat entities={entities} failed={entitiesFailed} dimension={entityDimension} noun={entityNoun} />
         <Stat
           className="border-b-0 bg-card"
           label="File retrieved"
@@ -194,14 +196,34 @@ export function DatasetHeader({
   );
 }
 
-function EntityStat({ entities, noun }: { entities: SourceEntities | null | undefined; noun: { one: string; many: string } | null }) {
-  if (entities === null) return <Stat className="border-b-0 bg-card" label="Entities" value="–" sub="no entity field" />;
+/** The headline of a period range: the years when it spans years, else the one period as a reader says it. */
+export function periodSpan(first: string, last: string): string {
+  if (first === last) return first;
+  const a = /(\d{4})(?!.*\d{4})/.exec(first)?.[1];
+  const b = /(\d{4})(?!.*\d{4})/.exec(last)?.[1];
+  return a && b && a !== b ? `${a} to ${b}` : `${first} to ${last}`;
+}
+
+function EntityStat({
+  entities,
+  failed,
+  dimension,
+  noun,
+}: {
+  entities: SourceEntities | null | undefined;
+  failed: boolean;
+  dimension: "entity" | "geo" | null;
+  noun: { one: string; many: string } | null;
+}) {
+  if (dimension === null) return <Stat className="border-b-0 bg-card" label="Entities" value="–" sub="no entity or place field" />;
+  const plural = dimension === "geo" ? "Places" : noun ? noun.many[0].toUpperCase() + noun.many.slice(1) : "Entities";
+  if (failed) return <Stat className="border-b-0 bg-card" label={plural} value="–" sub="could not be counted" />;
   if (!entities)
     return (
       <Stat className="border-b-0 bg-card" label="Entities" value={<span className="inline-block h-5 w-12 animate-pulse rounded bg-muted" aria-label="Loading" />} />
     );
   const n = entities.entities.length;
-  const label = entities.dimension === "geo" ? "Places" : noun ? noun.many[0].toUpperCase() + noun.many.slice(1) : "Entities";
+  const label = plural;
   const where = entities.period ? `in ${entities.period}` : "in the first rows";
   return (
     <Stat

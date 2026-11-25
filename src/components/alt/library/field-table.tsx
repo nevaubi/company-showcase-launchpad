@@ -12,6 +12,7 @@ import { definitionText, FieldSheet } from "./field-sheet";
 import { FillMeter, LibrarySection, PANEL } from "./ui/primitives";
 
 const ROW_H = 29;
+const WINDOW_FROM = 200;
 const NO_UNIT = "No stated unit";
 
 /** Unit chips for the summary line: every stated unit with its field count, largest first, then the rest. */
@@ -57,7 +58,9 @@ export function FieldsSection({
     [snapshot.columns, unit, words],
   );
   const [body, setBody] = useState<HTMLTableSectionElement | null>(null);
-  const [from, to] = useWindowRange(body, list.length, ROW_H);
+  // up to WINDOW_FROM fields are all in the page; a longer dictionary is windowed against the page scroll
+  const windowed = useWindowRange(body, list.length, ROW_H);
+  const [from, to] = list.length <= WINDOW_FROM ? [0, list.length] : windowed;
   const showUnits = units.length > 1 || units[0]?.unit !== NO_UNIT;
   return (
     <LibrarySection

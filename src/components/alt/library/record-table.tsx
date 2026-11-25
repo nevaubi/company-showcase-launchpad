@@ -1,4 +1,4 @@
-import { useMemo, useRef, type UIEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, ChevronsLeft, Download } from "lucide-react";
 import { Segmented } from "@/components/app/segmented";
@@ -252,9 +252,25 @@ function RecordGrid({
   openRow: number | undefined;
 }) {
   const head = useRef<HTMLDivElement>(null);
+  const names = useMemo(() => {
+    const d = snapshot.ingest.dimensions ?? {};
+    return new Set([d.entity_name, d.geo_name].filter((p): p is number => typeof p === "number"));
+  }, [snapshot.ingest]);
+  // widths from the heads and the first page of rows of this field choice, kept while paging so columns do not jump
+  const key = columns.join(",");
+  const [longest, setLongest] = useState<{ key: string; chars: number[] } | null>(null);
+  useEffect(() => {
+    if (!page?.rows.length || longest?.key === key) return;
+    setLongest({ key, chars: columns.map((_, k) => Math.min(40, Math.max(0, ...page.rows.map((r) => (r.cells[k] ?? "").length)))) });
+  }, [page, key, columns, longest]);
   const widths = useMemo(
-    () => [88, ...columns.map((c) => columnWidth(snapshot.columns[c], roles[c] === "quantity"))],
-    [columns, roles, snapshot.columns],
+    () => [
+      88,
+      ...columns.map((c, k) =>
+        columnWidth(snapshot.columns[c], roles[c] === "quantity", names.has(c), longest?.key === key ? longest.chars[k] : 0),
+      ),
+    ],
+    [columns, roles, snapshot.columns, names, longest, key],
   );
   const total = widths.reduce((a, b) => a + b, 0);
   const sync = (e: UIEvent<HTMLDivElement>) => {

@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/app/page-header";
 import { SectionNav } from "@/components/company/section-nav";
 import { Button } from "@/components/ui/button";
 import { describeDataset } from "@/lib/sources/catalog";
-import { defaultFields, fieldRoles } from "@/lib/sources/fields";
+import { fieldRoles } from "@/lib/sources/fields";
 import { profileStatus } from "@/lib/sources/profiles";
 import { sourceQueries, sourceReadFailure } from "@/lib/sources/queries";
 import { fieldCompleteness } from "@/lib/sources/read-types";
@@ -14,6 +14,7 @@ import { DatasetHeader } from "./dataset-header";
 import { datasetHref, libraryHref, recordHref } from "@/lib/sources/links";
 import { canOrderNewest, effectiveOrder, rangeFormat, recordDims, variesByRow } from "./dataset-model";
 import { datasetQueries, readData } from "./dataset-queries";
+import { openingFields } from "./columns-model";
 import { columnsOf, filterPatch, MAX_COLUMNS, snapshotPatch, type DatasetSearch } from "./dataset-search";
 import { FieldsSection } from "./field-table";
 import { FirstLook } from "./first-look";
@@ -121,11 +122,15 @@ function DatasetBody({
     enabled: entityDimension !== null,
   });
   const entitiesRead = readData(entitiesQuery.data);
-  const entities = entityDimension === null ? null : entitiesQuery.isError || entitiesRead.reason ? null : (entitiesRead.data ?? undefined);
+  const entities = entityDimension === null ? null : (entitiesRead.data ?? undefined);
+  const entitiesFailed = entityDimension !== null && (entitiesQuery.isError || !!entitiesRead.reason);
   const versions = useQuery(datasetQueries.versions(dataset.id));
   const roles = useMemo(() => fieldRoles(snapshot.columns, snapshot.ingest), [snapshot.columns, snapshot.ingest]);
   const fills = useMemo(() => fieldCompleteness(snapshot), [snapshot]);
-  const defaults = useMemo(() => defaultFields(snapshot.columns, snapshot.ingest, { limit: 8 }), [snapshot.columns, snapshot.ingest]);
+  const defaults = useMemo(
+    () => openingFields(snapshot.columns, snapshot.ingest, profile.state === "on" ? profile.profile.measures.map((m) => m.field) : []),
+    [snapshot.columns, snapshot.ingest, profile],
+  );
   const asked = columnsOf(search);
   const columns = asked && asked.every((p) => p < snapshot.columns.length) ? asked : defaults;
   const noun = profile.state === "on" && profile.profile.entityNoun ? profile.profile.entityNoun : nounFrom(snapshot.coverage?.entity_type);
@@ -143,6 +148,8 @@ function DatasetBody({
           range={range}
           format={format}
           entities={entities}
+          entitiesFailed={entitiesFailed}
+          entityDimension={entityDimension}
           entityNoun={noun}
           onLatest={() => setSearch(snapshotPatch(undefined))}
           pinnedUrl={pinnedUrl}

@@ -54,7 +54,6 @@ export function CoverageView({
   });
   const periods = readData(periodFacets.data);
   const ents = readData(entityFacets.data);
-  const awaiting = periods.reason === "unavailable" || ents.reason === "unavailable";
   const many = entityNoun?.many ?? (entityDimension === "geo_code" ? "places" : "entities");
 
   const years = periods.data && periods.data.values.length > 60 ? yearBars(periods.data.values, format) : null;
@@ -64,117 +63,113 @@ export function CoverageView({
   const small = snapshot.columns.length <= 16;
   const bands = fills ? fillBands(fills) : null;
 
+  // what can be drawn: period counts and entity counts need 0069; the entity list of the last period does not
+  const periodsPending = varies.period && periodFacets.isPending;
+  const showPeriods = !!perPeriod;
+  const showEntities = !!top || !!entities;
+  const notes: string[] = [];
+  if (varies.period && !perPeriod && !periodsPending) notes.push(periods.reason === "unavailable" ? AWAITS_UPDATE : "Records per period could not be counted.");
+  if (!varies.period) notes.push("No period field: the records are not counted by period.");
+
   return (
-    <div className="grid min-w-0 grid-cols-1 gap-3 @5xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-      <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Records per period">
-        <h3 className="text-[13px] font-semibold">Records per period</h3>
-        {!varies.period ? (
-          <QuietLine className="mt-1">This table has no period field: every record stands for the same time, or none.</QuietLine>
-        ) : perPeriod ? (
-          <>
-            <p className="mb-2 text-[11px] text-muted-foreground">
-              {years ? `${perPeriod.length} years, oldest first` : clipped ? `The last 60 of ${count(periods.data!.values.length)} periods` : `${perPeriod.length} periods, oldest first`}
-              {periods.data && !periods.data.complete ? "; more periods exist than are counted" : ""}
-              {years ? "." : ". Choose one to see its records."}
-            </p>
-            {view === "chart" ? (
-              <BarList bars={perPeriod} label="Records per period" onSelect={years ? undefined : (b) => onPeriod(b.key)} />
-            ) : (
-              <CountTable rows={perPeriod.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Period", "Records"]} />
-            )}
-          </>
-        ) : periodFacets.isPending ? (
-          <span className="mt-2 block h-24 animate-pulse rounded bg-muted" aria-hidden />
-        ) : (
-          <QuietLine className="mt-1">{periods.reason === "unavailable" ? AWAITS_UPDATE : "Records per period could not be counted."}</QuietLine>
-        )}
-      </div>
-
-      <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Entities">
-        <h3 className="text-[13px] font-semibold first-letter:uppercase">{many}</h3>
-        {entityDimension === null ? (
-          <QuietLine className="mt-1">This table names no entity or place on its rows.</QuietLine>
-        ) : top ? (
-          <>
-            <p className="mb-2 text-[11px] text-muted-foreground">
-              The {Math.min(10, top.length)} with the most records{ents.data && !ents.data.complete ? " among those counted" : ""}. Choose one to see its records.
-            </p>
-            {view === "chart" ? (
-              <BarList bars={top} label={`${many} by records`} onSelect={(b) => onEntity(b.key)} />
-            ) : (
-              <CountTable rows={top.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Name", "Records"]} />
-            )}
-          </>
-        ) : entities ? (
-          <>
-            <p className="mb-2 text-[13px] leading-5">
-              <span className="num font-semibold">{entities.complete ? count(entities.entities.length) : `${count(entities.entities.length)} or more`}</span>{" "}
-              {many} in {entities.period ?? "the first rows"}
-              {entities.periodRule === "greatest" ? ", the last period" : ""}.
-            </p>
-            <ul className="grid gap-0.5 text-[13px] leading-5">
-              {entities.entities.slice(0, 8).map((e) => (
-                <li key={`${e.id}|${e.name}|${e.row}`} className="min-w-0">
-                  <button
-                    type="button"
-                    onClick={() => onEntity(e.id || e.name || "")}
-                    className="max-w-full truncate text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {e.name || e.id || "(blank)"}
-                  </button>
-                  {e.name && e.id && <span className="num ml-1.5 text-[11px] text-muted-foreground">{e.id}</span>}
-                </li>
-              ))}
-            </ul>
-            {awaiting && <QuietLine className="mt-2 text-[11px] leading-4">Listed in file order. {AWAITS_UPDATE}</QuietLine>}
-          </>
-        ) : entityFacets.isPending ? (
-          <span className="mt-2 block h-24 animate-pulse rounded bg-muted" aria-hidden />
-        ) : (
-          <QuietLine className="mt-1">{AWAITS_UPDATE}</QuietLine>
-        )}
-      </div>
-
-      <div className={cn(PANEL, "min-w-0 px-4 py-3 @5xl:col-span-2")} data-section="Filled share">
-        <h3 className="text-[13px] font-semibold">How complete the fields are</h3>
-        {!fills || !bands ? (
-          <QuietLine className="mt-1">This version stores no counts of empty cells.</QuietLine>
-        ) : small ? (
-          <>
-            <p className="mb-2 text-[11px] text-muted-foreground">Share of records with a value in each field, from the counts stored with this version.</p>
-            {view === "chart" ? (
-              <BarList bars={fillBars(fills, snapshot.columns, snapshot.columns.map((_, i) => i))} max={1} label="Filled share per field" />
-            ) : (
-              <CountTable rows={fillBars(fills, snapshot.columns, snapshot.columns.map((_, i) => i)).map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Field", "Filled"]} />
-            )}
-          </>
-        ) : (
-          <div className="grid gap-4 @5xl:grid-cols-2">
-            <div className="min-w-0">
-              <p className="mb-2 text-[11px] text-muted-foreground">
-                {count(snapshot.columns.length)} fields by the share of records that have a value.
-              </p>
+    <div className="grid min-w-0 grid-cols-1 gap-3">
+      {(notes.length > 0 || periodsPending) && (
+        <QuietLine>{periodsPending ? "Counting records by period" : notes.join(" ")}</QuietLine>
+      )}
+      {showPeriods && (
+        <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Records per period">
+          <h3 className="text-[13px] font-semibold">Records per period</h3>
+          <p className="mb-2 text-[11px] text-muted-foreground">
+            {years ? `${perPeriod!.length} years, oldest first` : clipped ? `The last 60 of ${count(periods.data!.values.length)} periods` : `${perPeriod!.length} periods, oldest first`}
+            {periods.data && !periods.data.complete ? "; more periods exist than are counted" : ""}
+            {years ? "." : ". Choose one to see its records."}
+          </p>
+          {view === "chart" ? (
+            <BarList bars={perPeriod!} label="Records per period" onSelect={years ? undefined : (b) => onPeriod(b.key)} />
+          ) : (
+            <CountTable rows={perPeriod!.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Period", "Records"]} />
+          )}
+        </div>
+      )}
+      <div className={cn("grid min-w-0 grid-cols-1 gap-3", showEntities && "@5xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]")}>
+        <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Filled share">
+          <h3 className="text-[13px] font-semibold">How complete the fields are</h3>
+          {!fills || !bands ? (
+            <QuietLine className="mt-1">This version stores no counts of empty cells.</QuietLine>
+          ) : small ? (
+            <>
+              <p className="mb-2 text-[11px] text-muted-foreground">Share of records with a value in each field, from the counts stored with this version.</p>
               {view === "chart" ? (
-                <BarList
-                  bars={bands.map((b) => ({ key: b.band.id, label: b.band.label, value: b.fields, text: `${count(b.fields)} fields`, title: `${b.band.label}: ${count(b.fields)} fields` }))}
-                  label="Fields by filled share"
-                  labelWidth="minmax(9rem,13rem)"
-                />
+                <BarList bars={fillBars(fills, snapshot.columns, snapshot.columns.map((_, i) => i))} max={1} label="Filled share per field" />
               ) : (
-                <CountTable rows={bands.map((b) => ({ key: b.band.id, label: b.band.label, text: count(b.fields) }))} head={["Filled share", "Fields"]} />
+                <CountTable rows={fillBars(fills, snapshot.columns, snapshot.columns.map((_, i) => i)).map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Field", "Filled"]} />
               )}
+            </>
+          ) : (
+            <div className="grid gap-4 @7xl:grid-cols-2">
+              <div className="min-w-0">
+                <p className="mb-2 text-[11px] text-muted-foreground">{count(snapshot.columns.length)} fields by the share of records that have a value.</p>
+                {view === "chart" ? (
+                  <BarList
+                    bars={bands.map((b) => ({ key: b.band.id, label: b.band.label, value: b.fields, text: `${count(b.fields)} fields`, title: `${b.band.label}: ${count(b.fields)} fields` }))}
+                    label="Fields by filled share"
+                    labelWidth="minmax(9rem,13rem)"
+                  />
+                ) : (
+                  <CountTable rows={bands.map((b) => ({ key: b.band.id, label: b.band.label, text: count(b.fields) }))} head={["Filled share", "Fields"]} />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="mb-2 text-[11px] text-muted-foreground">The fields shown in the records table.</p>
+                {view === "chart" ? (
+                  <BarList bars={fillBars(fills, snapshot.columns, columns)} max={1} label="Filled share of the fields in the table" labelWidth="minmax(8rem,14rem)" />
+                ) : (
+                  <CountTable
+                    rows={columns.map((p) => ({ key: String(p), label: fieldTitle(snapshot.columns[p]), text: fills[p] ? `${(fills[p].share * 100).toFixed(1)}%` : "–" }))}
+                    head={["Field", "Filled"]}
+                  />
+                )}
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="mb-2 text-[11px] text-muted-foreground">The fields shown in the records table.</p>
-              {view === "chart" ? (
-                <BarList bars={fillBars(fills, snapshot.columns, columns)} max={1} label="Filled share of the fields in the table" labelWidth="minmax(8rem,14rem)" />
-              ) : (
-                <CountTable
-                  rows={columns.map((p) => ({ key: String(p), label: fieldTitle(snapshot.columns[p]), text: fills[p] ? `${(fills[p].share * 100).toFixed(1)}%` : "–" }))}
-                  head={["Field", "Filled"]}
-                />
-              )}
-            </div>
+          )}
+        </div>
+        {showEntities && (
+          <div className={cn(PANEL, "min-w-0 px-4 py-3")} data-section="Entities">
+            <h3 className="text-[13px] font-semibold first-letter:uppercase">{many}</h3>
+            {top ? (
+              <>
+                <p className="mb-2 text-[11px] text-muted-foreground">
+                  The {Math.min(10, top.length)} with the most records{ents.data && !ents.data.complete ? " among those counted" : ""}. Choose one to see its records.
+                </p>
+                {view === "chart" ? (
+                  <BarList bars={top} label={`${many} by records`} onSelect={(b) => onEntity(b.key)} />
+                ) : (
+                  <CountTable rows={top.map((b) => ({ key: b.key, label: b.label, sub: b.sub, text: b.text }))} head={["Name", "Records"]} />
+                )}
+              </>
+            ) : (
+              <>
+                <p className="mb-2 text-[13px] leading-5">
+                  <span className="num font-semibold">{entities!.complete ? count(entities!.entities.length) : `${count(entities!.entities.length)} or more`}</span>{" "}
+                  {many} in {entities!.period ?? "the first rows"}
+                  {entities!.periodRule === "greatest" ? ", the last period" : ""}. The first in file order:
+                </p>
+                <ul className="grid gap-0.5 text-[13px] leading-5">
+                  {entities!.entities.slice(0, 10).map((e) => (
+                    <li key={`${e.id}|${e.name}|${e.row}`} className="flex min-w-0 items-baseline gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onEntity(e.id || e.name || "")}
+                        className="min-w-0 truncate text-left underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {e.name || e.id || "(blank)"}
+                      </button>
+                      {e.name && e.id && <span className="num shrink-0 text-[11px] text-muted-foreground">{e.id}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </div>
         )}
       </div>

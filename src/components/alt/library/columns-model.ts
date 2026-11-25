@@ -2,7 +2,7 @@
  * Field lists of the table page, pure: search over a dictionary of up to 2,379 fields, grouping for the column
  * picker, and the head of a records column. Nothing here reads a cell.
  */
-import { fieldCode, fieldTitle, statedUnit } from "@/lib/sources/fields";
+import { defaultFields, fieldCode, fieldTitle, statedUnit } from "@/lib/sources/fields";
 import type { SourceColumn, SourceDimension, SourceIngest } from "@/lib/sources/schema";
 
 export type FieldItem = { position: number; column: SourceColumn };
@@ -100,12 +100,43 @@ export function columnHead(column: SourceColumn): { title: string; sub: string |
 }
 
 /** A starting width for a column, from its head and its role; the table is laid out fixed from these. */
-export function columnWidth(column: SourceColumn, quantity: boolean): number {
+export function columnWidth(column: SourceColumn, quantity: boolean, names = false, longest = 0): number {
   const head = columnHead(column);
-  const chars = Math.max(head.title.length, (head.sub ?? "").length * 0.85);
+  const chars = Math.max(head.title.length, (head.sub ?? "").length * 0.85, longest);
   const fromHead = Math.round(chars * 7.2 + 28);
-  const min = quantity ? 112 : 96;
+  // a column of entity or place names holds long text whatever its head says
+  const min = names ? 232 : quantity ? 112 : 96;
   return Math.max(min, Math.min(quantity ? 200 : 280, fromHead));
+}
+
+/** A table of at most this many fields opens with all of them. */
+export const ALL_FIELDS_UP_TO = 14;
+
+/**
+ * The fields the records table opens with: every field of a narrow table; otherwise the declared dimensions, then
+ * the measures a reviewed profile names (by label, each found exactly once), then the generic rule of `defaultFields`
+ * (stated quantities, then file order), 8 in all.
+ */
+export function openingFields(
+  columns: readonly SourceColumn[],
+  ingest: Pick<SourceIngest, "dimensions" | "composites"> | null | undefined,
+  measureLabels: readonly string[],
+): number[] {
+  const declared = dimensionOf(ingest);
+  if (columns.length <= ALL_FIELDS_UP_TO) {
+    // every field: the declared names, codes and period first, the rest in file order
+    const lead = defaultFields(columns, ingest, { limit: columns.length }).filter((p) => declared.has(p) && declared.get(p) !== "source address");
+    return [...lead, ...columns.map((_, i) => i).filter((p) => !lead.includes(p))];
+  }
+  const generic = defaultFields(columns, ingest, { limit: 8 });
+  const dims = generic.filter((p) => declared.has(p) && declared.get(p) !== "source address").slice(0, 5);
+  const measures = measureLabels.flatMap((label) => {
+    const hits = columns.flatMap((c, i) => (c.label === label ? [i] : []));
+    return hits.length === 1 ? hits : [];
+  });
+  const out: number[] = [];
+  for (const p of [...dims, ...measures, ...generic]) if (!out.includes(p) && out.length < 8) out.push(p);
+  return out;
 }
 
 /** Toggles a position in a selection of at most `max`, keeping the order of the earlier choices. */
