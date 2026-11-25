@@ -8,37 +8,34 @@
 //   bun scripts/abs-ee.ts status                       totals and the store's invariants
 //
 // Options: --max-filings=25 (per CIK and run), --from=YYYY-MM-DD, --to=YYYY-MM-DD, --reparse (store
-// again what an older reader version stored), --retry-skipped, --cache=<dir> (SEC files as served;
-// default .cache/sec), --offline (use only files already on disk).
+// again what an older reader version stored), --retry-skipped, --max-attempts=3 (tries per filing before
+// it is left alone), --cache=<dir> (SEC files as served; default .cache/sec), --offline (use only files
+// already on disk).
 //
 // A run is safe to stop at any point and safe to run again. One filing is stored all or nothing
 // (abs_begin_load, abs_put_rows, abs_commit_load); a filing this reader version already stored is not
 // planned again; a filing cut off half way is started over by the next run. Rules: src/lib/abs/AGENTS.md.
 // Database: the app's own (scripts/lib/supa.ts) unless ABS_DB_URL names a Postgres to prove a change on.
 import {
-  cmbsMetrics,
-  cmbsRows,
-  linkProperties,
-  type CmbsAssetRow,
-  type CmbsPropertyRow,
-} from "../src/lib/abs/cmbs";
-import {
-  assetFiles,
-  dealOf,
-  familyOfClass,
   headerUrl,
   indexUrl,
   listedFilings,
   olderPages,
-  parseAbsHeader,
-  parseFilingIndex,
   submissionsPageUrl,
   submissionsUrl,
   type SubmissionsFile,
 } from "../src/lib/abs/edgar";
-import { PARSER, type MetricRow } from "../src/lib/abs/metrics";
+import {
+  cmbsCollector,
+  countReplacements,
+  filingPayload,
+  planFiling,
+  ROW_KINDS,
+  type FilingPayload,
+} from "../src/lib/abs/filing";
+import { PARSER } from "../src/lib/abs/metrics";
 import { planLoads, type FilingState } from "../src/lib/abs/plan";
-import { createAbsReader, declaredEncoding, type AbsFileShape } from "../src/lib/abs/xml";
+import { createAbsReader, declaredEncoding } from "../src/lib/abs/xml";
 import { connectAbsDb, type AbsDb } from "./lib/abs-store";
 import { SecSource } from "./lib/abs-source";
 
@@ -60,10 +57,8 @@ const ciks = String(args.cik ?? "")
   .filter(Boolean)
   .map(Number);
 const MAX_FILINGS = Number(args["max-filings"] ?? 25);
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = Number(args["max-attempts"] ?? 3);
 const CHUNK = 200;
-const READS = new Set(["cmbs"]);
-const SMALL_FILE = 5_000_000;
 
 if (
   !["discover", "load", "run", "verify", "status"].includes(command) ||
@@ -87,60 +82,25 @@ const fault = (point: string) => {
     process.kill(process.pid, "SIGKILL");
 };
 
-type Parsed =
-  | { skip: string }
-  | {
-      skip?: undefined;
-      sha256: string;
-      bytes: number;
-      filing: Record<string, unknown>;
-      documents: Record<string, unknown>[];
-      rows: {
-        cmbs_assets: CmbsAssetRow[];
-        cmbs_properties: CmbsPropertyRow[];
-        metrics: MetricRow[];
-      };
-      counts: Record<string, unknown>;
-    };
-
 /** Everything one filing says, read from SEC (or the disk copy): no database involved. */
-async function readFiling(cik: number, accession: string): Promise<Parsed> {
+async function readFiling(cik: number, accession: string): Promise<FilingPayload> {
   const h = await src.text(headerUrl(cik, accession));
-  const header = parseAbsHeader(h.text);
-  if (header.accession !== accession) throw new Error(`header is for ${header.accession}`);
-  const deal = dealOf(header);
-  if (!deal) return { skip: "the header does not establish one issuing entity" };
-  const docs = parseFilingIndex((await src.text(indexUrl(cik, accession))).text);
-  const files = assetFiles(docs);
-  if (!files.length) return { skip: "no EX-102 asset data file" };
-  if (files.length > 1) return { skip: `unsupported: ${files.length} EX-102 files in one filing` };
-  // The header's asset class is the filer's label and has been seen wrong, so a small file is read and
-  // judged by its own namespace. Only a large file whose label names nothing this reader covers is left
-  // on SEC's side (an auto loan file is 30 to 220 MB).
-  const labelled = header.assetClasses.map(familyOfClass);
-  const covered = !labelled.length || labelled.some((f) => READS.has(f));
-  if (!covered && (files[0].listed_bytes ?? Infinity) > SMALL_FILE)
-    return {
-      skip: `unsupported: asset class "${header.assetClasses.join("; ")}" is not read by ${PARSER}`,
-    };
-
-  const assets: CmbsAssetRow[] = [];
-  const properties: CmbsPropertyRow[] = [];
-  let family: AbsFileShape["family"] | null = null;
-  const reader = createAbsReader((record) => {
-    family ??= reader.shape().family;
-    if (family !== "cmbs") return;
-    const rows = cmbsRows(record);
-    assets.push(rows.asset);
-    properties.push(...rows.properties);
-  });
-  const file = await src.open(files[0].url);
+  const plan = planFiling(
+    accession,
+    h.text,
+    h.sha256,
+    (await src.text(indexUrl(cik, accession))).text,
+  );
+  if (plan.skip !== undefined) return plan;
+  const collected = cmbsCollector();
+  const reader = createAbsReader((record) => collected.add(record, reader.shape().family));
+  const file = await src.open(plan.file.url);
   let decoder: TextDecoder | null = null;
   let head: Uint8Array[] = [];
   let headBytes = 0;
   let replacements = 0;
   const feed = (text: string) => {
-    for (let i = text.indexOf("�"); i >= 0; i = text.indexOf("�", i + 1)) replacements++;
+    replacements += countReplacements(text);
     reader.write(text);
   };
   for await (const chunk of file.chunks) {
@@ -163,66 +123,14 @@ async function readFiling(cik: number, accession: string): Promise<Parsed> {
   }
   feed(decoder.decode());
   const shape = reader.close();
-  const served = file.done();
-  if (!READS.has(shape.family))
-    return {
-      skip: `unsupported: asset files in ${shape.namespace || "no namespace"} are not read by ${PARSER}`,
-    };
-  linkProperties(assets, properties);
-  const metrics = cmbsMetrics(assets, properties);
-  const tally = (
-    rows: { unparsed: Record<string, unknown>; extra: Record<string, unknown> }[],
-    key: "unparsed" | "extra",
-  ) => {
-    const t: Record<string, number> = {};
-    for (const r of rows) for (const name of Object.keys(r[key])) t[name] = (t[name] ?? 0) + 1;
-    return t;
-  };
-  return {
-    sha256: served.sha256,
-    bytes: served.bytes,
-    filing: {
-      ...deal,
-      family: shape.family,
-      asset_class: header.assetClasses.join("; ") || null,
-      depositor_cik: header.depositorCik,
-      sponsor_cik: header.sponsorCik,
-      period_start: header.periodStart,
-      period_end: header.periodEnd,
-      accepted_at: header.acceptedAt,
-      header_sha256: h.sha256,
-    },
-    documents: docs.map((d) =>
-      d.url === files[0].url
-        ? {
-            ...d,
-            bytes: served.bytes,
-            sha256: served.sha256,
-            records: shape.records,
-            namespace: shape.namespace,
-            retrieved_at: served.retrievedAt,
-          }
-        : d,
-    ),
-    rows: { cmbs_assets: assets, cmbs_properties: properties, metrics },
-    counts: {
-      cmbs_assets: assets.length,
-      cmbs_properties: properties.length,
-      metrics: metrics.length,
-      records: shape.records,
-      attributes: shape.attributes,
-      decode_replacements: replacements,
-      unparsed: { assets: tally(assets, "unparsed"), properties: tally(properties, "unparsed") },
-      extra: { assets: tally(assets, "extra"), properties: tally(properties, "extra") },
-    },
-  };
+  return filingPayload(plan, shape, file.done(), collected, replacements);
 }
 
-const KINDS = ["cmbs_assets", "cmbs_properties", "metrics"] as const;
+const KINDS = ROW_KINDS;
 
 async function storeFiling(
   accession: string,
-  p: Exclude<Parsed, { skip: string }>,
+  p: Exclude<FilingPayload, { skip: string }>,
 ): Promise<"stored" | "unchanged"> {
   await db.gate("abs-ee");
   const begin = await db.rpc<{ skip: boolean; load_id: number }>("abs_begin_load", {
@@ -395,7 +303,7 @@ async function verify(cik: number) {
   return t;
 }
 
-const runId = command === "status" ? null : await db.runStart("abs-ee");
+const runId = command === "status" ? null : await db.runStart("abs-ee-script");
 const detail: Record<string, unknown> = { command, parser: PARSER, ciks };
 let ok = true;
 let items = 0;

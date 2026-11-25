@@ -31,6 +31,18 @@ const SIGNATURES = {
   abs_mark_filing: { _accession: "text", _status: "text", _detail: "text" },
   abs_verify_rows: { _accession: "text", _kind: "text", _rows: "jsonb" },
   abs_filing_load: { _accession: "text" },
+  abs_store_filing: {
+    _accession: "text",
+    _parser: "text",
+    _sha256: "text",
+    _bytes: "bigint",
+    _filing: "jsonb",
+    _documents: "jsonb",
+    _rows: "jsonb",
+    _expect: "jsonb",
+  },
+  abs_claim_next: { _watch: "jsonb", _max_attempts: "integer" },
+  abs_release_filing: { _accession: "text", _detail: "text" },
   abs_check: {},
   abs_summary: {},
 } as const;

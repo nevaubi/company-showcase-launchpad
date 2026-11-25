@@ -19,7 +19,7 @@ import { barProblem } from "@/lib/jobs/bar-check";
 import { healRow, providerKey, tripRow, type CircuitRow } from "@/lib/jobs/provider-health";
 import { isEarnings } from "@/lib/jobs/sec-discover";
 
-export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror" | "emails";
+export type JobName = "prices" | "macro" | "sec" | "filing-cache" | "ir-docs" | "estimates" | "alt-data" | "setups" | "gov-data" | "options" | "short-volume" | "sec-discover" | "partner-mirror" | "emails" | "abs-ee";
 
 /** job_state row: where the options tail rotation starts tonight (cursor = offset into the tail). */
 const OPTIONS_TAIL_KEY = "options-tail";
@@ -591,6 +591,11 @@ const JOBS: Record<JobName, () => Promise<JobResult>> = {
     const { runDiscovery } = await import("@/lib/jobs/sec-discover.server");
     const left = budget();
     return runDiscovery(left, left.end);
+  },
+  /** ABS-EE asset files: one waiting filing stored, or one watched CIK listed (src/lib/jobs/abs-ee.server.ts). */
+  async "abs-ee"() {
+    const { refreshAbsEe } = await import("@/lib/jobs/abs-ee.server");
+    return refreshAbsEe(budget().end);
   },
 
   /** Store the exhibits of new earnings / Reg FD 8-Ks found by the SEC scan, a few files per run. */

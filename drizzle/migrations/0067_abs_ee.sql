@@ -29,8 +29,11 @@
 -- abs_put_rows) and become the filing's data only when abs_commit_load has counted them and they match
 -- what the reader parsed; until then readers keep seeing the previous committed load, or nothing. An
 -- interrupted attempt leaves an open load that the next attempt clears. Readers use the *_live views.
+--
+-- The whole file can be applied twice: every statement either creates what is missing or replaces a
+-- definition with the same one, so it does not matter who applies it, or whether it was applied before.
 
-CREATE TABLE public.abs_deals (
+CREATE TABLE IF NOT EXISTS public.abs_deals (
   deal_id text PRIMARY KEY,
   issuer_cik bigint,
   issuer_name text NOT NULL,
@@ -42,7 +45,7 @@ CREATE TABLE public.abs_deals (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE public.abs_filings (
+CREATE TABLE IF NOT EXISTS public.abs_filings (
   accession text PRIMARY KEY CHECK (accession ~ '^\d{10}-\d{2}-\d{6}$'),
   list_cik bigint NOT NULL,
   form text NOT NULL CHECK (form IN ('ABS-EE', 'ABS-EE/A')),
@@ -67,11 +70,11 @@ CREATE TABLE public.abs_filings (
   listed_at timestamptz NOT NULL DEFAULT now(),
   loaded_at timestamptz
 );
-CREATE INDEX abs_filings_list_idx ON public.abs_filings (list_cik, filed, accession);
-CREATE INDEX abs_filings_deal_idx ON public.abs_filings (deal_id, period_end, accepted_at);
-CREATE INDEX abs_filings_status_idx ON public.abs_filings (status, filed, accession);
+CREATE INDEX IF NOT EXISTS abs_filings_list_idx ON public.abs_filings (list_cik, filed, accession);
+CREATE INDEX IF NOT EXISTS abs_filings_deal_idx ON public.abs_filings (deal_id, period_end, accepted_at);
+CREATE INDEX IF NOT EXISTS abs_filings_status_idx ON public.abs_filings (status, filed, accession);
 
-CREATE TABLE public.abs_documents (
+CREATE TABLE IF NOT EXISTS public.abs_documents (
   accession text NOT NULL REFERENCES public.abs_filings (accession) ON DELETE CASCADE,
   seq integer NOT NULL,
   doc_type text NOT NULL,
@@ -87,7 +90,7 @@ CREATE TABLE public.abs_documents (
   PRIMARY KEY (accession, seq)
 );
 
-CREATE TABLE public.abs_loads (
+CREATE TABLE IF NOT EXISTS public.abs_loads (
   load_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   accession text NOT NULL REFERENCES public.abs_filings (accession) ON DELETE CASCADE,
   parser text NOT NULL,
@@ -98,11 +101,15 @@ CREATE TABLE public.abs_loads (
   finished_at timestamptz,
   counts jsonb
 );
-CREATE UNIQUE INDEX abs_loads_one_open ON public.abs_loads (accession) WHERE status = 'open';
-CREATE UNIQUE INDEX abs_loads_one_committed ON public.abs_loads (accession) WHERE status = 'committed';
-ALTER TABLE public.abs_filings ADD CONSTRAINT abs_filings_load_fk FOREIGN KEY (load_id) REFERENCES public.abs_loads (load_id);
+CREATE UNIQUE INDEX IF NOT EXISTS abs_loads_one_open ON public.abs_loads (accession) WHERE status = 'open';
+CREATE UNIQUE INDEX IF NOT EXISTS abs_loads_one_committed ON public.abs_loads (accession) WHERE status = 'committed';
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'abs_filings_load_fk' AND conrelid = 'public.abs_filings'::regclass) THEN
+    ALTER TABLE public.abs_filings ADD CONSTRAINT abs_filings_load_fk FOREIGN KEY (load_id) REFERENCES public.abs_loads (load_id);
+  END IF;
+END $$;
 
-CREATE TABLE public.abs_cmbs_assets (
+CREATE TABLE IF NOT EXISTS public.abs_cmbs_assets (
   load_id bigint NOT NULL REFERENCES public.abs_loads (load_id) ON DELETE CASCADE,
   accession text NOT NULL,
   rec integer NOT NULL,
@@ -164,9 +171,9 @@ CREATE TABLE public.abs_cmbs_assets (
   unparsed jsonb NOT NULL DEFAULT '{}'::jsonb,
   PRIMARY KEY (load_id, rec)
 );
-CREATE INDEX abs_cmbs_assets_accn_idx ON public.abs_cmbs_assets (accession, asset_number);
+CREATE INDEX IF NOT EXISTS abs_cmbs_assets_accn_idx ON public.abs_cmbs_assets (accession, asset_number);
 
-CREATE TABLE public.abs_cmbs_properties (
+CREATE TABLE IF NOT EXISTS public.abs_cmbs_properties (
   load_id bigint NOT NULL REFERENCES public.abs_loads (load_id) ON DELETE CASCADE,
   accession text NOT NULL,
   rec integer NOT NULL,
@@ -231,9 +238,9 @@ CREATE TABLE public.abs_cmbs_properties (
   unparsed jsonb NOT NULL DEFAULT '{}'::jsonb,
   PRIMARY KEY (load_id, rec, seq)
 );
-CREATE INDEX abs_cmbs_properties_accn_idx ON public.abs_cmbs_properties (accession, loan_asset_number);
+CREATE INDEX IF NOT EXISTS abs_cmbs_properties_accn_idx ON public.abs_cmbs_properties (accession, loan_asset_number);
 
-CREATE TABLE public.abs_pool_metrics (
+CREATE TABLE IF NOT EXISTS public.abs_pool_metrics (
   load_id bigint NOT NULL REFERENCES public.abs_loads (load_id) ON DELETE CASCADE,
   accession text NOT NULL,
   metric text NOT NULL,
@@ -245,7 +252,7 @@ CREATE TABLE public.abs_pool_metrics (
   n_missing integer NOT NULL DEFAULT 0,
   PRIMARY KEY (load_id, metric, dim, bucket)
 );
-CREATE INDEX abs_pool_metrics_accn_idx ON public.abs_pool_metrics (accession, metric);
+CREATE INDEX IF NOT EXISTS abs_pool_metrics_accn_idx ON public.abs_pool_metrics (accession, metric);
 
 -- Access. This project's default privileges grant everything, so each table starts from nothing:
 -- members read, only the service role writes, and the ledger is the service role's alone.
@@ -259,22 +266,28 @@ ALTER TABLE public.abs_loads ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.abs_cmbs_assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.abs_cmbs_properties ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.abs_pool_metrics ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Members read ABS deals" ON public.abs_deals;
 CREATE POLICY "Members read ABS deals" ON public.abs_deals FOR SELECT TO authenticated USING (public.has_app_access(auth.uid()));
+DROP POLICY IF EXISTS "Members read ABS filings" ON public.abs_filings;
 CREATE POLICY "Members read ABS filings" ON public.abs_filings FOR SELECT TO authenticated USING (public.has_app_access(auth.uid()));
+DROP POLICY IF EXISTS "Members read ABS documents" ON public.abs_documents;
 CREATE POLICY "Members read ABS documents" ON public.abs_documents FOR SELECT TO authenticated USING (public.has_app_access(auth.uid()));
+DROP POLICY IF EXISTS "Members read ABS commercial mortgage assets" ON public.abs_cmbs_assets;
 CREATE POLICY "Members read ABS commercial mortgage assets" ON public.abs_cmbs_assets FOR SELECT TO authenticated USING (public.has_app_access(auth.uid()));
+DROP POLICY IF EXISTS "Members read ABS commercial mortgage properties" ON public.abs_cmbs_properties;
 CREATE POLICY "Members read ABS commercial mortgage properties" ON public.abs_cmbs_properties FOR SELECT TO authenticated USING (public.has_app_access(auth.uid()));
+DROP POLICY IF EXISTS "Members read ABS pool metrics" ON public.abs_pool_metrics;
 CREATE POLICY "Members read ABS pool metrics" ON public.abs_pool_metrics FOR SELECT TO authenticated USING (public.has_app_access(auth.uid()));
 
 -- Readers: only rows of the load a loaded filing points at. A row of an open, abandoned or replaced
 -- load is never shown. security_invoker keeps the tables' own row security in force.
-CREATE VIEW public.abs_cmbs_assets_live WITH (security_invoker = true) AS
+CREATE OR REPLACE VIEW public.abs_cmbs_assets_live WITH (security_invoker = true) AS
   SELECT f.deal_id, f.form, f.filed, f.accepted_at, f.period_end AS cover_period_end, f.is_current, a.*
   FROM public.abs_cmbs_assets a JOIN public.abs_filings f ON f.accession = a.accession AND f.load_id = a.load_id AND f.status = 'loaded';
-CREATE VIEW public.abs_cmbs_properties_live WITH (security_invoker = true) AS
+CREATE OR REPLACE VIEW public.abs_cmbs_properties_live WITH (security_invoker = true) AS
   SELECT f.deal_id, f.form, f.filed, f.accepted_at, f.period_end AS cover_period_end, f.is_current, p.*
   FROM public.abs_cmbs_properties p JOIN public.abs_filings f ON f.accession = p.accession AND f.load_id = p.load_id AND f.status = 'loaded';
-CREATE VIEW public.abs_pool_metrics_live WITH (security_invoker = true) AS
+CREATE OR REPLACE VIEW public.abs_pool_metrics_live WITH (security_invoker = true) AS
   SELECT f.deal_id, f.form, f.filed, f.accepted_at, f.period_start AS cover_period_start, f.period_end AS cover_period_end, f.is_current, m.*
   FROM public.abs_pool_metrics m JOIN public.abs_filings f ON f.accession = m.accession AND f.load_id = m.load_id AND f.status = 'loaded';
 REVOKE ALL ON public.abs_cmbs_assets_live, public.abs_cmbs_properties_live, public.abs_pool_metrics_live FROM PUBLIC, anon, authenticated;
@@ -534,6 +547,62 @@ BEGIN
 END
 $$;
 
+-- The whole of one filing in one call and one transaction (open, rows, commit), for a caller that has a
+-- few seconds and cannot afford several round trips. `_rows` holds the three kinds of rows by name.
+CREATE OR REPLACE FUNCTION public.abs_store_filing(_accession text, _parser text, _sha256 text, _bytes bigint, _filing jsonb, _documents jsonb, _rows jsonb, _expect jsonb)
+RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  b jsonb;
+  id bigint;
+BEGIN
+  b := abs_begin_load(_accession, _parser, _sha256, _bytes, false);
+  IF (b->>'skip')::boolean THEN
+    RETURN b;
+  END IF;
+  id := (b->>'load_id')::bigint;
+  PERFORM abs_put_rows(id, 'cmbs_assets', coalesce(_rows->'cmbs_assets', '[]'::jsonb));
+  PERFORM abs_put_rows(id, 'cmbs_properties', coalesce(_rows->'cmbs_properties', '[]'::jsonb));
+  PERFORM abs_put_rows(id, 'metrics', coalesce(_rows->'metrics', '[]'::jsonb));
+  RETURN abs_commit_load(id, _filing, _documents, _expect) || jsonb_build_object('skip', false);
+END
+$$;
+
+-- The next filing a scheduled run should store, among the CIKs it watches (`_watch`: cik and the first
+-- filing date wanted). The attempt is counted before any work, so a filing the run can never finish in
+-- its few seconds is tried `_max_attempts` times and then left for a person; least-tried filings go first,
+-- so one stuck filing never holds up the others. Null when nothing is waiting.
+CREATE OR REPLACE FUNCTION public.abs_claim_next(_watch jsonb, _max_attempts integer)
+RETURNS jsonb
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  pick record;
+BEGIN
+  SELECT f.accession, f.list_cik, f.form, f.filed, f.attempts INTO pick
+  FROM abs_filings f JOIN jsonb_to_recordset(coalesce(_watch, '[]'::jsonb)) AS w(cik bigint, "from" date) ON w.cik = f.list_cik
+  WHERE f.filed >= coalesce(w."from", DATE '1900-01-01')
+    AND (f.status = 'listed' OR (f.status = 'failed' AND f.attempts < _max_attempts))
+  ORDER BY f.attempts, f.filed, f.accession
+  LIMIT 1
+  FOR UPDATE OF f SKIP LOCKED;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+  UPDATE abs_filings SET status = 'failed', attempts = attempts + 1, status_detail = 'attempt started by the scheduled job and not finished'
+  WHERE accession = pick.accession;
+  RETURN jsonb_build_object('accession', pick.accession, 'list_cik', pick.list_cik, 'form', pick.form, 'filed', pick.filed, 'attempt', pick.attempts + 1);
+END
+$$;
+
+-- Gives a claimed attempt back when the cause was SEC being unavailable, not the filing: the filing is
+-- listed again and the attempt is not counted. A loaded filing is left alone.
+CREATE OR REPLACE FUNCTION public.abs_release_filing(_accession text, _detail text)
+RETURNS void
+LANGUAGE sql VOLATILE SECURITY DEFINER SET search_path = public AS $$
+  UPDATE abs_filings SET status = 'listed', attempts = greatest(attempts - 1, 0), status_detail = left(_detail, 500)
+  WHERE accession = _accession AND status = 'failed'
+$$;
+
 -- A filing that cannot be stored: `skipped` (nothing to read, for example no asset file or an asset
 -- class this reader does not cover) or `failed` (an error, counted so the importer can give up).
 -- A loaded filing keeps its data and status; only the note and the attempt count change.
@@ -612,6 +681,9 @@ REVOKE ALL ON FUNCTION public.abs_rows_metrics(bigint, text, jsonb) FROM PUBLIC,
 REVOKE ALL ON FUNCTION public.abs_require_columns(text, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_verify_rows(text, text, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_filing_load(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.abs_store_filing(text, text, text, bigint, jsonb, jsonb, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.abs_claim_next(jsonb, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.abs_release_filing(text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_mark_filing(text, text, text) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_check() FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.abs_summary() FROM PUBLIC, anon, authenticated;
@@ -626,6 +698,9 @@ GRANT EXECUTE ON FUNCTION public.abs_rows_metrics(bigint, text, jsonb) TO servic
 GRANT EXECUTE ON FUNCTION public.abs_require_columns(text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_verify_rows(text, text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_filing_load(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.abs_store_filing(text, text, text, bigint, jsonb, jsonb, jsonb, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.abs_claim_next(jsonb, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.abs_release_filing(text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_mark_filing(text, text, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_check() TO service_role;
 GRANT EXECUTE ON FUNCTION public.abs_summary() TO service_role;

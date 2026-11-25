@@ -39,7 +39,7 @@ describe("migration 0067 (ABS-EE store)", () => {
 
   it("starts every table from no access: members read, the service role writes, the ledger is the service role's alone", () => {
     for (const t of TABLES) {
-      expect(sql, t).toContain(`CREATE TABLE public.${t} (`);
+      expect(sql, t).toContain(`CREATE TABLE IF NOT EXISTS public.${t} (`);
       expect(sql, t).toContain(`ALTER TABLE public.${t} ENABLE ROW LEVEL SECURITY;`);
     }
     const revoke =
@@ -64,7 +64,9 @@ describe("migration 0067 (ABS-EE store)", () => {
 
   it("gives readers views that show only the rows of a loaded filing's committed load, under the tables' own row security", () => {
     for (const v of VIEWS) {
-      const start = sql.indexOf(`CREATE VIEW public.${v} WITH (security_invoker = true) AS`);
+      const start = sql.indexOf(
+        `CREATE OR REPLACE VIEW public.${v} WITH (security_invoker = true) AS`,
+      );
       expect(start, v).toBeGreaterThan(0);
       const body = sql.slice(start, sql.indexOf(";", start));
       expect(body, v).toMatch(/f\.load_id = \w\.load_id AND f\.status = 'loaded'/);
@@ -75,7 +77,7 @@ describe("migration 0067 (ABS-EE store)", () => {
     const names = [...sql.matchAll(/CREATE OR REPLACE FUNCTION public\.(\w+)\(([^)]*)\)/g)].map(
       (m) => m[1],
     );
-    expect(names.length).toBe(14);
+    expect(names.length).toBe(17);
     for (const n of names) {
       expect(sql, n).toMatch(
         new RegExp(
@@ -91,10 +93,10 @@ describe("migration 0067 (ABS-EE store)", () => {
 
   it("allows one open and one committed load per filing, by index, not by convention", () => {
     expect(sql).toContain(
-      "CREATE UNIQUE INDEX abs_loads_one_open ON public.abs_loads (accession) WHERE status = 'open';",
+      "CREATE UNIQUE INDEX IF NOT EXISTS abs_loads_one_open ON public.abs_loads (accession) WHERE status = 'open';",
     );
     expect(sql).toContain(
-      "CREATE UNIQUE INDEX abs_loads_one_committed ON public.abs_loads (accession) WHERE status = 'committed';",
+      "CREATE UNIQUE INDEX IF NOT EXISTS abs_loads_one_committed ON public.abs_loads (accession) WHERE status = 'committed';",
     );
   });
 
@@ -148,6 +150,43 @@ describe("migration 0067 (ABS-EE store)", () => {
       /f\.deal_id = h\.deal_id AND f\.period_end IS NOT DISTINCT FROM h\.period_end\s+ORDER BY f\.accepted_at DESC NULLS LAST, f\.accession DESC LIMIT 1;/,
     );
     expect(c).toMatch(/superseded_by = CASE WHEN f\.accession = cur THEN NULL ELSE cur END/);
+  });
+
+  it("can be applied twice: nothing is created without a guard", () => {
+    expect(sql).not.toMatch(/^CREATE TABLE (?!IF NOT EXISTS)/m);
+    expect(sql).not.toMatch(/^CREATE (UNIQUE )?INDEX (?!IF NOT EXISTS)/m);
+    expect(sql).not.toMatch(/^CREATE VIEW /m);
+    expect(sql).not.toMatch(/^CREATE FUNCTION /m);
+    const made = [...sql.matchAll(/^CREATE POLICY "([^"]+)" ON public\.(\w+)/gm)];
+    expect(made.length).toBe(6);
+    for (const m of made)
+      expect(sql, m[1]).toContain(
+        `DROP POLICY IF EXISTS "${m[1]}" ON public.${m[2]};\nCREATE POLICY "${m[1]}"`,
+      );
+    expect(sql).toMatch(
+      /IF NOT EXISTS \(SELECT 1 FROM pg_constraint WHERE conname = 'abs_filings_load_fk'/,
+    );
+  });
+
+  it("stores a whole filing in one transaction for the scheduled job, and counts an attempt before the work", () => {
+    const st = fn("abs_store_filing");
+    expect(st.indexOf("abs_begin_load(_accession, _parser, _sha256, _bytes, false)")).toBeLessThan(
+      st.indexOf("abs_put_rows(id, 'cmbs_assets'"),
+    );
+    expect(st.indexOf("abs_put_rows(id, 'metrics'")).toBeLessThan(
+      st.indexOf("abs_commit_load(id, _filing, _documents, _expect)"),
+    );
+    const cl = fn("abs_claim_next");
+    expect(cl).toMatch(
+      /ORDER BY f\.attempts, f\.filed, f\.accession\s+LIMIT 1\s+FOR UPDATE OF f SKIP LOCKED;/,
+    );
+    expect(cl).toMatch(
+      /f\.status = 'listed' OR \(f\.status = 'failed' AND f\.attempts < _max_attempts\)/,
+    );
+    expect(cl).toMatch(/UPDATE abs_filings SET status = 'failed', attempts = attempts \+ 1/);
+    expect(fn("abs_release_filing")).toMatch(
+      /attempts = greatest\(attempts - 1, 0\)[\s\S]*WHERE accession = _accession AND status = 'failed'/,
+    );
   });
 
   it("never downgrades a loaded filing when a later attempt fails", () => {

@@ -12,7 +12,7 @@ import { connectAbsDb, type AbsDb } from "../../scripts/lib/abs-store";
 import {
   cmbsMetrics,
   cmbsRows,
-  linkProperties,
+  classifyRecords,
   type CmbsAssetRow,
   type CmbsPropertyRow,
 } from "@/lib/abs/cmbs";
@@ -61,7 +61,7 @@ for (const r of records) {
   assets.push(x.asset);
   properties.push(...x.properties);
 }
-linkProperties(assets, properties);
+classifyRecords(assets, properties);
 const metrics = cmbsMetrics(assets, properties);
 const EXPECT = {
   cmbs_assets: assets.length,
@@ -534,6 +534,171 @@ describe.skipIf(!scratch)("abs store on a real Postgres", () => {
     ).rejects.toThrow(/is not loaded/);
   });
 
+  it("hands the scheduled job one waiting filing at a time, least tried first, and counts the attempt before any work", async () => {
+    const J1 = "0001888524-25-000001";
+    const J2 = "0001888524-25-000002";
+    const OTHER = "0000000777-25-000001";
+    await db.rpc("abs_register_filings", {
+      _rows: [
+        {
+          accession: J1,
+          list_cik: 2017898,
+          form: "ABS-EE",
+          filed: "2025-01-20",
+          accepted_at: "2025-01-20T15:00:00Z",
+        },
+        {
+          accession: J2,
+          list_cik: 2017898,
+          form: "ABS-EE",
+          filed: "2025-02-20",
+          accepted_at: "2025-02-20T15:00:00Z",
+        },
+        {
+          accession: OTHER,
+          list_cik: 777,
+          form: "ABS-EE",
+          filed: "2025-01-05",
+          accepted_at: "2025-01-05T15:00:00Z",
+        },
+      ],
+    });
+    const claim = (watch: unknown[], max = 3) =>
+      db.rpc<{ accession: string; list_cik: number; attempt: number } | null>("abs_claim_next", {
+        _watch: watch,
+        _max_attempts: max,
+      });
+    // only watched CIKs, and only from the day wanted
+    expect(await claim([{ cik: 999, from: null }])).toBeNull();
+    expect(await claim([{ cik: 2017898, from: "2025-03-01" }])).toBeNull();
+    expect(await claim([{ cik: 2017898, from: "2025-02-01" }])).toMatchObject({
+      accession: J2,
+      list_cik: 2017898,
+      attempt: 1,
+    });
+    expect(
+      (await rows(`select status, attempts from abs_filings where accession = '${J2}'`))[0],
+    ).toEqual({ status: "failed", attempts: 1 });
+    // a filing nobody tried yet goes before one that was tried
+    expect(await claim([{ cik: 2017898, from: "2025-01-01" }])).toMatchObject({
+      accession: J1,
+      attempt: 1,
+    });
+    expect(await claim([{ cik: 2017898, from: "2025-01-01" }])).toMatchObject({
+      accession: J1,
+      attempt: 2,
+    });
+    expect(await claim([{ cik: 2017898, from: "2025-01-01" }])).toMatchObject({
+      accession: J2,
+      attempt: 2,
+    });
+    // SEC was down for that attempt: it is given back
+    await db.rpc("abs_release_filing", {
+      _accession: J2,
+      _detail: "SEC answered 503; not counted as an attempt",
+    });
+    expect(
+      (await rows(`select status, attempts from abs_filings where accession = '${J2}'`))[0],
+    ).toEqual({ status: "listed", attempts: 1 });
+    // after the last allowed attempt a filing is left alone
+    for (const want of [J2, J1, J2])
+      expect(await claim([{ cik: 2017898, from: "2025-01-01" }])).toMatchObject({
+        accession: want,
+      });
+    expect(await claim([{ cik: 2017898, from: "2025-01-01" }])).toBeNull();
+    expect(
+      await rows(
+        `select accession, status, attempts from abs_filings where accession in ('${J1}', '${J2}') order by 1`,
+      ),
+    ).toEqual([
+      { accession: J1, status: "failed", attempts: 3 },
+      { accession: J2, status: "failed", attempts: 3 },
+    ]);
+    // releasing never touches a stored filing
+    await db.rpc("abs_release_filing", { _accession: A, _detail: "x" });
+    expect(await one(`select status from abs_filings where accession = '${A}'`)).toBe("loaded");
+    await checkClean();
+  });
+
+  it("stores a whole filing in one call, all or nothing, and does nothing the second time", async () => {
+    const J1 = "0001888524-25-000001";
+    const args = (rowsArg: unknown) => ({
+      _accession: J1,
+      _parser: "abs-1",
+      _sha256: "c".repeat(64),
+      _bytes: 22391,
+      _filing: facts({
+        period_start: "2024-12-18",
+        period_end: "2025-01-17",
+        accepted_at: "2025-01-20 10:00:00 America/New_York",
+      }),
+      _documents: DOCS,
+      _rows: rowsArg,
+      _expect: EXPECT,
+    });
+    const before = await db.rpc<Record<string, unknown>>("abs_summary");
+    // rows that do not add up: the whole call is undone, including the load it opened
+    await expect(
+      db.rpc(
+        "abs_store_filing",
+        args({ cmbs_assets: assets.slice(0, 3), cmbs_properties: properties, metrics }),
+      ),
+    ).rejects.toThrow(/holds .* but the reader counted/);
+    await expect(
+      db.rpc(
+        "abs_store_filing",
+        args({ cmbs_assets: [{ ...assets[0], nope: 1 }], cmbs_properties: [], metrics: [] }),
+      ),
+    ).rejects.toThrow(/has no column "nope"/);
+    expect(await db.rpc("abs_summary")).toEqual(before);
+    expect(await one(`select count(*)::int from abs_loads where accession = '${J1}'`)).toBe(0);
+    const done = await db.rpc<{ skip: boolean; current: boolean; counts: Record<string, number> }>(
+      "abs_store_filing",
+      args({ cmbs_assets: assets, cmbs_properties: properties, metrics }),
+    );
+    expect(done).toMatchObject({
+      skip: false,
+      current: true,
+      counts: { cmbs_assets: 6, cmbs_properties: 6 },
+    });
+    expect(
+      (
+        await rows(
+          `select status, status_detail, attempts from abs_filings where accession = '${J1}'`,
+        )
+      )[0],
+    ).toEqual({
+      status: "loaded",
+      status_detail: null,
+      attempts: 3,
+    });
+    expect(
+      await one(`select count(*)::int from abs_cmbs_assets_live where accession = '${J1}'`),
+    ).toBe(6);
+    const again = await db.rpc<{ skip: boolean }>(
+      "abs_store_filing",
+      args({ cmbs_assets: assets, cmbs_properties: properties, metrics }),
+    );
+    expect(again.skip).toBe(true);
+    expect(await one(`select count(*)::int from abs_loads where accession = '${J1}'`)).toBe(1);
+    await checkClean();
+  });
+
+  it("can be applied again over a store that holds data, without error and without changing a row", async () => {
+    const digest = () =>
+      one(`select md5(string_agg(d, '|' order by t)) from (
+        select 'a' t, md5(string_agg(x::text || xmin::text, ',' order by load_id, rec)) d from abs_cmbs_assets x
+        union all select 'f', md5(string_agg(x::text || xmin::text, ',' order by accession)) from abs_filings x
+        union all select 'l', md5(string_agg(x::text || xmin::text, ',' order by load_id)) from abs_loads x) s`);
+    const before = await digest();
+    await admin.unsafe(readFileSync("drizzle/migrations/0067_abs_ee.sql", "utf8"));
+    expect(await digest()).toBe(before);
+    await checkClean();
+    expect(
+      await db.rpc("abs_verify_rows", { _accession: AMEND, _kind: "cmbs_assets", _rows: assets }),
+    ).toBe(0);
+  });
+
   it("lets members read and nobody but the service role write or run the functions", async () => {
     const as = async <T>(role: string, uid: string | null, q: string) =>
       admin.begin(async (tx) => {
@@ -558,7 +723,7 @@ describe.skipIf(!scratch)("abs store on a real Postgres", () => {
           "select count(*)::int n from abs_filings",
         )
       )[0].n,
-    ).toBe(4);
+    ).toBe(7);
     // signed in without app access: row security shows nothing
     expect(
       (
@@ -603,15 +768,15 @@ describe.skipIf(!scratch)("abs store on a real Postgres", () => {
     const s = await db.rpc<Record<string, unknown>>("abs_summary");
     expect(s).toMatchObject({
       deals: 1,
-      filings: { loaded: 4 },
-      current: 2,
+      filings: { loaded: 5, failed: 1, listed: 1 },
+      current: 3,
       superseded: 2,
-      cmbs_assets: 24,
-      cmbs_properties: 24,
-      metrics: 4 * metrics.length,
+      cmbs_assets: 30,
+      cmbs_properties: 30,
+      metrics: 5 * metrics.length,
     });
     // one open load is left from the refusal test; nothing of it is visible
-    expect((s.loads as Record<string, number>).committed).toBe(4);
+    expect((s.loads as Record<string, number>).committed).toBe(5);
     expect(
       await one(
         "select count(*)::int from abs_cmbs_assets a join abs_loads l using (load_id) where l.status = 'open'",

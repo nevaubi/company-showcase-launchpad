@@ -5,7 +5,7 @@
 // text that does not spell one (a date in another shape, "N/A" in a number field) leaves the column
 // empty and is kept word for word under `unparsed`. A field with no column is kept word for word under
 // `extra`. Nothing is rescaled: a rate written .03486 is stored 0.03486.
-import { add, dec, div, fmt, isDecimal, mul, ZERO, type Dec } from "./decimal";
+import { add, cmp, dec, div, fmt, isDecimal, mul, ZERO, type Dec } from "./decimal";
 import { BLANK, metricRow, type MetricRow } from "./metrics";
 import type { AbsField, AbsRecord } from "./xml";
 
@@ -127,7 +127,7 @@ export const PROPERTY_COLUMNS: readonly Spec[] = [
   ["lease_rollover_review_date", "mostRecentAnnualLeaseRolloverReviewDate", "date"],
 ];
 
-/** A record is a loan when it states any of these; a record with none of them and a property block is that property. */
+/** A record that states any of these is taken for a loan until `classifyRecords` has looked at the whole file. */
 const LOAN_EVIDENCE = [
   "originalLoanAmount",
   "originationDate",
@@ -220,7 +220,7 @@ function columns(specs: readonly Spec[], fields: AbsField[], skip: ReadonlySet<s
 
 const NUMBER_ONLY = new Set(["assetNumber"]);
 
-/** One record as its asset row and the rows of its property blocks (not yet linked to a loan). */
+/** One record as its asset row and the rows of its property blocks. `classifyRecords` then settles kinds and links for the file. */
 export function cmbsRows(record: AbsRecord): {
   asset: CmbsAssetRow;
   properties: CmbsPropertyRow[];
@@ -246,7 +246,7 @@ export function cmbsRows(record: AbsRecord): {
       seq: i + 1,
       asset_number,
       loan_asset_number: asset_number,
-      link: loan ? "nested" : "none",
+      link: "none",
       ...p.out,
       extra: p.extra,
       unparsed: p.unparsed,
@@ -255,32 +255,88 @@ export function cmbsRows(record: AbsRecord): {
   return { asset: { rec: record.rec, kind, asset_number, ...out, extra, unparsed }, properties };
 }
 
+const text = (v: Cell | Kept) => (typeof v === "string" ? v : null);
+
+/** The fields only a loan (or a note of a loan) states about itself in a period: a property row has none of them. */
+const OWN_BALANCE = [
+  "securitization_balance",
+  "begin_balance",
+  "sched_end_balance",
+  "actual_end_balance",
+  "payment_status_code",
+] as const;
+
+/** What a file-wide look at the records found. Kept with the load, so the classification need not be taken on trust. */
+export type CmbsFileNotes = {
+  /** loans whose stated number of properties differs from the property records filed for them: [loan, stated, filed] */
+  property_count_differs: [loan: string, stated: number | null, filed: number][];
+  /** loans whose numbered rows state balances of their own that add up to the loan's: possibly allocations read as loans */
+  possible_allocations: string[];
+};
+
 /**
- * Ties the properties filed in records of their own to their loan. Such a record is numbered after its
- * loan ("9.01", "9.02" under loan "9"); the loan is the longest loan number the record's number starts
- * with, followed by a dot or a hyphen. A record no loan number fits stays unlinked (`none`): a guess
+ * Decides, with the whole file in view, which records are loans and which are properties of a loan,
+ * and ties every property block to its loan.
+ *
+ * A property of a multi-property loan is filed in a record of its own, numbered after its loan: "8-001"
+ * or "9.01" under loan "8" or "9". Such a row is a property when a record with the loan's number is in
+ * the same file and the row states no balance or payment status of its own. Field presence alone does
+ * not decide: a file made for an offering puts the loan amount allocated to each property on these rows,
+ * and counting them as loans would count that money twice. A numbered row that does state a balance of
+ * its own is a loan (a note of a split loan). A row no loan number fits stays untied (`none`): a guess
  * would attach a property to the wrong loan.
  */
-export function linkProperties(assets: CmbsAssetRow[], properties: CmbsPropertyRow[]): void {
-  const loans = assets.filter((a) => a.kind === "loan").map((a) => a.asset_number);
-  for (const p of properties) {
-    if (p.link === "nested") continue;
-    let best = "";
-    for (const n of loans)
+export function classifyRecords(
+  assets: CmbsAssetRow[],
+  properties: CmbsPropertyRow[],
+): CmbsFileNotes {
+  const numbers = new Set(assets.map((a) => a.asset_number));
+  const byNumber = new Map(assets.map((a) => [a.asset_number, a] as const));
+  const parentOf = new Map<number, string>();
+  const children = new Map<string, CmbsAssetRow[]>();
+  for (const a of assets) {
+    let parent = "";
+    for (const n of numbers)
       if (
-        n.length > best.length &&
-        p.asset_number.startsWith(n) &&
-        /^[.-]/.test(p.asset_number.slice(n.length))
+        n !== a.asset_number &&
+        n.length > parent.length &&
+        a.asset_number.startsWith(n) &&
+        /^[.-]\d+$/.test(a.asset_number.slice(n.length))
       )
-        best = n;
-    if (best) {
-      p.loan_asset_number = best;
-      p.link = "number";
+        parent = n;
+    if (!parent || byNumber.get(parent)?.kind !== "loan") continue;
+    children.set(parent, [...(children.get(parent) ?? []), a]);
+    if (OWN_BALANCE.every((c) => a[c] == null)) {
+      a.kind = "property";
+      parentOf.set(a.rec, parent);
     }
   }
+  const byRec = new Map(assets.map((a) => [a.rec, a] as const));
+  for (const p of properties) {
+    const owner = byRec.get(p.rec);
+    const parent = parentOf.get(p.rec);
+    if (owner?.kind === "loan") p.link = "nested";
+    else if (parent) {
+      p.link = "number";
+      p.loan_asset_number = parent;
+    } else p.link = "none";
+  }
+  const notes: CmbsFileNotes = { property_count_differs: [], possible_allocations: [] };
+  for (const [loan, rows] of children) {
+    const parent = byNumber.get(loan)!;
+    const filed = rows.filter((r) => r.kind === "property").length;
+    const stated = (parent.properties_securitization ?? parent.properties) as number | null;
+    if (filed && stated !== filed) notes.property_count_differs.push([loan, stated, filed]);
+    const own = rows.filter((r) => r.kind === "loan");
+    const total = text(parent.sched_end_balance);
+    if (own.length > 1 && total && own.every((r) => text(r.sched_end_balance))) {
+      const sum = own.reduce((t, r) => add(t, dec(text(r.sched_end_balance)!)!), ZERO);
+      const whole = dec(total);
+      if (whole && whole.v > 0n && cmp(sum, whole) === 0) notes.possible_allocations.push(loan);
+    }
+  }
+  return notes;
 }
-
-const text = (v: Cell | Kept) => (typeof v === "string" ? v : null);
 
 /** Pool figures of one commercial mortgage file. Definitions: metrics.ts. */
 export function cmbsMetrics(assets: CmbsAssetRow[], properties: CmbsPropertyRow[]): MetricRow[] {

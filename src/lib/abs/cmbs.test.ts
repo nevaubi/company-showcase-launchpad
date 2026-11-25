@@ -4,7 +4,7 @@ import {
   ASSET_COLUMNS,
   cmbsMetrics,
   cmbsRows,
-  linkProperties,
+  classifyRecords,
   monthFirstDate,
   PROPERTY_COLUMNS,
   typed,
@@ -25,8 +25,8 @@ function rowsOf(records: AbsRecord[]) {
     assets.push(x.asset);
     properties.push(...x.properties);
   }
-  linkProperties(assets, properties);
-  return { assets, properties };
+  const notes = classifyRecords(assets, properties);
+  return { assets, properties, notes };
 }
 const record = (
   rec: number,
@@ -242,6 +242,101 @@ describe("abs commercial mortgage rows", () => {
     ]);
   });
 
+  it("does not take the amounts an offering file allocates to each property for loans of their own", () => {
+    // seen in a real offering file: loan 8 for 40,000,000 with 33 rows 8-001..8-033 that each carry a
+    // share of it under originalLoanAmount and nothing else about a loan
+    const { assets, properties, notes } = rowsOf([
+      record(
+        1,
+        [
+          ["assetNumber", "8"],
+          ["originalLoanAmount", "40000000.00"],
+          ["reportPeriodEndScheduledLoanBalanceAmount", "40000000.00"],
+          ["paymentStatusLoanCode", "0"],
+          ["NumberPropertiesSecuritization", "3"],
+        ],
+        [[["propertyName", "Portfolio"]]],
+      ),
+      record(
+        2,
+        [
+          ["assetNumber", "8-001"],
+          ["originalLoanAmount", "25000000.00"],
+        ],
+        [[["propertyName", "A"]]],
+      ),
+      record(
+        3,
+        [
+          ["assetNumber", "8-002"],
+          ["originalLoanAmount", "10000000.00"],
+        ],
+        [[["propertyName", "B"]]],
+      ),
+      record(
+        4,
+        [
+          ["assetNumber", "8-003"],
+          ["originalLoanAmount", "5000000.00"],
+        ],
+        [[["propertyName", "C"]]],
+      ),
+    ]);
+    expect(assets.map((a) => [a.asset_number, a.kind])).toEqual([
+      ["8", "loan"],
+      ["8-001", "property"],
+      ["8-002", "property"],
+      ["8-003", "property"],
+    ]);
+    // the allocated amount stays on the row as filed; the pool total counts the loan once
+    expect(assets[1].original_loan_amount).toBe("25000000.00");
+    const m = cmbsMetrics(assets, properties);
+    expect(m.find((r) => r.metric === "original_balance" && r.dim === "")).toMatchObject({
+      value: "40000000",
+      n: 1,
+    });
+    expect(m.find((r) => r.metric === "loans" && r.dim === "")).toMatchObject({ value: "1" });
+    expect(m.find((r) => r.metric === "property_records")).toMatchObject({ value: "3" });
+    expect(properties.map((p) => [p.asset_number, p.loan_asset_number, p.link])).toEqual([
+      ["8", "8", "nested"],
+      ["8-001", "8", "number"],
+      ["8-002", "8", "number"],
+      ["8-003", "8", "number"],
+    ]);
+    expect(notes).toEqual({ property_count_differs: [], possible_allocations: [] });
+  });
+
+  it("keeps a numbered row that states its own balance as a loan, and flags what it cannot settle", () => {
+    const note = (n: number, number: string, balance: string) =>
+      record(n, [
+        ["assetNumber", number],
+        ["originalLoanAmount", balance],
+        ["reportPeriodEndScheduledLoanBalanceAmount", balance],
+        ["paymentStatusLoanCode", "0"],
+      ]);
+    const { assets, notes } = rowsOf([
+      note(1, "5", "30.00"),
+      note(2, "5-1", "20.00"),
+      note(3, "5-2", "10.00"),
+      record(4, [
+        ["assetNumber", "6"],
+        ["originalLoanAmount", "9.00"],
+        ["NumberPropertiesSecuritization", "3"],
+      ]),
+      record(5, [["assetNumber", "6.01"]], [[["propertyName", "only one of three filed"]]]),
+    ]);
+    expect(assets.map((a) => [a.asset_number, a.kind])).toEqual([
+      ["5", "loan"],
+      ["5-1", "loan"],
+      ["5-2", "loan"],
+      ["6", "loan"],
+      ["6.01", "property"],
+    ]);
+    // rows with balances of their own that add up to the loan's balance may be allocations: said, not decided
+    expect(notes.possible_allocations).toEqual(["5"]);
+    expect(notes.property_count_differs).toEqual([["6", 3, 1]]);
+  });
+
   it("computes pool figures exactly and says how many loans each one covers", () => {
     const { assets, properties } = rowsOf(readAbsText(EXCERPT).records);
     const m = cmbsMetrics(assets, properties);
@@ -302,7 +397,7 @@ describe("abs commercial mortgage rows", () => {
 
   it("names only columns the tables have, each once, and each source field once", () => {
     const table = (name: string) => {
-      const start = MIGRATION.indexOf(`CREATE TABLE public.${name} (`);
+      const start = MIGRATION.indexOf(`CREATE TABLE IF NOT EXISTS public.${name} (`);
       const body = MIGRATION.slice(start, MIGRATION.indexOf("\n);", start));
       return new Set([...body.matchAll(/^ {2}([a-z_0-9]+) /gm)].map((x) => x[1]));
     };
