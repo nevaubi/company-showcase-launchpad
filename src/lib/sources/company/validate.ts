@@ -176,7 +176,7 @@ export function summarizeLinks(links: CompanyLink[]): LinkSummary {
 
 export interface BankGuardFile {
   /** Mapped tickers: the certificates the page may show bank rows for, and how a deposits roll-up may be keyed. */
-  banks: Record<string, BankGuardEntry & { main: number; name: string }>;
+  banks: Record<string, BankGuardEntry & { main: number; name: string; y9c: boolean }>;
   /** Tickers whose bank panel rests on a name: which caveat applies. */
   review: Record<string, "name_match" | "name_and_subsidiary_list">;
 }
@@ -197,6 +197,7 @@ export function deriveGuard(links: CompanyLink[]): BankGuardFile {
       rollup: byHolder && inst.some(l => l.basis === "top_holder") ? [reg.key_value] : [],
       main: Number(main.key_value),
       name: reg.evidence.nic?.legal_name ?? reg.entity_name ?? t,
+      y9c: !!reg.y9c?.length,
     };
   }
   const review: BankGuardFile["review"] = {};
