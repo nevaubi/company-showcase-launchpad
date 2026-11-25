@@ -54,6 +54,7 @@ import { Route as AuthenticatedAppSituationsRouteImport } from './routes/_authen
 import { Route as AuthenticatedAppStatusRouteImport } from './routes/_authenticated/app.status'
 import { Route as AuthenticatedAppSupplyChainRouteImport } from './routes/_authenticated/app.supply-chain'
 import { Route as AuthenticatedAppWorkerRouteImport } from './routes/_authenticated/app.worker'
+import { Route as AuthenticatedAppAltDataCreditRouteImport } from './routes/_authenticated/app.alt-data_.credit'
 import { Route as AuthenticatedAppAltDataLibraryRouteImport } from './routes/_authenticated/app.alt-data_.library'
 import { Route as AuthenticatedAppAutopilotsIndexRouteImport } from './routes/_authenticated/app.autopilots.index'
 import { Route as AuthenticatedAppAutopilotsBotIdRouteImport } from './routes/_authenticated/app.autopilots.$botId'
@@ -330,6 +331,12 @@ const AuthenticatedAppWorkerRoute = AuthenticatedAppWorkerRouteImport.update({
   path: '/worker',
   getParentRoute: () => AuthenticatedAppRoute,
 } as any)
+const AuthenticatedAppAltDataCreditRoute =
+  AuthenticatedAppAltDataCreditRouteImport.update({
+    id: '/alt-data_/credit',
+    path: '/alt-data/credit',
+    getParentRoute: () => AuthenticatedAppRoute,
+  } as any)
 const AuthenticatedAppAltDataLibraryRoute =
   AuthenticatedAppAltDataLibraryRouteImport.update({
     id: '/alt-data_/library',
@@ -606,6 +613,7 @@ export interface FileRoutesByFullPath {
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app/worker': typeof AuthenticatedAppWorkerRoute
   '/app/': typeof AuthenticatedAppIndexRoute
+  '/app/alt-data/credit': typeof AuthenticatedAppAltDataCreditRoute
   '/app/alt-data/library': typeof AuthenticatedAppAltDataLibraryRoute
   '/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
@@ -689,6 +697,7 @@ export interface FileRoutesByTo {
   '/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/app/worker': typeof AuthenticatedAppWorkerRoute
   '/app': typeof AuthenticatedAppIndexRoute
+  '/app/alt-data/credit': typeof AuthenticatedAppAltDataCreditRoute
   '/app/alt-data/library': typeof AuthenticatedAppAltDataLibraryRoute
   '/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/app/docs/$id': typeof AuthenticatedAppDocsIdRoute
@@ -775,6 +784,7 @@ export interface FileRoutesById {
   '/_authenticated/app/supply-chain': typeof AuthenticatedAppSupplyChainRoute
   '/_authenticated/app/worker': typeof AuthenticatedAppWorkerRoute
   '/_authenticated/app/': typeof AuthenticatedAppIndexRoute
+  '/_authenticated/app/alt-data_/credit': typeof AuthenticatedAppAltDataCreditRoute
   '/_authenticated/app/alt-data_/library': typeof AuthenticatedAppAltDataLibraryRoute
   '/_authenticated/app/autopilots/$botId': typeof AuthenticatedAppAutopilotsBotIdRoute
   '/_authenticated/app/companies/$ticker': typeof AuthenticatedAppCompaniesTickerRouteWithChildren
@@ -862,6 +872,7 @@ export interface FileRouteTypes {
     | '/app/supply-chain'
     | '/app/worker'
     | '/app/'
+    | '/app/alt-data/credit'
     | '/app/alt-data/library'
     | '/app/autopilots/$botId'
     | '/app/companies/$ticker'
@@ -945,6 +956,7 @@ export interface FileRouteTypes {
     | '/app/supply-chain'
     | '/app/worker'
     | '/app'
+    | '/app/alt-data/credit'
     | '/app/alt-data/library'
     | '/app/autopilots/$botId'
     | '/app/docs/$id'
@@ -1030,6 +1042,7 @@ export interface FileRouteTypes {
     | '/_authenticated/app/supply-chain'
     | '/_authenticated/app/worker'
     | '/_authenticated/app/'
+    | '/_authenticated/app/alt-data_/credit'
     | '/_authenticated/app/alt-data_/library'
     | '/_authenticated/app/autopilots/$botId'
     | '/_authenticated/app/companies/$ticker'
@@ -1409,6 +1422,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAppWorkerRouteImport
       parentRoute: typeof AuthenticatedAppRoute
     }
+    '/_authenticated/app/alt-data_/credit': {
+      id: '/_authenticated/app/alt-data_/credit'
+      path: '/alt-data/credit'
+      fullPath: '/app/alt-data/credit'
+      preLoaderRoute: typeof AuthenticatedAppAltDataCreditRouteImport
+      parentRoute: typeof AuthenticatedAppRoute
+    }
     '/_authenticated/app/alt-data_/library': {
       id: '/_authenticated/app/alt-data_/library'
       path: '/alt-data/library'
@@ -1783,6 +1803,7 @@ interface AuthenticatedAppRouteChildren {
   AuthenticatedAppSupplyChainRoute: typeof AuthenticatedAppSupplyChainRoute
   AuthenticatedAppWorkerRoute: typeof AuthenticatedAppWorkerRoute
   AuthenticatedAppIndexRoute: typeof AuthenticatedAppIndexRoute
+  AuthenticatedAppAltDataCreditRoute: typeof AuthenticatedAppAltDataCreditRoute
   AuthenticatedAppAltDataLibraryRoute: typeof AuthenticatedAppAltDataLibraryRoute
   AuthenticatedAppAutopilotsBotIdRoute: typeof AuthenticatedAppAutopilotsBotIdRoute
   AuthenticatedAppCompaniesTickerRoute: typeof AuthenticatedAppCompaniesTickerRouteWithChildren
@@ -1835,6 +1856,7 @@ const AuthenticatedAppRouteChildren: AuthenticatedAppRouteChildren = {
   AuthenticatedAppSupplyChainRoute: AuthenticatedAppSupplyChainRoute,
   AuthenticatedAppWorkerRoute: AuthenticatedAppWorkerRoute,
   AuthenticatedAppIndexRoute: AuthenticatedAppIndexRoute,
+  AuthenticatedAppAltDataCreditRoute: AuthenticatedAppAltDataCreditRoute,
   AuthenticatedAppAltDataLibraryRoute: AuthenticatedAppAltDataLibraryRoute,
   AuthenticatedAppAutopilotsBotIdRoute: AuthenticatedAppAutopilotsBotIdRoute,
   AuthenticatedAppCompaniesTickerRoute:
