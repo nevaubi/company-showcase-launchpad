@@ -1,8 +1,8 @@
 /**
- * Durable official-data ingestion beside the existing IR worker. Two independent leases protect
- * source imports and larger ABS files. Reads wait on the shared database back-pressure gate.
+ * Durable official-data ingestion beside the existing IR worker. Independent leases protect
+ * source imports, refreshes and larger ABS files. Reads wait on the shared database back-pressure gate.
  * No browser credentials, temporary upload tickets, or local scratch paths are needed here.
- * Disable either lane with OFFICIAL_SOURCES_ENABLED=0 or ABS_BULK_ENABLED=0.
+ * Disable lanes with OFFICIAL_SOURCES_ENABLED=0, OFFICIAL_REFRESH_ENABLED=0 or ABS_BULK_ENABLED=0.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -12,8 +12,11 @@ import { sb, dbGate, log, sleep } from "./lib/supa";
 import { ABS_WATCH, type AbsWatch } from "../src/lib/abs/watch";
 import {
   SOURCE_WORKER_JOB,
+  SOURCE_REFRESH_JOB,
   ABS_WORKER_JOB,
   WORKER_LEASE_MS,
+  RESOURCE_WAIT_EXIT,
+  canStartOfficialChild,
   advanceCursor,
   enabled,
   retryDelay,
@@ -31,6 +34,25 @@ for (const signal of ["SIGTERM", "SIGINT"] as const)
   });
 
 type Lease = { job: string; renew: () => Promise<boolean>; release: () => Promise<void> };
+function memoryValue(paths: string[]): number | null {
+  for (const path of paths) {
+    try {
+      const raw = readFileSync(path, "utf8").trim();
+      const value = raw === "max" ? NaN : Number(raw);
+      if (raw && Number.isFinite(value) && value >= 0 && value < 1e15) return value;
+    } catch { /* Local environments may not expose a container memory limit. */ }
+  }
+  return null;
+}
+
+function hasMemoryHeadroom(): boolean {
+  return canStartOfficialChild(
+    memoryValue(["/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"]),
+    memoryValue(["/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory/memory.usage_in_bytes"]),
+    children.size,
+  );
+}
+
 async function claim(job: string): Promise<Lease | null> {
   await dbGate(job);
   const seeded = await sb
@@ -81,6 +103,10 @@ async function childRun(
   args: string[],
   maxMs: number,
 ): Promise<number | null> {
+  if (stopped || !hasMemoryHeadroom()) {
+    log(lease.job, "waiting for memory headroom before starting new work");
+    return RESOURCE_WAIT_EXIT;
+  }
   const started = new Date().toISOString();
   const child = spawn("bun", [script, ...args], { stdio: "inherit", env: process.env });
   children.add(child);
@@ -151,7 +177,7 @@ async function sourceLoop() {
           ["--all", "--max-snapshots=25", "--max-runtime-seconds=480"],
           570_000,
         );
-        failures = code === 0 ? 0 : failures + 1;
+        failures = code === 0 || code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
       } else failures = 0;
     } catch (e) {
       failures++;
@@ -160,6 +186,34 @@ async function sourceLoop() {
       await lease?.release();
     }
     if (!stopped) await sleep(failures ? retryDelay(failures) : 30_000);
+  }
+}
+
+async function refreshLoop() {
+  let failures = 0;
+  while (!stopped) {
+    let lease: Lease | null = null;
+    try {
+      lease = await claim(SOURCE_REFRESH_JOB);
+      if (!lease) {
+        await sleep(30_000);
+        continue;
+      }
+      const code = await childRun(
+        lease,
+        "scripts/source-refresh.ts",
+        ["--all", "--max-datasets=8", "--max-runtime-seconds=480"],
+        570_000,
+      );
+      failures = code === 0 || code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
+    } catch (e) {
+      failures++;
+      log(SOURCE_REFRESH_JOB, safeError(e));
+    } finally {
+      await lease?.release();
+    }
+    // Per-source due times are durable in job_state. This is only the scheduler's poll cadence.
+    if (!stopped) await sleep(failures ? retryDelay(failures) : 5 * 60_000);
   }
 }
 
@@ -213,7 +267,7 @@ async function absLoop() {
         Number(process.env.OFFICIAL_SEC_CACHE_BYTES ?? 2 * 1024 ** 3),
       );
       if (cacheState.removed) log(ABS_WORKER_JOB, "cache trimmed", cacheState);
-      failures = code === 0 ? 0 : failures + 1;
+      failures = code === 0 || code === RESOURCE_WAIT_EXIT ? 0 : failures + 1;
       if (code === 0) {
         const updated = await sb
           .from("job_state")
@@ -238,5 +292,6 @@ async function absLoop() {
 
 await Promise.all([
   ...(enabled(process.env.OFFICIAL_SOURCES_ENABLED) ? [sourceLoop()] : []),
+  ...(enabled(process.env.OFFICIAL_REFRESH_ENABLED) ? [refreshLoop()] : []),
   ...(enabled(process.env.ABS_BULK_ENABLED) ? [absLoop()] : []),
 ]);

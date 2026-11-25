@@ -7,6 +7,7 @@ import { agentStep, type AgentOutputItem } from "@/lib/research.functions";
 import { runTool, type AgentCtx, type ToolRun } from "@/lib/research/execute";
 import type { OfficeApp } from "@/lib/office/agent-tools";
 import type { Pin } from "@/lib/research/dom-agent";
+import { compactOfficialSourceOutput } from "@/lib/sources/research";
 
 export interface Step {
   kind: "tool" | "web" | "think";
@@ -64,7 +65,7 @@ export function compact(items: Record<string, unknown>[], budget = 700_000) {
     if (it.type === "function_call_output" && typeof it.output === "string" && it.output.length > 600) {
       const o = it.output as string;
       const before = o.length;
-      it.output = `${o.slice(0, 500)}\n…[older output compacted]`;
+      it.output = compactOfficialSourceOutput(o) ?? `${o.slice(0, 500)}\n…[older output compacted]`;
       size -= before - (it.output as string).length;
     }
   }
@@ -227,7 +228,7 @@ export async function runAgent(opts: {
           try {
             const r = await (localTool?.(name, args) ?? runTool(qc, name, args, { ...ctx, stopped }));
             st.summary = r.summary;
-            st.output = r.output.slice(0, 4000);
+            st.output = r.output.length > 4000 ? compactOfficialSourceOutput(r.output) ?? r.output.slice(0, 4000) : r.output;
             st.status = "done";
             st.pins = r.pins;
             st.choices = r.choices;

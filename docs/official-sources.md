@@ -25,9 +25,43 @@ bun scripts/source-import.ts --snapshot=<snapshot-sha256> --max-runtime-seconds=
 
 Registration is idempotent only for the same immutable file and snapshot definitions. It checks existing definitions before and after inserts, preserves publication pointers, and refuses conflicting definitions. Explicitly quarantined metadata remains failed and cannot be published by a normal retry.
 
-`scripts/official-source-worker.ts` runs beside the existing IR worker through `worker-start.ts`. Source imports and large ABS reads hold separate compare-and-swap leases, renew them while children run, honor the shared database back-pressure gate, keep cursors after failure, and back off repeated errors. `OFFICIAL_SOURCES_ENABLED=0` or `ABS_BULK_ENABLED=0` disables the corresponding lane. Restarting the worker resumes committed progress.
+`scripts/official-source-worker.ts` runs beside the existing IR worker through `worker-start.ts`. Source imports, official refreshes and large ABS reads hold separate compare-and-swap leases, renew them while children run, honor the shared database back-pressure gate, keep cursors after failure, and back off repeated errors. New children wait when the container lacks memory headroom for the existing readers. `OFFICIAL_SOURCES_ENABLED=0`, `OFFICIAL_REFRESH_ENABLED=0` or `ABS_BULK_ENABLED=0` disables the corresponding lane. Restarting the worker resumes committed progress.
 
 The ABS lane uses the existing reviewed ABS-EE reader and atomic store. The additional CIKs in `scripts/data/abs-candidate-watch.json` are discovery candidates from the supplied workbook, not verified parent-company relationships. The reader must establish the actual filing family and issuer. Commercial mortgages remain loan-level records; the existing auto-loan and auto-lease reader produces pool figures. Disposable SEC download copies are trimmed after a child exits; original stored datasets and the retrieval ledger are not removed.
+
+## Automatic source refreshes
+
+The refresh worker polls every five minutes, processes at most eight due datasets in a bounded eight-minute run, and persists each dataset's own next due time. Polling does not mean every source publishes new data every five minutes. These are the reviewed source families:
+
+| Family | Covered refresh inputs | Check cadence | Native scope |
+| --- | --- | --- | --- |
+| FRED | 120 hash-proven direct CSV inputs from the initial bundle | Daily | Original series and lower date bound; a retained upper date bound advances to the current date |
+| EIA Monthly Energy Review | 107 hash-proven direct CSV inputs | Weekly | The original official table identifier and ordered fields |
+| FHFA | The hash-proven annual tract CSV | Weekly | Native tract index rows; the adapter also recognizes the official master CSV path when exact original-byte provenance exists |
+| FDIC | Current reported quarter for the fixed 2026-Q2 cohort of 500 CERTs | Daily | All returned native fields from the historical field dictionary; reporting coverage and verified omitted fields are explicit |
+| TWSE and TPEx | Two official reported monthly revenue feeds | Daily | Each exchange's complete returned response, native Chinese headers, issuer codes and reported revenue strings; full exchange population completeness is not independently established |
+
+The 228 direct CSV inputs are eligible only after their original snapshots are published. The FDIC current-quarter adapter waits for the verified full historical FDIC baseline. The three native-adapter datasets are additional datasets; historical cohorts and technology-only Taiwan subsets remain intact. `OFFICIAL_FDIC_NATIVE_ENABLED=0` and `OFFICIAL_TAIWAN_REVENUE_ENABLED=0` disable those adapters independently.
+
+```sh
+bun scripts/source-refresh.ts --all --plan --max-datasets=8
+bun scripts/source-refresh.ts --all --max-datasets=8 --max-runtime-seconds=480
+bun scripts/source-refresh.ts --dataset=<reviewed-dataset-id> --max-runtime-seconds=480
+```
+
+Source responses are restricted to reviewed HTTPS endpoints with bounded transfers and explicit redirect rules. Complete responses, original hashes and supporting field/identity evidence are retained. Conditional responses and unchanged content update the checked time without manufacturing a new snapshot. A changed response receives a new immutable retrieval event; a source reverting to older bytes also receives a new event so publication chronology remains correct.
+
+Every changed table passes header, width, row and hash validation before it is staged. The importer independently verifies and publishes it. A changed header is held for review; the previous published snapshot remains usable. A staged refresh prevents duplicate collection while its import is pending. Per-dataset state lives under `source-refresh-state:<dataset-id>` in `job_state`; separate `source-refresh-lock:<dataset-id>` rows hold collection leases. A checked or staged timestamp is not a publication timestamp. Process receipts use the existing `job_runs` health view; actual row counts come from `source_snapshots`.
+
+The final November 25 native-adapter proof compared all 1,207,334 cells against the captured official responses: FDIC 496 × 2,378, TWSE 1,091 × 14 and TPEx 898 × 14. The FDIC result was 2026-09-30; four cohort CERTs were absent and the officially requested `L_REPDTE` field was not returned. The Taiwan result retained ROC month `11510`; the explicitly verified search index was `2026-10`. Those counts describe that response, not permanent coverage guarantees.
+
+Other historical source families remain available as published native snapshots. Their inclusion in the catalogue does not imply an implemented refresh adapter.
+
+## Research assistant access
+
+The existing assistant has three read-only tools: `search_official_sources`, `inspect_official_source` and `query_official_records`. They use the same app-access checks and ready-snapshot queries as the Source explorer. The assistant first discovers scope and native field keys, then pins an immutable snapshot and requests explicit fields and exact entity/geography/period filters.
+
+Each record response contains at most 20 complete rows and 12 selected fields, original string/null values, units, row numbers, original source URLs and pinned explorer links. Output limits remove whole rows or fields; they never clip a financial value. Compacted history contains identifiers and a requirement to reread, not fragments that could be mistaken for a complete number. No ticker, holding-company, geographic exposure or unit conversion is inferred by these tools.
 
 ## Interpretation rules
 

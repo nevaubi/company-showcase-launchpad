@@ -56,6 +56,7 @@ import { earningsReactions } from "@/lib/markets/core";
 import { nextEarnings } from "@/lib/company/catalysts";
 import { detailText, type DetailSection } from "@/lib/xbrl/text";
 import { browserFiles, browserStart, browserStatus, browserStop } from "@/lib/browser.functions";
+import { runOfficialSourceTool } from "@/lib/sources/research-reader";
 
 const MAX = 9000;
 const hostOf = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return u; } };
@@ -165,6 +166,10 @@ export function runTool(qc: QueryClient, name: string, args: Record<string, unkn
 
 async function runToolNow(qc: QueryClient, name: string, args: Record<string, unknown>, ctx: AgentCtx = {}): Promise<ToolRun> {
   switch (name) {
+    case "search_official_sources":
+    case "inspect_official_source":
+    case "query_official_records":
+      return runOfficialSourceTool(name,args);
     case "screen_companies": {
       const u = await qc.fetchQuery(universeQuery);
       let rows = flatUniverse(u.companies);

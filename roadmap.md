@@ -1,5 +1,9 @@
 # Filed Under — roadmap
 
+## Official source phase two (Nov 25)
+- [x] Applied all 22 reviewed files byte-exactly after verifying the ZIP and every file/base hash against `cd3b2153b81a165048157689c980b260d2b30203`; no conflicts or unrelated source changes.
+- [x] 106 focused refresh/native-adapter/research/worker tests passed across 11 test files; automatic preview build OK. No migration, bulk collection, imports, publication or Render deployment started in this code-application turn.
+
 ## Official source phase one (Nov 25)
 - [x] Verify the frozen patch/catalogue hashes and all 43 per-file base hashes; 42 reviewed paths applied byte-exactly. The platform removed the new migration file because only the managed migration tool can create it.
 - [x] Corrected reviewed schema applied through the managed migration tool as `drizzle/migrations/0068_official_sources.sql`; SHA-256 `b2e3e0b345a5a754dd14895850f0c4ccac4523a8f14a0008f5823980717f01f4` matches exactly, generated types refreshed, all 11 isolated PostgreSQL tests passed. No auth changes; ticket bucket remains private with a 5 MiB limit.

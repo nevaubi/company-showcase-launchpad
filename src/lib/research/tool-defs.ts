@@ -1,5 +1,6 @@
 // Function-tool definitions shared by the research agent server step and the
 // browser executor. Pure data — safe to import anywhere.
+import { OFFICIAL_SOURCE_TOOL_DEFS } from "@/lib/sources/research-tools";
 
 const obj = (properties: Record<string, unknown>, required: string[]) => ({
   type: "object",
@@ -11,6 +12,7 @@ const str = (description: string, extra: Record<string, unknown> = {}) => ({ typ
 const nullable = (schema: Record<string, unknown>) => ({ ...schema, type: [schema.type as string, "null"] });
 
 export const TOOL_DEFS = [
+  ...OFFICIAL_SOURCE_TOOL_DEFS,
   {
     type: "function",
     name: "get_coverage",
@@ -853,6 +855,9 @@ export const TOOL_LABELS: Record<string, string> = {
   screen_companies: "Screened companies",
   run_code: "Ran code",
   get_alt_data: "Read alt data",
+  search_official_sources: "Searched official sources",
+  inspect_official_source: "Inspected native fields",
+  query_official_records: "Read native records",
   get_supply_chain: "Mapped supply chain",
   get_hedge_fund_data: "Read hedge fund data",
   get_treasury_auctions: "Read Treasury auctions",
@@ -930,6 +935,9 @@ export const TOOL_RUNNING: Record<string, string> = {
   screen_companies: "Screening companies",
   run_code: "Running code",
   get_alt_data: "Reading alt data",
+  search_official_sources: "Searching official sources",
+  inspect_official_source: "Inspecting native fields",
+  query_official_records: "Reading native records",
   get_supply_chain: "Mapping supply chain",
   get_hedge_fund_data: "Reading hedge fund data",
   get_treasury_auctions: "Reading Treasury auctions",
@@ -972,6 +980,9 @@ export const TOOL_RUNNING: Record<string, string> = {
 
 /** Plural nouns for grouped finished calls: "Read 4 web pages". */
 export const TOOL_GROUP: Record<string, [string, string]> = {
+  search_official_sources: ["Searched", "official source pages"],
+  inspect_official_source: ["Inspected", "official sources"],
+  query_official_records: ["Read", "native record pages"],
   read_webpage: ["Read", "web pages"],
   read_filing: ["Read", "filings"],
   get_financials: ["Pulled financials for", "companies"],

@@ -37,7 +37,7 @@ export function authoritativeCsvUrl(value: string): { family: RefreshFamily; url
       && ["/hpi/download/annual/hpi_at_tract.csv", "/hpi/download/monthly/hpi_master.csv"].includes(url.pathname)
       && !url.search) return { family: "fhfa", url };
   if (url.hostname === "www.eia.gov" && url.pathname === "/totalenergy/data/browser/csv.php"
-      && /^T[A-Z0-9.]+$/.test(url.searchParams.get("tbl") ?? "")
+      && /^T[A-Za-z0-9.]+$/.test(url.searchParams.get("tbl") ?? "")
       && [...url.searchParams.keys()].every(key => key === "tbl")) return { family: "eia_mer", url };
   return null;
 }

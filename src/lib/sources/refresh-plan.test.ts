@@ -21,6 +21,16 @@ describe("official native CSV refresh", () => {
     expect(safeRefreshRedirect(initial, initial.replace("GDP", "CPIAUCSL"))).toBe(false);
     expect(safeRefreshRedirect(initial, "https://example.org/data.csv")).toBe(false);
   });
+  it("retains the exact lowercase suffixes in verified official EIA MER table IDs", () => {
+    for (const table of ["T03.03f", "T07.07a", "T07.07b", "T07.07c", "T07.07d", "T07.08a", "T07.08b", "T07.08c", "T07.08d"]) {
+      const direct_url = `https://www.eia.gov/totalenergy/data/browser/csv.php?tbl=${table}`;
+      const result = refreshEligibility({ provenance: { direct_url, direct_download_sha256_verified: true } }, ingest, new Date("2026-11-25"));
+      expect(result).toMatchObject({ eligible: true, family: "eia_mer", url: direct_url });
+      expect(safeRefreshRedirect(direct_url, direct_url.replace(table, table.toUpperCase()))).toBe(false);
+    }
+    expect(authoritativeCsvUrl("https://www.eia.gov/totalenergy/data/browser/csv.php?tbl=T07.07a&url=https://example.test")).toBeNull();
+    expect(authoritativeCsvUrl("https://www.eia.gov/other.csv?tbl=T07.07a")).toBeNull();
+  });
   it("parses across boundaries and distinguishes blank, zero, leading zeros and disclosure markers", () => {
     const reader = new NativeRefreshScanner(",", ["tract", "value", "note", "note"]);
     for (const piece of ['\ufefftract,value,note,note\r', '\n01001020100,0,"first\r', '\nsecond",\r\n01001020200,,"a "', '"quote""",(D)\n']) reader.write(piece);
