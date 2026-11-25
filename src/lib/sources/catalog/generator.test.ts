@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BDC_PAGE, BDC_README, H8_PAGE, NMFP_PAGE, NMFP_README, OFR_DATASETS, buildBdc, buildH8, buildNmfp, buildOfr, listedMonths, parseBdcReadme, parseNmfpReadme } from "../../../../scripts/lib/source-catalog/banks-funds";
 import { EIA860_PAGE, EIA861_PAGE, build860, build861, parse860, parse861 } from "../../../../scripts/lib/source-catalog/eia-forms";
 import { buildFred, catalogueTitles, isCut, parseFredTitle } from "../../../../scripts/lib/source-catalog/fred";
 import { buildMer, parseMerListing } from "../../../../scripts/lib/source-catalog/mer";
@@ -262,5 +263,62 @@ describe("EIA form pages", () => {
       b: { title: "Non-Net Metering Distributed, Territories, 2025", source: EIA861_PAGE },
     });
     expect(result.unmatched.map((u) => u.id)).toEqual(["c"]);
+  });
+});
+
+describe("banks and funds", () => {
+  const page = (url: string, body: string) => [url, { url, status: 200, body }] as const;
+  const t = (id: string, name: string, source_id: string): DatasetRow => ({ ...row(id, name), source_id });
+
+  it("reads what each N-MFP file holds from the SEC's readme, and titles October 2026 tables", () => {
+    const readme = `        12. COLLATERALISSUERS data provides details of collateral issuers and securities subjected to repurchase
+            agreements, with each row having the primary key ACCESSION_NUMBER, SECURITY_ID.
+
+        13. NRSRO data provides rating information, name of the assigning NRSRO, and the identity of a demand feature
+            issuer, enhancement provider, guarantor, or NRSRO, with each row having the primary key ACCESSION_NUMBER.`;
+    expect([...parseNmfpReadme(readme)]).toEqual([
+      ["COLLATERALISSUERS", "Collateral issuers and securities subjected to repurchase agreements"],
+      ["NRSRO", "Rating information"],
+    ]);
+    const html = '<a href="/files/x/20261008-20261106_nmfp.zip">2026 October NMFP</a>';
+    expect([...listedMonths(html, "NMFP")]).toEqual(["2026-10"]);
+    const cells = t("official_01_financials_data_sec_nmfp_2026_10_native_nmfp_collateralissuers_4be038f7ab", "NMFP COLLATERALISSUERS", "SEC_NMFP");
+    const older = t("official_01_financials_data_sec_nmfp_2026_09_native_nmfp_nrsro_0000000000", "NMFP NRSRO", "SEC_NMFP");
+    const result = buildNmfp([cells, older], new Map([page(NMFP_README, readme), page(NMFP_PAGE, html)]));
+    expect(result.titles).toEqual({
+      [cells.id]: { title: "Collateral issuers and securities subjected to repurchase agreements, October 2026", code: "N-MFP COLLATERALISSUERS", source: NMFP_README },
+    });
+    expect(result.unmatched.map((u) => u.id)).toEqual([older.id]);
+  });
+
+  it("names BDC tables from the readme and only for months the page lists", () => {
+    const readme = "    5.01    SUB (Submissions)\n    5.08    SOI (Schedule of Investments)\n";
+    expect([...parseBdcReadme(readme)]).toEqual([["SUB", "Submissions"], ["SOI", "Schedule of Investments"]]);
+    const html = ["July", "August", "September", "October"].map((m) => `<a href="x">2026 ${m} BDC</a>`).join("");
+    const soi = t("official_01_financials_data_sec_bdc_2026_jul_oct_full_schedule_of_investments_40c5eb7b93", "sec bdc 2026 jul oct full schedule of investments", "SEC_BDC");
+    const result = buildBdc([soi], new Map([page(BDC_README, readme), page(BDC_PAGE, html)]));
+    expect(result.titles[soi.id]).toEqual({ title: "Schedule of Investments, July to October 2026", code: "BDC SOI", source: BDC_README });
+    expect(buildBdc([soi], new Map([page(BDC_README, readme), page(BDC_PAGE, html.replace("2026 August BDC", ""))])).titles).toEqual({});
+  });
+
+  it("names H.8 tables after the release and the five OFR datasets after the listing", () => {
+    const h8 = "<h2>Assets and Liabilities of Commercial Banks in the United States - H.8</h2>";
+    const whole = t("official_01_financials_data_fed_h8_complete_native_observations_76de662a76", "fed h8 complete native observations", "FED_H8");
+    const view = t("official_01_financials_data_fed_h8_monthly_headline_balances_2000_latest_ad2cb5f5f5", "H.8 monthly all-bank headline balances", "FED_H8");
+    expect(buildH8([whole, view], new Map([page(H8_PAGE, h8)])).titles).toEqual({
+      [whole.id]: { title: "Assets and Liabilities of Commercial Banks in the United States (H.8)", code: "H.8", source: H8_PAGE },
+      [view.id]: { title: "Assets and Liabilities of Commercial Banks in the United States (H.8): monthly all-bank headline balances", code: "H.8", source: H8_PAGE },
+    });
+    const json = JSON.stringify({
+      fnyr: { short_name: "Reference Rates" },
+      mmf: { short_name: "U.S. Money Market Funds" },
+      nypd: { short_name: "Primary Dealer Statistics" },
+      repo: { short_name: "U.S. Repo Markets" },
+      tyld: { short_name: "Treasury Constant Maturity Rates" },
+    });
+    const all = t("official_01_financials_data_ofr_all_five_datasets_complete_timeseries_a2c31c8c80", "ofr all five datasets complete timeseries", "OFR_STFM");
+    expect(buildOfr([all], new Map([page(OFR_DATASETS, json)])).titles[all.id].title).toBe(
+      "Reference Rates, U.S. Money Market Funds, Primary Dealer Statistics, U.S. Repo Markets and Treasury Constant Maturity Rates, all series",
+    );
   });
 });
